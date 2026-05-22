@@ -12,7 +12,7 @@ import { useDialog } from "../providers/dialogs";
 import { useTheme } from "../providers/theme";
 
 type Props = {
-  onSubmit: (text: String) => void;
+  onSubmit: (text: string) => void;
   disabled?: boolean;
 };
 
@@ -78,7 +78,7 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
         textarea.insertText(command.value + " ");
       }
     },
-    [renderer, toast],
+    [renderer, toast, dialog],
   );
 
   const handleCommandExecute = useCallback(

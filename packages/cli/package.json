@@ -1,5 +1,5 @@
 {
-  "name": "@nightcode/cli",
+  "name": "@knightcode/cli",
   "module": "src/index.tsx",
   "type": "module",
   "private": true,
@@ -18,6 +18,8 @@
     "@repo/typescript-config": "workspace:*",
     "@opentui/core": "^0.2.10",
     "@opentui/react": "^0.2.10",
-    "react": "^19.2.6"
+    "opentui-spinner": "^0.0.6",
+    "react": "^19.2.6",
+    "react-router": "7.14.2"
   }
 }
