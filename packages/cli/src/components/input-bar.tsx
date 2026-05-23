@@ -1,22 +1,25 @@
+import { Mode } from "@knightcode/database/enums";
 import type { KeyBinding, TextareaRenderable } from "@opentui/core";
+import { useKeyboard, useRenderer } from "@opentui/react";
+import { useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "react-router";
+import { useDialog } from "../providers/dialogs";
+import { useKeyboardLayer } from "../providers/keyboard-layer";
+import { usePromptConfig } from "../providers/prompt-config";
+import { useTheme } from "../providers/theme";
+import { useToast } from "../providers/toast";
+import { CommandMenu } from "./command-menu";
+import type { Command } from "./command-menu/types";
+import { useCommandMenu } from "./command-menu/use-command-menu";
 import { StatusBar } from "./status-bar";
 import { EmptyBorder } from "./utils/border";
-import { CommandMenu } from "./command-menu";
-import { useCallback, useEffect, useRef } from "react";
-import { useRenderer } from "@opentui/react";
-import { useCommandMenu } from "./command-menu/use-command-menu";
-import { type Command } from "./command-menu/types";
-import { useToast } from "../providers/toast";
-import { useKeyboardLayer } from "../providers/keyboard-layer";
-import { useDialog } from "../providers/dialogs";
-import { useTheme } from "../providers/theme";
 
 type Props = {
   onSubmit: (text: string) => void;
   disabled?: boolean;
 };
 
-export const TEXT_AREA_KEYBINDINGS: KeyBinding[] = [
+export const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", action: "submit" },
   { name: "enter", action: "submit" },
   { name: "return", shift: true, action: "newline" },
@@ -24,9 +27,11 @@ export const TEXT_AREA_KEYBINDINGS: KeyBinding[] = [
 ];
 
 export function InputBar({ onSubmit, disabled = false }: Props) {
+  const { mode, toggleMode, setMode, model, setModel } = usePromptConfig();
   const textareaRef = useRef<TextareaRenderable>(null);
   const onSubmitRef = useRef<() => void>(() => {});
   const renderer = useRenderer();
+  const navigate = useNavigate();
   const toast = useToast();
   const dialog = useDialog();
   const { colors } = useTheme();
@@ -45,6 +50,7 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
   const handleTextareaContentChange = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+
     handleContentChange(textarea.plainText);
   }, []);
 
@@ -73,12 +79,17 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
           exit: () => renderer.destroy(),
           toast,
           dialog,
+          navigate,
+          mode,
+          setMode,
+          model,
+          setModel,
         });
       } else {
         textarea.insertText(command.value + " ");
       }
     },
-    [renderer, toast, dialog],
+    [renderer, toast, dialog, navigate, mode, setMode, model, setModel],
   );
 
   const handleCommandExecute = useCallback(
@@ -89,9 +100,11 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
     [resolveCommand, handleCommand],
   );
 
+  // Wire up textarea submit handler once so it always reads the latest state.
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+
     textarea.onSubmit = () => {
       onSubmitRef.current();
     };
@@ -99,14 +112,26 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
 
   onSubmitRef.current = () => {
     if (disabled) return;
+
     if (showCommandMenu) {
       const command = resolveCommand(selectedIndex);
       handleCommand(command);
       return;
     }
+
     handleSubmit();
   };
 
+  useKeyboard((key) => {
+    if (disabled) return;
+    if (!isTopLayer("base")) return;
+    if (key.name === "tab") {
+      key.preventDefault();
+      toggleMode();
+    }
+  });
+
+  // Register the base layer responder for ctrl+c dismissal
   useEffect(() => {
     setResponder("base", () => {
       if (disabled) return false;
@@ -126,8 +151,12 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
     <box width="100%" alignItems="center">
       <box
         border={["left"]}
-        borderColor={colors.primary}
-        customBorderChars={{ ...EmptyBorder, vertical: "┃", bottomLeft: "╹" }}
+        borderColor={mode === Mode.BUILD ? colors.primary : colors.planMode}
+        customBorderChars={{
+          ...EmptyBorder,
+          vertical: "┃",
+          bottomLeft: "╹",
+        }}
         width="100%"
       >
         <box
@@ -160,9 +189,9 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
           <textarea
             ref={textareaRef}
             focused={!disabled && (isTopLayer("base") || isTopLayer("command"))}
-            keyBindings={TEXT_AREA_KEYBINDINGS}
+            keyBindings={TEXTAREA_KEY_BINDINGS}
             onContentChange={handleTextareaContentChange}
-            placeholder={`Your prompt goes here... "Fix the issue with the dribble migrations"`}
+            placeholder={`Ask anything... "Fix a bug in the database"`}
           />
           <StatusBar />
         </box>

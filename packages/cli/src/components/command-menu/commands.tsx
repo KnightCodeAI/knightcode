@@ -1,4 +1,10 @@
-import { ThemeDialogContent } from "../dialogs";
+import { SUPPORTED_CHAT_MODELS } from "@knightcode/shared";
+import {
+  AgentsDialogContent,
+  ModelsDialogContent,
+  SessionsDialogContent,
+  ThemeDialogContent,
+} from "../dialogs";
 import type { Command } from "./types";
 
 export const COMMANDS: Command[] = [
@@ -8,8 +14,13 @@ export const COMMANDS: Command[] = [
     value: "/agents",
     action: (ctx) => {
       ctx.dialog.open({
-        title: "Select mode!",
-        children: <text>Agent Selection comming soon...</text>,
+        title: "Select Agent",
+        children: (
+          <AgentsDialogContent
+            currentMode={ctx.mode}
+            onSelectMode={ctx.setMode}
+          />
+        ),
       });
     },
   },
@@ -56,8 +67,14 @@ export const COMMANDS: Command[] = [
     value: "/models",
     action: (ctx) => {
       ctx.dialog.open({
-        title: "Opening model selector...",
-        children: <text>Model Selection coming soon...</text>,
+        title: "Select Model",
+        children: (
+          <ModelsDialogContent
+            models={SUPPORTED_CHAT_MODELS.map((m) => m.id)}
+            currentModel={ctx.model}
+            onSelectModel={ctx.setModel}
+          />
+        ),
       });
     },
   },
@@ -66,10 +83,7 @@ export const COMMANDS: Command[] = [
     description: "Start a new conversation",
     value: "/new",
     action: (ctx) => {
-      ctx.toast.show({
-        message: "Starting new conversation...",
-        variant: "success",
-      });
+      ctx.navigate("/");
     },
   },
   {
@@ -77,9 +91,9 @@ export const COMMANDS: Command[] = [
     description: "View and manage sessions",
     value: "/sessions",
     action: (ctx) => {
-      ctx.toast.show({
-        message: "Loading sessions...",
-        variant: "info",
+      ctx.dialog.open({
+        title: "Sessions",
+        children: <SessionsDialogContent />,
       });
     },
   },

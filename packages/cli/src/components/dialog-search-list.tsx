@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   TextAttributes,
   type InputRenderable,
@@ -19,6 +19,7 @@ type DialogSearchListProps<T> = {
   getKey: (item: T) => string;
   placeholder?: string;
   emptyText?: string;
+  initialIndex?: number;
 };
 
 export function DialogSearchList<T>({
@@ -30,13 +31,38 @@ export function DialogSearchList<T>({
   getKey,
   placeholder = "Search",
   emptyText = "No results",
+  initialIndex = 0,
 }: DialogSearchListProps<T>) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const [searchValue, setSearchValue] = useState("");
   const inputRef = useRef<InputRenderable>(null);
   const scrollRef = useRef<ScrollBoxRenderable>(null);
   const { isTopLayer } = useKeyboardLayer();
   const { colors } = useTheme();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (initialIndex > 0) {
+        const sb = scrollRef.current;
+        if (sb) {
+          const viewportHeight = sb.viewport?.height || MAX_VISIBLE_ITEMS;
+          const visibleEnd = sb.scrollTop + viewportHeight - 1;
+          if (initialIndex > visibleEnd) {
+            sb.scrollTo(initialIndex - viewportHeight + 1);
+          } else if (initialIndex < sb.scrollTop) {
+            sb.scrollTo(initialIndex);
+          }
+        }
+      }
+      const initialItem = items[initialIndex];
+      if (initialItem && onHighlight) {
+        onHighlight(initialItem);
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleContentChange = useCallback(() => {
     const text = inputRef.current?.value ?? "";
