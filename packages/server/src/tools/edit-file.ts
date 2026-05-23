@@ -1,7 +1,8 @@
 import { tool } from "ai";
 import { readFile, writeFile } from "fs/promises";
-import { isAbsolute, relative, resolve } from "path";
+import { relative, resolve } from "path";
 import { z } from "zod";
+import { isPathInside, getCanonicalPath } from "../utils/path-security";
 
 export function createEditFileTool(cwd: string) {
   return tool({
@@ -20,14 +21,21 @@ export function createEditFileTool(cwd: string) {
     execute: async ({ path, oldString, newString }) => {
       const resolved = resolve(cwd, path);
 
-      const rel = relative(cwd, resolved);
+      let targetReal: string, rootReal: string;
+      try {
+        rootReal = await getCanonicalPath(cwd);
+        targetReal = await getCanonicalPath(resolved);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { error: `Failed to edit file: ${message}` };
+      }
 
-      if (rel.startsWith("..") || isAbsolute(rel)) {
+      if (!isPathInside(rootReal, targetReal)) {
         return { error: "Path is outside the project directory" };
       }
 
       try {
-        const content = await readFile(resolved, "utf-8");
+        const content = await readFile(targetReal, "utf-8");
 
         const occurrences = content.split(oldString).length - 1;
 
@@ -43,11 +51,11 @@ export function createEditFileTool(cwd: string) {
 
         const updated = content.replace(oldString, newString);
 
-        await writeFile(resolved, updated, "utf-8");
+        await writeFile(targetReal, updated, "utf-8");
 
         return {
           success: true as const,
-          path: relative(cwd, resolved),
+          path: relative(rootReal, targetReal),
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
