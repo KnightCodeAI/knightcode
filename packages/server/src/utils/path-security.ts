@@ -1,4 +1,4 @@
-import { relative, resolve, isAbsolute } from "path";
+import { basename, dirname, isAbsolute, relative, resolve } from "path";
 import { realpath } from "fs/promises";
 
 export function isPathInside(root: string, target: string): boolean {
@@ -14,7 +14,12 @@ export function isPathInside(root: string, target: string): boolean {
 export async function getCanonicalPath(p: string): Promise<string> {
   try {
     return await realpath(p);
-  } catch {
-    return resolve(p);
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === "ENOENT") {
+      const parent = await realpath(dirname(p));
+      return resolve(parent, basename(p));
+    }
+    throw error;
   }
 }

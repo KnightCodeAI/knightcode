@@ -1,4 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
+import { Prisma } from "@knightcode/database";
 import { db } from "@knightcode/database/client";
 import { MessageStatus, Mode, Role } from "@knightcode/database/enums";
 import { findSupportedChatModel } from "@knightcode/shared";
@@ -107,6 +108,12 @@ const app = new Hono()
       });
       return c.json(session);
     } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2025"
+      ) {
+        return c.json({ error: "Session not found" }, 404);
+      }
       Sentry.logger.error("Failed to update session reasoningEffort", {
         sessionId: id,
         error: err,
