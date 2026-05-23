@@ -1,7 +1,8 @@
 import { tool } from "ai";
-import { mkdir, writeFile } from "fs/promises";
-import { dirname, relative, resolve } from "path";
+import { mkdir, writeFile, realpath } from "fs/promises";
+import { dirname, relative, resolve, basename } from "path";
 import { z } from "zod";
+import { isPathInside, getCanonicalPath } from "../utils/path-security";
 
 export function createWriteFileTool(cwd: string) {
   return tool({
@@ -13,18 +14,30 @@ export function createWriteFileTool(cwd: string) {
     }),
     execute: async ({ path, content }) => {
       const resolved = resolve(cwd, path);
+      const rootReal = await getCanonicalPath(cwd);
 
-      if (!resolved.startsWith(cwd)) {
+      // Perform lexical boundary check first
+      const relInitial = relative(rootReal, resolved);
+      if (relInitial.startsWith("..") || relInitial.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) {
         return { error: "Path is outside the project directory" };
       }
 
       try {
-        await mkdir(dirname(resolved), { recursive: true });
-        await writeFile(resolved, content, "utf-8");
+        const parentDir = dirname(resolved);
+        await mkdir(parentDir, { recursive: true });
+
+        const parentReal = await realpath(parentDir);
+        const targetReal = resolve(parentReal, basename(resolved));
+
+        if (!isPathInside(rootReal, targetReal)) {
+          return { error: "Path is outside the project directory" };
+        }
+
+        await writeFile(targetReal, content, "utf-8");
 
         return {
           success: true as const,
-          path: relative(cwd, resolved),
+          path: relative(rootReal, targetReal),
           bytesWritten: Buffer.byteLength(content, "utf-8"),
         };
       } catch (err) {

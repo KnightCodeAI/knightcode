@@ -9,6 +9,7 @@ import { z } from "zod";
 const createSessionSchema = z.object({
   title: z.string(),
   cwd: z.string().optional(),
+  reasoningEffort: z.enum(["none", "low", "medium", "high", "max"]).optional(),
   initialMessage: z
     .object({
       role: z.enum(Role),
@@ -21,12 +22,30 @@ const createSessionSchema = z.object({
     .optional(),
 });
 
+const updateSessionSchema = z.object({
+  reasoningEffort: z.enum(["none", "low", "medium", "high", "max"]),
+});
+
 const createSessionValidator = zValidator(
   "json",
   createSessionSchema,
   (result, c) => {
     if (!result.success) {
       Sentry.logger.warn("Session creation validation failed", {
+        path: c.req.path,
+        issues: result.error.issues.length,
+      });
+      return c.json({ error: "Invalid request body" }, 400);
+    }
+  },
+);
+
+const updateSessionValidator = zValidator(
+  "json",
+  updateSessionSchema,
+  (result, c) => {
+    if (!result.success) {
+      Sentry.logger.warn("Session update validation failed", {
         path: c.req.path,
         issues: result.error.issues.length,
       });
@@ -76,6 +95,24 @@ const app = new Hono()
     }
 
     return c.json(session);
+  })
+  .patch("/:id", updateSessionValidator, async (c) => {
+    const id = c.req.param("id");
+    const { reasoningEffort } = c.req.valid("json");
+
+    try {
+      const session = await db.session.update({
+        where: { id },
+        data: { reasoningEffort },
+      });
+      return c.json(session);
+    } catch (err) {
+      Sentry.logger.error("Failed to update session reasoningEffort", {
+        sessionId: id,
+        error: err,
+      });
+      return c.json({ error: "Failed to update session" }, 500);
+    }
   })
   .post("/", createSessionValidator, async (c) => {
     // MOCK: Uncomment to simulate slow session loading

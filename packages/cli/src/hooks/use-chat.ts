@@ -2,6 +2,7 @@ import type { Mode } from "@knightcode/database/enums";
 import {
   chatStreamEventSchema,
   type SupportedChatModelId,
+  type ReasoningEffortLevel,
 } from "@knightcode/shared";
 import { EventSourceParserStream } from "eventsource-parser/stream";
 import type { ClientResponse } from "hono/client";
@@ -66,6 +67,7 @@ type SubmitParams = {
   userText: string;
   mode: Mode;
   model: SupportedChatModelId;
+  reasoningEffort?: ReasoningEffortLevel;
 };
 
 type RunStreamParams = {
@@ -361,7 +363,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
   }, [initialMessages, resume]);
 
   const submit = useCallback(
-    async ({ userText, mode, model }: SubmitParams) => {
+    async ({ userText, mode, model, reasoningEffort }: SubmitParams) => {
       // Show the partial answer before sending the next message
       stopActiveStream(true);
 
@@ -384,7 +386,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
               const res = await apiClient.chat[":sessionId"].$post(
                 {
                   param: { sessionId },
-                  json: { content: userText, mode, model },
+                  json: { content: userText, mode, model, reasoningEffort },
                 },
                 { init: { signal: controller.signal } },
               );

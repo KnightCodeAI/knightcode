@@ -59,11 +59,17 @@ function mapDbMessages(dbMessages: SessionData["messages"]): Message[] {
 
     const parsedParts =
       m.parts == null ? null : messagePartsSchema.safeParse(m.parts);
-    const parts: ClientMessagePart[] = parsedParts?.success
+    const normalized = parsedParts?.success
       ? parsedParts.data.map((p) =>
           p.type === "tool-call" ? { ...p, status: "done" as const } : p,
         )
-      : [];
+      : null;
+    const parts: ClientMessagePart[] =
+      normalized && normalized.length > 0
+        ? normalized
+        : m.content
+          ? [{ type: "text", text: m.content }]
+          : [];
 
     return {
       id: m.id,
@@ -102,7 +108,7 @@ function ChatMessage({ msg }: { msg: Message }) {
 function SessionChat({ session }: { session: SessionData }) {
   const [initialMessages] = useState(() => mapDbMessages(session.messages));
   const { isTopLayer } = useKeyboardLayer();
-  const { mode, model } = usePromptConfig();
+  const { mode, model, reasoningEffort } = usePromptConfig();
   const { messages, streaming, submit, abort, interrupt } = useChat(
     session.id,
     initialMessages,
@@ -127,7 +133,9 @@ function SessionChat({ session }: { session: SessionData }) {
 
   return (
     <SessionShell
-      onSubmit={(text) => submit({ userText: text, mode, model })}
+      onSubmit={(text) =>
+        submit({ userText: text, mode, model, reasoningEffort })
+      }
       loading={streaming.status === "streaming"}
       interruptible={streaming.status === "streaming"}
     >
@@ -158,6 +166,14 @@ export function Session() {
   }, [location.state]);
 
   const [session, setSession] = useState<SessionData | null>(prefetched);
+
+  const { setReasoningEffort } = usePromptConfig();
+
+  useEffect(() => {
+    if (session) {
+      setReasoningEffort((session.reasoningEffort as any) || "medium");
+    }
+  }, [session, setReasoningEffort]);
 
   useEffect(() => {
     // Skip fetch if session was passed via location state

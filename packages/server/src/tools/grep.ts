@@ -1,8 +1,25 @@
 import { tool } from "ai";
-import { relative, resolve } from "path";
+import { relative, resolve, isAbsolute } from "path";
 import { z } from "zod";
+import { isPathInside, getCanonicalPath } from "../utils/path-security";
 
 const MAX_MATCHES = 50;
+const MAX_OUTPUT_BYTES = 20_000;
+
+function parseGrepLine(line: string): { file: string; line: number; content: string } | null {
+  // Find ':(\d+):' skipping drive letter prefix on Windows (start search at index 2)
+  const match = line.slice(2).match(/:(\d+):/);
+  if (!match) return null;
+
+  const colonIndex = line.indexOf(`:${match[1]}:`, 2);
+  if (colonIndex === -1) return null;
+
+  const file = line.substring(0, colonIndex);
+  const lineNumber = parseInt(match[1]!, 10);
+  const content = line.substring(colonIndex + match[1]!.length + 2);
+
+  return { file, line: lineNumber, content };
+}
 
 export function createGrepTool(cwd: string) {
   return tool({
@@ -21,8 +38,10 @@ export function createGrepTool(cwd: string) {
     }),
     execute: async ({ pattern, path, include }) => {
       const resolved = resolve(cwd, path);
+      const rootReal = await getCanonicalPath(cwd);
+      const searchRoot = await getCanonicalPath(resolved);
 
-      if (!resolved.startsWith(cwd)) {
+      if (!isPathInside(rootReal, searchRoot)) {
         return { error: "Path is outside the project directory" };
       }
 
@@ -39,7 +58,7 @@ export function createGrepTool(cwd: string) {
           args.push(`--include=${include}`);
         }
 
-        args.push(pattern, resolved);
+        args.push(pattern, searchRoot);
 
         const proc = Bun.spawn(["grep", ...args], {
           stdout: "pipe",
@@ -47,9 +66,85 @@ export function createGrepTool(cwd: string) {
           cwd,
         });
 
-        const stdout = await new Response(proc.stdout).text();
-        const stderr = await new Response(proc.stderr).text();
+        const reader = proc.stdout.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let totalBytes = 0;
+        let truncated = false;
+        const matches: { file: string; line: number; content: string }[] = [];
 
+        const killProcess = () => {
+          try {
+            proc.kill();
+          } catch {}
+        };
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              if (buffer) {
+                const lines = buffer.split("\n");
+                for (const line of lines) {
+                  if (line.trim()) {
+                    if (matches.length >= MAX_MATCHES) {
+                      truncated = true;
+                      killProcess();
+                      break;
+                    }
+                    const parsed = parseGrepLine(line);
+                    if (parsed) {
+                      matches.push({
+                        file: relative(rootReal, parsed.file),
+                        line: parsed.line,
+                        content: parsed.content,
+                      });
+                    }
+                  }
+                }
+              }
+              break;
+            }
+
+            if (value) {
+              totalBytes += value.byteLength;
+              if (totalBytes >= MAX_OUTPUT_BYTES) {
+                truncated = true;
+                killProcess();
+                break;
+              }
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              let hitLimit = false;
+              for (const line of lines) {
+                if (matches.length >= MAX_MATCHES) {
+                  truncated = true;
+                  killProcess();
+                  hitLimit = true;
+                  break;
+                }
+                const parsed = parseGrepLine(line);
+                if (parsed) {
+                  matches.push({
+                    file: relative(rootReal, parsed.file),
+                    line: parsed.line,
+                    content: parsed.content,
+                  });
+                }
+              }
+              if (hitLimit) break;
+            }
+          }
+        } catch (e) {
+          // Process killed
+        } finally {
+          reader.releaseLock();
+        }
+
+        const stderr = await new Response(proc.stderr).text();
         await proc.exited;
 
         // grep exits with 1 when no matches found — not an error
@@ -57,34 +152,13 @@ export function createGrepTool(cwd: string) {
           return { error: `grep failed: ${stderr.trim()}` };
         }
 
-        if (!stdout.trim()) {
+        if (matches.length === 0) {
           return { matches: [], message: "No matches found" };
-        }
-
-        const lines = stdout.trim().split("\n");
-        const matches: { file: string; line: number; content: string }[] = [];
-        let truncated = false;
-
-        for (const line of lines) {
-          if (matches.length >= MAX_MATCHES) {
-            truncated = true;
-            break;
-          }
-
-          // grep output format: /absolute/path:linenum:content
-          const match = line.match(/^(.+?):(\d+):(.*)$/);
-          if (match) {
-            matches.push({
-              file: relative(cwd, match[1]!),
-              line: parseInt(match[2]!, 10),
-              content: match[3]!,
-            });
-          }
         }
 
         return {
           matches,
-          ...(truncated ? { truncated: true, totalMatches: lines.length } : {}),
+          ...(truncated ? { truncated: true } : {}),
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

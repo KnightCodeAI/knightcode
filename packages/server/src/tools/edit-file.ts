@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { readFile, writeFile } from "fs/promises";
-import { relative, resolve } from "path";
+import { isAbsolute, relative, resolve } from "path";
 import { z } from "zod";
 
 export function createEditFileTool(cwd: string) {
@@ -11,6 +11,7 @@ export function createEditFileTool(cwd: string) {
       path: z.string().describe("Relative path to the file to edit"),
       oldString: z
         .string()
+        .min(1, "oldString must be non empty")
         .describe(
           "The exact text to find and replace (must be unique in the file)",
         ),
@@ -19,7 +20,9 @@ export function createEditFileTool(cwd: string) {
     execute: async ({ path, oldString, newString }) => {
       const resolved = resolve(cwd, path);
 
-      if (!resolved.startsWith(cwd)) {
+      const rel = relative(cwd, resolved);
+
+      if (rel.startsWith("..") || isAbsolute(rel)) {
         return { error: "Path is outside the project directory" };
       }
 

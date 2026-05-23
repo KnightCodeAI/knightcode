@@ -1,7 +1,8 @@
 import { tool } from "ai";
-import { readFile } from "fs/promises";
+import { readFile, realpath, stat, open } from "fs/promises";
 import { relative, resolve } from "path";
 import { z } from "zod";
+import { isPathInside, getCanonicalPath } from "../utils/path-security";
 
 const MAX_FILE_SIZE = 10_000;
 
@@ -14,29 +15,40 @@ export function createReadFileTool(cwd: string) {
     }),
     execute: async ({ path }) => {
       const resolved = resolve(cwd, path);
-      const rel = relative(cwd, resolved);
-
-      if (
-        rel.startsWith("..") ||
-        (resolve(resolved) !== resolved && rel.startsWith(".."))
-      ) {
-        return { error: "Path is outside the project directory" };
+      const rootReal = await getCanonicalPath(cwd);
+      let targetReal: string;
+      try {
+        targetReal = await realpath(resolved);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { error: `Failed to read file: ${message}` };
       }
 
-      // Ensure resolved path is still within cwd
-      if (!resolved.startsWith(cwd)) {
+      if (!isPathInside(rootReal, targetReal)) {
         return { error: "Path is outside the project directory" };
       }
 
       try {
-        const content = await readFile(resolved, "utf-8");
-        if (content.length > MAX_FILE_SIZE) {
-          return {
-            content: content.slice(0, MAX_FILE_SIZE),
-            truncated: true,
-            totalLength: content.length,
-          };
+        const fileInfo = await stat(targetReal);
+        const totalLength = fileInfo.size;
+
+        if (totalLength > MAX_FILE_SIZE) {
+          const handle = await open(targetReal, "r");
+          try {
+            const buffer = Buffer.alloc(MAX_FILE_SIZE);
+            const { bytesRead } = await handle.read(buffer, 0, MAX_FILE_SIZE, 0);
+            const content = buffer.toString("utf-8", 0, bytesRead);
+            return {
+              content,
+              truncated: true,
+              totalLength,
+            };
+          } finally {
+            await handle.close();
+          }
         }
+
+        const content = await readFile(targetReal, "utf-8");
         return { content };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

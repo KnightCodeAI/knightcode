@@ -17,34 +17,103 @@ export function createBashTool(cwd: string) {
     }),
     execute: async ({ command, timeout }) => {
       try {
+        const env: Record<string, string> = { TERM: "dumb" };
+        const allowedKeys = ["PATH", "Path", "LANG", "HOME", "USER", "SHELL", "TEMP", "TMP", "PWD"];
+        for (const key of allowedKeys) {
+          if (process.env[key] !== undefined) {
+            env[key] = process.env[key]!;
+          }
+        }
+
         const proc = Bun.spawn(["bash", "-c", command], {
           cwd,
           stdout: "pipe",
           stderr: "pipe",
-          env: { ...process.env, TERM: "dumb" },
+          env,
         });
 
         const timer = setTimeout(() => {
           proc.kill();
         }, timeout);
 
-        const [stdout, stderr] = await Promise.all([
-          new Response(proc.stdout).text(),
-          new Response(proc.stderr).text(),
+        const stdoutChunks: Uint8Array[] = [];
+        const stderrChunks: Uint8Array[] = [];
+        let totalBytes = 0;
+        let limitExceeded = false;
+
+        const killProcess = () => {
+          if (!limitExceeded) {
+            limitExceeded = true;
+            proc.kill();
+          }
+        };
+
+        async function readStream(
+          stream: ReadableStream<Uint8Array>,
+          chunks: Uint8Array[]
+        ): Promise<boolean> {
+          const reader = stream.getReader();
+          let truncated = false;
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                if (totalBytes + value.byteLength > MAX_OUTPUT) {
+                  const allowed = MAX_OUTPUT - totalBytes;
+                  if (allowed > 0) {
+                    chunks.push(value.slice(0, allowed));
+                    totalBytes += allowed;
+                  }
+                  truncated = true;
+                  killProcess();
+                  break;
+                }
+                chunks.push(value);
+                totalBytes += value.byteLength;
+              }
+            }
+          } catch (e) {
+            // Process killed
+          } finally {
+            reader.releaseLock();
+          }
+          return truncated;
+        }
+
+        const [stdoutTruncated, stderrTruncated] = await Promise.all([
+          readStream(proc.stdout, stdoutChunks),
+          readStream(proc.stderr, stderrChunks),
         ]);
 
         const exitCode = await proc.exited;
         clearTimeout(timer);
 
-        const truncate = (s: string) =>
-          s.length > MAX_OUTPUT
-            ? s.slice(0, MAX_OUTPUT) +
-              `\n... (truncated, ${s.length} total chars)`
-            : s;
+        const concatChunks = (chunks: Uint8Array[]) => {
+          const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+          const result = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const chunk of chunks) {
+            result.set(chunk, offset);
+            offset += chunk.length;
+          }
+          return result;
+        };
+
+        const decoder = new TextDecoder();
+        let stdoutText = decoder.decode(concatChunks(stdoutChunks));
+        let stderrText = decoder.decode(concatChunks(stderrChunks));
+
+        if (stdoutTruncated || (limitExceeded && stdoutText.length > 0)) {
+          stdoutText += "\n... (truncated)";
+        }
+        if (stderrTruncated || (limitExceeded && stderrText.length > 0)) {
+          stderrText += "\n... (truncated)";
+        }
 
         return {
-          stdout: truncate(stdout),
-          stderr: truncate(stderr),
+          stdout: stdoutText,
+          stderr: stderrText,
           exitCode,
         };
       } catch (err) {

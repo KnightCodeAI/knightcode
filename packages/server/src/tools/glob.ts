@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { relative, resolve } from "path";
 import { z } from "zod";
+import { isPathInside, getCanonicalPath } from "../utils/path-security";
 
 const MAX_RESULTS = 200;
 
@@ -19,8 +20,10 @@ export function createGlobTool(cwd: string) {
     }),
     execute: async ({ pattern, path }) => {
       const resolved = resolve(cwd, path);
+      const rootReal = await getCanonicalPath(cwd);
+      const searchRoot = await getCanonicalPath(resolved);
 
-      if (!resolved.startsWith(cwd)) {
+      if (!isPathInside(rootReal, searchRoot)) {
         return { error: "Path is outside the project directory" };
       }
 
@@ -30,7 +33,7 @@ export function createGlobTool(cwd: string) {
         let truncated = false;
 
         for await (const match of glob.scan({
-          cwd: resolved,
+          cwd: searchRoot,
           dot: false,
           onlyFiles: true,
         })) {
@@ -43,8 +46,14 @@ export function createGlobTool(cwd: string) {
           }
 
           // Return paths relative to project root
-          const absoluteMatch = resolve(resolved, match);
-          files.push(relative(cwd, absoluteMatch));
+          const absoluteMatch = resolve(searchRoot, match);
+          const canonicalMatch = await getCanonicalPath(absoluteMatch);
+
+          if (!isPathInside(rootReal, canonicalMatch)) {
+            continue;
+          }
+
+          files.push(relative(rootReal, canonicalMatch));
         }
 
         files.sort();

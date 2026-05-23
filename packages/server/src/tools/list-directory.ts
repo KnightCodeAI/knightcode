@@ -1,7 +1,8 @@
 import { tool } from "ai";
-import { readdir, stat } from "fs/promises";
+import { readdir, stat, realpath } from "fs/promises";
 import { join, relative, resolve } from "path";
 import { z } from "zod";
+import { isPathInside, getCanonicalPath } from "../utils/path-security";
 
 export function createListDirectoryTool(cwd: string) {
   return tool({
@@ -17,13 +18,20 @@ export function createListDirectoryTool(cwd: string) {
     }),
     execute: async ({ path }) => {
       const resolved = resolve(cwd, path);
+      const rootReal = await getCanonicalPath(cwd);
+      let targetReal = resolved;
+      try {
+        targetReal = await realpath(resolved);
+      } catch {
+        targetReal = resolve(rootReal, path);
+      }
 
-      if (!resolved.startsWith(cwd)) {
+      if (!isPathInside(rootReal, targetReal)) {
         return { error: "Path is outside the project directory" };
       }
 
       try {
-        const entries = await readdir(resolved);
+        const entries = await readdir(targetReal);
         const results: { name: string; type: "file" | "directory" }[] = [];
 
         for (const entry of entries) {
@@ -31,7 +39,7 @@ export function createListDirectoryTool(cwd: string) {
           if (entry.startsWith(".") || entry === "node_modules") continue;
 
           try {
-            const entryPath = join(resolved, entry);
+            const entryPath = join(targetReal, entry);
             const info = await stat(entryPath);
             results.push({
               name: entry,
@@ -48,7 +56,7 @@ export function createListDirectoryTool(cwd: string) {
         });
 
         return {
-          path: relative(cwd, resolved) || ".",
+          path: relative(rootReal, targetReal) || ".",
           entries: results,
         };
       } catch (err) {

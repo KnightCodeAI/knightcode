@@ -1,7 +1,7 @@
 import type { Mode } from "@knightcode/database/enums";
 import type { DialogContextValue } from "../../providers/dialogs";
 import type { ToastContextValue } from "../../providers/toast";
-import type { SupportedChatModelId } from "@knightcode/shared";
+import type { SupportedChatModelId, ReasoningEffortLevel } from "@knightcode/shared";
 
 export type CommandContext = {
   exit: () => void;
@@ -12,6 +12,9 @@ export type CommandContext = {
   setMode: (mode: Mode) => void;
   model: SupportedChatModelId;
   setModel: (model: SupportedChatModelId) => void;
+  reasoningEffort: ReasoningEffortLevel;
+  setReasoningEffort: (level: ReasoningEffortLevel) => void;
+  sessionId?: string;
 };
 
 export type Command = {

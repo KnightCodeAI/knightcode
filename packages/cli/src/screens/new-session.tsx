@@ -12,6 +12,7 @@ const newSessionStateSchema = z.object({
   message: z.string(),
   mode: z.enum(Mode),
   model: z.string(),
+  reasoningEffort: z.enum(["none", "low", "medium", "high", "max"]).optional(),
 });
 
 export function NewSession() {
@@ -45,6 +46,7 @@ export function NewSession() {
           json: {
             title: state.message.slice(0, 100),
             cwd: process.cwd(),
+            reasoningEffort: state.reasoningEffort,
             initialMessage: {
               role: "USER",
               content: state.message,

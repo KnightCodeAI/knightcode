@@ -1,11 +1,13 @@
-import { SUPPORTED_CHAT_MODELS } from "@knightcode/shared";
+import { SUPPORTED_CHAT_MODELS, findSupportedChatModel } from "@knightcode/shared";
 import {
   AgentsDialogContent,
   ModelsDialogContent,
   SessionsDialogContent,
   ThemeDialogContent,
+  ReasoningDialogContent,
 } from "../dialogs";
 import type { Command } from "./types";
+import { apiClient } from "../../lib/api-client";
 
 export const COMMANDS: Command[] = [
   {
@@ -84,6 +86,52 @@ export const COMMANDS: Command[] = [
     value: "/new",
     action: (ctx) => {
       ctx.navigate("/");
+    },
+  },
+  {
+    name: "reasoning",
+    description: "Set AI reasoning effort level",
+    value: "/reasoning",
+    action: (ctx) => {
+      const modelDef = findSupportedChatModel(ctx.model);
+      if (!modelDef?.supportsThinking) {
+        ctx.toast.show({
+          message: `Model ${ctx.model.replace(/:free$/, "")} does not support reasoning/thinking.`,
+          variant: "error",
+        });
+        return;
+      }
+
+      ctx.dialog.open({
+        title: "Select Reasoning Effort",
+        children: (
+          <ReasoningDialogContent
+            currentEffort={ctx.reasoningEffort}
+            onSelectEffort={async (level) => {
+              ctx.setReasoningEffort(level);
+              if (ctx.sessionId) {
+                try {
+                  const res = await apiClient.sessions[":id"].$patch({
+                    param: { id: ctx.sessionId },
+                    json: { reasoningEffort: level },
+                  });
+                  if (!res.ok) {
+                    ctx.toast.show({
+                      message: "Failed to persist reasoning effort on server",
+                      variant: "error",
+                    });
+                  }
+                } catch (err) {
+                  ctx.toast.show({
+                    message: "Error updating session reasoning effort",
+                    variant: "error",
+                  });
+                }
+              }
+            }}
+          />
+        ),
+      });
     },
   },
   {

@@ -7,12 +7,12 @@ import { TextAttributes } from "@opentui/core";
 
 export function Home() {
   const navigate = useNavigate();
-  const { mode, model } = usePromptConfig();
+  const { mode, model, reasoningEffort } = usePromptConfig();
   const handleSubmit = useCallback(
     (text: string) => {
-      navigate("/sessions/new", { state: { message: text, mode, model } });
+      navigate("/sessions/new", { state: { message: text, mode, model, reasoningEffort } });
     },
-    [navigate, mode, model],
+    [navigate, mode, model, reasoningEffort],
   );
 
   return (

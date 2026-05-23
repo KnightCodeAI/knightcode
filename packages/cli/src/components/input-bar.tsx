@@ -2,7 +2,7 @@ import { Mode } from "@knightcode/database/enums";
 import type { KeyBinding, TextareaRenderable } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useDialog } from "../providers/dialogs";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { usePromptConfig } from "../providers/prompt-config";
@@ -27,11 +27,12 @@ export const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
 ];
 
 export function InputBar({ onSubmit, disabled = false }: Props) {
-  const { mode, toggleMode, setMode, model, setModel } = usePromptConfig();
+  const { mode, toggleMode, setMode, model, setModel, reasoningEffort, setReasoningEffort } = usePromptConfig();
   const textareaRef = useRef<TextareaRenderable>(null);
   const onSubmitRef = useRef<() => void>(() => {});
   const renderer = useRenderer();
   const navigate = useNavigate();
+  const { id: sessionId } = useParams();
   const toast = useToast();
   const dialog = useDialog();
   const { colors } = useTheme();
@@ -84,12 +85,15 @@ export function InputBar({ onSubmit, disabled = false }: Props) {
           setMode,
           model,
           setModel,
+          reasoningEffort,
+          setReasoningEffort,
+          sessionId,
         });
       } else {
         textarea.insertText(command.value + " ");
       }
     },
-    [renderer, toast, dialog, navigate, mode, setMode, model, setModel],
+    [renderer, toast, dialog, navigate, mode, setMode, model, setModel, reasoningEffort, setReasoningEffort, sessionId],
   );
 
   const handleCommandExecute = useCallback(

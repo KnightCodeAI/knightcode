@@ -3,10 +3,11 @@ import type { Prisma } from "@knightcode/database";
 import { db } from "@knightcode/database/client";
 import { MessageStatus, Mode } from "@knightcode/database/enums";
 import {
-  type ChatStreamEvent,
-  type MessagePart,
   messagePartsSchema,
   toolCallArgsSchema,
+  type ChatStreamEvent,
+  type MessagePart,
+  type ReasoningEffortLevel,
 } from "@knightcode/shared";
 import { streamText as aiStreamText, stepCountIs } from "ai";
 import { Hono } from "hono";
@@ -20,6 +21,7 @@ const submitSchema = z.object({
   content: z.string(),
   mode: z.enum(Mode),
   model: z.string().refine(isSupportedChatModel, "Unsupported model"),
+  reasoningEffort: z.enum(["none", "low", "medium", "high", "max"]).optional(),
 });
 
 const submitValidator = zValidator("json", submitSchema, (result, c) => {
@@ -72,17 +74,26 @@ type StreamParams = {
   history: { role: "user" | "assistant"; content: string }[];
   mode: Mode;
   abortController: AbortController;
+  reasoningEffort?: ReasoningEffortLevel;
 };
 
 async function streamAIResponse(
   stream: Parameters<Parameters<typeof streamSSE>[1]>[0],
   params: StreamParams,
 ) {
-  const { sessionId, model, cwd, history, mode, abortController } = params;
+  const {
+    sessionId,
+    model,
+    cwd,
+    history,
+    mode,
+    abortController,
+    reasoningEffort,
+  } = params;
   const startTime = Date.now();
   const tools = cwd ? createTools(cwd, mode) : undefined;
   const parts: MessagePart[] = [];
-  const resolvedModel = resolveChatModel(model);
+  const resolvedModel = resolveChatModel(model, reasoningEffort);
 
   const persistInterruptedMessage = async () => {
     const fullText = parts
@@ -159,7 +170,8 @@ async function streamAIResponse(
       }
 
       if (part.type === "tool-call") {
-        const args = toolCallArgsSchema.parse(part.input);
+        const parsedArgs = toolCallArgsSchema.safeParse(part.input);
+        const args = parsedArgs.success ? parsedArgs.data : {};
 
         parts.push({
           type: "tool-call",
@@ -330,6 +342,7 @@ const app = new Hono()
               history,
               mode: resumableMessage.mode,
               abortController,
+              reasoningEffort: session.reasoningEffort as ReasoningEffortLevel,
             });
           } finally {
             activeResumeSessionIds.delete(sessionId);
@@ -400,6 +413,7 @@ const app = new Hono()
           history,
           mode: data.mode,
           abortController,
+          reasoningEffort: data.reasoningEffort,
         });
       },
       async (err, stream) => {
