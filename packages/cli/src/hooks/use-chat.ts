@@ -320,8 +320,9 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       // Show the partial answer before sending the next message
       stopActiveStream(true);
 
+      const userMessageId = crypto.randomUUID();
       const userMessage: Message = {
-        id: crypto.randomUUID(),
+        id: userMessageId,
         role: "user",
         content: userText,
         mode,
@@ -329,19 +330,32 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       };
       updateMessages((prev) => [...prev, userMessage]);
 
-      await runStream({
-        mode,
-        model,
-        request: async (controller) => {
-          return apiClient.chat[":sessionId"].$post(
-            {
-              param: { sessionId },
-              json: { content: userText, mode, model },
-            },
-            { init: { signal: controller.signal } },
-          );
-        },
-      });
+      try {
+        await runStream({
+          mode,
+          model,
+          request: async (controller) => {
+            try {
+              const res = await apiClient.chat[":sessionId"].$post(
+                {
+                  param: { sessionId },
+                  json: { content: userText, mode, model },
+                },
+                { init: { signal: controller.signal } },
+              );
+              if (!res.ok) {
+                updateMessages((prev) => prev.filter((m) => m.id !== userMessageId));
+              }
+              return res;
+            } catch (err) {
+              updateMessages((prev) => prev.filter((m) => m.id !== userMessageId));
+              throw err;
+            }
+          },
+        });
+      } catch (err) {
+        updateMessages((prev) => prev.filter((m) => m.id !== userMessageId));
+      }
     },
     [runStream, sessionId, updateMessages, stopActiveStream],
   );

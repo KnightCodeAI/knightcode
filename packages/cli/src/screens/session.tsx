@@ -27,13 +27,16 @@ const sessionLocationSchema = z.object({
   session: z.looseObject({
     id: z.string(),
     messages: z.array(
-      z.object({
+      z.looseObject({
         id: z.string(),
         role: z.enum(["USER", "ASSISTANT", "ERROR"]),
         content: z.string(),
         model: z.string(),
+        mode: z.enum(["BUILD", "PLAN"]),
+        status: z.enum(["COMPLETE", "INTERRUPTED"]),
+        duration: z.number().nullable().optional(),
       })
-    ).min(1),
+    ),
   }),
 }) as unknown as z.ZodType<{ session: SessionData }>;
 

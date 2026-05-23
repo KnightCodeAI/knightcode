@@ -49,12 +49,13 @@ function getResumableUserMessage(
     mode: Mode;
   }[],
 ) {
-  const lastMessage = messages[messages.length - 1];
-  if (!lastMessage || lastMessage.role !== "USER") {
-    return null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg && msg.role === "USER") {
+      return msg;
+    }
   }
-
-  return lastMessage;
+  return null;
 }
 
 type StreamParams = {
