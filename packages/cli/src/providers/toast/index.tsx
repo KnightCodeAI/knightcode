@@ -14,6 +14,7 @@ import {
 import { useTerminalDimensions } from "@opentui/react";
 import { SplitBorderChars } from "../../components/utils/border";
 import { useTheme } from "../theme";
+import { useMemo } from "hono/jsx";
 
 export type ToastContextValue = {
   show: (options: ToastOptions) => void;
@@ -62,9 +63,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
     [clearCurrentTimeout],
   );
 
-  const value: ToastContextValue = {
-    show,
-  };
+  const value = useMemo(() => ({ show }), [show]);
 
   return (
     <ToastContext.Provider value={value}>

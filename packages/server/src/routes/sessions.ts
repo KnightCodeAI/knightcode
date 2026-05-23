@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator";
-import { db } from "@knightcode/database";
+import { db } from "@knightcode/database/client";
 import { MessageStatus, Mode, Role } from "@knightcode/database/enums";
 import { findSupportedChatModel } from "@knightcode/shared";
 import { Hono } from "hono";

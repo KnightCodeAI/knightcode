@@ -12,12 +12,21 @@ type SessionData = InferResponseType<
   (typeof apiClient.sessions)[":id"]["$get"],
   200
 >;
-
 const sessionLocationSchema = z.object({
-  session: z.custom<SessionData>(
-    (val) => val != null && typeof val === "object" && "id" in val,
-  ),
-});
+  session: z.looseObject({
+    id: z.string(),
+    messages: z
+      .array(
+        z.object({
+          id: z.string(),
+          role: z.enum(["USER", "ASSISTANT", "ERROR"]),
+          content: z.string(),
+          model: z.string(),
+        }),
+      )
+      .min(1),
+  }),
+}) as unknown as z.ZodType<{ session: SessionData }>;
 
 function ChatMessage({ msg }: { msg: SessionData["messages"][number] }) {
   if (msg.role === "USER") {
