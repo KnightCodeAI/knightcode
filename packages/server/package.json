@@ -13,6 +13,8 @@
     "@hono/zod-validator": "^0.8.0",
     "@knightcode/database": "workspace:*",
     "@knightcode/shared": "workspace:*",
+    "@sentry/bun": "^10.53.1",
+    "@sentry/hono": "^10.53.1",
     "dotenv": "^17.4.2",
     "hono": "^4.12.22",
     "zod": "^4.4.3"

@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { db } from "@knightcode/database/client";
 import { MessageStatus, Mode, Role } from "@knightcode/database/enums";
 import { findSupportedChatModel } from "@knightcode/shared";
+import * as Sentry from "@sentry/hono/bun";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -25,6 +26,10 @@ const createSessionValidator = zValidator(
   createSessionSchema,
   (result, c) => {
     if (!result.success) {
+      Sentry.logger.warn("Session creation validation failed", {
+        path: c.req.path,
+        issues: result.error.issues.length,
+      });
       return c.json({ error: "Invalid request body" }, 400);
     }
   },
@@ -63,6 +68,10 @@ const app = new Hono()
     });
 
     if (!session) {
+      Sentry.logger.warn("Session not found", {
+        sessionId: id,
+        userId: "mock-user",
+      });
       return c.json({ error: "Session not found" }, 404);
     }
 
