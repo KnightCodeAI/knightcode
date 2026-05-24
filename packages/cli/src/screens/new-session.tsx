@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { z } from "zod";
-import { type ModeType, type SupportedChatModelId, type ReasoningEffortLevel } from "@knightcode/shared";
+import {
+  modeSchema,
+  findSupportedChatModel,
+  type ModeType,
+  type SupportedChatModelId,
+  type ReasoningEffortLevel,
+} from "@knightcode/shared";
 import { UserMessage } from "../components/messages";
 import { SessionShell } from "../components/session-shell";
 import { apiClient } from "../lib/api-client";
@@ -10,9 +16,9 @@ import { useToast } from "../providers/toast";
 
 const newSessionStateSchema = z.object({
   message: z.string(),
-  mode: z.custom<ModeType>(),
-  model: z.custom<SupportedChatModelId>(),
-  reasoningEffort: z.custom<ReasoningEffortLevel>().optional(),
+  mode: modeSchema,
+  model: z.string().refine((v) => !!findSupportedChatModel(v), "Unsupported model"),
+  reasoningEffort: z.enum(["none", "low", "medium", "high", "max"]).optional(),
 });
 
 export function NewSession() {

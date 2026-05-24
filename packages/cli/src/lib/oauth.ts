@@ -1,4 +1,5 @@
 import open from "open";
+import { createHmac } from "crypto";
 import { saveAuth } from "./auth";
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
@@ -21,13 +22,27 @@ async function createPkceChallenge(verifier: string) {
 }
 
 function encodeState(state: OAuthState) {
-  return toBase64Url(JSON.stringify(state));
+  const encoded = toBase64Url(JSON.stringify(state));
+  const secret = process.env.JWT_SECRET!;
+  const signature = createHmac("sha256", secret)
+    .update(encoded)
+    .digest("base64url");
+  return `${encoded}.${signature}`;
 }
 
 function decodeState(state: string) {
-  const [encoded] = state.split(".");
-  if (!encoded) {
-    throw new Error("Invalid state");
+  const [encoded, signature] = state.split(".");
+  if (!encoded || !signature) {
+    throw new Error("Invalid state format");
+  }
+
+  const secret = process.env.JWT_SECRET!;
+  const expectedSignature = createHmac("sha256", secret)
+    .update(encoded)
+    .digest("base64url");
+
+  if (signature !== expectedSignature) {
+    throw new Error("Invalid state signature");
   }
 
   return JSON.parse(Buffer.from(encoded, "base64url").toString()) as OAuthState;

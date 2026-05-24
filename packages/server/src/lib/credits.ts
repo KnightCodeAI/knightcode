@@ -41,7 +41,13 @@ function getTokenCounts(usage: LanguageModelUsage): TokenCounts {
     inputTokens < 0 ||
     outputTokens < 0
   ) {
-    throw new Error("Credit conversion requires input and output token counts");
+    console.warn(
+      `[Billing Warning] getTokenCounts received invalid or undefined LanguageModelUsage token counts (inputTokens: ${inputTokens}, outputTokens: ${outputTokens}). Returning safe fallback TokenCounts with 0 tokens to prevent billing hard-failure.`,
+    );
+    return {
+      inputTokens: 0,
+      outputTokens: 0,
+    };
   }
 
   return {

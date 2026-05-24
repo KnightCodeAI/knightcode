@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "crypto";
 import { Hono } from "hono";
 
 const app = new Hono().get("/callback", (c) => {
@@ -16,8 +17,21 @@ const app = new Hono().get("/callback", (c) => {
   }
 
   try {
-    const [encoded] = state.split(".");
-    if (!encoded) throw new Error("Invalid state");
+    const [encoded, signature] = state.split(".");
+    if (!encoded || !signature) {
+      return c.text("Invalid state format", 400);
+    }
+
+    const secret = process.env.JWT_SECRET!;
+    const expectedSignature = createHmac("sha256", secret)
+      .update(encoded)
+      .digest("base64url");
+
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expectedSignature);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return c.text("Invalid authentication state signature", 400);
+    }
 
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString());
     const port = payload.port;

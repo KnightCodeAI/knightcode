@@ -57,7 +57,7 @@ export const COMMANDS: Command[] = [
       });
       try {
         await performLogin();
-        ctx.toast.show({ variant: "success", message: "Sign in successfull" });
+        ctx.toast.show({ variant: "success", message: "Sign in successful" });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Sign in failed";
@@ -206,7 +206,9 @@ export const COMMANDS: Command[] = [
         });
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Failed to open checkout";
+          error instanceof Error
+            ? error.message
+            : "Failed to open billing portal";
         ctx.toast.show({ message, variant: "error" });
       }
     },

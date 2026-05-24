@@ -79,7 +79,7 @@ const app = new Hono<AuthenticatedEnv>()
     if (!session) {
       Sentry.logger.warn("Session not found", {
         sessionId: id,
-        userId: "mock-user",
+        userId,
       });
       return c.json({ error: "Session not found" }, 404);
     }
