@@ -1,7 +1,7 @@
-import { Mode } from "@knightcode/database";
 import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { z } from "zod";
+import { type ModeType, type SupportedChatModelId, type ReasoningEffortLevel } from "@knightcode/shared";
 import { UserMessage } from "../components/messages";
 import { SessionShell } from "../components/session-shell";
 import { apiClient } from "../lib/api-client";
@@ -10,9 +10,9 @@ import { useToast } from "../providers/toast";
 
 const newSessionStateSchema = z.object({
   message: z.string(),
-  mode: z.enum(Mode),
-  model: z.string(),
-  reasoningEffort: z.enum(["none", "low", "medium", "high", "max"]).optional(),
+  mode: z.custom<ModeType>(),
+  model: z.custom<SupportedChatModelId>(),
+  reasoningEffort: z.custom<ReasoningEffortLevel>().optional(),
 });
 
 export function NewSession() {
@@ -45,14 +45,7 @@ export function NewSession() {
         const res = await apiClient.sessions.$post({
           json: {
             title: state.message.slice(0, 100),
-            cwd: process.cwd(),
             reasoningEffort: state.reasoningEffort,
-            initialMessage: {
-              role: "USER",
-              content: state.message,
-              mode: state.mode,
-              model: state.model,
-            },
           },
         });
 
@@ -63,7 +56,14 @@ export function NewSession() {
         const session = await res.json();
         navigate(`/sessions/${session.id}`, {
           replace: true,
-          state: { session },
+          state: {
+            session,
+            initialPrompt: {
+              message: state.message,
+              mode: state.mode,
+              model: state.model,
+            },
+          },
         });
       } catch (error) {
         if (ignore) return;

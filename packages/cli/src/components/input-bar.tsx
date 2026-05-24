@@ -1,4 +1,4 @@
-import { Mode } from "@knightcode/database/enums";
+import { Mode } from "@knightcode/shared";
 import {
   ScrollBoxRenderable,
   TextAttributes,
@@ -269,9 +269,14 @@ function FileMentionMenu({
   onExecute,
 }: FileMentionMenuProps) {
   const { colors } = useTheme();
-  const terminalHeight = process.stdout?.rows && process.stdout.rows > 0 ? process.stdout.rows : 24;
+  const terminalHeight =
+    process.stdout?.rows && process.stdout.rows > 0 ? process.stdout.rows : 24;
   const maxMenuHeight = Math.max(2, terminalHeight - 6);
-  const visibleHeight = Math.min(candidates.length, MAX_VISIBLE_MENTIONS, maxMenuHeight);
+  const visibleHeight = Math.min(
+    candidates.length,
+    MAX_VISIBLE_MENTIONS,
+    maxMenuHeight,
+  );
 
   if (candidates.length === 0) {
     return (

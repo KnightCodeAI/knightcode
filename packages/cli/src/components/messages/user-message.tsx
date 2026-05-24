@@ -1,10 +1,10 @@
-import { Mode } from "@knightcode/database";
+import { type ModeType, Mode } from "@knightcode/shared";
 import { useTheme } from "../../providers/theme";
 import { EmptyBorder } from "../utils/border";
 
 type Props = {
   message: string;
-  mode: Mode;
+  mode: ModeType;
 };
 
 export function UserMessage({ message, mode }: Props) {

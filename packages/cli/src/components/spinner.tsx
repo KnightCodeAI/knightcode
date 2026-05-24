@@ -1,9 +1,9 @@
-import { Mode } from "@knightcode/database/enums";
+import { type ModeType, Mode } from "@knightcode/shared";
 import "opentui-spinner/react";
 import { useTheme } from "../providers/theme";
 
 type Props = {
-  mode?: Mode;
+  mode?: ModeType;
 };
 
 export function Spinner({ mode = Mode.BUILD }: Props) {

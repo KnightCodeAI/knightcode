@@ -1,26 +1,15 @@
 import { zValidator } from "@hono/zod-validator";
 import { Prisma } from "@knightcode/database";
 import { db } from "@knightcode/database/client";
-import { MessageStatus, Mode, Role } from "@knightcode/database/enums";
 import * as Sentry from "@sentry/hono/bun";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AuthenticatedEnv } from "../middleware/require-auth";
-import { isSupportedChatModel } from "../lib/models";
 import { requireCreditsBalance } from "../middleware/require-credits-balance";
 
 const createSessionSchema = z.object({
   title: z.string(),
-  cwd: z.string().optional(),
   reasoningEffort: z.enum(["none", "low", "medium", "high", "max"]).optional(),
-  initialMessage: z
-    .object({
-      role: z.enum(Role),
-      content: z.string(),
-      mode: z.enum(Mode),
-      model: z.string().refine(isSupportedChatModel, "Unsupported model"),
-    })
-    .optional(),
 });
 
 const updateSessionSchema = z.object({
@@ -85,9 +74,6 @@ const app = new Hono<AuthenticatedEnv>()
 
     const session = await db.session.findUnique({
       where: { id, userId },
-      include: {
-        messages: { orderBy: { createdAt: "asc" } },
-      },
     });
 
     if (!session) {
@@ -135,22 +121,13 @@ const app = new Hono<AuthenticatedEnv>()
     //   { message: "Mock error: session loading failed" }
     // )
     const userId = c.get("userId");
-    const { initialMessage, ...data } = c.req.valid("json");
+    const data = c.req.valid("json");
 
     const session = await db.session.create({
       data: {
         ...data,
         userId,
-        ...(initialMessage && {
-          messages: {
-            create: {
-              ...initialMessage,
-              status: MessageStatus.COMPLETE,
-            },
-          },
-        }),
       },
-      include: { messages: true },
     });
 
     return c.json(session, 201);

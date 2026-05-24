@@ -1,6 +1,5 @@
-import { Mode } from "@knightcode/database/enums";
+import { findSupportedChatModel, Mode } from "@knightcode/shared";
 import { TextAttributes } from "@opentui/core";
-import { findSupportedChatModel } from "@knightcode/shared";
 import { usePromptConfig } from "../providers/prompt-config";
 import { useTheme } from "../providers/theme";
 import type { ThemeColors } from "../providers/theme/theme";
@@ -25,7 +24,8 @@ export function StatusBar() {
   const { colors } = useTheme();
 
   const modelDef = findSupportedChatModel(model);
-  const showReasoning = modelDef?.supportsThinking && reasoningEffort !== "none";
+  const showReasoning =
+    modelDef?.supportsThinking && reasoningEffort !== "none";
   const modelText = model.replace(/:free$/, "");
 
   return (

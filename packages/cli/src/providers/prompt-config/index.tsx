@@ -1,16 +1,17 @@
-import { Mode } from "@knightcode/database/enums";
 import {
   DEFAULT_CHAT_MODEL_ID,
-  type SupportedChatModelId,
+  Mode,
+  type ModeType,
   type ReasoningEffortLevel,
+  type SupportedChatModelId,
 } from "@knightcode/shared";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useState } from "react";
 
 type PromptConfigContextValue = {
-  mode: Mode;
+  mode: ModeType;
   toggleMode: () => void;
-  setMode: (mode: Mode) => void;
+  setMode: (mode: ModeType) => void;
   model: SupportedChatModelId;
   setModel: (model: SupportedChatModelId) => void;
   reasoningEffort: ReasoningEffortLevel;
@@ -36,11 +37,12 @@ type PromptConfigProviderProps = {
 };
 
 export function PromptConfigProvider({ children }: PromptConfigProviderProps) {
-  const [mode, setMode] = useState<Mode>(Mode.BUILD);
+  const [mode, setMode] = useState<ModeType>(Mode.BUILD);
   const [model, setModel] = useState<SupportedChatModelId>(
     DEFAULT_CHAT_MODEL_ID,
   );
-  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffortLevel>("medium");
+  const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffortLevel>("medium");
 
   const toggleMode = useCallback(() => {
     setMode((m) => (m === Mode.BUILD ? Mode.PLAN : Mode.BUILD));

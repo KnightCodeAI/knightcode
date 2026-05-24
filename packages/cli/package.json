@@ -15,14 +15,15 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.193",
     "@knightcode/database": "workspace:*",
     "@knightcode/shared": "workspace:*",
     "@opentui/core": "^0.2.10",
     "@opentui/react": "^0.2.10",
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "workspace:*",
+    "ai": "^6.0.191",
     "date-fns": "^4.3.0",
-    "eventsource-parser": "^3.0.8",
     "hono": "^4.12.12",
     "open": "^11.0.0",
     "opentui-spinner": "^0.0.6",
