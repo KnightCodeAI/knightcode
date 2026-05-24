@@ -1,4 +1,7 @@
-import { SUPPORTED_CHAT_MODELS, findSupportedChatModel } from "@knightcode/shared";
+import {
+  SUPPORTED_CHAT_MODELS,
+  findSupportedChatModel,
+} from "@knightcode/shared";
 import {
   AgentsDialogContent,
   ModelsDialogContent,
@@ -8,6 +11,8 @@ import {
 } from "../dialogs";
 import type { Command } from "./types";
 import { apiClient } from "../../lib/api-client";
+import { performLogin } from "../../lib/oauth";
+import { clearAuth } from "../../lib/auth";
 
 export const COMMANDS: Command[] = [
   {
@@ -45,11 +50,18 @@ export const COMMANDS: Command[] = [
     name: "login",
     description: "Sign in to your account",
     value: "/login",
-    action: (ctx) => {
+    action: async (ctx) => {
       ctx.toast.show({
-        message: "Opening login flow...",
-        variant: "success",
+        message: "Opening browser to sign in...",
       });
+      try {
+        await performLogin();
+        ctx.toast.show({ variant: "success", message: "Sign in successfull" });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Sign in failed";
+        ctx.toast.show({ variant: "error", message });
+      }
     },
   },
   {
@@ -57,9 +69,10 @@ export const COMMANDS: Command[] = [
     description: "Sign out of your account",
     value: "/logout",
     action: (ctx) => {
+      clearAuth();
       ctx.toast.show({
-        message: "Logging out...",
-        variant: "info",
+        message: "Logged out successfull",
+        variant: "success",
       });
     },
   },

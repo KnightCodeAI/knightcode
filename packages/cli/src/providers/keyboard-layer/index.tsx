@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
 
-export type KeyboardLayerId = "base" | "command" | "dialog";
+export type KeyboardLayerId = "base" | "command" | "dialog" | "mention";
 
 type Responder = () => boolean;
 
