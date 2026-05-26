@@ -432,12 +432,17 @@ export async function executeLocalTool(
         port,
       } = toolInputSchemas.bash.parse(input);
 
+      const isWin = process.platform === "win32";
+      const shellArgs = isWin
+        ? ["powershell.exe", "-Command", command]
+        : ["bash", "-c", command];
+
       if (runInBackground) {
         if (port !== undefined) {
           killProcessOnPort(port);
         }
 
-        const proc = Bun.spawn(["bash", "-c", command], {
+        const proc = Bun.spawn(shellArgs, {
           cwd: resolveInsideCwd(".").resolved,
           stdout: "ignore",
           stderr: "ignore",
@@ -453,7 +458,7 @@ export async function executeLocalTool(
         };
       }
 
-      const proc = Bun.spawn(["bash", "-c", command], {
+      const proc = Bun.spawn(shellArgs, {
         cwd: resolveInsideCwd(".").resolved,
         stdout: "pipe",
         stderr: "pipe",
