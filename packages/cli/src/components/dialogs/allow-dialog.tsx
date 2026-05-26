@@ -73,6 +73,13 @@ export function AllowDialogContent() {
 
   useKeyboard((key) => {
     const totalCommands = permissions.allowedCommands.length;
+    if (totalCommands === 0) {
+      if (key.name === "enter" || key.name === "return") {
+        key.preventDefault();
+        handleAdd();
+      }
+      return;
+    }
     if (key.name === "up") {
       key.preventDefault();
       setFocusedIndex((prev) => {

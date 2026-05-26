@@ -64,7 +64,8 @@ export function isCommandAllowed(command: string): boolean {
 
   const normalised = command.trim();
   return permissions.allowedCommands.some((allowed) => {
-    return normalised === allowed.trim();
+    const pattern = allowed.trim();
+    return normalised === pattern || normalised.startsWith(`${pattern} `);
   });
 }
 

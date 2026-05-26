@@ -1,21 +1,17 @@
 import { Mode, toolInputSchemas, type ModeType } from "@knightcode/shared";
 import { existsSync } from "fs";
 import { mkdir, readFile, readdir, stat, writeFile, unlink } from "fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
 import { spawnSync } from "child_process";
+import safeRegex from "safe-regex";
 import { apiClient } from "./api-client";
 import { killProcessOnPort, registerProcess } from "./background-tasks";
+import { getExecutionRoot } from "./worktree-tools";
 
 const sessionOriginalContents = new Map<string, Map<string, string | null>>();
 
 function isSafeRegex(pattern: string): boolean {
-  // Check for common catastrophic backtracking pattern signatures:
-  // Nested quantifiers like (a+)+, (a*)*, (a?)*, (.*)*, etc.
-  const nestedQuantifierRegex = /\([^)]*[*+?{][^)]*\)[*+?{]/;
-  if (nestedQuantifierRegex.test(pattern)) {
-    return false;
-  }
-  return true;
+  return safeRegex(pattern);
 }
 
 function escapeRegExp(string: string) {
@@ -59,12 +55,12 @@ export async function undoSessionChanges(sessionId: string): Promise<{
 }> {
   const revertedFiles: string[] = [];
   const failedFiles: string[] = [];
-  const cwd = resolveInsideCwd(".").resolved;
 
   const sessionContents = sessionOriginalContents.get(sessionId);
   if (!sessionContents) {
     return { revertedFiles, failedFiles };
   }
+  const cwd = getExecutionRoot(sessionId).root;
 
   for (const [resolvedPath, originalContent] of sessionContents.entries()) {
     try {
@@ -98,16 +94,46 @@ const MAX_MATCHES = 200;
 const MAX_OUTPUT = 50_000;
 const DEFAULT_TIMEOUT = 120_000;
 
-function resolveInsideCwd(path: string) {
-  const cwd = process.cwd();
-  const resolved = resolve(cwd, path);
-  const rel = relative(cwd, resolved);
+function resolveInsideRoot(root: string, path: string) {
+  const resolved = resolve(root, path);
+  const rel = relative(root, resolved);
 
   if (rel.startsWith("..") || isAbsolute(rel)) {
     throw new Error("Path is outside the project directory");
   }
 
-  return { cwd, resolved };
+  return { cwd: root, resolved };
+}
+
+function assertSafeProjectFile(resolved: string, cwd: string, action: string) {
+  const rel = relative(cwd, resolved);
+  const parts = rel.split(/[\\/]+/);
+  const fileName = basename(resolved).toLowerCase();
+
+  if (parts.includes(".git")) {
+    throw new Error(`Refusing to ${action} files inside .git`);
+  }
+
+  if (fileName === ".env" || fileName.startsWith(".env.")) {
+    throw new Error(`Refusing to ${action} environment/secret files`);
+  }
+}
+
+function assertSafeCommand(command: string) {
+  const normalized = command.toLowerCase().replace(/\s+/g, " ").trim();
+  const forbiddenPatterns = [
+    /\brm\s+(-[^\s]*r[^\s]*f|-rf|-fr)\b/,
+    /\bgit\s+push\b.*\s--force(?:\s|$)/,
+    /\bdrop\s+table\b/,
+    /^format\b/,
+    /\bdeltree\b/,
+    /\bdel\s+\/[^\s]*s[^\s]*q\b/,
+    /\bremove-item\b.*\s-recurse\b.*\s-force\b/,
+  ];
+
+  if (forbiddenPatterns.some((pattern) => pattern.test(normalized))) {
+    throw new Error("Refusing to run a destructive command");
+  }
 }
 
 function truncate(value: string, limit: number) {
@@ -123,6 +149,7 @@ export async function executeLocalTool(
   sessionId?: string,
 ) {
   const sId = sessionId ?? "default";
+  const executionRoot = getExecutionRoot(sId).root;
   if (
     mode === Mode.PLAN &&
     ![
@@ -145,7 +172,8 @@ export async function executeLocalTool(
   switch (toolName) {
     case "readFile": {
       const { path, offset, limit } = toolInputSchemas.readFile.parse(input);
-      const { resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = resolveInsideRoot(executionRoot, path);
+      assertSafeProjectFile(resolved, cwd, "read");
 
       const ext = path.split(".").pop()?.toLowerCase();
       const imageExtensions = [
@@ -200,7 +228,7 @@ export async function executeLocalTool(
     }
     case "listDirectory": {
       const { path } = toolInputSchemas.listDirectory.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = resolveInsideRoot(executionRoot, path);
       const entries = await readdir(resolved);
       const results: { name: string; type: "file" | "directory" }[] = [];
 
@@ -224,7 +252,7 @@ export async function executeLocalTool(
     }
     case "glob": {
       const { pattern, path } = toolInputSchemas.glob.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = resolveInsideRoot(executionRoot, path);
       const glob = new Bun.Glob(pattern);
       const files: string[] = [];
       let truncated = false;
@@ -255,7 +283,7 @@ export async function executeLocalTool(
         outputMode = "content",
         maxResults = 200,
       } = toolInputSchemas.grep.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = resolveInsideRoot(executionRoot, path);
 
       const regex = validateAndGetRegex(pattern, caseInsensitive ? "i" : "");
 
@@ -389,7 +417,8 @@ export async function executeLocalTool(
     }
     case "writeFile": {
       const { path, content } = toolInputSchemas.writeFile.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = resolveInsideRoot(executionRoot, path);
+      assertSafeProjectFile(resolved, cwd, "modify");
       await recordOriginalContent(sId, resolved);
       await mkdir(dirname(resolved), { recursive: true });
       await writeFile(resolved, content, "utf-8");
@@ -402,7 +431,8 @@ export async function executeLocalTool(
     case "editFile": {
       const { path, oldString, newString, replaceAll } =
         toolInputSchemas.editFile.parse(input);
-      const { cwd, resolved } = resolveInsideCwd(path);
+      const { cwd, resolved } = resolveInsideRoot(executionRoot, path);
+      assertSafeProjectFile(resolved, cwd, "modify");
       await recordOriginalContent(sId, resolved);
       const content = await readFile(resolved, "utf-8");
       const occurrences = content.split(oldString).length - 1;
@@ -431,6 +461,7 @@ export async function executeLocalTool(
         runInBackground = false,
         port,
       } = toolInputSchemas.bash.parse(input);
+      assertSafeCommand(command);
 
       const isWin = process.platform === "win32";
       const shellArgs = isWin
@@ -443,7 +474,7 @@ export async function executeLocalTool(
         }
 
         const proc = Bun.spawn(shellArgs, {
-          cwd: resolveInsideCwd(".").resolved,
+          cwd: executionRoot,
           stdout: "ignore",
           stderr: "ignore",
           env: { ...process.env, TERM: "dumb" },
@@ -459,7 +490,7 @@ export async function executeLocalTool(
       }
 
       const proc = Bun.spawn(shellArgs, {
-        cwd: resolveInsideCwd(".").resolved,
+        cwd: executionRoot,
         stdout: "pipe",
         stderr: "pipe",
         env: { ...process.env, TERM: "dumb" },
@@ -501,7 +532,7 @@ export async function executeLocalTool(
     }
     case "gitStatus": {
       const res = spawnSync("git", ["status", "--short"], {
-        cwd: resolveInsideCwd(".").resolved,
+        cwd: executionRoot,
         encoding: "utf-8",
       });
       return {
@@ -513,11 +544,11 @@ export async function executeLocalTool(
       const { path: diffPath } = toolInputSchemas.gitDiff.parse(input);
       const args = ["diff"];
       if (diffPath) {
-        const { cwd, resolved } = resolveInsideCwd(diffPath);
+        const { cwd, resolved } = resolveInsideRoot(executionRoot, diffPath);
         args.push("--", relative(cwd, resolved));
       }
       const res = spawnSync("git", args, {
-        cwd: resolveInsideCwd(".").resolved,
+        cwd: executionRoot,
         encoding: "utf-8",
       });
       return {
@@ -528,7 +559,7 @@ export async function executeLocalTool(
     case "gitLog": {
       const { limit } = toolInputSchemas.gitLog.parse(input);
       const res = spawnSync("git", ["log", `-${limit}`, "--oneline"], {
-        cwd: resolveInsideCwd(".").resolved,
+        cwd: executionRoot,
         encoding: "utf-8",
       });
       return {
@@ -542,8 +573,8 @@ export async function executeLocalTool(
 }
 
 export function getSessionModifiedFiles(sessionId: string): string[] {
-  const cwd = resolveInsideCwd(".").resolved;
   const sessionContents = sessionOriginalContents.get(sessionId);
   if (!sessionContents) return [];
+  const cwd = getExecutionRoot(sessionId).root;
   return Array.from(sessionContents.keys()).map((p) => relative(cwd, p));
 }

@@ -12,7 +12,7 @@ type Props = {
   isCompacting?: boolean;
   loading?: boolean;
   interruptible?: boolean;
-  compact?: () => void;
+  compact?: () => void | Promise<void>;
   tokenStats?: {
     inputTokens: number;
     outputTokens: number;

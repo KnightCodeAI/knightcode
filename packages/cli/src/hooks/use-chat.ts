@@ -20,6 +20,8 @@ import { executeLocalTool, getSessionModifiedFiles } from "../lib/local-tools";
 import { loadProjectContextSync } from "../lib/project-context";
 import { loadGitContext } from "../lib/git-context";
 import { detectProjectStackSync } from "../lib/project-detection";
+import { allowCommand, isCommandAllowed } from "../lib/permissions";
+import { getExecutionRoot } from "../lib/worktree-tools";
 import { useTodo, type TodoItem } from "../providers/todo";
 import { useToast } from "../providers/toast";
 
@@ -62,6 +64,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
   const [alwaysAllowEdits, setAlwaysAllowEditsState] = useState(false);
   const alwaysAllowEditsRef = useRef(false);
   const chatRef = useRef<any>(null);
+  const toolLoopCountsRef = useRef(new Map<string, number>());
   const [isCompacting, setIsCompacting] = useState(false);
   const { setItems: setTodoItems } = useTodo();
   const todoRef = useRef(setTodoItems);
@@ -92,9 +95,10 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
             ? [previousMessage, message]
             : [message];
 
-        const projectCtx = loadProjectContextSync();
-        const gitCtx = loadGitContext();
-        const stackCtx = detectProjectStackSync();
+        const executionRoot = getExecutionRoot(sessionId);
+        const projectCtx = loadProjectContextSync(executionRoot.root);
+        const gitCtx = loadGitContext(executionRoot.root);
+        const stackCtx = detectProjectStackSync(executionRoot.root);
 
         return {
           body: {
@@ -123,6 +127,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
           p.toolCall.toolName,
           p.toolCall.input,
           p.mode,
+          sessionId,
         );
         chatRef.current?.addToolOutput({
           tool: p.toolCall.toolName as keyof ChatTools,
@@ -138,7 +143,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         });
       }
     },
-    [chatRef],
+    [chatRef, sessionId],
   );
 
   const confirmToolCall = useCallback(
@@ -149,26 +154,47 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       if (!pending) return;
 
       if (always) {
-        setAlwaysAllowEdits(true);
+        if (pending.toolCall.toolName === "bash") {
+          const command = pending.toolCall.input?.command;
+          if (typeof command === "string" && command.trim()) {
+            allowCommand(command);
+          }
+        } else if (
+          pending.toolCall.toolName === "editFile" ||
+          pending.toolCall.toolName === "writeFile"
+        ) {
+          setAlwaysAllowEdits(true);
+        }
 
         // Execute the current one
         await executeAndOutput(pending);
 
-        // Execute all other pending edits
-        const otherEdits = pendingConfirmations.filter(
-          (c) =>
-            c.toolCallId !== toolCallId && c.toolCall.toolName === "editFile",
-        );
-        for (const other of otherEdits) {
-          await executeAndOutput(other);
+        // Execute all other pending file edits when the user selects "always".
+        if (
+          pending.toolCall.toolName === "editFile" ||
+          pending.toolCall.toolName === "writeFile"
+        ) {
+          const otherEdits = pendingConfirmations.filter(
+            (c) =>
+              c.toolCallId !== toolCallId &&
+              (c.toolCall.toolName === "editFile" ||
+                c.toolCall.toolName === "writeFile"),
+          );
+          for (const other of otherEdits) {
+            await executeAndOutput(other);
+          }
         }
 
-        // Remove the current one and all other edits from pending
         setPendingConfirmations((prev) =>
-          prev.filter(
-            (c) =>
-              c.toolCallId !== toolCallId && c.toolCall.toolName !== "editFile",
-          ),
+          pending.toolCall.toolName === "editFile" ||
+          pending.toolCall.toolName === "writeFile"
+            ? prev.filter(
+                (c) =>
+                  c.toolCallId !== toolCallId &&
+                  c.toolCall.toolName !== "editFile" &&
+                  c.toolCall.toolName !== "writeFile",
+              )
+            : prev.filter((c) => c.toolCallId !== toolCallId),
         );
       } else {
         // Just handle the single one
@@ -557,6 +583,20 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     transport,
     onToolCall({ toolCall }: { toolCall: any }) {
       const mode = chatRef.current?.messages?.at(-1)?.metadata?.mode ?? "BUILD";
+      const loopKey = `${toolCall.toolName}:${JSON.stringify(toolCall.input ?? {})}`;
+      const loopCount = (toolLoopCountsRef.current.get(loopKey) ?? 0) + 1;
+      toolLoopCountsRef.current.set(loopKey, loopCount);
+
+      if (toolCall.toolName !== "todoWrite" && loopCount > 8) {
+        chatRef.current?.addToolOutput({
+          tool: toolCall.toolName as keyof ChatTools,
+          toolCallId: toolCall.toolCallId,
+          state: "output-error",
+          errorText:
+            "Loop protection stopped this repeated tool call. Adjust the input or ask the user before retrying.",
+        });
+        return;
+      }
 
       if (toolCall.toolName === "todoWrite") {
         const { items } = toolCall.input as { items: TodoItem[] };
@@ -569,7 +609,26 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         return;
       }
 
-      if (toolCall.toolName === "editFile" && !alwaysAllowEditsRef.current) {
+      if (
+        (toolCall.toolName === "editFile" ||
+          toolCall.toolName === "writeFile") &&
+        !alwaysAllowEditsRef.current
+      ) {
+        setPendingConfirmations((prev) => [
+          ...prev,
+          {
+            toolCallId: toolCall.toolCallId,
+            toolCall,
+            mode,
+          },
+        ]);
+        return;
+      }
+
+      if (
+        toolCall.toolName === "bash" &&
+        !isCommandAllowed(String(toolCall.input?.command ?? ""))
+      ) {
         setPendingConfirmations((prev) => [
           ...prev,
           {
@@ -593,7 +652,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         return;
       }
 
-      void executeLocalTool(toolCall.toolName, toolCall.input, mode)
+      void executeLocalTool(toolCall.toolName, toolCall.input, mode, sessionId)
         .then((output) => {
           chatRef.current?.addToolOutput({
             tool: toolCall.toolName as keyof ChatTools,
@@ -631,6 +690,8 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       mode: ModeType;
       model: SupportedChatModelId;
     }) => {
+      toolLoopCountsRef.current.clear();
+      await compactHistory(false, params.model);
       return chat.sendMessage({
         text: params.userText,
         metadata: {

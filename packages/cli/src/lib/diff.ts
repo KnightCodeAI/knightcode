@@ -8,6 +8,10 @@ function splitLines(value: string): string[] {
 }
 
 export function computeLineDiff(oldStr: string, newStr: string): DiffLine[] {
+  if (oldStr === "" && newStr === "") {
+    return [{ type: "unchanged", content: "" }];
+  }
+
   const oldLines = splitLines(oldStr);
   const newLines = splitLines(newStr);
 

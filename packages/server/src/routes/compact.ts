@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { db } from "@knightcode/database/client";
 import { getToolContracts, modeSchema } from "@knightcode/shared";
 import { isSupportedChatModel, resolveChatModel } from "../lib/models";
-import { convertToModelMessages, generateText } from "ai";
+import { convertToModelMessages, generateText, validateUIMessages } from "ai";
 import { Hono } from "hono";
 import { z } from "zod";
 import { calculateCreditsForUsage } from "../lib/credits";
@@ -43,8 +43,8 @@ function estimateTokensForMessages(messages: any[]): number {
         } else if (part.type === "reasoning" && typeof part.text === "string") {
           tokens += estimateTokensForText(part.text);
         } else if (
-          part.type === "dynamic-tool" ||
-          part.type.startsWith("tool-")
+          typeof part.type === "string" &&
+          (part.type === "dynamic-tool" || part.type.startsWith("tool-"))
         ) {
           if (part.input) {
             tokens += estimateTokensForText(JSON.stringify(part.input));
@@ -86,12 +86,18 @@ const app = new Hono<AuthenticatedEnv>().post(
 
     const resolvedModel = resolveChatModel(model);
     const tools = getToolContracts(mode);
+    const validatedMessages = await validateUIMessages({
+      messages: messages as any[],
+      tools: tools as any,
+    });
 
     // Keep the last 4 messages intact, summarize everything before.
-    const toSummarize = messages.slice(0, -4);
-    const preserved = messages.slice(-4);
+    const toSummarize = validatedMessages.slice(0, -4);
+    const preserved = validatedMessages.slice(-4);
 
-    const modelMessages = await convertToModelMessages(toSummarize, { tools });
+    const modelMessages = await convertToModelMessages(toSummarize, {
+      tools: tools as any,
+    });
 
     const compPrompt = `You are an expert technical coordinator. Your task is to analyze the conversation history between a developer and a coding assistant and compile a comprehensive, highly-structured, and dense engineering state summary. This summary will be used to compact the chat history so that the assistant retains complete, high-fidelity context of all work completed, files read/modified, active goals, design decisions, and unresolved issues, without needing to re-read the raw messages.
 
@@ -182,23 +188,30 @@ Produce only this summary. Be extremely precise, technical, and complete. Do not
 
       // Find the last assistant message in compactedMessages to update its token count metadata.
       // This will automatically refresh the TUI status bar.
+      const isRecord = (v: unknown): v is Record<string, any> =>
+        !!v && typeof v === "object";
       const lastAssistantMessage = [...compactedMessages]
         .reverse()
-        .find((m) => m.role === "assistant");
+        .find((m) => isRecord(m) && m.role === "assistant");
       if (lastAssistantMessage) {
         // Zero out metadata.usage on all other messages in compactedMessages to avoid double counting
         for (const msg of compactedMessages) {
-          if (msg !== lastAssistantMessage && msg.metadata) {
-            delete msg.metadata.usage;
+          if (isRecord(msg) && msg !== lastAssistantMessage && msg.metadata) {
+            delete (msg.metadata as Record<string, unknown>).usage;
           }
         }
 
-        if (!lastAssistantMessage.metadata) {
-          lastAssistantMessage.metadata = {};
+        const writableLastAssistantMessage = lastAssistantMessage as Record<
+          string,
+          any
+        >;
+        if (!writableLastAssistantMessage.metadata) {
+          writableLastAssistantMessage.metadata = {};
         }
-        lastAssistantMessage.metadata.usage = {
+        writableLastAssistantMessage.metadata.usage = {
           inputTokens: estimatedTokens,
-          outputTokens: lastAssistantMessage.metadata.usage?.outputTokens ?? 0,
+          outputTokens:
+            writableLastAssistantMessage.metadata.usage?.outputTokens ?? 0,
         };
       }
 

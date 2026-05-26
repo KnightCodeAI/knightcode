@@ -131,11 +131,11 @@ export function BotMessage({
                 isEditFile && part.input && typeof part.input === "object"
                   ? (part.input as any)
                   : null;
+              const isPending = pendingConfirmations.some(
+                (c) => c.toolCallId === part.toolCallId,
+              );
 
               if (isAskUserQuestion) {
-                const isPending = pendingConfirmations.some(
-                  (c) => c.toolCallId === part.toolCallId,
-                );
                 if (isPending && answerQuestion) {
                   const input = part.input as any;
                   return (
@@ -196,9 +196,6 @@ export function BotMessage({
                         },
                       ]
                     : computeLineDiff(editInput.oldString, editInput.newString);
-                const isPending = pendingConfirmations.some(
-                  (c) => c.toolCallId === part.toolCallId,
-                );
                 return (
                   <box
                     key={part.toolCallId}
@@ -248,6 +245,38 @@ export function BotMessage({
                         </text>
                       </box>
                     )}
+                  </box>
+                );
+              }
+
+              if (
+                isPending &&
+                (toolName === "writeFile" || toolName === "bash")
+              ) {
+                const input = part.input as any;
+                const description =
+                  toolName === "writeFile"
+                    ? `${input?.path ?? "file"} (${String(input?.content ?? "").length} chars)`
+                    : (input?.command ?? "");
+
+                return (
+                  <box
+                    key={part.toolCallId}
+                    border={["top", "bottom", "left", "right"]}
+                    borderColor="yellow"
+                    padding={1}
+                    flexDirection="column"
+                    width="100%"
+                    gap={0}
+                    marginY={1}
+                  >
+                    <text fg="yellow" attributes={TextAttributes.BOLD}>
+                      Approve {formatToolName(toolName)}?
+                    </text>
+                    <text fg="white">{description}</text>
+                    <text fg="yellow" attributes={TextAttributes.BOLD}>
+                      Accept? [y] Yes [n] No [a] Always
+                    </text>
                   </box>
                 );
               }

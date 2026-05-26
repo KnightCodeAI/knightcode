@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { convert } from "html-to-text";
 import dns from "node:dns/promises";
+import net from "node:net";
 import { z } from "zod";
 import { searchTavily } from "../lib/tavily";
 import type { AuthenticatedEnv } from "../middleware/require-auth";
@@ -18,14 +19,34 @@ const fetchSchema = z.object({
 });
 
 function isPrivateIp(ip: string): boolean {
-  // Minimal: expand as needed (RFC1918, loopback, link-local, ULA, etc.)
+  const normalized = ip.toLowerCase();
+  if (net.isIPv4(normalized)) {
+    const parts = normalized.split(".").map((part) => Number(part));
+    const [a, b] = parts;
+    if (a === 0 || a === 10 || a === 127 || (a === 169 && b === 254)) {
+      return true;
+    }
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b !== undefined && b >= 64 && b <= 127) return true;
+    if (a === 198 && (b === 18 || b === 19)) return true;
+    return false;
+  }
+
+  if (net.isIPv6(normalized)) {
+    return (
+      normalized === "::1" ||
+      normalized === "::" ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd") ||
+      normalized.startsWith("fe80:")
+    );
+  }
+
   return (
-    ip === "127.0.0.1" ||
-    ip === "::1" ||
-    ip.startsWith("10.") ||
-    ip.startsWith("192.168.") ||
-    ip.startsWith("169.254.") ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "metadata.google.internal"
   );
 }
 
@@ -62,7 +83,9 @@ const app = new Hono<AuthenticatedEnv>()
     async (c) => {
       const { url, maxLength } = c.req.valid("json");
       try {
+        await assertSafeTarget(url);
         const response = await fetch(url, {
+          redirect: "error",
           headers: {
             "User-Agent":
               "Mozilla/5.0 (compatible; KnightCode/1.0; +https://knightcode.dev)",
@@ -83,7 +106,36 @@ const app = new Hono<AuthenticatedEnv>()
         if (contentLength > maxLength * 5) {
           return c.json({ error: "Response too large to fetch safely" }, 413);
         }
-        const raw = await response.text();
+        if (!response.body) {
+          return c.json({ error: "Response body is null" }, 502);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let raw = "";
+        let accumulatedBytes = 0;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              accumulatedBytes += value.byteLength;
+              if (accumulatedBytes > maxLength * 5) {
+                await reader.cancel();
+                return c.json(
+                  { error: "Response too large to fetch safely" },
+                  413,
+                );
+              }
+              raw += decoder.decode(value, { stream: true });
+            }
+          }
+          raw += decoder.decode();
+        } finally {
+          reader.releaseLock();
+        }
+
         let text: string;
 
         if (

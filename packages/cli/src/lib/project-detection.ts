@@ -1,5 +1,5 @@
 import { join } from "path";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { readFile } from "fs/promises";
 
 export interface ProjectDetection {
@@ -49,7 +49,7 @@ function parsePackageDependencies(pkg: any): {
 
 function extractDetectorsSync(
   cwd: string,
-  packageJsonContent: string | null,
+  packageJsonContents: string[],
   tsconfigExists: boolean,
 ): ProjectDetection {
   let packageManager = "npm";
@@ -69,12 +69,14 @@ function extractDetectorsSync(
   let frameworks: string[] = [];
   let dependencies: string[] = [];
 
-  if (packageJsonContent) {
+  for (const packageJsonContent of packageJsonContents) {
     try {
       const pkg = JSON.parse(packageJsonContent);
       const parsed = parsePackageDependencies(pkg);
-      frameworks = parsed.frameworks;
-      dependencies = parsed.dependencies;
+      frameworks = Array.from(new Set([...frameworks, ...parsed.frameworks]));
+      dependencies = Array.from(
+        new Set([...dependencies, ...parsed.dependencies]),
+      );
     } catch {
       // Ignored
     }
@@ -88,34 +90,89 @@ function extractDetectorsSync(
   };
 }
 
-export function detectProjectStackSync(): ProjectDetection {
-  const cwd = process.cwd();
-  const packageJsonPath = join(cwd, "package.json");
-  const tsconfigPath = join(cwd, "tsconfig.json");
+function workspacePackageJsonPaths(cwd: string): string[] {
+  const paths = [join(cwd, "package.json")];
+  const workspaceDirs = ["packages", "apps"];
 
-  let packageJsonContent: string | null = null;
-  if (existsSync(packageJsonPath)) {
+  for (const workspaceDir of workspaceDirs) {
+    const absoluteWorkspaceDir = join(cwd, workspaceDir);
+    if (!existsSync(absoluteWorkspaceDir)) continue;
+
     try {
-      packageJsonContent = readFileSync(packageJsonPath, "utf-8");
-    } catch {}
+      for (const entry of readdirSync(absoluteWorkspaceDir, {
+        withFileTypes: true,
+      })) {
+        if (!entry.isDirectory()) continue;
+        const packageJsonPath = join(
+          absoluteWorkspaceDir,
+          entry.name,
+          "package.json",
+        );
+        if (existsSync(packageJsonPath)) {
+          paths.push(packageJsonPath);
+        }
+      }
+    } catch {
+      // Ignore unreadable workspace directories.
+    }
   }
 
-  const tsconfigExists = existsSync(tsconfigPath);
-  return extractDetectorsSync(cwd, packageJsonContent, tsconfigExists);
+  return Array.from(new Set(paths));
 }
 
-export async function detectProjectStack(): Promise<ProjectDetection> {
-  const cwd = process.cwd();
-  const packageJsonPath = join(cwd, "package.json");
-  const tsconfigPath = join(cwd, "tsconfig.json");
+function hasTypeScriptConfig(cwd: string): boolean {
+  if (existsSync(join(cwd, "tsconfig.json"))) return true;
 
-  let packageJsonContent: string | null = null;
-  if (existsSync(packageJsonPath)) {
+  for (const workspaceDir of ["packages", "apps"]) {
+    const absoluteWorkspaceDir = join(cwd, workspaceDir);
+    if (!existsSync(absoluteWorkspaceDir)) continue;
     try {
-      packageJsonContent = await readFile(packageJsonPath, "utf-8");
+      for (const entry of readdirSync(absoluteWorkspaceDir, {
+        withFileTypes: true,
+      })) {
+        if (
+          entry.isDirectory() &&
+          existsSync(join(absoluteWorkspaceDir, entry.name, "tsconfig.json"))
+        ) {
+          return true;
+        }
+      }
+    } catch {
+      // Ignore unreadable workspace directories.
+    }
+  }
+
+  return false;
+}
+
+export function detectProjectStackSync(cwd = process.cwd()): ProjectDetection {
+  const packageJsonContents: string[] = [];
+  for (const packageJsonPath of workspacePackageJsonPaths(cwd)) {
+    try {
+      packageJsonContents.push(readFileSync(packageJsonPath, "utf-8"));
     } catch {}
   }
 
-  const tsconfigExists = existsSync(tsconfigPath);
-  return extractDetectorsSync(cwd, packageJsonContent, tsconfigExists);
+  return extractDetectorsSync(
+    cwd,
+    packageJsonContents,
+    hasTypeScriptConfig(cwd),
+  );
+}
+
+export async function detectProjectStack(
+  cwd = process.cwd(),
+): Promise<ProjectDetection> {
+  const packageJsonContents: string[] = [];
+  for (const packageJsonPath of workspacePackageJsonPaths(cwd)) {
+    try {
+      packageJsonContents.push(await readFile(packageJsonPath, "utf-8"));
+    } catch {}
+  }
+
+  return extractDetectorsSync(
+    cwd,
+    packageJsonContents,
+    hasTypeScriptConfig(cwd),
+  );
 }

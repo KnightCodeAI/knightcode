@@ -330,7 +330,7 @@ type Props = {
   onSubmit: (text: string) => void;
   disabled?: boolean;
   isCompacting?: boolean;
-  compact?: () => void;
+  compact?: () => void | Promise<void>;
   tokenStats?: {
     inputTokens: number;
     outputTokens: number;

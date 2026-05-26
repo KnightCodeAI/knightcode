@@ -29,7 +29,7 @@ type Props = {
 };
 
 export function StatusBar({ tokenStats }: Props) {
-  const { mode, model, reasoningEffort } = usePromptConfig();
+  const { mode, model, reasoningEffort, worktreeDisabled } = usePromptConfig();
   const { colors } = useTheme();
 
   const modelDef = findSupportedChatModel(model);
@@ -69,47 +69,56 @@ export function StatusBar({ tokenStats }: Props) {
   }
 
   return (
-    <box flexDirection="row" gap={1}>
-      <text fg={mode === Mode.PLAN ? colors.planMode : colors.primary}>
-        {mode === Mode.PLAN ? "Plan" : "Build"}
-      </text>
+    <box flexDirection="row" gap={1} width="100%">
+      <box flexDirection="row" gap={1}>
+        <text fg={mode === Mode.PLAN ? colors.planMode : colors.primary}>
+          {mode === Mode.PLAN ? "Plan" : "Build"}
+        </text>
 
-      <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-        ›
-      </text>
-      <text>{modelText}</text>
-      {showReasoning && (
-        <>
-          <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-            •
-          </text>
-          <text fg={getReasoningColor(reasoningEffort, colors)}>
-            ✦ {reasoningEffort}
-          </text>
-        </>
-      )}
-
-      {tokenStats &&
-        (tokenStats.inputTokens > 0 || tokenStats.outputTokens > 0) && (
+        <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
+          ›
+        </text>
+        <text>{modelText}</text>
+        {showReasoning && (
           <>
             <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
               •
             </text>
-            <text fg={colors.info}>
-              {tokenStats.totalCost > 0
-                ? `$${tokenStats.totalCost.toFixed(4)}`
-                : "Free"}{" "}
-              (
-              {(
-                (tokenStats.inputTokens + tokenStats.outputTokens) /
-                1000
-              ).toFixed(1)}
-              k tkn)
+            <text fg={getReasoningColor(reasoningEffort, colors)}>
+              ✦ {reasoningEffort}
             </text>
           </>
         )}
 
-      {contextRemainingElement}
+        {tokenStats &&
+          (tokenStats.inputTokens > 0 || tokenStats.outputTokens > 0) && (
+            <>
+              <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
+                •
+              </text>
+              <text fg={colors.info}>
+                {tokenStats.totalCost > 0
+                  ? `$${tokenStats.totalCost.toFixed(4)}`
+                  : "Free"}{" "}
+                (
+                {(
+                  (tokenStats.inputTokens + tokenStats.outputTokens) /
+                  1000
+                ).toFixed(1)}
+                k tkn)
+              </text>
+            </>
+          )}
+
+        {contextRemainingElement}
+      </box>
+
+      <box flexDirection="row" gap={1} marginLeft="auto">
+        <text fg={colors.dimSeparator}>wt: </text>
+        <text fg={worktreeDisabled ? colors.planMode : colors.success}>
+          {worktreeDisabled ? "direct" : "isolated"}
+        </text>
+      </box>
     </box>
   );
 }

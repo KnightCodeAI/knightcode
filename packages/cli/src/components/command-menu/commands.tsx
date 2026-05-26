@@ -7,6 +7,7 @@ import {
   MemoryDialogContent,
   DiffDialogContent,
   AllowDialogContent,
+  WorktreeDialogContent,
 } from "../dialogs";
 import { undoSessionChanges } from "../../lib/local-tools";
 import {
@@ -292,7 +293,18 @@ export const COMMANDS: Command[] = [
     action: (ctx) => {
       ctx.dialog.open({
         title: "Repository Diff",
-        children: <DiffDialogContent />,
+        children: <DiffDialogContent sessionId={ctx.sessionId} />,
+      });
+    },
+  },
+  {
+    name: "worktree",
+    description: "Show current session worktree isolation status",
+    value: "/worktree",
+    action: (ctx) => {
+      ctx.dialog.open({
+        title: "Worktree",
+        children: <WorktreeDialogContent sessionId={ctx.sessionId} />,
       });
     },
   },
@@ -333,13 +345,20 @@ export const COMMANDS: Command[] = [
     name: "compact",
     description: "Compact chat history to free up context",
     value: "/compact",
-    action: (ctx) => {
+    action: async (ctx) => {
       if (ctx.compact) {
-        ctx.compact();
-        ctx.toast.show({
-          variant: "success",
-          message: "Chat history compacted successfully.",
-        });
+        try {
+          await ctx.compact();
+          ctx.toast.show({
+            variant: "success",
+            message: "Chat history compacted successfully.",
+          });
+        } catch (err) {
+          ctx.toast.show({
+            variant: "error",
+            message: `Compaction failed: ${(err as Error).message}`,
+          });
+        }
       } else {
         ctx.toast.show({
           variant: "error",

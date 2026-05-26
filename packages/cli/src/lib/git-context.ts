@@ -6,9 +6,7 @@ export interface GitContext {
   diffSummary: string;
 }
 
-export function loadGitContext(): GitContext {
-  const cwd = process.cwd();
-
+export function loadGitContext(cwd = process.cwd()): GitContext {
   const branchResult = spawnSync("git", ["branch", "--show-current"], {
     cwd,
     encoding: "utf-8",

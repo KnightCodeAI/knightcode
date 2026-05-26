@@ -8,9 +8,9 @@ export interface ProjectContext {
   projectInstructions: string;
 }
 
-export function loadProjectContextSync(): ProjectContext {
+export function loadProjectContextSync(cwd = process.cwd()): ProjectContext {
   const globalPath = join(homedir(), ".knightcode", "KNIGHTCODE.md");
-  const localDir = process.cwd();
+  const localDir = cwd;
   const localPath = join(localDir, "KNIGHTCODE.md");
 
   let globalInstructions = "";
@@ -38,9 +38,11 @@ export function loadProjectContextSync(): ProjectContext {
   };
 }
 
-export async function loadProjectContext(): Promise<ProjectContext> {
+export async function loadProjectContext(
+  cwd = process.cwd(),
+): Promise<ProjectContext> {
   const globalPath = join(homedir(), ".knightcode", "KNIGHTCODE.md");
-  const localDir = process.cwd();
+  const localDir = cwd;
   const localPath = join(localDir, "KNIGHTCODE.md");
 
   let globalInstructions = "";

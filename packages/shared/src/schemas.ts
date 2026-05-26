@@ -15,7 +15,7 @@ export const toolInputSchemas = {
     path: z.string().describe("Relative path to the file to read"),
     offset: z
       .int()
-      .min(1)
+      .min(0)
       .optional()
       .describe("Starting line number (0-indexed) for paginated reading"),
     limit: z
@@ -103,7 +103,9 @@ export const toolInputSchemas = {
   webSearch: z.object({
     query: z.string().describe("Search query to run on the web"),
     maxResults: z
-      .number()
+      .int()
+      .min(0)
+      .max(20)
       .optional()
       .default(5)
       .describe(

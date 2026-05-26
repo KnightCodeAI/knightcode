@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
+    "check-types": "tsc --noEmit",
     "db:migrate:deploy": "bun run --cwd ../database db:migrate:deploy",
     "start": "bun run dist/index.js",
     "postinstall": "bun run --cwd ../database db:generate"

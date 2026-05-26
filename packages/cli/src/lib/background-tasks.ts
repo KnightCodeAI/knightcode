@@ -22,20 +22,24 @@ export function killProcessOnPort(port: number) {
       for (const line of lines) {
         if (!line.includes(targetSearch)) continue;
         const parts = line.trim().split(/\s+/);
-        const pid = parts[parts.length - 1];
-        if (
-          pid &&
-          /^\d+$/.test(pid) &&
-          pid !== "0" &&
-          pid !== String(process.pid)
-        ) {
-          spawnSync("taskkill", ["/F", "/PID", pid]);
+        if (parts.length >= 2 && parts[parts.length - 2] === "LISTENING") {
+          const pid = parts[parts.length - 1];
+          if (
+            pid &&
+            /^\d+$/.test(pid) &&
+            pid !== "0" &&
+            pid !== String(process.pid)
+          ) {
+            spawnSync("taskkill", ["/F", "/PID", pid]);
+          }
         }
       }
     } else {
-      const res = spawnSync("lsof", ["-t", `-i:${port}`], {
-        encoding: "utf-8",
-      });
+      const res = spawnSync(
+        "lsof",
+        ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"],
+        { encoding: "utf-8" },
+      );
       const output = res.stdout || "";
       const pids = output.trim().split("\n");
       for (const pid of pids) {

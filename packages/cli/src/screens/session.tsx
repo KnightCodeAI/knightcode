@@ -51,25 +51,25 @@ function ChatMessage({
   pendingConfirmations: any[];
   answerQuestion: (toolCallId: string, answer: string | string[]) => void;
 }) {
+  const text = msg.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+
+  if (msg.metadata?.isCompaction) {
+    return (
+      <CompactionMessage
+        model={msg.metadata.model || "unknown"}
+        credits={msg.metadata.credits ?? 0}
+        originalMessageCount={msg.metadata.originalMessageCount ?? 0}
+        summary={text}
+        summaryCount={msg.metadata.summaryCount}
+        preservedCount={msg.metadata.preservedCount}
+      />
+    );
+  }
+
   if (msg.role === "user") {
-    const text = msg.parts
-      .filter((p) => p.type === "text")
-      .map((p) => p.text)
-      .join("");
-
-    if (msg.metadata?.isCompaction) {
-      return (
-        <CompactionMessage
-          model={msg.metadata.model || "unknown"}
-          credits={msg.metadata.credits ?? 0}
-          originalMessageCount={msg.metadata.originalMessageCount ?? 0}
-          summary={text}
-          summaryCount={msg.metadata.summaryCount}
-          preservedCount={msg.metadata.preservedCount}
-        />
-      );
-    }
-
     return <UserMessage message={text} mode={msg.metadata?.mode ?? "BUILD"} />;
   }
 
@@ -217,7 +217,7 @@ function SessionChat({
       return;
     }
 
-    if (pending && pending.toolCall.toolName === "editFile") {
+    if (pending && pending.toolCall.toolName !== "AskUserQuestion") {
       if (key.name === "y" || key.name === "Y") {
         key.preventDefault();
         confirmToolCall(pending.toolCallId, true, false);

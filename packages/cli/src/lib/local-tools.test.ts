@@ -2,15 +2,27 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { executeLocalTool, undoSessionChanges } from "./local-tools";
 import { Mode } from "@knightcode/shared";
 import { writeFile, unlink, mkdir, mkdtemp, rm } from "fs/promises";
+import { existsSync, readFileSync } from "fs";
+import { tmpdir } from "os";
 import { join, relative } from "path";
+import { spawnSync } from "child_process";
+import {
+  getWorktreeStatus,
+  isWorktreeDisabled,
+  setWorktreeDisabled,
+} from "./worktree-tools";
 
 describe("local-tools tool functioning", () => {
   let tempDir: string;
   let testFile: string;
   let pngFile: string;
   let testRevertFile: string;
+  let previousDisableWorktrees: string | undefined;
 
   beforeAll(async () => {
+    previousDisableWorktrees = process.env.KNIGHTCODE_DISABLE_WORKTREES;
+    process.env.KNIGHTCODE_DISABLE_WORKTREES = "1";
+
     // Create a unique temp directory inside process.cwd() so it passes CWD resolution checks
     tempDir = await mkdtemp(join(process.cwd(), "temp_test_"));
     testFile = join(tempDir, "temp_test_file.txt");
@@ -26,6 +38,12 @@ describe("local-tools tool functioning", () => {
   });
 
   afterAll(async () => {
+    if (previousDisableWorktrees === undefined) {
+      delete process.env.KNIGHTCODE_DISABLE_WORKTREES;
+    } else {
+      process.env.KNIGHTCODE_DISABLE_WORKTREES = previousDisableWorktrees;
+    }
+
     try {
       await rm(tempDir, { recursive: true, force: true });
     } catch {}
@@ -279,5 +297,119 @@ describe("local-tools tool functioning", () => {
     try {
       process.kill(res.pid, "SIGKILL");
     } catch {}
+  });
+});
+
+describe("local-tools worktree isolation", () => {
+  test("writes happen in a session worktree without changing the main checkout", async () => {
+    const previousCwd = process.cwd();
+    const previousDisableWorktrees = process.env.KNIGHTCODE_DISABLE_WORKTREES;
+    delete process.env.KNIGHTCODE_DISABLE_WORKTREES;
+
+    const repoDir = await mkdtemp(join(tmpdir(), "knightcode-wt-"));
+
+    try {
+      const git = (args: string[]) =>
+        spawnSync("git", args, {
+          cwd: repoDir,
+          encoding: "utf-8",
+          windowsHide: true,
+        });
+
+      expect(git(["init"]).status).toBe(0);
+      await writeFile(join(repoDir, "file.txt"), "main", "utf-8");
+      expect(git(["add", "file.txt"]).status).toBe(0);
+      expect(
+        git([
+          "-c",
+          "user.email=test@example.com",
+          "-c",
+          "user.name=Test User",
+          "commit",
+          "-m",
+          "init",
+        ]).status,
+      ).toBe(0);
+
+      process.chdir(repoDir);
+
+      // Enable worktree isolation explicitly since the default is now direct mode
+      setWorktreeDisabled(repoDir, false);
+
+      const result = (await executeLocalTool(
+        "writeFile",
+        { path: "file.txt", content: "worktree" },
+        Mode.BUILD,
+        "session-worktree-test",
+      )) as any;
+
+      expect(result.success).toBe(true);
+      expect(readFileSync(join(repoDir, "file.txt"), "utf-8")).toBe("main");
+
+      const record = getWorktreeStatus("session-worktree-test", repoDir);
+      expect(record).not.toBeNull();
+      expect(record?.worktreePath).toBeTruthy();
+      expect(existsSync(join(record!.worktreePath, "file.txt"))).toBe(true);
+      expect(
+        readFileSync(join(record!.worktreePath, "file.txt"), "utf-8"),
+      ).toBe("worktree");
+    } finally {
+      process.chdir(previousCwd);
+      if (previousDisableWorktrees === undefined) {
+        delete process.env.KNIGHTCODE_DISABLE_WORKTREES;
+      } else {
+        process.env.KNIGHTCODE_DISABLE_WORKTREES = previousDisableWorktrees;
+      }
+      await rm(repoDir, { recursive: true, force: true });
+    }
+  });
+
+  test("can toggle worktree isolation and write directly to repo when disabled", async () => {
+    const previousCwd = process.cwd();
+    const repoDir = await mkdtemp(join(tmpdir(), "knightcode-wt-toggle-"));
+
+    try {
+      const git = (args: string[]) =>
+        spawnSync("git", args, {
+          cwd: repoDir,
+          encoding: "utf-8",
+          windowsHide: true,
+        });
+
+      expect(git(["init"]).status).toBe(0);
+      await writeFile(join(repoDir, "file.txt"), "main", "utf-8");
+      expect(git(["add", "file.txt"]).status).toBe(0);
+      expect(
+        git([
+          "-c",
+          "user.email=test@example.com",
+          "-c",
+          "user.name=Test User",
+          "commit",
+          "-m",
+          "init",
+        ]).status,
+      ).toBe(0);
+
+      process.chdir(repoDir);
+
+      // Disable worktrees via the function
+      setWorktreeDisabled(repoDir, true);
+      expect(isWorktreeDisabled(repoDir)).toBe(true);
+
+      const result = (await executeLocalTool(
+        "writeFile",
+        { path: "file.txt", content: "direct" },
+        Mode.BUILD,
+        "session-toggle-test",
+      )) as any;
+
+      expect(result.success).toBe(true);
+      // Since it's direct mode, the parent file should be changed to "direct"!
+      expect(readFileSync(join(repoDir, "file.txt"), "utf-8")).toBe("direct");
+    } finally {
+      process.chdir(previousCwd);
+      await rm(repoDir, { recursive: true, force: true });
+    }
   });
 });

@@ -1,19 +1,30 @@
 import { exec } from "child_process";
 import { useEffect, useState } from "react";
 import { useTheme } from "../../providers/theme";
+import {
+  formatRootForDisplay,
+  getExecutionRoot,
+} from "../../lib/worktree-tools";
 
-export function DiffDialogContent() {
+type Props = {
+  sessionId?: string;
+};
+
+export function DiffDialogContent({ sessionId }: Props) {
   const { colors } = useTheme();
   const [diff, setDiff] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rootLabel, setRootLabel] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    exec("git diff", { cwd: process.cwd() }, (error, stdout, stderr) => {
+    const root = getExecutionRoot(sessionId).root;
+    setRootLabel(formatRootForDisplay(root));
+    exec("git diff", { cwd: root }, (error, stdout, stderr) => {
       setDiff(stdout || stderr || "");
       setLoading(false);
     });
-  }, []);
+  }, [sessionId]);
 
   if (loading) {
     return (
@@ -25,7 +36,8 @@ export function DiffDialogContent() {
 
   if (!diff || !diff.trim()) {
     return (
-      <box padding={1}>
+      <box padding={1} flexDirection="column">
+        {rootLabel && <text fg="gray">Worktree: {rootLabel}</text>}
         <text fg="gray">No changes found in the repository.</text>
       </box>
     );
@@ -35,6 +47,7 @@ export function DiffDialogContent() {
 
   return (
     <box flexDirection="column" width="100%">
+      {rootLabel && <text fg="gray">Worktree: {rootLabel}</text>}
       <scrollbox height={15} width="100%">
         <box flexDirection="column" gap={0} width="100%">
           {lines.map((line, idx) => {
