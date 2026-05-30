@@ -9,53 +9,135 @@ import { spawnSync } from "child_process";
 // ---------------------------------------------------------------------------
 export const TEXT_FILE_EXTENSIONS = new Set([
   // Markdown and text
-  ".md", ".txt", ".text",
+  ".md",
+  ".txt",
+  ".text",
   // Data formats
-  ".json", ".yaml", ".yml", ".toml", ".xml", ".csv",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".xml",
+  ".csv",
   // Web
-  ".html", ".htm", ".css", ".scss", ".sass", ".less",
+  ".html",
+  ".htm",
+  ".css",
+  ".scss",
+  ".sass",
+  ".less",
   // JavaScript/TypeScript
-  ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
+  ".js",
+  ".ts",
+  ".tsx",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".mts",
+  ".cts",
   // Python
-  ".py", ".pyi", ".pyw",
+  ".py",
+  ".pyi",
+  ".pyw",
   // Ruby
-  ".rb", ".erb", ".rake",
+  ".rb",
+  ".erb",
+  ".rake",
   // Go
   ".go",
   // Rust
   ".rs",
   // Java/Kotlin/Scala
-  ".java", ".kt", ".kts", ".scala",
+  ".java",
+  ".kt",
+  ".kts",
+  ".scala",
   // C/C++
-  ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".hxx",
+  ".c",
+  ".cpp",
+  ".cc",
+  ".cxx",
+  ".h",
+  ".hpp",
+  ".hxx",
   // C#
   ".cs",
   // Swift
   ".swift",
   // Shell
-  ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd",
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".fish",
+  ".ps1",
+  ".bat",
+  ".cmd",
   // Config
-  ".env", ".ini", ".cfg", ".conf", ".config", ".properties",
+  ".env",
+  ".ini",
+  ".cfg",
+  ".conf",
+  ".config",
+  ".properties",
   // Database
-  ".sql", ".graphql", ".gql",
+  ".sql",
+  ".graphql",
+  ".gql",
   // Protocol
   ".proto",
   // Frontend frameworks
-  ".vue", ".svelte", ".astro",
+  ".vue",
+  ".svelte",
+  ".astro",
   // Templating
-  ".ejs", ".hbs", ".pug", ".jade",
+  ".ejs",
+  ".hbs",
+  ".pug",
+  ".jade",
   // Other languages
-  ".php", ".pl", ".pm", ".lua", ".r", ".R", ".dart",
-  ".ex", ".exs", ".erl", ".hrl", ".clj", ".cljs", ".cljc", ".edn",
-  ".hs", ".lhs", ".elm", ".ml", ".mli", ".f", ".f90", ".f95", ".for",
+  ".php",
+  ".pl",
+  ".pm",
+  ".lua",
+  ".r",
+  ".R",
+  ".dart",
+  ".ex",
+  ".exs",
+  ".erl",
+  ".hrl",
+  ".clj",
+  ".cljs",
+  ".cljc",
+  ".edn",
+  ".hs",
+  ".lhs",
+  ".elm",
+  ".ml",
+  ".mli",
+  ".f",
+  ".f90",
+  ".f95",
+  ".for",
   // Build files
-  ".cmake", ".make", ".makefile", ".gradle", ".sbt",
+  ".cmake",
+  ".make",
+  ".makefile",
+  ".gradle",
+  ".sbt",
   // Documentation
-  ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex",
+  ".rst",
+  ".adoc",
+  ".asciidoc",
+  ".org",
+  ".tex",
+  ".latex",
   // Lock files
   ".lock",
   // Misc
-  ".log", ".diff", ".patch",
+  ".log",
+  ".diff",
+  ".patch",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -88,10 +170,7 @@ export function findGitRoot(cwd: string): string | null {
  * Stops at git root to prevent leaking parent-project configs.
  * Never includes the home directory itself (loaded separately as "global").
  */
-export function getProjectDirsUpToRoot(
-  subdir: string,
-  cwd: string,
-): string[] {
+export function getProjectDirsUpToRoot(subdir: string, cwd: string): string[] {
   const home = resolve(homedir());
   const gitRoot = findGitRoot(cwd);
   let current = resolve(cwd);
@@ -103,7 +182,10 @@ export function getProjectDirsUpToRoot(
 
     const knightcodeSubdir = join(current, ".knightcode", subdir);
     try {
-      if (existsSync(knightcodeSubdir) && statSync(knightcodeSubdir).isDirectory()) {
+      if (
+        existsSync(knightcodeSubdir) &&
+        statSync(knightcodeSubdir).isDirectory()
+      ) {
         dirs.push(knightcodeSubdir);
       }
     } catch {

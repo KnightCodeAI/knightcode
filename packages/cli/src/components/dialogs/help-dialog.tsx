@@ -52,11 +52,7 @@ export function HelpDialogContent() {
         scrollRef.current?.scrollTo(next);
         return next;
       });
-    } else if (
-      !key.ctrl &&
-      !key.meta &&
-      key.name.length === 1
-    ) {
+    } else if (!key.ctrl && !key.meta && key.name.length === 1) {
       const char = key.shift ? key.name.toUpperCase() : key.name;
       setQuery((q) => q + char);
     } else if (key.name === "space") {
@@ -79,7 +75,14 @@ export function HelpDialogContent() {
       ) : (
         <scrollbox ref={scrollRef} height={visibleHeight}>
           {filtered.map((cmd) => (
-            <box key={cmd.name} flexDirection="row" gap={2} paddingY={0} height={1} overflow="hidden">
+            <box
+              key={cmd.name}
+              flexDirection="row"
+              gap={2}
+              paddingY={0}
+              height={1}
+              overflow="hidden"
+            >
               <box width={18} flexShrink={0}>
                 <text fg="cyan">{cmd.value}</text>
               </box>

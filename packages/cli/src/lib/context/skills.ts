@@ -30,7 +30,10 @@ export type Skill = {
   body: string;
   source: SkillSource;
   dirPath: string;
-  getDynamicBody?: (args?: string, sessionId?: string) => Promise<string> | string;
+  getDynamicBody?: (
+    args?: string,
+    sessionId?: string,
+  ) => Promise<string> | string;
 };
 
 type SkillFrontmatter = {
@@ -38,7 +41,7 @@ type SkillFrontmatter = {
   description?: string;
   "argument-hint"?: string;
   arguments?: string[];
-  "when_to_use"?: string;
+  when_to_use?: string;
   "allowed-tools"?: string[];
   agent?: string;
   shell?: string;
@@ -93,7 +96,9 @@ function parseSkillFrontmatter(raw: string): {
       const items: string[] = [];
       while (i + 1 < lines.length && lines[i + 1]!.match(/^\s*-\s+/)) {
         i++;
-        items.push(lines[i]!.replace(/^\s*-\s+/, "").replace(/^["']|["']$/g, ""));
+        items.push(
+          lines[i]!.replace(/^\s*-\s+/, "").replace(/^["']|["']$/g, ""),
+        );
       }
       if (items.length > 0) {
         if (key === "allowed-tools") meta["allowed-tools"] = items;

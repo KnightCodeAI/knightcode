@@ -41,7 +41,8 @@ When done, briefly summarize what was fixed (or confirm the code was already cle
 
 export const simplifySkill: Skill = {
   name: "simplify",
-  description: "Review changed code for reuse, quality, and efficiency, then fix any issues found.",
+  description:
+    "Review changed code for reuse, quality, and efficiency, then fix any issues found.",
   userInvocable: true,
   disableModelInvocation: false,
   source: "bundled",

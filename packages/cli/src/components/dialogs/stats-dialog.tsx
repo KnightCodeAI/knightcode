@@ -54,7 +54,10 @@ export function StatsDialogContent() {
     ["Total messages", stats.totalMessages.toLocaleString()],
     ["Input tokens", stats.totalInputTokens.toLocaleString()],
     ["Output tokens", stats.totalOutputTokens.toLocaleString()],
-    ["Total tokens", (stats.totalInputTokens + stats.totalOutputTokens).toLocaleString()],
+    [
+      "Total tokens",
+      (stats.totalInputTokens + stats.totalOutputTokens).toLocaleString(),
+    ],
     [
       "Est. total cost",
       stats.totalCost > 0 ? `$${stats.totalCost.toFixed(4)}` : "Free",
@@ -63,7 +66,9 @@ export function StatsDialogContent() {
 
   return (
     <box flexDirection="column" gap={1} width="100%">
-      <text attributes={TextAttributes.BOLD}>Usage statistics — all sessions</text>
+      <text attributes={TextAttributes.BOLD}>
+        Usage statistics — all sessions
+      </text>
       {rows.map(([label, value]) => (
         <box key={label} flexDirection="row" gap={2}>
           <box width={18} flexShrink={0}>

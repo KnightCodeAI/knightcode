@@ -29,7 +29,10 @@ export function RenameDialogContent({ sessionId }: Props) {
         toast.show({ variant: "error", message: "Failed to rename session" });
         return;
       }
-      toast.show({ variant: "success", message: `Session renamed to "${title}"` });
+      toast.show({
+        variant: "success",
+        message: `Session renamed to "${title}"`,
+      });
       dialog.close();
     } catch (err) {
       toast.show({

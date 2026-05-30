@@ -57,7 +57,9 @@ export function HooksDialogContent() {
   const [hooks, setHooks] = useState(() => loadHooks());
   const [eventIdx, setEventIdx] = useState(0);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [inputFocus, setInputFocus] = useState<"matcher" | "command">("matcher");
+  const [inputFocus, setInputFocus] = useState<"matcher" | "command">(
+    "matcher",
+  );
 
   const activeEvent = HOOK_EVENTS[eventIdx]!;
   const eventHooks = getEventHooks(hooks, activeEvent);
@@ -148,24 +150,35 @@ export function HooksDialogContent() {
 
   return (
     <box flexDirection="column" gap={1} width="100%">
-
       {/* Event header — single line */}
       <box flexDirection="row" gap={1} alignItems="center">
         <text fg="gray">◀</text>
-        <text fg="cyan" attributes={TextAttributes.BOLD}>{activeEvent}</text>
+        <text fg="cyan" attributes={TextAttributes.BOLD}>
+          {activeEvent}
+        </text>
         <text fg="gray">▶</text>
-        <text fg="gray" attributes={TextAttributes.DIM}>  {EVENT_DESC[activeEvent]}</text>
+        <text fg="gray" attributes={TextAttributes.DIM}>
+          {" "}
+          {EVENT_DESC[activeEvent]}
+        </text>
       </box>
 
       {/* Hook list */}
       <box flexDirection="column">
         {eventHooks.length === 0 ? (
-          <text fg="gray" attributes={TextAttributes.DIM}>  no hooks</text>
+          <text fg="gray" attributes={TextAttributes.DIM}>
+            {" "}
+            no hooks
+          </text>
         ) : (
           eventHooks.map((item, idx) => {
             const sel = selectedIdx === idx;
             return (
-              <box key={`${item.matcherIdx}-${item.hookIdx}`} flexDirection="row" gap={2}>
+              <box
+                key={`${item.matcherIdx}-${item.hookIdx}`}
+                flexDirection="row"
+                gap={2}
+              >
                 <text fg={sel ? "yellow" : "gray"}>{sel ? "▶" : " "}</text>
                 <box width={12} flexShrink={0}>
                   <text fg={sel ? "yellow" : "cyan"}>{item.matcher}</text>
@@ -183,7 +196,9 @@ export function HooksDialogContent() {
       </box>
 
       {/* Divider */}
-      <text fg="gray" attributes={TextAttributes.DIM}>──────────────────────────</text>
+      <text fg="gray" attributes={TextAttributes.DIM}>
+        ──────────────────────────
+      </text>
 
       {/* Add form — compact */}
       <box flexDirection="column" gap={0}>
@@ -209,7 +224,6 @@ export function HooksDialogContent() {
           [d] delete · [↑/↓] navigate · [Esc] back
         </text>
       )}
-
     </box>
   );
 }

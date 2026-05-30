@@ -17,7 +17,7 @@ import {
   RewindDialogContent,
   StatsDialogContent,
 } from "../dialogs";
-import { undoSessionChanges } from "../../lib/tools/local-tools";
+import { undoSessionChanges } from "../../lib/tools";
 import {
   SUPPORTED_CHAT_MODELS,
   findSupportedChatModel,
@@ -31,7 +31,13 @@ import fs from "fs";
 import path from "path";
 import { copyToClipboard } from "../../lib/clipboard";
 import open from "open";
-import { REVIEW_PROMPT, SECURITY_REVIEW_PROMPT, COMMIT_PROMPT, COMMIT_PUSH_PR_PROMPT, INIT_PROMPT } from "../../lib/prompts";
+import {
+  REVIEW_PROMPT,
+  SECURITY_REVIEW_PROMPT,
+  COMMIT_PROMPT,
+  COMMIT_PUSH_PR_PROMPT,
+  INIT_PROMPT,
+} from "../../lib/prompts";
 
 export const COMMANDS: Command[] = [
   {
@@ -244,7 +250,8 @@ export const COMMANDS: Command[] = [
   },
   {
     name: "init",
-    description: "Initialize CLAUDE.md, skills, and hooks with codebase analysis",
+    description:
+      "Initialize KNIGHTCODE.md, skills, and hooks with codebase analysis",
     value: "/init",
     action: (ctx) => {
       if (!ctx.submitCommand) {
@@ -672,7 +679,10 @@ export const COMMANDS: Command[] = [
 
         const dateStr = new Date().toISOString().slice(0, 10);
         // Sanitize: strip any path separators from the generated filename
-        const filename = `knightcode-export-${dateStr}.md`.replace(/[/\\]/g, "-");
+        const filename = `knightcode-export-${dateStr}.md`.replace(
+          /[/\\]/g,
+          "-",
+        );
         const exportDir = process.cwd();
         const outputPath = path.resolve(exportDir, filename);
 
@@ -691,11 +701,12 @@ export const COMMANDS: Command[] = [
         const msg = err instanceof Error ? err.message : String(err);
         ctx.toast.show({
           variant: "error",
-          message: msg.includes("EACCES") || msg.includes("EPERM")
-            ? `Export failed: no write permission in ${process.cwd()}`
-            : msg.includes("ENOSPC")
-            ? "Export failed: disk full"
-            : `Export failed: ${msg}`,
+          message:
+            msg.includes("EACCES") || msg.includes("EPERM")
+              ? `Export failed: no write permission in ${process.cwd()}`
+              : msg.includes("ENOSPC")
+                ? "Export failed: disk full"
+                : `Export failed: ${msg}`,
         });
       }
     },
@@ -706,7 +717,10 @@ export const COMMANDS: Command[] = [
     value: "/commit",
     action(ctx) {
       if (!ctx.submitMessage) {
-        ctx.toast.show({ variant: "error", message: "Not available in this context" });
+        ctx.toast.show({
+          variant: "error",
+          message: "Not available in this context",
+        });
         return;
       }
       ctx.submitMessage(COMMIT_PROMPT);
@@ -718,7 +732,10 @@ export const COMMANDS: Command[] = [
     value: "/commit-push-pr",
     action(ctx) {
       if (!ctx.submitMessage) {
-        ctx.toast.show({ variant: "error", message: "Not available in this context" });
+        ctx.toast.show({
+          variant: "error",
+          message: "Not available in this context",
+        });
         return;
       }
       ctx.submitMessage(COMMIT_PUSH_PR_PROMPT);

@@ -1,56 +1,174 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { type InputRenderable, TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useTheme } from "../../providers/theme";
 
-type Props = {
-  toolCallId: string;
-  question: string;
-  options: string[];
-  isMultiSelect?: boolean;
-  onAnswer: (toolCallId: string, answer: string | string[]) => void;
+type QuestionOption = {
+  label: string;
+  description?: string;
+  preview?: string;
 };
 
-export function InlineQuestion({
-  toolCallId,
-  question,
-  options,
-  isMultiSelect = false,
-  onAnswer,
-}: Props) {
+type Question = {
+  question: string;
+  header?: string;
+  options: QuestionOption[];
+  multi_select?: boolean;
+};
+
+export type Answer = {
+  question: string;
+  answer: string | string[];
+};
+
+type Props = {
+  toolCallId: string;
+  questions: Question[];
+  onAnswer: (toolCallId: string, answers: Answer[]) => void;
+};
+
+type PerQuestionState = {
+  // Single-select: string label. Multi-select: array of labels.
+  selected?: string | string[];
+  // Free-text "Other" answer for this question, if any.
+  custom?: string;
+};
+
+const CHECK_ON = "☒";
+const CHECK_OFF = "☐";
+
+function defaultStateForQuestion(q: Question): PerQuestionState {
+  return q.multi_select ? { selected: [] } : {};
+}
+
+function hasAnswer(state: PerQuestionState | undefined): boolean {
+  if (!state) return false;
+  if (Array.isArray(state.selected)) return state.selected.length > 0;
+  if (typeof state.selected === "string" && state.selected.length > 0) {
+    return true;
+  }
+  if (state.custom && state.custom.length > 0) return true;
+  return false;
+}
+
+function answerFromState(
+  q: Question,
+  state: PerQuestionState | undefined,
+): string | string[] {
+  if (!state) return q.multi_select ? [] : "";
+  if (q.multi_select) {
+    const arr = Array.isArray(state.selected) ? [...state.selected] : [];
+    if (state.custom) arr.push(state.custom);
+    return arr;
+  }
+  if (state.custom) return state.custom;
+  return typeof state.selected === "string" ? state.selected : "";
+}
+
+export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
   const { colors } = useTheme();
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
-    new Set(),
-  );
+  // Question index. questions.length means we're on the Submit tab.
+  const [qIndex, setQIndex] = useState(0);
+  // Per-question state keyed by index (stable references to questions[] indices).
+  const [states, setStates] = useState<Record<number, PerQuestionState>>(() => {
+    const init: Record<number, PerQuestionState> = {};
+    questions.forEach((q, i) => {
+      init[i] = defaultStateForQuestion(q);
+    });
+    return init;
+  });
+  // Focused option index within the current question.
+  const [optionIndex, setOptionIndex] = useState(0);
   const [isWritingCustom, setIsWritingCustom] = useState(false);
   const customInputRef = useRef<InputRenderable>(null);
 
-  // We append "Write custom answer..." to options list automatically
-  const CUSTOM_OPTION = "Write custom answer...";
-  const allOptions = [...options, CUSTOM_OPTION];
+  const currentQuestion =
+    qIndex < questions.length ? questions[qIndex] : undefined;
+  const allAnswered = useMemo(
+    () => questions.every((_, i) => hasAnswer(states[i])),
+    [questions, states],
+  );
 
-  const handleSubmittingSelections = useCallback(() => {
-    if (isMultiSelect) {
-      const selected = allOptions.filter((_, idx) => selectedIndices.has(idx));
-      // If CUSTOM_OPTION is selected and not writing custom, we ignore it
-      onAnswer(
-        toolCallId,
-        selected.filter((s) => s !== CUSTOM_OPTION),
-      );
-    } else {
-      const selected = allOptions[selectedIndex];
-      if (selected && selected !== CUSTOM_OPTION) {
-        onAnswer(toolCallId, selected);
-      }
+  const hasPreview = useMemo(() => {
+    if (!currentQuestion) return false;
+    return currentQuestion.options.some((o) => !!o.preview);
+  }, [currentQuestion]);
+
+  const allOptions = useMemo<QuestionOption[]>(() => {
+    if (!currentQuestion) return [];
+    if (hasPreview) return currentQuestion.options;
+    return [
+      ...currentQuestion.options,
+      { label: "Other (write a custom answer)" },
+    ];
+  }, [currentQuestion, hasPreview]);
+
+  const focusedOption = allOptions[optionIndex];
+  const previewText = focusedOption?.preview;
+  const isCustomOption =
+    !!focusedOption && focusedOption.label === "Other (write a custom answer)";
+
+  const goToQuestion = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(questions.length, next));
+      setQIndex(clamped);
+      setOptionIndex(0);
+      setIsWritingCustom(false);
+    },
+    [questions.length],
+  );
+
+  const updateCurrentState = useCallback(
+    (update: (s: PerQuestionState) => PerQuestionState) => {
+      setStates((prev) => ({
+        ...prev,
+        [qIndex]: update(prev[qIndex] ?? {}),
+      }));
+    },
+    [qIndex],
+  );
+
+  const submitAll = useCallback(() => {
+    const out: Answer[] = questions.map((q, i) => ({
+      question: q.question,
+      answer: answerFromState(q, states[i]),
+    }));
+    onAnswer(toolCallId, out);
+  }, [onAnswer, questions, states, toolCallId]);
+
+  const handleOptionEnter = useCallback(() => {
+    if (!currentQuestion) return;
+    const opt = allOptions[optionIndex];
+    if (!opt) return;
+    if (opt.label === "Other (write a custom answer)") {
+      setIsWritingCustom(true);
+      return;
     }
+    if (currentQuestion.multi_select) {
+      // Toggle the option in/out
+      updateCurrentState((s) => {
+        const current = Array.isArray(s.selected) ? [...s.selected] : [];
+        const idx = current.indexOf(opt.label);
+        if (idx >= 0) current.splice(idx, 1);
+        else current.push(opt.label);
+        return { ...s, selected: current };
+      });
+      return;
+    }
+    // Single-select: record the answer and advance to next question (or Submit tab).
+    updateCurrentState((s) => ({
+      ...s,
+      selected: opt.label,
+      custom: undefined,
+    }));
+    goToQuestion(qIndex + 1);
   }, [
-    selectedIndex,
-    selectedIndices,
     allOptions,
-    isMultiSelect,
-    onAnswer,
-    toolCallId,
+    currentQuestion,
+    goToQuestion,
+    optionIndex,
+    qIndex,
+    updateCurrentState,
   ]);
 
   useKeyboard((key) => {
@@ -58,56 +176,59 @@ export function InlineQuestion({
       if (key.name === "escape") {
         key.preventDefault();
         setIsWritingCustom(false);
-      } else if (key.name === "enter" || key.name === "return") {
+        return;
+      }
+      if (key.name === "enter" || key.name === "return") {
         key.preventDefault();
-        const customValue = customInputRef.current?.value?.trim() ?? "";
-        if (customValue) {
-          if (isMultiSelect) {
-            // Add custom value to multi-select answers
-            const currentSelected = allOptions.filter(
-              (_, idx) =>
-                selectedIndices.has(idx) && idx !== allOptions.length - 1,
-            );
-            onAnswer(toolCallId, [...currentSelected, customValue]);
-          } else {
-            onAnswer(toolCallId, customValue);
-          }
+        const v = customInputRef.current?.value?.trim() ?? "";
+        if (!v) return;
+        updateCurrentState((s) => ({ ...s, custom: v }));
+        setIsWritingCustom(false);
+        if (!currentQuestion?.multi_select) {
+          goToQuestion(qIndex + 1);
         }
       }
       return;
     }
 
+    // On the Submit tab
+    if (qIndex === questions.length) {
+      if (key.name === "left" || (key.shift && key.name === "tab")) {
+        key.preventDefault();
+        goToQuestion(qIndex - 1);
+        return;
+      }
+      if (key.name === "enter" || key.name === "return") {
+        key.preventDefault();
+        if (allAnswered) submitAll();
+        return;
+      }
+      return;
+    }
+
+    // Within a question
     if (key.name === "down" || key.name === "j") {
       key.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % allOptions.length);
+      setOptionIndex((p) => (p + 1) % allOptions.length);
     } else if (key.name === "up" || key.name === "k") {
       key.preventDefault();
-      setSelectedIndex(
-        (prev) => (prev - 1 + allOptions.length) % allOptions.length,
-      );
-    } else if (key.name === "space") {
+      setOptionIndex((p) => (p - 1 + allOptions.length) % allOptions.length);
+    } else if (key.name === "left" || (key.shift && key.name === "tab")) {
       key.preventDefault();
-      if (isMultiSelect) {
-        setSelectedIndices((prev) => {
-          const next = new Set(prev);
-          if (next.has(selectedIndex)) {
-            next.delete(selectedIndex);
-          } else {
-            next.add(selectedIndex);
-          }
-          return next;
-        });
-      }
+      goToQuestion(qIndex - 1);
+    } else if (key.name === "right" || key.name === "tab") {
+      key.preventDefault();
+      goToQuestion(qIndex + 1);
+    } else if (key.name === "space" && currentQuestion?.multi_select) {
+      key.preventDefault();
+      handleOptionEnter();
     } else if (key.name === "enter" || key.name === "return") {
       key.preventDefault();
-      const currentSelected = allOptions[selectedIndex];
-      if (currentSelected === CUSTOM_OPTION) {
-        setIsWritingCustom(true);
-      } else {
-        handleSubmittingSelections();
-      }
+      handleOptionEnter();
     }
   });
+
+  if (questions.length === 0) return null;
 
   return (
     <box
@@ -116,74 +237,283 @@ export function InlineQuestion({
       padding={1}
       flexDirection="column"
       width="100%"
-      gap={0}
       marginY={1}
     >
-      {/* Header */}
-      <box flexDirection="column" gap={0} marginBottom={1}>
-        <text fg="yellow" attributes={TextAttributes.BOLD}>
-          Question
-        </text>
-        <text fg="white" attributes={TextAttributes.BOLD}>
-          {question}
-        </text>
-      </box>
+      <NavigationBar
+        questions={questions}
+        states={states}
+        currentIndex={qIndex}
+        inactiveColor={colors.dimSeparator}
+        activeBg={colors.selection}
+      />
 
-      {/* Options List */}
-      {!isWritingCustom ? (
-        <box flexDirection="column" gap={0} marginY={1}>
-          {allOptions.map((opt, idx) => {
-            const isHighlighted = idx === selectedIndex;
-            const isSelected = selectedIndices.has(idx);
-            let prefix = "  ";
-
-            if (isMultiSelect) {
-              prefix = isSelected ? "[x] " : "[ ] ";
-            } else {
-              prefix = isHighlighted ? "● " : "○ ";
-            }
-
-            return (
-              <box key={idx} flexDirection="row" gap={1}>
-                <text fg={isHighlighted ? "green" : "gray"}>
-                  {isHighlighted ? "> " : "  "}
-                  {prefix}
-                </text>
-                <text
-                  fg={isHighlighted ? "green" : isSelected ? "yellow" : "white"}
-                  attributes={isHighlighted ? TextAttributes.BOLD : undefined}
-                >
-                  {opt}
-                </text>
-              </box>
-            );
-          })}
-        </box>
+      {qIndex < questions.length && currentQuestion ? (
+        <QuestionBody
+          question={currentQuestion}
+          state={states[qIndex] ?? defaultStateForQuestion(currentQuestion)}
+          allOptions={allOptions}
+          optionIndex={optionIndex}
+          previewText={previewText}
+          isCustomFocused={isCustomOption}
+          isWritingCustom={isWritingCustom}
+          customInputRef={customInputRef}
+          colors={colors}
+        />
       ) : (
-        <box flexDirection="column" gap={1} marginY={1}>
-          <text fg="green">Custom Answer:</text>
-          <input
-            ref={customInputRef}
-            placeholder="Type your custom answer and press Enter..."
-            focused
-          />
-        </box>
+        <SubmitView
+          questions={questions}
+          states={states}
+          allAnswered={allAnswered}
+          colors={colors}
+        />
       )}
 
-      {/* Help / Instructions bar */}
+      {/* Help bar */}
       <box flexDirection="row" gap={2} marginTop={1}>
         {isWritingCustom ? (
           <>
             <text fg="green">[Enter] Submit</text>
             <text fg="gray">[Esc] Cancel</text>
           </>
+        ) : qIndex === questions.length ? (
+          <>
+            <text fg={allAnswered ? "green" : "gray"}>
+              [Enter]{" "}
+              {allAnswered ? "Submit answers" : "Answer all questions first"}
+            </text>
+            <text fg="gray">[←] Back</text>
+          </>
         ) : (
           <>
-            <text fg="gray">▲▼/jk Navigate</text>
-            {isMultiSelect && <text fg="gray">[Space] Select</text>}
-            <text fg="green">[Enter] Confirm</text>
+            <text fg="gray">↑↓ Navigate</text>
+            {currentQuestion?.multi_select ? (
+              <text fg="gray">[Space] Toggle</text>
+            ) : null}
+            <text fg="green">
+              [Enter] {currentQuestion?.multi_select ? "Toggle" : "Select"}
+            </text>
+            <text fg="gray">[← →] Question</text>
           </>
         )}
+      </box>
+    </box>
+  );
+}
+
+function NavigationBar({
+  questions,
+  states,
+  currentIndex,
+  inactiveColor,
+  activeBg,
+}: {
+  questions: Question[];
+  states: Record<number, PerQuestionState>;
+  currentIndex: number;
+  inactiveColor: string;
+  activeBg: string;
+}) {
+  return (
+    <box flexDirection="row" gap={1} marginBottom={1}>
+      <text fg={currentIndex === 0 ? inactiveColor : "white"}>←</text>
+      {questions.map((q, i) => {
+        const isCurrent = i === currentIndex;
+        const checkbox = hasAnswer(states[i]) ? CHECK_ON : CHECK_OFF;
+        const display = q.header || `Q${i + 1}`;
+        return isCurrent ? (
+          <box key={i} backgroundColor={activeBg} paddingX={1}>
+            <text fg="black" attributes={TextAttributes.BOLD}>
+              {checkbox} {display}
+            </text>
+          </box>
+        ) : (
+          <box key={i} paddingX={1}>
+            <text fg="white">
+              {checkbox} {display}
+            </text>
+          </box>
+        );
+      })}
+      {currentIndex === questions.length ? (
+        <box backgroundColor={activeBg} paddingX={1}>
+          <text fg="black" attributes={TextAttributes.BOLD}>
+            ✓ Submit
+          </text>
+        </box>
+      ) : (
+        <box paddingX={1}>
+          <text fg="white">✓ Submit</text>
+        </box>
+      )}
+      <text fg={currentIndex === questions.length ? inactiveColor : "white"}>
+        →
+      </text>
+    </box>
+  );
+}
+
+function QuestionBody({
+  question,
+  state,
+  allOptions,
+  optionIndex,
+  previewText,
+  isCustomFocused,
+  isWritingCustom,
+  customInputRef,
+  colors,
+}: {
+  question: Question;
+  state: PerQuestionState;
+  allOptions: QuestionOption[];
+  optionIndex: number;
+  previewText?: string;
+  isCustomFocused: boolean;
+  isWritingCustom: boolean;
+  customInputRef: React.RefObject<InputRenderable | null>;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  const selected = state.selected;
+  const isSelectedLabel = (label: string): boolean => {
+    if (Array.isArray(selected)) return selected.includes(label);
+    return selected === label;
+  };
+
+  return (
+    <box flexDirection="column" gap={0} marginBottom={1}>
+      {/* Question text + header chip */}
+      <box flexDirection="row" gap={2}>
+        {question.header ? (
+          <box backgroundColor={colors.dimSeparator} paddingX={1}>
+            <text fg="white">{question.header}</text>
+          </box>
+        ) : null}
+        <text fg="white" attributes={TextAttributes.BOLD}>
+          {question.question}
+        </text>
+      </box>
+
+      {/* Body: options on left, optional preview on right */}
+      <box flexDirection="row" gap={2} marginY={1} width="100%">
+        <box
+          flexDirection="column"
+          gap={0}
+          width={previewText ? "40%" : "100%"}
+        >
+          {isWritingCustom ? (
+            <box flexDirection="column" gap={1}>
+              <text fg="green">Custom answer:</text>
+              <input
+                ref={customInputRef}
+                placeholder="Type and press Enter…"
+                focused
+              />
+            </box>
+          ) : (
+            allOptions.map((opt, idx) => {
+              const isFocused = idx === optionIndex;
+              const isChecked = isSelectedLabel(opt.label);
+              const prefix = question.multi_select
+                ? isChecked
+                  ? "[x] "
+                  : "[ ] "
+                : isChecked
+                  ? "● "
+                  : "○ ";
+              return (
+                <box key={idx} flexDirection="column" gap={0}>
+                  <box flexDirection="row" gap={1}>
+                    <text fg={isFocused ? "green" : "gray"}>
+                      {isFocused ? "› " : "  "}
+                      {prefix}
+                    </text>
+                    <text
+                      fg={isFocused ? "green" : isChecked ? "yellow" : "white"}
+                      attributes={isFocused ? TextAttributes.BOLD : undefined}
+                    >
+                      {opt.label}
+                    </text>
+                  </box>
+                  {isFocused && opt.description ? (
+                    <box paddingLeft={4}>
+                      <text fg="gray" attributes={TextAttributes.DIM}>
+                        {opt.description}
+                      </text>
+                    </box>
+                  ) : null}
+                </box>
+              );
+            })
+          )}
+          {state.custom && !isWritingCustom ? (
+            <box marginTop={1}>
+              <text fg="yellow" attributes={TextAttributes.DIM}>
+                Custom: {state.custom}
+              </text>
+            </box>
+          ) : null}
+        </box>
+
+        {previewText && !isWritingCustom ? (
+          <box
+            flexDirection="column"
+            width="60%"
+            border={["top", "bottom", "left", "right"]}
+            borderColor={colors.dimSeparator}
+            paddingX={1}
+          >
+            <text fg="gray" attributes={TextAttributes.DIM}>
+              Preview
+            </text>
+            {previewText.split("\n").map((line, i) => (
+              <text key={i} fg="white">
+                {line || " "}
+              </text>
+            ))}
+          </box>
+        ) : null}
+      </box>
+    </box>
+  );
+}
+
+function SubmitView({
+  questions,
+  states,
+  allAnswered,
+  colors,
+}: {
+  questions: Question[];
+  states: Record<number, PerQuestionState>;
+  allAnswered: boolean;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  return (
+    <box flexDirection="column" marginBottom={1}>
+      <text fg="white" attributes={TextAttributes.BOLD}>
+        Review your answers
+      </text>
+      {!allAnswered ? (
+        <box marginTop={1}>
+          <text fg="yellow">⚠ You have not answered all questions</text>
+        </box>
+      ) : null}
+      <box flexDirection="column" gap={0} marginTop={1}>
+        {questions.map((q, i) => {
+          const a = answerFromState(q, states[i]);
+          const answered = hasAnswer(states[i]);
+          const display = Array.isArray(a) ? a.join(", ") : a;
+          return (
+            <box key={i} flexDirection="column">
+              <text fg="white">• {q.question}</text>
+              <box paddingLeft={2}>
+                <text fg={answered ? "green" : colors.dimSeparator}>
+                  → {answered ? display : "(no answer yet)"}
+                </text>
+              </box>
+            </box>
+          );
+        })}
       </box>
     </box>
   );

@@ -50,9 +50,7 @@ export function StatusDialogContent({
           ],
           [
             "Total tokens",
-            (
-              tokenStats.inputTokens + tokenStats.outputTokens
-            ).toLocaleString(),
+            (tokenStats.inputTokens + tokenStats.outputTokens).toLocaleString(),
           ],
         ] as [string, string][])
       : []),

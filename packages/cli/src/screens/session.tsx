@@ -63,7 +63,10 @@ function ChatMessage({
 }: {
   msg: Message;
   pendingConfirmations: any[];
-  answerQuestion: (toolCallId: string, answer: string | string[]) => void;
+  answerQuestion: (
+    toolCallId: string,
+    answers: Array<{ question: string; answer: string | string[] }>,
+  ) => void;
 }) {
   const text = msg.parts
     .filter((p) => p.type === "text")
@@ -98,7 +101,9 @@ function ChatMessage({
 
   if (msg.role === "user") {
     if (msg.metadata?.commandProgressMessage) {
-      return <CommandProgressMessage message={msg.metadata.commandProgressMessage} />;
+      return (
+        <CommandProgressMessage message={msg.metadata.commandProgressMessage} />
+      );
     }
     return <UserMessage message={text} mode={msg.metadata?.mode ?? "BUILD"} />;
   }
@@ -130,7 +135,7 @@ function SessionChat({
   const [initialMessages] = useState(
     () => session.messages as unknown as Message[],
   );
-  const { mode, model } = usePromptConfig();
+  const { mode, model, setMode } = usePromptConfig();
   const { isTopLayer } = useKeyboardLayer();
   const toast = useToast();
 
@@ -148,7 +153,7 @@ function SessionChat({
     clearMessages,
     rewindMessages,
     isCompacting,
-  } = useChat(session.id, initialMessages);
+  } = useChat(session.id, initialMessages, { onModeChange: setMode });
   const { setItems, clearAll, toggleExpanded } = useTodo();
 
   useEffect(() => {
@@ -166,8 +171,20 @@ function SessionChat({
                 ? part.type.slice("tool-".length)
                 : null;
 
-          if (toolName === "todoWrite" && (part as any).input?.items) {
-            foundItems = (part as any).input.items;
+          if (toolName === "TodoWrite" && (part as any).input?.todos) {
+            const todos = (part as any).input.todos as Array<{
+              content: string;
+              active_form?: string;
+              status: "pending" | "in_progress" | "completed";
+            }>;
+            foundItems = todos.map((t, idx) => ({
+              id: String(idx),
+              label:
+                t.status === "in_progress" && t.active_form
+                  ? t.active_form
+                  : t.content,
+              status: t.status,
+            }));
             break;
           }
         }
@@ -251,8 +268,6 @@ function SessionChat({
       return;
     }
 
-
-
     if (pending && pending.toolCall.toolName !== "AskUserQuestion") {
       if (key.name === "y" || key.name === "Y") {
         key.preventDefault();
@@ -299,7 +314,14 @@ function SessionChat({
       messages={messages}
       tokenStats={tokenStats}
       submitMessage={(text) => submit({ userText: text, mode, model })}
-      submitCommand={(text, progressMessage) => submit({ userText: text, mode, model, commandProgressMessage: progressMessage })}
+      submitCommand={(text, progressMessage) =>
+        submit({
+          userText: text,
+          mode,
+          model,
+          commandProgressMessage: progressMessage,
+        })
+      }
     >
       {messages.map((msg) => (
         <ChatMessage

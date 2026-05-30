@@ -24,7 +24,8 @@ Monitor and report the completion status of each work unit in a status table.
 
 export const batchSkill: Skill = {
   name: "batch",
-  description: "Research and plan a large-scale change, then execute it in parallel across subagents.",
+  description:
+    "Research and plan a large-scale change, then execute it in parallel across subagents.",
   userInvocable: true,
   disableModelInvocation: true,
   source: "bundled",

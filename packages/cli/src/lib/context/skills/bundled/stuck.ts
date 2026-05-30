@@ -20,7 +20,8 @@ Help the user diagnose if a KnightCode session, background process, or subproces
 
 export const stuckSkill: Skill = {
   name: "stuck",
-  description: "Diagnose frozen or slow background tasks and process executions.",
+  description:
+    "Diagnose frozen or slow background tasks and process executions.",
   userInvocable: true,
   disableModelInvocation: false,
   source: "bundled",

@@ -9,7 +9,10 @@ type Props = {
   mode: ModeType;
   durationMs?: number;
   pendingConfirmations?: any[];
-  answerQuestion?: (toolCallId: string, answer: string | string[]) => void;
+  answerQuestion?: (
+    toolCallId: string,
+    answers: Array<{ question: string; answer: string | string[] }>,
+  ) => void;
 };
 
 /**

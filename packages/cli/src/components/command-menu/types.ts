@@ -31,7 +31,6 @@ export type CommandContext = {
   rewindMessages?: (n: number) => Promise<void>;
   submitMessage?: (text: string) => void;
   submitCommand?: (text: string, progressMessage: string) => void;
-
 };
 
 export type Command = {

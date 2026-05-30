@@ -84,7 +84,10 @@ export function loadProjectContextSync(cwd = process.cwd()): ProjectContext {
 
   // 1. Global instructions: ~/.knightcode/KNIGHTCODE.md
   const globalPath = join(homedir(), ".knightcode", "KNIGHTCODE.md");
-  const globalInstructions = processInstructionFileSync(globalPath, processedPaths);
+  const globalInstructions = processInstructionFileSync(
+    globalPath,
+    processedPaths,
+  );
 
   // 2. Project instructions: walk upward from CWD to git root
   //    Check KNIGHTCODE.md and .knightcode/KNIGHTCODE.md at each level
@@ -100,7 +103,10 @@ export function loadProjectContextSync(cwd = process.cwd()): ProjectContext {
 
     // .knightcode/KNIGHTCODE.md
     const dotKnightcodePath = join(dir, ".knightcode", "KNIGHTCODE.md");
-    const dotContent = processInstructionFileSync(dotKnightcodePath, processedPaths);
+    const dotContent = processInstructionFileSync(
+      dotKnightcodePath,
+      processedPaths,
+    );
     if (dotContent.trim()) projectParts.push(dotContent);
   }
 

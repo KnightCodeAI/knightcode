@@ -26,7 +26,9 @@ async function nextOrd(tx: TxClient, sessionId: string): Promise<number> {
   return (agg._max.ord ?? 0) + 1;
 }
 
-export async function loadSessionMessages(sessionId: string): Promise<StoredMessage[]> {
+export async function loadSessionMessages(
+  sessionId: string,
+): Promise<StoredMessage[]> {
   const rows = await db.message.findMany({
     where: { sessionId },
     orderBy: { ord: "asc" },

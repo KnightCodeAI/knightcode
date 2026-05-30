@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import {
-  mkdirSync,
-  writeFileSync,
-  rmSync,
-  existsSync,
-} from "fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join, resolve } from "path";
 import {
   stripHtmlComments,

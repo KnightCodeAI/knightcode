@@ -53,13 +53,13 @@ const app = new Hono().get("/callback", (c) => {
   const { port } = verified;
 
   const blockedPorts = new Set([
-    1433,  // MS SQL
-    1521,  // Oracle
-    3306,  // MySQL
-    5432,  // PostgreSQL
-    6379,  // Redis
-    8080,  // Alternative HTTP / Jenkins
-    9000,  // Alternative HTTP / php-fpm
+    1433, // MS SQL
+    1521, // Oracle
+    3306, // MySQL
+    5432, // PostgreSQL
+    6379, // Redis
+    8080, // Alternative HTTP / Jenkins
+    9000, // Alternative HTTP / php-fpm
     27017, // MongoDB
   ]);
 

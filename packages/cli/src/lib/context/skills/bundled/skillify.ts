@@ -35,7 +35,8 @@ arguments:
 
 export const skillifySkill: Skill = {
   name: "skillify",
-  description: "Capture this session's repeatable process into a reusable skill.",
+  description:
+    "Capture this session's repeatable process into a reusable skill.",
   userInvocable: true,
   disableModelInvocation: true, // User-only invocation
   source: "bundled",
@@ -74,7 +75,10 @@ export const skillifySkill: Skill = {
       }
     }
 
-    let prompt = SKILLIFY_PROMPT_TEMPLATE.replace("{{userMessages}}", userMessagesText);
+    let prompt = SKILLIFY_PROMPT_TEMPLATE.replace(
+      "{{userMessages}}",
+      userMessagesText,
+    );
     if (args) {
       prompt += `\n\n## Additional User Instructions\n\n${args}`;
     }

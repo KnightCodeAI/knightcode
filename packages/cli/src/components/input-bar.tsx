@@ -63,8 +63,6 @@ type MentionCandidate = {
   kind: "file" | "directory";
 };
 
-
-
 function isWithinCurrentDirectory(targetPath: string) {
   const relativePath = relative(CURRENT_DIRECTORY, targetPath);
   return (
@@ -368,7 +366,6 @@ export function InputBar({
   messages,
   tokenStats,
 }: Props) {
-
   const {
     mode,
     toggleMode,
@@ -502,7 +499,10 @@ export function InputBar({
 
       if (command.action) {
         command.action({
-          exit: () => { markIntentionalExit(); renderer.destroy(); },
+          exit: () => {
+            markIntentionalExit();
+            renderer.destroy();
+          },
           toast,
           dialog,
           navigate,
@@ -554,8 +554,6 @@ export function InputBar({
     },
     [resolveCommand, handleCommand],
   );
-
-
 
   // keep the file picker in sync with the current @mention token
   useEffect(() => {
@@ -691,7 +689,13 @@ export function InputBar({
     <box width="100%" alignItems="center">
       <box
         border={["left"]}
-        borderColor={mode === Mode.BUILD ? colors.primary : colors.planMode}
+        borderColor={
+          mode === Mode.PLAN
+            ? colors.planMode
+            : mode === Mode.AUTO
+              ? colors.autoMode
+              : colors.primary
+        }
         customBorderChars={{
           ...EmptyBorder,
           vertical: "┃",

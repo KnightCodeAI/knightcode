@@ -19,7 +19,10 @@ export type RenderedLine = {
 type Align = "left" | "center" | "right";
 
 function parseTableRow(line: string): string[] {
-  return line.split("|").slice(1, -1).map((c) => c.trim());
+  return line
+    .split("|")
+    .slice(1, -1)
+    .map((c) => c.trim());
 }
 
 function isSeparatorRow(cells: string[]): boolean {
@@ -82,7 +85,12 @@ function renderTable(rows: string[]): RenderedLine[] {
   }
 
   if (headerRows.length > 0) {
-    out.push({ text: "─".repeat(totalWidth), fg: "dim", bold: false, dim: true });
+    out.push({
+      text: "─".repeat(totalWidth),
+      fg: "dim",
+      bold: false,
+      dim: true,
+    });
   }
 
   for (const row of dataRows) {
@@ -139,34 +147,83 @@ export function renderMarkdownLines(md: string): RenderedLine[] {
 
     // Headings
     const h1 = raw.match(/^# (.+)$/);
-    if (h1) { out.push({ text: h1[1]!.toUpperCase(), fg: "primary", bold: true, dim: false }); continue; }
+    if (h1) {
+      out.push({
+        text: h1[1]!.toUpperCase(),
+        fg: "primary",
+        bold: true,
+        dim: false,
+      });
+      continue;
+    }
 
     const h2 = raw.match(/^## (.+)$/);
-    if (h2) { out.push({ text: "▸ " + h2[1]!, fg: "info", bold: true, dim: false }); continue; }
+    if (h2) {
+      out.push({ text: "▸ " + h2[1]!, fg: "info", bold: true, dim: false });
+      continue;
+    }
 
     const h3 = raw.match(/^### (.+)$/);
-    if (h3) { out.push({ text: "  › " + h3[1]!, fg: "thinking", bold: true, dim: false }); continue; }
+    if (h3) {
+      out.push({
+        text: "  › " + h3[1]!,
+        fg: "thinking",
+        bold: true,
+        dim: false,
+      });
+      continue;
+    }
 
     const h4 = raw.match(/^#{4,} (.+)$/);
-    if (h4) { out.push({ text: "    " + h4[1]!, fg: "primary", bold: true, dim: false }); continue; }
+    if (h4) {
+      out.push({
+        text: "    " + h4[1]!,
+        fg: "primary",
+        bold: true,
+        dim: false,
+      });
+      continue;
+    }
 
     // Blockquote
     const bq = raw.match(/^> ?(.*)$/);
-    if (bq) { out.push({ text: "│ " + stripInline(bq[1] ?? ""), fg: "dim", bold: false, dim: true }); continue; }
+    if (bq) {
+      out.push({
+        text: "│ " + stripInline(bq[1] ?? ""),
+        fg: "dim",
+        bold: false,
+        dim: true,
+      });
+      continue;
+    }
 
     // Unordered list
     const ul = raw.match(/^(\s*)[*\-+] (.+)$/);
     if (ul) {
       const depth = (ul[1] ?? "").length;
       const bullet = depth > 0 ? "  ◦ " : "• ";
-      out.push({ text: " ".repeat(depth) + bullet + stripInline(ul[2] ?? ""), fg: "text", bold: false, dim: false });
+      out.push({
+        text: " ".repeat(depth) + bullet + stripInline(ul[2] ?? ""),
+        fg: "text",
+        bold: false,
+        dim: false,
+      });
       continue;
     }
 
     // Ordered list
     const ol = raw.match(/^(\s*)(\d+)\. (.+)$/);
     if (ol) {
-      out.push({ text: " ".repeat((ol[1] ?? "").length) + ol[2]! + ". " + stripInline(ol[3] ?? ""), fg: "text", bold: false, dim: false });
+      out.push({
+        text:
+          " ".repeat((ol[1] ?? "").length) +
+          ol[2]! +
+          ". " +
+          stripInline(ol[3] ?? ""),
+        fg: "text",
+        bold: false,
+        dim: false,
+      });
       continue;
     }
 

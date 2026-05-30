@@ -243,7 +243,9 @@ Version rules.`,
     const wrongVersionDir = join(projectDir, "vx");
     ensureDir(wrongVersionDir);
     const rulesWrongVersion = loadRules(wrongVersionDir);
-    expect(rulesWrongVersion.some((r) => r.name === "char-class-only")).toBe(false);
+    expect(rulesWrongVersion.some((r) => r.name === "char-class-only")).toBe(
+      false,
+    );
   });
 
   it("loadRules matches relative paths and negation classes correctly", async () => {

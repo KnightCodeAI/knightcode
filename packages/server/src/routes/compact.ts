@@ -276,7 +276,8 @@ Produce only this summary. Be extremely precise, technical, and complete. Do not
         ]);
 
         const toSummarizeOrds = existing.map((m) => m.ord);
-        const targetOrd = toSummarizeOrds.length > 0 ? Math.min(...toSummarizeOrds) : 1;
+        const targetOrd =
+          toSummarizeOrds.length > 0 ? Math.min(...toSummarizeOrds) : 1;
 
         const priorInputTokens = deletedStats._sum.inputTokens ?? 0;
         const priorOutputTokens = deletedStats._sum.outputTokens ?? 0;
@@ -319,20 +320,28 @@ Produce only this summary. Be extremely precise, technical, and complete. Do not
             credits: billableUsage.credits,
           });
         } catch (ingestErr) {
-          console.error("Failed to ingest Polar AI usage for compaction:", ingestErr);
+          console.error(
+            "Failed to ingest Polar AI usage for compaction:",
+            ingestErr,
+          );
         }
       } else {
         // Race lost: another compaction won. Project DB rows down to the
         // UIMessage shape so the response matches the happy path.
-        const rawRows: Array<{ id: string; role: string; parts: any; metadata: any }> =
-          (txResult as any).messages || [];
+        const rawRows: Array<{
+          id: string;
+          role: string;
+          parts: any;
+          metadata: any;
+        }> = (txResult as any).messages || [];
         const uiShaped = rawRows.map((m) => ({
           id: m.id,
           role: m.role,
           parts: Array.isArray(m.parts) ? m.parts : [],
           metadata: m.metadata as Record<string, unknown> | null,
         }));
-        const estimatedTokensAfterLost = 1500 + estimateTokensForMessages(uiShaped);
+        const estimatedTokensAfterLost =
+          1500 + estimateTokensForMessages(uiShaped);
         return c.json({
           compactedMessages: uiShaped,
           credits: 0,

@@ -43,8 +43,8 @@ function detectWindowsShell(): ShellInfo {
 
   for (const { bin, name } of candidates) {
     const available = bin.includes("\\")
-      ? existsSync(bin)          // absolute path — check disk
-      : isOnWindowsPath(bin);    // plain name — check PATH dirs
+      ? existsSync(bin) // absolute path — check disk
+      : isOnWindowsPath(bin); // plain name — check PATH dirs
     if (available) {
       return { name, bin, args: ["-NoProfile", "-NonInteractive", "-Command"] };
     }
@@ -62,8 +62,10 @@ function detectUnixShell(): ShellInfo {
   // 1. Respect $SHELL if it points to bash or zsh and is executable
   const envShell = process.env["SHELL"] ?? "";
   if (envShell && isExecutable(envShell)) {
-    if (envShell.endsWith("/zsh")) return { name: "zsh", bin: envShell, args: ["-c"] };
-    if (envShell.endsWith("/bash")) return { name: "bash", bin: envShell, args: ["-c"] };
+    if (envShell.endsWith("/zsh"))
+      return { name: "zsh", bin: envShell, args: ["-c"] };
+    if (envShell.endsWith("/bash"))
+      return { name: "bash", bin: envShell, args: ["-c"] };
   }
 
   // 2. Search well-known locations.

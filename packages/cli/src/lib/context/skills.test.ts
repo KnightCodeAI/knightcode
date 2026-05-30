@@ -46,7 +46,9 @@ Run the deployment pipeline.`,
     expect(projectSkills.length).toBeGreaterThanOrEqual(1);
     const deploySkill = projectSkills.find((s) => s.name === "deploy");
     expect(deploySkill).toBeDefined();
-    expect(deploySkill!.description).toBe("Deploy the application to production");
+    expect(deploySkill!.description).toBe(
+      "Deploy the application to production",
+    );
     expect(deploySkill!.body).toContain("deployment pipeline");
   });
 
@@ -161,7 +163,9 @@ Run the linter.`,
     const index = buildSkillIndex(projectDir);
     expect(index).toContain("**lint**");
     expect(index).toContain("Run linting checks");
-    expect(index).toContain("Use when: When the user mentions code quality or linting");
+    expect(index).toContain(
+      "Use when: When the user mentions code quality or linting",
+    );
   });
 
   it("buildSkillIndex excludes model-disabled skills", async () => {

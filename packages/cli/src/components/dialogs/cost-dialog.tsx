@@ -27,9 +27,7 @@ export function CostDialogContent({ tokenStats, model }: Props) {
     ],
     [
       "Session cost",
-      tokenStats.totalCost > 0
-        ? `$${tokenStats.totalCost.toFixed(6)}`
-        : "Free",
+      tokenStats.totalCost > 0 ? `$${tokenStats.totalCost.toFixed(6)}` : "Free",
     ],
     ...(tokenStats.lastInputTokens !== undefined
       ? ([

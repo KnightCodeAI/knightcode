@@ -68,7 +68,9 @@ function isPrivateIp(ip: string): boolean {
   );
 }
 
-async function assertSafeTarget(rawUrl: string): Promise<{ vettedIp: string; hostname: string }> {
+async function assertSafeTarget(
+  rawUrl: string,
+): Promise<{ vettedIp: string; hostname: string }> {
   const u = new URL(rawUrl);
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new SafeTargetError("Only http/https URLs are allowed");
@@ -76,7 +78,9 @@ async function assertSafeTarget(rawUrl: string): Promise<{ vettedIp: string; hos
   const records = await dns.lookup(u.hostname, { all: true });
   const safeRecords = records.filter((r) => !isPrivateIp(r.address));
   if (safeRecords.length === 0) {
-    throw new SafeTargetError("Target host resolves to no allowed public addresses");
+    throw new SafeTargetError(
+      "Target host resolves to no allowed public addresses",
+    );
   }
   const vettedIp = safeRecords[0]!.address;
   return { vettedIp, hostname: u.hostname };

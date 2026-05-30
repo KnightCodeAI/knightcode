@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { TextAttributes } from "@opentui/core";
-import { getSessionModifiedFiles } from "../../lib/tools/local-tools";
+import { getSessionModifiedFiles } from "../../lib/tools";
 
 type Props = {
   sessionId: string;
@@ -26,7 +26,8 @@ export function FilesDialogContent({ sessionId }: Props) {
   return (
     <box flexDirection="column" gap={1} width="100%">
       <text attributes={TextAttributes.DIM}>
-        {files.length} file{files.length !== 1 ? "s" : ""} modified this session:
+        {files.length} file{files.length !== 1 ? "s" : ""} modified this
+        session:
       </text>
       {files.map((file) => (
         <box key={file} flexDirection="row" gap={1} paddingX={1}>

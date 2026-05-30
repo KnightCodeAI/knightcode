@@ -74,7 +74,9 @@ function parseFrontmatter(raw: string): { meta: Frontmatter; body: string } {
       const items: string[] = [];
       while (i + 1 < lines.length && lines[i + 1]!.match(/^\s*-\s+/)) {
         i++;
-        items.push(lines[i]!.replace(/^\s*-\s+/, "").replace(/^["']|["']$/g, ""));
+        items.push(
+          lines[i]!.replace(/^\s*-\s+/, "").replace(/^["']|["']$/g, ""),
+        );
       }
       if (items.length > 0 && key === "paths") meta.paths = items;
       continue;
@@ -262,7 +264,11 @@ export function loadRules(cwd = process.cwd()): Rule[] {
     if (!rule) continue;
 
     // Conditional path filtering
-    if (rule.paths && rule.paths.length > 0 && !matchesAnyPath(rule.paths, cwd)) {
+    if (
+      rule.paths &&
+      rule.paths.length > 0 &&
+      !matchesAnyPath(rule.paths, cwd)
+    ) {
       continue;
     }
 

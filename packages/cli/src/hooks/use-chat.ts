@@ -5,7 +5,13 @@ import {
   type ToolContracts,
   findSupportedChatModel,
   DEFAULT_CHAT_MODEL_ID,
+  ALL_TOOL_NAMES,
 } from "@knightcode/shared";
+import { loadAgents, formatAgentLines } from "../lib/agents/loader";
+import {
+  dequeueNotification,
+  hasNotifications,
+} from "../lib/tools/Agent/notifications";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
@@ -13,16 +19,24 @@ import {
   type LanguageModelUsage,
   type UIMessage,
 } from "ai";
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { apiClient } from "../lib/api-client";
 import { getAuth } from "../lib/auth/auth";
-import { executeLocalTool, getSessionModifiedFiles } from "../lib/tools/local-tools";
+import {
+  executeLocalTool,
+  getSessionModifiedFiles,
+  hasIncompleteTasksSync,
+} from "../lib/tools";
 import { loadProjectContextSync } from "../lib/context/project-context";
 import { loadGitContext } from "../lib/git/git-context";
 import { detectProjectStackSync } from "../lib/project-detection";
 import { allowCommand, isCommandAllowed } from "../lib/permissions/permissions";
 
-import { runUserPromptSubmitHooks, runStopHooks, type UserPromptHookResult } from "../lib/hooks";
+import {
+  runUserPromptSubmitHooks,
+  runStopHooks,
+  type UserPromptHookResult,
+} from "../lib/hooks";
 import { detectShell } from "../lib/shell";
 import { loadRulesText } from "../lib/context/rules";
 import { buildSkillIndex } from "../lib/context/skills";
@@ -62,7 +76,11 @@ export type PendingConfirmation = {
   mode: ModeType;
 };
 
-export function useChat(sessionId: string, initialMessages: Message[]) {
+export function useChat(
+  sessionId: string,
+  initialMessages: Message[],
+  options?: { onModeChange?: (mode: ModeType) => void },
+) {
   const toast = useToast();
   const [pendingConfirmations, setPendingConfirmations] = useState<
     PendingConfirmation[]
@@ -71,6 +89,11 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
   const alwaysAllowEditsRef = useRef(false);
   const chatRef = useRef<any>(null);
   const toolLoopCountsRef = useRef(new Map<string, number>());
+  // Resolvers for promise-based permission requests (used by foreground
+  // subagents that route their tool prompts through pendingConfirmations).
+  const permissionResolversRef = useRef(
+    new Map<string, (allowed: boolean) => void>(),
+  );
   const [isCompacting, setIsCompacting] = useState(false);
   const isCompactingRef = useRef(false);
   const { setItems: setTodoItems } = useTodo();
@@ -125,6 +148,10 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
             isTypeScript: stackCtx.isTypeScript,
             shellName: detectShell().name,
             platform: process.platform,
+            hasPersistedTasks: hasIncompleteTasksSync(process.cwd()),
+            agentTypes: formatAgentLines(loadAgents(process.cwd()), [
+              ...ALL_TOOL_NAMES,
+            ]),
           },
         };
       },
@@ -140,6 +167,13 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
           p.mode,
           sessionId,
         );
+        if (
+          output &&
+          typeof output === "object" &&
+          "modeTransition" in output
+        ) {
+          options?.onModeChange?.(output.modeTransition as ModeType);
+        }
         chatRef.current?.addToolOutput({
           tool: p.toolCall.toolName as keyof ChatTools,
           toolCallId: p.toolCallId,
@@ -154,7 +188,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         });
       }
     },
-    [chatRef, sessionId],
+    [chatRef, sessionId, options?.onModeChange],
   );
 
   const confirmToolCall = useCallback(
@@ -164,15 +198,28 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       );
       if (!pending) return;
 
+      // Foreground-subagent permission requests await a promise resolver rather
+      // than going through the main-thread addToolOutput path.
+      const resolver = permissionResolversRef.current.get(toolCallId);
+      if (resolver) {
+        permissionResolversRef.current.delete(toolCallId);
+        setPendingConfirmations((prev) =>
+          prev.filter((c) => c.toolCallId !== toolCallId),
+        );
+        resolver(allowed);
+        return;
+      }
+
       if (always) {
-        if (pending.toolCall.toolName === "bash") {
+        if (pending.toolCall.toolName === "Bash") {
           const command = pending.toolCall.input?.command;
           if (typeof command === "string" && command.trim()) {
             allowCommand(command);
           }
         } else if (
-          pending.toolCall.toolName === "editFile" ||
-          pending.toolCall.toolName === "writeFile"
+          pending.toolCall.toolName === "Edit" ||
+          pending.toolCall.toolName === "MultiEdit" ||
+          pending.toolCall.toolName === "Write"
         ) {
           setAlwaysAllowEdits(true);
         }
@@ -182,14 +229,16 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
 
         // Execute all other pending file edits when the user selects "always".
         if (
-          pending.toolCall.toolName === "editFile" ||
-          pending.toolCall.toolName === "writeFile"
+          pending.toolCall.toolName === "Edit" ||
+          pending.toolCall.toolName === "MultiEdit" ||
+          pending.toolCall.toolName === "Write"
         ) {
           const otherEdits = pendingConfirmations.filter(
             (c) =>
               c.toolCallId !== toolCallId &&
-              (c.toolCall.toolName === "editFile" ||
-                c.toolCall.toolName === "writeFile"),
+              (c.toolCall.toolName === "Edit" ||
+                c.toolCall.toolName === "MultiEdit" ||
+                c.toolCall.toolName === "Write"),
           );
           for (const other of otherEdits) {
             await executeAndOutput(other);
@@ -197,13 +246,15 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         }
 
         setPendingConfirmations((prev) =>
-          pending.toolCall.toolName === "editFile" ||
-          pending.toolCall.toolName === "writeFile"
+          pending.toolCall.toolName === "Edit" ||
+          pending.toolCall.toolName === "MultiEdit" ||
+          pending.toolCall.toolName === "Write"
             ? prev.filter(
                 (c) =>
                   c.toolCallId !== toolCallId &&
-                  c.toolCall.toolName !== "editFile" &&
-                  c.toolCall.toolName !== "writeFile",
+                  c.toolCall.toolName !== "Edit" &&
+                  c.toolCall.toolName !== "MultiEdit" &&
+                  c.toolCall.toolName !== "Write",
               )
             : prev.filter((c) => c.toolCallId !== toolCallId),
         );
@@ -228,8 +279,26 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     [pendingConfirmations, executeAndOutput, setAlwaysAllowEdits],
   );
 
+  const requestToolPermission = useCallback(
+    (
+      toolCall: { toolCallId: string; toolName: string; input: any },
+      mode: ModeType,
+    ): Promise<boolean> =>
+      new Promise<boolean>((resolve) => {
+        permissionResolversRef.current.set(toolCall.toolCallId, resolve);
+        setPendingConfirmations((prev) => [
+          ...prev,
+          { toolCallId: toolCall.toolCallId, toolCall, mode },
+        ]);
+      }),
+    [],
+  );
+
   const answerQuestion = useCallback(
-    (toolCallId: string, answer: string | string[]) => {
+    (
+      toolCallId: string,
+      answers: Array<{ question: string; answer: string | string[] }>,
+    ) => {
       const pending = pendingConfirmations.find(
         (c) => c.toolCallId === toolCallId,
       );
@@ -242,7 +311,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       chatRef.current?.addToolOutput({
         tool: "AskUserQuestion" as keyof ChatTools,
         toolCallId,
-        output: { answer },
+        output: { answers },
       });
     },
     [pendingConfirmations],
@@ -337,7 +406,9 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
             // Preserve any messages that arrived during the async server round-trip
             const freshAfterServer = chatRef.current.messages as Message[];
             const sentIds = new Set(currentMessages.map((m) => m.id));
-            const serverTrailing = freshAfterServer.filter((m) => !sentIds.has(m.id));
+            const serverTrailing = freshAfterServer.filter(
+              (m) => !sentIds.has(m.id),
+            );
 
             // Reconstruct last summarized message ID to find compactionId
             const toSummarize = currentMessages.slice(0, -4);
@@ -346,14 +417,19 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
             const compactionId = `compaction-${lastMessageId}`;
 
             const freshMap = new Map(freshAfterServer.map((m) => [m.id, m]));
-            const mergedCompacted = (compactedMessages as Message[]).map((m) => {
-              if (m.id !== compactionId && freshMap.has(m.id)) {
-                return freshMap.get(m.id)!;
-              }
-              return m;
-            });
+            const mergedCompacted = (compactedMessages as Message[]).map(
+              (m) => {
+                if (m.id !== compactionId && freshMap.has(m.id)) {
+                  return freshMap.get(m.id)!;
+                }
+                return m;
+              },
+            );
 
-            chatRef.current.setMessages([...mergedCompacted, ...serverTrailing]);
+            chatRef.current.setMessages([
+              ...mergedCompacted,
+              ...serverTrailing,
+            ]);
 
             toast.show({
               variant: "success",
@@ -394,11 +470,12 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
                   : null;
 
             if (
-              toolName === "readFile" ||
-              toolName === "writeFile" ||
-              toolName === "editFile"
+              toolName === "Read" ||
+              toolName === "Write" ||
+              toolName === "Edit" ||
+              toolName === "MultiEdit"
             ) {
-              const filePath = part.input?.path;
+              const filePath = part.input?.file_path;
               if (
                 filePath &&
                 typeof filePath === "string" &&
@@ -454,9 +531,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
                       : part.type.slice("tool-".length);
 
                   if (
-                    ["glob", "grep", "gitStatus", "gitDiff", "gitLog"].includes(
-                      toolName,
-                    )
+                    ["Glob", "Grep", "TaskList", "TaskGet"].includes(toolName)
                   ) {
                     toolNames.push(toolName);
                   } else {
@@ -496,18 +571,19 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
 
               // Preserve file write/edit/read contents for the 5 most recent files
               if (
-                (toolName === "editFile" ||
-                  toolName === "writeFile" ||
-                  toolName === "readFile") &&
-                toolPart.input?.path &&
-                preservedFiles.has(toolPart.input.path)
+                (toolName === "Edit" ||
+                  toolName === "MultiEdit" ||
+                  toolName === "Write" ||
+                  toolName === "Read") &&
+                toolPart.input?.file_path &&
+                preservedFiles.has(toolPart.input.file_path)
               ) {
                 return part;
               }
 
               // Preserve bash outputs for failed commands
               if (
-                toolName === "bash" &&
+                toolName === "Bash" &&
                 toolPart.output?.exitCode !== undefined &&
                 toolPart.output?.exitCode !== 0
               ) {
@@ -519,15 +595,15 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
                 const output = toolPart.output;
                 if (typeof output === "object") {
                   if (typeof output.content === "string") {
-                     const lineCount = output.content.split("\n").length;
-                     return {
-                       ...part,
-                       output: {
-                         ...output,
-                         content: `[Tool Output Cleared: ${lineCount} lines]`,
-                         truncated: true,
-                       },
-                     };
+                    const lineCount = output.content.split("\n").length;
+                    return {
+                      ...part,
+                      output: {
+                        ...output,
+                        content: `[Tool Output Cleared: ${lineCount} lines]`,
+                        truncated: true,
+                      },
+                    };
                   }
                   if (
                     typeof output.stdout === "string" ||
@@ -591,7 +667,9 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
           // Preserve any messages that arrived during the naive compaction processing
           const freshAfterNaive = chatRef.current.messages as Message[];
           const sentIds = new Set(currentMessages.map((m) => m.id));
-          const naiveTrailing = freshAfterNaive.filter((m) => !sentIds.has(m.id));
+          const naiveTrailing = freshAfterNaive.filter(
+            (m) => !sentIds.has(m.id),
+          );
 
           const freshMap = new Map(freshAfterNaive.map((m) => [m.id, m]));
           const mergedCompacted = (compacted as Message[]).map((m) => {
@@ -611,7 +689,10 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
               : "Chat history automatically compacted to save context window.",
           });
         } else if (force) {
-          toast.show({ variant: "info", message: "Chat history is already compact." });
+          toast.show({
+            variant: "info",
+            message: "Chat history is already compact.",
+          });
         }
 
         try {
@@ -657,7 +738,10 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
 
       while (i >= 0 && pairs.length < n) {
         const msg = current[i];
-        if (!msg) { i--; continue; }
+        if (!msg) {
+          i--;
+          continue;
+        }
 
         if (msg.role === "assistant") {
           // Search backward for the nearest preceding user message
@@ -681,7 +765,9 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
 
       const removeIndices = new Set(pairs.flatMap(([u, a]) => [u, a]));
       const removedIds = new Set(
-        pairs.flatMap(([u, a]) => [current[u]?.id, current[a]?.id]).filter((id): id is string => !!id),
+        pairs
+          .flatMap(([u, a]) => [current[u]?.id, current[a]?.id])
+          .filter((id): id is string => !!id),
       );
       const next = current.filter((_, idx) => !removeIndices.has(idx));
       // Preserve any messages that arrived after the snapshot was taken.
@@ -716,7 +802,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       const loopCount = (toolLoopCountsRef.current.get(loopKey) ?? 0) + 1;
       toolLoopCountsRef.current.set(loopKey, loopCount);
 
-      if (toolCall.toolName !== "todoWrite" && loopCount > 8) {
+      if (toolCall.toolName !== "TodoWrite" && loopCount > 8) {
         chatRef.current?.addToolOutput({
           tool: toolCall.toolName as keyof ChatTools,
           toolCallId: toolCall.toolCallId,
@@ -727,11 +813,22 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         return;
       }
 
-      if (toolCall.toolName === "todoWrite") {
-        const { items } = toolCall.input as { items: TodoItem[] };
+      if (toolCall.toolName === "TodoWrite") {
+        const { todos } = toolCall.input as {
+          todos: Array<{
+            content: string;
+            active_form?: string;
+            status: "pending" | "in_progress" | "completed";
+          }>;
+        };
+        const items: TodoItem[] = todos.map((t, idx) => ({
+          id: String(idx),
+          label: t.status === "in_progress" && t.active_form ? t.active_form : t.content,
+          status: t.status,
+        }));
         todoRef.current(items, true);
         chatRef.current?.addToolOutput({
-          tool: "todoWrite",
+          tool: "TodoWrite",
           toolCallId: toolCall.toolCallId,
           output: { success: true, itemCount: items.length },
         });
@@ -739,9 +836,12 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       }
 
       if (
-        (toolCall.toolName === "editFile" ||
-          toolCall.toolName === "writeFile") &&
-        !alwaysAllowEditsRef.current
+        (toolCall.toolName === "Edit" ||
+          toolCall.toolName === "MultiEdit" ||
+          toolCall.toolName === "Write" ||
+          toolCall.toolName === "NotebookEdit") &&
+        !alwaysAllowEditsRef.current &&
+        mode !== "AUTO"
       ) {
         setPendingConfirmations((prev) => [
           ...prev,
@@ -755,8 +855,9 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       }
 
       if (
-        toolCall.toolName === "bash" &&
-        !isCommandAllowed(String(toolCall.input?.command ?? ""))
+        toolCall.toolName === "Bash" &&
+        !isCommandAllowed(String(toolCall.input?.command ?? "")) &&
+        mode !== "AUTO"
       ) {
         setPendingConfirmations((prev) => [
           ...prev,
@@ -781,8 +882,34 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
         return;
       }
 
-      void executeLocalTool(toolCall.toolName, toolCall.input, mode, sessionId)
+      // Config writes (value present) require confirmation; reads are auto-allowed.
+      if (
+        toolCall.toolName === "Config" &&
+        toolCall.input?.value !== undefined &&
+        mode !== "AUTO"
+      ) {
+        setPendingConfirmations((prev) => [
+          ...prev,
+          {
+            toolCallId: toolCall.toolCallId,
+            toolCall,
+            mode,
+          },
+        ]);
+        return;
+      }
+
+      void executeLocalTool(toolCall.toolName, toolCall.input, mode, sessionId, {
+        requestToolPermission: (tc) => requestToolPermission(tc, mode),
+      })
         .then((output) => {
+          if (
+            output &&
+            typeof output === "object" &&
+            "modeTransition" in output
+          ) {
+            options?.onModeChange?.(output.modeTransition as ModeType);
+          }
           chatRef.current?.addToolOutput({
             tool: toolCall.toolName as keyof ChatTools,
             toolCallId: toolCall.toolCallId,
@@ -811,12 +938,25 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
   });
   chatRef.current = chat;
 
+  // Flush background-agent notifications only when the main chat is idle
+  // (priority-"later" semantics): never interrupt an active stream or a pending
+  // permission prompt. One notification per idle tick; extras flush on the next.
+  useEffect(() => {
+    if (chat.status !== "ready") return;
+    if (pendingConfirmations.length > 0) return;
+    if (!hasNotifications()) return;
+    const next = dequeueNotification();
+    if (!next) return;
+    void chat.sendMessage({ text: next });
+  }, [chat.status, pendingConfirmations.length]);
+
   return {
     messages: chat.messages,
     status: chat.status,
     error: chat.error,
     pendingConfirmations,
     confirmToolCall,
+    requestToolPermission,
     answerQuestion,
     compact: () => compactHistory(true),
     clearMessages,
@@ -831,7 +971,10 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
       // UserPromptSubmit hooks — can block sending; wrap so I/O errors don't drop the message
       let promptHookResult: UserPromptHookResult;
       try {
-        promptHookResult = await runUserPromptSubmitHooks(params.userText, sessionId);
+        promptHookResult = await runUserPromptSubmitHooks(
+          params.userText,
+          sessionId,
+        );
       } catch (err) {
         console.error("UserPromptSubmit hook error:", err);
         promptHookResult = { blocked: false };

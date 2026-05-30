@@ -147,7 +147,8 @@ describe("renderMarkdownLines", () => {
     });
 
     test("inline markers in cells are stripped", () => {
-      const md = "| **Bold** | `code` |\n| --- | --- |\n| *italic* | [link](url) |";
+      const md =
+        "| **Bold** | `code` |\n| --- | --- |\n| *italic* | [link](url) |";
       const lines = renderMarkdownLines(md);
       expect(lines[0]!.text).toContain("Bold");
       expect(lines[0]!.text).not.toContain("**");

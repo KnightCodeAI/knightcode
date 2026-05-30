@@ -38,11 +38,17 @@ function decodeState(state: string): OAuthState {
   if (dot <= 0) throw new Error("Invalid state");
   const payloadB64 = state.slice(0, dot);
   const sigB64 = state.slice(dot + 1);
-  const expectedSig = createHmac("sha256", getSecret()).update(payloadB64).digest();
+  const expectedSig = createHmac("sha256", getSecret())
+    .update(payloadB64)
+    .digest();
   const providedSig = Buffer.from(sigB64, "base64url");
-  if (providedSig.length !== expectedSig.length) throw new Error("State signature mismatch");
-  if (!timingSafeEqual(providedSig, expectedSig)) throw new Error("State signature mismatch");
-  return JSON.parse(Buffer.from(payloadB64, "base64url").toString()) as OAuthState;
+  if (providedSig.length !== expectedSig.length)
+    throw new Error("State signature mismatch");
+  if (!timingSafeEqual(providedSig, expectedSig))
+    throw new Error("State signature mismatch");
+  return JSON.parse(
+    Buffer.from(payloadB64, "base64url").toString(),
+  ) as OAuthState;
 }
 
 function getErrorMessage(error: unknown) {

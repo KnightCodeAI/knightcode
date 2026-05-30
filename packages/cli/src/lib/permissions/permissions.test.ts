@@ -1,5 +1,10 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { isCommandAllowed, allowCommand, savePermissions, loadPermissions } from "./permissions";
+import {
+  isCommandAllowed,
+  allowCommand,
+  savePermissions,
+  loadPermissions,
+} from "./permissions";
 
 describe("isCommandAllowed permissions check", () => {
   const originalPerms = loadPermissions();

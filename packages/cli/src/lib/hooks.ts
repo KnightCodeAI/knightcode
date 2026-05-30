@@ -1,10 +1,7 @@
-import { join } from "path";
-import { homedir } from "os";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { spawn, spawnSync } from "child_process";
 
 // ---------------------------------------------------------------------------
-// Types — match Claude Code's schema
+// Types
 // ---------------------------------------------------------------------------
 
 export type HookEvent =
@@ -17,22 +14,19 @@ export type HookEvent =
 export type HookCommand = {
   type: "command";
   command: string;
-  timeout?: number;    // seconds
-  async?: boolean;     // run without blocking
+  timeout?: number; // seconds
+  async?: boolean; // run without blocking
 };
 
 export type HookMatcher = {
-  matcher?: string;    // tool name, "*" for all, or pipe-separated list "bash|python"
+  matcher?: string; // tool name, "*" for all, or pipe-separated list "bash|python"
   hooks: HookCommand[];
 };
 
 export type HooksConfig = Partial<Record<HookEvent, HookMatcher[]>>;
 
-// Top-level settings file shape (only the hooks slice matters here)
-type SettingsFile = {
-  hooks?: HooksConfig;
-  [key: string]: unknown;
-};
+// Settings load/save live in ./settings (shared with the Config tool).
+import { loadSettings, saveSettings } from "./settings";
 
 // ---------------------------------------------------------------------------
 // Hook output — what a subprocess can write to stdout
@@ -51,30 +45,6 @@ export type HookOutput = {
   suppressOutput?: boolean;
 };
 
-// ---------------------------------------------------------------------------
-// Storage — ~/.knightcode/settings.json
-// ---------------------------------------------------------------------------
-
-function getSettingsPath(): string {
-  return join(homedir(), ".knightcode", "settings.json");
-}
-
-function loadSettings(): SettingsFile {
-  const p = getSettingsPath();
-  if (!existsSync(p)) return {};
-  try {
-    return JSON.parse(readFileSync(p, "utf-8")) as SettingsFile;
-  } catch {
-    return {};
-  }
-}
-
-function saveSettings(settings: SettingsFile): void {
-  const dir = join(homedir(), ".knightcode");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), "utf-8");
-}
-
 export function loadHooks(): HooksConfig {
   return loadSettings().hooks ?? {};
 }
@@ -85,7 +55,11 @@ export function saveHooks(config: HooksConfig): void {
   saveSettings(settings);
 }
 
-export function addHook(event: HookEvent, matcher: string, command: string): void {
+export function addHook(
+  event: HookEvent,
+  matcher: string,
+  command: string,
+): void {
   const config = loadHooks();
   if (!config[event]) config[event] = [];
   const group = config[event]!.find((m) => (m.matcher ?? "*") === matcher);
@@ -97,7 +71,11 @@ export function addHook(event: HookEvent, matcher: string, command: string): voi
   saveHooks(config);
 }
 
-export function removeHook(event: HookEvent, matcherIndex: number, hookIndex: number): void {
+export function removeHook(
+  event: HookEvent,
+  matcherIndex: number,
+  hookIndex: number,
+): void {
   const config = loadHooks();
   const matchers = config[event];
   if (!matchers) return;
@@ -113,9 +91,14 @@ export function removeHook(event: HookEvent, matcherIndex: number, hookIndex: nu
 // Matching
 // ---------------------------------------------------------------------------
 
-function matchesMatcher(toolName: string, matcher: string | undefined): boolean {
+function matchesMatcher(
+  toolName: string,
+  matcher: string | undefined,
+): boolean {
   if (!matcher || matcher === "*") return true;
-  return matcher.split("|").some((m) => m.trim().toLowerCase() === toolName.toLowerCase());
+  return matcher
+    .split("|")
+    .some((m) => m.trim().toLowerCase() === toolName.toLowerCase());
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +130,11 @@ type StopInput = BaseInput & {
   stop_hook_active: boolean;
 };
 
-type HookInput = PreToolUseInput | PostToolUseInput | UserPromptSubmitInput | StopInput;
+type HookInput =
+  | PreToolUseInput
+  | PostToolUseInput
+  | UserPromptSubmitInput
+  | StopInput;
 
 // ---------------------------------------------------------------------------
 // Async execution — uses spawn so the event loop remains unblocked
@@ -166,7 +153,10 @@ function buildEnv(input: HookInput): NodeJS.ProcessEnv {
   return env;
 }
 
-async function execHook(hook: HookCommand, input: HookInput): Promise<HookOutput | null> {
+async function execHook(
+  hook: HookCommand,
+  input: HookInput,
+): Promise<HookOutput | null> {
   const timeoutMs = (hook.timeout ?? 60) * 1000;
   const inputJson = JSON.stringify(input);
   const env = buildEnv(input);
@@ -214,7 +204,9 @@ async function execHook(hook: HookCommand, input: HookInput): Promise<HookOutput
       done(null);
     }, timeoutMs);
 
-    child.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
 
     // Write + end synchronously so fast-exiting children receive complete input.
     try {
@@ -227,7 +219,10 @@ async function execHook(hook: HookCommand, input: HookInput): Promise<HookOutput
 
     child.on("close", () => {
       const out = stdout.trim();
-      if (!out) { done(null); return; }
+      if (!out) {
+        done(null);
+        return;
+      }
       try {
         done(JSON.parse(out) as HookOutput);
       } catch {

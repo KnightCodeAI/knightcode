@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join, resolve } from "path";
+import { tmpdir } from "os";
 import { listSkills, loadSkill } from "../skills";
 
-const TEST_ROOT = resolve(__dirname, "__test_bundled_skills__");
+const TEST_ROOT = resolve(
+  tmpdir(),
+  "knightcode_test_bundled_skills_" + Math.random().toString(36).slice(2),
+);
 
 function ensureDir(dir: string) {
   mkdirSync(dir, { recursive: true });
@@ -86,7 +90,10 @@ Custom lorem body`,
     expect(skillify).toBeDefined();
     expect(skillify!.getDynamicBody).toBeDefined();
 
-    const body = await skillify!.getDynamicBody!("focused instructions", "test-session-id");
+    const body = await skillify!.getDynamicBody!(
+      "focused instructions",
+      "test-session-id",
+    );
     expect(body).toContain("focused instructions");
     expect(body).toContain("# Skillify");
   });

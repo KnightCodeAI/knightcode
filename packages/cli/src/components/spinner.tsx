@@ -8,6 +8,11 @@ type Props = {
 
 export function Spinner({ mode = Mode.BUILD }: Props) {
   const { colors } = useTheme();
-  const activeColor = mode === Mode.PLAN ? colors.planMode : colors.primary;
+  const activeColor =
+    mode === Mode.PLAN
+      ? colors.planMode
+      : mode === Mode.AUTO
+        ? colors.autoMode
+        : colors.primary;
   return <spinner name="dots14" color={activeColor} />;
 }

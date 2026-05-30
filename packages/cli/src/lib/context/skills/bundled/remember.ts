@@ -27,7 +27,8 @@ Output a structured report proposing changes (e.g. additions/modifications to th
 
 export const rememberSkill: Skill = {
   name: "remember",
-  description: "Review recent session context and propose promotions to KNIGHTCODE.md or KNIGHTCODE.local.md.",
+  description:
+    "Review recent session context and propose promotions to KNIGHTCODE.md or KNIGHTCODE.local.md.",
   userInvocable: true,
   disableModelInvocation: false,
   source: "bundled",

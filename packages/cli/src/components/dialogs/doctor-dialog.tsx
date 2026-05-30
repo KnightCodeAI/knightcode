@@ -84,9 +84,10 @@ export function DoctorDialogContent() {
     }
 
     // 4. Runtime
-    const runtime = typeof Bun !== "undefined"
-      ? `Bun ${(globalThis as any).Bun.version}`
-      : `Node ${process.version}`;
+    const runtime =
+      typeof Bun !== "undefined"
+        ? `Bun ${(globalThis as any).Bun.version}`
+        : `Node ${process.version}`;
     update(3, "ok", runtime);
   }, []);
 

@@ -1,7 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
 import {
+  getDeferredToolNames,
   getToolContracts,
   modeSchema,
+  TASK_SUITE_TOOL_NAMES,
   type ModeType,
   type ToolContracts,
   type ReasoningEffortLevel,
@@ -28,6 +30,7 @@ import {
   saveMessage,
   finalizeAssistantMessage,
 } from "../lib/messages";
+import { extractLoadedDeferredTools } from "../lib/loaded-deferred-tools";
 
 type ChatMessageMetadata = {
   mode?: ModeType;
@@ -72,6 +75,8 @@ const submitSchema = z.object({
   isTypeScript: z.boolean().optional(),
   shellName: z.string().max(32).optional(),
   platform: z.string().max(32).optional(),
+  hasPersistedTasks: z.boolean().optional(),
+  agentTypes: z.string().max(8000).optional(),
 });
 
 const submitValidator = zValidator("json", submitSchema, (result, c) => {
@@ -80,7 +85,9 @@ const submitValidator = zValidator("json", submitSchema, (result, c) => {
   }
 });
 
-function hasPendingToolCalls(message: { parts: Array<{ type?: string; state?: string }> }) {
+function hasPendingToolCalls(message: {
+  parts: Array<{ type?: string; state?: string }>;
+}) {
   return message.parts.some((part) => {
     if (part.type === "dynamic-tool" || part.type?.startsWith("tool-")) {
       const state = part.state;
@@ -128,6 +135,8 @@ const app = new Hono<AuthenticatedEnv>().post(
       isTypeScript,
       shellName,
       platform,
+      hasPersistedTasks,
+      agentTypes,
     } = c.req.valid("json");
 
     const session = await db.session.findUnique({
@@ -139,7 +148,6 @@ const app = new Hono<AuthenticatedEnv>().post(
     }
 
     const startTime = Date.now();
-    const tools = getToolContracts(mode);
     const resolvedModel = resolveChatModel(
       model,
       session.reasoningEffort as ReasoningEffortLevel,
@@ -159,7 +167,9 @@ const app = new Hono<AuthenticatedEnv>().post(
         metadata: { ...message.metadata, mode, model },
       } satisfies KnightcodeUIMessage;
 
-      const existingIndex = mergedMessages.findIndex((m) => m.id === incomingMessage.id);
+      const existingIndex = mergedMessages.findIndex(
+        (m) => m.id === incomingMessage.id,
+      );
       if (existingIndex === -1) {
         mergedMessages.push(incomingMessage);
       } else {
@@ -175,11 +185,30 @@ const app = new Hono<AuthenticatedEnv>().post(
           id: message.id,
           role: message.role,
           parts: message.parts as any[],
-          metadata: { ...message.metadata, mode, model } as Record<string, unknown>,
+          metadata: { ...message.metadata, mode, model } as Record<
+            string,
+            unknown
+          >,
           status: "complete",
         });
       }
     }
+
+    // Derive which deferred tools the model has loaded earlier in this
+    // conversation by scanning ToolSearch outputs. Build the per-turn tool
+    // set as base + loaded deferred; announce the still-unloaded set via the
+    // system prompt's <system-reminder> block.
+    const loadedDeferred = extractLoadedDeferredTools(mergedMessages);
+    // Adaptive pre-load: when the workspace already has incomplete tasks, the
+    // Task suite is clearly in use — surface it from turn 1 so the model can
+    // resume cross-session work without a ToolSearch detour.
+    if (hasPersistedTasks) {
+      for (const name of TASK_SUITE_TOOL_NAMES) loadedDeferred.add(name);
+    }
+    const tools = getToolContracts(mode, { loaded_deferred: loadedDeferred });
+    const availableDeferredTools = getDeferredToolNames(mode).filter(
+      (name) => !loadedDeferred.has(name),
+    );
 
     const nextMessages = await validateUIMessages<KnightcodeUIMessage>({
       messages: mergedMessages,
@@ -207,6 +236,8 @@ const app = new Hono<AuthenticatedEnv>().post(
         isTypeScript,
         shellName,
         platform,
+        availableDeferredTools,
+        agentTypes,
       }),
       messages: modelMessages,
       tools,
@@ -220,9 +251,12 @@ const app = new Hono<AuthenticatedEnv>().post(
           } else {
             accumulatedUsage = {
               ...accumulatedUsage,
-              inputTokens: (accumulatedUsage.inputTokens ?? 0) + (u.inputTokens ?? 0),
-              outputTokens: (accumulatedUsage.outputTokens ?? 0) + (u.outputTokens ?? 0),
-              totalTokens: (accumulatedUsage.totalTokens ?? 0) + (u.totalTokens ?? 0),
+              inputTokens:
+                (accumulatedUsage.inputTokens ?? 0) + (u.inputTokens ?? 0),
+              outputTokens:
+                (accumulatedUsage.outputTokens ?? 0) + (u.outputTokens ?? 0),
+              totalTokens:
+                (accumulatedUsage.totalTokens ?? 0) + (u.totalTokens ?? 0),
             };
           }
         }
@@ -251,8 +285,8 @@ const app = new Hono<AuthenticatedEnv>().post(
         // Prefer AI SDK's canonical totalUsage; fall back to the running
         // accumulator (kept for the streaming `finish` part's metadata).
         const finalUsage =
-          (event as unknown as { totalUsage?: LanguageModelUsage }).totalUsage ??
-          accumulatedUsage;
+          (event as unknown as { totalUsage?: LanguageModelUsage })
+            .totalUsage ?? accumulatedUsage;
 
         let credits = 0;
         if (finalUsage) {
@@ -272,7 +306,9 @@ const app = new Hono<AuthenticatedEnv>().post(
         // input-available state is an incomplete turn — convertToModelMessages
         // will reject it on the next load. Persist as "error" so the load path
         // can filter it instead of bricking the session.
-        const pending = hasPendingToolCalls({ parts: responseMessage.parts as any[] });
+        const pending = hasPendingToolCalls({
+          parts: responseMessage.parts as any[],
+        });
         const finalStatus = isAborted
           ? "interrupted"
           : pending

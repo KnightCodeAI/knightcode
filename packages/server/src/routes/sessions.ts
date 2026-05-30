@@ -138,8 +138,10 @@ const app = new Hono<AuthenticatedEnv>()
         const modelDef = findSupportedChatModel(modelId);
         if (modelDef?.pricing) {
           totalCost +=
-            ((msg.inputTokens ?? 0) / 1_000_000) * modelDef.pricing.inputUsdPerMillionTokens +
-            ((msg.outputTokens ?? 0) / 1_000_000) * modelDef.pricing.outputUsdPerMillionTokens;
+            ((msg.inputTokens ?? 0) / 1_000_000) *
+              modelDef.pricing.inputUsdPerMillionTokens +
+            ((msg.outputTokens ?? 0) / 1_000_000) *
+              modelDef.pricing.outputUsdPerMillionTokens;
         }
       }
     }
