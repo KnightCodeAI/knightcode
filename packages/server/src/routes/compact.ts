@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { db } from "@knightcode/database/client";
 import { getToolContracts, modeSchema } from "@knightcode/shared";
+import { loadSessionMessages, replaceSessionMessages } from "../lib/messages";
 import { isSupportedChatModel, resolveChatModel } from "../lib/models";
 import { convertToModelMessages, generateText, validateUIMessages } from "ai";
 import { Hono } from "hono";
@@ -99,12 +100,20 @@ const app = new Hono<AuthenticatedEnv>().post(
     const lastMessageId = lastSummarizedMessage?.id || "initial";
     const compactionId = `compaction-${lastMessageId}`;
 
-    const dbMessages = (session.messages as any[]) || [];
+    const dbMessages = await loadSessionMessages(id);
     const alreadyCompacted = dbMessages.some((m) => m && m.id === compactionId);
     if (alreadyCompacted) {
-      const estimatedTokens = 1500 + estimateTokensForMessages(dbMessages);
+      // Return UIMessage-shaped rows so the response shape matches the happy
+      // path below — clients should not have to handle two different schemas.
+      const uiShaped = dbMessages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        parts: m.parts,
+        metadata: m.metadata,
+      }));
+      const estimatedTokens = 1500 + estimateTokensForMessages(uiShaped);
       return c.json({
-        compactedMessages: dbMessages,
+        compactedMessages: uiShaped,
         credits: 0,
         estimatedTokens,
       });
@@ -231,22 +240,76 @@ Produce only this summary. Be extremely precise, technical, and complete. Do not
           throw new Error("Session not found");
         }
 
-        const currentMessages = (sessionInside.messages as any[]) || [];
-        const alreadyDone = currentMessages.some((m) => m && m.id === compactionId);
+        const alreadyDone = await tx.message.findFirst({
+          where: { sessionId: id, id: compactionId },
+          select: { id: true },
+        });
         if (alreadyDone) {
-          return { won: false, messages: currentMessages };
+          const existing = await tx.message.findMany({
+            where: { sessionId: id },
+            orderBy: { ord: "asc" },
+          });
+          return { won: false, messages: existing };
         }
 
-        const updatedSession = await tx.session.update({
-          where: { id, userId },
-          data: {
-            messages: compactedMessages as any,
+        const toSummarizeIds = new Set(toSummarize.map((m) => m.id));
+
+        // Read the ords we need to compute targetOrd AND aggregate the
+        // billing rollup in parallel — both target the same session and
+        // shortening the transaction reduces lock-hold time.
+        const [existing, deletedStats] = await Promise.all([
+          tx.message.findMany({
+            where: { sessionId: id, id: { in: Array.from(toSummarizeIds) } },
+            select: { id: true, ord: true },
+          }),
+          tx.message.aggregate({
+            where: {
+              sessionId: id,
+              id: { in: Array.from(toSummarizeIds) },
+            },
+            _sum: {
+              inputTokens: true,
+              outputTokens: true,
+              credits: true,
+            },
+          }),
+        ]);
+
+        const toSummarizeOrds = existing.map((m) => m.ord);
+        const targetOrd =
+          toSummarizeOrds.length > 0 ? Math.min(...toSummarizeOrds) : 1;
+
+        const priorInputTokens = deletedStats._sum.inputTokens ?? 0;
+        const priorOutputTokens = deletedStats._sum.outputTokens ?? 0;
+        const priorCredits = deletedStats._sum.credits ?? 0;
+
+        await tx.message.deleteMany({
+          where: {
+            sessionId: id,
+            id: { in: Array.from(toSummarizeIds) },
           },
         });
-        if (!updatedSession) {
-          throw new Error("Failed to update session messages in database");
-        }
-        return { won: true, session: updatedSession };
+
+        await tx.message.create({
+          data: {
+            id: compactionId,
+            sessionId: id,
+            role: "assistant",
+            parts: summaryMessage.parts,
+            metadata: summaryMessage.metadata ?? null,
+            status: "complete",
+            ord: targetOrd,
+            durationMs: null,
+            inputTokens: (usage?.inputTokens ?? 0) + priorInputTokens,
+            outputTokens: (usage?.outputTokens ?? 0) + priorOutputTokens,
+            credits: (billableUsage.credits ?? 0) + priorCredits,
+            billed: true,
+            startedAt: null,
+            completedAt: new Date(),
+          },
+        });
+
+        return { won: true };
       });
 
       if (txResult.won) {
@@ -257,13 +320,30 @@ Produce only this summary. Be extremely precise, technical, and complete. Do not
             credits: billableUsage.credits,
           });
         } catch (ingestErr) {
-          console.error("Failed to ingest Polar AI usage for compaction:", ingestErr);
+          console.error(
+            "Failed to ingest Polar AI usage for compaction:",
+            ingestErr,
+          );
         }
       } else {
-        const dbMessagesAfterLost = txResult.messages || [];
-        const estimatedTokensAfterLost = 1500 + estimateTokensForMessages(dbMessagesAfterLost);
+        // Race lost: another compaction won. Project DB rows down to the
+        // UIMessage shape so the response matches the happy path.
+        const rawRows: Array<{
+          id: string;
+          role: string;
+          parts: any;
+          metadata: any;
+        }> = (txResult as any).messages || [];
+        const uiShaped = rawRows.map((m) => ({
+          id: m.id,
+          role: m.role,
+          parts: Array.isArray(m.parts) ? m.parts : [],
+          metadata: m.metadata as Record<string, unknown> | null,
+        }));
+        const estimatedTokensAfterLost =
+          1500 + estimateTokensForMessages(uiShaped);
         return c.json({
-          compactedMessages: dbMessagesAfterLost,
+          compactedMessages: uiShaped,
           credits: 0,
           estimatedTokens: estimatedTokensAfterLost,
         });

@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import auth from "./routes/auth";
 import chat from "./routes/chat";
+import agentStep from "./routes/agent-step";
 import sessions from "./routes/sessions";
 import billing from "./routes/billing";
 import web from "./routes/web";
@@ -52,6 +53,7 @@ app.onError((error, c) => {
 
 app.use("/sessions/*", requireAuth);
 app.use("/chat/*", requireAuth);
+app.use("/agent-step/*", requireAuth);
 app.use("/web/*", requireAuth);
 app.use("/compact/*", requireAuth);
 app.use("/billing/checkout", requireAuth);
@@ -60,6 +62,7 @@ app.use("/billing/portal", requireAuth);
 const routes = app
   .route("/sessions", sessions)
   .route("/chat", chat)
+  .route("/agent-step", agentStep)
   .route("/auth", auth)
   .route("/billing", billing)
   .route("/web", web)

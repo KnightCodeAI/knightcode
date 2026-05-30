@@ -163,6 +163,46 @@ export const SUPPORTED_CHAT_MODELS = [
     supportsThinking: true,
     contextWindow: 131072,
   },
+  {
+    id: "moonshotai/kimi-k2.6",
+    provider: "openrouter",
+    pricing: {
+      inputUsdPerMillionTokens: 1,
+      outputUsdPerMillionTokens: 4,
+    },
+    supportsThinking: true,
+    contextWindow: 262144,
+  },
+  {
+    id: "z-ai/glm-5.1",
+    provider: "openrouter",
+    pricing: {
+      inputUsdPerMillionTokens: 0.9,
+      outputUsdPerMillionTokens: 4.5,
+    },
+    supportsThinking: true,
+    contextWindow: 202752,
+  },
+  {
+    id: "xiaomi/mimo-v2.5-pro",
+    provider: "openrouter",
+    pricing: {
+      inputUsdPerMillionTokens: 1,
+      outputUsdPerMillionTokens: 3.2,
+    },
+    supportsThinking: true,
+    contextWindow: 1000000,
+  },
+  {
+    id: "minimax/minimax-m2.7",
+    provider: "openrouter",
+    pricing: {
+      inputUsdPerMillionTokens: 0.5,
+      outputUsdPerMillionTokens: 2.5,
+    },
+    supportsThinking: true,
+    contextWindow: 204800,
+  },
 ] as const satisfies readonly SupportedChatModelDefinition[];
 
 export type SupportedChatModel = (typeof SUPPORTED_CHAT_MODELS)[number] &

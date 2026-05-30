@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { useDialog } from "../../providers/dialogs";
 import { DialogSearchList } from "../dialog-search-list";
 
-const AVAILABLE_MODES: ModeType[] = [Mode.BUILD, Mode.PLAN];
+const AVAILABLE_MODES: ModeType[] = [Mode.BUILD, Mode.PLAN, Mode.AUTO];
 
 type AgentsDialogContentProps = {
   currentMode: ModeType;
@@ -11,7 +11,9 @@ type AgentsDialogContentProps = {
 };
 
 function getModeLabel(mode: ModeType) {
-  return mode === Mode.PLAN ? "Plan" : "Build";
+  if (mode === Mode.PLAN) return "Plan";
+  if (mode === Mode.AUTO) return "Auto";
+  return "Build";
 }
 
 export const AgentsDialogContent = ({

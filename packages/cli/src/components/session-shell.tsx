@@ -4,6 +4,7 @@ import { InputBar } from "./input-bar";
 import { Spinner } from "./spinner";
 import { TodoPanel } from "./todo-panel";
 import { usePromptConfig } from "../providers/prompt-config";
+import type { Message } from "../hooks/use-chat";
 
 type Props = {
   children?: ReactNode;
@@ -13,6 +14,11 @@ type Props = {
   loading?: boolean;
   interruptible?: boolean;
   compact?: () => void | Promise<void>;
+  clearMessages?: () => Promise<void>;
+  rewindMessages?: (n: number) => Promise<void>;
+  submitMessage?: (text: string) => void;
+  submitCommand?: (text: string, progressMessage: string) => void;
+  messages?: Message[];
   tokenStats?: {
     inputTokens: number;
     outputTokens: number;
@@ -29,6 +35,11 @@ export function SessionShell({
   loading = false,
   interruptible = false,
   compact,
+  clearMessages,
+  rewindMessages,
+  submitMessage,
+  submitCommand,
+  messages,
   tokenStats,
 }: Props) {
   const { mode } = usePromptConfig();
@@ -58,6 +69,11 @@ export function SessionShell({
           disabled={inputDisabled}
           isCompacting={isCompacting}
           compact={compact}
+          clearMessages={clearMessages}
+          rewindMessages={rewindMessages}
+          submitMessage={submitMessage}
+          submitCommand={submitCommand}
+          messages={messages}
           tokenStats={tokenStats}
         />
       </box>
@@ -85,9 +101,11 @@ export function SessionShell({
           ) : null}
         </box>
 
-        <box flexDirection="row" gap={1} flexShrink={0} marginLeft="auto">
-          <text>tab</text>
-          <text attributes={TextAttributes.DIM}>agents</text>
+        <box flexDirection="row" gap={3} flexShrink={0} marginLeft="auto">
+          <box flexDirection="row" gap={1}>
+            <text>tab</text>
+            <text attributes={TextAttributes.DIM}>agents</text>
+          </box>
         </box>
       </box>
     </box>

@@ -22,6 +22,22 @@ class SafeTargetError extends Error {}
 
 function isPrivateIp(ip: string): boolean {
   const normalized = ip.toLowerCase();
+  if (normalized.startsWith("::ffff:")) {
+    const rest = normalized.slice(7);
+    if (net.isIPv4(rest)) {
+      return isPrivateIp(rest);
+    }
+    const hexParts = rest.split(":");
+    if (hexParts.length === 2) {
+      const high = parseInt(hexParts[0]!, 16);
+      const low = parseInt(hexParts[1]!, 16);
+      if (!isNaN(high) && !isNaN(low)) {
+        const ipv4 = `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`;
+        return isPrivateIp(ipv4);
+      }
+    }
+  }
+
   if (net.isIPv4(normalized)) {
     const parts = normalized.split(".").map((part) => Number(part));
     const [a, b] = parts;
@@ -52,7 +68,9 @@ function isPrivateIp(ip: string): boolean {
   );
 }
 
-async function assertSafeTarget(rawUrl: string): Promise<{ vettedIp: string; hostname: string }> {
+async function assertSafeTarget(
+  rawUrl: string,
+): Promise<{ vettedIp: string; hostname: string }> {
   const u = new URL(rawUrl);
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new SafeTargetError("Only http/https URLs are allowed");
@@ -60,7 +78,9 @@ async function assertSafeTarget(rawUrl: string): Promise<{ vettedIp: string; hos
   const records = await dns.lookup(u.hostname, { all: true });
   const safeRecords = records.filter((r) => !isPrivateIp(r.address));
   if (safeRecords.length === 0) {
-    throw new SafeTargetError("Target host resolves to no allowed public addresses");
+    throw new SafeTargetError(
+      "Target host resolves to no allowed public addresses",
+    );
   }
   const vettedIp = safeRecords[0]!.address;
   return { vettedIp, hostname: u.hostname };

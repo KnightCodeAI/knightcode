@@ -7,11 +7,6 @@ import {
 } from "@knightcode/shared";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useState } from "react";
-import {
-  getRepoRoot,
-  isWorktreeDisabled,
-  setWorktreeDisabled as setWorktreeConfig,
-} from "../../lib/worktree-tools";
 
 type PromptConfigContextValue = {
   mode: ModeType;
@@ -21,8 +16,6 @@ type PromptConfigContextValue = {
   setModel: (model: SupportedChatModelId) => void;
   reasoningEffort: ReasoningEffortLevel;
   setReasoningEffort: (level: ReasoningEffortLevel) => void;
-  worktreeDisabled: boolean;
-  setWorktreeDisabled: (disabled: boolean) => void;
 };
 
 const PromptConfigContext = createContext<PromptConfigContextValue | null>(
@@ -51,19 +44,6 @@ export function PromptConfigProvider({ children }: PromptConfigProviderProps) {
   const [reasoningEffort, setReasoningEffort] =
     useState<ReasoningEffortLevel>("medium");
 
-  const repoRoot = getRepoRoot();
-  const [worktreeDisabled, setWorktreeDisabledState] = useState(() => {
-    return repoRoot ? isWorktreeDisabled(repoRoot) : true;
-  });
-
-  const setWorktreeDisabled = useCallback((disabled: boolean) => {
-    const root = getRepoRoot();
-    if (root) {
-      setWorktreeConfig(root, disabled);
-    }
-    setWorktreeDisabledState(disabled);
-  }, []);
-
   const toggleMode = useCallback(() => {
     setMode((m) => (m === Mode.BUILD ? Mode.PLAN : Mode.BUILD));
   }, []);
@@ -78,8 +58,6 @@ export function PromptConfigProvider({ children }: PromptConfigProviderProps) {
         setModel,
         reasoningEffort,
         setReasoningEffort,
-        worktreeDisabled,
-        setWorktreeDisabled,
       }}
     >
       {children}

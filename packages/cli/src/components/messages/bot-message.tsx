@@ -4,8 +4,9 @@ import prettyMs from "pretty-ms";
 import type { Message } from "../../hooks/use-chat";
 import { useTheme } from "../../providers/theme";
 import { EmptyBorder } from "../utils/border";
-import { computeLineDiff } from "../../lib/diff";
+import { computeLineDiff } from "../../lib/git/diff";
 import { InlineQuestion } from "./inline-question";
+import { renderMarkdownLines } from "../../lib/markdown/markdown-renderer";
 
 type ClientMessagePart = Message["parts"][number];
 type ToolPart = Extract<
@@ -20,7 +21,10 @@ type Props = {
   durationMs?: number;
   streaming?: boolean;
   pendingConfirmations?: any[];
-  answerQuestion?: (toolCallId: string, answer: string | string[]) => void;
+  answerQuestion?: (
+    toolCallId: string,
+    answers: Array<{ question: string; answer: string | string[] }>,
+  ) => void;
 };
 
 function formatToolName(name: string): string {
@@ -40,10 +44,10 @@ function formatToolArgs(tc: ToolPart): string {
       ? (tc as any).toolName
       : tc.type.slice("tool-".length);
 
-  if (toolName === "todoWrite") {
-    const items = (tc.input as any).items || [];
-    const completed = items.filter((i: any) => i.status === "completed").length;
-    return `checklist (${completed}/${items.length} completed)`;
+  if (toolName === "TodoWrite") {
+    const todos = (tc.input as any).todos || [];
+    const completed = todos.filter((i: any) => i.status === "completed").length;
+    return `checklist (${completed}/${todos.length} completed)`;
   }
 
   if (typeof tc.input !== "object") return String(tc.input);
@@ -84,6 +88,63 @@ function groupConsecutiveParts(parts: ClientMessagePart[]): PartGroup[] {
   return groups;
 }
 
+function MarkdownText({
+  text,
+  defaultFg = "white",
+  isThinking = false,
+}: {
+  text: string;
+  defaultFg?: string;
+  isThinking?: boolean;
+}) {
+  const { colors } = useTheme();
+  const lines = renderMarkdownLines(text);
+
+  function resolveFg(fg: string): string {
+    switch (fg) {
+      case "primary":
+        return colors.primary;
+      case "info":
+        return colors.info;
+      case "thinking":
+        return colors.thinking;
+      case "dim":
+        return colors.dimSeparator;
+      case "code":
+        return isThinking ? defaultFg : colors.info;
+      case "text":
+      default:
+        return defaultFg;
+    }
+  }
+
+  return (
+    <box flexDirection="column" width="100%" gap={0}>
+      {lines.map((line, idx) => {
+        let attributes = TextAttributes.NONE;
+        if (line.bold) attributes |= TextAttributes.BOLD;
+        if (line.dim) attributes |= TextAttributes.DIM;
+
+        if (isThinking && line.fg === "code") {
+          attributes |= TextAttributes.ITALIC | TextAttributes.DIM;
+        }
+
+        return (
+          <text
+            key={idx}
+            fg={resolveFg(line.fg)}
+            attributes={
+              attributes === TextAttributes.NONE ? undefined : attributes
+            }
+          >
+            {line.text || " "}
+          </text>
+        );
+      })}
+    </box>
+  );
+}
+
 export function BotMessage({
   parts,
   model,
@@ -111,10 +172,16 @@ export function BotMessage({
                   }}
                   width="100%"
                   paddingX={2}
+                  flexDirection="column"
                 >
                   <text attributes={TextAttributes.DIM}>
-                    <em fg={colors.thinking}>Thinking:</em> {part.text}
+                    <em fg={colors.thinking}>Thinking:</em>
                   </text>
+                  <MarkdownText
+                    text={part.text}
+                    defaultFg="gray"
+                    isThinking={true}
+                  />
                 </box>
               );
             }
@@ -125,7 +192,7 @@ export function BotMessage({
                   ? part.toolName
                   : part.type.slice("tool-".length);
 
-              const isEditFile = toolName === "editFile";
+              const isEditFile = toolName === "Edit";
               const isAskUserQuestion = toolName === "AskUserQuestion";
               const editInput =
                 isEditFile && part.input && typeof part.input === "object"
@@ -136,56 +203,77 @@ export function BotMessage({
               );
 
               if (isAskUserQuestion) {
-                if (isPending && answerQuestion) {
-                  const input = part.input as any;
+                const input = part.input as any;
+                const questions = Array.isArray(input?.questions)
+                  ? input.questions
+                  : [];
+                if (isPending && answerQuestion && questions.length > 0) {
                   return (
                     <InlineQuestion
                       key={part.toolCallId}
                       toolCallId={part.toolCallId}
-                      question={input.question}
-                      options={input.options}
-                      isMultiSelect={input.isMultiSelect}
+                      questions={questions}
                       onAnswer={answerQuestion}
                     />
                   );
-                } else {
-                  return (
-                    <box
-                      key={part.toolCallId}
-                      border={["left"]}
-                      borderColor={colors.thinkingBorder}
-                      paddingX={2}
-                      flexDirection="column"
-                      marginY={1}
-                    >
-                      <text fg="yellow" attributes={TextAttributes.BOLD}>
-                        Question: {(part.input as any)?.question}
-                      </text>
-                      {part.state === "output-available" && (
-                        <text fg="green">
-                          Answer:{" "}
-                          {Array.isArray((part.output as any)?.answer)
-                            ? (part.output as any).answer.join(", ")
-                            : (part.output as any)?.answer}
-                        </text>
-                      )}
-                    </box>
-                  );
                 }
+                const outputAnswers = Array.isArray(
+                  (part.output as any)?.answers,
+                )
+                  ? ((part.output as any).answers as Array<{
+                      question: string;
+                      answer: string | string[];
+                    }>)
+                  : [];
+                return (
+                  <box
+                    key={part.toolCallId}
+                    border={["left"]}
+                    borderColor={colors.thinkingBorder}
+                    paddingX={2}
+                    flexDirection="column"
+                    marginY={1}
+                  >
+                    {questions.map((q: any, qi: number) => {
+                      const entry = outputAnswers.find(
+                        (a) => a?.question === q.question,
+                      );
+                      const display = entry
+                        ? Array.isArray(entry.answer)
+                          ? entry.answer.join(", ")
+                          : entry.answer
+                        : "";
+                      return (
+                        <box
+                          key={qi}
+                          flexDirection="column"
+                          marginBottom={qi < questions.length - 1 ? 1 : 0}
+                        >
+                          <text fg="yellow" attributes={TextAttributes.BOLD}>
+                            Question: {q.question}
+                          </text>
+                          {part.state === "output-available" && entry ? (
+                            <text fg="green">Answer: {display}</text>
+                          ) : null}
+                        </box>
+                      );
+                    })}
+                  </box>
+                );
               }
 
               if (
                 editInput &&
-                editInput.oldString !== undefined &&
-                editInput.newString !== undefined
+                editInput.old_string !== undefined &&
+                editInput.new_string !== undefined
               ) {
                 const maxChars = 10000;
                 const maxLines = 500;
                 const combinedLength =
-                  editInput.oldString.length + editInput.newString.length;
+                  editInput.old_string.length + editInput.new_string.length;
                 const combinedLines =
-                  editInput.oldString.split("\n").length +
-                  editInput.newString.split("\n").length;
+                  editInput.old_string.split("\n").length +
+                  editInput.new_string.split("\n").length;
 
                 const diffLines =
                   combinedLength > maxChars || combinedLines > maxLines
@@ -195,7 +283,7 @@ export function BotMessage({
                           content: `[Diff too large to display (${combinedLength} characters, ${combinedLines} lines)]`,
                         },
                       ]
-                    : computeLineDiff(editInput.oldString, editInput.newString);
+                    : computeLineDiff(editInput.old_string, editInput.new_string);
                 return (
                   <box
                     key={part.toolCallId}
@@ -212,7 +300,7 @@ export function BotMessage({
                       justifyContent="space-between"
                       width="100%"
                     >
-                      <text fg="white">{editInput.path || "file"}</text>
+                      <text fg="white">{editInput.file_path || "file"}</text>
                       {part.state === "output-error" && (
                         <text fg="red">Failed: {part.errorText}</text>
                       )}
@@ -251,12 +339,12 @@ export function BotMessage({
 
               if (
                 isPending &&
-                (toolName === "writeFile" || toolName === "bash")
+                (toolName === "Write" || toolName === "Bash")
               ) {
                 const input = part.input as any;
                 const description =
-                  toolName === "writeFile"
-                    ? `${input?.path ?? "file"} (${String(input?.content ?? "").length} chars)`
+                  toolName === "Write"
+                    ? `${input?.file_path ?? "file"} (${String(input?.content ?? "").length} chars)`
                     : (input?.command ?? "");
 
                 return (
@@ -309,7 +397,7 @@ export function BotMessage({
             if (part.type === "text") {
               return (
                 <box key={`text-${j}`} paddingX={3} width="100%">
-                  <text>{part.text}</text>
+                  <MarkdownText text={part.text} />
                 </box>
               );
             }
@@ -321,11 +409,25 @@ export function BotMessage({
 
       <box paddingX={3} paddingY={1} gap={1} width="100%">
         <box flexDirection="row" gap={2}>
-          <text fg={mode === Mode.PLAN ? colors.planMode : colors.primary}>
+          <text
+            fg={
+              mode === Mode.PLAN
+                ? colors.planMode
+                : mode === Mode.AUTO
+                  ? colors.autoMode
+                  : colors.primary
+            }
+          >
             ◉
           </text>
           <box flexDirection="row" gap={1}>
-            <text>{mode === Mode.PLAN ? "Plan" : "Build"}</text>
+            <text>
+              {mode === Mode.PLAN
+                ? "Plan"
+                : mode === Mode.AUTO
+                  ? "Auto"
+                  : "Build"}
+            </text>
             <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
               ›
             </text>

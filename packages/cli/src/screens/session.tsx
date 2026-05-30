@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { TextAttributes } from "@opentui/core";
 import { useParams, useLocation, useNavigate } from "react-router";
 import { z } from "zod";
 import { useKeyboard } from "@opentui/react";
+import { copyToClipboard } from "../lib/clipboard";
 import {
   type ModeType,
   type SupportedChatModelId,
@@ -14,8 +16,10 @@ import {
   BotMessage,
   ErrorMessage,
   CompactionMessage,
+  InterruptedMessage,
 } from "../components/messages";
 import { useToast } from "../providers/toast";
+import { useTheme } from "../providers/theme";
 import { useChat } from "../hooks/use-chat";
 import { usePromptConfig } from "../providers/prompt-config";
 import type { Message } from "../hooks/use-chat";
@@ -42,6 +46,16 @@ const sessionLocationSchema = z.object({
     .optional(),
 });
 
+function CommandProgressMessage({ message }: { message: string }) {
+  const { colors } = useTheme();
+  return (
+    <box flexDirection="row" gap={1} paddingX={3} paddingY={1}>
+      <spinner name="dots14" color={colors.primary} />
+      <text attributes={TextAttributes.DIM}>{message}</text>
+    </box>
+  );
+}
+
 function ChatMessage({
   msg,
   pendingConfirmations,
@@ -49,12 +63,28 @@ function ChatMessage({
 }: {
   msg: Message;
   pendingConfirmations: any[];
-  answerQuestion: (toolCallId: string, answer: string | string[]) => void;
+  answerQuestion: (
+    toolCallId: string,
+    answers: Array<{ question: string; answer: string | string[] }>,
+  ) => void;
 }) {
   const text = msg.parts
     .filter((p) => p.type === "text")
     .map((p) => p.text)
     .join("");
+
+  if (msg.metadata?.isInterrupted) {
+    return (
+      <InterruptedMessage
+        parts={msg.parts}
+        model={msg.metadata?.model ?? "unknown"}
+        mode={msg.metadata?.mode ?? "BUILD"}
+        durationMs={msg.metadata?.durationMs}
+        pendingConfirmations={pendingConfirmations}
+        answerQuestion={answerQuestion}
+      />
+    );
+  }
 
   if (msg.metadata?.isCompaction) {
     return (
@@ -70,6 +100,11 @@ function ChatMessage({
   }
 
   if (msg.role === "user") {
+    if (msg.metadata?.commandProgressMessage) {
+      return (
+        <CommandProgressMessage message={msg.metadata.commandProgressMessage} />
+      );
+    }
     return <UserMessage message={text} mode={msg.metadata?.mode ?? "BUILD"} />;
   }
 
@@ -100,8 +135,10 @@ function SessionChat({
   const [initialMessages] = useState(
     () => session.messages as unknown as Message[],
   );
-  const { mode, model } = usePromptConfig();
+  const { mode, model, setMode } = usePromptConfig();
   const { isTopLayer } = useKeyboardLayer();
+  const toast = useToast();
+
   const {
     messages,
     status,
@@ -113,8 +150,10 @@ function SessionChat({
     confirmToolCall,
     answerQuestion,
     compact,
+    clearMessages,
+    rewindMessages,
     isCompacting,
-  } = useChat(session.id, initialMessages);
+  } = useChat(session.id, initialMessages, { onModeChange: setMode });
   const { setItems, clearAll, toggleExpanded } = useTodo();
 
   useEffect(() => {
@@ -132,8 +171,20 @@ function SessionChat({
                 ? part.type.slice("tool-".length)
                 : null;
 
-          if (toolName === "todoWrite" && (part as any).input?.items) {
-            foundItems = (part as any).input.items;
+          if (toolName === "TodoWrite" && (part as any).input?.todos) {
+            const todos = (part as any).input.todos as Array<{
+              content: string;
+              active_form?: string;
+              status: "pending" | "in_progress" | "completed";
+            }>;
+            foundItems = todos.map((t, idx) => ({
+              id: String(idx),
+              label:
+                t.status === "in_progress" && t.active_form
+                  ? t.active_form
+                  : t.content,
+              status: t.status,
+            }));
             break;
           }
         }
@@ -258,7 +309,19 @@ function SessionChat({
       }
       inputDisabled={pendingConfirmations.length > 0 || isCompacting}
       compact={compact}
+      clearMessages={clearMessages}
+      rewindMessages={rewindMessages}
+      messages={messages}
       tokenStats={tokenStats}
+      submitMessage={(text) => submit({ userText: text, mode, model })}
+      submitCommand={(text, progressMessage) =>
+        submit({
+          userText: text,
+          mode,
+          model,
+          commandProgressMessage: progressMessage,
+        })
+      }
     >
       {messages.map((msg) => (
         <ChatMessage

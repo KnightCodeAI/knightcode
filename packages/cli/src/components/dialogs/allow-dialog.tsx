@@ -7,7 +7,7 @@ import {
   loadPermissions,
   allowCommand,
   savePermissions,
-} from "../../lib/permissions";
+} from "../../lib/permissions/permissions";
 
 export function AllowDialogContent() {
   const dialog = useDialog();

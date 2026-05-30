@@ -1,6 +1,6 @@
 import { hc } from "hono/client";
 import type { AppType } from "@knightcode/server";
-import { clearAuth, getAuth } from "./auth";
+import { clearAuth, getAuth } from "./auth/auth";
 
 export const apiClient = hc<AppType>(
   process.env.API_URL ?? "http://localhost:3000",
