@@ -17,4 +17,14 @@ describe("knightcodeHome", () => {
     process.env.KNIGHTCODE_HOME = "/tmp/kc-test";
     expect(knightcodeHome()).toBe("/tmp/kc-test");
   });
+
+  test("empty KNIGHTCODE_HOME falls back to default", () => {
+    process.env.KNIGHTCODE_HOME = "";
+    expect(knightcodeHome()).toBe(join(homedir(), ".knightcode"));
+  });
+
+  test("whitespace-only KNIGHTCODE_HOME falls back to default", () => {
+    process.env.KNIGHTCODE_HOME = "   ";
+    expect(knightcodeHome()).toBe(join(homedir(), ".knightcode"));
+  });
 });

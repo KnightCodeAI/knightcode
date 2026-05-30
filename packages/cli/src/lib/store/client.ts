@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -29,6 +29,11 @@ export function createStore(dbPath: string = getDefaultDbPath()): Store {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   const sqlite = new Database(dbPath, { create: true });
+  // Tighten the db file (session/message history) to owner-only. The parent dir
+  // is already 0700; this is defense-in-depth (POSIX; skipped on Windows).
+  if (dbPath !== ":memory:" && process.platform !== "win32") {
+    chmodSync(dbPath, 0o600);
+  }
   sqlite.exec("PRAGMA foreign_keys = ON;");
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });

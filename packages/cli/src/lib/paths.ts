@@ -7,5 +7,8 @@ import { join } from "node:path";
  * changes take effect.
  */
 export function knightcodeHome(): string {
-  return process.env.KNIGHTCODE_HOME ?? join(homedir(), ".knightcode");
+  // Trim + truthy-check so an empty/whitespace override falls back rather than
+  // resolving to an empty/cwd-relative base (?? would let "" through).
+  const home = process.env.KNIGHTCODE_HOME?.trim();
+  return home ? home : join(homedir(), ".knightcode");
 }

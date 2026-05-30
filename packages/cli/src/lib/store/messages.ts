@@ -1,4 +1,4 @@
-import { asc, eq, max, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { Store } from "./client";
 import { messageTable, sessionTable, type MessageRow } from "./schema";
 
@@ -16,36 +16,34 @@ export interface AppendMessageInput {
   outputTokens?: number | null;
 }
 
-function nextOrd(db: Store, sessionId: string): number {
-  const row = db
-    .select({ value: max(messageTable.ord) })
-    .from(messageTable)
-    .where(eq(messageTable.sessionId, sessionId))
-    .get();
-  return (row?.value ?? 0) + 1;
-}
-
 export function appendMessage(db: Store, input: AppendMessageInput): MessageRow {
-  const row: MessageRow = {
-    id: input.id,
-    sessionId: input.sessionId,
-    role: input.role,
-    parts: input.parts,
-    metadata: input.metadata ?? null,
-    status: input.status ?? "complete",
-    ord: nextOrd(db, input.sessionId),
-    timeStarted: input.timeStarted ?? null,
-    timeCompleted: input.timeCompleted ?? null,
-    durationMs: input.durationMs ?? null,
-    inputTokens: input.inputTokens ?? null,
-    outputTokens: input.outputTokens ?? null,
-  };
-  db.insert(messageTable).values(row).run();
+  // Allocate ord inside the INSERT via a subquery so concurrent writers can't
+  // collide on UNIQUE(session_id, ord): SQLite serializes writers, so each
+  // INSERT recomputes max(ord) under its own write lock.
+  const inserted = db
+    .insert(messageTable)
+    .values({
+      id: input.id,
+      sessionId: input.sessionId,
+      role: input.role,
+      parts: input.parts,
+      metadata: input.metadata ?? null,
+      status: input.status ?? "complete",
+      ord: sql`(select coalesce(max(${messageTable.ord}), 0) + 1 from ${messageTable} where ${messageTable.sessionId} = ${input.sessionId})`,
+      timeStarted: input.timeStarted ?? null,
+      timeCompleted: input.timeCompleted ?? null,
+      durationMs: input.durationMs ?? null,
+      inputTokens: input.inputTokens ?? null,
+      outputTokens: input.outputTokens ?? null,
+    })
+    .returning()
+    .get();
+  if (!inserted) throw new Error("appendMessage: insert returned no row");
   db.update(sessionTable)
     .set({ timeUpdated: Date.now() })
     .where(eq(sessionTable.id, input.sessionId))
     .run();
-  return row;
+  return inserted;
 }
 
 export interface UpdateMessagePatch {

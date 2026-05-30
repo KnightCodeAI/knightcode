@@ -6,6 +6,7 @@ import {
   getSession,
   listSessions,
   renameSession,
+  touchSession,
 } from "./sessions";
 
 describe("session store", () => {
@@ -42,5 +43,14 @@ describe("session store", () => {
     const s = createSession(db, { directory: "/p", title: "x" });
     deleteSession(db, s.id);
     expect(getSession(db, s.id)).toBeNull();
+  });
+
+  test("touchSession bumps timeUpdated (drives listSessions ordering)", async () => {
+    const db = createStore(":memory:");
+    const s = createSession(db, { directory: "/p", title: "x" });
+    const before = getSession(db, s.id)!.timeUpdated;
+    await Bun.sleep(5); // guarantee the clock advances past ms granularity
+    touchSession(db, s.id);
+    expect(getSession(db, s.id)!.timeUpdated).toBeGreaterThan(before);
   });
 });
