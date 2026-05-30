@@ -13,9 +13,10 @@
     "build": "bun build src/index.tsx --outdir dist --target bun"
   },
   "devDependencies": {
+    "@knightcode/server": "workspace:*",
     "@types/bun": "latest",
     "@types/react": "^19.2.6",
-    "@knightcode/server": "workspace:*"
+    "drizzle-kit": "^0.31.10"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -30,6 +31,7 @@
     "@repo/typescript-config": "workspace:*",
     "ai": "^6.0.191",
     "date-fns": "^4.3.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.12",
     "open": "^11.0.0",
     "opentui-spinner": "^0.0.6",
