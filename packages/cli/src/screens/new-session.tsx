@@ -10,8 +10,8 @@ import {
 } from "@knightcode/shared";
 import { UserMessage } from "../components/messages";
 import { SessionShell } from "../components/session-shell";
-import { apiClient } from "../lib/api-client";
-import { getErrorMessage } from "../lib/http-errors";
+import { getStore } from "../lib/store/client";
+import { createSession } from "../lib/store";
 import { useToast } from "../providers/toast";
 
 const newSessionStateSchema = z.object({
@@ -48,24 +48,19 @@ export function NewSession() {
     hasStartedRef.current = true;
 
     let ignore = false;
-    const createSession = async () => {
+    const create = () => {
       try {
-        const res = await apiClient.sessions.$post({
-          json: {
-            title: state.message.slice(0, 100),
-            reasoningEffort: state.reasoningEffort,
-          },
+        const row = createSession(getStore(), {
+          directory: process.cwd(),
+          title: state.message.slice(0, 100),
+          model: state.model,
+          reasoningEffort: state.reasoningEffort,
         });
-
         if (ignore) return;
-        if (!res.ok) {
-          throw new Error(await getErrorMessage(res));
-        }
-        const session = await res.json();
-        navigate(`/sessions/${session.id}`, {
+        navigate(`/sessions/${row.id}`, {
           replace: true,
           state: {
-            session,
+            session: { ...row, messages: [] },
             initialPrompt: {
               message: state.message,
               mode: state.mode,
@@ -84,7 +79,7 @@ export function NewSession() {
       }
     };
 
-    createSession();
+    create();
     return () => {
       ignore = true;
     };

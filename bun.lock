@@ -58,9 +58,11 @@
         "knightcode": "./bin/knightcode",
       },
       "dependencies": {
+        "@ai-sdk/provider-utils": "^4.0.27",
         "@ai-sdk/react": "^3.0.193",
         "@knightcode/database": "workspace:*",
         "@knightcode/shared": "workspace:*",
+        "@openrouter/ai-sdk-provider": "^2.9.0",
         "@opentui/core": "^0.2.10",
         "@opentui/react": "^0.2.10",
         "@repo/eslint-config": "*",
