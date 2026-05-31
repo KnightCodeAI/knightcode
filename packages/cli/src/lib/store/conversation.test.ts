@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createStore } from "./client";
+import { getSession } from "./sessions";
 import {
   ensureSession,
   loadConversation,
@@ -18,8 +19,10 @@ describe("conversation adapter", () => {
     const db = createStore(":memory:");
     ensureSession(db, { id: "s1", directory: "/p", title: "T" });
     ensureSession(db, { id: "s1", directory: "/p", title: "CHANGED" });
-    // second call must not throw or overwrite the title
+    // second call must not throw, seeds no messages...
     expect(loadConversation(db, "s1")).toEqual([]);
+    // ...and must not overwrite the original title (onConflictDoNothing).
+    expect(getSession(db, "s1")?.title).toBe("T");
   });
 
   test("replace then load round-trips messages in order", () => {
@@ -39,6 +42,10 @@ describe("conversation adapter", () => {
     expect(loaded.map((m) => m.id)).toEqual(["m1", "m2"]);
     expect(loaded[1]!.role).toBe("assistant");
     expect((loaded[1]!.parts[0] as any).text).toBe("hello");
+    // metadata round-trips through the JSON column.
+    const usage = (loaded[1]!.metadata as any)?.usage;
+    expect(usage?.inputTokens).toBe(10);
+    expect(usage?.outputTokens).toBe(5);
   });
 
   test("replace overwrites prior contents (clear via empty array)", () => {
