@@ -13,8 +13,8 @@
     "build": "bun build src/index.tsx --outdir dist --target bun"
   },
   "devDependencies": {
-    "@knightcode/server": "workspace:*",
     "@types/bun": "latest",
+    "@types/html-to-text": "^9.0.4",
     "@types/react": "^19.2.6",
     "drizzle-kit": "^0.31.10"
   },
@@ -24,7 +24,6 @@
   "dependencies": {
     "@ai-sdk/provider-utils": "^4.0.27",
     "@ai-sdk/react": "^3.0.193",
-    "@knightcode/database": "workspace:*",
     "@knightcode/shared": "workspace:*",
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "@opentui/core": "^0.2.10",
@@ -35,6 +34,7 @@
     "date-fns": "^4.3.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.12",
+    "html-to-text": "^10.0.0",
     "open": "^11.0.0",
     "opentui-spinner": "^0.0.6",
     "pretty-ms": "^9.3.0",

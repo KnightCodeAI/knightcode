@@ -42,7 +42,6 @@ export type ChatMessageMetadata = {
   usage?: LanguageModelUsage;
   isCompaction?: boolean;
   isInterrupted?: boolean;
-  credits?: number;
   originalMessageCount?: number;
   summaryCount?: number;
   preservedCount?: number;

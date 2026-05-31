@@ -1,4 +1,5 @@
-import { apiClient } from "../../../api-client";
+import { getStore } from "../../../store/client";
+import { loadConversation } from "../../../store/conversation";
 import type { Skill } from "../../skills";
 
 const SKILLIFY_PROMPT_TEMPLATE = `# Skillify
@@ -46,32 +47,23 @@ export const skillifySkill: Skill = {
     let userMessagesText = "No session history available.";
     if (sessionId) {
       try {
-        const res = await apiClient.sessions[":id"].$get({
-          param: { id: sessionId },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.messages)) {
-            const userMessages = data.messages
-              .filter((m: any) => m.role === "user")
-              .map((m: any) => {
-                if (typeof m.parts === "string") return m.parts;
-                if (Array.isArray(m.parts)) {
-                  return m.parts
-                    .filter((p: any) => p && p.type === "text")
-                    .map((p: any) => p.text)
-                    .join("\n");
-                }
-                return "";
-              })
-              .filter(Boolean);
-            if (userMessages.length > 0) {
-              userMessagesText = userMessages.join("\n\n---\n\n");
-            }
-          }
+        const messages = loadConversation(getStore(), sessionId);
+        const userMessages = messages
+          .filter((m) => m.role === "user")
+          .map((m) =>
+            Array.isArray(m.parts)
+              ? m.parts
+                  .filter((p: any) => p && p.type === "text")
+                  .map((p: any) => p.text)
+                  .join("\n")
+              : "",
+          )
+          .filter(Boolean);
+        if (userMessages.length > 0) {
+          userMessagesText = userMessages.join("\n\n---\n\n");
         }
       } catch (err) {
-        console.error("Failed to fetch session messages for skillify:", err);
+        console.error("Failed to load session messages for skillify:", err);
       }
     }
 

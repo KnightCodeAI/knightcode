@@ -87,7 +87,6 @@ function ChatMessage({
     return (
       <CompactionMessage
         model={msg.metadata.model || "unknown"}
-        credits={msg.metadata.credits ?? 0}
         originalMessageCount={msg.metadata.originalMessageCount ?? 0}
         summary={text}
         summaryCount={msg.metadata.summaryCount}

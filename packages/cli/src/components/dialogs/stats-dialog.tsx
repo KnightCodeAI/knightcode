@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { TextAttributes } from "@opentui/core";
-import { apiClient } from "../../lib/api-client";
+import { findSupportedChatModel } from "@knightcode/shared";
+import { getStore } from "../../lib/store/client";
+import { directorySessionStats } from "../../lib/store";
 
 type Stats = {
   totalSessions: number;
@@ -10,44 +12,34 @@ type Stats = {
   totalCost: number;
 };
 
+function computeStats(): Stats {
+  const rows = directorySessionStats(getStore(), process.cwd());
+  let totalMessages = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCost = 0;
+  for (const r of rows) {
+    totalMessages += r.messageCount;
+    totalInputTokens += r.inputTokens;
+    totalOutputTokens += r.outputTokens;
+    const def = r.model ? findSupportedChatModel(r.model) : undefined;
+    if (def?.pricing) {
+      totalCost +=
+        (r.inputTokens / 1_000_000) * def.pricing.inputUsdPerMillionTokens +
+        (r.outputTokens / 1_000_000) * def.pricing.outputUsdPerMillionTokens;
+    }
+  }
+  return {
+    totalSessions: rows.length,
+    totalMessages,
+    totalInputTokens,
+    totalOutputTokens,
+    totalCost,
+  };
+}
+
 export function StatsDialogContent() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiClient.sessions.stats.$get();
-        if (!res.ok) {
-          setError(`Failed to load stats (HTTP ${res.status})`);
-          return;
-        }
-        const data = await res.json();
-        setStats(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load stats");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  if (loading) {
-    return (
-      <box flexDirection="column" gap={1}>
-        <text attributes={TextAttributes.DIM}>Loading stats…</text>
-      </box>
-    );
-  }
-
-  if (error || !stats) {
-    return (
-      <box flexDirection="column" gap={1}>
-        <text fg="red">{error ?? "Unknown error"}</text>
-      </box>
-    );
-  }
+  const [stats] = useState<Stats>(computeStats);
 
   const rows: [string, string][] = [
     ["Sessions", stats.totalSessions.toLocaleString()],
@@ -67,7 +59,7 @@ export function StatsDialogContent() {
   return (
     <box flexDirection="column" gap={1} width="100%">
       <text attributes={TextAttributes.BOLD}>
-        Usage statistics — all sessions
+        Usage statistics — this directory
       </text>
       {rows.map(([label, value]) => (
         <box key={label} flexDirection="row" gap={2}>
