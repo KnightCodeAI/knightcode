@@ -3,7 +3,8 @@ import { type InputRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useDialog } from "../../providers/dialogs";
 import { useToast } from "../../providers/toast";
-import { apiClient } from "../../lib/api-client";
+import { getStore } from "../../lib/store/client";
+import { renameSession } from "../../lib/store";
 
 type Props = {
   sessionId: string;
@@ -21,14 +22,7 @@ export function RenameDialogContent({ sessionId }: Props) {
       return;
     }
     try {
-      const res = await apiClient.sessions[":id"].$patch({
-        param: { id: sessionId },
-        json: { title },
-      });
-      if (!res.ok) {
-        toast.show({ variant: "error", message: "Failed to rename session" });
-        return;
-      }
+      renameSession(getStore(), sessionId, title);
       toast.show({
         variant: "success",
         message: `Session renamed to "${title}"`,

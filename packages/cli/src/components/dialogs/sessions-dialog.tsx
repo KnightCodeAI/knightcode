@@ -1,78 +1,26 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { TextAttributes } from "@opentui/core";
 import { format } from "date-fns";
 import { useNavigate } from "react-router";
 import { useDialog } from "../../providers/dialogs";
-import { useToast } from "../../providers/toast";
-import { apiClient } from "../../lib/api-client";
-import { getErrorMessage } from "../../lib/http-errors";
+import { getStore } from "../../lib/store/client";
+import { listSessions, type SessionRow } from "../../lib/store";
 import { DialogSearchList } from "../dialog-search-list";
-import type { InferResponseType } from "hono/client";
-
-type Session = InferResponseType<
-  (typeof apiClient.sessions)["$get"],
-  200
->[number];
 
 export const SessionsDialogContent = () => {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sessions] = useState<SessionRow[]>(() =>
+    listSessions(getStore(), process.cwd()),
+  );
   const { close } = useDialog();
   const navigate = useNavigate();
-  const { show } = useToast();
-
-  useEffect(() => {
-    let ignore = false;
-
-    const fetchSessions = async () => {
-      try {
-        const res = await apiClient.sessions.$get();
-        if (!res.ok) {
-          throw new Error(await getErrorMessage(res));
-        }
-
-        const data = await res.json();
-
-        if (!ignore) {
-          setSessions(data);
-          setLoading(false);
-        }
-      } catch (error) {
-        if (!ignore) {
-          show({
-            variant: "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to fetch sessions",
-          });
-          close();
-        }
-      }
-    };
-
-    fetchSessions();
-
-    return () => {
-      ignore = true;
-    };
-  }, [close, show]);
 
   const handleSelect = useCallback(
-    (session: Session) => {
+    (session: SessionRow) => {
       close();
       navigate(`/sessions/${session.id}`);
     },
     [close, navigate],
   );
-
-  if (loading) {
-    return (
-      <box flexDirection="column">
-        <text attributes={TextAttributes.DIM}>Loading sessions...</text>
-      </box>
-    );
-  }
 
   return (
     <DialogSearchList
@@ -92,13 +40,13 @@ export const SessionsDialogContent = () => {
             fg={isSelected ? "black" : undefined}
             attributes={TextAttributes.DIM}
           >
-            {format(new Date(session.createdAt), "hh:mm a")}
+            {format(new Date(session.timeUpdated), "hh:mm a")}
           </text>
         </>
       )}
       getKey={(s) => s.id}
       placeholder="Search sessions"
-      emptyText="No matching sessions"
+      emptyText="No sessions in this directory"
     />
   );
 };

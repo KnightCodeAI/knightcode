@@ -23,10 +23,9 @@ import {
   findSupportedChatModel,
 } from "@knightcode/shared";
 import type { Command } from "./types";
-import { apiClient } from "../../lib/api-client";
-import { performLogin } from "../../lib/auth/oauth";
-import { clearAuth } from "../../lib/auth/auth";
-import { openBillingPortal, openUpgradeCheckout } from "../../lib/upgrade";
+import { getStore } from "../../lib/store/client";
+import { createSession, setSessionReasoningEffort } from "../../lib/store";
+import { replaceSessionMessages } from "../../lib/store/conversation";
 import fs from "fs";
 import path from "path";
 import { copyToClipboard } from "../../lib/clipboard";
@@ -83,36 +82,6 @@ export const COMMANDS: Command[] = [
     },
   },
   {
-    name: "login",
-    description: "Sign in to your account",
-    value: "/login",
-    action: async (ctx) => {
-      ctx.toast.show({
-        message: "Opening browser to sign in...",
-      });
-      try {
-        await performLogin();
-        ctx.toast.show({ variant: "success", message: "Sign in successful" });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Sign in failed";
-        ctx.toast.show({ variant: "error", message });
-      }
-    },
-  },
-  {
-    name: "logout",
-    description: "Sign out of your account",
-    value: "/logout",
-    action: (ctx) => {
-      clearAuth();
-      ctx.toast.show({
-        message: "Logged out successfully",
-        variant: "success",
-      });
-    },
-  },
-  {
     name: "models",
     description: "View and switch AI models",
     value: "/models",
@@ -155,23 +124,14 @@ export const COMMANDS: Command[] = [
         children: (
           <ReasoningDialogContent
             currentEffort={ctx.reasoningEffort}
-            onSelectEffort={async (level) => {
+            onSelectEffort={(level) => {
               ctx.setReasoningEffort(level);
               if (ctx.sessionId) {
                 try {
-                  const res = await apiClient.sessions[":id"].$patch({
-                    param: { id: ctx.sessionId },
-                    json: { reasoningEffort: level },
-                  });
-                  if (!res.ok) {
-                    ctx.toast.show({
-                      message: "Failed to persist reasoning effort on server",
-                      variant: "error",
-                    });
-                  }
-                } catch (err) {
+                  setSessionReasoningEffort(getStore(), ctx.sessionId, level);
+                } catch {
                   ctx.toast.show({
-                    message: "Error updating session reasoning effort",
+                    message: "Failed to persist reasoning effort",
                     variant: "error",
                   });
                 }
@@ -202,50 +162,6 @@ export const COMMANDS: Command[] = [
         title: "Select theme",
         children: <ThemeDialogContent />,
       });
-    },
-  },
-  {
-    name: "upgrade",
-    description: "Upgrade your subscription plan",
-    value: "/upgrade",
-    action: async (ctx) => {
-      ctx.toast.show({
-        message: "Opening upgrade options...",
-      });
-      try {
-        await openUpgradeCheckout();
-        ctx.toast.show({
-          message: "Checkout open in browser",
-          variant: "success",
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to open checkout";
-        ctx.toast.show({ message, variant: "error" });
-      }
-    },
-  },
-  {
-    name: "usage",
-    description: "View current usage and limits",
-    value: "/usage",
-    action: async (ctx) => {
-      ctx.toast.show({
-        message: "Opening usage portal...",
-      });
-      try {
-        await openBillingPortal();
-        ctx.toast.show({
-          message: "Billing portal opened in browser",
-          variant: "success",
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to open billing portal";
-        ctx.toast.show({ message, variant: "error" });
-      }
     },
   },
   {
@@ -536,53 +452,36 @@ export const COMMANDS: Command[] = [
     name: "branch",
     description: "Fork this conversation into a new session",
     value: "/branch",
-    action: async (ctx) => {
+    action: (ctx) => {
       if (!ctx.messages || ctx.messages.length === 0) {
         ctx.toast.show({ variant: "error", message: "Nothing to branch from" });
         return;
       }
       ctx.toast.show({ message: "Forking session…" });
       try {
-        const createRes = await apiClient.sessions.$post({
-          json: { title: "Branch" },
+        const store = getStore();
+        const row = createSession(store, {
+          directory: process.cwd(),
+          title: "Branch",
+          model: ctx.model,
+          reasoningEffort: ctx.reasoningEffort,
         });
-        if (!createRes.ok) {
-          ctx.toast.show({
-            variant: "error",
-            message: "Failed to create branch session",
-          });
-          return;
-        }
-        const newSession = await createRes.json();
-
-        type ServerMessage = {
-          id: string;
-          role: "user" | "assistant" | "system" | "data";
-          content?: string;
-          parts?: unknown[];
-          metadata?: Record<string, unknown>;
-        };
-        const patchRes = await apiClient.sessions[":id"].$patch({
-          param: { id: newSession.id },
-          json: {
-            messages: (ctx.messages ?? []) as unknown as ServerMessage[],
-            title: "Branch",
-          },
-        });
-        if (!patchRes.ok) {
-          ctx.toast.show({
-            variant: "error",
-            message: "Branch created but failed to copy messages",
-          });
-          return;
-        }
-
+        replaceSessionMessages(
+          store,
+          row.id,
+          ctx.messages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            parts: m.parts as unknown[],
+            metadata: (m.metadata ?? null) as Record<string, unknown> | null,
+          })),
+        );
         ctx.toast.show({
           variant: "success",
           message: "Session forked — navigating…",
         });
         setTimeout(() => {
-          ctx.navigate(`/sessions/${newSession.id}`);
+          ctx.navigate(`/sessions/${row.id}`);
         }, 400);
       } catch (err) {
         ctx.toast.show({

@@ -3,7 +3,6 @@ import { useTheme } from "../../providers/theme";
 
 type Props = {
   model: string;
-  credits: number;
   originalMessageCount: number;
   summary: string;
   summaryCount?: number;
@@ -12,7 +11,6 @@ type Props = {
 
 export function CompactionMessage({
   model,
-  credits,
   originalMessageCount,
   summary,
   summaryCount = 1,
@@ -39,7 +37,7 @@ export function CompactionMessage({
             <text fg="white">{model.replace(/:free$/, "")}</text>
           </box>
           <text fg={colors.success} attributes={TextAttributes.BOLD}>
-            {credits > 0 ? `-${credits} credits` : "Free"}
+            Free
           </text>
         </box>
 

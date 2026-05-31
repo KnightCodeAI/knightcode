@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { TextAttributes } from "@opentui/core";
 import { spawnSync } from "child_process";
-import { getAuth } from "../../lib/auth/auth";
-import { apiClient } from "../../lib/api-client";
+import { getOpenRouterApiKey } from "../../lib/credentials";
+import { getStore } from "../../lib/store/client";
+import { listSessions } from "../../lib/store";
 
 type CheckStatus = "pending" | "ok" | "warn" | "fail";
 
@@ -40,8 +41,8 @@ function statusIcon(s: CheckStatus): string {
 
 export function DoctorDialogContent() {
   const [checks, setChecks] = useState<Check[]>([
-    { label: "Auth token", status: "pending" },
-    { label: "Server connectivity", status: "pending" },
+    { label: "OpenRouter API key", status: "pending" },
+    { label: "Local store", status: "pending" },
     { label: "Git available", status: "pending" },
     { label: "Runtime", status: "pending" },
   ]);
@@ -53,27 +54,20 @@ export function DoctorDialogContent() {
       );
     };
 
-    // 1. Auth token
-    const auth = getAuth();
-    if (auth?.token) {
-      update(0, "ok", "token present");
+    // 1. OpenRouter API key
+    if (getOpenRouterApiKey()) {
+      update(0, "ok", "key present");
     } else {
-      update(0, "fail", "not signed in — run /login");
+      update(0, "fail", "set OPENROUTER_API_KEY or add it to credentials.json");
     }
 
-    // 2. Server connectivity
-    (async () => {
-      try {
-        const res = await apiClient.sessions.$get();
-        if (res.ok || res.status === 401) {
-          update(1, "ok", `HTTP ${res.status}`);
-        } else {
-          update(1, "warn", `HTTP ${res.status}`);
-        }
-      } catch {
-        update(1, "fail", "could not reach server");
-      }
-    })();
+    // 2. Local store
+    try {
+      listSessions(getStore(), process.cwd());
+      update(1, "ok", "ready");
+    } catch (err) {
+      update(1, "fail", err instanceof Error ? err.message : "unavailable");
+    }
 
     // 3. Git available
     const git = spawnSync("git", ["--version"], { encoding: "utf-8" });
