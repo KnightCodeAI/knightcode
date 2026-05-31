@@ -18,8 +18,27 @@ describe("isPrivateIp", () => {
     }
   });
 
+  test("flags IPv4-mapped IPv6 literals pointing at private space", () => {
+    // Exercises the bespoke "::ffff:" unwrapping in isPrivateIp, including the
+    // case-insensitive and hex-compressed forms.
+    for (const ip of [
+      "::ffff:127.0.0.1",
+      "::ffff:10.0.0.1",
+      "::FFFF:192.168.1.1",
+      "::ffff:7f00:1", // hex-compressed 127.0.0.1
+    ]) {
+      expect(isPrivateIp(ip)).toBe(true);
+    }
+  });
+
   test("allows public addresses", () => {
-    for (const ip of ["8.8.8.8", "1.1.1.1", "172.15.0.1", "192.169.0.1"]) {
+    for (const ip of [
+      "8.8.8.8",
+      "1.1.1.1",
+      "172.15.0.1",
+      "192.169.0.1",
+      "::ffff:8.8.8.8", // mapped public
+    ]) {
       expect(isPrivateIp(ip)).toBe(false);
     }
   });

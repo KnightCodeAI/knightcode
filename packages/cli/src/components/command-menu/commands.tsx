@@ -23,8 +23,13 @@ import {
   findSupportedChatModel,
 } from "@knightcode/shared";
 import type { Command } from "./types";
+import { randomUUID } from "node:crypto";
 import { getStore } from "../../lib/store/client";
-import { createSession, setSessionReasoningEffort } from "../../lib/store";
+import {
+  createSession,
+  deleteSession,
+  setSessionReasoningEffort,
+} from "../../lib/store";
 import { replaceSessionMessages } from "../../lib/store/conversation";
 import fs from "fs";
 import path from "path";
@@ -466,16 +471,27 @@ export const COMMANDS: Command[] = [
           model: ctx.model,
           reasoningEffort: ctx.reasoningEffort,
         });
-        replaceSessionMessages(
-          store,
-          row.id,
-          ctx.messages.map((m) => ({
-            id: m.id,
-            role: m.role,
-            parts: m.parts as unknown[],
-            metadata: (m.metadata ?? null) as Record<string, unknown> | null,
-          })),
-        );
+        try {
+          // A fork is fresh rows. message.id is a global primary key, so the
+          // copied transcript must get new ids or it collides with the source
+          // session's rows. (UIMessages carry no cross-message id references —
+          // tool-call ids live inside parts and are not DB keys — so only the
+          // top-level id needs regenerating.)
+          replaceSessionMessages(
+            store,
+            row.id,
+            ctx.messages.map((m) => ({
+              id: randomUUID(),
+              role: m.role,
+              parts: m.parts as unknown[],
+              metadata: (m.metadata ?? null) as Record<string, unknown> | null,
+            })),
+          );
+        } catch (copyErr) {
+          // Don't leave an empty orphan "Branch" session if the copy fails.
+          deleteSession(store, row.id);
+          throw copyErr;
+        }
         ctx.toast.show({
           variant: "success",
           message: "Session forked — navigating…",

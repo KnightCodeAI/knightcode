@@ -52,39 +52,36 @@ export function isPrivateIp(ip: string): boolean {
   );
 }
 
-async function assertSafeTarget(
-  rawUrl: string,
-): Promise<{ vettedIp: string; hostname: string }> {
+async function assertSafeTarget(rawUrl: string): Promise<void> {
   const u = new URL(rawUrl);
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new SafeTargetError("Only http/https URLs are allowed");
   }
   const records = await dns.lookup(u.hostname, { all: true });
-  const safeRecords = records.filter((r) => !isPrivateIp(r.address));
-  if (safeRecords.length === 0) {
-    throw new SafeTargetError(
-      "Target host resolves to no allowed public addresses",
-    );
+  if (records.length === 0) {
+    throw new SafeTargetError("Target host does not resolve");
   }
-  return { vettedIp: safeRecords[0]!.address, hostname: u.hostname };
+  // We fetch by the original hostname so TLS SNI and certificate validation
+  // stay correct (connecting to a bare IP would fail cert checks). That means
+  // we can't pin one vetted IP at the socket layer, so the entire resolved set
+  // must be public to preserve the SSRF guard.
+  if (records.some((r) => isPrivateIp(r.address))) {
+    throw new SafeTargetError("Target host resolves to a private address");
+  }
 }
 
 export async function execute(input: unknown): Promise<unknown> {
   const { url, prompt, max_length } = WebFetch.input_schema.parse(input);
   const maxLength = max_length ?? 20_000;
 
-  const { vettedIp, hostname } = await assertSafeTarget(url);
-  const u = new URL(url);
-  u.hostname = vettedIp.includes(":") ? `[${vettedIp}]` : vettedIp;
-  const targetUrl = u.toString();
+  await assertSafeTarget(url);
 
-  const response = await fetch(targetUrl, {
+  const response = await fetch(url, {
     redirect: "error",
     headers: {
       "User-Agent":
         "Mozilla/5.0 (compatible; KnightCode/1.0; +https://knightcode.dev)",
       Accept: "text/html, application/xhtml+xml, text/plain",
-      Host: hostname,
     },
     signal: AbortSignal.timeout(15000),
   });

@@ -37,7 +37,7 @@ export function CompactionMessage({
             <text fg="white">{model.replace(/:free$/, "")}</text>
           </box>
           <text fg={colors.success} attributes={TextAttributes.BOLD}>
-            Free
+            Local
           </text>
         </box>
 
