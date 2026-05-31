@@ -47,7 +47,6 @@ export function NewSession() {
 
     hasStartedRef.current = true;
 
-    let ignore = false;
     const create = () => {
       try {
         const row = createSession(getStore(), {
@@ -56,7 +55,7 @@ export function NewSession() {
           model: state.model,
           reasoningEffort: state.reasoningEffort,
         });
-        if (ignore) return;
+
         navigate(`/sessions/${row.id}`, {
           replace: true,
           state: {
@@ -69,7 +68,6 @@ export function NewSession() {
           },
         });
       } catch (error) {
-        if (ignore) return;
         toast.show({
           variant: "error",
           message:
@@ -80,9 +78,6 @@ export function NewSession() {
     };
 
     create();
-    return () => {
-      ignore = true;
-    };
   }, [state, navigate, toast]);
 
   if (!state) return null;

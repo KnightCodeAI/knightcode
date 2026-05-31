@@ -23,10 +23,7 @@ import { compactConversation } from "../lib/inference/compact-conversation";
 import { getStore } from "../lib/store/client";
 import { replaceSessionMessages } from "../lib/store/conversation";
 import { getOpenRouterApiKey } from "../lib/credentials";
-import {
-  executeLocalTool,
-  getSessionModifiedFiles,
-} from "../lib/tools";
+import { executeLocalTool, getSessionModifiedFiles } from "../lib/tools";
 import { allowCommand, isCommandAllowed } from "../lib/permissions/permissions";
 
 import {
@@ -371,7 +368,15 @@ export function useChat(
 
             const finalMerged = [...mergedCompacted, ...trailing];
             chatRef.current.setMessages(finalMerged);
-            replaceSessionMessages(getStore(), sessionId, finalMerged as never);
+            try {
+              replaceSessionMessages(
+                getStore(),
+                sessionId,
+                finalMerged as never,
+              );
+            } catch (err) {
+              console.error("Failed to persist compacted messages: ", err);
+            }
             toast.show({
               variant: "success",
               message: "Context compacted.",
@@ -753,7 +758,10 @@ export function useChat(
         };
         const items: TodoItem[] = todos.map((t, idx) => ({
           id: String(idx),
-          label: t.status === "in_progress" && t.active_form ? t.active_form : t.content,
+          label:
+            t.status === "in_progress" && t.active_form
+              ? t.active_form
+              : t.content,
           status: t.status,
         }));
         todoRef.current(items, true);
@@ -829,9 +837,15 @@ export function useChat(
         return;
       }
 
-      void executeLocalTool(toolCall.toolName, toolCall.input, mode, sessionId, {
-        requestToolPermission: (tc) => requestToolPermission(tc, mode),
-      })
+      void executeLocalTool(
+        toolCall.toolName,
+        toolCall.input,
+        mode,
+        sessionId,
+        {
+          requestToolPermission: (tc) => requestToolPermission(tc, mode),
+        },
+      )
         .then((output) => {
           if (
             output &&
