@@ -9,7 +9,6 @@ import {
   type SupportedChatModelId,
   findSupportedChatModel,
 } from "@knightcode/shared";
-import type { InferResponseType } from "hono/client";
 import { SessionShell } from "../components/session-shell";
 import {
   UserMessage,
@@ -23,15 +22,13 @@ import { useTheme } from "../providers/theme";
 import { useChat } from "../hooks/use-chat";
 import { usePromptConfig } from "../providers/prompt-config";
 import type { Message } from "../hooks/use-chat";
-import { apiClient } from "../lib/api-client";
-import { getErrorMessage } from "../lib/http-errors";
+import { getStore } from "../lib/store/client";
+import { getSession, type SessionRow } from "../lib/store";
+import { loadConversation } from "../lib/store/conversation";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { useTodo } from "../providers/todo";
 
-type SessionData = InferResponseType<
-  (typeof apiClient.sessions)[":id"]["$get"],
-  200
->;
+type SessionData = SessionRow & { messages: Message[] };
 
 const sessionLocationSchema = z.object({
   session: z.custom<SessionData>(
@@ -135,7 +132,7 @@ function SessionChat({
   const [initialMessages] = useState(
     () => session.messages as unknown as Message[],
   );
-  const { mode, model, setMode } = usePromptConfig();
+  const { mode, model, reasoningEffort, setMode } = usePromptConfig();
   const { isTopLayer } = useKeyboardLayer();
   const toast = useToast();
 
@@ -296,12 +293,13 @@ function SessionChat({
       userText: initialPrompt.message,
       mode: initialPrompt.mode,
       model: initialPrompt.model,
+      reasoningEffort,
     });
-  }, [initialPrompt, submit]);
+  }, [initialPrompt, submit, reasoningEffort]);
 
   return (
     <SessionShell
-      onSubmit={(text) => submit({ userText: text, mode, model })}
+      onSubmit={(text) => submit({ userText: text, mode, model, reasoningEffort })}
       loading={status === "submitted" || status === "streaming" || isCompacting}
       isCompacting={isCompacting}
       interruptible={
@@ -313,12 +311,15 @@ function SessionChat({
       rewindMessages={rewindMessages}
       messages={messages}
       tokenStats={tokenStats}
-      submitMessage={(text) => submit({ userText: text, mode, model })}
+      submitMessage={(text) =>
+        submit({ userText: text, mode, model, reasoningEffort })
+      }
       submitCommand={(text, progressMessage) =>
         submit({
           userText: text,
           mode,
           model,
+          reasoningEffort,
           commandProgressMessage: progressMessage,
         })
       }
@@ -360,38 +361,33 @@ export function Session() {
   }, [session, setReasoningEffort]);
 
   useEffect(() => {
-    // Skip fetch if session was passed via location state
+    // Skip load if session was passed via location state
     if (prefetched?.session) return;
 
     setSession(null);
 
     if (!id) return;
 
-    let ignore = false;
-    const fetchSession = async () => {
-      try {
-        const res = await apiClient.sessions[":id"].$get({
-          param: { id },
-        });
-        if (ignore) return;
-        if (!res.ok) throw new Error(await getErrorMessage(res));
-        const resolved = await res.json();
-        setSession(resolved);
-      } catch (err) {
-        if (ignore) return;
-        toast.show({
-          variant: "error",
-          message:
-            err instanceof Error ? err.message : "Failed to load session",
-        });
-        navigate("/", { replace: true });
-      }
-    };
-
-    fetchSession();
-    return () => {
-      ignore = true;
-    };
+    try {
+      const db = getStore();
+      const row = getSession(db, id);
+      if (!row) throw new Error("Session not found");
+      // Stored rows hold UIMessage-shaped JSON (we wrote them from Message
+      // objects); narrow each field explicitly rather than an opaque cast.
+      const messages: Message[] = loadConversation(db, id).map((m) => ({
+        id: m.id,
+        role: m.role as Message["role"],
+        parts: (m.parts ?? []) as Message["parts"],
+        metadata: (m.metadata ?? undefined) as Message["metadata"],
+      }));
+      setSession({ ...row, messages });
+    } catch (err) {
+      toast.show({
+        variant: "error",
+        message: err instanceof Error ? err.message : "Failed to load session",
+      });
+      navigate("/", { replace: true });
+    }
   }, [id, prefetched, toast, navigate]);
 
   if (!session) {

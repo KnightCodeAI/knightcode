@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../defineTool";
+import { MODEL_ALIAS_NAMES } from "../../models";
 
 const input_schema = z.object({
   description: z.string().describe("A short (3-5 word) description of the task"),
@@ -11,10 +12,10 @@ const input_schema = z.object({
       "The type of specialized agent to use. If omitted, general-purpose is used.",
     ),
   model: z
-    .enum(["sonnet", "opus", "haiku"])
+    .enum(MODEL_ALIAS_NAMES)
     .optional()
     .describe(
-      "Optional model override for this agent. If omitted, uses the agent's default or inherits from the parent.",
+      "Optional model override for this agent (one of the model aliases). If omitted, uses the agent's default or inherits from the parent.",
     ),
   run_in_background: z
     .boolean()
