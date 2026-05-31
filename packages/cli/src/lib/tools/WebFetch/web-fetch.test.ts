@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isPrivateIp } from "./execute";
+import { isPrivateIp, execute } from "./execute";
 
 describe("isPrivateIp", () => {
   test("flags private / loopback / link-local addresses", () => {
@@ -43,3 +43,38 @@ describe("isPrivateIp", () => {
     }
   });
 });
+
+describe("execute", () => {
+  test("upgrades http to https", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchCalls: string[] = [];
+    (globalThis as any).fetch = async (url: any) => {
+      fetchCalls.push(url.toString());
+      return {
+        ok: true,
+        headers: new Headers({ "content-type": "text/plain" }),
+        body: {
+          getReader() {
+            return {
+              read: async () => ({ done: true, value: undefined }),
+              releaseLock() {}
+            };
+          }
+        }
+      } as any;
+    };
+
+    const dns = require("node:dns/promises");
+    const originalLookup = dns.lookup;
+    dns.lookup = async () => [{ address: "8.8.8.8", family: 4 }];
+
+    try {
+      await execute({ url: "http://example.com", prompt: "test prompt", max_length: 1000 });
+      expect(fetchCalls).toContain("https://example.com/");
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+      dns.lookup = originalLookup;
+    }
+  });
+});
+

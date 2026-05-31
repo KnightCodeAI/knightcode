@@ -54,6 +54,9 @@ export function isPrivateIp(ip: string): boolean {
 
 async function assertSafeTarget(rawUrl: string): Promise<void> {
   const u = new URL(rawUrl);
+  if (u.protocol === "http:") {
+    u.protocol = "https:";
+  }
   if (!["http:", "https:"].includes(u.protocol)) {
     throw new SafeTargetError("Only http/https URLs are allowed");
   }
@@ -71,8 +74,14 @@ async function assertSafeTarget(rawUrl: string): Promise<void> {
 }
 
 export async function execute(input: unknown): Promise<unknown> {
-  const { url, prompt, max_length } = WebFetch.input_schema.parse(input);
+  const { url: rawUrl, prompt, max_length } = WebFetch.input_schema.parse(input);
   const maxLength = max_length ?? 20_000;
+
+  const u = new URL(rawUrl);
+  if (u.protocol === "http:") {
+    u.protocol = "https:";
+  }
+  const url = u.toString();
 
   await assertSafeTarget(url);
 
