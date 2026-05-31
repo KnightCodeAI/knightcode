@@ -39,3 +39,11 @@ export function createStore(dbPath: string = getDefaultDbPath()): Store {
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
   return db;
 }
+
+let cachedStore: Store | undefined;
+
+/** Process-wide lazy singleton over the default db path. */
+export function getStore(): Store {
+  if (!cachedStore) cachedStore = createStore();
+  return cachedStore;
+}

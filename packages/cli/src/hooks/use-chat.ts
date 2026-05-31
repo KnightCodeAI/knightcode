@@ -1,35 +1,32 @@
 import { useChat as useAiChat } from "@ai-sdk/react";
 import {
   type ModeType,
+  type ReasoningEffortLevel,
   type SupportedChatModelId,
   type ToolContracts,
   findSupportedChatModel,
   DEFAULT_CHAT_MODEL_ID,
-  ALL_TOOL_NAMES,
 } from "@knightcode/shared";
-import { loadAgents, formatAgentLines } from "../lib/agents/loader";
 import {
   dequeueNotification,
   hasNotifications,
 } from "../lib/tools/Agent/notifications";
 import {
-  DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
   type InferUITools,
   type LanguageModelUsage,
   type UIMessage,
 } from "ai";
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
-import { apiClient } from "../lib/api-client";
-import { getAuth } from "../lib/auth/auth";
+import { LocalChatTransport } from "../lib/inference/local-chat-transport";
+import { compactConversation } from "../lib/inference/compact-conversation";
+import { getStore } from "../lib/store/client";
+import { replaceSessionMessages } from "../lib/store/conversation";
+import { getOpenRouterApiKey } from "../lib/credentials";
 import {
   executeLocalTool,
   getSessionModifiedFiles,
-  hasIncompleteTasksSync,
 } from "../lib/tools";
-import { loadProjectContextSync } from "../lib/context/project-context";
-import { loadGitContext } from "../lib/git/git-context";
-import { detectProjectStackSync } from "../lib/project-detection";
 import { allowCommand, isCommandAllowed } from "../lib/permissions/permissions";
 
 import {
@@ -37,15 +34,13 @@ import {
   runStopHooks,
   type UserPromptHookResult,
 } from "../lib/hooks";
-import { detectShell } from "../lib/shell";
-import { loadRulesText } from "../lib/context/rules";
-import { buildSkillIndex } from "../lib/context/skills";
 import { useTodo, type TodoItem } from "../providers/todo";
 import { useToast } from "../providers/toast";
 
 export type ChatMessageMetadata = {
   mode?: ModeType;
   model?: SupportedChatModelId | string;
+  reasoningEffort?: ReasoningEffortLevel;
   durationMs?: number;
   usage?: LanguageModelUsage;
   isCompaction?: boolean;
@@ -106,55 +101,10 @@ export function useChat(
   }, []);
 
   const transport = useMemo(() => {
-    return new DefaultChatTransport<Message>({
-      api: apiClient.chat.$url().toString(),
-      headers() {
-        const auth = getAuth();
-        return auth ? { Authorization: `Bearer ${auth.token}` } : new Headers();
-      },
-      prepareSendMessagesRequest({ messages }) {
-        const message = messages[messages.length - 1];
-        if (!message) throw new Error("No message to send");
-
-        const metadata = messages.findLast(
-          (m) => m.metadata?.mode && m.metadata?.model,
-        )?.metadata;
-        const previousMessage = messages[messages.length - 2];
-        const requestMessages =
-          message.role === "assistant" && previousMessage?.role === "user"
-            ? [previousMessage, message]
-            : [message];
-
-        const projectCtx = loadProjectContextSync(process.cwd());
-        const gitCtx = loadGitContext(process.cwd());
-        const stackCtx = detectProjectStackSync(process.cwd());
-
-        return {
-          body: {
-            id: sessionId,
-            messages: requestMessages,
-            mode: message.metadata?.mode ?? metadata?.mode,
-            model: message.metadata?.model ?? metadata?.model,
-            globalInstructions: projectCtx.globalInstructions,
-            projectInstructions: projectCtx.projectInstructions,
-            localInstructions: projectCtx.localInstructions,
-            rules: loadRulesText(process.cwd()),
-            skillIndex: buildSkillIndex(process.cwd()),
-            gitBranchName: gitCtx.branchName,
-            gitStatus: gitCtx.status,
-            gitDiffSummary: gitCtx.diffSummary,
-            frameworks: stackCtx.frameworks,
-            packageManager: stackCtx.packageManager,
-            isTypeScript: stackCtx.isTypeScript,
-            shellName: detectShell().name,
-            platform: process.platform,
-            hasPersistedTasks: hasIncompleteTasksSync(process.cwd()),
-            agentTypes: formatAgentLines(loadAgents(process.cwd()), [
-              ...ALL_TOOL_NAMES,
-            ]),
-          },
-        };
-      },
+    return new LocalChatTransport({
+      sessionId,
+      cwd: process.cwd(),
+      getApiKey: getOpenRouterApiKey,
     });
   }, [sessionId]);
 
@@ -392,23 +342,20 @@ export function useChat(
           "BUILD";
 
         try {
-          const res = await apiClient.compact.$post({
-            json: {
-              id: sessionId,
-              messages: currentMessages as any[],
-              model: activeModelId,
-              mode: activeMode,
-            },
+          const { compactedMessages } = await compactConversation({
+            messages: currentMessages as any[],
+            model: activeModelId,
+            mode: activeMode,
           });
 
-          if (res.ok) {
-            const { compactedMessages, credits } = await res.json();
-            // Preserve any messages that arrived during the async server round-trip
-            const freshAfterServer = chatRef.current.messages as Message[];
+          if (compactedMessages !== currentMessages) {
+            // Preserve any messages that arrived during the async summarize.
+            const freshAfterCompact = chatRef.current.messages as Message[];
             const sentIds = new Set(currentMessages.map((m) => m.id));
-            const serverTrailing = freshAfterServer.filter(
+            const trailing = freshAfterCompact.filter(
               (m) => !sentIds.has(m.id),
             );
+            const freshMap = new Map(freshAfterCompact.map((m) => [m.id, m]));
 
             // Reconstruct last summarized message ID to find compactionId
             const toSummarize = currentMessages.slice(0, -4);
@@ -416,32 +363,20 @@ export function useChat(
             const lastMessageId = lastSummarizedMessage?.id || "initial";
             const compactionId = `compaction-${lastMessageId}`;
 
-            const freshMap = new Map(freshAfterServer.map((m) => [m.id, m]));
-            const mergedCompacted = (compactedMessages as Message[]).map(
-              (m) => {
-                if (m.id !== compactionId && freshMap.has(m.id)) {
-                  return freshMap.get(m.id)!;
-                }
-                return m;
-              },
+            const mergedCompacted = (compactedMessages as Message[]).map((m) =>
+              m.id !== compactionId && freshMap.has(m.id)
+                ? freshMap.get(m.id)!
+                : m,
             );
 
-            chatRef.current.setMessages([
-              ...mergedCompacted,
-              ...serverTrailing,
-            ]);
-
+            const finalMerged = [...mergedCompacted, ...trailing];
+            chatRef.current.setMessages(finalMerged);
+            replaceSessionMessages(getStore(), sessionId, finalMerged as never);
             toast.show({
               variant: "success",
-              message: `Context compacted. Billed: ${credits} credits.`,
+              message: "Context compacted.",
             });
             return;
-          } else {
-            const errText = await res.text();
-            console.error(
-              "Compaction failed on server, falling back to naive compaction:",
-              errText,
-            );
           }
         } catch (err) {
           console.error(
@@ -696,12 +631,13 @@ export function useChat(
         }
 
         try {
-          await apiClient.sessions[":id"].$patch({
-            param: { id: sessionId },
-            json: { messages: finalMessagesForPatch as any[] },
-          });
+          replaceSessionMessages(
+            getStore(),
+            sessionId,
+            finalMessagesForPatch as never,
+          );
         } catch (err) {
-          console.error("Failed to sync compacted messages to server:", err);
+          console.error("Failed to persist compacted messages:", err);
         }
       } finally {
         setIsCompacting(false);
@@ -715,12 +651,9 @@ export function useChat(
     if (!chatRef.current) return;
     chatRef.current.setMessages([]);
     try {
-      await apiClient.sessions[":id"].$patch({
-        param: { id: sessionId },
-        json: { messages: [] },
-      });
+      replaceSessionMessages(getStore(), sessionId, []);
     } catch (err) {
-      console.error("Failed to clear messages on server:", err);
+      console.error("Failed to clear messages:", err);
     }
   }, [sessionId]);
 
@@ -781,12 +714,9 @@ export function useChat(
       const merged = [...next, ...rewindTrailing];
       chatRef.current.setMessages(merged);
       try {
-        await apiClient.sessions[":id"].$patch({
-          param: { id: sessionId },
-          json: { messages: merged as any[] },
-        });
+        replaceSessionMessages(getStore(), sessionId, merged as never);
       } catch (err) {
-        console.error("Failed to sync rewound messages to server:", err);
+        console.error("Failed to persist rewound messages:", err);
       }
     },
     [sessionId],
@@ -966,6 +896,7 @@ export function useChat(
       userText: string;
       mode: ModeType;
       model: SupportedChatModelId;
+      reasoningEffort: ReasoningEffortLevel;
       commandProgressMessage?: string;
     }) => {
       // UserPromptSubmit hooks — can block sending; wrap so I/O errors don't drop the message
@@ -994,6 +925,7 @@ export function useChat(
         metadata: {
           mode: params.mode,
           model: params.model,
+          reasoningEffort: params.reasoningEffort,
           ...(params.commandProgressMessage
             ? { commandProgressMessage: params.commandProgressMessage }
             : {}),

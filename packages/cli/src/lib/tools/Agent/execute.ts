@@ -2,14 +2,16 @@ import {
   Agent,
   ALL_TOOL_NAMES,
   DEFAULT_CHAT_MODEL_ID,
+  getToolContractsByNames,
+  resolveModelAlias,
   type ModeType,
   type KnightcodeTool,
 } from "@knightcode/shared";
-import type { ModelMessage } from "ai";
+import { generateText, type ModelMessage } from "ai";
 import { randomUUID } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { apiClient } from "../../api-client";
+import { resolveModel } from "../../inference/resolve-model";
 import { loadAgents, getAgent, resolveAgentTools } from "../../agents/loader";
 import { DEFAULT_AGENT_TYPE } from "../../agents/types";
 import { runSubagentLoop, type SubagentStepResult } from "./run-subagent";
@@ -17,28 +19,6 @@ import { buildTaskNotification, enqueueNotification } from "./notifications";
 import { executeLocalTool } from "../index";
 
 export const tool: KnightcodeTool = Agent;
-
-const MODEL_ALIAS: Record<string, string> = {
-  sonnet: "claude-sonnet-4-6",
-  opus: "claude-opus-4-6",
-  haiku: "claude-haiku-4-5",
-  gpt: "gpt-5.4",
-  gpt_oss: "openai/gpt-oss-120b:free",
-  gpt_mini: "gpt-5.4-mini",
-  gpt_nano: "gpt-5.4-nano",
-  cobuddy: "baidu/cobuddy:free",
-  laguna_xs: "poolside/laguna-xs.2:free",
-  laguna_m: "poolside/laguna-m.1:free",
-  owl_alpha: "openrouter/owl-alpha",
-  deepseek: "deepseek/deepseek-v4-flash:free",
-  trinity_large: "arcee-ai/trinity-large-thinking:free",
-  nemotron: "nvidia/nemotron-3-super-120b-a12b:free",
-  glm: "z-ai/glm-5.1",
-  glm_air: "z-ai/glm-4.5-air:free",
-  kimi: "moonshotai/kimi-k2.6",
-  xiaomi: "xiaomi/mimo-v2.5-pro",
-  minimax: "minimax/minimax-m2.7",
-};
 
 /** Tools that require user confirmation outside AUTO mode (mirrors use-chat). */
 function needsPermission(toolName: string, mode: ModeType): boolean {
@@ -79,8 +59,10 @@ export async function execute(input: unknown, ctx: AgentCtx): Promise<unknown> {
     (n) => n !== "Agent",
   );
   const resolvedModel =
-    (model && MODEL_ALIAS[model]) ||
-    (agent.model && agent.model !== "inherit" && MODEL_ALIAS[agent.model]) ||
+    (model && resolveModelAlias(model)) ||
+    (agent.model &&
+      agent.model !== "inherit" &&
+      resolveModelAlias(agent.model)) ||
     DEFAULT_CHAT_MODEL_ID;
   const mode: ModeType = "BUILD";
   const maxTurns = agent.maxTurns ?? 25;
@@ -92,9 +74,25 @@ export async function execute(input: unknown, ctx: AgentCtx): Promise<unknown> {
     mode: ModeType;
     model: string;
   }): Promise<SubagentStepResult> => {
-    const res = await apiClient["agent-step"].$post({ json: req as never });
-    if (!res.ok) throw new Error(`agent-step failed: ${res.status}`);
-    return (await res.json()) as SubagentStepResult;
+    const resolved = resolveModel(req.model, "medium");
+    const tools = getToolContractsByNames(req.toolNames);
+    const result = await generateText({
+      model: resolved.model,
+      system: req.system,
+      messages: req.messages,
+      tools,
+      providerOptions: resolved.providerOptions,
+    });
+    return {
+      text: result.text,
+      toolCalls: result.toolCalls.map((tc) => ({
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        input: tc.input,
+      })),
+      finishReason: result.finishReason,
+      usage: result.usage ?? null,
+    };
   };
 
   const executeTool = (name: string, toolInput: unknown) =>
