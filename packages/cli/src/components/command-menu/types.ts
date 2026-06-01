@@ -16,6 +16,8 @@ export type CommandContext = {
   setMode: (mode: ModeType) => void;
   model: SupportedChatModelId;
   setModel: (model: SupportedChatModelId) => void;
+  /** Re-open the onboarding wizard (/setup). */
+  startOnboarding?: () => void;
   reasoningEffort: ReasoningEffortLevel;
   setReasoningEffort: (level: ReasoningEffortLevel) => void;
   sessionId?: string;

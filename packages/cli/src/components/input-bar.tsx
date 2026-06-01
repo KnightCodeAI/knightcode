@@ -19,6 +19,7 @@ import {
 import { useNavigate, useParams } from "react-router";
 import { useDialog } from "../providers/dialogs";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
+import { useOnboarding } from "../providers/onboarding";
 import { usePromptConfig } from "../providers/prompt-config";
 import { useTheme } from "../providers/theme";
 import { useToast } from "../providers/toast";
@@ -385,6 +386,7 @@ export function InputBar({
   const { id: sessionId } = useParams();
   const toast = useToast();
   const dialog = useDialog();
+  const { start: startOnboarding } = useOnboarding();
   const { colors } = useTheme();
   const { isTopLayer, setResponder, push, pop } = useKeyboardLayer();
   const {
@@ -510,6 +512,7 @@ export function InputBar({
           setMode,
           model,
           setModel,
+          startOnboarding,
           reasoningEffort,
           setReasoningEffort,
           sessionId,
@@ -534,6 +537,7 @@ export function InputBar({
       setMode,
       model,
       setModel,
+      startOnboarding,
       reasoningEffort,
       setReasoningEffort,
       sessionId,

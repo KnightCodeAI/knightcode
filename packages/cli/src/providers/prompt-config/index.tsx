@@ -1,10 +1,11 @@
 import {
-  DEFAULT_CHAT_MODEL_ID,
   Mode,
   type ModeType,
   type ReasoningEffortLevel,
   type SupportedChatModelId,
 } from "@knightcode/shared";
+import { loadPreferredModel } from "../../lib/onboarding";
+import { setSettingValue } from "../../lib/settings";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useState } from "react";
 
@@ -38,9 +39,18 @@ type PromptConfigProviderProps = {
 
 export function PromptConfigProvider({ children }: PromptConfigProviderProps) {
   const [mode, setMode] = useState<ModeType>(Mode.BUILD);
-  const [model, setModel] = useState<SupportedChatModelId>(
-    DEFAULT_CHAT_MODEL_ID,
+  const [model, setModelState] = useState<SupportedChatModelId>(() =>
+    loadPreferredModel(),
   );
+  const setModel = useCallback((next: SupportedChatModelId) => {
+    setModelState(next);
+    try {
+      setSettingValue("model", next);
+    } catch {
+      // Persisting the preference is best-effort; a read-only home dir must not
+      // break in-session model switching.
+    }
+  }, []);
   const [reasoningEffort, setReasoningEffort] =
     useState<ReasoningEffortLevel>("medium");
 
