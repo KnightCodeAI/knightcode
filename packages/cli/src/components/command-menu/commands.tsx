@@ -104,6 +104,18 @@ export const COMMANDS: Command[] = [
     },
   },
   {
+    name: "setup",
+    description: "Re-run first-run setup (API key, model, web search)",
+    value: "/setup",
+    action: (ctx) => {
+      if (!ctx.startOnboarding) {
+        ctx.toast.show({ variant: "error", message: "Not available here" });
+        return;
+      }
+      ctx.startOnboarding();
+    },
+  },
+  {
     name: "new",
     description: "Start a new conversation",
     value: "/new",

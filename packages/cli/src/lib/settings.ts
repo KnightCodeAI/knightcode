@@ -1,11 +1,11 @@
 import { join } from "path";
-import { homedir } from "os";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { knightcodeHome } from "./paths";
 
 export type SettingsFile = { [key: string]: unknown };
 
 export function getSettingsPath(): string {
-  return join(homedir(), ".knightcode", "settings.json");
+  return join(knightcodeHome(), "settings.json");
 }
 
 export function loadSettings(): SettingsFile {
@@ -19,7 +19,7 @@ export function loadSettings(): SettingsFile {
 }
 
 export function saveSettings(settings: SettingsFile): void {
-  const dir = join(homedir(), ".knightcode");
+  const dir = knightcodeHome();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), "utf-8");
 }
