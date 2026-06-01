@@ -72,7 +72,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   );
 
   const submitKey = useCallback(async () => {
-    const value = keyInputRef.current?.value ?? "";
+    const value = keyInputRef.current?.value?.trim() ?? "";
     setApiKey(value);
     setStep("validating");
     const result = await validateOpenRouterKey(value);
@@ -209,9 +209,14 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 key={entry.id}
                 flexDirection="row"
                 height={1}
-                backgroundColor={i === modelIndex ? colors.selection : undefined}
+                backgroundColor={
+                  i === modelIndex ? colors.selection : undefined
+                }
               >
-                <text>{i === modelIndex ? "› " : "  "}{entry.label}</text>
+                <text>
+                  {i === modelIndex ? "› " : "  "}
+                  {entry.label}
+                </text>
               </box>
             ))}
           </box>
@@ -229,7 +234,10 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   i === providerIndex ? colors.selection : undefined
                 }
               >
-                <text>{i === providerIndex ? "› " : "  "}{choice.label}</text>
+                <text>
+                  {i === providerIndex ? "› " : "  "}
+                  {choice.label}
+                </text>
               </box>
             ))}
           </box>

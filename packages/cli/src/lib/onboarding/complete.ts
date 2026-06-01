@@ -23,7 +23,11 @@ export interface OnboardingResult {
  * downstream WebSearch resolver would have to defend against.
  */
 export function completeOnboarding(result: OnboardingResult): void {
-  const search = result.search?.apiKey.trim() ? result.search : undefined;
+  const trimmedSearchApiKey = result.search?.apiKey.trim();
+  const search =
+    trimmedSearchApiKey && result.search
+      ? { provider: result.search.provider, apiKey: trimmedSearchApiKey }
+      : undefined;
   saveCredentials({
     openRouterApiKey: result.openRouterApiKey,
     ...(search
