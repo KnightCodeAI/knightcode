@@ -3,6 +3,7 @@ import { TextAttributes } from "@opentui/core";
 import { format } from "date-fns";
 import { useNavigate } from "react-router";
 import { useDialog } from "../../providers/dialogs";
+import { useTheme } from "../../providers/theme";
 import { getStore } from "../../lib/store/client";
 import { listSessions, type SessionRow } from "../../lib/store";
 import { DialogSearchList } from "../dialog-search-list";
@@ -12,6 +13,7 @@ export const SessionsDialogContent = () => {
     listSessions(getStore(), process.cwd()),
   );
   const { close } = useDialog();
+  const { colors } = useTheme();
   const navigate = useNavigate();
 
   const handleSelect = useCallback(
@@ -31,13 +33,13 @@ export const SessionsDialogContent = () => {
       }
       renderItem={(session, isSelected) => (
         <>
-          <text selectable={false} fg={isSelected ? "black" : "white"}>
+          <text selectable={false} fg={isSelected ? colors.inverseText : colors.text}>
             {session.title}
           </text>
           <box flexGrow={1} />
           <text
             selectable={false}
-            fg={isSelected ? "black" : undefined}
+            fg={isSelected ? colors.inverseText : colors.dimSeparator}
             attributes={TextAttributes.DIM}
           >
             {format(new Date(session.timeUpdated), "hh:mm a")}

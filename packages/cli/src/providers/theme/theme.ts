@@ -1,17 +1,55 @@
 export type ThemeColors = {
   primary: string;
+  primaryShimmer: string;
   planMode: string;
   autoMode: string;
+  autoModeShimmer: string;
+  fastMode: string;
+  fastModeShimmer: string;
+  permission: string;
+  permissionShimmer: string;
   selection: string;
   thinking: string;
+
   success: string;
   error: string;
+  warning: string;
+  warningShimmer: string;
+  merged: string;
+  remember: string;
+
+  text: string;
+  inverseText: string;
+  dimSeparator: string;
+  dimSeparatorShimmer: string;
+  subtle: string;
+  promptBorder: string;
+  promptBorderShimmer: string;
+  bashBorder: string;
   info: string;
+
   background: string;
   surface: string;
+  surfaceHover: string;
   dialogSurface: string;
+  messageActions: string;
+  selectionBg: string;
+  bashMessageBg: string;
+  memoryBg: string;
   thinkingBorder: string;
-  dimSeparator: string;
+
+  diffAdded: string;
+  diffRemoved: string;
+  diffAddedDimmed: string;
+  diffRemovedDimmed: string;
+  diffAddedWord: string;
+  diffRemovedWord: string;
+
+  rateLimitFill: string;
+  rateLimitEmpty: string;
+
+  briefLabelYou: string;
+  briefLabelAssistant: string;
 };
 
 export type Theme = {
@@ -19,583 +57,371 @@ export type Theme = {
   colors: ThemeColors;
 };
 
+// ── Helper: rgb → hex ─────────────────────────────────────────────────
+function rgb(r: number, g: number, b: number): string {
+  return (
+    "#" +
+    [r, g, b]
+      .map((v) => v.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase()
+  );
+}
+
 export const THEMES: Theme[] = [
+  // ── Dark ────────────────────────────────────────────────────────────
   {
-    name: "Knightfox",
+    name: "Dark",
     colors: {
-      primary: "#56D6C2",
-      planMode: "#CF8EF4",
-      autoMode: "#F8C471",
-      selection: "#89B4FA",
-      thinking: "#CF8EF4",
-      success: "#82E0AA",
-      error: "#E74C5E",
-      info: "#56D6C2",
-      background: "#0D0D12",
-      surface: "#1A1A24",
-      dialogSurface: "#0A0A10",
-      thinkingBorder: "#34344A",
-      dimSeparator: "#4E4E66",
+      primary: rgb(215, 119, 87), // the reference TUI
+      primaryShimmer: rgb(235, 159, 127), // brandShimmer
+      planMode: rgb(72, 150, 140), // planMode
+      autoMode: rgb(175, 135, 255), // autoAccept
+      autoModeShimmer: rgb(205, 165, 255), // derived lighter
+      fastMode: rgb(255, 120, 20), // fastMode
+      fastModeShimmer: rgb(255, 165, 70), // fastModeShimmer
+
+      permission: rgb(177, 185, 249), // permission
+      permissionShimmer: rgb(207, 215, 255), // permissionShimmer
+      selection: rgb(177, 185, 249), // suggestion
+      thinking: rgb(177, 185, 249), // permission (same as the reference TUI)
+
+      success: rgb(78, 186, 101), // success
+      error: rgb(255, 107, 128), // error
+      warning: rgb(255, 193, 7), // warning
+      warningShimmer: rgb(255, 223, 57), // warningShimmer
+      merged: rgb(175, 135, 255), // merged
+      remember: rgb(177, 185, 249), // remember
+
+      text: rgb(255, 255, 255), // text
+      inverseText: rgb(0, 0, 0), // inverseText
+      dimSeparator: rgb(153, 153, 153), // inactive
+      dimSeparatorShimmer: rgb(193, 193, 193), // inactiveShimmer
+      subtle: rgb(80, 80, 80), // subtle
+      promptBorder: rgb(136, 136, 136), // promptBorder
+      promptBorderShimmer: rgb(166, 166, 166), // promptBorderShimmer
+      bashBorder: rgb(253, 93, 177), // bashBorder
+      info: rgb(71, 130, 200), // ide
+
+      background: "#0D0D0D", // derived
+      surface: rgb(55, 55, 55), // userMessageBackground
+      surfaceHover: rgb(70, 70, 70), // userMessageBackgroundHover
+      dialogSurface: "#1C1C1C", // derived
+      messageActions: rgb(44, 50, 62), // messageActionsBackground
+      selectionBg: rgb(38, 79, 120), // selectionBg
+      bashMessageBg: rgb(65, 60, 65), // bashMessageBackgroundColor
+      memoryBg: rgb(55, 65, 70), // memoryBackgroundColor
+      thinkingBorder: rgb(80, 80, 80), // subtle (same as the reference TUI)
+
+      diffAdded: rgb(34, 92, 43), // diffAdded
+      diffRemoved: rgb(122, 41, 54), // diffRemoved
+      diffAddedDimmed: rgb(71, 88, 74), // diffAddedDimmed
+      diffRemovedDimmed: rgb(105, 72, 77), // diffRemovedDimmed
+      diffAddedWord: rgb(56, 166, 96), // diffAddedWord
+      diffRemovedWord: rgb(179, 89, 107), // diffRemovedWord
+
+      rateLimitFill: rgb(177, 185, 249), // rate_limit_fill
+      rateLimitEmpty: rgb(80, 83, 112), // rate_limit_empty
+
+      briefLabelYou: rgb(122, 180, 232), // briefLabelYou
+      briefLabelAssistant: rgb(215, 119, 87), // briefLabelAssistant
     },
   },
+
+  // ── Light ───────────────────────────────────────────────────────────
   {
-    name: "Catppuccin Mocha",
+    name: "Light",
     colors: {
-      primary: "#E0AF68",
-      planMode: "#9D7CD8",
-      autoMode: "#FAB387",
-      selection: "#B4A4E8",
-      thinking: "#9D7CD8",
-      success: "#73DACA",
-      error: "#F7768E",
-      info: "#7AA2F7",
-      background: "#11111B",
-      surface: "#1E1E2E",
-      dialogSurface: "#13131D",
-      thinkingBorder: "#45475A",
-      dimSeparator: "#585B70",
+      primary: rgb(215, 119, 87), // the reference TUI
+      primaryShimmer: rgb(245, 149, 117), // brandShimmer
+      planMode: rgb(0, 102, 102), // planMode
+      autoMode: rgb(135, 0, 255), // autoAccept
+      autoModeShimmer: rgb(165, 50, 255), // derived lighter
+      fastMode: rgb(255, 106, 0), // fastMode
+      fastModeShimmer: rgb(255, 150, 50), // fastModeShimmer
+
+      permission: rgb(87, 105, 247), // permission
+      permissionShimmer: rgb(137, 155, 255), // permissionShimmer
+      selection: rgb(87, 105, 247), // suggestion
+      thinking: rgb(87, 105, 247), // permission (same as the reference TUI)
+
+      success: rgb(44, 122, 57), // success
+      error: rgb(171, 43, 63), // error
+      warning: rgb(150, 108, 30), // warning
+      warningShimmer: rgb(200, 158, 80), // warningShimmer
+      merged: rgb(135, 0, 255), // merged
+      remember: rgb(0, 0, 255), // remember
+
+      text: rgb(0, 0, 0), // text
+      inverseText: rgb(255, 255, 255), // inverseText
+      dimSeparator: rgb(102, 102, 102), // inactive
+      dimSeparatorShimmer: rgb(142, 142, 142), // inactiveShimmer
+      subtle: rgb(175, 175, 175), // subtle
+      promptBorder: rgb(153, 153, 153), // promptBorder
+      promptBorderShimmer: rgb(183, 183, 183), // promptBorderShimmer
+      bashBorder: rgb(255, 0, 135), // bashBorder
+      info: rgb(71, 130, 200), // ide
+
+      background: "#FFFFFF", // derived
+      surface: rgb(240, 240, 240), // userMessageBackground
+      surfaceHover: rgb(252, 252, 252), // userMessageBackgroundHover
+      dialogSurface: "#FAFAFA", // derived
+      messageActions: rgb(232, 236, 244), // messageActionsBackground
+      selectionBg: rgb(180, 213, 255), // selectionBg
+      bashMessageBg: rgb(250, 245, 250), // bashMessageBackgroundColor
+      memoryBg: rgb(230, 245, 250), // memoryBackgroundColor
+      thinkingBorder: rgb(175, 175, 175), // subtle (same as the reference TUI)
+
+      diffAdded: rgb(105, 219, 124), // diffAdded
+      diffRemoved: rgb(255, 168, 180), // diffRemoved
+      diffAddedDimmed: rgb(199, 225, 203), // diffAddedDimmed
+      diffRemovedDimmed: rgb(253, 210, 216), // diffRemovedDimmed
+      diffAddedWord: rgb(47, 157, 68), // diffAddedWord
+      diffRemovedWord: rgb(209, 69, 75), // diffRemovedWord
+
+      rateLimitFill: rgb(87, 105, 247), // rate_limit_fill
+      rateLimitEmpty: rgb(39, 47, 111), // rate_limit_empty
+
+      briefLabelYou: rgb(37, 99, 235), // briefLabelYou
+      briefLabelAssistant: rgb(215, 119, 87), // briefLabelAssistant
     },
   },
+
+  // ── Dark Daltonized ─────────────────────────────────────────────────
   {
-    name: "Dracula",
+    name: "Dark Daltonized",
     colors: {
-      primary: "#BD93F9",
-      planMode: "#FF79C6",
-      autoMode: "#FFB86C",
-      selection: "#6272A4",
-      thinking: "#FF79C6",
-      success: "#50FA7B",
-      error: "#FF5555",
-      info: "#8BE9FD",
-      background: "#282A36",
-      surface: "#343746",
-      dialogSurface: "#21222C",
-      thinkingBorder: "#6272A4",
-      dimSeparator: "#44475A",
+      primary: rgb(255, 153, 51), // the reference TUI
+      primaryShimmer: rgb(255, 183, 101), // brandShimmer
+      planMode: rgb(102, 153, 153), // planMode
+      autoMode: rgb(175, 135, 255), // autoAccept
+      autoModeShimmer: rgb(205, 165, 255), // derived lighter
+      fastMode: rgb(255, 120, 20), // fastMode
+      fastModeShimmer: rgb(255, 165, 70), // fastModeShimmer
+
+      permission: rgb(153, 204, 255), // permission
+      permissionShimmer: rgb(183, 224, 255), // permissionShimmer
+      selection: rgb(153, 204, 255), // suggestion
+      thinking: rgb(153, 204, 255), // permission
+
+      success: rgb(51, 153, 255), // success (blue, not green)
+      error: rgb(255, 102, 102), // error
+      warning: rgb(255, 204, 0), // warning
+      warningShimmer: rgb(255, 234, 50), // warningShimmer
+      merged: rgb(175, 135, 255), // merged
+      remember: rgb(153, 204, 255), // remember
+
+      text: rgb(255, 255, 255), // text
+      inverseText: rgb(0, 0, 0), // inverseText
+      dimSeparator: rgb(153, 153, 153), // inactive
+      dimSeparatorShimmer: rgb(193, 193, 193), // inactiveShimmer
+      subtle: rgb(80, 80, 80), // subtle
+      promptBorder: rgb(136, 136, 136), // promptBorder
+      promptBorderShimmer: rgb(166, 166, 166), // promptBorderShimmer
+      bashBorder: rgb(51, 153, 255), // bashBorder
+      info: rgb(71, 130, 200), // ide
+
+      background: "#0D0D0D", // derived
+      surface: rgb(55, 55, 55), // userMessageBackground
+      surfaceHover: rgb(70, 70, 70), // userMessageBackgroundHover
+      dialogSurface: "#1C1C1C", // derived
+      messageActions: rgb(44, 50, 62), // messageActionsBackground
+      selectionBg: rgb(38, 79, 120), // selectionBg
+      bashMessageBg: rgb(65, 60, 65), // bashMessageBackgroundColor
+      memoryBg: rgb(55, 65, 70), // memoryBackgroundColor
+      thinkingBorder: rgb(80, 80, 80), // subtle
+
+      diffAdded: rgb(0, 68, 102), // diffAdded (blue)
+      diffRemoved: rgb(102, 0, 0), // diffRemoved
+      diffAddedDimmed: rgb(62, 81, 91), // diffAddedDimmed
+      diffRemovedDimmed: rgb(62, 44, 44), // diffRemovedDimmed
+      diffAddedWord: rgb(0, 119, 179), // diffAddedWord
+      diffRemovedWord: rgb(179, 0, 0), // diffRemovedWord
+
+      rateLimitFill: rgb(153, 204, 255), // rate_limit_fill
+      rateLimitEmpty: rgb(69, 92, 115), // rate_limit_empty
+
+      briefLabelYou: rgb(122, 180, 232), // briefLabelYou
+      briefLabelAssistant: rgb(255, 153, 51), // briefLabelAssistant
     },
   },
+
+  // ── Light Daltonized ────────────────────────────────────────────────
   {
-    name: "Monokai Pro",
+    name: "Light Daltonized",
     colors: {
-      primary: "#FFD866",
-      planMode: "#AB9DF2",
-      autoMode: "#FC9867",
-      selection: "#AB9DF2",
-      thinking: "#AB9DF2",
-      success: "#A9DC76",
-      error: "#FF6188",
-      info: "#78DCE8",
-      background: "#2D2A2E",
-      surface: "#403E41",
-      dialogSurface: "#221F22",
-      thinkingBorder: "#5B595C",
-      dimSeparator: "#727072",
+      primary: rgb(255, 153, 51), // the reference TUI
+      primaryShimmer: rgb(255, 183, 101), // brandShimmer
+      planMode: rgb(51, 102, 102), // planMode
+      autoMode: rgb(135, 0, 255), // autoAccept
+      autoModeShimmer: rgb(165, 50, 255), // derived lighter
+      fastMode: rgb(255, 106, 0), // fastMode
+      fastModeShimmer: rgb(255, 150, 50), // fastModeShimmer
+
+      permission: rgb(51, 102, 255), // permission
+      permissionShimmer: rgb(101, 152, 255), // permissionShimmer
+      selection: rgb(51, 102, 255), // suggestion
+      thinking: rgb(51, 102, 255), // permission
+
+      success: rgb(0, 102, 153), // success (blue)
+      error: rgb(204, 0, 0), // error
+      warning: rgb(255, 153, 0), // warning
+      warningShimmer: rgb(255, 183, 50), // warningShimmer
+      merged: rgb(135, 0, 255), // merged
+      remember: rgb(51, 102, 255), // remember
+
+      text: rgb(0, 0, 0), // text
+      inverseText: rgb(255, 255, 255), // inverseText
+      dimSeparator: rgb(102, 102, 102), // inactive
+      dimSeparatorShimmer: rgb(142, 142, 142), // inactiveShimmer
+      subtle: rgb(175, 175, 175), // subtle
+      promptBorder: rgb(153, 153, 153), // promptBorder
+      promptBorderShimmer: rgb(183, 183, 183), // promptBorderShimmer
+      bashBorder: rgb(0, 102, 204), // bashBorder
+      info: rgb(71, 130, 200), // ide
+
+      background: "#FFFFFF", // derived
+      surface: rgb(220, 220, 220), // userMessageBackground
+      surfaceHover: rgb(232, 232, 232), // userMessageBackgroundHover
+      dialogSurface: "#FAFAFA", // derived
+      messageActions: rgb(210, 216, 226), // messageActionsBackground
+      selectionBg: rgb(180, 213, 255), // selectionBg
+      bashMessageBg: rgb(250, 245, 250), // bashMessageBackgroundColor
+      memoryBg: rgb(230, 245, 250), // memoryBackgroundColor
+      thinkingBorder: rgb(175, 175, 175), // subtle
+
+      diffAdded: rgb(153, 204, 255), // diffAdded (light blue)
+      diffRemoved: rgb(255, 204, 204), // diffRemoved
+      diffAddedDimmed: rgb(209, 231, 253), // diffAddedDimmed
+      diffRemovedDimmed: rgb(255, 233, 233), // diffRemovedDimmed
+      diffAddedWord: rgb(51, 102, 204), // diffAddedWord
+      diffRemovedWord: rgb(153, 51, 51), // diffRemovedWord
+
+      rateLimitFill: rgb(51, 102, 255), // rate_limit_fill
+      rateLimitEmpty: rgb(23, 46, 114), // rate_limit_empty
+
+      briefLabelYou: rgb(37, 99, 235), // briefLabelYou
+      briefLabelAssistant: rgb(255, 153, 51), // briefLabelAssistant
     },
   },
+
+  // ── Dark ANSI ───────────────────────────────────────────────────────
   {
-    name: "Tokyo Night",
+    name: "Dark ANSI",
     colors: {
-      primary: "#7AA2F7",
-      planMode: "#BB9AF7",
-      autoMode: "#FF9E64",
-      selection: "#7AA2F7",
-      thinking: "#BB9AF7",
-      success: "#9ECE6A",
-      error: "#F7768E",
-      info: "#7DCFFF",
-      background: "#1A1B26",
-      surface: "#24283B",
-      dialogSurface: "#16161E",
-      thinkingBorder: "#3B4261",
-      dimSeparator: "#565F89",
+      primary: "#FF0000", // the reference TUI = ansi:redBright
+      primaryShimmer: "#FF6666", // derived lighter
+      planMode: "#00FFFF", // planMode = ansi:cyanBright
+      autoMode: "#FF00FF", // autoAccept = ansi:magentaBright
+      autoModeShimmer: "#FF99FF", // derived lighter
+      fastMode: "#FF0000", // fastMode = ansi:redBright
+      fastModeShimmer: "#FF6666", // derived lighter
+
+      permission: "#5C5CFF", // permission = ansi:blueBright
+      permissionShimmer: "#5C5CFF", // ansi:blueBright
+      selection: "#5C5CFF", // suggestion = ansi:blueBright
+      thinking: "#5C5CFF", // permission = ansi:blueBright
+
+      success: "#00FF00", // success = ansi:greenBright
+      error: "#FF0000", // error = ansi:redBright
+      warning: "#FFFF00", // warning = ansi:yellowBright
+      warningShimmer: "#FFFF00", // ansi:yellowBright
+      merged: "#FF00FF", // merged = ansi:magentaBright
+      remember: "#5C5CFF", // remember = ansi:blueBright
+
+      text: "#E5E5E5", // text = ansi:whiteBright
+      inverseText: "#000000", // inverseText = ansi:black
+      dimSeparator: "#E5E5E5", // inactive = ansi:white
+      dimSeparatorShimmer: "#E5E5E5", // ansi:white
+      subtle: "#E5E5E5", // subtle = ansi:white
+      promptBorder: "#E5E5E5", // promptBorder = ansi:white
+      promptBorderShimmer: "#E5E5E5", // ansi:white
+      bashBorder: "#FF00FF", // bashBorder = ansi:magentaBright
+      info: "#0000EE", // ide = ansi:blue
+
+      background: "#000000", // derived (ansi:black)
+      surface: "#2B2B2B", // derived (usable dark panel)
+      surfaceHover: "#3A3A3A", // derived
+      dialogSurface: "#000000", // clawd_background = ansi:black
+      messageActions: "#2B2B2B", // derived
+      selectionBg: "#0000EE", // selectionBg = ansi:blue
+      bashMessageBg: "#000000", // ansi:black
+      memoryBg: "#2B2B2B", // derived
+      thinkingBorder: "#E5E5E5", // subtle = ansi:white
+
+      diffAdded: "#00CD00", // diffAdded = ansi:green
+      diffRemoved: "#CD0000", // diffRemoved = ansi:red
+      diffAddedDimmed: "#00CD00", // diffAdded = ansi:green
+      diffRemovedDimmed: "#CD0000", // diffRemoved = ansi:red
+      diffAddedWord: "#00FF00", // diffAddedWord = ansi:greenBright
+      diffRemovedWord: "#FF0000", // diffRemovedWord = ansi:redBright
+
+      rateLimitFill: "#FFFF00", // rate_limit_fill = ansi:yellow
+      rateLimitEmpty: "#E5E5E5", // rate_limit_empty = ansi:white
+
+      briefLabelYou: "#5C5CFF", // briefLabelYou = ansi:blueBright
+      briefLabelAssistant: "#FF0000", // briefLabelAssistant = ansi:redBright
     },
   },
+
+  // ── Light ANSI ──────────────────────────────────────────────────────
   {
-    name: "Nord",
+    name: "Light ANSI",
     colors: {
-      primary: "#EBCB8B",
-      planMode: "#B48EAD",
-      autoMode: "#D08770",
-      selection: "#81A1C1",
-      thinking: "#B48EAD",
-      success: "#A3BE8C",
-      error: "#BF616A",
-      info: "#88C0D0",
-      background: "#2E3440",
-      surface: "#3B4252",
-      dialogSurface: "#272C36",
-      thinkingBorder: "#4C566A",
-      dimSeparator: "#616E88",
-    },
-  },
-  {
-    name: "Synthwave",
-    colors: {
-      primary: "#F472B6",
-      planMode: "#A855F7",
-      autoMode: "#FF7E40",
-      selection: "#E879F9",
-      thinking: "#A855F7",
-      success: "#4ADE80",
-      error: "#EF4444",
-      info: "#C084FC",
-      background: "#0A0A0A",
-      surface: "#171717",
-      dialogSurface: "#0D0D0D",
-      thinkingBorder: "#404040",
-      dimSeparator: "#525252",
-    },
-  },
-  {
-    name: "Midnight Sky",
-    colors: {
-      primary: "#6AAEF5",
-      planMode: "#B07AE8",
-      autoMode: "#F08D49",
-      selection: "#8CC4F0",
-      thinking: "#B07AE8",
-      success: "#58CEA0",
-      error: "#E8555A",
-      info: "#7DCFFF",
-      background: "#0A0E14",
-      surface: "#141A22",
-      dialogSurface: "#0E1319",
-      thinkingBorder: "#4A5A6E",
-      dimSeparator: "#607080",
-    },
-  },
-  {
-    name: "Neon Nights",
-    colors: {
-      primary: "#E86ACA",
-      planMode: "#5ED4E8",
-      autoMode: "#FFB84C",
-      selection: "#D48EE0",
-      thinking: "#5ED4E8",
-      success: "#4ED89C",
-      error: "#F04858",
-      info: "#E86ACA",
-      background: "#0C0814",
-      surface: "#18122A",
-      dialogSurface: "#110C1E",
-      thinkingBorder: "#5C4878",
-      dimSeparator: "#745E90",
-    },
-  },
-  {
-    name: "Hacker Terminal",
-    colors: {
-      primary: "#00E5A0",
-      planMode: "#D946EF",
-      autoMode: "#FF9F1C",
-      selection: "#2DD4BF",
-      thinking: "#D946EF",
-      success: "#4ADE80",
-      error: "#F43F5E",
-      info: "#06B6D4",
-      background: "#050505",
-      surface: "#131313",
-      dialogSurface: "#0A0A0A",
-      thinkingBorder: "#2E2E2E",
-      dimSeparator: "#454545",
-    },
-  },
-  {
-    name: "One Dark",
-    colors: {
-      primary: "#CBAACB",
-      planMode: "#55B6C2",
-      autoMode: "#D19A66",
-      selection: "#98C379",
-      thinking: "#55B6C2",
-      success: "#98C379",
-      error: "#E06C75",
-      info: "#61AFEF",
-      background: "#1E2127",
-      surface: "#282C34",
-      dialogSurface: "#191C21",
-      thinkingBorder: "#3E4451",
-      dimSeparator: "#5C6370",
-    },
-  },
-  {
-    name: "Xcode Midnight",
-    colors: {
-      primary: "#FF7AB2",
-      planMode: "#6BDFFF",
-      autoMode: "#FCA260",
-      selection: "#ACF2E4",
-      thinking: "#6BDFFF",
-      success: "#83C9BC",
-      error: "#FF6961",
-      info: "#B281EB",
-      background: "#1F1F24",
-      surface: "#2A2A30",
-      dialogSurface: "#18181D",
-      thinkingBorder: "#3E3E45",
-      dimSeparator: "#57575F",
-    },
-  },
-  {
-    name: "Catppuccin Frappe",
-    colors: {
-      primary: "#8CAAEE",
-      planMode: "#CA9EE6",
-      autoMode: "#EF9F76",
-      selection: "#A6D189",
-      thinking: "#CA9EE6",
-      success: "#A6D189",
-      error: "#E78284",
-      info: "#85C1DC",
-      background: "#232634",
-      surface: "#303446",
-      dialogSurface: "#1E2030",
-      thinkingBorder: "#51576D",
-      dimSeparator: "#626880",
-    },
-  },
-  {
-    name: "Vercel Dark",
-    colors: {
-      primary: "#8B5CF6",
-      planMode: "#EC4899",
-      autoMode: "#F97316",
-      selection: "#6366F1",
-      thinking: "#EC4899",
-      success: "#10B981",
-      error: "#EF4444",
-      info: "#3B82F6",
-      background: "#030712",
-      surface: "#111827",
-      dialogSurface: "#060C18",
-      thinkingBorder: "#1F2937",
-      dimSeparator: "#374151",
-    },
-  },
-  {
-    name: "Material Ocean",
-    colors: {
-      primary: "#82AAFF",
-      planMode: "#C792EA",
-      autoMode: "#F78C6C",
-      selection: "#717CB4",
-      thinking: "#C792EA",
-      success: "#C3E88D",
-      error: "#FF5370",
-      info: "#89DDFF",
-      background: "#0F111A",
-      surface: "#1A1C2A",
-      dialogSurface: "#090B16",
-      thinkingBorder: "#3B3F5C",
-      dimSeparator: "#4B5178",
-    },
-  },
-  {
-    name: "Dusk",
-    colors: {
-      primary: "#C9A0DC",
-      planMode: "#F2B866",
-      autoMode: "#38BDF8",
-      selection: "#E8889A",
-      thinking: "#F2B866",
-      success: "#7ED4A6",
-      error: "#E25A6E",
-      info: "#C9A0DC",
-      background: "#110D16",
-      surface: "#1E1726",
-      dialogSurface: "#15101C",
-      thinkingBorder: "#6B5880",
-      dimSeparator: "#7E6E94",
-    },
-  },
-  {
-    name: "Ocean",
-    colors: {
-      primary: "#3B9ECF",
-      planMode: "#E0A846",
-      autoMode: "#55B6C2",
-      selection: "#6CC9A1",
-      thinking: "#E0A846",
-      success: "#A8D45F",
-      error: "#D94F4F",
-      info: "#3B9ECF",
-      background: "#0B1218",
-      surface: "#152028",
-      dialogSurface: "#0F181F",
-      thinkingBorder: "#4A6A7A",
-      dimSeparator: "#5E7888",
-    },
-  },
-  {
-    name: "Soft Midnight",
-    colors: {
-      primary: "#60A5FA",
-      planMode: "#F9A8D4",
-      autoMode: "#FDE047",
-      selection: "#93C5FD",
-      thinking: "#F9A8D4",
-      success: "#6EE7B7",
-      error: "#FCA5A5",
-      info: "#67E8F9",
-      background: "#0F172A",
-      surface: "#1E293B",
-      dialogSurface: "#0C1322",
-      thinkingBorder: "#334155",
-      dimSeparator: "#475569",
-    },
-  },
-  {
-    name: "Minimal Dark",
-    colors: {
-      primary: "#A78BFA",
-      planMode: "#38BDF8",
-      autoMode: "#FBBF24",
-      selection: "#818CF8",
-      thinking: "#38BDF8",
-      success: "#34D399",
-      error: "#FB7185",
-      info: "#22D3EE",
-      background: "#09090B",
-      surface: "#18181B",
-      dialogSurface: "#0C0C0F",
-      thinkingBorder: "#3F3F46",
-      dimSeparator: "#52525B",
-    },
-  },
-  {
-    name: "Solarized Dark",
-    colors: {
-      primary: "#268BD2",
-      planMode: "#6C71C4",
-      autoMode: "#CB4B16",
-      selection: "#6BC0CC",
-      thinking: "#6C71C4",
-      success: "#859900",
-      error: "#DC322F",
-      info: "#2AA198",
-      background: "#002B36",
-      surface: "#073642",
-      dialogSurface: "#00212B",
-      thinkingBorder: "#586E75",
-      dimSeparator: "#657B83",
-    },
-  },
-  {
-    name: "Gruvbox Dark",
-    colors: {
-      primary: "#FABD2F",
-      planMode: "#D3869B",
-      autoMode: "#FE8019",
-      selection: "#FABD2F",
-      thinking: "#D3869B",
-      success: "#B8BB26",
-      error: "#FB4934",
-      info: "#83A598",
-      background: "#282828",
-      surface: "#3C3836",
-      dialogSurface: "#1D2021",
-      thinkingBorder: "#504945",
-      dimSeparator: "#665C54",
-    },
-  },
-  {
-    name: "Rosé Pine",
-    colors: {
-      primary: "#EBBCBA",
-      planMode: "#C4A7E7",
-      autoMode: "#F6C177",
-      selection: "#C4A7E7",
-      thinking: "#C4A7E7",
-      success: "#31748F",
-      error: "#EB6F92",
-      info: "#9CCFD8",
-      background: "#191724",
-      surface: "#1F1D2E",
-      dialogSurface: "#16141F",
-      thinkingBorder: "#26233A",
-      dimSeparator: "#524F67",
-    },
-  },
-  {
-    name: "Rosé Pine Moon",
-    colors: {
-      primary: "#EA9A97",
-      planMode: "#C4A7E7",
-      autoMode: "#F6C177",
-      selection: "#EA9A97",
-      thinking: "#C4A7E7",
-      success: "#3E8FB0",
-      error: "#EB6F92",
-      info: "#9CCFD8",
-      background: "#232136",
-      surface: "#2A273F",
-      dialogSurface: "#1E1C31",
-      thinkingBorder: "#393552",
-      dimSeparator: "#56526E",
-    },
-  },
-  {
-    name: "Kanagawa",
-    colors: {
-      primary: "#DCD7BA",
-      planMode: "#957FB8",
-      autoMode: "#FF9E3B",
-      selection: "#7E9CD8",
-      thinking: "#957FB8",
-      success: "#76946A",
-      error: "#C34043",
-      info: "#7E9CD8",
-      background: "#1F1F28",
-      surface: "#2A2A37",
-      dialogSurface: "#16161D",
-      thinkingBorder: "#54546D",
-      dimSeparator: "#727169",
-    },
-  },
-  {
-    name: "Everforest Dark",
-    colors: {
-      primary: "#A7C080",
-      planMode: "#D699B6",
-      autoMode: "#E69875",
-      selection: "#A7C080",
-      thinking: "#D699B6",
-      success: "#83C092",
-      error: "#E67E80",
-      info: "#7FBBB3",
-      background: "#2D353B",
-      surface: "#343F44",
-      dialogSurface: "#272E33",
-      thinkingBorder: "#4F585E",
-      dimSeparator: "#859289",
-    },
-  },
-  {
-    name: "Ayu Dark",
-    colors: {
-      primary: "#E6B450",
-      planMode: "#D2A6FF",
-      autoMode: "#FF8F40",
-      selection: "#73B8FF",
-      thinking: "#D2A6FF",
-      success: "#7FD962",
-      error: "#D95757",
-      info: "#59C2FF",
-      background: "#0B0E14",
-      surface: "#11151C",
-      dialogSurface: "#080A0F",
-      thinkingBorder: "#2D3640",
-      dimSeparator: "#475266",
-    },
-  },
-  {
-    name: "GitHub Dark",
-    colors: {
-      primary: "#79C0FF",
-      planMode: "#D2A8FF",
-      autoMode: "#F78166",
-      selection: "#79C0FF",
-      thinking: "#D2A8FF",
-      success: "#56D364",
-      error: "#F85149",
-      info: "#58A6FF",
-      background: "#0D1117",
-      surface: "#161B22",
-      dialogSurface: "#090D13",
-      thinkingBorder: "#30363D",
-      dimSeparator: "#484F58",
-    },
-  },
-  {
-    name: "Palenight",
-    colors: {
-      primary: "#82AAFF",
-      planMode: "#C792EA",
-      autoMode: "#F78C6C",
-      selection: "#82AAFF",
-      thinking: "#C792EA",
-      success: "#C3E88D",
-      error: "#FF5370",
-      info: "#89DDFF",
-      background: "#292D3E",
-      surface: "#343850",
-      dialogSurface: "#232738",
-      thinkingBorder: "#4E5272",
-      dimSeparator: "#676E95",
-    },
-  },
-  {
-    name: "Vesper",
-    colors: {
-      primary: "#FFC799",
-      planMode: "#A78BFA",
-      autoMode: "#A6CCFF",
-      selection: "#FFC799",
-      thinking: "#A78BFA",
-      success: "#6EE7B7",
-      error: "#EF4444",
-      info: "#FFC799",
-      background: "#101010",
-      surface: "#1C1C1C",
-      dialogSurface: "#0C0C0C",
-      thinkingBorder: "#333333",
-      dimSeparator: "#505050",
-    },
-  },
-  {
-    name: "Poimandres",
-    colors: {
-      primary: "#ADD7FF",
-      planMode: "#A6ACCD",
-      autoMode: "#FFFAC2",
-      selection: "#ADD7FF",
-      thinking: "#A6ACCD",
-      success: "#5DE4C7",
-      error: "#D0679D",
-      info: "#89DDFF",
-      background: "#1B1E28",
-      surface: "#252B37",
-      dialogSurface: "#161922",
-      thinkingBorder: "#3B4058",
-      dimSeparator: "#506477",
-    },
-  },
-  {
-    name: "Moonlight",
-    colors: {
-      primary: "#82AAFF",
-      planMode: "#C099FF",
-      autoMode: "#FF966C",
-      selection: "#C099FF",
-      thinking: "#C099FF",
-      success: "#C3E88D",
-      error: "#FF757F",
-      info: "#77E0C6",
-      background: "#1E2030",
-      surface: "#2B2F44",
-      dialogSurface: "#191B28",
-      thinkingBorder: "#3E4265",
-      dimSeparator: "#5B5E7A",
-    },
-  },
-  {
-    name: "Vitesse Dark",
-    colors: {
-      primary: "#4FC1FF",
-      planMode: "#C186E0",
-      autoMode: "#DDB27F",
-      selection: "#4FC1FF",
-      thinking: "#C186E0",
-      success: "#80C97F",
-      error: "#E45649",
-      info: "#4FC1FF",
-      background: "#121212",
-      surface: "#1E1E1E",
-      dialogSurface: "#0E0E0E",
-      thinkingBorder: "#333333",
-      dimSeparator: "#555555",
+      primary: "#FF0000", // the reference TUI = ansi:redBright
+      primaryShimmer: "#FF6666", // derived lighter
+      planMode: "#00CDCD", // planMode = ansi:cyan
+      autoMode: "#CD00CD", // autoAccept = ansi:magenta
+      autoModeShimmer: "#E066E0", // derived lighter
+      fastMode: "#FF0000", // fastMode = ansi:redBright
+      fastModeShimmer: "#FF6666", // derived lighter
+
+      permission: "#0000EE", // permission = ansi:blue
+      permissionShimmer: "#5C5CFF", // ansi:blueBright
+      selection: "#0000EE", // suggestion = ansi:blue
+      thinking: "#0000EE", // permission = ansi:blue
+
+      success: "#00CD00", // success = ansi:green
+      error: "#CD0000", // error = ansi:red
+      warning: "#CDCD00", // warning = ansi:yellow
+      warningShimmer: "#CDCD00", // ansi:yellow
+      merged: "#CD00CD", // merged = ansi:magenta
+      remember: "#0000EE", // remember = ansi:blue
+
+      text: "#000000", // text = ansi:black
+      inverseText: "#E5E5E5", // inverseText = ansi:whiteBright
+      dimSeparator: "#7F7F7F", // inactive = ansi:blackBright
+      dimSeparatorShimmer: "#7F7F7F", // ansi:blackBright
+      subtle: "#7F7F7F", // subtle = ansi:blackBright
+      promptBorder: "#7F7F7F", // promptBorder = ansi:blackBright
+      promptBorderShimmer: "#7F7F7F", // ansi:blackBright
+      bashBorder: "#CD00CD", // bashBorder = ansi:magenta
+      info: "#5C5CFF", // ide = ansi:blueBright
+
+      background: "#FFFFFF", // derived
+      surface: "#F0F0F0", // derived (usable light panel)
+      surfaceHover: "#F8F8F8", // derived
+      dialogSurface: "#FAFAFA", // derived
+      messageActions: "#F0F0F0", // derived
+      selectionBg: "#00CDCD", // selectionBg = ansi:cyan
+      bashMessageBg: "#FFFFFF", // derived
+      memoryBg: "#F0F0F0", // derived
+      thinkingBorder: "#7F7F7F", // subtle = ansi:blackBright
+
+      diffAdded: "#00CD00", // diffAdded = ansi:green
+      diffRemoved: "#CD0000", // diffRemoved = ansi:red
+      diffAddedDimmed: "#00CD00", // diffAdded = ansi:green
+      diffRemovedDimmed: "#CD0000", // diffRemoved = ansi:red
+      diffAddedWord: "#00FF00", // diffAddedWord = ansi:greenBright
+      diffRemovedWord: "#FF0000", // diffRemovedWord = ansi:redBright
+
+      rateLimitFill: "#CDCD00", // rate_limit_fill = ansi:yellow
+      rateLimitEmpty: "#7F7F7F", // rate_limit_empty = ansi:blackBright
+
+      briefLabelYou: "#0000EE", // briefLabelYou = ansi:blue
+      briefLabelAssistant: "#FF0000", // briefLabelAssistant = ansi:redBright
     },
   },
 ];
 
-export const DEFAULT_THEME = THEMES.find((t) => t.name === "Knightfox")!;
+export const DEFAULT_THEME = THEMES.find((t) => t.name === "Dark")!;

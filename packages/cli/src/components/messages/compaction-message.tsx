@@ -34,7 +34,7 @@ export function CompactionMessage({
               ⚡ CONTEXT COMPACTED
             </text>
             <text fg={colors.dimSeparator}>•</text>
-            <text fg="white">{model.replace(/:free$/, "")}</text>
+            <text fg={colors.text}>{model.replace(/:free$/, "")}</text>
           </box>
           <text fg={colors.success} attributes={TextAttributes.BOLD}>
             Local
@@ -43,11 +43,11 @@ export function CompactionMessage({
 
         <box flexDirection="row" gap={1} marginTop={1}>
           <text fg={colors.dimSeparator}>Consolidated:</text>
-          <text fg="white" attributes={TextAttributes.BOLD}>
+          <text fg={colors.text} attributes={TextAttributes.BOLD}>
             {originalMessageCount} messages
           </text>
           <text fg={colors.dimSeparator}>➔</text>
-          <text fg="white" attributes={TextAttributes.BOLD}>
+          <text fg={colors.text} attributes={TextAttributes.BOLD}>
             {summaryCount + preservedCount} messages ({summaryCount} summary +{" "}
             {preservedCount} preserved)
           </text>
@@ -71,7 +71,7 @@ export function CompactionMessage({
           </text>
           {summary.split("\n").map((line, index) => {
             const isHeader = line.startsWith("#");
-            const fgColor = isHeader ? colors.primary : "white";
+            const fgColor = isHeader ? colors.primary : colors.text;
             const attributes = isHeader ? [TextAttributes.BOLD] : [];
             return (
               <text key={index} fg={fgColor} attributes={attributes as any}>

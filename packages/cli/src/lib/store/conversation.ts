@@ -106,7 +106,11 @@ export function loadConversation(
     .where(eq(messageTable.sessionId, sessionId))
     .orderBy(asc(messageTable.ord))
     .all()
-    .filter((row) => row.status !== "error")
+    .filter(
+      (row) =>
+        row.status !== "error" &&
+        !(row.role === "assistant" && Array.isArray(row.parts) && row.parts.length === 0),
+    )
     .map((row) => ({
       id: row.id,
       role: row.role,

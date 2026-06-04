@@ -44,7 +44,7 @@ export async function execute(input: unknown): Promise<unknown> {
     WebSearch.input_schema.parse(input);
 
   // Contract preserved from the prior stub: the two domain filters are mutually
-  // exclusive (matches claude-code's WebSearch).
+  // exclusive (matches the reference TUI's WebSearch).
   if (allowed_domains?.length && blocked_domains?.length) {
     throw new Error(
       "Cannot specify both allowed_domains and blocked_domains in the same request",

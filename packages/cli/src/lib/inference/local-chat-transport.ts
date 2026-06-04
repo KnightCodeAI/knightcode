@@ -29,6 +29,8 @@ export type LocalChatTransportOptions = {
   cwd?: string;
   defaultMode?: ModeType;
   getApiKey?: () => string | undefined;
+  /** Ms spent waiting on the user this turn — excluded from the turn duration. */
+  getTurnPausedMs?: () => number;
 };
 
 /**
@@ -86,8 +88,13 @@ export class LocalChatTransport implements ChatTransport<Message> {
       getApiKey: this.options.getApiKey,
     });
 
+    // Strip empty assistant shells left by failed/interrupted streams — they
+    // have parts:[] and cause validateUIMessages to throw.
+    const cleanedMessages = messages.filter(
+      (m) => !(m.role === "assistant" && m.parts.length === 0),
+    );
     const validated = await validateUIMessages<Message>({
-      messages,
+      messages: cleanedMessages,
       tools: tools as never,
     });
     const modelMessages = await convertToModelMessages(validated, {
@@ -95,6 +102,13 @@ export class LocalChatTransport implements ChatTransport<Message> {
     });
 
     const startTime = Date.now();
+    // Anchor turn timing to the user's submit, not this segment's start — a turn
+    // spans multiple streamText calls (one per tool-loop round), so per-call
+    // timing would reset on every thinking→tool→text transition. The most recent
+    // user message carries submittedAt; fall back to this call's start.
+    const turnStartMs =
+      messages.findLast((m) => m.role === "user")?.metadata?.submittedAt ??
+      startTime;
     let accumulatedUsage: LanguageModelUsage | null = null;
 
     const result = streamText({
@@ -143,10 +157,11 @@ export class LocalChatTransport implements ChatTransport<Message> {
       messageMetadata: ({ part }) => {
         if (part.type === "start") return { mode, model: modelId };
         if (part.type !== "finish") return undefined;
+        const pausedMs = this.options.getTurnPausedMs?.() ?? 0;
         return {
           mode,
           model: modelId,
-          durationMs: Date.now() - startTime,
+          durationMs: Math.max(0, Date.now() - turnStartMs - pausedMs),
           ...(accumulatedUsage ? { usage: accumulatedUsage } : {}),
         };
       },

@@ -3,6 +3,8 @@ import { TextAttributes } from "@opentui/core";
 import { usePromptConfig } from "../providers/prompt-config";
 import { useTheme } from "../providers/theme";
 import type { ThemeColors } from "../providers/theme/theme";
+import { formatContextWindow, type TokenStats } from "../lib/ui/status-format";
+import { EFFORT_GLYPH } from "../lib/ui/figures";
 
 function getReasoningColor(level: string, colors: ThemeColors): string {
   switch (level) {
@@ -19,107 +21,68 @@ function getReasoningColor(level: string, colors: ThemeColors): string {
   }
 }
 
-type Props = {
-  tokenStats?: {
-    inputTokens: number;
-    outputTokens: number;
-    totalCost: number;
-    lastInputTokens?: number;
-  };
-};
-
-export function StatusBar({ tokenStats }: Props) {
+export function StatusBar({ tokenStats }: { tokenStats?: TokenStats }) {
   const { mode, model, reasoningEffort } = usePromptConfig();
   const { colors } = useTheme();
 
   const modelDef = findSupportedChatModel(model);
-  const showReasoning =
-    modelDef?.supportsThinking && reasoningEffort !== "none";
+  const showReasoning = modelDef?.supportsThinking && reasoningEffort !== "none";
   const modelText = model.replace(/:free$/, "");
-
   const contextLimit = modelDef?.contextWindow || 128000;
-  const lastInputTokens = tokenStats?.lastInputTokens;
 
-  let contextRemainingElement = null;
-  if (lastInputTokens !== undefined) {
-    const remaining = Math.max(0, contextLimit - lastInputTokens);
-    const percentLeft = Math.round((remaining / contextLimit) * 100);
-    const remainingK = (remaining / 1000).toFixed(0);
-    const limitK = (contextLimit / 1000).toFixed(0);
+  const ctx = tokenStats
+    ? formatContextWindow(tokenStats.lastInputTokens, contextLimit)
+    : null;
+  const ctxColor =
+    ctx?.severity === "crit"
+      ? colors.error
+      : ctx?.severity === "warn"
+        ? colors.primary
+        : colors.success;
 
-    let percentColor = colors.success;
-    if (percentLeft <= 30) {
-      percentColor = colors.error;
-    } else if (percentLeft <= 50) {
-      percentColor = colors.primary;
-    }
-
-    contextRemainingElement = (
-      <>
-        <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-          •
-        </text>
-        <text fg={colors.dimSeparator}>ctx: </text>
-        <text fg={percentColor}>{percentLeft}%</text>
-        <text fg={colors.dimSeparator}>
-          ({remainingK}k/{limitK}k left)
-        </text>
-      </>
-    );
-  }
+  const sep = (
+    <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
+      •
+    </text>
+  );
 
   return (
     <box flexDirection="row" gap={1} width="100%">
-      <box flexDirection="row" gap={1}>
-        <text
-          fg={
-            mode === Mode.PLAN
-              ? colors.planMode
-              : mode === Mode.AUTO
-                ? colors.autoMode
-                : colors.primary
-          }
-        >
-          {mode === Mode.PLAN ? "Plan" : mode === Mode.AUTO ? "Auto" : "Build"}
-        </text>
+      <text
+        fg={
+          mode === Mode.PLAN
+            ? colors.planMode
+            : mode === Mode.AUTO
+              ? colors.autoMode
+              : colors.primary
+        }
+      >
+        {mode === Mode.PLAN ? "Plan" : mode === Mode.AUTO ? "Auto" : "Build"}
+      </text>
+      <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
+        ›
+      </text>
+      <text>{modelText}</text>
 
-        <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-          ›
-        </text>
-        <text>{modelText}</text>
-        {showReasoning && (
-          <>
-            <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-              •
-            </text>
-            <text fg={getReasoningColor(reasoningEffort, colors)}>
-              ✦ {reasoningEffort}
-            </text>
-          </>
-        )}
+      {showReasoning ? (
+        <>
+          {sep}
+          <text fg={getReasoningColor(reasoningEffort, colors)}>
+            {EFFORT_GLYPH[reasoningEffort]} {reasoningEffort}
+          </text>
+        </>
+      ) : null}
 
-        {tokenStats &&
-          (tokenStats.inputTokens > 0 || tokenStats.outputTokens > 0) && (
-            <>
-              <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-                •
-              </text>
-              <text fg={colors.info}>
-                {tokenStats.totalCost > 0
-                  ? `$${tokenStats.totalCost.toFixed(4)}`
-                  : "Free"}{" "}
-                (
-                {(
-                  (tokenStats.inputTokens + tokenStats.outputTokens) /
-                  1000
-                ).toFixed(1)}
-                k tkn)
-              </text>
-            </>
-          )}
-
-        {contextRemainingElement}
-      </box>
+      {ctx ? (
+        <>
+          {sep}
+          <text fg={colors.dimSeparator}>ctx: </text>
+          <text fg={ctxColor}>{ctx.percentLeft}%</text>
+          <text fg={colors.dimSeparator}>
+            ({ctx.remainingK}k/{ctx.limitK}k left)
+          </text>
+        </>
+      ) : null}
     </box>
   );
 }

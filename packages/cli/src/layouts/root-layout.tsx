@@ -6,6 +6,7 @@ import { PromptConfigProvider } from "../providers/prompt-config";
 import { ThemeProvider } from "../providers/theme";
 import { ToastProvider } from "../providers/toast";
 import { TodoProvider } from "../providers/todo";
+import { VerboseProvider } from "../providers/verbose";
 import { OnboardingWizard } from "../components/onboarding/onboarding-wizard";
 import { ThemedRoot } from "./themed-root";
 
@@ -28,9 +29,11 @@ export function RootLayout() {
             <PromptConfigProvider>
               <TodoProvider>
                 <OnboardingProvider>
-                  <ThemedRoot>
-                    <RoutedContent />
-                  </ThemedRoot>
+                  <VerboseProvider>
+                    <ThemedRoot>
+                      <RoutedContent />
+                    </ThemedRoot>
+                  </VerboseProvider>
                 </OnboardingProvider>
               </TodoProvider>
             </PromptConfigProvider>

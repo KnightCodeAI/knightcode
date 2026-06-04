@@ -112,7 +112,9 @@ export async function compactConversation(
 
   const tools = getToolContracts(mode);
   const validated = await validateUIMessages({
-    messages: messages as any[],
+    messages: (messages as any[]).filter(
+      (m) => !(m.role === "assistant" && Array.isArray(m.parts) && m.parts.length === 0),
+    ),
     tools: tools as any,
   });
 

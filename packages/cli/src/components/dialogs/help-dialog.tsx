@@ -4,12 +4,14 @@ import { useDialog } from "../../providers/dialogs";
 import { useKeyboard } from "@opentui/react";
 import { getFilteredCommands } from "../command-menu/filter-commmands";
 import { useKeyboardLayer } from "../../providers/keyboard-layer";
+import { useTheme } from "../../providers/theme";
 
 const MAX_VISIBLE_HELP_ITEMS = 10;
 
 export function HelpDialogContent() {
   const { close } = useDialog();
   const { isTopLayer } = useKeyboardLayer();
+  const { colors } = useTheme();
   const [query, setQuery] = useState("");
   const [scrollTop, setScrollTop] = useState(0);
   const scrollRef = useRef<ScrollBoxRenderable>(null);
@@ -65,7 +67,7 @@ export function HelpDialogContent() {
   return (
     <box flexDirection="column" gap={1} width="100%">
       <box flexDirection="row" gap={1}>
-        <text fg="gray">Search:</text>
+        <text fg={colors.dimSeparator}>Search:</text>
         <text>{query || " "}</text>
       </box>
       {filtered.length === 0 ? (
@@ -84,14 +86,14 @@ export function HelpDialogContent() {
               overflow="hidden"
             >
               <box width={18} flexShrink={0}>
-                <text fg="cyan">{cmd.value}</text>
+                <text fg={colors.info}>{cmd.value}</text>
               </box>
               <text attributes={TextAttributes.DIM}>{cmd.description}</text>
             </box>
           ))}
         </scrollbox>
       )}
-      <text attributes={TextAttributes.DIM} fg="gray">
+      <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
         Type to filter • [↑/↓] Scroll • [Esc] Close
       </text>
     </box>

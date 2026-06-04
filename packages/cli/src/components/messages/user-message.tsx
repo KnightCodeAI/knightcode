@@ -1,42 +1,27 @@
-import { type ModeType, Mode } from "@knightcode/shared";
 import { useTheme } from "../../providers/theme";
-import { EmptyBorder } from "../utils/border";
 
 type Props = {
   message: string;
-  mode: ModeType;
 };
 
-export function UserMessage({ message, mode }: Props) {
+/**
+ * The user's submitted prompt, echoed the reference TUI-style: a full-width
+ * highlighted bar with a `>` prompt marker.
+ */
+export function UserMessage({ message }: Props) {
   const { colors } = useTheme();
 
   return (
-    <box width="100%" alignItems="stretch">
-      <box
-        border={["left"]}
-        borderColor={
-          mode === Mode.PLAN
-            ? colors.planMode
-            : mode === Mode.AUTO
-              ? colors.autoMode
-              : colors.primary
-        }
-        width="100%"
-        customBorderChars={{
-          ...EmptyBorder,
-          vertical: "┃",
-          bottomLeft: "╹",
-        }}
-      >
-        <box
-          justifyContent="center"
-          paddingX={2}
-          paddingY={1}
-          backgroundColor={colors.surface}
-          width="100%"
-        >
-          <text>{message}</text>
-        </box>
+    <box
+      width="100%"
+      backgroundColor={colors.surface}
+      flexDirection="row"
+      paddingX={1}
+      marginTop={1}
+    >
+      <text fg={colors.dimSeparator}>{"> "}</text>
+      <box flexGrow={1} flexShrink={1}>
+        <text>{message}</text>
       </box>
     </box>
   );

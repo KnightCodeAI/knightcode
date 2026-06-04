@@ -3,12 +3,14 @@ import { type InputRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useDialog } from "../../providers/dialogs";
 import { useToast } from "../../providers/toast";
+import { useTheme } from "../../providers/theme";
 import { join } from "path";
 import { appendFileSync, existsSync, writeFileSync } from "fs";
 
 export function MemoryDialogContent() {
   const dialog = useDialog();
   const toast = useToast();
+  const { colors } = useTheme();
   const inputRef = useRef<InputRenderable>(null);
 
   const handleSubmit = useCallback(() => {
@@ -60,8 +62,8 @@ export function MemoryDialogContent() {
         focused
       />
       <box flexDirection="row" gap={2} marginTop={1}>
-        <text fg="green">[Enter] Submit</text>
-        <text fg="gray">[Esc] Cancel</text>
+        <text fg={colors.success}>[Enter] Submit</text>
+        <text fg={colors.dimSeparator}>[Esc] Cancel</text>
       </box>
     </box>
   );

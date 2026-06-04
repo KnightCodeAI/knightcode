@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { type InputRenderable, TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useToast } from "../../providers/toast";
+import { useTheme } from "../../providers/theme";
 import {
   loadHooks,
   addHook,
@@ -52,6 +53,7 @@ function getEventHooks(
 
 export function HooksDialogContent() {
   const toast = useToast();
+  const { colors } = useTheme();
   const matcherRef = useRef<InputRenderable>(null);
   const commandRef = useRef<InputRenderable>(null);
   const [hooks, setHooks] = useState(() => loadHooks());
@@ -152,12 +154,12 @@ export function HooksDialogContent() {
     <box flexDirection="column" gap={1} width="100%">
       {/* Event header — single line */}
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg="gray">◀</text>
-        <text fg="cyan" attributes={TextAttributes.BOLD}>
+        <text fg={colors.dimSeparator}>◀</text>
+        <text fg={colors.info} attributes={TextAttributes.BOLD}>
           {activeEvent}
         </text>
-        <text fg="gray">▶</text>
-        <text fg="gray" attributes={TextAttributes.DIM}>
+        <text fg={colors.dimSeparator}>▶</text>
+        <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
           {" "}
           {EVENT_DESC[activeEvent]}
         </text>
@@ -166,7 +168,7 @@ export function HooksDialogContent() {
       {/* Hook list */}
       <box flexDirection="column">
         {eventHooks.length === 0 ? (
-          <text fg="gray" attributes={TextAttributes.DIM}>
+          <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
             {" "}
             no hooks
           </text>
@@ -179,12 +181,16 @@ export function HooksDialogContent() {
                 flexDirection="row"
                 gap={2}
               >
-                <text fg={sel ? "yellow" : "gray"}>{sel ? "▶" : " "}</text>
+                <text fg={sel ? colors.warning : colors.dimSeparator}>
+                  {sel ? "▶" : " "}
+                </text>
                 <box width={12} flexShrink={0}>
-                  <text fg={sel ? "yellow" : "cyan"}>{item.matcher}</text>
+                  <text fg={sel ? colors.warning : colors.info}>
+                    {item.matcher}
+                  </text>
                 </box>
                 <text
-                  fg={sel ? "white" : undefined}
+                  fg={sel ? colors.text : undefined}
                   attributes={sel ? TextAttributes.BOLD : TextAttributes.DIM}
                 >
                   {item.command}
@@ -196,7 +202,7 @@ export function HooksDialogContent() {
       </box>
 
       {/* Divider */}
-      <text fg="gray" attributes={TextAttributes.DIM}>
+      <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
         ──────────────────────────
       </text>
 
@@ -216,11 +222,11 @@ export function HooksDialogContent() {
 
       {/* Footer */}
       {selectedIdx === null ? (
-        <text attributes={TextAttributes.DIM} fg="gray">
+        <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
           [Enter] add · [Tab] field · [←/→] event · [↑] select · [Esc] close
         </text>
       ) : (
-        <text attributes={TextAttributes.DIM} fg="gray">
+        <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
           [d] delete · [↑/↓] navigate · [Esc] back
         </text>
       )}

@@ -1,6 +1,7 @@
 import type { SupportedChatModelId } from "@knightcode/shared";
 import { useCallback } from "react";
 import { useDialog } from "../../providers/dialogs";
+import { useTheme } from "../../providers/theme";
 import { DialogSearchList } from "../dialog-search-list";
 
 type ModelsDialogContentProps = {
@@ -15,6 +16,7 @@ export const ModelsDialogContent = ({
   onSelectModel,
 }: ModelsDialogContentProps) => {
   const dialog = useDialog();
+  const { colors } = useTheme();
 
   const handleSelect = useCallback(
     (modelId: SupportedChatModelId) => {
@@ -37,7 +39,7 @@ export const ModelsDialogContent = ({
         modelId.toLowerCase().includes(query.toLowerCase())
       }
       renderItem={(modelId, isSelected) => (
-        <text selectable={false} fg={isSelected ? "black" : "white"}>
+        <text selectable={false} fg={isSelected ? colors.inverseText : colors.text}>
           {modelId}
         </text>
       )}

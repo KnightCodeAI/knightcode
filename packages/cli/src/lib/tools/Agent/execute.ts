@@ -1,9 +1,7 @@
 import {
   Agent,
   ALL_TOOL_NAMES,
-  DEFAULT_CHAT_MODEL_ID,
   getToolContractsByNames,
-  resolveModelAlias,
   type ModeType,
   type KnightcodeTool,
 } from "@knightcode/shared";
@@ -12,6 +10,7 @@ import { randomUUID } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { resolveModel } from "../../inference/resolve-model";
+import { resolveSubagentModel } from "../../inference/resolve-subagent-model";
 import { loadAgents, getAgent, resolveAgentTools } from "../../agents/loader";
 import { DEFAULT_AGENT_TYPE } from "../../agents/types";
 import { runSubagentLoop, type SubagentStepResult } from "./run-subagent";
@@ -36,6 +35,7 @@ type AgentCtx = {
     toolName: string;
     input: unknown;
   }) => Promise<boolean>;
+  modelOverride?: string;
 };
 
 export async function execute(input: unknown, ctx: AgentCtx): Promise<unknown> {
@@ -58,12 +58,11 @@ export async function execute(input: unknown, ctx: AgentCtx): Promise<unknown> {
   const toolNames = resolveAgentTools(agent, [...ALL_TOOL_NAMES]).filter(
     (n) => n !== "Agent",
   );
-  const resolvedModel =
-    (model && resolveModelAlias(model)) ||
-    (agent.model &&
-      agent.model !== "inherit" &&
-      resolveModelAlias(agent.model)) ||
-    DEFAULT_CHAT_MODEL_ID;
+  const resolvedModel = resolveSubagentModel({
+    override: ctx.modelOverride,
+    aliasArg: model,
+    agentModel: agent.model,
+  });
   const mode: ModeType = "BUILD";
   const maxTurns = agent.maxTurns ?? 25;
 

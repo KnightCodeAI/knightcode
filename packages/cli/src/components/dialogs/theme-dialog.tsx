@@ -46,7 +46,7 @@ export const ThemeDialogContent = () => {
         t.name.toLowerCase().includes(query.toLowerCase())
       }
       renderItem={(theme, isSelected) => (
-        <text selectable={false} fg={isSelected ? colors.background : "white"}>
+        <text selectable={false} fg={isSelected ? colors.inverseText : colors.text}>
           {theme.name === originalThemeRef.current.name
             ? "\u0020\u2022\u0020"
             : "\u0020\u0020\u0020"}

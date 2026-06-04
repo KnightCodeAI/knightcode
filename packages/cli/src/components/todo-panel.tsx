@@ -14,14 +14,17 @@ function statusIcon(status: TodoItem["status"]): string {
   }
 }
 
-function statusColor(status: TodoItem["status"]): string {
+function statusColor(
+  status: TodoItem["status"],
+  colors: ReturnType<typeof useTheme>["colors"],
+): string {
   switch (status) {
     case "completed":
-      return "green";
+      return colors.success;
     case "in_progress":
-      return "yellow";
+      return colors.warning;
     case "pending":
-      return "gray";
+      return colors.dimSeparator;
   }
 }
 
@@ -58,10 +61,10 @@ export function TodoPanel() {
           <text attributes={TextAttributes.BOLD} fg={colors.primary}>
             Progress
           </text>
-          <text fg="gray">
+          <text fg={colors.dimSeparator}>
             ({completed}/{total})
           </text>
-          <text fg="gray" attributes={TextAttributes.DIM}>
+          <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
             [ctrl+t to {isExpanded ? "collapse" : "expand"}]
           </text>
         </box>
@@ -72,11 +75,11 @@ export function TodoPanel() {
         <box flexDirection="column" gap={0} marginTop={0}>
           {items.map((item) => (
             <box key={item.id} flexDirection="row" gap={1} height={1}>
-              <text fg={statusColor(item.status)}>
+              <text fg={statusColor(item.status, colors)}>
                 {statusIcon(item.status)}
               </text>
               <text
-                fg={item.status === "completed" ? "gray" : "white"}
+                fg={item.status === "completed" ? colors.dimSeparator : colors.text}
                 attributes={
                   item.status === "completed" ? TextAttributes.DIM : undefined
                 }

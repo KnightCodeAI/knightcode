@@ -38,6 +38,8 @@ export type ChatMessageMetadata = {
   mode?: ModeType;
   model?: SupportedChatModelId | string;
   reasoningEffort?: ReasoningEffortLevel;
+  /** Wall-clock ms when the user submitted this prompt; anchors turn timing. */
+  submittedAt?: number;
   durationMs?: number;
   usage?: LanguageModelUsage;
   isCompaction?: boolean;
@@ -65,6 +67,7 @@ export type PendingConfirmation = {
     input: any;
   };
   mode: ModeType;
+  modelOverride?: SupportedChatModelId;
 };
 
 export function useChat(
@@ -87,6 +90,16 @@ export function useChat(
   );
   const [isCompacting, setIsCompacting] = useState(false);
   const isCompactingRef = useRef(false);
+  // Turn-timer pausing: while the assistant waits on the user (a permission
+  // prompt or AskUserQuestion), the elapsed clock freezes — matching the reference TUI,
+  // so "thinking" time excludes the human's decision time.
+  const turnPausedMsRef = useRef(0);
+  const pauseStartRef = useRef<number | null>(null);
+  const getTurnPausedMs = useCallback(() => {
+    const live =
+      pauseStartRef.current !== null ? Date.now() - pauseStartRef.current : 0;
+    return turnPausedMsRef.current + live;
+  }, []);
   const { setItems: setTodoItems } = useTodo();
   const todoRef = useRef(setTodoItems);
   todoRef.current = setTodoItems;
@@ -101,8 +114,24 @@ export function useChat(
       sessionId,
       cwd: process.cwd(),
       getApiKey: getOpenRouterApiKey,
+      getTurnPausedMs,
     });
-  }, [sessionId]);
+  }, [sessionId, getTurnPausedMs]);
+
+  const requestToolPermission = useCallback(
+    (
+      toolCall: { toolCallId: string; toolName: string; input: any },
+      mode: ModeType,
+    ): Promise<boolean> =>
+      new Promise<boolean>((resolve) => {
+        permissionResolversRef.current.set(toolCall.toolCallId, resolve);
+        setPendingConfirmations((prev) => [
+          ...prev,
+          { toolCallId: toolCall.toolCallId, toolCall, mode },
+        ]);
+      }),
+    [],
+  );
 
   const executeAndOutput = useCallback(
     async (p: PendingConfirmation) => {
@@ -112,6 +141,10 @@ export function useChat(
           p.toolCall.input,
           p.mode,
           sessionId,
+          {
+            modelOverride: p.modelOverride,
+            requestToolPermission: (tc) => requestToolPermission(tc, p.mode),
+          },
         );
         if (
           output &&
@@ -134,11 +167,16 @@ export function useChat(
         });
       }
     },
-    [chatRef, sessionId, options?.onModeChange],
+    [chatRef, sessionId, options?.onModeChange, requestToolPermission],
   );
 
   const confirmToolCall = useCallback(
-    async (toolCallId: string, allowed: boolean, always: boolean) => {
+    async (
+      toolCallId: string,
+      allowed: boolean,
+      always: boolean,
+      feedback?: string,
+    ) => {
       const pending = pendingConfirmations.find(
         (c) => c.toolCallId === toolCallId,
       );
@@ -213,11 +251,14 @@ export function useChat(
         if (allowed) {
           await executeAndOutput(pending);
         } else {
+          const guidance = feedback?.trim();
           chatRef.current?.addToolOutput({
             tool: pending.toolCall.toolName as keyof ChatTools,
             toolCallId,
             state: "output-error",
-            errorText: "User rejected the changes",
+            errorText: guidance
+              ? `User declined this change. Guidance: ${guidance}`
+              : "User rejected the changes",
           });
         }
       }
@@ -225,18 +266,14 @@ export function useChat(
     [pendingConfirmations, executeAndOutput, setAlwaysAllowEdits],
   );
 
-  const requestToolPermission = useCallback(
-    (
-      toolCall: { toolCallId: string; toolName: string; input: any },
-      mode: ModeType,
-    ): Promise<boolean> =>
-      new Promise<boolean>((resolve) => {
-        permissionResolversRef.current.set(toolCall.toolCallId, resolve);
-        setPendingConfirmations((prev) => [
-          ...prev,
-          { toolCallId: toolCall.toolCallId, toolCall, mode },
-        ]);
-      }),
+  const setConfirmationModelOverride = useCallback(
+    (toolCallId: string, modelId: SupportedChatModelId | undefined) => {
+      setPendingConfirmations((prev) =>
+        prev.map((c) =>
+          c.toolCallId === toolCallId ? { ...c, modelOverride: modelId } : c,
+        ),
+      );
+    },
     [],
   );
 
@@ -836,6 +873,14 @@ export function useChat(
         return;
       }
 
+      if (toolCall.toolName === "Agent" && mode !== "AUTO") {
+        setPendingConfirmations((prev) => [
+          ...prev,
+          { toolCallId: toolCall.toolCallId, toolCall, mode },
+        ]);
+        return;
+      }
+
       void executeLocalTool(
         toolCall.toolName,
         toolCall.input,
@@ -881,6 +926,17 @@ export function useChat(
   });
   chatRef.current = chat;
 
+  // Freeze the turn clock whenever a confirmation prompt is up, and bank the
+  // waited time once it clears.
+  useEffect(() => {
+    if (pendingConfirmations.length > 0) {
+      if (pauseStartRef.current === null) pauseStartRef.current = Date.now();
+    } else if (pauseStartRef.current !== null) {
+      turnPausedMsRef.current += Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+    }
+  }, [pendingConfirmations.length]);
+
   // Flush background-agent notifications only when the main chat is idle
   // (priority-"later" semantics): never interrupt an active stream or a pending
   // permission prompt. One notification per idle tick; extras flush on the next.
@@ -893,12 +949,22 @@ export function useChat(
     void chat.sendMessage({ text: next });
   }, [chat.status, pendingConfirmations.length]);
 
+  // Start of the in-flight turn (the latest user prompt), so the working
+  // indicator can show one continuous elapsed time across every tool-loop round
+  // instead of restarting on each thinking→tool→text transition.
+  const activeTurnStartMs = chat.messages.findLast(
+    (m) => m.role === "user",
+  )?.metadata?.submittedAt;
+
   return {
     messages: chat.messages,
     status: chat.status,
     error: chat.error,
+    activeTurnStartMs,
+    getTurnPausedMs,
     pendingConfirmations,
     confirmToolCall,
+    setConfirmationModelOverride,
     requestToolPermission,
     answerQuestion,
     compact: () => compactHistory(true),
@@ -932,6 +998,9 @@ export function useChat(
       }
 
       toolLoopCountsRef.current.clear();
+      // New turn → reset the pause accumulator so timing starts fresh.
+      turnPausedMsRef.current = 0;
+      pauseStartRef.current = null;
       await compactHistory(false, params.model);
       return chat.sendMessage({
         text: params.userText,
@@ -939,6 +1008,7 @@ export function useChat(
           mode: params.mode,
           model: params.model,
           reasoningEffort: params.reasoningEffort,
+          submittedAt: Date.now(),
           ...(params.commandProgressMessage
             ? { commandProgressMessage: params.commandProgressMessage }
             : {}),

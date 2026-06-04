@@ -151,6 +151,11 @@ export function DialogSearchList<T>({
                 }}
                 onMouseDown={() => onSelect(item)}
               >
+                <box width={2} alignItems="center">
+                  <text fg={isSelected ? colors.primary : undefined}>
+                    {isSelected ? "❯" : " "}
+                  </text>
+                </box>
                 {renderItem(item, isSelected)}
               </box>
             );
