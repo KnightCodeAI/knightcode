@@ -24,7 +24,6 @@ export function useStall(
   thresholdMs = 3000,
 ): boolean {
   const lastChange = useRef(Date.now());
-  const prevSignal = useRef(signal);
   const [, force] = useState(0);
 
   // Re-evaluate on a slow tick; also pin the clock to now while a tool is active.
@@ -38,7 +37,6 @@ export function useStall(
 
   // Track signal changes without mutating refs during render.
   useEffect(() => {
-    prevSignal.current = signal;
     lastChange.current = Date.now();
   }, [signal]);
 

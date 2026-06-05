@@ -28,7 +28,7 @@ export function splitMarkdownBlocks(md: string): MarkdownBlock[] {
       const lang = open[1] ?? "";
       const code: string[] = [];
       i++;
-      while (i < lines.length && !/^```\s*$/.test(lines[i]!)) {
+      while (i < lines.length && !/^ {0,3}```\s*$/.test(lines[i]!)) {
         code.push(lines[i]!);
         i++;
       }
