@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { TextAttributes } from "@opentui/core";
 import { getSessionModifiedFiles } from "../../lib/tools";
+import { useTheme } from "../../providers/theme";
 
 type Props = {
   sessionId: string;
 };
 
 export function FilesDialogContent({ sessionId }: Props) {
+  const { colors } = useTheme();
   const [files, setFiles] = useState<string[]>([]);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export function FilesDialogContent({ sessionId }: Props) {
       </text>
       {files.map((file) => (
         <box key={file} flexDirection="row" gap={1} paddingX={1}>
-          <text fg="green">•</text>
+          <text fg={colors.success}>•</text>
           <text>{file}</text>
         </box>
       ))}

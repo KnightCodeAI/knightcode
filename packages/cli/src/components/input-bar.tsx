@@ -27,7 +27,6 @@ import { CommandMenu } from "./command-menu";
 import type { Command } from "./command-menu/types";
 import { useCommandMenu } from "./command-menu/use-command-menu";
 import { StatusBar } from "./status-bar";
-import { EmptyBorder } from "./utils/border";
 
 const MAX_VISIBLE_MENTIONS = 8;
 const CURRENT_DIRECTORY = process.cwd();
@@ -298,6 +297,8 @@ function FileMentionMenu({
     >
       {candidates.map((candidate, index) => {
         const isSelected = index === selectedIndex;
+        const fg = isSelected ? colors.primary : undefined;
+        const attrs = isSelected ? undefined : TextAttributes.DIM;
 
         return (
           <box
@@ -306,18 +307,22 @@ function FileMentionMenu({
             paddingX={1}
             height={1}
             overflow="hidden"
-            backgroundColor={isSelected ? colors.selection : colors.surface}
             onMouseMove={() => onSelect(index)}
             onMouseDown={() => onExecute(index)}
           >
+            <box width={2} flexShrink={0}>
+              <text selectable={false} fg={fg} attributes={attrs}>
+                +
+              </text>
+            </box>
             <box flexGrow={1} flexShrink={1} overflow="hidden">
-              <text selectable={false} fg={isSelected ? "black" : "white"}>
+              <text selectable={false} fg={fg} attributes={attrs}>
                 {candidate.path}
               </text>
             </box>
 
             <box width={8} alignItems="flex-end" flexShrink={0}>
-              <text selectable={false} fg={isSelected ? "black" : "gray"}>
+              <text selectable={false} fg={fg} attributes={attrs}>
                 {candidate.kind === "directory" ? "Folder" : "File"}
               </text>
             </box>
@@ -689,89 +694,88 @@ export function InputBar({
     return () => setResponder("base", null);
   }, [disabled, setResponder]);
 
+  const modeColor =
+    mode === Mode.PLAN
+      ? colors.planMode
+      : mode === Mode.AUTO
+        ? colors.autoMode
+        : colors.primary;
+  // the reference TUI's prompt box is a subtle grey border by default; only Plan/Auto
+  // tint it. The caret keeps the brand/mode colour.
+  const borderColor = mode === Mode.BUILD ? colors.promptBorder : modeColor;
+
   return (
-    <box width="100%" alignItems="center">
+    <box width="100%" flexDirection="column">
       <box
-        border={["left"]}
-        borderColor={
-          mode === Mode.PLAN
-            ? colors.planMode
-            : mode === Mode.AUTO
-              ? colors.autoMode
-              : colors.primary
-        }
-        customBorderChars={{
-          ...EmptyBorder,
-          vertical: "┃",
-          bottomLeft: "╹",
-        }}
+        position="relative"
+        border={["top", "bottom"]}
+        borderColor={borderColor}
         width="100%"
+        flexDirection="column"
+        paddingX={1}
       >
-        <box
-          position="relative"
-          justifyContent="center"
-          paddingX={2}
-          paddingY={1}
-          backgroundColor={colors.surface}
-          width="100%"
-          gap={1}
-        >
-          {showCommandMenu && (
-            <box
-              position="absolute"
-              bottom="100%"
-              left={0}
-              width="100%"
-              backgroundColor={colors.surface}
-              zIndex={10}
-            >
-              <CommandMenu
-                query={commandQuery}
-                selectedIndex={selectedIndex}
-                scrollRef={scrollRef}
-                onSelect={setSelectedIndex}
-                onExecute={handleCommandExecute}
-              />
-            </box>
-          )}
-          {!showCommandMenu && showMentionMenu && (
-            <box
-              position="absolute"
-              bottom="100%"
-              left={0}
-              width="100%"
-              backgroundColor={colors.surface}
-              zIndex={10}
-            >
-              <FileMentionMenu
-                candidates={mentionCandidates}
-                selectedIndex={mentionSelectedIndex}
-                scrollRef={mentionScrollRef}
-                onSelect={setMentionSelectedIndex}
-                onExecute={handleMentionExecute}
-              />
-            </box>
-          )}
-          <textarea
-            ref={textareaRef}
-            focused={
-              !disabled &&
-              (isTopLayer("base") ||
-                isTopLayer("command") ||
-                isTopLayer("mention"))
-            }
-            keyBindings={TEXTAREA_KEY_BINDINGS}
-            onContentChange={handleTextareaContentChange}
-            placeholder={
-              isCompacting
-                ? "Compacting context... please wait"
-                : disabled
-                  ? "Awaiting confirmation (y/n/a)..."
-                  : `Ask anything... "Fix a bug in the database"`
-            }
-          />
-          <StatusBar tokenStats={tokenStats} />
+        {showCommandMenu && (
+          <box
+            position="absolute"
+            bottom="100%"
+            left={0}
+            width="100%"
+            backgroundColor={colors.surface}
+            zIndex={10}
+          >
+            <CommandMenu
+              query={commandQuery}
+              selectedIndex={selectedIndex}
+              scrollRef={scrollRef}
+              onSelect={setSelectedIndex}
+              onExecute={handleCommandExecute}
+            />
+          </box>
+        )}
+        {!showCommandMenu && showMentionMenu && (
+          <box
+            position="absolute"
+            bottom="100%"
+            left={0}
+            width="100%"
+            backgroundColor={colors.surface}
+            zIndex={10}
+          >
+            <FileMentionMenu
+              candidates={mentionCandidates}
+              selectedIndex={mentionSelectedIndex}
+              scrollRef={mentionScrollRef}
+              onSelect={setMentionSelectedIndex}
+              onExecute={handleMentionExecute}
+            />
+          </box>
+        )}
+        <box flexDirection="row" alignItems="flex-start" width="100%">
+          <text fg={modeColor}>❯ </text>
+          <box flexGrow={1} flexShrink={1}>
+            <textarea
+              ref={textareaRef}
+              focused={
+                !disabled &&
+                (isTopLayer("base") ||
+                  isTopLayer("command") ||
+                  isTopLayer("mention"))
+              }
+              keyBindings={TEXTAREA_KEY_BINDINGS}
+              onContentChange={handleTextareaContentChange}
+              placeholder={
+                isCompacting
+                  ? "Compacting context... please wait"
+                  : disabled
+                    ? "Choose an option above (↑/↓ · enter · esc)…"
+                    : `Ask anything... "Fix a bug in the database"`
+              }
+            />
+          </box>
         </box>
+      </box>
+      <box paddingX={1} width="100%">
+        <StatusBar tokenStats={tokenStats} />
       </box>
     </box>
   );

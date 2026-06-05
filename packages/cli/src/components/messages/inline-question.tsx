@@ -89,19 +89,15 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
     [questions, states],
   );
 
-  const hasPreview = useMemo(() => {
-    if (!currentQuestion) return false;
-    return currentQuestion.options.some((o) => !!o.preview);
-  }, [currentQuestion]);
-
+  // The AskUserQuestion tool always provides an "Other" escape hatch, even when
+  // options carry previews — so it's appended unconditionally.
   const allOptions = useMemo<QuestionOption[]>(() => {
     if (!currentQuestion) return [];
-    if (hasPreview) return currentQuestion.options;
     return [
       ...currentQuestion.options,
       { label: "Other (write a custom answer)" },
     ];
-  }, [currentQuestion, hasPreview]);
+  }, [currentQuestion]);
 
   const focusedOption = allOptions[optionIndex];
   const previewText = focusedOption?.preview;
@@ -233,7 +229,7 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
   return (
     <box
       border={["top", "bottom", "left", "right"]}
-      borderColor="yellow"
+      borderColor={colors.autoMode}
       padding={1}
       flexDirection="column"
       width="100%"
@@ -245,6 +241,8 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
         currentIndex={qIndex}
         inactiveColor={colors.dimSeparator}
         activeBg={colors.selection}
+        textColor={colors.text}
+        inverseColor={colors.inverseText}
       />
 
       {qIndex < questions.length && currentQuestion ? (
@@ -272,27 +270,27 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
       <box flexDirection="row" gap={2} marginTop={1}>
         {isWritingCustom ? (
           <>
-            <text fg="green">[Enter] Submit</text>
-            <text fg="gray">[Esc] Cancel</text>
+            <text fg={colors.success}>[Enter] Submit</text>
+            <text fg={colors.dimSeparator}>[Esc] Cancel</text>
           </>
         ) : qIndex === questions.length ? (
           <>
-            <text fg={allAnswered ? "green" : "gray"}>
+            <text fg={allAnswered ? colors.success : colors.dimSeparator}>
               [Enter]{" "}
               {allAnswered ? "Submit answers" : "Answer all questions first"}
             </text>
-            <text fg="gray">[←] Back</text>
+            <text fg={colors.dimSeparator}>[←] Back</text>
           </>
         ) : (
           <>
-            <text fg="gray">↑↓ Navigate</text>
+            <text fg={colors.dimSeparator}>↑↓ Navigate</text>
             {currentQuestion?.multi_select ? (
-              <text fg="gray">[Space] Toggle</text>
+              <text fg={colors.dimSeparator}>[Space] Toggle</text>
             ) : null}
-            <text fg="green">
+            <text fg={colors.success}>
               [Enter] {currentQuestion?.multi_select ? "Toggle" : "Select"}
             </text>
-            <text fg="gray">[← →] Question</text>
+            <text fg={colors.dimSeparator}>[← →] Question</text>
           </>
         )}
       </box>
@@ -306,29 +304,33 @@ function NavigationBar({
   currentIndex,
   inactiveColor,
   activeBg,
+  textColor,
+  inverseColor,
 }: {
   questions: Question[];
   states: Record<number, PerQuestionState>;
   currentIndex: number;
   inactiveColor: string;
   activeBg: string;
+  textColor: string;
+  inverseColor: string;
 }) {
   return (
     <box flexDirection="row" gap={1} marginBottom={1}>
-      <text fg={currentIndex === 0 ? inactiveColor : "white"}>←</text>
+      <text fg={currentIndex === 0 ? inactiveColor : textColor}>←</text>
       {questions.map((q, i) => {
         const isCurrent = i === currentIndex;
         const checkbox = hasAnswer(states[i]) ? CHECK_ON : CHECK_OFF;
         const display = q.header || `Q${i + 1}`;
         return isCurrent ? (
           <box key={i} backgroundColor={activeBg} paddingX={1}>
-            <text fg="black" attributes={TextAttributes.BOLD}>
+            <text fg={inverseColor} attributes={TextAttributes.BOLD}>
               {checkbox} {display}
             </text>
           </box>
         ) : (
           <box key={i} paddingX={1}>
-            <text fg="white">
+            <text fg={textColor}>
               {checkbox} {display}
             </text>
           </box>
@@ -336,16 +338,16 @@ function NavigationBar({
       })}
       {currentIndex === questions.length ? (
         <box backgroundColor={activeBg} paddingX={1}>
-          <text fg="black" attributes={TextAttributes.BOLD}>
+          <text fg={inverseColor} attributes={TextAttributes.BOLD}>
             ✓ Submit
           </text>
         </box>
       ) : (
         <box paddingX={1}>
-          <text fg="white">✓ Submit</text>
+          <text fg={textColor}>✓ Submit</text>
         </box>
       )}
-      <text fg={currentIndex === questions.length ? inactiveColor : "white"}>
+      <text fg={currentIndex === questions.length ? inactiveColor : textColor}>
         →
       </text>
     </box>
@@ -385,10 +387,10 @@ function QuestionBody({
       <box flexDirection="row" gap={2}>
         {question.header ? (
           <box backgroundColor={colors.dimSeparator} paddingX={1}>
-            <text fg="white">{question.header}</text>
+            <text fg={colors.inverseText}>{question.header}</text>
           </box>
         ) : null}
-        <text fg="white" attributes={TextAttributes.BOLD}>
+        <text fg={colors.text} attributes={TextAttributes.BOLD}>
           {question.question}
         </text>
       </box>
@@ -402,7 +404,7 @@ function QuestionBody({
         >
           {isWritingCustom ? (
             <box flexDirection="column" gap={1}>
-              <text fg="green">Custom answer:</text>
+              <text fg={colors.success}>Custom answer:</text>
               <input
                 ref={customInputRef}
                 placeholder="Type and press Enter…"
@@ -423,12 +425,18 @@ function QuestionBody({
               return (
                 <box key={idx} flexDirection="column" gap={0}>
                   <box flexDirection="row" gap={1}>
-                    <text fg={isFocused ? "green" : "gray"}>
-                      {isFocused ? "› " : "  "}
+                    <text fg={isFocused ? colors.primary : colors.dimSeparator}>
+                      {isFocused ? "❯ " : "  "}
                       {prefix}
                     </text>
                     <text
-                      fg={isFocused ? "green" : isChecked ? "yellow" : "white"}
+                      fg={
+                        isFocused
+                          ? colors.primary
+                          : isChecked
+                            ? colors.success
+                            : undefined
+                      }
                       attributes={isFocused ? TextAttributes.BOLD : undefined}
                     >
                       {opt.label}
@@ -436,7 +444,10 @@ function QuestionBody({
                   </box>
                   {isFocused && opt.description ? (
                     <box paddingLeft={4}>
-                      <text fg="gray" attributes={TextAttributes.DIM}>
+                      <text
+                        fg={colors.dimSeparator}
+                        attributes={TextAttributes.DIM}
+                      >
                         {opt.description}
                       </text>
                     </box>
@@ -446,9 +457,10 @@ function QuestionBody({
             })
           )}
           {state.custom && !isWritingCustom ? (
-            <box marginTop={1}>
-              <text fg="yellow" attributes={TextAttributes.DIM}>
-                Custom: {state.custom}
+            <box marginTop={1} flexDirection="row" gap={1}>
+              <text fg={colors.success}>● Your answer:</text>
+              <text fg={colors.success} attributes={TextAttributes.BOLD}>
+                {state.custom}
               </text>
             </box>
           ) : null}
@@ -462,11 +474,11 @@ function QuestionBody({
             borderColor={colors.dimSeparator}
             paddingX={1}
           >
-            <text fg="gray" attributes={TextAttributes.DIM}>
+            <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
               Preview
             </text>
             {previewText.split("\n").map((line, i) => (
-              <text key={i} fg="white">
+              <text key={i} fg={colors.text}>
                 {line || " "}
               </text>
             ))}
@@ -490,26 +502,38 @@ function SubmitView({
 }) {
   return (
     <box flexDirection="column" marginBottom={1}>
-      <text fg="white" attributes={TextAttributes.BOLD}>
-        Review your answers
-      </text>
+      <text attributes={TextAttributes.BOLD}>Review your answers</text>
       {!allAnswered ? (
         <box marginTop={1}>
-          <text fg="yellow">⚠ You have not answered all questions</text>
+          <text fg={colors.autoMode}>
+            ⚠ You have not answered all questions
+          </text>
         </box>
       ) : null}
       <box flexDirection="column" gap={0} marginTop={1}>
         {questions.map((q, i) => {
-          const a = answerFromState(q, states[i]);
-          const answered = hasAnswer(states[i]);
+          const state = states[i];
+          const a = answerFromState(q, state);
+          const answered = hasAnswer(state);
           const display = Array.isArray(a) ? a.join(", ") : a;
+          const isCustom =
+            !!state?.custom &&
+            (Array.isArray(a) ? a.includes(state.custom) : a === state.custom);
           return (
             <box key={i} flexDirection="column">
-              <text fg="white">• {q.question}</text>
-              <box paddingLeft={2}>
-                <text fg={answered ? "green" : colors.dimSeparator}>
+              <text>• {q.question}</text>
+              <box paddingLeft={2} flexDirection="row" gap={1}>
+                <text fg={answered ? colors.success : colors.dimSeparator}>
                   → {answered ? display : "(no answer yet)"}
                 </text>
+                {isCustom ? (
+                  <text
+                    fg={colors.dimSeparator}
+                    attributes={TextAttributes.DIM}
+                  >
+                    (custom)
+                  </text>
+                ) : null}
               </box>
             </box>
           );

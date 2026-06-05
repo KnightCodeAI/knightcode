@@ -44,6 +44,8 @@ export function CommandMenu({
     );
   }
 
+  // the reference TUI style: the selected row is the accent color (not dim); every
+  // other row is dimmed. No highlight bar, no pointer marker.
   return (
     <scrollbox
       ref={scrollRef}
@@ -52,6 +54,8 @@ export function CommandMenu({
     >
       {filtered.map((cmd, i) => {
         const isSelected = i === selectedIndex;
+        const fg = isSelected ? colors.primary : undefined;
+        const attrs = isSelected ? undefined : TextAttributes.DIM;
 
         return (
           <box
@@ -59,17 +63,16 @@ export function CommandMenu({
             flexDirection="row"
             paddingX={1}
             height={1}
-            backgroundColor={isSelected ? colors.selection : colors.surface}
             onMouseMove={() => onSelect(i)}
             onMouseDown={() => onExecute(i)}
           >
             <box width={COMMAND_COL_WIDTH} flexShrink={0}>
-              <text selectable={false} fg={isSelected ? "black" : "white"}>
+              <text selectable={false} fg={fg} attributes={attrs}>
                 /{cmd.name}
               </text>
             </box>
             <box flexGrow={1} flexShrink={1} overflow="hidden">
-              <text selectable={false} fg={isSelected ? "black" : "gray"}>
+              <text selectable={false} fg={fg} attributes={attrs}>
                 {cmd.description}
               </text>
             </box>

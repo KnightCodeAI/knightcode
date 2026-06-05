@@ -214,7 +214,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 }
               >
                 <text>
-                  {i === modelIndex ? "› " : "  "}
+                  {i === modelIndex ? "❯ " : "  "}
                   {entry.label}
                 </text>
               </box>
@@ -235,7 +235,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 }
               >
                 <text>
-                  {i === providerIndex ? "› " : "  "}
+                  {i === providerIndex ? "❯ " : "  "}
                   {choice.label}
                 </text>
               </box>

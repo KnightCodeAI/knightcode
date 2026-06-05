@@ -1,12 +1,17 @@
-import { Mode, type ModeType } from "@knightcode/shared";
+import type { ModeType } from "@knightcode/shared";
 import { TextAttributes } from "@opentui/core";
-import prettyMs from "pretty-ms";
+import { useState } from "react";
 import type { Message } from "../../hooks/use-chat";
 import { useTheme } from "../../providers/theme";
-import { EmptyBorder } from "../utils/border";
-import { computeLineDiff } from "../../lib/git/diff";
+import { BULLET, THINKING_MARK } from "../../lib/ui/figures";
+import { formatDuration } from "../../lib/ui/format-duration";
+import { pickCompletionVerb } from "../../lib/ui/spinner-verbs";
+import { DiffView } from "./diff-view";
+import { ToolCallView } from "./tool-call-view";
+import { ToolPermissionRequest } from "./tool-permission-request";
 import { InlineQuestion } from "./inline-question";
-import { renderMarkdownLines } from "../../lib/markdown/markdown-renderer";
+import { AgentSpawnConfirm } from "./agent-spawn-confirm";
+import { MarkdownView } from "./markdown-view";
 
 type ClientMessagePart = Message["parts"][number];
 type ToolPart = Extract<
@@ -25,41 +30,22 @@ type Props = {
     toolCallId: string,
     answers: Array<{ question: string; answer: string | string[] }>,
   ) => void;
+  setConfirmationModelOverride?: (
+    toolCallId: string,
+    modelId: import("@knightcode/shared").SupportedChatModelId | undefined,
+  ) => void;
+  confirmToolCall?: (
+    toolCallId: string,
+    approved: boolean,
+    always: boolean,
+    feedback?: string,
+  ) => void;
+  /** toolCallId of the confirmation at the front of the queue (the interactive one). */
+  activePendingId?: string;
 };
-
-function formatToolName(name: string): string {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/^./, (c) => c.toUpperCase());
-}
 
 function isToolPart(part: ClientMessagePart): part is ToolPart {
   return part.type === "dynamic-tool" || part.type.startsWith("tool-");
-}
-
-function formatToolArgs(tc: ToolPart): string {
-  if (!("input" in tc) || tc.input == null) return "";
-  const toolName =
-    tc.type === "dynamic-tool"
-      ? (tc as any).toolName
-      : tc.type.slice("tool-".length);
-
-  if (toolName === "TodoWrite") {
-    const todos = (tc.input as any).todos || [];
-    const completed = todos.filter((i: any) => i.status === "completed").length;
-    return `checklist (${completed}/${todos.length} completed)`;
-  }
-
-  if (typeof tc.input !== "object") return String(tc.input);
-  return Object.values(tc.input)
-    .map((val) => {
-      if (val == null) return "";
-      if (typeof val === "object") {
-        return JSON.stringify(val);
-      }
-      return String(val);
-    })
-    .join(" ");
 }
 
 type PartGroup = {
@@ -88,100 +74,49 @@ function groupConsecutiveParts(parts: ClientMessagePart[]): PartGroup[] {
   return groups;
 }
 
-function MarkdownText({
-  text,
-  defaultFg = "white",
-  isThinking = false,
-}: {
-  text: string;
-  defaultFg?: string;
-  isThinking?: boolean;
-}) {
-  const { colors } = useTheme();
-  const lines = renderMarkdownLines(text);
-
-  function resolveFg(fg: string): string {
-    switch (fg) {
-      case "primary":
-        return colors.primary;
-      case "info":
-        return colors.info;
-      case "thinking":
-        return colors.thinking;
-      case "dim":
-        return colors.dimSeparator;
-      case "code":
-        return isThinking ? defaultFg : colors.info;
-      case "text":
-      default:
-        return defaultFg;
-    }
-  }
-
-  return (
-    <box flexDirection="column" width="100%" gap={0}>
-      {lines.map((line, idx) => {
-        let attributes = TextAttributes.NONE;
-        if (line.bold) attributes |= TextAttributes.BOLD;
-        if (line.dim) attributes |= TextAttributes.DIM;
-
-        if (isThinking && line.fg === "code") {
-          attributes |= TextAttributes.ITALIC | TextAttributes.DIM;
-        }
-
-        return (
-          <text
-            key={idx}
-            fg={resolveFg(line.fg)}
-            attributes={
-              attributes === TextAttributes.NONE ? undefined : attributes
-            }
-          >
-            {line.text || " "}
-          </text>
-        );
-      })}
-    </box>
-  );
-}
-
 export function BotMessage({
   parts,
-  model,
-  mode,
   durationMs,
-  streaming = false,
+  streaming,
   pendingConfirmations = [],
   answerQuestion,
+  setConfirmationModelOverride,
+  confirmToolCall,
+  activePendingId,
 }: Props) {
   const { colors } = useTheme();
+  const [completionVerb] = useState(pickCompletionVerb);
+  const hasContent = parts.some(
+    (p) => p.type === "text" || isToolPart(p) || p.type === "reasoning",
+  );
+  // The trailing text part is the only one still mutating mid-stream; scope the
+  // native markdown streaming mode to it.
+  let lastTextPart: ClientMessagePart | undefined;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i]!.type === "text") {
+      lastTextPart = parts[i];
+      break;
+    }
+  }
+  const showCompletion =
+    !streaming && durationMs != null && durationMs > 0 && hasContent;
   return (
-    <box width="100%" alignItems="stretch">
+    <box width="100%" alignItems="stretch" marginTop={1}>
       {groupConsecutiveParts(parts).map((group, i) => (
         <box key={group.key} width="100%" paddingTop={i === 0 ? 0 : 1}>
           {group.parts.map((part, j) => {
             if (part.type === "reasoning") {
               return (
-                <box
-                  key={`reasoning-${j}`}
-                  border={["left"]}
-                  borderColor={colors.thinkingBorder}
-                  customBorderChars={{
-                    ...EmptyBorder,
-                    vertical: "│",
-                  }}
-                  width="100%"
-                  paddingX={2}
-                  flexDirection="column"
-                >
-                  <text attributes={TextAttributes.DIM}>
-                    <em fg={colors.thinking}>Thinking:</em>
+                <box key={`reasoning-${j}`} width="100%" flexDirection="column">
+                  <text fg={colors.thinking} attributes={TextAttributes.DIM}>
+                    {THINKING_MARK} Thinking…
                   </text>
-                  <MarkdownText
-                    text={part.text}
-                    defaultFg="gray"
-                    isThinking={true}
-                  />
+                  <box flexDirection="row" width="100%">
+                    <text>{"  "}</text>
+                    <box flexGrow={1} flexShrink={1}>
+                      <MarkdownView text={part.text} isThinking />
+                    </box>
+                  </box>
                 </box>
               );
             }
@@ -201,6 +136,7 @@ export function BotMessage({
               const isPending = pendingConfirmations.some(
                 (c) => c.toolCallId === part.toolCallId,
               );
+              const isActivePending = part.toolCallId === activePendingId;
 
               if (isAskUserQuestion) {
                 const input = part.input as any;
@@ -249,11 +185,11 @@ export function BotMessage({
                           flexDirection="column"
                           marginBottom={qi < questions.length - 1 ? 1 : 0}
                         >
-                          <text fg="yellow" attributes={TextAttributes.BOLD}>
+                          <text fg={colors.autoMode} attributes={TextAttributes.BOLD}>
                             Question: {q.question}
                           </text>
                           {part.state === "output-available" && entry ? (
-                            <text fg="green">Answer: {display}</text>
+                            <text fg={colors.success}>Answer: {display}</text>
                           ) : null}
                         </box>
                       );
@@ -267,137 +203,89 @@ export function BotMessage({
                 editInput.old_string !== undefined &&
                 editInput.new_string !== undefined
               ) {
-                const maxChars = 10000;
-                const maxLines = 500;
-                const combinedLength =
-                  editInput.old_string.length + editInput.new_string.length;
-                const combinedLines =
-                  editInput.old_string.split("\n").length +
-                  editInput.new_string.split("\n").length;
-
-                const diffLines =
-                  combinedLength > maxChars || combinedLines > maxLines
-                    ? [
-                        {
-                          type: "unchanged" as const,
-                          content: `[Diff too large to display (${combinedLength} characters, ${combinedLines} lines)]`,
-                        },
-                      ]
-                    : computeLineDiff(editInput.old_string, editInput.new_string);
+                if (isActivePending && confirmToolCall) {
+                  return (
+                    <ToolPermissionRequest
+                      key={part.toolCallId}
+                      toolCallId={part.toolCallId}
+                      toolName="Edit"
+                      input={editInput}
+                      onConfirm={confirmToolCall}
+                    />
+                  );
+                }
                 return (
-                  <box
+                  <DiffView
                     key={part.toolCallId}
-                    border={["top", "bottom", "left", "right"]}
-                    borderColor={isPending ? "yellow" : colors.thinkingBorder}
-                    padding={1}
-                    flexDirection="column"
-                    width="100%"
-                    gap={0}
-                    marginY={1}
-                  >
-                    <box
-                      flexDirection="row"
-                      justifyContent="space-between"
-                      width="100%"
-                    >
-                      <text fg="white">{editInput.file_path || "file"}</text>
-                      {part.state === "output-error" && (
-                        <text fg="red">Failed: {part.errorText}</text>
-                      )}
-                    </box>
-                    <box flexDirection="column" gap={0} marginTop={1}>
-                      {diffLines.map((line, idx) => {
-                        let fg = "white";
-                        let prefix = "  ";
-                        if (line.type === "added") {
-                          fg = "green";
-                          prefix = "+ ";
-                        } else if (line.type === "deleted") {
-                          fg = "red";
-                          prefix = "- ";
-                        } else {
-                          fg = "gray";
-                        }
-                        return (
-                          <text key={idx} fg={fg}>
-                            {prefix}
-                            {line.content}
-                          </text>
-                        );
-                      })}
-                    </box>
-                    {isPending && (
-                      <box flexDirection="column" gap={0} marginTop={1}>
-                        <text fg="yellow" attributes={TextAttributes.BOLD}>
-                          Accept changes? [y] Yes [n] No [a] Always
-                        </text>
-                      </box>
+                    filePath={editInput.file_path || "file"}
+                    oldString={editInput.old_string}
+                    newString={editInput.new_string}
+                    pending={false}
+                    errorText={
+                      part.state === "output-error" ? part.errorText : undefined
+                    }
+                  />
+                );
+              }
+
+              if (isActivePending && toolName === "Agent") {
+                const input = part.input as any;
+                return (
+                  <AgentSpawnConfirm
+                    key={part.toolCallId}
+                    toolCallId={part.toolCallId}
+                    description={String(input?.description ?? "")}
+                    subagentType={String(
+                      input?.subagent_type ?? "general-purpose",
                     )}
-                  </box>
+                    aliasArg={input?.model}
+                    onPickModel={(id) =>
+                      setConfirmationModelOverride?.(part.toolCallId, id)
+                    }
+                  />
                 );
               }
 
               if (
-                isPending &&
+                isActivePending &&
+                confirmToolCall &&
                 (toolName === "Write" || toolName === "Bash")
               ) {
-                const input = part.input as any;
-                const description =
-                  toolName === "Write"
-                    ? `${input?.file_path ?? "file"} (${String(input?.content ?? "").length} chars)`
-                    : (input?.command ?? "");
-
                 return (
-                  <box
+                  <ToolPermissionRequest
                     key={part.toolCallId}
-                    border={["top", "bottom", "left", "right"]}
-                    borderColor="yellow"
-                    padding={1}
-                    flexDirection="column"
-                    width="100%"
-                    gap={0}
-                    marginY={1}
-                  >
-                    <text fg="yellow" attributes={TextAttributes.BOLD}>
-                      Approve {formatToolName(toolName)}?
-                    </text>
-                    <text fg="white">{description}</text>
-                    <text fg="yellow" attributes={TextAttributes.BOLD}>
-                      Accept? [y] Yes [n] No [a] Always
-                    </text>
-                  </box>
+                    toolCallId={part.toolCallId}
+                    toolName={toolName}
+                    input={(part.input as Record<string, unknown>) ?? {}}
+                    onConfirm={confirmToolCall}
+                  />
                 );
               }
 
               return (
-                <box
+                <ToolCallView
                   key={part.toolCallId}
-                  border={["left"]}
-                  borderColor={colors.thinkingBorder}
-                  customBorderChars={{
-                    ...EmptyBorder,
-                    vertical: "│",
-                  }}
-                  width="100%"
-                  paddingX={2}
-                >
-                  <text attributes={TextAttributes.DIM}>
-                    <em fg={colors.info}>{formatToolName(toolName)}:</em>{" "}
-                    {formatToolArgs(part)}
-                    {part.state !== "output-available" &&
-                    part.state !== "output-error"
-                      ? " …"
-                      : ""}
-                    {part.state === "output-error" ? ` ${part.errorText}` : ""}
-                  </text>
-                </box>
+                  toolName={toolName}
+                  input={part.input}
+                  state={part.state}
+                  output={part.output}
+                  errorText={
+                    part.state === "output-error" ? part.errorText : undefined
+                  }
+                />
               );
             }
 
             if (part.type === "text") {
               return (
-                <box key={`text-${j}`} paddingX={3} width="100%">
-                  <MarkdownText text={part.text} />
+                <box key={`text-${j}`} flexDirection="row" width="100%">
+                  <text fg={colors.primary}>{BULLET} </text>
+                  <box flexGrow={1} flexShrink={1}>
+                    <MarkdownView
+                      text={part.text}
+                      streaming={!!streaming && part === lastTextPart}
+                    />
+                  </box>
                 </box>
               );
             }
@@ -406,45 +294,14 @@ export function BotMessage({
           })}
         </box>
       ))}
-
-      <box paddingX={3} paddingY={1} gap={1} width="100%">
-        <box flexDirection="row" gap={2}>
-          <text
-            fg={
-              mode === Mode.PLAN
-                ? colors.planMode
-                : mode === Mode.AUTO
-                  ? colors.autoMode
-                  : colors.primary
-            }
-          >
-            ◉
+      {showCompletion ? (
+        <box flexDirection="row" gap={1} marginTop={1}>
+          <text fg={colors.dimSeparator}>{THINKING_MARK}</text>
+          <text attributes={TextAttributes.DIM}>
+            {completionVerb} for {formatDuration(durationMs!)}
           </text>
-          <box flexDirection="row" gap={1}>
-            <text>
-              {mode === Mode.PLAN
-                ? "Plan"
-                : mode === Mode.AUTO
-                  ? "Auto"
-                  : "Build"}
-            </text>
-            <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-              ›
-            </text>
-            <text attributes={TextAttributes.DIM}>{model}</text>
-            {durationMs != null && (
-              <>
-                <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
-                  ›
-                </text>
-                <text attributes={TextAttributes.DIM}>
-                  {prettyMs(durationMs)}
-                </text>
-              </>
-            )}
-          </box>
         </box>
-      </box>
+      ) : null}
     </box>
   );
 }

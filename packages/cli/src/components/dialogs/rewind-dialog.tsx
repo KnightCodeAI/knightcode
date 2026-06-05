@@ -3,6 +3,7 @@ import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useDialog } from "../../providers/dialogs";
 import { useToast } from "../../providers/toast";
+import { useTheme } from "../../providers/theme";
 
 type Props = {
   rewindMessages: (n: number) => Promise<void>;
@@ -12,6 +13,7 @@ type Props = {
 export function RewindDialogContent({ rewindMessages, maxTurns }: Props) {
   const { close } = useDialog();
   const toast = useToast();
+  const { colors } = useTheme();
   const [turns, setTurns] = useState(1);
 
   useKeyboard((key) => {
@@ -48,15 +50,15 @@ export function RewindDialogContent({ rewindMessages, maxTurns }: Props) {
       </text>
       <box flexDirection="row" gap={2} marginTop={1} alignItems="center">
         <text attributes={TextAttributes.DIM}>Turns to remove:</text>
-        <text fg="cyan" attributes={TextAttributes.BOLD}>
+        <text fg={colors.info} attributes={TextAttributes.BOLD}>
           {turns}
         </text>
         <text attributes={TextAttributes.DIM}>(max {maxTurns})</text>
       </box>
       <box flexDirection="row" gap={2} marginTop={1}>
-        <text fg="gray">[↑/↓] Adjust</text>
-        <text fg="green">[Enter] Confirm</text>
-        <text fg="gray">[Esc] Cancel</text>
+        <text fg={colors.dimSeparator}>[↑/↓] Adjust</text>
+        <text fg={colors.success}>[Enter] Confirm</text>
+        <text fg={colors.dimSeparator}>[Esc] Cancel</text>
       </box>
     </box>
   );

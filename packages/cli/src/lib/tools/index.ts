@@ -52,6 +52,7 @@ type ToolExecutor = (
       toolName: string;
       input: unknown;
     }) => Promise<boolean>;
+    modelOverride?: string;
   },
 ) => Promise<unknown>;
 
@@ -92,6 +93,8 @@ export type ExecuteLocalToolOptions = {
     toolName: string;
     input: unknown;
   }) => Promise<boolean>;
+  /** Per-spawn model override (raw OpenRouter id), consumed by the Agent tool. */
+  modelOverride?: string;
 };
 
 async function executeLocalToolImpl(
@@ -118,6 +121,7 @@ async function executeLocalToolImpl(
     executionRoot: options.cwd ?? process.cwd(),
     sessionId,
     requestToolPermission: options.requestToolPermission,
+    modelOverride: options.modelOverride,
   });
 }
 

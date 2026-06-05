@@ -4,6 +4,7 @@ import { spawnSync } from "child_process";
 import { getOpenRouterApiKey } from "../../lib/credentials";
 import { getStore } from "../../lib/store/client";
 import { listSessions } from "../../lib/store";
+import { useTheme } from "../../providers/theme";
 
 type CheckStatus = "pending" | "ok" | "warn" | "fail";
 
@@ -13,16 +14,19 @@ type Check = {
   detail?: string;
 };
 
-function statusColor(s: CheckStatus): string {
+function statusColor(
+  s: CheckStatus,
+  colors: ReturnType<typeof useTheme>["colors"],
+): string {
   switch (s) {
     case "ok":
-      return "green";
+      return colors.success;
     case "warn":
-      return "yellow";
+      return colors.warning;
     case "fail":
-      return "red";
+      return colors.error;
     default:
-      return "gray";
+      return colors.dimSeparator;
   }
 }
 
@@ -40,6 +44,7 @@ function statusIcon(s: CheckStatus): string {
 }
 
 export function DoctorDialogContent() {
+  const { colors } = useTheme();
   const [checks, setChecks] = useState<Check[]>([
     { label: "OpenRouter API key", status: "pending" },
     { label: "Local store", status: "pending" },
@@ -90,7 +95,9 @@ export function DoctorDialogContent() {
       <text attributes={TextAttributes.BOLD}>Knightcode diagnostics</text>
       {checks.map((check) => (
         <box key={check.label} flexDirection="row" gap={2}>
-          <text fg={statusColor(check.status)}>{statusIcon(check.status)}</text>
+          <text fg={statusColor(check.status, colors)}>
+            {statusIcon(check.status)}
+          </text>
           <box width={22} flexShrink={0}>
             <text>{check.label}</text>
           </box>

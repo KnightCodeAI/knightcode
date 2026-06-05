@@ -1,6 +1,7 @@
 import type { ReasoningEffortLevel } from "@knightcode/shared";
 import { useCallback } from "react";
 import { useDialog } from "../../providers/dialogs";
+import { useTheme } from "../../providers/theme";
 import { DialogSearchList } from "../dialog-search-list";
 
 type ReasoningDialogContentProps = {
@@ -21,6 +22,7 @@ export const ReasoningDialogContent = ({
   onSelectEffort,
 }: ReasoningDialogContentProps) => {
   const dialog = useDialog();
+  const { colors } = useTheme();
 
   const handleSelect = useCallback(
     (effort: ReasoningEffortLevel) => {
@@ -45,7 +47,7 @@ export const ReasoningDialogContent = ({
         if (effort === "none") label = "None (Disable Thinking)";
         if (effort === "max") label = "Max (Extended)";
         return (
-          <text selectable={false} fg={isSelected ? "black" : "white"}>
+          <text selectable={false} fg={isSelected ? colors.inverseText : colors.text}>
             {label}
           </text>
         );

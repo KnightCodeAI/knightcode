@@ -1,9 +1,10 @@
 import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
 import { InputBar } from "./input-bar";
-import { Spinner } from "./spinner";
+import { WorkingIndicator } from "./working-indicator";
 import { TodoPanel } from "./todo-panel";
 import { usePromptConfig } from "../providers/prompt-config";
+import { useVerbose } from "../providers/verbose";
 import type { Message } from "../hooks/use-chat";
 
 type Props = {
@@ -12,6 +13,10 @@ type Props = {
   inputDisabled?: boolean;
   isCompacting?: boolean;
   loading?: boolean;
+  turnStartMs?: number;
+  getPausedMs?: () => number;
+  responseChars?: number;
+  toolActive?: boolean;
   interruptible?: boolean;
   compact?: () => void | Promise<void>;
   clearMessages?: () => Promise<void>;
@@ -33,6 +38,10 @@ export function SessionShell({
   inputDisabled = false,
   isCompacting = false,
   loading = false,
+  turnStartMs,
+  getPausedMs,
+  responseChars,
+  toolActive,
   interruptible = false,
   compact,
   clearMessages,
@@ -43,6 +52,7 @@ export function SessionShell({
   tokenStats,
 }: Props) {
   const { mode } = usePromptConfig();
+  const { verbose } = useVerbose();
   return (
     <box
       flexDirection="column"
@@ -63,6 +73,19 @@ export function SessionShell({
         <box>{children}</box>
       </scrollbox>
       <TodoPanel />
+      {loading || isCompacting ? (
+        <box flexShrink={0} height={1}>
+          <WorkingIndicator
+            mode={mode}
+            startMs={turnStartMs}
+            getPausedMs={getPausedMs}
+            responseChars={responseChars}
+            toolActive={toolActive}
+            interruptible={interruptible}
+            isCompacting={isCompacting}
+          />
+        </box>
+      ) : null}
       <box flexShrink={0}>
         <InputBar
           onSubmit={onSubmit}
@@ -80,28 +103,19 @@ export function SessionShell({
       <box
         flexShrink={0}
         flexDirection="row"
-        justifyContent="space-between"
+        justifyContent="flex-end"
         width="100%"
         height={1}
         gap={2}
         paddingLeft={1}
       >
-        <box flexDirection="row" alignItems="center" gap={2}>
-          {loading ? (
-            <>
-              <Spinner mode={mode} />
-              {isCompacting ? (
-                <text fg="yellow" attributes={TextAttributes.BOLD}>
-                  Compacting context...
-                </text>
-              ) : interruptible ? (
-                <text>esc to interrupt</text>
-              ) : null}
-            </>
-          ) : null}
-        </box>
-
         <box flexDirection="row" gap={3} flexShrink={0} marginLeft="auto">
+          <box flexDirection="row" gap={1}>
+            <text>ctrl+o</text>
+            <text attributes={TextAttributes.DIM}>
+              {verbose ? "collapse" : "expand"}
+            </text>
+          </box>
           <box flexDirection="row" gap={1}>
             <text>tab</text>
             <text attributes={TextAttributes.DIM}>agents</text>

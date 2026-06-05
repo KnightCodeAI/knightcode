@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import type { ModeType } from "@knightcode/shared";
 import type { Message } from "../../hooks/use-chat";
+import { useTheme } from "../../providers/theme";
 import { BotMessage } from "./bot-message";
 
 type Props = {
@@ -28,10 +29,11 @@ export function InterruptedMessage({
   pendingConfirmations,
   answerQuestion,
 }: Props) {
+  const { colors } = useTheme();
   return (
     <box width="100%" flexDirection="column">
       <box paddingX={3} paddingTop={1} paddingBottom={0}>
-        <text fg="yellow" attributes={TextAttributes.DIM}>
+        <text fg={colors.warning} attributes={TextAttributes.DIM}>
           ⚠ interrupted
         </text>
       </box>

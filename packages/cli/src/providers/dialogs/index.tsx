@@ -96,10 +96,12 @@ function Dialog({ currentDialog, close }: DialogProps) {
       onMouseDown={() => close()}
     >
       <box
-        width={Math.min(60, dimensions.width - 4)}
+        width={Math.min(64, dimensions.width - 4)}
         height="auto"
         backgroundColor={colors.dialogSurface}
-        paddingX={4}
+        border={["top", "bottom", "left", "right"]}
+        borderColor={colors.thinkingBorder}
+        paddingX={3}
         paddingY={1}
         flexDirection="column"
         gap={1}
@@ -111,7 +113,9 @@ function Dialog({ currentDialog, close }: DialogProps) {
           alignItems="center"
           justifyContent="space-between"
         >
-          <text attributes={TextAttributes.BOLD}>{title}</text>
+          <text fg={colors.primary} attributes={TextAttributes.BOLD}>
+            {title}
+          </text>
           <text attributes={TextAttributes.DIM} onMouseDown={() => close()}>
             esc
           </text>

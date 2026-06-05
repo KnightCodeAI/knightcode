@@ -55,15 +55,31 @@ function CommandProgressMessage({ message }: { message: string }) {
 
 function ChatMessage({
   msg,
+  streaming,
   pendingConfirmations,
   answerQuestion,
+  setConfirmationModelOverride,
+  confirmToolCall,
+  activePendingId,
 }: {
   msg: Message;
+  streaming: boolean;
   pendingConfirmations: any[];
   answerQuestion: (
     toolCallId: string,
     answers: Array<{ question: string; answer: string | string[] }>,
   ) => void;
+  setConfirmationModelOverride: (
+    toolCallId: string,
+    modelId: SupportedChatModelId | undefined,
+  ) => void;
+  confirmToolCall: (
+    toolCallId: string,
+    approved: boolean,
+    always: boolean,
+    feedback?: string,
+  ) => void;
+  activePendingId?: string;
 }) {
   const text = msg.parts
     .filter((p) => p.type === "text")
@@ -101,7 +117,7 @@ function ChatMessage({
         <CommandProgressMessage message={msg.metadata.commandProgressMessage} />
       );
     }
-    return <UserMessage message={text} mode={msg.metadata?.mode ?? "BUILD"} />;
+    return <UserMessage message={text} />;
   }
 
   return (
@@ -110,9 +126,12 @@ function ChatMessage({
       model={msg.metadata?.model ?? "unknown"}
       mode={msg.metadata?.mode ?? "BUILD"}
       durationMs={msg.metadata?.durationMs}
-      streaming={false}
+      streaming={streaming}
       pendingConfirmations={pendingConfirmations}
       answerQuestion={answerQuestion}
+      setConfirmationModelOverride={setConfirmationModelOverride}
+      confirmToolCall={confirmToolCall}
+      activePendingId={activePendingId}
     />
   );
 }
@@ -142,8 +161,11 @@ function SessionChat({
     abort,
     interrupt,
     error,
+    activeTurnStartMs,
+    getTurnPausedMs,
     pendingConfirmations,
     confirmToolCall,
+    setConfirmationModelOverride,
     answerQuestion,
     compact,
     clearMessages,
@@ -256,6 +278,30 @@ function SessionChat({
 
   const pending = pendingConfirmations[0];
 
+  // Live signal for the working row: how much the assistant has produced this
+  // turn (drives the token counter + stall detection) and whether a tool is
+  // currently executing (drives the tool-use flash + suppresses the stall red).
+  const lastMessage = messages[messages.length - 1];
+  let responseChars = 0;
+  let toolActive = false;
+  if (lastMessage?.role === "assistant") {
+    for (const part of lastMessage.parts) {
+      if (part.type === "text" || part.type === "reasoning") {
+        responseChars += (part as { text?: string }).text?.length ?? 0;
+      } else if (
+        part.type === "dynamic-tool" ||
+        part.type.startsWith("tool-")
+      ) {
+        // Any tool part still lacking output means a tool is mid-flight — keep
+        // it true regardless of position so the spinner never reddens mid-tool.
+        const st = (part as { state?: string }).state;
+        if (st === "input-streaming" || st === "input-available") {
+          toolActive = true;
+        }
+      }
+    }
+  }
+
   // Let the user cancel a reply even before the first streamed chunk arrives.
   useKeyboard((key) => {
     if (key.ctrl && key.name === "t") {
@@ -264,7 +310,21 @@ function SessionChat({
       return;
     }
 
-    if (pending && pending.toolCall.toolName !== "AskUserQuestion") {
+    // Edit/Write/Bash own their keyboard via ToolPermissionRequest (it has a
+    // reject-feedback text input, so the global y/n/a shortcuts would collide
+    // with typing). Other confirmations (Agent/Config/…) still use these keys.
+    const dialogOwnsKeys =
+      !!pending &&
+      (pending.toolCall.toolName === "Edit" ||
+        pending.toolCall.toolName === "Write" ||
+        pending.toolCall.toolName === "Bash");
+
+    if (
+      pending &&
+      pending.toolCall.toolName !== "AskUserQuestion" &&
+      !dialogOwnsKeys &&
+      isTopLayer("base")
+    ) {
       if (key.name === "y" || key.name === "Y") {
         key.preventDefault();
         confirmToolCall(pending.toolCallId, true, false);
@@ -300,6 +360,10 @@ function SessionChat({
     <SessionShell
       onSubmit={(text) => submit({ userText: text, mode, model, reasoningEffort })}
       loading={status === "submitted" || status === "streaming" || isCompacting}
+      turnStartMs={activeTurnStartMs}
+      getPausedMs={getTurnPausedMs}
+      responseChars={responseChars}
+      toolActive={toolActive}
       isCompacting={isCompacting}
       interruptible={
         (status === "submitted" || status === "streaming") && !isCompacting
@@ -323,12 +387,21 @@ function SessionChat({
         })
       }
     >
-      {messages.map((msg) => (
+      {messages.map((msg, idx) => (
         <ChatMessage
           key={msg.id}
           msg={msg}
+          // The last message is still "live" until the turn settles to ready —
+          // gate the "Cooked for…" line on that so it never shows mid-turn.
+          streaming={
+            idx === messages.length - 1 &&
+            (status === "streaming" || status === "submitted")
+          }
           pendingConfirmations={pendingConfirmations}
           answerQuestion={answerQuestion}
+          setConfirmationModelOverride={setConfirmationModelOverride}
+          confirmToolCall={confirmToolCall}
+          activePendingId={pending?.toolCallId}
         />
       ))}
       {error && <ErrorMessage message={error.message} />}

@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useDialog } from "../../providers/dialogs";
 import { useToast } from "../../providers/toast";
+import { useTheme } from "../../providers/theme";
 
 type Props = {
   clearMessages: () => Promise<void>;
@@ -10,6 +11,7 @@ type Props = {
 export function ClearDialogContent({ clearMessages }: Props) {
   const dialog = useDialog();
   const toast = useToast();
+  const { colors } = useTheme();
 
   const handleConfirm = useCallback(async () => {
     dialog.close();
@@ -38,8 +40,8 @@ export function ClearDialogContent({ clearMessages }: Props) {
     <box flexDirection="column" gap={2} paddingY={1}>
       <text>This will permanently clear all messages in this session.</text>
       <box flexDirection="row" gap={2}>
-        <text fg="green">[Y] Confirm</text>
-        <text fg="gray">[N / Esc] Cancel</text>
+        <text fg={colors.success}>[Y] Confirm</text>
+        <text fg={colors.dimSeparator}>[N / Esc] Cancel</text>
       </box>
     </box>
   );

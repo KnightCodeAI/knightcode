@@ -1,12 +1,14 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router";
+import { TextAttributes } from "@opentui/core";
 import { Header } from "../components/header";
 import { InputBar } from "../components/input-bar";
 import { usePromptConfig } from "../providers/prompt-config";
-import { TextAttributes } from "@opentui/core";
+import { useTheme } from "../providers/theme";
 
 export function Home() {
   const navigate = useNavigate();
+  const { colors } = useTheme();
   const { mode, model, reasoningEffort } = usePromptConfig();
   const handleSubmit = useCallback(
     (text: string) => {
@@ -19,27 +21,36 @@ export function Home() {
 
   return (
     <box
-      alignItems="center"
-      justifyContent="center"
+      flexDirection="column"
       flexGrow={1}
-      gap={2}
-      position="relative"
       width="100%"
       height="100%"
+      paddingX={2}
+      paddingY={1}
+      gap={1}
     >
-      <Header />
       <box
-        width="100%"
-        maxHeight={78}
-        paddingX={2}
         flexDirection="column"
-        gap={1}
+        flexGrow={1}
+        width="100%"
+        height="50%"
+        justifyContent="center"
+        alignItems="center"
       >
-        <InputBar onSubmit={handleSubmit} />
-        <box flexDirection="row" gap={1} flexShrink={0} marginLeft="auto">
-          <text>tab</text>
-          <text attributes={TextAttributes.DIM}>agents</text>
-        </box>
+        <Header />
+      </box>
+      <box flexGrow={1} />
+      <InputBar onSubmit={handleSubmit} />
+      <box flexDirection="row" gap={2} flexShrink={0} paddingLeft={1}>
+        <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
+          / for commands
+        </text>
+        <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
+          @ for files
+        </text>
+        <text fg={colors.dimSeparator} attributes={TextAttributes.DIM}>
+          tab for mode
+        </text>
       </box>
     </box>
   );
