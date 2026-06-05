@@ -35,14 +35,10 @@ export function runMigrations(db: Database, migrations: Migration[]): void {
       continue;
     }
 
-    db.exec("BEGIN");
-    try {
+    const apply = db.transaction(() => {
       db.exec(m.sql);
       db.run(`INSERT INTO ${TABLE} (id, hash) VALUES (?, ?)`, [m.id, m.hash]);
-      db.exec("COMMIT");
-    } catch (err) {
-      db.exec("ROLLBACK");
-      throw err;
-    }
+    });
+    apply();
   }
 }

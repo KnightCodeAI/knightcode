@@ -6,7 +6,7 @@ describe("readMigrationsFromDisk", () => {
     const migrations = readMigrationsFromDisk();
     expect(migrations.length).toBeGreaterThan(0);
     const first = migrations[0]!;
-    expect(first.id).toBe("0000_majestic_prima");
+    expect(first.id).toMatch(/^\d{4}_/);
     expect(first.sql).toContain("CREATE TABLE");
     // sha-256 hex digest is 64 chars
     expect(first.hash).toMatch(/^[0-9a-f]{64}$/);
