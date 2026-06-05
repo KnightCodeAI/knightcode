@@ -10,5 +10,6 @@ export function estimateTokens(chars: number): number {
 export function formatTokenCount(n: number): string {
   if (n < 1000) return String(Math.max(0, Math.round(n)));
   const k = n / 1000;
-  return k >= 10 ? `${Math.round(k)}k` : `${k.toFixed(1)}k`;
+  const rounded = Math.round(k * 10) / 10;
+  return rounded >= 10 ? `${Math.round(k)}k` : `${rounded.toFixed(1)}k`;
 }

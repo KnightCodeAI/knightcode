@@ -21,7 +21,11 @@ export function commandRisk(command: string): CommandRisk {
   }
 
   // rm -rf / rm -fr (recursive + force, any flag order)
-  if (/\brm\b/.test(lower) && /-[a-z]*r/.test(lower) && /-[a-z]*f/.test(lower)) {
+  if (
+    /\brm\b/.test(lower) &&
+    (/-[a-z]*r/.test(lower) || /--recursive\b/.test(lower)) &&
+    (/-[a-z]*f/.test(lower) || /--force\b/.test(lower))
+  ) {
     return { level: "warn", reason: "Recursively force-deletes files" };
   }
 

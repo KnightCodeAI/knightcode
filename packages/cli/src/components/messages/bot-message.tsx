@@ -228,7 +228,7 @@ export function BotMessage({
                 );
               }
 
-              if (isPending && toolName === "Agent") {
+              if (isActivePending && toolName === "Agent") {
                 const input = part.input as any;
                 return (
                   <AgentSpawnConfirm

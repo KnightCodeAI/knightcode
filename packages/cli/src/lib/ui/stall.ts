@@ -27,19 +27,20 @@ export function useStall(
   const prevSignal = useRef(signal);
   const [, force] = useState(0);
 
-  // Re-evaluate on a slow tick even if the parent isn't re-rendering.
+  // Re-evaluate on a slow tick; also pin the clock to now while a tool is active.
   useEffect(() => {
-    const id = setInterval(() => force((n) => (n + 1) % 1_000_000), 500);
+    const id = setInterval(() => {
+      if (active) lastChange.current = Date.now();
+      force((n) => (n + 1) % 1_000_000);
+    }, 500);
     return () => clearInterval(id);
-  }, []);
+  }, [active]);
 
-  const now = Date.now();
-  if (signal !== prevSignal.current) {
+  // Track signal changes without mutating refs during render.
+  useEffect(() => {
     prevSignal.current = signal;
-    lastChange.current = now;
-  }
-  if (active) {
-    lastChange.current = now;
-  }
-  return isStalled(lastChange.current, now, thresholdMs);
+    lastChange.current = Date.now();
+  }, [signal]);
+
+  return isStalled(lastChange.current, Date.now(), thresholdMs);
 }

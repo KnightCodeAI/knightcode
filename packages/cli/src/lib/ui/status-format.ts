@@ -12,6 +12,7 @@ export function formatContextWindow(
   contextLimit: number,
 ): { percentLeft: number; remainingK: string; limitK: string; severity: ContextSeverity } | null {
   if (lastInputTokens === undefined) return null;
+  if (contextLimit <= 0) return null;
   const remaining = Math.max(0, contextLimit - lastInputTokens);
   const percentLeft = Math.round((remaining / contextLimit) * 100);
   const severity: ContextSeverity =

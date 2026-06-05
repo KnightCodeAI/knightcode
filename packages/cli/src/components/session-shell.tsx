@@ -73,7 +73,7 @@ export function SessionShell({
         <box>{children}</box>
       </scrollbox>
       <TodoPanel />
-      {loading ? (
+      {loading || isCompacting ? (
         <box flexShrink={0} height={1}>
           <WorkingIndicator
             mode={mode}

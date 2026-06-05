@@ -23,4 +23,12 @@ describe("toolResultSummary", () => {
   test("no output yet → empty", () => {
     expect(toolResultSummary("Read", {}, undefined)).toBe("");
   });
+  test("circular (non-serializable) output → empty string", () => {
+    const circular: Record<string, unknown> = {};
+    circular["self"] = circular;
+    expect(toolResultSummary("Bash", {}, circular)).toBe("");
+  });
+  test("serializer returns undefined (function value) → empty string", () => {
+    expect(toolResultSummary("Bash", {}, () => {})).toBe("");
+  });
 });

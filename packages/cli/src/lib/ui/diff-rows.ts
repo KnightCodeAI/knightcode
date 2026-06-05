@@ -30,10 +30,20 @@ export function buildDiffRows(
   const maxLines = options.maxLines ?? DEFAULT_MAX_LINES;
 
   const combinedChars = oldString.length + newString.length;
+  if (combinedChars > maxChars) {
+    return {
+      truncated: true,
+      rows: [
+        {
+          kind: "context",
+          text: `[Diff too large to display (${combinedChars} characters)]`,
+        },
+      ],
+    };
+  }
   const combinedLines =
     oldString.split("\n").length + newString.split("\n").length;
-
-  if (combinedChars > maxChars || combinedLines > maxLines) {
+  if (combinedLines > maxLines) {
     return {
       truncated: true,
       rows: [

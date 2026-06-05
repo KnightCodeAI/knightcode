@@ -46,7 +46,17 @@ export function toolResultSummary(
 ): string {
   if (errorText) return errorText;
   if (output == null) return "";
-  const text = typeof output === "string" ? output : JSON.stringify(output);
+  let text: string;
+  if (typeof output === "string") {
+    text = output;
+  } else {
+    try {
+      const json = JSON.stringify(output);
+      text = typeof json === "string" ? json : "";
+    } catch {
+      text = "";
+    }
+  }
   const lines = text.split("\n");
   if (toolName === "Read") return `Read ${lines.length} lines`;
   const first = lines.find((l) => l.trim()) ?? "";

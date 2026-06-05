@@ -106,9 +106,9 @@ export class LocalChatTransport implements ChatTransport<Message> {
     // spans multiple streamText calls (one per tool-loop round), so per-call
     // timing would reset on every thinking→tool→text transition. The most recent
     // user message carries submittedAt; fall back to this call's start.
-    const turnStartMs =
-      messages.findLast((m) => m.role === "user")?.metadata?.submittedAt ??
-      startTime;
+    const rawTurnStart =
+      messages.findLast((m) => m.role === "user")?.metadata?.submittedAt;
+    const turnStartMs = Number.isFinite(rawTurnStart) ? (rawTurnStart as number) : startTime;
     let accumulatedUsage: LanguageModelUsage | null = null;
 
     const result = streamText({
@@ -157,7 +157,8 @@ export class LocalChatTransport implements ChatTransport<Message> {
       messageMetadata: ({ part }) => {
         if (part.type === "start") return { mode, model: modelId };
         if (part.type !== "finish") return undefined;
-        const pausedMs = this.options.getTurnPausedMs?.() ?? 0;
+        const rawPausedMs = this.options.getTurnPausedMs?.() ?? 0;
+        const pausedMs = Number.isFinite(rawPausedMs) ? rawPausedMs : 0;
         return {
           mode,
           model: modelId,

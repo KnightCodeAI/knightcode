@@ -22,7 +22,7 @@ export function splitMarkdownBlocks(md: string): MarkdownBlock[] {
 
   let i = 0;
   while (i < lines.length) {
-    const open = lines[i]!.match(/^```\s*([\w+#.-]+)?\s*$/);
+    const open = lines[i]!.match(/^ {0,3}```([^\s`]+)?(?:[ \t].*)?$/);
     if (open) {
       flushProse();
       const lang = open[1] ?? "";

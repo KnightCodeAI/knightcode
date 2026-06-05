@@ -322,7 +322,8 @@ function SessionChat({
     if (
       pending &&
       pending.toolCall.toolName !== "AskUserQuestion" &&
-      !dialogOwnsKeys
+      !dialogOwnsKeys &&
+      isTopLayer("base")
     ) {
       if (key.name === "y" || key.name === "Y") {
         key.preventDefault();
