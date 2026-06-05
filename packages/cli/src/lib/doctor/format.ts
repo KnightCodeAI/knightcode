@@ -9,7 +9,9 @@ export function formatDoctorReport(version: string, checks: DoctorCheck[]): stri
     `platform: ${process.platform}-${process.arch}`,
     "",
   ];
-  const width = Math.max(...checks.map((c) => c.label.length));
+  const width = checks.length
+    ? Math.max(...checks.map((c) => c.label.length))
+    : 0;
   for (const c of checks) {
     const label = c.label.padEnd(width);
     const detail = c.detail ? `  ${c.detail}` : "";

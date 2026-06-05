@@ -16,6 +16,11 @@ describe("formatDoctorReport", () => {
     expect(out).toContain("not configured");
     expect(out).toContain("Local store");
   });
+
+  test("empty checks → header only, no throw", () => {
+    const out = formatDoctorReport("0.1.0", []);
+    expect(out).toContain("knightcode 0.1.0");
+  });
 });
 
 describe("doctorExitCode", () => {
