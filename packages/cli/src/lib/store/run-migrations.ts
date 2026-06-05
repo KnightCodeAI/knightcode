@@ -50,7 +50,10 @@ export function runMigrations(db: Database, migrations: Migration[]): void {
       const adopt = db.transaction(() => {
         for (let i = 0; i < adoptCount; i++) {
           const m = sorted[i]!;
-          db.run(`INSERT INTO ${TABLE} (id, hash) VALUES (?, ?)`, [m.id, m.hash]);
+          db.run(`INSERT INTO ${TABLE} (id, hash) VALUES (?, ?)`, [
+            m.id,
+            m.hash,
+          ]);
           applied.set(m.id, m.hash);
         }
       });

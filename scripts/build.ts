@@ -19,7 +19,9 @@ const ALL_TARGETS: Target[] = [
 
 const single = process.argv.includes("--single");
 const targets = single
-  ? ALL_TARGETS.filter((t) => t.os === process.platform && t.arch === process.arch)
+  ? ALL_TARGETS.filter(
+      (t) => t.os === process.platform && t.arch === process.arch,
+    )
   : ALL_TARGETS;
 
 if (targets.length === 0) {

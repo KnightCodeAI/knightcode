@@ -10,7 +10,9 @@ export function getUpdateCachePath(): string {
 
 export function readUpdateCache(): UpdateCache | null {
   try {
-    const raw = JSON.parse(readFileSync(getUpdateCachePath(), "utf-8")) as unknown;
+    const raw = JSON.parse(
+      readFileSync(getUpdateCachePath(), "utf-8"),
+    ) as unknown;
     if (
       raw &&
       typeof raw === "object" &&

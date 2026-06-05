@@ -3,7 +3,10 @@ import type { CheckStatus, DoctorCheck } from "./checks";
 const ICON: Record<CheckStatus, string> = { ok: "✓", warn: "!", fail: "✗" };
 
 /** Plain-text diagnostic block for `knightcode doctor` (no TUI, no color). */
-export function formatDoctorReport(version: string, checks: DoctorCheck[]): string {
+export function formatDoctorReport(
+  version: string,
+  checks: DoctorCheck[],
+): string {
   const lines = [
     `knightcode ${version}`,
     `platform: ${process.platform}-${process.arch}`,

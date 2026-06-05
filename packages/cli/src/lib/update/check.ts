@@ -60,7 +60,10 @@ export function maybeRefreshUpdateCache(): void {
       if (!res.ok) return;
       const body = (await res.json()) as { version?: unknown };
       if (typeof body.version === "string") {
-        writeUpdateCache({ lastChecked: Date.now(), latestVersion: body.version });
+        writeUpdateCache({
+          lastChecked: Date.now(),
+          latestVersion: body.version,
+        });
       }
     } catch {
       // Offline / slow / malformed — stale cache is fine.

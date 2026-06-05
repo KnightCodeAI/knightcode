@@ -4,7 +4,11 @@ import { listSessions } from "../store";
 import { getStore } from "../store/client";
 
 export type CheckStatus = "ok" | "warn" | "fail";
-export type DoctorCheck = { label: string; status: CheckStatus; detail?: string };
+export type DoctorCheck = {
+  label: string;
+  status: CheckStatus;
+  detail?: string;
+};
 
 /**
  * Synchronous diagnostics shared by the /doctor dialog and the headless
@@ -16,7 +20,11 @@ export function runDoctorChecks(): DoctorCheck[] {
 
   // 1. OpenRouter API key
   if (getOpenRouterApiKey()) {
-    checks.push({ label: "OpenRouter API key", status: "ok", detail: "configured" });
+    checks.push({
+      label: "OpenRouter API key",
+      status: "ok",
+      detail: "configured",
+    });
   } else {
     checks.push({
       label: "OpenRouter API key",
@@ -40,9 +48,17 @@ export function runDoctorChecks(): DoctorCheck[] {
   // 3. Git available
   const git = spawnSync("git", ["--version"], { encoding: "utf-8" });
   if (git.status === 0) {
-    checks.push({ label: "Git available", status: "ok", detail: git.stdout.trim() });
+    checks.push({
+      label: "Git available",
+      status: "ok",
+      detail: git.stdout.trim(),
+    });
   } else {
-    checks.push({ label: "Git available", status: "warn", detail: "git not found in PATH" });
+    checks.push({
+      label: "Git available",
+      status: "warn",
+      detail: "git not found in PATH",
+    });
   }
 
   // 4. Runtime
