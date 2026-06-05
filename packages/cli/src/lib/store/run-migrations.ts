@@ -1,6 +1,19 @@
 import type { Database } from "bun:sqlite";
 import type { Migration } from "./migrations";
 
+function countLegacyMigrations(db: Database): number {
+  const exists = db
+    .query(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'`,
+    )
+    .get();
+  if (!exists) return 0;
+  const row = db
+    .query(`SELECT COUNT(*) AS c FROM __drizzle_migrations`)
+    .get() as { c: number };
+  return row.c;
+}
+
 const TABLE = "__knightcode_migrations";
 
 /**
@@ -24,6 +37,21 @@ export function runMigrations(db: Database, migrations: Migration[]): void {
   }
 
   const sorted = [...migrations].sort((a, b) => a.id.localeCompare(b.id));
+
+  // One-time adoption of a DB created by the previous (drizzle) migrator: if our
+  // tracking table is empty but a legacy __drizzle_migrations table records N
+  // applied migrations, the first N of ours (same files, same order) are already
+  // applied — record them without re-running so the existing schema isn't
+  // recreated. Anything beyond N applies normally below. Fresh DBs skip this.
+  if (applied.size === 0) {
+    const legacyCount = countLegacyMigrations(db);
+    for (let i = 0; i < Math.min(legacyCount, sorted.length); i++) {
+      const m = sorted[i]!;
+      db.run(`INSERT INTO ${TABLE} (id, hash) VALUES (?, ?)`, [m.id, m.hash]);
+      applied.set(m.id, m.hash);
+    }
+  }
+
   for (const m of sorted) {
     const existingHash = applied.get(m.id);
     if (existingHash !== undefined) {
