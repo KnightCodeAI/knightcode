@@ -1,4 +1,17 @@
 import { markIntentionalExit, isIntentionalExit } from "./lib/exit-guard"; // must be first
+import { parseCliArgs } from "./lib/cli/parse-args";
+import { VERSION } from "./lib/version";
+import { runDoctorHeadless } from "./lib/doctor/run-headless";
+
+const command = parseCliArgs(process.argv.slice(2));
+if (command.kind === "version") {
+  process.stdout.write(VERSION + "\n");
+  process.exit(0);
+}
+if (command.kind === "doctor") {
+  process.exit(runDoctorHeadless());
+}
+
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
