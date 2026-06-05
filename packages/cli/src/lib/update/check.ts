@@ -16,7 +16,9 @@ export function isNewerVersion(latest: string, current: string): boolean {
   const b = parseSemver(current);
   if (!a || !b) return false;
   for (let i = 0; i < 3; i++) {
-    if (a[i] !== b[i]) return a[i] > b[i];
+    const ai = a[i as 0 | 1 | 2];
+    const bi = b[i as 0 | 1 | 2];
+    if (ai !== bi) return ai > bi;
   }
   return false;
 }
