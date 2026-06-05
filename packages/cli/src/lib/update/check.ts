@@ -1,4 +1,4 @@
-import { readUpdateCache, writeUpdateCache } from "./cache";
+import { readUpdateCache, writeUpdateCache, type UpdateCache } from "./cache";
 
 const REGISTRY_URL = "https://registry.npmjs.org/@knightcode/cli/latest";
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -32,6 +32,13 @@ export function getAvailableUpdate(current: string): string | null {
   return null;
 }
 
+/** Whether a background refresh should run, given the current cache and time. */
+export function shouldRefresh(cache: UpdateCache | null, now: number): boolean {
+  if (process.env.KNIGHTCODE_NO_UPDATE_CHECK) return false;
+  if (cache && now - cache.lastChecked < TTL_MS) return false;
+  return true;
+}
+
 let refreshedThisProcess = false;
 
 /**
@@ -42,10 +49,7 @@ let refreshedThisProcess = false;
 export function maybeRefreshUpdateCache(): void {
   if (refreshedThisProcess) return;
   refreshedThisProcess = true;
-  if (process.env.KNIGHTCODE_NO_UPDATE_CHECK) return;
-
-  const cache = readUpdateCache();
-  if (cache && Date.now() - cache.lastChecked < TTL_MS) return;
+  if (!shouldRefresh(readUpdateCache(), Date.now())) return;
 
   void (async () => {
     try {

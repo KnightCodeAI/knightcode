@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readUpdateCache, writeUpdateCache } from "./cache";
@@ -32,7 +32,6 @@ describe("update cache", () => {
   test("returns null on malformed json", () => {
     writeUpdateCache({ lastChecked: 1, latestVersion: "1.0.0" });
     // Corrupt the file
-    const { writeFileSync } = require("node:fs");
     writeFileSync(join(home, "update-check.json"), "{not json");
     expect(readUpdateCache()).toBeNull();
   });

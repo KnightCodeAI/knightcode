@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isNewerVersion, getAvailableUpdate } from "./check";
+import { isNewerVersion, getAvailableUpdate, shouldRefresh } from "./check";
 import { writeUpdateCache } from "./cache";
 
 describe("isNewerVersion", () => {
@@ -43,5 +43,41 @@ describe("getAvailableUpdate", () => {
   test("null when cached latest is not newer", () => {
     writeUpdateCache({ lastChecked: Date.now(), latestVersion: "0.1.0" });
     expect(getAvailableUpdate("0.1.0")).toBeNull();
+  });
+});
+
+describe("shouldRefresh", () => {
+  test("false when KNIGHTCODE_NO_UPDATE_CHECK is set", () => {
+    const prev = process.env.KNIGHTCODE_NO_UPDATE_CHECK;
+    process.env.KNIGHTCODE_NO_UPDATE_CHECK = "1";
+    try {
+      expect(shouldRefresh(null, Date.now())).toBe(false);
+    } finally {
+      if (prev !== undefined) process.env.KNIGHTCODE_NO_UPDATE_CHECK = prev;
+      else delete process.env.KNIGHTCODE_NO_UPDATE_CHECK;
+    }
+  });
+
+  test("false when cache is fresh (<24h)", () => {
+    const prev = process.env.KNIGHTCODE_NO_UPDATE_CHECK;
+    delete process.env.KNIGHTCODE_NO_UPDATE_CHECK;
+    try {
+      const now = Date.now();
+      expect(shouldRefresh({ lastChecked: now, latestVersion: "1.0.0" }, now)).toBe(false);
+    } finally {
+      if (prev !== undefined) process.env.KNIGHTCODE_NO_UPDATE_CHECK = prev;
+    }
+  });
+
+  test("true when cache is missing or stale (>24h)", () => {
+    const prev = process.env.KNIGHTCODE_NO_UPDATE_CHECK;
+    delete process.env.KNIGHTCODE_NO_UPDATE_CHECK;
+    try {
+      const now = Date.now();
+      expect(shouldRefresh(null, now)).toBe(true);
+      expect(shouldRefresh({ lastChecked: now - 25 * 60 * 60 * 1000, latestVersion: "1.0.0" }, now)).toBe(true);
+    } finally {
+      if (prev !== undefined) process.env.KNIGHTCODE_NO_UPDATE_CHECK = prev;
+    }
   });
 });
