@@ -41,6 +41,10 @@ const renderer = await createCliRenderer({
   exitOnCtrlC: false,
 });
 
+// Register cleanup before anything that could fail (heartbeat, render) so a
+// crash during startup still tears down spawned processes on exit.
+process.on("exit", () => cleanupAllProcesses());
+
 // Start process heartbeat monitor
 const heartbeatTimer = setInterval(() => {
   monitorProcessesHeartbeat();
@@ -100,8 +104,8 @@ let _lastPressAt = 0;
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-createRoot(renderer).render(<App />);
-
-process.on("exit", () => cleanupAllProcesses());
-// SIGTERM (kill / system shutdown) — always immediate; handleExit marks intentional.
+// SIGTERM (kill / system shutdown) — always immediate; handleExit marks
+// intentional. Registered before first render so a render-time crash is covered.
 process.on("SIGTERM", handleExit);
+
+createRoot(renderer).render(<App />);
