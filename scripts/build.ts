@@ -7,7 +7,7 @@ import { readMigrationsFromDisk } from "../packages/cli/src/lib/store/migrations
 const ROOT = join(import.meta.dir, "..");
 const ENTRY = join(ROOT, "packages/cli/src/index.tsx");
 
-type Target = { os: string; arch: string; bunTarget: string };
+type Target = { os: string; arch: string; bunTarget: Bun.Build.CompileTarget };
 
 const ALL_TARGETS: Target[] = [
   { os: "linux", arch: "x64", bunTarget: "bun-linux-x64" },
@@ -32,6 +32,12 @@ if (targets.length === 0) {
 // package.json has no typed `version` field yet (added in Plan B) — read defensively.
 const version = (pkg as { version?: string }).version ?? "0.0.0-dev";
 const migrations = readMigrationsFromDisk();
+if (migrations.length === 0) {
+  console.error(
+    "No migrations found to embed — refusing to build a binary with an empty migration set.",
+  );
+  process.exit(1);
+}
 console.log(`Embedding ${migrations.length} migration(s), version ${version}`);
 
 for (const target of targets) {
@@ -44,9 +50,7 @@ for (const target of targets) {
   const result = await Bun.build({
     entrypoints: [ENTRY],
     target: "bun",
-    // Bun validates the platform triple at build time; the static union type is
-    // narrower than our runtime list, so cast.
-    compile: { target: target.bunTarget as never, outfile },
+    compile: { target: target.bunTarget, outfile },
     define: {
       KNIGHTCODE_VERSION: JSON.stringify(version),
       KNIGHTCODE_MIGRATIONS: JSON.stringify(migrations),
