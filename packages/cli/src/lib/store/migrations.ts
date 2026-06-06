@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +12,9 @@ export type Migration = { id: string; hash: string; sql: string };
 export function readMigrationsFromDisk(
   dir: string = join(dirname(fileURLToPath(import.meta.url)), "migrations"),
 ): Migration[] {
+  if (!existsSync(dir)) {
+    throw new Error(`Migrations directory not found: ${dir}`);
+  }
   return readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
     .sort()
