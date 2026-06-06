@@ -46,12 +46,21 @@ export function runDoctorChecks(): DoctorCheck[] {
   }
 
   // 3. Git available
-  const git = spawnSync("git", ["--version"], { encoding: "utf-8" });
+  const git = spawnSync("git", ["--version"], {
+    encoding: "utf-8",
+    timeout: 5000,
+  });
   if (git.status === 0) {
     checks.push({
       label: "Git available",
       status: "ok",
       detail: git.stdout.trim(),
+    });
+  } else if (git.error && (git.error as { code?: string }).code === "ETIMEDOUT") {
+    checks.push({
+      label: "Git available",
+      status: "warn",
+      detail: "git check timed out",
     });
   } else {
     checks.push({
@@ -64,7 +73,7 @@ export function runDoctorChecks(): DoctorCheck[] {
   // 4. Runtime
   const runtime =
     typeof Bun !== "undefined"
-      ? `Bun ${(globalThis as { Bun: { version: string } }).Bun.version}`
+      ? `Bun ${Bun.version}`
       : `Node ${process.version}`;
   checks.push({ label: "Runtime", status: "ok", detail: runtime });
 

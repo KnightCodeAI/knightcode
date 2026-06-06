@@ -3,6 +3,10 @@ import { TextAttributes } from "@opentui/core";
 import { runDoctorChecks, type CheckStatus } from "../../lib/doctor/checks";
 import { useTheme } from "../../providers/theme";
 
+function assertNever(value: never): never {
+  throw new Error(`Unexpected check status: ${String(value)}`);
+}
+
 function statusColor(
   s: CheckStatus,
   colors: ReturnType<typeof useTheme>["colors"],
@@ -14,6 +18,8 @@ function statusColor(
       return colors.warning;
     case "fail":
       return colors.error;
+    default:
+      return assertNever(s);
   }
 }
 
@@ -25,6 +31,8 @@ function statusIcon(s: CheckStatus): string {
       return "!";
     case "fail":
       return "✗";
+    default:
+      return assertNever(s);
   }
 }
 
