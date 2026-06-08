@@ -57,7 +57,7 @@ export function Home() {
       {updateVersion ? (
         <box flexDirection="row" flexShrink={0} paddingLeft={1}>
           <text fg={colors.success} attributes={TextAttributes.DIM}>
-            ★ Update available: v{updateVersion}  •  npm install -g @knightcode/cli
+            ★ Update available: v{updateVersion}  •  npm install -g @knightcodeai/cli
           </text>
         </box>
       ) : null}

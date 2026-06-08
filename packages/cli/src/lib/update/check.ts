@@ -1,6 +1,6 @@
 import { readUpdateCache, writeUpdateCache, type UpdateCache } from "./cache";
 
-const REGISTRY_URL = "https://registry.npmjs.org/@knightcode/cli/latest";
+const REGISTRY_URL = "https://registry.npmjs.org/@knightcodeai/cli/latest";
 const TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 1500;
 
