@@ -8,10 +8,13 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "build:cli": "bun run --filter @knightcode/cli build",
-    "link:cli": "bun run build:cli && cd packages/cli && bun link"
+    "build:cli": "bun run scripts/build.ts --single",
+    "link:cli": "bun run build:cli && cd packages/cli && bun link",
+    "ci:version": "changeset version && bun install",
+    "ci:publish": "bun run scripts/pack-test.ts && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.27.10",
     "prettier": "^3.8.3",
     "turbo": "^2.9.14",
     "typescript": "5.9.2"

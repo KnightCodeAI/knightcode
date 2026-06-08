@@ -1,10 +1,61 @@
-#!/usr/bin/env bun
-import dotenv from "dotenv"
-import path from "path"
+#!/usr/bin/env node
+// Dependency-free launcher: resolves the platform-specific compiled binary
+// (shipped as an optional dependency) and spawns it, forwarding args, stdio,
+// signals, and the exit code. Uses only Node builtins.
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 
-dotenv.config({
-    path: path.resolve(import.meta.dirname, "../../../.env"),
-    quiet: true
-});
+const require = createRequire(import.meta.url);
 
-await import("../src/index.tsx");
+const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"];
+
+function run(target) {
+  const child = spawn(target, process.argv.slice(2), {
+    stdio: "inherit",
+  });
+
+  child.on("error", (error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+
+  const forwarders = {};
+  for (const signal of forwardedSignals) {
+    forwarders[signal] = () => {
+      try {
+        child.kill(signal);
+      } catch {
+        // The child may have already exited.
+      }
+    };
+    process.on(signal, forwarders[signal]);
+  }
+
+  child.on("exit", (code, signal) => {
+    for (const s of forwardedSignals) process.removeListener(s, forwarders[s]);
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(typeof code === "number" ? code : 0);
+  });
+}
+
+const pkg = `@knightcodeai/cli-${process.platform}-${process.arch}`;
+const binary = process.platform === "win32" ? "knightcode.exe" : "knightcode";
+
+let target = process.env.KNIGHTCODE_BIN_PATH;
+if (!target) {
+  try {
+    target = require.resolve(`${pkg}/bin/${binary}`);
+  } catch {
+    console.error(
+      `knightcode: no prebuilt binary for ${process.platform}-${process.arch}.\n` +
+        `Your package manager may have skipped the optional dependency "${pkg}".\n` +
+        `Try reinstalling: npm install -g @knightcodeai/cli`,
+    );
+    process.exit(1);
+  }
+}
+
+run(target);

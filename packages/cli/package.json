@@ -1,27 +1,27 @@
 {
-  "name": "@knightcode/cli",
-  "module": "src/index.tsx",
+  "name": "@knightcodeai/cli",
+  "version": "0.0.0",
   "type": "module",
-  "private": true,
   "bin": {
     "knightcode": "./bin/knightcode"
+  },
+  "files": ["bin/", "README.md"],
+  "engines": {
+    "node": ">=16"
+  },
+  "optionalDependencies": {
+    "@knightcodeai/cli-linux-x64": "0.0.0",
+    "@knightcodeai/cli-linux-arm64": "0.0.0",
+    "@knightcodeai/cli-darwin-x64": "0.0.0",
+    "@knightcodeai/cli-darwin-arm64": "0.0.0",
+    "@knightcodeai/cli-win32-x64": "0.0.0"
   },
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "check-types": "tsc --noEmit",
-    "test": "bun test src/**/*.test.ts",
-    "build": "bun build src/index.tsx --outdir dist --target bun"
+    "test": "bun test src/**/*.test.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/html-to-text": "^9.0.4",
-    "@types/react": "^19.2.6",
-    "drizzle-kit": "^0.31.10"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
     "@ai-sdk/provider-utils": "^4.0.27",
     "@ai-sdk/react": "^3.0.193",
     "@knightcode/shared": "workspace:*",
@@ -30,8 +30,12 @@
     "@opentui/react": "^0.2.10",
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "@types/html-to-text": "^9.0.4",
+    "@types/react": "^19.2.6",
     "ai": "^6.0.191",
     "date-fns": "^4.3.0",
+    "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.12",
     "html-to-text": "^10.0.0",
@@ -41,6 +45,7 @@
     "react": "^19.2.6",
     "react-router": "7.14.2",
     "safe-regex": "^2.1.1",
+    "typescript": "^5",
     "zod": "^4.3.6"
   }
 }
