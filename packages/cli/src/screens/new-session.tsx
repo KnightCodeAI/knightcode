@@ -7,7 +7,7 @@ import {
   type ModeType,
   type SupportedChatModelId,
   type ReasoningEffortLevel,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import { UserMessage } from "../components/messages";
 import { SessionShell } from "../components/session-shell";
 import { getStore } from "../lib/store/client";

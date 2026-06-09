@@ -2,7 +2,7 @@ import {
   DEFAULT_CHAT_MODEL_ID,
   findSupportedChatModel,
   type SupportedChatModelId,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import { getSettingValue } from "../settings";
 
 /**

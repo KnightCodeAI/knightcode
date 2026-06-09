@@ -2,7 +2,7 @@ import {
   getToolContracts,
   type ModeType,
   type ReasoningEffortLevel,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import {
   convertToModelMessages,
   generateText,

@@ -1,4 +1,4 @@
-import type { SupportedChatModelId } from "@knightcode/shared";
+import type { SupportedChatModelId } from "@repo/shared";
 import { saveCredentials, type SearchProvider } from "../credentials";
 import { setSettingValue } from "../settings";
 

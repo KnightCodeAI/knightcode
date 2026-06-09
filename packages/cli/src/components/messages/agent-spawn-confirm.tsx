@@ -1,4 +1,4 @@
-import { MODEL_SHORTLIST, type SupportedChatModelId } from "@knightcode/shared";
+import { MODEL_SHORTLIST, type SupportedChatModelId } from "@repo/shared";
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useState } from "react";

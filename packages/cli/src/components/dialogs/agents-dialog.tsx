@@ -1,4 +1,4 @@
-import { type ModeType, Mode } from "@knightcode/shared";
+import { type ModeType, Mode } from "@repo/shared";
 import { useCallback } from "react";
 import { useDialog } from "../../providers/dialogs";
 import { useTheme } from "../../providers/theme";

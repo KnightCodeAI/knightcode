@@ -1,4 +1,4 @@
-import { WebSearch, type KnightcodeTool } from "@knightcode/shared";
+import { WebSearch, type KnightcodeTool } from "@repo/shared";
 import { resolveSearchClient, type WebSearchResult } from "./providers";
 
 export const tool: KnightcodeTool = WebSearch;

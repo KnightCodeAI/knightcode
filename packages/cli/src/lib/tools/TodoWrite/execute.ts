@@ -1,4 +1,4 @@
-import { TodoWrite, type KnightcodeTool } from "@knightcode/shared";
+import { TodoWrite, type KnightcodeTool } from "@repo/shared";
 
 export const tool: KnightcodeTool = TodoWrite;
 

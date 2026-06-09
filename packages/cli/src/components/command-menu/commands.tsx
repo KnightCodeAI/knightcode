@@ -21,7 +21,7 @@ import { undoSessionChanges } from "../../lib/tools";
 import {
   SUPPORTED_CHAT_MODELS,
   findSupportedChatModel,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import type { Command } from "./types";
 import { randomUUID } from "node:crypto";
 import { getStore } from "../../lib/store/client";

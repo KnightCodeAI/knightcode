@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { TextAttributes } from "@opentui/core";
-import { findSupportedChatModel } from "@knightcode/shared";
+import { findSupportedChatModel } from "@repo/shared";
 import { getStore } from "../../lib/store/client";
 import { directorySessionStats } from "../../lib/store";
 

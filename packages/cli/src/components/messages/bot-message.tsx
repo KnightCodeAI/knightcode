@@ -1,4 +1,4 @@
-import type { ModeType } from "@knightcode/shared";
+import type { ModeType } from "@repo/shared";
 import { TextAttributes } from "@opentui/core";
 import { useState } from "react";
 import type { Message } from "../../hooks/use-chat";
@@ -32,7 +32,7 @@ type Props = {
   ) => void;
   setConfirmationModelOverride?: (
     toolCallId: string,
-    modelId: import("@knightcode/shared").SupportedChatModelId | undefined,
+    modelId: import("@repo/shared").SupportedChatModelId | undefined,
   ) => void;
   confirmToolCall?: (
     toolCallId: string,

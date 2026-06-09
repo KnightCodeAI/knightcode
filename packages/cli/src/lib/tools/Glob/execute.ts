@@ -1,6 +1,6 @@
 import { stat } from "fs/promises";
 import { relative, resolve } from "path";
-import { Glob, type KnightcodeTool } from "@knightcode/shared";
+import { Glob, type KnightcodeTool } from "@repo/shared";
 import {
   assertSafeProjectFile,
   isSafeProjectFile,

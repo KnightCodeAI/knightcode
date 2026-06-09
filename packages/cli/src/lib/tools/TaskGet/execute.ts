@@ -1,4 +1,4 @@
-import { TaskGet, type KnightcodeTool } from "@knightcode/shared";
+import { TaskGet, type KnightcodeTool } from "@repo/shared";
 import { getTaskRecord } from "../task-store";
 
 export const tool: KnightcodeTool = TaskGet;

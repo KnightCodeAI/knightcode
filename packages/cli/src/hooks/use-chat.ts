@@ -6,7 +6,7 @@ import {
   type ToolContracts,
   findSupportedChatModel,
   DEFAULT_CHAT_MODEL_ID,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import {
   dequeueNotification,
   hasNotifications,

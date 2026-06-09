@@ -1,4 +1,4 @@
-import { Config, type KnightcodeTool } from "@knightcode/shared";
+import { Config, type KnightcodeTool } from "@repo/shared";
 import {
   isSupportedSetting,
   getSettingMeta,

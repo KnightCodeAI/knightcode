@@ -1,5 +1,5 @@
 import { markIntentionalExit } from "../lib/exit-guard";
-import { Mode } from "@knightcode/shared";
+import { Mode } from "@repo/shared";
 import {
   ScrollBoxRenderable,
   TextAttributes,

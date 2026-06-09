@@ -1,4 +1,4 @@
-import { EnterPlanMode, type KnightcodeTool } from "@knightcode/shared";
+import { EnterPlanMode, type KnightcodeTool } from "@repo/shared";
 
 export const tool: KnightcodeTool = EnterPlanMode;
 

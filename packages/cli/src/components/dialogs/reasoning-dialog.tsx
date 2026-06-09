@@ -1,4 +1,4 @@
-import type { ReasoningEffortLevel } from "@knightcode/shared";
+import type { ReasoningEffortLevel } from "@repo/shared";
 import { useCallback } from "react";
 import { useDialog } from "../../providers/dialogs";
 import { useTheme } from "../../providers/theme";

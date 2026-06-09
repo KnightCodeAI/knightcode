@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "fs/promises";
 import { extname, relative } from "path";
-import { NotebookEdit, type KnightcodeTool } from "@knightcode/shared";
+import { NotebookEdit, type KnightcodeTool } from "@repo/shared";
 import {
   assertSafeProjectFile,
   resolveInsideRoot,

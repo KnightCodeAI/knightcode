@@ -1,4 +1,4 @@
-import { ALL_TOOL_NAMES } from "@knightcode/shared";
+import { ALL_TOOL_NAMES } from "@repo/shared";
 import { loadProjectContextSync } from "../context/project-context";
 import { loadRulesText } from "../context/rules";
 import { buildSkillIndex } from "../context/skills";
