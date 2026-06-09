@@ -16,5 +16,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@knightcode/shared"]
+  "ignore": ["@repo/shared"]
 }

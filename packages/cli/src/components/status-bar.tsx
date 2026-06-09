@@ -1,4 +1,4 @@
-import { findSupportedChatModel, Mode } from "@knightcode/shared";
+import { findSupportedChatModel, Mode } from "@repo/shared";
 import { TextAttributes } from "@opentui/core";
 import { usePromptConfig } from "../providers/prompt-config";
 import { useTheme } from "../providers/theme";

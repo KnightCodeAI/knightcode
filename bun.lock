@@ -62,11 +62,11 @@
       "devDependencies": {
         "@ai-sdk/provider-utils": "^4.0.27",
         "@ai-sdk/react": "^3.0.193",
-        "@knightcode/shared": "workspace:*",
         "@openrouter/ai-sdk-provider": "^2.9.0",
         "@opentui/core": "^0.2.10",
         "@opentui/react": "^0.2.10",
         "@repo/eslint-config": "*",
+        "@repo/shared": "workspace:*",
         "@repo/typescript-config": "workspace:*",
         "@types/bun": "latest",
         "@types/html-to-text": "^9.0.4",
@@ -132,7 +132,7 @@
       },
     },
     "packages/shared": {
-      "name": "@knightcode/shared",
+      "name": "@repo/shared",
       "dependencies": {
         "ai": "^6.0.191",
         "zod": "^4.3.6",
@@ -460,8 +460,6 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@knightcode/shared": ["@knightcode/shared@workspace:packages/shared"],
-
     "@knightcodeai/cli": ["@knightcodeai/cli@workspace:packages/cli"],
 
     "@knightcodeai/cli-darwin-arm64": ["@knightcodeai/cli-darwin-arm64@workspace:packages/cli-darwin-arm64"],
@@ -695,6 +693,8 @@
     "@radix-ui/rect": ["@radix-ui/rect@1.1.1", "", {}, "sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw=="],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
+
+    "@repo/shared": ["@repo/shared@workspace:packages/shared"],
 
     "@repo/typescript-config": ["@repo/typescript-config@workspace:packages/typescript-config"],
 

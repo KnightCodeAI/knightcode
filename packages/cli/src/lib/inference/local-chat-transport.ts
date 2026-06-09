@@ -5,7 +5,7 @@ import {
   TASK_SUITE_TOOL_NAMES,
   type ModeType,
   type ReasoningEffortLevel,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import {
   convertToModelMessages,
   streamText,

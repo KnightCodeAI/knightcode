@@ -1,4 +1,4 @@
-import type { ModeType } from "@knightcode/shared";
+import type { ModeType } from "@repo/shared";
 import type { ModelMessage } from "ai";
 
 export interface SubagentStepResult {

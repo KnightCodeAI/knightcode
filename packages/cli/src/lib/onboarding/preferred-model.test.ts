@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_CHAT_MODEL_ID } from "@knightcode/shared";
+import { DEFAULT_CHAT_MODEL_ID } from "@repo/shared";
 import { setSettingValue } from "../settings";
 import { loadPreferredModel } from "./preferred-model";
 

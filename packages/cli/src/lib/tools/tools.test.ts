@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { executeLocalTool } from "./index";
-import { Mode } from "@knightcode/shared";
+import { Mode } from "@repo/shared";
 import { writeFile, mkdtemp, rm } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";

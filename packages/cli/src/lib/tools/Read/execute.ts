@@ -1,7 +1,7 @@
 import fs from "fs";
 import { open, readFile, stat } from "fs/promises";
 import readline from "readline";
-import { Read, type KnightcodeTool } from "@knightcode/shared";
+import { Read, type KnightcodeTool } from "@repo/shared";
 import {
   assertSafeProjectFile,
   resolveInsideRoot,

@@ -1,4 +1,4 @@
-import { Skill, type KnightcodeTool } from "@knightcode/shared";
+import { Skill, type KnightcodeTool } from "@repo/shared";
 
 export const tool: KnightcodeTool = Skill;
 

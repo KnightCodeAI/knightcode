@@ -1,4 +1,4 @@
-import { TaskList, type KnightcodeTool } from "@knightcode/shared";
+import { TaskList, type KnightcodeTool } from "@repo/shared";
 import { listTasksSummary } from "../task-store";
 
 export const tool: KnightcodeTool = TaskList;

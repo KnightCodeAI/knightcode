@@ -1,4 +1,4 @@
-import { ExitPlanMode, type KnightcodeTool } from "@knightcode/shared";
+import { ExitPlanMode, type KnightcodeTool } from "@repo/shared";
 
 export const tool: KnightcodeTool = ExitPlanMode;
 

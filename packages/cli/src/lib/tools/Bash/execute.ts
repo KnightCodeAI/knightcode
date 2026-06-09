@@ -1,4 +1,4 @@
-import { Bash, type KnightcodeTool } from "@knightcode/shared";
+import { Bash, type KnightcodeTool } from "@repo/shared";
 import {
   assertInteractiveCommandBlocked,
   assertSafeCommand,

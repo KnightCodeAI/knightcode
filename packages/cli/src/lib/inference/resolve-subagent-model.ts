@@ -3,7 +3,7 @@ import {
   findSupportedChatModel,
   resolveModelAlias,
   type SupportedChatModelId,
-} from "@knightcode/shared";
+} from "@repo/shared";
 
 export type ResolveSubagentModelArgs = {
   /** Raw OpenRouter id chosen by the user at spawn-confirm time. */

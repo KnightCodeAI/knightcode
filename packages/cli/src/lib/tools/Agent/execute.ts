@@ -4,7 +4,7 @@ import {
   getToolContractsByNames,
   type ModeType,
   type KnightcodeTool,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import { generateText, type ModelMessage } from "ai";
 import { randomUUID } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";

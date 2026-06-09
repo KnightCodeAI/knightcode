@@ -1,7 +1,7 @@
 import { convert } from "html-to-text";
 import dns from "node:dns/promises";
 import net from "node:net";
-import { WebFetch, type KnightcodeTool } from "@knightcode/shared";
+import { WebFetch, type KnightcodeTool } from "@repo/shared";
 
 export const tool: KnightcodeTool = WebFetch;
 

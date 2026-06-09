@@ -1,4 +1,4 @@
-import { type ModeType, Mode } from "@knightcode/shared";
+import { type ModeType, Mode } from "@repo/shared";
 import { TextAttributes } from "@opentui/core";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../providers/theme";

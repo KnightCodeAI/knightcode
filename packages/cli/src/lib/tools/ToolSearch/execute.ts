@@ -2,7 +2,7 @@ import {
   ToolSearch,
   getDeferredTools,
   type KnightcodeTool,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import { z } from "zod";
 
 export const tool: KnightcodeTool = ToolSearch;

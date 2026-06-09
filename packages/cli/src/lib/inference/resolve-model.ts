@@ -2,7 +2,7 @@ import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import {
   findSupportedChatModel,
   type ReasoningEffortLevel,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 import { getOpenRouterApiKey } from "../credentials";

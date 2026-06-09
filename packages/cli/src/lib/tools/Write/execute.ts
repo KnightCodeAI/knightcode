@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, relative } from "path";
-import { Write, type KnightcodeTool } from "@knightcode/shared";
+import { Write, type KnightcodeTool } from "@repo/shared";
 import {
   assertSafeProjectFile,
   resolveInsideRoot,

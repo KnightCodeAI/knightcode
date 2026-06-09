@@ -1,4 +1,4 @@
-import { AskUserQuestion, type KnightcodeTool } from "@knightcode/shared";
+import { AskUserQuestion, type KnightcodeTool } from "@repo/shared";
 
 export const tool: KnightcodeTool = AskUserQuestion;
 

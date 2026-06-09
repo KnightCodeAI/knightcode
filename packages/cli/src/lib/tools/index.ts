@@ -3,7 +3,7 @@ import {
   getTool,
   isToolAvailableInMode,
   type ModeType,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import {
   runPreToolHooks,
   runPostToolHooks,

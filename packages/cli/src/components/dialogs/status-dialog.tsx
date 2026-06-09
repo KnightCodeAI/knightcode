@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import { findSupportedChatModel } from "@knightcode/shared";
+import { findSupportedChatModel } from "@repo/shared";
 import type { Message } from "../../hooks/use-chat";
 
 type Props = {

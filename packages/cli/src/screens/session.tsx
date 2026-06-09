@@ -8,7 +8,7 @@ import {
   type ModeType,
   type SupportedChatModelId,
   findSupportedChatModel,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import { SessionShell } from "../components/session-shell";
 import {
   UserMessage,

@@ -1,4 +1,4 @@
-import type { SupportedChatModelId } from "@knightcode/shared";
+import type { SupportedChatModelId } from "@repo/shared";
 import { useCallback } from "react";
 import { useDialog } from "../../providers/dialogs";
 import { useTheme } from "../../providers/theme";

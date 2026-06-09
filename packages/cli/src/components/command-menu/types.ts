@@ -2,7 +2,7 @@ import type {
   ModeType,
   ReasoningEffortLevel,
   SupportedChatModelId,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import type { DialogContextValue } from "../../providers/dialogs";
 import type { ToastContextValue } from "../../providers/toast";
 import type { Message } from "../../hooks/use-chat";

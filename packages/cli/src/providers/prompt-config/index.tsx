@@ -3,7 +3,7 @@ import {
   type ModeType,
   type ReasoningEffortLevel,
   type SupportedChatModelId,
-} from "@knightcode/shared";
+} from "@repo/shared";
 import { loadPreferredModel } from "../../lib/onboarding";
 import { setSettingValue } from "../../lib/settings";
 import type { ReactNode } from "react";

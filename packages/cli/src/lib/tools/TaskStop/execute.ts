@@ -1,4 +1,4 @@
-import { TaskStop, type KnightcodeTool } from "@knightcode/shared";
+import { TaskStop, type KnightcodeTool } from "@repo/shared";
 import { stopTaskRecord } from "../task-store";
 
 export const tool: KnightcodeTool = TaskStop;

@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import type { ModeType } from "@knightcode/shared";
+import type { ModeType } from "@repo/shared";
 import type { Message } from "../../hooks/use-chat";
 import { useTheme } from "../../providers/theme";
 import { BotMessage } from "./bot-message";

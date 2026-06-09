@@ -1,6 +1,6 @@
 import { open, readFile, stat } from "fs/promises";
 import { relative, resolve } from "path";
-import { Grep, type KnightcodeTool } from "@knightcode/shared";
+import { Grep, type KnightcodeTool } from "@repo/shared";
 import {
   assertSafeProjectFile,
   isSafeProjectFile,
