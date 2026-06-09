@@ -52,7 +52,8 @@ if (!target) {
     console.error(
       `knightcode: no prebuilt binary for ${process.platform}-${process.arch}.\n` +
         `Your package manager may have skipped the optional dependency "${pkg}".\n` +
-        `Try reinstalling: npm install -g @knightcodeai/cli`,
+        `Reinstall the CLI with your package manager (npm, yarn, pnpm, or bun), ` +
+        `or set KNIGHTCODE_BIN_PATH to a local knightcode binary.`,
     );
     process.exit(1);
   }

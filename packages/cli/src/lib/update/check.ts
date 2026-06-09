@@ -59,7 +59,9 @@ export function maybeRefreshUpdateCache(): void {
       });
       if (!res.ok) return;
       const body = (await res.json()) as { version?: unknown };
-      if (typeof body.version === "string") {
+      // Only cache a well-formed semver — the registry is trusted, but a
+      // malformed value would poison the cache the next launch reads.
+      if (typeof body.version === "string" && parseSemver(body.version)) {
         writeUpdateCache({
           lastChecked: Date.now(),
           latestVersion: body.version,

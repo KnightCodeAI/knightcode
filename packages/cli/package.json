@@ -7,7 +7,7 @@
   },
   "files": ["bin/", "README.md"],
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "optionalDependencies": {
     "@knightcodeai/cli-linux-x64": "0.0.0",

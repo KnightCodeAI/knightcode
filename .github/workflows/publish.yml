@@ -5,11 +5,10 @@ on:
     branches:
       - main
 
+# No cancel-in-progress on purpose: cancelling a run mid-publish could leave a
+# partial release (some of the 6 fixed-group packages published, others not).
+# Queue overlapping runs instead of cancelling them.
 concurrency: ${{ github.workflow }}-${{ github.ref }}
-
-permissions:
-  contents: write # push the Version PR branch + tags
-  pull-requests: write # open/update the Version Packages PR
 
 jobs:
   # Manages the "Version Packages" PR on every push. When changesets are present
@@ -17,14 +16,17 @@ jobs:
   # left) hasChangesets is "false", which gates the build + publish jobs below.
   version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # commit + push the Version PR branch
+      pull-requests: write # open/update the Version Packages PR
     outputs:
       hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.3
 
@@ -32,7 +34,7 @@ jobs:
 
       - name: Create Release Pull Request
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
         with:
           version: bun run ci:version
           commit: "chore(release): version packages"
@@ -43,11 +45,13 @@ jobs:
   # Build each binary on its own native OS so bun build --compile embeds the
   # correct platform-native libs (OpenTUI ships per-platform native packages),
   # then run the binary headlessly before it is allowed anywhere near npm.
-  # linux-arm64 has no native GitHub runner, so it is cross-compiled and skips
-  # the smoke test (the only target shipped without native execution).
+  # linux-arm64 and darwin-x64 have no free native runner (GitHub retired the
+  # Intel macos-13 image), so they are cross-compiled and skip the smoke test.
   build:
     needs: version
     if: needs.version.outputs.hasChangesets == 'false'
+    permissions:
+      contents: read
     strategy:
       fail-fast: true
       matrix:
@@ -59,8 +63,8 @@ jobs:
             runner: ubuntu-latest
             smoke: false # cross-compiled from x64 — cannot execute here
           - target: darwin-x64
-            runner: macos-13
-            smoke: true
+            runner: macos-latest
+            smoke: false # cross-compiled from arm64 — no free Intel runner
           - target: darwin-arm64
             runner: macos-latest
             smoke: true
@@ -69,30 +73,36 @@ jobs:
             smoke: true
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false # build job never pushes; don't leave the token in .git/config
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.3
 
       - run: bun install --frozen-lockfile
 
       - name: Build ${{ matrix.target }}
-        run: bun run scripts/build.ts --target=${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: bun run scripts/build.ts --target="$TARGET"
 
       - name: Smoke test (native targets only)
         if: matrix.smoke
+        env:
+          TARGET: ${{ matrix.target }}
         shell: bash
         run: |
-          bin="packages/cli-${{ matrix.target }}/bin/knightcode"
-          if [ "${{ matrix.target }}" = "win32-x64" ]; then bin="$bin.exe"; fi
+          bin="packages/cli-${TARGET}/bin/knightcode"
+          if [ "$TARGET" = "win32-x64" ]; then bin="$bin.exe"; fi
           echo "→ knightcode --version"
           "$bin" --version
           echo "→ knightcode doctor"
           "$bin" doctor
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cli-${{ matrix.target }}
           path: packages/cli-${{ matrix.target }}/bin/
@@ -101,21 +111,23 @@ jobs:
 
   # Reassemble the tested binaries into their package folders, validate the full
   # npm install path (pack-test), then publish every package Changesets considers
-  # unpublished. Publishes the exact artifacts that passed the smoke tests.
+  # unpublished. Publishes the exact artifacts the build job produced.
   publish:
     needs: [version, build]
     if: needs.version.outputs.hasChangesets == 'false'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # push tags + create the GitHub Release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.3
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
@@ -123,7 +135,7 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Download all binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
 
