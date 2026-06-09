@@ -1,20 +1,23 @@
 {
   "name": "@knightcodeai/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "bin": {
     "knightcode": "./bin/knightcode"
   },
-  "files": ["bin/", "README.md"],
+  "files": [
+    "bin/",
+    "README.md"
+  ],
   "engines": {
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@knightcodeai/cli-linux-x64": "0.0.0",
-    "@knightcodeai/cli-linux-arm64": "0.0.0",
-    "@knightcodeai/cli-darwin-x64": "0.0.0",
-    "@knightcodeai/cli-darwin-arm64": "0.0.0",
-    "@knightcodeai/cli-win32-x64": "0.0.0"
+    "@knightcodeai/cli-linux-x64": "0.1.0",
+    "@knightcodeai/cli-linux-arm64": "0.1.0",
+    "@knightcodeai/cli-darwin-x64": "0.1.0",
+    "@knightcodeai/cli-darwin-arm64": "0.1.0",
+    "@knightcodeai/cli-win32-x64": "0.1.0"
   },
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
