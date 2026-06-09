@@ -43,10 +43,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Build each binary on its own native OS so bun build --compile embeds the
-  # correct platform-native libs (OpenTUI ships per-platform native packages),
-  # then run the binary headlessly before it is allowed anywhere near npm.
-  # linux-arm64 and darwin-x64 have no free native runner (GitHub retired the
-  # Intel macos-13 image), so they are cross-compiled and skip the smoke test.
+  # correct platform-native libs (OpenTUI's per-platform packages carry
+  # libopentui), then run it headlessly before it goes anywhere near npm.
+  # Only darwin-x64 has no free native runner (GitHub retired the Intel image);
+  # it is cross-compiled on the arm64 mac after fetching its native lib, and
+  # skips the smoke test.
   build:
     needs: version
     if: needs.version.outputs.hasChangesets == 'false'
@@ -60,8 +61,8 @@ jobs:
             runner: ubuntu-latest
             smoke: true
           - target: linux-arm64
-            runner: ubuntu-latest
-            smoke: false # cross-compiled from x64 — cannot execute here
+            runner: ubuntu-24.04-arm # free native arm64 runner (public repo)
+            smoke: true
           - target: darwin-x64
             runner: macos-latest
             smoke: false # cross-compiled from arm64 — no free Intel runner
@@ -82,6 +83,23 @@ jobs:
           bun-version: 1.3.3
 
       - run: bun install --frozen-lockfile
+
+      # darwin-x64 has no free native runner, so it is cross-compiled on the
+      # arm64 mac. bun install only fetched the host's OpenTUI native package, so
+      # fetch the x64 one (it carries libopentui) before compiling — otherwise
+      # `bun build --compile` cannot resolve @opentui/core-darwin-x64. Uses
+      # npm pack (no lockfile change, so --frozen-lockfile above stays valid).
+      - name: Fetch cross-target native lib (darwin-x64)
+        if: matrix.target == 'darwin-x64'
+        shell: bash
+        run: |
+          ver=$(cd packages/cli && bun -e "console.log(require('@opentui/core/package.json').version)")
+          tmp=$(mktemp -d)
+          npm pack "@opentui/core-darwin-x64@${ver}" --pack-destination "$tmp"
+          tar -xzf "$tmp"/opentui-core-darwin-x64-*.tgz -C "$tmp"
+          mkdir -p node_modules/@opentui/core-darwin-x64
+          cp -R "$tmp"/package/. node_modules/@opentui/core-darwin-x64/
+          echo "Installed @opentui/core-darwin-x64@${ver} for cross-compile"
 
       - name: Build ${{ matrix.target }}
         env:
