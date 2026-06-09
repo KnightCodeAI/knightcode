@@ -104,6 +104,7 @@ jobs:
       - name: Build ${{ matrix.target }}
         env:
           TARGET: ${{ matrix.target }}
+        shell: bash # windows-latest defaults to pwsh, where "$TARGET" wouldn't expand
         run: bun run scripts/build.ts --target="$TARGET"
 
       - name: Smoke test (native targets only)
