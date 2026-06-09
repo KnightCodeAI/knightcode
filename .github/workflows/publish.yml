@@ -140,6 +140,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false # tags are pushed with an explicit token below
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -179,7 +180,9 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push release tags
-        run: git push origin --tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" --tags
 
       # One clean GitHub Release per version for the main package (not the 5
       # platform packages). Body = the CHANGELOG.md section Changesets wrote.
