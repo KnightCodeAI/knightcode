@@ -21,7 +21,7 @@ import { useToast } from "../providers/toast";
 import { useTheme } from "../providers/theme";
 import { useChat } from "../hooks/use-chat";
 import { usePromptConfig } from "../providers/prompt-config";
-import type { Message } from "../hooks/use-chat";
+import type { Message } from "../lib/engine/messages";
 import { getStore } from "../lib/store/client";
 import { getSession, type SessionRow } from "../lib/store";
 import { loadConversation } from "../lib/store/conversation";

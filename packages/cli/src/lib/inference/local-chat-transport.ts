@@ -15,7 +15,7 @@ import {
   type ToolSet,
   type UIMessageChunk,
 } from "ai";
-import type { Message } from "../../hooks/use-chat";
+import type { Message } from "../engine/messages";
 import { getSession } from "../store";
 import { getStore } from "../store/client";
 import { ensureSession, replaceSessionMessages } from "../store/conversation";

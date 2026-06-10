@@ -1,7 +1,7 @@
 import type { ModeType } from "@repo/shared";
 import { TextAttributes } from "@opentui/core";
 import { useState } from "react";
-import type { Message } from "../../hooks/use-chat";
+import type { Message } from "../../lib/engine/messages";
 import { useTheme } from "../../providers/theme";
 import { BULLET, THINKING_MARK } from "../../lib/ui/figures";
 import { formatDuration } from "../../lib/ui/format-duration";

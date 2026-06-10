@@ -5,7 +5,7 @@ import { WorkingIndicator } from "./working-indicator";
 import { TodoPanel } from "./todo-panel";
 import { usePromptConfig } from "../providers/prompt-config";
 import { useVerbose } from "../providers/verbose";
-import type { Message } from "../hooks/use-chat";
+import type { Message } from "../lib/engine/messages";
 
 type Props = {
   children?: ReactNode;

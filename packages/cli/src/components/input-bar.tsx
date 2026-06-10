@@ -333,7 +333,7 @@ function FileMentionMenu({
   );
 }
 
-import type { Message } from "../hooks/use-chat";
+import type { Message } from "../lib/engine/messages";
 
 type Props = {
   onSubmit: (text: string) => void;
