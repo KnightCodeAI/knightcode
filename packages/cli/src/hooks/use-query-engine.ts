@@ -52,6 +52,14 @@ type ConfirmDecision = {
 
 const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
+type SubmitParams = {
+  userText: string;
+  mode: ModeType;
+  model: SupportedChatModelId;
+  reasoningEffort: ReasoningEffortLevel;
+  commandProgressMessage?: string;
+};
+
 export function useQueryEngine(
   sessionId: string,
   initialMessages: Message[],
@@ -72,12 +80,27 @@ export function useQueryEngine(
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+  // Single write path that syncs the ref synchronously: await continuations
+  // (e.g. after compactHistory) read messagesRef before React re-renders, so
+  // every write must update the ref immediately, not just on the next render.
+  const updateMessages = useCallback(
+    (next: Message[] | ((prev: Message[]) => Message[])) => {
+      const value =
+        typeof next === "function" ? next(messagesRef.current) : next;
+      messagesRef.current = value;
+      setMessages(value);
+    },
+    [],
+  );
   const pendingConfirmationsRef = useRef(pendingConfirmations);
   pendingConfirmationsRef.current = pendingConfirmations;
   const abortRef = useRef<AbortController | null>(null);
   // Synchronous re-entry guard: abortRef is only assigned after async work in
   // submit, so it alone cannot prevent two concurrent turns.
   const inFlightRef = useRef(false);
+  // Submits that arrive mid-turn are queued and drained one at a time once
+  // the current turn finishes (the input bar stays enabled while streaming).
+  const queuedSubmitsRef = useRef<SubmitParams[]>([]);
   const loopGuardRef = useRef(new ToolLoopGuard());
   const alwaysAllowEditsRef = useRef(false);
   // Resolvers for confirmation prompts keyed by toolCallId. AskUserQuestion
@@ -93,7 +116,8 @@ export function useQueryEngine(
     new Map<string, (allowed: boolean) => void>(),
   );
 
-  // Turn-clock pause while a prompt/question is up (ported from use-chat).
+  // Turn-clock pause while a prompt/question is up (ported from the old
+  // useChat hook).
   const turnPausedMsRef = useRef(0);
   const pauseStartRef = useRef<number | null>(null);
   const getTurnPausedMs = useCallback(() => {
@@ -119,11 +143,11 @@ export function useQueryEngine(
       createCompactHistory({
         sessionId,
         getMessages: () => messagesRef.current,
-        setMessages: (m) => setMessages(m),
+        setMessages: (m) => updateMessages(m),
         setCompacting: setIsCompacting,
         toast: (t) => toast.show(t),
       }),
-    [sessionId, toast],
+    [sessionId, toast, updateMessages],
   );
 
   const persist = useCallback(
@@ -162,7 +186,7 @@ export function useQueryEngine(
     [],
   );
 
-  /** Boolean variant used by foreground subagents (ported from use-chat). */
+  /** Boolean variant used by foreground subagents (ported from the old useChat hook). */
   const requestToolPermission = useCallback(
     (
       toolCall: { toolCallId: string; toolName: string; input: unknown },
@@ -325,8 +349,13 @@ export function useQueryEngine(
         modelOverride: pending?.modelOverride,
       });
       // "Always" for a file edit auto-approves the other pending file edits
-      // (ported from use-chat). Their resolvers are awaiting too.
-      if (allowed && always) {
+      // (ported from the old useChat hook). Their resolvers are awaiting too.
+      if (
+        allowed &&
+        always &&
+        pending &&
+        FILE_EDIT_TOOLS.has(pending.toolCall.toolName)
+      ) {
         const pendingNow = pendingConfirmationsRef.current.filter(
           (c) =>
             c.toolCallId !== toolCallId &&
@@ -371,14 +400,12 @@ export function useQueryEngine(
   );
 
   const submit = useCallback(
-    async (params: {
-      userText: string;
-      mode: ModeType;
-      model: SupportedChatModelId;
-      reasoningEffort: ReasoningEffortLevel;
-      commandProgressMessage?: string;
-    }) => {
-      if (inFlightRef.current || abortRef.current) return; // one turn at a time
+    async (params: SubmitParams) => {
+      if (inFlightRef.current || abortRef.current) {
+        // One turn at a time: queue the submit and run it after this turn.
+        queuedSubmitsRef.current.push(params);
+        return;
+      }
       inFlightRef.current = true;
       try {
         let promptHookResult: UserPromptHookResult;
@@ -422,7 +449,7 @@ export function useQueryEngine(
         };
 
         const base = [...messagesRef.current, userMessage];
-        setMessages(base);
+        updateMessages(base);
         setStatus("submitted");
 
         const ac = new AbortController();
@@ -449,7 +476,7 @@ export function useQueryEngine(
           let finalAssistant: Message | null = null;
           const upsertAssistant = (message: Message) => {
             finalAssistant = message;
-            setMessages((prev) => {
+            updateMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === message.id);
               if (idx === -1) return [...prev, message];
               const next = [...prev];
@@ -507,13 +534,28 @@ export function useQueryEngine(
         }
       } finally {
         inFlightRef.current = false;
+        // Drain one queued submit. setTimeout avoids re-entrancy here.
+        const queued = queuedSubmitsRef.current.shift();
+        if (queued) setTimeout(() => void submitRef.current?.(queued), 0);
       }
     },
-    [sessionId, toast, compactHistory, makeRunTool, getTurnPausedMs, persist],
+    [
+      sessionId,
+      toast,
+      compactHistory,
+      makeRunTool,
+      getTurnPausedMs,
+      persist,
+      updateMessages,
+    ],
   );
+  const submitRef = useRef<typeof submit | null>(null);
+  submitRef.current = submit;
 
   const abort = useCallback(() => {
     abortRef.current?.abort();
+    // Aborting should not fire stale queued messages afterwards.
+    queuedSubmitsRef.current = [];
     // Unblock any prompt the engine is awaiting so the turn can wind down.
     for (const [id, r] of confirmResolversRef.current) {
       r({ allowed: false, always: false });
@@ -531,13 +573,13 @@ export function useQueryEngine(
   }, []);
 
   const clearMessages = useCallback(async () => {
-    setMessages([]);
+    updateMessages([]);
     try {
       replaceSessionMessages(getStore(), sessionId, []);
     } catch (err) {
       console.error("Failed to clear messages:", err);
     }
-  }, [sessionId]);
+  }, [sessionId, updateMessages]);
 
   const rewindMessages = useCallback(
     async (n: number) => {
@@ -546,7 +588,7 @@ export function useQueryEngine(
 
       // Walk backward collecting (userIdx, assistantIdx) pairs. Resilient to
       // orphan assistants, consecutive same-role messages, and imported
-      // histories (ported from use-chat).
+      // histories (ported from the old useChat hook).
       const pairs: [number, number][] = [];
       let i = current.length - 1;
       while (i >= 0 && pairs.length < n) {
@@ -571,14 +613,14 @@ export function useQueryEngine(
       if (pairs.length === 0) return;
       const removeIndices = new Set(pairs.flatMap(([u, a]) => [u, a]));
       const next = current.filter((_, idx) => !removeIndices.has(idx));
-      setMessages(next);
+      updateMessages(next);
       try {
         replaceSessionMessages(getStore(), sessionId, next as never);
       } catch (err) {
         console.error("Failed to persist rewound messages:", err);
       }
     },
-    [sessionId],
+    [sessionId, updateMessages],
   );
 
   // Background-agent notifications: drain one per idle tick (ported).
@@ -588,8 +630,9 @@ export function useQueryEngine(
     if (!hasNotifications()) return;
     const next = dequeueNotification();
     if (!next) return;
-    const meta = messagesRef.current.findLast((m) => m.metadata?.model)
-      ?.metadata;
+    const meta = messagesRef.current.findLast(
+      (m) => m.metadata?.model,
+    )?.metadata;
     void submit({
       userText: next,
       mode: (meta?.mode ?? "BUILD") as ModeType,
