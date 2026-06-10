@@ -23,8 +23,9 @@ export type EngineEvent =
 export type TerminalReason = "complete" | "aborted" | "max_rounds" | "error";
 export type Terminal = { reason: TerminalReason; error?: unknown };
 
+// Session identity intentionally absent: persistence and tool execution
+// receive it via the runTool closure, keeping the engine session-agnostic.
 export type QueryParams = {
-  sessionId: string;
   cwd: string;
   /** Full transcript including the just-submitted user message. */
   messages: Message[];

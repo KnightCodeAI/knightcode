@@ -104,7 +104,6 @@ function toolThenTextModel() {
 }
 
 const baseParams = (model: unknown, runTool?: (tc: never) => Promise<ToolOutcome>) => ({
-  sessionId: "s1",
   cwd: process.cwd(),
   messages: [userMsg("hello")],
   mode: "BUILD" as const,

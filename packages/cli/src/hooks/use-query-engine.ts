@@ -464,7 +464,6 @@ export function useQueryEngine(
         abortRef.current = ac;
 
         const gen = query({
-          sessionId,
           cwd: process.cwd(),
           messages: base,
           mode: params.mode,
