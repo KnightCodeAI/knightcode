@@ -561,7 +561,7 @@ export const COMMANDS: Command[] = [
     action: async (ctx) => {
       ctx.toast.show({ message: "Opening GitHub issues…" });
       try {
-        await open("https://github.com/Raghav1428/knightcode/issues/new");
+        await open("https://github.com/KnightCodeAI/knightcode/issues/new");
         ctx.toast.show({ variant: "success", message: "Opened in browser" });
       } catch {
         ctx.toast.show({ variant: "error", message: "Could not open browser" });

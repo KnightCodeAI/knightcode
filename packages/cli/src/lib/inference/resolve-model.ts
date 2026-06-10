@@ -57,7 +57,7 @@ export function resolveModel(
   const openrouter = createOpenRouter({
     apiKey,
     headers: {
-      "HTTP-Referer": "https://github.com/Raghav1428/knightcode",
+      "HTTP-Referer": "https://github.com/KnightCodeAI/knightcode",
       "X-Title": "KnightCode CLI",
     },
   });
