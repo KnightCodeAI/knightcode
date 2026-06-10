@@ -75,6 +75,9 @@ export function useQueryEngine(
   const pendingConfirmationsRef = useRef(pendingConfirmations);
   pendingConfirmationsRef.current = pendingConfirmations;
   const abortRef = useRef<AbortController | null>(null);
+  // Synchronous re-entry guard: abortRef is only assigned after async work in
+  // submit, so it alone cannot prevent two concurrent turns.
+  const inFlightRef = useRef(false);
   const loopGuardRef = useRef(new ToolLoopGuard());
   const alwaysAllowEditsRef = useRef(false);
   // Resolvers for confirmation prompts keyed by toolCallId. AskUserQuestion
@@ -375,123 +378,135 @@ export function useQueryEngine(
       reasoningEffort: ReasoningEffortLevel;
       commandProgressMessage?: string;
     }) => {
-      if (abortRef.current) return; // one turn at a time
-
-      let promptHookResult: UserPromptHookResult;
+      if (inFlightRef.current || abortRef.current) return; // one turn at a time
+      inFlightRef.current = true;
       try {
-        promptHookResult = await runUserPromptSubmitHooks(
-          params.userText,
-          sessionId,
-        );
-      } catch (err) {
-        console.error("UserPromptSubmit hook error:", err);
-        promptHookResult = { blocked: false };
-      }
-      if (promptHookResult.blocked) {
-        toast.show({
-          variant: "error",
-          message: promptHookResult.stopReason ?? "Hook blocked this message",
-        });
-        return;
-      }
-
-      loopGuardRef.current.reset();
-      turnPausedMsRef.current = 0;
-      pauseStartRef.current = null;
-      setError(undefined);
-      await compactHistory(false, params.model);
-
-      const submittedAt = Date.now();
-      const userMessage: Message = {
-        id: `user-${crypto.randomUUID()}`,
-        role: "user",
-        parts: [{ type: "text", text: params.userText }],
-        metadata: {
-          mode: params.mode,
-          model: params.model,
-          reasoningEffort: params.reasoningEffort,
-          submittedAt,
-          ...(params.commandProgressMessage
-            ? { commandProgressMessage: params.commandProgressMessage }
-            : {}),
-        },
-      };
-
-      const base = [...messagesRef.current, userMessage];
-      setMessages(base);
-      setStatus("submitted");
-
-      const ac = new AbortController();
-      abortRef.current = ac;
-
-      const gen = query({
-        sessionId,
-        cwd: process.cwd(),
-        messages: base,
-        mode: params.mode,
-        modelId: params.model,
-        reasoningEffort: params.reasoningEffort,
-        getApiKey: getOpenRouterApiKey,
-        runTool: makeRunTool(params.mode),
-        abortSignal: ac.signal,
-        turnStartMs: submittedAt,
-        getTurnPausedMs,
-      });
-
-      let hadError = false;
-      try {
-        const upsertAssistant = (message: Message) => {
-          setMessages((prev) => {
-            const idx = prev.findIndex((m) => m.id === message.id);
-            if (idx === -1) return [...prev, message];
-            const next = [...prev];
-            next[idx] = message;
-            return next;
+        let promptHookResult: UserPromptHookResult;
+        try {
+          promptHookResult = await runUserPromptSubmitHooks(
+            params.userText,
+            sessionId,
+          );
+        } catch (err) {
+          console.error("UserPromptSubmit hook error:", err);
+          promptHookResult = { blocked: false };
+        }
+        if (promptHookResult.blocked) {
+          toast.show({
+            variant: "error",
+            message: promptHookResult.stopReason ?? "Hook blocked this message",
           });
-        };
-
-        while (true) {
-          const r = await gen.next();
-          if (r.done) {
-            if (r.value.reason === "error") {
-              hadError = true;
-              setError(
-                r.value.error instanceof Error
-                  ? r.value.error
-                  : new Error(String(r.value.error)),
-              );
-              setStatus("error");
-            }
-            break;
-          }
-          const event = r.value;
-          switch (event.type) {
-            case "stream_start":
-              setStatus("streaming");
-              break;
-            case "message_update":
-            case "turn_complete":
-              upsertAssistant(event.message);
-              break;
-            default:
-              break;
-          }
+          return;
         }
 
-        persist(messagesRef.current, params.model, params.reasoningEffort);
-        void compactHistory(false, params.model);
-        setTimeout(() => {
-          runStopHooks(sessionId).catch((err) =>
-            console.error("Stop hook error:", err),
+        loopGuardRef.current.reset();
+        turnPausedMsRef.current = 0;
+        pauseStartRef.current = null;
+        setError(undefined);
+        await compactHistory(false, params.model);
+
+        const submittedAt = Date.now();
+        const userMessage: Message = {
+          id: `user-${crypto.randomUUID()}`,
+          role: "user",
+          parts: [{ type: "text", text: params.userText }],
+          metadata: {
+            mode: params.mode,
+            model: params.model,
+            reasoningEffort: params.reasoningEffort,
+            submittedAt,
+            ...(params.commandProgressMessage
+              ? { commandProgressMessage: params.commandProgressMessage }
+              : {}),
+          },
+        };
+
+        const base = [...messagesRef.current, userMessage];
+        setMessages(base);
+        setStatus("submitted");
+
+        const ac = new AbortController();
+        abortRef.current = ac;
+
+        const gen = query({
+          sessionId,
+          cwd: process.cwd(),
+          messages: base,
+          mode: params.mode,
+          modelId: params.model,
+          reasoningEffort: params.reasoningEffort,
+          getApiKey: getOpenRouterApiKey,
+          runTool: makeRunTool(params.mode),
+          abortSignal: ac.signal,
+          turnStartMs: submittedAt,
+          getTurnPausedMs,
+        });
+
+        let hadError = false;
+        try {
+          // Track the latest assistant message locally: React state may not
+          // have flushed the final turn_complete upsert when we persist.
+          let finalAssistant: Message | null = null;
+          const upsertAssistant = (message: Message) => {
+            finalAssistant = message;
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === message.id);
+              if (idx === -1) return [...prev, message];
+              const next = [...prev];
+              next[idx] = message;
+              return next;
+            });
+          };
+
+          while (true) {
+            const r = await gen.next();
+            if (r.done) {
+              if (r.value.reason === "error") {
+                hadError = true;
+                setError(
+                  r.value.error instanceof Error
+                    ? r.value.error
+                    : new Error(String(r.value.error)),
+                );
+                setStatus("error");
+              }
+              break;
+            }
+            const event = r.value;
+            switch (event.type) {
+              case "stream_start":
+                setStatus("streaming");
+                break;
+              case "message_update":
+              case "turn_complete":
+                upsertAssistant(event.message);
+                break;
+              default:
+                break;
+            }
+          }
+
+          persist(
+            finalAssistant ? [...base, finalAssistant] : base,
+            params.model,
+            params.reasoningEffort,
           );
-        }, 0);
+          void compactHistory(false, params.model);
+          setTimeout(() => {
+            runStopHooks(sessionId).catch((err) =>
+              console.error("Stop hook error:", err),
+            );
+          }, 0);
+        } finally {
+          abortRef.current = null;
+          if (!hadError) setStatus("ready");
+          setPendingConfirmations([]);
+          confirmResolversRef.current.clear();
+          questionResolversRef.current.clear();
+          permissionResolversRef.current.clear();
+        }
       } finally {
-        abortRef.current = null;
-        if (!hadError) setStatus("ready");
-        setPendingConfirmations([]);
-        confirmResolversRef.current.clear();
-        questionResolversRef.current.clear();
-        permissionResolversRef.current.clear();
+        inFlightRef.current = false;
       }
     },
     [sessionId, toast, compactHistory, makeRunTool, getTurnPausedMs, persist],
