@@ -64,6 +64,7 @@ export function createCompactHistory(
   return async function compactHistory(force = false, targetModelId) {
     if (running) return;
     running = true;
+    let compactingSet = false;
     try {
       const currentMessages = deps.getMessages();
 
@@ -90,6 +91,7 @@ export function createCompactHistory(
       }
 
       deps.setCompacting(true);
+      compactingSet = true;
       const activeMode =
         currentMessages.findLast((m) => m.metadata?.mode)?.metadata?.mode ??
         "BUILD";
@@ -389,7 +391,7 @@ export function createCompactHistory(
         console.error("Failed to persist compacted messages:", err);
       }
     } finally {
-      deps.setCompacting(false);
+      if (compactingSet) deps.setCompacting(false);
       running = false;
     }
   };
