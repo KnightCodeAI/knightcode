@@ -19,7 +19,7 @@ import {
 } from "../components/messages";
 import { useToast } from "../providers/toast";
 import { useTheme } from "../providers/theme";
-import { useChat } from "../hooks/use-chat";
+import { useQueryEngine } from "../hooks/use-query-engine";
 import { usePromptConfig } from "../providers/prompt-config";
 import type { Message } from "../lib/engine/messages";
 import { getStore } from "../lib/store/client";
@@ -171,7 +171,7 @@ function SessionChat({
     clearMessages,
     rewindMessages,
     isCompacting,
-  } = useChat(session.id, initialMessages, { onModeChange: setMode });
+  } = useQueryEngine(session.id, initialMessages, { onModeChange: setMode });
   const { setItems, clearAll, toggleExpanded } = useTodo();
 
   useEffect(() => {
