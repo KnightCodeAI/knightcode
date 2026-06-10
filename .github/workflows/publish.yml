@@ -21,8 +21,11 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   # Manages the "Version Packages" PR on every push. When changesets are present
-  # it opens/updates the PR and stops. When the PR has been merged (no changesets
-  # left) hasChangesets is "false", which gates the build + publish jobs below.
+  # it opens/updates the PR and stops. The build + publish jobs below only run
+  # when there are no changesets left AND the version in the repo is not yet on
+  # npm — i.e. exactly once, on the Version Packages merge. Without the registry
+  # check, every ordinary merge (no changesets) would spin up the full 5-OS
+  # build matrix just to no-op at `changeset publish`.
   version:
     runs-on: ubuntu-latest
     permissions:
@@ -30,6 +33,7 @@ jobs:
       pull-requests: write # open/update the Version Packages PR
     outputs:
       hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
+      needsPublish: ${{ steps.release.outputs.needsPublish }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -40,6 +44,27 @@ jobs:
           bun-version: 1.3.3
 
       - run: bun install
+
+      # All 6 fixed-group packages must be checked, not just the main one: a
+      # release run that fails partway can leave some platform packages
+      # unpublished, and a re-run must still fire for the stragglers. Keep the
+      # list in sync with the fixed group in .changeset/config.json. The empty
+      # check alongside the exit code covers old npm versions where a missing
+      # version exited 0 with no output.
+      - name: Check whether the current version is unpublished
+        id: release
+        shell: bash
+        run: |
+          local_ver=$(node -p "require('./packages/cli/package.json').version")
+          needs_publish=false
+          for pkg in @knightcodeai/cli @knightcodeai/cli-linux-x64 @knightcodeai/cli-linux-arm64 @knightcodeai/cli-darwin-x64 @knightcodeai/cli-darwin-arm64 @knightcodeai/cli-win32-x64; do
+            if [ -z "$(npm view "${pkg}@${local_ver}" version 2>/dev/null)" ]; then
+              needs_publish=true
+              break
+            fi
+          done
+          echo "needsPublish=${needs_publish}" >> "$GITHUB_OUTPUT"
+          echo "local=$local_ver needsPublish=$needs_publish"
 
       - name: Create Release Pull Request
         id: changesets
@@ -59,7 +84,7 @@ jobs:
   # skips the smoke test.
   build:
     needs: version
-    if: needs.version.outputs.hasChangesets == 'false'
+    if: needs.version.outputs.hasChangesets == 'false' && needs.version.outputs.needsPublish == 'true'
     permissions:
       contents: read
     strategy:
@@ -142,7 +167,7 @@ jobs:
   # unpublished. Publishes the exact artifacts the build job produced.
   publish:
     needs: [version, build]
-    if: needs.version.outputs.hasChangesets == 'false'
+    if: needs.version.outputs.hasChangesets == 'false' && needs.version.outputs.needsPublish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write # push tags + create the GitHub Release
