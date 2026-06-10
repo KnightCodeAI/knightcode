@@ -5,7 +5,7 @@ import type {
 } from "@repo/shared";
 import type { DialogContextValue } from "../../providers/dialogs";
 import type { ToastContextValue } from "../../providers/toast";
-import type { Message } from "../../hooks/use-chat";
+import type { Message } from "../../lib/engine/messages";
 
 export type CommandContext = {
   exit: () => void;

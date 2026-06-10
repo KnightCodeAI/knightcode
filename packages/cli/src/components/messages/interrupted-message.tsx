@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
 import type { ModeType } from "@repo/shared";
-import type { Message } from "../../hooks/use-chat";
+import type { Message } from "../../lib/engine/messages";
 import { useTheme } from "../../providers/theme";
 import { BotMessage } from "./bot-message";
 
@@ -8,6 +8,7 @@ type Props = {
   parts: Message["parts"];
   model: string;
   mode: ModeType;
+  /** Accepted for call-site compatibility; intentionally not rendered. */
   durationMs?: number;
   pendingConfirmations?: any[];
   answerQuestion?: (
@@ -25,7 +26,6 @@ export function InterruptedMessage({
   parts,
   model,
   mode,
-  durationMs,
   pendingConfirmations,
   answerQuestion,
 }: Props) {
@@ -34,14 +34,16 @@ export function InterruptedMessage({
     <box width="100%" flexDirection="column">
       <box paddingX={3} paddingTop={1} paddingBottom={0}>
         <text fg={colors.warning} attributes={TextAttributes.DIM}>
-          ⚠ interrupted
+          Interrupted, what can I do for you instead?
         </text>
       </box>
+      {/* durationMs intentionally withheld: it gates BotMessage's whimsical
+          "Crunched for Xs" completion line, which reads wrong on an
+          interrupted turn — the header above already states the outcome. */}
       <BotMessage
         parts={parts}
         model={model}
         mode={mode}
-        durationMs={durationMs}
         streaming={false}
         pendingConfirmations={pendingConfirmations}
         answerQuestion={answerQuestion}

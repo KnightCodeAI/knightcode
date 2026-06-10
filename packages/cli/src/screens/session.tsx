@@ -19,9 +19,9 @@ import {
 } from "../components/messages";
 import { useToast } from "../providers/toast";
 import { useTheme } from "../providers/theme";
-import { useChat } from "../hooks/use-chat";
+import { useQueryEngine } from "../hooks/use-query-engine";
 import { usePromptConfig } from "../providers/prompt-config";
-import type { Message } from "../hooks/use-chat";
+import type { Message } from "../lib/engine/messages";
 import { getStore } from "../lib/store/client";
 import { getSession, type SessionRow } from "../lib/store";
 import { loadConversation } from "../lib/store/conversation";
@@ -157,6 +157,7 @@ function SessionChat({
   const {
     messages,
     status,
+    queuedMessages,
     submit,
     abort,
     interrupt,
@@ -171,7 +172,7 @@ function SessionChat({
     clearMessages,
     rewindMessages,
     isCompacting,
-  } = useChat(session.id, initialMessages, { onModeChange: setMode });
+  } = useQueryEngine(session.id, initialMessages, { onModeChange: setMode });
   const { setItems, clearAll, toggleExpanded } = useTodo();
 
   useEffect(() => {
@@ -373,6 +374,7 @@ function SessionChat({
       clearMessages={clearMessages}
       rewindMessages={rewindMessages}
       messages={messages}
+      queuedMessages={queuedMessages}
       tokenStats={tokenStats}
       submitMessage={(text) =>
         submit({ userText: text, mode, model, reasoningEffort })
