@@ -45,20 +45,26 @@ jobs:
 
       - run: bun install
 
-      # The 6 packages version together (fixed group), so probing the main one
-      # is sufficient. "none" covers the first-ever publish of a package.
+      # All 6 fixed-group packages must be checked, not just the main one: a
+      # release run that fails partway can leave some platform packages
+      # unpublished, and a re-run must still fire for the stragglers. Keep the
+      # list in sync with the fixed group in .changeset/config.json. The empty
+      # check alongside the exit code covers old npm versions where a missing
+      # version exited 0 with no output.
       - name: Check whether the current version is unpublished
         id: release
         shell: bash
         run: |
           local_ver=$(node -p "require('./packages/cli/package.json').version")
-          published_ver=$(npm view @knightcodeai/cli version 2>/dev/null || echo "none")
-          if [ "$local_ver" = "$published_ver" ]; then
-            echo "needsPublish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "needsPublish=true" >> "$GITHUB_OUTPUT"
-          fi
-          echo "local=$local_ver published=$published_ver"
+          needs_publish=false
+          for pkg in @knightcodeai/cli @knightcodeai/cli-linux-x64 @knightcodeai/cli-linux-arm64 @knightcodeai/cli-darwin-x64 @knightcodeai/cli-darwin-arm64 @knightcodeai/cli-win32-x64; do
+            if [ -z "$(npm view "${pkg}@${local_ver}" version 2>/dev/null)" ]; then
+              needs_publish=true
+              break
+            fi
+          done
+          echo "needsPublish=${needs_publish}" >> "$GITHUB_OUTPUT"
+          echo "local=$local_ver needsPublish=$needs_publish"
 
       - name: Create Release Pull Request
         id: changesets
