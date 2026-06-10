@@ -101,6 +101,11 @@ export function useQueryEngine(
   // Submits that arrive mid-turn are queued and drained one at a time once
   // the current turn finishes (the input bar stays enabled while streaming).
   const queuedSubmitsRef = useRef<SubmitParams[]>([]);
+  // Mirror of the queue as state so the UI can render pending submits.
+  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
+  const syncQueued = useCallback(() => {
+    setQueuedMessages(queuedSubmitsRef.current.map((q) => q.userText));
+  }, []);
   const loopGuardRef = useRef(new ToolLoopGuard());
   const alwaysAllowEditsRef = useRef(false);
   // Resolvers for confirmation prompts keyed by toolCallId. AskUserQuestion
@@ -134,9 +139,11 @@ export function useQueryEngine(
     }
   }, [pendingConfirmations.length]);
 
-  const { setItems: setTodoItems } = useTodo();
+  const { setItems: setTodoItems, items: todoItems } = useTodo();
   const todoRef = useRef(setTodoItems);
   todoRef.current = setTodoItems;
+  const todoItemsRef = useRef(todoItems);
+  todoItemsRef.current = todoItems;
 
   const compactHistory = useMemo(
     () =>
@@ -404,6 +411,7 @@ export function useQueryEngine(
       if (inFlightRef.current || abortRef.current) {
         // One turn at a time: queue the submit and run it after this turn.
         queuedSubmitsRef.current.push(params);
+        syncQueued();
         return;
       }
       inFlightRef.current = true;
@@ -524,6 +532,12 @@ export function useQueryEngine(
               console.error("Stop hook error:", err),
             );
           }, 0);
+          // The todo panel has served its purpose once every item is done —
+          // clear it on natural turn end so it doesn't linger.
+          const todos = todoItemsRef.current;
+          if (todos.length > 0 && todos.every((t) => t.status === "completed")) {
+            todoRef.current([], false);
+          }
         } finally {
           abortRef.current = null;
           if (!hadError) setStatus("ready");
@@ -536,6 +550,7 @@ export function useQueryEngine(
         inFlightRef.current = false;
         // Drain one queued submit. setTimeout avoids re-entrancy here.
         const queued = queuedSubmitsRef.current.shift();
+        syncQueued();
         if (queued) setTimeout(() => void submitRef.current?.(queued), 0);
       }
     },
@@ -547,6 +562,7 @@ export function useQueryEngine(
       getTurnPausedMs,
       persist,
       updateMessages,
+      syncQueued,
     ],
   );
   const submitRef = useRef<typeof submit | null>(null);
@@ -556,6 +572,7 @@ export function useQueryEngine(
     abortRef.current?.abort();
     // Aborting should not fire stale queued messages afterwards.
     queuedSubmitsRef.current = [];
+    syncQueued();
     // Unblock any prompt the engine is awaiting so the turn can wind down.
     for (const [id, r] of confirmResolversRef.current) {
       r({ allowed: false, always: false });
@@ -570,7 +587,7 @@ export function useQueryEngine(
       questionResolversRef.current.delete(id);
     }
     setPendingConfirmations([]);
-  }, []);
+  }, [syncQueued]);
 
   const clearMessages = useCallback(async () => {
     updateMessages([]);
@@ -651,6 +668,7 @@ export function useQueryEngine(
     messages,
     status,
     error,
+    queuedMessages,
     activeTurnStartMs,
     getTurnPausedMs,
     pendingConfirmations,

@@ -157,6 +157,7 @@ function SessionChat({
   const {
     messages,
     status,
+    queuedMessages,
     submit,
     abort,
     interrupt,
@@ -373,6 +374,7 @@ function SessionChat({
       clearMessages={clearMessages}
       rewindMessages={rewindMessages}
       messages={messages}
+      queuedMessages={queuedMessages}
       tokenStats={tokenStats}
       submitMessage={(text) =>
         submit({ userText: text, mode, model, reasoningEffort })

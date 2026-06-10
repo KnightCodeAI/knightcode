@@ -186,6 +186,9 @@ export async function* query(
       const toolCalls: ToolCallRequest[] = [];
       let activeText: { type: "text"; text: string } | null = null;
       let activeReasoning: { type: "reasoning"; text: string } | null = null;
+      // streamText doesn't throw on abort mid-stream: it emits a graceful
+      // `abort` part and ends the stream, so track it explicitly.
+      let streamAborted = false;
 
       for await (const part of result.fullStream) {
         switch (part.type) {
@@ -234,6 +237,9 @@ export async function* query(
           case "finish":
             usage = addUsage(usage, part.totalUsage);
             break;
+          case "abort":
+            streamAborted = true;
+            break;
           case "error":
             throw part.error instanceof Error
               ? part.error
@@ -241,6 +247,11 @@ export async function* query(
           default:
             break;
         }
+      }
+
+      if (streamAborted || abortSignal?.aborted) {
+        yield { type: "turn_complete", message: sealTurn(true) };
+        return { reason: "aborted" };
       }
 
       if (toolCalls.length === 0) {

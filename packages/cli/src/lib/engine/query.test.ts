@@ -172,6 +172,56 @@ describe("query", () => {
     expect(toolPart.errorText).toBe("boom");
   });
 
+  test("abort mid-stream (graceful abort part) yields interrupted turn", async () => {
+    // The installed AI SDK never accepts a raw `abort` model-stream part
+    // (runToolsTransformation throws "Unhandled chunk type"); streamText
+    // synthesizes the fullStream `{ type: "abort" }` part itself when its
+    // abortSignal fires mid-pull. So trigger the graceful abort path by
+    // aborting on the first streamed text delta.
+    const ac = new AbortController();
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "1" },
+          { type: "text-delta", id: "1", delta: "partial answer" },
+          { type: "text-delta", id: "1", delta: " more text" },
+          { type: "text-end", id: "1" },
+          {
+            type: "finish",
+            finishReason: v3Finish("stop"),
+            usage: v3Usage(10, 5),
+          },
+        ] as never),
+      }),
+    });
+    const gen = query({
+      ...(baseParams(model) as never as object),
+      abortSignal: ac.signal,
+    } as never);
+    const events: EngineEvent[] = [];
+    let terminal: Terminal | undefined;
+    while (true) {
+      const r = await gen.next();
+      if (r.done) {
+        terminal = r.value;
+        break;
+      }
+      events.push(r.value);
+      if (r.value.type === "message_update") ac.abort();
+    }
+    expect(terminal?.reason).toBe("aborted");
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    expect(done.message.metadata?.isInterrupted).toBe(true);
+    expect(
+      done.message.parts.some(
+        (p) => (p as { type: string; text?: string }).type === "text",
+      ),
+    ).toBe(true);
+  });
+
   test("abort before tool execution yields interrupted turn", async () => {
     const ac = new AbortController();
     const runTool = async (): Promise<ToolOutcome> => {

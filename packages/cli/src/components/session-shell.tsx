@@ -4,6 +4,7 @@ import { InputBar } from "./input-bar";
 import { WorkingIndicator } from "./working-indicator";
 import { TodoPanel } from "./todo-panel";
 import { usePromptConfig } from "../providers/prompt-config";
+import { useTheme } from "../providers/theme";
 import { useVerbose } from "../providers/verbose";
 import type { Message } from "../lib/engine/messages";
 
@@ -24,6 +25,7 @@ type Props = {
   submitMessage?: (text: string) => void;
   submitCommand?: (text: string, progressMessage: string) => void;
   messages?: Message[];
+  queuedMessages?: string[];
   tokenStats?: {
     inputTokens: number;
     outputTokens: number;
@@ -49,9 +51,11 @@ export function SessionShell({
   submitMessage,
   submitCommand,
   messages,
+  queuedMessages,
   tokenStats,
 }: Props) {
   const { mode } = usePromptConfig();
+  const { colors } = useTheme();
   const { verbose } = useVerbose();
   return (
     <box
@@ -73,6 +77,15 @@ export function SessionShell({
         <box>{children}</box>
       </scrollbox>
       <TodoPanel />
+      {queuedMessages && queuedMessages.length > 0 ? (
+        <box flexDirection="column" flexShrink={0}>
+          {queuedMessages.map((text, i) => (
+            <text key={`queued-${i}`} fg={colors.dimSeparator}>
+              {`> queued: ${text}`}
+            </text>
+          ))}
+        </box>
+      ) : null}
       {loading || isCompacting ? (
         <box flexShrink={0} height={1}>
           <WorkingIndicator
