@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - main
+    # Only run when something publishable changed — pushes touching only
+    # apps/** (e.g. the website) skip the workflow entirely. Version-Packages
+    # merges still match via .changeset/** and packages/*/package.json.
+    paths:
+      - "packages/**"
+      - ".changeset/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/publish.yml"
 
 # No cancel-in-progress on purpose: cancelling a run mid-publish could leave a
 # partial release (some of the 6 fixed-group packages published, others not).
