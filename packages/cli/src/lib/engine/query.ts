@@ -1,7 +1,6 @@
 import {
   convertToModelMessages,
   streamText,
-  validateUIMessages,
   type LanguageModelUsage,
   type ToolSet,
 } from "ai";
@@ -146,12 +145,14 @@ export async function* query(
 
       const requestMessages =
         assistant.parts.length > 0 ? [...transcript, assistant] : transcript;
-      const validated = await validateUIMessages({
-        messages: requestMessages,
+      // No schema re-validation of history: the transcript records what
+      // happened, including tool calls whose input the executor already
+      // rejected (e.g. Grep with {}). validateUIMessages would throw on those
+      // forever, permanently poisoning the session. convertToModelMessages
+      // only needs structural shapes, which the engine/store guarantee.
+      const modelMessages = await convertToModelMessages(requestMessages, {
         tools: tools as never,
-      });
-      const modelMessages = await convertToModelMessages(validated, {
-        tools: tools as never,
+        ignoreIncompleteToolCalls: true,
       });
 
       yield { type: "stream_start" };
@@ -219,6 +220,25 @@ export async function* query(
             activeReasoning = null;
             break;
           case "tool-call": {
+            // Unparsable args or unknown tool: never execute — resolve the
+            // part as an error immediately so the model can self-correct on
+            // the next round instead of the executor (or worse, a later
+            // history pass) choking on it.
+            const invalid = (part as { invalid?: boolean }).invalid === true;
+            if (invalid) {
+              const reason = (part as { error?: unknown }).error;
+              assistant.parts.push({
+                type: `tool-${part.toolName}`,
+                toolCallId: part.toolCallId,
+                state: "output-error",
+                input: part.input ?? {},
+                errorText: `Invalid tool call: ${
+                  reason instanceof Error ? reason.message : String(reason ?? "unparsable arguments")
+                }`,
+              } as never);
+              yield { type: "message_update", message: snapshot(assistant) };
+              break;
+            }
             const toolCall: ToolCallRequest = {
               toolCallId: part.toolCallId,
               toolName: part.toolName,

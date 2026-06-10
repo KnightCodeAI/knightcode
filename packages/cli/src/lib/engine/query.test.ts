@@ -222,6 +222,102 @@ describe("query", () => {
     ).toBe(true);
   });
 
+  test("malformed historical tool input does not poison the session", async () => {
+    // Regression: a model once emitted Grep with input {} (missing required
+    // `pattern`). The executor rejected it, but strict schema re-validation of
+    // HISTORY threw on every later round, permanently erroring the session.
+    const poisoned: Message[] = [
+      userMsg("find usages"),
+      {
+        id: "a-old",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-Grep",
+            toolCallId: "bad1",
+            state: "output-error",
+            input: {},
+            errorText: "pattern: Invalid input: expected string",
+          },
+          { type: "text", text: "that failed" },
+        ],
+      } as never,
+      {
+        id: "u2",
+        role: "user",
+        parts: [{ type: "text", text: "try again" }],
+        metadata: { submittedAt: Date.now() },
+      } as never,
+    ];
+    const params = {
+      ...(baseParams(textOnlyModel("recovered fine")) as never as object),
+      messages: poisoned,
+    };
+    const { events, terminal } = await drain(query(params as never));
+    expect(terminal.reason).toBe("complete");
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    expect(done.message.metadata?.isInterrupted).toBeUndefined();
+  });
+
+  test("invalid (unparsable) tool call is not executed; resolves as error", async () => {
+    let call = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async () => {
+        call++;
+        if (call === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: "stream-start", warnings: [] },
+              {
+                type: "tool-call",
+                toolCallId: "tc-bad",
+                toolName: "Read",
+                input: "{not valid json",
+              },
+              {
+                type: "finish",
+                finishReason: v3Finish("tool-calls"),
+                usage: v3Usage(10, 5),
+              },
+            ] as never),
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "1" },
+            { type: "text-delta", id: "1", delta: "self-corrected" },
+            { type: "text-end", id: "1" },
+            {
+              type: "finish",
+              finishReason: v3Finish("stop"),
+              usage: v3Usage(20, 5),
+            },
+          ] as never),
+        };
+      },
+    });
+    const calls: string[] = [];
+    const runTool = async (tc: { toolName: string }): Promise<ToolOutcome> => {
+      calls.push(tc.toolName);
+      return { kind: "output", output: {} };
+    };
+    const { events, terminal } = await drain(
+      query(baseParams(model, runTool as never) as never),
+    );
+    expect(terminal.reason).toBe("complete");
+    expect(calls).toEqual([]); // invalid call must never reach the executor
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    const toolPart = done.message.parts.find((p) =>
+      (p as { type: string }).type.startsWith("tool-"),
+    ) as never as { state: string; errorText?: string };
+    expect(toolPart.state).toBe("output-error");
+  });
+
   test("abort before tool execution yields interrupted turn", async () => {
     const ac = new AbortController();
     const runTool = async (): Promise<ToolOutcome> => {
