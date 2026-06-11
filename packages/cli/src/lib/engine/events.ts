@@ -11,12 +11,51 @@ export type ToolOutcome =
   | { kind: "output"; output: unknown }
   | { kind: "error"; errorText: string };
 
+/** UI's answer to a gated tool call. */
+export type PermissionDecision =
+  | {
+      behavior: "allow";
+      /** Persist the grant (bash allowlist / session-wide edit approval). */
+      always?: boolean;
+      /** Raw OpenRouter id override for Agent spawns (per-spawn model pick). */
+      modelOverride?: string;
+    }
+  | { behavior: "deny"; feedback?: string };
+
+/**
+ * Everything the engine needs from its embedder to run tools. Supplied by
+ * useQueryEngine (and later, recursively, by the Agent tool). The engine owns
+ * gating, loop protection, hooks, and scheduling; the host owns execution and
+ * user interaction.
+ */
+export type ToolHost = {
+  /** Execute one already-approved tool call. Throws on failure. */
+  executeTool: (
+    toolCall: ToolCallRequest,
+    mode: ModeType,
+    opts: { modelOverride?: string },
+  ) => Promise<unknown>;
+  /** Show a permission prompt and await the user's decision. */
+  canUseTool: (
+    toolCall: ToolCallRequest,
+    mode: ModeType,
+  ) => Promise<PermissionDecision>;
+  /** AskUserQuestion: prompt and return the tool output ({ answers }). */
+  askQuestion: (toolCall: ToolCallRequest) => Promise<unknown>;
+  /** Bash allowlist check (persisted permissions.json). */
+  isCommandAllowed: (command: string) => boolean;
+  /** Persist a bash pattern after an "always" grant. */
+  onAlwaysAllowBash: (command: string) => void;
+};
+
 export type EngineEvent =
   | { type: "stream_start" }
   /** In-progress assistant message snapshot; replaces the previous snapshot. */
   | { type: "message_update"; message: Message }
   | { type: "tool_call"; toolCall: ToolCallRequest }
   | { type: "tool_result"; toolCallId: string; outcome: ToolOutcome }
+  /** A tool result carried a modeTransition; subsequent rounds use the new mode. */
+  | { type: "mode_change"; mode: ModeType }
   /** Final assistant message for the turn, metadata (durationMs/usage) attached. */
   | { type: "turn_complete"; message: Message };
 
@@ -36,6 +75,13 @@ export type QueryParams = {
   /** Executes one tool call (permission gating happens inside). Must not throw
    *  for ordinary failures — return { kind: "error" }. Throws are still caught. */
   runTool: (toolCall: ToolCallRequest) => Promise<ToolOutcome>;
+  /** Tool execution + user-interaction callbacks (replaces runTool). */
+  host?: ToolHost;
+  /** Hook adapter (engine/hooks.ts). Defaults to no-op for tests. */
+  hooks?: import("./hooks").EngineHooks;
+  /** Session-scoped "always allow edits" flag, owned by the embedder so it
+   *  survives across turns. Defaults to a per-query internal flag. */
+  alwaysAllowEdits?: { get: () => boolean; set: (value: boolean) => void };
   abortSignal?: AbortSignal;
   /** Anchor for durationMs (the user's submit time). Defaults to Date.now(). */
   turnStartMs?: number;
