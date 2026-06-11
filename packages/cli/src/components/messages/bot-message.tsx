@@ -242,7 +242,7 @@ export function BotMessage({
                 );
               }
 
-              if (isActivePending && toolName === "Agent") {
+              if (isActivePending && toolName === "Agent" && confirmToolCall) {
                 const input = part.input as any;
                 return (
                   <AgentSpawnConfirm
@@ -256,6 +256,7 @@ export function BotMessage({
                     onPickModel={(id) =>
                       setConfirmationModelOverride?.(part.toolCallId, id)
                     }
+                    onConfirm={confirmToolCall}
                   />
                 );
               }

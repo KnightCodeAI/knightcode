@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { type InputRenderable, TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useTheme } from "../../providers/theme";
+import { PermissionPanel } from "./permission-panel";
 
 type QuestionOption = {
   label: string;
@@ -227,47 +228,48 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
   if (questions.length === 0) return null;
 
   return (
-    <box
-      border={["top", "bottom", "left", "right"]}
-      borderColor={colors.autoMode}
-      padding={1}
-      flexDirection="column"
-      width="100%"
-      marginY={1}
-    >
-      <NavigationBar
-        questions={questions}
-        states={states}
-        currentIndex={qIndex}
-        inactiveColor={colors.dimSeparator}
-        activeBg={colors.selection}
-        textColor={colors.text}
-        inverseColor={colors.inverseText}
-      />
+    <box flexDirection="column" width="100%" marginY={1}>
+      <PermissionPanel
+        title={questions.length === 1 ? "Question" : "Questions"}
+      >
+        <box flexDirection="column" width="100%" marginTop={1}>
+          <NavigationBar
+            questions={questions}
+            states={states}
+            currentIndex={qIndex}
+            inactiveColor={colors.dimSeparator}
+            activeBg={colors.selection}
+            textColor={colors.text}
+            inverseColor={colors.inverseText}
+          />
 
-      {qIndex < questions.length && currentQuestion ? (
-        <QuestionBody
-          question={currentQuestion}
-          state={states[qIndex] ?? defaultStateForQuestion(currentQuestion)}
-          allOptions={allOptions}
-          optionIndex={optionIndex}
-          previewText={previewText}
-          isCustomFocused={isCustomOption}
-          isWritingCustom={isWritingCustom}
-          customInputRef={customInputRef}
-          colors={colors}
-        />
-      ) : (
-        <SubmitView
-          questions={questions}
-          states={states}
-          allAnswered={allAnswered}
-          colors={colors}
-        />
-      )}
+          {qIndex < questions.length && currentQuestion ? (
+            <QuestionBody
+              question={currentQuestion}
+              state={
+                states[qIndex] ?? defaultStateForQuestion(currentQuestion)
+              }
+              allOptions={allOptions}
+              optionIndex={optionIndex}
+              previewText={previewText}
+              isCustomFocused={isCustomOption}
+              isWritingCustom={isWritingCustom}
+              customInputRef={customInputRef}
+              colors={colors}
+            />
+          ) : (
+            <SubmitView
+              questions={questions}
+              states={states}
+              allAnswered={allAnswered}
+              colors={colors}
+            />
+          )}
+        </box>
+      </PermissionPanel>
 
-      {/* Help bar */}
-      <box flexDirection="row" gap={2} marginTop={1}>
+      {/* Help bar — outside the panel, like the permission dialogs. */}
+      <box flexDirection="row" gap={2} paddingX={1} marginTop={1}>
         {isWritingCustom ? (
           <>
             <text fg={colors.success}>[Enter] Submit</text>

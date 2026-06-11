@@ -319,31 +319,12 @@ function SessionChat({
       return;
     }
 
-    // Every confirm-gated tool except Agent renders ToolPermissionRequest
-    // (it has a reject-feedback text input, so the global y/n/a shortcuts
-    // would collide with typing) — including subagent-bubbled requests, which
-    // get a standalone dialog below the transcript. Agent keeps these keys
-    // (AgentSpawnConfirm only handles ↑/↓ for the model picker).
-    const dialogOwnsKeys =
-      !!pending && pending.toolCall.toolName !== "Agent";
+    // Every pending confirmation renders a self-keyboarded dialog
+    // (ToolPermissionRequest / AgentSpawnConfirm / InlineQuestion), so the
+    // session level only handles the no-prompt case.
+    if (pending) return;
 
     if (
-      pending &&
-      pending.toolCall.toolName !== "AskUserQuestion" &&
-      !dialogOwnsKeys &&
-      isTopLayer("base")
-    ) {
-      if (key.name === "y" || key.name === "Y") {
-        key.preventDefault();
-        confirmToolCall(pending.toolCallId, true, false);
-      } else if (key.name === "n" || key.name === "N") {
-        key.preventDefault();
-        confirmToolCall(pending.toolCallId, false, false);
-      } else if (key.name === "a" || key.name === "A") {
-        key.preventDefault();
-        confirmToolCall(pending.toolCallId, true, true);
-      }
-    } else if (
       key.name === "escape" &&
       isTopLayer("base") &&
       status === "streaming"

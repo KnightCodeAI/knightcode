@@ -6,6 +6,7 @@ import { useTheme } from "../../providers/theme";
 import { diffSummary } from "../../lib/ui/diff-summary";
 import { commandRisk } from "../../lib/permissions/command-risk";
 import { DiffBody } from "./diff-body";
+import { PermissionPanel } from "./permission-panel";
 
 const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
@@ -298,23 +299,7 @@ export function ToolPermissionRequest({
 
   return (
     <box flexDirection="column" width="100%" marginY={1}>
-      <box
-        border={["top"]}
-        borderColor={colors.autoMode}
-        flexDirection="column"
-        width="100%"
-        paddingX={1}
-        paddingTop={1}
-      >
-        <box flexDirection="row" justifyContent="space-between" width="100%">
-          <text fg={colors.autoMode} attributes={TextAttributes.BOLD}>
-            {title}
-          </text>
-          {subtitle ? (
-            <text attributes={TextAttributes.DIM}>{subtitle}</text>
-          ) : null}
-        </box>
-
+      <PermissionPanel title={title} subtitle={subtitle || undefined}>
         {content}
 
         <box flexDirection="column" width="100%" marginTop={1}>
@@ -354,7 +339,7 @@ export function ToolPermissionRequest({
             </box>
           ) : null}
         </box>
-      </box>
+      </PermissionPanel>
       <box paddingX={1} marginTop={1}>
         <text attributes={TextAttributes.DIM}>
           {inputFocused
