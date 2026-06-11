@@ -61,6 +61,7 @@ function ChatMessage({
   setConfirmationModelOverride,
   confirmToolCall,
   activePendingId,
+  runningToolIds,
 }: {
   msg: Message;
   streaming: boolean;
@@ -80,6 +81,7 @@ function ChatMessage({
     feedback?: string,
   ) => void;
   activePendingId?: string;
+  runningToolIds?: Set<string>;
 }) {
   const text = msg.parts
     .filter((p) => p.type === "text")
@@ -132,6 +134,7 @@ function ChatMessage({
       setConfirmationModelOverride={setConfirmationModelOverride}
       confirmToolCall={confirmToolCall}
       activePendingId={activePendingId}
+      runningToolIds={runningToolIds}
     />
   );
 }
@@ -158,6 +161,7 @@ function SessionChat({
     messages,
     status,
     queuedMessages,
+    runningToolIds,
     submit,
     abort,
     interrupt,
@@ -404,6 +408,7 @@ function SessionChat({
           setConfirmationModelOverride={setConfirmationModelOverride}
           confirmToolCall={confirmToolCall}
           activePendingId={pending?.toolCallId}
+          runningToolIds={runningToolIds}
         />
       ))}
       {error && <ErrorMessage message={error.message} />}

@@ -42,6 +42,8 @@ type Props = {
   ) => void;
   /** toolCallId of the confirmation at the front of the queue (the interactive one). */
   activePendingId?: string;
+  /** toolCallIds currently executing (drives per-row spinners). */
+  runningToolIds?: Set<string>;
 };
 
 function isToolPart(part: ClientMessagePart): part is ToolPart {
@@ -83,6 +85,7 @@ export function BotMessage({
   setConfirmationModelOverride,
   confirmToolCall,
   activePendingId,
+  runningToolIds,
 }: Props) {
   const { colors } = useTheme();
   const [completionVerb] = useState(pickCompletionVerb);
@@ -269,6 +272,7 @@ export function BotMessage({
                   input={part.input}
                   state={part.state}
                   output={part.output}
+                  running={runningToolIds?.has(part.toolCallId) ?? false}
                   errorText={
                     part.state === "output-error" ? part.errorText : undefined
                   }
