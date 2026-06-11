@@ -18,6 +18,7 @@ import type {
 import { createEngineHooks } from "../lib/engine/hooks";
 import type { Message, PendingConfirmation } from "../lib/engine/messages";
 import { repairTranscript } from "../lib/engine/transcript";
+import { expandAtMentions } from "../lib/at-mentions";
 import { getOpenRouterApiKey } from "../lib/credentials";
 import {
   runStopHooks,
@@ -379,10 +380,27 @@ export function useQueryEngine(
         await compactHistory(false, params.model);
 
         const submittedAt = Date.now();
+        // @-mentioned paths ride along as a hidden system-reminder part so the
+        // model gets their contents directly instead of searching for the
+        // literal "@path" text (claude-code's processAtMentionedFiles).
+        let mentionContext: string | null = null;
+        try {
+          mentionContext = await expandAtMentions(
+            params.userText,
+            process.cwd(),
+          );
+        } catch {
+          // mention expansion must never block the submit
+        }
         const userMessage: Message = {
           id: `user-${crypto.randomUUID()}`,
           role: "user",
-          parts: [{ type: "text", text: params.userText }],
+          parts: [
+            { type: "text", text: params.userText },
+            ...(mentionContext
+              ? [{ type: "text" as const, text: mentionContext }]
+              : []),
+          ],
           metadata: {
             mode: params.mode,
             model: params.model,

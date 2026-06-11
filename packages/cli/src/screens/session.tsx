@@ -85,6 +85,9 @@ function ChatMessage({
 }) {
   const text = msg.parts
     .filter((p) => p.type === "text")
+    // System-reminder parts (e.g. @-mention expansions) are model context,
+    // not something the user typed — keep them out of the rendered bubble.
+    .filter((p) => !p.text.startsWith("<system-reminder>"))
     .map((p) => p.text)
     .join("");
 
