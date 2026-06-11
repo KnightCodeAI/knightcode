@@ -1,4 +1,4 @@
-import type { ModeType } from "@repo/shared";
+import { getKnightcodeTool, type ModeType } from "@repo/shared";
 import { TextAttributes } from "@opentui/core";
 import { useState } from "react";
 import type { Message } from "../../lib/engine/messages";
@@ -42,6 +42,8 @@ type Props = {
   ) => void;
   /** toolCallId of the confirmation at the front of the queue (the interactive one). */
   activePendingId?: string;
+  /** toolCallIds currently executing (drives per-row spinners). */
+  runningToolIds?: Set<string>;
 };
 
 function isToolPart(part: ClientMessagePart): part is ToolPart {
@@ -83,6 +85,7 @@ export function BotMessage({
   setConfirmationModelOverride,
   confirmToolCall,
   activePendingId,
+  runningToolIds,
 }: Props) {
   const { colors } = useTheme();
   const [completionVerb] = useState(pickCompletionVerb);
@@ -140,9 +143,20 @@ export function BotMessage({
 
               if (isAskUserQuestion) {
                 const input = part.input as any;
-                const questions = Array.isArray(input?.questions)
-                  ? input.questions
-                  : [];
+                // Normalize through the contract schema: it wraps the legacy
+                // flat shape ({question, options}) into {questions:[…]} — the
+                // same normalization the engine's central parse applies, so a
+                // pending question always gets its prompt UI.
+                const parsed = getKnightcodeTool(
+                  "AskUserQuestion",
+                )?.input_schema.safeParse(input);
+                const questions =
+                  parsed?.success &&
+                  Array.isArray((parsed.data as any)?.questions)
+                    ? ((parsed.data as any).questions as any[])
+                    : Array.isArray(input?.questions)
+                      ? input.questions
+                      : [];
                 if (isPending && answerQuestion && questions.length > 0) {
                   return (
                     <InlineQuestion
@@ -228,7 +242,7 @@ export function BotMessage({
                 );
               }
 
-              if (isActivePending && toolName === "Agent") {
+              if (isActivePending && toolName === "Agent" && confirmToolCall) {
                 const input = part.input as any;
                 return (
                   <AgentSpawnConfirm
@@ -242,15 +256,16 @@ export function BotMessage({
                     onPickModel={(id) =>
                       setConfirmationModelOverride?.(part.toolCallId, id)
                     }
+                    onConfirm={confirmToolCall}
                   />
                 );
               }
 
-              if (
-                isActivePending &&
-                confirmToolCall &&
-                (toolName === "Write" || toolName === "Bash")
-              ) {
+              // Every other confirm-gated tool (Write, Bash, MultiEdit,
+              // NotebookEdit, Config, …) gets the permission dialog — a
+              // pending confirmation with no UI would deadlock the engine,
+              // which awaits canUseTool forever.
+              if (isActivePending && confirmToolCall) {
                 return (
                   <ToolPermissionRequest
                     key={part.toolCallId}
@@ -269,6 +284,7 @@ export function BotMessage({
                   input={part.input}
                   state={part.state}
                   output={part.output}
+                  running={runningToolIds?.has(part.toolCallId) ?? false}
                   errorText={
                     part.state === "output-error" ? part.errorText : undefined
                   }

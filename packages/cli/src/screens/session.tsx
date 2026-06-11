@@ -16,6 +16,7 @@ import {
   ErrorMessage,
   CompactionMessage,
   InterruptedMessage,
+  ToolPermissionRequest,
 } from "../components/messages";
 import { useToast } from "../providers/toast";
 import { useTheme } from "../providers/theme";
@@ -61,6 +62,7 @@ function ChatMessage({
   setConfirmationModelOverride,
   confirmToolCall,
   activePendingId,
+  runningToolIds,
 }: {
   msg: Message;
   streaming: boolean;
@@ -80,9 +82,13 @@ function ChatMessage({
     feedback?: string,
   ) => void;
   activePendingId?: string;
+  runningToolIds?: Set<string>;
 }) {
   const text = msg.parts
     .filter((p) => p.type === "text")
+    // System-reminder parts (e.g. @-mention expansions) are model context,
+    // not something the user typed — keep them out of the rendered bubble.
+    .filter((p) => !p.text.startsWith("<system-reminder>"))
     .map((p) => p.text)
     .join("");
 
@@ -132,6 +138,7 @@ function ChatMessage({
       setConfirmationModelOverride={setConfirmationModelOverride}
       confirmToolCall={confirmToolCall}
       activePendingId={activePendingId}
+      runningToolIds={runningToolIds}
     />
   );
 }
@@ -158,6 +165,7 @@ function SessionChat({
     messages,
     status,
     queuedMessages,
+    runningToolIds,
     submit,
     abort,
     interrupt,
@@ -311,32 +319,12 @@ function SessionChat({
       return;
     }
 
-    // Edit/Write/Bash own their keyboard via ToolPermissionRequest (it has a
-    // reject-feedback text input, so the global y/n/a shortcuts would collide
-    // with typing). Other confirmations (Agent/Config/…) still use these keys.
-    const dialogOwnsKeys =
-      !!pending &&
-      (pending.toolCall.toolName === "Edit" ||
-        pending.toolCall.toolName === "Write" ||
-        pending.toolCall.toolName === "Bash");
+    // Every pending confirmation renders a self-keyboarded dialog
+    // (ToolPermissionRequest / AgentSpawnConfirm / InlineQuestion), so the
+    // session level only handles the no-prompt case.
+    if (pending) return;
 
     if (
-      pending &&
-      pending.toolCall.toolName !== "AskUserQuestion" &&
-      !dialogOwnsKeys &&
-      isTopLayer("base")
-    ) {
-      if (key.name === "y" || key.name === "Y") {
-        key.preventDefault();
-        confirmToolCall(pending.toolCallId, true, false);
-      } else if (key.name === "n" || key.name === "N") {
-        key.preventDefault();
-        confirmToolCall(pending.toolCallId, false, false);
-      } else if (key.name === "a" || key.name === "A") {
-        key.preventDefault();
-        confirmToolCall(pending.toolCallId, true, true);
-      }
-    } else if (
       key.name === "escape" &&
       isTopLayer("base") &&
       status === "streaming"
@@ -404,8 +392,21 @@ function SessionChat({
           setConfirmationModelOverride={setConfirmationModelOverride}
           confirmToolCall={confirmToolCall}
           activePendingId={pending?.toolCallId}
+          runningToolIds={runningToolIds}
         />
       ))}
+      {/* Subagent-bubbled permission requests reference the subagent's inner
+          toolCallIds, which match no transcript part — BotMessage can't render
+          them inline, so the dialog renders standalone here. confirmToolCall
+          routes them to the boolean permission resolver. */}
+      {pending?.source === "subagent" ? (
+        <ToolPermissionRequest
+          toolCallId={pending.toolCallId}
+          toolName={pending.toolCall.toolName}
+          input={(pending.toolCall.input as Record<string, unknown>) ?? {}}
+          onConfirm={confirmToolCall}
+        />
+      ) : null}
       {error && <ErrorMessage message={error.message} />}
     </SessionShell>
   );

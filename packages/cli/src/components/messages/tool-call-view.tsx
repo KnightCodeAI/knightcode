@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTheme } from "../../providers/theme";
 import { useVerbose } from "../../providers/verbose";
 import { BULLET, RESULT_GUTTER } from "../../lib/ui/figures";
+import { useSpinnerFrame } from "../../lib/ui/spinner-frame";
 import { toolStatus } from "../../lib/ui/tool-presentation";
 import { toolCallLine, toolResultSummary } from "../../lib/ui/tool-line";
 
@@ -14,6 +15,8 @@ type Props = {
   errorText?: string;
   /** Start expanded (e.g. while pending confirmation). */
   defaultExpanded?: boolean;
+  /** True while the engine is executing this call — animates the bullet. */
+  running?: boolean;
 };
 
 function stringifyOutput(output: unknown): string {
@@ -39,12 +42,16 @@ export function ToolCallView({
   output,
   errorText,
   defaultExpanded = false,
+  running = false,
 }: Props) {
   const { colors } = useTheme();
   const { verbose } = useVerbose();
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const status = toolStatus({ state });
+  // useSpinnerFrame(0) installs no interval, so idle rows don't tick.
+  const spinnerFrame = useSpinnerFrame(running ? 120 : 0);
+  const isRunning = running && status === "running";
   const bulletColor =
     status === "error"
       ? colors.error
@@ -65,7 +72,9 @@ export function ToolCallView({
   return (
     <box flexDirection="column" width="100%">
       <box flexDirection="row" width="100%">
-        <text fg={bulletColor}>{BULLET} </text>
+        <text fg={isRunning ? colors.primary : bulletColor}>
+          {isRunning ? spinnerFrame : BULLET}{" "}
+        </text>
         <box flexGrow={1} flexShrink={1} overflow="hidden">
           <text>{toolCallLine(toolName, input)}</text>
         </box>

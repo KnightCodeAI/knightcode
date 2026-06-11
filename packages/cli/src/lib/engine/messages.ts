@@ -40,4 +40,8 @@ export type PendingConfirmation = {
   };
   mode: ModeType;
   modelOverride?: SupportedChatModelId;
+  /** "subagent" = bubbled from a foreground subagent's inner tool call —
+   *  its toolCallId matches no transcript part, so the prompt must render
+   *  standalone instead of inline under the tool row. */
+  source?: "subagent";
 };

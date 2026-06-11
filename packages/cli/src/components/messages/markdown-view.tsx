@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useTheme } from "../../providers/theme";
 import { getSyntaxStyle } from "../../lib/ui/markdown-engine";
+import { convertHtmlBreaks } from "../../lib/markdown/inline-html";
 import { splitMarkdownBlocks } from "../../lib/markdown/split-blocks";
 import { CodeBlock } from "./code-block";
 
@@ -55,7 +56,7 @@ export function MarkdownView({
         ) : (
           <box key={i} width="100%">
             <markdown
-              content={block.text}
+              content={convertHtmlBreaks(block.text)}
               syntaxStyle={syntaxStyle}
               conceal
               streaming={streaming && i === lastProseIndex}

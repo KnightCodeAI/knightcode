@@ -10,14 +10,15 @@ import {
   hasNotifications,
 } from "../lib/tools/Agent/notifications";
 import { query } from "../lib/engine/query";
-import type { ToolCallRequest, ToolOutcome } from "../lib/engine/events";
+import type {
+  PermissionDecision,
+  ToolCallRequest,
+  ToolHost,
+} from "../lib/engine/events";
+import { createEngineHooks } from "../lib/engine/hooks";
 import type { Message, PendingConfirmation } from "../lib/engine/messages";
 import { repairTranscript } from "../lib/engine/transcript";
-import {
-  gateToolCall,
-  LOOP_PROTECTION_ERROR,
-  ToolLoopGuard,
-} from "../lib/engine/tool-runner";
+import { expandAtMentions } from "../lib/at-mentions";
 import { getOpenRouterApiKey } from "../lib/credentials";
 import {
   runStopHooks,
@@ -30,7 +31,7 @@ import {
   ensureSession,
   replaceSessionMessages,
 } from "../lib/store/conversation";
-import { executeLocalTool } from "../lib/tools";
+import { executeRegisteredTool } from "../lib/tools";
 import { useTodo, type TodoItem } from "../providers/todo";
 import { useToast } from "../providers/toast";
 import { createCompactHistory } from "./compact-history";
@@ -49,8 +50,6 @@ type ConfirmDecision = {
   feedback?: string;
   modelOverride?: SupportedChatModelId;
 };
-
-const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
 type SubmitParams = {
   userText: string;
@@ -106,8 +105,12 @@ export function useQueryEngine(
   const syncQueued = useCallback(() => {
     setQueuedMessages(queuedSubmitsRef.current.map((q) => q.userText));
   }, []);
-  const loopGuardRef = useRef(new ToolLoopGuard());
   const alwaysAllowEditsRef = useRef(false);
+  // toolCallIds currently executing (engine tool_call → tool_result window);
+  // drives the per-row spinners for concurrent tools.
+  const [runningToolIds, setRunningToolIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   // Resolvers for confirmation prompts keyed by toolCallId. AskUserQuestion
   // resolves with answers via answerQuestion instead.
   const confirmResolversRef = useRef(
@@ -203,7 +206,7 @@ export function useQueryEngine(
         permissionResolversRef.current.set(toolCall.toolCallId, resolve);
         setPendingConfirmations((prev) => [
           ...prev,
-          { toolCallId: toolCall.toolCallId, toolCall, mode },
+          { toolCallId: toolCall.toolCallId, toolCall, mode, source: "subagent" },
         ]);
       }),
     [],
@@ -215,23 +218,15 @@ export function useQueryEngine(
     );
   }, []);
 
-  /** Engine runTool: gating + execution. Never throws for ordinary failures. */
-  const makeRunTool = useCallback(
-    (mode: ModeType) =>
-      async (toolCall: ToolCallRequest): Promise<ToolOutcome> => {
-        if (!loopGuardRef.current.check(toolCall.toolName, toolCall.input)) {
-          return { kind: "error", errorText: LOOP_PROTECTION_ERROR };
-        }
+  const engineHooks = useMemo(() => createEngineHooks(sessionId), [sessionId]);
 
-        const decision = gateToolCall({
-          toolName: toolCall.toolName,
-          input: toolCall.input,
-          mode,
-          alwaysAllowEdits: alwaysAllowEditsRef.current,
-          isCommandAllowed,
-        });
-
-        if (decision === "todo") {
+  /** Engine ToolHost: execution + user interaction. Gating/loop-guard/hooks
+   *  now live in the engine scheduler. */
+  const makeHost = useCallback(
+    (): ToolHost => ({
+      executeTool: async (toolCall, mode, opts) => {
+        // TodoWrite is a pure UI side effect — feed the panel, skip executors.
+        if (toolCall.toolName === "TodoWrite") {
           const { todos } = toolCall.input as {
             todos: Array<{
               content: string;
@@ -248,83 +243,46 @@ export function useQueryEngine(
             status: t.status,
           }));
           todoRef.current(items, true);
-          return {
-            kind: "output",
-            output: { success: true, itemCount: items.length },
-          };
+          return { success: true, itemCount: items.length };
         }
-
-        let modelOverride: SupportedChatModelId | undefined;
-        if (decision === "confirm") {
-          if (toolCall.toolName === "AskUserQuestion") {
-            const answers = await new Promise<{ answers: unknown }>(
-              (resolve) => {
-                questionResolversRef.current.set(toolCall.toolCallId, resolve);
-                setPendingConfirmations((prev) => [
-                  ...prev,
-                  { toolCallId: toolCall.toolCallId, toolCall, mode },
-                ]);
-              },
-            );
-            return { kind: "output", output: answers };
-          }
-
-          const d = await requestConfirmation(toolCall, mode);
-          if (!d.allowed) {
-            return {
-              kind: "error",
-              errorText: d.feedback?.trim()
-                ? `User declined this change. Guidance: ${d.feedback.trim()}`
-                : "User rejected the changes",
-            };
-          }
-          if (d.always) {
-            if (toolCall.toolName === "Bash") {
-              const command = (toolCall.input as { command?: string })?.command;
-              if (typeof command === "string" && command.trim()) {
-                allowCommand(command);
-              }
-            } else if (FILE_EDIT_TOOLS.has(toolCall.toolName)) {
-              alwaysAllowEditsRef.current = true;
-            }
-          }
-          modelOverride = d.modelOverride;
-        }
-
-        try {
-          const output = await executeLocalTool(
-            toolCall.toolName,
-            toolCall.input,
-            mode,
-            sessionId,
-            {
-              modelOverride,
-              requestToolPermission: (tc) => requestToolPermission(tc, mode),
-            },
-          );
-          if (
-            output &&
-            typeof output === "object" &&
-            "modeTransition" in output
-          ) {
-            options?.onModeChange?.(
-              (output as { modeTransition: ModeType }).modeTransition,
-            );
-          }
-          return { kind: "output", output };
-        } catch (err) {
-          return {
-            kind: "error",
-            errorText: err instanceof Error ? err.message : String(err),
-          };
-        }
+        return executeRegisteredTool(
+          toolCall.toolName,
+          toolCall.input,
+          mode,
+          sessionId,
+          {
+            modelOverride: opts.modelOverride,
+            requestToolPermission: (tc) => requestToolPermission(tc, mode),
+          },
+        );
       },
-    [
-      sessionId,
-      options?.onModeChange,
-      requestConfirmation,
-      requestToolPermission,
-    ],
+      canUseTool: async (toolCall, mode): Promise<PermissionDecision> => {
+        const d = await requestConfirmation(toolCall, mode);
+        return d.allowed
+          ? {
+              behavior: "allow",
+              always: d.always,
+              modelOverride: d.modelOverride,
+            }
+          : { behavior: "deny", feedback: d.feedback };
+      },
+      // PendingConfirmation.mode is only consumed by permission dialogs, not
+      // question prompts (InlineQuestion ignores it), so "BUILD" is fine here.
+      askQuestion: (toolCall) =>
+        new Promise<unknown>((resolve) => {
+          questionResolversRef.current.set(
+            toolCall.toolCallId,
+            resolve as (answers: { answers: unknown }) => void,
+          );
+          setPendingConfirmations((prev) => [
+            ...prev,
+            { toolCallId: toolCall.toolCallId, toolCall, mode: "BUILD" },
+          ]);
+        }),
+      isCommandAllowed,
+      onAlwaysAllowBash: (command) => allowCommand(command),
+    }),
+    [sessionId, requestConfirmation, requestToolPermission],
   );
 
   const confirmToolCall = useCallback(
@@ -355,28 +313,10 @@ export function useQueryEngine(
         feedback,
         modelOverride: pending?.modelOverride,
       });
-      // "Always" for a file edit auto-approves the other pending file edits
-      // (ported from the old useChat hook). Their resolvers are awaiting too.
-      if (
-        allowed &&
-        always &&
-        pending &&
-        FILE_EDIT_TOOLS.has(pending.toolCall.toolName)
-      ) {
-        const pendingNow = pendingConfirmationsRef.current.filter(
-          (c) =>
-            c.toolCallId !== toolCallId &&
-            FILE_EDIT_TOOLS.has(c.toolCall.toolName),
-        );
-        for (const other of pendingNow) {
-          const r = confirmResolversRef.current.get(other.toolCallId);
-          if (r) {
-            confirmResolversRef.current.delete(other.toolCallId);
-            removePending(other.toolCallId);
-            r({ allowed: true, always: false });
-          }
-        }
-      }
+      // No multi-pending edit auto-approval here: file-edit tools are
+      // concurrency-unsafe (serialized by the scheduler), so two edit
+      // confirmations can never be pending at once, and an "always" grant
+      // sets the engine's alwaysAllowEdits flag for subsequent edits.
     },
     [removePending],
   );
@@ -434,17 +374,33 @@ export function useQueryEngine(
           return;
         }
 
-        loopGuardRef.current.reset();
         turnPausedMsRef.current = 0;
         pauseStartRef.current = null;
         setError(undefined);
         await compactHistory(false, params.model);
 
         const submittedAt = Date.now();
+        // @-mentioned paths ride along as a hidden system-reminder part so the
+        // model gets their contents directly instead of searching for the
+        // literal "@path" text (claude-code's processAtMentionedFiles).
+        let mentionContext: string | null = null;
+        try {
+          mentionContext = await expandAtMentions(
+            params.userText,
+            process.cwd(),
+          );
+        } catch {
+          // mention expansion must never block the submit
+        }
         const userMessage: Message = {
           id: `user-${crypto.randomUUID()}`,
           role: "user",
-          parts: [{ type: "text", text: params.userText }],
+          parts: [
+            { type: "text", text: params.userText },
+            ...(mentionContext
+              ? [{ type: "text" as const, text: mentionContext }]
+              : []),
+          ],
           metadata: {
             mode: params.mode,
             model: params.model,
@@ -470,7 +426,14 @@ export function useQueryEngine(
           modelId: params.model,
           reasoningEffort: params.reasoningEffort,
           getApiKey: getOpenRouterApiKey,
-          runTool: makeRunTool(params.mode),
+          host: makeHost(),
+          hooks: engineHooks,
+          alwaysAllowEdits: {
+            get: () => alwaysAllowEditsRef.current,
+            set: (v) => {
+              alwaysAllowEditsRef.current = v;
+            },
+          },
           abortSignal: ac.signal,
           turnStartMs: submittedAt,
           getTurnPausedMs,
@@ -515,6 +478,23 @@ export function useQueryEngine(
               case "turn_complete":
                 upsertAssistant(event.message);
                 break;
+              case "tool_call":
+                setRunningToolIds((prev) => {
+                  const next = new Set(prev);
+                  next.add(event.toolCall.toolCallId);
+                  return next;
+                });
+                break;
+              case "tool_result":
+                setRunningToolIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(event.toolCallId);
+                  return next;
+                });
+                break;
+              case "mode_change":
+                options?.onModeChange?.(event.mode);
+                break;
               default:
                 break;
             }
@@ -540,6 +520,7 @@ export function useQueryEngine(
         } finally {
           abortRef.current = null;
           if (!hadError) setStatus("ready");
+          setRunningToolIds(new Set());
           setPendingConfirmations([]);
           confirmResolversRef.current.clear();
           questionResolversRef.current.clear();
@@ -557,7 +538,9 @@ export function useQueryEngine(
       sessionId,
       toast,
       compactHistory,
-      makeRunTool,
+      makeHost,
+      engineHooks,
+      options?.onModeChange,
       getTurnPausedMs,
       persist,
       updateMessages,
@@ -668,6 +651,7 @@ export function useQueryEngine(
     status,
     error,
     queuedMessages,
+    runningToolIds,
     activeTurnStartMs,
     getTurnPausedMs,
     pendingConfirmations,

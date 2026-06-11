@@ -6,12 +6,15 @@ import { useTheme } from "../../providers/theme";
 import { diffSummary } from "../../lib/ui/diff-summary";
 import { commandRisk } from "../../lib/permissions/command-risk";
 import { DiffBody } from "./diff-body";
+import { PermissionPanel } from "./permission-panel";
 
-type ToolKind = "Edit" | "Write" | "Bash";
+const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
 type Props = {
   toolCallId: string;
-  toolName: ToolKind;
+  /** Any confirm-gated tool; Edit/MultiEdit/Write/Bash get rich previews,
+   *  everything else falls back to a JSON input preview. */
+  toolName: string;
   input: Record<string, unknown>;
   onConfirm: (
     toolCallId: string,
@@ -75,6 +78,49 @@ function WriteContent({
   );
 }
 
+type MultiEditEntry = { old_string?: unknown; new_string?: unknown };
+
+function MultiEditContent({
+  edits,
+  filePath,
+}: {
+  edits: MultiEditEntry[];
+  filePath: string;
+}) {
+  return (
+    <box flexDirection="column" width="100%">
+      {edits.map((edit, i) => (
+        <EditContent
+          key={i}
+          oldString={String(edit.old_string ?? "")}
+          newString={String(edit.new_string ?? "")}
+          filePath={filePath}
+        />
+      ))}
+    </box>
+  );
+}
+
+function GenericContent({ input }: { input: Record<string, unknown> }) {
+  const { colors } = useTheme();
+  let pretty: string;
+  try {
+    pretty = JSON.stringify(input, null, 2);
+  } catch {
+    pretty = String(input);
+  }
+  const lines = pretty.split("\n").slice(0, 20);
+  return (
+    <box flexDirection="column" width="100%" marginTop={1}>
+      {lines.map((line, i) => (
+        <text key={i} fg={colors.info}>
+          {line}
+        </text>
+      ))}
+    </box>
+  );
+}
+
 function BashContent({ command }: { command: string }) {
   const { colors } = useTheme();
   const risk = commandRisk(command);
@@ -133,7 +179,9 @@ export function ToolPermissionRequest({
   let subtitle: string;
   let question: string;
   let content: ReactNode;
-  let secondLabel: string;
+  // null = no persistent grant exists for this tool (engine only honors
+  // "always" for Bash and the file-edit tools), so offer plain Yes/No.
+  let secondLabel: string | null;
 
   if (toolName === "Bash") {
     title = "Run command";
@@ -149,7 +197,7 @@ export function ToolPermissionRequest({
       <WriteContent content={String(input.content ?? "")} filePath={filePath} />
     );
     secondLabel = "Yes, allow all edits this session";
-  } else {
+  } else if (toolName === "Edit") {
     title = "Edit file";
     subtitle = filePath;
     question = `Do you want to make this edit to ${name}?`;
@@ -161,11 +209,28 @@ export function ToolPermissionRequest({
       />
     );
     secondLabel = "Yes, allow all edits this session";
+  } else if (toolName === "MultiEdit" && Array.isArray(input.edits)) {
+    const edits = input.edits as MultiEditEntry[];
+    title = "Edit file";
+    subtitle = filePath;
+    question = `Do you want to make ${plural(edits.length, "edit")} to ${name}?`;
+    content = <MultiEditContent edits={edits} filePath={filePath} />;
+    secondLabel = "Yes, allow all edits this session";
+  } else {
+    title = `Use ${toolName}`;
+    subtitle = "";
+    question = `Do you want to run ${toolName}?`;
+    content = <GenericContent input={input} />;
+    secondLabel = FILE_EDIT_TOOLS.has(toolName)
+      ? "Yes, allow all edits this session"
+      : null;
   }
 
   const options: Option[] = [
     { label: "Yes", approved: true, always: false },
-    { label: secondLabel, approved: true, always: true },
+    ...(secondLabel
+      ? [{ label: secondLabel, approved: true, always: true }]
+      : []),
     {
       label: "No, and tell the model what to do differently (esc)",
       approved: false,
@@ -175,6 +240,7 @@ export function ToolPermissionRequest({
   ];
 
   const rejectIndex = options.length - 1;
+  const alwaysIndex = options.findIndex((o) => o.always);
   const inputFocused = index === rejectIndex;
 
   function choose(i: number) {
@@ -224,7 +290,7 @@ export function ToolPermissionRequest({
       choose(0);
     } else if (key.name === "a" || key.name === "A") {
       key.preventDefault();
-      choose(1);
+      if (alwaysIndex !== -1) choose(alwaysIndex);
     } else if (key.name === "n" || key.name === "N") {
       key.preventDefault();
       choose(rejectIndex);
@@ -233,23 +299,7 @@ export function ToolPermissionRequest({
 
   return (
     <box flexDirection="column" width="100%" marginY={1}>
-      <box
-        border={["top"]}
-        borderColor={colors.autoMode}
-        flexDirection="column"
-        width="100%"
-        paddingX={1}
-        paddingTop={1}
-      >
-        <box flexDirection="row" justifyContent="space-between" width="100%">
-          <text fg={colors.autoMode} attributes={TextAttributes.BOLD}>
-            {title}
-          </text>
-          {subtitle ? (
-            <text attributes={TextAttributes.DIM}>{subtitle}</text>
-          ) : null}
-        </box>
-
+      <PermissionPanel title={title} subtitle={subtitle || undefined}>
         {content}
 
         <box flexDirection="column" width="100%" marginTop={1}>
@@ -289,7 +339,7 @@ export function ToolPermissionRequest({
             </box>
           ) : null}
         </box>
-      </box>
+      </PermissionPanel>
       <box paddingX={1} marginTop={1}>
         <text attributes={TextAttributes.DIM}>
           {inputFocused

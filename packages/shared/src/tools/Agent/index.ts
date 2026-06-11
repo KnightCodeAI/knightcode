@@ -28,7 +28,7 @@ const input_schema = z.object({
 export const Agent = defineTool({
   name: "Agent",
   is_read_only: false,
-  is_concurrency_safe: false,
+  is_concurrency_safe: true,
   is_deferred: true,
   visibility: "build_only",
   search_hint: "launch a specialized subagent to handle a multi-step task",

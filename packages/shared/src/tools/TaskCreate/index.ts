@@ -23,7 +23,7 @@ export const TaskCreate = defineTool({
   name: "TaskCreate",
   is_deferred: true,
   is_read_only: false,
-  is_concurrency_safe: true,
+  is_concurrency_safe: false,
   search_hint: "create a task in the persistent task list",
   input_schema,
   description: `Create a new task in the persistent task list. Tasks survive across messages in the session and are stored under .knightcode/tasks.json in the workspace.

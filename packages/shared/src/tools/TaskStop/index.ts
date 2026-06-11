@@ -13,7 +13,7 @@ export const TaskStop = defineTool({
   name: "TaskStop",
   is_deferred: true,
   is_read_only: false,
-  is_concurrency_safe: true,
+  is_concurrency_safe: false,
   search_hint: "stop an in-progress task",
   input_schema,
   description: `Stop a task that is currently in_progress. Sets status back to \`pending\` and clears the owner.

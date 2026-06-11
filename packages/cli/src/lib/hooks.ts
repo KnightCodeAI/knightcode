@@ -303,12 +303,24 @@ export async function runPreToolHooks(
   return { blocked: false, systemMessage };
 }
 
+/** Aggregate the systemMessage channel across parallel hook outputs. */
+export function mergeSystemMessages(
+  outputs: Array<HookOutput | null>,
+): string | undefined {
+  const messages = outputs
+    .map((o) => o?.systemMessage)
+    .filter((m): m is string => typeof m === "string" && m.length > 0);
+  return messages.length > 0 ? messages.join("\n") : undefined;
+}
+
+export type PostToolHookResult = { systemMessage?: string };
+
 export async function runPostToolHooks(
   toolName: string,
   input: unknown,
   response: unknown,
   sessionId: string,
-): Promise<void> {
+): Promise<PostToolHookResult> {
   const config = loadHooks();
   const hooks = getMatchingHooks(config, "PostToolUse", toolName);
   const hookInput: PostToolUseInput = {
@@ -319,7 +331,10 @@ export async function runPostToolHooks(
     tool_input: input,
     tool_response: response,
   };
-  await Promise.all(hooks.map((hook) => execHook(hook, hookInput)));
+  const outputs = await Promise.all(
+    hooks.map((hook) => execHook(hook, hookInput)),
+  );
+  return { systemMessage: mergeSystemMessages(outputs) };
 }
 
 export async function runPostToolUseFailureHooks(
