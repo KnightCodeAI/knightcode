@@ -1,25 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { stripHtmlBreaks } from "./inline-html";
+import { convertHtmlBreaks } from "./inline-html";
 
-describe("stripHtmlBreaks", () => {
-  test("replaces br variants with a space", () => {
-    expect(stripHtmlBreaks("a<br>b<br/>c<br />d<BR>e")).toBe("a b c d e");
-  });
-
-  test("table cells lose the literal tag", () => {
-    expect(stripHtmlBreaks("| builds binaries<br>cross-platform |")).toBe(
-      "| builds binaries cross-platform |",
+describe("convertHtmlBreaks", () => {
+  test("mid-line br becomes a hard line break", () => {
+    expect(convertHtmlBreaks("first<br>second")).toBe("first  \nsecond");
+    expect(convertHtmlBreaks("a<br/>b<br />c<BR>d")).toBe(
+      "a  \nb  \nc  \nd",
     );
   });
 
+  test("br at end of line uses the existing newline for the break", () => {
+    expect(convertHtmlBreaks("first<br>\nsecond")).toBe("first  \nsecond");
+  });
+
+  test("table cells get a space, never a newline", () => {
+    expect(convertHtmlBreaks("| builds binaries<br>cross-platform |")).toBe(
+      "| builds binaries cross-platform |",
+    );
+    expect(
+      convertHtmlBreaks("| a | b |\n| one<br>two | three<br/>four |"),
+    ).toBe("| a | b |\n| one two | three four |");
+  });
+
   test("inline code spans are preserved", () => {
-    expect(stripHtmlBreaks("use `<br>` for line breaks<br>ok")).toBe(
-      "use `<br>` for line breaks ok",
+    expect(convertHtmlBreaks("use `<br>` for line breaks<br>ok")).toBe(
+      "use `<br>` for line breaks  \nok",
     );
   });
 
   test("other text untouched", () => {
-    expect(stripHtmlBreaks("a < b and Promise<void>")).toBe(
+    expect(convertHtmlBreaks("a < b and Promise<void>")).toBe(
       "a < b and Promise<void>",
     );
   });
