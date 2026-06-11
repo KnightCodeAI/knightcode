@@ -63,7 +63,7 @@ export type TerminalReason = "complete" | "aborted" | "max_rounds" | "error";
 export type Terminal = { reason: TerminalReason; error?: unknown };
 
 // Session identity intentionally absent: persistence and tool execution
-// receive it via the runTool closure, keeping the engine session-agnostic.
+// receive it via the host/hooks closures, keeping the engine session-agnostic.
 export type QueryParams = {
   cwd: string;
   /** Full transcript including the just-submitted user message. */
@@ -72,11 +72,8 @@ export type QueryParams = {
   modelId: string;
   reasoningEffort: ReasoningEffortLevel;
   getApiKey?: () => string | undefined;
-  /** Executes one tool call (permission gating happens inside). Must not throw
-   *  for ordinary failures — return { kind: "error" }. Throws are still caught. */
-  runTool: (toolCall: ToolCallRequest) => Promise<ToolOutcome>;
-  /** Tool execution + user-interaction callbacks (replaces runTool). */
-  host?: ToolHost;
+  /** Tool execution + user-interaction callbacks. */
+  host: ToolHost;
   /** Hook adapter (engine/hooks.ts). Defaults to no-op for tests. */
   hooks?: import("./hooks").EngineHooks;
   /** Session-scoped "always allow edits" flag, owned by the embedder so it

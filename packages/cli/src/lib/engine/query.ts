@@ -8,6 +8,7 @@ import {
   getDeferredToolNames,
   getToolContracts,
   TASK_SUITE_TOOL_NAMES,
+  type ModeType,
 } from "@repo/shared";
 import { buildRequestContext } from "../inference/build-request-context";
 import { buildSystemPrompt } from "../inference/system-prompt";
@@ -20,7 +21,10 @@ import type {
   ToolCallRequest,
   ToolOutcome,
 } from "./events";
+import { NOOP_ENGINE_HOOKS } from "./hooks";
 import type { Message } from "./messages";
+import { runToolCalls } from "./scheduler";
+import { ToolLoopGuard } from "./tool-runner";
 import { INTERRUPTED_TOOL_ERROR, repairTranscript } from "./transcript";
 
 const DEFAULT_MAX_ROUNDS = 100;
@@ -70,9 +74,24 @@ function trackToolSearchLoads(
 export async function* query(
   params: QueryParams,
 ): AsyncGenerator<EngineEvent, Terminal> {
-  const { cwd, mode, modelId, reasoningEffort, runTool, abortSignal } = params;
+  const { cwd, modelId, reasoningEffort, host, abortSignal } = params;
+  const hooks = params.hooks ?? NOOP_ENGINE_HOOKS;
   const maxRounds = params.maxRounds ?? DEFAULT_MAX_ROUNDS;
   const turnStartMs = params.turnStartMs ?? Date.now();
+
+  // Engine State (spec): current mode (modeTransition results update it),
+  // loop guard (per turn), session-scoped edit grant (embedder-owned), and
+  // hook reminders pending injection into the next round.
+  let mode: ModeType = params.mode;
+  const loopGuard = new ToolLoopGuard();
+  let internalAlwaysAllowEdits = false;
+  const alwaysAllowEdits = params.alwaysAllowEdits ?? {
+    get: () => internalAlwaysAllowEdits,
+    set: (value: boolean) => {
+      internalAlwaysAllowEdits = value;
+    },
+  };
+  const reminders: string[] = [];
 
   const transcript = repairTranscript(params.messages);
   const loadedDeferred = extractLoadedDeferredTools(transcript);
@@ -81,7 +100,7 @@ export async function* query(
     id: `asst-${crypto.randomUUID()}`,
     role: "assistant",
     parts: [],
-    metadata: { mode, model: modelId },
+    metadata: { mode: params.mode, model: modelId },
   } as Message;
   let usage: LanguageModelUsage | null = null;
 
@@ -143,8 +162,30 @@ export async function* query(
             getApiKey: params.getApiKey,
           });
 
-      const requestMessages =
-        assistant.parts.length > 0 ? [...transcript, assistant] : transcript;
+      // Hook systemMessages accumulated this turn ride along as a transient
+      // user message (request-view only — never persisted to the transcript).
+      // Placed AFTER the assistant message so the model sees them following
+      // the tool calls/results that produced them — claude-code appends
+      // attachments to toolResults the same way (query.ts:1580-1590,
+      // `toolResults.push(attachment)`).
+      const reminderMessage: Message | null =
+        reminders.length === 0
+          ? null
+          : ({
+              id: "engine-hook-reminders",
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: `<system-reminder>\n${reminders.join("\n\n")}\n</system-reminder>`,
+                },
+              ],
+            } as Message);
+      const requestMessages = [
+        ...transcript,
+        ...(assistant.parts.length > 0 ? [assistant] : []),
+        ...(reminderMessage ? [reminderMessage] : []),
+      ];
       // No schema re-validation of history: the transcript records what
       // happened, including tool calls whose input the executor already
       // rejected (e.g. Grep with {}). validateUIMessages would throw on those
@@ -279,33 +320,53 @@ export async function* query(
         return { reason: "complete" };
       }
 
-      for (const toolCall of toolCalls) {
-        if (abortSignal?.aborted) break;
-        yield { type: "tool_call", toolCall };
-        if (abortSignal?.aborted) break; // re-check: consumer may abort on the event
-        let outcome: ToolOutcome;
-        try {
-          outcome = await runTool(toolCall);
-        } catch (err) {
-          outcome = {
-            kind: "error",
-            errorText: err instanceof Error ? err.message : String(err),
-          };
+      const scheduler = runToolCalls({
+        toolCalls,
+        host,
+        hooks,
+        getMode: () => mode,
+        loopGuard,
+        alwaysAllowEdits,
+        abortSignal,
+      });
+      while (true) {
+        const step = await scheduler.next();
+        if (step.done) {
+          reminders.push(...step.value);
+          break;
+        }
+        const ev = step.value;
+        if (ev.type === "tool_start") {
+          yield { type: "tool_call", toolCall: ev.toolCall };
+          continue;
         }
         const toolPart = assistant.parts.find(
-          (p) => (p as never as ToolPart).toolCallId === toolCall.toolCallId,
+          (p) => (p as never as ToolPart).toolCallId === ev.toolCallId,
         ) as never as ToolPart | undefined;
         if (toolPart) {
-          if (outcome.kind === "output") {
+          if (ev.outcome.kind === "output") {
             toolPart.state = "output-available";
-            toolPart.output = outcome.output;
+            toolPart.output = ev.outcome.output;
           } else {
             toolPart.state = "output-error";
-            toolPart.errorText = outcome.errorText;
+            toolPart.errorText = ev.outcome.errorText;
           }
+          const found = toolCalls.find((c) => c.toolCallId === ev.toolCallId);
+          if (found) trackToolSearchLoads(found, ev.outcome, loadedDeferred);
         }
-        trackToolSearchLoads(toolCall, outcome, loadedDeferred);
-        yield { type: "tool_result", toolCallId: toolCall.toolCallId, outcome };
+        // Mode transitions (EnterPlanMode/ExitPlanMode) update engine State so
+        // later rounds gate and assemble tools under the new mode.
+        if (
+          ev.outcome.kind === "output" &&
+          ev.outcome.output &&
+          typeof ev.outcome.output === "object" &&
+          "modeTransition" in ev.outcome.output
+        ) {
+          mode = (ev.outcome.output as { modeTransition: ModeType })
+            .modeTransition;
+          yield { type: "mode_change", mode };
+        }
+        yield { type: "tool_result", toolCallId: ev.toolCallId, outcome: ev.outcome };
         yield { type: "message_update", message: snapshot(assistant) };
       }
 

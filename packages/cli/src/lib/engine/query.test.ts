@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { MockLanguageModelV3, convertArrayToReadableStream } from "ai/test";
 import { query } from "./query";
-import type { EngineEvent, Terminal, ToolOutcome } from "./events";
+import type { EngineEvent, Terminal, ToolHost } from "./events";
+import { NOOP_ENGINE_HOOKS } from "./hooks";
 import type { Message } from "./messages";
 
 // Drives the generator to completion, collecting events + terminal.
@@ -103,13 +104,26 @@ function toolThenTextModel() {
   });
 }
 
-const baseParams = (model: unknown, runTool?: (tc: never) => Promise<ToolOutcome>) => ({
+const makeHost = (
+  executeTool?: ToolHost["executeTool"],
+  overrides: Partial<ToolHost> = {},
+): ToolHost => ({
+  executeTool: executeTool ?? (async () => ({})),
+  canUseTool: async () => ({ behavior: "allow" }),
+  askQuestion: async () => ({ answers: [] }),
+  isCommandAllowed: () => true,
+  onAlwaysAllowBash: () => {},
+  ...overrides,
+});
+
+const baseParams = (model: unknown, host?: ToolHost) => ({
   cwd: process.cwd(),
   messages: [userMsg("hello")],
   mode: "BUILD" as const,
   modelId: "test-model",
   reasoningEffort: "medium" as const,
-  runTool: runTool ?? (async () => ({ kind: "output", output: {} }) as const),
+  host: host ?? makeHost(),
+  hooks: NOOP_ENGINE_HOOKS,
   // Injected for tests — bypasses resolveModel/OpenRouter.
   modelOverrideForTest: model,
 });
@@ -130,12 +144,12 @@ describe("query", () => {
 
   test("tool round: runs tool, loops, completes; tool part resolved", async () => {
     const calls: string[] = [];
-    const runTool = async (tc: { toolName: string }): Promise<ToolOutcome> => {
+    const host = makeHost(async (tc) => {
       calls.push(tc.toolName);
-      return { kind: "output", output: { content: "hi" } };
-    };
+      return { content: "hi" };
+    });
     const { events, terminal } = await drain(
-      query(baseParams(toolThenTextModel(), runTool as never) as never),
+      query(baseParams(toolThenTextModel(), host) as never),
     );
     expect(terminal.reason).toBe("complete");
     expect(calls).toEqual(["Read"]);
@@ -152,13 +166,12 @@ describe("query", () => {
     expect(done.message.metadata?.usage?.totalTokens).toBe(40);
   });
 
-  test("runTool error becomes output-error part; loop still continues", async () => {
-    const runTool = async (): Promise<ToolOutcome> => ({
-      kind: "error",
-      errorText: "boom",
+  test("executeTool throw becomes output-error part; loop still continues", async () => {
+    const host = makeHost(async () => {
+      throw new Error("boom");
     });
     const { events, terminal } = await drain(
-      query(baseParams(toolThenTextModel(), runTool as never) as never),
+      query(baseParams(toolThenTextModel(), host) as never),
     );
     expect(terminal.reason).toBe("complete");
     const done = events.find((e) => e.type === "turn_complete") as {
@@ -299,12 +312,12 @@ describe("query", () => {
       },
     });
     const calls: string[] = [];
-    const runTool = async (tc: { toolName: string }): Promise<ToolOutcome> => {
+    const host = makeHost(async (tc) => {
       calls.push(tc.toolName);
-      return { kind: "output", output: {} };
-    };
+      return {};
+    });
     const { events, terminal } = await drain(
-      query(baseParams(model, runTool as never) as never),
+      query(baseParams(model, host) as never),
     );
     expect(terminal.reason).toBe("complete");
     expect(calls).toEqual([]); // invalid call must never reach the executor
@@ -319,12 +332,12 @@ describe("query", () => {
 
   test("abort before tool execution yields interrupted turn", async () => {
     const ac = new AbortController();
-    const runTool = async (): Promise<ToolOutcome> => {
+    const host = makeHost(async () => {
       throw new Error("should not run");
-    };
+    });
     // Abort as soon as the tool_call event is seen.
     const gen = query({
-      ...(baseParams(toolThenTextModel(), runTool as never) as never as object),
+      ...(baseParams(toolThenTextModel(), host) as never as object),
       abortSignal: ac.signal,
     } as never);
     const events: EngineEvent[] = [];
@@ -347,5 +360,128 @@ describe("query", () => {
       (p as { type: string }).type.startsWith("tool-"),
     ) as never as { state: string };
     expect(toolPart.state).toBe("output-error");
+  });
+
+  test("modeTransition output updates engine mode and emits mode_change", async () => {
+    // Round 1 calls ExitPlanMode (unsafe, serialized); round 2 is text.
+    let call = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async () => {
+        call++;
+        if (call === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: "stream-start", warnings: [] },
+              {
+                type: "tool-call",
+                toolCallId: "tc1",
+                toolName: "ExitPlanMode",
+                input: JSON.stringify({ plan: "do it" }),
+              },
+              {
+                type: "finish",
+                finishReason: v3Finish("tool-calls"),
+                usage: v3Usage(1, 1),
+              },
+            ] as never),
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "1" },
+            { type: "text-delta", id: "1", delta: "switching" },
+            { type: "text-end", id: "1" },
+            {
+              type: "finish",
+              finishReason: v3Finish("stop"),
+              usage: v3Usage(1, 1),
+            },
+          ] as never),
+        };
+      },
+    });
+    const host = makeHost(async () => ({ modeTransition: "BUILD" }));
+    // ExitPlanMode is deferred — seed a prior ToolSearch load so the engine
+    // includes its contract (otherwise streamText flags the call invalid).
+    const toolSearchLoad: Message = {
+      id: "a-toolsearch",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-ToolSearch",
+          toolCallId: "ts1",
+          state: "output-available",
+          input: { query: "select:ExitPlanMode" },
+          output: { matches: [{ name: "ExitPlanMode" }] },
+        },
+      ],
+    } as never;
+    const params = {
+      ...baseParams(model, host),
+      messages: [toolSearchLoad, userMsg("exit plan mode")],
+      mode: "PLAN" as const,
+    };
+    const { events, terminal } = await drain(query(params as never));
+    expect(terminal.reason).toBe("complete");
+    const modeEvent = events.find((e) => e.type === "mode_change") as {
+      mode: string;
+    };
+    expect(modeEvent).toBeDefined();
+    expect(modeEvent.mode).toBe("BUILD");
+  });
+
+  test("hook systemMessages are injected into the next round's request", async () => {
+    const prompts: string[] = [];
+    let call = 0;
+    const model = new MockLanguageModelV3({
+      doStream: async (options) => {
+        call++;
+        prompts.push(JSON.stringify(options.prompt));
+        if (call === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: "stream-start", warnings: [] },
+              {
+                type: "tool-call",
+                toolCallId: "tc1",
+                toolName: "Read",
+                input: JSON.stringify({ file_path: "C:/x.txt" }),
+              },
+              {
+                type: "finish",
+                finishReason: v3Finish("tool-calls"),
+                usage: v3Usage(1, 1),
+              },
+            ] as never),
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "1" },
+            { type: "text-delta", id: "1", delta: "done" },
+            { type: "text-end", id: "1" },
+            {
+              type: "finish",
+              finishReason: v3Finish("stop"),
+              usage: v3Usage(1, 1),
+            },
+          ] as never),
+        };
+      },
+    });
+    const params = {
+      ...baseParams(model),
+      hooks: {
+        preToolUse: async () => ({ blocked: false }),
+        postToolUse: async () => ({ systemMessage: "lint passed on x.txt" }),
+        postToolUseFailure: async () => {},
+      },
+    };
+    const { terminal } = await drain(query(params as never));
+    expect(terminal.reason).toBe("complete");
+    expect(prompts[0]).not.toContain("lint passed on x.txt");
+    expect(prompts[1]).toContain("lint passed on x.txt");
   });
 });
