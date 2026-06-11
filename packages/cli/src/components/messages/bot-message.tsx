@@ -249,11 +249,11 @@ export function BotMessage({
                 );
               }
 
-              if (
-                isActivePending &&
-                confirmToolCall &&
-                (toolName === "Write" || toolName === "Bash")
-              ) {
+              // Every other confirm-gated tool (Write, Bash, MultiEdit,
+              // NotebookEdit, Config, …) gets the permission dialog — a
+              // pending confirmation with no UI would deadlock the engine,
+              // which awaits canUseTool forever.
+              if (isActivePending && confirmToolCall) {
                 return (
                   <ToolPermissionRequest
                     key={part.toolCallId}
