@@ -18,7 +18,7 @@ const input_schema = z.object({
 export const Skill = defineTool({
   name: "Skill",
   is_read_only: true,
-  is_concurrency_safe: false,
+  is_concurrency_safe: true,
   search_hint: "load a skill on demand",
   input_schema,
   description: `Load a knightcode skill on demand. The Available Skills section of the system prompt lists every skill name and a one-line description — pick the closest match for what the user is asking and call this tool with that name.

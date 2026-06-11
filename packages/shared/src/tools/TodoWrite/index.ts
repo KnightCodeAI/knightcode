@@ -26,7 +26,7 @@ const input_schema = z.object({
 export const TodoWrite = defineTool({
   name: "TodoWrite",
   is_read_only: false,
-  is_concurrency_safe: false,
+  is_concurrency_safe: true,
   search_hint: "update the session todo list",
   input_schema,
   description: `Update the todo list for the current session. Use proactively and often to track progress and pending tasks.

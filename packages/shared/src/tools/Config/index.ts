@@ -14,7 +14,7 @@ const input_schema = z.object({
 export const Config = defineTool({
   name: "Config",
   is_read_only: false,
-  is_concurrency_safe: true,
+  is_concurrency_safe: false,
   is_deferred: true,
   visibility: "always",
   search_hint: "get or set knightcode settings (theme, model)",

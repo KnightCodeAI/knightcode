@@ -45,7 +45,7 @@ export const TaskUpdate = defineTool({
   name: "TaskUpdate",
   is_deferred: true,
   is_read_only: false,
-  is_concurrency_safe: true,
+  is_concurrency_safe: false,
   search_hint: "update an existing task",
   input_schema,
   description: `Update a task in the persistent task list.
