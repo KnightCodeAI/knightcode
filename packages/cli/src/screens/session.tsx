@@ -16,6 +16,7 @@ import {
   ErrorMessage,
   CompactionMessage,
   InterruptedMessage,
+  ToolPermissionRequest,
 } from "../components/messages";
 import { useToast } from "../providers/toast";
 import { useTheme } from "../providers/theme";
@@ -318,14 +319,13 @@ function SessionChat({
       return;
     }
 
-    // Edit/Write/Bash own their keyboard via ToolPermissionRequest (it has a
-    // reject-feedback text input, so the global y/n/a shortcuts would collide
-    // with typing). Other confirmations (Agent/Config/…) still use these keys.
+    // Every confirm-gated tool except Agent renders ToolPermissionRequest
+    // (it has a reject-feedback text input, so the global y/n/a shortcuts
+    // would collide with typing) — including subagent-bubbled requests, which
+    // get a standalone dialog below the transcript. Agent keeps these keys
+    // (AgentSpawnConfirm only handles ↑/↓ for the model picker).
     const dialogOwnsKeys =
-      !!pending &&
-      (pending.toolCall.toolName === "Edit" ||
-        pending.toolCall.toolName === "Write" ||
-        pending.toolCall.toolName === "Bash");
+      !!pending && pending.toolCall.toolName !== "Agent";
 
     if (
       pending &&
@@ -414,6 +414,18 @@ function SessionChat({
           runningToolIds={runningToolIds}
         />
       ))}
+      {/* Subagent-bubbled permission requests reference the subagent's inner
+          toolCallIds, which match no transcript part — BotMessage can't render
+          them inline, so the dialog renders standalone here. confirmToolCall
+          routes them to the boolean permission resolver. */}
+      {pending?.source === "subagent" ? (
+        <ToolPermissionRequest
+          toolCallId={pending.toolCallId}
+          toolName={pending.toolCall.toolName}
+          input={(pending.toolCall.input as Record<string, unknown>) ?? {}}
+          onConfirm={confirmToolCall}
+        />
+      ) : null}
       {error && <ErrorMessage message={error.message} />}
     </SessionShell>
   );

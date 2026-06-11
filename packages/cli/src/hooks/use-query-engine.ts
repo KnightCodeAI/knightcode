@@ -206,7 +206,7 @@ export function useQueryEngine(
         permissionResolversRef.current.set(toolCall.toolCallId, resolve);
         setPendingConfirmations((prev) => [
           ...prev,
-          { toolCallId: toolCall.toolCallId, toolCall, mode },
+          { toolCallId: toolCall.toolCallId, toolCall, mode, source: "subagent" },
         ]);
       }),
     [],
