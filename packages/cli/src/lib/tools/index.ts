@@ -97,12 +97,18 @@ export type ExecuteLocalToolOptions = {
   modelOverride?: string;
 };
 
-async function executeLocalToolImpl(
+/**
+ * Execute a registered tool WITHOUT running Pre/PostToolUse hooks — the
+ * engine scheduler owns hook invocation. Throws on unknown tool, mode
+ * mismatch, or executor failure. Use executeLocalTool when hooks should run
+ * here (legacy subagent path).
+ */
+export async function executeRegisteredTool(
   toolName: string,
   input: unknown,
   mode: ModeType,
   sessionId: string,
-  options: ExecuteLocalToolOptions,
+  options: ExecuteLocalToolOptions = {},
 ): Promise<unknown> {
   const tool = getTool(toolName);
   if (!tool) {
@@ -145,7 +151,7 @@ export async function executeLocalTool(
 
   let output: unknown;
   try {
-    output = await executeLocalToolImpl(toolName, input, mode, sId, options);
+    output = await executeRegisteredTool(toolName, input, mode, sId, options);
   } catch (err) {
     void runPostToolUseFailureHooks(
       toolName,
