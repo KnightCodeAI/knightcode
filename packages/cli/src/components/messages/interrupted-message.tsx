@@ -32,14 +32,9 @@ export function InterruptedMessage({
   const { colors } = useTheme();
   return (
     <box width="100%" flexDirection="column">
-      <box paddingX={3} paddingTop={1} paddingBottom={0}>
-        <text fg={colors.warning} attributes={TextAttributes.DIM}>
-          Interrupted, what can I do for you instead?
-        </text>
-      </box>
       {/* durationMs intentionally withheld: it gates BotMessage's whimsical
           "Crunched for Xs" completion line, which reads wrong on an
-          interrupted turn — the header above already states the outcome. */}
+          interrupted turn — the marker below already states the outcome. */}
       <BotMessage
         parts={parts}
         model={model}
@@ -48,6 +43,12 @@ export function InterruptedMessage({
         pendingConfirmations={pendingConfirmations}
         answerQuestion={answerQuestion}
       />
+      {/* After the partial content, like claude-code's InterruptedByUser. */}
+      <box paddingX={3} paddingTop={1} paddingBottom={0}>
+        <text fg={colors.warning} attributes={TextAttributes.DIM}>
+          Interrupted, what can I do for you instead?
+        </text>
+      </box>
     </box>
   );
 }
