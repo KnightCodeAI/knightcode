@@ -1,6 +1,12 @@
 {
   "extends": "@repo/typescript-config/bun.json",
   "compilerOptions": {
-    "jsxImportSource": "@opentui/react"
-  }
+    "jsxImportSource": "@opentui/react",
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "src/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
 }

@@ -2,11 +2,10 @@
 import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../packages/cli/package.json";
-import { readMigrationsFromDisk } from "../packages/cli/src/lib/store/migrations";
 import process from "node:process";
 
 const ROOT = join(import.meta.dir, "..");
-const ENTRY = join(ROOT, "packages/cli/src/index.tsx");
+const ENTRY = join(ROOT, "packages/cli/src/main.tsx");
 
 type Target = { os: string; arch: string; bunTarget: Bun.Build.CompileTarget };
 
@@ -49,22 +48,7 @@ if (targets.length === 0) {
 
 const version = (pkg as { version?: string }).version ?? "0.0.0-dev";
 
-const migrations = (() => {
-  try {
-    return readMigrationsFromDisk();
-  } catch (error) {
-    console.error(`Failed to read migrations: ${error}`);
-    process.exit(1);
-  }
-})();
-
-if (migrations.length === 0) {
-  console.error(
-    "No migrations found to embed — refusing to build a binary with an empty migration set.",
-  );
-  process.exit(1);
-}
-console.log(`Embedding ${migrations.length} migration(s), version ${version}`);
+console.log(`Building version ${version}`);
 
 for (const target of targets) {
   const outDir = join(
@@ -84,7 +68,6 @@ for (const target of targets) {
     compile: { target: target.bunTarget, outfile },
     define: {
       KNIGHTCODE_VERSION: JSON.stringify(version),
-      KNIGHTCODE_MIGRATIONS: JSON.stringify(migrations),
     },
   });
 
