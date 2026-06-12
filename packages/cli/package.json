@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@alcalzone/ansi-tokenize": "^0.1.0",
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.104.1",
     "@opentui/core": "^0.2.10",
     "@opentui/react": "^0.2.10",
     "@repo/typescript-config": "workspace:*",
