@@ -6,12 +6,16 @@
  * background or utility query (summaries, compaction, hooks, subagents, …).
  */
 export type QuerySource =
+  | 'agent:builtin'
+  | 'agent:custom'
+  | 'agent:default'
   | 'agent_creation'
   | 'agent_summary'
   | 'auto_dream'
   | 'auto_mode'
   | 'auto_mode_critique'
   | 'away_summary'
+  | 'bash_classifier'
   | 'bash_extract_prefix'
   | 'chrome_mcp'
   | 'compact'
@@ -30,6 +34,9 @@ export type QuerySource =
   | 'prompt_suggestion'
   | 'rename_generate_name'
   | 'repl_main_thread'
+  | 'repl_main_thread:outputStyle:custom'
+  | 'repl_main_thread:outputStyle:Explanatory'
+  | 'repl_main_thread:outputStyle:Learning'
   | 'sdk'
   | 'session_memory'
   | 'session_search'

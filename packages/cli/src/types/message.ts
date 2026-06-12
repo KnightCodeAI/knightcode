@@ -49,7 +49,7 @@ export type UserMessage = {
   }
   uuid: UUID
   timestamp: string
-  isMeta?: true | false
+  isMeta?: true
   isVisibleInTranscriptOnly?: true
   isVirtual?: true
   isCompactSummary?: true
@@ -101,10 +101,10 @@ export type ProgressMessage<P = unknown> = {
 }
 
 // TODO: Attachment variants land with the context/attachment layer; until
-// then the payload is opaque here and typed at the producer.
+// then only the discriminator is typed and the payload stays open.
 export type AttachmentMessage = {
   type: 'attachment'
-  attachment: unknown
+  attachment: { type: string; [key: string]: unknown }
   uuid: UUID
   timestamp: string
 }
