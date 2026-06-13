@@ -55,6 +55,7 @@
     "zod": "^3.25.0"
   },
   "dependencies": {
+    "@vscode/ripgrep": "^1.18.0",
     "ignore": "^7.0.5"
   }
 }
