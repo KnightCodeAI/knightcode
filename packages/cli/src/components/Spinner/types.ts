@@ -7,4 +7,9 @@ export interface RGBColor {
   b: number
 }
 
-export type SpinnerMode = 'requesting' | 'responding' | 'thinking'
+export type SpinnerMode =
+  | 'requesting'
+  | 'responding'
+  | 'thinking'
+  | 'tool-use'
+  | 'tool-input'
