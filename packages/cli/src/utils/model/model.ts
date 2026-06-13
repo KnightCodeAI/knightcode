@@ -86,6 +86,12 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   return getDefaultSonnetModel()
 }
 
+// TODO: the user-specified model override (from /model and settings) is read
+// by the harness; until then the main-loop model is the default setting.
+export function getMainLoopModel(): ModelName {
+  return getDefaultMainLoopModelSetting()
+}
+
 /**
  * Maps a full model string to a shorter canonical version. Gateway ids
  * carry a vendor prefix ('anthropic/claude-sonnet-4.6'); the canonical
