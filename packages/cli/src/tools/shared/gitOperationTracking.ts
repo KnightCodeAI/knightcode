@@ -13,3 +13,12 @@ export function trackGitOperations(
   _exitCode: number,
   _stdout: string,
 ): void {}
+
+/**
+ * Parse the short commit id from `git commit` stdout, e.g.
+ * `[branch abc1234] message` or `[branch (root-commit) abc1234] message`.
+ */
+export function parseGitCommitId(stdout: string): string | undefined {
+  const match = stdout.match(/\[[\w./-]+(?: \(root-commit\))? ([0-9a-f]+)\]/)
+  return match?.[1]
+}

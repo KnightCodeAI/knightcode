@@ -20,3 +20,11 @@ export async function getDynamicConfig_BLOCKS_ON_INIT<T>(
 ): Promise<T> {
   return defaultValue
 }
+
+export function getFeatureValue_CACHED_WITH_REFRESH<T>(
+  feature: string,
+  defaultValue: T,
+  _refreshIntervalMs: number,
+): T {
+  return getFeatureValue_CACHED_MAY_BE_STALE(feature, defaultValue)
+}

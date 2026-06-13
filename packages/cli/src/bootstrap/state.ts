@@ -124,13 +124,60 @@ export function getAllowedSettingSources(): SettingSource[] {
 
 /** Attributed lines-of-code counter, when one is installed for the session. */
 type AttributedCounter = {
-  add(value: number, attributes: { type: 'added' | 'removed' }): void
+  add(
+    value: number,
+    additionalAttributes?: Record<
+      string,
+      string | number | boolean | undefined
+    >,
+  ): void
 }
 
 // TODO: the LOC counter is provisioned by the statusline/metrics layer. Until
 // then nothing is counting, so callers guard on null.
 export function getLocCounter(): AttributedCounter | null {
   return null
+}
+
+// TODO: the code-edit decision counter is provisioned by the metrics layer
+// alongside the other attributed counters. Until then nothing is counting.
+export function getCodeEditToolDecisionCounter(): AttributedCounter | null {
+  return null
+}
+
+// TODO: the OpenTelemetry stats store (histogram/observation sink) is
+// provisioned by the metrics layer. Until then there is nothing to record to.
+export function getStatsStore():
+  | { observe(name: string, value: number): void }
+  | null {
+  return null
+}
+
+// TODO: turn/tool duration aggregation is consumed by the stats display, which
+// lands with the metrics layer. The executor records into it; nothing reads it
+// yet, so accumulation is a no-op for now.
+export function addToToolDuration(_duration: number): void {}
+
+// TODO: classifier-overhead timing is reported by the auto-mode metrics, which
+// land with the classifier layer. Nothing reads it yet.
+export function addToTurnClassifierDuration(_duration: number): void {}
+
+// TODO: per-model token accounting is populated by the API cost layer. Until
+// that wiring lands these report zero so telemetry payloads stay well-formed.
+export function getTotalInputTokens(): number {
+  return 0
+}
+
+export function getTotalOutputTokens(): number {
+  return 0
+}
+
+export function getTotalCacheReadInputTokens(): number {
+  return 0
+}
+
+export function getTotalCacheCreationInputTokens(): number {
+  return 0
 }
 
 // TODO: scroll-draining coordination is owned by the REPL renderer. With no

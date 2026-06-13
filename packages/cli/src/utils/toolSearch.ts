@@ -20,6 +20,14 @@ export function isToolSearchEnabledOptimistic(): boolean {
   return false
 }
 
+// TODO: tool-search availability detection lands with the tool-search layer.
+// Until deferred tools are wired up the search tool is never present.
+export function isToolSearchToolAvailable(
+  _tools: readonly { name: string }[],
+): boolean {
+  return false
+}
+
 export function isDeferredToolsDeltaEnabled(): boolean {
   return false
 }

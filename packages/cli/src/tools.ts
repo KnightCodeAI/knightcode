@@ -6,7 +6,7 @@ import { GlobTool } from './tools/GlobTool/GlobTool.js'
 import { GrepTool } from './tools/GrepTool/GrepTool.js'
 import { PowerShellTool } from './tools/PowerShellTool/PowerShellTool.js'
 import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
-import { getDenyRules } from './utils/permissions/ruleSelectors.js'
+import { getDenyRules } from './utils/permissions/permissions.js'
 import { getPlatform } from './utils/platform.js'
 
 // The in-scope tool set. Agent/Skill/Web/Task/MCP tools and the Bash shell tool

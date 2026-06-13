@@ -13,8 +13,10 @@ import { getCwd } from '../../utils/cwd.js'
 import { isCurrentDirectoryBareGitRepo } from '../../utils/git.js'
 import type { PermissionRule } from '../../utils/permissions/PermissionRule.js'
 import type { PermissionUpdate } from '../../utils/permissions/PermissionUpdateSchema.js'
-import { createPermissionRequestMessage } from '../../utils/permissions/permissionMessages.js'
-import { getRuleByContentsForToolName } from '../../utils/permissions/ruleSelectors.js'
+import {
+  createPermissionRequestMessage,
+  getRuleByContentsForToolName,
+} from '../../utils/permissions/permissions.js'
 import {
   matchWildcardPattern,
   parsePermissionRule,

@@ -46,7 +46,7 @@ import type {
 import type { PermissionRule, PermissionRuleSource } from './PermissionRule.js'
 import { createReadRuleSuggestion } from './permissionSuggestions.js'
 import type { PermissionUpdate } from './PermissionUpdateSchema.js'
-import { getRuleByContentsForToolName } from './ruleSelectors.js'
+import { getRuleByContentsForToolName } from './permissions.js'
 
 declare const MACRO: { VERSION: string }
 

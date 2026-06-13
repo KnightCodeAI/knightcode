@@ -12,6 +12,7 @@ export type ISandboxManager = {
   isSandboxingEnabled(): boolean
   isSandboxEnabledInSettings(): boolean
   areUnsandboxedCommandsAllowed(): boolean
+  isAutoAllowBashIfSandboxedEnabled(): boolean
   getFsWriteConfig(): FsWriteRestrictionConfig
   wrapWithSandbox(
     command: string,
@@ -31,6 +32,9 @@ export const SandboxManager: ISandboxManager = {
   },
   areUnsandboxedCommandsAllowed() {
     return true
+  },
+  isAutoAllowBashIfSandboxedEnabled() {
+    return false
   },
   getFsWriteConfig() {
     return { allowOnly: [], denyWithinAllow: [] }

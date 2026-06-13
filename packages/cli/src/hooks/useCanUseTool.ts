@@ -4,7 +4,7 @@
 
 import type { Tool, ToolUseContext } from '../Tool.js'
 import type { AssistantMessage } from '../types/message.js'
-import type { PermissionResult } from '../types/permissions.js'
+import type { PermissionDecision } from '../types/permissions.js'
 
 /**
  * Resolves whether a tool may run with the given input in the current context,
@@ -18,5 +18,5 @@ export type CanUseToolFn<
   toolUseContext: ToolUseContext,
   assistantMessage: AssistantMessage,
   toolUseID: string,
-  forceDecision?: PermissionResult<Input>,
-) => Promise<PermissionResult<Input>>
+  forceDecision?: PermissionDecision<Input>,
+) => Promise<PermissionDecision<Input>>

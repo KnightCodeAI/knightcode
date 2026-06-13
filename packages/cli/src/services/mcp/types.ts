@@ -4,7 +4,23 @@
 
 export type MCPServerConnection = {
   name: string
-  client: unknown
+  // Connection lifecycle state. Stays empty in practice until the MCP transport
+  // lands, but the tool executor branches on it to attach server metadata.
+  type?: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled'
+  config: {
+    type?:
+      | 'stdio'
+      | 'sse'
+      | 'http'
+      | 'ws'
+      | 'sdk'
+      | 'sse-ide'
+      | 'ws-ide'
+      | 'claudeai-proxy'
+    url?: unknown
+    [key: string]: unknown
+  }
+  client?: unknown
   capabilities?: Record<string, unknown>
 }
 

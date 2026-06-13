@@ -54,6 +54,8 @@ import type {
   SystemInformationalMessage,
   SystemLocalCommandMessage,
   SystemMessageLevel,
+  SystemStopHookSummaryMessage,
+  StopHookInfo,
   ToolUseSummaryMessage,
   ProgressMessage,
   UserMessage,
@@ -131,6 +133,49 @@ export function AUTO_REJECT_MESSAGE(toolName: string): string {
 
 export function DONT_ASK_REJECT_MESSAGE(toolName: string): string {
   return `Permission to use ${toolName} has been denied because Claude Code is running in don't ask mode. ${DENIAL_WORKAROUND_GUIDANCE}`
+}
+
+const AUTO_MODE_REJECTION_PREFIX =
+  'Permission for this action has been denied. Reason: '
+
+export function buildYoloRejectionMessage(reason: string): string {
+  const prefix = AUTO_MODE_REJECTION_PREFIX
+
+  const ruleHint = feature('BASH_CLASSIFIER')
+    ? `To allow this type of action in the future, the user can add a permission rule like ` +
+      `Bash(prompt: <description of allowed action>) to their settings. ` +
+      `At the end of your session, recommend what permission rules to add so you don't get blocked again.`
+    : `To allow this type of action in the future, the user can add a Bash permission rule to their settings.`
+
+  return (
+    `${prefix}${reason}. ` +
+    `If you have other tasks that don't depend on this action, continue working on those. ` +
+    `${DENIAL_WORKAROUND_GUIDANCE} ` +
+    ruleHint
+  )
+}
+
+/**
+ * Build a message for when the auto mode classifier is temporarily unavailable.
+ * Tells the agent to wait and retry, and suggests working on other tasks.
+ */
+export function buildClassifierUnavailableMessage(
+  toolName: string,
+  classifierModel: string,
+): string {
+  return (
+    `${classifierModel} is temporarily unavailable, so auto mode cannot determine the safety of ${toolName} right now. ` +
+    `Wait briefly and then try this action again. ` +
+    `If it keeps failing, continue with other tasks that don't require this action and come back to it later. ` +
+    `Note: reading files, searching code, and other read-only operations do not require the classifier and can still be used.`
+  )
+}
+
+// TODO: the auto-memory correction hint (appended when the auto-memory layer
+// and its feature flag are both active) lands with the memory layer. Until then
+// no hint is appended.
+export function withMemoryCorrectionHint(message: string): string {
+  return message
 }
 
 export const NO_RESPONSE_REQUESTED = 'No response requested.'
@@ -1379,6 +1424,37 @@ export function createToolUseSummaryMessage(
     precedingToolUseIds,
     uuid: randomUUID(),
     timestamp: new Date().toISOString(),
+  }
+}
+
+export function createStopHookSummaryMessage(
+  hookCount: number,
+  hookInfos: StopHookInfo[],
+  hookErrors: string[],
+  preventedContinuation: boolean,
+  stopReason: string | undefined,
+  hasOutput: boolean,
+  level: SystemMessageLevel,
+  toolUseID?: string,
+  hookLabel?: string,
+  totalDurationMs?: number,
+): SystemStopHookSummaryMessage {
+  return {
+    type: 'system',
+    subtype: 'stop_hook_summary',
+    isMeta: false,
+    hookCount,
+    hookInfos,
+    hookErrors,
+    preventedContinuation,
+    stopReason,
+    hasOutput,
+    level,
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+    toolUseID,
+    hookLabel,
+    totalDurationMs,
   }
 }
 
