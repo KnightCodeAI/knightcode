@@ -10,3 +10,10 @@ export type AgentDefinition = {
   model?: string
   [key: string]: unknown
 }
+
+export type AgentDefinitionsResult = {
+  activeAgents: AgentDefinition[]
+  allAgents: AgentDefinition[]
+  failedFiles?: Array<{ path: string; error: string }>
+  allowedAgentTypes?: string[]
+}

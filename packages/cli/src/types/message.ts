@@ -18,6 +18,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { UUID } from 'crypto'
 import type { SDKAssistantMessageError } from '../entrypoints/agentSdkTypes.js'
 import type { PermissionMode } from './permissions.js'
+import type { ToolProgressData } from './tools.js'
 
 /**
  * Provenance of a user message. undefined = human (keyboard input).
@@ -93,7 +94,7 @@ export type AssistantMessage = {
   research?: unknown
 }
 
-export type ProgressMessage<P = unknown> = {
+export type ProgressMessage<P = ToolProgressData> = {
   type: 'progress'
   data: P
   toolUseID: string

@@ -18,3 +18,12 @@ export type FileHistorySnapshot = {
   trackedFileBackups: Record<string, FileHistoryBackup>
   timestamp: Date
 }
+
+export type FileHistoryState = {
+  snapshots: FileHistorySnapshot[]
+  trackedFiles: Set<string>
+  // Monotonically-increasing counter incremented on every snapshot, even when
+  // old snapshots are evicted. Used as an activity signal (snapshots.length
+  // plateaus once the cap is reached).
+  snapshotSequence: number
+}

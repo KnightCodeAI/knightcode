@@ -5,6 +5,9 @@ import { useAnimationTimer } from '../tui/hooks/use-interval.js'
 const FRAMES = ['·', '✢', '✳', '∗', '✻', '✽'] as const
 const FRAME_MS = 120
 
+/** Activity phase the spinner reflects while a turn is in flight. */
+export type SpinnerMode = 'requesting' | 'responding' | 'thinking' | 'tool-use'
+
 /**
  * The minimal animated activity glyph.
  * TODO: port the full spinner suite (verb lines, shimmer, stall states)
