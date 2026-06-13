@@ -41,6 +41,8 @@ type State = {
   promptCache1hAllowlist: string[] | null
   promptCache1hEligible: boolean | null
   slowOperations: SlowOperation[]
+  // SDK-provided betas (e.g., context-1m-2025-08-07)
+  sdkBetas: string[] | undefined
   // Set after a compaction; consumed once by the next API success event.
   pendingPostCompaction: boolean
   // Skills invoked this session, keyed by skill name; agentId scopes them to
@@ -73,6 +75,7 @@ const STATE: State = {
   promptCache1hAllowlist: null,
   promptCache1hEligible: null,
   slowOperations: [],
+  sdkBetas: undefined,
   pendingPostCompaction: false,
   invokedSkills: new Map(),
 }
@@ -282,9 +285,8 @@ export function getHasUnknownModelCost(): boolean {
   return hasUnknownModelCost
 }
 
-/** Extra beta headers requested by an embedding SDK; none in the CLI. */
-export function getSdkBetas(): string[] {
-  return []
+export function getSdkBetas(): string[] | undefined {
+  return STATE.sdkBetas
 }
 
 /** Whether an SDK REPL bridge is attached to this session. */
