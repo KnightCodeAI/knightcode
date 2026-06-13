@@ -58,6 +58,8 @@ type State = {
   lastEmittedDate: string | null
   // Stable name→color assignment for subagents (UI display).
   agentColorMap: Map<string, AgentColorName>
+  // Whether the user opted in to showing their prompt text in the transcript.
+  userMsgOptIn: boolean
 }
 
 const STATE: State = {
@@ -93,6 +95,7 @@ const STATE: State = {
   needsAutoModeExitAttachment: false,
   lastEmittedDate: null,
   agentColorMap: new Map(),
+  userMsgOptIn: false,
 }
 
 const SLOW_OPERATION_TTL_MS = 5 * 60 * 1000
@@ -112,6 +115,10 @@ export function getProjectRoot(): string {
 
 export function getAgentColorMap(): Map<string, AgentColorName> {
   return STATE.agentColorMap
+}
+
+export function getUserMsgOptIn(): boolean {
+  return STATE.userMsgOptIn
 }
 
 /**

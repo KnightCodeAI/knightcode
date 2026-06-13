@@ -127,6 +127,10 @@ type SystemMessageBase = {
   uuid: UUID
   timestamp: string
   isMeta: boolean
+  // Optional on the base so the SystemMessage union is uniformly addressable by
+  // the renderer; text-bearing subtypes narrow these to required.
+  level?: SystemMessageLevel
+  content?: string
 }
 
 export type SystemInformationalMessage = SystemMessageBase & {
@@ -207,6 +211,7 @@ export type SystemAwaySummaryMessage = SystemMessageBase & {
 export type SystemMemorySavedMessage = SystemMessageBase & {
   subtype: 'memory_saved'
   writtenPaths: string[]
+  verb?: string
 }
 
 export type SystemAgentsKilledMessage = SystemMessageBase & {

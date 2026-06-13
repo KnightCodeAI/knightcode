@@ -57,3 +57,29 @@ export function isIdleNotification(
 ): IdleNotificationMessage | null {
   return null
 }
+
+export type PlanApprovalRequestMessage = {
+  type: 'plan_approval_request'
+  from: string
+  planContent: string
+  planFilePath: string
+}
+
+export type PlanApprovalResponseMessage = {
+  type: 'plan_approval_response'
+  from: string
+  approved: boolean
+  feedback?: string
+}
+
+export function isPlanApprovalRequest(
+  _messageText: string,
+): PlanApprovalRequestMessage | null {
+  return null
+}
+
+export function isPlanApprovalResponse(
+  _messageText: string,
+): PlanApprovalResponseMessage | null {
+  return null
+}

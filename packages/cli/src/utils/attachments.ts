@@ -445,6 +445,10 @@ export type Attachment =
   | CompactFileReferenceAttachment
   | PDFReferenceAttachment
   | AlreadyReadFileAttachment
+  // Pen-mode enter/exit markers (rendered as null; newer than the rest of this
+  // union, added so the renderer's null-rendering set stays in sync).
+  | { type: 'pen_mode_enter'; isMeta?: boolean }
+  | { type: 'pen_mode_exit'; isMeta?: boolean }
   /**
    * An at-mentioned file was edited
    */

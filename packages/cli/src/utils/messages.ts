@@ -2945,3 +2945,34 @@ export function stripSignatureBlocks(messages: Message[]): Message[] {
   })
   return changed ? result : messages
 }
+
+// TODO: the real per-round message lookups (sibling tool uses, progress
+// messages, hook counts, tool_use↔tool_result pairing) are computed by the
+// transcript assembly. This typed stub lets the hook-progress renderer reference
+// the return shape; the transcript pass replaces it with the real builder.
+export type MessageLookups = {
+  siblingToolUseIDs: Map<string, Set<string>>
+  progressMessagesByToolUseID: Map<string, ProgressMessage[]>
+  inProgressHookCounts: Map<string, Map<string, number>>
+  resolvedHookCounts: Map<string, Map<string, number>>
+  toolResultByToolUseID: Map<string, NormalizedMessage>
+  toolUseByToolUseID: Map<string, unknown>
+  normalizedMessageCount: number
+  resolvedToolUseIDs: Set<string>
+}
+
+export function buildMessageLookups(
+  _normalizedMessages: NormalizedMessage[],
+  _messages: Message[],
+): MessageLookups {
+  return {
+    siblingToolUseIDs: new Map(),
+    progressMessagesByToolUseID: new Map(),
+    inProgressHookCounts: new Map(),
+    resolvedHookCounts: new Map(),
+    toolResultByToolUseID: new Map(),
+    toolUseByToolUseID: new Map(),
+    normalizedMessageCount: 0,
+    resolvedToolUseIDs: new Set(),
+  }
+}

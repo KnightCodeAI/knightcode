@@ -48,6 +48,8 @@ export type GlobalConfig = {
   hasUsedBackslashReturn?: boolean
   appleTerminalSetupInProgress?: boolean
   appleTerminalBackupPath?: string
+  /** Whether the per-turn duration is shown in the transcript. */
+  showTurnDuration?: boolean
 }
 
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
