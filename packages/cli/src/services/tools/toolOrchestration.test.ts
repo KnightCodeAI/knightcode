@@ -10,7 +10,7 @@ import {
   getEmptyToolPermissionContext,
   type ToolUseContext,
 } from '../../Tool.js'
-import type { AppState } from '../../state/AppState.js'
+import { getDefaultAppState, type AppState } from '../../state/AppState.js'
 import type { AssistantMessage, UserMessage } from '../../types/message.js'
 import type { PermissionDecision } from '../../types/permissions.js'
 import type { Tool } from '../../Tool.js'
@@ -33,12 +33,9 @@ afterAll(() => {
 
 function makeState(): AppState {
   return {
+    ...getDefaultAppState(),
     toolPermissionContext: getEmptyToolPermissionContext(),
-    todos: {},
-    tasks: {},
-    mcp: { clients: [], commands: [], tools: [] },
-    inbox: { messages: [] },
-  } as AppState
+  }
 }
 
 // A context exposing only the fields the serial/concurrent tool paths read.

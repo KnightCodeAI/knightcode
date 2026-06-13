@@ -30,3 +30,8 @@ export function createAttributionState(surface: string): AttributionState {
     permissionPromptCountAtLastCommit: 0,
   }
 }
+
+// Empty attribution state for the initial app state (no surface attributed yet).
+export function createEmptyAttributionState(): AttributionState {
+  return createAttributionState('')
+}

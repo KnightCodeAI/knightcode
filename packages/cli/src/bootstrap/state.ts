@@ -5,6 +5,7 @@
 import { randomUUID } from 'crypto'
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { asSessionId, type SessionId } from '../types/ids.js'
+import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js'
 import type { SettingSource } from '../utils/settings/constants.js'
 
 type SlowOperation = {
@@ -55,6 +56,8 @@ type State = {
   needsAutoModeExitAttachment: boolean
   // Last date emitted as a date-change attachment (ISO date string).
   lastEmittedDate: string | null
+  // Stable name→color assignment for subagents (UI display).
+  agentColorMap: Map<string, AgentColorName>
 }
 
 const STATE: State = {
@@ -89,6 +92,7 @@ const STATE: State = {
   needsPlanModeExitAttachment: false,
   needsAutoModeExitAttachment: false,
   lastEmittedDate: null,
+  agentColorMap: new Map(),
 }
 
 const SLOW_OPERATION_TTL_MS = 5 * 60 * 1000
@@ -104,6 +108,10 @@ export function getOriginalCwd(): string {
 
 export function getProjectRoot(): string {
   return STATE.projectRoot
+}
+
+export function getAgentColorMap(): Map<string, AgentColorName> {
+  return STATE.agentColorMap
 }
 
 /**

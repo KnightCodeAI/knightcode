@@ -20,3 +20,8 @@ export function deletePermissionRuleFromSettings(
 ): boolean {
   return false
 }
+
+// No on-disk rules until the settings persistence layer is wired up.
+export function loadAllPermissionRulesFromDisk(): PermissionRule[] {
+  return []
+}

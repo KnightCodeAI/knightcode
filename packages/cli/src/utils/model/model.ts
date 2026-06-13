@@ -8,6 +8,8 @@ import type { PermissionMode } from '../../types/permissions.js'
 export type ModelName = string
 export type ModelAlias = string
 export type ModelShortName = string
+// alias / full model name / null (use the default)
+export type ModelSetting = ModelName | ModelAlias | null
 
 export function getDefaultOpusModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {

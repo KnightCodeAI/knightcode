@@ -12,6 +12,9 @@ export type TuiInstance = {
   unmount: () => void
   waitUntilExit: () => Promise<void>
   clear: () => void
+  // Marks the previous frame contaminated so the next render is a full repaint.
+  // Used on overlay unmount to avoid ghost cells from a shrunken layout.
+  invalidatePrevFrame: () => void
 }
 
 const instances = new Map<NodeJS.WriteStream, TuiInstance>()

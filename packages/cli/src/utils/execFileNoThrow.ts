@@ -9,7 +9,10 @@ type ExecFileOptions = {
   timeout?: number
   preserveOutputOnError?: boolean
   useCwd?: boolean
+  cwd?: string
   env?: NodeJS.ProcessEnv
+  maxBuffer?: number
+  shell?: boolean | string
   stdin?: 'ignore' | 'inherit' | 'pipe'
   input?: string
 }
@@ -40,7 +43,9 @@ export function execFileNoThrow(
         signal: abortSignal,
         timeout,
         env,
-        maxBuffer: 1_000_000,
+        cwd: options.cwd,
+        maxBuffer: options.maxBuffer ?? 1_000_000,
+        shell: options.shell,
         windowsHide: true,
       },
       (error, stdout, stderr) => {
@@ -67,5 +72,20 @@ export function execFileNoThrow(
       child.stdin.write(input)
       child.stdin.end()
     }
+  })
+}
+
+/**
+ * As execFileNoThrow, but defaulting to the current working directory (and
+ * accepting an explicit cwd). The harness uses this for cwd-sensitive helpers.
+ */
+export function execFileNoThrowWithCwd(
+  file: string,
+  args: string[],
+  options: ExecFileOptions = {},
+): Promise<{ stdout: string; stderr: string; code: number; error?: string }> {
+  return execFileNoThrow(file, args, {
+    cwd: options.cwd ?? process.cwd(),
+    ...options,
   })
 }

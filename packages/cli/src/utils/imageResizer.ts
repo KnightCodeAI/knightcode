@@ -71,6 +71,14 @@ export function detectImageFormatFromBuffer(buffer: Buffer): ImageMediaType {
   return 'image/png'
 }
 
+export function detectImageFormatFromBase64(base64Data: string): ImageMediaType {
+  try {
+    return detectImageFormatFromBuffer(Buffer.from(base64Data, 'base64'))
+  } catch {
+    return 'image/png'
+  }
+}
+
 export function createImageMetadataText(
   _dims: ImageDimensions,
   _sourcePath?: string,

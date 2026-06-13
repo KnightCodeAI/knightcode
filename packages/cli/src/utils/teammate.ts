@@ -17,6 +17,10 @@ export function isTeammate(): boolean {
   return false
 }
 
+export function isPlanModeRequired(): boolean {
+  return false
+}
+
 export function getAgentId(): string | undefined {
   return undefined
 }

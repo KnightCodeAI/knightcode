@@ -19,6 +19,12 @@ export type PastedContent = {
   sourcePath?: string
 }
 
+// One entry in the prompt input history (what the arrow keys cycle through).
+export interface HistoryEntry {
+  display: string
+  pastedContents: Record<number, PastedContent>
+}
+
 // Global (per-user) configuration. Grows as features land; fields with
 // defaults are filled in when an older config file omits them.
 export type GlobalConfig = {
@@ -36,6 +42,12 @@ export type GlobalConfig = {
   companion?: StoredCompanion
   /** Whether the desktop companion's intro/notifications are muted. */
   companionMuted?: boolean
+  /** Terminal-setup bookkeeping (the /terminal-setup command). */
+  shiftEnterKeyBindingInstalled?: boolean
+  optionAsMetaKeyInstalled?: boolean
+  hasUsedBackslashReturn?: boolean
+  appleTerminalSetupInProgress?: boolean
+  appleTerminalBackupPath?: string
 }
 
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
@@ -111,4 +123,32 @@ export function getOrCreateUserID(): string {
   const userID = randomBytes(32).toString('hex')
   saveGlobalConfig(current => ({ ...current, userID }))
   return userID
+}
+
+// TODO: per-project config persistence (onboarding state, project history,
+// trust) lands with the config layer. This keeps an in-memory project config
+// keyed by cwd so onboarding bookkeeping works within a session; it is not yet
+// written to disk.
+export type ProjectConfig = {
+  hasCompletedProjectOnboarding?: boolean
+  projectOnboardingSeenCount: number
+  [key: string]: unknown
+}
+
+const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
+  projectOnboardingSeenCount: 0,
+}
+
+const projectConfigByDir = new Map<string, ProjectConfig>()
+
+export function getCurrentProjectConfig(): ProjectConfig {
+  const cwd = process.cwd().normalize('NFC')
+  return projectConfigByDir.get(cwd) ?? { ...DEFAULT_PROJECT_CONFIG }
+}
+
+export function saveCurrentProjectConfig(
+  updater: (current: ProjectConfig) => ProjectConfig,
+): void {
+  const cwd = process.cwd().normalize('NFC')
+  projectConfigByDir.set(cwd, updater(getCurrentProjectConfig()))
 }

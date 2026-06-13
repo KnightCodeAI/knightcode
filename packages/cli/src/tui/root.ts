@@ -138,6 +138,12 @@ async function createInstance(
     clear() {
       renderer.console.clear()
     },
+    invalidatePrevFrame() {
+      // TODO: OpenTUI diffs frames internally and exposes no prev-frame
+      // contamination hook, so the overlay-unmount ghost-cell guard is a no-op
+      // for now. Overlays still render correctly; only the one-shot full-repaint
+      // optimization on tall-overlay teardown is deferred.
+    },
   }
 
   return instance

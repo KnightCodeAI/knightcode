@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { query } from './query.js'
 import { getEmptyToolPermissionContext, type ToolUseContext } from './Tool.js'
-import type { AppState } from './state/AppState.js'
+import { getDefaultAppState, type AppState } from './state/AppState.js'
 import type { AssistantMessage, Message } from './types/message.js'
 import { FileReadTool } from './tools/FileReadTool/FileReadTool.js'
 import {
@@ -26,12 +26,9 @@ afterAll(() => {
 
 function makeState(): AppState {
   return {
+    ...getDefaultAppState(),
     toolPermissionContext: getEmptyToolPermissionContext(),
-    todos: {},
-    tasks: {},
-    mcp: { clients: [], commands: [], tools: [] },
-    inbox: { messages: [] },
-  } as AppState
+  }
 }
 
 function makeCtx(state: AppState): ToolUseContext {
