@@ -40,6 +40,15 @@ export type CompactMetadata = {
   preTokens: number
   userContext?: string
   messagesSummarized?: number
+  /** Deferred tool names loaded before compaction, carried across so the
+   *  post-compact schema filter keeps sending their schemas to the API. */
+  preCompactDiscoveredTools?: string[]
+  /** Relink metadata for messages preserved verbatim through compaction. */
+  preservedSegment?: {
+    headUuid: UUID
+    anchorUuid: UUID
+    tailUuid: UUID
+  }
 }
 
 export type UserMessage = {

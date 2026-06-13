@@ -161,6 +161,36 @@ export async function* executeTaskCompletedHooks(
   _toolUseContext?: ToolUseContext,
 ): AsyncGenerator<AggregatedHookResult> {}
 
+// Compaction hooks mirror the stop-hook stubs: no-ops until hook dispatch
+// lands. They report no custom instructions and no display message, so
+// compaction runs in the hook-free default.
+export async function executePreCompactHooks(
+  _compactData: {
+    trigger: 'manual' | 'auto'
+    customInstructions: string | null
+  },
+  _signal?: AbortSignal,
+  _timeoutMs: number = TOOL_HOOK_EXECUTION_TIMEOUT_MS,
+): Promise<{
+  newCustomInstructions?: string
+  userDisplayMessage?: string
+}> {
+  return {}
+}
+
+export async function executePostCompactHooks(
+  _compactData: {
+    trigger: 'manual' | 'auto'
+    compactSummary: string
+  },
+  _signal?: AbortSignal,
+  _timeoutMs: number = TOOL_HOOK_EXECUTION_TIMEOUT_MS,
+): Promise<{
+  userDisplayMessage?: string
+}> {
+  return {}
+}
+
 export function getStopHookMessage(blockingError: HookBlockingError): string {
   return `Stop hook feedback:\n${blockingError.blockingError}`
 }

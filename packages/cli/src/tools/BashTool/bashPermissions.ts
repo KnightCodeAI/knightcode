@@ -13,3 +13,7 @@ export function startSpeculativeClassifierCheck(
 ): boolean {
   return false
 }
+
+/** Clears any in-flight speculative classifier checks. No-op until the
+ *  classifier is wired up. */
+export function clearSpeculativeChecks(): void {}

@@ -35,3 +35,17 @@ export async function checkResponseForCacheBreak(
   _agentId?: AgentId,
   _requestId?: string | null,
 ): Promise<void> {}
+
+/** Reset the cache-read baseline so a legitimate cache deletion isn't flagged
+ *  as a break. Inert while detection is inert. */
+export function notifyCacheDeletion(
+  _querySource: QuerySource,
+  _agentId?: AgentId,
+): void {}
+
+/** Reset the cache-read baseline after compaction so the post-compact drop
+ *  isn't flagged as a break. Inert while detection is inert. */
+export function notifyCompaction(
+  _querySource: QuerySource,
+  _agentId?: AgentId,
+): void {}
