@@ -35,6 +35,34 @@ export function fileHistoryEnabled(): boolean {
   return false
 }
 
+export type DiffStats =
+  | {
+      filesChanged?: string[]
+      insertions: number
+      deletions: number
+    }
+  | undefined
+
+export function fileHistoryCanRestore(
+  state: FileHistoryState,
+  messageId: UUID,
+): boolean {
+  if (!fileHistoryEnabled()) {
+    return false
+  }
+
+  return state.snapshots.some(snapshot => snapshot.messageId === messageId)
+}
+
+// TODO: diff stats for a restore point are computed by the file-change tracking
+// layer. Until it lands there is nothing snapshotted to diff against.
+export async function fileHistoryGetDiffStats(
+  _state: FileHistoryState,
+  _messageId: UUID,
+): Promise<DiffStats> {
+  return undefined
+}
+
 export async function fileHistoryTrackEdit(
   _updateFileHistoryState: (
     updater: (prev: FileHistoryState) => FileHistoryState,

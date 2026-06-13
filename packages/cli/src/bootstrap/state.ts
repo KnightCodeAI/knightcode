@@ -171,6 +171,16 @@ export function getCodeEditToolDecisionCounter(): AttributedCounter | null {
   return null
 }
 
+// TODO: git-operation counters are provisioned by the metrics layer alongside
+// the other attributed counters. Until then nothing is counting.
+export function getCommitCounter(): AttributedCounter | null {
+  return null
+}
+
+export function getPrCounter(): AttributedCounter | null {
+  return null
+}
+
 // TODO: the OpenTelemetry stats store (histogram/observation sink) is
 // provisioned by the metrics layer. Until then there is nothing to record to.
 export function getStatsStore():
@@ -268,6 +278,12 @@ export function setAllowedSettingSources(sources: SettingSource[]): void {
 
 export function getIsNonInteractiveSession(): boolean {
   return !STATE.isInteractive
+}
+
+// TODO: remote sessions land with the remote/teammate subsystem. This build
+// runs locally only, so remote mode is never active.
+export function getIsRemoteMode(): boolean {
+  return false
 }
 
 export function getIsInteractive(): boolean {

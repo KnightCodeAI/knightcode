@@ -11,6 +11,7 @@
 import type { APIError } from '@anthropic-ai/sdk'
 import type {
   BetaContentBlock,
+  BetaToolUseBlock,
   BetaUsage as Usage,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type {
@@ -51,6 +52,7 @@ import type {
   NormalizedUserMessage,
   PartialCompactDirection,
   SystemAPIErrorMessage,
+  SystemMessage,
   SystemCompactBoundaryMessage,
   SystemInformationalMessage,
   SystemLocalCommandMessage,
@@ -63,6 +65,7 @@ import type {
   UserMessage,
 } from '../types/message.js'
 import type { PermissionMode } from '../types/permissions.js'
+import type { HookEvent } from '../types/hooks.js'
 import type { Attachment } from '../utils/attachments.js'
 import { isConnectorTextBlock } from '../types/connectorText.js'
 import { formatTokens } from './format.js'
@@ -3058,4 +3061,304 @@ export function getProgressMessagesFromLookup(
     return []
   }
   return lookups.progressMessagesByToolUseID.get(toolUseID) ?? []
+}
+
+// ---------------------------------------------------------------------------
+// Transcript reordering + predicates (consumed by the message list).
+// ---------------------------------------------------------------------------
+
+export function isNotEmptyMessage(message: Message): boolean {
+  if (
+    message.type === 'progress' ||
+    message.type === 'attachment' ||
+    message.type === 'system'
+  ) {
+    return true
+  }
+
+  if (typeof message.message.content === 'string') {
+    return message.message.content.trim().length > 0
+  }
+
+  if (message.message.content.length === 0) {
+    return false
+  }
+
+  // Skip multi-block messages for now
+  if (message.message.content.length > 1) {
+    return true
+  }
+
+  if (message.message.content[0]!.type !== 'text') {
+    return true
+  }
+
+  return (
+    message.message.content[0]!.text.trim().length > 0 &&
+    message.message.content[0]!.text !== NO_CONTENT_MESSAGE &&
+    message.message.content[0]!.text !== INTERRUPT_MESSAGE_FOR_TOOL_USE
+  )
+}
+
+type ToolUseRequestMessage = NormalizedAssistantMessage & {
+  message: { content: [ToolUseBlock] }
+}
+
+export function isToolUseRequestMessage(
+  message: Message,
+): message is ToolUseRequestMessage {
+  return (
+    message.type === 'assistant' &&
+    // Note: stop_reason === 'tool_use' is unreliable -- it's not always set correctly
+    message.message.content.some(_ => _.type === 'tool_use')
+  )
+}
+
+type ToolUseResultMessage = NormalizedUserMessage & {
+  message: { content: [ToolResultBlockParam] }
+}
+
+export function isToolUseResultMessage(
+  message: Message,
+): message is ToolUseResultMessage {
+  return (
+    message.type === 'user' &&
+    ((Array.isArray(message.message.content) &&
+      message.message.content[0]?.type === 'tool_result') ||
+      Boolean(message.toolUseResult))
+  )
+}
+
+// Re-order, to move result messages to be after their tool use messages
+export function reorderMessagesInUI(
+  messages: (
+    | NormalizedUserMessage
+    | NormalizedAssistantMessage
+    | AttachmentMessage
+    | SystemMessage
+  )[],
+  syntheticStreamingToolUseMessages: NormalizedAssistantMessage[],
+): (
+  | NormalizedUserMessage
+  | NormalizedAssistantMessage
+  | AttachmentMessage
+  | SystemMessage
+)[] {
+  // Maps tool use ID to its related messages
+  const toolUseGroups = new Map<
+    string,
+    {
+      toolUse: ToolUseRequestMessage | null
+      preHooks: AttachmentMessage[]
+      toolResult: NormalizedUserMessage | null
+      postHooks: AttachmentMessage[]
+    }
+  >()
+
+  // First pass: group messages by tool use ID
+  for (const message of messages) {
+    // Handle tool use messages
+    if (isToolUseRequestMessage(message)) {
+      const toolUseID = message.message.content[0]?.id
+      if (toolUseID) {
+        if (!toolUseGroups.has(toolUseID)) {
+          toolUseGroups.set(toolUseID, {
+            toolUse: null,
+            preHooks: [],
+            toolResult: null,
+            postHooks: [],
+          })
+        }
+        toolUseGroups.get(toolUseID)!.toolUse = message
+      }
+      continue
+    }
+
+    // Handle pre-tool-use hooks
+    if (
+      isHookAttachmentMessage(message) &&
+      message.attachment.hookEvent === 'PreToolUse'
+    ) {
+      const toolUseID = message.attachment.toolUseID
+      if (!toolUseGroups.has(toolUseID)) {
+        toolUseGroups.set(toolUseID, {
+          toolUse: null,
+          preHooks: [],
+          toolResult: null,
+          postHooks: [],
+        })
+      }
+      toolUseGroups.get(toolUseID)!.preHooks.push(message)
+      continue
+    }
+
+    // Handle tool results
+    if (
+      message.type === 'user' &&
+      message.message.content[0]?.type === 'tool_result'
+    ) {
+      const toolUseID = message.message.content[0].tool_use_id
+      if (!toolUseGroups.has(toolUseID)) {
+        toolUseGroups.set(toolUseID, {
+          toolUse: null,
+          preHooks: [],
+          toolResult: null,
+          postHooks: [],
+        })
+      }
+      toolUseGroups.get(toolUseID)!.toolResult = message
+      continue
+    }
+
+    // Handle post-tool-use hooks
+    if (
+      isHookAttachmentMessage(message) &&
+      message.attachment.hookEvent === 'PostToolUse'
+    ) {
+      const toolUseID = message.attachment.toolUseID
+      if (!toolUseGroups.has(toolUseID)) {
+        toolUseGroups.set(toolUseID, {
+          toolUse: null,
+          preHooks: [],
+          toolResult: null,
+          postHooks: [],
+        })
+      }
+      toolUseGroups.get(toolUseID)!.postHooks.push(message)
+      continue
+    }
+  }
+
+  // Second pass: reconstruct the message list in the correct order
+  const result: (
+    | NormalizedUserMessage
+    | NormalizedAssistantMessage
+    | AttachmentMessage
+    | SystemMessage
+  )[] = []
+  const processedToolUses = new Set<string>()
+
+  for (const message of messages) {
+    // Check if this is a tool use
+    if (isToolUseRequestMessage(message)) {
+      const toolUseID = message.message.content[0]?.id
+      if (toolUseID && !processedToolUses.has(toolUseID)) {
+        processedToolUses.add(toolUseID)
+        const group = toolUseGroups.get(toolUseID)
+        if (group && group.toolUse) {
+          // Output in order: tool use, pre hooks, tool result, post hooks
+          result.push(group.toolUse)
+          result.push(...group.preHooks)
+          if (group.toolResult) {
+            result.push(group.toolResult)
+          }
+          result.push(...group.postHooks)
+        }
+      }
+      continue
+    }
+
+    // Check if this message is part of a tool use group
+    if (
+      isHookAttachmentMessage(message) &&
+      (message.attachment.hookEvent === 'PreToolUse' ||
+        message.attachment.hookEvent === 'PostToolUse')
+    ) {
+      // Skip - already handled in tool use groups
+      continue
+    }
+
+    if (
+      message.type === 'user' &&
+      message.message.content[0]?.type === 'tool_result'
+    ) {
+      // Skip - already handled in tool use groups
+      continue
+    }
+
+    // Handle api error messages (only keep the last one)
+    if (message.type === 'system' && message.subtype === 'api_error') {
+      const last = result.at(-1)
+      if (last?.type === 'system' && last.subtype === 'api_error') {
+        result[result.length - 1] = message
+      } else {
+        result.push(message)
+      }
+      continue
+    }
+
+    // Add standalone messages
+    result.push(message)
+  }
+
+  // Add synthetic streaming tool use messages
+  for (const message of syntheticStreamingToolUseMessages) {
+    result.push(message)
+  }
+
+  // Filter to keep only the last api error message
+  const last = result.at(-1)
+  return result.filter(
+    _ => _.type !== 'system' || _.subtype !== 'api_error' || _ === last,
+  )
+}
+
+export function hasUnresolvedHooksFromLookup(
+  toolUseID: string,
+  hookEvent: HookEvent,
+  lookups: MessageLookups,
+): boolean {
+  const inProgressCount =
+    lookups.inProgressHookCounts.get(toolUseID)?.get(hookEvent) ?? 0
+  const resolvedCount =
+    lookups.resolvedHookCounts.get(toolUseID)?.get(hookEvent) ?? 0
+  return inProgressCount > resolvedCount
+}
+
+export function getToolUseIDs(
+  normalizedMessages: NormalizedMessage[],
+): Set<string> {
+  return new Set(
+    normalizedMessages
+      .filter(
+        (_): _ is NormalizedAssistantMessage<BetaToolUseBlock> =>
+          _.type === 'assistant' &&
+          Array.isArray(_.message.content) &&
+          _.message.content[0]?.type === 'tool_use',
+      )
+      .map(_ => _.message.content[0]!.id),
+  )
+}
+
+export type StreamingToolUse = {
+  index: number
+  contentBlock: BetaToolUseBlock
+  unparsedToolInput: string
+}
+
+export type StreamingThinking = {
+  thinking: string
+  isStreaming: boolean
+  streamingEndedAt?: number
+}
+
+export function shouldShowUserMessage(
+  message: NormalizedMessage,
+  isTranscriptMode: boolean,
+): boolean {
+  if (message.type !== 'user') return true
+  if (message.isMeta) {
+    // Channel messages stay isMeta (for snip-tag/turn-boundary/brief-mode
+    // semantics) but render in the default transcript — the keyboard user
+    // should see what arrived. The <channel> tag in UserTextMessage handles
+    // the actual rendering.
+    if (
+      (feature('KAIROS') || feature('KAIROS_CHANNELS')) &&
+      message.origin?.kind === 'channel'
+    )
+      return true
+    return false
+  }
+  if (message.isVisibleInTranscriptOnly && !isTranscriptMode) return false
+  return true
 }

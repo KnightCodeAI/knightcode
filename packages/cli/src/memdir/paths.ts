@@ -26,6 +26,16 @@ export function getAutoMemPath(): string {
   return join(home, 'memory') + sep
 }
 
+// Base directory memory files live under (the config home, or a remote override).
+export function getMemoryBaseDir(): string {
+  if (process.env.KNIGHTCODE_REMOTE_MEMORY_DIR) {
+    return process.env.KNIGHTCODE_REMOTE_MEMORY_DIR
+  }
+  return (
+    process.env.KNIGHTCODE_CONFIG_DIR ?? join(homedir(), '.knightcode')
+  ).normalize('NFC')
+}
+
 export function isAutoMemoryEnabled(): boolean {
   return false
 }

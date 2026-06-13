@@ -32,6 +32,16 @@ export function reAppendSessionMetadata(): void {}
 
 export function clearSessionMessagesCache(): void {}
 
+// TODO: session↔PR linking is recorded by the session-metadata layer. Until it
+// lands the link is not persisted.
+export async function linkSessionToPR(
+  _sessionId: string,
+  _prNumber: number,
+  _prUrl: string,
+  _prRepository: string,
+  _fullPath?: string,
+): Promise<void> {}
+
 // TODO: queue-operation journaling is part of the session storage layer. The
 // message queue records enqueue/remove operations for --resume; until the
 // transcript store lands this is inert.

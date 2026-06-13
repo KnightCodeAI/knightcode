@@ -377,7 +377,7 @@ export type GroupedToolUseMessage = {
   toolName: string
   messages: NormalizedAssistantMessage<BetaToolUseBlock>[]
   results: NormalizedUserMessage[]
-  displayMessage: NormalizedMessage
+  displayMessage: NormalizedUserMessage | NormalizedAssistantMessage
   uuid: string
   timestamp: string
   messageId: string | undefined
@@ -396,7 +396,7 @@ export type CollapsedReadSearchGroup = {
   searchArgs: string[]
   latestDisplayHint?: string
   messages: RenderableMessage[]
-  displayMessage: NormalizedMessage
+  displayMessage: CollapsibleMessage
   uuid: string
   timestamp: string
   /** Team-memory operation counts, present only when the TEAMMEM feature is on. */
@@ -422,7 +422,12 @@ export type CollapsedReadSearchGroup = {
 }
 
 // TODO: reconstructed as their consumers port.
-export type CollapsibleMessage = NormalizedMessage
+// The message kinds the read/search collapser can fold into a group: tool-use
+// (assistant), tool-result (user), and an already-grouped tool-use block.
+export type CollapsibleMessage =
+  | NormalizedUserMessage
+  | NormalizedAssistantMessage
+  | GroupedToolUseMessage
 // Progress messages are filtered out before rendering, so the renderable union
 // covers the visible transcript subset plus the two display-only groupings.
 export type RenderableMessage =

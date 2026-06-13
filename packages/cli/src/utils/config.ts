@@ -36,6 +36,8 @@ export type GlobalConfig = {
   /** Whether the conversation is auto-compacted as it nears the context
    *  window. On by default; users can opt out in settings. */
   autoCompactEnabled: boolean
+  /** Whether to draw the terminal's native progress bar during long tool runs. */
+  terminalProgressBarEnabled?: boolean
   /** OAuth account info; absent in BYOK builds (no hosted account). */
   oauthAccount?: { accountUuid?: string; [key: string]: unknown }
   /** Stored desktop-companion state (soul only; bones regenerate from userID). */

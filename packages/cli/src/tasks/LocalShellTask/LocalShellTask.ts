@@ -16,6 +16,9 @@ import type { ShellCommand } from '../../utils/ShellCommand.js'
 const BACKGROUND_DEFERRED =
   'Background shell tasks are not available yet — the task framework lands with the harness.'
 
+/** Prefix on the synthetic summary message for a backgrounded shell command. */
+export const BACKGROUND_BASH_SUMMARY_PREFIX = 'Background command '
+
 /** Spawn a backgrounded shell task. Requires the task framework (deferred). */
 export async function spawnShellTask(
   _input: LocalShellSpawnInput & { shellCommand: ShellCommand },
