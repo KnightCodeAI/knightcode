@@ -5,6 +5,7 @@
 import { randomUUID } from 'crypto'
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { asSessionId, type SessionId } from '../types/ids.js'
+import type { SettingSource } from '../utils/settings/constants.js'
 
 type SlowOperation = {
   operation: string
@@ -14,6 +15,9 @@ type SlowOperation = {
 
 type State = {
   sessionId: SessionId
+  originalCwd: string
+  cwd: string
+  allowedSettingSources: SettingSource[]
   isInteractive: boolean
   strictToolResultPairing: boolean
   lastAPIRequest: Omit<BetaMessageStreamParams, 'messages'> | null
@@ -32,6 +36,15 @@ type State = {
 
 const STATE: State = {
   sessionId: asSessionId(randomUUID()),
+  originalCwd: process.cwd().normalize('NFC'),
+  cwd: process.cwd().normalize('NFC'),
+  allowedSettingSources: [
+    'userSettings',
+    'projectSettings',
+    'localSettings',
+    'flagSettings',
+    'policySettings',
+  ],
   isInteractive: false,
   strictToolResultPairing: false,
   lastAPIRequest: null,
@@ -52,6 +65,26 @@ const MAX_SLOW_OPERATIONS = 20
 
 export function getSessionId(): SessionId {
   return STATE.sessionId
+}
+
+export function getOriginalCwd(): string {
+  return STATE.originalCwd
+}
+
+export function getCwdState(): string {
+  return STATE.cwd
+}
+
+export function setCwdState(cwd: string): void {
+  STATE.cwd = cwd.normalize('NFC')
+}
+
+export function getAllowedSettingSources(): SettingSource[] {
+  return STATE.allowedSettingSources
+}
+
+export function setAllowedSettingSources(sources: SettingSource[]): void {
+  STATE.allowedSettingSources = sources
 }
 
 export function getIsNonInteractiveSession(): boolean {

@@ -1,5 +1,20 @@
-// TODO: only the persisted-record type lives here so the log types compile;
+// TODO: only the persisted-record type and the results-directory path live
+// here so the log types compile and the permission layer can classify paths;
 // the storage/budgeting implementation lands with the tool execution layer.
+
+import { join } from 'path'
+import { getClaudeConfigHomeDir } from './envUtils.js'
+import { getSessionId } from '../bootstrap/state.js'
+
+export const TOOL_RESULTS_SUBDIR = 'tool-results'
+
+function getSessionDir(): string {
+  return join(getClaudeConfigHomeDir(), 'sessions', getSessionId())
+}
+
+export function getToolResultsDir(): string {
+  return join(getSessionDir(), TOOL_RESULTS_SUBDIR)
+}
 
 /**
  * Records a tool-result content replacement (large output swapped for a
