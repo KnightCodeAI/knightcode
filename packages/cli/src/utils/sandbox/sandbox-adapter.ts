@@ -10,14 +10,35 @@ export type FsWriteRestrictionConfig = {
 
 export type ISandboxManager = {
   isSandboxingEnabled(): boolean
+  isSandboxEnabledInSettings(): boolean
+  areUnsandboxedCommandsAllowed(): boolean
   getFsWriteConfig(): FsWriteRestrictionConfig
+  wrapWithSandbox(
+    command: string,
+    binShell?: string,
+    customConfig?: unknown,
+    abortSignal?: AbortSignal,
+  ): Promise<string>
+  cleanupAfterCommand(): void
 }
 
 export const SandboxManager: ISandboxManager = {
   isSandboxingEnabled() {
     return false
   },
+  isSandboxEnabledInSettings() {
+    return false
+  },
+  areUnsandboxedCommandsAllowed() {
+    return true
+  },
   getFsWriteConfig() {
     return { allowOnly: [], denyWithinAllow: [] }
   },
+  // Inert: returns the command unchanged. Real sandbox wrapping lands with the
+  // OS-level sandbox layer; until then commands run unsandboxed.
+  async wrapWithSandbox(command: string) {
+    return command
+  },
+  cleanupAfterCommand() {},
 }

@@ -71,6 +71,13 @@ export function getOriginalCwd(): string {
   return STATE.originalCwd
 }
 
+// Assistant-mode ("Kairos") changes how long-running commands auto-background.
+// That mode is not wired yet; report inactive so the shell tools take the
+// ordinary foreground path. Gated behind feature('KAIROS') at the call site.
+export function getKairosActive(): boolean {
+  return false
+}
+
 export function getCwdState(): string {
   return STATE.cwd
 }

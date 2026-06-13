@@ -15,6 +15,9 @@ export type ToolProgressData = {
 export type AgentToolProgress = ToolProgressData & { type: 'agent_progress' }
 export type BashProgress = ToolProgressData & { type: 'bash_progress' }
 export type MCPProgress = ToolProgressData & { type: 'mcp_progress' }
+export type PowerShellProgress = ToolProgressData & {
+  type: 'powershell_progress'
+}
 export type REPLToolProgress = ToolProgressData & { type: 'repl_progress' }
 export type SkillToolProgress = ToolProgressData & { type: 'skill_progress' }
 export type TaskOutputProgress = ToolProgressData & {
