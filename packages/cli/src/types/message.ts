@@ -376,7 +376,7 @@ export type GroupedToolUseMessage = {
   type: 'grouped_tool_use'
   toolName: string
   messages: NormalizedAssistantMessage<BetaToolUseBlock>[]
-  results: NormalizedMessage[]
+  results: NormalizedUserMessage[]
   displayMessage: NormalizedMessage
   uuid: string
   timestamp: string
@@ -389,8 +389,36 @@ export type CollapsedReadSearchGroup = {
   readCount: number
   listCount: number
   replCount: number
+  memorySearchCount: number
+  memoryReadCount: number
+  memoryWriteCount: number
+  readFilePaths: string[]
+  searchArgs: string[]
+  latestDisplayHint?: string
+  messages: RenderableMessage[]
+  displayMessage: NormalizedMessage
   uuid: string
   timestamp: string
+  /** Team-memory operation counts, present only when the TEAMMEM feature is on. */
+  teamMemorySearchCount?: number
+  teamMemoryReadCount?: number
+  teamMemoryWriteCount?: number
+  mcpCallCount?: number
+  mcpServerNames?: string[]
+  bashCount?: number
+  gitOpBashCount?: number
+  commits?: Array<{ kind: 'committed' | 'amended' | 'cherry-picked'; sha: string }>
+  pushes?: Array<{ branch: string }>
+  branches?: Array<{ action: 'merged' | 'rebased'; ref: string }>
+  prs?: Array<{
+    action: 'created' | 'edited' | 'merged' | 'commented' | 'closed' | 'ready'
+    number: number
+    url?: string
+  }>
+  hookTotalMs?: number
+  hookCount?: number
+  hookInfos?: StopHookInfo[]
+  relevantMemories?: Array<{ path: string; content: string }>
 }
 
 // TODO: reconstructed as their consumers port.

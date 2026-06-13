@@ -143,6 +143,10 @@ export function DONT_ASK_REJECT_MESSAGE(toolName: string): string {
 const AUTO_MODE_REJECTION_PREFIX =
   'Permission for this action has been denied. Reason: '
 
+export function isClassifierDenial(content: string): boolean {
+  return content.startsWith(AUTO_MODE_REJECTION_PREFIX)
+}
+
 export function buildYoloRejectionMessage(reason: string): string {
   const prefix = AUTO_MODE_REJECTION_PREFIX
 
@@ -2957,7 +2961,7 @@ export type MessageLookups = {
   inProgressHookCounts: Map<string, Map<string, number>>
   resolvedHookCounts: Map<string, Map<string, number>>
   toolResultByToolUseID: Map<string, NormalizedMessage>
-  toolUseByToolUseID: Map<string, unknown>
+  toolUseByToolUseID: Map<string, ToolUseBlockParam>
   normalizedMessageCount: number
   resolvedToolUseIDs: Set<string>
   erroredToolUseIDs: Set<string>
