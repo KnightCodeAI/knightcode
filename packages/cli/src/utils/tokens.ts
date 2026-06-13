@@ -94,3 +94,38 @@ export function tokenCountWithEstimation(messages: readonly Message[]): number {
   }
   return roughTokenCountEstimationForMessages(messages)
 }
+
+export function finalContextTokensFromLastResponse(messages: Message[]): number {
+  let i = messages.length - 1
+  while (i >= 0) {
+    const message = messages[i]
+    const usage = message ? getTokenUsage(message) : undefined
+    if (usage) {
+      const iterations = (
+        usage as {
+          iterations?: Array<{
+            input_tokens: number
+            output_tokens: number
+          }> | null
+        }
+      ).iterations
+      if (iterations && iterations.length > 0) {
+        const last = iterations.at(-1)!
+        return last.input_tokens + last.output_tokens
+      }
+      return usage.input_tokens + usage.output_tokens
+    }
+    i--
+  }
+  return 0
+}
+
+export function doesMostRecentAssistantMessageExceed200k(
+  messages: Message[],
+): boolean {
+  const THRESHOLD = 200_000
+  const lastAsst = messages.findLast(m => m.type === 'assistant')
+  if (!lastAsst) return false
+  const usage = getTokenUsage(lastAsst)
+  return usage ? getTokenCountFromUsage(usage) > THRESHOLD : false
+}

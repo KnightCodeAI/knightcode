@@ -20,3 +20,14 @@ export type REPLHookContext = {
 export type PostSamplingHook = (
   context: REPLHookContext,
 ) => Promise<void> | void
+
+// Post-sampling hooks run after the model response completes. No-op until hook
+// dispatch lands; with no registered hooks there is nothing to run.
+export async function executePostSamplingHooks(
+  _messages: Message[],
+  _systemPrompt: SystemPrompt,
+  _userContext: { [k: string]: string },
+  _systemContext: { [k: string]: string },
+  _toolUseContext: ToolUseContext,
+  _querySource?: QuerySource,
+): Promise<void> {}

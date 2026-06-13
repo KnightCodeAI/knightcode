@@ -219,6 +219,14 @@ export async function executeInstructionsLoadedHooks(
   },
 ): Promise<void> {}
 
+// Stop-failure hooks fire when the model never produced a valid response
+// (prompt-too-long, image error). No-op until hook dispatch lands; with no
+// configured hooks there is nothing to run.
+export async function executeStopFailureHooks(
+  _lastMessage: Message,
+  _toolUseContext: ToolUseContext,
+): Promise<void> {}
+
 export function getStopHookMessage(blockingError: HookBlockingError): string {
   return `Stop hook feedback:\n${blockingError.blockingError}`
 }

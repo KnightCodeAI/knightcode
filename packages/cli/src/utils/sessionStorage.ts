@@ -9,6 +9,7 @@ import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
 import type { QueueOperationMessage } from '../types/messageQueueTypes.js'
+import type { AgentId } from '../types/ids.js'
 
 export function getProjectsDir(): string {
   return join(getClaudeConfigHomeDir(), 'projects')
@@ -36,4 +37,12 @@ export function clearSessionMessagesCache(): void {}
 // transcript store lands this is inert.
 export async function recordQueueOperation(
   _queueOp: QueueOperationMessage,
+): Promise<void> {}
+
+// TODO: content-replacement journaling (recording tool-result truncations for
+// --resume reconstruction) is part of the session storage layer. Until the
+// transcript store lands this is inert.
+export async function recordContentReplacement(
+  _replacements: readonly unknown[],
+  _agentId?: AgentId,
 ): Promise<void> {}

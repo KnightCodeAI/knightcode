@@ -10,3 +10,13 @@ export function isSnipRuntimeEnabled(): boolean {
 export function shouldNudgeForSnips(_messages: Message[]): boolean {
   return false
 }
+
+// History-snip compaction runs behind a feature gate that is off in this build,
+// so the query loop never reaches this; it frees nothing.
+export function snipCompactIfNeeded(messages: Message[]): {
+  messages: Message[]
+  tokensFreed: number
+  boundaryMessage?: Message
+} {
+  return { messages, tokensFreed: 0 }
+}

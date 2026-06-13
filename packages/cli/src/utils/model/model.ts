@@ -3,6 +3,7 @@
 // gateway model ids.
 
 import { getModelStrings } from './modelStrings.js'
+import type { PermissionMode } from '../../types/permissions.js'
 
 export type ModelName = string
 export type ModelAlias = string
@@ -110,4 +111,21 @@ export function getCanonicalName(fullModelName: ModelName): ModelShortName {
     : base
   // Strip a trailing date stamp (e.g. -20251001) and normalize version dots
   return withoutVendor.replace(/-\d{8}$/, '').replace(/\./g, '-')
+}
+
+// TODO: alias-based plan-mode model switching (opusplan/sonnetplan) is a hosted
+// concept that doesn't apply to a BYOK build — the configured model is used as
+// is. Kept with the upstream signature so the query loop ports unchanged.
+export function getRuntimeMainLoopModel(params: {
+  permissionMode: PermissionMode
+  mainLoopModel: string
+  exceeds200kTokens?: boolean
+}): ModelName {
+  return params.mainLoopModel
+}
+
+// In a BYOK build the model id is the display name; the hosted public-name and
+// codename-masking table isn't ported.
+export function renderModelName(model: ModelName): string {
+  return model
 }

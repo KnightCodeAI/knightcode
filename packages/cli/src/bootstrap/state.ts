@@ -194,6 +194,11 @@ export function getCurrentTurnTokenBudget(): number | null {
   return null
 }
 
+let budgetContinuationCount = 0
+export function incrementBudgetContinuationCount(): void {
+  budgetContinuationCount++
+}
+
 export function getTotalCostUSD(): number {
   return 0
 }

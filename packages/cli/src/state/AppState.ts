@@ -5,7 +5,7 @@
 
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import type { LocalAgentTaskState } from '../tasks/LocalAgentTask/LocalAgentTask.js'
-import type { ToolPermissionContext } from '../Tool.js'
+import type { Tool, ToolPermissionContext } from '../Tool.js'
 import type { DenialTrackingState } from '../utils/permissions/denialTracking.js'
 import type { EffortValue } from '../utils/effort.js'
 import type { TodoList } from '../utils/todo/types.js'
@@ -30,7 +30,12 @@ export type AppState = {
   mcp: {
     clients: MCPServerConnection[]
     commands: Command[]
+    tools: Tool[]
   }
+  /** Advisor model id for the side-channel advisor; absent until wired. */
+  advisorModel?: string
+  /** Whether fast mode (Opus with faster output) is active for this session. */
+  fastMode?: boolean
   /**
    * Swarm/teammate context. Undefined in solo mode (the only mode today); the
    * attachment pipeline reads team membership when it is present.

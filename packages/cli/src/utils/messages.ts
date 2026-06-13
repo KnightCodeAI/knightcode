@@ -55,6 +55,7 @@ import type {
   SystemInformationalMessage,
   SystemLocalCommandMessage,
   SystemMessageLevel,
+  SystemMicrocompactBoundaryMessage,
   SystemStopHookSummaryMessage,
   StopHookInfo,
   ToolUseSummaryMessage,
@@ -62,6 +63,8 @@ import type {
   UserMessage,
 } from '../types/message.js'
 import type { PermissionMode } from '../types/permissions.js'
+import { isConnectorTextBlock } from '../types/connectorText.js'
+import { formatTokens } from './format.js'
 import { feature } from '../macros/bun-bundle.js'
 import { checkStatsigFeatureGate_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
@@ -2891,3 +2894,54 @@ export function isThinkingMessage(message: Message): boolean {
   )
 }
 
+
+export function createMicrocompactBoundaryMessage(
+  trigger: 'auto',
+  preTokens: number,
+  tokensSaved: number,
+  compactedToolIds: string[],
+  clearedAttachmentUUIDs: string[],
+): SystemMicrocompactBoundaryMessage {
+  logForDebugging(
+    `[microcompact] saved ~${formatTokens(tokensSaved)} tokens (cleared ${compactedToolIds.length} tool results)`,
+  )
+  return {
+    type: 'system',
+    subtype: 'microcompact_boundary',
+    content: 'Context microcompacted',
+    isMeta: false,
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+    level: 'info',
+    microcompactMetadata: {
+      trigger,
+      preTokens,
+      tokensSaved,
+      compactedToolIds,
+      clearedAttachmentUUIDs,
+    },
+  }
+}
+
+export function stripSignatureBlocks(messages: Message[]): Message[] {
+  let changed = false
+  const result = messages.map(msg => {
+    if (msg.type !== 'assistant') return msg
+    const content = msg.message.content
+    if (!Array.isArray(content)) return msg
+    const filtered = content.filter(block => {
+      if (isThinkingBlock(block)) return false
+      if (feature('CONNECTOR_TEXT')) {
+        if (isConnectorTextBlock(block)) return false
+      }
+      return true
+    })
+    if (filtered.length === content.length) return msg
+    changed = true
+    return {
+      ...msg,
+      message: { ...msg.message, content: filtered },
+    } as typeof msg
+  })
+  return changed ? result : messages
+}

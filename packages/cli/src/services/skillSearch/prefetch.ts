@@ -12,3 +12,21 @@ export async function getTurnZeroSkillDiscovery(
 ): Promise<Attachment[]> {
   return []
 }
+
+// Opaque handle for an in-flight prefetch; nothing is scheduled while the
+// subsystem is unimplemented.
+export type SkillDiscoveryPrefetchHandle = { readonly _tag: 'skill-prefetch' }
+
+export function startSkillDiscoveryPrefetch(
+  _input: string | null,
+  _messages: Message[],
+  _context: ToolUseContext,
+): SkillDiscoveryPrefetchHandle | null {
+  return null
+}
+
+export async function collectSkillDiscoveryPrefetch(
+  _handle: SkillDiscoveryPrefetchHandle,
+): Promise<Attachment[]> {
+  return []
+}
