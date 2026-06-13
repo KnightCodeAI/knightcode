@@ -83,6 +83,17 @@ export function getAllowedSettingSources(): SettingSource[] {
   return STATE.allowedSettingSources
 }
 
+/** Attributed lines-of-code counter, when one is installed for the session. */
+type AttributedCounter = {
+  add(value: number, attributes: { type: 'added' | 'removed' }): void
+}
+
+// TODO: the LOC counter is provisioned by the statusline/metrics layer. Until
+// then nothing is counting, so callers guard on null.
+export function getLocCounter(): AttributedCounter | null {
+  return null
+}
+
 export function setAllowedSettingSources(sources: SettingSource[]): void {
   STATE.allowedSettingSources = sources
 }

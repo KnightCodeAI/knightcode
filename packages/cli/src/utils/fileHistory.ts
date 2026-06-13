@@ -27,3 +27,18 @@ export type FileHistoryState = {
   // plateaus once the cap is reached).
   snapshotSequence: number
 }
+
+// TODO: file checkpointing (backup-before-edit, restore) lands with the
+// file-change tracking layer. Until then it is reported disabled and the edit
+// tracker is inert, so writes/edits proceed without snapshots.
+export function fileHistoryEnabled(): boolean {
+  return false
+}
+
+export async function fileHistoryTrackEdit(
+  _updateFileHistoryState: (
+    updater: (prev: FileHistoryState) => FileHistoryState,
+  ) => void,
+  _filePath: string,
+  _messageId: UUID,
+): Promise<void> {}
