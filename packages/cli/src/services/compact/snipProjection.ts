@@ -8,3 +8,8 @@ import type { Message } from '../../types/message.js'
 export function projectSnippedView(messages: Message[]): Message[] {
   return messages
 }
+
+// Snip runtime is disabled, so no message is ever a snip boundary.
+export function isSnipBoundaryMessage(_message: unknown): boolean {
+  return false
+}

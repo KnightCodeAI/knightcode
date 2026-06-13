@@ -11,6 +11,11 @@ export function shouldNudgeForSnips(_messages: Message[]): boolean {
   return false
 }
 
+// Snip runtime is disabled, so no message is ever a snip marker.
+export function isSnipMarkerMessage(_message: unknown): boolean {
+  return false
+}
+
 // History-snip compaction runs behind a feature gate that is off in this build,
 // so the query loop never reaches this; it frees nothing.
 export function snipCompactIfNeeded(messages: Message[]): {

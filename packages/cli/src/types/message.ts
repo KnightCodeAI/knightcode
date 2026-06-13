@@ -11,10 +11,18 @@
 
 import type { APIError } from '@anthropic-ai/sdk'
 import type {
+  BetaContentBlock,
   BetaMessage,
   BetaRawMessageStreamEvent,
+  BetaToolUseBlock,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import type {
+  ContentBlockParam,
+  ImageBlockParam,
+  TextBlockParam,
+  ToolResultBlockParam,
+  ToolUseBlockParam,
+} from '@anthropic-ai/sdk/resources/index.mjs'
 import type { UUID } from 'crypto'
 import type { SDKAssistantMessageError } from '../entrypoints/agentSdkTypes.js'
 import type { PermissionMode } from './permissions.js'
@@ -79,6 +87,10 @@ export type UserMessage = {
   imagePasteIds?: number[]
   /** For tool_result messages: uuid of the assistant message with the matching tool_use. */
   sourceToolAssistantUUID?: UUID
+  /** For tool_result messages: id of the tool_use this result answers. */
+  sourceToolUseID?: string
+  /** Plan text carried on a user message produced by ExitPlanMode. */
+  planContent?: string
   /** Permission mode when the message was sent (for rewind restoration). */
   permissionMode?: PermissionMode
   origin?: MessageOrigin
@@ -333,11 +345,20 @@ export type ToolUseSummaryMessage = {
 export type NormalizedUserMessage = Omit<UserMessage, 'message'> & {
   message: {
     role: 'user'
-    content: ContentBlockParam[]
+    content: Array<
+      | TextBlockParam
+      | ImageBlockParam
+      | ToolUseBlockParam
+      | ToolResultBlockParam
+    >
   }
 }
 
-export type NormalizedAssistantMessage = AssistantMessage
+export type NormalizedAssistantMessage<
+  T extends BetaContentBlock = BetaContentBlock,
+> = Omit<AssistantMessage, 'message'> & {
+  message: Omit<BetaMessage, 'content'> & { content: T[] }
+}
 
 export type NormalizedMessage =
   | NormalizedUserMessage
@@ -354,7 +375,7 @@ export type NormalizedMessage =
 export type GroupedToolUseMessage = {
   type: 'grouped_tool_use'
   toolName: string
-  messages: NormalizedMessage[]
+  messages: NormalizedAssistantMessage<BetaToolUseBlock>[]
   results: NormalizedMessage[]
   displayMessage: NormalizedMessage
   uuid: string
@@ -374,8 +395,13 @@ export type CollapsedReadSearchGroup = {
 
 // TODO: reconstructed as their consumers port.
 export type CollapsibleMessage = NormalizedMessage
+// Progress messages are filtered out before rendering, so the renderable union
+// covers the visible transcript subset plus the two display-only groupings.
 export type RenderableMessage =
-  | NormalizedMessage
+  | NormalizedUserMessage
+  | NormalizedAssistantMessage
+  | AttachmentMessage
+  | SystemMessage
   | GroupedToolUseMessage
   | CollapsedReadSearchGroup
 export type HookResultMessage = SystemInformationalMessage

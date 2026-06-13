@@ -63,6 +63,7 @@ import type {
   UserMessage,
 } from '../types/message.js'
 import type { PermissionMode } from '../types/permissions.js'
+import type { Attachment } from '../utils/attachments.js'
 import { isConnectorTextBlock } from '../types/connectorText.js'
 import { formatTokens } from './format.js'
 import { feature } from '../macros/bun-bundle.js'
@@ -2959,6 +2960,7 @@ export type MessageLookups = {
   toolUseByToolUseID: Map<string, unknown>
   normalizedMessageCount: number
   resolvedToolUseIDs: Set<string>
+  erroredToolUseIDs: Set<string>
 }
 
 export function buildMessageLookups(
@@ -2974,5 +2976,82 @@ export function buildMessageLookups(
     toolUseByToolUseID: new Map(),
     normalizedMessageCount: 0,
     resolvedToolUseIDs: new Set(),
+    erroredToolUseIDs: new Set(),
   }
+}
+
+export const EMPTY_STRING_SET: ReadonlySet<string> = Object.freeze(
+  new Set<string>(),
+)
+
+// Hook attachments are the attachment subtypes that carry a toolUseID linking
+// them back to the tool call they annotate.
+type HookAttachment = Extract<Attachment, { toolUseID: string }>
+
+function isHookAttachmentMessage(
+  message: NormalizedMessage,
+): message is AttachmentMessage & { attachment: HookAttachment } {
+  return (
+    message.type === 'attachment' &&
+    (message.attachment.type === 'hook_blocking_error' ||
+      message.attachment.type === 'hook_cancelled' ||
+      message.attachment.type === 'hook_error_during_execution' ||
+      message.attachment.type === 'hook_non_blocking_error' ||
+      message.attachment.type === 'hook_success' ||
+      message.attachment.type === 'hook_system_message' ||
+      message.attachment.type === 'hook_additional_context' ||
+      message.attachment.type === 'hook_stopped_continuation')
+  )
+}
+
+export function getToolUseID(message: NormalizedMessage): string | null {
+  switch (message.type) {
+    case 'attachment':
+      if (isHookAttachmentMessage(message)) {
+        return message.attachment.toolUseID
+      }
+      return null
+    case 'assistant':
+      if (message.message.content[0]?.type !== 'tool_use') {
+        return null
+      }
+      return message.message.content[0].id
+    case 'user':
+      if (message.sourceToolUseID) {
+        return message.sourceToolUseID
+      }
+
+      if (message.message.content[0]?.type !== 'tool_result') {
+        return null
+      }
+      return message.message.content[0].tool_use_id
+    case 'progress':
+      return message.toolUseID
+    case 'system':
+      return message.subtype === 'informational'
+        ? (message.toolUseID ?? null)
+        : null
+  }
+}
+
+export function getSiblingToolUseIDsFromLookup(
+  message: NormalizedMessage,
+  lookups: MessageLookups,
+): ReadonlySet<string> {
+  const toolUseID = getToolUseID(message)
+  if (!toolUseID) {
+    return EMPTY_STRING_SET
+  }
+  return lookups.siblingToolUseIDs.get(toolUseID) ?? EMPTY_STRING_SET
+}
+
+export function getProgressMessagesFromLookup(
+  message: NormalizedMessage,
+  lookups: MessageLookups,
+): ProgressMessage[] {
+  const toolUseID = getToolUseID(message)
+  if (!toolUseID) {
+    return []
+  }
+  return lookups.progressMessagesByToolUseID.get(toolUseID) ?? []
 }
