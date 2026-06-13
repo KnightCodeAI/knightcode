@@ -1,4 +1,4 @@
-// TODO: the MCP client/transport and config layer land in their own phase. The
+// TODO: the MCP client/transport and config layer are not implemented yet. The
 // pure tool-name predicate and URL sanitizer the tool executor needs live here;
 // the config-scope lookup stays inert until server configs are wired up.
 

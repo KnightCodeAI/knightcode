@@ -1,7 +1,8 @@
 // TODO: auto-mode action classification (deciding whether a tool call is safe
 // to auto-approve by consulting a classifier model) is not implemented yet.
-// The action-formatting helper is pure and kept faithful; the classifier call
-// itself is inert and reports "unavailable" so callers fall back to prompting.
+// The action-formatting helper is pure and fully functional; the classifier
+// call itself is inert and reports "unavailable" so callers fall back to
+// prompting.
 
 import type { ToolPermissionContext, Tools } from '../../Tool.js'
 import type { Message } from '../../types/message.js'

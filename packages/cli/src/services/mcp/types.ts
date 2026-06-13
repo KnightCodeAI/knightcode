@@ -1,4 +1,4 @@
-// TODO: the MCP client/transport layer lands with the MCP phase. The Tool
+// TODO: the MCP client/transport layer is not implemented yet. The Tool
 // surface and context reference these shapes for fields that stay empty until
 // then; only the minimal type surface lives here.
 

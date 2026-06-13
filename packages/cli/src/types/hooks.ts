@@ -2,7 +2,7 @@
  * Hook-related types consumed across the tool/permission layer.
  *
  * TODO: the full hook dispatch (sync/async response schemas, blocking errors,
- * settings wiring) lands with the hooks phase. This carries the shapes the
+ * settings wiring) is not implemented yet. This carries the shapes the
  * Tool surface and interactive prompt path reference today.
  */
 
