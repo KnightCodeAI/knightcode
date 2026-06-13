@@ -48,6 +48,7 @@ export type Settings = {
   alwaysThinkingEnabled?: boolean
   advisorModel?: string
   effortLevel?: 'low' | 'medium' | 'high' | 'max' | number
+  outputStyle?: string
   [key: string]: unknown
 }
 
@@ -61,3 +62,6 @@ export function getSettingsWithErrors(): {
 export function getInitialSettings(): Settings {
   return {}
 }
+
+// Alias kept for callers that read the merged settings snapshot directly.
+export const getSettings_DEPRECATED = getInitialSettings

@@ -36,7 +36,8 @@ function makeState(): AppState {
     toolPermissionContext: getEmptyToolPermissionContext(),
     todos: {},
     tasks: {},
-    mcp: { clients: [] },
+    mcp: { clients: [], commands: [] },
+    inbox: { messages: [] },
   } as AppState
 }
 

@@ -2847,3 +2847,47 @@ function appendMessageTagToUserMessage(message: UserMessage): UserMessage {
   }
 }
 
+/**
+ * Extract text from an array of content blocks, joining text blocks with the
+ * given separator. Works with ContentBlock, ContentBlockParam, BetaContentBlock,
+ * and their readonly variants via structural typing.
+ */
+export function extractTextContent(
+  blocks: readonly { readonly type: string }[],
+  separator = '',
+): string {
+  return blocks
+    .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+    .map(b => b.text)
+    .join(separator)
+}
+
+export function getContentText(
+  content: string | ContentBlockParam[],
+): string | null {
+  if (typeof content === 'string') {
+    return content
+  }
+  if (Array.isArray(content)) {
+    return extractTextContent(content, '\n').trim() || null
+  }
+  return null
+}
+
+export function getUserMessageText(
+  message: Message | NormalizedMessage,
+): string | null {
+  if (message.type !== 'user') {
+    return null
+  }
+  return getContentText(message.message.content as string | ContentBlockParam[])
+}
+
+export function isThinkingMessage(message: Message): boolean {
+  if (message.type !== 'assistant') return false
+  if (!Array.isArray(message.message.content)) return false
+  return message.message.content.every(
+    block => block.type === 'thinking' || block.type === 'redacted_thinking',
+  )
+}
+

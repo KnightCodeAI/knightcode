@@ -16,3 +16,13 @@ export function getTeamName(_teamContext?: {
 export function isTeammate(): boolean {
   return false
 }
+
+export function getAgentId(): string | undefined {
+  return undefined
+}
+
+export function isTeamLead(
+  _teamContext: { leadAgentId: string } | undefined,
+): boolean {
+  return false
+}

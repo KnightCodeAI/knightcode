@@ -19,6 +19,7 @@ import type { UUID } from 'crypto'
 import type { SDKAssistantMessageError } from '../entrypoints/agentSdkTypes.js'
 import type { PermissionMode } from './permissions.js'
 import type { ToolProgressData } from './tools.js'
+import type { Attachment } from '../utils/attachments.js'
 
 /**
  * Provenance of a user message. undefined = human (keyboard input).
@@ -112,19 +113,9 @@ export type ProgressMessage<P = ToolProgressData> = {
   timestamp: string
 }
 
-// TODO: Attachment variants land with the context/attachment layer; until
-// then only the discriminator plus the hook-completion fields read by the
-// tool layer are typed and the rest of the payload stays open.
 export type AttachmentMessage = {
   type: 'attachment'
-  attachment: {
-    type: string
-    /** Originating hook command, present on hook-completion attachments. */
-    command?: string
-    /** Per-hook execution time in ms, present on hook-completion attachments. */
-    durationMs?: number
-    [key: string]: unknown
-  }
+  attachment: Attachment
   uuid: UUID
   timestamp: string
 }

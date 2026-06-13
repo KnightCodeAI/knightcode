@@ -82,7 +82,7 @@ describe('buildPostCompactMessages', () => {
 
     const attachment: AttachmentMessage = {
       type: 'attachment',
-      attachment: { type: 'plan_mode' },
+      attachment: { type: 'date_change', newDate: '2026-06-13' },
       uuid: '00000000-0000-0000-0000-000000000004',
       timestamp: new Date().toISOString(),
     }

@@ -143,6 +143,10 @@ export async function getApiKeyFromApiKeyHelper(
 // Inert upstream-auth surface (no OAuth/subscriber/cloud-credential support).
 // ---------------------------------------------------------------------------
 
+export function getSubscriptionType(): null {
+  return null
+}
+
 export function isClaudeAISubscriber(): boolean {
   return false
 }

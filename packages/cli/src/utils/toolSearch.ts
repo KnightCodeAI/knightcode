@@ -32,6 +32,41 @@ export function isDeferredToolsDeltaEnabled(): boolean {
   return false
 }
 
+export type DeferredToolsDelta = {
+  addedNames: string[]
+  /** Rendered lines for addedNames; the scan reconstructs from names. */
+  addedLines: string[]
+  removedNames: string[]
+}
+
+/** Call-site discriminator for deferred-tool delta scans. */
+export type DeferredToolsDeltaScanContext = {
+  callSite:
+    | 'attachments_main'
+    | 'attachments_subagent'
+    | 'compact_full'
+    | 'compact_partial'
+    | 'reactive_compact'
+  querySource?: string
+}
+
+// TODO: deferred-tool delta diffing lands with the tool-search layer. The
+// announce gate (isDeferredToolsDeltaEnabled) is off, so the attachment caller
+// never reaches this; it reports no delta.
+export function getDeferredToolsDelta(
+  _tools: Tools,
+  _messages: Message[],
+  _scanContext?: DeferredToolsDeltaScanContext,
+): DeferredToolsDelta | null {
+  return null
+}
+
+// TODO: tool_reference is a beta not wired in this build; no model advertises
+// support until the tool-search layer lands.
+export function modelSupportsToolReference(_model: string): boolean {
+  return false
+}
+
 /** Tool names announced via ToolSearch results in prior turns. */
 export function extractDiscoveredToolNames(_messages: Message[]): Set<string> {
   return new Set()

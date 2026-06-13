@@ -191,6 +191,34 @@ export async function executePostCompactHooks(
   return {}
 }
 
+export type InstructionsMemoryType = 'User' | 'Project' | 'Local' | 'Managed'
+
+type InstructionsLoadReason =
+  | 'session_start'
+  | 'nested_traversal'
+  | 'path_glob_match'
+  | 'include'
+  | 'compact'
+
+// Memory-file (CLAUDE.md) load hooks: no-ops until hook dispatch lands. With no
+// configured InstructionsLoaded hook, the attachment pipeline loads memory
+// files without running any hook.
+export function hasInstructionsLoadedHook(): boolean {
+  return false
+}
+
+export async function executeInstructionsLoadedHooks(
+  _filePath: string,
+  _memoryType: InstructionsMemoryType,
+  _loadReason: InstructionsLoadReason,
+  _options?: {
+    globs?: string[]
+    triggerFilePath?: string
+    parentFilePath?: string
+    timeoutMs?: number
+  },
+): Promise<void> {}
+
 export function getStopHookMessage(blockingError: HookBlockingError): string {
   return `Stop hook feedback:\n${blockingError.blockingError}`
 }

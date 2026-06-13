@@ -28,3 +28,19 @@ export function getTaskListId(): string {
 export async function listTasks(_taskListId: string): Promise<Task[]> {
   return []
 }
+
+export type UnassignTasksResult = {
+  unassignedTasks: Array<{ id: string; subject: string }>
+  notificationMessage: string
+}
+
+// TODO: teammate task reassignment lands with the teammate/swarm subsystem.
+// Solo mode has no shared task store, so there is nothing to unassign.
+export async function unassignTeammateTasks(
+  _teamName: string,
+  _teammateId: string,
+  _teammateName: string,
+  _reason: 'terminated' | 'shutdown',
+): Promise<UnassignTasksResult> {
+  return { unassignedTasks: [], notificationMessage: '' }
+}

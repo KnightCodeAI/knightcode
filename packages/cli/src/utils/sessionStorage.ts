@@ -8,6 +8,7 @@ import memoize from 'lodash-es/memoize.js'
 import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
+import type { QueueOperationMessage } from '../types/messageQueueTypes.js'
 
 export function getProjectsDir(): string {
   return join(getClaudeConfigHomeDir(), 'projects')
@@ -29,3 +30,10 @@ export function getTranscriptPath(): string {
 export function reAppendSessionMetadata(): void {}
 
 export function clearSessionMessagesCache(): void {}
+
+// TODO: queue-operation journaling is part of the session storage layer. The
+// message queue records enqueue/remove operations for --resume; until the
+// transcript store lands this is inert.
+export async function recordQueueOperation(
+  _queueOp: QueueOperationMessage,
+): Promise<void> {}

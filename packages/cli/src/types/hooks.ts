@@ -18,6 +18,9 @@ export type HookEvent =
   | 'PostCompact'
   | 'SessionStart'
   | 'Notification'
+  | 'PermissionRequest'
+  | 'TaskCompleted'
+  | 'TeammateIdle'
 
 export type HookProgress = {
   type: 'hook_progress'

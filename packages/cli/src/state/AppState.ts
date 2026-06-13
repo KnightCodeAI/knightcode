@@ -9,6 +9,7 @@ import type { ToolPermissionContext } from '../Tool.js'
 import type { DenialTrackingState } from '../utils/permissions/denialTracking.js'
 import type { EffortValue } from '../utils/effort.js'
 import type { TodoList } from '../utils/todo/types.js'
+import type { Command } from '../types/command.js'
 
 export type AppState = {
   toolPermissionContext: ToolPermissionContext
@@ -23,10 +24,46 @@ export type AppState = {
   denialTracking?: DenialTrackingState
   /**
    * Connected MCP servers. Stays empty until the MCP transport lands, but the
-   * tool executor reads the connection list to update auth status on failure.
+   * tool executor reads the connection list (and skill commands) for
+   * attachments and auth-status updates.
    */
   mcp: {
     clients: MCPServerConnection[]
+    commands: Command[]
+  }
+  /**
+   * Swarm/teammate context. Undefined in solo mode (the only mode today); the
+   * attachment pipeline reads team membership when it is present.
+   */
+  teamContext?: {
+    teamName: string
+    leadAgentId: string
+    teammates: {
+      [teammateId: string]: {
+        name: string
+        spawnedAt: number
+        [key: string]: unknown
+      }
+    }
+    [key: string]: unknown
+  }
+  /** Cross-agent message inbox. Empty in solo mode. */
+  inbox: {
+    messages: Array<{
+      id: string
+      from: string
+      text: string
+      timestamp: string
+      status: 'pending' | 'processing' | 'processed'
+      color?: string
+      summary?: string
+    }>
+  }
+  /** Pending plan verification state, set when exiting plan mode. */
+  pendingPlanVerification?: {
+    plan: string
+    verificationStarted: boolean
+    verificationCompleted: boolean
   }
   [key: string]: unknown
 }

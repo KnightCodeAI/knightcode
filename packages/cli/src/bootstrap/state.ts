@@ -48,6 +48,13 @@ type State = {
   // Skills invoked this session, keyed by skill name; agentId scopes them to
   // the main thread (null) or a specific subagent.
   invokedSkills: Map<string, InvokedSkillInfo>
+  // Plan-mode / auto-mode exit attachments: set when the user leaves the mode
+  // so the next turn can inform the model the mode is no longer active.
+  hasExitedPlanMode: boolean
+  needsPlanModeExitAttachment: boolean
+  needsAutoModeExitAttachment: boolean
+  // Last date emitted as a date-change attachment (ISO date string).
+  lastEmittedDate: string | null
 }
 
 const STATE: State = {
@@ -78,6 +85,10 @@ const STATE: State = {
   sdkBetas: undefined,
   pendingPostCompaction: false,
   invokedSkills: new Map(),
+  hasExitedPlanMode: false,
+  needsPlanModeExitAttachment: false,
+  needsAutoModeExitAttachment: false,
+  lastEmittedDate: null,
 }
 
 const SLOW_OPERATION_TTL_MS = 5 * 60 * 1000
@@ -170,6 +181,53 @@ export function getTotalInputTokens(): number {
 
 export function getTotalOutputTokens(): number {
   return 0
+}
+
+// TODO: per-turn token budgeting and cost are populated by the API cost layer.
+// Until that wiring lands these report safe defaults so attachment payloads
+// stay well-formed.
+export function getTurnOutputTokens(): number {
+  return 0
+}
+
+export function getCurrentTurnTokenBudget(): number | null {
+  return null
+}
+
+export function getTotalCostUSD(): number {
+  return 0
+}
+
+export function hasExitedPlanModeInSession(): boolean {
+  return STATE.hasExitedPlanMode
+}
+
+export function setHasExitedPlanMode(value: boolean): void {
+  STATE.hasExitedPlanMode = value
+}
+
+export function needsPlanModeExitAttachment(): boolean {
+  return STATE.needsPlanModeExitAttachment
+}
+
+export function setNeedsPlanModeExitAttachment(value: boolean): void {
+  STATE.needsPlanModeExitAttachment = value
+}
+
+export function needsAutoModeExitAttachment(): boolean {
+  return STATE.needsAutoModeExitAttachment
+}
+
+export function setNeedsAutoModeExitAttachment(value: boolean): void {
+  STATE.needsAutoModeExitAttachment = value
+}
+
+export function getLastEmittedDate(): string | null {
+  return STATE.lastEmittedDate
+}
+
+export function setLastEmittedDate(date: string | null): void {
+  STATE.lastEmittedDate = date
 }
 
 export function getTotalCacheReadInputTokens(): number {

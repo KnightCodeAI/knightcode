@@ -3,6 +3,8 @@
 // image pipeline lands, reading one is unsupported. Format detection and
 // metadata text are pure and remain real.
 
+import type { ImageBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
+
 export type ImageMediaType =
   | 'image/png'
   | 'image/jpeg'
@@ -90,4 +92,18 @@ export async function compressImageBufferWithTokenLimit(
   _originalMediaType?: string,
 ): Promise<CompressedImageResult> {
   throw new ImageResizeError(UNSUPPORTED)
+}
+
+export type ImageBlockWithDimensions = {
+  block: ImageBlockParam
+  dimensions?: ImageDimensions
+}
+
+// TODO: image resize/downsample isn't ported. The attachment pipeline passes
+// pasted image blocks through unchanged (no resizing) until the image pipeline
+// lands.
+export async function maybeResizeAndDownsampleImageBlock(
+  imageBlock: ImageBlockParam,
+): Promise<ImageBlockWithDimensions> {
+  return { block: imageBlock }
 }

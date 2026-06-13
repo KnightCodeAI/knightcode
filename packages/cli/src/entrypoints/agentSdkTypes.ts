@@ -17,3 +17,21 @@ export type SDKAssistantMessageError =
 
 /** SDK status surfaced while long-running maintenance is in flight. */
 export type SDKStatus = 'compacting' | null
+
+export type { HookEvent } from '../types/hooks.js'
+export type { PermissionResult } from '../utils/permissions/PermissionResult.js'
+
+/**
+ * JSON a synchronous hook may emit to influence the turn. The full SDK schema
+ * carries per-event `hookSpecificOutput` variants; only the common control
+ * fields are modeled here until the hook execution layer lands.
+ */
+export type SyncHookJSONOutput = {
+  continue?: boolean
+  suppressOutput?: boolean
+  stopReason?: string
+  decision?: 'approve' | 'block'
+  systemMessage?: string
+  reason?: string
+  hookSpecificOutput?: unknown
+}

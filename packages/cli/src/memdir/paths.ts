@@ -1,6 +1,8 @@
 // TODO: the auto-memory directory feature isn't ported. These inert checks let
 // the permission layer treat no path as an auto-memory path until it lands.
 
+import { homedir } from 'os'
+import { join, sep } from 'path'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 
@@ -9,6 +11,22 @@ export function hasAutoMemPathOverride(): boolean {
 }
 
 export function isAutoMemPath(_absolutePath: string): boolean {
+  return false
+}
+
+// TODO: auto-memory storage isn't implemented yet. isAutoMemoryEnabled reports
+// disabled so the relevant-memory prefetch and turn-end extraction stay off;
+// getAutoMemPath still yields a stable directory for callers that compute it
+// before the gate check.
+export function getAutoMemPath(): string {
+  const home = (
+    process.env.KNIGHTCODE_CONFIG_DIR ??
+    join(homedir(), '.knightcode')
+  ).normalize('NFC')
+  return join(home, 'memory') + sep
+}
+
+export function isAutoMemoryEnabled(): boolean {
   return false
 }
 

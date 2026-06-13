@@ -5,6 +5,19 @@ import { getOriginalCwd } from '../bootstrap/state.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import type { MemoryType } from './memory/types.js'
 import type { ThemeSetting } from './theme.js'
+import type { ImageDimensions } from './imageResizer.js'
+import type { StoredCompanion } from '../buddy/types.js'
+
+// A single pasted/dropped item awaiting submission (text or image).
+export type PastedContent = {
+  id: number
+  type: 'text' | 'image'
+  content: string
+  mediaType?: string
+  filename?: string
+  dimensions?: ImageDimensions
+  sourcePath?: string
+}
 
 // Global (per-user) configuration. Grows as features land; fields with
 // defaults are filled in when an older config file omits them.
@@ -17,6 +30,12 @@ export type GlobalConfig = {
   /** Whether the conversation is auto-compacted as it nears the context
    *  window. On by default; users can opt out in settings. */
   autoCompactEnabled: boolean
+  /** OAuth account info; absent in BYOK builds (no hosted account). */
+  oauthAccount?: { accountUuid?: string; [key: string]: unknown }
+  /** Stored desktop-companion state (soul only; bones regenerate from userID). */
+  companion?: StoredCompanion
+  /** Whether the desktop companion's intro/notifications are muted. */
+  companionMuted?: boolean
 }
 
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
