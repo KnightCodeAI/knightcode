@@ -228,6 +228,8 @@ export type SystemPermissionRetryMessage = SystemMessageBase & {
 export type StopHookInfo = {
   command?: string
   promptText?: string
+  // Per-hook execution time, filled in from the hook's completion attachment.
+  durationMs?: number
 }
 
 export type SystemStopHookSummaryMessage = SystemMessageBase & {

@@ -13,9 +13,18 @@ type SlowOperation = {
   timestamp: number
 }
 
+export type InvokedSkillInfo = {
+  skillName: string
+  skillPath: string
+  content: string
+  invokedAt: number
+  agentId: string | null
+}
+
 type State = {
   sessionId: SessionId
   originalCwd: string
+  projectRoot: string
   cwd: string
   allowedSettingSources: SettingSource[]
   isInteractive: boolean
@@ -32,11 +41,17 @@ type State = {
   promptCache1hAllowlist: string[] | null
   promptCache1hEligible: boolean | null
   slowOperations: SlowOperation[]
+  // Set after a compaction; consumed once by the next API success event.
+  pendingPostCompaction: boolean
+  // Skills invoked this session, keyed by skill name; agentId scopes them to
+  // the main thread (null) or a specific subagent.
+  invokedSkills: Map<string, InvokedSkillInfo>
 }
 
 const STATE: State = {
   sessionId: asSessionId(randomUUID()),
   originalCwd: process.cwd().normalize('NFC'),
+  projectRoot: process.cwd().normalize('NFC'),
   cwd: process.cwd().normalize('NFC'),
   allowedSettingSources: [
     'userSettings',
@@ -58,6 +73,8 @@ const STATE: State = {
   promptCache1hAllowlist: null,
   promptCache1hEligible: null,
   slowOperations: [],
+  pendingPostCompaction: false,
+  invokedSkills: new Map(),
 }
 
 const SLOW_OPERATION_TTL_MS = 5 * 60 * 1000
@@ -69,6 +86,18 @@ export function getSessionId(): SessionId {
 
 export function getOriginalCwd(): string {
   return STATE.originalCwd
+}
+
+export function getProjectRoot(): string {
+  return STATE.projectRoot
+}
+
+/**
+ * Only for --worktree startup flag. Mid-session worktree entry must NOT call
+ * this — skills/history should stay anchored to where the session started.
+ */
+export function setProjectRoot(cwd: string): void {
+  STATE.projectRoot = cwd.normalize('NFC')
 }
 
 // Assistant-mode ("Kairos") changes how long-running commands auto-background.
@@ -265,4 +294,34 @@ export function isReplBridgeActive(): boolean {
 
 export function getSlowOperations(): readonly SlowOperation[] {
   return STATE.slowOperations
+}
+
+/** Mark that a compaction just occurred. The next API success event will
+ *  include isPostCompaction=true, then the flag auto-resets. */
+export function markPostCompaction(): void {
+  STATE.pendingPostCompaction = true
+}
+
+/** Consume the post-compaction flag. Returns true once after compaction,
+ *  then returns false until the next compaction. */
+export function consumePostCompaction(): boolean {
+  const was = STATE.pendingPostCompaction
+  STATE.pendingPostCompaction = false
+  return was
+}
+
+// TODO: the skill-invocation setters (addInvokedSkill and the per-turn /
+// subagent cleanup helpers) land with the Skill tool port. The session starts
+// with no invoked skills, so this getter reports an empty map until then.
+export function getInvokedSkillsForAgent(
+  agentId: string | undefined | null,
+): Map<string, InvokedSkillInfo> {
+  const normalizedId = agentId ?? null
+  const filtered = new Map<string, InvokedSkillInfo>()
+  for (const [key, skill] of STATE.invokedSkills) {
+    if (skill.agentId === normalizedId) {
+      filtered.set(key, skill)
+    }
+  }
+  return filtered
 }
