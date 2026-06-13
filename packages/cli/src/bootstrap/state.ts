@@ -94,6 +94,10 @@ export function getLocCounter(): AttributedCounter | null {
   return null
 }
 
+// TODO: scroll-draining coordination is owned by the REPL renderer. With no
+// interactive scroll buffer active here, there is nothing to wait for.
+export async function waitForScrollIdle(): Promise<void> {}
+
 export function setAllowedSettingSources(sources: SettingSource[]): void {
   STATE.allowedSettingSources = sources
 }

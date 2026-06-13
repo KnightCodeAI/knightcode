@@ -41,3 +41,14 @@ export function whichSync(exe: string): string | undefined {
   }
   return undefined
 }
+
+/**
+ * Asynchronous `which`: resolve an executable name against PATH, returning its
+ * absolute path or null. Uses Bun.which when available, else the PATH scan.
+ */
+export async function which(command: string): Promise<string | null> {
+  if (typeof Bun !== 'undefined' && typeof Bun.which === 'function') {
+    return Bun.which(command)
+  }
+  return whichSync(command) ?? null
+}

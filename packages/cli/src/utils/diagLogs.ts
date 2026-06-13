@@ -3,4 +3,5 @@
 export function logForDiagnosticsNoPII(
   _level: string,
   _eventName: string,
+  _data?: Record<string, unknown>,
 ): void {}
