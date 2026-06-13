@@ -188,6 +188,26 @@ export function addSlowOperation(operation: string, durationMs: number): void {
   }
 }
 
+let hasUnknownModelCost = false
+
+export function setHasUnknownModelCost(value: boolean = true): void {
+  hasUnknownModelCost = value
+}
+
+export function getHasUnknownModelCost(): boolean {
+  return hasUnknownModelCost
+}
+
+/** Extra beta headers requested by an embedding SDK; none in the CLI. */
+export function getSdkBetas(): string[] {
+  return []
+}
+
+/** Whether an SDK REPL bridge is attached to this session. */
+export function isReplBridgeActive(): boolean {
+  return false
+}
+
 export function getSlowOperations(): readonly SlowOperation[] {
   return STATE.slowOperations
 }

@@ -151,6 +151,18 @@ export function isEnterpriseSubscriber(): boolean {
   return false
 }
 
+export function isProSubscriber(): boolean {
+  return false
+}
+
+export function isMaxSubscriber(): boolean {
+  return false
+}
+
+export function isTeamSubscriber(): boolean {
+  return false
+}
+
 export function getClaudeAIOAuthTokens(): OAuthTokens | null {
   return null
 }

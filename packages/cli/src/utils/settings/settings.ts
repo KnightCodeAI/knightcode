@@ -3,6 +3,8 @@
 
 export type Settings = {
   alwaysThinkingEnabled?: boolean
+  advisorModel?: string
+  effortLevel?: 'low' | 'medium' | 'high' | 'max' | number
   [key: string]: unknown
 }
 
@@ -11,4 +13,8 @@ export function getSettingsWithErrors(): {
   errors: unknown[]
 } {
   return { settings: {}, errors: [] }
+}
+
+export function getInitialSettings(): Settings {
+  return {}
 }

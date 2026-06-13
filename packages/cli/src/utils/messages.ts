@@ -16,7 +16,11 @@ import type {
 import type {
   ContentBlock,
   ContentBlockParam,
+  RedactedThinkingBlock,
+  RedactedThinkingBlockParam,
   TextBlockParam,
+  ThinkingBlock,
+  ThinkingBlockParam,
   ToolResultBlockParam,
   ToolUseBlock,
   ToolUseBlockParam,
@@ -57,6 +61,32 @@ import type {
 import type { PermissionMode } from '../types/permissions.js'
 import { feature } from '../macros/bun-bundle.js'
 import { checkStatsigFeatureGate_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import {
+  getImageTooLargeErrorMessage,
+  getPdfInvalidErrorMessage,
+  getPdfPasswordProtectedErrorMessage,
+  getPdfTooLargeErrorMessage,
+  getRequestTooLargeErrorMessage,
+} from '../services/api/errors.js'
+import { findToolByName, type Tools, toolMatchesName } from '../Tool.js'
+import type { AgentId } from '../types/ids.js'
+import {
+  normalizeToolInput,
+  normalizeToolInputForAPI,
+} from './api.js'
+import { isAdvisorBlock } from './advisor.js'
+import { normalizeLegacyToolName } from './permissions/permissionRuleParser.js'
+import { isToolSearchEnabledOptimistic } from './toolSearch.js'
+import { logForDebugging } from './debug.js'
+import type {
+  BetaMessage,
+  BetaRedactedThinkingBlock,
+  BetaThinkingBlock,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import isObject from 'lodash-es/isObject.js'
+import { safeParseJSON } from './json.js'
+import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
+import { validateImagesForAPI } from './imageValidation.js'
 import { logError } from './log.js'
 import { escapeRegExp } from './stringUtils.js'
 import { isToolReferenceBlock } from './toolSearch.js'
@@ -1420,3 +1450,1225 @@ export function extractTag(html: string, tagName: string): string | null {
 
   return null
 }
+
+
+// TODO: the attachment-to-user-message conversion (one branch per attachment
+// kind) lands with the context/attachment layer. Nothing creates attachments
+// yet, so reaching this is a bug worth failing loudly on.
+function normalizeAttachmentForAPI(attachment: {
+  type: string
+  [key: string]: unknown
+}): UserMessage[] {
+  throw new Error(
+    `attachment conversion not yet supported: ${attachment.type}`,
+  )
+}
+
+const TOOL_REFERENCE_TURN_BOUNDARY = 'Tool loaded.'
+
+/**
+ * Filter orphaned thinking-only assistant messages.
+ *
+ * During streaming, each content block is yielded as a separate message with the same
+ * message.id. When messages are loaded for resume, interleaved user messages or attachments
+ * can prevent proper merging by message.id, leaving orphaned assistant messages that contain
+ * only thinking blocks. These cause "thinking blocks cannot be modified" API errors.
+ *
+ * A thinking-only message is "orphaned" if there is NO other assistant message with the
+ * same message.id that contains non-thinking content (text, tool_use, etc). If such a
+ * message exists, the thinking block will be merged with it in normalizeMessagesForAPI().
+ */
+export function filterOrphanedThinkingOnlyMessages(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[]
+export function filterOrphanedThinkingOnlyMessages(
+  messages: Message[],
+): Message[]
+export function filterOrphanedThinkingOnlyMessages(
+  messages: Message[],
+): Message[] {
+  // First pass: collect message.ids that have non-thinking content
+  // These will be merged later in normalizeMessagesForAPI()
+  const messageIdsWithNonThinkingContent = new Set<string>()
+  for (const msg of messages) {
+    if (msg.type !== 'assistant') continue
+
+    const content = msg.message.content
+    if (!Array.isArray(content)) continue
+
+    const hasNonThinking = content.some(
+      block => block.type !== 'thinking' && block.type !== 'redacted_thinking',
+    )
+    if (hasNonThinking && msg.message.id) {
+      messageIdsWithNonThinkingContent.add(msg.message.id)
+    }
+  }
+
+  // Second pass: filter out thinking-only messages that are truly orphaned
+  const filtered = messages.filter(msg => {
+    if (msg.type !== 'assistant') {
+      return true
+    }
+
+    const content = msg.message.content
+    if (!Array.isArray(content) || content.length === 0) {
+      return true
+    }
+
+    // Check if ALL content blocks are thinking blocks
+    const allThinking = content.every(
+      block => block.type === 'thinking' || block.type === 'redacted_thinking',
+    )
+
+    if (!allThinking) {
+      return true // Has non-thinking content, keep it
+    }
+
+    // It's thinking-only. Keep it if there's another message with same id
+    // that has non-thinking content (they'll be merged later)
+    if (
+      msg.message.id &&
+      messageIdsWithNonThinkingContent.has(msg.message.id)
+    ) {
+      return true
+    }
+
+    // Truly orphaned - no other message with same id has content to merge with
+    logEvent('tengu_filtered_orphaned_thinking_message', {
+      messageUUID:
+        msg.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      messageId: msg.message
+        .id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      blockCount: content.length,
+    })
+    return false
+  })
+
+  return filtered
+}
+
+/**
+ * Filter trailing thinking blocks from the last message if it's an assistant message.
+ * The API doesn't allow assistant messages to end with thinking/redacted_thinking blocks.
+ */
+function filterTrailingThinkingFromLastAssistant(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[] {
+  const lastMessage = messages.at(-1)
+  if (!lastMessage || lastMessage.type !== 'assistant') {
+    // Last message is not assistant, nothing to filter
+    return messages
+  }
+
+  const content = lastMessage.message.content
+  const lastBlock = content.at(-1)
+  if (!lastBlock || !isThinkingBlock(lastBlock)) {
+    return messages
+  }
+
+  // Find last non-thinking block
+  let lastValidIndex = content.length - 1
+  while (lastValidIndex >= 0) {
+    const block = content[lastValidIndex]
+    if (!block || !isThinkingBlock(block)) {
+      break
+    }
+    lastValidIndex--
+  }
+
+  logEvent('tengu_filtered_trailing_thinking_block', {
+    messageUUID:
+      lastMessage.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    blocksRemoved: content.length - lastValidIndex - 1,
+    remainingBlocks: lastValidIndex + 1,
+  })
+
+  // Insert placeholder if all blocks were thinking
+  const filteredContent =
+    lastValidIndex < 0
+      ? [{ type: 'text' as const, text: '[No message content]', citations: [] }]
+      : content.slice(0, lastValidIndex + 1)
+
+  const result = [...messages]
+  result[messages.length - 1] = {
+    ...lastMessage,
+    message: {
+      ...lastMessage.message,
+      content: filteredContent,
+    },
+  }
+  return result
+}
+
+/**
+ * Filter out assistant messages with only whitespace-only text content.
+ *
+ * The API requires "text content blocks must contain non-whitespace text".
+ * This can happen when the model outputs whitespace (like "\n\n") before a thinking block,
+ * but the user cancels mid-stream, leaving only the whitespace text.
+ *
+ * This function removes such messages entirely rather than keeping a placeholder,
+ * since whitespace-only content has no semantic value.
+ *
+ * Also used by conversationRecovery to filter these from the main state during session resume.
+ */
+export function filterWhitespaceOnlyAssistantMessages(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[]
+export function filterWhitespaceOnlyAssistantMessages(
+  messages: Message[],
+): Message[]
+export function filterWhitespaceOnlyAssistantMessages(
+  messages: Message[],
+): Message[] {
+  let hasChanges = false
+
+  const filtered = messages.filter(message => {
+    if (message.type !== 'assistant') {
+      return true
+    }
+
+    const content = message.message.content
+    // Keep messages with empty arrays (handled elsewhere) or that have real content
+    if (!Array.isArray(content) || content.length === 0) {
+      return true
+    }
+
+    if (hasOnlyWhitespaceTextContent(content)) {
+      hasChanges = true
+      logEvent('tengu_filtered_whitespace_only_assistant', {
+        messageUUID:
+          message.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      })
+      return false
+    }
+
+    return true
+  })
+
+  if (!hasChanges) {
+    return messages
+  }
+
+  // Removing assistant messages may leave adjacent user messages that need
+  // merging (the API requires alternating user/assistant roles).
+  const merged: Message[] = []
+  for (const message of filtered) {
+    const prev = merged.at(-1)
+    if (message.type === 'user' && prev?.type === 'user') {
+      merged[merged.length - 1] = mergeUserMessages(prev, message) // lvalue
+    } else {
+      merged.push(message)
+    }
+  }
+  return merged
+}
+
+/**
+ * Ensure all non-final assistant messages have non-empty content.
+ *
+ * The API requires "all messages must have non-empty content except for the
+ * optional final assistant message". This can happen when the model returns
+ * an empty content array.
+ *
+ * For non-final assistant messages with empty content, we insert a placeholder.
+ * The final assistant message is left as-is since it's allowed to be empty (for prefill).
+ *
+ * Note: Whitespace-only text content is handled separately by filterWhitespaceOnlyAssistantMessages.
+ */
+function ensureNonEmptyAssistantContent(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[] {
+  if (messages.length === 0) {
+    return messages
+  }
+
+  let hasChanges = false
+  const result = messages.map((message, index) => {
+    // Skip non-assistant messages
+    if (message.type !== 'assistant') {
+      return message
+    }
+
+    // Skip the final message (allowed to be empty for prefill)
+    if (index === messages.length - 1) {
+      return message
+    }
+
+    // Check if content is empty
+    const content = message.message.content
+    if (Array.isArray(content) && content.length === 0) {
+      hasChanges = true
+      logEvent('tengu_fixed_empty_assistant_content', {
+        messageUUID:
+          message.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        messageIndex: index,
+      })
+
+      return {
+        ...message,
+        message: {
+          ...message.message,
+          content: [
+            { type: 'text' as const, text: NO_CONTENT_MESSAGE, citations: [] },
+          ],
+        },
+      }
+    }
+
+    return message
+  })
+
+  return hasChanges ? result : messages
+}
+
+function mergeAdjacentUserMessages(
+  msgs: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[] {
+  const out: (UserMessage | AssistantMessage)[] = []
+  for (const m of msgs) {
+    const prev = out.at(-1)
+    if (m.type === 'user' && prev?.type === 'user') {
+      out[out.length - 1] = mergeUserMessages(prev, m) // lvalue — can't use .at()
+    } else {
+      out.push(m)
+    }
+  }
+  return out
+}
+
+/**
+ * Strip non-text blocks from is_error tool_results — the API rejects the
+ * combination with "all content must be type text if is_error is true".
+ *
+ * Read-side guard for transcripts persisted before smooshIntoToolResult
+ * learned to filter on is_error. Without this a resumed session with one
+ * of these 400s on every call and can't be recovered by /fork. Adjacent
+ * text left behind by a stripped image is re-merged.
+ */
+function sanitizeErrorToolResultContent(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[] {
+  return messages.map(msg => {
+    if (msg.type !== 'user') return msg
+    const content = msg.message.content
+    if (!Array.isArray(content)) return msg
+
+    let changed = false
+    const newContent = content.map(b => {
+      if (b.type !== 'tool_result' || !b.is_error) return b
+      const trContent = b.content
+      if (!Array.isArray(trContent)) return b
+      if (trContent.every(c => c.type === 'text')) return b
+      changed = true
+      const texts = trContent.filter(c => c.type === 'text').map(c => c.text)
+      const textOnly: TextBlockParam[] =
+        texts.length > 0 ? [{ type: 'text', text: texts.join('\n\n') }] : []
+      return { ...b, content: textOnly }
+    })
+    if (!changed) return msg
+    return { ...msg, message: { ...msg.message, content: newContent } }
+  })
+}
+
+
+export function wrapInSystemReminder(content: string): string {
+  return `<system-reminder>\n${content}\n</system-reminder>`
+}
+
+type ThinkingBlockType =
+  | ThinkingBlock
+  | RedactedThinkingBlock
+  | ThinkingBlockParam
+  | RedactedThinkingBlockParam
+  | BetaThinkingBlock
+  | BetaRedactedThinkingBlock
+
+function isThinkingBlock(
+  block: ContentBlockParam | ContentBlock | BetaContentBlock,
+): block is ThinkingBlockType {
+  return block.type === 'thinking' || block.type === 'redacted_thinking'
+}
+
+/**
+ * Check if an assistant message has only whitespace-only text content blocks.
+ * Returns true if all content blocks are text blocks with only whitespace.
+ * Returns false if there are any non-text blocks (like tool_use) or text with actual content.
+ */
+function hasOnlyWhitespaceTextContent(
+  content: Array<{ type: string; text?: string }>,
+): boolean {
+  if (content.length === 0) {
+    return false
+  }
+
+  for (const block of content) {
+    // If there's any non-text block (tool_use, thinking, etc.), the message is valid
+    if (block.type !== 'text') {
+      return false
+    }
+    // If there's a text block with non-whitespace content, the message is valid
+    if (block.text !== undefined && block.text.trim() !== '') {
+      return false
+    }
+  }
+
+  // All blocks are text blocks with only whitespace
+  return true
+}
+
+/**
+ * Derive a short stable message ID (6-char base36 string) from a UUID.
+ * Used for snip tool referencing — injected into API-bound messages as [id:...] tags.
+ * Deterministic: same UUID always produces the same short ID.
+ */
+export function deriveShortMessageId(uuid: string): string {
+  // Take first 10 hex chars from the UUID (skipping dashes)
+  const hex = uuid.replace(/-/g, '').slice(0, 10)
+  // Convert to base36 for shorter representation, take 6 chars
+  return parseInt(hex, 16).toString(36).slice(0, 6)
+}
+
+export function normalizeMessagesForAPI(
+  messages: Message[],
+  tools: Tools = [],
+): (UserMessage | AssistantMessage)[] {
+  // Build set of available tool names for filtering unavailable tool references
+  const availableToolNames = new Set(tools.map(t => t.name))
+
+  // First, reorder attachments to bubble up until they hit a tool result or assistant message
+  // Then strip virtual messages — they're display-only (e.g. REPL inner tool
+  // calls) and must never reach the API.
+  const reorderedMessages = reorderAttachmentsForAPI(messages).filter(
+    m => !((m.type === 'user' || m.type === 'assistant') && m.isVirtual),
+  )
+
+  // Build a map from error text → which block types to strip from the preceding user message.
+  const errorToBlockTypes: Record<string, Set<string>> = {
+    [getPdfTooLargeErrorMessage()]: new Set(['document']),
+    [getPdfPasswordProtectedErrorMessage()]: new Set(['document']),
+    [getPdfInvalidErrorMessage()]: new Set(['document']),
+    [getImageTooLargeErrorMessage()]: new Set(['image']),
+    [getRequestTooLargeErrorMessage()]: new Set(['document', 'image']),
+  }
+
+  // Walk the reordered messages to build a targeted strip map:
+  // userMessageUUID → set of block types to strip from that message.
+  const stripTargets = new Map<string, Set<string>>()
+  for (let i = 0; i < reorderedMessages.length; i++) {
+    const msg = reorderedMessages[i]!
+    if (!isSyntheticApiErrorMessage(msg)) {
+      continue
+    }
+    // Determine which error this is
+    const errorText =
+      Array.isArray(msg.message.content) &&
+      msg.message.content[0]?.type === 'text'
+        ? msg.message.content[0].text
+        : undefined
+    if (!errorText) {
+      continue
+    }
+    const blockTypesToStrip = errorToBlockTypes[errorText]
+    if (!blockTypesToStrip) {
+      continue
+    }
+    // Walk backward to find the nearest preceding isMeta user message
+    for (let j = i - 1; j >= 0; j--) {
+      const candidate = reorderedMessages[j]!
+      if (candidate.type === 'user' && candidate.isMeta) {
+        const existing = stripTargets.get(candidate.uuid)
+        if (existing) {
+          for (const t of blockTypesToStrip) {
+            existing.add(t)
+          }
+        } else {
+          stripTargets.set(candidate.uuid, new Set(blockTypesToStrip))
+        }
+        break
+      }
+      // Skip over other synthetic error messages or non-meta messages
+      if (isSyntheticApiErrorMessage(candidate)) {
+        continue
+      }
+      // Stop if we hit an assistant message or non-meta user message
+      break
+    }
+  }
+
+  const result: (UserMessage | AssistantMessage)[] = []
+  reorderedMessages
+    .filter(
+      (
+        _,
+      ): _ is
+        | UserMessage
+        | AssistantMessage
+        | AttachmentMessage
+        | SystemLocalCommandMessage => {
+        if (
+          _.type === 'progress' ||
+          (_.type === 'system' && !isSystemLocalCommandMessage(_)) ||
+          isSyntheticApiErrorMessage(_)
+        ) {
+          return false
+        }
+        return true
+      },
+    )
+    .forEach(message => {
+      switch (message.type) {
+        case 'system': {
+          // local_command system messages need to be included as user messages
+          // so the model can reference previous command output in later turns
+          const userMsg = createUserMessage({
+            content: message.content,
+            uuid: message.uuid,
+            timestamp: message.timestamp,
+          })
+          const lastMessage = last(result)
+          if (lastMessage?.type === 'user') {
+            result[result.length - 1] = mergeUserMessages(lastMessage, userMsg)
+            return
+          }
+          result.push(userMsg)
+          return
+        }
+        case 'user': {
+          // Merge consecutive user messages because Bedrock doesn't support
+          // multiple user messages in a row; 1P API does and merges them
+          // into a single user turn
+
+          // When tool search is NOT enabled, strip all tool_reference blocks from
+          // tool_result content, as these are only valid with the tool search beta.
+          // When tool search IS enabled, strip only tool_reference blocks for
+          // tools that no longer exist (e.g., MCP server was disconnected).
+          let normalizedMessage = message
+          if (!isToolSearchEnabledOptimistic()) {
+            normalizedMessage = stripToolReferenceBlocksFromUserMessage(message)
+          } else {
+            normalizedMessage = stripUnavailableToolReferencesFromUserMessage(
+              message,
+              availableToolNames,
+            )
+          }
+
+          // Strip document/image blocks from the specific meta user message that
+          // preceded a PDF/image/request-too-large error, to prevent re-sending
+          // the problematic content on every subsequent API call.
+          const typesToStrip = stripTargets.get(normalizedMessage.uuid)
+          if (typesToStrip && normalizedMessage.isMeta) {
+            const content = normalizedMessage.message.content
+            if (Array.isArray(content)) {
+              const filtered = content.filter(
+                block => !typesToStrip.has(block.type),
+              )
+              if (filtered.length === 0) {
+                // All content blocks were stripped; skip this message entirely
+                return
+              }
+              if (filtered.length < content.length) {
+                normalizedMessage = {
+                  ...normalizedMessage,
+                  message: {
+                    ...normalizedMessage.message,
+                    content: filtered,
+                  },
+                }
+              }
+            }
+          }
+
+          // Server renders tool_reference expansion as <functions>...</functions>
+          // (same tags as the system prompt's tool block). When this is at the
+          // prompt tail, capybara models sample the stop sequence at ~10% (A/B:
+          // 21/200 vs 0/200 on v3-prod). A sibling text block inserts a clean
+          // "\n\nHuman: ..." turn boundary. Injected here (API-prep) rather than
+          // stored in the message so it never renders in the REPL, and is
+          // auto-skipped when strip* above removes all tool_reference content.
+          // Must be a sibling, NOT inside tool_result.content — mixing text with
+          // tool_reference inside the block is a server ValueError.
+          // Idempotent: query.ts calls this per-tool-result; the output flows
+          // back through here via claude.ts on the next API request. The first
+          // pass's sibling gets a \n[id:xxx] suffix from appendMessageTag below,
+          // so startsWith matches both bare and tagged forms.
+          //
+          // Gated OFF when tengu_toolref_defer_j8m is active — that gate
+          // enables relocateToolReferenceSiblings in post-processing below,
+          // which moves existing siblings to a later non-ref message instead
+          // of adding one here. This injection is itself one of the patterns
+          // that gets relocated, so skipping it saves a scan. When gate is
+          // off, this is the fallback (same as pre-#21049 main).
+          if (
+            !checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
+              'tengu_toolref_defer_j8m',
+            )
+          ) {
+            const contentAfterStrip = normalizedMessage.message.content
+            if (
+              Array.isArray(contentAfterStrip) &&
+              !contentAfterStrip.some(
+                b =>
+                  b.type === 'text' &&
+                  b.text.startsWith(TOOL_REFERENCE_TURN_BOUNDARY),
+              ) &&
+              contentHasToolReference(contentAfterStrip)
+            ) {
+              normalizedMessage = {
+                ...normalizedMessage,
+                message: {
+                  ...normalizedMessage.message,
+                  content: [
+                    ...contentAfterStrip,
+                    { type: 'text', text: TOOL_REFERENCE_TURN_BOUNDARY },
+                  ],
+                },
+              }
+            }
+          }
+
+          // If the last message is also a user message, merge them
+          const lastMessage = last(result)
+          if (lastMessage?.type === 'user') {
+            result[result.length - 1] = mergeUserMessages(
+              lastMessage,
+              normalizedMessage,
+            )
+            return
+          }
+
+          // Otherwise, add the message normally
+          result.push(normalizedMessage)
+          return
+        }
+        case 'assistant': {
+          // Normalize tool inputs for API (strip fields like plan from ExitPlanModeV2)
+          // When tool search is NOT enabled, we must strip tool_search-specific fields
+          // like 'caller' from tool_use blocks, as these are only valid with the
+          // tool search beta header
+          const toolSearchEnabled = isToolSearchEnabledOptimistic()
+          const normalizedMessage: AssistantMessage = {
+            ...message,
+            message: {
+              ...message.message,
+              content: message.message.content.map(block => {
+                if (block.type === 'tool_use') {
+                  const tool = tools.find(t => toolMatchesName(t, block.name))
+                  const normalizedInput = tool
+                    ? normalizeToolInputForAPI(
+                        tool,
+                        block.input as Record<string, unknown>,
+                      )
+                    : block.input
+                  const canonicalName = tool?.name ?? block.name
+
+                  // When tool search is enabled, preserve all fields including 'caller'
+                  if (toolSearchEnabled) {
+                    return {
+                      ...block,
+                      name: canonicalName,
+                      input: normalizedInput,
+                    }
+                  }
+
+                  // When tool search is NOT enabled, explicitly construct tool_use
+                  // block with only standard API fields to avoid sending fields like
+                  // 'caller' that may be stored in sessions from tool search runs
+                  return {
+                    type: 'tool_use' as const,
+                    id: block.id,
+                    name: canonicalName,
+                    input: normalizedInput,
+                  }
+                }
+                return block
+              }),
+            },
+          }
+
+          // Find a previous assistant message with the same message ID and merge.
+          // Walk backwards, skipping tool results and different-ID assistants,
+          // since concurrent agents (teammates) can interleave streaming content
+          // blocks from multiple API responses with different message IDs.
+          for (let i = result.length - 1; i >= 0; i--) {
+            const msg = result[i]!
+
+            if (msg.type !== 'assistant' && !isToolResultMessage(msg)) {
+              break
+            }
+
+            if (msg.type === 'assistant') {
+              if (msg.message.id === normalizedMessage.message.id) {
+                result[i] = mergeAssistantMessages(msg, normalizedMessage)
+                return
+              }
+              continue
+            }
+          }
+
+          result.push(normalizedMessage)
+          return
+        }
+        case 'attachment': {
+          const rawAttachmentMessage = normalizeAttachmentForAPI(
+            message.attachment,
+          )
+          const attachmentMessage = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
+            'tengu_chair_sermon',
+          )
+            ? rawAttachmentMessage.map(ensureSystemReminderWrap)
+            : rawAttachmentMessage
+
+          // If the last message is also a user message, merge them
+          const lastMessage = last(result)
+          if (lastMessage?.type === 'user') {
+            result[result.length - 1] = attachmentMessage.reduce(
+              (p, c) => mergeUserMessagesAndToolResults(p, c),
+              lastMessage,
+            )
+            return
+          }
+
+          result.push(...attachmentMessage)
+          return
+        }
+      }
+    })
+
+  // Relocate text siblings off tool_reference messages — prevents the
+  // anomalous two-consecutive-human-turns pattern that teaches the model
+  // to emit the stop sequence after tool results. See #21049.
+  // Runs after merge (siblings are in place) and before ID tagging (so
+  // tags reflect final positions). When gate is OFF, this is a noop and
+  // the TOOL_REFERENCE_TURN_BOUNDARY injection above serves as fallback.
+  const relocated = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
+    'tengu_toolref_defer_j8m',
+  )
+    ? relocateToolReferenceSiblings(result)
+    : result
+
+  // Filter orphaned thinking-only assistant messages (likely introduced by
+  // compaction slicing away intervening messages between a failed streaming
+  // response and its retry). Without this, consecutive assistant messages with
+  // mismatched thinking block signatures cause API 400 errors.
+  const withFilteredOrphans = filterOrphanedThinkingOnlyMessages(relocated)
+
+  // Order matters: strip trailing thinking first, THEN filter whitespace-only
+  // messages. The reverse order has a bug: a message like [text("\n\n"), thinking("...")]
+  // survives the whitespace filter (has a non-text block), then thinking stripping
+  // removes the thinking block, leaving [text("\n\n")] — which the API rejects.
+  //
+  // These multi-pass normalizations are inherently fragile — each pass can create
+  // conditions a prior pass was meant to handle. Consider unifying into a single
+  // pass that cleans content, then validates in one shot.
+  const withFilteredThinking =
+    filterTrailingThinkingFromLastAssistant(withFilteredOrphans)
+  const withFilteredWhitespace =
+    filterWhitespaceOnlyAssistantMessages(withFilteredThinking)
+  const withNonEmpty = ensureNonEmptyAssistantContent(withFilteredWhitespace)
+
+  // filterOrphanedThinkingOnlyMessages doesn't merge adjacent users (whitespace
+  // filter does, but only when IT fires). Merge here so smoosh can fold the
+  // SR-text sibling that hoistToolResults produces. The smoosh itself folds
+  // <system-reminder>-prefixed text siblings into the adjacent tool_result.
+  // Gated together: the merge exists solely to feed the smoosh; running it
+  // ungated changes VCR fixture hashes for @-mention scenarios (adjacent
+  // [prompt, attachment] users) without any benefit when the smoosh is off.
+  const smooshed = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
+    'tengu_chair_sermon',
+  )
+    ? smooshSystemReminderSiblings(mergeAdjacentUserMessages(withNonEmpty))
+    : withNonEmpty
+
+  // Unconditional — catches transcripts persisted before smooshIntoToolResult
+  // learned to filter on is_error. Without this a resumed session with an
+  // image-in-error tool_result 400s forever.
+  const sanitized = sanitizeErrorToolResultContent(smooshed)
+
+  // Append message ID tags for snip tool visibility (after all merging,
+  // so tags always match the surviving message's messageId field).
+  // Skip in test mode — tags change message content hashes, breaking
+  // VCR fixture lookup. Gate must match SnipTool.isEnabled() — don't
+  // inject [id:] tags when the tool isn't available (confuses the model
+  // and wastes tokens on every non-meta user message for every ant).
+  if (feature('HISTORY_SNIP') && process.env.NODE_ENV !== 'test') {
+    const { isSnipRuntimeEnabled } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../services/compact/snipCompact.js') as typeof import('../services/compact/snipCompact.js')
+    if (isSnipRuntimeEnabled()) {
+      for (let i = 0; i < sanitized.length; i++) {
+        if (sanitized[i]!.type === 'user') {
+          sanitized[i] = appendMessageTagToUserMessage(
+            sanitized[i] as UserMessage,
+          )
+        }
+      }
+    }
+  }
+
+  // Validate all images are within API size limits before sending
+  validateImagesForAPI(sanitized)
+
+  return sanitized
+}
+
+/**
+ * Strips tool_reference blocks for tools that no longer exist from tool_result content.
+ * This handles the case where a session was saved with MCP tools that are no longer
+ * available (e.g., MCP server was disconnected, renamed, or removed).
+ * Without this filtering, the API rejects with "Tool reference not found in available tools".
+ */
+function stripUnavailableToolReferencesFromUserMessage(
+  message: UserMessage,
+  availableToolNames: Set<string>,
+): UserMessage {
+  const content = message.message.content
+  if (!Array.isArray(content)) {
+    return message
+  }
+
+  // Check if any tool_reference blocks point to unavailable tools
+  const hasUnavailableReference = content.some(
+    block =>
+      block.type === 'tool_result' &&
+      Array.isArray(block.content) &&
+      block.content.some(c => {
+        if (!isToolReferenceBlock(c)) return false
+        const toolName = (c as { tool_name?: string }).tool_name
+        return (
+          toolName && !availableToolNames.has(normalizeLegacyToolName(toolName))
+        )
+      }),
+  )
+
+  if (!hasUnavailableReference) {
+    return message
+  }
+
+  return {
+    ...message,
+    message: {
+      ...message.message,
+      content: content.map(block => {
+        if (block.type !== 'tool_result' || !Array.isArray(block.content)) {
+          return block
+        }
+
+        // Filter out tool_reference blocks for unavailable tools
+        const filteredContent = block.content.filter(c => {
+          if (!isToolReferenceBlock(c)) return true
+          const rawToolName = (c as { tool_name?: string }).tool_name
+          if (!rawToolName) return true
+          const toolName = normalizeLegacyToolName(rawToolName)
+          const isAvailable = availableToolNames.has(toolName)
+          if (!isAvailable) {
+            logForDebugging(
+              `Filtering out tool_reference for unavailable tool: ${toolName}`,
+              { level: 'warn' },
+            )
+          }
+          return isAvailable
+        })
+
+        // If all content was filtered out, replace with a placeholder
+        if (filteredContent.length === 0) {
+          return {
+            ...block,
+            content: [
+              {
+                type: 'text' as const,
+                text: '[Tool references removed - tools no longer available]',
+              },
+            ],
+          }
+        }
+
+        return {
+          ...block,
+          content: filteredContent,
+        }
+      }),
+    },
+  }
+}
+
+// Sometimes the API returns empty messages (eg. "\n\n"). We need to filter these out,
+// otherwise they will give an API error when we send them to the API next time we call query().
+export function normalizeContentFromAPI(
+  contentBlocks: BetaMessage['content'],
+  tools: Tools,
+  agentId?: AgentId,
+): BetaMessage['content'] {
+  if (!contentBlocks) {
+    return []
+  }
+  return contentBlocks.map(contentBlock => {
+    switch (contentBlock.type) {
+      case 'tool_use': {
+        if (
+          typeof contentBlock.input !== 'string' &&
+          !isObject(contentBlock.input)
+        ) {
+          // we stream tool use inputs as strings, but when we fall back, they're objects
+          throw new Error('Tool use input must be a string or object')
+        }
+
+        // With fine-grained streaming on, we are getting a stringied JSON back from the API.
+        // The API has strange behaviour, where it returns nested stringified JSONs, and so
+        // we need to recursively parse these. If the top-level value returned from the API is
+        // an empty string, this should become an empty object (nested values should be empty string).
+        // TODO: This needs patching as recursive fields can still be stringified
+        let normalizedInput: unknown
+        if (typeof contentBlock.input === 'string') {
+          const parsed = safeParseJSON(contentBlock.input)
+          if (parsed === null && contentBlock.input.length > 0) {
+            // TET/FC-v3 diagnostic: the streamed tool input JSON failed to
+            // parse. We fall back to {} which means downstream validation
+            // sees empty input. The raw prefix goes to debug log only — no
+            // PII-tagged proto column exists for it yet.
+            logEvent('tengu_tool_input_json_parse_fail', {
+              toolName: sanitizeToolNameForAnalytics(contentBlock.name),
+              inputLen: contentBlock.input.length,
+            })
+            if (process.env.USER_TYPE === 'ant') {
+              logForDebugging(
+                `tool input JSON parse fail: ${contentBlock.input.slice(0, 200)}`,
+                { level: 'warn' },
+              )
+            }
+          }
+          normalizedInput = parsed ?? {}
+        } else {
+          normalizedInput = contentBlock.input
+        }
+
+        // Then apply tool-specific corrections
+        if (typeof normalizedInput === 'object' && normalizedInput !== null) {
+          const tool = findToolByName(tools, contentBlock.name)
+          if (tool) {
+            try {
+              normalizedInput = normalizeToolInput(
+                tool,
+                normalizedInput as { [key: string]: unknown },
+                agentId,
+              )
+            } catch (error) {
+              logError(new Error('Error normalizing tool input: ' + error))
+              // Keep the original input if normalization fails
+            }
+          }
+        }
+
+        return {
+          ...contentBlock,
+          input: normalizedInput,
+        }
+      }
+      case 'text':
+        if (contentBlock.text.trim().length === 0) {
+          logEvent('tengu_model_whitespace_response', {
+            length: contentBlock.text.length,
+          })
+        }
+        // Return the block as-is to preserve exact content for prompt caching.
+        // Empty text blocks are handled at the display layer and must not be
+        // altered here.
+        return contentBlock
+      case 'code_execution_tool_result':
+      case 'mcp_tool_use':
+      case 'mcp_tool_result':
+      case 'container_upload':
+        // Beta-specific content blocks - pass through as-is
+        return contentBlock
+      case 'server_tool_use':
+        if (typeof contentBlock.input === 'string') {
+          return {
+            ...contentBlock,
+            input: (safeParseJSON(contentBlock.input) ?? {}) as {
+              [key: string]: unknown
+            },
+          }
+        }
+        return contentBlock
+      default:
+        return contentBlock
+    }
+  })
+}
+
+/**
+ * Strip advisor blocks from messages. The API rejects server_tool_use blocks
+ * with name "advisor" unless the advisor beta header is present.
+ */
+export function stripAdvisorBlocks(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[] {
+  let changed = false
+  const result = messages.map(msg => {
+    if (msg.type !== 'assistant') return msg
+    const content = msg.message.content
+    const filtered = content.filter(b => !isAdvisorBlock(b))
+    if (filtered.length === content.length) return msg
+    changed = true
+    if (
+      filtered.length === 0 ||
+      filtered.every(
+        b =>
+          b.type === 'thinking' ||
+          b.type === 'redacted_thinking' ||
+          (b.type === 'text' && (!b.text || !b.text.trim())),
+      )
+    ) {
+      filtered.push({
+        type: 'text' as const,
+        text: '[Advisor response]',
+        citations: [],
+      })
+    }
+    return { ...msg, message: { ...msg.message, content: filtered } }
+  })
+  return changed ? result : messages
+}
+
+/**
+ * Strips tool_reference blocks from tool_result content in a user message.
+ * tool_reference blocks are only valid when the tool search beta is enabled.
+ * When tool search is disabled, we need to remove these blocks to avoid API errors.
+ */
+export function stripToolReferenceBlocksFromUserMessage(
+  message: UserMessage,
+): UserMessage {
+  const content = message.message.content
+  if (!Array.isArray(content)) {
+    return message
+  }
+
+  const hasToolReference = content.some(
+    block =>
+      block.type === 'tool_result' &&
+      Array.isArray(block.content) &&
+      block.content.some(isToolReferenceBlock),
+  )
+
+  if (!hasToolReference) {
+    return message
+  }
+
+  return {
+    ...message,
+    message: {
+      ...message.message,
+      content: content.map(block => {
+        if (block.type !== 'tool_result' || !Array.isArray(block.content)) {
+          return block
+        }
+
+        // Filter out tool_reference blocks from tool_result content
+        const filteredContent = block.content.filter(
+          c => !isToolReferenceBlock(c),
+        )
+
+        // If all content was tool_reference blocks, replace with a placeholder
+        if (filteredContent.length === 0) {
+          return {
+            ...block,
+            content: [
+              {
+                type: 'text' as const,
+                text: '[Tool references removed - tool search not enabled]',
+              },
+            ],
+          }
+        }
+
+        return {
+          ...block,
+          content: filteredContent,
+        }
+      }),
+    },
+  }
+}
+
+/**
+ * Does the content array have a tool_result block whose inner content
+ * contains tool_reference (ToolSearch loaded tools)?
+ */
+function contentHasToolReference(
+  content: ReadonlyArray<ContentBlockParam>,
+): boolean {
+  return content.some(
+    block =>
+      block.type === 'tool_result' &&
+      Array.isArray(block.content) &&
+      block.content.some(isToolReferenceBlock),
+  )
+}
+
+/**
+ * Ensure all text content in attachment-origin messages carries the
+ * <system-reminder> wrapper. This makes the prefix a reliable discriminator
+ * for the post-pass smoosh (smooshSystemReminderSiblings) — no need for every
+ * normalizeAttachmentForAPI case to remember to wrap.
+ *
+ * Idempotent: already-wrapped text is unchanged.
+ */
+function ensureSystemReminderWrap(msg: UserMessage): UserMessage {
+  const content = msg.message.content
+  if (typeof content === 'string') {
+    if (content.startsWith('<system-reminder>')) return msg
+    return {
+      ...msg,
+      message: { ...msg.message, content: wrapInSystemReminder(content) },
+    }
+  }
+  let changed = false
+  const newContent = content.map(b => {
+    if (b.type === 'text' && !b.text.startsWith('<system-reminder>')) {
+      changed = true
+      return { ...b, text: wrapInSystemReminder(b.text) }
+    }
+    return b
+  })
+  return changed
+    ? { ...msg, message: { ...msg.message, content: newContent } }
+    : msg
+}
+
+/**
+ * Move text-block siblings off user messages that contain tool_reference.
+ *
+ * When a tool_result contains tool_reference, the server expands it to a
+ * functions block. Any text siblings appended to that same user message
+ * (auto-memory, skill reminders, etc.) create a second human-turn segment
+ * right after the functions-close tag — an anomalous pattern the model
+ * imprints on. At a later tool-results tail, the model completes the
+ * pattern and emits the stop sequence. See #21049 for mechanism and
+ * five-arm dose-response.
+ *
+ * The fix: find the next user message with tool_result content but NO
+ * tool_reference, and move the text siblings there. Pure transformation —
+ * no state, no side effects. The target message's existing siblings (if any)
+ * are preserved; moved blocks append.
+ *
+ * If no valid target exists (tool_reference message is at/near the tail),
+ * siblings stay in place. That's safe: a tail ending in a human turn (with
+ * siblings) gets an Assistant: cue before generation; only a tail ending
+ * in bare tool output (no siblings) lacks the cue.
+ *
+ * Idempotent: after moving, the source has no text siblings; second pass
+ * finds nothing to move.
+ */
+function relocateToolReferenceSiblings(
+  messages: (UserMessage | AssistantMessage)[],
+): (UserMessage | AssistantMessage)[] {
+  const result = [...messages]
+
+  for (let i = 0; i < result.length; i++) {
+    const msg = result[i]!
+    if (msg.type !== 'user') continue
+    const content = msg.message.content
+    if (!Array.isArray(content)) continue
+    if (!contentHasToolReference(content)) continue
+
+    const textSiblings = content.filter(b => b.type === 'text')
+    if (textSiblings.length === 0) continue
+
+    // Find the next user message with tool_result but no tool_reference.
+    // Skip tool_reference-containing targets — moving there would just
+    // recreate the problem one position later.
+    let targetIdx = -1
+    for (let j = i + 1; j < result.length; j++) {
+      const cand = result[j]!
+      if (cand.type !== 'user') continue
+      const cc = cand.message.content
+      if (!Array.isArray(cc)) continue
+      if (!cc.some(b => b.type === 'tool_result')) continue
+      if (contentHasToolReference(cc)) continue
+      targetIdx = j
+      break
+    }
+
+    if (targetIdx === -1) continue // No valid target; leave in place.
+
+    // Strip text from source, append to target.
+    result[i] = {
+      ...msg,
+      message: {
+        ...msg.message,
+        content: content.filter(b => b.type !== 'text'),
+      },
+    }
+    const target = result[targetIdx] as UserMessage
+    result[targetIdx] = {
+      ...target,
+      message: {
+        ...target.message,
+        content: [
+          ...(target.message.content as ContentBlockParam[]),
+          ...textSiblings,
+        ],
+      },
+    }
+  }
+
+  return result
+}
+
+/**
+ * Appends a [id:...] message ID tag to the last text block of a user message.
+ * Only mutates the API-bound copy, not the stored message.
+ * This lets Claude reference message IDs when calling the snip tool.
+ */
+function appendMessageTagToUserMessage(message: UserMessage): UserMessage {
+  if (message.isMeta) {
+    return message
+  }
+
+  const tag = `\n[id:${deriveShortMessageId(message.uuid)}]`
+
+  const content = message.message.content
+
+  // Handle string content (most common for simple text input)
+  if (typeof content === 'string') {
+    return {
+      ...message,
+      message: {
+        ...message.message,
+        content: content + tag,
+      },
+    }
+  }
+
+  if (!Array.isArray(content) || content.length === 0) {
+    return message
+  }
+
+  // Find the last text block
+  let lastTextIdx = -1
+  for (let i = content.length - 1; i >= 0; i--) {
+    if (content[i]!.type === 'text') {
+      lastTextIdx = i
+      break
+    }
+  }
+  if (lastTextIdx === -1) {
+    return message
+  }
+
+  const newContent = [...content]
+  const textBlock = newContent[lastTextIdx] as TextBlockParam
+  newContent[lastTextIdx] = {
+    ...textBlock,
+    text: textBlock.text + tag,
+  }
+
+  return {
+    ...message,
+    message: {
+      ...message.message,
+      content: newContent as typeof content,
+    },
+  }
+}
+

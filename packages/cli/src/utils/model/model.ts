@@ -92,6 +92,11 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
  * form drops the prefix and normalizes dots so capability checks written
  * against upstream names ('claude-sonnet-4-6') keep working.
  */
+/** Map a first-party-format model id to its canonical short name. */
+export function firstPartyNameToCanonical(name: string): ModelShortName {
+  return name.replace(/-\d{8}$/, '')
+}
+
 export function getCanonicalName(fullModelName: ModelName): ModelShortName {
   const base = normalizeModelStringForAPI(fullModelName)
   const withoutVendor = base.includes('/')

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { randomBytes } from 'crypto'
 import { join } from 'path'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import type { ThemeSetting } from './theme.js'
@@ -7,6 +8,10 @@ import type { ThemeSetting } from './theme.js'
 // defaults are filled in when an older config file omits them.
 export type GlobalConfig = {
   theme: ThemeSetting
+  /** Random per-install identifier (created on first use). */
+  userID?: string
+  /** Server-pushed client data; absent until remote config lands. */
+  clientDataCache?: Record<string, unknown> | null
 }
 
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
@@ -50,4 +55,15 @@ export function saveGlobalConfig(
   } catch {
     // Persisting config is best-effort; the in-memory value still applies.
   }
+}
+
+export function getOrCreateUserID(): string {
+  const config = getGlobalConfig()
+  if (config.userID) {
+    return config.userID
+  }
+
+  const userID = randomBytes(32).toString('hex')
+  saveGlobalConfig(current => ({ ...current, userID }))
+  return userID
 }

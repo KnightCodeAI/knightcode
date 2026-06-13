@@ -89,6 +89,8 @@ export type AssistantMessage = {
   isVirtual?: true
   /** Model that produced this message when it came from the advisor lane. */
   advisorModel?: string
+  /** Internal research annotation passed through from the API stream. */
+  research?: unknown
 }
 
 export type ProgressMessage<P = unknown> = {

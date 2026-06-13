@@ -13,3 +13,10 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
 ): T {
   return defaultValue
 }
+
+export async function getDynamicConfig_BLOCKS_ON_INIT<T>(
+  _configName: string,
+  defaultValue: T,
+): Promise<T> {
+  return defaultValue
+}

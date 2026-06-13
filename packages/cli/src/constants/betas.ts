@@ -50,3 +50,6 @@ export const VERTEX_COUNT_TOKENS_ALLOWED_BETAS = new Set([
   INTERLEAVED_THINKING_BETA_HEADER,
   CONTEXT_MANAGEMENT_BETA_HEADER,
 ])
+
+// Used only behind the cached-microcompact gate (off in this build).
+export const CACHE_EDITING_BETA_HEADER = 'cache-editing-2025-09-22'

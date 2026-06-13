@@ -11,6 +11,10 @@ export function isFastModeAvailable(): boolean {
   return false
 }
 
+export function isFastModeSupportedByModel(_model: string): boolean {
+  return false
+}
+
 export function isFastModeCooldown(): boolean {
   return false
 }

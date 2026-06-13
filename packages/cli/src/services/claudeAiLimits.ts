@@ -40,6 +40,17 @@ export type ClaudeAILimits = {
   surpassedThreshold?: number
 }
 
+// Exported for parity with upstream consumers; permanently 'allowed'.
+export const currentLimits: ClaudeAILimits = {
+  status: 'allowed',
+  unifiedRateLimitFallbackAvailable: false,
+  isUsingOverage: false,
+}
+
+export function extractQuotaStatusFromHeaders(_headers: Headers): void {}
+
+export function extractQuotaStatusFromError(_error: unknown): void {}
+
 export function getRateLimitErrorMessage(
   _limits: ClaudeAILimits,
   _model: string,

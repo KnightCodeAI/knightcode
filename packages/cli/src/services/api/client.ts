@@ -17,6 +17,8 @@ import { getProxyFetchOptions } from '../../utils/proxy.js'
  */
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api'
 
+export const CLIENT_REQUEST_ID_HEADER = 'x-client-request-id'
+
 function getBaseURL(): string {
   return process.env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL
 }
