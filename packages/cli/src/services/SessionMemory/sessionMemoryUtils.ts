@@ -3,3 +3,9 @@
 // until the subsystem lands this is an inert setter.
 
 export function setLastSummarizedMessageId(_messageId: string | undefined): void {}
+
+// Loaded session-memory content for the current session. The session-memory
+// subsystem isn't wired yet, so there is none to surface.
+export async function getSessionMemoryContent(): Promise<string | null> {
+  return null
+}
