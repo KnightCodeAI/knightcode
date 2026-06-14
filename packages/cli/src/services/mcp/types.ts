@@ -80,3 +80,7 @@ export type ScopedMcpServerConfig = {
   pluginSource?: string
   [key: string]: unknown
 }
+
+// TODO: the canonical MCP ConfigScope is a zod-inferred enum; this literal union
+// mirrors it until the MCP config schema ports.
+export type ConfigScope = 'local' | 'user' | 'project' | 'dynamic' | 'enterprise' | 'claudeai' | 'managed'

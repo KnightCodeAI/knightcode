@@ -12,3 +12,6 @@ export async function launchUltraplan(_opts: {
 }): Promise<string> {
   return ''
 }
+
+// TODO: ultraplan task control lands with the ultraplan command; inert stop.
+export async function stopUltraplan(_taskId: string, _sessionId: string, _setAppState: (f: (p: any) => any) => void): Promise<void> {}

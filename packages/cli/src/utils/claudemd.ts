@@ -71,3 +71,23 @@ type InstructionsLoadReason =
 export function resetGetMemoryFilesCache(
   _reason: InstructionsLoadReason = 'session_start',
 ): void {}
+
+// An external CLAUDE.md include reached from outside the original cwd.
+export type ExternalClaudeMdInclude = {
+  path: string
+  parent: string
+}
+
+export function getExternalClaudeMdIncludes(files: MemoryFileInfo[]): ExternalClaudeMdInclude[] {
+  const externals: ExternalClaudeMdInclude[] = []
+  for (const file of files) {
+    if (file.type !== 'User' && file.parent) {
+      externals.push({ path: file.path, parent: file.parent })
+    }
+  }
+  return externals
+}
+
+export function hasExternalClaudeMdIncludes(files: MemoryFileInfo[]): boolean {
+  return getExternalClaudeMdIncludes(files).length > 0
+}

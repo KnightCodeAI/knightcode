@@ -29,6 +29,27 @@ export interface HistoryEntry {
 // defaults are filled in when an older config file omits them.
 export type GlobalConfig = {
   theme: ThemeSetting
+  // TODO: these settings are surfaced by the settings UI ahead of the
+  // subsystems that consume them (notifications, IDE, teammates, checkpointing,
+  // speculation). Typed here so the config panel compiles.
+  additionalModelOptionsCache?: any[]
+  agentPushNotifEnabled?: boolean
+  autoConnectIde?: boolean
+  autoUpdates?: boolean
+  cachedExtraUsageDisabledReason?: string | null
+  claudeInChromeDefaultEnabled?: boolean
+  copyFullResponse?: boolean
+  customApiKeyResponses?: { approved?: string[]; rejected?: string[] }
+  diffTool?: string
+  fileCheckpointingEnabled?: boolean
+  inputNeededNotifEnabled?: boolean
+  remoteControlAtStartup?: boolean
+  respectGitignore?: boolean
+  showStatusInTerminalTab?: boolean
+  speculationEnabled?: boolean
+  taskCompleteNotifEnabled?: boolean
+  teammateDefaultModel?: string | null
+  teammateMode?: 'auto' | 'tmux' | 'in-process'
   /** Random per-install identifier (created on first use). */
   userID?: string
   /** Server-pushed client data; absent until remote config lands. */
@@ -220,3 +241,8 @@ export function saveCurrentProjectConfig(
 export function checkHasTrustDialogAccepted(): boolean {
   return true
 }
+
+// TODO: remote-control + auto-updater gating are out of scope for a BYOK build.
+export function getRemoteControlAtStartup(): boolean { return false }
+export function getAutoUpdaterDisabledReason(): any { return null }
+export function formatAutoUpdaterDisabledReason(_reason: any): string { return '' }

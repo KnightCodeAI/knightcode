@@ -8,3 +8,6 @@ export function getProxyFetchOptions(_opts?: {
 }
 
 export function disableKeepAlive(): void {}
+
+// TODO: managed proxy config is out of scope for a BYOK build.
+export function getProxyUrl(): string | undefined { return undefined }

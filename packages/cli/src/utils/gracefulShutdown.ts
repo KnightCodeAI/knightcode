@@ -4,7 +4,7 @@
 
 export async function gracefulShutdown(
   code: number,
-  _reason: string,
+  _reason?: string,
 ): Promise<void> {
   process.exit(code)
 }

@@ -20,7 +20,20 @@ export type AgentDefinition = {
   getSystemPrompt: (params?: {
     toolUseContext: Pick<ToolUseContext, 'options'>
   }) => string
-  [key: string]: unknown
+  // Optional display/config fields read by the agent-management UI. The runtime
+  // that fully populates custom/plugin agents lands with the agent subsystem.
+  skills?: string[]
+  hooks?: Record<string, unknown>
+  color?: string
+  permissionMode?: import('../../types/permissions.js').PermissionMode
+  effort?: string
+  filename?: string
+  baseDir?: string
+  plugin?: string
+  serverName?: string
+  requiredMcpServers?: string[]
+  overriddenBy?: SettingSource | 'built-in' | 'plugin'
+  location?: SettingSource | 'built-in' | 'plugin'
 }
 
 export type AgentDefinitionsResult = {
@@ -43,4 +56,39 @@ export function filterAgentsByMcpRequirements(
 // project-defined agent file).
 export function isBuiltInAgent(agent: AgentDefinition): boolean {
   return agent.source === 'built-in'
+}
+
+// Custom (user/project/policy) agents — modelled as the flat AgentDefinition.
+// The reference splits built-in/custom/plugin into a discriminated union; the
+// BYOK build keeps one shape and discriminates on `source`.
+export type CustomAgentDefinition = AgentDefinition
+
+export function isCustomAgent(agent: AgentDefinition): boolean {
+  return agent.source !== 'built-in' && agent.source !== 'plugin'
+}
+
+export function isPluginAgent(agent: AgentDefinition): boolean {
+  return agent.source === 'plugin'
+}
+
+// Collapse a flat agent list to the active set: later sources override earlier
+// ones by agentType, in built-in → plugin → user → project → flag → policy order.
+export function getActiveAgentsFromList(
+  allAgents: AgentDefinition[],
+): AgentDefinition[] {
+  const order = [
+    'built-in',
+    'plugin',
+    'userSettings',
+    'projectSettings',
+    'flagSettings',
+    'policySettings',
+  ]
+  const agentMap = new Map<string, AgentDefinition>()
+  for (const source of order) {
+    for (const agent of allAgents.filter(a => a.source === source)) {
+      agentMap.set(agent.agentType, agent)
+    }
+  }
+  return Array.from(agentMap.values())
 }

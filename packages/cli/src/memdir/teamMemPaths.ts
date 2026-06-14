@@ -12,3 +12,6 @@ export function isTeamMemPath(_filePath: string): boolean {
 export function isTeamMemFile(_filePath: string): boolean {
   return false
 }
+
+// TODO: team-memory paths land with the team-memory subsystem; inert stub.
+export function getTeamMemPath(..._args: any[]): string { return '' }

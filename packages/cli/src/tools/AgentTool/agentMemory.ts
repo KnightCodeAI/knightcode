@@ -22,3 +22,23 @@ export function getAgentMemoryDir(
   ).normalize('NFC')
   return join(home, 'agent-memory', agentType)
 }
+
+// Human-readable label for an agent's memory scope, shown in the agent UI.
+export function getMemoryScopeDisplay(memory: AgentMemoryScope | undefined): string {
+  switch (memory) {
+    case 'user':
+      return 'User (~/.claude/agent-memory/)'
+    case 'project':
+      return 'Project (.claude/agent-memory/)'
+    case 'local':
+      return 'Local (.claude/agent-memory/)'
+    default:
+      return 'None'
+  }
+}
+
+// TODO: persistent agent memory (dir creation + MEMORY.md read) lands with the
+// agent-memory subsystem; until then no prior memory is injected.
+export function loadAgentMemoryPrompt(_agentType: string, _scope: AgentMemoryScope): string {
+  return ''
+}

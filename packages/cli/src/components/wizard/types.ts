@@ -3,7 +3,7 @@
 // props, useWizard, WizardDialogLayout, CreateAgentWizard's step list).
 import type { ReactNode } from 'react'
 
-export type WizardStepComponent = () => ReactNode
+export type WizardStepComponent<_T = unknown> = () => ReactNode
 
 export interface WizardContextValue<
   T extends Record<string, unknown> = Record<string, unknown>,

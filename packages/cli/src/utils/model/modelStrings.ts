@@ -30,3 +30,9 @@ const GATEWAY_MODEL_STRINGS: ModelStrings = {
 export function getModelStrings(): ModelStrings {
   return GATEWAY_MODEL_STRINGS
 }
+
+// TODO: per-provider model-id overrides (e.g. Bedrock ARNs) aren't part of a
+// BYOK gateway build; the id is used as-is.
+export function resolveOverriddenModel(modelId: string): string {
+  return modelId
+}

@@ -47,3 +47,8 @@ export function getTotalLinesAdded(): number {
 export function getTotalLinesRemoved(): number {
   return 0
 }
+
+// Format a USD cost for display: 2 decimals above $0.50, finer precision below.
+export function formatCost(cost: number, maxDecimalPlaces: number = 4): string {
+  return `$${cost > 0.5 ? cost.toFixed(2) : cost.toFixed(maxDecimalPlaces)}`
+}

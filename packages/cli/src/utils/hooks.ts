@@ -308,3 +308,7 @@ export async function executeStatusLineCommand(
 ): Promise<string | undefined> {
   return undefined
 }
+
+// TODO: file-suggestion ("@"-mention) command execution lands with the prompt
+// pipeline; inert until then.
+export async function executeFileSuggestionCommand(..._args: any[]): Promise<any> { return undefined }

@@ -6,3 +6,5 @@ export type MonitorMcpTaskState = TaskStateBase & {
   type: 'monitor_mcp'
   isBackgrounded?: boolean
 }
+
+export function killMonitorMcp(..._args: any[]): void {}

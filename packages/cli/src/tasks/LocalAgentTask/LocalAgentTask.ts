@@ -17,7 +17,24 @@ export type LocalAgentTaskState = {
   description: string
   retrieved: boolean
   error?: string
-  progress?: { summary?: string }
+  // TODO: the live runtime populates these; the detail/background views read
+  // them, so they are typed (optional) ahead of the task runner landing.
+  id: string
+  notified?: boolean
+  prompt: string
+  result?: { totalTokens?: number; totalToolUseCount?: number; [key: string]: unknown }
+  selectedAgent?: { agentType?: string; [key: string]: unknown }
+  startTime: number
+  totalPausedMs?: number
+  retain?: boolean
+  messages?: any[]
+  progress?: {
+    summary?: string
+    tokenCount?: number
+    toolUseCount?: number
+    recentActivities?: any[]
+    lastActivity?: unknown
+  }
 }
 
 import type { AppState } from '../../state/AppState.js'
@@ -37,3 +54,28 @@ export function drainPendingMessages(
 export function isPanelAgentTask(_task: unknown): _task is LocalAgentTaskState {
   return false
 }
+
+// TODO: the live local-agent progress/activity runtime lands with the task
+// subsystem. The detail dialogs consume these shapes structurally, so the types
+// are permissive and the functions are inert placeholders.
+export type ProgressTracker = any
+export type ToolActivity = any
+
+export const LocalAgentTask = {
+  type: 'local_agent' as const,
+  kill(..._args: any[]): Promise<void> { return Promise.resolve() },
+}
+
+export function isLocalAgentTask(task: unknown): task is LocalAgentTaskState {
+  return !!task && (task as { type?: string }).type === 'local_agent'
+}
+export function createProgressTracker(..._args: any[]): any { return {} }
+export function createActivityDescriptionResolver(..._args: any[]): any { return () => '' }
+export function getProgressUpdate(..._args: any[]): any { return undefined }
+export function getTokenCountFromTracker(..._args: any[]): number { return 0 }
+export function updateAgentProgress(..._args: any[]): void {}
+export function updateProgressFromMessage(..._args: any[]): void {}
+export function completeAgentTask(..._args: any[]): void {}
+export function failAgentTask(..._args: any[]): void {}
+export function killAsyncAgent(..._args: any[]): Promise<void> { return Promise.resolve() }
+export function enqueueAgentNotification(..._args: any[]): void {}

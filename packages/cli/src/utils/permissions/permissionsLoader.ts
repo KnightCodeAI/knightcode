@@ -31,3 +31,6 @@ export function loadAllPermissionRulesFromDisk(): PermissionRule[] {
 export function shouldShowAlwaysAllowOptions(): boolean {
   return !shouldAllowManagedPermissionRulesOnly()
 }
+
+// TODO: per-source permission rule loading lands with the rules UI; empty until then.
+export function getPermissionRulesForSource(..._args: any[]): any[] { return [] }

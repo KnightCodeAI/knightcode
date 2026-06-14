@@ -8,9 +8,12 @@ export type InProcessTeammateTaskState = TaskStateBase & {
   isBackgrounded?: boolean
   // Display fields the spinner reads when a teammate is foregrounded (solo mode
   // never populates these).
-  isIdle?: boolean
-  progress?: { tokenCount?: number }
-  identity: { color?: string; agentName?: string }
+  isIdle: boolean
+  progress?: { tokenCount?: number; recentActivities?: any[]; lastActivity?: { activityDescription?: string; [key: string]: unknown } }
+  identity: { color?: string; agentName: string; teamName: string }
+  awaitingPlanApproval?: boolean
+  shutdownRequested?: boolean
+  startTime?: number
   // The teammate's own permission mode, shown in the footer when viewing it.
   permissionMode: PermissionMode
 }

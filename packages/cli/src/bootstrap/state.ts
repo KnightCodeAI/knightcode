@@ -535,3 +535,10 @@ export function getLastInteractionTime(): number {
 export function updateLastInteractionTime(_immediate?: boolean): void {
   STATE.lastInteractionTime = Date.now()
 }
+
+// TODO: skill-invocation tracking + trust/opt-in setters land with their
+// subsystems; inert placeholders so the settings/trust UIs compile.
+export function clearInvokedSkillsForAgent(_agentId?: unknown): void {}
+export function setSessionTrustAccepted(_accepted?: unknown): void {}
+export function setUserMsgOptIn(_value?: unknown): void {}
+export function getInitialMainLoopModel(): any { return null }

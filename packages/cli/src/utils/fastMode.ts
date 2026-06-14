@@ -33,3 +33,8 @@ export function handleFastModeOverageRejection(_reason: string | null): void {}
 export function getFastModeUnavailableReason(): string | null {
   return null
 }
+
+// Display label + model used for fast mode; cooldown is a no-op in a BYOK build.
+export const FAST_MODE_MODEL_DISPLAY = 'Opus 4.6'
+export function getFastModeModel(): string { return FAST_MODE_MODEL_DISPLAY }
+export function clearFastModeCooldown(): void {}

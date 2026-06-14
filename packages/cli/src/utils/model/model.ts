@@ -153,7 +153,7 @@ export function modelDisplayString(model: ModelSetting): string {
   return model === resolvedModel ? resolvedModel : `${model} (${resolvedModel})`
 }
 
-function getDefaultMainLoopModel(): ModelName {
+export function getDefaultMainLoopModel(): ModelName {
   return getDefaultMainLoopModelSetting()
 }
 
@@ -170,4 +170,35 @@ export function resolveSkillModelOverride(
   _currentModel: string,
 ): string {
   return skillModel
+}
+
+// TODO: the user-specified model override (from /model and --model) is read by
+// the harness; until then there is no explicit override and the default is used.
+export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
+  return undefined
+}
+
+// In a BYOK build there is no hosted-account default; the configured default
+// model is shown directly.
+export function getClaudeAiUserDefaultModelDescription(_fastMode = false): string {
+  return `Default (${getDefaultMainLoopModelSetting()})`
+}
+
+// Render a default-model setting label. The BYOK build has no plan-mode alias
+// switching, so the resolved model id is shown as-is.
+export function renderDefaultModelSetting(setting: ModelName | ModelAlias): string {
+  if (setting === 'opusplan') {
+    return 'Opus in plan mode, else Sonnet'
+  }
+  return renderModelName(parseUserSpecifiedModel(setting))
+}
+
+// TODO: hosted per-tier pricing suffixes don't apply to a BYOK build.
+export function getOpus46PricingSuffix(_fastMode: boolean): string {
+  return ''
+}
+
+// In a BYOK build the model id is its own marketing name.
+export function getMarketingNameForModel(modelId: string): string | undefined {
+  return renderModelName(modelId)
 }

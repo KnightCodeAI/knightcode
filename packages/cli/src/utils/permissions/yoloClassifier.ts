@@ -41,3 +41,6 @@ export async function classifyYoloAction(
     model: '',
   }
 }
+
+// TODO: the auto-mode transcript classifier lands with that flow; empty transcript for now.
+export function buildTranscriptForClassifier(..._args: any[]): string { return '' }

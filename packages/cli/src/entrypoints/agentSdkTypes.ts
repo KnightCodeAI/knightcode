@@ -35,3 +35,15 @@ export type SyncHookJSONOutput = {
   reason?: string
   hookSpecificOutput?: unknown
 }
+
+// Per-model token + cost rollup used by the stats panels.
+export type ModelUsage = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  webSearchRequests: number
+  costUSD: number
+  contextWindow: number
+  maxOutputTokens: number
+}

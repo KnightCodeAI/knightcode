@@ -70,3 +70,8 @@ export function formatDescriptionWithSource(cmd: Command): string {
 export function isBridgeSafeCommand(_cmd: Command): boolean {
   return false
 }
+
+// TODO: the full command registry lands with the slash-command phase; the
+// built-in name list and internal-only set are empty until then.
+export const builtInCommandNames = (): Set<string> => new Set()
+export const INTERNAL_ONLY_COMMANDS: { name: string }[] = []

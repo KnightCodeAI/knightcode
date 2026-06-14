@@ -6,4 +6,16 @@ import type { TaskStateBase } from '../../Task.js'
 export type RemoteAgentTaskState = TaskStateBase & {
   type: 'remote_agent'
   isBackgrounded?: boolean
+  // TODO: live remote-task fields read by the shared task views; typed ahead
+  // of the remote subsystem landing.
+  sessionId: string
+  title: string
+  isRemoteReview?: boolean
+  isUltraplan?: boolean
+}
+
+// TODO: remote agent task — out of scope, inert stub.
+export const RemoteAgentTask = {
+  type: 'remote_agent' as const,
+  kill(..._args: any[]): Promise<void> { return Promise.resolve() },
 }

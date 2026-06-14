@@ -85,3 +85,19 @@ export async function saveCustomTitle(
   _fullPath?: string,
   _source: 'user' | 'auto' = 'user',
 ): Promise<void> {}
+
+// TODO: resume/session-log helpers below are inert placeholders consumed by the
+// session pickers; the real readers land with the resume flow.
+export function getSessionIdFromLog(_log: any): any { return undefined }
+export function getFirstMeaningfulUserMessageTextContent(_log: any): any { return undefined }
+export function isCustomTitleEnabled(): boolean { return false }
+export function isLiteLog(_log: any): boolean { return false }
+export function loadFullLog(log: any): Promise<any> { return Promise.resolve(log) }
+export function isTranscriptMessage(
+  entry: import('../types/logs.js').Entry,
+): entry is import('../types/logs.js').TranscriptMessage {
+  return (
+    (entry as { type?: string }).type === 'user' ||
+    (entry as { type?: string }).type === 'assistant'
+  )
+}

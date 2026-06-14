@@ -228,3 +228,11 @@ export function getApiKeyHelperElapsedMs(): number {
 export function getRateLimitTier(): string | null {
   return null
 }
+
+// TODO: hosted subscription tiers don't apply to a BYOK build.
+export function isTeamPremiumSubscriber(): boolean {
+  return false
+}
+
+// TODO: hosted-account info is out of scope for a BYOK build.
+export function getAccountInformation(): any { return undefined }

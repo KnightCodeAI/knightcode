@@ -6,6 +6,7 @@
 import { join, resolve } from 'path'
 import { getOriginalCwd } from '../../bootstrap/state.js'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
+import type { SettingsJson } from './types.js'
 import type { SettingSource } from './constants.js'
 
 export function getSettingsRootPathForSource(source: SettingSource): string {
@@ -44,10 +45,14 @@ export function getSettingsFilePathForSource(
   }
 }
 
+// The loose settings document. Fields the partial models explicitly are kept;
+// `effortLevel`/`statusLine` are left to the index signature so this stays
+// assignable to the canonical (zod-inferred) SettingsJson — their concrete
+// shapes there are narrower than the convenience types we used here.
 export type Settings = {
+  availableModels?: string[]
   alwaysThinkingEnabled?: boolean
   advisorModel?: string
-  effortLevel?: 'low' | 'medium' | 'high' | 'max' | number
   outputStyle?: string
   /** Offer "clear context" when accepting a plan (plan-mode exit dialog). */
   showClearContextOnPlanAccept?: boolean
@@ -55,13 +60,7 @@ export type Settings = {
   companyAnnouncements?: string[]
   /** Default --agent for the session (welcome footer / status). */
   agent?: string
-  /** User-configured statusline command (a hook that renders the statusline). */
-  statusLine?: {
-    type?: string
-    command: string
-    padding?: number
-  }
-  [key: string]: unknown
+  [key: string]: any
 }
 
 export function getSettingsWithErrors(): {
@@ -96,7 +95,7 @@ export function getRelativeSettingsFilePathForSource(
 // TODO: per-source settings reads/writes land with the settings phase. Until
 // then every source reads as "no settings file" and writes are dropped (the
 // callers — effort callout, channels notice — degrade to their defaults).
-export function getSettingsForSource(_source: SettingSource): Settings | null {
+export function getSettingsForSource(_source: SettingSource): SettingsJson | null {
   return null
 }
 
@@ -105,4 +104,12 @@ export function updateSettingsForSource(
   _settings: Settings,
 ): { error: Error | null } {
   return { error: null }
+}
+
+// TODO: managed/policy settings discovery is enterprise-only and out of scope.
+export function getManagedFileSettingsPresence(): { hasBase: boolean; hasDropIns: boolean } {
+  return { hasBase: false, hasDropIns: false }
+}
+export function getPolicySettingsOrigin(): 'remote' | 'plist' | 'hklm' | 'file' | 'hkcu' | null {
+  return null
 }

@@ -80,3 +80,9 @@ export function backgroundAll(
   _getAppState: () => AppState,
   _setAppState: SetAppState,
 ): void {}
+
+// TODO: live shell-task control lands with the background-task subsystem; identity stub.
+export const LocalShellTask = {
+  type: 'local_shell' as const,
+  kill(..._args: any[]): Promise<void> { return Promise.resolve() },
+}

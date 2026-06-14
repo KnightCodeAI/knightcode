@@ -85,3 +85,12 @@ export function restoreDangerousPermissions(
 ): ToolPermissionContext {
   return context
 }
+
+// Parse a CLI --allowedTools/--disallowedTools list into tool names.
+export function parseToolListFromCLI(tools: string[]): string[] {
+  return tools.flatMap(t => t.split(',')).map(t => t.trim()).filter(Boolean)
+}
+
+// TODO: auto-accept ("auto mode") opt-in lands with its permission flow; off in a BYOK build.
+export function getAutoModeEnabledState(): any { return { enabled: false } }
+export function hasAutoModeOptInAnySource(): boolean { return false }

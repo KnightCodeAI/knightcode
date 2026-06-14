@@ -58,3 +58,9 @@ export function isSupportedJetBrainsTerminal(): boolean {
 export function getTerminalIdeType(): IdeType | null {
   return null
 }
+
+// TODO: IDE integration is out of scope for a terminal BYOK build.
+export function isJetBrainsIde(..._args: any[]): boolean { return false }
+export function getIdeClientName(..._args: any[]): string | undefined { return undefined }
+export function isSupportedTerminal(..._args: any[]): boolean { return false }
+export function hasAccessToIDEExtensionDiffFeature(..._args: any[]): boolean { return false }
