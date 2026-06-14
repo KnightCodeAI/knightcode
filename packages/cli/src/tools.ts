@@ -14,6 +14,11 @@ import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
 import { getDenyRules } from './utils/permissions/permissions.js'
 import { getPlatform } from './utils/platform.js'
 
+// The set of tools a sub-agent may never call. Defined in constants/tools.ts;
+// re-exported here because the sub-agent pool filter and agent hooks import it
+// from the tool registry.
+export { ALL_AGENT_DISALLOWED_TOOLS } from './constants/tools.js'
+
 // The in-scope tool set. The Agent (sub-agent spawning), Bash, and NotebookEdit
 // tools are registered here; Skill/Web/MCP tools land with their owning
 // subsystems. PowerShell is also offered on Windows (its primary platform).

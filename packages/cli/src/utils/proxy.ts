@@ -11,3 +11,8 @@ export function disableKeepAlive(): void {}
 
 // TODO: managed proxy config is out of scope for a BYOK build.
 export function getProxyUrl(): string | undefined { return undefined }
+
+// With no managed/sandbox proxy, every host bypasses the proxy (direct request).
+export function shouldBypassProxy(_host: string): boolean {
+  return true
+}

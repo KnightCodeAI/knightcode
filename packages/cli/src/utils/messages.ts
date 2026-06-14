@@ -3748,3 +3748,47 @@ export function handleMessageFromStream(
       return
   }
 }
+
+export function hasSuccessfulToolCall(
+  messages: Message[],
+  toolName: string,
+): boolean {
+  // Search backwards to find most recent tool_use for this tool
+  let mostRecentToolUseId: string | undefined
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (!msg) continue
+    if (msg.type === 'assistant' && Array.isArray(msg.message.content)) {
+      const toolUse = msg.message.content.find(
+        (block): block is ToolUseBlock =>
+          block.type === 'tool_use' && block.name === toolName,
+      )
+      if (toolUse) {
+        mostRecentToolUseId = toolUse.id
+        break
+      }
+    }
+  }
+
+  if (!mostRecentToolUseId) return false
+
+  // Find the corresponding tool_result (search backwards)
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (!msg) continue
+    if (msg.type === 'user' && Array.isArray(msg.message.content)) {
+      const toolResult = msg.message.content.find(
+        (block): block is ToolResultBlockParam =>
+          block.type === 'tool_result' &&
+          block.tool_use_id === mostRecentToolUseId,
+      )
+      if (toolResult) {
+        // Success if is_error is false or undefined
+        return toolResult.is_error !== true
+      }
+    }
+  }
+
+  // Tool called but no result yet (shouldn't happen in practice)
+  return false
+}

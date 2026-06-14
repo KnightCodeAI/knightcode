@@ -42,6 +42,8 @@ export type ISandboxManager = {
   refreshConfig(): void
   isSandboxRequired(): boolean
   getSandboxUnavailableReason(): string | null
+  waitForNetworkInitialization(): Promise<void>
+  getProxyPort(): number | undefined
 }
 
 export const SandboxManager: ISandboxManager = {
@@ -89,6 +91,12 @@ export const SandboxManager: ISandboxManager = {
   },
   getSandboxUnavailableReason() {
     return null
+  },
+  // No sandbox network proxy: initialization completes immediately and there is
+  // no proxy port, so HTTP hooks degrade to a direct request.
+  async waitForNetworkInitialization() {},
+  getProxyPort() {
+    return undefined
   },
 }
 

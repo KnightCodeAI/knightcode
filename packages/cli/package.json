@@ -59,6 +59,9 @@
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
+    "ajv": "^8.20.0",
+    "asciichart": "^1.5.25",
+    "axios": "^1.18.0",
     "chokidar": "^4.0.0",
     "diff": "^9.0.0",
     "execa": "^9.6.1",
@@ -66,12 +69,11 @@
     "highlight.js": "^11.11.1",
     "ignore": "^7.0.5",
     "marked": "^15.0.0",
+    "plist": "^3.1.0",
     "proper-lockfile": "^4.1.2",
     "sharp": "^0.35.1",
-    "tree-kill": "^1.2.2",
     "shell-quote": "^1.8.0",
-    "plist": "^3.1.0",
-    "asciichart": "^1.5.25",
+    "tree-kill": "^1.2.2",
     "yaml": "^2.6.1"
   }
 }
