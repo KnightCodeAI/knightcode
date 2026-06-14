@@ -67,7 +67,7 @@ export async function recordContentReplacement(
 // TODO: session titles / agent-name persistence land with session storage. No
 // title is recorded yet, so reads return undefined and writes are no-ops.
 export function getCurrentSessionTitle(
-  _sessionId: import('../utils/session.js').SessionId,
+  _sessionId: import('../types/ids.js').SessionId,
 ): string | undefined {
   return undefined
 }
