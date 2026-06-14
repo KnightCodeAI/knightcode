@@ -8,8 +8,12 @@ export type WorktreeSession = {
   worktreeBranch: string
   originalCwd: string
   originalBranch: string
+  creationDurationMs?: number
+  usedSparsePaths?: boolean
 }
 
 export function getCurrentWorktreeSession(): WorktreeSession | null {
   return null
 }
+
+export function restoreWorktreeSession(..._args: unknown[]): void {}

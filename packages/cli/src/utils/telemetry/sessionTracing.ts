@@ -57,3 +57,5 @@ export function startLLMRequestSpan(
 export function startInteractionSpan(_userPrompt: string): Span {
   return undefined
 }
+
+export function endInteractionSpan(..._args: unknown[]): void {}

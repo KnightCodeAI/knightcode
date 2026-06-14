@@ -28,3 +28,10 @@ export function getSimpleCommandPrefix(_command: string): string | null {
 export function getFirstWordPrefix(_command: string): string | null {
   return null
 }
+
+// TODO: bash-command classifier auto-approval (feature-gated). With the
+// classifier disabled, no speculative check is ever started or consumed.
+export async function executeAsyncClassifierCheck(..._args: unknown[]): Promise<any> { return null }
+export async function awaitClassifierAutoApproval(..._args: unknown[]): Promise<any> { return null }
+export function consumeSpeculativeClassifierCheck(..._args: unknown[]): any { return null }
+export function peekSpeculativeClassifierCheck(..._args: unknown[]): any { return null }

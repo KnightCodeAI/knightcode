@@ -17,6 +17,7 @@ export type LocalAgentTaskState = {
   description: string
   retrieved: boolean
   error?: string
+  diskLoaded?: boolean
   // TODO: the live runtime populates these; the detail/background views read
   // them, so they are typed (optional) ahead of the task runner landing.
   id: string
@@ -116,3 +117,6 @@ export function markAgentsNotified(taskId: string, setAppState: SetAppState): vo
     }
   })
 }
+
+export function queuePendingMessage(..._args: unknown[]): void {}
+export function appendMessageToLocalAgent(..._args: unknown[]): void {}

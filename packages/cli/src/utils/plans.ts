@@ -41,3 +41,9 @@ export function getPlan(agentId?: AgentId): string | null {
     return null
   }
 }
+
+// TODO: plan fork/resume copying lands with the plan-slug store; inert.
+export function setPlanSlug(_sessionId: any, _slug: string): void {}
+export function clearAllPlanSlugs(): void {}
+export async function copyPlanForFork(..._args: any[]): Promise<void> {}
+export async function copyPlanForResume(..._args: any[]): Promise<void> {}

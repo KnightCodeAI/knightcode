@@ -8,3 +8,5 @@ export function AutoModeOptInDialog(_props: {
 }): React.ReactNode {
   return null
 }
+
+export const AUTO_MODE_DESCRIPTION = ''

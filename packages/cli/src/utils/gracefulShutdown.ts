@@ -9,6 +9,6 @@ export async function gracefulShutdown(
   process.exit(code)
 }
 
-export function gracefulShutdownSync(code: number): void {
+export function gracefulShutdownSync(code = 0, _reason?: string): void {
   process.exit(code)
 }

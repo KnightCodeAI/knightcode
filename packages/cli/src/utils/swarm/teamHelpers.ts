@@ -16,3 +16,5 @@ export function syncTeammateMode(
   _mode: import('../../types/permissions.js').PermissionMode,
   _teamNameOverride?: string,
 ): void {}
+
+export function setMemberActive(..._args: unknown[]): void {}

@@ -39,3 +39,10 @@ export function createAttributionState(surface: string): AttributionState {
 export function createEmptyAttributionState(): AttributionState {
   return createAttributionState('')
 }
+
+// TODO: attribution restore-from-log/snapshots land with the storage layer.
+export function incrementPromptCount(attribution: AttributionState, _saveSnapshot: (snapshot: any) => void): AttributionState { return { ...attribution, promptCount: attribution.promptCount + 1 } }
+export function attributionRestoreStateFromLog(..._args: any[]): any { return null }
+export function restoreAttributionStateFromSnapshots(..._args: any[]): any { return null }
+
+export function isInternalModelRepo(..._args: unknown[]): boolean { return false }

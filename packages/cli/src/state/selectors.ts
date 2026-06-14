@@ -7,7 +7,7 @@ import type { InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/
 import type { AppState } from './AppState.js'
 
 export function getViewedTeammateTask(
-  _appState: AppState,
+  _appState: any,
 ): InProcessTeammateTaskState | undefined {
   return undefined
 }

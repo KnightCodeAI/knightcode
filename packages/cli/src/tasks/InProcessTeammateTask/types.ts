@@ -10,7 +10,10 @@ export type InProcessTeammateTaskState = TaskStateBase & {
   // never populates these).
   isIdle: boolean
   progress?: { tokenCount?: number; recentActivities?: any[]; lastActivity?: { activityDescription?: string; [key: string]: unknown } }
-  identity: { color?: string; agentName: string; teamName: string }
+  identity: { color?: string; agentName: string; teamName: string; agentId: string }
+  spinnerVerb?: string
+  inProgressToolUseIDs?: Set<string>
+  messages?: unknown[]
   awaitingPlanApproval?: boolean
   shutdownRequested?: boolean
   startTime?: number

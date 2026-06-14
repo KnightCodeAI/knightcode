@@ -29,3 +29,5 @@ export function estimateSkillFrontmatterTokens(skill: Command): number {
     .join(' ')
   return roughTokenCountEstimation(frontmatterText)
 }
+
+export function clearDynamicSkills(): void {}

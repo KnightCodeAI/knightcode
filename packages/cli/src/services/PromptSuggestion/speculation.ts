@@ -11,3 +11,5 @@ export type ActiveSpeculationState = Extract<
 export function abortSpeculation(
   _setAppState: (f: (prev: any) => any) => void,
 ): void {}
+
+export async function handleSpeculationAccept(..._args: any[]): Promise<any> { return null }

@@ -89,3 +89,5 @@ export function execFileNoThrowWithCwd(
     ...options,
   })
 }
+
+export function execSyncWithDefaults_DEPRECATED(..._args: any[]): any { return '' }

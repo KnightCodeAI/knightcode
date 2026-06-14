@@ -4,3 +4,5 @@ export type CodeSession = any;
 export function fetchCodeSessionsFromSessionsAPI(): Promise<CodeSession[]> {
   return Promise.resolve([]);
 }
+
+export type RemoteMessageContent = string | Array<{ type: string; [key: string]: unknown }>

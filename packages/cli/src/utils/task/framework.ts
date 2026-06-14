@@ -30,3 +30,10 @@ export function applyTaskOffsetsAndEvictions(
   _updatedTaskOffsets: Record<string, number>,
   _evictedTaskIds: string[],
 ): void {}
+
+export function registerTask(..._args: any[]): any { return undefined }
+export function updateTaskState<T = any>(
+  _taskId: any,
+  _setAppState: any,
+  _updater: (task: T) => T,
+): void {}

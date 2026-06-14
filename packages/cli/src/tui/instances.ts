@@ -37,6 +37,13 @@ export type TuiInstance = {
   // OSC 8 hyperlink click handler — set by FullscreenLayout, invoked by the
   // renderer when the user clicks a terminal hyperlink.
   onHyperlinkClick?: (url: string) => void
+  // Transcript search highlight: the search hook pushes the active query and
+  // match positions to the renderer so matched cells can be highlighted. The
+  // OpenTUI renderer does not implement search highlighting yet, so these are
+  // no-ops (scanElementSubtree finds no matches).
+  setSearchHighlight: (query: string) => void
+  scanElementSubtree: (el: unknown) => any[]
+  setSearchPositions: (state: unknown) => void
 }
 
 const instances = new Map<NodeJS.WriteStream, TuiInstance>()

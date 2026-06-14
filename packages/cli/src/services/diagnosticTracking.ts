@@ -12,4 +12,6 @@ export const diagnosticTracker = {
   async getNewDiagnostics(): Promise<DiagnosticFile[]> {
     return []
   },
+  handleQueryStart(..._args: unknown[]): void {},
+  shutdown(..._args: unknown[]): void {},
 }

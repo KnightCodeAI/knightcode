@@ -3,3 +3,5 @@
 // dead-code-eliminated feature guard, so this is inert until the feature lands.
 
 export async function sweepFileContentCache(): Promise<void> {}
+
+export function clearAttributionCaches(): void {}

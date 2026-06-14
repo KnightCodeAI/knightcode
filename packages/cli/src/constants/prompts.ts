@@ -18,6 +18,7 @@ export async function getSystemPrompt(
   _tools: Tools,
   _model: string,
   _additionalWorkingDirectories?: string[],
+  _mcpClients?: unknown[],
 ): Promise<string[]> {
   return []
 }

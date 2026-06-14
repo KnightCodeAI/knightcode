@@ -5,7 +5,9 @@ import type * as React from 'react'
 
 type Props = {
   event: unknown
-  onResponse: (action: unknown, content?: unknown) => void
+  onResponse: (action: any, content?: unknown) => void
+  onWaitingDismiss?: (action: any) => void
+  [key: string]: unknown
 }
 
 export function ElicitationDialog(_props: Props): React.ReactNode {

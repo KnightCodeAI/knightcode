@@ -16,3 +16,5 @@ export function getAllInProcessTeammateTasks(
 ): InProcessTeammateTaskState[] {
   return []
 }
+
+export function injectUserMessageToTeammate(..._args: unknown[]): void {}

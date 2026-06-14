@@ -203,6 +203,7 @@ export type PermissionAskDecision<
   message: string
   updatedInput?: Input
   decisionReason?: PermissionDecisionReason
+  toolUseID?: string
   suggestions?: PermissionUpdate[]
   blockedPath?: string
   metadata?: PermissionMetadata
@@ -256,6 +257,7 @@ export type PermissionResult<
       behavior: 'passthrough'
       message: string
       decisionReason?: PermissionDecision<Input>['decisionReason']
+      toolUseID?: string
       suggestions?: PermissionUpdate[]
       blockedPath?: string
       /**

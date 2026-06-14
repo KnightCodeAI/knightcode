@@ -80,3 +80,10 @@ export async function fileHistoryMakeSnapshot(
   ) => void,
   _messageId: UUID,
 ): Promise<void> {}
+
+// TODO: file-history resume/rewind land with the snapshot store; inert.
+export async function copyFileHistoryForResume(_log: unknown): Promise<void> {}
+export async function fileHistoryHasAnyChanges(..._args: unknown[]): Promise<boolean> { return false }
+export async function fileHistoryRewind(..._args: any[]): Promise<any> { return null }
+
+export function fileHistoryRestoreStateFromLog(..._args: any[]): any { return null }

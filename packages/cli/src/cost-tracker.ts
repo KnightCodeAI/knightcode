@@ -52,3 +52,10 @@ export function getTotalLinesRemoved(): number {
 export function formatCost(cost: number, maxDecimalPlaces: number = 4): string {
   return `$${cost > 0.5 ? cost.toFixed(2) : cost.toFixed(maxDecimalPlaces)}`
 }
+
+// TODO: per-session cost persistence lands with the storage layer; inert.
+export function formatTotalCost(): string { return '$0.00' }
+export function getStoredSessionCosts(_sessionId: string): any { return null }
+export function restoreCostStateForSession(_sessionId: string): boolean { return false }
+export function saveCurrentSessionCosts(_fpsMetrics?: unknown): void {}
+export function resetCostState(): void {}

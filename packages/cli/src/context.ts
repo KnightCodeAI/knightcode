@@ -14,3 +14,7 @@ export const getUserContext = memoize(
 export const getSystemContext = memoize(
   async (): Promise<{ [k: string]: string }> => ({}),
 )
+
+// TODO: git status / system-prompt injection land with their subsystems; inert.
+export const getGitStatus = memoize(async (): Promise<string | null> => null)
+export function setSystemPromptInjection(_value: string | null): void {}

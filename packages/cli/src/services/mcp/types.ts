@@ -84,3 +84,7 @@ export type ScopedMcpServerConfig = {
 // TODO: the canonical MCP ConfigScope is a zod-inferred enum; this literal union
 // mirrors it until the MCP config schema ports.
 export type ConfigScope = 'local' | 'user' | 'project' | 'dynamic' | 'enterprise' | 'claudeai' | 'managed'
+
+// TODO: the connected-MCP-server shape lands with the MCP subsystem; only the
+// IDE-selection hook reads .client, so this is a permissive placeholder.
+export interface ConnectedMCPServer { name?: string; client?: any; [key: string]: unknown }

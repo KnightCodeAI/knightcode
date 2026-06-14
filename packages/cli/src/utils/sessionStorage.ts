@@ -134,3 +134,66 @@ export async function recordTranscript(
 ): Promise<import('crypto').UUID | null> {
   return null
 }
+
+// TODO: transcript reading, session-metadata persistence, and the resume
+// reconstruction helpers below are part of the deferred storage layer. They
+// preserve the call signatures the REPL / resume flow depend on; readers return
+// empty results and writers are inert until the storage layer lands.
+export function getAgentTranscriptPath(agentId: AgentId): string {
+  return join(getProjectDir(getOriginalCwd()), `${agentId}.jsonl`)
+}
+export async function getAgentTranscript(
+  _agentId: AgentId,
+): Promise<{
+  messages: import('../types/message.js').Message[]
+  contentReplacements: unknown[]
+} | null> {
+  return null
+}
+export async function getLastSessionLog(
+  _sessionId: import('crypto').UUID,
+): Promise<LogOption | null> {
+  return null
+}
+export async function loadTranscriptFile(
+  _filePath: string,
+  _opts?: { keepAllLeaves?: boolean },
+): Promise<any> {
+  return {
+    messages: new Map(),
+    summaries: new Map(),
+    customTitles: new Map(),
+    tags: new Map(),
+    agentNames: new Map(),
+  }
+}
+export function buildConversationChain(..._args: any[]): any[] {
+  return []
+}
+export function removeExtraFields(_transcript: any[]): any[] {
+  return _transcript
+}
+export function checkResumeConsistency(_chain: any[]): void {}
+export function isEphemeralToolProgress(_dataType: unknown): boolean {
+  return false
+}
+export function isLoggableMessage(_m: unknown): boolean {
+  return true
+}
+export function clearSessionMetadata(): void {}
+export function adoptResumedSessionFile(): void {}
+export async function resetSessionFilePointer(): Promise<void> {}
+export async function removeTranscriptMessage(
+  _targetUuid: import('crypto').UUID,
+): Promise<void> {}
+export async function recordAttributionSnapshot(
+  _snapshot: unknown,
+): Promise<void> {}
+export async function recordSidechainTranscript(
+  _messages: import('../types/message.js').Message[],
+  _agentId?: string,
+  _startingParentUuid?: import('crypto').UUID | null,
+): Promise<void> {}
+export function restoreSessionMetadata(_meta: Record<string, unknown>): void {}
+export function saveMode(_mode: 'coordinator' | 'normal'): void {}
+export function saveWorktreeState(_worktreeSession: unknown): void {}

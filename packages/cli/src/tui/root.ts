@@ -182,6 +182,14 @@ async function createInstance(
       // TODO: wire to the renderer's native selection clear once selection is
       // wired (see tui/selection); no selection state to clear yet.
     },
+    setSearchHighlight(_query: string) {
+      // TODO: transcript search highlighting is not implemented in the OpenTUI
+      // renderer; the query is dropped and no cells are highlighted.
+    },
+    scanElementSubtree(_el: unknown): any[] {
+      return []
+    },
+    setSearchPositions(_state: unknown) {},
   }
 
   return instance

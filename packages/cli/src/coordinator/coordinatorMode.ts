@@ -5,3 +5,5 @@ export function isCoordinatorMode(): boolean {
 
 // TODO: coordinator system prompt (agent swarm) — out of scope, inert.
 export function getCoordinatorSystemPrompt(..._args: any[]): string { return '' }
+
+export function matchSessionMode(..._args: unknown[]): string { return '' }

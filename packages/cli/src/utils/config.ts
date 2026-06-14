@@ -35,6 +35,12 @@ export type GlobalConfig = {
   additionalModelOptionsCache?: any[]
   agentPushNotifEnabled?: boolean
   autoConnectIde?: boolean
+  autoPermissionsNotificationCount?: number
+  btwUseCount?: number
+  hasAcknowledgedCostThreshold?: boolean
+  idleReturnDismissed?: boolean
+  messageIdleNotifThresholdMs: number
+  promptQueueUseCount?: number
   autoUpdates?: boolean
   cachedExtraUsageDisabledReason?: string | null
   claudeInChromeDefaultEnabled?: boolean
@@ -131,6 +137,7 @@ const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   autoCompactEnabled: true,
   preferredNotifChannel: 'auto',
   numStartups: 0,
+  messageIdleNotifThresholdMs: 60000,
 }
 
 function globalConfigPath(): string {
@@ -246,3 +253,5 @@ export function checkHasTrustDialogAccepted(): boolean {
 export function getRemoteControlAtStartup(): boolean { return false }
 export function getAutoUpdaterDisabledReason(): any { return null }
 export function formatAutoUpdaterDisabledReason(_reason: any): string { return '' }
+
+export function getGlobalConfigWriteCount(): number { return 0 }

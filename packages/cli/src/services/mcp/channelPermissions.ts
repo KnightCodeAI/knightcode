@@ -5,6 +5,7 @@
 export type ChannelPermissionResponse = {
   requestId: string
   behavior: 'allow' | 'deny'
+  fromServer?: string
 }
 
 export type ChannelPermissionCallbacks = {
@@ -18,3 +19,8 @@ export type ChannelPermissionCallbacks = {
     fromServer: string,
   ): boolean
 }
+
+// TODO: MCP permission-relay helpers (DEFERRED with MCP). No relay clients.
+export function filterPermissionRelayClients(..._args: unknown[]): any[] { return [] }
+export function shortRequestId(id: unknown): string { return String(id ?? '') }
+export function truncateForPreview(s: unknown, ..._args: unknown[]): string { return String(s ?? '') }

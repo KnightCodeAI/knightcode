@@ -18,3 +18,9 @@ export function getEffectiveChannelAllowlist(
 ): EffectiveChannelAllowlist {
   return { entries: [], source: 'none' }
 }
+
+// TODO: MCP permission-relay channel notifications (DEFERRED with MCP). No
+// channel is connected, so there is nothing to find or notify.
+export const CHANNEL_PERMISSION_REQUEST_METHOD = 'channel/permission_request'
+export type ChannelPermissionRequestParams = Record<string, unknown>
+export function findChannelEntry(..._args: unknown[]): undefined { return undefined }

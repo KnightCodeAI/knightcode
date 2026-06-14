@@ -91,3 +91,5 @@ export function getExternalClaudeMdIncludes(files: MemoryFileInfo[]): ExternalCl
 export function hasExternalClaudeMdIncludes(files: MemoryFileInfo[]): boolean {
   return getExternalClaudeMdIncludes(files).length > 0
 }
+
+export function clearMemoryFileCaches(): void {}

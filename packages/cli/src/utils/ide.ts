@@ -64,3 +64,11 @@ export function isJetBrainsIde(..._args: any[]): boolean { return false }
 export function getIdeClientName(..._args: any[]): string | undefined { return undefined }
 export function isSupportedTerminal(..._args: any[]): boolean { return false }
 export function hasAccessToIDEExtensionDiffFeature(..._args: any[]): boolean { return false }
+
+// TODO: IDE client lookup / diff closing land with IDE integration; inert.
+export function getConnectedIdeClient(
+  ..._args: unknown[]
+): import('../services/mcp/types.js').ConnectedMCPServer | undefined {
+  return undefined
+}
+export async function closeOpenDiffs(..._args: unknown[]): Promise<void> {}

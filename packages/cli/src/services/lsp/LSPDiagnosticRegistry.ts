@@ -14,3 +14,5 @@ export function checkForLSPDiagnostics(): Array<{
 }
 
 export function clearAllLSPDiagnostics(): void {}
+
+export function resetAllLSPDiagnosticState(): void {}

@@ -19,3 +19,5 @@ export const RemoteAgentTask = {
   type: 'remote_agent' as const,
   kill(..._args: any[]): Promise<void> { return Promise.resolve() },
 }
+
+export function restoreRemoteAgentTasks(..._args: unknown[]): void {}

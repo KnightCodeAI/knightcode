@@ -21,6 +21,10 @@ export type ISandboxManager = {
     abortSignal?: AbortSignal,
   ): Promise<string>
   cleanupAfterCommand(): void
+  initialize(sandboxAskCallback?: SandboxAskCallback): Promise<void>
+  refreshConfig(): void
+  isSandboxRequired(): boolean
+  getSandboxUnavailableReason(): string | null
 }
 
 export const SandboxManager: ISandboxManager = {
@@ -45,4 +49,16 @@ export const SandboxManager: ISandboxManager = {
     return command
   },
   cleanupAfterCommand() {},
+  async initialize() {},
+  refreshConfig() {},
+  isSandboxRequired() {
+    return false
+  },
+  getSandboxUnavailableReason() {
+    return null
+  },
 }
+
+// TODO: sandbox network-host ask flow lands with the sandbox subsystem.
+export interface NetworkHostPattern { host: string; [key: string]: unknown }
+export type SandboxAskCallback = (hostPattern: NetworkHostPattern) => Promise<boolean>

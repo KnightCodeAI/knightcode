@@ -2,3 +2,5 @@
 // by the deferred-tool prompt logic.
 
 export const BRIEF_TOOL_NAME = 'SendUserMessage'
+
+export const LEGACY_BRIEF_TOOL_NAME = 'Brief'

@@ -5,3 +5,8 @@ export function companionReservedColumns(
 ): number {
   return 0
 }
+
+// TODO: companion sprite is a deferred feature; render nothing.
+export const MIN_COLS_FOR_FULL_SPRITE = 100
+export function CompanionSprite(_props: Record<string, unknown>): null { return null }
+export function CompanionFloatingBubble(_props: Record<string, unknown>): null { return null }

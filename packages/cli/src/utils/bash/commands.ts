@@ -25,3 +25,5 @@ export function extractOutputRedirections(cmd: string): {
 export function splitCommand_DEPRECATED(command: string): string[] {
   return [command]
 }
+
+export function clearCommandPrefixCaches(): void {}

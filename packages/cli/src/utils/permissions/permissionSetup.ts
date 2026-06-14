@@ -114,3 +114,10 @@ export function parseToolListFromCLI(tools: string[]): string[] {
 // TODO: auto-accept ("auto mode") opt-in lands with its permission flow; off in a BYOK build.
 export function getAutoModeEnabledState(): any { return { enabled: false } }
 export function hasAutoModeOptInAnySource(): boolean { return false }
+
+export async function shouldDisableBypassPermissions(..._args: unknown[]): Promise<boolean> { return false }
+export async function verifyAutoModeGateAccess(
+  ..._args: unknown[]
+): Promise<{ updateContext: (ctx: any) => any; notification: any }> {
+  return { updateContext: ctx => ctx, notification: null }
+}

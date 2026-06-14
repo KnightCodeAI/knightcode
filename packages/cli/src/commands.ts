@@ -86,3 +86,9 @@ export function isBridgeSafeCommand(_cmd: Command): boolean {
 // built-in name list and internal-only set are empty until then.
 export const builtInCommandNames = (): Set<string> => new Set()
 export const INTERNAL_ONLY_COMMANDS: { name: string }[] = []
+
+// TODO: remote-safe command gating + prefix-cache invalidation land with the
+// command system; inert (no remote mode, nothing cached).
+export type ResumeEntrypoint = string
+export const REMOTE_SAFE_COMMANDS = new Set<Command>()
+export function clearCommandPrefixCaches(): void {}

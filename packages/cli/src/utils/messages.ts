@@ -64,7 +64,15 @@ import type {
   ToolUseSummaryMessage,
   ProgressMessage,
   UserMessage,
+  StreamEvent,
+  RequestStartEvent,
+  TombstoneMessage,
+  SystemTurnDurationMessage,
+  SystemApiMetricsMessage,
+  SystemAgentsKilledMessage,
 } from '../types/message.js'
+import type { SpinnerMode } from '../components/Spinner.js'
+import { stripIdeContextTags } from './displayTags.js'
 import type { PermissionMode } from '../types/permissions.js'
 import type { HookEvent } from '../types/hooks.js'
 import type { Attachment } from '../utils/attachments.js'
@@ -3398,5 +3406,281 @@ export function createCommandInputMessage(
     timestamp: new Date().toISOString(),
     uuid: randomUUID(),
     isMeta: false,
+  }
+}
+
+export function textForResubmit(
+  msg: UserMessage,
+): { text: string; mode: 'bash' | 'prompt' } | null {
+  const content = getUserMessageText(msg)
+  if (content === null) return null
+  const bash = extractTag(content, 'bash-input')
+  if (bash) return { text: bash, mode: 'bash' }
+  const cmd = extractTag(content, COMMAND_NAME_TAG)
+  if (cmd) {
+    const args = extractTag(content, COMMAND_ARGS_TAG) ?? ''
+    return { text: `${cmd} ${args}`, mode: 'prompt' }
+  }
+  return { text: stripIdeContextTags(content), mode: 'prompt' }
+}
+
+export function createTurnDurationMessage(
+  durationMs: number,
+  budget?: { tokens: number; limit: number; nudges: number },
+  messageCount?: number,
+): SystemTurnDurationMessage {
+  return {
+    type: 'system',
+    subtype: 'turn_duration',
+    durationMs,
+    budgetTokens: budget?.tokens,
+    budgetLimit: budget?.limit,
+    budgetNudges: budget?.nudges,
+    messageCount,
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+    isMeta: false,
+  }
+}
+
+export function createAgentsKilledMessage(): SystemAgentsKilledMessage {
+  return {
+    type: 'system',
+    subtype: 'agents_killed',
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+    isMeta: false,
+  }
+}
+
+export function createApiMetricsMessage(metrics: {
+  ttftMs: number
+  otps: number
+  isP50?: boolean
+  hookDurationMs?: number
+  turnDurationMs?: number
+  toolDurationMs?: number
+  classifierDurationMs?: number
+  toolCount?: number
+  hookCount?: number
+  classifierCount?: number
+  configWriteCount?: number
+}): SystemApiMetricsMessage {
+  return {
+    type: 'system',
+    subtype: 'api_metrics',
+    ttftMs: metrics.ttftMs,
+    otps: metrics.otps,
+    isP50: metrics.isP50,
+    hookDurationMs: metrics.hookDurationMs,
+    turnDurationMs: metrics.turnDurationMs,
+    toolDurationMs: metrics.toolDurationMs,
+    classifierDurationMs: metrics.classifierDurationMs,
+    toolCount: metrics.toolCount,
+    hookCount: metrics.hookCount,
+    classifierCount: metrics.classifierCount,
+    configWriteCount: metrics.configWriteCount,
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+    isMeta: false,
+  }
+}
+
+export function filterUnresolvedToolUses(messages: Message[]): Message[] {
+  const toolUseIds = new Set<string>()
+  const toolResultIds = new Set<string>()
+
+  for (const msg of messages) {
+    if (msg.type !== 'user' && msg.type !== 'assistant') continue
+    const content = msg.message.content
+    if (!Array.isArray(content)) continue
+    for (const block of content) {
+      if (block.type === 'tool_use') {
+        toolUseIds.add(block.id)
+      }
+      if (block.type === 'tool_result') {
+        toolResultIds.add(block.tool_use_id)
+      }
+    }
+  }
+
+  const unresolvedIds = new Set(
+    [...toolUseIds].filter(id => !toolResultIds.has(id)),
+  )
+
+  if (unresolvedIds.size === 0) {
+    return messages
+  }
+
+  return messages.filter(msg => {
+    if (msg.type !== 'assistant') return true
+    const content = msg.message.content
+    if (!Array.isArray(content)) return true
+    const toolUseBlockIds: string[] = []
+    for (const b of content) {
+      if (b.type === 'tool_use') {
+        toolUseBlockIds.push(b.id)
+      }
+    }
+    if (toolUseBlockIds.length === 0) return true
+    return !toolUseBlockIds.every(id => unresolvedIds.has(id))
+  })
+}
+
+export function handleMessageFromStream(
+  message:
+    | Message
+    | TombstoneMessage
+    | StreamEvent
+    | RequestStartEvent
+    | ToolUseSummaryMessage,
+  onMessage: (message: Message) => void,
+  onUpdateLength: (newContent: string) => void,
+  onSetStreamMode: (mode: SpinnerMode) => void,
+  onStreamingToolUses: (
+    f: (streamingToolUse: StreamingToolUse[]) => StreamingToolUse[],
+  ) => void,
+  onTombstone?: (message: Message) => void,
+  onStreamingThinking?: (
+    f: (current: StreamingThinking | null) => StreamingThinking | null,
+  ) => void,
+  onApiMetrics?: (metrics: { ttftMs: number }) => void,
+  onStreamingText?: (f: (current: string | null) => string | null) => void,
+): void {
+  if (
+    message.type !== 'stream_event' &&
+    message.type !== 'stream_request_start'
+  ) {
+    if (message.type === 'tombstone') {
+      onTombstone?.(message.message)
+      return
+    }
+    if (message.type === 'tool_use_summary') {
+      return
+    }
+    if (message.type === 'assistant') {
+      const thinkingBlock = message.message.content.find(
+        block => block.type === 'thinking',
+      )
+      if (thinkingBlock && thinkingBlock.type === 'thinking') {
+        onStreamingThinking?.(() => ({
+          thinking: thinkingBlock.thinking,
+          isStreaming: false,
+          streamingEndedAt: Date.now(),
+        }))
+      }
+    }
+    onStreamingText?.(() => null)
+    onMessage(message)
+    return
+  }
+
+  if (message.type === 'stream_request_start') {
+    onSetStreamMode('requesting')
+    return
+  }
+
+  if (message.event.type === 'message_start') {
+    if (message.ttftMs != null) {
+      onApiMetrics?.({ ttftMs: message.ttftMs })
+    }
+  }
+
+  if (message.event.type === 'message_stop') {
+    onSetStreamMode('tool-use')
+    onStreamingToolUses(() => [])
+    return
+  }
+
+  switch (message.event.type) {
+    case 'content_block_start':
+      onStreamingText?.(() => null)
+      if (
+        feature('CONNECTOR_TEXT') &&
+        isConnectorTextBlock(message.event.content_block)
+      ) {
+        onSetStreamMode('responding')
+        return
+      }
+      switch (message.event.content_block.type) {
+        case 'thinking':
+        case 'redacted_thinking':
+          onSetStreamMode('thinking')
+          return
+        case 'text':
+          onSetStreamMode('responding')
+          return
+        case 'tool_use': {
+          onSetStreamMode('tool-input')
+          const contentBlock = message.event.content_block
+          const index = message.event.index
+          onStreamingToolUses(_ => [
+            ..._,
+            {
+              index,
+              contentBlock,
+              unparsedToolInput: '',
+            },
+          ])
+          return
+        }
+        case 'server_tool_use':
+        case 'web_search_tool_result':
+        case 'code_execution_tool_result':
+        case 'mcp_tool_use':
+        case 'mcp_tool_result':
+        case 'container_upload':
+        case 'web_fetch_tool_result':
+        case 'bash_code_execution_tool_result':
+        case 'text_editor_code_execution_tool_result':
+        case 'tool_search_tool_result':
+        case 'compaction':
+          onSetStreamMode('tool-input')
+          return
+      }
+      return
+    case 'content_block_delta':
+      switch (message.event.delta.type) {
+        case 'text_delta': {
+          const deltaText = message.event.delta.text
+          onUpdateLength(deltaText)
+          onStreamingText?.(text => (text ?? '') + deltaText)
+          return
+        }
+        case 'input_json_delta': {
+          const delta = message.event.delta.partial_json
+          const index = message.event.index
+          onUpdateLength(delta)
+          onStreamingToolUses(_ => {
+            const element = _.find(_ => _.index === index)
+            if (!element) {
+              return _
+            }
+            return [
+              ..._.filter(_ => _ !== element),
+              {
+                ...element,
+                unparsedToolInput: element.unparsedToolInput + delta,
+              },
+            ]
+          })
+          return
+        }
+        case 'thinking_delta':
+          onUpdateLength(message.event.delta.thinking)
+          return
+        case 'signature_delta':
+          return
+        default:
+          return
+      }
+    case 'content_block_stop':
+      return
+    case 'message_delta':
+      onSetStreamMode('responding')
+      return
+    default:
+      onSetStreamMode('responding')
+      return
   }
 }

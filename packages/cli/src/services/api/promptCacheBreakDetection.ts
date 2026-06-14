@@ -49,3 +49,5 @@ export function notifyCompaction(
   _querySource: QuerySource,
   _agentId?: AgentId,
 ): void {}
+
+export function resetPromptCacheBreakDetection(): void {}

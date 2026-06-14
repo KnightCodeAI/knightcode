@@ -42,3 +42,7 @@ export function hasRules(updates: PermissionUpdate[] | undefined): boolean {
 export function persistPermissionUpdate(update: PermissionUpdate): void {
   persistPermissionUpdates([update])
 }
+
+// TODO: full persistence-destination gating lands with settings; treat every
+// destination as persistable so the "always allow" option stays available.
+export function supportsPersistence(_destination: unknown): boolean { return true }

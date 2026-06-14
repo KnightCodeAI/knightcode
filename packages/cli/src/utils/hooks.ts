@@ -312,3 +312,7 @@ export async function executeStatusLineCommand(
 // TODO: file-suggestion ("@"-mention) command execution lands with the prompt
 // pipeline; inert until then.
 export async function executeFileSuggestionCommand(..._args: any[]): Promise<any> { return undefined }
+
+// TODO: session-end hook execution lands with the hooks subsystem; inert.
+export async function executeSessionEndHooks(..._args: unknown[]): Promise<void> {}
+export function getSessionEndHookTimeoutMs(): number { return 0 }

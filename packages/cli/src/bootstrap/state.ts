@@ -542,3 +542,61 @@ export function clearInvokedSkillsForAgent(_agentId?: unknown): void {}
 export function setSessionTrustAccepted(_accepted?: unknown): void {}
 export function setUserMsgOptIn(_value?: unknown): void {}
 export function getInitialMainLoopModel(): any { return null }
+
+// TODO: per-turn metric counters (hook/tool/classifier durations + counts) and
+// the session-switch/cost-restore machinery land with the harness's full
+// startup state. Inert placeholders: counters read zero, switches update only
+// the active sessionId, so the metrics UI and /resume path compile and the
+// solo boot path behaves identically to upstream.
+export function getTurnHookDurationMs(): number { return 0 }
+export function getTurnHookCount(): number { return 0 }
+export function resetTurnHookDuration(): void {}
+export function getTurnToolDurationMs(): number { return 0 }
+export function getTurnToolCount(): number { return 0 }
+export function resetTurnToolDuration(): void {}
+export function getTurnClassifierDurationMs(): number { return 0 }
+export function getTurnClassifierCount(): number { return 0 }
+export function resetTurnClassifierDuration(): void {}
+export function getBudgetContinuationCount(): number { return 0 }
+export function snapshotOutputTokensForTurn(_budget: number | null): void {}
+export function getActiveTimeCounter(): AttributedCounter | null { return null }
+export function setMainThreadAgentType(_agentType: string | undefined): void {}
+export function setOriginalCwd(_cwd: string): void {}
+
+export function addInvokedSkill(
+  _skillName: string,
+  _skillPath: string,
+  _content: string,
+  _agentId: string | null = null,
+): void {}
+export function clearInvokedSkills(
+  _preservedAgentIds?: ReadonlySet<string>,
+): void {}
+
+export function switchSession(
+  sessionId: SessionId,
+  _projectDir: string | null = null,
+): void {
+  STATE.sessionId = sessionId
+}
+export function regenerateSessionId(
+  _options: { setCurrentAsParent?: boolean } = {},
+): SessionId {
+  const id = asSessionId(randomUUID())
+  STATE.sessionId = id
+  return id
+}
+export const onSessionSwitch = (
+  _cb: (id: SessionId) => void,
+): (() => void) => () => {}
+
+export function setCostStateForRestore(_state: {
+  totalCostUSD: number
+  totalAPIDuration: number
+  totalAPIDurationWithoutRetries: number
+  totalToolDuration: number
+  totalLinesAdded: number
+  totalLinesRemoved: number
+  lastDuration: number
+  modelUsage: unknown
+}): void {}

@@ -1,3 +1,4 @@
+import memoize from 'lodash-es/memoize.js'
 // TODO: agent discovery (built-in, user, and project agent files) is not
 // implemented yet; only the definition type the API layer references lives
 // here.
@@ -92,3 +93,9 @@ export function getActiveAgentsFromList(
   }
   return Array.from(agentMap.values())
 }
+
+export const getAgentDefinitionsWithOverrides = memoize(
+  (..._args: any[]): any => ({ allAgents: [], builtInAgents: [], userAgents: [] }),
+)
+
+export function clearAgentDefinitionsCache(): void {}
