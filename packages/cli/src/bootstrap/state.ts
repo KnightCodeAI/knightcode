@@ -5,6 +5,8 @@
 import { randomUUID } from 'crypto'
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { asSessionId, type SessionId } from '../types/ids.js'
+import type { HookEvent } from '../types/hooks.js'
+import type { HookCommand } from '../schemas/hooks.js'
 import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js'
 import type { SettingSource } from '../utils/settings/constants.js'
 import type { ModelSetting } from '../utils/model/model.js'
@@ -589,6 +591,22 @@ export function regenerateSessionId(
 export const onSessionSwitch = (
   _cb: (id: SessionId) => void,
 ): (() => void) => () => {}
+
+// Hooks registered programmatically (plugin hooks, internal callbacks) outside
+// settings.json. None are registered in this build, so the registry is empty.
+export type RegisteredHookMatcher = {
+  matcher?: string
+  hooks: HookCommand[]
+  pluginRoot?: string
+  pluginName?: string
+  pluginId?: string
+}
+
+export function getRegisteredHooks(): Partial<
+  Record<HookEvent, RegisteredHookMatcher[]>
+> | null {
+  return null
+}
 
 // Extra working directories the user added via /add-dir, included when loading
 // CLAUDE.md files. Held in module state for the session.

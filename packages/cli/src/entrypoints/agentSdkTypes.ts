@@ -19,6 +19,7 @@ export type SDKAssistantMessageError =
 export type SDKStatus = 'compacting' | null
 
 export type { HookEvent } from '../types/hooks.js'
+export { HOOK_EVENTS } from './sdk/coreTypes.js'
 export type { PermissionResult } from '../utils/permissions/PermissionResult.js'
 export type { PermissionMode } from '../types/permissions.js'
 export type { ApiKeySource } from '../utils/auth.js'
