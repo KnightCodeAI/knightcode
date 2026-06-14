@@ -9,6 +9,7 @@ import { getCommandName } from './types/command.js'
 
 export type { Command } from './types/command.js'
 export { getCommandName, isCommandEnabled } from './types/command.js'
+export type { CommandResultDisplay } from './types/command.js'
 
 export async function getSkillToolCommands(_cwd: string): Promise<Command[]> {
   return []

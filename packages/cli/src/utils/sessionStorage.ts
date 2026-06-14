@@ -56,3 +56,25 @@ export async function recordContentReplacement(
   _replacements: readonly unknown[],
   _agentId?: AgentId,
 ): Promise<void> {}
+
+// TODO: session titles / agent-name persistence land with session storage. No
+// title is recorded yet, so reads return undefined and writes are no-ops.
+export function getCurrentSessionTitle(
+  _sessionId: import('../utils/session.js').SessionId,
+): string | undefined {
+  return undefined
+}
+
+export async function saveAgentName(
+  _sessionId: import('crypto').UUID,
+  _agentName: string,
+  _fullPath?: string,
+  _source: 'user' | 'auto' = 'user',
+): Promise<void> {}
+
+export async function saveCustomTitle(
+  _sessionId: import('crypto').UUID,
+  _customTitle: string,
+  _fullPath?: string,
+  _source: 'user' | 'auto' = 'user',
+): Promise<void> {}

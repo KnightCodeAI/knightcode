@@ -54,7 +54,8 @@
     "typescript": "^5",
     "usehooks-ts": "^3.1.0",
     "wrap-ansi": "^9.0.0",
-    "zod": "^3.25.0"
+    "zod": "^3.25.0",
+    "@types/shell-quote": "^1.7.5"
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
@@ -67,6 +68,8 @@
     "marked": "^15.0.0",
     "proper-lockfile": "^4.1.2",
     "sharp": "^0.35.1",
-    "tree-kill": "^1.2.2"
+    "tree-kill": "^1.2.2",
+    "shell-quote": "^1.8.0",
+    "plist": "^3.1.0"
   }
 }

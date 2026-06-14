@@ -70,3 +70,18 @@ export function transitionPermissionMode(
 ): ToolPermissionContext {
   return context
 }
+
+// TODO: dangerous-rule stripping/restoring is part of the auto-mode permission
+// flow, which is inert in this build (see neighbors). Both pass the context
+// through unchanged.
+export function stripDangerousPermissionsForAutoMode(
+  context: ToolPermissionContext,
+): ToolPermissionContext {
+  return context
+}
+
+export function restoreDangerousPermissions(
+  context: ToolPermissionContext,
+): ToolPermissionContext {
+  return context
+}

@@ -16,6 +16,9 @@ export type AttributionState = {
   promptCountAtLastCommit: number
   permissionPromptCount: number
   permissionPromptCountAtLastCommit: number
+  // How many times the user pressed Escape during a permission prompt (used to
+  // tune the attribution surface).
+  escapeCount: number
 }
 
 export function createAttributionState(surface: string): AttributionState {
@@ -28,6 +31,7 @@ export function createAttributionState(surface: string): AttributionState {
     promptCountAtLastCommit: 0,
     permissionPromptCount: 0,
     permissionPromptCountAtLastCommit: 0,
+    escapeCount: 0,
   }
 }
 

@@ -60,6 +60,8 @@ type State = {
   agentColorMap: Map<string, AgentColorName>
   // Whether the user opted in to showing their prompt text in the transcript.
   userMsgOptIn: boolean
+  // Epoch ms of the user's last interaction; feeds the idle notifier.
+  lastInteractionTime: number
 }
 
 const STATE: State = {
@@ -96,6 +98,7 @@ const STATE: State = {
   lastEmittedDate: null,
   agentColorMap: new Map(),
   userMsgOptIn: false,
+  lastInteractionTime: 0,
 }
 
 const SLOW_OPERATION_TTL_MS = 5 * 60 * 1000
@@ -472,3 +475,23 @@ export function getInvokedSkillsForAgent(
 // TODO: the per-prompt id is a tracing correlation handle; tracing is out of
 // scope, so recording it is a no-op until (if ever) a consumer needs it.
 export function setPromptId(_id: string | null): void {}
+
+// TODO: plan-mode transition side effects (cache breaking, attachment latches)
+// are wired with the plan-mode flow; inert here. Session persistence is always
+// on in this build. Interaction-time tracking feeds the idle notifier.
+export function handlePlanModeTransition(
+  _fromMode: string,
+  _toMode: string,
+): void {}
+
+export function isSessionPersistenceDisabled(): boolean {
+  return false
+}
+
+export function getLastInteractionTime(): number {
+  return STATE.lastInteractionTime
+}
+
+export function updateLastInteractionTime(_immediate?: boolean): void {
+  STATE.lastInteractionTime = Date.now()
+}

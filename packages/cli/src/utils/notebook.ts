@@ -26,3 +26,12 @@ export function mapNotebookCellsToToolResult(
 ): ToolResultBlockParam {
   throw new Error('Reading Jupyter notebooks is not supported in this build.')
 }
+
+// Parse a "cell-N" id into its zero-based index, or undefined if not that shape.
+export function parseCellId(cellId: string): number | undefined {
+  const match = cellId.match(/^cell-(\d+)$/)
+  if (match && match[1]) {
+    return parseInt(match[1], 10)
+  }
+  return undefined
+}

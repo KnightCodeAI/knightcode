@@ -70,6 +70,10 @@ export type GlobalConfig = {
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
   /** ISO timestamp of the user's first token (onboarding bookkeeping). */
   claudeCodeFirstTokenDate?: string
+  /** Preferred OS notification channel ('auto', 'terminal', etc.). */
+  preferredNotifChannel: string
+  /** Enable model-generated explanations for permission requests (default true). */
+  permissionExplainerEnabled?: boolean
 }
 
 export type EditorMode = 'emacs' | 'normal' | 'vim'
@@ -77,6 +81,7 @@ export type EditorMode = 'emacs' | 'normal' | 'vim'
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   theme: 'dark',
   autoCompactEnabled: true,
+  preferredNotifChannel: 'auto',
 }
 
 function globalConfigPath(): string {

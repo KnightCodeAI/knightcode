@@ -49,6 +49,8 @@ export type Settings = {
   advisorModel?: string
   effortLevel?: 'low' | 'medium' | 'high' | 'max' | number
   outputStyle?: string
+  /** Offer "clear context" when accepting a plan (plan-mode exit dialog). */
+  showClearContextOnPlanAccept?: boolean
   [key: string]: unknown
 }
 
@@ -70,4 +72,13 @@ export const getSettings_DEPRECATED = getInitialSettings
 // build has no auto-mode, so the opt-in is permanently off.
 export function hasAutoModeOptIn(): boolean {
   return false
+}
+
+// Settings file path relative to the project root, for display in the rule UI.
+export function getRelativeSettingsFilePathForSource(
+  source: 'projectSettings' | 'localSettings',
+): string {
+  return source === 'localSettings'
+    ? '.claude/settings.local.json'
+    : '.claude/settings.json'
 }

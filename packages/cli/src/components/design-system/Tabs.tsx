@@ -18,7 +18,10 @@ import { useKeybindings } from '../../keybindings/useKeybinding.js'
 import type { Theme } from '../../utils/theme.js'
 
 type TabsProps = {
-  children: Array<React.ReactElement<TabProps>>
+  // Accepts <Tab> elements. Typed as ReactNode because the renderer's JSX
+  // namespace types every JSX expression as ReactNode (not ReactElement); the
+  // header map below normalizes and narrows back to Tab elements.
+  children: React.ReactNode
   title?: string
   color?: keyof Theme
   defaultTab?: string
@@ -91,10 +94,9 @@ export function Tabs({
   navFromContent = false,
 }: TabsProps): React.ReactNode {
   const { columns: terminalWidth } = useTerminalSize()
-  const tabs = children.map(child => [
-    child.props.id ?? child.props.title,
-    child.props.title,
-  ])
+  const tabs = (
+    React.Children.toArray(children) as Array<React.ReactElement<TabProps>>
+  ).map(child => [child.props.id ?? child.props.title, child.props.title])
   const defaultTabIndex = defaultTab
     ? tabs.findIndex(tab => defaultTab === tab[0])
     : 0

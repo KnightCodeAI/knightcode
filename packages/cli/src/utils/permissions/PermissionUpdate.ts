@@ -5,6 +5,7 @@
 // persisting nothing for now.
 
 import type { ToolPermissionContext } from '../../Tool.js'
+import type { PermissionRuleValue } from './PermissionRule.js'
 import type { PermissionUpdate } from './PermissionUpdateSchema.js'
 
 export function applyPermissionUpdate(
@@ -22,3 +23,22 @@ export function applyPermissionUpdates(
 }
 
 export function persistPermissionUpdates(_updates: PermissionUpdate[]): void {}
+
+// Flatten the rule values carried by a set of permission updates.
+export function extractRules(
+  updates: PermissionUpdate[] | undefined,
+): PermissionRuleValue[] {
+  if (!updates) return []
+  return updates.flatMap(u =>
+    u.type === 'addRules' || u.type === 'replaceRules' ? u.rules : [],
+  )
+}
+
+export function hasRules(updates: PermissionUpdate[] | undefined): boolean {
+  return extractRules(updates).length > 0
+}
+
+// Persist a single permission update (singular convenience over the batch form).
+export function persistPermissionUpdate(update: PermissionUpdate): void {
+  persistPermissionUpdates([update])
+}

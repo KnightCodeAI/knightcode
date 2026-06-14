@@ -17,3 +17,14 @@ export function startSpeculativeClassifierCheck(
 /** Clears any in-flight speculative classifier checks. No-op until the
  *  classifier is wired up. */
 export function clearSpeculativeChecks(): void {}
+
+// TODO: command-prefix extraction for rule suggestions ("always allow `git`")
+// depends on the bash parser / env-var safety tables that aren't ported. Until
+// then no prefix is suggested and the rule UI falls back to the exact command.
+export function getSimpleCommandPrefix(_command: string): string | null {
+  return null
+}
+
+export function getFirstWordPrefix(_command: string): string | null {
+  return null
+}

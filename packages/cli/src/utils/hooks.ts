@@ -261,3 +261,10 @@ export function getUserPromptSubmitHookBlockingMessage(
 ): string {
   return `UserPromptSubmit hook feedback:\n${blockingError.blockingError}`
 }
+
+// Notification hooks fire when the CLI wants to alert the user (idle, awaiting
+// input). Inert until hooks dispatch lands — yields nothing.
+export async function* executeNotificationHooks(_notificationData: {
+  message: string
+  title?: string
+}): AsyncGenerator<AggregatedHookResult> {}

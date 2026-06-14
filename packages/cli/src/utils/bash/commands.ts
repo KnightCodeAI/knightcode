@@ -17,3 +17,11 @@ export function extractOutputRedirections(cmd: string): {
     hasDangerousRedirection: false,
   }
 }
+
+// TODO: command-splitting (operator-aware tokenization into sub-commands) is
+// part of the bash parser that isn't ported. The permission layer uses this to
+// enumerate sub-commands of a compound command for rule matching; until the
+// parser lands it conservatively treats the whole command as one (no split).
+export function splitCommand_DEPRECATED(command: string): string[] {
+  return [command]
+}

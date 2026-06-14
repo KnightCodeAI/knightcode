@@ -25,3 +25,9 @@ export function deletePermissionRuleFromSettings(
 export function loadAllPermissionRulesFromDisk(): PermissionRule[] {
   return []
 }
+
+// Whether the permission dialog should offer "always allow" rule options.
+// Suppressed when only managed (admin-pushed) rules are allowed.
+export function shouldShowAlwaysAllowOptions(): boolean {
+  return !shouldAllowManagedPermissionRulesOnly()
+}
