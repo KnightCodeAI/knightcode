@@ -226,3 +226,51 @@ export async function enrichLogs(
 ): Promise<{ logs: LogOption[]; nextIndex: number }> {
   return { logs: [], nextIndex: 0 }
 }
+
+// TODO: on-disk session transcripts (path resolution, custom titles, tags,
+// agent colors, cross-project/same-repo log loading) land with the full
+// session-store port. Until then these report no stored sessions so /resume,
+// /branch, /tag and /color render their dialogs without persisting.
+export function getTranscriptPathForSession(_sessionId: string): string {
+  return ''
+}
+
+export async function saveTag(
+  _sessionId: import('crypto').UUID,
+  _tag: string,
+  _fullPath?: string,
+): Promise<void> {}
+
+export function getCurrentSessionTag(
+  _sessionId: import('crypto').UUID,
+): string | undefined {
+  return undefined
+}
+
+export async function saveAgentColor(
+  _sessionId: import('crypto').UUID,
+  _agentColor: string,
+  _fullPath?: string,
+): Promise<void> {}
+
+export async function searchSessionsByCustomTitle(
+  _query: string,
+  _options?: { limit?: number; exact?: boolean },
+): Promise<LogOption[]> {
+  return []
+}
+
+export async function loadAllProjectsMessageLogs(
+  _limit?: number,
+  _options?: { skipIndex?: boolean; initialEnrichCount?: number },
+): Promise<LogOption[]> {
+  return []
+}
+
+export async function loadSameRepoMessageLogs(
+  _worktreePaths: string[],
+  _limit?: number,
+  _initialEnrichCount?: number,
+): Promise<LogOption[]> {
+  return []
+}

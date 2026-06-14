@@ -14,7 +14,7 @@ describe('init command', () => {
 
   test('getPromptForCommand returns the CLAUDE.md setup prompt', async () => {
     if (init.type !== 'prompt') throw new Error('init must be a prompt command')
-    const blocks = await init.getPromptForCommand('', {} as never)
+    const blocks = await init.getPromptForCommand()
     const text = blocks
       .map(b => (b.type === 'text' ? b.text : ''))
       .join('\n')

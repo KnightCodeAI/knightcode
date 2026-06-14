@@ -36,7 +36,7 @@ export type GlobalConfig = {
   agentPushNotifEnabled?: boolean
   autoConnectIde?: boolean
   autoPermissionsNotificationCount?: number
-  btwUseCount?: number
+  btwUseCount: number // Number of times user has used /btw
   hasAcknowledgedCostThreshold?: boolean
   idleReturnDismissed?: boolean
   messageIdleNotifThresholdMs: number
@@ -138,6 +138,7 @@ const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   preferredNotifChannel: 'auto',
   numStartups: 0,
   messageIdleNotifThresholdMs: 60000,
+  btwUseCount: 0,
 }
 
 function globalConfigPath(): string {

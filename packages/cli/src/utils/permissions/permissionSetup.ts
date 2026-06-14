@@ -106,6 +106,16 @@ export function restoreDangerousPermissions(
   return context
 }
 
+// Records the mode to restore when leaving plan mode. The auto-mode plan
+// handling runs behind a transcript-classifier gate that is off in this build,
+// so plan entry just preserves the prior mode in prePlanMode.
+export function prepareContextForPlanMode(
+  context: ToolPermissionContext,
+): ToolPermissionContext {
+  if (context.mode === 'plan') return context
+  return { ...context, prePlanMode: context.mode }
+}
+
 // Parse a CLI --allowedTools/--disallowedTools list into tool names.
 export function parseToolListFromCLI(tools: string[]): string[] {
   return tools.flatMap(t => t.split(',')).map(t => t.trim()).filter(Boolean)

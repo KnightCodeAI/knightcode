@@ -59,6 +59,7 @@ import type {
   SystemLocalCommandMessage,
   SystemMessageLevel,
   SystemMicrocompactBoundaryMessage,
+  SystemPermissionRetryMessage,
   SystemStopHookSummaryMessage,
   StopHookInfo,
   ToolUseSummaryMessage,
@@ -1559,6 +1560,21 @@ export function createToolUseSummaryMessage(
     precedingToolUseIds,
     uuid: randomUUID(),
     timestamp: new Date().toISOString(),
+  }
+}
+
+export function createPermissionRetryMessage(
+  commands: string[],
+): SystemPermissionRetryMessage {
+  return {
+    type: 'system',
+    subtype: 'permission_retry',
+    content: `Allowed ${commands.join(', ')}`,
+    commands,
+    level: 'info',
+    isMeta: false,
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
   }
 }
 

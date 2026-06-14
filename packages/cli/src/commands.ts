@@ -10,6 +10,7 @@ import { getCommandName } from './types/command.js'
 export type { Command } from './types/command.js'
 export { getCommandName, isCommandEnabled } from './types/command.js'
 export type { CommandResultDisplay } from './types/command.js'
+export type { LocalCommandResult } from './types/command.js'
 
 export async function getSkillToolCommands(_cwd: string): Promise<Command[]> {
   return []
@@ -87,8 +88,9 @@ export function isBridgeSafeCommand(_cmd: Command): boolean {
 export const builtInCommandNames = (): Set<string> => new Set()
 export const INTERNAL_ONLY_COMMANDS: { name: string }[] = []
 
+export type { ResumeEntrypoint } from './types/command.js'
+
 // TODO: remote-safe command gating + prefix-cache invalidation land with the
 // command system; inert (no remote mode, nothing cached).
-export type ResumeEntrypoint = string
 export const REMOTE_SAFE_COMMANDS = new Set<Command>()
 export function clearCommandPrefixCaches(): void {}
