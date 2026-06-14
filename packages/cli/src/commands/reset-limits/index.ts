@@ -1,21 +1,21 @@
 import type { Command } from '../../commands.js'
 
-// TODO: Anthropic extra-usage provisioning (account/billing). Hidden, disabled
+// TODO: Anthropic rate-limit reset (account/backend feature). Hidden, disabled
 // inert stubs (interactive + non-interactive) so the registry still lists them.
-export const extraUsage = {
+export const resetLimits: Command = {
   type: 'local',
-  name: 'extra-usage',
-  description: 'extra-usage',
+  name: 'reset-limits',
+  description: 'reset-limits',
   isEnabled: () => false,
   isHidden: true,
   supportsNonInteractive: false,
   load: async () => ({ call: async () => ({ type: 'text', value: '' }) }),
-} satisfies Command
+}
 
-export const extraUsageNonInteractive: Command = {
+export const resetLimitsNonInteractive: Command = {
   type: 'local',
-  name: 'extra-usage',
-  description: 'extra-usage',
+  name: 'reset-limits',
+  description: 'reset-limits',
   isEnabled: () => false,
   isHidden: true,
   supportsNonInteractive: true,
