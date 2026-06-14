@@ -1,20 +1,21 @@
 import uniqBy from 'lodash-es/uniqBy.js'
 import type { Tool, ToolPermissionContext, Tools } from './Tool.js'
 import { AgentTool } from './tools/AgentTool/AgentTool.js'
+import { BashTool } from './tools/BashTool/BashTool.js'
 import { FileEditTool } from './tools/FileEditTool/FileEditTool.js'
 import { FileReadTool } from './tools/FileReadTool/FileReadTool.js'
 import { FileWriteTool } from './tools/FileWriteTool/FileWriteTool.js'
 import { GlobTool } from './tools/GlobTool/GlobTool.js'
 import { GrepTool } from './tools/GrepTool/GrepTool.js'
+import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { PowerShellTool } from './tools/PowerShellTool/PowerShellTool.js'
 import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
 import { getDenyRules } from './utils/permissions/permissions.js'
 import { getPlatform } from './utils/platform.js'
 
-// The in-scope tool set. The Agent tool (sub-agent spawning) is registered
-// here; Skill/Web/MCP tools and the Bash shell tool land with their owning
-// subsystems. PowerShell is the shell tool on Windows (its primary platform);
-// the POSIX shell tool is deferred.
+// The in-scope tool set. The Agent (sub-agent spawning), Bash, and NotebookEdit
+// tools are registered here; Skill/Web/MCP tools land with their owning
+// subsystems. PowerShell is also offered on Windows (its primary platform).
 
 /** Predefined tool presets selectable with --tools. */
 export const TOOL_PRESETS = ['default'] as const
@@ -35,12 +36,14 @@ export function parseToolPreset(preset: string): ToolPreset | null {
 export function getAllBaseTools(): Tools {
   return [
     AgentTool,
+    BashTool,
     ...(getPlatform() === 'windows' ? [PowerShellTool] : []),
     GlobTool,
     GrepTool,
     FileReadTool,
     FileEditTool,
     FileWriteTool,
+    NotebookEditTool,
     TodoWriteTool,
   ]
 }
