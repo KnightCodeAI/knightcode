@@ -7,6 +7,10 @@
  *  paths out of event payloads. */
 export type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS = never
 
+/** Like the above, but for fields routed to PII-tagged (privileged) columns.
+ *  Also `never` so every call site casts explicitly. */
+export type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED = never
+
 // Event payloads carry booleans/numbers freely; strings must be cast through
 // AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS so call sites
 // affirm they hold no code or file paths.

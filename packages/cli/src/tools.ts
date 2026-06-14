@@ -9,6 +9,7 @@ import { GlobTool } from './tools/GlobTool/GlobTool.js'
 import { GrepTool } from './tools/GrepTool/GrepTool.js'
 import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { PowerShellTool } from './tools/PowerShellTool/PowerShellTool.js'
+import { SkillTool } from './tools/SkillTool/SkillTool.js'
 import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
 import { getDenyRules } from './utils/permissions/permissions.js'
 import { getPlatform } from './utils/platform.js'
@@ -45,6 +46,7 @@ export function getAllBaseTools(): Tools {
     FileWriteTool,
     NotebookEditTool,
     TodoWriteTool,
+    SkillTool,
   ]
 }
 
