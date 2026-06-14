@@ -6,6 +6,8 @@ import { hasAnthropicApiKeyAuth } from './utils/auth.js'
 import { getDefaultAppState } from './state/AppStateStore.js'
 import { getEmptyToolPermissionContext } from './Tool.js'
 import { getTools } from './tools.js'
+import { getCommands } from './commands.js'
+import { initBundledSkills } from './skills/bundled/index.js'
 
 // Thin REPL launcher: the full subcommand surface (doctor/resume/headless
 // flags) lands with the command-line entrypoint later. For now this boots the
@@ -17,6 +19,10 @@ if (!hasAnthropicApiKeyAuth()) {
   const root = await createRoot()
   const initialState = getDefaultAppState()
   const initialTools = [...getTools(getEmptyToolPermissionContext())]
+  // Register bundled skills before the first getCommands() so they appear in
+  // the slash-command list and are model-invocable from the first turn.
+  initBundledSkills()
+  const commands = await getCommands(process.cwd())
   await launchRepl(
     root,
     {
@@ -24,7 +30,7 @@ if (!hasAnthropicApiKeyAuth()) {
       initialState,
     },
     {
-      commands: [],
+      commands,
       debug: false,
       initialTools,
       thinkingConfig: { type: 'disabled' },
