@@ -31,6 +31,16 @@ export async function getSystemPrompt(
 
 export const DEFAULT_AGENT_PROMPT = `You are an agent for Claude Code, Anthropic's official CLI for Claude. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
 
+// Render a list of items as bullet lines (nested arrays become indented
+// sub-bullets). Used to assemble tool-prompt sections.
+export function prependBullets(items: Array<string | string[]>): string[] {
+  return items.flatMap(item =>
+    Array.isArray(item)
+      ? item.map(subitem => `  - ${subitem}`)
+      : [` - ${item}`],
+  )
+}
+
 function getKnowledgeCutoff(modelId: string): string | null {
   const canonical = getCanonicalName(modelId)
   if (canonical.includes('claude-sonnet-4-6')) {

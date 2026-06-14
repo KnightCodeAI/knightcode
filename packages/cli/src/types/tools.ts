@@ -15,8 +15,13 @@ import type { AssistantMessage, NormalizedUserMessage } from './message.js'
 export type ToolProgressData =
   | {
       type: 'bash_progress'
+      output: string
+      fullOutput: string
       elapsedTimeSeconds: number
       totalLines: number
+      totalBytes?: number
+      timeoutMs?: number
+      taskId?: string
       [key: string]: unknown
     }
   | {

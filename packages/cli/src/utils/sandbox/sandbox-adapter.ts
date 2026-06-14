@@ -8,12 +8,29 @@ export type FsWriteRestrictionConfig = {
   denyWithinAllow: string[]
 }
 
+export type FsReadRestrictionConfig = {
+  denyOnly: string[]
+  allowWithinDeny: string[]
+}
+
+export type NetworkRestrictionConfig = {
+  allowedHosts: string[]
+  deniedHosts: string[]
+}
+
+export type IgnoreViolationsConfig = { [key: string]: unknown }
+
 export type ISandboxManager = {
   isSandboxingEnabled(): boolean
   isSandboxEnabledInSettings(): boolean
   areUnsandboxedCommandsAllowed(): boolean
   isAutoAllowBashIfSandboxedEnabled(): boolean
   getFsWriteConfig(): FsWriteRestrictionConfig
+  getFsReadConfig(): FsReadRestrictionConfig
+  getNetworkRestrictionConfig(): NetworkRestrictionConfig
+  getAllowUnixSockets(): string[] | undefined
+  getIgnoreViolations(): IgnoreViolationsConfig | undefined
+  annotateStderrWithSandboxFailures(command: string, stderr: string): string
   wrapWithSandbox(
     command: string,
     binShell?: string,
@@ -42,6 +59,22 @@ export const SandboxManager: ISandboxManager = {
   },
   getFsWriteConfig() {
     return { allowOnly: [], denyWithinAllow: [] }
+  },
+  getFsReadConfig() {
+    return { denyOnly: [], allowWithinDeny: [] }
+  },
+  getNetworkRestrictionConfig() {
+    return { allowedHosts: [], deniedHosts: [] }
+  },
+  getAllowUnixSockets() {
+    return undefined
+  },
+  getIgnoreViolations() {
+    return undefined
+  },
+  // Inert: no sandbox, so stderr is returned unchanged.
+  annotateStderrWithSandboxFailures(_command: string, stderr: string) {
+    return stderr
   },
   // Inert: returns the command unchanged. Real sandbox wrapping lands with the
   // OS-level sandbox layer; until then commands run unsandboxed.

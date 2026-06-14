@@ -4,9 +4,35 @@
 // surface the permission dispatch uses, returning the context unchanged and
 // persisting nothing for now.
 
+import { posix } from 'path'
 import type { ToolPermissionContext } from '../../Tool.js'
 import type { PermissionRuleValue } from './PermissionRule.js'
-import type { PermissionUpdate } from './PermissionUpdateSchema.js'
+import type {
+  PermissionUpdate,
+  PermissionUpdateDestination,
+} from './PermissionUpdateSchema.js'
+import { toPosixPath } from './filesystem.js'
+
+// Build an "always allow reads under this directory" rule suggestion. Used by
+// the Bash tool's path validator to offer a Read allowlist entry for a dir.
+export function createReadRuleSuggestion(
+  dirPath: string,
+  destination: PermissionUpdateDestination = 'session',
+): PermissionUpdate | undefined {
+  const pathForPattern = toPosixPath(dirPath)
+  if (pathForPattern === '/') {
+    return undefined
+  }
+  const ruleContent = posix.isAbsolute(pathForPattern)
+    ? `/${pathForPattern}/**`
+    : `${pathForPattern}/**`
+  return {
+    type: 'addRules',
+    rules: [{ toolName: 'Read', ruleContent }],
+    behavior: 'allow',
+    destination,
+  }
+}
 
 export function applyPermissionUpdate(
   context: ToolPermissionContext,

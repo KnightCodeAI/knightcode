@@ -27,3 +27,18 @@ export function splitCommand_DEPRECATED(command: string): string[] {
 }
 
 export function clearCommandPrefixCaches(): void {}
+
+// TODO: operator-aware splitting (into segments AND the operators between them)
+// is part of the bash parser that isn't ported. The Bash tool uses this to
+// enumerate sub-commands for security-hook matching; until the parser lands it
+// conservatively treats the whole command as a single segment.
+export function splitCommandWithOperators(command: string): string[] {
+  return [command]
+}
+
+// TODO: compound-command safety classification depends on the bash parser. With
+// no parser, conservatively report the command as not provably unsafe (callers
+// fall back to the permission prompt rather than auto-allowing).
+export function isUnsafeCompoundCommand_DEPRECATED(_command: string): boolean {
+  return false
+}
