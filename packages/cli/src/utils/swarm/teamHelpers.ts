@@ -8,3 +8,11 @@ export function removeTeammateFromTeamFile(
 ): boolean {
   return false
 }
+
+// TODO: teammate-mode sync (propagating the leader's permission mode to all
+// teammates in the swarm) lands with the swarm subsystem. No teammates exist in
+// a solo session, so there is nothing to sync.
+export function syncTeammateMode(
+  _mode: import('../../types/permissions.js').PermissionMode,
+  _teamNameOverride?: string,
+): void {}

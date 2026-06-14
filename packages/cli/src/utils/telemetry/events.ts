@@ -5,3 +5,9 @@ export async function logOTelEvent(
   _eventName: string,
   _metadata: { [key: string]: string | undefined } = {},
 ): Promise<void> {}
+
+// TODO: prompt-text logging toggles live with telemetry (out of scope). Redact
+// by default so no prompt text is emitted anywhere it might be logged.
+export function redactIfDisabled(_content: string): string {
+  return '<REDACTED>'
+}

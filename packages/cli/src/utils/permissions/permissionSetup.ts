@@ -46,3 +46,27 @@ export function transitionPlanAutoMode(
 ): ToolPermissionContext {
   return context
 }
+
+export type AutoModeUnavailableReason = 'settings' | 'circuit-breaker' | 'model'
+
+// TODO: auto mode is an account-backed permission tier; a BYOK build has no
+// auto-mode gate, so it is permanently unavailable and the gate is off.
+export function isAutoModeGateEnabled(): boolean {
+  return false
+}
+
+export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null {
+  return 'settings'
+}
+
+// Apply a permission-mode change. Auto/plan-mode side effects (classifier
+// activation, beta headers, dangerous-rule stripping) belong to the hosted
+// permission system and are inert here; the mode change itself is reflected by
+// the caller, so the context passes through unchanged.
+export function transitionPermissionMode(
+  _fromMode: string,
+  _toMode: string,
+  context: ToolPermissionContext,
+): ToolPermissionContext {
+  return context
+}

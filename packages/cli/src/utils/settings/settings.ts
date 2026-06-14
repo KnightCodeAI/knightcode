@@ -65,3 +65,9 @@ export function getInitialSettings(): Settings {
 
 // Alias kept for callers that read the merged settings snapshot directly.
 export const getSettings_DEPRECATED = getInitialSettings
+
+// TODO: auto-mode opt-in is part of the account-backed permission system; a BYOK
+// build has no auto-mode, so the opt-in is permanently off.
+export function hasAutoModeOptIn(): boolean {
+  return false
+}

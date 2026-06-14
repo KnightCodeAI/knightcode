@@ -12,3 +12,14 @@ export async function executePromptSuggestion(
 export function shouldEnablePromptSuggestion(): boolean {
   return false
 }
+
+// Prompt suggestion is inert (see above); aborting an in-flight suggestion and
+// logging a suppression are no-ops until the subsystem lands.
+export function abortPromptSuggestion(): void {}
+
+export function logSuggestionSuppressed(
+  _reason: string,
+  _suggestion?: string,
+  _promptId?: string,
+  _source?: 'cli' | 'sdk',
+): void {}

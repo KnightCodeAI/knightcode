@@ -131,3 +131,33 @@ export function getRuntimeMainLoopModel(params: {
 export function renderModelName(model: ModelName): string {
   return model
 }
+
+// Human-readable model label for the footer/status. null means "use the
+// default"; otherwise show the input and, if it resolves to a different id,
+// the resolved id in parentheses.
+export function modelDisplayString(model: ModelSetting): string {
+  if (model === null) {
+    return `Default (${getDefaultMainLoopModel()})`
+  }
+  const resolvedModel = parseUserSpecifiedModel(model)
+  return model === resolvedModel ? resolvedModel : `${model} (${resolvedModel})`
+}
+
+function getDefaultMainLoopModel(): ModelName {
+  return getDefaultMainLoopModelSetting()
+}
+
+// TODO: the Opus 1M-context merge is a hosted serving concept; a BYOK build has
+// no such gating, so the merged 1M variant is never offered.
+export function isOpus1mMergeEnabled(): boolean {
+  return false
+}
+
+// TODO: per-skill model overrides honor a 1M-context guard in the hosted build.
+// With 1M gating off, a skill's requested model is used as-is.
+export function resolveSkillModelOverride(
+  skillModel: string,
+  _currentModel: string,
+): string {
+  return skillModel
+}

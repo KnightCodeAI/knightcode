@@ -52,7 +52,27 @@ export type GlobalConfig = {
   appleTerminalBackupPath?: string
   /** Whether the per-turn duration is shown in the transcript. */
   showTurnDuration?: boolean
+  /** Text-editing keymap for the prompt input. */
+  editorMode?: EditorMode
+  /** Whether the user has seen the tasks hint. */
+  hasSeenTasksHint?: boolean
+  /** Whether the user has used the stash feature (Ctrl+S). */
+  hasUsedStash?: boolean
+  /** How many times the queued-command up-arrow hint has been shown. */
+  queuedCommandUpHintCount?: number
+  /** How many sessions the "hold to speak" footer hint has been shown. */
+  voiceFooterHintSeenCount?: number
+  /** Auto-copy to clipboard on mouse-up (undefined → true). */
+  copyOnSelect?: boolean
+  /** Show PR review status in the footer (default: true). */
+  prStatusFooterEnabled?: boolean
+  /** Per-skill usage stats used to rank command suggestions. */
+  skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
+  /** ISO timestamp of the user's first token (onboarding bookkeeping). */
+  claudeCodeFirstTokenDate?: string
 }
+
+export type EditorMode = 'emacs' | 'normal' | 'vim'
 
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   theme: 'dark',
@@ -136,6 +156,10 @@ export function getOrCreateUserID(): string {
 export type ProjectConfig = {
   hasCompletedProjectOnboarding?: boolean
   projectOnboardingSeenCount: number
+  /** Cached frequently-modified files used to seed example prompts. */
+  exampleFiles?: string[]
+  /** Epoch ms when exampleFiles was last refreshed. */
+  exampleFilesGeneratedAt?: number
   [key: string]: unknown
 }
 

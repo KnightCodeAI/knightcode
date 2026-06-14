@@ -242,3 +242,22 @@ export function getTaskCompletedHookMessage(
 ): string {
   return `TaskCompleted hook feedback:\n${blockingError.blockingError}`
 }
+
+// UserPromptSubmit hooks run before a typed prompt is sent. Inert until hooks
+// dispatch lands: the generator yields nothing, so no prompt is ever blocked or
+// rewritten and the submit pipeline proceeds with the original input.
+export async function* executeUserPromptSubmitHooks(
+  _prompt: string,
+  _permissionMode: string,
+  _toolUseContext: ToolUseContext,
+  _requestPrompt?: (
+    sourceName: string,
+    toolInputSummary?: string | null,
+  ) => (request: PromptRequest) => Promise<PromptResponse>,
+): AsyncGenerator<AggregatedHookResult> {}
+
+export function getUserPromptSubmitHookBlockingMessage(
+  blockingError: HookBlockingError,
+): string {
+  return `UserPromptSubmit hook feedback:\n${blockingError.blockingError}`
+}

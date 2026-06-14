@@ -70,3 +70,13 @@ export async function fileHistoryTrackEdit(
   _filePath: string,
   _messageId: UUID,
 ): Promise<void> {}
+
+// TODO: snapshotting the working tree at a turn boundary (so edits can be rolled
+// back to that point) is part of the file-change tracking layer. Until it lands
+// there is nothing to snapshot, so this is inert.
+export async function fileHistoryMakeSnapshot(
+  _updateFileHistoryState: (
+    updater: (prev: FileHistoryState) => FileHistoryState,
+  ) => void,
+  _messageId: UUID,
+): Promise<void> {}

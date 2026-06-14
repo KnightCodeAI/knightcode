@@ -51,3 +51,9 @@ export function startLLMRequestSpan(
 ): Span {
   return null
 }
+
+// TODO: per-interaction tracing spans belong to telemetry (out of scope). Return
+// the inert Span sentinel so callers can hold a span handle that does nothing.
+export function startInteractionSpan(_userPrompt: string): Span {
+  return undefined
+}

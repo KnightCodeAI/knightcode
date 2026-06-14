@@ -192,3 +192,19 @@ export async function refreshAndGetAwsCredentials(): Promise<null> {
 }
 
 export async function refreshGcpCredentialsIfNeeded(): Promise<void> {}
+
+// TODO: external apiKeyHelper support (a user-configured command that supplies
+// the API key, with in-flight timing for the footer notice) and rate-limit-tier
+// reporting are account/serving concerns not wired in a BYOK build. No helper is
+// ever configured and there is no tier to report.
+export function getConfiguredApiKeyHelper(): string | undefined {
+  return undefined
+}
+
+export function getApiKeyHelperElapsedMs(): number {
+  return 0
+}
+
+export function getRateLimitTier(): string | null {
+  return null
+}

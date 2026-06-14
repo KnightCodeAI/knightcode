@@ -285,3 +285,15 @@ export const env = {
   isConductor,
   detectDeploymentEnvironment,
 }
+
+// TODO: analytics is out of scope; the host-platform label it would tag events
+// with is reported here for any non-analytics caller that wants the raw value.
+// Honors the CLAUDE_CODE_HOST_PLATFORM override (used when the platform must be
+// reported as something other than the live process platform).
+export function getHostPlatformForAnalytics(): Platform {
+  const override = process.env.CLAUDE_CODE_HOST_PLATFORM
+  if (override === 'win32' || override === 'darwin' || override === 'linux') {
+    return override
+  }
+  return env.platform
+}

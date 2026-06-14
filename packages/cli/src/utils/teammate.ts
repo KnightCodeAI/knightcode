@@ -30,3 +30,7 @@ export function isTeamLead(
 ): boolean {
   return false
 }
+
+export function getTeammateColor(): string | undefined {
+  return undefined
+}

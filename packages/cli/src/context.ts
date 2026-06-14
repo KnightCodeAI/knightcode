@@ -8,3 +8,9 @@ import memoize from 'lodash-es/memoize.js'
 export const getUserContext = memoize(
   async (): Promise<{ [k: string]: string }> => ({}),
 )
+
+// TODO: system-context assembly (git status, system-prompt injection) lands with
+// the context loader; resolves to an empty context until then.
+export const getSystemContext = memoize(
+  async (): Promise<{ [k: string]: string }> => ({}),
+)

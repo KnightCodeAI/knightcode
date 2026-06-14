@@ -144,6 +144,29 @@ async function createInstance(
       // for now. Overlays still render correctly; only the one-shot full-repaint
       // optimization on tall-overlay teardown is deferred.
     },
+    enterAlternateScreen() {
+      // Terminal editor takes over: suspend the renderer (releases the screen
+      // and stdin) so the editor owns the terminal until exitAlternateScreen().
+      renderer.suspend()
+    },
+    exitAlternateScreen() {
+      // Reclaim the terminal and force a full repaint from scratch.
+      renderer.resume()
+    },
+    pause() {
+      renderer.pause()
+    },
+    resume() {
+      renderer.resume()
+    },
+    suspendStdin() {
+      // TODO: OpenTUI has no public granular stdin-only release; suspend() (used
+      // by the alt-screen path) covers full handoff, and pause() already halts
+      // rendering for the GUI-editor path, so this is a no-op for now.
+    },
+    resumeStdin() {
+      // TODO: paired no-op with suspendStdin() — see above.
+    },
   }
 
   return instance

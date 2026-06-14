@@ -83,3 +83,9 @@ export function isPlanApprovalResponse(
 ): PlanApprovalResponseMessage | null {
   return null
 }
+
+export async function writeToMailbox(
+  _recipientName: string,
+  _message: Omit<TeammateMessage, 'read'>,
+  _teamName?: string,
+): Promise<void> {}

@@ -8,3 +8,16 @@
  */
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY =
   '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
+
+// TODO: the system-prompt assembly (persona, tool guidance, environment) lands
+// with the harness phase. The /context analyzer asks for the effective prompt to
+// size it; until assembly lands it contributes nothing.
+import type { Tools } from '../Tool.js'
+
+export async function getSystemPrompt(
+  _tools: Tools,
+  _model: string,
+  _additionalWorkingDirectories?: string[],
+): Promise<string[]> {
+  return []
+}

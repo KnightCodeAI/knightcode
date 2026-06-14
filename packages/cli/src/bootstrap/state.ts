@@ -468,3 +468,7 @@ export function getInvokedSkillsForAgent(
   }
   return filtered
 }
+
+// TODO: the per-prompt id is a tracing correlation handle; tracing is out of
+// scope, so recording it is a no-op until (if ever) a consumer needs it.
+export function setPromptId(_id: string | null): void {}

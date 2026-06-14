@@ -17,3 +17,15 @@ export function activateConditionalSkillsForPaths(
 ): string[] {
   return []
 }
+
+// Rough token estimate of a skill's frontmatter (name/description/whenToUse),
+// used by the /context analyzer to size loaded skills.
+import type { Command } from '../commands.js'
+import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
+
+export function estimateSkillFrontmatterTokens(skill: Command): number {
+  const frontmatterText = [skill.name, skill.description, skill.whenToUse]
+    .filter(Boolean)
+    .join(' ')
+  return roughTokenCountEstimation(frontmatterText)
+}

@@ -3362,3 +3362,24 @@ export function shouldShowUserMessage(
   if (message.isVisibleInTranscriptOnly && !isTranscriptMode) return false
   return true
 }
+
+// Shared empty lookups singleton for render paths that have no message context
+// (e.g. previewing a queued command). Same shape buildMessageLookups produces
+// for an empty conversation.
+export const EMPTY_LOOKUPS: MessageLookups = buildMessageLookups([], [])
+
+// A system message echoing a slash command the user invoked, shown in the
+// transcript as the command's own input line.
+export function createCommandInputMessage(
+  content: string,
+): SystemLocalCommandMessage {
+  return {
+    type: 'system',
+    subtype: 'local_command',
+    content,
+    level: 'info',
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+    isMeta: false,
+  }
+}

@@ -58,8 +58,10 @@
   },
   "dependencies": {
     "@vscode/ripgrep": "^1.18.0",
+    "chokidar": "^4.0.0",
     "diff": "^9.0.0",
     "execa": "^9.6.1",
+    "fuse.js": "^7.3.0",
     "highlight.js": "^11.11.1",
     "ignore": "^7.0.5",
     "marked": "^15.0.0",

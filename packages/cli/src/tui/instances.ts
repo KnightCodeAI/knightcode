@@ -15,6 +15,16 @@ export type TuiInstance = {
   // Marks the previous frame contaminated so the next render is a full repaint.
   // Used on overlay unmount to avoid ghost cells from a shrunken layout.
   invalidatePrevFrame: () => void
+  // External-editor handoff: release/reclaim the terminal while a subprocess
+  // (vim/nano/code/…) runs. enterAlternateScreen/exitAlternateScreen are the
+  // terminal-editor path (full takeover); pause/resume + suspendStdin/resumeStdin
+  // are the GUI-editor path (stop rendering, leave the terminal alone).
+  enterAlternateScreen: () => void
+  exitAlternateScreen: () => void
+  pause: () => void
+  resume: () => void
+  suspendStdin: () => void
+  resumeStdin: () => void
 }
 
 const instances = new Map<NodeJS.WriteStream, TuiInstance>()

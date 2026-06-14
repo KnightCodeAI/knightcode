@@ -168,3 +168,21 @@ function roughTokenCountEstimationForBlock(
   // the serialized form the API sees.
   return roughTokenCountEstimation(jsonStringify(block))
 }
+
+// TODO: server-side token counting (the /count_tokens API and a Haiku-model
+// fallback) lands with the model phase. The /context analyzer uses these to size
+// the conversation precisely; until then it falls back to the rough estimator,
+// so these report "no API count available".
+export async function countMessagesTokensWithAPI(
+  _messages: Anthropic.Beta.Messages.BetaMessageParam[],
+  _tools: Anthropic.Beta.Messages.BetaToolUnion[],
+): Promise<number | null> {
+  return null
+}
+
+export async function countTokensViaHaikuFallback(
+  _messages: Anthropic.Beta.Messages.BetaMessageParam[],
+  _tools: Anthropic.Beta.Messages.BetaToolUnion[],
+): Promise<number | null> {
+  return null
+}

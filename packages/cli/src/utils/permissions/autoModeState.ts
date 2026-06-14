@@ -3,3 +3,5 @@
 export function isAutoModeActive(): boolean {
   return false
 }
+
+export function setAutoModeActive(_active: boolean): void {}

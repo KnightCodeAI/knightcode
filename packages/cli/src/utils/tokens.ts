@@ -129,3 +129,14 @@ export function doesMostRecentAssistantMessageExceed200k(
   const usage = getTokenUsage(lastAsst)
   return usage ? getTokenCountFromUsage(usage) > THRESHOLD : false
 }
+
+// Actual token usage from the last API response, if one carried usage data.
+// Returns null until the message stream records usage.
+export function getCurrentUsage(_messages: Message[]): {
+  input_tokens: number
+  output_tokens: number
+  cache_creation_input_tokens: number
+  cache_read_input_tokens: number
+} | null {
+  return null
+}

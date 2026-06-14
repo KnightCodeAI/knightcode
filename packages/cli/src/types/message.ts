@@ -125,9 +125,9 @@ export type ProgressMessage<P = ToolProgressData> = {
   timestamp: string
 }
 
-export type AttachmentMessage = {
+export type AttachmentMessage<A extends Attachment = Attachment> = {
   type: 'attachment'
-  attachment: Attachment
+  attachment: A
   uuid: UUID
   timestamp: string
 }

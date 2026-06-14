@@ -31,3 +31,9 @@ export function drainPendingMessages(
 ): string[] {
   return []
 }
+
+// TODO: panel-agent classification lands with the local-agent task runner. No
+// background agent tasks exist in solo mode, so nothing is a panel agent.
+export function isPanelAgentTask(_task: unknown): _task is LocalAgentTaskState {
+  return false
+}

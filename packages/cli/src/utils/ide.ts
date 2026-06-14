@@ -36,3 +36,14 @@ export function getConnectedIdeName(
 ): string | null {
   return null
 }
+
+const ideDisplayNames: Partial<Record<IdeType, string>> = {
+  vscode: 'VS Code',
+  cursor: 'Cursor',
+  windsurf: 'Windsurf',
+}
+
+export function toIDEDisplayName(terminal: string | null): string {
+  if (!terminal) return 'IDE'
+  return ideDisplayNames[terminal as IdeType] ?? terminal
+}

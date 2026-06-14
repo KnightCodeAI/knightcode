@@ -6,3 +6,10 @@ export async function onCwdChangedForHooks(
   _oldCwd: string,
   _newCwd: string,
 ): Promise<void> {}
+
+// TODO: the env-change footer notifier (a callback the watcher invokes to flash
+// a footer notice when a hook reports an environment change) lands with hooks
+// dispatch. No watcher fires today, so registering a notifier is inert.
+export function setEnvHookNotifier(
+  _cb: ((text: string, isError: boolean) => void) | null,
+): void {}
