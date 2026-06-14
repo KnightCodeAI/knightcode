@@ -1,5 +1,5 @@
 import type { SettingSource } from '../../../utils/settings/constants.js';
-import type { AgentDefinition } from '../../../tools/AgentTool/loadAgentsDir.js';
+import type { CustomAgentDefinition } from '../../../tools/AgentTool/loadAgentsDir.js';
 
 // Reconstructed from the wizard steps' field usage — the upstream definition was
 // not present in the vendored source. Fields are filled in step-by-step, so all
@@ -12,7 +12,7 @@ export interface AgentWizardData {
   selectedModel?: string | null;
   selectedTools?: string[];
   location?: SettingSource;
-  finalAgent?: AgentDefinition;
+  finalAgent?: CustomAgentDefinition;
   wasGenerated?: boolean;
   generationPrompt?: string;
   [key: string]: unknown;

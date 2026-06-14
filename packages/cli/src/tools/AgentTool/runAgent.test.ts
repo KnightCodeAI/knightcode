@@ -67,6 +67,7 @@ const agentDefinition: AgentDefinition = {
   agentType: 'test-agent',
   whenToUse: 'a trivial agent used to exercise the runAgent loop',
   source: 'built-in',
+  baseDir: 'built-in',
   getSystemPrompt: () => 'You are a test agent.',
 }
 
