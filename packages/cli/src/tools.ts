@@ -1,3 +1,4 @@
+import uniqBy from 'lodash-es/uniqBy.js'
 import type { Tool, ToolPermissionContext, Tools } from './Tool.js'
 import { FileEditTool } from './tools/FileEditTool/FileEditTool.js'
 import { FileReadTool } from './tools/FileReadTool/FileReadTool.js'
@@ -68,6 +69,30 @@ export function getTools(permissionContext: ToolPermissionContext): Tools {
   const allowed = filterToolsByDenyRules(getAllBaseTools(), permissionContext)
   const isEnabled = allowed.map(tool => tool.isEnabled())
   return allowed.filter((_, i) => isEnabled[i])
+}
+
+// The shared pure function REPL and runAgent both use to build the final tool
+// pool: the enabled built-ins plus the deny-filtered MCP tools.
+export function assembleToolPool(
+  permissionContext: ToolPermissionContext,
+  mcpTools: Tools,
+): Tools {
+  const builtInTools = getTools(permissionContext)
+
+  // Filter out MCP tools that are in the deny list
+  const allowedMcpTools = filterToolsByDenyRules(mcpTools, permissionContext)
+
+  // Sort each partition for prompt-cache stability, keeping built-ins as a
+  // contiguous prefix. The server's cache policy places a global cache
+  // breakpoint after the last prefix-matched built-in tool; a flat sort would
+  // interleave MCP tools into built-ins and invalidate all downstream cache
+  // keys whenever an MCP tool sorts between existing built-ins. uniqBy
+  // preserves insertion order, so built-ins win on name conflict.
+  const byName = (a: Tool, b: Tool) => a.name.localeCompare(b.name)
+  return uniqBy(
+    [...builtInTools].sort(byName).concat(allowedMcpTools.sort(byName)),
+    'name',
+  )
 }
 
 /** Names of the enabled tools in the default preset. */

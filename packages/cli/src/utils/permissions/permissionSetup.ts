@@ -59,6 +59,26 @@ export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null
   return 'settings'
 }
 
+export function getAutoModeUnavailableNotification(
+  reason: AutoModeUnavailableReason,
+): string {
+  let base: string
+  switch (reason) {
+    case 'settings':
+      base = 'auto mode disabled by settings'
+      break
+    case 'circuit-breaker':
+      base = 'auto mode is unavailable for your plan'
+      break
+    case 'model':
+      base = 'auto mode unavailable for this model'
+      break
+  }
+  return process.env.USER_TYPE === 'ant'
+    ? `${base} · #claude-code-feedback`
+    : base
+}
+
 // Apply a permission-mode change. Auto/plan-mode side effects (classifier
 // activation, beta headers, dangerous-rule stripping) belong to the hosted
 // permission system and are inert here; the mode change itself is reflected by

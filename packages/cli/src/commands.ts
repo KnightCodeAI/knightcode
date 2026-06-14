@@ -25,6 +25,17 @@ export async function getSlashCommandToolSkills(_cwd: string): Promise<Command[]
   return []
 }
 
+// Discovery + cache invalidation. The registry that populates commands lands
+// later, so discovery reports nothing and there are no memoization caches to
+// clear; the signatures are preserved so the skills-change hook compiles.
+export async function getCommands(_cwd: string): Promise<Command[]> {
+  return []
+}
+
+export function clearCommandMemoizationCaches(): void {}
+
+export function clearCommandsCache(): void {}
+
 export type { LocalJSXCommandContext } from './types/command.js'
 
 // Pure lookup/format helpers over a passed command list — self-contained, no

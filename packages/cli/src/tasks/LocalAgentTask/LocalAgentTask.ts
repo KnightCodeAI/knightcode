@@ -21,6 +21,9 @@ export type LocalAgentTaskState = {
   // them, so they are typed (optional) ahead of the task runner landing.
   id: string
   notified?: boolean
+  toolUseId?: string
+  // Per-task abort handle; the foreground/cancel paths read it to stop a task.
+  abortController?: AbortController
   prompt: string
   result?: { totalTokens?: number; totalToolUseCount?: number; [key: string]: unknown }
   selectedAgent?: { agentType?: string; [key: string]: unknown }
@@ -38,6 +41,7 @@ export type LocalAgentTaskState = {
 }
 
 import type { AppState } from '../../state/AppState.js'
+import type { SetAppState } from '../../Task.js'
 
 // TODO: pending-message draining lands with the local-agent task runner. With
 // no background tasks producing messages, there is nothing queued to drain.
@@ -79,3 +83,36 @@ export function completeAgentTask(..._args: any[]): void {}
 export function failAgentTask(..._args: any[]): void {}
 export function killAsyncAgent(..._args: any[]): Promise<void> { return Promise.resolve() }
 export function enqueueAgentNotification(..._args: any[]): void {}
+
+// Kill every running local-agent task. The kill itself is inert until the task
+// runner lands, but the iteration/selection is real so the cancel hook routes
+// through one code path.
+export function killAllRunningAgentTasks(
+  tasks: Record<string, import('../types.js').TaskState>,
+  setAppState: SetAppState,
+): void {
+  for (const [taskId, task] of Object.entries(tasks)) {
+    if (task.type === 'local_agent' && task.status === 'running') {
+      void killAsyncAgent(taskId, setAppState)
+    }
+  }
+}
+
+// Flag a local-agent task as having had its termination surfaced to the model,
+// so the aggregate cancel notification is only emitted once per task.
+export function markAgentsNotified(taskId: string, setAppState: SetAppState): void {
+  setAppState(prev => {
+    const task = prev.tasks[taskId]
+    if (
+      !task ||
+      task.type !== 'local_agent' ||
+      (task as LocalAgentTaskState).notified
+    ) {
+      return prev
+    }
+    return {
+      ...prev,
+      tasks: { ...prev.tasks, [taskId]: { ...task, notified: true } },
+    }
+  })
+}

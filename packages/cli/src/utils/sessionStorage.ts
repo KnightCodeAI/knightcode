@@ -101,3 +101,36 @@ export function isTranscriptMessage(
     (entry as { type?: string }).type === 'assistant'
   )
 }
+
+export type TeamInfo = {
+  teamName?: string
+  agentName?: string
+}
+
+// A message participates in the persisted parent-uuid chain unless it is a
+// transient progress entry.
+export function isChainParticipant(
+  m: Pick<import('../types/message.js').Message, 'type'>,
+): boolean {
+  return m.type !== 'progress'
+}
+
+// Transcript persistence is not implemented yet; these preserve the call
+// signatures the logging hook depends on. cleanMessagesForLogging passes the
+// messages through untouched, and recordTranscript records nothing (so it
+// reports no recorded uuid).
+export function cleanMessagesForLogging(
+  messages: import('../types/message.js').Message[],
+  _allMessages: readonly import('../types/message.js').Message[] = messages,
+): import('../types/message.js').Message[] {
+  return messages
+}
+
+export async function recordTranscript(
+  _messages: import('../types/message.js').Message[],
+  _teamInfo?: TeamInfo,
+  _startingParentUuidHint?: import('crypto').UUID,
+  _allMessages?: readonly import('../types/message.js').Message[],
+): Promise<import('crypto').UUID | null> {
+  return null
+}

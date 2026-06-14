@@ -20,6 +20,20 @@ export type SDKStatus = 'compacting' | null
 
 export type { HookEvent } from '../types/hooks.js'
 export type { PermissionResult } from '../utils/permissions/PermissionResult.js'
+export type { PermissionMode } from '../types/permissions.js'
+export type { ApiKeySource } from '../utils/auth.js'
+
+// The wire-format messages on the SDK/remote-control stream. Upstream generates
+// the exhaustive discriminated union from Zod schemas that are not part of the
+// source tree; modeled here structurally (discriminant `type` plus an open
+// field set) since the only builder is buildSystemInitMessage and every other
+// consumer treats it opaquely.
+export type SDKMessage = {
+  type: string
+  uuid?: string
+  message?: { content?: unknown }
+  [key: string]: unknown
+}
 
 /**
  * JSON a synchronous hook may emit to influence the turn. The full SDK schema

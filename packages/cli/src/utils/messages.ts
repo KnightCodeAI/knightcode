@@ -53,6 +53,7 @@ import type {
   PartialCompactDirection,
   SystemAPIErrorMessage,
   SystemMessage,
+  SystemBridgeStatusMessage,
   SystemCompactBoundaryMessage,
   SystemInformationalMessage,
   SystemLocalCommandMessage,
@@ -503,6 +504,22 @@ export function createProgressMessage<P extends Progress>({
     parentToolUseID,
     uuid: randomUUID(),
     timestamp: new Date().toISOString(),
+  }
+}
+
+export function createBridgeStatusMessage(
+  url: string,
+  upgradeNudge?: string,
+): SystemBridgeStatusMessage {
+  return {
+    type: 'system',
+    subtype: 'bridge_status',
+    content: `/remote-control is active. Code in CLI or at ${url}`,
+    url,
+    upgradeNudge,
+    isMeta: false,
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
   }
 }
 

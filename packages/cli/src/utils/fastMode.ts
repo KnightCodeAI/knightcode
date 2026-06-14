@@ -38,3 +38,23 @@ export function getFastModeUnavailableReason(): string | null {
 export const FAST_MODE_MODEL_DISPLAY = 'Opus 4.6'
 export function getFastModeModel(): string { return FAST_MODE_MODEL_DISPLAY }
 export function clearFastModeCooldown(): void {}
+
+// Tri-state fast-mode status surfaced in the init message. Always 'off' in a
+// BYOK build since the underlying tier is never enabled.
+export function getFastModeState(
+  model: ModelSetting,
+  fastModeUserEnabled: boolean | undefined,
+): 'off' | 'cooldown' | 'on' {
+  const enabled =
+    isFastModeEnabled() &&
+    isFastModeAvailable() &&
+    !!fastModeUserEnabled &&
+    isFastModeSupportedByModel(model)
+  if (enabled && isFastModeCooldown()) {
+    return 'cooldown'
+  }
+  if (enabled) {
+    return 'on'
+  }
+  return 'off'
+}

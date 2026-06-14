@@ -15,6 +15,9 @@ export type TuiInstance = {
   // Marks the previous frame contaminated so the next render is a full repaint.
   // Used on overlay unmount to avoid ghost cells from a shrunken layout.
   invalidatePrevFrame: () => void
+  // Clear the terminal and force a full repaint (ctrl+l). Recovery path when the
+  // screen was cleared out from under the renderer (e.g. macOS Cmd+K).
+  forceRedraw: () => void
   // External-editor handoff: release/reclaim the terminal while a subprocess
   // (vim/nano/code/…) runs. enterAlternateScreen/exitAlternateScreen are the
   // terminal-editor path (full takeover); pause/resume + suspendStdin/resumeStdin

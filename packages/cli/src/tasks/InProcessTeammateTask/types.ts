@@ -14,6 +14,17 @@ export type InProcessTeammateTaskState = TaskStateBase & {
   awaitingPlanApproval?: boolean
   shutdownRequested?: boolean
   startTime?: number
+  // Aborts only the teammate's current turn (distinct from abortController,
+  // which tears the teammate down). Read by the transcript-view escape handler.
+  currentWorkAbortController?: AbortController
   // The teammate's own permission mode, shown in the footer when viewing it.
   permissionMode: PermissionMode
+}
+
+// Type guard narrowing a task-state union member to an in-process teammate.
+// Solo mode never creates these, so it is always false.
+export function isInProcessTeammateTask(
+  task: unknown,
+): task is InProcessTeammateTaskState {
+  return !!task && (task as { type?: string }).type === 'in_process_teammate'
 }

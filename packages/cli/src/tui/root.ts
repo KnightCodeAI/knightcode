@@ -144,6 +144,11 @@ async function createInstance(
       // for now. Overlays still render correctly; only the one-shot full-repaint
       // optimization on tall-overlay teardown is deferred.
     },
+    forceRedraw() {
+      // Clear the terminal and ask the renderer to repaint from scratch.
+      renderer.console.clear()
+      renderer.requestRender()
+    },
     enterAlternateScreen() {
       // Terminal editor takes over: suspend the renderer (releases the screen
       // and stdin) so the editor owns the terminal until exitAlternateScreen().

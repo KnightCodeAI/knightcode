@@ -100,6 +100,16 @@ export function hasAnthropicApiKeyAuth(): boolean {
 }
 
 /**
+ * Whether the session uses first-party OAuth auth. A BYOK build always talks to
+ * OpenRouter with an API key and never holds an OAuth session, so this is
+ * always false — callers that gate Anthropic-account verification skip it, and
+ * missing-key handling is surfaced separately at launch.
+ */
+export function isAnthropicAuthEnabled(): boolean {
+  return false
+}
+
+/**
  * Persist the API key to the credentials file (creating the config dir on
  * first run) and reset the resolution cache so the new key takes effect in
  * this process immediately.
