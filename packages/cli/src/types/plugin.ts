@@ -60,3 +60,5 @@ export type PluginError = {
   plugin?: string
   [key: string]: unknown
 }
+
+export function getPluginErrorMessage(..._args: unknown[]): string { return '' }

@@ -1,4 +1,6 @@
-// TODO: useSettingsErrors — surfaces a startup/runtime notice for a subsystem that isn't
-// ported. With nothing to report, the hook is inert.
+// TODO: settings validation errors — surfaces malformed settings.json entries.
+// The settings-validation pass isn't ported, so there are no errors to report.
 
-export function useSettingsErrors(..._args: unknown[]): void {}
+export function useSettingsErrors(): any[] {
+  return []
+}

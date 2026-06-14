@@ -11,3 +11,13 @@ export type AutoUpdaterResult = {
   status: InstallStatus
   notifications?: string[]
 }
+
+// TODO: npm/GCS dist-tag lookup for the update checker (not ported). No update
+// channel is queried, so the tag sets are empty.
+export type NpmDistTags = { latest?: any; [key: string]: any }
+export async function getNpmDistTags(): Promise<NpmDistTags> {
+  return {}
+}
+export async function getGcsDistTags(): Promise<NpmDistTags> {
+  return {}
+}

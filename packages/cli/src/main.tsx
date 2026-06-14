@@ -1,8 +1,37 @@
 import React from 'react'
-import { ChatSmoke, MissingKeyNotice } from './components/ChatSmoke.js'
-import { render } from './tui.js'
+import { MissingKeyNotice } from './components/MissingKeyNotice.js'
+import { render, createRoot } from './tui.js'
+import { launchRepl } from './replLauncher.js'
 import { hasAnthropicApiKeyAuth } from './utils/auth.js'
+import { getDefaultAppState } from './state/AppStateStore.js'
+import { getEmptyToolPermissionContext } from './Tool.js'
+import { getTools } from './tools.js'
 
-const screen = hasAnthropicApiKeyAuth() ? <ChatSmoke /> : <MissingKeyNotice />
-const instance = await render(screen)
-await instance.waitUntilExit()
+// Thin REPL launcher: the full subcommand surface (doctor/resume/headless
+// flags) lands with the command-line entrypoint later. For now this boots the
+// interactive REPL directly, or prints the missing-key notice and exits.
+if (!hasAnthropicApiKeyAuth()) {
+  const instance = await render(<MissingKeyNotice />)
+  await instance.waitUntilExit()
+} else {
+  const root = await createRoot()
+  const initialState = getDefaultAppState()
+  const initialTools = [...getTools(getEmptyToolPermissionContext())]
+  await launchRepl(
+    root,
+    {
+      getFpsMetrics: () => undefined,
+      initialState,
+    },
+    {
+      commands: [],
+      debug: false,
+      initialTools,
+      thinkingConfig: { type: 'disabled' },
+    },
+    async (root, element) => {
+      root.render(element)
+      await root.waitUntilExit()
+    },
+  )
+}

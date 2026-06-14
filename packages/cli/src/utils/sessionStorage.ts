@@ -197,3 +197,32 @@ export async function recordSidechainTranscript(
 export function restoreSessionMetadata(_meta: Record<string, unknown>): void {}
 export function saveMode(_mode: 'coordinator' | 'normal'): void {}
 export function saveWorktreeState(_worktreeSession: unknown): void {}
+
+// TODO: progressive session-log loading (the /resume picker) lands with the
+// transcript store. With no transcripts on disk there are no sessions to list,
+// so every loader yields an empty result set.
+export type SessionLogResult = {
+  logs: LogOption[]
+  allStatLogs: LogOption[]
+  nextIndex: number
+}
+export async function loadAllProjectsMessageLogsProgressive(
+  _limit?: number,
+  _initialEnrichCount?: number,
+): Promise<SessionLogResult> {
+  return { logs: [], allStatLogs: [], nextIndex: 0 }
+}
+export async function loadSameRepoMessageLogsProgressive(
+  _worktreePaths: string[],
+  _limit?: number,
+  _initialEnrichCount?: number,
+): Promise<SessionLogResult> {
+  return { logs: [], allStatLogs: [], nextIndex: 0 }
+}
+export async function enrichLogs(
+  _allLogs: LogOption[],
+  _startIndex: number,
+  _count: number,
+): Promise<{ logs: LogOption[]; nextIndex: number }> {
+  return { logs: [], nextIndex: 0 }
+}
