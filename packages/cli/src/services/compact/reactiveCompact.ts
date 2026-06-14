@@ -30,3 +30,25 @@ export async function tryReactiveCompact(_args: {
 }): Promise<CompactionResult | null> {
   return null
 }
+
+// Reactive-only mode routes /compact through the reactive path instead of the
+// classic summarizer. Off in this build (the feature gate above is false), so
+// /compact always uses the classic path.
+export function isReactiveOnlyMode(): boolean {
+  return false
+}
+
+export type ReactiveCompactOutcome =
+  | { ok: true; result: CompactionResult }
+  | {
+      ok: false
+      reason: 'too_few_groups' | 'aborted' | 'exhausted' | 'error' | 'media_unstrippable'
+    }
+
+export async function reactiveCompactOnPromptTooLong(
+  _messages: Message[],
+  _cacheSafeParams: CacheSafeParams,
+  _options: { customInstructions?: string | null; trigger: 'manual' | 'auto' },
+): Promise<ReactiveCompactOutcome> {
+  return { ok: false, reason: 'error' }
+}

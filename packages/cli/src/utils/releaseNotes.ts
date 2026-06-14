@@ -24,3 +24,21 @@ export function getStoredChangelogFromMemory(): string | null {
 export function parseChangelog(_changelog: string): Record<string, string[]> {
   return {}
 }
+
+// Where the full changelog lives, shown as a fallback when no notes are cached.
+export const CHANGELOG_URL =
+  'https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md'
+
+// The fetcher (network client) lands with the update subsystem; until then
+// /release-notes downloads nothing and falls back to the changelog link.
+export async function fetchAndStoreChangelog(): Promise<void> {}
+
+export async function getStoredChangelog(): Promise<string> {
+  return ''
+}
+
+export function getAllReleaseNotes(
+  _changelog: string,
+): Array<[string, string[]]> {
+  return []
+}
