@@ -7,6 +7,7 @@ import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/m
 import { asSessionId, type SessionId } from '../types/ids.js'
 import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js'
 import type { SettingSource } from '../utils/settings/constants.js'
+import type { ModelSetting } from '../utils/model/model.js'
 
 type SlowOperation = {
   operation: string
@@ -287,6 +288,45 @@ export function getIsNonInteractiveSession(): boolean {
 // runs locally only, so remote mode is never active.
 export function getIsRemoteMode(): boolean {
   return false
+}
+
+// TODO: --agent main-thread agent typing lands with the agents phase; until
+// then the main thread runs the default agent (no explicit type).
+export function getMainThreadAgentType(): string | undefined {
+  return undefined
+}
+
+// MCP/plugin channels land with the MCP phase. A channel is a plugin- or
+// server-scoped MCP connection enabled via --channels; none are loaded yet.
+export type ChannelEntry =
+  | { kind: 'plugin'; name: string; marketplace: string; dev?: boolean }
+  | { kind: 'server'; name: string; dev?: boolean }
+
+export function getAllowedChannels(): ChannelEntry[] {
+  return []
+}
+
+export function getHasDevChannels(): boolean {
+  return false
+}
+
+// The app-state model selection is mirrored here so non-React code (e.g. the
+// API layer) can read the active model override. Tracked but not yet consulted
+// by the model resolver until that seam lands.
+let mainLoopModelOverride: ModelSetting | undefined
+export function setMainLoopModelOverride(
+  model: ModelSetting | undefined,
+): void {
+  mainLoopModelOverride = model
+}
+export function getMainLoopModelOverride(): ModelSetting | undefined {
+  return mainLoopModelOverride
+}
+
+// TODO: direct-connect (remote control server) is out of scope; there is no
+// server URL to advertise.
+export function getDirectConnectServerUrl(): string | undefined {
+  return undefined
 }
 
 export function getIsInteractive(): boolean {

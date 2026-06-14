@@ -143,7 +143,9 @@ export async function getApiKeyFromApiKeyHelper(
 // Inert upstream-auth surface (no OAuth/subscriber/cloud-credential support).
 // ---------------------------------------------------------------------------
 
-export function getSubscriptionType(): null {
+export type SubscriptionType = 'pro' | 'max' | 'team' | 'enterprise'
+
+export function getSubscriptionType(): SubscriptionType | null {
   return null
 }
 
@@ -161,6 +163,24 @@ export function isProSubscriber(): boolean {
 
 export function isMaxSubscriber(): boolean {
   return false
+}
+
+// Human-readable subscription label for the welcome footer. No hosted account
+// in a BYOK build, so there is no subscription to name.
+export function getSubscriptionName(): string {
+  return ''
+}
+
+// macOS keychain / config-file API key lookup. BYOK reads the key from the
+// environment only, so there is never a keychain/config-stored key.
+export function getApiKeyFromConfigOrMacOSKeychain(): string | null {
+  return null
+}
+
+// Which bearer-token source (if any) is in effect. No OAuth/token sources in a
+// BYOK build, so there is none.
+export function getAuthTokenSource(): { source: string; hasToken: boolean } {
+  return { source: 'none', hasToken: false }
 }
 
 export function isTeamSubscriber(): boolean {

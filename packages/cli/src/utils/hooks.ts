@@ -15,6 +15,8 @@ import type {
 import type { ToolUseContext } from '../Tool.js'
 import type { PermissionResult } from './permissions/PermissionResult.js'
 import type { PermissionUpdate } from './permissions/PermissionUpdateSchema.js'
+import type { StatusLineCommandInput } from '../types/statusLine.js'
+import { getMainThreadAgentType, getSessionId } from '../bootstrap/state.js'
 
 export type HookBlockingError = {
   blockingError: string
@@ -268,3 +270,41 @@ export async function* executeNotificationHooks(_notificationData: {
   message: string
   title?: string
 }): AsyncGenerator<AggregatedHookResult> {}
+
+// Base fields shared by every hook input payload. The transcript path lands
+// with on-disk session persistence; until then it reports empty.
+export function createBaseHookInput(
+  permissionMode?: string,
+  sessionId?: string,
+  agentInfo?: { agentId?: string; agentType?: string },
+): {
+  session_id: string
+  transcript_path: string
+  cwd: string
+  permission_mode?: string
+  agent_id?: string
+  agent_type?: string
+} {
+  const resolvedSessionId = sessionId ?? getSessionId()
+  const resolvedAgentType = agentInfo?.agentType ?? getMainThreadAgentType()
+  return {
+    session_id: resolvedSessionId,
+    transcript_path: '',
+    cwd: process.cwd(),
+    permission_mode: permissionMode,
+    agent_id: agentInfo?.agentId,
+    agent_type: resolvedAgentType,
+  }
+}
+
+// The statusLine command is a user-configured hook; with hook dispatch inert
+// (no configured hooks) it never runs and the statusline falls back to its
+// built-in rendering.
+export async function executeStatusLineCommand(
+  _statusLineInput: StatusLineCommandInput,
+  _signal?: AbortSignal,
+  _timeoutMs?: number,
+  _logResult?: boolean,
+): Promise<string | undefined> {
+  return undefined
+}

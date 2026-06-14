@@ -25,6 +25,15 @@ export type TuiInstance = {
   resume: () => void
   suspendStdin: () => void
   resumeStdin: () => void
+  // Alternate-screen bookkeeping for the fullscreen layout: track whether the
+  // alt-screen (and mouse tracking) is active so the renderer can size and
+  // route input correctly.
+  setAltScreenActive: (active: boolean, mouseTracking?: boolean) => void
+  // Clear any active native text selection (on alt-screen exit).
+  clearTextSelection: () => void
+  // OSC 8 hyperlink click handler — set by FullscreenLayout, invoked by the
+  // renderer when the user clicks a terminal hyperlink.
+  onHyperlinkClick?: (url: string) => void
 }
 
 const instances = new Map<NodeJS.WriteStream, TuiInstance>()

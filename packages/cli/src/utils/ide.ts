@@ -47,3 +47,14 @@ export function toIDEDisplayName(terminal: string | null): string {
   if (!terminal) return 'IDE'
   return ideDisplayNames[terminal as IdeType] ?? terminal
 }
+
+// Whether the CLI is running inside a supported JetBrains IDE terminal. IDE
+// integration is not wired, so this never matches.
+export function isSupportedJetBrainsTerminal(): boolean {
+  return false
+}
+
+// The IDE type hosting the terminal, if recognized. No IDE detection yet.
+export function getTerminalIdeType(): IdeType | null {
+  return null
+}

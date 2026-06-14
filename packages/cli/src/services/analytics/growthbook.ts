@@ -28,3 +28,16 @@ export function getFeatureValue_CACHED_WITH_REFRESH<T>(
 ): T {
   return getFeatureValue_CACHED_MAY_BE_STALE(feature, defaultValue)
 }
+
+export function getDynamicConfig_CACHED_MAY_BE_STALE<T>(
+  configName: string,
+  defaultValue: T,
+): T {
+  return getFeatureValue_CACHED_MAY_BE_STALE(configName, defaultValue)
+}
+
+// Flags never refresh (no remote source), so the listener is never invoked;
+// the returned unsubscribe is a no-op.
+export function onGrowthBookRefresh(_listener: () => void): () => void {
+  return () => {}
+}

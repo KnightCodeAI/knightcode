@@ -51,6 +51,16 @@ export type Settings = {
   outputStyle?: string
   /** Offer "clear context" when accepting a plan (plan-mode exit dialog). */
   showClearContextOnPlanAccept?: boolean
+  /** Welcome-screen company announcements (shown once per startup). */
+  companyAnnouncements?: string[]
+  /** Default --agent for the session (welcome footer / status). */
+  agent?: string
+  /** User-configured statusline command (a hook that renders the statusline). */
+  statusLine?: {
+    type?: string
+    command: string
+    padding?: number
+  }
   [key: string]: unknown
 }
 
@@ -81,4 +91,18 @@ export function getRelativeSettingsFilePathForSource(
   return source === 'localSettings'
     ? '.claude/settings.local.json'
     : '.claude/settings.json'
+}
+
+// TODO: per-source settings reads/writes land with the settings phase. Until
+// then every source reads as "no settings file" and writes are dropped (the
+// callers — effort callout, channels notice — degrade to their defaults).
+export function getSettingsForSource(_source: SettingSource): Settings | null {
+  return null
+}
+
+export function updateSettingsForSource(
+  _source: SettingSource,
+  _settings: Settings,
+): { error: Error | null } {
+  return { error: null }
 }

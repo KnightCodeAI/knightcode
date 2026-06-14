@@ -39,7 +39,12 @@ export type GlobalConfig = {
   /** Whether to draw the terminal's native progress bar during long tool runs. */
   terminalProgressBarEnabled?: boolean
   /** OAuth account info; absent in BYOK builds (no hosted account). */
-  oauthAccount?: { accountUuid?: string; [key: string]: unknown }
+  oauthAccount?: {
+    accountUuid?: string
+    displayName?: string
+    organizationName?: string
+    [key: string]: unknown
+  }
   /** Stored desktop-companion state (soul only; bones regenerate from userID). */
   companion?: StoredCompanion
   /** Whether the desktop companion's intro/notifications are muted. */
@@ -74,14 +79,37 @@ export type GlobalConfig = {
   preferredNotifChannel: string
   /** Enable model-generated explanations for permission requests (default true). */
   permissionExplainerEnabled?: boolean
+  /** Number of times the CLI has been started (welcome/announcement gating). */
+  numStartups: number
+  /** Whether the effort-level callout (v1/v2) has been dismissed. */
+  effortCalloutDismissed?: boolean
+  effortCalloutV2Dismissed?: boolean
+  /** Id of the last emergency tip shown, so it isn't repeated. */
+  lastShownEmergencyTip?: string
+  /** Version whose release notes were last shown on the welcome screen. */
+  lastReleaseNotesSeen?: string
+  /** Whether the user has ever backgrounded a session (Ctrl+B hint gating). */
+  hasUsedBackgroundTask?: boolean
+  /** Persisted UI toggles mirrored from app state. */
+  showExpandedTodos?: boolean
+  showSpinnerTree?: boolean
+  verbose?: boolean
+  tungstenPanelVisible?: boolean
+  /** Whether to auto-install the IDE extension when a supported IDE is found. */
+  autoInstallIdeExtension?: boolean
 }
 
 export type EditorMode = 'emacs' | 'normal' | 'vim'
+
+// A named output style (built-in or user/plugin-defined). The registry of
+// style definitions lands with the output-style phase; the id is a string.
+export type OutputStyle = string
 
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   theme: 'dark',
   autoCompactEnabled: true,
   preferredNotifChannel: 'auto',
+  numStartups: 0,
 }
 
 function globalConfigPath(): string {
@@ -184,4 +212,11 @@ export function saveCurrentProjectConfig(
 ): void {
   const cwd = process.cwd().normalize('NFC')
   projectConfigByDir.set(cwd, updater(getCurrentProjectConfig()))
+}
+
+// TODO: the workspace-trust gate lands with the trust dialog. A local BYOK
+// session runs in a directory the user launched it from, so trust is treated
+// as accepted until the dialog is wired.
+export function checkHasTrustDialogAccepted(): boolean {
+  return true
 }

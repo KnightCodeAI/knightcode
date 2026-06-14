@@ -4,6 +4,7 @@ import type {
   TaskContext,
   TaskHandle,
 } from '../../Task.js'
+import type { AppState } from '../../state/AppStateStore.js'
 import type { ShellCommand } from '../../utils/ShellCommand.js'
 
 // The background-task framework (task registry, AppState task records, kill
@@ -66,3 +67,16 @@ export function backgroundExistingForegroundTask(
 ): boolean {
   return false
 }
+
+/** Whether any shell task is running in the foreground. Always false until
+ * the task registry exists (no foreground tasks are tracked yet). */
+export function hasForegroundTasks(_state: AppState): boolean {
+  return false
+}
+
+/** Promote every foreground task to the background. No-op until the registry
+ * exists — there is nothing to promote. */
+export function backgroundAll(
+  _getAppState: () => AppState,
+  _setAppState: SetAppState,
+): void {}

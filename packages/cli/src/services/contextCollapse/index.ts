@@ -35,3 +35,37 @@ export function recoverFromOverflow(
 ): { committed: number; messages: Message[] } {
   return { committed: 0, messages }
 }
+
+export type ContextCollapseHealth = {
+  totalSpawns: number
+  totalErrors: number
+  totalEmptySpawns: number
+  lastError: string | null
+  emptySpawnWarningEmitted: boolean
+}
+
+export type ContextCollapseStats = {
+  collapsedSpans: number
+  collapsedMessages: number
+  stagedSpans: number
+  health: ContextCollapseHealth
+}
+
+export function getStats(): ContextCollapseStats {
+  return {
+    collapsedSpans: 0,
+    collapsedMessages: 0,
+    stagedSpans: 0,
+    health: {
+      totalSpawns: 0,
+      totalErrors: 0,
+      totalEmptySpawns: 0,
+      lastError: null,
+      emptySpawnWarningEmitted: false,
+    },
+  }
+}
+
+export function subscribe(_cb: () => void): () => void {
+  return () => {}
+}

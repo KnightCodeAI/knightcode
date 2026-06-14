@@ -132,6 +132,16 @@ export function renderModelName(model: ModelName): string {
   return model
 }
 
+// TODO: alias capitalization (e.g. "sonnet" → "Sonnet") lands with the /model
+// phase's alias registry; until then only the opusplan label is special-cased
+// and everything else renders as its raw model name.
+export function renderModelSetting(setting: ModelName | ModelAlias): string {
+  if (setting === 'opusplan') {
+    return 'Opus Plan'
+  }
+  return renderModelName(setting)
+}
+
 // Human-readable model label for the footer/status. null means "use the
 // default"; otherwise show the input and, if it resolves to a different id,
 // the resolved id in parentheses.

@@ -10,6 +10,7 @@ import { getClaudeConfigHomeDir } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
 import type { QueueOperationMessage } from '../types/messageQueueTypes.js'
 import type { AgentId } from '../types/ids.js'
+import type { LogOption } from '../types/logs.js'
 
 export function getProjectsDir(): string {
   return join(getClaudeConfigHomeDir(), 'projects')
@@ -29,6 +30,12 @@ export function getTranscriptPath(): string {
 // these to keep --resume metadata in window and to drop the stale message
 // cache; until the layer lands they are inert.
 export function reAppendSessionMetadata(): void {}
+
+// TODO: session transcript discovery lands with the storage layer. The welcome
+// feed lists recent sessions; with no transcript dir there are none yet.
+export async function loadMessageLogs(_limit?: number): Promise<LogOption[]> {
+  return []
+}
 
 export function clearSessionMessagesCache(): void {}
 

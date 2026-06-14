@@ -22,6 +22,16 @@ export function filterInjectedMemoryFiles(
   return files
 }
 
+// Above this character count a CLAUDE.md is large enough that the statusline
+// warns it is eating into the context window.
+export const MAX_MEMORY_CHARACTER_COUNT = 40000
+
+export function getLargeMemoryFiles(
+  files: MemoryFileInfo[],
+): MemoryFileInfo[] {
+  return files.filter(f => f.content.length > MAX_MEMORY_CHARACTER_COUNT)
+}
+
 export async function getMemoryFiles(
   _forceIncludeExternal: boolean = false,
 ): Promise<MemoryFileInfo[]> {

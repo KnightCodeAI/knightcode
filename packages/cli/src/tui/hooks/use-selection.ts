@@ -1,13 +1,7 @@
 import { useMemo } from 'react'
+import type { FocusMove, SelectionState } from '../selection.js'
 
-export type FocusMove = 'left' | 'right' | 'up' | 'down'
-
-export type SelectionState = {
-  isDragging: boolean
-  // True when the most recent mouse-press carried the Alt modifier. Read on
-  // macOS to detect a failed alt+click (the footer's copy-on-select hint).
-  lastPressHadAlt: boolean
-}
+export type { FocusMove, SelectionState } from '../selection.js'
 
 /**
  * Access to text selection operations (fullscreen only).

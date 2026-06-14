@@ -57,3 +57,18 @@ export function getRateLimitErrorMessage(
 ): string | null {
   return null
 }
+
+type RawWindowUtilization = {
+  utilization: number // 0-1 fraction
+  resets_at: number // unix epoch seconds
+}
+type RawUtilization = {
+  five_hour?: RawWindowUtilization
+  seven_day?: RawWindowUtilization
+}
+
+// TODO: unified rate-limit utilization is parsed from response headers; until
+// the limits ledger is wired the statusline reads an empty window set.
+export function getRawUtilization(): RawUtilization {
+  return {}
+}

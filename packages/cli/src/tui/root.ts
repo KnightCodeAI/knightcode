@@ -167,6 +167,16 @@ async function createInstance(
     resumeStdin() {
       // TODO: paired no-op with suspendStdin() — see above.
     },
+    setAltScreenActive(_active: boolean, _mouseTracking?: boolean) {
+      // TODO: the fullscreen layout writes the alt-screen escape sequences
+      // directly (see components/AlternateScreen); OpenTUI manages its own
+      // viewport, so tracking the flag here is a no-op until the renderer needs
+      // it for sizing/input routing.
+    },
+    clearTextSelection() {
+      // TODO: wire to the renderer's native selection clear once selection is
+      // wired (see tui/selection); no selection state to clear yet.
+    },
   }
 
   return instance
