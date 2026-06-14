@@ -5,6 +5,27 @@
 // here standalone until the connection layer lands.
 
 import { TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../utils/errors.js'
+import type { Tool } from '../../Tool.js'
+import type {
+  MCPServerConnection,
+  ScopedMcpServerConfig,
+} from './types.js'
+
+// TODO: MCP server connection lands with the MCP transport. With no MCP servers
+// configured, agent frontmatter never references one, so these resolve a server
+// as failed and surface no tools rather than opening a connection.
+export async function connectToServer(
+  name: string,
+  config: ScopedMcpServerConfig,
+): Promise<MCPServerConnection> {
+  return { name, config: config as { [key: string]: unknown }, type: 'failed' }
+}
+
+export async function fetchToolsForClient(
+  _client: MCPServerConnection,
+): Promise<Tool[]> {
+  return []
+}
 
 export class McpAuthError extends Error {
   serverName: string

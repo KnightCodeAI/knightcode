@@ -51,3 +51,7 @@ export function notifyCompaction(
 ): void {}
 
 export function resetPromptCacheBreakDetection(): void {}
+
+/** Release per-agent cache-tracking state when a subagent finishes. Inert
+ *  while detection is inert. */
+export function cleanupAgentTracking(_agentId: AgentId): void {}

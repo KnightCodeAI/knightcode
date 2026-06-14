@@ -151,6 +151,13 @@ export async function* executeTeammateIdleHooks(
   _timeoutMs?: HookExecutionTimeoutMs,
 ): AsyncGenerator<AggregatedHookResult> {}
 
+export async function* executeSubagentStartHooks(
+  _agentId: string,
+  _agentType: string,
+  _signal?: AbortSignal,
+  _timeoutMs?: HookExecutionTimeoutMs,
+): AsyncGenerator<AggregatedHookResult> {}
+
 export async function* executeTaskCompletedHooks(
   _taskId: string,
   _taskSubject: string,

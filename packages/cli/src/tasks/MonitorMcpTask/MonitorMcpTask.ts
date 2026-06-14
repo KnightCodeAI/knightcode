@@ -8,3 +8,5 @@ export type MonitorMcpTaskState = TaskStateBase & {
 }
 
 export function killMonitorMcp(..._args: any[]): void {}
+
+export function killMonitorMcpTasksForAgent(..._args: any[]): void {}

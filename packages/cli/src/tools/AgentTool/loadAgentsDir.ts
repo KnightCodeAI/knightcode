@@ -27,7 +27,7 @@ export type AgentDefinition = {
   hooks?: Record<string, unknown>
   color?: string
   permissionMode?: import('../../types/permissions.js').PermissionMode
-  effort?: string
+  effort?: import('../../utils/effort.js').EffortValue
   filename?: string
   baseDir?: string
   plugin?: string
@@ -35,6 +35,14 @@ export type AgentDefinition = {
   requiredMcpServers?: string[]
   overriddenBy?: SettingSource | 'built-in' | 'plugin'
   location?: SettingSource | 'built-in' | 'plugin'
+  // Runtime fields the sub-agent execution engine reads. The reference splits
+  // these across the built-in/custom/plugin union; the flat shape carries them
+  // as optional until the full union lands.
+  mcpServers?: Array<string | Record<string, Record<string, unknown>>>
+  omitClaudeMd?: boolean
+  maxTurns?: number
+  criticalSystemReminder_EXPERIMENTAL?: string
+  callback?: () => void
 }
 
 export type AgentDefinitionsResult = {

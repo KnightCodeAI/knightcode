@@ -36,6 +36,7 @@ export type MCPServerConnection =
         readResource(args: { uri: string }): Promise<ReadResourceResult>
         [key: string]: unknown
       }
+      cleanup: () => Promise<void>
     })
   | (MCPServerBase & {
       type: 'failed' | 'needs-auth' | 'pending' | 'disabled'

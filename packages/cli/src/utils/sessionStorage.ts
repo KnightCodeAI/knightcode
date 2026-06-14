@@ -194,6 +194,27 @@ export async function recordSidechainTranscript(
   _agentId?: string,
   _startingParentUuid?: import('crypto').UUID | null,
 ): Promise<void> {}
+
+// TODO: subagent transcript grouping and agent-metadata sidecars land with the
+// session storage layer. Subagents run without persisted transcripts until
+// then, so the subdir mapping and metadata writes are inert.
+export function setAgentTranscriptSubdir(
+  _agentId: string,
+  _subdir: string,
+): void {}
+export function clearAgentTranscriptSubdir(_agentId: string): void {}
+
+export type AgentMetadata = {
+  agentType: string
+  /** Worktree path if the agent was spawned with isolation: "worktree" */
+  worktreePath?: string
+  /** Original task description from the AgentTool input. */
+  description?: string
+}
+export async function writeAgentMetadata(
+  _agentId: AgentId,
+  _metadata: AgentMetadata,
+): Promise<void> {}
 export function restoreSessionMetadata(_meta: Record<string, unknown>): void {}
 export function saveMode(_mode: 'coordinator' | 'normal'): void {}
 export function saveWorktreeState(_worktreeSession: unknown): void {}
