@@ -13,12 +13,10 @@ describe('/output-style command', () => {
     if (outputStyle.type !== 'local-jsx') throw new Error('must be local-jsx')
     const mod = await outputStyle.load()
     let message = ''
-    await mod.call(
+    await (mod.call as (onDone: (result?: string) => void) => Promise<unknown>)(
       (result?: string) => {
         message = result ?? ''
       },
-      {} as never,
-      '',
     )
     expect(message).toContain('/config')
   })
