@@ -3409,6 +3409,54 @@ export function shouldShowUserMessage(
 // for an empty conversation.
 export const EMPTY_LOOKUPS: MessageLookups = buildMessageLookups([], [])
 
+// Lookups scoped to a single sub-agent's message stream (e.g. a forked skill's
+// transcript), used to render its tool-use progress. Lighter than the full
+// buildMessageLookups: only the tool-use/result maps and the in-progress set.
+export function buildSubagentLookups(
+  messages: { message: AssistantMessage | NormalizedUserMessage }[],
+): { lookups: MessageLookups; inProgressToolUseIDs: Set<string> } {
+  const toolUseByToolUseID = new Map<string, ToolUseBlockParam>()
+  const resolvedToolUseIDs = new Set<string>()
+  const toolResultByToolUseID = new Map<
+    string,
+    NormalizedUserMessage & { type: 'user' }
+  >()
+
+  for (const { message: msg } of messages) {
+    if (msg.type === 'assistant') {
+      for (const content of msg.message.content) {
+        if (content.type === 'tool_use') {
+          toolUseByToolUseID.set(content.id, content as ToolUseBlockParam)
+        }
+      }
+    } else if (msg.type === 'user') {
+      for (const content of msg.message.content) {
+        if (content.type === 'tool_result') {
+          resolvedToolUseIDs.add(content.tool_use_id)
+          toolResultByToolUseID.set(content.tool_use_id, msg)
+        }
+      }
+    }
+  }
+
+  const inProgressToolUseIDs = new Set<string>()
+  for (const id of toolUseByToolUseID.keys()) {
+    if (!resolvedToolUseIDs.has(id)) {
+      inProgressToolUseIDs.add(id)
+    }
+  }
+
+  return {
+    lookups: {
+      ...EMPTY_LOOKUPS,
+      toolUseByToolUseID,
+      resolvedToolUseIDs,
+      toolResultByToolUseID,
+    },
+    inProgressToolUseIDs,
+  }
+}
+
 // A system message echoing a slash command the user invoked, shown in the
 // transcript as the command's own input line.
 export function createCommandInputMessage(

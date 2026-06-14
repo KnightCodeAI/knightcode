@@ -20,8 +20,32 @@ export function activateConditionalSkillsForPaths(
 
 // Rough token estimate of a skill's frontmatter (name/description/whenToUse),
 // used by the /context analyzer to size loaded skills.
+import { join } from 'path'
 import type { Command } from '../commands.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
+import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
+import { getManagedFilePath } from '../utils/settings/managedPath.js'
+import type { SettingSource } from '../utils/settings/constants.js'
+
+// The on-disk location of a settings source's skills/commands directory, used
+// by the /skills menu to show where each skill lives.
+export function getSkillsPath(
+  source: SettingSource | 'plugin',
+  dir: 'skills' | 'commands',
+): string {
+  switch (source) {
+    case 'policySettings':
+      return join(getManagedFilePath(), '.claude', dir)
+    case 'userSettings':
+      return join(getClaudeConfigHomeDir(), dir)
+    case 'projectSettings':
+      return `.claude/${dir}`
+    case 'plugin':
+      return 'plugin'
+    default:
+      return ''
+  }
+}
 
 export function estimateSkillFrontmatterTokens(skill: Command): number {
   const frontmatterText = [skill.name, skill.description, skill.whenToUse]

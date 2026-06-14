@@ -7,6 +7,8 @@
  * payload so producers and consumers type-check.
  */
 
+import type { AssistantMessage, NormalizedUserMessage } from './message.js'
+
 // Discriminated by `type` so consumers narrowing on the tag get the variant's
 // fields; each member stays open ([key: string]: unknown) for producer payloads
 // whose full shape ports with the owning tool's progress UI.
@@ -34,7 +36,13 @@ export type ToolProgressData =
   | { type: 'agent_progress'; [key: string]: unknown }
   | { type: 'mcp_progress'; [key: string]: unknown }
   | { type: 'repl_progress'; [key: string]: unknown }
-  | { type: 'skill_progress'; [key: string]: unknown }
+  | {
+      type: 'skill_progress'
+      message: AssistantMessage | NormalizedUserMessage
+      prompt: string
+      agentId: string
+      [key: string]: unknown
+    }
   | { type: 'task_output_progress'; [key: string]: unknown }
   | { type: 'web_search_progress'; [key: string]: unknown }
 
