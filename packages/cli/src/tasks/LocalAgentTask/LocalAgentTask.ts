@@ -14,6 +14,7 @@ export type LocalAgentTaskState = {
   type: 'local_agent'
   agentId: string
   status: LocalAgentTaskStatus
+  isBackgrounded?: boolean
   description: string
   retrieved: boolean
   error?: string
@@ -120,3 +121,29 @@ export function markAgentsNotified(taskId: string, setAppState: SetAppState): vo
 
 export function queuePendingMessage(..._args: unknown[]): void {}
 export function appendMessageToLocalAgent(..._args: unknown[]): void {}
+
+// TODO: foreground/async agent registration lands with the task runner. The
+// synchronous Agent-tool spawn drives runAgent directly; these register the
+// task record for the background/async path, inert until the runner lands.
+export function registerAgentForeground(args: {
+  agentId: string
+  [key: string]: unknown
+}): {
+  taskId: string
+  // Never resolves: auto-background never fires without the task runner.
+  backgroundSignal: Promise<void>
+  cancelAutoBackground?: () => void
+} {
+  return {
+    taskId: args.agentId,
+    backgroundSignal: new Promise<void>(() => {}),
+    cancelAutoBackground: undefined,
+  }
+}
+export function registerAsyncAgent(args: {
+  agentId: string
+  [key: string]: unknown
+}): { agentId: string; abortController: AbortController; [key: string]: unknown } {
+  return { agentId: args.agentId, abortController: new AbortController() }
+}
+export function unregisterAgentForeground(..._args: any[]): void {}

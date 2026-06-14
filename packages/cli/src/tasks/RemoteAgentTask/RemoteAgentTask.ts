@@ -21,3 +21,24 @@ export const RemoteAgentTask = {
 }
 
 export function restoreRemoteAgentTasks(..._args: unknown[]): void {}
+
+// TODO: remote-agent spawning is out of scope. These gate the (always-off)
+// remote isolation path in the Agent tool; eligibility is never met, so no
+// remote task is registered.
+export async function checkRemoteAgentEligibility(
+  ..._args: unknown[]
+): Promise<{ eligible: false; errors: string[] }> {
+  return { eligible: false, errors: ['remote agents are not supported'] }
+}
+export function formatPreconditionError(..._args: unknown[]): string {
+  return 'remote agents are not supported'
+}
+export function getRemoteTaskSessionUrl(..._args: unknown[]): string {
+  return ''
+}
+export function registerRemoteAgentTask(..._args: unknown[]): {
+  taskId: string
+  sessionId: string
+} {
+  return { taskId: '', sessionId: '' }
+}

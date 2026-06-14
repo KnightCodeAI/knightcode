@@ -541,6 +541,10 @@ export function updateLastInteractionTime(_immediate?: boolean): void {
 // TODO: skill-invocation tracking + trust/opt-in setters land with their
 // subsystems; inert placeholders so the settings/trust UIs compile.
 export function clearInvokedSkillsForAgent(_agentId?: unknown): void {}
+// SDK background progress summaries are an SDK-only feature; off in this build.
+export function getSdkAgentProgressSummariesEnabled(): boolean {
+  return false
+}
 export function setSessionTrustAccepted(_accepted?: unknown): void {}
 export function setUserMsgOptIn(_value?: unknown): void {}
 export function getInitialMainLoopModel(): any { return null }

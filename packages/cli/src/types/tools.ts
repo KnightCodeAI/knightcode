@@ -46,8 +46,20 @@ export type ToolProgressData =
   | { type: 'task_output_progress'; [key: string]: unknown }
   | { type: 'web_search_progress'; [key: string]: unknown }
 
-export type AgentToolProgress = ToolProgressData & { type: 'agent_progress' }
+// Carries a sub-agent's streamed message up to the parent's progress renderer.
+export type AgentToolProgress = {
+  type: 'agent_progress'
+  message: AssistantMessage | NormalizedUserMessage
+  prompt?: string
+  agentId?: string
+  [key: string]: unknown
+}
 export type BashProgress = ToolProgressData & { type: 'bash_progress' }
+// Shell progress (bash or powershell) forwarded from a sub-agent to the parent.
+export type ShellProgress = Extract<
+  ToolProgressData,
+  { type: 'bash_progress' | 'powershell_progress' }
+>
 export type MCPProgress = ToolProgressData & { type: 'mcp_progress' }
 export type PowerShellProgress = ToolProgressData & {
   type: 'powershell_progress'

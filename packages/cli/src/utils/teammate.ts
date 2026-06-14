@@ -25,6 +25,10 @@ export function getAgentId(): string | undefined {
   return undefined
 }
 
+export function getParentSessionId(): string | undefined {
+  return undefined
+}
+
 export function isTeamLead(
   _teamContext: { leadAgentId: string } | undefined,
 ): boolean {
