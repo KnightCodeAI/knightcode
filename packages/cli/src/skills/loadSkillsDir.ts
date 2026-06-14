@@ -31,3 +31,16 @@ export function estimateSkillFrontmatterTokens(skill: Command): number {
 }
 
 export function clearDynamicSkills(): void {}
+
+// Discovered skill-directory commands and dynamically-activated skills. Full
+// disk discovery lands with the skills phase; until then there are none, and
+// clearing the (empty) caches is a no-op.
+export async function getSkillDirCommands(_cwd: string): Promise<Command[]> {
+  return []
+}
+
+export function getDynamicSkills(): Command[] {
+  return []
+}
+
+export function clearSkillCaches(): void {}

@@ -58,3 +58,16 @@ export function getFastModeState(
   }
   return 'off'
 }
+
+// Runtime cooldown state machine for fast mode. Fast mode is an inference-tier
+// feature with no backend wired in this build, so the runtime is always
+// 'active' and prefetching its status is a no-op.
+export type FastModeRuntimeState =
+  | { status: 'active' }
+  | { status: 'cooldown'; resetAt: number; reason: CooldownReason }
+
+export function getFastModeRuntimeState(): FastModeRuntimeState {
+  return { status: 'active' }
+}
+
+export async function prefetchFastModeStatus(): Promise<void> {}

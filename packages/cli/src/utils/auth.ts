@@ -15,6 +15,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { safeParseJSON } from './json.js'
+import { isEnvTruthy } from './envUtils.js'
 
 export type ApiKeySource =
   | 'ANTHROPIC_API_KEY'
@@ -246,3 +247,14 @@ export function isTeamPremiumSubscriber(): boolean {
 
 // TODO: hosted-account info is out of scope for a BYOK build.
 export function getAccountInformation(): any { return undefined }
+
+// True when routing through Bedrock/Vertex/Foundry instead of the first-party
+// API. A BYOK build never sets these, so this is normally false; kept as the
+// real env check so availability gating matches upstream.
+export function isUsing3PServices(): boolean {
+  return !!(
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
+  )
+}

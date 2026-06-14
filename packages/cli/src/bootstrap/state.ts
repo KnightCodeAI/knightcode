@@ -590,6 +590,20 @@ export const onSessionSwitch = (
   _cb: (id: SessionId) => void,
 ): (() => void) => () => {}
 
+// Extra working directories the user added via /add-dir, included when loading
+// CLAUDE.md files. Held in module state for the session.
+let additionalDirectoriesForClaudeMd: string[] = []
+
+export function getAdditionalDirectoriesForClaudeMd(): string[] {
+  return additionalDirectoriesForClaudeMd
+}
+
+export function setAdditionalDirectoriesForClaudeMd(
+  directories: string[],
+): void {
+  additionalDirectoriesForClaudeMd = directories
+}
+
 export function setCostStateForRestore(_state: {
   totalCostUSD: number
   totalAPIDuration: number
