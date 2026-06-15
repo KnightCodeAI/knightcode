@@ -7,6 +7,7 @@ import type { MemoryType } from './memory/types.js'
 import type { ThemeSetting } from './theme.js'
 import type { ImageDimensions } from './imageResizer.js'
 import type { StoredCompanion } from '../buddy/types.js'
+import type { McpServerConfig } from '../services/mcp/types.js'
 
 // A single pasted/dropped item awaiting submission (text or image).
 export type PastedContent = {
@@ -29,6 +30,8 @@ export interface HistoryEntry {
 // defaults are filled in when an older config file omits them.
 export type GlobalConfig = {
   theme: ThemeSetting
+  /** User-scoped MCP servers (global `.claude.json`). */
+  mcpServers?: Record<string, McpServerConfig>
   // TODO: these settings are surfaced by the settings UI ahead of the
   // subsystems that consume them (notifications, IDE, teammates, checkpointing,
   // speculation). Typed here so the config panel compiles.
@@ -222,6 +225,11 @@ export type ProjectConfig = {
   exampleFiles?: string[]
   /** Epoch ms when exampleFiles was last refreshed. */
   exampleFilesGeneratedAt?: number
+  /** Project-scoped MCP servers (`.mcp.json` / local config). */
+  mcpServers?: Record<string, McpServerConfig>
+  /** Per-project MCP server enable/disable lists (toggled from the MCP UI). */
+  enabledMcpServers?: string[]
+  disabledMcpServers?: string[]
   [key: string]: unknown
 }
 
