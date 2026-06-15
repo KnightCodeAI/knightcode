@@ -1163,7 +1163,7 @@ export function Config({
           },
         ]
       : []),
-    ...(process.env.ANTHROPIC_API_KEY && !isRunningOnHomespace()
+    ...(process.env.OPENROUTER_API_KEY && !isRunningOnHomespace()
       ? [
           {
             id: 'apiKey',
@@ -1171,15 +1171,15 @@ export function Config({
               <Text>
                 Use custom API key:{' '}
                 <Text bold>
-                  {normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY)}
+                  {normalizeApiKeyForConfig(process.env.OPENROUTER_API_KEY)}
                 </Text>
               </Text>
             ),
             searchText: 'Use custom API key',
             value: Boolean(
-              process.env.ANTHROPIC_API_KEY &&
+              process.env.OPENROUTER_API_KEY &&
                 globalConfig.customApiKeyResponses?.approved?.includes(
-                  normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY),
+                  normalizeApiKeyForConfig(process.env.OPENROUTER_API_KEY),
                 ),
             ),
             type: 'boolean' as const,
@@ -1204,9 +1204,9 @@ export function Config({
                     rejected: [],
                   }
                 }
-                if (process.env.ANTHROPIC_API_KEY) {
+                if (process.env.OPENROUTER_API_KEY) {
                   const truncatedKey = normalizeApiKeyForConfig(
-                    process.env.ANTHROPIC_API_KEY,
+                    process.env.OPENROUTER_API_KEY,
                   )
                   if (useCustomKey) {
                     updated.customApiKeyResponses = {
@@ -1309,11 +1309,11 @@ export function Config({
       },
     )
     // Check for API key changes
-    // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
+    // On homespace, OPENROUTER_API_KEY is preserved in process.env for child
     // processes but ignored by the CLI itself (see auth.ts).
     const effectiveApiKey = isRunningOnHomespace()
       ? undefined
-      : process.env.ANTHROPIC_API_KEY
+      : process.env.OPENROUTER_API_KEY
     const initialUsingCustomKey = Boolean(
       effectiveApiKey &&
         initialConfig.current.customApiKeyResponses?.approved?.includes(
@@ -1331,7 +1331,7 @@ export function Config({
         `${currentUsingCustomKey ? 'Enabled' : 'Disabled'} custom API key`,
       )
       logEvent('tengu_config_changed', {
-        key: 'env.ANTHROPIC_API_KEY' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        key: 'env.OPENROUTER_API_KEY' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         value:
           currentUsingCustomKey as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })

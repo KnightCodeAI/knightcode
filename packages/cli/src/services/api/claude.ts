@@ -572,17 +572,21 @@ export async function verifyApiKey(
       error = errorFromRetry.originalError
     }
     logError(error)
-    // Check for authentication error
-    if (
-      error instanceof Error &&
-      error.message.includes(
-        '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
-      )
-    ) {
+    // OpenRouter returns 401 for an invalid/missing API key.
+    if (isInvalidApiKeyError(error)) {
       return false
     }
     throw error
   }
+}
+
+/**
+ * Whether an error is OpenRouter rejecting the API key (HTTP 401). Used by
+ * verifyApiKey to distinguish a bad key (return false) from a transient
+ * failure (rethrow).
+ */
+export function isInvalidApiKeyError(error: unknown): boolean {
+  return (error as { status?: unknown } | null)?.status === 401
 }
 
 export function userMessageToMessageParam(

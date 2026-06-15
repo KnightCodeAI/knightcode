@@ -6,7 +6,7 @@ import { clearApiKeyHelperCache } from '../../utils/auth.js'
 import { createUserMessage } from '../../utils/messages.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
 import type { Options } from './claude.js'
-import { queryModelWithStreaming } from './claude.js'
+import { isInvalidApiKeyError, queryModelWithStreaming } from './claude.js'
 
 const fixture = readFileSync(
   join(import.meta.dir, '__fixtures__', 'openrouter-stream.txt'),
@@ -125,5 +125,13 @@ describe('queryModelWithStreaming', () => {
       // an abort error is acceptable here; the assertion below is what matters
     }
     expect(events.filter(e => e.type === 'assistant')).toHaveLength(0)
+  })
+})
+
+describe('isInvalidApiKeyError', () => {
+  test('a 401 surfaces as an invalid OpenRouter key, not x-api-key', () => {
+    expect(isInvalidApiKeyError({ status: 401 })).toBe(true)
+    expect(isInvalidApiKeyError({ status: 500 })).toBe(false)
+    expect(isInvalidApiKeyError(new Error('boom'))).toBe(false)
   })
 })
