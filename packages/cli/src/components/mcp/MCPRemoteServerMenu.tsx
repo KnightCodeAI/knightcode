@@ -248,7 +248,7 @@ export function MCPRemoteServerMenu({
         void handleClaudeAIClearAuthComplete()
       } else {
         // First Enter: open the browser
-        const connectorsUrl = `${getOauthConfig().CLAUDE_AI_ORIGIN}/settings/connectors`
+        const connectorsUrl = `${getOauthConfig().HOSTED_CONNECTOR_ORIGIN}/settings/connectors`
         setClaudeAIClearAuthUrl(connectorsUrl)
         setClaudeAIClearAuthBrowserOpened(true)
         void openBrowser(connectorsUrl)
@@ -282,7 +282,7 @@ export function MCPRemoteServerMenu({
   const toggleMcpServer = useMcpToggleEnabled()
 
   const handleClaudeAIAuth = React.useCallback(async () => {
-    const claudeAiBaseUrl = getOauthConfig().CLAUDE_AI_ORIGIN
+    const claudeAiBaseUrl = getOauthConfig().HOSTED_CONNECTOR_ORIGIN
     const accountInfo = getOauthAccountInfo()
     const orgUuid = accountInfo?.organizationUuid
 

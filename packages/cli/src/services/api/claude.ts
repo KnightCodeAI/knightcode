@@ -91,11 +91,6 @@ import {
 } from '../../utils/systemPromptType.js'
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js'
 import { getDynamicConfig_BLOCKS_ON_INIT } from '../analytics/growthbook.js'
-import {
-  currentLimits,
-  extractQuotaStatusFromError,
-  extractQuotaStatusFromHeaders,
-} from '../claudeAiLimits.js'
 import { getAPIContextManagement } from '../compact/apiMicrocompact.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -1476,7 +1471,7 @@ async function* queryModel(
       globalCacheStrategy,
       betas,
       autoModeActive: afkHeaderLatched,
-      isUsingOverage: currentLimits.isUsingOverage ?? false,
+      isUsingOverage: false,
       cachedMCEnabled: cacheEditingHeaderLatched,
       effortValue: effort,
       extraBodyParams: getExtraBodyParams(),
@@ -2391,7 +2386,6 @@ async function* queryModel(
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
       const resp = streamResponse as unknown as Response | undefined
       if (resp) {
-        extractQuotaStatusFromHeaders(resp.headers)
         // Store headers for gateway detection
         responseHeaders = resp.headers
       }
@@ -2704,10 +2698,6 @@ async function* queryModel(
           errorModel = fallbackError.retryContext.model
         }
 
-        if (error instanceof APIError) {
-          extractQuotaStatusFromError(error)
-        }
-
         const requestId =
           streamRequestId ||
           (error instanceof APIError ? error.requestID : undefined) ||
@@ -2756,11 +2746,6 @@ async function* queryModel(
       if (errorFromRetry instanceof CannotRetryError) {
         error = errorFromRetry.originalError
         errorModel = errorFromRetry.retryContext.model
-      }
-
-      // Extract quota status from error headers if it's a rate limit error
-      if (error instanceof APIError) {
-        extractQuotaStatusFromError(error)
       }
 
       // Extract requestId from stream, error header, or error body
