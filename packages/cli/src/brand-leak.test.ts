@@ -15,7 +15,7 @@ const ALLOW: RegExp[] = [
   /claude-(opus|sonnet|haiku|fable|3|4)/, // model-id prefixes
   // The `Anthropic` SDK type/namespace/constructor — the default export of
   // @anthropic-ai/sdk, a functional identifier like the package specifier.
-  /(?:[<:(]|new |as |typeof |Promise<)\s*Anthropic\b/,
+  /(?:[<:]|new |as |typeof |Promise<)\s*Anthropic\b/,
   /\bAnthropic[>.]/,
   // Test-only idioms that verify the rebrand: negative brand assertions and the
   // legacy-CLAUDE.md ignore fixture must reference the old token by design.

@@ -1,4 +1,4 @@
-// TODO: API-backed token counting (Anthropic / Bedrock / Vertex count-tokens)
+// TODO: API-backed token counting (provider count-tokens endpoints)
 // is not implemented yet. The rough chars-per-token estimators below are pure
 // and are what the compaction and context layers rely on until accurate API
 // counts are available.

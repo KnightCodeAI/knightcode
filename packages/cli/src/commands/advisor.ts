@@ -1,6 +1,6 @@
 import type { Command } from '../commands.js'
 
-// TODO: advisor model configuration (Anthropic backend). Hidden, disabled inert stub so the registry still lists the name.
+// TODO: advisor model configuration (provider backend). Hidden, disabled inert stub so the registry still lists the name.
 const command: Command = {
   type: 'local',
   name: 'advisor',
