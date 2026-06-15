@@ -11,17 +11,19 @@ export const MCP_CLIENT_METADATA_URL =
 
 type OauthConfig = {
   OAUTH_FILE_SUFFIX: string
-  // claude.ai MCP proxy endpoint (only used by the OUT claude.ai connector path).
+  // claude.ai endpoints (only used by the OUT claude.ai connector path).
   MCP_PROXY_URL: string
   MCP_PROXY_PATH: string
+  CLAUDE_AI_ORIGIN: string
 }
 
-// The keychain service-name suffix; empty in a standard build. The MCP proxy
+// The keychain service-name suffix; empty in a standard build. The claude.ai
 // fields are inert (the claude.ai connector is not part of a BYOK build).
 export function getOauthConfig(): OauthConfig {
   return {
     OAUTH_FILE_SUFFIX: '',
     MCP_PROXY_URL: '',
     MCP_PROXY_PATH: '',
+    CLAUDE_AI_ORIGIN: '',
   }
 }
