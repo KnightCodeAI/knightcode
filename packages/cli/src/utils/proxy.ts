@@ -16,3 +16,14 @@ export function getProxyUrl(): string | undefined { return undefined }
 export function shouldBypassProxy(_host: string): boolean {
   return true
 }
+
+// No proxy configured: WebSocket MCP connects directly.
+export function getWebSocketProxyAgent(
+  _url: string,
+): import('http').Agent | undefined {
+  return undefined
+}
+
+export function getWebSocketProxyUrl(_url: string): string | undefined {
+  return undefined
+}

@@ -72,3 +72,9 @@ export function getConnectedIdeClient(
   return undefined
 }
 export async function closeOpenDiffs(..._args: unknown[]): Promise<void> {}
+
+// TODO: IDE connection notifications land with IDE integration; inert (no IDE
+// is ever connected in a terminal BYOK build).
+export async function maybeNotifyIDEConnected(
+  _client: import('@modelcontextprotocol/sdk/client/index.js').Client,
+): Promise<void> {}

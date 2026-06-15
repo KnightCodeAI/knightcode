@@ -5,7 +5,8 @@
     "types": ["bun"],
     "baseUrl": ".",
     "paths": {
-      "src/*": ["./src/*"]
+      "src/*": ["./src/*"],
+      "@ant/claude-for-chrome-mcp": ["./src/stubs/claude-for-chrome-mcp.ts"]
     }
   },
   "include": ["src"]

@@ -14,3 +14,8 @@ export function getUserAgent(): string {
     : ''
   return `claude-cli/${MACRO.VERSION} (external, ${process.env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp})`
 }
+
+/** User-Agent sent on MCP HTTP/WebSocket requests. */
+export function getMCPUserAgent(): string {
+  return getUserAgent()
+}

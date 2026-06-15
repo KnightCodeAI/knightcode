@@ -115,3 +115,12 @@ export async function maybeResizeAndDownsampleImageBlock(
 ): Promise<ImageBlockWithDimensions> {
   return { block: imageBlock }
 }
+
+// TODO: oversized-image compression isn't ported (same image pipeline). MCP
+// image results pass through unchanged rather than being shrunk to a byte cap.
+export async function compressImageBlock(
+  imageBlock: ImageBlockParam,
+  _maxBytes?: number,
+): Promise<ImageBlockParam> {
+  return imageBlock
+}
