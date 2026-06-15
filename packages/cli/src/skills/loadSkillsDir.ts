@@ -23,7 +23,7 @@ export function activateConditionalSkillsForPaths(
 import { join } from 'path'
 import type { Command } from '../commands.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
-import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
+import { getKnightcodeConfigHomeDir } from '../utils/envUtils.js'
 import { getManagedFilePath } from '../utils/settings/managedPath.js'
 import type { SettingSource } from '../utils/settings/constants.js'
 
@@ -35,11 +35,11 @@ export function getSkillsPath(
 ): string {
   switch (source) {
     case 'policySettings':
-      return join(getManagedFilePath(), '.claude', dir)
+      return join(getManagedFilePath(), '.knightcode', dir)
     case 'userSettings':
-      return join(getClaudeConfigHomeDir(), dir)
+      return join(getKnightcodeConfigHomeDir(), dir)
     case 'projectSettings':
-      return `.claude/${dir}`
+      return `.knightcode/${dir}`
     case 'plugin':
       return 'plugin'
     default:

@@ -27,11 +27,11 @@ export function getAgentMemoryDir(
 export function getMemoryScopeDisplay(memory: AgentMemoryScope | undefined): string {
   switch (memory) {
     case 'user':
-      return 'User (~/.claude/agent-memory/)'
+      return 'User (~/.knightcode/agent-memory/)'
     case 'project':
-      return 'Project (.claude/agent-memory/)'
+      return 'Project (.knightcode/agent-memory/)'
     case 'local':
-      return 'Local (.claude/agent-memory/)'
+      return 'Local (.knightcode/agent-memory/)'
     default:
       return 'None'
   }

@@ -3,8 +3,8 @@
 // that hook commands expose via $CLAUDE_PLUGIN_DATA.
 
 import { join } from 'path'
-import { getClaudeConfigHomeDir } from '../envUtils.js'
+import { getKnightcodeConfigHomeDir } from '../envUtils.js'
 
 export function getPluginDataDir(pluginId: string): string {
-  return join(getClaudeConfigHomeDir(), 'plugins', 'data', pluginId)
+  return join(getKnightcodeConfigHomeDir(), 'plugins', 'data', pluginId)
 }

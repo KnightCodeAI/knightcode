@@ -11,7 +11,7 @@ import React, {
 import { KeybindingWarnings } from 'src/components/KeybindingWarnings.js'
 import { McpParsingWarnings } from 'src/components/mcp/McpParsingWarnings.js'
 import { getModelMaxOutputTokens } from 'src/utils/context.js'
-import { getClaudeConfigHomeDir } from 'src/utils/envUtils.js'
+import { getKnightcodeConfigHomeDir } from 'src/utils/envUtils.js'
 import type { SettingSource } from 'src/utils/settings/constants.js'
 import { getOriginalCwd } from '../bootstrap/state.js'
 import type { CommandResultDisplay } from '../commands.js'
@@ -172,8 +172,8 @@ export function Doctor({ onDone }: Props): React.ReactNode {
     void getDoctorDiagnostic().then(setDiagnostic)
 
     void (async () => {
-      const userAgentsDir = join(getClaudeConfigHomeDir(), 'agents')
-      const projectAgentsDir = join(getOriginalCwd(), '.claude', 'agents')
+      const userAgentsDir = join(getKnightcodeConfigHomeDir(), 'agents')
+      const projectAgentsDir = join(getOriginalCwd(), '.knightcode', 'agents')
 
       const { activeAgents, allAgents, failedFiles } = agentDefinitions
 

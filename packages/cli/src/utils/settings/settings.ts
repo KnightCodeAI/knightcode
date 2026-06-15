@@ -5,14 +5,14 @@
 
 import { join, resolve } from 'path'
 import { getOriginalCwd } from '../../bootstrap/state.js'
-import { getClaudeConfigHomeDir } from '../envUtils.js'
+import { getKnightcodeConfigHomeDir } from '../envUtils.js'
 import type { SettingsJson } from './types.js'
 import type { SettingSource } from './constants.js'
 
 export function getSettingsRootPathForSource(source: SettingSource): string {
   switch (source) {
     case 'userSettings':
-      return resolve(getClaudeConfigHomeDir())
+      return resolve(getKnightcodeConfigHomeDir())
     case 'policySettings':
     case 'projectSettings':
     case 'localSettings':
@@ -30,13 +30,13 @@ export function getSettingsFilePathForSource(
     case 'projectSettings':
       return join(
         getSettingsRootPathForSource(source),
-        '.claude',
+        '.knightcode',
         'settings.json',
       )
     case 'localSettings':
       return join(
         getSettingsRootPathForSource(source),
-        '.claude',
+        '.knightcode',
         'settings.local.json',
       )
     case 'policySettings':
@@ -92,8 +92,8 @@ export function getRelativeSettingsFilePathForSource(
   source: 'projectSettings' | 'localSettings',
 ): string {
   return source === 'localSettings'
-    ? '.claude/settings.local.json'
-    : '.claude/settings.json'
+    ? '.knightcode/settings.local.json'
+    : '.knightcode/settings.json'
 }
 
 // TODO: per-source settings reads/writes land with the settings phase. Until

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomBytes } from 'crypto'
 import { join } from 'path'
 import { getOriginalCwd } from '../bootstrap/state.js'
-import { getClaudeConfigHomeDir } from './envUtils.js'
+import { getKnightcodeConfigHomeDir } from './envUtils.js'
 import { getManagedFilePath } from './settings/managedPath.js'
 import type { MemoryType } from './memory/types.js'
 import type { ThemeSetting } from './theme.js'
@@ -146,7 +146,7 @@ const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
 }
 
 function globalConfigPath(): string {
-  return join(getClaudeConfigHomeDir(), 'config.json')
+  return join(getKnightcodeConfigHomeDir(), 'config.json')
 }
 
 let cachedConfig: GlobalConfig | undefined
@@ -177,7 +177,7 @@ export function saveGlobalConfig(
       : configOrUpdate
   cachedConfig = config
   try {
-    mkdirSync(getClaudeConfigHomeDir(), { recursive: true })
+    mkdirSync(getKnightcodeConfigHomeDir(), { recursive: true })
     writeFileSync(globalConfigPath(), JSON.stringify(config, null, 2) + '\n')
   } catch {
     // Persisting config is best-effort; the in-memory value still applies.
@@ -192,24 +192,24 @@ export function getMemoryPath(memoryType: MemoryType): string {
   const cwd = getOriginalCwd()
   switch (memoryType) {
     case 'User':
-      return join(getClaudeConfigHomeDir(), 'CLAUDE.md')
+      return join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
     case 'Local':
       return join(cwd, 'CLAUDE.local.md')
     case 'Project':
       return join(cwd, 'CLAUDE.md')
     case 'Managed':
     case 'AutoMem':
-      return join(getClaudeConfigHomeDir(), 'CLAUDE.md')
+      return join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
   }
-  return join(getClaudeConfigHomeDir(), 'CLAUDE.md')
+  return join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
 }
 
 export function getManagedClaudeRulesDir(): string {
-  return join(getManagedFilePath(), '.claude', 'rules')
+  return join(getManagedFilePath(), '.knightcode', 'rules')
 }
 
 export function getUserClaudeRulesDir(): string {
-  return join(getClaudeConfigHomeDir(), 'rules')
+  return join(getKnightcodeConfigHomeDir(), 'rules')
 }
 
 export function getOrCreateUserID(): string {

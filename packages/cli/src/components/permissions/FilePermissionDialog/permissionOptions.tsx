@@ -12,7 +12,7 @@ import {
 } from '../../../utils/permissions/filesystem.js'
 import type { OptionWithDescription } from '../../CustomSelect/select.js'
 /**
- * Check if a path is within the project's .claude/ folder.
+ * Check if a path is within the project's .knightcode/ folder.
  * This is used to determine whether to show the special ".claude folder" permission option.
  */
 export function isInClaudeFolder(filePath: string): boolean {
@@ -35,13 +35,13 @@ export function isInClaudeFolder(filePath: string): boolean {
 }
 
 /**
- * Check if a path is within the global ~/.claude/ folder.
+ * Check if a path is within the global ~/.knightcode/ folder.
  * This is used to determine whether to show the special ".claude folder" permission option
  * for files in the user's home directory.
  */
 export function isInGlobalClaudeFolder(filePath: string): boolean {
   const absolutePath = expandPath(filePath)
-  const globalClaudeFolderPath = join(homedir(), '.claude')
+  const globalClaudeFolderPath = join(homedir(), '.knightcode')
 
   const normalizedAbsolutePath = normalizeCaseForComparison(absolutePath)
   const normalizedGlobalClaudeFolderPath = normalizeCaseForComparison(
@@ -115,11 +115,11 @@ export function getFilePermissionOptions({
     toolPermissionContext,
   )
 
-  // Check if this is a .claude/ folder path (project or global)
+  // Check if this is a .knightcode/ folder path (project or global)
   const inClaudeFolder = isInClaudeFolder(filePath)
   const inGlobalClaudeFolder = isInGlobalClaudeFolder(filePath)
 
-  // Option 2: For .claude/ folder, show special option instead of generic session option
+  // Option 2: For .knightcode/ folder, show special option instead of generic session option
   // Note: Session-level options are always shown since they only affect in-memory state,
   // not persisted settings. The allowManagedPermissionRulesOnly setting only restricts
   // persisted permission rules.

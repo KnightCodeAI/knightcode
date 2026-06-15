@@ -16,7 +16,7 @@ import { useAppState } from '../../state/AppState.js'
 import { getAgentMemoryDir } from '../../tools/AgentTool/agentMemory.js'
 import { openPath } from '../../utils/browser.js'
 import { getMemoryFiles, type MemoryFileInfo } from '../../utils/claudemd.js'
-import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
+import { getKnightcodeConfigHomeDir } from '../../utils/envUtils.js'
 import { getDisplayPath } from '../../utils/file.js'
 import { formatRelativeTimeAgo } from '../../utils/format.js'
 import { projectIsInGitRepo } from '../../utils/memory/versions.js'
@@ -52,7 +52,7 @@ export function MemoryFileSelector({
   const existingMemoryFiles = use(getMemoryFiles())
 
   // Create entries for User and Project CLAUDE.md even if they don't exist
-  const userMemoryPath = join(getClaudeConfigHomeDir(), 'CLAUDE.md')
+  const userMemoryPath = join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
   const projectMemoryPath = join(getOriginalCwd(), 'CLAUDE.md')
 
   // Check if these are already in the existing files
@@ -131,7 +131,7 @@ export function MemoryFileSelector({
     const isGit = projectIsInGitRepo(getOriginalCwd())
 
     if (file.type === 'User' && !file.isNested) {
-      description = 'Saved in ~/.claude/CLAUDE.md'
+      description = 'Saved in ~/.knightcode/CLAUDE.md'
     } else if (
       file.type === 'Project' &&
       !file.isNested &&

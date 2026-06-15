@@ -6,14 +6,14 @@
 import { join } from 'path'
 import memoize from 'lodash-es/memoize.js'
 import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
-import { getClaudeConfigHomeDir } from './envUtils.js'
+import { getKnightcodeConfigHomeDir } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
 import type { QueueOperationMessage } from '../types/messageQueueTypes.js'
 import type { AgentId } from '../types/ids.js'
 import type { LogOption } from '../types/logs.js'
 
 export function getProjectsDir(): string {
-  return join(getClaudeConfigHomeDir(), 'projects')
+  return join(getKnightcodeConfigHomeDir(), 'projects')
 }
 
 export const getProjectDir = memoize((projectDir: string): string => {

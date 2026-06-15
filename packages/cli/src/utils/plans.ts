@@ -6,13 +6,13 @@ import { join } from 'path'
 import memoize from 'lodash-es/memoize.js'
 import { getSessionId } from '../bootstrap/state.js'
 import type { AgentId } from '../types/ids.js'
-import { getClaudeConfigHomeDir } from './envUtils.js'
+import { getKnightcodeConfigHomeDir } from './envUtils.js'
 import { isENOENT } from './errors.js'
 import { getFsImplementation } from './fsOperations.js'
 import { logError } from './log.js'
 
 export const getPlansDirectory = memoize(function getPlansDirectory(): string {
-  return join(getClaudeConfigHomeDir(), 'plans')
+  return join(getKnightcodeConfigHomeDir(), 'plans')
 })
 
 export function getPlanSlug(sessionId: string = getSessionId()): string {
