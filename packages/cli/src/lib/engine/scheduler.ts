@@ -166,10 +166,30 @@ async function executeOne(
   let modelOverride: string | undefined;
   if (decision === "confirm") {
     if (toolName === "AskUserQuestion") {
-      const output = await host.askQuestion(toolCall);
-      return { kind: "output", output };
+      // A throw here (e.g. the host's prompt UI rejecting) must not escape
+      // executeOne — that would abort the round and orphan the tool_use with
+      // no matching tool_result. Surface it as the tool's error instead.
+      try {
+        const output = await host.askQuestion(toolCall);
+        return { kind: "output", output };
+      } catch (err) {
+        return {
+          kind: "error",
+          errorText: err instanceof Error ? err.message : String(err),
+        };
+      }
     }
-    const granted = await host.canUseTool(toolCall, mode);
+    let granted: Awaited<ReturnType<ToolHost["canUseTool"]>>;
+    try {
+      granted = await host.canUseTool(toolCall, mode);
+    } catch (err) {
+      // Same contract as above: a failed permission prompt becomes a tool
+      // error so the round keeps its tool_use/tool_result pairing.
+      return {
+        kind: "error",
+        errorText: err instanceof Error ? err.message : String(err),
+      };
+    }
     if (granted.behavior === "deny") {
       return {
         kind: "error",

@@ -30,6 +30,8 @@ type Props = {
     toolCallId: string,
     answers: Array<{ question: string; answer: string | string[] }>,
   ) => void;
+  /** Esc on a pending question cancels the turn (the dialog owns the keyboard). */
+  cancelQuestion?: (toolCallId: string) => void;
   setConfirmationModelOverride?: (
     toolCallId: string,
     modelId: import("@repo/shared").SupportedChatModelId | undefined,
@@ -82,6 +84,7 @@ export function BotMessage({
   streaming,
   pendingConfirmations = [],
   answerQuestion,
+  cancelQuestion,
   setConfirmationModelOverride,
   confirmToolCall,
   activePendingId,
@@ -164,6 +167,7 @@ export function BotMessage({
                       toolCallId={part.toolCallId}
                       questions={questions}
                       onAnswer={answerQuestion}
+                      onCancel={cancelQuestion}
                     />
                   );
                 }

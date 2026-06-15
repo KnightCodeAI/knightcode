@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "fs/promises";
+import { open, opendir, stat } from "fs/promises";
 import {
   isSafeProjectFile,
   resolveInsideRoot,
@@ -6,6 +6,10 @@ import {
 
 const MAX_DIR_ENTRIES = 1000;
 const MAX_FILE_CHARS = 40_000;
+// UTF-8 encodes at most 4 bytes per code point, so reading this many bytes is
+// always enough to recover MAX_FILE_CHARS characters — without slurping a
+// multi-gigabyte file into memory just to throw most of it away.
+const MAX_FILE_BYTES = MAX_FILE_CHARS * 4;
 
 /**
  * Extract paths mentioned with the @ symbol, ported from claude-code's
@@ -44,21 +48,39 @@ async function describeMention(
 
     const stats = await stat(resolved);
     if (stats.isDirectory()) {
-      const entries = await readdir(resolved, { withFileTypes: true });
-      const names = entries
-        .slice(0, MAX_DIR_ENTRIES)
-        .map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
-      if (entries.length > MAX_DIR_ENTRIES) {
-        names.push(`… and ${entries.length - MAX_DIR_ENTRIES} more entries`);
+      // Stream entries and stop once we have enough — a directory with 100k
+      // files never materializes a 100k-element Dirent array in memory. The
+      // iterator closes the handle when we break.
+      const names: string[] = [];
+      let more = false;
+      for await (const entry of await opendir(resolved)) {
+        if (names.length >= MAX_DIR_ENTRIES) {
+          more = true;
+          break;
+        }
+        names.push(entry.isDirectory() ? `${entry.name}/` : entry.name);
       }
+      if (more) names.push(`… and more entries (showing first ${MAX_DIR_ENTRIES})`);
       return `Contents of directory @${mention}:\n${names.join("\n")}`;
     }
 
-    let content = await readFile(resolved, "utf-8");
-    if (content.length > MAX_FILE_CHARS) {
-      content = `${content.slice(0, MAX_FILE_CHARS)}\n… (truncated; read the file for the rest)`;
+    // Read at most MAX_FILE_BYTES rather than the whole file, so mentioning a
+    // huge file can't spike memory or stall submission.
+    const readLen = Math.min(stats.size, MAX_FILE_BYTES);
+    const handle = await open(resolved, "r");
+    let raw: string;
+    try {
+      const buf = Buffer.alloc(readLen);
+      const { bytesRead } = await handle.read(buf, 0, readLen, 0);
+      raw = buf.subarray(0, bytesRead).toString("utf-8");
+    } finally {
+      await handle.close();
     }
-    return `Contents of file @${mention}:\n${content}`;
+    const truncated = stats.size > readLen || raw.length > MAX_FILE_CHARS;
+    const content = raw.length > MAX_FILE_CHARS ? raw.slice(0, MAX_FILE_CHARS) : raw;
+    return `Contents of file @${mention}:\n${content}${
+      truncated ? "\n… (truncated; read the file for the rest)" : ""
+    }`;
   } catch {
     // Missing path, unreadable file, outside the project root — the mention
     // was probably not a path at all. Silently skip, like claude-code.

@@ -26,6 +26,9 @@ type Props = {
   toolCallId: string;
   questions: Question[];
   onAnswer: (toolCallId: string, answers: Answer[]) => void;
+  /** Esc (outside the custom-answer box) cancels the prompt — wired to the
+   *  turn interrupt so a question never traps the user. */
+  onCancel?: (toolCallId: string) => void;
 };
 
 type PerQuestionState = {
@@ -66,7 +69,12 @@ function answerFromState(
   return typeof state.selected === "string" ? state.selected : "";
 }
 
-export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
+export function InlineQuestion({
+  toolCallId,
+  questions,
+  onAnswer,
+  onCancel,
+}: Props) {
   const { colors } = useTheme();
   // Question index. questions.length means we're on the Submit tab.
   const [qIndex, setQIndex] = useState(0);
@@ -188,6 +196,15 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
       return;
     }
 
+    // Outside the custom-answer box, Esc cancels the whole prompt (the dialog
+    // owns the keyboard while pending, so the session-level interrupt can't
+    // fire). Mirrors ToolPermissionRequest/AgentSpawnConfirm owning Esc.
+    if (key.name === "escape") {
+      key.preventDefault();
+      onCancel?.(toolCallId);
+      return;
+    }
+
     // On the Submit tab
     if (qIndex === questions.length) {
       if (key.name === "left" || (key.shift && key.name === "tab")) {
@@ -282,6 +299,7 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
               {allAnswered ? "Submit answers" : "Answer all questions first"}
             </text>
             <text fg={colors.dimSeparator}>[←] Back</text>
+            <text fg={colors.dimSeparator}>[Esc] Cancel</text>
           </>
         ) : (
           <>
@@ -293,6 +311,7 @@ export function InlineQuestion({ toolCallId, questions, onAnswer }: Props) {
               [Enter] {currentQuestion?.multi_select ? "Toggle" : "Select"}
             </text>
             <text fg={colors.dimSeparator}>[← →] Question</text>
+            <text fg={colors.dimSeparator}>[Esc] Cancel</text>
           </>
         )}
       </box>

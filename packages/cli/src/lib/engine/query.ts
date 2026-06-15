@@ -168,8 +168,13 @@ export async function* query(
       // the tool calls/results that produced them — claude-code appends
       // attachments to toolResults the same way (query.ts:1580-1590,
       // `toolResults.push(attachment)`).
+      // Consume the pending reminders: each one rides along exactly once, in
+      // the round after it was produced. Splicing empties the array so reminders
+      // pushed while this round's tools run (below) queue for the NEXT round
+      // instead of being re-injected every round forever.
+      const pendingReminders = reminders.splice(0, reminders.length);
       const reminderMessage: Message | null =
-        reminders.length === 0
+        pendingReminders.length === 0
           ? null
           : ({
               id: "engine-hook-reminders",
@@ -177,7 +182,7 @@ export async function* query(
               parts: [
                 {
                   type: "text",
-                  text: `<system-reminder>\n${reminders.join("\n\n")}\n</system-reminder>`,
+                  text: `<system-reminder>\n${pendingReminders.join("\n\n")}\n</system-reminder>`,
                 },
               ],
             } as Message);

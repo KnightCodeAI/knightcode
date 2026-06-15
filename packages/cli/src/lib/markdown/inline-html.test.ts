@@ -51,6 +51,35 @@ describe("convertHtmlBreaks", () => {
     );
   });
 
+  test("multi-backtick code spans preserve an inner <br>", () => {
+    expect(convertHtmlBreaks("see ``a `<br>` b`` then<br>next")).toBe(
+      "see ``a `<br>` b`` then  \nnext",
+    );
+    expect(convertHtmlBreaks("| ``x<br>y`` | c<br>d |")).toBe(
+      ["| ``x<br>y`` | c |", "|  | d |"].join("\n"),
+    );
+  });
+
+  test("body row without a trailing pipe still expands its breaks", () => {
+    // Previously a missing trailing pipe forced the fallback that degraded
+    // <br> to a space; now the row expands into continuation rows.
+    expect(convertHtmlBreaks("| a | b<br>c")).toBe(
+      ["| a | b |", "|  | c |"].join("\n"),
+    );
+  });
+
+  test("a literal pipe inside a code span is not a column separator", () => {
+    expect(convertHtmlBreaks("| `a | b` | c<br>d |")).toBe(
+      ["| `a | b` | c |", "|  | d |"].join("\n"),
+    );
+  });
+
+  test("an escaped pipe stays inside its cell", () => {
+    expect(convertHtmlBreaks("| a \\| b | c<br>d |")).toBe(
+      ["| a \\| b | c |", "|  | d |"].join("\n"),
+    );
+  });
+
   test("other text untouched", () => {
     expect(convertHtmlBreaks("a < b and Promise<void>")).toBe(
       "a < b and Promise<void>",
