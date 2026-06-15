@@ -200,8 +200,14 @@ export function InlineQuestion({
     // owns the keyboard while pending, so the session-level interrupt can't
     // fire). Mirrors ToolPermissionRequest/AgentSpawnConfirm owning Esc.
     if (key.name === "escape") {
-      key.preventDefault();
-      onCancel?.(toolCallId);
+      // Only swallow Esc when we can actually cancel. If no onCancel is wired
+      // (e.g. a question surfaced inside an InterruptedMessage), preventing
+      // default would silently eat the key and trap the prompt — so leave it
+      // for the session-level interrupt instead.
+      if (onCancel) {
+        key.preventDefault();
+        onCancel(toolCallId);
+      }
       return;
     }
 

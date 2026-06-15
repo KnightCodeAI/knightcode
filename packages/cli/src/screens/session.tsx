@@ -89,9 +89,12 @@ function ChatMessage({
   const text = msg.parts
     .filter((p) => p.type === "text")
     // `text` is typed as required on text parts, but the transcript store is
-    // not re-validated on load (engine/query.ts), so guard against a missing
-    // value rather than crashing on .startsWith.
-    .map((p) => (p as { text?: string }).text ?? "")
+    // not re-validated on load (engine/query.ts), so coerce to a string —
+    // a missing or non-string value would otherwise crash on .startsWith.
+    .map((p) => {
+      const t = (p as { text?: unknown }).text;
+      return typeof t === "string" ? t : "";
+    })
     // System-reminder parts (e.g. @-mention expansions) are model context,
     // not something the user typed — keep them out of the rendered bubble.
     .filter((t) => !t.startsWith("<system-reminder>"))

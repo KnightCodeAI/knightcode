@@ -71,8 +71,21 @@ async function describeMention(
     let raw: string;
     try {
       const buf = Buffer.alloc(readLen);
-      const { bytesRead } = await handle.read(buf, 0, readLen, 0);
-      raw = buf.subarray(0, bytesRead).toString("utf-8");
+      // A single read() can return fewer bytes than requested (a short read),
+      // so loop until the buffer is filled or we hit EOF — otherwise part of
+      // the file would be dropped with no truncation marker.
+      let offset = 0;
+      while (offset < readLen) {
+        const { bytesRead } = await handle.read(
+          buf,
+          offset,
+          readLen - offset,
+          offset,
+        );
+        if (bytesRead === 0) break;
+        offset += bytesRead;
+      }
+      raw = buf.subarray(0, offset).toString("utf-8");
     } finally {
       await handle.close();
     }
