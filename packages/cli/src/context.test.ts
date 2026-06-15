@@ -17,9 +17,9 @@ afterEach(() => {
   getSystemContext.cache.clear?.()
 })
 
-test('getUserContext returns memory content for a repo with CLAUDE.md', async () => {
+test('getUserContext returns memory content for a repo with KNIGHTCODE.md', async () => {
   dir = mkdtempSync(join(tmpdir(), 'kc-ctx-'))
-  writeFileSync(join(dir, 'CLAUDE.md'), 'remember the secret rule')
+  writeFileSync(join(dir, 'KNIGHTCODE.md'), 'remember the secret rule')
   setOriginalCwd(dir)
   resetGetMemoryFilesCache()
   getUserContext.cache.clear?.()

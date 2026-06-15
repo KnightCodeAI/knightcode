@@ -884,7 +884,7 @@ export const getMemoryFiles = memoize(
 
       // Try reading CLAUDE.md (Project) - only if projectSettings is enabled
       if (isSettingSourceEnabled('projectSettings') && !skipProject) {
-        const projectPath = join(dir, 'CLAUDE.md')
+        const projectPath = join(dir, 'KNIGHTCODE.md')
         result.push(
           ...(await processMemoryFile(
             projectPath,
@@ -895,7 +895,7 @@ export const getMemoryFiles = memoize(
         )
 
         // Try reading .claude/CLAUDE.md (Project)
-        const dotClaudePath = join(dir, '.claude', 'CLAUDE.md')
+        const dotClaudePath = join(dir, '.claude', 'KNIGHTCODE.md')
         result.push(
           ...(await processMemoryFile(
             dotClaudePath,
@@ -920,7 +920,7 @@ export const getMemoryFiles = memoize(
 
       // Try reading CLAUDE.local.md (Local) - only if localSettings is enabled
       if (isSettingSourceEnabled('localSettings')) {
-        const localPath = join(dir, 'CLAUDE.local.md')
+        const localPath = join(dir, 'KNIGHTCODE.local.md')
         result.push(
           ...(await processMemoryFile(
             localPath,
@@ -940,7 +940,7 @@ export const getMemoryFiles = memoize(
       const additionalDirs = getAdditionalDirectoriesForClaudeMd()
       for (const dir of additionalDirs) {
         // Try reading CLAUDE.md from the additional directory
-        const projectPath = join(dir, 'CLAUDE.md')
+        const projectPath = join(dir, 'KNIGHTCODE.md')
         result.push(
           ...(await processMemoryFile(
             projectPath,
@@ -951,7 +951,7 @@ export const getMemoryFiles = memoize(
         )
 
         // Try reading .claude/CLAUDE.md from the additional directory
-        const dotClaudePath = join(dir, '.claude', 'CLAUDE.md')
+        const dotClaudePath = join(dir, '.claude', 'KNIGHTCODE.md')
         result.push(
           ...(await processMemoryFile(
             dotClaudePath,
@@ -1254,7 +1254,7 @@ export async function getMemoryFilesForNestedDirectory(
 
   // Process project memory files (CLAUDE.md and .claude/CLAUDE.md)
   if (isSettingSourceEnabled('projectSettings')) {
-    const projectPath = join(dir, 'CLAUDE.md')
+    const projectPath = join(dir, 'KNIGHTCODE.md')
     result.push(
       ...(await processMemoryFile(
         projectPath,
@@ -1263,7 +1263,7 @@ export async function getMemoryFilesForNestedDirectory(
         false,
       )),
     )
-    const dotClaudePath = join(dir, '.claude', 'CLAUDE.md')
+    const dotClaudePath = join(dir, '.claude', 'KNIGHTCODE.md')
     result.push(
       ...(await processMemoryFile(
         dotClaudePath,
@@ -1276,7 +1276,7 @@ export async function getMemoryFilesForNestedDirectory(
 
   // Process local memory file (CLAUDE.local.md)
   if (isSettingSourceEnabled('localSettings')) {
-    const localPath = join(dir, 'CLAUDE.local.md')
+    const localPath = join(dir, 'KNIGHTCODE.local.md')
     result.push(
       ...(await processMemoryFile(localPath, 'Local', processedPaths, false)),
     )
@@ -1435,7 +1435,7 @@ export function isMemoryFilePath(filePath: string): boolean {
   const name = basename(filePath)
 
   // CLAUDE.md or CLAUDE.local.md anywhere
-  if (name === 'CLAUDE.md' || name === 'CLAUDE.local.md') {
+  if (name === 'KNIGHTCODE.md' || name === 'KNIGHTCODE.local.md') {
     return true
   }
 
