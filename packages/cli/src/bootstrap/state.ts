@@ -572,6 +572,17 @@ export function setOriginalCwd(cwd: string): void {
   STATE.originalCwd = cwd.normalize('NFC')
 }
 
+// Snapshot of the assembled project-memory content for the current turn, so
+// the auto-mode classifier can read it without importing claudemd.ts (which
+// would create a cycle through permissions/filesystem).
+let cachedClaudeMdContent: string | null = null
+export function setCachedClaudeMdContent(content: string | null): void {
+  cachedClaudeMdContent = content
+}
+export function getCachedClaudeMdContent(): string | null {
+  return cachedClaudeMdContent
+}
+
 export function addInvokedSkill(
   _skillName: string,
   _skillPath: string,
