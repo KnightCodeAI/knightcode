@@ -20,10 +20,7 @@ import {
   getOauthAccountInfo,
   isClaudeAISubscriber,
 } from 'src/utils/auth.js'
-import {
-  createAssistantAPIErrorMessage,
-  NO_RESPONSE_REQUESTED,
-} from 'src/utils/messages.js'
+import { createAssistantAPIErrorMessage } from 'src/utils/messages.js'
 import {
   getDefaultMainLoopModelSetting,
   isNonCustomOpusModel,
@@ -43,21 +40,12 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import {
-  type ClaudeAILimits,
-  getRateLimitErrorMessage,
-  type OverageDisabledReason,
-} from '../claudeAiLimits.js'
-import { shouldProcessRateLimits } from '../rateLimitMocking.js' // Used for /mock-limits command
 import { extractConnectionErrorDetails, formatAPIError } from './errorUtils.js'
 
 export const API_ERROR_MESSAGE_PREFIX = 'API Error'
 
 export function startsWithApiErrorPrefix(text: string): boolean {
-  return (
-    text.startsWith(API_ERROR_MESSAGE_PREFIX) ||
-    text.startsWith(`Please run /login · ${API_ERROR_MESSAGE_PREFIX}`)
-  )
+  return text.startsWith(API_ERROR_MESSAGE_PREFIX)
 }
 export const PROMPT_TOO_LONG_ERROR_MESSAGE = 'Prompt is too long'
 
@@ -152,7 +140,8 @@ export function isMediaSizeErrorMessage(msg: AssistantMessage): boolean {
   )
 }
 export const CREDIT_BALANCE_TOO_LOW_ERROR_MESSAGE = 'Credit balance is too low'
-export const INVALID_API_KEY_ERROR_MESSAGE = 'Not logged in · Please run /login'
+export const INVALID_API_KEY_ERROR_MESSAGE =
+  'Invalid OpenRouter API key · check `OPENROUTER_API_KEY`'
 export const INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL =
   'Invalid API key · Fix external API key'
 export const ORG_DISABLED_ERROR_MESSAGE_ENV_KEY_WITH_OAUTH =
@@ -167,6 +156,62 @@ export const REPEATED_529_ERROR_MESSAGE = 'Repeated 529 Overloaded errors'
 export const CUSTOM_OFF_SWITCH_MESSAGE =
   'Opus is experiencing high load, please use /model to switch to Sonnet'
 export const API_TIMEOUT_ERROR_MESSAGE = 'Request timed out'
+
+/**
+ * The OpenRouter error contract. Maps an HTTP status to a user-facing message
+ * and whether the request is worth retrying.
+ *
+ * | Status   | Meaning                       | Retry?       |
+ * | 401      | Invalid/missing API key       | no           |
+ * | 402      | Insufficient credits          | no           |
+ * | 429      | Rate limited                  | yes, on reset|
+ * | 400/404  | Invalid/unknown model         | no           |
+ * | 502/503  | Upstream provider error       | yes, backoff |
+ */
+export type ApiErrorClassification = { message: string; retryable: boolean }
+
+function getErrorStatus(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status
+  return typeof status === 'number' ? status : undefined
+}
+
+export function classifyApiError(error: unknown): ApiErrorClassification {
+  const status = getErrorStatus(error)
+  switch (status) {
+    case 401:
+      return {
+        message: 'Invalid OpenRouter API key — check `OPENROUTER_API_KEY`',
+        retryable: false,
+      }
+    case 402:
+      return {
+        message: 'Out of OpenRouter credits — top up at openrouter.ai/credits',
+        retryable: false,
+      }
+    case 429:
+      return {
+        message: 'Rate limited — retrying after the reset window',
+        retryable: true,
+      }
+    case 400:
+    case 404:
+      return {
+        message: 'Model unavailable — pick another with /model',
+        retryable: false,
+      }
+    case 502:
+    case 503:
+      return {
+        message: 'Provider temporarily unavailable — retrying',
+        retryable: true,
+      }
+  }
+  if (status !== undefined && status >= 500) {
+    return { message: 'Provider error — retrying', retryable: true }
+  }
+  const message = error instanceof Error ? error.message : 'Unknown error'
+  return { message: `${API_ERROR_MESSAGE_PREFIX}: ${message}`, retryable: false }
+}
 export function getPdfTooLargeErrorMessage(): string {
   const limits = `max ${API_PDF_MAX_PAGES} pages, ${formatFileSize(PDF_TARGET_RAW_SIZE)}`
   return getIsNonInteractiveSession()
@@ -462,98 +507,16 @@ export function getAssistantMessageFromError(
     })
   }
 
+  // OpenRouter rate-limit (429) and insufficient-credits (402). 402 is a hard
+  // stop (top up credits); 429 is transient and retried upstream by withRetry.
   if (
     error instanceof APIError &&
-    error.status === 429 &&
-    shouldProcessRateLimits(isClaudeAISubscriber())
+    (error.status === 429 || error.status === 402)
   ) {
-    // Check if this is the new API with multiple rate limit headers
-    const rateLimitType = error.headers?.get?.(
-      'anthropic-ratelimit-unified-representative-claim',
-    ) as 'five_hour' | 'seven_day' | 'seven_day_opus' | null
-
-    const overageStatus = error.headers?.get?.(
-      'anthropic-ratelimit-unified-overage-status',
-    ) as 'allowed' | 'allowed_warning' | 'rejected' | null
-
-    // If we have the new headers, use the new message generation
-    if (rateLimitType || overageStatus) {
-      // Build limits object from error headers to determine the appropriate message
-      const limits: ClaudeAILimits = {
-        status: 'rejected',
-        unifiedRateLimitFallbackAvailable: false,
-        isUsingOverage: false,
-      }
-
-      // Extract rate limit information from headers
-      const resetHeader = error.headers?.get?.(
-        'anthropic-ratelimit-unified-reset',
-      )
-      if (resetHeader) {
-        limits.resetsAt = Number(resetHeader)
-      }
-
-      if (rateLimitType) {
-        limits.rateLimitType = rateLimitType
-      }
-
-      if (overageStatus) {
-        limits.overageStatus = overageStatus
-      }
-
-      const overageResetHeader = error.headers?.get?.(
-        'anthropic-ratelimit-unified-overage-reset',
-      )
-      if (overageResetHeader) {
-        limits.overageResetsAt = Number(overageResetHeader)
-      }
-
-      const overageDisabledReason = error.headers?.get?.(
-        'anthropic-ratelimit-unified-overage-disabled-reason',
-      ) as OverageDisabledReason | null
-      if (overageDisabledReason) {
-        limits.overageDisabledReason = overageDisabledReason
-      }
-
-      // Use the new message format for all new API rate limits
-      const specificErrorMessage = getRateLimitErrorMessage(limits, model)
-      if (specificErrorMessage) {
-        return createAssistantAPIErrorMessage({
-          content: specificErrorMessage,
-          error: 'rate_limit',
-        })
-      }
-
-      // If getRateLimitErrorMessage returned null, it means the fallback mechanism
-      // will handle this silently (e.g., Opus -> Sonnet fallback for eligible users).
-      // Return NO_RESPONSE_REQUESTED so no error is shown to the user, but the
-      // message is still recorded in conversation history for Claude to see.
-      return createAssistantAPIErrorMessage({
-        content: NO_RESPONSE_REQUESTED,
-        error: 'rate_limit',
-      })
-    }
-
-    // No quota headers — this is NOT a quota limit. Surface what the API actually
-    // said instead of a generic "Rate limit reached". Entitlement rejections
-    // (e.g. 1M context without Extra Usage) and infra capacity 429s land here.
-    if (error.message.includes('Extra usage is required for long context')) {
-      const hint = getIsNonInteractiveSession()
-        ? 'enable extra usage at claude.ai/settings/usage, or use --model to switch to standard context'
-        : 'run /extra-usage to enable, or /model to switch to standard context'
-      return createAssistantAPIErrorMessage({
-        content: `${API_ERROR_MESSAGE_PREFIX}: Extra usage is required for 1M context · ${hint}`,
-        error: 'rate_limit',
-      })
-    }
-    // SDK's APIError.makeMessage prepends "429 " and JSON-stringifies the body
-    // when there's no top-level .message — extract the inner error.message.
-    const stripped = error.message.replace(/^429\s+/, '')
-    const innerMessage = stripped.match(/"message"\s*:\s*"([^"]*)"/)?.[1]
-    const detail = innerMessage || stripped
+    const { message } = classifyApiError(error)
     return createAssistantAPIErrorMessage({
-      content: `${API_ERROR_MESSAGE_PREFIX}: Request rejected (429) · ${detail || 'this may be a temporary capacity issue — check status.anthropic.com'}`,
-      error: 'rate_limit',
+      content: `${API_ERROR_MESSAGE_PREFIX}: ${message}`,
+      error: error.status === 402 ? 'billing_error' : 'rate_limit',
     })
   }
 
@@ -876,9 +839,7 @@ export function getAssistantMessageFromError(
 
     return createAssistantAPIErrorMessage({
       error: 'authentication_failed',
-      content: getIsNonInteractiveSession()
-        ? `Failed to authenticate. ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`
-        : `Please run /login · ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`,
+      content: `${API_ERROR_MESSAGE_PREFIX}: ${error.message} · check your \`OPENROUTER_API_KEY\``,
     })
   }
 
@@ -977,14 +938,6 @@ export function classifyAPIError(error: unknown): string {
     return 'api_timeout'
   }
 
-  // Check for repeated 529 errors
-  if (
-    error instanceof Error &&
-    error.message.includes(REPEATED_529_ERROR_MESSAGE)
-  ) {
-    return 'repeated_529'
-  }
-
   // Check for emergency capacity off switch
   if (
     error instanceof Error &&
@@ -998,11 +951,10 @@ export function classifyAPIError(error: unknown): string {
     return 'rate_limit'
   }
 
-  // Server overload (529)
+  // Upstream provider error (the OpenRouter equivalent of "overloaded")
   if (
     error instanceof APIError &&
-    (error.status === 529 ||
-      error.message?.includes('"type":"overloaded_error"'))
+    (error.status === 502 || error.status === 503)
   ) {
     return 'server_overload'
   }
@@ -1163,14 +1115,11 @@ export function classifyAPIError(error: unknown): string {
 export function categorizeRetryableAPIError(
   error: APIError,
 ): SDKAssistantMessageError {
-  if (
-    error.status === 529 ||
-    error.message?.includes('"type":"overloaded_error"')
-  ) {
-    return 'rate_limit'
-  }
   if (error.status === 429) {
     return 'rate_limit'
+  }
+  if (error.status === 502 || error.status === 503) {
+    return 'server_error'
   }
   if (error.status === 401 || error.status === 403) {
     return 'authentication_failed'
