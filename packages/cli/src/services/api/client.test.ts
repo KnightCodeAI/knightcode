@@ -4,11 +4,11 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   clearApiKeyHelperCache,
-  getAnthropicApiKey,
-  getAnthropicApiKeyWithSource,
+  getKnightcodeApiKey,
+  getKnightcodeApiKeyWithSource,
   saveCredentials,
 } from '../../utils/auth.js'
-import { getAnthropicClient, OPENROUTER_BASE_URL } from './client.js'
+import { getKnightcodeClient, OPENROUTER_BASE_URL } from './client.js'
 
 let configDir: string
 const savedEnv: Record<string, string | undefined> = {}
@@ -35,7 +35,7 @@ afterEach(() => {
 
 describe('credential resolution', () => {
   test('no key anywhere resolves to none', () => {
-    expect(getAnthropicApiKeyWithSource()).toEqual({
+    expect(getKnightcodeApiKeyWithSource()).toEqual({
       key: null,
       source: 'none',
     })
@@ -45,14 +45,14 @@ describe('credential resolution', () => {
     process.env.OPENROUTER_API_KEY = 'sk-or-test-env'
     saveCredentials('sk-or-test-file')
     clearApiKeyHelperCache()
-    const { key, source } = getAnthropicApiKeyWithSource()
+    const { key, source } = getKnightcodeApiKeyWithSource()
     expect(key).toBe('sk-or-test-env')
     expect(source).toBe('OPENROUTER_API_KEY')
   })
 
   test('saved credentials resolve with the managed source', () => {
     saveCredentials('sk-or-test-file')
-    const { key, source } = getAnthropicApiKeyWithSource()
+    const { key, source } = getKnightcodeApiKeyWithSource()
     expect(key).toBe('sk-or-test-file')
     expect(source).toBe('/login managed key')
   })
@@ -66,30 +66,30 @@ describe('credential resolution', () => {
   })
 
   test('resolution is cached until cleared', () => {
-    expect(getAnthropicApiKey()).toBeNull()
+    expect(getKnightcodeApiKey()).toBeNull()
     process.env.OPENROUTER_API_KEY = 'sk-or-late'
-    expect(getAnthropicApiKey()).toBeNull()
+    expect(getKnightcodeApiKey()).toBeNull()
     clearApiKeyHelperCache()
-    expect(getAnthropicApiKey()).toBe('sk-or-late')
+    expect(getKnightcodeApiKey()).toBe('sk-or-late')
   })
 })
 
-describe('getAnthropicClient', () => {
+describe('getKnightcodeClient', () => {
   test('targets the gateway base URL', async () => {
-    const client = await getAnthropicClient({ maxRetries: 0 })
+    const client = await getKnightcodeClient({ maxRetries: 0 })
     expect(client.baseURL).toBe(OPENROUTER_BASE_URL)
   })
 
   test('honors the base URL override', async () => {
     process.env.OPENROUTER_BASE_URL = 'http://localhost:9999/api'
-    const client = await getAnthropicClient({ maxRetries: 0 })
+    const client = await getKnightcodeClient({ maxRetries: 0 })
     expect(client.baseURL).toBe('http://localhost:9999/api')
   })
 
   test('explicit key overrides the resolved key', async () => {
     process.env.OPENROUTER_API_KEY = 'sk-or-env'
     clearApiKeyHelperCache()
-    const client = await getAnthropicClient({
+    const client = await getKnightcodeClient({
       apiKey: 'sk-or-explicit',
       maxRetries: 0,
     })

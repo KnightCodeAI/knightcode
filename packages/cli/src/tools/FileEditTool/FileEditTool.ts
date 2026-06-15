@@ -526,7 +526,7 @@ export const FileEditTool = buildTool({
 
     // 7. Log events
     if (absoluteFilePath.endsWith(`${sep}KNIGHTCODE.md`)) {
-      logEvent('knightcode_write_claudemd', {})
+      logEvent('knightcode_write_knightcodemd', {})
     }
     countLinesChanged(patch)
 

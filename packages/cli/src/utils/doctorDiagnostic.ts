@@ -1,5 +1,5 @@
 // TODO: environment "doctor" diagnostics (install type, ripgrep status, version
-// locks) — not ported. The `claude doctor` screen reads many fields, so the
+// locks) — not ported. The `knightcode doctor` screen reads many fields, so the
 // shape is permissive; the array fields are typed so the display loops resolve.
 export type DiagnosticInfo = {
   multipleInstallations: any[]

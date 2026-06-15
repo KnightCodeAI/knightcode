@@ -81,18 +81,18 @@ export function MCPListPanel({
   const [theme] = useTheme()
   const [selectedIndex, setSelectedIndex] = useState(0)
 
-  // Non-claudeai servers grouped by scope
+  // Non-knightcodeai servers grouped by scope
   const serversByScope = React.useMemo(() => {
     const regularServers = servers.filter(
-      s => s.client.config.type !== 'claudeai-proxy',
+      s => s.client.config.type !== 'knightcodeai-proxy',
     )
     return groupServersByScope(regularServers)
   }, [servers])
 
-  const claudeAiServers = React.useMemo(
+  const knightcodeAiServers = React.useMemo(
     () =>
       servers
-        .filter(s => s.client.config.type === 'claudeai-proxy')
+        .filter(s => s.client.config.type === 'knightcodeai-proxy')
         .sort((a, b) => a.name.localeCompare(b.name)),
     [servers],
   )
@@ -118,7 +118,7 @@ export function MCPListPanel({
         items.push({ type: 'server', server })
       }
     }
-    for (const server of claudeAiServers) {
+    for (const server of knightcodeAiServers) {
       items.push({ type: 'server', server })
     }
     for (const agentServer of agentServers) {
@@ -129,7 +129,7 @@ export function MCPListPanel({
       items.push({ type: 'server', server })
     }
     return items
-  }, [serversByScope, claudeAiServers, agentServers, dynamicServers])
+  }, [serversByScope, knightcodeAiServers, agentServers, dynamicServers])
 
   const handleCancel = useCallback((): void => {
     onComplete('MCP dialog dismissed', {
@@ -278,12 +278,12 @@ export function MCPListPanel({
           })}
 
           {/* KnightCode.ai servers section */}
-          {claudeAiServers.length > 0 && (
+          {knightcodeAiServers.length > 0 && (
             <Box flexDirection="column" marginBottom={1}>
               <Box paddingLeft={2}>
                 <Text bold>knightcode.raghavseth.in</Text>
               </Box>
-              {claudeAiServers.map(server => renderServerItem(server))}
+              {knightcodeAiServers.map(server => renderServerItem(server))}
             </Box>
           )}
 
@@ -328,7 +328,7 @@ export function MCPListPanel({
               <Text dimColor>
                 {debugMode
                   ? '※ Error logs shown inline with --debug'
-                  : '※ Run claude --debug to see error logs'}
+                  : '※ Run knightcode --debug to see error logs'}
               </Text>
             )}
             <Text dimColor>

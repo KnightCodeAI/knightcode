@@ -573,14 +573,14 @@ export function setOriginalCwd(cwd: string): void {
 }
 
 // Snapshot of the assembled project-memory content for the current turn, so
-// the auto-mode classifier can read it without importing claudemd.ts (which
+// the auto-mode classifier can read it without importing knightcodemd.ts (which
 // would create a cycle through permissions/filesystem).
-let cachedClaudeMdContent: string | null = null
-export function setCachedClaudeMdContent(content: string | null): void {
-  cachedClaudeMdContent = content
+let cachedKnightcodeMdContent: string | null = null
+export function setCachedKnightcodeMdContent(content: string | null): void {
+  cachedKnightcodeMdContent = content
 }
-export function getCachedClaudeMdContent(): string | null {
-  return cachedClaudeMdContent
+export function getCachedKnightcodeMdContent(): string | null {
+  return cachedKnightcodeMdContent
 }
 
 export function addInvokedSkill(
@@ -628,16 +628,16 @@ export function getRegisteredHooks(): Partial<
 
 // Extra working directories the user added via /add-dir, included when loading
 // KNIGHTCODE.md files. Held in module state for the session.
-let additionalDirectoriesForClaudeMd: string[] = []
+let additionalDirectoriesForKnightcodeMd: string[] = []
 
-export function getAdditionalDirectoriesForClaudeMd(): string[] {
-  return additionalDirectoriesForClaudeMd
+export function getAdditionalDirectoriesForKnightcodeMd(): string[] {
+  return additionalDirectoriesForKnightcodeMd
 }
 
-export function setAdditionalDirectoriesForClaudeMd(
+export function setAdditionalDirectoriesForKnightcodeMd(
   directories: string[],
 ): void {
-  additionalDirectoriesForClaudeMd = directories
+  additionalDirectoriesForKnightcodeMd = directories
 }
 
 export function setCostStateForRestore(_state: {

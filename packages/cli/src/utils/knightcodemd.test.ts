@@ -2,7 +2,7 @@ import { test, expect, afterEach } from 'bun:test'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { getMemoryFiles, resetGetMemoryFilesCache } from './claudemd.js'
+import { getMemoryFiles, resetGetMemoryFilesCache } from './knightcodemd.js'
 import { getOriginalCwd, setOriginalCwd } from '../bootstrap/state.js'
 
 let dir: string

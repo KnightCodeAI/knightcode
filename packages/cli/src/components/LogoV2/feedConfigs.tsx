@@ -50,7 +50,7 @@ export function createWhatsNewFeed(releaseNotes: string[]): FeedConfig {
 
   const emptyMessage =
     ("external" as string) === 'ant'
-      ? 'Unable to fetch latest claude-cli-internal commits'
+      ? 'Unable to fetch latest knightcode-cli-internal commits'
       : 'Check the KnightCode changelog for updates'
 
   return {
@@ -78,7 +78,7 @@ export function createProjectOnboardingFeed(steps: Step[]): FeedConfig {
 
   const warningText =
     getCwd() === homedir()
-      ? 'Note: You have launched claude in your home directory. For the best experience, launch it in a project directory instead.'
+      ? 'Note: You have launched knightcode in your home directory. For the best experience, launch it in a project directory instead.'
       : undefined
 
   if (warningText) {
@@ -105,7 +105,7 @@ export function createGuestPassesFeed(): FeedConfig {
       content: (
         <>
           <Box marginY={1}>
-            <Text color="claude">[✻] [✻] [✻]</Text>
+            <Text color="knightcode">[✻] [✻] [✻]</Text>
           </Box>
           <Text dimColor>{subtitle}</Text>
         </>

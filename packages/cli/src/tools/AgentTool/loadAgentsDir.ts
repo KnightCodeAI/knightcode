@@ -41,7 +41,7 @@ export type BaseAgentDefinition = {
   /** Omit KNIGHTCODE.md hierarchy from the agent's userContext. Read-only agents
    * (Explore, Plan) don't need commit/PR/lint guidelines — the main agent has
    * full KNIGHTCODE.md and interprets their output. */
-  omitClaudeMd?: boolean
+  omitKnightcodeMd?: boolean
   serverName?: string
   requiredMcpServersText?: string
   overriddenBy?: SettingSource | 'built-in' | 'plugin'

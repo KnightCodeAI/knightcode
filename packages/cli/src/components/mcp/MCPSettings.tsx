@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo } from 'react'
 import type { CommandResultDisplay } from '../../commands.js'
-import { ClaudeAuthProvider } from '../../services/mcp/auth.js'
+import { KnightcodeAuthProvider } from '../../services/mcp/auth.js'
 import type {
-  McpClaudeAIProxyServerConfig,
+  McpKnightcodeAIProxyServerConfig,
   McpHTTPServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
@@ -59,11 +59,11 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
           const scope = client.config.scope
           const isSSE = client.config.type === 'sse'
           const isHTTP = client.config.type === 'http'
-          const isClaudeAIProxy = client.config.type === 'claudeai-proxy'
+          const isKnightcodeAIProxy = client.config.type === 'knightcodeai-proxy'
           let isAuthenticated: boolean | undefined = undefined
 
           if (isSSE || isHTTP) {
-            const authProvider = new ClaudeAuthProvider(
+            const authProvider = new KnightcodeAuthProvider(
               client.name,
               client.config as McpSSEServerConfig | McpHTTPServerConfig,
             )
@@ -88,12 +88,12 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
             scope,
           }
 
-          if (isClaudeAIProxy) {
+          if (isKnightcodeAIProxy) {
             return {
               ...baseInfo,
-              transport: 'claudeai-proxy' as const,
+              transport: 'knightcodeai-proxy' as const,
               isAuthenticated: false,
-              config: client.config as McpClaudeAIProxyServerConfig,
+              config: client.config as McpKnightcodeAIProxyServerConfig,
             }
           } else if (isSSE) {
             return {
@@ -138,7 +138,7 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
     // Only show "no servers" message if no regular servers AND no agent servers
     if (servers.length === 0 && agentMcpServers.length === 0) {
       onComplete(
-        'No MCP servers configured. Please run /doctor if this is unexpected. Otherwise, run `claude mcp --help` or visit https://knightcode.raghavseth.in/docs/en/mcp to learn more.',
+        'No MCP servers configured. Please run /doctor if this is unexpected. Otherwise, run `knightcode mcp --help` or visit https://knightcode.raghavseth.in/docs/en/mcp to learn more.',
       )
     }
   }, [
@@ -169,7 +169,7 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
       const serverTools = filterToolsByServer(mcp.tools, viewState.server.name)
 
       const defaultTab =
-        viewState.server.transport === 'claudeai-proxy'
+        viewState.server.transport === 'knightcodeai-proxy'
           ? 'knightcode.raghavseth.in'
           : 'KnightCode'
 

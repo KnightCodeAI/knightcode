@@ -2,7 +2,7 @@
 // the runtime's default fetch behavior.
 
 export function getProxyFetchOptions(_opts?: {
-  forAnthropicAPI?: boolean
+  forKnightcodeAPI?: boolean
 }): Record<string, never> {
   return {}
 }

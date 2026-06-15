@@ -5,7 +5,7 @@ import { isEnvTruthy } from './envUtils.js'
  * Actions. This prevents prompt-injection attacks from exfiltrating secrets
  * via shell expansion (e.g., ${OPENROUTER_API_KEY}) in Bash tool commands.
  *
- * The parent claude process keeps these vars (needed for API calls, lazy
+ * The parent knightcode process keeps these vars (needed for API calls, lazy
  * credential reads). Only child processes (bash, shell snapshot, MCP stdio, LSP, hooks) are scrubbed.
  *
  * GITHUB_TOKEN / GH_TOKEN are intentionally NOT scrubbed — wrapper scripts
@@ -36,7 +36,7 @@ const GHA_SUBPROCESS_SCRUB = [
   'AZURE_CLIENT_SECRET',
   'AZURE_CLIENT_CERTIFICATE_PATH',
 
-  // GitHub Actions OIDC — consumed by the action's JS before claude spawns;
+  // GitHub Actions OIDC — consumed by the action's JS before knightcode spawns;
   // leaking these allows minting an App installation token → repo takeover
   'ACTIONS_ID_TOKEN_REQUEST_TOKEN',
   'ACTIONS_ID_TOKEN_REQUEST_URL',
@@ -45,8 +45,8 @@ const GHA_SUBPROCESS_SCRUB = [
   'ACTIONS_RUNTIME_TOKEN',
   'ACTIONS_RUNTIME_URL',
 
-  // claude-code-action-specific duplicates — action JS consumes these during
-  // prepare, before spawning claude. ALL_INPUTS contains anthropic_api_key as JSON.
+  // knightcode-code-action-specific duplicates — action JS consumes these during
+  // prepare, before spawning knightcode. ALL_INPUTS contains knightcode_api_key as JSON.
   'ALL_INPUTS',
   'OVERRIDE_GITHUB_TOKEN',
   'DEFAULT_WORKFLOW_TOKEN',
@@ -93,7 +93,7 @@ export function subprocessEnv(): NodeJS.ProcessEnv {
   for (const k of GHA_SUBPROCESS_SCRUB) {
     delete env[k]
     // GitHub Actions auto-creates INPUT_<NAME> for `with:` inputs, duplicating
-    // secrets like INPUT_ANTHROPIC_API_KEY. No-op for vars that aren't action inputs.
+    // secrets like INPUT_KNIGHTCODE_API_KEY. No-op for vars that aren't action inputs.
     delete env[`INPUT_${k}`]
   }
   return env

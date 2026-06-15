@@ -4,7 +4,7 @@ import isEqual from 'lodash-es/isEqual.js'
 import memoize from 'lodash-es/memoize.js'
 import { join } from 'path'
 import { z } from 'zod/v4'
-import { getAnthropicClient } from '../../services/api/client.js'
+import { getKnightcodeClient } from '../../services/api/client.js'
 import { logForDebugging } from '../debug.js'
 import { getKnightcodeConfigHomeDir } from '../envUtils.js'
 import { safeParseJSON } from '../json.js'
@@ -84,9 +84,9 @@ export async function refreshModelCapabilities(): Promise<void> {
   if (isEssentialTrafficOnly()) return
 
   try {
-    const anthropic = await getAnthropicClient({ maxRetries: 1 })
+    const knightcode = await getKnightcodeClient({ maxRetries: 1 })
     const parsed: ModelCapability[] = []
-    for await (const entry of anthropic.models.list({})) {
+    for await (const entry of knightcode.models.list({})) {
       const result = ModelCapabilitySchema().safeParse(entry)
       if (result.success) parsed.push(result.data)
     }

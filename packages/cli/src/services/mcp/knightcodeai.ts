@@ -4,16 +4,16 @@
 
 import type { ScopedMcpServerConfig } from './types.js'
 
-export async function fetchClaudeAIMcpConfigsIfEligible(): Promise<
+export async function fetchKnightcodeAIMcpConfigsIfEligible(): Promise<
   Record<string, ScopedMcpServerConfig>
 > {
   return {}
 }
 
-export function clearClaudeAIMcpConfigsCache(): void {}
+export function clearKnightcodeAIMcpConfigsCache(): void {}
 
-export function markClaudeAiMcpConnected(_name: string): void {}
+export function markKnightcodeAiMcpConnected(_name: string): void {}
 
-export function hasClaudeAiMcpEverConnected(_name: string): boolean {
+export function hasKnightcodeAiMcpEverConnected(_name: string): boolean {
   return false
 }

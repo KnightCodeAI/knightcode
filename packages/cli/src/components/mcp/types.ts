@@ -6,7 +6,7 @@
 import type {
   ConfigScope,
   MCPServerConnection,
-  McpClaudeAIProxyServerConfig,
+  McpKnightcodeAIProxyServerConfig,
   McpHTTPServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
@@ -35,17 +35,17 @@ export interface HTTPServerInfo extends BaseServerInfo {
   config: McpHTTPServerConfig
 }
 
-export interface ClaudeAIServerInfo extends BaseServerInfo {
-  transport: 'claudeai-proxy'
+export interface KnightcodeAIServerInfo extends BaseServerInfo {
+  transport: 'knightcodeai-proxy'
   isAuthenticated: boolean
-  config: McpClaudeAIProxyServerConfig
+  config: McpKnightcodeAIProxyServerConfig
 }
 
 export type ServerInfo =
   | StdioServerInfo
   | SSEServerInfo
   | HTTPServerInfo
-  | ClaudeAIServerInfo
+  | KnightcodeAIServerInfo
 
 // An MCP server discovered from an agent's config, grouped by server name with
 // the list of agents that reference it.

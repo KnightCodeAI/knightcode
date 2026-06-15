@@ -42,7 +42,7 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import {
-  dedupClaudeAiMcpServers,
+  dedupKnightcodeAiMcpServers,
   doesEnterpriseMcpConfigExist,
   filterMcpServersByPolicy,
   getKnightCodeMcpConfigs,
@@ -77,9 +77,9 @@ import {
   isChannelPermissionRelayEnabled,
 } from './channelPermissions.js'
 import {
-  clearClaudeAIMcpConfigsCache,
-  fetchClaudeAIMcpConfigsIfEligible,
-} from './claudeai.js'
+  clearKnightcodeAIMcpConfigsCache,
+  fetchKnightcodeAIMcpConfigsIfEligible,
+} from './knightcodeai.js'
 import { registerElicitationHandler } from './elicitationHandler.js'
 import { getMcpPrefix } from './mcpStringUtils.js'
 import { commandBelongsToServer, excludeStalePluginClients } from './utils.js'
@@ -467,7 +467,7 @@ export function useManageMCPConnections(
             }
           }
 
-          // Channel push: notifications/claude/channel → enqueue().
+          // Channel push: notifications/knightcode/channel → enqueue().
           // Gate decides whether to register the handler; connection stays
           // up either way (allowedMcpServers controls that).
           if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
@@ -513,7 +513,7 @@ export function useManageMCPConnections(
                     const { content, meta } = notification.params
                     logMCPDebug(
                       client.name,
-                      `notifications/claude/channel: ${content.slice(0, 80)}`,
+                      `notifications/knightcode/channel: ${content.slice(0, 80)}`,
                     )
                     logEvent('knightcode_mcp_channel_message', {
                       content_length: content.length,
@@ -535,13 +535,13 @@ export function useManageMCPConnections(
                 )
                 // Permission-reply handler — separate event, separate
                 // capability. Only registers if the server declares
-                // claude/channel/permission (same opt-in check as the send
+                // knightcode/channel/permission (same opt-in check as the send
                 // path in interactiveHandler.ts). Server parses the user's
                 // reply and emits {request_id, behavior}; no regex on our
                 // side, text in the general channel can't accidentally match.
                 if (
                   client.capabilities?.experimental?.[
-                    'claude/channel/permission'
+                    'knightcode/channel/permission'
                   ] !== undefined
                 ) {
                   client.client.setNotificationHandler(
@@ -559,7 +559,7 @@ export function useManageMCPConnections(
                         ) ?? false
                       logMCPDebug(
                         client.name,
-                        `notifications/claude/channel/permission: ${request_id} → ${behavior} (${resolved ? 'matched pending' : 'no pending entry — stale or unknown ID'})`,
+                        `notifications/knightcode/channel/permission: ${request_id} → ${behavior} (${resolved ? 'matched pending' : 'no pending entry — stale or unknown ID'})`,
                       )
                     },
                   )
@@ -572,7 +572,7 @@ export function useManageMCPConnections(
                 // the gate says skip but the earlier handler keeps enqueuing.
                 // Map.delete — safe when never registered.
                 client.client.removeNotificationHandler(
-                  'notifications/claude/channel',
+                  'notifications/knightcode/channel',
                 )
                 client.client.removeNotificationHandler(
                   CHANNEL_PERMISSION_METHOD,
@@ -870,27 +870,27 @@ export function useManageMCPConnections(
       // logout). Kick off the fetch now so it overlaps with loadAllPlugins()
       // inside getKnightCodeMcpConfigs; it's awaited only at the dedup step.
       // Phase 2 below awaits the same promise — no second network call.
-      let claudeaiPromise: Promise<Record<string, ScopedMcpServerConfig>>
+      let knightcodeaiPromise: Promise<Record<string, ScopedMcpServerConfig>>
       if (isStrictMcpConfig || doesEnterpriseMcpConfigExist()) {
-        claudeaiPromise = Promise.resolve({})
+        knightcodeaiPromise = Promise.resolve({})
       } else {
-        clearClaudeAIMcpConfigsCache()
-        claudeaiPromise = fetchClaudeAIMcpConfigsIfEligible()
+        clearKnightcodeAIMcpConfigsCache()
+        knightcodeaiPromise = fetchKnightcodeAIMcpConfigsIfEligible()
       }
 
       // Phase 1: Load KnightCode configs. Plugin MCP servers that duplicate a
       // --mcp-config entry or a knightcode.raghavseth.in connector are suppressed here so they
       // don't connect alongside the connector in Phase 2.
-      const { servers: claudeCodeConfigs, errors: mcpErrors } =
+      const { servers: knightCodeConfigs, errors: mcpErrors } =
         isStrictMcpConfig
           ? { servers: {}, errors: [] }
-          : await getKnightCodeMcpConfigs(dynamicMcpConfig, claudeaiPromise)
+          : await getKnightCodeMcpConfigs(dynamicMcpConfig, knightcodeaiPromise)
       if (cancelled) return
 
       // Add MCP errors to plugin errors for UI visibility (deduplicated)
       addErrorsToAppState(setAppState, mcpErrors)
 
-      const configs = { ...claudeCodeConfigs, ...dynamicMcpConfig }
+      const configs = { ...knightCodeConfigs, ...dynamicMcpConfig }
 
       // Start connecting to KnightCode servers (don't wait - runs concurrently with Phase 2)
       // Filter out disabled servers to avoid unnecessary connection attempts
@@ -908,31 +908,31 @@ export function useManageMCPConnections(
       })
 
       // Phase 2: Await knightcode.raghavseth.in configs (started above; memoized — no second fetch)
-      let claudeaiConfigs: Record<string, ScopedMcpServerConfig> = {}
+      let knightcodeaiConfigs: Record<string, ScopedMcpServerConfig> = {}
       if (!isStrictMcpConfig) {
-        claudeaiConfigs = filterMcpServersByPolicy(
-          await claudeaiPromise,
+        knightcodeaiConfigs = filterMcpServersByPolicy(
+          await knightcodeaiPromise,
         ).allowed
         if (cancelled) return
 
         // Suppress knightcode.raghavseth.in connectors that duplicate an enabled manual server.
         // Keys never collide (`slack` vs `knightcode.raghavseth.in Slack`) so the merge below
         // won't catch this — need content-based dedup by URL signature.
-        if (Object.keys(claudeaiConfigs).length > 0) {
-          const { servers: dedupedClaudeAi } = dedupClaudeAiMcpServers(
-            claudeaiConfigs,
+        if (Object.keys(knightcodeaiConfigs).length > 0) {
+          const { servers: dedupedKnightcodeAi } = dedupKnightcodeAiMcpServers(
+            knightcodeaiConfigs,
             configs,
           )
-          claudeaiConfigs = dedupedClaudeAi
+          knightcodeaiConfigs = dedupedKnightcodeAi
         }
 
-        if (Object.keys(claudeaiConfigs).length > 0) {
+        if (Object.keys(knightcodeaiConfigs).length > 0) {
           // Add knightcode.raghavseth.in servers as pending immediately so they show up in UI
           setAppState(prevState => {
             const existingServerNames = new Set(
               prevState.mcp.clients.map(c => c.name),
             )
-            const newClients = Object.entries(claudeaiConfigs)
+            const newClients = Object.entries(knightcodeaiConfigs)
               .filter(([name]) => !existingServerNames.has(name))
               .map(([name, config]) => ({
                 name,
@@ -952,14 +952,14 @@ export function useManageMCPConnections(
           })
 
           // Now start connecting (only enabled servers)
-          const enabledClaudeaiConfigs = Object.fromEntries(
-            Object.entries(claudeaiConfigs).filter(
+          const enabledKnightcodeaiConfigs = Object.fromEntries(
+            Object.entries(knightcodeaiConfigs).filter(
               ([name]) => !isMcpServerDisabled(name),
             ),
           )
           getMcpToolsCommandsAndResources(
             onConnectionAttempt,
-            enabledClaudeaiConfigs,
+            enabledKnightcodeaiConfigs,
           ).catch(error => {
             logMCPError(
               'useManageMcpConnections',
@@ -970,14 +970,14 @@ export function useManageMCPConnections(
       }
 
       // Log server counts after both phases complete
-      const allConfigs = { ...configs, ...claudeaiConfigs }
+      const allConfigs = { ...configs, ...knightcodeaiConfigs }
       const counts = {
         enterprise: 0,
         global: 0,
         project: 0,
         user: 0,
         plugin: 0,
-        claudeai: 0,
+        knightcodeai: 0,
       }
       // Ant-only: collect stdio command basenames to correlate with RSS/FPS
       // metrics. Stdio servers like rust-analyzer can be heavy and we want to
@@ -989,7 +989,7 @@ export function useManageMCPConnections(
         else if (serverConfig.scope === 'project') counts.project++
         else if (serverConfig.scope === 'local') counts.user++
         else if (serverConfig.scope === 'dynamic') counts.plugin++
-        else if (serverConfig.scope === 'claudeai') counts.claudeai++
+        else if (serverConfig.scope === 'knightcodeai') counts.knightcodeai++
 
         if (
           process.env.USER_TYPE === 'ant' &&

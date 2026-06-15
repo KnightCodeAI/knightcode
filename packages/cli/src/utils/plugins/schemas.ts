@@ -7,8 +7,8 @@ export const MarketplaceSourceSchema = lazySchema(() => z.object({}).passthrough
 
 // KnightCode-controlled marketplaces. Used by hook telemetry/plugin classification.
 export const ALLOWED_OFFICIAL_MARKETPLACE_NAMES = new Set([
-  'claude-code-marketplace',
-  'claude-code-plugins',
-  'claude-plugins-official',
-  'anthropic-marketplace',
+  'knightcode-code-marketplace',
+  'knightcode-code-plugins',
+  'knightcode-plugins-official',
+  'knightcode-marketplace',
 ]);

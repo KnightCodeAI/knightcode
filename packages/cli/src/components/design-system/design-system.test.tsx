@@ -33,7 +33,7 @@ describe("design system", () => {
     createRoot(h.renderer).render(
       <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
         <ThemeProvider initialState="dark">
-          <ThemedBox borderStyle="round" borderColor="claude" paddingX={1}>
+          <ThemedBox borderStyle="round" borderColor="knightcode" paddingX={1}>
             <ThemedText color="success">hi</ThemedText>
           </ThemedBox>
         </ThemeProvider>

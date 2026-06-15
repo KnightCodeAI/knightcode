@@ -112,7 +112,7 @@ function generateReservedShortcuts(): string {
 }
 
 const FILE_FORMAT_EXAMPLE: KeybindingsSchemaType = {
-  $schema: 'https://www.schemastore.org/claude-code-keybindings.json',
+  $schema: 'https://www.schemastore.org/knightcode-code-keybindings.json',
   $docs: 'https://knightcode.raghavseth.in/docs/en/keybindings',
   bindings: [
     {

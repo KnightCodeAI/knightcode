@@ -20,7 +20,7 @@ export const getManagedFilePath = memoize(function (): string {
     case 'windows':
       return 'C:\\Program Files\\KnightCode'
     default:
-      return '/etc/claude-code'
+      return '/etc/knightcode-code'
   }
 })
 

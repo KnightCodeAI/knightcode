@@ -4324,7 +4324,7 @@ export function hasInstructionsLoadedHook(): boolean {
  * for observability/audit only and does not support blocking.
  *
  * Dispatch sites:
- * - Eager load at session start (getMemoryFiles in claudemd.ts)
+ * - Eager load at session start (getMemoryFiles in knightcodemd.ts)
  * - Eager reload after compaction (getMemoryFiles cache cleared by
  *   runPostCompactCleanup; next call reports load_reason: 'compact')
  * - Lazy load when KnightCode touches a file that triggers nested KNIGHTCODE.md or

@@ -19,11 +19,11 @@ export async function createBashShellProvider(
       command: string,
       opts: { id: number | string; sandboxTmpDir?: string; useSandbox: boolean },
     ): Promise<{ commandString: string; cwdFilePath: string }> {
-      const cwdFilePath = join(tmpdir(), `claude-pwd-${opts.id}`)
+      const cwdFilePath = join(tmpdir(), `knightcode-pwd-${opts.id}`)
       const escaped = cwdFilePath.replace(/'/g, `'\\''`)
       // Run the command, capture its exit code, record the resulting cwd for
       // Shell.ts to read back, then exit with the original code.
-      const commandString = `${command}\n__claude_ec=$?\npwd -P >| '${escaped}'\nexit $__claude_ec`
+      const commandString = `${command}\n__knightcode_ec=$?\npwd -P >| '${escaped}'\nexit $__knightcode_ec`
       return { commandString, cwdFilePath }
     },
 

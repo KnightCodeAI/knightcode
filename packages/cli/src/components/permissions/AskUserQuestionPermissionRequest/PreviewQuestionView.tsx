@@ -43,7 +43,7 @@ type Props = {
   onCancel: () => void
   onTabPrev?: () => void
   onTabNext?: () => void
-  onRespondToClaude: () => void
+  onRespondToKnightcode: () => void
   onFinishPlanInterview: () => void
 }
 
@@ -66,7 +66,7 @@ export function PreviewQuestionView({
   onCancel,
   onTabPrev,
   onTabNext,
-  onRespondToClaude,
+  onRespondToKnightcode,
   onFinishPlanInterview,
 }: Props): React.ReactNode {
   const isInPlanMode = useAppState(s => s.toolPermissionContext.mode) === 'plan'
@@ -214,7 +214,7 @@ export function PreviewQuestionView({
         if (e.key === 'return') {
           e.preventDefault()
           if (footerIndex === 0) {
-            onRespondToClaude()
+            onRespondToKnightcode()
           } else {
             onFinishPlanInterview()
           }
@@ -282,7 +282,7 @@ export function PreviewQuestionView({
       handleNavigate,
       handleSelectOption,
       handleNotesExit,
-      onRespondToClaude,
+      onRespondToKnightcode,
       onFinishPlanInterview,
       onCancel,
       onTextInputFocus,

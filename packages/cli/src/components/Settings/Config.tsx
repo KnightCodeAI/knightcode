@@ -62,7 +62,7 @@ import {
   isOpus1mMergeEnabled,
 } from '../../utils/model/model.js'
 import { isBilledAsExtraUsage } from '../../utils/extraUsage.js'
-import { ClaudeMdExternalIncludesDialog } from '../ClaudeMdExternalIncludesDialog.js'
+import { KnightcodeMdExternalIncludesDialog } from '../KnightcodeMdExternalIncludesDialog.js'
 import {
   ChannelDowngradeDialog,
   type ChannelDowngradeChoice,
@@ -72,10 +72,10 @@ import { Select } from '../CustomSelect/index.js'
 import { OutputStylePicker } from '../OutputStylePicker.js'
 import { LanguagePicker } from '../LanguagePicker.js'
 import {
-  getExternalClaudeMdIncludes,
+  getExternalKnightcodeMdIncludes,
   getMemoryFiles,
-  hasExternalClaudeMdIncludes,
-} from 'src/utils/claudemd.js'
+  hasExternalKnightcodeMdIncludes,
+} from 'src/utils/knightcodemd.js'
 import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
 import { Byline } from '../design-system/Byline.js'
@@ -302,7 +302,7 @@ export function Config({
 
   const memoryFiles = React.use(getMemoryFiles(true))
   const shouldShowExternalIncludesToggle =
-    hasExternalClaudeMdIncludes(memoryFiles)
+    hasExternalKnightcodeMdIncludes(memoryFiles)
 
   const autoUpdaterDisabledReason = getAutoUpdaterDisabledReason()
 
@@ -1034,7 +1034,7 @@ export function Config({
           ...getGlobalConfig(),
           knightcodeInChromeDefaultEnabled: enabled,
         })
-        logEvent('knightcode_claude_in_chrome_setting_changed', {
+        logEvent('knightcode_knightcode_in_chrome_setting_changed', {
           enabled,
         })
       },
@@ -1150,7 +1150,7 @@ export function Config({
             label: 'External KNIGHTCODE.md includes',
             value: (() => {
               const projectConfig = getCurrentProjectConfig()
-              if (projectConfig.hasClaudeMdExternalIncludesApproved) {
+              if (projectConfig.hasKnightcodeMdExternalIncludesApproved) {
                 return 'true'
               } else {
                 return 'false'
@@ -1913,12 +1913,12 @@ export function Config({
         </>
       ) : showSubmenu === 'ExternalIncludes' ? (
         <>
-          <ClaudeMdExternalIncludesDialog
+          <KnightcodeMdExternalIncludesDialog
             onDone={() => {
               setShowSubmenu(null)
               setTabsHidden(false)
             }}
-            externalIncludes={getExternalClaudeMdIncludes(memoryFiles)}
+            externalIncludes={getExternalKnightcodeMdIncludes(memoryFiles)}
           />
           <Text dimColor>
             <Byline>

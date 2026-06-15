@@ -2,14 +2,14 @@ import * as React from 'react'
 import { Box, Text } from '../../tui.js'
 import { env } from '../../utils/env.js'
 
-export type ClawdPose =
+export type KnightPose =
   | 'default'
   | 'arms-up' // both arms raised (used during jump)
   | 'look-left' // both pupils shifted left
   | 'look-right' // both pupils shifted right
 
 type Props = {
-  pose?: ClawdPose
+  pose?: KnightPose
 }
 
 // Standard-terminal pose fragments. Each row is split into segments so we can
@@ -34,7 +34,7 @@ type Segments = {
   r2R: string
 }
 
-const POSES: Record<ClawdPose, Segments> = {
+const POSES: Record<KnightPose, Segments> = {
   default: { r1L: ' ▐', r1E: '▛███▜', r1R: '▌', r2L: '▝▜', r2R: '▛▘' },
   'look-left': { r1L: ' ▐', r1E: '▟███▟', r1R: '▌', r2L: '▝▜', r2R: '▛▘' },
   'look-right': { r1L: ' ▐', r1E: '▙███▙', r1R: '▌', r2L: '▝▜', r2R: '▛▘' },
@@ -43,56 +43,56 @@ const POSES: Record<ClawdPose, Segments> = {
 
 // Apple Terminal uses a bg-fill trick (see below), so only eye poses make
 // sense. Arm poses fall back to default.
-const APPLE_EYES: Record<ClawdPose, string> = {
+const APPLE_EYES: Record<KnightPose, string> = {
   default: ' ▗   ▖ ',
   'look-left': ' ▘   ▘ ',
   'look-right': ' ▝   ▝ ',
   'arms-up': ' ▗   ▖ ',
 }
 
-export function Clawd({ pose = 'default' }: Props = {}): React.ReactNode {
+export function Knight({ pose = 'default' }: Props = {}): React.ReactNode {
   if (env.terminal === 'Apple_Terminal') {
-    return <AppleTerminalClawd pose={pose} />
+    return <AppleTerminalKnight pose={pose} />
   }
   const p = POSES[pose]
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="clawd_body">{p.r1L}</Text>
-        <Text color="clawd_body" backgroundColor="clawd_background">
+        <Text color="knight_body">{p.r1L}</Text>
+        <Text color="knight_body" backgroundColor="knight_background">
           {p.r1E}
         </Text>
-        <Text color="clawd_body">{p.r1R}</Text>
+        <Text color="knight_body">{p.r1R}</Text>
       </Text>
       <Text>
-        <Text color="clawd_body">{p.r2L}</Text>
-        <Text color="clawd_body" backgroundColor="clawd_background">
+        <Text color="knight_body">{p.r2L}</Text>
+        <Text color="knight_body" backgroundColor="knight_background">
           █████
         </Text>
-        <Text color="clawd_body">{p.r2R}</Text>
+        <Text color="knight_body">{p.r2R}</Text>
       </Text>
-      <Text color="clawd_body">
+      <Text color="knight_body">
         {'  '}▘▘ ▝▝{'  '}
       </Text>
     </Box>
   )
 }
 
-function AppleTerminalClawd({ pose }: { pose: ClawdPose }): React.ReactNode {
+function AppleTerminalKnight({ pose }: { pose: KnightPose }): React.ReactNode {
   // Apple's Terminal renders vertical space between chars by default.
   // It does NOT render vertical space between background colors
   // so we use background color to draw the main shape.
   return (
     <Box flexDirection="column" alignItems="center">
       <Text>
-        <Text color="clawd_body">▗</Text>
-        <Text color="clawd_background" backgroundColor="clawd_body">
+        <Text color="knight_body">▗</Text>
+        <Text color="knight_background" backgroundColor="knight_body">
           {APPLE_EYES[pose]}
         </Text>
-        <Text color="clawd_body">▖</Text>
+        <Text color="knight_body">▖</Text>
       </Text>
-      <Text backgroundColor="clawd_body">{' '.repeat(7)}</Text>
-      <Text color="clawd_body">▘▘ ▝▝</Text>
+      <Text backgroundColor="knight_body">{' '.repeat(7)}</Text>
+      <Text color="knight_body">▘▘ ▝▝</Text>
     </Box>
   )
 }

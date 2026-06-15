@@ -31,7 +31,7 @@ export interface HistoryEntry {
 // defaults are filled in when an older config file omits them.
 export type GlobalConfig = {
   theme: ThemeSetting
-  /** User-scoped MCP servers (global `.claude.json`). */
+  /** User-scoped MCP servers (global `.knightcode.json`). */
   mcpServers?: Record<string, McpServerConfig>
   // TODO: these settings are surfaced by the settings UI ahead of the
   // subsystems that consume them (notifications, IDE, teammates, checkpointing,
@@ -204,11 +204,11 @@ export function getMemoryPath(memoryType: MemoryType): string {
   return join(getKnightcodeConfigHomeDir(), 'KNIGHTCODE.md')
 }
 
-export function getManagedClaudeRulesDir(): string {
+export function getManagedKnightcodeRulesDir(): string {
   return join(getManagedFilePath(), '.knightcode', 'rules')
 }
 
-export function getUserClaudeRulesDir(): string {
+export function getUserKnightcodeRulesDir(): string {
   return join(getKnightcodeConfigHomeDir(), 'rules')
 }
 
@@ -240,9 +240,9 @@ export type ProjectConfig = {
   enabledMcpServers?: string[]
   disabledMcpServers?: string[]
   /** Whether the user has approved memory files that @include paths outside cwd. */
-  hasClaudeMdExternalIncludesApproved?: boolean
+  hasKnightcodeMdExternalIncludesApproved?: boolean
   /** Whether the external-includes warning has already been shown this project. */
-  hasClaudeMdExternalIncludesWarningShown?: boolean
+  hasKnightcodeMdExternalIncludesWarningShown?: boolean
   [key: string]: unknown
 }
 

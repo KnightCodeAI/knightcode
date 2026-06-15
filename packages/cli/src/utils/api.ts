@@ -179,7 +179,7 @@ export async function toolToAPISchema(
     // Enable fine-grained tool streaming via per-tool API field.
     // Without FGTS, the API buffers entire tool input parameters before sending
     // input_json_delta events, causing multi-minute hangs on large tool inputs.
-    // Gated to direct api.anthropic.com: proxies (LiteLLM etc.) and Bedrock/Vertex
+    // Gated to direct api.knightcode.com: proxies (LiteLLM etc.) and Bedrock/Vertex
     // with KnightCode 4.5 reject this field with 400. See GH#32742, PR #21729.
     if (
       getFeatureValue_CACHED_MAY_BE_STALE('knightcode_fgts', false) ||
@@ -222,7 +222,7 @@ export async function toolToAPISchema(
   // standard prompt caching (Bedrock/Vertex supported); the beta sub-fields
   // (scope, ttl) are already gated upstream by shouldIncludeFirstPartyOnlyBetas
   // which independently respects this kill switch.
-  // github.com/anthropics/claude-code/issues/20031
+  // github.com/knightcode/knightcode-code/issues/20031
   if (isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_EXPERIMENTAL_BETAS)) {
     const allowed = new Set([
       'name',
@@ -250,7 +250,7 @@ export async function toolToAPISchema(
 
 /**
  * Log stats about first block for analyzing prefix matching config
- * (see https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/claude_cli_system_prompt_prefixes)
+ * (see https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/knightcode_cli_system_prompt_prefixes)
  */
 export function logAPIPrefix(systemPrompt: SystemPrompt): void {
   const [firstSyspromptBlock] = splitSysPromptPrefix(systemPrompt)
@@ -269,7 +269,7 @@ export function logAPIPrefix(systemPrompt: SystemPrompt): void {
 
 /**
  * Split system prompt blocks by content type for API matching and cache control.
- * See https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/claude_cli_system_prompt_prefixes
+ * See https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/knightcode_cli_system_prompt_prefixes
  *
  * Behavior depends on feature flags and options:
  *
@@ -310,7 +310,7 @@ export function splitSysPromptPrefix(
     for (const prompt of systemPrompt) {
       if (!prompt) continue
       if (prompt === SYSTEM_PROMPT_DYNAMIC_BOUNDARY) continue // Skip boundary
-      if (prompt.startsWith('x-anthropic-billing-header')) {
+      if (prompt.startsWith('x-knightcode-billing-header')) {
         attributionHeader = prompt
       } else if (CLI_SYSPROMPT_PREFIXES.has(prompt)) {
         systemPromptPrefix = prompt
@@ -347,7 +347,7 @@ export function splitSysPromptPrefix(
         const block = systemPrompt[i]
         if (!block || block === SYSTEM_PROMPT_DYNAMIC_BOUNDARY) continue
 
-        if (block.startsWith('x-anthropic-billing-header')) {
+        if (block.startsWith('x-knightcode-billing-header')) {
           attributionHeader = block
         } else if (CLI_SYSPROMPT_PREFIXES.has(block)) {
           systemPromptPrefix = block
@@ -389,7 +389,7 @@ export function splitSysPromptPrefix(
   for (const block of systemPrompt) {
     if (!block) continue
 
-    if (block.startsWith('x-anthropic-billing-header')) {
+    if (block.startsWith('x-knightcode-billing-header')) {
       attributionHeader = block
     } else if (CLI_SYSPROMPT_PREFIXES.has(block)) {
       systemPromptPrefix = block

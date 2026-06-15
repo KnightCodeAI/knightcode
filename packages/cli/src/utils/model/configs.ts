@@ -3,7 +3,7 @@ import type { APIProvider } from './providers.js'
 
 export type ModelConfig = Record<APIProvider, ModelName>
 
-// @[MODEL LAUNCH]: Add a new CLAUDE_*_CONFIG constant here. Double check the correct model strings
+// @[MODEL LAUNCH]: Add a new KNIGHTCODE_*_CONFIG constant here. Double check the correct model strings
 // here since the pattern may change.
 
 export const KNIGHTCODE_3_7_SONNET_CONFIG = {

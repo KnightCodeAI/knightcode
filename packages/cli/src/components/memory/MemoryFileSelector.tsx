@@ -15,7 +15,7 @@ import { readLastConsolidatedAt } from '../../services/autoDream/consolidationLo
 import { useAppState } from '../../state/AppState.js'
 import { getAgentMemoryDir } from '../../tools/AgentTool/agentMemory.js'
 import { openPath } from '../../utils/browser.js'
-import { getMemoryFiles, type MemoryFileInfo } from '../../utils/claudemd.js'
+import { getMemoryFiles, type MemoryFileInfo } from '../../utils/knightcodemd.js'
 import { getKnightcodeConfigHomeDir } from '../../utils/envUtils.js'
 import { getDisplayPath } from '../../utils/file.js'
 import { formatRelativeTimeAgo } from '../../utils/format.js'

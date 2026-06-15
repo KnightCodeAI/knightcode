@@ -208,7 +208,7 @@ export function Doctor({ onDone }: Props): React.ReactNode {
 
       // Fetch version lock info if PID-based locking is enabled
       if (isPidBasedLockingEnabled()) {
-        const locksDir = join(getXDGStateHome(), 'claude', 'locks')
+        const locksDir = join(getXDGStateHome(), 'knightcode', 'locks')
         const staleLocksCleaned = cleanupStaleLocks(locksDir)
         const locks = getAllLockInfo(locksDir)
         setVersionLockInfo({
@@ -449,22 +449,22 @@ export function Doctor({ onDone }: Props): React.ReactNode {
 
       {/* Context Usage Warnings */}
       {contextWarnings &&
-        (contextWarnings.claudeMdWarning ||
+        (contextWarnings.knightcodeMdWarning ||
           contextWarnings.agentWarning ||
           contextWarnings.mcpWarning) && (
           <Box flexDirection="column">
             <Text bold>Context Usage Warnings</Text>
 
-            {contextWarnings.claudeMdWarning && (
+            {contextWarnings.knightcodeMdWarning && (
               <>
                 <Text>
                   └{' '}
                   <Text color="warning">
-                    {figures.warning} {contextWarnings.claudeMdWarning.message}
+                    {figures.warning} {contextWarnings.knightcodeMdWarning.message}
                   </Text>
                 </Text>
                 <Text>{'  '}└ Files:</Text>
-                {contextWarnings.claudeMdWarning.details.map((detail, i) => (
+                {contextWarnings.knightcodeMdWarning.details.map((detail, i) => (
                   <Text key={i} dimColor>
                     {'    '}└ {detail}
                   </Text>

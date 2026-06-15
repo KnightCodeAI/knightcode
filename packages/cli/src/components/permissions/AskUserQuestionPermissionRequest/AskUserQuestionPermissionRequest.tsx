@@ -277,7 +277,7 @@ function AskUserQuestionPermissionRequestBody({
     isInPlanMode,
   ])
 
-  const handleRespondToClaude = useCallback(async () => {
+  const handleRespondToKnightcode = useCallback(async () => {
     const questionsWithAnswers = questions
       .map((q: Question) => {
         const answer = answers[q.question]
@@ -296,7 +296,7 @@ function AskUserQuestionPermissionRequestBody({
     Questions asked:\n${questionsWithAnswers}`
 
     if (metadataSource) {
-      logEvent('knightcode_ask_user_question_respond_to_claude', {
+      logEvent('knightcode_ask_user_question_respond_to_knightcode', {
         source:
           metadataSource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         questionCount: questions.length,
@@ -542,7 +542,7 @@ Questions asked and answers provided:\n${questionsWithAnswers}`
           onSubmit={nextQuestion}
           onTabPrev={handleTabPrev}
           onTabNext={handleTabNext}
-          onRespondToClaude={handleRespondToClaude}
+          onRespondToKnightcode={handleRespondToKnightcode}
           onFinishPlanInterview={handleFinishPlanInterview}
           onImagePaste={(base64, mediaType, filename, dims, path) =>
             onImagePaste(

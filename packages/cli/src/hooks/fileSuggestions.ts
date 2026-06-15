@@ -442,7 +442,7 @@ function collectDirectoryNames(
 /**
  * Gets additional files from KnightCode config directories
  */
-async function getClaudeConfigFiles(cwd: string): Promise<string[]> {
+async function getKnightcodeConfigFiles(cwd: string): Promise<string[]> {
   const markdownFileArrays = await Promise.all(
     KNIGHTCODE_CONFIG_DIRECTORIES.map(subdir =>
       loadMarkdownFilesForSubdir(subdir, cwd),
@@ -534,7 +534,7 @@ export async function getPathsForSuggestions(): Promise<FileIndex> {
     const cwd = getCwd()
     const [projectFiles, configFiles] = await Promise.all([
       getProjectFiles(signal, respectGitignore),
-      getClaudeConfigFiles(cwd),
+      getKnightcodeConfigFiles(cwd),
     ])
 
     // Cache for mergeUntrackedIntoNormalizedCache

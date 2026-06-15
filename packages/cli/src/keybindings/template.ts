@@ -43,7 +43,7 @@ export function generateKeybindingsTemplate(): string {
 
   // Format as object wrapper with bindings array
   const config = {
-    $schema: 'https://www.schemastore.org/claude-code-keybindings.json',
+    $schema: 'https://www.schemastore.org/knightcode-code-keybindings.json',
     $docs: 'https://knightcode.raghavseth.in/docs/en/keybindings',
     bindings,
   }

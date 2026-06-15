@@ -1,5 +1,5 @@
 import {
-  getClaudeAiBaseUrl,
+  getKnightcodeAiBaseUrl,
   getRemoteSessionUrl,
 } from '../constants/product.js'
 import { stringWidth } from '../tui/stringWidth.js'
@@ -40,7 +40,7 @@ export function buildBridgeConnectUrl(
   environmentId: string,
   ingressUrl?: string,
 ): string {
-  const baseUrl = getClaudeAiBaseUrl(undefined, ingressUrl)
+  const baseUrl = getKnightcodeAiBaseUrl(undefined, ingressUrl)
   return `${baseUrl}/code?bridge=${environmentId}`
 }
 

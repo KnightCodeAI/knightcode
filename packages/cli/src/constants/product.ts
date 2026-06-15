@@ -2,7 +2,7 @@ export const PRODUCT_URL = 'https://knightcode.raghavseth.in'
 
 // Remote session URLs
 export const KNIGHTCODE_AI_BASE_URL = 'https://knightcode.raghavseth.in'
-export const KNIGHTCODE_AI_STAGING_BASE_URL = 'https://claude-ai.staging.ant.dev'
+export const KNIGHTCODE_AI_STAGING_BASE_URL = 'https://knightcode-ai.staging.ant.dev'
 export const KNIGHTCODE_AI_LOCAL_BASE_URL = 'http://localhost:4000'
 
 /**
@@ -36,7 +36,7 @@ export function isRemoteSessionLocal(
 /**
  * Get the base URL for KnightCode AI based on environment.
  */
-export function getClaudeAiBaseUrl(
+export function getKnightcodeAiBaseUrl(
   sessionId?: string,
   ingressUrl?: string,
 ): string {
@@ -71,6 +71,6 @@ export function getRemoteSessionUrl(
     require('../bridge/sessionIdCompat.js') as typeof import('../bridge/sessionIdCompat.js')
   /* eslint-enable @typescript-eslint/no-require-imports */
   const compatId = toCompatSessionId(sessionId)
-  const baseUrl = getClaudeAiBaseUrl(compatId, ingressUrl)
+  const baseUrl = getKnightcodeAiBaseUrl(compatId, ingressUrl)
   return `${baseUrl}/code/${compatId}`
 }

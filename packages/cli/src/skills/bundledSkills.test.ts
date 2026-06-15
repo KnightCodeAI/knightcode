@@ -31,6 +31,6 @@ describe('bundled skills', () => {
     const names = new Set(getBundledSkills().map(s => s.name))
     // remote/chrome/docs skills are omitted from this build.
     expect(names.has('scheduleRemoteAgents')).toBe(false)
-    expect(names.has('claudeInChrome')).toBe(false)
+    expect(names.has('knightcodeInChrome')).toBe(false)
   })
 })

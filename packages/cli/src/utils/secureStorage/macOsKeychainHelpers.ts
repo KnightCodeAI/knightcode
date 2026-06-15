@@ -44,7 +44,7 @@ export function getUsername(): string {
   try {
     return process.env.USER || userInfo().username
   } catch {
-    return 'claude-code-user'
+    return 'knightcode-code-user'
   }
 }
 

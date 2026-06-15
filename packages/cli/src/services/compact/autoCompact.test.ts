@@ -12,7 +12,7 @@ import type {
   UserMessage,
 } from '../../types/message.js'
 
-const MODEL = 'claude-test-model'
+const MODEL = 'knightcode-test-model'
 
 describe('calculateTokenWarningState', () => {
   test('a near-window count is more severe than a low count', () => {

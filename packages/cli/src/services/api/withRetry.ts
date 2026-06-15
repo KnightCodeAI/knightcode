@@ -13,7 +13,7 @@ import { createSystemAPIErrorMessage } from 'src/utils/messages.js'
 import { getAPIProviderForStatsig } from 'src/utils/model/providers.js'
 import {
   clearApiKeyHelperCache,
-  getClaudeAIOAuthTokens,
+  getKnightcodeAIOAuthTokens,
   handleOAuth401Error,
 } from '../../utils/auth.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
@@ -202,7 +202,7 @@ export async function* withRetry<T>(
           (lastError instanceof APIError && lastError.status === 401) ||
           isOAuthTokenRevokedError(lastError)
         ) {
-          const failedAccessToken = getClaudeAIOAuthTokens()?.accessToken
+          const failedAccessToken = getKnightcodeAIOAuthTokens()?.accessToken
           if (failedAccessToken) {
             await handleOAuth401Error(failedAccessToken)
           }

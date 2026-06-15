@@ -1,5 +1,5 @@
 // TODO: the in-process KnightCode-in-Chrome MCP server is not ported. Inert: only
-// reached for a "claude-in-chrome" server, which is never matched here.
+// reached for a "knightcode-in-chrome" server, which is never matched here.
 
 export function createChromeContext(_env: Record<string, string> | undefined): {
   env: Record<string, string> | undefined

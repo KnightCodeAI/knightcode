@@ -154,10 +154,10 @@ export function generateHeatmap(
   lines.push(
     '    Less ' +
       [
-        claudeOrange('░'),
-        claudeOrange('▒'),
-        claudeOrange('▓'),
-        claudeOrange('█'),
+        knightcodeOrange('░'),
+        knightcodeOrange('▒'),
+        knightcodeOrange('▓'),
+        knightcodeOrange('█'),
       ].join(' ') +
       ' More',
   )
@@ -178,20 +178,20 @@ function getIntensity(
 }
 
 // KnightCode orange color (hex #da7756)
-const claudeOrange = chalk.hex('#da7756')
+const knightcodeOrange = chalk.hex('#da7756')
 
 function getHeatmapChar(intensity: number): string {
   switch (intensity) {
     case 0:
       return chalk.gray('·')
     case 1:
-      return claudeOrange('░')
+      return knightcodeOrange('░')
     case 2:
-      return claudeOrange('▒')
+      return knightcodeOrange('▒')
     case 3:
-      return claudeOrange('▓')
+      return knightcodeOrange('▓')
     case 4:
-      return claudeOrange('█')
+      return knightcodeOrange('█')
     default:
       return chalk.gray('·')
   }

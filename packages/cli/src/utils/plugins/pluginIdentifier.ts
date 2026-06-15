@@ -6,10 +6,10 @@
 // KnightCode-controlled marketplaces. Identifiers from these are safe to log to
 // general-access fields; third-party ones are treated as PII-tagged.
 export const ALLOWED_OFFICIAL_MARKETPLACE_NAMES = new Set([
-  'claude-code-marketplace',
-  'claude-code-plugins',
-  'claude-plugins-official',
-  'anthropic-marketplace',
+  'knightcode-code-marketplace',
+  'knightcode-code-plugins',
+  'knightcode-plugins-official',
+  'knightcode-marketplace',
 ])
 
 export type ParsedPluginIdentifier = {

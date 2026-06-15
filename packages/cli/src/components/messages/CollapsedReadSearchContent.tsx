@@ -463,7 +463,7 @@ export function CollapsedReadSearchContent({
   if (mcpCallCount > 0) {
     const serverLabel =
       message.mcpServerNames
-        ?.map(n => n.replace(/^claude\.ai /, ''))
+        ?.map(n => n.replace(/^knightcode\.ai /, ''))
         .join(', ') || 'MCP'
     const isFirst = nonMemParts.length === 0
     const verb = isActiveGroup

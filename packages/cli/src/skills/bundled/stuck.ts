@@ -5,11 +5,11 @@ import { registerBundledSkill } from '../bundledSkills.js'
 // eslint-disable-next-line custom-rules/no-direct-ps-commands
 const STUCK_PROMPT = `# /stuck — diagnose frozen/slow KnightCode sessions
 
-The user thinks another KnightCode session on this machine is frozen, stuck, or very slow. Investigate and post a report to #claude-code-feedback.
+The user thinks another KnightCode session on this machine is frozen, stuck, or very slow. Investigate and post a report to #knightcode-code-feedback.
 
 ## What to look for
 
-Scan for other KnightCode processes (excluding the current one — PID is in \`process.pid\` but for shell commands just exclude the PID you see running this prompt). Process names are typically \`claude\` (installed) or \`cli\` (native dev build).
+Scan for other KnightCode processes (excluding the current one — PID is in \`process.pid\` but for shell commands just exclude the PID you see running this prompt). Process names are typically \`knightcode\` (installed) or \`cli\` (native dev build).
 
 Signs of a stuck session:
 - **High CPU (≥90%) sustained** — likely an infinite loop. Sample twice, 1-2s apart, to confirm it's not a transient spike.
@@ -23,9 +23,9 @@ Signs of a stuck session:
 
 1. **List all KnightCode processes** (macOS/Linux):
    \`\`\`
-   ps -axo pid=,pcpu=,rss=,etime=,state=,comm=,command= | grep -E '(claude|cli)' | grep -v grep
+   ps -axo pid=,pcpu=,rss=,etime=,state=,comm=,command= | grep -E '(knightcode|cli)' | grep -v grep
    \`\`\`
-   Filter to rows where \`comm\` is \`claude\` or (\`cli\` AND the command path contains "claude").
+   Filter to rows where \`comm\` is \`knightcode\` or (\`cli\` AND the command path contains "knightcode").
 
 2. **For anything suspicious**, gather more context:
    - Child processes: \`pgrep -lP <pid>\`
@@ -41,7 +41,7 @@ Signs of a stuck session:
 
 **Only post to Slack if you actually found something stuck.** If every session looks healthy, tell the user that directly — do not post an all-clear to the channel.
 
-If you did find a stuck/slow session, post to **#claude-code-feedback** (channel ID: \`C07VBSHV7EV\`) using the Slack MCP tool. Use ToolSearch to find \`slack_send_message\` if it's not already loaded.
+If you did find a stuck/slow session, post to **#knightcode-code-feedback** (channel ID: \`C07VBSHV7EV\`) using the Slack MCP tool. Use ToolSearch to find \`slack_send_message\` if it's not already loaded.
 
 **Use a two-message structure** to keep the channel scannable:
 
@@ -51,7 +51,7 @@ If you did find a stuck/slow session, post to **#claude-code-feedback** (channel
    - Your diagnosis of what's likely wrong
    - Relevant debug log tail or \`sample\` output if you captured it
 
-If Slack MCP isn't available, format the report as a message the user can copy-paste into #claude-code-feedback (and let them know to thread the details themselves).
+If Slack MCP isn't available, format the report as a message the user can copy-paste into #knightcode-code-feedback (and let them know to thread the details themselves).
 
 ## Notes
 - Don't kill or signal any processes — this is diagnostic only.
@@ -66,7 +66,7 @@ export function registerStuckSkill(): void {
   registerBundledSkill({
     name: 'stuck',
     description:
-      '[ANT-ONLY] Investigate frozen/stuck/slow KnightCode sessions on this machine and post a diagnostic report to #claude-code-feedback.',
+      '[ANT-ONLY] Investigate frozen/stuck/slow KnightCode sessions on this machine and post a diagnostic report to #knightcode-code-feedback.',
     userInvocable: true,
     async getPromptForCommand(args) {
       let prompt = STUCK_PROMPT

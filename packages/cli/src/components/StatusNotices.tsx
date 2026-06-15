@@ -2,7 +2,7 @@ import * as React from 'react'
 import { use } from 'react'
 import { Box } from '../tui.js'
 import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js'
-import { getMemoryFiles } from '../utils/claudemd.js'
+import { getMemoryFiles } from '../utils/knightcodemd.js'
 import { getGlobalConfig } from '../utils/config.js'
 import {
   getActiveNotices,

@@ -32,8 +32,8 @@ export function createFallbackStorage(
 
       if (result.success) {
         // Delete secondary when migrating to primary for the first time
-        // This preserves credentials when sharing .claude between host and containers
-        // See: https://github.com/anthropics/claude-code/issues/1414
+        // This preserves credentials when sharing .knightcode between host and containers
+        // See: https://github.com/knightcode/knightcode-code/issues/1414
         if (primaryDataBefore === null) {
           secondary.delete()
         }

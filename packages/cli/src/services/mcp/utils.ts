@@ -6,7 +6,7 @@ import type { AgentMcpServerInfo } from '../../components/mcp/types.js'
 import type { Tool } from '../../Tool.js'
 import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
 import { getCwd } from '../../utils/cwd.js'
-import { getGlobalClaudeFile } from '../../utils/env.js'
+import { getGlobalKnightcodeFile } from '../../utils/env.js'
 import { isSettingSourceEnabled } from '../../utils/settings/constants.js'
 import {
   getSettings_DEPRECATED,
@@ -263,16 +263,16 @@ export function isMcpCommand(command: Command): boolean {
 export function describeMcpConfigFilePath(scope: ConfigScope): string {
   switch (scope) {
     case 'user':
-      return getGlobalClaudeFile()
+      return getGlobalKnightcodeFile()
     case 'project':
       return join(getCwd(), '.mcp.json')
     case 'local':
-      return `${getGlobalClaudeFile()} [project: ${getCwd()}]`
+      return `${getGlobalKnightcodeFile()} [project: ${getCwd()}]`
     case 'dynamic':
       return 'Dynamically configured'
     case 'enterprise':
       return getEnterpriseMcpFilePath()
-    case 'claudeai':
+    case 'knightcodeai':
       return 'knightcode.raghavseth.in'
     default:
       return scope
@@ -291,7 +291,7 @@ export function getScopeLabel(scope: ConfigScope): string {
       return 'Dynamic config (from command line)'
     case 'enterprise':
       return 'Enterprise config (managed by your organization)'
-    case 'claudeai':
+    case 'knightcodeai':
       return 'knightcode.raghavseth.in config'
     default:
       return scope
@@ -390,7 +390,7 @@ export function getProjectMcpServerStatus(
     return 'approved'
   }
 
-  // In non-interactive mode (SDK, claude -p, piped input), there's no way to
+  // In non-interactive mode (SDK, knightcode -p, piped input), there's no way to
   // show an approval popup. Auto-approve if projectSettings is enabled since:
   // 1. The user/developer explicitly chose to run in this mode
   // 2. For SDK, projectSettings is off by default - they must explicitly enable it
@@ -426,10 +426,10 @@ export function getMcpServerScopeFromToolName(
   // Look up server config
   const serverConfig = getMcpConfigByName(mcpInfo.serverName)
 
-  // Fallback: knightcode.raghavseth.in servers have normalized names starting with "claude_ai_"
+  // Fallback: knightcode.raghavseth.in servers have normalized names starting with "knightcode_ai_"
   // but aren't in getMcpConfigByName (they're fetched async separately)
-  if (!serverConfig && mcpInfo.serverName.startsWith('claude_ai_')) {
-    return 'claudeai'
+  if (!serverConfig && mcpInfo.serverName.startsWith('knightcode_ai_')) {
+    return 'knightcodeai'
   }
 
   return serverConfig?.scope ?? null
@@ -545,7 +545,7 @@ export function extractAgentMcpServers(
         needsAuth: false,
       })
     }
-    // Skip unsupported transport types (sdk, claudeai-proxy, sse-ide, ws-ide)
+    // Skip unsupported transport types (sdk, knightcodeai-proxy, sse-ide, ws-ide)
     // These are internal types not meant for agent MCP server display
   }
 

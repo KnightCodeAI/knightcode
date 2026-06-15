@@ -15,7 +15,7 @@ import type {
   UserMessage,
 } from 'src/types/message.js'
 import {
-  getAnthropicApiKeyWithSource,
+  getKnightcodeApiKeyWithSource,
   getOauthAccountInfo,
 } from 'src/utils/auth.js'
 import { createAssistantAPIErrorMessage } from 'src/utils/messages.js'
@@ -606,7 +606,7 @@ export function getAssistantMessageFromError(
     error instanceof APIError &&
     error.status === 400 &&
     error.message.includes(AFK_MODE_BETA_HEADER) &&
-    error.message.includes('anthropic-beta')
+    error.message.includes('knightcode-beta')
   ) {
     return createAssistantAPIErrorMessage({
       content: 'Auto mode is unavailable for your plan',
@@ -703,7 +703,7 @@ export function getAssistantMessageFromError(
   ) {
     // Get organization ID from config - only use OAuth account data when actively using OAuth
     const orgId = getOauthAccountInfo()?.organizationUuid
-    const baseMsg = `[ANT-ONLY] Your org isn't gated into the \`${model}\` model. Either run \`claude\` with \`KNIGHTCODE_MODEL=${getDefaultMainLoopModelSetting()}\``
+    const baseMsg = `[ANT-ONLY] Your org isn't gated into the \`${model}\` model. Either run \`knightcode\` with \`KNIGHTCODE_MODEL=${getDefaultMainLoopModelSetting()}\``
     const msg = orgId
       ? `${baseMsg} or share your orgId (${orgId}) in ${MACRO.FEEDBACK_CHANNEL} for help getting access.`
       : `${baseMsg} or reach out in ${MACRO.FEEDBACK_CHANNEL} for help getting access.`
@@ -736,7 +736,7 @@ export function getAssistantMessageFromError(
     }
 
     // Check if the API key is from an external source
-    const { source } = getAnthropicApiKeyWithSource()
+    const { source } = getKnightcodeApiKeyWithSource()
     const isExternalSource =
       source === 'OPENROUTER_API_KEY' || source === 'apiKeyHelper'
 

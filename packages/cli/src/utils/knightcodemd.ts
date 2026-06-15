@@ -1,7 +1,7 @@
 /**
  * Files are loaded in the following order:
  *
- * 1. Managed memory (eg. /etc/claude-code/KNIGHTCODE.md) - Global instructions for all users
+ * 1. Managed memory (eg. /etc/knightcode-code/KNIGHTCODE.md) - Global instructions for all users
  * 2. User memory (~/.knightcode/KNIGHTCODE.md) - Private global instructions for all projects
  * 3. Project memory (KNIGHTCODE.md, .knightcode/KNIGHTCODE.md, and .knightcode/rules/*.md in project roots) - Instructions checked into the codebase
  * 4. Local memory (KNIGHTCODE.local.md in project roots) - Private project-specific instructions
@@ -42,7 +42,7 @@ import {
 import picomatch from 'picomatch'
 import { logEvent } from 'src/services/analytics/index.js'
 import {
-  getAdditionalDirectoriesForClaudeMd,
+  getAdditionalDirectoriesForKnightcodeMd,
   getOriginalCwd,
 } from '../bootstrap/state.js'
 import { truncateEntrypointContent } from '../memdir/memdir.js'
@@ -50,9 +50,9 @@ import { getAutoMemEntrypoint, isAutoMemoryEnabled } from '../memdir/paths.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
   getCurrentProjectConfig,
-  getManagedClaudeRulesDir,
+  getManagedKnightcodeRulesDir,
   getMemoryPath,
-  getUserClaudeRulesDir,
+  getUserKnightcodeRulesDir,
 } from './config.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
@@ -408,7 +408,7 @@ function handleMemoryFileReadError(error: unknown, filePath: string): void {
   // Log permission errors (EACCES) as they're actionable
   if (code === 'EACCES') {
     // Don't log the full file path to avoid PII/security issues
-    logEvent('knightcode_claude_md_permission_error', {
+    logEvent('knightcode_knightcode_md_permission_error', {
       is_access_error: 1,
       has_home_dir: filePath.includes(getKnightcodeConfigHomeDir()) ? 1 : 0,
     })
@@ -537,19 +537,19 @@ function extractIncludePathsFromTokens(
 const MAX_INCLUDE_DEPTH = 5
 
 /**
- * Checks whether a KNIGHTCODE.md file path is excluded by the claudeMdExcludes setting.
+ * Checks whether a KNIGHTCODE.md file path is excluded by the knightcodeMdExcludes setting.
  * Only applies to User, Project, and Local memory types.
  * Managed, AutoMem, and TeamMem types are never excluded.
  *
  * Matches both the original path and the realpath-resolved path to handle symlinks
  * (e.g., /tmp -> /private/tmp on macOS).
  */
-function isClaudeMdExcluded(filePath: string, type: MemoryType): boolean {
+function isKnightcodeMdExcluded(filePath: string, type: MemoryType): boolean {
   if (type !== 'User' && type !== 'Project' && type !== 'Local') {
     return false
   }
 
-  const patterns = getInitialSettings().claudeMdExcludes
+  const patterns = getInitialSettings().knightcodeMdExcludes
   if (!patterns || patterns.length === 0) {
     return false
   }
@@ -596,7 +596,7 @@ function resolveExcludePatterns(patterns: string[]): string[] {
     const dirToResolve = dirname(staticPrefix)
 
     try {
-      // sync IO: called from sync context (isClaudeMdExcluded -> processMemoryFile -> getMemoryFiles)
+      // sync IO: called from sync context (isKnightcodeMdExcluded -> processMemoryFile -> getMemoryFiles)
       const resolvedDir = fs.realpathSync(dirToResolve).replaceAll('\\', '/')
       if (resolvedDir !== dirToResolve) {
         const resolvedPattern =
@@ -631,8 +631,8 @@ export async function processMemoryFile(
     return []
   }
 
-  // Skip if path is excluded by claudeMdExcludes setting
-  if (isClaudeMdExcluded(filePath, type)) {
+  // Skip if path is excluded by knightcodeMdExcludes setting
+  if (isKnightcodeMdExcluded(filePath, type)) {
     return []
   }
 
@@ -778,7 +778,7 @@ export async function processMdRules({
     return result
   } catch (error) {
     if (error instanceof Error && error.message.includes('EACCES')) {
-      logEvent('knightcode_claude_rules_md_permission_error', {
+      logEvent('knightcode_knightcode_rules_md_permission_error', {
         is_access_error: 1,
         has_home_dir: rulesDir.includes(getKnightcodeConfigHomeDir()) ? 1 : 0,
       })
@@ -797,24 +797,24 @@ export const getMemoryFiles = memoize(
     const config = getCurrentProjectConfig()
     const includeExternal =
       forceIncludeExternal ||
-      config.hasClaudeMdExternalIncludesApproved ||
+      config.hasKnightcodeMdExternalIncludesApproved ||
       false
 
     // Process Managed file first (always loaded - policy settings)
-    const managedClaudeMd = getMemoryPath('Managed')
+    const managedKnightcodeMd = getMemoryPath('Managed')
     result.push(
       ...(await processMemoryFile(
-        managedClaudeMd,
+        managedKnightcodeMd,
         'Managed',
         processedPaths,
         includeExternal,
       )),
     )
     // Process Managed .knightcode/rules/*.md files
-    const managedClaudeRulesDir = getManagedClaudeRulesDir()
+    const managedKnightcodeRulesDir = getManagedKnightcodeRulesDir()
     result.push(
       ...(await processMdRules({
-        rulesDir: managedClaudeRulesDir,
+        rulesDir: managedKnightcodeRulesDir,
         type: 'Managed',
         processedPaths,
         includeExternal,
@@ -824,20 +824,20 @@ export const getMemoryFiles = memoize(
 
     // Process User file (only if userSettings is enabled)
     if (isSettingSourceEnabled('userSettings')) {
-      const userClaudeMd = getMemoryPath('User')
+      const userKnightcodeMd = getMemoryPath('User')
       result.push(
         ...(await processMemoryFile(
-          userClaudeMd,
+          userKnightcodeMd,
           'User',
           processedPaths,
           true, // User memory can always include external files
         )),
       )
       // Process User ~/.knightcode/rules/*.md files
-      const userClaudeRulesDir = getUserClaudeRulesDir()
+      const userKnightcodeRulesDir = getUserKnightcodeRulesDir()
       result.push(
         ...(await processMdRules({
-          rulesDir: userClaudeRulesDir,
+          rulesDir: userKnightcodeRulesDir,
           type: 'User',
           processedPaths,
           includeExternal: true,
@@ -857,7 +857,7 @@ export const getMemoryFiles = memoize(
     }
 
     // When running from a git worktree nested inside its main repo (e.g.,
-    // .knightcode/worktrees/<name>/ from `claude -w`), the upward walk passes
+    // .knightcode/worktrees/<name>/ from `knightcode -w`), the upward walk passes
     // through both the worktree root and the main repo root. Both contain
     // checked-in files like KNIGHTCODE.md and .knightcode/rules/*.md, so the same
     // content gets loaded twice. Skip Project-type (checked-in) files from
@@ -895,10 +895,10 @@ export const getMemoryFiles = memoize(
         )
 
         // Try reading .knightcode/KNIGHTCODE.md (Project)
-        const dotClaudePath = join(dir, '.knightcode', 'KNIGHTCODE.md')
+        const dotKnightcodePath = join(dir, '.knightcode', 'KNIGHTCODE.md')
         result.push(
           ...(await processMemoryFile(
-            dotClaudePath,
+            dotKnightcodePath,
             'Project',
             processedPaths,
             includeExternal,
@@ -933,11 +933,11 @@ export const getMemoryFiles = memoize(
     }
 
     // Process KNIGHTCODE.md from additional directories (--add-dir) if env var is enabled
-    // This is controlled by KNIGHTCODE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD and defaults to off
+    // This is controlled by KNIGHTCODE_CODE_ADDITIONAL_DIRECTORIES_KNIGHTCODE_MD and defaults to off
     // Note: we don't check isSettingSourceEnabled('projectSettings') here because --add-dir
     // is an explicit user action and the SDK defaults settingSources to [] when not specified
-    if (isEnvTruthy(process.env.KNIGHTCODE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD)) {
-      const additionalDirs = getAdditionalDirectoriesForClaudeMd()
+    if (isEnvTruthy(process.env.KNIGHTCODE_CODE_ADDITIONAL_DIRECTORIES_KNIGHTCODE_MD)) {
+      const additionalDirs = getAdditionalDirectoriesForKnightcodeMd()
       for (const dir of additionalDirs) {
         // Try reading KNIGHTCODE.md from the additional directory
         const projectPath = join(dir, 'KNIGHTCODE.md')
@@ -951,10 +951,10 @@ export const getMemoryFiles = memoize(
         )
 
         // Try reading .knightcode/KNIGHTCODE.md from the additional directory
-        const dotClaudePath = join(dir, '.knightcode', 'KNIGHTCODE.md')
+        const dotKnightcodePath = join(dir, '.knightcode', 'KNIGHTCODE.md')
         result.push(
           ...(await processMemoryFile(
-            dotClaudePath,
+            dotKnightcodePath,
             'Project',
             processedPaths,
             includeExternal,
@@ -1023,7 +1023,7 @@ export const getMemoryFiles = memoize(
 
     if (!hasLoggedInitialLoad) {
       hasLoggedInitialLoad = true
-      logEvent('knightcode_claudemd__initial_load', {
+      logEvent('knightcode_knightcodemd__initial_load', {
         file_count: result.length,
         total_content_length: totalContentLength,
         user_count: typeCounts['User'] ?? 0,
@@ -1043,7 +1043,7 @@ export const getMemoryFiles = memoize(
     // AutoMem/TeamMem are intentionally excluded — they're a separate
     // memory system, not "instructions" in the KNIGHTCODE.md/rules sense.
     // Gated on !forceIncludeExternal: the forceIncludeExternal=true variant
-    // is only used by getExternalClaudeMdIncludes() for approval checks, not
+    // is only used by getExternalKnightcodeMdIncludes() for approval checks, not
     // for building context — firing the hook there would double-fire on startup.
     // The one-shot flag is consumed on every !forceIncludeExternal cache miss
     // (NOT gated on hasInstructionsLoadedHook) so the flag is released even
@@ -1149,7 +1149,7 @@ export function filterInjectedMemoryFiles(
   return files.filter(f => f.type !== 'AutoMem' && f.type !== 'TeamMem')
 }
 
-export const getClaudeMds = (
+export const getKnightcodeMds = (
   memoryFiles: MemoryFileInfo[],
   filter?: (type: MemoryType) => boolean,
 ): string => {
@@ -1208,11 +1208,11 @@ export async function getManagedAndUserConditionalRules(
   const result: MemoryFileInfo[] = []
 
   // Process Managed conditional .knightcode/rules/*.md files
-  const managedClaudeRulesDir = getManagedClaudeRulesDir()
+  const managedKnightcodeRulesDir = getManagedKnightcodeRulesDir()
   result.push(
     ...(await processConditionedMdRules(
       targetPath,
-      managedClaudeRulesDir,
+      managedKnightcodeRulesDir,
       'Managed',
       processedPaths,
       false,
@@ -1221,11 +1221,11 @@ export async function getManagedAndUserConditionalRules(
 
   if (isSettingSourceEnabled('userSettings')) {
     // Process User conditional .knightcode/rules/*.md files
-    const userClaudeRulesDir = getUserClaudeRulesDir()
+    const userKnightcodeRulesDir = getUserKnightcodeRulesDir()
     result.push(
       ...(await processConditionedMdRules(
         targetPath,
-        userClaudeRulesDir,
+        userKnightcodeRulesDir,
         'User',
         processedPaths,
         true,
@@ -1263,10 +1263,10 @@ export async function getMemoryFilesForNestedDirectory(
         false,
       )),
     )
-    const dotClaudePath = join(dir, '.knightcode', 'KNIGHTCODE.md')
+    const dotKnightcodePath = join(dir, '.knightcode', 'KNIGHTCODE.md')
     result.push(
       ...(await processMemoryFile(
-        dotClaudePath,
+        dotKnightcodePath,
         'Project',
         processedPaths,
         false,
@@ -1371,11 +1371,11 @@ export async function processConditionedMdRules(
       return false
     }
 
-    // For Project rules: glob patterns are relative to the directory containing .claude
+    // For Project rules: glob patterns are relative to the directory containing .knightcode
     // For Managed/User rules: glob patterns are relative to the original CWD
     const baseDir =
       type === 'Project'
-        ? dirname(dirname(rulesDir)) // Parent of .claude
+        ? dirname(dirname(rulesDir)) // Parent of .knightcode
         : getOriginalCwd() // Project root for managed/user rules
 
     const relativePath = isAbsolute(targetPath)
@@ -1395,15 +1395,15 @@ export async function processConditionedMdRules(
   })
 }
 
-export type ExternalClaudeMdInclude = {
+export type ExternalKnightcodeMdInclude = {
   path: string
   parent: string
 }
 
-export function getExternalClaudeMdIncludes(
+export function getExternalKnightcodeMdIncludes(
   files: MemoryFileInfo[],
-): ExternalClaudeMdInclude[] {
-  const externals: ExternalClaudeMdInclude[] = []
+): ExternalKnightcodeMdInclude[] {
+  const externals: ExternalKnightcodeMdInclude[] = []
   for (const file of files) {
     if (file.type !== 'User' && file.parent && !pathInOriginalCwd(file.path)) {
       externals.push({ path: file.path, parent: file.parent })
@@ -1412,20 +1412,20 @@ export function getExternalClaudeMdIncludes(
   return externals
 }
 
-export function hasExternalClaudeMdIncludes(files: MemoryFileInfo[]): boolean {
-  return getExternalClaudeMdIncludes(files).length > 0
+export function hasExternalKnightcodeMdIncludes(files: MemoryFileInfo[]): boolean {
+  return getExternalKnightcodeMdIncludes(files).length > 0
 }
 
-export async function shouldShowClaudeMdExternalIncludesWarning(): Promise<boolean> {
+export async function shouldShowKnightcodeMdExternalIncludesWarning(): Promise<boolean> {
   const config = getCurrentProjectConfig()
   if (
-    config.hasClaudeMdExternalIncludesApproved ||
-    config.hasClaudeMdExternalIncludesWarningShown
+    config.hasKnightcodeMdExternalIncludesApproved ||
+    config.hasKnightcodeMdExternalIncludesWarningShown
   ) {
     return false
   }
 
-  return hasExternalClaudeMdIncludes(await getMemoryFiles(true))
+  return hasExternalKnightcodeMdIncludes(await getMemoryFiles(true))
 }
 
 /**
@@ -1442,7 +1442,7 @@ export function isMemoryFilePath(filePath: string): boolean {
   // .md files in .knightcode/rules/ directories
   if (
     name.endsWith('.md') &&
-    filePath.includes(`${sep}.claude${sep}rules${sep}`)
+    filePath.includes(`${sep}.knightcode${sep}rules${sep}`)
   ) {
     return true
   }

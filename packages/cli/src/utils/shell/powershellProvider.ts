@@ -16,7 +16,7 @@ export function buildPowerShellArgs(cmd: string): string[] {
  * Base64-encode a string as UTF-16LE for PowerShell's -EncodedCommand.
  * Same encoding the parser uses (parser.ts toUtf16LeBase64). The output
  * is [A-Za-z0-9+/=] only — survives ANY shell-quoting layer, including
- * @anthropic-ai/sandbox-runtime's shellquote.quote() which would otherwise
+ * @knightcode-ai/sandbox-runtime's shellquote.quote() which would otherwise
  * corrupt !$? to \!$? when re-wrapping a single-quoted string in double
  * quotes. Review 2964609818.
  */
@@ -49,8 +49,8 @@ export function createPowerShellProvider(shellPath: string): ShellProvider {
       // on Windows native, sandbox is never enabled so this branch is dead.
       const cwdFilePath =
         opts.useSandbox && opts.sandboxTmpDir
-          ? posixJoin(opts.sandboxTmpDir, `claude-pwd-ps-${opts.id}`)
-          : join(tmpdir(), `claude-pwd-ps-${opts.id}`)
+          ? posixJoin(opts.sandboxTmpDir, `knightcode-pwd-ps-${opts.id}`)
+          : join(tmpdir(), `knightcode-pwd-ps-${opts.id}`)
       const escapedCwdFilePath = cwdFilePath.replace(/'/g, "''")
       // Exit-code capture: prefer $LASTEXITCODE when a native exe ran.
       // On PS 5.1, a native command that writes to stderr while the stream

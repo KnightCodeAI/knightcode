@@ -5,8 +5,8 @@ import { getEmptyToolPermissionContext } from '../../Tool.js'
 import { clearApiKeyHelperCache } from '../../utils/auth.js'
 import { createUserMessage } from '../../utils/messages.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
-import type { Options } from './claude.js'
-import { isInvalidApiKeyError, queryModelWithStreaming } from './claude.js'
+import type { Options } from './knightcode.js'
+import { isInvalidApiKeyError, queryModelWithStreaming } from './knightcode.js'
 
 const fixture = readFileSync(
   join(import.meta.dir, '__fixtures__', 'openrouter-stream.txt'),

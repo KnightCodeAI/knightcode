@@ -51,7 +51,7 @@ type Props = {
   onSubmit: () => void
   onTabPrev?: () => void
   onTabNext?: () => void
-  onRespondToClaude: () => void
+  onRespondToKnightcode: () => void
   onFinishPlanInterview: () => void
   onImagePaste?: (
     base64Image: string,
@@ -80,7 +80,7 @@ export function QuestionView({
   onSubmit,
   onTabPrev,
   onTabNext,
-  onRespondToClaude,
+  onRespondToKnightcode,
   onFinishPlanInterview,
   onImagePaste,
   pastedContents,
@@ -137,7 +137,7 @@ export function QuestionView({
       if (e.key === 'return') {
         e.preventDefault()
         if (footerIndex === 0) {
-          onRespondToClaude()
+          onRespondToKnightcode()
         } else {
           onFinishPlanInterview()
         }
@@ -154,7 +154,7 @@ export function QuestionView({
       footerIndex,
       isInPlanMode,
       handleUpFromFooter,
-      onRespondToClaude,
+      onRespondToKnightcode,
       onFinishPlanInterview,
       onCancel,
     ],
@@ -230,7 +230,7 @@ export function QuestionView({
         onCancel={onCancel}
         onTabPrev={onTabPrev}
         onTabNext={onTabNext}
-        onRespondToClaude={onRespondToClaude}
+        onRespondToKnightcode={onRespondToKnightcode}
         onFinishPlanInterview={onFinishPlanInterview}
       />
     )

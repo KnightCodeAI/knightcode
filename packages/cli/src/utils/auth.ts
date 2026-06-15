@@ -70,7 +70,7 @@ function readCredentialsFileKey(): string | null {
  * env-var source; keys saved by onboarding report the managed-key source so
  * error messaging can distinguish "fix your env var" from "re-run /login".
  */
-export function getAnthropicApiKeyWithSource(
+export function getKnightcodeApiKeyWithSource(
   _opts: { skipRetrievingKeyFromApiKeyHelper?: boolean } = {},
 ): {
   key: null | string
@@ -89,12 +89,12 @@ export function getAnthropicApiKeyWithSource(
   return cachedResolution
 }
 
-export function getAnthropicApiKey(): null | string {
-  return getAnthropicApiKeyWithSource().key
+export function getKnightcodeApiKey(): null | string {
+  return getKnightcodeApiKeyWithSource().key
 }
 
-export function hasAnthropicApiKeyAuth(): boolean {
-  const { key, source } = getAnthropicApiKeyWithSource({
+export function hasKnightcodeApiKeyAuth(): boolean {
+  const { key, source } = getKnightcodeApiKeyWithSource({
     skipRetrievingKeyFromApiKeyHelper: true,
   })
   return key !== null && source !== 'none'
@@ -106,7 +106,7 @@ export function hasAnthropicApiKeyAuth(): boolean {
  * always false — callers that gate KnightCode-account verification skip it, and
  * missing-key handling is surfaced separately at launch.
  */
-export function isAnthropicAuthEnabled(): boolean {
+export function isKnightcodeAuthEnabled(): boolean {
   return false
 }
 
@@ -194,7 +194,7 @@ export function isTeamSubscriber(): boolean {
   return false
 }
 
-export function getClaudeAIOAuthTokens(): OAuthTokens | null {
+export function getKnightcodeAIOAuthTokens(): OAuthTokens | null {
   return null
 }
 

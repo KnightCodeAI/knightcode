@@ -384,17 +384,17 @@ export async function* runAgent({
 
   // Read-only agents (Explore, Plan) don't act on commit/PR/lint rules from
   // KNIGHTCODE.md — the main agent has full context and interprets their output.
-  // Dropping claudeMd here saves ~5-15 Gtok/week across 34M+ Explore spawns.
+  // Dropping knightcodeMd here saves ~5-15 Gtok/week across 34M+ Explore spawns.
   // Explicit override.userContext from callers is preserved untouched.
-  // Kill-switch defaults true; flip knightcode_slim_subagent_claudemd=false to revert.
-  const shouldOmitClaudeMd =
-    agentDefinition.omitClaudeMd &&
+  // Kill-switch defaults true; flip knightcode_slim_subagent_knightcodemd=false to revert.
+  const shouldOmitKnightcodeMd =
+    agentDefinition.omitKnightcodeMd &&
     !override?.userContext &&
-    getFeatureValue_CACHED_MAY_BE_STALE('knightcode_slim_subagent_claudemd', true)
-  const { claudeMd: _omittedClaudeMd, ...userContextNoClaudeMd } =
+    getFeatureValue_CACHED_MAY_BE_STALE('knightcode_slim_subagent_knightcodemd', true)
+  const { knightcodeMd: _omittedKnightcodeMd, ...userContextNoKnightcodeMd } =
     baseUserContext
-  const resolvedUserContext = shouldOmitClaudeMd
-    ? userContextNoClaudeMd
+  const resolvedUserContext = shouldOmitKnightcodeMd
+    ? userContextNoKnightcodeMd
     : baseUserContext
 
   // Explore/Plan are read-only search agents — the parent-session-start

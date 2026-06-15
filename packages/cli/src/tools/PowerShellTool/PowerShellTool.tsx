@@ -561,8 +561,8 @@ export const PowerShellTool = buildTool({
 
       let stdout = stripEmptyLines(stdoutAccumulator.toString());
 
-      // KnightCode hints protocol: CLIs/SDKs gated on CLAUDECODE=1 emit a
-      // `<claude-code-hint />` tag to stderr (merged into stdout here). Scan,
+      // KnightCode hints protocol: CLIs/SDKs gated on KNIGHTCODECODE=1 emit a
+      // `<knightcode-code-hint />` tag to stderr (merged into stdout here). Scan,
       // record for useKnightCodeHintRecommendation to surface, then strip
       // so the model never sees the tag — a zero-token side channel.
       // Stripping runs unconditionally (subagent output must stay clean too);

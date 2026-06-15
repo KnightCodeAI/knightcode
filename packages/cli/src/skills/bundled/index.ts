@@ -59,11 +59,11 @@ export function initBundledSkills(): void {
     /* eslint-enable @typescript-eslint/no-require-imports */
     registerScheduleRemoteAgentsSkill()
   }
-  if (feature('BUILDING_CLAUDE_APPS')) {
+  if (feature('BUILDING_KNIGHTCODE_APPS')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
-    const { registerClaudeApiSkill } = require('./claudeApi.js')
+    const { registerKnightcodeApiSkill } = require('./knightcodeApi.js')
     /* eslint-enable @typescript-eslint/no-require-imports */
-    registerClaudeApiSkill()
+    registerKnightcodeApiSkill()
   }
   // TODO: the KnightCode-in-Chrome bundled skill is out of scope (chrome integration).
   if (feature('RUN_SKILL_GENERATOR')) {

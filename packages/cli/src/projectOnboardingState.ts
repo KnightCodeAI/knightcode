@@ -17,7 +17,7 @@ export type Step = {
 }
 
 export function getSteps(): Step[] {
-  const hasClaudeMd = getFsImplementation().existsSync(
+  const hasKnightcodeMd = getFsImplementation().existsSync(
     join(getCwd(), 'KNIGHTCODE.md'),
   )
   const isWorkspaceDirEmpty = isDirEmpty(getCwd())
@@ -31,9 +31,9 @@ export function getSteps(): Step[] {
       isEnabled: isWorkspaceDirEmpty,
     },
     {
-      key: 'claudemd',
+      key: 'knightcodemd',
       text: 'Run /init to create a KNIGHTCODE.md file with instructions for KnightCode',
-      isComplete: hasClaudeMd,
+      isComplete: hasKnightcodeMd,
       isCompletable: true,
       isEnabled: !isWorkspaceDirEmpty,
     },

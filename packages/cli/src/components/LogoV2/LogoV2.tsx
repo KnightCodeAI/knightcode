@@ -15,7 +15,7 @@ import {
 } from '../../utils/logoV2Utils.js'
 import { truncate } from '../../utils/format.js'
 import { getDisplayPath } from '../../utils/file.js'
-import { Clawd } from './Clawd.js'
+import { Knight } from './Knight.js'
 import { FeedColumn } from './FeedColumn.js'
 import {
   createRecentActivityFeed,
@@ -259,8 +259,8 @@ export function LogoV2(): React.ReactNode {
   const layoutMode = getLayoutMode(columns)
 
   const userTheme = resolveThemeSetting(getGlobalConfig().theme)
-  const borderTitle = ` ${color('claude', userTheme)('KnightCode')} ${color('inactive', userTheme)(`v${version}`)} `
-  const compactBorderTitle = color('claude', userTheme)(' KnightCode ')
+  const borderTitle = ` ${color('knightcode', userTheme)('KnightCode')} ${color('inactive', userTheme)(`v${version}`)} `
+  const compactBorderTitle = color('knightcode', userTheme)(' KnightCode ')
 
   // Early return for compact mode
   if (layoutMode === 'compact') {
@@ -290,7 +290,7 @@ export function LogoV2(): React.ReactNode {
           <Box
             flexDirection="column"
             borderStyle="round"
-            borderColor="claude"
+            borderColor="knightcode"
             borderText={{
               content: compactBorderTitle,
               position: 'top',
@@ -304,7 +304,7 @@ export function LogoV2(): React.ReactNode {
           >
             <Text bold>{welcomeMessage}</Text>
             <Box marginY={1}>
-              <Clawd />
+              <Knight />
             </Box>
             <Text dimColor>{modelDisplayName}</Text>
             <Text dimColor>{billingType}</Text>
@@ -364,7 +364,7 @@ export function LogoV2(): React.ReactNode {
         <Box
           flexDirection="column"
           borderStyle="round"
-          borderColor="claude"
+          borderColor="knightcode"
           borderText={{
             content: borderTitle,
             position: 'top',
@@ -390,7 +390,7 @@ export function LogoV2(): React.ReactNode {
                 <Text bold>{welcomeMessage}</Text>
               </Box>
 
-              <Clawd />
+              <Knight />
 
               <Box flexDirection="column" alignItems="center">
                 <Text dimColor>{modelLine}</Text>
@@ -403,7 +403,7 @@ export function LogoV2(): React.ReactNode {
               <Box
                 height="100%"
                 borderStyle="single"
-                borderColor="claude"
+                borderColor="knightcode"
                 borderDimColor
                 borderTop={false}
                 borderBottom={false}

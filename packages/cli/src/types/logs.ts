@@ -87,7 +87,7 @@ export type LastPromptMessage = {
 /**
  * Periodic fork-generated summary of what the agent is currently doing.
  * Written every min(5 steps, 2min) by forking the main thread mid-turn so
- * `claude ps` can show something more useful than the last user prompt
+ * `knightcode ps` can show something more useful than the last user prompt
  * (which is often "ok go" or "fix it").
  */
 export type TaskSummaryMessage = {
@@ -197,7 +197,7 @@ export type FileHistorySnapshotMessage = {
  */
 export type FileAttributionState = {
   contentHash: string // SHA-256 hash of file content
-  claudeContribution: number // Characters written by KnightCode
+  knightcodeContribution: number // Characters written by KnightCode
   mtime: number // File modification time
 }
 

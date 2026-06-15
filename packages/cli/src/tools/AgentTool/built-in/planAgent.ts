@@ -87,6 +87,6 @@ export const PLAN_AGENT: BuiltInAgentDefinition = {
   model: 'inherit',
   // Plan is read-only and can Read KNIGHTCODE.md directly if it needs conventions.
   // Dropping it from context saves tokens without blocking access.
-  omitClaudeMd: true,
+  omitKnightcodeMd: true,
   getSystemPrompt: () => getPlanV2SystemPrompt(),
 }

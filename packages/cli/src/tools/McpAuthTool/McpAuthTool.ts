@@ -83,10 +83,10 @@ export function createMcpAuthTool(
       return { behavior: 'allow', updatedInput: input }
     },
     async call(_input, context) {
-      // knightcode.raghavseth.in connectors use a separate auth flow (handleClaudeAIAuth in
+      // knightcode.raghavseth.in connectors use a separate auth flow (handleKnightcodeAIAuth in
       // MCPRemoteServerMenu) that we don't invoke programmatically here —
       // just point the user at /mcp.
-      if (config.type === 'claudeai-proxy') {
+      if (config.type === 'knightcodeai-proxy') {
         return {
           data: {
             status: 'unsupported' as const,

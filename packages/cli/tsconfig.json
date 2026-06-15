@@ -6,7 +6,7 @@
     "baseUrl": ".",
     "paths": {
       "src/*": ["./src/*"],
-      "@ant/claude-for-chrome-mcp": ["./src/stubs/claude-for-chrome-mcp.ts"]
+      "@ant/knightcode-for-chrome-mcp": ["./src/stubs/knightcode-for-chrome-mcp.ts"]
     }
   },
   "include": ["src"]

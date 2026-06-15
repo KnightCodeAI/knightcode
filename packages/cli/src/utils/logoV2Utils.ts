@@ -85,7 +85,7 @@ export function calculateOptimalLeftWidth(
     stringWidth(welcomeMessage),
     stringWidth(truncatedCwd),
     stringWidth(modelLine),
-    20, // Minimum for clawd art
+    20, // Minimum for knight art
   )
   return Math.min(contentWidth + 4, MAX_LEFT_WIDTH) // +4 for padding
 }
@@ -247,7 +247,7 @@ export function getLogoDisplayData(): {
   const version = process.env.DEMO_VERSION ?? MACRO.VERSION
   const serverUrl = getDirectConnectServerUrl()
   const displayPath = process.env.DEMO_VERSION
-    ? '/code/claude'
+    ? '/code/knightcode'
     : getDisplayPath(getCwd())
   const cwd = serverUrl
     ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`

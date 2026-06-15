@@ -19,7 +19,7 @@ export function WelcomeV2(): React.ReactNode {
       <Box width={WELCOME_V2_WIDTH}>
         <Text>
           <Text>
-            <Text color="claude">{welcomeMessage} </Text>
+            <Text color="knightcode">{welcomeMessage} </Text>
             <Text dimColor>v{MACRO.VERSION} </Text>
           </Text>
           <Text>
@@ -59,24 +59,24 @@ export function WelcomeV2(): React.ReactNode {
           </Text>
           <Text>
             {'      '}
-            <Text color="clawd_body"> █████████ </Text>
+            <Text color="knight_body"> █████████ </Text>
             {'                         ▒▒░░▒▒      ▒ ▒▒'}
           </Text>
           <Text>
             {'      '}
-            <Text color="clawd_body" backgroundColor="clawd_background">
+            <Text color="knight_body" backgroundColor="knight_background">
               ██▄█████▄██
             </Text>
             {'                           ▒▒         ▒▒ '}
           </Text>
           <Text>
             {'      '}
-            <Text color="clawd_body"> █████████ </Text>
+            <Text color="knight_body"> █████████ </Text>
             {'                          ░          ▒   '}
           </Text>
           <Text>
             {'…………………'}
-            <Text color="clawd_body">{'█ █   █ █'}</Text>
+            <Text color="knight_body">{'█ █   █ █'}</Text>
             {'……………………………………………………………………░…………………………▒…………'}
           </Text>
         </Text>
@@ -88,7 +88,7 @@ export function WelcomeV2(): React.ReactNode {
     <Box width={WELCOME_V2_WIDTH}>
       <Text>
         <Text>
-          <Text color="claude">{welcomeMessage} </Text>
+          <Text color="knightcode">{welcomeMessage} </Text>
           <Text dimColor>v{MACRO.VERSION} </Text>
         </Text>
         <Text>
@@ -128,26 +128,26 @@ export function WelcomeV2(): React.ReactNode {
         </Text>
         <Text>
           {'      '}
-          <Text color="clawd_body"> █████████ </Text>
+          <Text color="knight_body"> █████████ </Text>
           {'                                       '}
           <Text dimColor>*</Text>
           <Text> </Text>
         </Text>
         <Text>
           {'      '}
-          <Text color="clawd_body">██▄█████▄██</Text>
+          <Text color="knight_body">██▄█████▄██</Text>
           <Text>{'                        '}</Text>
           <Text bold>*</Text>
           <Text>{'                '}</Text>
         </Text>
         <Text>
           {'      '}
-          <Text color="clawd_body"> █████████ </Text>
+          <Text color="knight_body"> █████████ </Text>
           {'     *                                   '}
         </Text>
         <Text>
           {'…………………'}
-          <Text color="clawd_body">{'█ █   █ █'}</Text>
+          <Text color="knight_body">{'█ █   █ █'}</Text>
           {'………………………………………………………………………………………………………………'}
         </Text>
       </Text>
@@ -173,7 +173,7 @@ function AppleTerminalWelcomeV2({
       <Box width={WELCOME_V2_WIDTH}>
         <Text>
           <Text>
-            <Text color="claude">{welcomeMessage} </Text>
+            <Text color="knightcode">{welcomeMessage} </Text>
             <Text dimColor>v{MACRO.VERSION} </Text>
           </Text>
           <Text>
@@ -216,28 +216,28 @@ function AppleTerminalWelcomeV2({
           </Text>
           <Text>
             {'      '}
-            <Text color="clawd_body">▗</Text>
-            <Text color="clawd_background" backgroundColor="clawd_body">
+            <Text color="knight_body">▗</Text>
+            <Text color="knight_background" backgroundColor="knight_body">
               {' '}
               ▗{'     '}▖{' '}
             </Text>
-            <Text color="clawd_body">▖</Text>
+            <Text color="knight_body">▖</Text>
             {'                           ▒▒         ▒▒ '}
           </Text>
           <Text>
             {'       '}
-            <Text backgroundColor="clawd_body">{' '.repeat(9)}</Text>
+            <Text backgroundColor="knight_body">{' '.repeat(9)}</Text>
             {'                           ░          ▒   '}
           </Text>
           <Text>
             {'…………………'}
-            <Text backgroundColor="clawd_body"> </Text>
+            <Text backgroundColor="knight_body"> </Text>
             <Text> </Text>
-            <Text backgroundColor="clawd_body"> </Text>
+            <Text backgroundColor="knight_body"> </Text>
             <Text>{'   '}</Text>
-            <Text backgroundColor="clawd_body"> </Text>
+            <Text backgroundColor="knight_body"> </Text>
             <Text> </Text>
-            <Text backgroundColor="clawd_body"> </Text>
+            <Text backgroundColor="knight_body"> </Text>
             {'……………………………………………………………………░…………………………▒…………'}
           </Text>
         </Text>
@@ -249,7 +249,7 @@ function AppleTerminalWelcomeV2({
     <Box width={WELCOME_V2_WIDTH}>
       <Text>
         <Text>
-          <Text color="claude">{welcomeMessage} </Text>
+          <Text color="knightcode">{welcomeMessage} </Text>
           <Text dimColor>v{MACRO.VERSION} </Text>
         </Text>
         <Text>
@@ -294,30 +294,30 @@ function AppleTerminalWelcomeV2({
         </Text>
         <Text>
           {'        '}
-          <Text color="clawd_body">▗</Text>
-          <Text color="clawd_background" backgroundColor="clawd_body">
+          <Text color="knight_body">▗</Text>
+          <Text color="knight_background" backgroundColor="knight_body">
             {' '}
             ▗{'     '}▖{' '}
           </Text>
-          <Text color="clawd_body">▖</Text>
+          <Text color="knight_body">▖</Text>
           <Text>{'                       '}</Text>
           <Text bold>*</Text>
           <Text>{'                '}</Text>
         </Text>
         <Text>
           {'        '}
-          <Text backgroundColor="clawd_body">{' '.repeat(9)}</Text>
+          <Text backgroundColor="knight_body">{' '.repeat(9)}</Text>
           {'      *                                   '}
         </Text>
         <Text>
           {'…………………'}
-          <Text backgroundColor="clawd_body"> </Text>
+          <Text backgroundColor="knight_body"> </Text>
           <Text> </Text>
-          <Text backgroundColor="clawd_body"> </Text>
+          <Text backgroundColor="knight_body"> </Text>
           <Text>{'   '}</Text>
-          <Text backgroundColor="clawd_body"> </Text>
+          <Text backgroundColor="knight_body"> </Text>
           <Text> </Text>
-          <Text backgroundColor="clawd_body"> </Text>
+          <Text backgroundColor="knight_body"> </Text>
           {'………………………………………………………………………………………………………………'}
         </Text>
       </Text>

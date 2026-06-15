@@ -5,7 +5,7 @@ import {
   getLargeMemoryFiles,
   MAX_MEMORY_CHARACTER_COUNT,
   type MemoryFileInfo,
-} from './claudemd.js'
+} from './knightcodemd.js'
 import figures from 'figures'
 import { getCwd } from './cwd.js'
 import { relative } from 'path'
@@ -123,7 +123,7 @@ const jetbrainsPluginNotice: StatusNoticeDefinition = {
         <Text>
           Install the <Text color="ide">{ideName}</Text> plugin from the
           JetBrains Marketplace:{' '}
-          <Text bold>https://docs.knightcode.raghavseth.in/s/claude-code-jetbrains</Text>
+          <Text bold>https://docs.knightcode.raghavseth.in/s/knightcode-code-jetbrains</Text>
         </Text>
       </Box>
     )

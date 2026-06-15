@@ -278,7 +278,7 @@ export const SettingsSchema = lazySchema(() =>
           'Command to refresh GCP authentication (e.g., gcloud auth application-default login)',
         ),
       // Gated so the SDK generator (which runs without KNIGHTCODE_CODE_ENABLE_XAA)
-      // doesn't surface this in GlobalClaudeSettings. Read via getXaaIdpSettings().
+      // doesn't surface this in GlobalKnightcodeSettings. Read via getXaaIdpSettings().
       // .passthrough() on the outer object keeps an existing settings.json key
       // alive across env-var-off sessions — it's just not schema-validated then.
       ...(isEnvTruthy(process.env.KNIGHTCODE_CODE_ENABLE_XAA)
@@ -563,7 +563,7 @@ export const SettingsSchema = lazySchema(() =>
         )
         .optional()
         .describe(
-          'Enabled plugins using plugin-id@marketplace-id format. Example: { "formatter@anthropic-tools": true }. Also supports extended format with version constraints.',
+          'Enabled plugins using plugin-id@marketplace-id format. Example: { "formatter@knightcode-tools": true }. Also supports extended format with version constraints.',
         ),
       // Extra marketplaces for this repository (usually for project settings)
       extraKnownMarketplaces: z
@@ -620,12 +620,12 @@ export const SettingsSchema = lazySchema(() =>
             'these exact sources are blocked from being added as marketplaces. The check happens BEFORE ' +
             'downloading, so blocked sources never touch the filesystem.',
         ),
-      // Force a specific login method: 'claudeai' for KnightCode Pro/Max, 'console' for Console billing
+      // Force a specific login method: 'knightcodeai' for KnightCode Pro/Max, 'console' for Console billing
       forceLoginMethod: z
-        .enum(['claudeai', 'console'])
+        .enum(['knightcodeai', 'console'])
         .optional()
         .describe(
-          'Force a specific login method: "claudeai" for KnightCode Pro/Max, "console" for Console billing',
+          'Force a specific login method: "knightcodeai" for KnightCode Pro/Max, "console" for Console billing',
         ),
       // Organization UUID to use for OAuth login (will be added as URL param to authorization URL)
       forceLoginOrgUUID: z
@@ -811,7 +811,7 @@ export const SettingsSchema = lazySchema(() =>
               .enum(['disable'])
               .optional()
               .describe(
-                'Prevent claude-cli:// protocol handler registration with the OS',
+                'Prevent knightcode-cli:// protocol handler registration with the OS',
               ),
           }
         : {}),
@@ -886,7 +886,7 @@ export const SettingsSchema = lazySchema(() =>
           }
         : {}),
       // Teams/Enterprise opt-IN for channel notifications. Default OFF.
-      // MCP servers that declare the claude/channel capability can push
+      // MCP servers that declare the knightcode/channel capability can push
       // inbound messages into the conversation; for managed orgs this only
       // works when explicitly enabled. Which servers can connect at all is
       // still governed by allowedMcpServers/deniedMcpServers. Not
@@ -898,7 +898,7 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Teams/Enterprise opt-in for channel notifications (MCP servers with the ' +
-            'claude/channel capability pushing inbound messages). Default off. ' +
+            'knightcode/channel capability pushing inbound messages). Default off. ' +
             'Set true to allow; users then select servers via --channels.',
         ),
       // Org-level channel plugin allowlist. When set, REPLACES the
@@ -1040,7 +1040,7 @@ export const SettingsSchema = lazySchema(() =>
                 'Default working directory on the remote host. ' +
                   'Supports tilde expansion (e.g. ~/projects). ' +
                   'If not specified, defaults to the remote user home directory. ' +
-                  'Can be overridden by the [dir] positional argument in `claude ssh <config> [dir]`.',
+                  'Can be overridden by the [dir] positional argument in `knightcode ssh <config> [dir]`.',
               ),
           }),
         )
@@ -1050,7 +1050,7 @@ export const SettingsSchema = lazySchema(() =>
             'Typically set in managed settings by enterprise administrators ' +
             'to pre-configure SSH connections for team members.',
         ),
-      claudeMdExcludes: z
+      knightcodeMdExcludes: z
         .array(z.string())
         .optional()
         .describe(

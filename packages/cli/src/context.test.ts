@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { getUserContext, getSystemContext } from './context.js'
-import { resetGetMemoryFilesCache } from './utils/claudemd.js'
+import { resetGetMemoryFilesCache } from './utils/knightcodemd.js'
 import { getOriginalCwd, setOriginalCwd } from './bootstrap/state.js'
 
 let dir: string
@@ -24,7 +24,7 @@ test('getUserContext returns memory content for a repo with KNIGHTCODE.md', asyn
   resetGetMemoryFilesCache()
   getUserContext.cache.clear?.()
   const ctx = await getUserContext()
-  expect(ctx.claudeMd).toContain('remember the secret rule')
+  expect(ctx.knightcodeMd).toContain('remember the secret rule')
   expect(ctx.currentDate).toContain("Today's date")
 })
 

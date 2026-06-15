@@ -30,7 +30,7 @@ export type { ExecResult } from './ShellCommand.js'
 
 import { accessSync } from 'fs'
 import { onCwdChangedForHooks } from './hooks/fileChangedWatcher.js'
-import { getClaudeTempDirName } from './permissions/filesystem.js'
+import { getKnightcodeTempDirName } from './permissions/filesystem.js'
 import { getPlatform } from './platform.js'
 import { SandboxManager } from './sandbox/sandbox-adapter.js'
 import { invalidateSessionEnvCache } from './sessionEnvironment.js'
@@ -203,7 +203,7 @@ export async function exec(
   // Sandbox temp directory - use per-user directory name to prevent multi-user permission conflicts
   const sandboxTmpDir = posixJoin(
     process.env.KNIGHTCODE_CODE_TMPDIR || '/tmp',
-    getClaudeTempDirName(),
+    getKnightcodeTempDirName(),
   )
 
   const { commandString: builtCommand, cwdFilePath } =
@@ -318,7 +318,7 @@ export async function exec(
         ...subprocessEnv(),
         SHELL: shellType === 'bash' ? binShell : undefined,
         GIT_EDITOR: 'true',
-        CLAUDECODE: '1',
+        KNIGHTCODECODE: '1',
         ...envOverrides,
         ...(process.env.USER_TYPE === 'ant'
           ? {

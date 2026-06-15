@@ -180,7 +180,7 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
 
 // In a BYOK build there is no hosted-account default; the configured default
 // model is shown directly.
-export function getClaudeAiUserDefaultModelDescription(_fastMode = false): string {
+export function getKnightcodeAiUserDefaultModelDescription(_fastMode = false): string {
   return `Default (${getDefaultMainLoopModelSetting()})`
 }
 

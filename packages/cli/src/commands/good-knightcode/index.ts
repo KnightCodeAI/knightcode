@@ -3,8 +3,8 @@ import type { Command } from '../../commands.js'
 // TODO: internal. Hidden, disabled inert stub so the registry still lists the name.
 const command: Command = {
   type: 'local',
-  name: 'good-claude',
-  description: 'good-claude',
+  name: 'good-knightcode',
+  description: 'good-knightcode',
   isEnabled: () => false,
   isHidden: true,
   supportsNonInteractive: false,

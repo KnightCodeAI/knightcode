@@ -1,6 +1,6 @@
 import { test, expect, afterEach, beforeEach } from 'bun:test'
 import {
-  getAnthropicApiKeyWithSource,
+  getKnightcodeApiKeyWithSource,
   clearApiKeyHelperCache,
 } from './auth.js'
 
@@ -12,5 +12,5 @@ afterEach(() => {
 
 test('env key resolves with source OPENROUTER_API_KEY', () => {
   process.env.OPENROUTER_API_KEY = 'sk-or-test'
-  expect(getAnthropicApiKeyWithSource().source).toBe('OPENROUTER_API_KEY')
+  expect(getKnightcodeApiKeyWithSource().source).toBe('OPENROUTER_API_KEY')
 })

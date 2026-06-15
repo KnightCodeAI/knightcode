@@ -35,7 +35,7 @@ export const KNIGHTCODE_CONFIG_DIRECTORIES = [
   ...(feature('TEMPLATES') ? (['templates'] as const) : []),
 ] as const
 
-export type ClaudeConfigDirectory = (typeof KNIGHTCODE_CONFIG_DIRECTORIES)[number]
+export type KnightcodeConfigDirectory = (typeof KNIGHTCODE_CONFIG_DIRECTORIES)[number]
 
 export type MarkdownFile = {
   filePath: string
@@ -151,7 +151,7 @@ export function parseSlashCommandToolsFromFrontmatter(
  * Uses bigint: true to handle filesystems with large inodes (e.g., ExFAT)
  * that exceed JavaScript's Number precision (53 bits). Without bigint, different
  * large inodes can round to the same Number, causing false duplicate detection.
- * See: https://github.com/anthropics/claude-code/issues/13893
+ * See: https://github.com/knightcode/knightcode-code/issues/13893
  *
  * @param filePath - Path to the file
  * @returns A string identifier "device:inode" or null if file can't be identified
@@ -221,7 +221,7 @@ function resolveStopBoundary(cwd: string): string | null {
 
 /**
  * Traverses from the current directory up to the git root (or home directory if not in a git repo),
- * collecting all .claude directories along the way.
+ * collecting all .knightcode directories along the way.
  *
  * Stopping at git root prevents commands/skills from parent directories outside the repository
  * from leaking into projects. For example, if ~/projects/.knightcode/commands/ exists, it won't
@@ -232,7 +232,7 @@ function resolveStopBoundary(cwd: string): string | null {
  * @returns Array of directory paths containing .knightcode/subdir, from most specific (cwd) to least specific
  */
 export function getProjectDirsUpToHome(
-  subdir: ClaudeConfigDirectory,
+  subdir: KnightcodeConfigDirectory,
   cwd: string,
 ): string[] {
   const home = resolve(homedir()).normalize('NFC')
@@ -250,7 +250,7 @@ export function getProjectDirsUpToHome(
       break
     }
 
-    const claudeSubdir = join(current, '.knightcode', subdir)
+    const knightcodeSubdir = join(current, '.knightcode', subdir)
     // Filter to existing dirs. This is a perf filter (avoids spawning
     // ripgrep on non-existent dirs downstream) and the worktree fallback
     // in loadMarkdownFilesForSubdir relies on it. statSync + explicit error
@@ -258,8 +258,8 @@ export function getProjectDirsUpToHome(
     // than silently swallowing them. Downstream loadMarkdownFiles handles
     // the TOCTOU window (dir disappearing before read) gracefully.
     try {
-      statSync(claudeSubdir)
-      dirs.push(claudeSubdir)
+      statSync(knightcodeSubdir)
+      dirs.push(knightcodeSubdir)
     } catch (e: unknown) {
       if (!isFsInaccessible(e)) throw e
     }
@@ -296,7 +296,7 @@ export function getProjectDirsUpToHome(
  */
 export const loadMarkdownFilesForSubdir = memoize(
   async function (
-    subdir: ClaudeConfigDirectory,
+    subdir: KnightcodeConfigDirectory,
     cwd: string,
   ): Promise<MarkdownFile[]> {
     const searchStartTime = Date.now()
@@ -313,7 +313,7 @@ export const loadMarkdownFilesForSubdir = memoize(
     // is absent. A standard `git worktree add` checks out the full tree, so the
     // worktree already has identical .knightcode/<subdir> content — loading the main
     // repo's copy too would duplicate every command/agent/skill
-    // (anthropics/claude-code#29599, #28182, #26992).
+    // (knightcode/knightcode-code#29599, #28182, #26992).
     //
     // projectDirs already reflects existence (getProjectDirsUpToHome checked
     // each dir), so we compare against that instead of stat'ing again.
@@ -327,9 +327,9 @@ export const loadMarkdownFilesForSubdir = memoize(
         dir => normalizePathForComparison(dir) === worktreeSubdir,
       )
       if (!worktreeHasSubdir) {
-        const mainClaudeSubdir = join(canonicalRoot, '.knightcode', subdir)
-        if (!projectDirs.includes(mainClaudeSubdir)) {
-          projectDirs.push(mainClaudeSubdir)
+        const mainKnightcodeSubdir = join(canonicalRoot, '.knightcode', subdir)
+        if (!projectDirs.includes(mainKnightcodeSubdir)) {
+          projectDirs.push(mainKnightcodeSubdir)
         }
       }
     }
@@ -378,7 +378,7 @@ export const loadMarkdownFilesForSubdir = memoize(
     const allFiles = [...managedFiles, ...userFiles, ...projectFiles]
 
     // Deduplicate files that resolve to the same physical file (same inode).
-    // This prevents the same file from appearing multiple times when ~/.claude is
+    // This prevents the same file from appearing multiple times when ~/.knightcode is
     // symlinked to a directory within the project hierarchy, causing the same
     // physical file to be discovered through different paths.
     const fileIdentities = await Promise.all(
@@ -426,7 +426,7 @@ export const loadMarkdownFilesForSubdir = memoize(
     return deduplicatedFiles
   },
   // Custom resolver creates cache key from both subdir and cwd parameters
-  (subdir: ClaudeConfigDirectory, cwd: string) => `${subdir}:${cwd}`,
+  (subdir: KnightcodeConfigDirectory, cwd: string) => `${subdir}:${cwd}`,
 )
 
 /**
@@ -463,7 +463,7 @@ async function findMarkdownFilesNative(
     // Cycle detection: track visited directories by device+inode
     // Uses bigint: true to handle filesystems with large inodes (e.g., ExFAT)
     // that exceed JavaScript's Number precision (53 bits).
-    // See: https://github.com/anthropics/claude-code/issues/13893
+    // See: https://github.com/knightcode/knightcode-code/issues/13893
     try {
       const stats = await stat(currentDir, { bigint: true })
       if (stats.isDirectory()) {

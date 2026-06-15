@@ -338,7 +338,7 @@ export const FileWriteTool = buildTool({
 
     // Log when writing to KNIGHTCODE.md
     if (fullFilePath.endsWith(`${sep}KNIGHTCODE.md`)) {
-      logEvent('knightcode_write_claudemd', {})
+      logEvent('knightcode_write_knightcodemd', {})
     }
 
     let gitDiff: ToolUseDiff | undefined

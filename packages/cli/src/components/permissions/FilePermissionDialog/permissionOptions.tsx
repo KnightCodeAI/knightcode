@@ -13,52 +13,52 @@ import {
 import type { OptionWithDescription } from '../../CustomSelect/select.js'
 /**
  * Check if a path is within the project's .knightcode/ folder.
- * This is used to determine whether to show the special ".claude folder" permission option.
+ * This is used to determine whether to show the special ".knightcode folder" permission option.
  */
-export function isInClaudeFolder(filePath: string): boolean {
+export function isInKnightcodeFolder(filePath: string): boolean {
   const absolutePath = expandPath(filePath)
-  const claudeFolderPath = expandPath(`${getOriginalCwd()}/.claude`)
+  const knightcodeFolderPath = expandPath(`${getOriginalCwd()}/.knightcode`)
 
-  // Check if the path is within the project's .claude folder
+  // Check if the path is within the project's .knightcode folder
   const normalizedAbsolutePath = normalizeCaseForComparison(absolutePath)
-  const normalizedClaudeFolderPath =
-    normalizeCaseForComparison(claudeFolderPath)
+  const normalizedKnightcodeFolderPath =
+    normalizeCaseForComparison(knightcodeFolderPath)
 
-  // Path must start with the .claude folder path (and be inside it, not just the folder itself)
+  // Path must start with the .knightcode folder path (and be inside it, not just the folder itself)
   return (
     normalizedAbsolutePath.startsWith(
-      normalizedClaudeFolderPath + sep.toLowerCase(),
+      normalizedKnightcodeFolderPath + sep.toLowerCase(),
     ) ||
     // Also match case where sep is / on posix systems
-    normalizedAbsolutePath.startsWith(normalizedClaudeFolderPath + '/')
+    normalizedAbsolutePath.startsWith(normalizedKnightcodeFolderPath + '/')
   )
 }
 
 /**
  * Check if a path is within the global ~/.knightcode/ folder.
- * This is used to determine whether to show the special ".claude folder" permission option
+ * This is used to determine whether to show the special ".knightcode folder" permission option
  * for files in the user's home directory.
  */
-export function isInGlobalClaudeFolder(filePath: string): boolean {
+export function isInGlobalKnightcodeFolder(filePath: string): boolean {
   const absolutePath = expandPath(filePath)
-  const globalClaudeFolderPath = join(homedir(), '.knightcode')
+  const globalKnightcodeFolderPath = join(homedir(), '.knightcode')
 
   const normalizedAbsolutePath = normalizeCaseForComparison(absolutePath)
-  const normalizedGlobalClaudeFolderPath = normalizeCaseForComparison(
-    globalClaudeFolderPath,
+  const normalizedGlobalKnightcodeFolderPath = normalizeCaseForComparison(
+    globalKnightcodeFolderPath,
   )
 
   return (
     normalizedAbsolutePath.startsWith(
-      normalizedGlobalClaudeFolderPath + sep.toLowerCase(),
+      normalizedGlobalKnightcodeFolderPath + sep.toLowerCase(),
     ) ||
-    normalizedAbsolutePath.startsWith(normalizedGlobalClaudeFolderPath + '/')
+    normalizedAbsolutePath.startsWith(normalizedGlobalKnightcodeFolderPath + '/')
   )
 }
 
 export type PermissionOption =
   | { type: 'accept-once' }
-  | { type: 'accept-session'; scope?: 'claude-folder' | 'global-claude-folder' }
+  | { type: 'accept-session'; scope?: 'knightcode-folder' | 'global-knightcode-folder' }
   | { type: 'reject' }
 
 export type PermissionOptionWithLabel = OptionWithDescription<string> & {
@@ -116,20 +116,20 @@ export function getFilePermissionOptions({
   )
 
   // Check if this is a .knightcode/ folder path (project or global)
-  const inClaudeFolder = isInClaudeFolder(filePath)
-  const inGlobalClaudeFolder = isInGlobalClaudeFolder(filePath)
+  const inKnightcodeFolder = isInKnightcodeFolder(filePath)
+  const inGlobalKnightcodeFolder = isInGlobalKnightcodeFolder(filePath)
 
   // Option 2: For .knightcode/ folder, show special option instead of generic session option
   // Note: Session-level options are always shown since they only affect in-memory state,
   // not persisted settings. The allowManagedPermissionRulesOnly setting only restricts
   // persisted permission rules.
-  if ((inClaudeFolder || inGlobalClaudeFolder) && operationType !== 'read') {
+  if ((inKnightcodeFolder || inGlobalKnightcodeFolder) && operationType !== 'read') {
     options.push({
       label: 'Yes, and allow KnightCode to edit its own settings for this session',
-      value: 'yes-claude-folder',
+      value: 'yes-knightcode-folder',
       option: {
         type: 'accept-session',
-        scope: inGlobalClaudeFolder ? 'global-claude-folder' : 'claude-folder',
+        scope: inGlobalKnightcodeFolder ? 'global-knightcode-folder' : 'knightcode-folder',
       },
     })
   } else {

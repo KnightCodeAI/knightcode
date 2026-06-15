@@ -8,7 +8,7 @@ import {
   getLargeMemoryFiles,
   getMemoryFiles,
   MAX_MEMORY_CHARACTER_COUNT,
-} from './claudemd.js'
+} from './knightcodemd.js'
 import { getDoctorDiagnostic } from './doctorDiagnostic.js'
 import {
   getAWSRegion,
@@ -345,11 +345,11 @@ export function buildAPIProviderProperties(): Property[] {
   }
 
   if (apiProvider === 'firstParty') {
-    const anthropicBaseUrl = process.env.KNIGHTCODE_BASE_URL
-    if (anthropicBaseUrl) {
+    const knightcodeBaseUrl = process.env.KNIGHTCODE_BASE_URL
+    if (knightcodeBaseUrl) {
       properties.push({
         label: 'KnightCode base URL',
-        value: anthropicBaseUrl,
+        value: knightcodeBaseUrl,
       })
     }
   } else if (apiProvider === 'bedrock') {

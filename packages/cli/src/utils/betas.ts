@@ -159,8 +159,8 @@ export function modelSupportsAutoMode(model: string): boolean {
     }
     // GrowthBook override: knightcode_auto_mode_config.allowModels force-enables
     // auto mode for listed models, bypassing the denylist/allowlist below.
-    // Exact model IDs (e.g. "claude-strudel-v6-p") match only that model;
-    // canonical names (e.g. "claude-strudel") match the whole family.
+    // Exact model IDs (e.g. "knightcode-strudel-v6-p") match only that model;
+    // canonical names (e.g. "knightcode-strudel") match the whole family.
     const config = getFeatureValue_CACHED_MAY_BE_STALE<{
       allowModels?: string[]
     }>('knightcode_auto_mode_config', {})
@@ -173,14 +173,14 @@ export function modelSupportsAutoMode(model: string): boolean {
       return true
     }
     if (process.env.USER_TYPE === 'ant') {
-      // Denylist: block known-unsupported claude models, allow everything else (ant-internal models etc.)
+      // Denylist: block known-unsupported knightcode models, allow everything else (ant-internal models etc.)
       if (m.includes('claude-3-')) return false
-      // claude-*-4 not followed by -[6-9]: blocks bare -4, -4-YYYYMMDD, -4@, -4-0 thru -4-5
-      if (/claude-(opus|sonnet|haiku)-4(?!-[6-9])/.test(m)) return false
+      // knightcode-*-4 not followed by -[6-9]: blocks bare -4, -4-YYYYMMDD, -4@, -4-0 thru -4-5
+      if (/knightcode-(opus|sonnet|haiku)-4(?!-[6-9])/.test(m)) return false
       return true
     }
     // External allowlist (firstParty already checked above).
-    return /^claude-(opus|sonnet)-4-6/.test(m)
+    return /^knightcode-(opus|sonnet)-4-6/.test(m)
   }
   return false
 }
@@ -303,7 +303,7 @@ export const getAllModelBetas = memoize((model: string): string[] => {
   // already strips schema.strict from tool bodies at api.ts's choke point, but
   // this header was escaping that kill switch. Proxy gateways that look like
   // firstParty but forward to Vertex reject this header with 400.
-  // github.com/deshaw/anthropic-issues/issues/5
+  // github.com/deshaw/knightcode-issues/issues/5
   const strictToolsEnabled =
     checkStatsigFeatureGate_CACHED_MAY_BE_STALE('knightcode_tool_pear')
   // 3P default: false. API rejects strict + token-efficient-tools together
@@ -388,7 +388,7 @@ export function getMergedBetas(
 ): string[] {
   const baseBetas = [...getModelBetas(model)]
 
-  // Agentic queries always need claude-code and cli-internal beta headers.
+  // Agentic queries always need knightcode-code and cli-internal beta headers.
   // For non-Haiku models these are already in baseBetas; for Haiku they're
   // excluded by getAllModelBetas() since non-agentic Haiku calls don't need them.
   if (options?.isAgenticQuery) {

@@ -977,8 +977,8 @@ export function mergeUserContentBlocks(
   a: ContentBlockParam[],
   b: ContentBlockParam[],
 ): ContentBlockParam[] {
-  // See https://anthropic.slack.com/archives/C06FE2FP0Q2/p1747586370117479 and
-  // https://anthropic.slack.com/archives/C0AHK9P0129/p1773159663856279:
+  // See https://knightcode.slack.com/archives/C06FE2FP0Q2/p1747586370117479 and
+  // https://knightcode.slack.com/archives/C0AHK9P0129/p1773159663856279:
   // any sibling after tool_result renders as </function_results>\n\nHuman:<...>
   // on the wire. Repeated mid-conversation, this teaches capy to emit Human: at
   // a bare tail → 3-token empty end_turn. A/B (sai-20260310-161901) validated:
@@ -2216,7 +2216,7 @@ export function normalizeMessagesForAPI(
           // Must be a sibling, NOT inside tool_result.content — mixing text with
           // tool_reference inside the block is a server ValueError.
           // Idempotent: query.ts calls this per-tool-result; the output flows
-          // back through here via claude.ts on the next API request. The first
+          // back through here via knightcode.ts on the next API request. The first
           // pass's sibling gets a \n[id:xxx] suffix from appendMessageTag below,
           // so startsWith matches both bare and tagged forms.
           //

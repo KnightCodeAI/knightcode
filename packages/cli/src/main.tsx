@@ -2,7 +2,7 @@ import React from 'react'
 import { MissingKeyNotice } from './components/MissingKeyNotice.js'
 import { render, createRoot } from './tui.js'
 import { launchRepl } from './replLauncher.js'
-import { hasAnthropicApiKeyAuth } from './utils/auth.js'
+import { hasKnightcodeApiKeyAuth } from './utils/auth.js'
 import { getDefaultAppState } from './state/AppStateStore.js'
 import { getEmptyToolPermissionContext } from './Tool.js'
 import { getTools } from './tools.js'
@@ -12,7 +12,7 @@ import { initBundledSkills } from './skills/bundled/index.js'
 // Thin REPL launcher: the full subcommand surface (doctor/resume/headless
 // flags) lands with the command-line entrypoint later. For now this boots the
 // interactive REPL directly, or prints the missing-key notice and exits.
-if (!hasAnthropicApiKeyAuth()) {
+if (!hasKnightcodeApiKeyAuth()) {
   const instance = await render(<MissingKeyNotice />)
   await instance.waitUntilExit()
 } else {

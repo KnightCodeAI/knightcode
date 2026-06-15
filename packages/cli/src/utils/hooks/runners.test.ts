@@ -9,9 +9,9 @@ import {
 // execPromptHook drives the model through queryModelWithoutStreaming; stub just
 // that export (preserving the rest of the module) to return a fixed JSON
 // completion so the runner's success path is exercised without a real API key.
-const actualClaude = await import('../../services/api/claude.js')
-mock.module('../../services/api/claude.js', () => ({
-  ...actualClaude,
+const actualKnightcode = await import('../../services/api/knightcode.js')
+mock.module('../../services/api/knightcode.js', () => ({
+  ...actualKnightcode,
   queryModelWithoutStreaming: async () => ({
     message: { content: [{ type: 'text', text: '{"ok": true}' }] },
   }),

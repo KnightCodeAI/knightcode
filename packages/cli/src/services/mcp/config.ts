@@ -6,7 +6,7 @@ import { dirname, join, parse } from 'path'
 import { getPlatform } from 'src/utils/platform.js'
 import type { PluginError } from '../../types/plugin.js'
 import { getPluginErrorMessage } from '../../types/plugin.js'
-import { isClaudeInChromeMCPServer } from '../../utils/claudeInChrome/common.js'
+import { isKnightcodeInChromeMCPServer } from '../../utils/knightcodeInChrome/common.js'
 import {
   getCurrentProjectConfig,
   getGlobalConfig,
@@ -40,7 +40,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import { fetchClaudeAIMcpConfigsIfEligible } from './claudeai.js'
+import { fetchKnightcodeAIMcpConfigsIfEligible } from './knightcodeai.js'
 import { expandEnvVarsInString } from './envExpansion.js'
 import {
   type ConfigScope,
@@ -268,18 +268,18 @@ export function dedupPluginMcpServers(
 /**
  * Filter knightcode.raghavseth.in connectors, dropping any whose signature matches an enabled
  * manually-configured server. Manual wins: a user who wrote .mcp.json or ran
- * `claude mcp add` expressed higher intent than a connector toggled in the web UI.
+ * `knightcode mcp add` expressed higher intent than a connector toggled in the web UI.
  *
  * Connector keys are `knightcode.raghavseth.in <DisplayName>` so they never key-collide with
  * manual servers in the merge — this content-based check catches the case where
  * both point at the same underlying URL (e.g. `mcp__slack__*` and
- * `mcp__claude_ai_Slack__*` both hitting mcp.slack.com, ~600 chars/turn wasted).
+ * `mcp__knightcode_ai_Slack__*` both hitting mcp.slack.com, ~600 chars/turn wasted).
  *
  * Only enabled manual servers count as dedup targets — a disabled manual server
  * mustn't suppress its connector twin, or neither runs.
  */
-export function dedupClaudeAiMcpServers(
-  claudeAiServers: Record<string, ScopedMcpServerConfig>,
+export function dedupKnightcodeAiMcpServers(
+  knightcodeAiServers: Record<string, ScopedMcpServerConfig>,
   manualServers: Record<string, ScopedMcpServerConfig>,
 ): {
   servers: Record<string, ScopedMcpServerConfig>
@@ -294,7 +294,7 @@ export function dedupClaudeAiMcpServers(
 
   const servers: Record<string, ScopedMcpServerConfig> = {}
   const suppressed: Array<{ name: string; duplicateOf: string }> = []
-  for (const [name, config] of Object.entries(claudeAiServers)) {
+  for (const [name, config] of Object.entries(knightcodeAiServers)) {
     const sig = getMcpServerSignature(config)
     const manualDup = sig !== null ? manualSigs.get(sig) : undefined
     if (manualDup !== undefined) {
@@ -604,7 +604,7 @@ function expandEnvVars(config: McpServerConfig): {
     case 'sdk':
       expanded = config
       break
-    case 'claudeai-proxy':
+    case 'knightcodeai-proxy':
       expanded = config
       break
   }
@@ -633,8 +633,8 @@ export async function addMcpConfig(
     )
   }
 
-  // Block reserved server name "claude-in-chrome"
-  if (isClaudeInChromeMCPServer(name)) {
+  // Block reserved server name "knightcode-in-chrome"
+  if (isKnightcodeInChromeMCPServer(name)) {
     throw new Error(`Cannot add MCP server "${name}": this name is reserved.`)
   }
 
@@ -705,8 +705,8 @@ export async function addMcpConfig(
       throw new Error('Cannot add MCP server to scope: dynamic')
     case 'enterprise':
       throw new Error('Cannot add MCP server to scope: enterprise')
-    case 'claudeai':
-      throw new Error('Cannot add MCP server to scope: claudeai')
+    case 'knightcodeai':
+      throw new Error('Cannot add MCP server to scope: knightcodeai')
   }
 
   // Add based on scope
@@ -1266,25 +1266,25 @@ export async function getAllMcpConfigs(): Promise<{
 
   // Kick off the knightcode.raghavseth.in fetch before getKnightCodeMcpConfigs so it overlaps
   // with loadAllPluginsCacheOnly() inside. Memoized — the awaited call below is a cache hit.
-  const claudeaiPromise = fetchClaudeAIMcpConfigsIfEligible()
-  const { servers: claudeCodeServers, errors } = await getKnightCodeMcpConfigs(
+  const knightcodeaiPromise = fetchKnightcodeAIMcpConfigsIfEligible()
+  const { servers: knightCodeServers, errors } = await getKnightCodeMcpConfigs(
     {},
-    claudeaiPromise,
+    knightcodeaiPromise,
   )
-  const { allowed: claudeaiMcpServers } = filterMcpServersByPolicy(
-    await claudeaiPromise,
+  const { allowed: knightcodeaiMcpServers } = filterMcpServersByPolicy(
+    await knightcodeaiPromise,
   )
 
   // Suppress knightcode.raghavseth.in connectors that duplicate an enabled manual server.
   // Keys never collide (`slack` vs `knightcode.raghavseth.in Slack`) so the merge below
   // won't catch this — need content-based dedup by URL signature.
-  const { servers: dedupedClaudeAi } = dedupClaudeAiMcpServers(
-    claudeaiMcpServers,
-    claudeCodeServers,
+  const { servers: dedupedKnightcodeAi } = dedupKnightcodeAiMcpServers(
+    knightcodeaiMcpServers,
+    knightCodeServers,
   )
 
   // Merge with knightcode.raghavseth.in having lowest precedence
-  const servers = Object.assign({}, dedupedClaudeAi, claudeCodeServers)
+  const servers = Object.assign({}, dedupedKnightcodeAi, knightCodeServers)
 
   return { servers, errors }
 }
@@ -1495,11 +1495,11 @@ export function areMcpConfigsAllowedWithEnterpriseMcpConfig(
   configs: Record<string, ScopedMcpServerConfig>,
 ): boolean {
   // NOTE: While all SDK MCP servers should be safe from a security perspective, we are still discussing
-  // what the best way to do this is. In the meantime, we are limiting this to claude-vscode for now to
+  // what the best way to do this is. In the meantime, we are limiting this to knightcode-vscode for now to
   // unbreak the VSCode extension for certain enterprise customers who have enterprise MCP config enabled.
-  // https://anthropic.slack.com/archives/C093UA0KLD7/p1764975463670109
+  // https://knightcode.slack.com/archives/C093UA0KLD7/p1764975463670109
   return Object.values(configs).every(
-    c => c.type === 'sdk' && c.name === 'claude-vscode',
+    c => c.type === 'sdk' && c.name === 'knightcode-vscode',
   )
 }
 

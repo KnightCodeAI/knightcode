@@ -9,7 +9,7 @@ import { isAgentMemoryPath } from 'src/tools/AgentTool/agentMemory.js'
 import {
   KNIGHTCODE_FOLDER_PERMISSION_PATTERN,
   FILE_EDIT_TOOL_NAME,
-  GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN,
+  GLOBAL_KNIGHTCODE_FOLDER_PERMISSION_PATTERN,
 } from 'src/tools/FileEditTool/constants.js'
 import type { z } from 'zod/v4'
 import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
@@ -64,7 +64,7 @@ export const DANGEROUS_FILES = [
   '.profile',
   '.ripgreprc',
   '.mcp.json',
-  '.claude.json',
+  '.knightcode.json',
 ] as const
 
 /**
@@ -81,7 +81,7 @@ export const DANGEROUS_DIRECTORIES = [
 /**
  * Normalizes a path for case-insensitive comparison.
  * This prevents bypassing security checks using mixed-case paths on case-insensitive
- * filesystems (macOS/Windows) like `.cLauDe/Settings.locaL.json`.
+ * filesystems (macOS/Windows) like `.kNiGhTcOdE/Settings.locaL.json`.
  *
  * We always normalize to lowercase regardless of platform for consistent security.
  * @param path The path to normalize
@@ -98,7 +98,7 @@ export function normalizeCaseForComparison(path: string): string {
  * permission dialog and SDK suggestions, so iterating on one skill doesn't
  * require granting session access to all of .knightcode/ (settings.json, hooks/, etc.).
  */
-export function getClaudeSkillScope(
+export function getKnightcodeSkillScope(
   filePath: string,
 ): { skillName: string; pattern: string } | null {
   const absolutePath = expandPath(filePath)
@@ -197,19 +197,19 @@ function getSettingsPaths(): string[] {
   ).filter(path => path !== undefined)
 }
 
-export function isClaudeSettingsPath(filePath: string): boolean {
+export function isKnightcodeSettingsPath(filePath: string): boolean {
   // SECURITY: Normalize path structure first to prevent bypass via redundant ./
   // sequences like `./.knightcode/./settings.json` which would evade the endsWith() check
   const expandedPath = expandPath(filePath)
 
   // Normalize for case-insensitive comparison to prevent bypassing security
-  // with paths like .cLauDe/Settings.locaL.json
+  // with paths like .kNiGhTcOdE/Settings.locaL.json
   const normalizedPath = normalizeCaseForComparison(expandedPath)
 
   // Use platform separator so endsWith checks work on both Unix (/) and Windows (\)
   if (
-    normalizedPath.endsWith(`${sep}.claude${sep}settings.json`) ||
-    normalizedPath.endsWith(`${sep}.claude${sep}settings.local.json`)
+    normalizedPath.endsWith(`${sep}.knightcode${sep}settings.json`) ||
+    normalizedPath.endsWith(`${sep}.knightcode${sep}settings.local.json`)
   ) {
     // Include .knightcode/settings.json even for other projects
     return true
@@ -222,8 +222,8 @@ export function isClaudeSettingsPath(filePath: string): boolean {
 }
 
 // Always ask when KnightCode tries to edit its own config files
-function isClaudeConfigFilePath(filePath: string): boolean {
-  if (isClaudeSettingsPath(filePath)) {
+function isKnightcodeConfigFilePath(filePath: string): boolean {
+  if (isKnightcodeSettingsPath(filePath)) {
     return true
   }
 
@@ -301,34 +301,34 @@ export function isScratchpadEnabled(): boolean {
 
 /**
  * Returns the user-specific KnightCode temp directory name.
- * On Unix: 'claude-{uid}' to prevent multi-user permission conflicts
- * On Windows: 'claude' (tmpdir() is already per-user)
+ * On Unix: 'knightcode-{uid}' to prevent multi-user permission conflicts
+ * On Windows: 'knightcode' (tmpdir() is already per-user)
  */
-export function getClaudeTempDirName(): string {
+export function getKnightcodeTempDirName(): string {
   if (getPlatform() === 'windows') {
-    return 'claude'
+    return 'knightcode'
   }
   // Use UID to create per-user directories, preventing permission conflicts
   // when multiple users share the same /tmp directory
   const uid = process.getuid?.() ?? 0
-  return `claude-${uid}`
+  return `knightcode-${uid}`
 }
 
 /**
  * Returns the KnightCode temp directory path with symlinks resolved.
  * Uses TMPDIR env var if set, otherwise:
- * - On Unix: /tmp/claude-{uid}/ (resolved to /private/tmp/claude-{uid}/ on macOS)
- * - On Windows: {tmpdir}/claude/ (e.g., C:\Users\{user}\AppData\Local\Temp\claude\)
+ * - On Unix: /tmp/knightcode-{uid}/ (resolved to /private/tmp/knightcode-{uid}/ on macOS)
+ * - On Windows: {tmpdir}/knightcode/ (e.g., C:\Users\{user}\AppData\Local\Temp\knightcode\)
  * This is a per-user temporary directory used by KnightCode for all temp files.
  *
  * NOTE: We resolve symlinks to ensure this path matches the resolved paths used
  * in permission checks. On macOS, /tmp is a symlink to /private/tmp, so without
- * resolution, paths like /tmp/claude-{uid}/... wouldn't match /private/tmp/claude-{uid}/...
+ * resolution, paths like /tmp/knightcode-{uid}/... wouldn't match /private/tmp/knightcode-{uid}/...
  */
 // Memoized: called per-tool from permission checks (yoloClassifier, sandbox-adapter)
 // and per-turn from BashTool prompt. Inputs (KNIGHTCODE_CODE_TMPDIR env + platform) are
 // fixed at startup, and the realpath of the system tmp dir does not change mid-session.
-export const getClaudeTempDir = memoize(function getClaudeTempDir(): string {
+export const getKnightcodeTempDir = memoize(function getKnightcodeTempDir(): string {
   const baseTmpDir =
     process.env.KNIGHTCODE_CODE_TMPDIR ||
     (getPlatform() === 'windows' ? tmpdir() : '/tmp')
@@ -343,7 +343,7 @@ export const getClaudeTempDir = memoize(function getClaudeTempDir(): string {
     // If resolution fails, use the original path
   }
 
-  return join(resolvedBaseTmpDir, getClaudeTempDirName()) + sep
+  return join(resolvedBaseTmpDir, getKnightcodeTempDirName()) + sep
 })
 
 /**
@@ -365,21 +365,21 @@ export const getClaudeTempDir = memoize(function getClaudeTempDir(): string {
 export const getBundledSkillsRoot = memoize(
   function getBundledSkillsRoot(): string {
     const nonce = randomBytes(16).toString('hex')
-    return join(getClaudeTempDir(), 'bundled-skills', MACRO.VERSION, nonce)
+    return join(getKnightcodeTempDir(), 'bundled-skills', MACRO.VERSION, nonce)
   },
 )
 
 /**
  * Returns the project temp directory path with trailing separator.
- * Path format: /tmp/claude-{uid}/{sanitized-cwd}/
+ * Path format: /tmp/knightcode-{uid}/{sanitized-cwd}/
  */
 export function getProjectTempDir(): string {
-  return join(getClaudeTempDir(), sanitizePath(getOriginalCwd())) + sep
+  return join(getKnightcodeTempDir(), sanitizePath(getOriginalCwd())) + sep
 }
 
 /**
  * Returns the scratchpad directory path for the current session.
- * Path format: /tmp/claude-{uid}/{sanitized-cwd}/{sessionId}/scratchpad/
+ * Path format: /tmp/knightcode-{uid}/{sanitized-cwd}/{sessionId}/scratchpad/
  */
 export function getScratchpadDir(): string {
   return join(getProjectTempDir(), getSessionId(), 'scratchpad')
@@ -414,7 +414,7 @@ function isScratchpadPath(absolutePath: string): boolean {
   const scratchpadDir = getScratchpadDir()
   // SECURITY: Normalize the path to resolve .. segments before checking
   // This prevents path traversal bypasses like:
-  //   echo "malicious" > /tmp/claude-0/proj/session/scratchpad/../../../etc/passwd
+  //   echo "malicious" > /tmp/knightcode-0/proj/session/scratchpad/../../../etc/passwd
   // Without normalization, the path would pass the startsWith check but write to /etc/passwd
   const normalizedPath = normalize(absolutePath)
   return (
@@ -454,8 +454,8 @@ function isDangerousFilePathToAutoEdit(path: string): boolean {
       }
 
       // Special case: .knightcode/worktrees/ is a structural path (where KnightCode stores
-      // git worktrees), not a user-created dangerous directory. Skip the .claude
-      // segment when it's followed by 'worktrees'. Any nested .claude directories
+      // git worktrees), not a user-created dangerous directory. Skip the .knightcode
+      // segment when it's followed by 'worktrees'. Any nested .knightcode directories
       // within the worktree (not followed by 'worktrees') are still blocked.
       if (dir === '.knightcode') {
         const nextSegment = pathSegments[i + 1]
@@ -463,7 +463,7 @@ function isDangerousFilePathToAutoEdit(path: string): boolean {
           nextSegment &&
           normalizeCaseForComparison(nextSegment) === 'worktrees'
         ) {
-          break // Skip this .claude, continue checking other segments
+          break // Skip this .knightcode, continue checking other segments
         }
       }
 
@@ -491,9 +491,9 @@ function isDangerousFilePathToAutoEdit(path: string): boolean {
  * Detects suspicious Windows path patterns that could bypass security checks.
  * These patterns include:
  * - NTFS Alternate Data Streams (e.g., file.txt::$DATA or file.txt:stream)
- * - 8.3 short names (e.g., GIT~1, CLAUDE~1, SETTIN~1.JSON)
+ * - 8.3 short names (e.g., GIT~1, KNIGHTCODE~1, SETTIN~1.JSON)
  * - Long path prefixes (e.g., \\?\C:\..., \\.\C:\..., //?/C:/..., //./C:/...)
- * - Trailing dots and spaces (e.g., .git., .claude , .bashrc...)
+ * - Trailing dots and spaces (e.g., .git., .knightcode , .bashrc...)
  * - DOS device names (e.g., .git.CON, settings.json.PRN, .bashrc.AUX)
  * - Three or more consecutive dots (e.g., .../file.txt, path/.../file, file...txt)
  *
@@ -552,7 +552,7 @@ function hasSuspiciousWindowsPathPattern(path: string): boolean {
 
   // Check for 8.3 short names
   // Look for '~' followed by a digit
-  // Examples: GIT~1, CLAUDE~1, SETTIN~1.JSON, BASHRC~1
+  // Examples: GIT~1, KNIGHTCODE~1, SETTIN~1.JSON, BASHRC~1
   if (/~\d/.test(path)) {
     return true
   }
@@ -569,7 +569,7 @@ function hasSuspiciousWindowsPathPattern(path: string): boolean {
   }
 
   // Check for trailing dots and spaces that Windows strips during path resolution
-  // Examples: .git., .claude , .bashrc..., settings.json.
+  // Examples: .git., .knightcode , .bashrc..., settings.json.
   // This can bypass string matching if ".git" is blocked but ".git." is used
   if (/[.\s]+$/.test(path)) {
     return true
@@ -640,7 +640,7 @@ export function checkPathSafetyForAutoEdit(
 
   // Check for KnightCode config files on all paths
   for (const pathToCheck of pathsToCheck) {
-    if (isClaudeConfigFilePath(pathToCheck)) {
+    if (isKnightcodeConfigFilePath(pathToCheck)) {
       return {
         safe: false,
         message: `KnightCode requested permissions to write to ${path}, but you haven't granted it yet.`,
@@ -721,7 +721,7 @@ export function pathInWorkingPath(path: string, workingPath: string): boolean {
     .replace(/^\/private\/tmp(\/|$)/, '/tmp$1')
 
   // Normalize case for case-insensitive comparison to prevent bypassing security
-  // checks on case-insensitive filesystems (macOS/Windows) like .cLauDe/CoMmAnDs
+  // checks on case-insensitive filesystems (macOS/Windows) like .kNiGhTcOdE/CoMmAnDs
   const caseNormalizedPath = normalizeCaseForComparison(normalizedPath)
   const caseNormalizedWorkingPath = normalizeCaseForComparison(
     normalizedWorkingPath,
@@ -1239,7 +1239,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
   }
 
   // 1.5. Allow writes to internal editable paths (plan files, scratchpad)
-  // This MUST come before isDangerousFilePathToAutoEdit check since .claude is a dangerous directory
+  // This MUST come before isDangerousFilePathToAutoEdit check since .knightcode is a dangerous directory
   const absolutePathForEdit = expandPath(path)
   const internalEditResult = checkEditableInternalPath(
     absolutePathForEdit,
@@ -1255,11 +1255,11 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
   // permanently granting broad access to their .knightcode/ folder.
   //
   // matchingRuleForInput returns the first match across all sources. If the user
-  // also has a broader Edit(.claude) rule in userSettings (e.g. from sandbox
+  // also has a broader Edit(.knightcode) rule in userSettings (e.g. from sandbox
   // write-allow conversion), that rule would be found first and its source check
   // below would fail. Scope the search to session-only rules so the dialog's
   // "allow KnightCode to edit its own settings for this session" option actually works.
-  const claudeFolderAllowRule = matchingRuleForInput(
+  const knightcodeFolderAllowRule = matchingRuleForInput(
     path,
     {
       ...toolPermissionContext,
@@ -1270,7 +1270,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
     'edit',
     'allow',
   )
-  if (claudeFolderAllowRule) {
+  if (knightcodeFolderAllowRule) {
     // Check if this rule is scoped under .knightcode/ (project or global).
     // Accepts both the broad patterns ('/.knightcode/**', '~/.knightcode/**') and
     // narrowed ones like '/.knightcode/skills/my-skill/**' so users can grant
@@ -1278,12 +1278,12 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
     // or hooks/. The rule already matched the path via matchingRuleForInput;
     // this is an additional scope check. Reject '..' to prevent a rule like
     // '/.knightcode/../**' from leaking this bypass outside .knightcode/.
-    const ruleContent = claudeFolderAllowRule.ruleValue.ruleContent
+    const ruleContent = knightcodeFolderAllowRule.ruleValue.ruleContent
     if (
       ruleContent &&
       (ruleContent.startsWith(KNIGHTCODE_FOLDER_PERMISSION_PATTERN.slice(0, -2)) ||
         ruleContent.startsWith(
-          GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN.slice(0, -2),
+          GLOBAL_KNIGHTCODE_FOLDER_PERMISSION_PATTERN.slice(0, -2),
         )) &&
       !ruleContent.includes('..') &&
       ruleContent.endsWith('/**')
@@ -1293,7 +1293,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
         updatedInput: input,
         decisionReason: {
           type: 'rule',
-          rule: claudeFolderAllowRule,
+          rule: knightcodeFolderAllowRule,
         },
       }
     }
@@ -1309,7 +1309,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
     // Everything else (.knightcode/settings.json, .git/, .vscode/, .idea/) falls
     // back to generateSuggestions — its setMode suggestion doesn't bypass
     // this check, but preserving it avoids a surprising empty array.
-    const skillScope = getClaudeSkillScope(path)
+    const skillScope = getKnightcodeSkillScope(path)
     const safetySuggestions: PermissionUpdate[] = skillScope
       ? [
           {
@@ -1525,7 +1525,7 @@ export function checkEditableInternalPath(
       const jobsRootForms = getPathsForPermissionCheck(jobsRoot).map(normalize)
       // Hijack guard: every resolved form of the job dir must sit under
       // some resolved form of the jobs root. Resolving both sides handles
-      // the case where ~/.claude is a symlink (e.g. to /data/claude-config).
+      // the case where ~/.knightcode is a symlink (e.g. to /data/knightcode-config).
       const isUnderJobsRoot = jobDirForms.every(jd =>
         jobsRootForms.some(jr => jd.startsWith(jr + sep)),
       )
@@ -1685,7 +1685,7 @@ export function checkReadableInternalPath(
     }
   }
 
-  // Project temp directory (/tmp/claude/{sanitized-cwd}/)
+  // Project temp directory (/tmp/knightcode/{sanitized-cwd}/)
   // Intentionally allows reading files from all sessions in this project, not just the current session.
   // This enables cross-session file access within the same project's temp space.
   const projectTempDir = getProjectTempDir()

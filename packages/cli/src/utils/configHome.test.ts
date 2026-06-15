@@ -21,10 +21,9 @@ test('falls back to KNIGHTCODE_HOME', () => {
   expect(getKnightcodeConfigHomeDir()).toBe(target.normalize('NFC'))
 })
 
-test('defaults to ~/.knightcode, never ~/.claude', () => {
+test('defaults to ~/.knightcode', () => {
   delete process.env.KNIGHTCODE_CONFIG_DIR
   delete process.env.KNIGHTCODE_HOME
   const resolved = getKnightcodeConfigHomeDir()
   expect(resolved).toBe(join(homedir(), '.knightcode').normalize('NFC'))
-  expect(resolved).not.toContain('.claude')
 })

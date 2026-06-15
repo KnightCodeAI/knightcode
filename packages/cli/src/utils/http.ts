@@ -12,7 +12,7 @@ export function getUserAgent(): string {
   const clientApp = process.env.KNIGHTCODE_AGENT_SDK_CLIENT_APP
     ? `, client-app/${process.env.KNIGHTCODE_AGENT_SDK_CLIENT_APP}`
     : ''
-  return `claude-cli/${MACRO.VERSION} (external, ${process.env.KNIGHTCODE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp})`
+  return `knightcode-cli/${MACRO.VERSION} (external, ${process.env.KNIGHTCODE_CODE_ENTRYPOINT ?? 'cli'}${agentSdkVersion}${clientApp})`
 }
 
 /** User-Agent sent on MCP HTTP/WebSocket requests. */

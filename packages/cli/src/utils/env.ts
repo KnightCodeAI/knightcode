@@ -7,12 +7,12 @@ import { getKnightcodeConfigHomeDir, isEnvTruthy } from './envUtils.js'
 type Platform = 'win32' | 'darwin' | 'linux'
 
 // Config and data paths
-export const getGlobalClaudeFile = memoize((): string => {
+export const getGlobalKnightcodeFile = memoize((): string => {
   // Legacy fallback for backwards compatibility
   if (existsSync(join(getKnightcodeConfigHomeDir(), '.config.json'))) {
     return join(getKnightcodeConfigHomeDir(), '.config.json')
   }
-  return join(process.env.KNIGHTCODE_CONFIG_DIR || homedir(), '.claude.json')
+  return join(process.env.KNIGHTCODE_CONFIG_DIR || homedir(), '.knightcode.json')
 })
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {

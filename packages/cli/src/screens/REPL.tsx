@@ -156,7 +156,7 @@ import {
 import { getSystemPrompt } from '../constants/prompts.js'
 import { buildEffectiveSystemPrompt } from '../utils/systemPrompt.js'
 import { getSystemContext, getUserContext } from '../context.js'
-import { getMemoryFiles } from '../utils/claudemd.js'
+import { getMemoryFiles } from '../utils/knightcodemd.js'
 import { startBackgroundHousekeeping } from '../utils/backgroundHousekeeping.js'
 import {
   getTotalCost,
@@ -508,7 +508,7 @@ import { useInstallMessages } from 'src/hooks/notifs/useInstallMessages.js'
 import { useAwaySummary } from 'src/hooks/useAwaySummary.js'
 import { useChromeExtensionNotification } from 'src/hooks/useChromeExtensionNotification.js'
 import { useOfficialMarketplaceNotification } from 'src/hooks/useOfficialMarketplaceNotification.js'
-import { usePromptsFromClaudeInChrome } from 'src/hooks/usePromptsFromClaudeInChrome.js'
+import { usePromptsFromKnightcodeInChrome } from 'src/hooks/usePromptsFromKnightcodeInChrome.js'
 import {
   getTipToShowOnSpinner,
   recordShownTip,
@@ -615,7 +615,7 @@ const HISTORY_STUB = { maybeLoadOlder: (_: ScrollBoxHandle) => {} }
 // Window after a user-initiated scroll during which type-into-empty does NOT
 // repin to bottom. Josh Rosen's workflow: KnightCode emits long output → scroll
 // up to read the start → start typing → before this fix, snapped to bottom.
-// https://anthropic.slack.com/archives/C07VBSHV7EV/p1773545449871739
+// https://knightcode.slack.com/archives/C07VBSHV7EV/p1773545449871739
 const RECENT_SCROLL_REPIN_WINDOW_MS = 3000
 
 // Use LRU cache to prevent unbounded memory growth
@@ -918,9 +918,9 @@ export type Props = {
   taskListId?: string
   // Remote session config for --remote mode (uses CCR as execution engine)
   remoteSessionConfig?: RemoteSessionConfig
-  // Direct connect config for `claude connect` mode (connects to a claude server)
+  // Direct connect config for `knightcode connect` mode (connects to a knightcode server)
   directConnectConfig?: DirectConnectConfig
-  // SSH session for `claude ssh` mode (local REPL, remote tools over ssh)
+  // SSH session for `knightcode ssh` mode (local REPL, remote tools over ssh)
   sshSession?: SSHSession
   // Thinking configuration to use when thinking is enabled
   thinkingConfig: ThinkingConfig
@@ -1206,7 +1206,7 @@ export function REPL({
 
   // Allow KnightCode in Chrome MCP to send prompts through MCP notifications
   // and sync permission mode changes to the Chrome extension
-  usePromptsFromClaudeInChrome(
+  usePromptsFromKnightcodeInChrome(
     isRemoteSession ? EMPTY_MCP_CLIENTS : mcpClients,
     toolPermissionContext.mode,
   )
@@ -1644,7 +1644,7 @@ export function REPL({
               ? 'dialog open'
               : 'input needed'
 
-  // Push status to the PID file for `claude ps`. Fire-and-forget; ps falls
+  // Push status to the PID file for `knightcode ps`. Fire-and-forget; ps falls
   // back to transcript-tail derivation when this is missing/stale.
   useEffect(() => {
     if (feature('BG_SESSIONS')) {
@@ -1935,7 +1935,7 @@ export function REPL({
     setInProgressToolUseIDs,
   })
 
-  // Direct connect hook - manages WebSocket to a claude server for `claude connect` mode
+  // Direct connect hook - manages WebSocket to a knightcode server for `knightcode connect` mode
   const directConnect = useDirectConnect({
     config: directConnectConfig,
     setMessages,
@@ -1944,7 +1944,7 @@ export function REPL({
     tools: combinedInitialTools,
   })
 
-  // SSH session hook - manages ssh child process for `claude ssh` mode.
+  // SSH session hook - manages ssh child process for `knightcode ssh` mode.
   // Same callback shape as useDirectConnect; only the transport under the
   // hood differs (ChildProcess stdin/stdout vs WebSocket).
   const sshRemote = useSSHSession({
@@ -2569,7 +2569,7 @@ export function REPL({
         // Skipped for in-session /branch: the existing ref is already correct
         // (branch preserves tool_use_ids), so there's no need to reconstruct.
         // createFork() does write content-replacement entries to the forked
-        // JSONL with the fork's sessionId, so `claude -r {forkId}` also works.
+        // JSONL with the fork's sessionId, so `knightcode -r {forkId}` also works.
         if (contentReplacementStateRef.current && entrypoint !== 'fork') {
           contentReplacementStateRef.current =
             reconstructContentReplacementState(
@@ -3296,8 +3296,8 @@ export function REPL({
         onCompactProgress: event => {
           switch (event.type) {
             case 'hooks_start':
-              setSpinnerColor('claudeBlue_FOR_SYSTEM_SPINNER')
-              setSpinnerShimmerColor('claudeBlueShimmer_FOR_SYSTEM_SPINNER')
+              setSpinnerColor('knightcodeBlue_FOR_SYSTEM_SPINNER')
+              setSpinnerShimmerColor('knightcodeBlueShimmer_FOR_SYSTEM_SPINNER')
               setSpinnerMessage(
                 event.hookType === 'pre_compact'
                   ? 'Running PreCompact hooks\u2026'
@@ -4832,7 +4832,7 @@ export function REPL({
     ],
   )
 
-  // Handlers for auto-run /issue or /good-claude (defined after onSubmit)
+  // Handlers for auto-run /issue or /good-knightcode (defined after onSubmit)
   const handleAutoRunIssue = useCallback(() => {
     const command = autoRunIssueReason
       ? getAutoRunCommand(autoRunIssueReason)
@@ -5146,7 +5146,7 @@ export function REPL({
   // empty to non-empty, not on every length change -- otherwise a render loop
   // (concurrent onQuery thrashing, etc.) spams saveGlobalConfig, which hits
   // ELOCKED under concurrent sessions and falls back to unlocked writes.
-  // That write storm is the primary trigger for ~/.claude.json corruption
+  // That write storm is the primary trigger for ~/.knightcode.json corruption
   // (GH #3117).
   const hasCountedQueueUseRef = useRef(false)
   useEffect(() => {

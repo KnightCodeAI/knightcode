@@ -16,7 +16,7 @@ export function getPlanModeV2AgentCount(): number {
 
   if (
     subscriptionType === 'max' &&
-    rateLimitTier === 'default_claude_max_20x'
+    rateLimitTier === 'default_knightcode_max_20x'
   ) {
     return 3
   }

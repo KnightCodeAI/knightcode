@@ -1,6 +1,6 @@
 import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk'
 import { getSessionId } from '../../bootstrap/state.js'
-import { getAnthropicApiKey } from '../../utils/auth.js'
+import { getKnightcodeApiKey } from '../../utils/auth.js'
 import { getUserAgent } from '../../utils/http.js'
 import { getProxyFetchOptions } from '../../utils/proxy.js'
 
@@ -23,7 +23,7 @@ function getBaseURL(): string {
   return process.env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL
 }
 
-export async function getAnthropicClient({
+export async function getKnightcodeClient({
   apiKey,
   maxRetries,
   model: _model,
@@ -45,14 +45,14 @@ export async function getAnthropicClient({
   }
 
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey: apiKey || getAnthropicApiKey(),
+    apiKey: apiKey || getKnightcodeApiKey(),
     baseURL: getBaseURL(),
     defaultHeaders,
     maxRetries,
     timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
     dangerouslyAllowBrowser: true,
     fetchOptions: getProxyFetchOptions({
-      forAnthropicAPI: true,
+      forKnightcodeAPI: true,
     }) as ClientOptions['fetchOptions'],
     ...(fetchOverride && { fetch: fetchOverride }),
   }

@@ -43,7 +43,7 @@ import { Spinner } from '../Spinner.js'
 import TextInput from '../TextInput.js'
 import { CapabilitiesSection } from './CapabilitiesSection.js'
 import type {
-  ClaudeAIServerInfo,
+  KnightcodeAIServerInfo,
   HTTPServerInfo,
   SSEServerInfo,
 } from './types.js'
@@ -53,7 +53,7 @@ import {
 } from './utils/reconnectHelpers.js'
 
 type Props = {
-  server: SSEServerInfo | HTTPServerInfo | ClaudeAIServerInfo
+  server: SSEServerInfo | HTTPServerInfo | KnightcodeAIServerInfo
   serverToolsCount: number
   onViewTools: () => void
   onCancel: () => void
@@ -84,14 +84,14 @@ export function MCPRemoteServerMenu({
   )
   const [isReconnecting, setIsReconnecting] = useState(false)
   const authAbortControllerRef = useRef<AbortController | null>(null)
-  const [isClaudeAIAuthenticating, setIsClaudeAIAuthenticating] =
+  const [isKnightcodeAIAuthenticating, setIsKnightcodeAIAuthenticating] =
     useState(false)
-  const [claudeAIAuthUrl, setClaudeAIAuthUrl] = useState<string | null>(null)
-  const [isClaudeAIClearingAuth, setIsClaudeAIClearingAuth] = useState(false)
-  const [claudeAIClearAuthUrl, setClaudeAIClearAuthUrl] = useState<
+  const [knightcodeAIAuthUrl, setKnightcodeAIAuthUrl] = useState<string | null>(null)
+  const [isKnightcodeAIClearingAuth, setIsKnightcodeAIClearingAuth] = useState(false)
+  const [knightcodeAIClearAuthUrl, setKnightcodeAIClearAuthUrl] = useState<
     string | null
   >(null)
-  const [claudeAIClearAuthBrowserOpened, setClaudeAIClearAuthBrowserOpened] =
+  const [knightcodeAIClearAuthBrowserOpened, setKnightcodeAIClearAuthBrowserOpened] =
     useState(false)
   const [urlCopied, setUrlCopied] = useState(false)
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -130,14 +130,14 @@ export function MCPRemoteServerMenu({
 
   const reconnectMcpServer = useMcpReconnect()
 
-  const handleClaudeAIAuthComplete = React.useCallback(async () => {
-    setIsClaudeAIAuthenticating(false)
-    setClaudeAIAuthUrl(null)
+  const handleKnightcodeAIAuthComplete = React.useCallback(async () => {
+    setIsKnightcodeAIAuthenticating(false)
+    setKnightcodeAIAuthUrl(null)
     setIsReconnecting(true)
     try {
       const result = await reconnectMcpServer(server.name)
       const success = result.client.type === 'connected'
-      logEvent('knightcode_claudeai_mcp_auth_completed', { success })
+      logEvent('knightcode_knightcodeai_mcp_auth_completed', { success })
       if (success) {
         onComplete?.(`Authentication successful. Connected to ${server.name}.`)
       } else if (result.client.type === 'needs-auth') {
@@ -150,14 +150,14 @@ export function MCPRemoteServerMenu({
         )
       }
     } catch (err) {
-      logEvent('knightcode_claudeai_mcp_auth_completed', { success: false })
+      logEvent('knightcode_knightcodeai_mcp_auth_completed', { success: false })
       onComplete?.(handleReconnectError(err, server.name))
     } finally {
       setIsReconnecting(false)
     }
   }, [reconnectMcpServer, server.name, onComplete])
 
-  const handleClaudeAIClearAuthComplete = React.useCallback(async () => {
+  const handleKnightcodeAIClearAuthComplete = React.useCallback(async () => {
     await clearServerCache(server.name, {
       ...server.config,
       scope: server.scope,
@@ -189,11 +189,11 @@ export function MCPRemoteServerMenu({
       }
     })
 
-    logEvent('knightcode_claudeai_mcp_clear_auth_completed', {})
+    logEvent('knightcode_knightcodeai_mcp_clear_auth_completed', {})
     onComplete?.(`Disconnected from ${server.name}.`)
-    setIsClaudeAIClearingAuth(false)
-    setClaudeAIClearAuthUrl(null)
-    setClaudeAIClearAuthBrowserOpened(false)
+    setIsKnightcodeAIClearingAuth(false)
+    setKnightcodeAIClearAuthUrl(null)
+    setKnightcodeAIClearAuthBrowserOpened(false)
   }, [server.name, server.config, server.scope, setAppState, onComplete])
 
   // Escape to cancel authentication flow
@@ -215,12 +215,12 @@ export function MCPRemoteServerMenu({
   useKeybinding(
     'confirm:no',
     () => {
-      setIsClaudeAIAuthenticating(false)
-      setClaudeAIAuthUrl(null)
+      setIsKnightcodeAIAuthenticating(false)
+      setKnightcodeAIAuthUrl(null)
     },
     {
       context: 'Confirmation',
-      isActive: isClaudeAIAuthenticating,
+      isActive: isKnightcodeAIAuthenticating,
     },
   )
 
@@ -228,35 +228,35 @@ export function MCPRemoteServerMenu({
   useKeybinding(
     'confirm:no',
     () => {
-      setIsClaudeAIClearingAuth(false)
-      setClaudeAIClearAuthUrl(null)
-      setClaudeAIClearAuthBrowserOpened(false)
+      setIsKnightcodeAIClearingAuth(false)
+      setKnightcodeAIClearAuthUrl(null)
+      setKnightcodeAIClearAuthBrowserOpened(false)
     },
     {
       context: 'Confirmation',
-      isActive: isClaudeAIClearingAuth,
+      isActive: isKnightcodeAIClearingAuth,
     },
   )
 
   // Return key handling for authentication flows and 'c' to copy URL
   useInput((input, key) => {
-    if (key.return && isClaudeAIAuthenticating) {
-      void handleClaudeAIAuthComplete()
+    if (key.return && isKnightcodeAIAuthenticating) {
+      void handleKnightcodeAIAuthComplete()
     }
-    if (key.return && isClaudeAIClearingAuth) {
-      if (claudeAIClearAuthBrowserOpened) {
-        void handleClaudeAIClearAuthComplete()
+    if (key.return && isKnightcodeAIClearingAuth) {
+      if (knightcodeAIClearAuthBrowserOpened) {
+        void handleKnightcodeAIClearAuthComplete()
       } else {
         // First Enter: open the browser
         const connectorsUrl = `${getOauthConfig().HOSTED_CONNECTOR_ORIGIN}/settings/connectors`
-        setClaudeAIClearAuthUrl(connectorsUrl)
-        setClaudeAIClearAuthBrowserOpened(true)
+        setKnightcodeAIClearAuthUrl(connectorsUrl)
+        setKnightcodeAIClearAuthBrowserOpened(true)
         void openBrowser(connectorsUrl)
       }
     }
     if (input === 'c' && !urlCopied) {
       const urlToCopy =
-        authorizationUrl || claudeAIAuthUrl || claudeAIClearAuthUrl
+        authorizationUrl || knightcodeAIAuthUrl || knightcodeAIClearAuthUrl
       if (urlToCopy) {
         void setClipboard(urlToCopy).then(raw => {
           if (unmountedRef.current) return
@@ -281,15 +281,15 @@ export function MCPRemoteServerMenu({
 
   const toggleMcpServer = useMcpToggleEnabled()
 
-  const handleClaudeAIAuth = React.useCallback(async () => {
-    const claudeAiBaseUrl = getOauthConfig().HOSTED_CONNECTOR_ORIGIN
+  const handleKnightcodeAIAuth = React.useCallback(async () => {
+    const knightcodeAiBaseUrl = getOauthConfig().HOSTED_CONNECTOR_ORIGIN
     const accountInfo = getOauthAccountInfo()
     const orgUuid = accountInfo?.organizationUuid
 
     let authUrl: string
     if (
       orgUuid &&
-      server.config.type === 'claudeai-proxy' &&
+      server.config.type === 'knightcodeai-proxy' &&
       server.config.id
     ) {
       // Use the direct auth URL with org and server IDs
@@ -300,21 +300,21 @@ export function MCPRemoteServerMenu({
       const productSurface = encodeURIComponent(
         process.env.KNIGHTCODE_CODE_ENTRYPOINT || 'cli',
       )
-      authUrl = `${claudeAiBaseUrl}/api/organizations/${orgUuid}/mcp/start-auth/${serverId}?product_surface=${productSurface}`
+      authUrl = `${knightcodeAiBaseUrl}/api/organizations/${orgUuid}/mcp/start-auth/${serverId}?product_surface=${productSurface}`
     } else {
       // Fall back to settings/connectors if we don't have the required IDs
-      authUrl = `${claudeAiBaseUrl}/settings/connectors`
+      authUrl = `${knightcodeAiBaseUrl}/settings/connectors`
     }
 
-    setClaudeAIAuthUrl(authUrl)
-    setIsClaudeAIAuthenticating(true)
-    logEvent('knightcode_claudeai_mcp_auth_started', {})
+    setKnightcodeAIAuthUrl(authUrl)
+    setIsKnightcodeAIAuthenticating(true)
+    logEvent('knightcode_knightcodeai_mcp_auth_started', {})
     await openBrowser(authUrl)
   }, [server.config])
 
-  const handleClaudeAIClearAuth = React.useCallback(() => {
-    setIsClaudeAIClearingAuth(true)
-    logEvent('knightcode_claudeai_mcp_clear_auth_started', {})
+  const handleKnightcodeAIClearAuth = React.useCallback(() => {
+    setIsKnightcodeAIClearingAuth(true)
+    logEvent('knightcode_knightcodeai_mcp_clear_auth_started', {})
   }, [])
 
   const handleToggleEnabled = React.useCallback(async () => {
@@ -323,8 +323,8 @@ export function MCPRemoteServerMenu({
     try {
       await toggleMcpServer(server.name)
 
-      if (server.config.type === 'claudeai-proxy') {
-        logEvent('knightcode_claudeai_mcp_toggle', {
+      if (server.config.type === 'knightcodeai-proxy') {
+        logEvent('knightcode_knightcodeai_mcp_toggle', {
           new_state: (wasEnabled
             ? 'disabled'
             : 'enabled') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -349,7 +349,7 @@ export function MCPRemoteServerMenu({
   ])
 
   const handleAuthenticate = React.useCallback(async () => {
-    if (server.config.type === 'claudeai-proxy') return
+    if (server.config.type === 'knightcodeai-proxy') return
 
     setIsAuthenticating(true)
     setError(null)
@@ -426,7 +426,7 @@ export function MCPRemoteServerMenu({
   ])
 
   const handleClearAuth = async () => {
-    if (server.config.type === 'claudeai-proxy') return
+    if (server.config.type === 'knightcodeai-proxy') return
 
     if (server.config) {
       // First revoke the authentication tokens and clear all auth state
@@ -476,12 +476,12 @@ export function MCPRemoteServerMenu({
     // one will open. If IdP login IS needed, authorizationUrl populates and
     // the URL fallback block below still renders.
     const authCopy =
-      server.config.type !== 'claudeai-proxy' && server.config.oauth?.xaa
+      server.config.type !== 'knightcodeai-proxy' && server.config.oauth?.xaa
         ? ' Authenticating via your identity provider'
         : ' A browser window will open for authentication'
     return (
       <Box flexDirection="column" gap={1} padding={1}>
-        <Text color="claude">Authenticating with {server.name}…</Text>
+        <Text color="knightcode">Authenticating with {server.name}…</Text>
         <Box>
           <Spinner />
           <Text>{authCopy}</Text>
@@ -536,15 +536,15 @@ export function MCPRemoteServerMenu({
     )
   }
 
-  if (isClaudeAIAuthenticating) {
+  if (isKnightcodeAIAuthenticating) {
     return (
       <Box flexDirection="column" gap={1} padding={1}>
-        <Text color="claude">Authenticating with {server.name}…</Text>
+        <Text color="knightcode">Authenticating with {server.name}…</Text>
         <Box>
           <Spinner />
           <Text> A browser window will open for authentication</Text>
         </Box>
-        {claudeAIAuthUrl && (
+        {knightcodeAIAuthUrl && (
           <Box flexDirection="column">
             <Box>
               <Text dimColor>
@@ -559,7 +559,7 @@ export function MCPRemoteServerMenu({
                 </Text>
               )}
             </Box>
-            <Link url={claudeAIAuthUrl} />
+            <Link url={knightcodeAIAuthUrl} />
           </Box>
         )}
         <Box marginLeft={3} flexDirection="column">
@@ -579,17 +579,17 @@ export function MCPRemoteServerMenu({
     )
   }
 
-  if (isClaudeAIClearingAuth) {
+  if (isKnightcodeAIClearingAuth) {
     return (
       <Box flexDirection="column" gap={1} padding={1}>
-        <Text color="claude">Clear authentication for {server.name}</Text>
-        {claudeAIClearAuthBrowserOpened ? (
+        <Text color="knightcode">Clear authentication for {server.name}</Text>
+        {knightcodeAIClearAuthBrowserOpened ? (
           <>
             <Text>
               Find the MCP server in the browser and click
               &quot;Disconnect&quot;.
             </Text>
-            {claudeAIClearAuthUrl && (
+            {knightcodeAIClearAuthUrl && (
               <Box flexDirection="column">
                 <Box>
                   <Text dimColor>
@@ -604,7 +604,7 @@ export function MCPRemoteServerMenu({
                     </Text>
                   )}
                 </Box>
-                <Link url={claudeAIClearAuthUrl} />
+                <Link url={knightcodeAIClearAuthUrl} />
               </Box>
             )}
             <Box marginLeft={3} flexDirection="column">
@@ -678,16 +678,16 @@ export function MCPRemoteServerMenu({
     })
   }
 
-  if (server.config.type === 'claudeai-proxy') {
+  if (server.config.type === 'knightcodeai-proxy') {
     if (server.client.type === 'connected') {
       menuOptions.push({
         label: 'Clear authentication',
-        value: 'claudeai-clear-auth',
+        value: 'knightcodeai-clear-auth',
       })
     } else if (server.client.type !== 'disabled') {
       menuOptions.push({
         label: 'Authenticate',
-        value: 'claudeai-auth',
+        value: 'knightcodeai-auth',
       })
     }
   } else {
@@ -764,7 +764,7 @@ export function MCPRemoteServerMenu({
             )}
           </Box>
 
-          {server.transport !== 'claudeai-proxy' && (
+          {server.transport !== 'knightcodeai-proxy' && (
             <Box>
               <Text bold>Auth: </Text>
               {isEffectivelyAuthenticated ? (
@@ -827,18 +827,18 @@ export function MCPRemoteServerMenu({
                   case 'clear-auth':
                     await handleClearAuth()
                     break
-                  case 'claudeai-auth':
-                    await handleClaudeAIAuth()
+                  case 'knightcodeai-auth':
+                    await handleKnightcodeAIAuth()
                     break
-                  case 'claudeai-clear-auth':
-                    handleClaudeAIClearAuth()
+                  case 'knightcodeai-clear-auth':
+                    handleKnightcodeAIClearAuth()
                     break
                   case 'reconnectMcpServer':
                     setIsReconnecting(true)
                     try {
                       const result = await reconnectMcpServer(server.name)
-                      if (server.config.type === 'claudeai-proxy') {
-                        logEvent('knightcode_claudeai_mcp_reconnect', {
+                      if (server.config.type === 'knightcodeai-proxy') {
+                        logEvent('knightcode_knightcodeai_mcp_reconnect', {
                           success: result.client.type === 'connected',
                         })
                       }
@@ -848,8 +848,8 @@ export function MCPRemoteServerMenu({
                       )
                       onComplete?.(message)
                     } catch (err) {
-                      if (server.config.type === 'claudeai-proxy') {
-                        logEvent('knightcode_claudeai_mcp_reconnect', {
+                      if (server.config.type === 'knightcodeai-proxy') {
+                        logEvent('knightcode_knightcodeai_mcp_reconnect', {
                           success: false,
                         })
                       }

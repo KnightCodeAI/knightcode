@@ -265,8 +265,8 @@ function SpinnerWithVerbInner({
   // progress updates to s.tasks trigger re-renders that keep this fresh.
   const leaderTokenCount = Math.round(responseLengthRef.current / 4)
 
-  const defaultColor: keyof Theme = 'claude'
-  const defaultShimmerColor = 'claudeShimmer'
+  const defaultColor: keyof Theme = 'knightcode'
+  const defaultShimmerColor = 'knightcodeShimmer'
   const messageColor = overrideColor ?? defaultColor
   const shimmerColor = overrideShimmerColor ?? defaultShimmerColor
 
@@ -489,7 +489,7 @@ function BriefSpinner({
       s.remoteBackgroundTaskCount,
   )
 
-  // Connection trouble overrides the verb — `claude assistant` is a pure viewer,
+  // Connection trouble overrides the verb — `knightcode assistant` is a pure viewer,
   // nothing useful is happening while the WS is down.
   const showConnWarning =
     connStatus === 'reconnecting' || connStatus === 'disconnected'
