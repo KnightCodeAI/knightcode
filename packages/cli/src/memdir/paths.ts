@@ -26,6 +26,11 @@ export function getAutoMemPath(): string {
   return join(home, 'memory') + sep
 }
 
+// The auto-memory entrypoint (MEMORY.md inside the auto-memory dir).
+export function getAutoMemEntrypoint(): string {
+  return join(getAutoMemPath(), 'MEMORY.md')
+}
+
 // Base directory memory files live under (the config home, or a remote override).
 export function getMemoryBaseDir(): string {
   if (process.env.KNIGHTCODE_REMOTE_MEMORY_DIR) {

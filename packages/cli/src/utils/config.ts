@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import { join } from 'path'
 import { getOriginalCwd } from '../bootstrap/state.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
+import { getManagedFilePath } from './settings/managedPath.js'
 import type { MemoryType } from './memory/types.js'
 import type { ThemeSetting } from './theme.js'
 import type { ImageDimensions } from './imageResizer.js'
@@ -203,6 +204,14 @@ export function getMemoryPath(memoryType: MemoryType): string {
   return join(getClaudeConfigHomeDir(), 'CLAUDE.md')
 }
 
+export function getManagedClaudeRulesDir(): string {
+  return join(getManagedFilePath(), '.claude', 'rules')
+}
+
+export function getUserClaudeRulesDir(): string {
+  return join(getClaudeConfigHomeDir(), 'rules')
+}
+
 export function getOrCreateUserID(): string {
   const config = getGlobalConfig()
   if (config.userID) {
@@ -230,6 +239,10 @@ export type ProjectConfig = {
   /** Per-project MCP server enable/disable lists (toggled from the MCP UI). */
   enabledMcpServers?: string[]
   disabledMcpServers?: string[]
+  /** Whether the user has approved memory files that @include paths outside cwd. */
+  hasClaudeMdExternalIncludesApproved?: boolean
+  /** Whether the external-includes warning has already been shown this project. */
+  hasClaudeMdExternalIncludesWarningShown?: boolean
   [key: string]: unknown
 }
 

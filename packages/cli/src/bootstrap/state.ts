@@ -568,7 +568,9 @@ export function getBudgetContinuationCount(): number { return 0 }
 export function snapshotOutputTokensForTurn(_budget: number | null): void {}
 export function getActiveTimeCounter(): AttributedCounter | null { return null }
 export function setMainThreadAgentType(_agentType: string | undefined): void {}
-export function setOriginalCwd(_cwd: string): void {}
+export function setOriginalCwd(cwd: string): void {
+  STATE.originalCwd = cwd.normalize('NFC')
+}
 
 export function addInvokedSkill(
   _skillName: string,
