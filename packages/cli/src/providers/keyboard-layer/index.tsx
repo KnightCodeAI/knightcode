@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { useKeyboard, useRenderer } from "@opentui/react";
+import { useKeyboard } from "@opentui/react";
 
 export type KeyboardLayerId =
   | "base"
@@ -38,7 +38,6 @@ export function KeyboardLayerProvider({
   stackRef.current = stack;
 
   const responders = useRef<Map<KeyboardLayerId, Responder>>(new Map());
-  const renderer = useRenderer();
 
   const push = useCallback((id: KeyboardLayerId, responder?: Responder) => {
     if (responder) {
@@ -87,6 +86,9 @@ export function KeyboardLayerProvider({
   useKeyboard((key) => {
     if (!key.ctrl || key.name !== "c") return;
 
+    // Ctrl+C never exits — the only way out is the /exit command. We still let
+    // each layer's responder consume it (e.g. clearing the input line); when
+    // nothing consumes it, do nothing rather than tearing down the renderer.
     const currentStack = stackRef.current;
     for (let i = currentStack.length - 1; i >= 0; i--) {
       const layerId = currentStack[i]!;
@@ -95,8 +97,6 @@ export function KeyboardLayerProvider({
         return;
       }
     }
-
-    renderer.destroy();
   });
 
   return (
