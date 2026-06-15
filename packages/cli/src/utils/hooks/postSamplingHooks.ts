@@ -1,13 +1,13 @@
-// TODO: the post-sampling hook registry (registerPostSamplingHook /
-// runPostSamplingHooks) lands with the input-pipeline port. For now this module
-// only exposes the REPLHookContext shape that the stop-hook spine and post-turn
-// fork helpers thread through — the runtime registry has no callers yet.
-
 import type { QuerySource } from '../../constants/querySource.js'
-import type { Message } from '../../types/message.js'
 import type { ToolUseContext } from '../../Tool.js'
+import type { Message } from '../../types/message.js'
+import { toError } from '../errors.js'
+import { logError } from '../log.js'
 import type { SystemPrompt } from '../systemPromptType.js'
 
+// Post-sampling hook - not exposed in settings.json config (yet), only used programmatically
+
+// Generic context for REPL hooks (both post-sampling and stop hooks)
 export type REPLHookContext = {
   messages: Message[] // Full message history including assistant responses
   systemPrompt: SystemPrompt
@@ -21,13 +21,50 @@ export type PostSamplingHook = (
   context: REPLHookContext,
 ) => Promise<void> | void
 
-// Post-sampling hooks run after the model response completes. No-op until hook
-// dispatch lands; with no registered hooks there is nothing to run.
+// Internal registry for post-sampling hooks
+const postSamplingHooks: PostSamplingHook[] = []
+
+/**
+ * Register a post-sampling hook that will be called after model sampling completes
+ * This is an internal API not exposed through settings
+ */
+export function registerPostSamplingHook(hook: PostSamplingHook): void {
+  postSamplingHooks.push(hook)
+}
+
+/**
+ * Clear all registered post-sampling hooks (for testing)
+ */
+export function clearPostSamplingHooks(): void {
+  postSamplingHooks.length = 0
+}
+
+/**
+ * Execute all registered post-sampling hooks
+ */
 export async function executePostSamplingHooks(
-  _messages: Message[],
-  _systemPrompt: SystemPrompt,
-  _userContext: { [k: string]: string },
-  _systemContext: { [k: string]: string },
-  _toolUseContext: ToolUseContext,
-  _querySource?: QuerySource,
-): Promise<void> {}
+  messages: Message[],
+  systemPrompt: SystemPrompt,
+  userContext: { [k: string]: string },
+  systemContext: { [k: string]: string },
+  toolUseContext: ToolUseContext,
+  querySource?: QuerySource,
+): Promise<void> {
+  const context: REPLHookContext = {
+    messages,
+    systemPrompt,
+    userContext,
+    systemContext,
+    toolUseContext,
+    querySource,
+  }
+
+  for (const hook of postSamplingHooks) {
+    try {
+      await hook(context)
+    } catch (error) {
+      // Log but don't fail on hook errors
+      logError(toError(error))
+    }
+  }
+}
