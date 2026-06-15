@@ -18,7 +18,7 @@ import { safeParseJSON } from './json.js'
 import { isEnvTruthy } from './envUtils.js'
 
 export type ApiKeySource =
-  | 'ANTHROPIC_API_KEY'
+  | 'OPENROUTER_API_KEY'
   | 'apiKeyHelper'
   | '/login managed key'
   | 'none'
@@ -79,7 +79,7 @@ export function getAnthropicApiKeyWithSource(
   if (cachedResolution) return cachedResolution
   const envKey = process.env.OPENROUTER_API_KEY
   if (envKey) {
-    cachedResolution = { key: envKey, source: 'ANTHROPIC_API_KEY' }
+    cachedResolution = { key: envKey, source: 'OPENROUTER_API_KEY' }
     return cachedResolution
   }
   const fileKey = readCredentialsFileKey()

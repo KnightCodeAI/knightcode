@@ -111,7 +111,7 @@ const apiKeyConflictNotice: StatusNoticeDefinition = {
     })
     return (
       !!getApiKeyFromConfigOrMacOSKeychain() &&
-      (apiKeySource === 'ANTHROPIC_API_KEY' || apiKeySource === 'apiKeyHelper')
+      (apiKeySource === 'OPENROUTER_API_KEY' || apiKeySource === 'apiKeyHelper')
     )
   },
   render: () => {
@@ -168,7 +168,7 @@ const bothAuthMethodsNotice: StatusNoticeDefinition = {
               ? 'claude.ai'
               : authTokenInfo.source}
             ?{' '}
-            {apiKeySource === 'ANTHROPIC_API_KEY'
+            {apiKeySource === 'OPENROUTER_API_KEY'
               ? 'Unset the ANTHROPIC_API_KEY environment variable, or claude /logout then say "No" to the API key approval before login.'
               : apiKeySource === 'apiKeyHelper'
                 ? 'Unset the apiKeyHelper setting.'

@@ -793,7 +793,7 @@ export function getAssistantMessageFromError(
     // the env var. The three guards ensure we only blame the env var when it's
     // actually set and actually on the wire.
     if (
-      source === 'ANTHROPIC_API_KEY' &&
+      source === 'OPENROUTER_API_KEY' &&
       process.env.ANTHROPIC_API_KEY &&
       !isClaudeAISubscriber()
     ) {
@@ -825,7 +825,7 @@ export function getAssistantMessageFromError(
     // Check if the API key is from an external source
     const { source } = getAnthropicApiKeyWithSource()
     const isExternalSource =
-      source === 'ANTHROPIC_API_KEY' || source === 'apiKeyHelper'
+      source === 'OPENROUTER_API_KEY' || source === 'apiKeyHelper'
 
     return createAssistantAPIErrorMessage({
       error: 'authentication_failed',

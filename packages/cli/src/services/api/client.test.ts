@@ -47,7 +47,7 @@ describe('credential resolution', () => {
     clearApiKeyHelperCache()
     const { key, source } = getAnthropicApiKeyWithSource()
     expect(key).toBe('sk-or-test-env')
-    expect(source).toBe('ANTHROPIC_API_KEY')
+    expect(source).toBe('OPENROUTER_API_KEY')
   })
 
   test('saved credentials resolve with the managed source', () => {
