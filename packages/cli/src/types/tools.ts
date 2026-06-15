@@ -65,7 +65,13 @@ export type ShellProgress = Extract<
   ToolProgressData,
   { type: 'bash_progress' | 'powershell_progress' }
 >
-export type MCPProgress = ToolProgressData & { type: 'mcp_progress' }
+export type MCPProgress = ToolProgressData & {
+  type: 'mcp_progress'
+  // MCP progress-notification payload (SDK ProgressNotification params).
+  progress?: number
+  total?: number
+  progressMessage?: string
+}
 export type PowerShellProgress = ToolProgressData & {
   type: 'powershell_progress'
 }
