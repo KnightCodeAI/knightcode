@@ -59,48 +59,19 @@ function handleExit() {
   _originalDestroy();
 }
 
-// ── Ctrl+C double-press guard ─────────────────────────────────────────────────
-// How OpenTUI exits (confirmed by reading its source):
-//   - exitOnCtrlC: false → the keypress handler does NOT destroy. So React's
-//     useKeyboard owns the Ctrl+C UX (copy + toast) and fires reliably.
-//   - OpenTUI registers exitHandler (→ renderer.destroy()) on SIGINT *and*
-//     SIGBREAK. On Windows a single Ctrl+C fires BOTH within a few ms.
-//
-// We wrap renderer.destroy() as the single choke point:
-//   - Intentional exit (/exit command, SIGTERM, confirmed 2nd press): pass through.
-//   - First press: record timestamp, swallow. The duplicate signal from the
-//     SAME keypress (arriving <80ms later) is collapsed so it can't count as a
-//     second press. React shows the "copy / ⌃C again" toast on the same tick.
-//   - Genuine 2nd press within 2s: route through handleExit() so the heartbeat
-//     interval is cleared (otherwise destroy() blanks the screen but the event
-//     loop stays alive → blank-but-not-closed terminal).
+// ── Ctrl+C cannot quit the app ────────────────────────────────────────────────
+// The ONLY way to exit is the /exit command, which calls markIntentionalExit()
+// before renderer.destroy(). OpenTUI routes Ctrl+C (SIGINT, plus SIGBREAK on
+// Windows) through renderer.destroy(), so we wrap it as the single choke point
+// and swallow every destroy() that wasn't explicitly marked intentional. This
+// neutralizes both the signal handlers and any stray React-side destroy call.
 const _originalDestroy = renderer.destroy.bind(renderer);
 
-const COLLAPSE_MS = 80; // duplicate signals from one physical keypress
-const DOUBLE_PRESS_MS = 2000;
-let _lastPressAt = 0;
-
 (renderer as any).destroy = () => {
-  if (isIntentionalExit()) {
-    clearInterval(heartbeatTimer);
-    cleanupAllProcesses();
-    _originalDestroy();
-    return;
-  }
-  const now = Date.now();
-  const delta = now - _lastPressAt;
-
-  if (delta < COLLAPSE_MS) {
-    // Duplicate signal (SIGINT + SIGBREAK) from the same Ctrl+C — ignore.
-    return;
-  }
-  if (delta < DOUBLE_PRESS_MS) {
-    // Confirmed second press — clean exit.
-    handleExit();
-    return;
-  }
-  // First press — swallow. React's useKeyboard shows the toast on this tick.
-  _lastPressAt = now;
+  if (!isIntentionalExit()) return;
+  clearInterval(heartbeatTimer);
+  cleanupAllProcesses();
+  _originalDestroy();
 };
 // ─────────────────────────────────────────────────────────────────────────────
 

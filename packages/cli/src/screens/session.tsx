@@ -59,6 +59,7 @@ function ChatMessage({
   streaming,
   pendingConfirmations,
   answerQuestion,
+  cancelQuestion,
   setConfirmationModelOverride,
   confirmToolCall,
   activePendingId,
@@ -71,6 +72,7 @@ function ChatMessage({
     toolCallId: string,
     answers: Array<{ question: string; answer: string | string[] }>,
   ) => void;
+  cancelQuestion: (toolCallId: string) => void;
   setConfirmationModelOverride: (
     toolCallId: string,
     modelId: SupportedChatModelId | undefined,
@@ -86,10 +88,16 @@ function ChatMessage({
 }) {
   const text = msg.parts
     .filter((p) => p.type === "text")
+    // `text` is typed as required on text parts, but the transcript store is
+    // not re-validated on load (engine/query.ts), so coerce to a string —
+    // a missing or non-string value would otherwise crash on .startsWith.
+    .map((p) => {
+      const t = (p as { text?: unknown }).text;
+      return typeof t === "string" ? t : "";
+    })
     // System-reminder parts (e.g. @-mention expansions) are model context,
     // not something the user typed — keep them out of the rendered bubble.
-    .filter((p) => !p.text.startsWith("<system-reminder>"))
-    .map((p) => p.text)
+    .filter((t) => !t.startsWith("<system-reminder>"))
     .join("");
 
   if (msg.metadata?.isInterrupted) {
@@ -135,6 +143,7 @@ function ChatMessage({
       streaming={streaming}
       pendingConfirmations={pendingConfirmations}
       answerQuestion={answerQuestion}
+      cancelQuestion={cancelQuestion}
       setConfirmationModelOverride={setConfirmationModelOverride}
       confirmToolCall={confirmToolCall}
       activePendingId={activePendingId}
@@ -389,6 +398,7 @@ function SessionChat({
           }
           pendingConfirmations={pendingConfirmations}
           answerQuestion={answerQuestion}
+          cancelQuestion={() => interrupt()}
           setConfirmationModelOverride={setConfirmationModelOverride}
           confirmToolCall={confirmToolCall}
           activePendingId={pending?.toolCallId}
@@ -405,6 +415,7 @@ function SessionChat({
           toolName={pending.toolCall.toolName}
           input={(pending.toolCall.input as Record<string, unknown>) ?? {}}
           onConfirm={confirmToolCall}
+          booleanOnly
         />
       ) : null}
       {error && <ErrorMessage message={error.message} />}

@@ -339,6 +339,56 @@ describe("runToolCalls", () => {
     expect(failures).toEqual(["disk on fire"]);
   });
 
+  test("canUseTool throwing becomes an error result; the round keeps going", async () => {
+    const host = makeHost({
+      canUseTool: async () => {
+        throw new Error("prompt UI exploded");
+      },
+    });
+    const { events } = await run(
+      [
+        tc("Write", { file_path: "x", content: "y" }, "w1"),
+        tc("Read", { file_path: "a" }, "r1"),
+      ],
+      host,
+    );
+    const w = resultOf(events, "w1");
+    expect(w.outcome.kind).toBe("error");
+    expect((w.outcome as { errorText: string }).errorText).toContain(
+      "prompt UI exploded",
+    );
+    // The throw must not abort the round — the next call still runs and pairs.
+    expect(resultOf(events, "r1").outcome.kind).toBe("output");
+  });
+
+  test("askQuestion throwing becomes an error result, not an orphaned tool_use", async () => {
+    const host = makeHost({
+      askQuestion: async () => {
+        throw new Error("question prompt closed");
+      },
+    });
+    const { events } = await run(
+      [
+        tc(
+          "AskUserQuestion",
+          {
+            questions: [
+              { question: "q", options: [{ label: "a" }, { label: "b" }] },
+            ],
+          },
+          "q1",
+        ),
+      ],
+      host,
+    );
+    const r = resultOf(events, "q1");
+    expect(r).toBeDefined(); // tool_result emitted despite the throw
+    expect(r.outcome.kind).toBe("error");
+    expect((r.outcome as { errorText: string }).errorText).toContain(
+      "question prompt closed",
+    );
+  });
+
   test("abort before a serial call starts: no further tool_start events", async () => {
     const ac = new AbortController();
     let executions = 0;

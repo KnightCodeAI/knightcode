@@ -51,6 +51,30 @@ describe("expandAtMentions", () => {
     expect(reminder).toContain("console.log('build');");
   });
 
+  test("a large file is truncated, not loaded whole", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kc-mention-"));
+    // ~500k chars of ASCII — well past the 40k cap.
+    writeFileSync(join(dir, "big.txt"), "x".repeat(500_000));
+
+    const reminder = await expandAtMentions("read @big.txt", dir);
+    expect(reminder).toContain("Contents of file @big.txt:");
+    expect(reminder).toContain("… (truncated; read the file for the rest)");
+    // The emitted content must be capped near the char limit, not the full file.
+    expect(reminder!.length).toBeLessThan(60_000);
+  });
+
+  test("a directory past the cap reports more entries without listing all", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "kc-mention-"));
+    const many = join(dir, "many");
+    mkdirSync(many);
+    for (let i = 0; i < 1100; i++) {
+      writeFileSync(join(many, `f${i}.txt`), "x");
+    }
+    const reminder = await expandAtMentions("list @many", dir);
+    expect(reminder).toContain("Contents of directory @many:");
+    expect(reminder).toContain("showing first 1000");
+  });
+
   test("returns null when nothing resolves", async () => {
     const dir = mkdtempSync(join(tmpdir(), "kc-mention-"));
     expect(await expandAtMentions("@nope/missing.ts", dir)).toBeNull();

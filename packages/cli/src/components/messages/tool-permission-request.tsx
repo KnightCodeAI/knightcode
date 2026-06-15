@@ -22,6 +22,10 @@ type Props = {
     always: boolean,
     feedback?: string,
   ) => void;
+  /** Subagent permission requests resolve through a boolean-only resolver that
+   *  ignores `always` / `feedback`. Hide those options so we never present a
+   *  choice the resolver silently drops — plain Yes/No only. */
+  booleanOnly?: boolean;
 };
 
 type Option = {
@@ -166,6 +170,7 @@ export function ToolPermissionRequest({
   toolName,
   input,
   onConfirm,
+  booleanOnly = false,
 }: Props) {
   const { colors } = useTheme();
   const { isTopLayer } = useKeyboardLayer();
@@ -226,13 +231,19 @@ export function ToolPermissionRequest({
       : null;
   }
 
+  // The boolean resolver can't honor an "always" grant or rejection feedback,
+  // so drop both from the UI in that mode.
+  if (booleanOnly) secondLabel = null;
+
   const options: Option[] = [
     { label: "Yes", approved: true, always: false },
     ...(secondLabel
       ? [{ label: secondLabel, approved: true, always: true }]
       : []),
     {
-      label: "No, and tell the model what to do differently (esc)",
+      label: booleanOnly
+        ? "No (esc)"
+        : "No, and tell the model what to do differently (esc)",
       approved: false,
       always: false,
       reject: true,
@@ -241,13 +252,15 @@ export function ToolPermissionRequest({
 
   const rejectIndex = options.length - 1;
   const alwaysIndex = options.findIndex((o) => o.always);
-  const inputFocused = index === rejectIndex;
+  const inputFocused = !booleanOnly && index === rejectIndex;
 
   function choose(i: number) {
     const opt = options[i];
     if (!opt) return;
     if (opt.reject) {
-      const feedback = feedbackRef.current?.value?.trim() || undefined;
+      const feedback = booleanOnly
+        ? undefined
+        : feedbackRef.current?.value?.trim() || undefined;
       onConfirm(toolCallId, false, false, feedback);
       return;
     }

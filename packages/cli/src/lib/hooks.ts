@@ -332,7 +332,16 @@ export async function runPostToolHooks(
     tool_response: response,
   };
   const outputs = await Promise.all(
-    hooks.map((hook) => execHook(hook, hookInput)),
+    hooks.map((hook) => {
+      if (hook.async) {
+        // Non-blocking hook: fire-and-forget so it never adds latency or a
+        // timeout to the post-tool pipeline (matches runPreToolHooks). Its
+        // systemMessage channel is intentionally dropped.
+        void execHook(hook, hookInput);
+        return Promise.resolve(null);
+      }
+      return execHook(hook, hookInput);
+    }),
   );
   return { systemMessage: mergeSystemMessages(outputs) };
 }

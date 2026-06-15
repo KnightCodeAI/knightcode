@@ -4,7 +4,8 @@ import { ALL_TOOLS, ALL_TOOL_NAMES } from "./index";
 // Locked Phase-2 concurrency table (query-engine design spec). Agent being
 // safe is what makes subagents parallel; Config writes settings; the Task*
 // mutators write the task store; mode-transition tools mutate gating for
-// subsequent calls.
+// subsequent calls. TodoWrite is unsafe for the same reason as the Task*
+// mutators — it rewrites the shared todo list.
 const CONCURRENCY_SAFE = new Set([
   "Read",
   "Glob",
@@ -16,7 +17,6 @@ const CONCURRENCY_SAFE = new Set([
   "TaskOutput",
   "ToolSearch",
   "Skill",
-  "TodoWrite",
   "Agent",
 ]);
 
