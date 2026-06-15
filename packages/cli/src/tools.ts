@@ -11,8 +11,12 @@ import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { PowerShellTool } from './tools/PowerShellTool/PowerShellTool.js'
 import { SkillTool } from './tools/SkillTool/SkillTool.js'
 import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
+import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
+import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
+import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
 import { getDenyRules } from './utils/permissions/permissions.js'
 import { getPlatform } from './utils/platform.js'
+import { isToolSearchEnabledOptimistic } from './utils/toolSearch.js'
 
 // The set of tools a sub-agent may never call. Defined in constants/tools.ts;
 // re-exported here because the sub-agent pool filter and agent hooks import it
@@ -52,6 +56,11 @@ export function getAllBaseTools(): Tools {
     NotebookEditTool,
     TodoWriteTool,
     SkillTool,
+    ListMcpResourcesTool,
+    ReadMcpResourceTool,
+    // Include ToolSearchTool when tool search might be enabled (optimistic check).
+    // The actual decision to defer tools happens at request time.
+    ...(isToolSearchEnabledOptimistic() ? [ToolSearchTool] : []),
   ]
 }
 
@@ -109,7 +118,13 @@ export function assembleToolPool(
 
 /** Names of the enabled tools in the default preset. */
 export function getToolsForDefaultPreset(): string[] {
-  const tools = getAllBaseTools()
+  // The resource tools are added conditionally (they back the MCP resource
+  // commands, not the default model toolset) — exclude them from the preset.
+  const specialTools = new Set([
+    ListMcpResourcesTool.name,
+    ReadMcpResourceTool.name,
+  ])
+  const tools = getAllBaseTools().filter(tool => !specialTools.has(tool.name))
   const isEnabled = tools.map(tool => tool.isEnabled())
   return tools.filter((_, i) => isEnabled[i]).map((tool: Tool) => tool.name)
 }
