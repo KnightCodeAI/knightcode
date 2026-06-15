@@ -4,50 +4,50 @@ import { env } from '../../utils/env.js'
 
 export type KnightPose =
   | 'default'
-  | 'arms-up' // both arms raised (used during jump)
-  | 'look-left' // both pupils shifted left
-  | 'look-right' // both pupils shifted right
+  | 'arms-up' // ears/mane raised (used during jump)
+  | 'look-left' // pupil shifted toward the muzzle
+  | 'look-right' // pupil shifted toward the mane
 
 type Props = {
   pose?: KnightPose
 }
 
-// Standard-terminal pose fragments. Each row is split into segments so we can
-// vary only the parts that change (eyes, arms) while keeping the body/bg spans
-// stable. All poses end up 9 cols wide.
-//
-// arms-up: the row-2 arm shapes (▝▜ / ▛▘) move to row 1 as their
-// bottom-heavy mirrors (▗▟ / ▙▖) — same silhouette, one row higher.
-//
-// look-* use top-quadrant eye chars (▙/▟) so both eyes change from the
-// default (▛/▜, bottom pupils) — otherwise only one eye would appear to move.
+// A left-facing chess-knight (horse head) on a pedestal, matching the
+// KnightCode mark. Three rows, drawn with quadrant block glyphs in the
+// knight_body color; the eye is a knight_background gap punched into the head
+// so it reads as the mark's glowing eye. Each row is split into segments so a
+// pose only varies the eye (look-*) or the ears (arms-up) while the silhouette
+// and the bg-filled head band stay stable. All poses are 8 cols wide.
 type Segments = {
-  /** row 1 left (no bg): optional raised arm + side */
+  /** row 1 left of the head band (ears / mane crest) */
   r1L: string
-  /** row 1 eyes (with bg): left-eye, forehead, right-eye */
+  /** row 1 head band (bg-filled): forehead with the eye gap */
   r1E: string
-  /** row 1 right (no bg): side + optional raised arm */
+  /** row 1 right of the head band (mane) */
   r1R: string
-  /** row 2 left (no bg): arm + body curve */
+  /** row 2 left (muzzle wedge, pointing left) */
   r2L: string
-  /** row 2 right (no bg): body curve + arm */
+  /** row 2 right (jaw + neck) */
   r2R: string
 }
 
+// The eye gap glyph within the bg-filled forehead band. Shifting which quadrant
+// is "lit" moves the pupil. ▛ = forward/down, ▙ = toward muzzle (left),
+// ▟ = toward mane (right).
 const POSES: Record<KnightPose, Segments> = {
-  default: { r1L: ' ▐', r1E: '▛███▜', r1R: '▌', r2L: '▝▜', r2R: '▛▘' },
-  'look-left': { r1L: ' ▐', r1E: '▟███▟', r1R: '▌', r2L: '▝▜', r2R: '▛▘' },
-  'look-right': { r1L: ' ▐', r1E: '▙███▙', r1R: '▌', r2L: '▝▜', r2R: '▛▘' },
-  'arms-up': { r1L: '▗▟', r1E: '▛███▜', r1R: '▙▖', r2L: ' ▜', r2R: '▛ ' },
+  default: { r1L: ' ▗▟', r1E: '█▛█', r1R: '▙▖', r2L: '▟█', r2R: '██▌' },
+  'look-left': { r1L: ' ▗▟', r1E: '█▙█', r1R: '▙▖', r2L: '▟█', r2R: '██▌' },
+  'look-right': { r1L: ' ▗▟', r1E: '█▟█', r1R: '▙▖', r2L: '▟█', r2R: '██▌' },
+  'arms-up': { r1L: '▗▟▛', r1E: '█▛█', r1R: '▜▖', r2L: '▟█', r2R: '██▌' },
 }
 
-// Apple Terminal uses a bg-fill trick (see below), so only eye poses make
-// sense. Arm poses fall back to default.
+// Apple Terminal renders vertical gaps between glyphs but not between
+// background fills, so the body is drawn as a bg block and only the eye varies.
 const APPLE_EYES: Record<KnightPose, string> = {
-  default: ' ▗   ▖ ',
-  'look-left': ' ▘   ▘ ',
-  'look-right': ' ▝   ▝ ',
-  'arms-up': ' ▗   ▖ ',
+  default: '  ▝▘  ',
+  'look-left': '  ▖▘  ',
+  'look-right': '  ▝▗  ',
+  'arms-up': '  ▝▘  ',
 }
 
 export function Knight({ pose = 'default' }: Props = {}): React.ReactNode {
@@ -67,21 +67,20 @@ export function Knight({ pose = 'default' }: Props = {}): React.ReactNode {
       <Text>
         <Text color="knight_body">{p.r2L}</Text>
         <Text color="knight_body" backgroundColor="knight_background">
-          █████
+          ███
         </Text>
         <Text color="knight_body">{p.r2R}</Text>
       </Text>
       <Text color="knight_body">
-        {'  '}▘▘ ▝▝{'  '}
+        {' '}▝▀▀▀▀▘{' '}
       </Text>
     </Box>
   )
 }
 
 function AppleTerminalKnight({ pose }: { pose: KnightPose }): React.ReactNode {
-  // Apple's Terminal renders vertical space between chars by default.
-  // It does NOT render vertical space between background colors
-  // so we use background color to draw the main shape.
+  // Apple's Terminal renders vertical space between chars by default but not
+  // between background colors, so we draw the head with a background fill.
   return (
     <Box flexDirection="column" alignItems="center">
       <Text>
@@ -91,8 +90,8 @@ function AppleTerminalKnight({ pose }: { pose: KnightPose }): React.ReactNode {
         </Text>
         <Text color="knight_body">▖</Text>
       </Text>
-      <Text backgroundColor="knight_body">{' '.repeat(7)}</Text>
-      <Text color="knight_body">▘▘ ▝▝</Text>
+      <Text backgroundColor="knight_body">{' '.repeat(8)}</Text>
+      <Text color="knight_body">▝▀▀▀▀▘</Text>
     </Box>
   )
 }
