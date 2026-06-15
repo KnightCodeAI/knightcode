@@ -160,10 +160,6 @@ export function getSubscriptionType(): SubscriptionType | null {
   return null
 }
 
-export function isClaudeAISubscriber(): boolean {
-  return false
-}
-
 export function isEnterpriseSubscriber(): boolean {
   return false
 }

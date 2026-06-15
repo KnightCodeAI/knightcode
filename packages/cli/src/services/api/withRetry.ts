@@ -18,8 +18,6 @@ import {
   clearGcpCredentialsCache,
   getClaudeAIOAuthTokens,
   handleOAuth401Error,
-  isClaudeAISubscriber,
-  isEnterpriseSubscriber,
 } from '../../utils/auth.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
@@ -675,10 +673,7 @@ function shouldRetry(error: APIError): boolean {
   // If the server explicitly says whether or not to retry, obey.
   // For Max and Pro users, should-retry is true, but in several hours, so we shouldn't.
   // Enterprise users can retry because they typically use PAYG instead of rate limits.
-  if (
-    shouldRetryHeader === 'true' &&
-    (!isClaudeAISubscriber() || isEnterpriseSubscriber())
-  ) {
+  if (shouldRetryHeader === 'true') {
     return true
   }
 
@@ -703,10 +698,9 @@ function shouldRetry(error: APIError): boolean {
   // Retry on lock timeouts.
   if (error.status === 409) return true
 
-  // Retry on rate limits, but not for ClaudeAI Subscription users
-  // Enterprise users can retry because they typically use PAYG instead of rate limits
+  // Retry on rate limits.
   if (error.status === 429) {
-    return !isClaudeAISubscriber() || isEnterpriseSubscriber()
+    return true
   }
 
   // Clear API key cache on 401 and allow retry.

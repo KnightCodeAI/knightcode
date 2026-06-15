@@ -3,7 +3,7 @@ import figures from 'figures'
 import * as React from 'react'
 import { color, Text } from '../tui.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
-import { getAccountInformation, isClaudeAISubscriber } from './auth.js'
+import { getAccountInformation } from './auth.js'
 import {
   getLargeMemoryFiles,
   getMemoryFiles,
@@ -23,10 +23,7 @@ import {
   isJetBrainsIde,
   toIDEDisplayName,
 } from './ide.js'
-import {
-  getClaudeAiUserDefaultModelDescription,
-  modelDisplayString,
-} from './model/model.js'
+import { modelDisplayString } from './model/model.js'
 import { getAPIProvider } from './model/providers.js'
 import { getMTLSConfig } from './mtls.js'
 import { checkInstall } from './nativeInstaller/index.js'
@@ -460,13 +457,5 @@ export function buildAPIProviderProperties(): Property[] {
 }
 
 export function getModelDisplayLabel(mainLoopModel: string | null): string {
-  let modelLabel = modelDisplayString(mainLoopModel)
-
-  if (mainLoopModel === null && isClaudeAISubscriber()) {
-    const description = getClaudeAiUserDefaultModelDescription()
-
-    modelLabel = `${chalk.bold('Default')} ${description}`
-  }
-
-  return modelLabel
+  return modelDisplayString(mainLoopModel)
 }

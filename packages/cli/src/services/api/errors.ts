@@ -16,9 +16,7 @@ import type {
 } from 'src/types/message.js'
 import {
   getAnthropicApiKeyWithSource,
-  getClaudeAIOAuthTokens,
   getOauthAccountInfo,
-  isClaudeAISubscriber,
 } from 'src/utils/auth.js'
 import { createAssistantAPIErrorMessage } from 'src/utils/messages.js'
 import {
@@ -694,21 +692,6 @@ export function getAssistantMessageFromError(
     })
   }
 
-  // Check for invalid model name error for subscription users trying to use Opus
-  if (
-    isClaudeAISubscriber() &&
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.toLowerCase().includes('invalid model name') &&
-    (isNonCustomOpusModel(model) || model === 'opus')
-  ) {
-    return createAssistantAPIErrorMessage({
-      content:
-        'Claude Opus is not available with the Claude Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.',
-      error: 'invalid_request',
-    })
-  }
-
   // Check for invalid model name errors for internal users: the CLI may be
   // defaulting to a custom internal-only model, and some internal org IDs
   // may not have been gated in yet.
@@ -740,38 +723,6 @@ export function getAssistantMessageFromError(
       error: 'billing_error',
     })
   }
-  // "Organization has been disabled" — commonly a stale ANTHROPIC_API_KEY
-  // from a previous employer/project overriding subscription auth. Only handle
-  // the env-var case; apiKeyHelper and /login-managed keys mean the active
-  // auth's org is genuinely disabled with no dormant fallback to point at.
-  if (
-    error instanceof APIError &&
-    error.status === 400 &&
-    error.message.toLowerCase().includes('organization has been disabled')
-  ) {
-    const { source } = getAnthropicApiKeyWithSource()
-    // getAnthropicApiKeyWithSource conflates the env var with FD-passed keys
-    // under the same source value, and in CCR mode OAuth stays active despite
-    // the env var. The three guards ensure we only blame the env var when it's
-    // actually set and actually on the wire.
-    if (
-      source === 'OPENROUTER_API_KEY' &&
-      process.env.ANTHROPIC_API_KEY &&
-      !isClaudeAISubscriber()
-    ) {
-      const hasStoredOAuth = getClaudeAIOAuthTokens()?.accessToken != null
-      // Not 'authentication_failed' — that triggers VS Code's showLogin(), but
-      // login can't fix this (approved env var keeps overriding OAuth). The fix
-      // is configuration-based (unset the var), so invalid_request is correct.
-      return createAssistantAPIErrorMessage({
-        error: 'invalid_request',
-        content: hasStoredOAuth
-          ? ORG_DISABLED_ERROR_MESSAGE_ENV_KEY_WITH_OAUTH
-          : ORG_DISABLED_ERROR_MESSAGE_ENV_KEY,
-      })
-    }
-  }
-
   if (
     error instanceof Error &&
     error.message.toLowerCase().includes('x-api-key')

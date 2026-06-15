@@ -154,7 +154,6 @@ import {
   modelSupportsAdvisor,
 } from 'src/utils/advisor.js'
 import { getAgentContext } from 'src/utils/agentContext.js'
-import { isClaudeAISubscriber } from 'src/utils/auth.js'
 import {
   getToolSearchBetaHeader,
   modelSupportsStructuredOutputs,
@@ -405,9 +404,7 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
   // would bust the server-side prompt cache (~20K tokens per flip).
   let userEligible = getPromptCache1hEligible()
   if (userEligible === null) {
-    userEligible =
-      process.env.USER_TYPE === 'ant' ||
-      (isClaudeAISubscriber() && !currentLimits.isUsingOverage)
+    userEligible = process.env.USER_TYPE === 'ant'
     setPromptCache1hEligible(userEligible)
   }
   if (!userEligible) return false
@@ -1034,7 +1031,6 @@ async function* queryModel(
   // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
   // entirely. Subscribers don't hit this path at all.
   if (
-    !isClaudeAISubscriber() &&
     isNonCustomOpusModel(options.model) &&
     (
       await getDynamicConfig_BLOCKS_ON_INIT<{ activated: boolean }>(
