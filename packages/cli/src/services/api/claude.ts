@@ -251,7 +251,7 @@ import {
 import {
   CannotRetryError,
   FallbackTriggeredError,
-  is529Error,
+  isUpstreamProviderError,
   type RetryContext,
   withRetry,
 } from './withRetry.js'
@@ -827,7 +827,7 @@ export async function* executeNonStreamingRequest(
     thinkingConfig: ThinkingConfig
     fastMode?: boolean
     signal: AbortSignal
-    initialConsecutive529Errors?: number
+    initialConsecutiveUpstreamErrors?: number
     querySource?: QuerySource
   },
   paramsFromContext: (context: RetryContext) => BetaMessageStreamParams,
@@ -900,7 +900,8 @@ export async function* executeNonStreamingRequest(
       thinkingConfig: retryOptions.thinkingConfig,
       ...(isFastModeEnabled() && { fastMode: retryOptions.fastMode }),
       signal: retryOptions.signal,
-      initialConsecutive529Errors: retryOptions.initialConsecutive529Errors,
+      initialConsecutiveUpstreamErrors:
+        retryOptions.initialConsecutiveUpstreamErrors,
       querySource: retryOptions.querySource,
     },
   )
@@ -2556,7 +2557,11 @@ async function* queryModel(
           thinkingConfig,
           ...(isFastModeEnabled() && { fastMode: isFastMode }),
           signal,
-          initialConsecutive529Errors: is529Error(streamingError) ? 1 : 0,
+          initialConsecutiveUpstreamErrors: isUpstreamProviderError(
+            streamingError,
+          )
+            ? 1
+            : 0,
           querySource: options.querySource,
         },
         paramsFromContext,

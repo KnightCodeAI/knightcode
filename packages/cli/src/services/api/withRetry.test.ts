@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import type Anthropic from '@anthropic-ai/sdk'
 import { APIError, APIUserAbortError } from '@anthropic-ai/sdk'
 import type { SystemAPIErrorMessage } from '../../types/message.js'
-import { FallbackTriggeredError, withRetry } from './withRetry.js'
+import {
+  FallbackTriggeredError,
+  isUpstreamProviderError,
+  withRetry,
+} from './withRetry.js'
 
 const fakeClient = {} as Anthropic
 const getClient = () => Promise.resolve(fakeClient)
@@ -77,11 +81,17 @@ describe('withRetry', () => {
     expect(calls).toBe(1)
   })
 
-  test('repeated 529s on an Opus primary trigger the fallback model', async () => {
+  test('502/503 classify as retryable upstream provider errors', () => {
+    expect(isUpstreamProviderError(apiError(503))).toBe(true)
+    expect(isUpstreamProviderError(apiError(502))).toBe(true)
+    expect(isUpstreamProviderError(apiError(400))).toBe(false)
+  })
+
+  test('repeated upstream errors on an Opus primary trigger the fallback model', async () => {
     const gen = withRetry(
       getClient,
       async () => {
-        throw apiError(529, 'Overloaded')
+        throw apiError(503, 'Provider unavailable')
       },
       {
         ...baseOptions,

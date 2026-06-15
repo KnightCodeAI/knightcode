@@ -25,7 +25,6 @@ import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
 import {
   type CooldownReason,
-  handleFastModeOverageRejection,
   handleFastModeRejectedByAPI,
   isFastModeCooldown,
   isFastModeEnabled,
@@ -44,51 +43,18 @@ import {
   checkMockRateLimitError,
   isMockRateLimitError,
 } from '../rateLimitMocking.js'
-import { REPEATED_529_ERROR_MESSAGE } from './errors.js'
 import { extractConnectionErrorDetails } from './errorUtils.js'
 
 const abortError = () => new APIUserAbortError()
 
 const DEFAULT_MAX_RETRIES = 10
 const FLOOR_OUTPUT_TOKENS = 3000
-const MAX_529_RETRIES = 3
+// Consecutive upstream-provider (502/503) errors before falling back to a
+// smaller model, rather than retrying the same overloaded provider forever.
+const MAX_UPSTREAM_ERROR_RETRIES = 3
 export const BASE_DELAY_MS = 500
 
-// Foreground query sources where the user IS blocking on the result — these
-// retry on 529. Everything else (summaries, titles, suggestions, classifiers)
-// bails immediately: during a capacity cascade each retry is 3-10× gateway
-// amplification, and the user never sees those fail anyway. New sources
-// default to no-retry — add here only if the user is waiting on the result.
-const FOREGROUND_529_RETRY_SOURCES = new Set<QuerySource>([
-  'repl_main_thread',
-  'repl_main_thread:outputStyle:custom',
-  'repl_main_thread:outputStyle:Explanatory',
-  'repl_main_thread:outputStyle:Learning',
-  'sdk',
-  'agent:custom',
-  'agent:default',
-  'agent:builtin',
-  'compact',
-  'hook_agent',
-  'hook_prompt',
-  'verification_agent',
-  'side_question',
-  // Security classifiers — must complete for auto-mode correctness.
-  // yoloClassifier.ts uses 'auto_mode' (not 'yolo_classifier' — that's
-  // type-only). bash_classifier is internal-only; feature-gate so the string
-  // tree-shakes out of external builds (excluded-strings.txt).
-  'auto_mode',
-  ...(feature('BASH_CLASSIFIER') ? (['bash_classifier'] as const) : []),
-])
-
-function shouldRetry529(querySource: QuerySource | undefined): boolean {
-  // undefined → retry (conservative for untagged call paths)
-  return (
-    querySource === undefined || FOREGROUND_529_RETRY_SOURCES.has(querySource)
-  )
-}
-
-// CLAUDE_CODE_UNATTENDED_RETRY: for unattended sessions (internal-only). Retries 429/529
+// CLAUDE_CODE_UNATTENDED_RETRY: for unattended sessions (internal-only). Retries 429/5xx
 // indefinitely with higher backoff and periodic keep-alive yields so the host
 // environment does not mark the session idle mid-wait.
 // TODO: the keep-alive via SystemAPIErrorMessage yields is a stopgap
@@ -105,7 +71,8 @@ function isPersistentRetryEnabled(): boolean {
 
 function isTransientCapacityError(error: unknown): boolean {
   return (
-    is529Error(error) || (error instanceof APIError && error.status === 429)
+    isUpstreamProviderError(error) ||
+    (error instanceof APIError && error.status === 429)
   )
 }
 
@@ -133,12 +100,12 @@ interface RetryOptions {
   signal?: AbortSignal
   querySource?: QuerySource
   /**
-   * Pre-seed the consecutive 529 counter. Used when this retry loop is a
-   * non-streaming fallback after a streaming 529 — the streaming 529 should
-   * count toward MAX_529_RETRIES so total 529s-before-fallback is consistent
-   * regardless of which request mode hit the overload.
+   * Pre-seed the consecutive upstream-error counter. Used when this retry loop
+   * is a non-streaming fallback after a streaming upstream (502/503) error —
+   * the streaming error should count toward MAX_UPSTREAM_ERROR_RETRIES so the
+   * total before fallback is consistent regardless of which request mode hit it.
    */
-  initialConsecutive529Errors?: number
+  initialConsecutiveUpstreamErrors?: number
 }
 
 export class CannotRetryError extends Error {
@@ -183,7 +150,7 @@ export async function* withRetry<T>(
     ...(isFastModeEnabled() && { fastMode: options.fastMode }),
   }
   let client: Anthropic | null = null
-  let consecutive529Errors = options.initialConsecutive529Errors ?? 0
+  let consecutiveUpstreamErrors = options.initialConsecutiveUpstreamErrors ?? 0
   let lastError: unknown
   let persistentAttempt = 0
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
@@ -268,19 +235,8 @@ export async function* withRetry<T>(
         wasFastModeActive &&
         !isPersistentRetryEnabled() &&
         error instanceof APIError &&
-        (error.status === 429 || is529Error(error))
+        (error.status === 429 || isUpstreamProviderError(error))
       ) {
-        // If the 429 is specifically because extra usage (overage) is not
-        // available, permanently disable fast mode with a specific message.
-        const overageReason = error.headers?.get(
-          'anthropic-ratelimit-unified-overage-disabled-reason',
-        )
-        if (overageReason !== null && overageReason !== undefined) {
-          handleFastModeOverageRejection(overageReason)
-          retryContext.fastMode = false
-          continue
-        }
-
         const retryAfterMs = getRetryAfterMs(error)
         if (retryAfterMs !== null && retryAfterMs < SHORT_RETRY_THRESHOLD_MS) {
           // Short retry-after: wait and retry with fast mode still active
@@ -294,7 +250,7 @@ export async function* withRetry<T>(
           retryAfterMs ?? DEFAULT_FAST_MODE_FALLBACK_HOLD_MS,
           MIN_COOLDOWN_MS,
         )
-        const cooldownReason: CooldownReason = is529Error(error)
+        const cooldownReason: CooldownReason = isUpstreamProviderError(error)
           ? 'overloaded'
           : 'rate_limit'
         triggerFastModeCooldown(Date.now() + cooldownMs, cooldownReason)
@@ -313,27 +269,16 @@ export async function* withRetry<T>(
         continue
       }
 
-      // Non-foreground sources bail immediately on 529 — no retry amplification
-      // during capacity cascades. User never sees these fail.
-      if (is529Error(error) && !shouldRetry529(options.querySource)) {
-        logEvent('tengu_api_529_background_dropped', {
-          query_source:
-            options.querySource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        })
-        throw new CannotRetryError(error, retryContext)
-      }
-
-      // Track consecutive 529 errors
+      // Track consecutive upstream-provider (502/503) errors. After a few in a
+      // row, fall back to a smaller model rather than hammering an overloaded
+      // provider — retrying the same model won't help while it's down.
       if (
-        is529Error(error) &&
-        // If FALLBACK_FOR_ALL_PRIMARY_MODELS is not set, fall through only if the primary model is a non-custom Opus model.
-        // TODO: Revisit if the isNonCustomOpusModel check should still exist, or if isNonCustomOpusModel is a stale artifact of when the CLI was hardcoded on Opus.
+        isUpstreamProviderError(error) &&
         (process.env.FALLBACK_FOR_ALL_PRIMARY_MODELS ||
-          (!isClaudeAISubscriber() && isNonCustomOpusModel(options.model)))
+          isNonCustomOpusModel(options.model))
       ) {
-        consecutive529Errors++
-        if (consecutive529Errors >= MAX_529_RETRIES) {
-          // Check if fallback model is specified
+        consecutiveUpstreamErrors++
+        if (consecutiveUpstreamErrors >= MAX_UPSTREAM_ERROR_RETRIES) {
           if (options.fallbackModel) {
             logEvent('tengu_api_opus_fallback_triggered', {
               original_model:
@@ -355,11 +300,7 @@ export async function* withRetry<T>(
             !process.env.IS_SANDBOX &&
             !isPersistentRetryEnabled()
           ) {
-            logEvent('tengu_api_custom_529_overloaded_error', {})
-            throw new CannotRetryError(
-              new Error(REPEATED_529_ERROR_MESSAGE),
-              retryContext,
-            )
+            throw new CannotRetryError(error, retryContext)
           }
         }
       }
@@ -607,16 +548,13 @@ function isFastModeNotEnabledError(error: unknown): boolean {
   )
 }
 
-export function is529Error(error: unknown): boolean {
-  if (!(error instanceof APIError)) {
-    return false
-  }
-
-  // Check for 529 status code or overloaded error in message
+// An upstream-provider error: OpenRouter returns 502/503 when the underlying
+// model provider is unavailable or overloaded. These are transient and worth
+// retrying with backoff (the OpenRouter equivalent of the old 529 "overloaded").
+export function isUpstreamProviderError(error: unknown): boolean {
   return (
-    error.status === 529 ||
-    // See below: the SDK sometimes fails to properly pass the 529 status code during streaming
-    (error.message?.includes('"type":"overloaded_error"') ?? false)
+    error instanceof APIError &&
+    (error.status === 502 || error.status === 503)
   )
 }
 
@@ -716,10 +654,13 @@ function shouldRetry(error: APIError): boolean {
     return true
   }
 
-  // Check for overloaded errors first by examining the message content
-  // The SDK sometimes fails to properly pass the 529 status code during streaming,
-  // so we need to check the error message directly
-  if (error.message?.includes('"type":"overloaded_error"')) {
+  // Never retry insufficient-credits — retrying won't add credits.
+  if (error.status === 402) {
+    return false
+  }
+
+  // Upstream provider errors (502/503) are transient — retry with backoff.
+  if (isUpstreamProviderError(error)) {
     return true
   }
 
@@ -812,11 +753,12 @@ function getRetryAfterMs(error: APIError): number | null {
 }
 
 function getRateLimitResetDelayMs(error: APIError): number | null {
-  const resetHeader = error.headers?.get?.('anthropic-ratelimit-unified-reset')
+  // OpenRouter returns X-RateLimit-Reset as a Unix timestamp in milliseconds.
+  const resetHeader = error.headers?.get?.('X-RateLimit-Reset')
   if (!resetHeader) return null
-  const resetUnixSec = Number(resetHeader)
-  if (!Number.isFinite(resetUnixSec)) return null
-  const delayMs = resetUnixSec * 1000 - Date.now()
+  const resetUnixMs = Number(resetHeader)
+  if (!Number.isFinite(resetUnixMs)) return null
+  const delayMs = resetUnixMs - Date.now()
   if (delayMs <= 0) return null
   return Math.min(delayMs, PERSISTENT_RESET_CAP_MS)
 }
