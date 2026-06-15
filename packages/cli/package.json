@@ -58,6 +58,7 @@
     "@types/shell-quote": "^1.7.5"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
     "@vscode/ripgrep": "^1.18.0",
     "ajv": "^8.20.0",
     "asciichart": "^1.5.25",

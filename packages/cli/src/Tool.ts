@@ -17,11 +17,11 @@ export type ToolInputJSONSchema = {
 }
 
 import type { Notification } from './context/notifications.js'
-// The MCP protocol SDK isn't a dependency yet; the two elicitation shapes the
-// tool context references live in the local MCP type stub until it lands.
 import type {
   ElicitRequestURLParams,
   ElicitResult,
+} from '@modelcontextprotocol/sdk/types.js'
+import type {
   MCPServerConnection,
   ServerResource,
 } from './services/mcp/types.js'

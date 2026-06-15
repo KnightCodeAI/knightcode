@@ -108,9 +108,13 @@ export function useIdeSelection(
       }
     }
 
-    // Register notification handler for selection_changed events
+    // Register notification handler for selection_changed events.
+    // The SDK types this parameter with zod's classic ZodObject shape; our
+    // schema is built with the zod/v4 surface, so the structurally-equivalent
+    // schemas don't unify nominally. Cast at the boundary.
     ideClient.client.setNotificationHandler(
-      SelectionChangedSchema(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      SelectionChangedSchema() as any,
       (notification: any) => {
         if (currentIDERef.current !== ideClient) {
           return

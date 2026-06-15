@@ -18,7 +18,7 @@ export async function connectToServer(
   name: string,
   config: ScopedMcpServerConfig,
 ): Promise<MCPServerConnection> {
-  return { name, config: config as { [key: string]: unknown }, type: 'failed' }
+  return { name, config, type: 'failed' }
 }
 
 export async function fetchToolsForClient(

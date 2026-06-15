@@ -60,6 +60,10 @@ export type Settings = {
   companyAnnouncements?: string[]
   /** Default --agent for the session (welcome footer / status). */
   agent?: string
+  /** Project-scoped MCP server approval lists (read by the MCP config gate). */
+  enabledMcpjsonServers?: string[]
+  disabledMcpjsonServers?: string[]
+  enableAllProjectMcpServers?: boolean
   [key: string]: any
 }
 
@@ -104,6 +108,20 @@ export function updateSettingsForSource(
   _settings: Settings,
 ): { error: Error | null } {
   return { error: null }
+}
+
+/**
+ * Returns true if any trusted settings source has accepted the bypass
+ * permissions mode dialog. projectSettings is intentionally excluded —
+ * a malicious project could otherwise auto-bypass the dialog (RCE risk).
+ */
+export function hasSkipDangerousModePermissionPrompt(): boolean {
+  return !!(
+    getSettingsForSource('userSettings')?.skipDangerousModePermissionPrompt ||
+    getSettingsForSource('localSettings')?.skipDangerousModePermissionPrompt ||
+    getSettingsForSource('flagSettings')?.skipDangerousModePermissionPrompt ||
+    getSettingsForSource('policySettings')?.skipDangerousModePermissionPrompt
+  )
 }
 
 // TODO: managed/policy settings discovery is enterprise-only and out of scope.

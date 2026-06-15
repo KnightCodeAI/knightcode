@@ -1,91 +1,258 @@
-// TODO: the MCP client/transport layer is not implemented yet. The Tool
-// surface and context reference these shapes for fields that stay empty until
-// then; only the minimal type surface lives here.
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import type {
+  Resource,
+  ServerCapabilities,
+} from '@modelcontextprotocol/sdk/types.js'
+import { z } from 'zod/v4'
+import { lazySchema } from '../../utils/lazySchema.js'
 
-type MCPServerConfig = {
-  type?:
-    | 'stdio'
-    | 'sse'
-    | 'http'
-    | 'ws'
-    | 'sdk'
-    | 'sse-ide'
-    | 'ws-ide'
-    | 'claudeai-proxy'
-  url?: unknown
-  [key: string]: unknown
-}
+// Configuration schemas and types
+export const ConfigScopeSchema = lazySchema(() =>
+  z.enum([
+    'local',
+    'user',
+    'project',
+    'dynamic',
+    'enterprise',
+    'claudeai',
+    'managed',
+  ]),
+)
+export type ConfigScope = z.infer<ReturnType<typeof ConfigScopeSchema>>
 
-type MCPServerBase = {
-  name: string
-  config: MCPServerConfig
-  capabilities?: Record<string, unknown>
-}
+export const TransportSchema = lazySchema(() =>
+  z.enum(['stdio', 'sse', 'sse-ide', 'http', 'ws', 'sdk']),
+)
+export type Transport = z.infer<ReturnType<typeof TransportSchema>>
 
-// Connection lifecycle is the discriminant; only a connected server carries a
-// live client. Stays empty in practice until the MCP transport lands, but the
-// tool executor and attachment pipeline branch on `type` and read `client`
-// after narrowing to 'connected'.
-export type MCPServerConnection =
-  | (MCPServerBase & {
-      type: 'connected'
-      // The connected MCP SDK client. Typed with only the resource-read
-      // surface the attachment pipeline touches; replaced by the full SDK
-      // Client when the MCP transport lands.
-      client: {
-        readResource(args: { uri: string }): Promise<ReadResourceResult>
-        [key: string]: unknown
-      }
-      cleanup: () => Promise<void>
-    })
-  | (MCPServerBase & {
-      type: 'failed' | 'needs-auth' | 'pending' | 'disabled'
-    })
+export const McpStdioServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('stdio').optional(), // Optional for backwards compatibility
+    command: z.string().min(1, 'Command cannot be empty'),
+    args: z.array(z.string()).default([]),
+    env: z.record(z.string(), z.string()).optional(),
+  }),
+)
 
-export type ServerResource = {
-  server: string
-  uri: string
-  name?: string
-  mimeType?: string
-  [key: string]: unknown
-}
+// Cross-App Access (XAA / SEP-990): just a per-server flag. IdP connection
+// details (issuer, clientId, callbackPort) come from settings.xaaIdp — configured
+// once, shared across all XAA-enabled servers. clientId/clientSecret (parent
+// oauth config + keychain slot) are for the MCP server's AS.
+const McpXaaConfigSchema = lazySchema(() => z.boolean())
 
-// The MCP protocol SDK isn't a dependency yet; these mirror the two elicitation
-// shapes the tool context's URL-elicitation handler references. Replaced by the
-// real SDK types when the MCP transport lands.
-export type ElicitRequestURLParams = {
-  message: string
-  url: string
-  [key: string]: unknown
-}
+const McpOAuthConfigSchema = lazySchema(() =>
+  z.object({
+    clientId: z.string().optional(),
+    callbackPort: z.number().int().positive().optional(),
+    authServerMetadataUrl: z
+      .string()
+      .url()
+      .startsWith('https://', {
+        message: 'authServerMetadataUrl must use https://',
+      })
+      .optional(),
+    xaa: McpXaaConfigSchema().optional(),
+  }),
+)
 
-export type ElicitResult = {
-  action: 'accept' | 'decline' | 'cancel'
-  content?: Record<string, unknown>
-  [key: string]: unknown
-}
+export const McpSSEServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('sse'),
+    url: z.string(),
+    headers: z.record(z.string(), z.string()).optional(),
+    headersHelper: z.string().optional(),
+    oauth: McpOAuthConfigSchema().optional(),
+  }),
+)
 
-// Minimal stand-in for the MCP SDK's read-resource result; only used as the
-// payload type of an mcp_resource attachment, which never fires without a
-// connected MCP server. Replaced by the real SDK type when MCP lands.
-export type ReadResourceResult = {
-  contents: Array<Record<string, unknown>>
-  [key: string]: unknown
-}
+// Internal-only server type for IDE extensions
+export const McpSSEIDEServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('sse-ide'),
+    url: z.string(),
+    ideName: z.string(),
+    ideRunningInWindows: z.boolean().optional(),
+  }),
+)
 
-// TODO: per-server MCP configuration (scope, plugin source, transport options)
-// lands with the MCP transport. The command-config types reference this shape;
-// only the open record is needed until then.
-export type ScopedMcpServerConfig = {
-  scope?: string
+// Internal-only server type for IDE extensions
+export const McpWebSocketIDEServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('ws-ide'),
+    url: z.string(),
+    ideName: z.string(),
+    authToken: z.string().optional(),
+    ideRunningInWindows: z.boolean().optional(),
+  }),
+)
+
+export const McpHTTPServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('http'),
+    url: z.string(),
+    headers: z.record(z.string(), z.string()).optional(),
+    headersHelper: z.string().optional(),
+    oauth: McpOAuthConfigSchema().optional(),
+  }),
+)
+
+export const McpWebSocketServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('ws'),
+    url: z.string(),
+    headers: z.record(z.string(), z.string()).optional(),
+    headersHelper: z.string().optional(),
+  }),
+)
+
+export const McpSdkServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('sdk'),
+    name: z.string(),
+  }),
+)
+
+// Config type for Claude.ai proxy servers
+export const McpClaudeAIProxyServerConfigSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('claudeai-proxy'),
+    url: z.string(),
+    id: z.string(),
+  }),
+)
+
+export const McpServerConfigSchema = lazySchema(() =>
+  z.union([
+    McpStdioServerConfigSchema(),
+    McpSSEServerConfigSchema(),
+    McpSSEIDEServerConfigSchema(),
+    McpWebSocketIDEServerConfigSchema(),
+    McpHTTPServerConfigSchema(),
+    McpWebSocketServerConfigSchema(),
+    McpSdkServerConfigSchema(),
+    McpClaudeAIProxyServerConfigSchema(),
+  ]),
+)
+
+export type McpStdioServerConfig = z.infer<
+  ReturnType<typeof McpStdioServerConfigSchema>
+>
+export type McpSSEServerConfig = z.infer<
+  ReturnType<typeof McpSSEServerConfigSchema>
+>
+export type McpSSEIDEServerConfig = z.infer<
+  ReturnType<typeof McpSSEIDEServerConfigSchema>
+>
+export type McpWebSocketIDEServerConfig = z.infer<
+  ReturnType<typeof McpWebSocketIDEServerConfigSchema>
+>
+export type McpHTTPServerConfig = z.infer<
+  ReturnType<typeof McpHTTPServerConfigSchema>
+>
+export type McpWebSocketServerConfig = z.infer<
+  ReturnType<typeof McpWebSocketServerConfigSchema>
+>
+export type McpSdkServerConfig = z.infer<
+  ReturnType<typeof McpSdkServerConfigSchema>
+>
+export type McpClaudeAIProxyServerConfig = z.infer<
+  ReturnType<typeof McpClaudeAIProxyServerConfigSchema>
+>
+export type McpServerConfig = z.infer<ReturnType<typeof McpServerConfigSchema>>
+
+export type ScopedMcpServerConfig = McpServerConfig & {
+  scope: ConfigScope
+  // For plugin-provided servers: the providing plugin's LoadedPlugin.source
+  // (e.g. 'slack@anthropic'). Stashed at config-build time so the channel
+  // gate doesn't have to race AppState.plugins.enabled hydration.
   pluginSource?: string
-  [key: string]: unknown
 }
 
-// TODO: the canonical MCP ConfigScope is a zod-inferred enum; this literal union
-// mirrors it until the MCP config schema ports.
-export type ConfigScope = 'local' | 'user' | 'project' | 'dynamic' | 'enterprise' | 'claudeai' | 'managed'
+export const McpJsonConfigSchema = lazySchema(() =>
+  z.object({
+    mcpServers: z.record(z.string(), McpServerConfigSchema()),
+  }),
+)
 
-// TODO: the connected-MCP-server shape lands with the MCP subsystem; only the
-// IDE-selection hook reads .client, so this is a permissive placeholder.
-export interface ConnectedMCPServer { name?: string; client?: any; [key: string]: unknown }
+export type McpJsonConfig = z.infer<ReturnType<typeof McpJsonConfigSchema>>
+
+// Server connection types
+export type ConnectedMCPServer = {
+  client: Client
+  name: string
+  type: 'connected'
+  capabilities: ServerCapabilities
+  serverInfo?: {
+    name: string
+    version: string
+  }
+  instructions?: string
+  config: ScopedMcpServerConfig
+  cleanup: () => Promise<void>
+}
+
+export type FailedMCPServer = {
+  name: string
+  type: 'failed'
+  config: ScopedMcpServerConfig
+  error?: string
+}
+
+export type NeedsAuthMCPServer = {
+  name: string
+  type: 'needs-auth'
+  config: ScopedMcpServerConfig
+}
+
+export type PendingMCPServer = {
+  name: string
+  type: 'pending'
+  config: ScopedMcpServerConfig
+  reconnectAttempt?: number
+  maxReconnectAttempts?: number
+}
+
+export type DisabledMCPServer = {
+  name: string
+  type: 'disabled'
+  config: ScopedMcpServerConfig
+}
+
+export type MCPServerConnection =
+  | ConnectedMCPServer
+  | FailedMCPServer
+  | NeedsAuthMCPServer
+  | PendingMCPServer
+  | DisabledMCPServer
+
+// Resource types
+export type ServerResource = Resource & { server: string }
+
+// MCP CLI State types
+export interface SerializedTool {
+  name: string
+  description: string
+  inputJSONSchema?: {
+    [x: string]: unknown
+    type: 'object'
+    properties?: {
+      [x: string]: unknown
+    }
+  }
+  isMcp?: boolean
+  originalToolName?: string // Original unnormalized tool name from MCP server
+}
+
+export interface SerializedClient {
+  name: string
+  type: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled'
+  capabilities?: ServerCapabilities
+}
+
+export interface MCPCliState {
+  clients: SerializedClient[]
+  configs: Record<string, ScopedMcpServerConfig>
+  tools: SerializedTool[]
+  resources: Record<string, ServerResource[]>
+  normalizedNames?: Record<string, string> // Maps normalized names to original names
+}

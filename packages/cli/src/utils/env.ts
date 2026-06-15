@@ -1,8 +1,19 @@
 import memoize from 'lodash-es/memoize.js'
 import { existsSync, readFileSync } from 'fs'
-import { isEnvTruthy } from './envUtils.js'
+import { homedir } from 'os'
+import { join } from 'path'
+import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
 
 type Platform = 'win32' | 'darwin' | 'linux'
+
+// Config and data paths
+export const getGlobalClaudeFile = memoize((): string => {
+  // Legacy fallback for backwards compatibility
+  if (existsSync(join(getClaudeConfigHomeDir(), '.config.json'))) {
+    return join(getClaudeConfigHomeDir(), '.config.json')
+  }
+  return join(process.env.CLAUDE_CONFIG_DIR || homedir(), '.claude.json')
+})
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {
   try {
