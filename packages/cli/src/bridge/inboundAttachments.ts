@@ -1,4 +1,4 @@
-// TODO: inbound remote-control attachment resolution — owned by the claude.ai
+// TODO: inbound remote-control attachment resolution — owned by the knightcode.raghavseth.in
 // remote-control feature. Local-only build has no inbound attachments to resolve.
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 

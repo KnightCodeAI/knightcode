@@ -144,14 +144,14 @@ const PROGRESS_THRESHOLD_MS = 2000 // Show background hint after 2 seconds
 // Check if background tasks are disabled at module load time
 const isBackgroundTasksDisabled =
   // eslint-disable-next-line custom-rules/no-process-env-top-level -- Intentional: schema must be defined at module load
-  isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS)
+  isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_BACKGROUND_TASKS)
 
 // Auto-background agent tasks after this many ms (0 = disabled)
 // Enabled by env var OR GrowthBook gate (checked lazily since GB may not be ready at module load)
 function getAutoBackgroundMs(): number {
   if (
-    isEnvTruthy(process.env.CLAUDE_AUTO_BACKGROUND_TASKS) ||
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_auto_background_agents', false)
+    isEnvTruthy(process.env.KNIGHTCODE_AUTO_BACKGROUND_TASKS) ||
+    getFeatureValue_CACHED_MAY_BE_STALE('knightcode_auto_background_agents', false)
   ) {
     return 120_000
   }
@@ -365,7 +365,7 @@ export const AgentTool = buildTool({
     // Use inline env check instead of coordinatorModule to avoid circular
     // dependency issues during test module loading.
     const isCoordinator = feature('COORDINATOR_MODE')
-      ? isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE)
+      ? isEnvTruthy(process.env.KNIGHTCODE_CODE_COORDINATOR_MODE)
       : false
     return await getPrompt(filteredAgents, isCoordinator, allowedAgentTypes)
   },
@@ -642,7 +642,7 @@ export const AgentTool = buildTool({
       permissionMode,
     )
 
-    logEvent('tengu_agent_tool_selected', {
+    logEvent('knightcode_agent_tool_selected', {
       agent_type:
         selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       model:
@@ -694,7 +694,7 @@ export const AgentTool = buildTool({
         toolUseId: toolUseContext.toolUseId,
       })
 
-      logEvent('tengu_agent_tool_remote_launched', {
+      logEvent('knightcode_agent_tool_remote_launched', {
         agent_type:
           selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
@@ -764,7 +764,7 @@ export const AgentTool = buildTool({
 
         // Log agent memory loaded event for subagents
         if (selectedAgent.memory) {
-          logEvent('tengu_agent_memory_loaded', {
+          logEvent('knightcode_agent_memory_loaded', {
             ...(process.env.USER_TYPE === 'ant' && {
               agent_type:
                 selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -804,7 +804,7 @@ export const AgentTool = buildTool({
     // Use inline env check instead of coordinatorModule to avoid circular
     // dependency issues during test module loading.
     const isCoordinator = feature('COORDINATOR_MODE')
-      ? isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE)
+      ? isEnvTruthy(process.env.KNIGHTCODE_CODE_COORDINATOR_MODE)
       : false
 
     // Fork subagent experiment: force ALL spawns async for a unified
@@ -1340,7 +1340,7 @@ export const AgentTool = buildTool({
                         // Transition status BEFORE worktree cleanup so
                         // TaskOutput unblocks even if git hangs (gh-20236).
                         killAsyncAgent(backgroundedTaskId, rootSetAppState)
-                        logEvent('tengu_agent_tool_terminated', {
+                        logEvent('knightcode_agent_tool_terminated', {
                           agent_type:
                             metadata.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                           model:
@@ -1512,7 +1512,7 @@ export const AgentTool = buildTool({
             // AbortError should be re-thrown for proper interruption handling
             if (error instanceof AbortError) {
               wasAborted = true
-              logEvent('tengu_agent_tool_terminated', {
+              logEvent('knightcode_agent_tool_terminated', {
                 agent_type:
                   metadata.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                 model:
@@ -1598,7 +1598,7 @@ export const AgentTool = buildTool({
             _ => _.type !== 'system' && _.type !== 'progress',
           )
           if (lastMessage && isSyntheticMessage(lastMessage)) {
-            logEvent('tengu_agent_tool_terminated', {
+            logEvent('knightcode_agent_tool_terminated', {
               agent_type:
                 metadata.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               model:

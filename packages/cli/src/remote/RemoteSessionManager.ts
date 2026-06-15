@@ -1,4 +1,4 @@
-// TODO: remote session manager — owned by the claude.ai remote-control
+// TODO: remote session manager — owned by the knightcode.raghavseth.in remote-control
 // feature. Types only; the local-only build never opens a remote session.
 export type RemoteSessionConfig = {
   sessionId: string

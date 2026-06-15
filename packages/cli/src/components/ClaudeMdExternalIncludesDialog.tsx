@@ -19,13 +19,13 @@ export function ClaudeMdExternalIncludesDialog({
 }: Props): React.ReactNode {
   React.useEffect(() => {
     // Log when dialog is shown
-    logEvent('tengu_claude_md_includes_dialog_shown', {})
+    logEvent('knightcode_claude_md_includes_dialog_shown', {})
   }, [])
 
   const handleSelection = useCallback(
     (value: 'yes' | 'no') => {
       if (value === 'no') {
-        logEvent('tengu_claude_md_external_includes_dialog_declined', {})
+        logEvent('knightcode_claude_md_external_includes_dialog_declined', {})
         // Mark that we've shown the dialog but it was declined
         saveCurrentProjectConfig(current => ({
           ...current,
@@ -33,7 +33,7 @@ export function ClaudeMdExternalIncludesDialog({
           hasClaudeMdExternalIncludesWarningShown: true,
         }))
       } else {
-        logEvent('tengu_claude_md_external_includes_dialog_accepted', {})
+        logEvent('knightcode_claude_md_external_includes_dialog_accepted', {})
         saveCurrentProjectConfig(current => ({
           ...current,
           hasClaudeMdExternalIncludesApproved: true,
@@ -52,14 +52,14 @@ export function ClaudeMdExternalIncludesDialog({
 
   return (
     <Dialog
-      title="Allow external CLAUDE.md file imports?"
+      title="Allow external KNIGHTCODE.md file imports?"
       color="warning"
       onCancel={handleEscape}
       hideBorder={!isStandaloneDialog}
       hideInputGuide={!isStandaloneDialog}
     >
       <Text>
-        This project&apos;s CLAUDE.md imports files outside the current working
+        This project&apos;s KNIGHTCODE.md imports files outside the current working
         directory. Never allow this for third-party repositories.
       </Text>
 
@@ -76,9 +76,9 @@ export function ClaudeMdExternalIncludesDialog({
       )}
 
       <Text dimColor>
-        Important: Only use Claude Code with files you trust. Accessing
+        Important: Only use KnightCode with files you trust. Accessing
         untrusted files may pose security risks{' '}
-        <Link url="https://code.claude.com/docs/en/security" />{' '}
+        <Link url="https://knightcode.raghavseth.in/docs/en/security" />{' '}
       </Text>
 
       <Select

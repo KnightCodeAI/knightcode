@@ -1,5 +1,5 @@
 // TODO: remote `claude assistant` session-history loader — owned by the
-// claude.ai remote-control feature. The local-only build never runs a viewer
+// knightcode.raghavseth.in remote-control feature. The local-only build never runs a viewer
 // session (the consuming hook is gated on config.viewerOnly), so history
 // fetching is inert: auth context is empty and pages resolve to null.
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'

@@ -2,8 +2,8 @@
 
 import { normalizeNameForMCP } from '../../services/mcp/normalization.js'
 
-export const CLAUDE_IN_CHROME_MCP_SERVER_NAME = 'claude-in-chrome'
+export const KNIGHTCODE_IN_CHROME_MCP_SERVER_NAME = 'claude-in-chrome'
 
 export function isClaudeInChromeMCPServer(name: string): boolean {
-  return normalizeNameForMCP(name) === CLAUDE_IN_CHROME_MCP_SERVER_NAME
+  return normalizeNameForMCP(name) === KNIGHTCODE_IN_CHROME_MCP_SERVER_NAME
 }

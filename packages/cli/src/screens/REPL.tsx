@@ -532,8 +532,8 @@ import { AUTO_MODE_DESCRIPTION } from 'src/components/AutoModeOptInDialog.js'
 import { useLspInitializationNotification } from 'src/hooks/notifs/useLspInitializationNotification.js'
 import { useLspPluginRecommendation } from 'src/hooks/useLspPluginRecommendation.js'
 import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js'
-import { useClaudeCodeHintRecommendation } from 'src/hooks/useClaudeCodeHintRecommendation.js'
-import { PluginHintMenu } from 'src/components/ClaudeCodeHint/PluginHintMenu.js'
+import { useKnightCodeHintRecommendation } from 'src/hooks/useKnightCodeHintRecommendation.js'
+import { PluginHintMenu } from 'src/components/KnightCodeHint/PluginHintMenu.js'
 import {
   DesktopUpsellStartup,
   shouldShowDesktopUpsellStartup,
@@ -613,7 +613,7 @@ const EMPTY_MCP_CLIENTS: MCPServerConnection[] = []
 // function identity each render, which would break composedOnScroll's memo.
 const HISTORY_STUB = { maybeLoadOlder: (_: ScrollBoxHandle) => {} }
 // Window after a user-initiated scroll during which type-into-empty does NOT
-// repin to bottom. Josh Rosen's workflow: Claude emits long output → scroll
+// repin to bottom. Josh Rosen's workflow: KnightCode emits long output → scroll
 // up to read the start → start typing → before this fix, snapped to bottom.
 // https://anthropic.slack.com/archives/C07VBSHV7EV/p1773545449871739
 const RECENT_SCROLL_REPIN_WINDOW_MS = 3000
@@ -647,7 +647,7 @@ function TranscriptModeFooter({
    *  right-aligned count instead of scroll hints. */
   searchBadge?: { current: number; count: number }
   /** Hide the ctrl+e hint. The [ dump path shares this footer with
-   *  env-opted dump (CLAUDE_CODE_NO_FLICKER=0 / DISABLE_VIRTUAL_SCROLL=1),
+   *  env-opted dump (KNIGHTCODE_CODE_NO_FLICKER=0 / DISABLE_VIRTUAL_SCROLL=1),
    *  but ctrl+e only works in the env case — useGlobalKeybindings.tsx
    *  gates on !virtualScrollActive which is env-derived, doesn't know
    *  [ happened. */
@@ -960,23 +960,23 @@ export function REPL({
   // Env-var gates hoisted to mount-time — isEnvTruthy does toLowerCase+trim+
   // includes, and these were on the render path (hot during PageUp spam).
   const titleDisabled = useMemo(
-    () => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE),
+    () => isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_TERMINAL_TITLE),
     [],
   )
   const moreRightEnabled = useMemo(
     () =>
       ('external' as string) === 'ant' &&
-      isEnvTruthy(process.env.CLAUDE_MORERIGHT),
+      isEnvTruthy(process.env.KNIGHTCODE_MORERIGHT),
     [],
   )
   const disableVirtualScroll = useMemo(
-    () => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL),
+    () => isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_VIRTUAL_SCROLL),
     [],
   )
   const disableMessageActions = feature('MESSAGE_ACTIONS')
     ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
       useMemo(
-        () => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_MESSAGE_ACTIONS),
+        () => isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_MESSAGE_ACTIONS),
         [],
       )
     : false
@@ -1060,7 +1060,7 @@ export function REPL({
 
   // Note: standaloneAgentContext is initialized in main.tsx (via initialState) or
   // ResumeConversation.tsx (via setAppState before rendering REPL) to avoid
-  // useEffect-based state initialization on mount (per CLAUDE.md guidelines)
+  // useEffect-based state initialization on mount (per KNIGHTCODE.md guidelines)
 
   // Local state for commands (hot-reloadable when skill files change)
   const [localCommands, setLocalCommands] = useState(initialCommands)
@@ -1107,7 +1107,7 @@ export function REPL({
   const [screen, setScreen] = useState<Screen>('prompt')
   const [showAllInTranscript, setShowAllInTranscript] = useState(false)
   // [ forces the dump-to-scrollback path inside transcript mode. Separate
-  // from CLAUDE_CODE_NO_FLICKER=0 (which is process-lifetime) — this is
+  // from KNIGHTCODE_CODE_NO_FLICKER=0 (which is process-lifetime) — this is
   // ephemeral, reset on transcript exit. Diagnostic escape hatch so
   // terminal/tmux native cmd-F can search the full flat render.
   const [dumpMode, setDumpMode] = useState(false)
@@ -1179,7 +1179,7 @@ export function REPL({
   const {
     recommendation: hintRecommendation,
     handleResponse: handleHintResponse,
-  } = useClaudeCodeHintRecommendation()
+  } = useKnightCodeHintRecommendation()
 
   // Memoize the combined initial tools array to prevent reference changes
   const combinedInitialTools = useMemo(() => {
@@ -1204,7 +1204,7 @@ export function REPL({
     void performStartupChecks(setAppState)
   }, [setAppState, isRemoteSession])
 
-  // Allow Claude in Chrome MCP to send prompts through MCP notifications
+  // Allow KnightCode in Chrome MCP to send prompts through MCP notifications
   // and sync permission mode changes to the Chrome extension
   usePromptsFromClaudeInChrome(
     isRemoteSession ? EMPTY_MCP_CLIENTS : mcpClients,
@@ -1491,7 +1491,7 @@ export function REPL({
   } | null>(null)
 
   // Track local JSX commands separately so tools can't overwrite them.
-  // This enables "immediate" commands (like /btw) to persist while Claude is processing.
+  // This enables "immediate" commands (like /btw) to persist while KnightCode is processing.
   const localJSXCommandRef = useRef<{
     jsx: React.ReactNode | null
     shouldHidePromptInput: boolean
@@ -1597,7 +1597,7 @@ export function REPL({
   const haikuTitleAttemptedRef = useRef((initialMessages?.length ?? 0) > 0)
   const agentTitle = mainThreadAgentDefinition?.agentType
   const terminalTitle =
-    sessionTitle ?? agentTitle ?? haikuTitle ?? 'Claude Code'
+    sessionTitle ?? agentTitle ?? haikuTitle ?? 'KnightCode'
   const isWaitingForApproval =
     toolUseConfirmQueue.length > 0 ||
     promptQueue.length > 0 ||
@@ -1616,7 +1616,7 @@ export function REPL({
   // here because onQueryImpl reads them (background session description,
   // haiku title extraction gate).
 
-  // Prevent macOS from sleeping while Claude is working
+  // Prevent macOS from sleeping while KnightCode is working
   useEffect(() => {
     if (isLoading && !isWaitingForApproval && !isShowingLocalJSXCommand) {
       startPreventSleep()
@@ -1657,7 +1657,7 @@ export function REPL({
   // the title spinner in terminals that render both. When the flag is
   // on, the user-facing config setting controls whether it's active.
   const tabStatusGateEnabled = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_terminal_sidebar',
+    'knightcode_terminal_sidebar',
     false,
   )
   const showStatusInTerminalTab =
@@ -2588,14 +2588,14 @@ export function REPL({
         // Clear input to ensure no residual state
         setInputValue('')
 
-        logEvent('tengu_session_resumed', {
+        logEvent('knightcode_session_resumed', {
           entrypoint:
             entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           success: true,
           resume_duration_ms: Math.round(performance.now() - resumeStart),
         })
       } catch (error) {
-        logEvent('tengu_session_resumed', {
+        logEvent('knightcode_session_resumed', {
           entrypoint:
             entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           success: false,
@@ -2617,18 +2617,18 @@ export function REPL({
   const bashTools = useRef(new Set<string>())
   const bashToolsProcessedIdx = useRef(0)
   // Session-scoped skill discovery tracking (feeds was_discovered on
-  // tengu_skill_tool_invocation). Must persist across getToolUseContext
+  // knightcode_skill_tool_invocation). Must persist across getToolUseContext
   // rebuilds within a session: turn-0 discovery writes via processUserInput
   // before onQuery builds its own context, and discovery on turn N must
   // still attribute a SkillTool call on turn N+k. Cleared in clearConversation.
   const discoveredSkillNamesRef = useRef(new Set<string>())
-  // Session-level dedup for nested_memory CLAUDE.md attachments.
-  // readFileState is a 100-entry LRU; once it evicts a CLAUDE.md path,
+  // Session-level dedup for nested_memory KNIGHTCODE.md attachments.
+  // readFileState is a 100-entry LRU; once it evicts a KNIGHTCODE.md path,
   // the next discovery cycle re-injects it. Cleared in clearConversation.
   const loadedNestedMemoryPathsRef = useRef(new Set<string>())
 
   // Helper to restore read file state from messages (used for resume flows)
-  // This allows Claude to edit files that were read in previous sessions
+  // This allows KnightCode to edit files that were read in previous sessions
   const restoreReadFileState = useCallback(
     (messages: MessageType[], cwd: string) => {
       const extracted = extractReadFilesFromMessages(
@@ -2943,7 +2943,7 @@ export function REPL({
   useEffect(() => {
     const totalCost = getTotalCost()
     if (totalCost >= 5 /* $5 */ && !showCostDialog && !haveShownCostDialog) {
-      logEvent('tengu_cost_threshold_reached', {})
+      logEvent('knightcode_cost_threshold_reached', {})
       // Mark as shown even if the dialog won't render (no console billing
       // access). Otherwise this effect re-fires on every message change for
       // the rest of the session — 200k+ spurious events observed.
@@ -3018,7 +3018,7 @@ export function REPL({
 
         // When the REPL bridge is connected, also forward the sandbox
         // permission request as a can_use_tool control_request so the
-        // remote user (e.g. on claude.ai) can approve it too.
+        // remote user (e.g. on knightcode.raghavseth.in) can approve it too.
         if (feature('BRIDGE_MODE')) {
           const bridgeCallbacks = store.getState().replBridgePermissionCallbacks
           if (bridgeCallbacks) {
@@ -3597,16 +3597,16 @@ export function REPL({
         }
       }
 
-      // Mark onboarding as complete when any user message is sent to Claude
+      // Mark onboarding as complete when any user message is sent to KnightCode
       void maybeMarkProjectOnboardingComplete()
 
       // Extract a session title from the first real user message. One-shot
-      // via ref (was tengu_birch_mist experiment: first-message-only to save
+      // via ref (was knightcode_birch_mist experiment: first-message-only to save
       // Haiku calls). The ref replaces the old `messages.length <= 1` check,
       // which was broken by SessionStart hook messages (prepended via
       // useDeferredHookMessages) and attachment messages (appended by
       // processTextPrompt) — both pushed length past 1 on turn one, so the
-      // title silently fell through to the "Claude Code" default.
+      // title silently fell through to the "KnightCode" default.
       if (
         !titleDisabled &&
         !sessionTitle &&
@@ -3899,7 +3899,7 @@ export function REPL({
       // Returns null if already running — no separate check-then-set.
       const thisGeneration = queryGuard.tryStart()
       if (thisGeneration === null) {
-        logEvent('tengu_concurrent_onquery_detected', {})
+        logEvent('knightcode_concurrent_onquery_detected', {})
 
         // Extract and enqueue user message text, skipping meta messages
         // (e.g. expanded skill content, tick prompts) that should not be
@@ -3911,7 +3911,7 @@ export function REPL({
           .forEach((msg, i) => {
             enqueue({ value: msg, mode: 'prompt' })
             if (i === 0) {
-              logEvent('tengu_concurrent_onquery_enqueued', {})
+              logEvent('knightcode_concurrent_onquery_enqueued', {})
             }
           })
         return
@@ -4282,7 +4282,7 @@ export function REPL({
       }
 
       // Handle immediate commands - these bypass the queue and execute right away
-      // even while Claude is processing. Commands opt-in via `immediate: true`.
+      // even while KnightCode is processing. Commands opt-in via `immediate: true`.
       // Commands triggered via keybindings are always treated as immediate.
       if (!speculationAccept && input.trim().startsWith('/')) {
         // Expand [Pasted text #N] refs so immediate commands (e.g. /btw) receive
@@ -4308,7 +4308,7 @@ export function REPL({
               getCommandName(cmd) === commandName),
         )
         if (matchingCommand?.name === 'clear' && idleHintShownRef.current) {
-          logEvent('tengu_idle_return_action', {
+          logEvent('knightcode_idle_return_action', {
             action:
               'hint_converted' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
             variant:
@@ -4349,8 +4349,8 @@ export function REPL({
             (sum, r) => sum + (pastedContents[r.id]?.content.length ?? 0),
             0,
           )
-          logEvent('tengu_paste_text', { pastedTextCount, pastedTextBytes })
-          logEvent('tengu_immediate_command_executed', {
+          logEvent('knightcode_paste_text', { pastedTextCount, pastedTextBytes })
+          logEvent('knightcode_immediate_command_executed', {
             commandName:
               matchingCommand.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
             fromKeybinding: options?.fromKeybinding ?? false,
@@ -4459,18 +4459,18 @@ export function REPL({
       }
 
       // Idle-return: prompt returning users to start fresh when the
-      // conversation is large and the cache is cold. tengu_willow_mode
+      // conversation is large and the cache is cold. knightcode_willow_mode
       // controls treatment: "dialog" (blocking), "hint" (notification), "off".
       {
         const willowMode = getFeatureValue_CACHED_MAY_BE_STALE(
-          'tengu_willow_mode',
+          'knightcode_willow_mode',
           'off',
         )
         const idleThresholdMin = Number(
-          process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75,
+          process.env.KNIGHTCODE_CODE_IDLE_THRESHOLD_MINUTES ?? 75,
         )
         const tokenThreshold = Number(
-          process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000,
+          process.env.KNIGHTCODE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000,
         )
         if (
           willowMode !== 'off' &&
@@ -4930,7 +4930,7 @@ export function REPL({
       const messageIndex = prev.lastIndexOf(message)
       if (messageIndex === -1) return
 
-      logEvent('tengu_conversation_rewind', {
+      logEvent('knightcode_conversation_rewind', {
         preRewindMessageCount: prev.length,
         postRewindMessageCount: messageIndex,
         messagesRemoved: prev.length - messageIndex,
@@ -5086,7 +5086,7 @@ export function REPL({
     // bottom right corner of the screen if the API key is invalid.
     void reverify()
 
-    // Populate readFileState with CLAUDE.md files at startup
+    // Populate readFileState with KNIGHTCODE.md files at startup
     const memoryFiles = await getMemoryFiles()
     if (memoryFiles.length > 0) {
       const fileList = memoryFiles
@@ -5096,10 +5096,10 @@ export function REPL({
         )
         .join('\n')
       logForDebugging(
-        `Loaded ${memoryFiles.length} CLAUDE.md/rules files:\n${fileList}`,
+        `Loaded ${memoryFiles.length} KNIGHTCODE.md/rules files:\n${fileList}`,
       )
     } else {
-      logForDebugging('No CLAUDE.md/rules files found')
+      logForDebugging('No KNIGHTCODE.md/rules files found')
     }
     for (const file of memoryFiles) {
       // When the injected content doesn't match disk (stripped HTML comments,
@@ -5130,7 +5130,7 @@ export function REPL({
   useLogMessages(messages, messages.length === initialMessages?.length)
 
   // REPL Bridge: replicate user/assistant messages to the bridge session
-  // for remote access via claude.ai. No-op in external builds or when not enabled.
+  // for remote access via knightcode.raghavseth.in. No-op in external builds or when not enabled.
   const { sendBridgeResult } = useReplBridge(
     messages,
     setMessages,
@@ -5232,9 +5232,9 @@ export function REPL({
     }
   }, [submitCount])
 
-  // Show notification when Claude is done responding and user is idle
+  // Show notification when KnightCode is done responding and user is idle
   useEffect(() => {
-    // Don't set up notification if Claude is busy
+    // Don't set up notification if KnightCode is busy
     if (isLoading) return
 
     // Only enable notifications after the first new interaction in this session
@@ -5256,7 +5256,7 @@ export function REPL({
         const lastUserInteraction = getLastInteractionTime()
 
         if (lastUserInteraction > lastQueryCompletionTime) {
-          // User has interacted since Claude finished - they're not idle, don't notify
+          // User has interacted since KnightCode finished - they're not idle, don't notify
           return
         }
 
@@ -5271,7 +5271,7 @@ export function REPL({
         ) {
           void sendNotification(
             {
-              message: 'Claude is waiting for your input',
+              message: 'KnightCode is waiting for your input',
               notificationType: 'idle_prompt',
             },
             terminal,
@@ -5296,19 +5296,19 @@ export function REPL({
     if (lastQueryCompletionTime === 0) return
     if (isLoading) return
     const willowMode: string = getFeatureValue_CACHED_MAY_BE_STALE(
-      'tengu_willow_mode',
+      'knightcode_willow_mode',
       'off',
     )
     if (willowMode !== 'hint' && willowMode !== 'hint_v2') return
     if (getGlobalConfig().idleReturnDismissed) return
 
     const tokenThreshold = Number(
-      process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000,
+      process.env.KNIGHTCODE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000,
     )
     if (getTotalInputTokens() < tokenThreshold) return
 
     const idleThresholdMs =
-      Number(process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75) * 60_000
+      Number(process.env.KNIGHTCODE_CODE_IDLE_THRESHOLD_MINUTES ?? 75) * 60_000
     const elapsed = Date.now() - lastQueryCompletionTime
     const remaining = idleThresholdMs - elapsed
 
@@ -5340,7 +5340,7 @@ export function REPL({
           timeoutMs: 0x7fffffff,
         })
         hintRef.current = mode
-        logEvent('tengu_idle_return_action', {
+        logEvent('knightcode_idle_return_action', {
           action:
             'hint_shown' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           variant:
@@ -5424,7 +5424,7 @@ export function REPL({
     // Assistant mode bypasses the isLoading gate (the proactive tick →
     // Sleep → tick loop would otherwise starve the scheduler).
     // kairosEnabled is set once in initialState (main.tsx) and never mutated — no
-    // subscription needed. The tengu_kairos_cron runtime gate is checked inside
+    // subscription needed. The knightcode_kairos_cron runtime gate is checked inside
     // useScheduledTasks's effect (not here) since wrapping a hook call in a dynamic
     // condition would break rules-of-hooks.
     const assistantMode = store.getState().kairosEnabled
@@ -5491,7 +5491,7 @@ export function REPL({
     const handleSuspend = () => {
       // Print suspension instructions
       process.stdout.write(
-        `\nClaude Code has been suspended. Run \`fg\` to bring Claude Code back.\nNote: ctrl + z now suspends Claude Code, ctrl + _ undoes input.\n`,
+        `\nKnightCode has been suspended. Run \`fg\` to bring KnightCode back.\nNote: ctrl + z now suspends KnightCode, ctrl + _ undoes input.\n`,
       )
     }
 
@@ -6216,7 +6216,7 @@ export function REPL({
                   it would sit at the last visible transcript row right above
                   the ▔ divider, showing "❯ /config" as redundant clutter
                   (the modal IS the /config UI). Outside modals it stays so
-                  the user sees their input echoed while Claude processes. */}
+                  the user sees their input echoed while KnightCode processes. */}
               {!disabled && placeholderText && !centeredModal && (
                 <UserTextMessage
                   param={{ text: placeholderText, type: 'text' }}
@@ -6528,7 +6528,7 @@ export function REPL({
                         ...current,
                         hasAcknowledgedCostThreshold: true,
                       }))
-                      logEvent('tengu_cost_threshold_acknowledged', {})
+                      logEvent('knightcode_cost_threshold_acknowledged', {})
                     }}
                   />
                 )}
@@ -6539,7 +6539,7 @@ export function REPL({
                     onDone={async action => {
                       const pending = idleReturnPending
                       setIdleReturnPending(null)
-                      logEvent('tengu_idle_return_action', {
+                      logEvent('knightcode_idle_return_action', {
                         action:
                           action as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                         idleMinutes: Math.round(pending.idleMinutes),
@@ -6785,7 +6785,7 @@ export function REPL({
                           inputValue={inputValue}
                           setInputValue={setInputValue}
                           onRequestFeedback={handleSurveyRequestFeedback}
-                          message="How well did Claude use its memory? (optional)"
+                          message="How well did KnightCode use its memory? (optional)"
                         />
                       ) : (
                         <FeedbackSurvey

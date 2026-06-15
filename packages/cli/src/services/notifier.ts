@@ -26,7 +26,7 @@ export async function sendNotification(
 
   const methodUsed = await sendToChannel(channel, notif, terminal)
 
-  logEvent('tengu_notification_method_used', {
+  logEvent('knightcode_notification_method_used', {
     configured_channel:
       channel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     method_used:
@@ -35,7 +35,7 @@ export async function sendNotification(
   })
 }
 
-const DEFAULT_TITLE = 'Claude Code'
+const DEFAULT_TITLE = 'KnightCode'
 
 async function sendToChannel(
   channel: string,

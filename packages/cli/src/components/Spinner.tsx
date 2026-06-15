@@ -90,7 +90,7 @@ export function SpinnerWithVerb(props: Props): React.ReactNode {
   const briefEnvEnabled =
     feature('KAIROS') || feature('KAIROS_BRIEF')
       ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-        useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_BRIEF), [])
+        useMemo(() => isEnvTruthy(process.env.KNIGHTCODE_CODE_BRIEF), [])
       : false
 
   // Runtime gate mirrors isBriefEnabled() but inlined — importing from
@@ -101,7 +101,7 @@ export function SpinnerWithVerb(props: Props): React.ReactNode {
     (getKairosActive() ||
       (getUserMsgOptIn() &&
         (briefEnvEnabled ||
-          getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false)))) &&
+          getFeatureValue_CACHED_MAY_BE_STALE('knightcode_kairos_brief', false)))) &&
     isBriefOnly &&
     !viewingAgentTaskId
   ) {
@@ -351,7 +351,7 @@ function SpinnerWithVerbInner({
     : showClearTip && !nextTask
       ? 'Use /clear to start fresh when switching topics and free up context'
       : showBtwTip && !nextTask
-        ? "Use /btw to ask a quick side question without interrupting Claude's current work"
+        ? "Use /btw to ask a quick side question without interrupting KnightCode's current work"
         : spinnerTip
 
   // Budget text (ant-only) — shown above the tip line

@@ -137,20 +137,20 @@ export function MCPRemoteServerMenu({
     try {
       const result = await reconnectMcpServer(server.name)
       const success = result.client.type === 'connected'
-      logEvent('tengu_claudeai_mcp_auth_completed', { success })
+      logEvent('knightcode_claudeai_mcp_auth_completed', { success })
       if (success) {
         onComplete?.(`Authentication successful. Connected to ${server.name}.`)
       } else if (result.client.type === 'needs-auth') {
         onComplete?.(
-          'Authentication successful, but server still requires authentication. You may need to manually restart Claude Code.',
+          'Authentication successful, but server still requires authentication. You may need to manually restart KnightCode.',
         )
       } else {
         onComplete?.(
-          'Authentication successful, but server reconnection failed. You may need to manually restart Claude Code for the changes to take effect.',
+          'Authentication successful, but server reconnection failed. You may need to manually restart KnightCode for the changes to take effect.',
         )
       }
     } catch (err) {
-      logEvent('tengu_claudeai_mcp_auth_completed', { success: false })
+      logEvent('knightcode_claudeai_mcp_auth_completed', { success: false })
       onComplete?.(handleReconnectError(err, server.name))
     } finally {
       setIsReconnecting(false)
@@ -189,7 +189,7 @@ export function MCPRemoteServerMenu({
       }
     })
 
-    logEvent('tengu_claudeai_mcp_clear_auth_completed', {})
+    logEvent('knightcode_claudeai_mcp_clear_auth_completed', {})
     onComplete?.(`Disconnected from ${server.name}.`)
     setIsClaudeAIClearingAuth(false)
     setClaudeAIClearAuthUrl(null)
@@ -211,7 +211,7 @@ export function MCPRemoteServerMenu({
     },
   )
 
-  // Escape to cancel Claude AI authentication
+  // Escape to cancel KnightCode AI authentication
   useKeybinding(
     'confirm:no',
     () => {
@@ -224,7 +224,7 @@ export function MCPRemoteServerMenu({
     },
   )
 
-  // Escape to cancel Claude AI clear auth
+  // Escape to cancel KnightCode AI clear auth
   useKeybinding(
     'confirm:no',
     () => {
@@ -298,7 +298,7 @@ export function MCPRemoteServerMenu({
         ? 'mcpsrv' + server.config.id.slice(5)
         : server.config.id
       const productSurface = encodeURIComponent(
-        process.env.CLAUDE_CODE_ENTRYPOINT || 'cli',
+        process.env.KNIGHTCODE_CODE_ENTRYPOINT || 'cli',
       )
       authUrl = `${claudeAiBaseUrl}/api/organizations/${orgUuid}/mcp/start-auth/${serverId}?product_surface=${productSurface}`
     } else {
@@ -308,13 +308,13 @@ export function MCPRemoteServerMenu({
 
     setClaudeAIAuthUrl(authUrl)
     setIsClaudeAIAuthenticating(true)
-    logEvent('tengu_claudeai_mcp_auth_started', {})
+    logEvent('knightcode_claudeai_mcp_auth_started', {})
     await openBrowser(authUrl)
   }, [server.config])
 
   const handleClaudeAIClearAuth = React.useCallback(() => {
     setIsClaudeAIClearingAuth(true)
-    logEvent('tengu_claudeai_mcp_clear_auth_started', {})
+    logEvent('knightcode_claudeai_mcp_clear_auth_started', {})
   }, [])
 
   const handleToggleEnabled = React.useCallback(async () => {
@@ -324,7 +324,7 @@ export function MCPRemoteServerMenu({
       await toggleMcpServer(server.name)
 
       if (server.config.type === 'claudeai-proxy') {
-        logEvent('tengu_claudeai_mcp_toggle', {
+        logEvent('knightcode_claudeai_mcp_toggle', {
           new_state: (wasEnabled
             ? 'disabled'
             : 'enabled') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -379,7 +379,7 @@ export function MCPRemoteServerMenu({
           },
         )
 
-        logEvent('tengu_mcp_auth_config_authenticate', {
+        logEvent('knightcode_mcp_auth_config_authenticate', {
           wasAuthenticated: server.isAuthenticated,
         })
 
@@ -392,13 +392,13 @@ export function MCPRemoteServerMenu({
           onComplete?.(message)
         } else if (result.client.type === 'needs-auth') {
           onComplete?.(
-            'Authentication successful, but server still requires authentication. You may need to manually restart Claude Code.',
+            'Authentication successful, but server still requires authentication. You may need to manually restart KnightCode.',
           )
         } else {
           // result.client.type === 'failed'
           logMCPDebug(server.name, `Reconnection failed after authentication`)
           onComplete?.(
-            'Authentication successful, but server reconnection failed. You may need to manually restart Claude Code for the changes to take effect.',
+            'Authentication successful, but server reconnection failed. You may need to manually restart KnightCode for the changes to take effect.',
           )
         }
       }
@@ -431,7 +431,7 @@ export function MCPRemoteServerMenu({
     if (server.config) {
       // First revoke the authentication tokens and clear all auth state
       await revokeServerTokens(server.name, server.config)
-      logEvent('tengu_mcp_auth_config_clear', {})
+      logEvent('knightcode_mcp_auth_config_clear', {})
 
       // Disconnect the client and clear the cache
       await clearServerCache(server.name, {
@@ -624,7 +624,7 @@ export function MCPRemoteServerMenu({
         ) : (
           <>
             <Text>
-              This will open claude.ai in the browser. Find the MCP server in
+              This will open knightcode.raghavseth.in in the browser. Find the MCP server in
               the list and click &quot;Disconnect&quot;.
             </Text>
             <Box marginLeft={3} flexDirection="column">
@@ -838,7 +838,7 @@ export function MCPRemoteServerMenu({
                     try {
                       const result = await reconnectMcpServer(server.name)
                       if (server.config.type === 'claudeai-proxy') {
-                        logEvent('tengu_claudeai_mcp_reconnect', {
+                        logEvent('knightcode_claudeai_mcp_reconnect', {
                           success: result.client.type === 'connected',
                         })
                       }
@@ -849,7 +849,7 @@ export function MCPRemoteServerMenu({
                       onComplete?.(message)
                     } catch (err) {
                       if (server.config.type === 'claudeai-proxy') {
-                        logEvent('tengu_claudeai_mcp_reconnect', {
+                        logEvent('knightcode_claudeai_mcp_reconnect', {
                           success: false,
                         })
                       }

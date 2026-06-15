@@ -1,6 +1,6 @@
 import type { Command } from '../../commands.js'
 
-// TODO: Claude-in-Chrome integration. Hidden, disabled inert stub so the registry still lists the name.
+// TODO: KnightCode-in-Chrome integration. Hidden, disabled inert stub so the registry still lists the name.
 const command: Command = {
   type: 'local',
   name: 'chrome',

@@ -340,7 +340,7 @@ export function ExitPlanModePermissionRequest({
   const handleKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrl && e.key === 'g') {
       e.preventDefault()
-      logEvent('tengu_plan_external_editor_used', {})
+      logEvent('knightcode_plan_external_editor_used', {})
 
       void (async () => {
         if (isV2 && planFilePath) {
@@ -395,7 +395,7 @@ export function ExitPlanModePermissionRequest({
     // Dialog dismisses immediately so the query loop unblocks; the teleport
     // runs detached and its launch message lands via the command queue.
     if (value === 'ultraplan') {
-      logEvent('tengu_plan_exit', {
+      logEvent('knightcode_plan_exit', {
         planLengthChars: currentPlan.length,
         outcome:
           'ultraplan' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -485,7 +485,7 @@ export function ExitPlanModePermissionRequest({
       }
 
       // Log plan exit event
-      logEvent('tengu_plan_exit', {
+      logEvent('knightcode_plan_exit', {
         planLengthChars: currentPlan.length,
         outcome:
           value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -497,7 +497,7 @@ export function ExitPlanModePermissionRequest({
 
       // Set initial message - REPL will handle context clear and fresh query
       // Add verification instruction if the feature is enabled
-      // Dead code elimination: CLAUDE_CODE_VERIFY_PLAN='false' in external builds, so === 'true' check allows Bun to eliminate the string
+      // Dead code elimination: KNIGHTCODE_CODE_VERIFY_PLAN='false' in external builds, so === 'true' check allows Bun to eliminate the string
       const verificationInstruction =
         undefined === 'true'
           ? `\n\nIMPORTANT: When you have finished implementing the plan, you MUST call the "VerifyPlanExecution" tool directly (NOT the ${AGENT_TOOL_NAME} tool or an agent) to trigger background verification.`
@@ -547,7 +547,7 @@ export function ExitPlanModePermissionRequest({
       value === 'yes-resume-auto-mode' &&
       isAutoModeGateEnabled()
     ) {
-      logEvent('tengu_plan_exit', {
+      logEvent('knightcode_plan_exit', {
         planLengthChars: currentPlan.length,
         outcome:
           value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -589,7 +589,7 @@ export function ExitPlanModePermissionRequest({
     }
     const keepContextMode = keepContextModes[value]
     if (keepContextMode) {
-      logEvent('tengu_plan_exit', {
+      logEvent('knightcode_plan_exit', {
         planLengthChars: currentPlan.length,
         outcome:
           value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -616,7 +616,7 @@ export function ExitPlanModePermissionRequest({
     }
     const standardMode = standardModes[value]
     if (standardMode) {
-      logEvent('tengu_plan_exit', {
+      logEvent('knightcode_plan_exit', {
         planLengthChars: currentPlan.length,
         outcome:
           value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -642,7 +642,7 @@ export function ExitPlanModePermissionRequest({
         return
       }
 
-      logEvent('tengu_plan_exit', {
+      logEvent('knightcode_plan_exit', {
         planLengthChars: currentPlan.length,
         outcome:
           'no' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -692,7 +692,7 @@ export function ExitPlanModePermissionRequest({
   handleResponseRef.current = handleResponse
   const handleCancelRef = useRef<() => void>(undefined)
   handleCancelRef.current = () => {
-    logEvent('tengu_plan_exit', {
+    logEvent('knightcode_plan_exit', {
       planLengthChars: currentPlan.length,
       outcome:
         'no' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -764,7 +764,7 @@ export function ExitPlanModePermissionRequest({
   if (isEmpty) {
     function handleEmptyPlanResponse(value: 'yes' | 'no'): void {
       if (value === 'yes') {
-        logEvent('tengu_plan_exit', {
+        logEvent('knightcode_plan_exit', {
           planLengthChars: 0,
           outcome:
             'yes-default' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -793,7 +793,7 @@ export function ExitPlanModePermissionRequest({
           { type: 'setMode', mode: 'default', destination: 'session' },
         ])
       } else {
-        logEvent('tengu_plan_exit', {
+        logEvent('knightcode_plan_exit', {
           planLengthChars: 0,
           outcome:
             'no' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -813,7 +813,7 @@ export function ExitPlanModePermissionRequest({
         workerBadge={workerBadge}
       >
         <Box flexDirection="column" paddingX={1} marginTop={1}>
-          <Text>Claude wants to exit plan mode</Text>
+          <Text>KnightCode wants to exit plan mode</Text>
           <Box marginTop={1}>
             <Select
               options={[
@@ -822,7 +822,7 @@ export function ExitPlanModePermissionRequest({
               ]}
               onChange={handleEmptyPlanResponse}
               onCancel={() => {
-                logEvent('tengu_plan_exit', {
+                logEvent('knightcode_plan_exit', {
                   planLengthChars: 0,
                   outcome:
                     'no' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -855,7 +855,7 @@ export function ExitPlanModePermissionRequest({
       >
         <Box flexDirection="column" marginTop={1}>
           <Box paddingX={1} flexDirection="column">
-            <Text>Here is Claude&apos;s plan:</Text>
+            <Text>Here is KnightCode&apos;s plan:</Text>
           </Box>
           <Box
             borderColor="subtle"
@@ -890,7 +890,7 @@ export function ExitPlanModePermissionRequest({
             {!useStickyFooter && (
               <>
                 <Text dimColor>
-                  Claude has written up a plan and is ready to execute. Would
+                  KnightCode has written up a plan and is ready to execute. Would
                   you like to proceed?
                 </Text>
                 <Box marginTop={1}>
@@ -994,7 +994,7 @@ export function buildPlanApprovalOptions({
 
   if (showUltraplan) {
     options.push({
-      label: 'No, refine with Ultraplan on Claude Code on the web',
+      label: 'No, refine with Ultraplan on KnightCode on the web',
       value: 'ultraplan',
     })
   }
@@ -1003,7 +1003,7 @@ export function buildPlanApprovalOptions({
     type: 'input',
     label: 'No, keep planning',
     value: 'no',
-    placeholder: 'Tell Claude what to change',
+    placeholder: 'Tell KnightCode what to change',
     description: 'shift+tab to approve with this feedback',
     onChange: onFeedbackChange,
   })

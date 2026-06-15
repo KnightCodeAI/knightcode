@@ -19,7 +19,7 @@ export function IssueFlagBanner(): React.ReactNode {
       <Text>
         <Text dimColor>[ANT-ONLY] </Text>
         <Text color="warning" bold>
-          Something off with Claude?
+          Something off with KnightCode?
         </Text>
         <Text dimColor> /issue to report it</Text>
       </Text>

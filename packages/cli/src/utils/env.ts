@@ -12,7 +12,7 @@ export const getGlobalClaudeFile = memoize((): string => {
   if (existsSync(join(getKnightcodeConfigHomeDir(), '.config.json'))) {
     return join(getKnightcodeConfigHomeDir(), '.config.json')
   }
-  return join(process.env.CLAUDE_CONFIG_DIR || homedir(), '.claude.json')
+  return join(process.env.KNIGHTCODE_CONFIG_DIR || homedir(), '.claude.json')
 })
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {
@@ -299,10 +299,10 @@ export const env = {
 
 // TODO: analytics is out of scope; the host-platform label it would tag events
 // with is reported here for any non-analytics caller that wants the raw value.
-// Honors the CLAUDE_CODE_HOST_PLATFORM override (used when the platform must be
+// Honors the KNIGHTCODE_CODE_HOST_PLATFORM override (used when the platform must be
 // reported as something other than the live process platform).
 export function getHostPlatformForAnalytics(): Platform {
-  const override = process.env.CLAUDE_CODE_HOST_PLATFORM
+  const override = process.env.KNIGHTCODE_CODE_HOST_PLATFORM
   if (override === 'win32' || override === 'darwin' || override === 'linux') {
     return override
   }

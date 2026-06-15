@@ -86,7 +86,7 @@ export function AssistantTextMessage({
   }
 
   switch (text) {
-    // Local JSX commands don't need a response, but we still want Claude to see them
+    // Local JSX commands don't need a response, but we still want KnightCode to see them
     // Tool results render their own interrupt messages
     case NO_RESPONSE_REQUESTED:
       return null
@@ -108,7 +108,7 @@ export function AssistantTextMessage({
         <MessageResponse height={1}>
           <Text color="error">
             Credit balance too low &middot; Add funds:
-            https://platform.claude.com/settings/billing
+            https://knightcode.raghavseth.in/settings/billing
           </Text>
         </MessageResponse>
       )

@@ -277,11 +277,11 @@ export function MCPListPanel({
             )
           })}
 
-          {/* Claude.ai servers section */}
+          {/* KnightCode.ai servers section */}
           {claudeAiServers.length > 0 && (
             <Box flexDirection="column" marginBottom={1}>
               <Box paddingLeft={2}>
-                <Text bold>claude.ai</Text>
+                <Text bold>knightcode.raghavseth.in</Text>
               </Box>
               {claudeAiServers.map(server => renderServerItem(server))}
             </Box>
@@ -332,8 +332,8 @@ export function MCPListPanel({
               </Text>
             )}
             <Text dimColor>
-              <Link url="https://code.claude.com/docs/en/mcp">
-                https://code.claude.com/docs/en/mcp
+              <Link url="https://knightcode.raghavseth.in/docs/en/mcp">
+                https://knightcode.raghavseth.in/docs/en/mcp
               </Link>{' '}
               for help
             </Text>

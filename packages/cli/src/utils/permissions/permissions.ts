@@ -205,7 +205,7 @@ export function createPermissionRequestMessage(
   }
 
   // Default message without listing allowed commands
-  const message = `Claude requested permissions to use ${toolName}, but you haven't granted it yet.`
+  const message = `KnightCode requested permissions to use ${toolName}, but you haven't granted it yet.`
 
   return message
 }
@@ -245,7 +245,7 @@ function toolMatchesRule(
   }
 
   // MCP tools are matched by their fully qualified mcp__server__tool name. In
-  // skip-prefix mode (CLAUDE_AGENT_SDK_MCP_NO_PREFIX), MCP tools have unprefixed
+  // skip-prefix mode (KNIGHTCODE_AGENT_SDK_MCP_NO_PREFIX), MCP tools have unprefixed
   // display names (e.g., "Write") that collide with builtin names; rules targeting
   // builtins should not match their MCP replacements.
   const nameForRuleMatch = getToolNameForPermissionCheck(tool)
@@ -623,7 +623,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
             logForDebugging(
               `Skipping auto mode classifier for ${tool.name}: would be allowed in acceptEdits mode`,
             )
-            logEvent('tengu_auto_mode_decision', {
+            logEvent('knightcode_auto_mode_decision', {
               decision:
                 'allowed' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               toolName: sanitizeToolNameForAnalytics(tool.name),
@@ -663,7 +663,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
         logForDebugging(
           `Skipping auto mode classifier for ${tool.name}: tool is on the safe allowlist`,
         )
-        logEvent('tengu_auto_mode_decision', {
+        logEvent('knightcode_auto_mode_decision', {
           decision:
             'allowed' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           toolName: sanitizeToolNameForAnalytics(tool.name),
@@ -730,7 +730,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
               classifierResult.usage,
             )
           : undefined
-      logEvent('tengu_auto_mode_decision', {
+      logEvent('knightcode_auto_mode_decision', {
         decision:
           yoloDecision as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         toolName: sanitizeToolNameForAnalytics(tool.name),
@@ -841,11 +841,11 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
           }
         }
         // When classifier is unavailable (API error), behavior depends on
-        // the tengu_iron_gate_closed gate.
+        // the knightcode_iron_gate_closed gate.
         if (classifierResult.unavailable) {
           if (
             getFeatureValue_CACHED_WITH_REFRESH(
-              'tengu_iron_gate_closed',
+              'knightcode_iron_gate_closed',
               true,
               CLASSIFIER_FAIL_CLOSED_REFRESH_MS,
             )
@@ -1006,7 +1006,7 @@ function handleDenialLimitExceeded(
     ? `${totalCount} actions were blocked this session. Please review the transcript before continuing.`
     : `${consecutiveCount} consecutive actions were blocked. Please review the transcript before continuing.`
 
-  logEvent('tengu_auto_mode_denial_limit_exceeded', {
+  logEvent('knightcode_auto_mode_denial_limit_exceeded', {
     limit: (hitTotalLimit
       ? 'total'
       : 'consecutive') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

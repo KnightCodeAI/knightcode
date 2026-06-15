@@ -137,7 +137,7 @@ export function Notifications({
   // Show external editor hint as notification when input is wrapped
   useEffect(() => {
     if (shouldShowExternalEditorHint && editor) {
-      logEvent('tengu_external_editor_hint_shown', {})
+      logEvent('knightcode_external_editor_hint_shown', {})
       addNotification({
         key: 'external-editor-hint',
         jsx: (
@@ -314,7 +314,7 @@ function NotificationContent({
       {(apiKeyStatus === 'invalid' || apiKeyStatus === 'missing') && (
         <Box>
           <Text color="error" wrap="truncate">
-            {isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)
+            {isEnvTruthy(process.env.KNIGHTCODE_CODE_REMOTE)
               ? 'Authentication error · Try again'
               : 'No API key · set OPENROUTER_API_KEY'}
           </Text>

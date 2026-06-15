@@ -53,7 +53,7 @@ export function GlobalKeybindingHandlers({
 
   // Toggle todo list (ctrl+t) - cycles through views
   const handleToggleTodos = useCallback(() => {
-    logEvent('tengu_toggle_todos', {
+    logEvent('knightcode_toggle_todos', {
       is_expanded: expandedView === 'tasks',
     })
     setAppState(prev => {
@@ -116,7 +116,7 @@ export function GlobalKeybindingHandlers({
     }
 
     const isEnteringTranscript = screen !== 'transcript'
-    logEvent('tengu_toggle_transcript', {
+    logEvent('knightcode_toggle_transcript', {
       is_entering: isEnteringTranscript,
       show_all: showAllInTranscript,
       message_count: messageCount,
@@ -143,7 +143,7 @@ export function GlobalKeybindingHandlers({
 
   // Toggle showing all messages in transcript mode (ctrl+e)
   const handleToggleShowAll = useCallback(() => {
-    logEvent('tengu_transcript_toggle_show_all', {
+    logEvent('knightcode_transcript_toggle_show_all', {
       is_expanding: !showAllInTranscript,
       message_count: messageCount,
     })
@@ -152,7 +152,7 @@ export function GlobalKeybindingHandlers({
 
   // Exit transcript mode (ctrl+c or escape)
   const handleExitTranscript = useCallback(() => {
-    logEvent('tengu_transcript_exit', {
+    logEvent('knightcode_transcript_exit', {
       show_all: showAllInTranscript,
       message_count: messageCount,
     })
@@ -181,7 +181,7 @@ export function GlobalKeybindingHandlers({
       /* eslint-enable @typescript-eslint/no-require-imports */
       if (!isBriefEnabled() && !isBriefOnly) return
       const next = !isBriefOnly
-      logEvent('tengu_brief_mode_toggled', {
+      logEvent('knightcode_brief_mode_toggled', {
         enabled: next,
         gated: false,
         source:
@@ -226,7 +226,7 @@ export function GlobalKeybindingHandlers({
   // toggle() blocks in spawnSync until the user detaches from tmux.
   const handleToggleTerminal = useCallback(() => {
     if (feature('TERMINAL_PANEL')) {
-      if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_terminal_panel', false)) {
+      if (!getFeatureValue_CACHED_MAY_BE_STALE('knightcode_terminal_panel', false)) {
         return
       }
       getTerminalPanel().toggle()

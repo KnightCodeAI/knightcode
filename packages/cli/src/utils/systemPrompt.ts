@@ -61,7 +61,7 @@ export function buildEffectiveSystemPrompt({
   // dependency issues during test module loading.
   if (
     feature('COORDINATOR_MODE') &&
-    isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE) &&
+    isEnvTruthy(process.env.KNIGHTCODE_CODE_COORDINATOR_MODE) &&
     !mainThreadAgentDefinition
   ) {
     // Lazy require to avoid circular dependency at module load time
@@ -84,7 +84,7 @@ export function buildEffectiveSystemPrompt({
 
   // Log agent memory loaded event for main loop agents
   if (mainThreadAgentDefinition?.memory) {
-    logEvent('tengu_agent_memory_loaded', {
+    logEvent('knightcode_agent_memory_loaded', {
       ...(process.env.USER_TYPE === 'ant' && {
         agent_type:
           mainThreadAgentDefinition.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

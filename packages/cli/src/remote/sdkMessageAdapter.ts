@@ -1,4 +1,4 @@
-// TODO: remote SDK-message adapter — owned by the claude.ai remote-control
+// TODO: remote SDK-message adapter — owned by the knightcode.raghavseth.in remote-control
 // feature. Local-only build never converts remote events; calls are inert.
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'
 import type { Message, StreamEvent } from '../types/message.js'

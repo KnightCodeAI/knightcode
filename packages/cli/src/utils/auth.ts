@@ -103,7 +103,7 @@ export function hasAnthropicApiKeyAuth(): boolean {
 /**
  * Whether the session uses first-party OAuth auth. A BYOK build always talks to
  * OpenRouter with an API key and never holds an OAuth session, so this is
- * always false — callers that gate Anthropic-account verification skip it, and
+ * always false — callers that gate KnightCode-account verification skip it, and
  * missing-key handling is surfaced separately at launch.
  */
 export function isAnthropicAuthEnabled(): boolean {

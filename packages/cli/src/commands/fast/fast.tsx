@@ -79,7 +79,7 @@ export function FastModePicker({
   function handleConfirm(): void {
     if (isUnavailable) return
     applyFastMode(enableFastMode, setAppState)
-    logEvent('tengu_fast_mode_toggled', {
+    logEvent('knightcode_fast_mode_toggled', {
       enabled: enableFastMode,
       source:
         'picker' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -186,8 +186,8 @@ export function FastModePicker({
       )}
       <Text dimColor>
         Learn more:{' '}
-        <Link url="https://code.claude.com/docs/en/fast-mode">
-          https://code.claude.com/docs/en/fast-mode
+        <Link url="https://knightcode.raghavseth.in/docs/en/fast-mode">
+          https://knightcode.raghavseth.in/docs/en/fast-mode
         </Link>
       </Text>
     </Dialog>
@@ -206,7 +206,7 @@ async function handleFastModeShortcut(
 
   const { mainLoopModel } = getAppState()
   applyFastMode(enable, setAppState)
-  logEvent('tengu_fast_mode_toggled', {
+  logEvent('knightcode_fast_mode_toggled', {
     enabled: enable,
     source:
       'shortcut' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -250,7 +250,7 @@ export async function call(
   }
 
   const unavailableReason = getFastModeUnavailableReason()
-  logEvent('tengu_fast_mode_picker_shown', {
+  logEvent('knightcode_fast_mode_picker_shown', {
     unavailable_reason: (unavailableReason ??
       '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   })

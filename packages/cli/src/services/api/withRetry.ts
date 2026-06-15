@@ -49,7 +49,7 @@ const FLOOR_OUTPUT_TOKENS = 3000
 const MAX_UPSTREAM_ERROR_RETRIES = 3
 export const BASE_DELAY_MS = 500
 
-// CLAUDE_CODE_UNATTENDED_RETRY: for unattended sessions (internal-only). Retries 429/5xx
+// KNIGHTCODE_CODE_UNATTENDED_RETRY: for unattended sessions (internal-only). Retries 429/5xx
 // indefinitely with higher backoff and periodic keep-alive yields so the host
 // environment does not mark the session idle mid-wait.
 // TODO: the keep-alive via SystemAPIErrorMessage yields is a stopgap
@@ -60,7 +60,7 @@ const HEARTBEAT_INTERVAL_MS = 30_000
 
 function isPersistentRetryEnabled(): boolean {
   return feature('UNATTENDED_RETRY')
-    ? isEnvTruthy(process.env.CLAUDE_CODE_UNATTENDED_RETRY)
+    ? isEnvTruthy(process.env.KNIGHTCODE_CODE_UNATTENDED_RETRY)
     : false
 }
 
@@ -181,7 +181,7 @@ export async function* withRetry<T>(
       if (
         isStaleConnection &&
         getFeatureValue_CACHED_MAY_BE_STALE(
-          'tengu_disable_keepalive_on_econnreset',
+          'knightcode_disable_keepalive_on_econnreset',
           false,
         )
       ) {
@@ -273,7 +273,7 @@ export async function* withRetry<T>(
         consecutiveUpstreamErrors++
         if (consecutiveUpstreamErrors >= MAX_UPSTREAM_ERROR_RETRIES) {
           if (options.fallbackModel) {
-            logEvent('tengu_api_opus_fallback_triggered', {
+            logEvent('knightcode_api_opus_fallback_triggered', {
               original_model:
                 options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               fallback_model:
@@ -343,7 +343,7 @@ export async function* withRetry<T>(
           )
           retryContext.maxTokensOverride = adjustedMaxTokens
 
-          logEvent('tengu_max_tokens_context_overflow_adjustment', {
+          logEvent('knightcode_max_tokens_context_overflow_adjustment', {
             inputTokens,
             contextLimit,
             adjustedMaxTokens,
@@ -393,7 +393,7 @@ export async function* withRetry<T>(
       // In persistent mode the for-loop `attempt` is clamped at maxRetries+1;
       // use persistentAttempt for telemetry/yields so they show the true count.
       const reportedAttempt = persistent ? persistentAttempt : attempt
-      logEvent('tengu_api_retry', {
+      logEvent('knightcode_api_retry', {
         attempt: reportedAttempt,
         delayMs: delayMs,
         error: (error as APIError)
@@ -404,7 +404,7 @@ export async function* withRetry<T>(
 
       if (persistent) {
         if (delayMs > 60_000) {
-          logEvent('tengu_api_persistent_retry_wait', {
+          logEvent('knightcode_api_persistent_retry_wait', {
             status: (error as APIError).status,
             delayMs,
             attempt: reportedAttempt,
@@ -570,7 +570,7 @@ function shouldRetry(error: APIError): boolean {
   // credentials. Bypass x-should-retry:false — the server assumes we'd retry
   // the same bad key, but our key is fine.
   if (
-    isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) &&
+    isEnvTruthy(process.env.KNIGHTCODE_CODE_REMOTE) &&
     (error.status === 401 || error.status === 403)
   ) {
     return true
@@ -646,8 +646,8 @@ function shouldRetry(error: APIError): boolean {
 }
 
 export function getDefaultMaxRetries(): number {
-  if (process.env.CLAUDE_CODE_MAX_RETRIES) {
-    return parseInt(process.env.CLAUDE_CODE_MAX_RETRIES, 10)
+  if (process.env.KNIGHTCODE_CODE_MAX_RETRIES) {
+    return parseInt(process.env.KNIGHTCODE_CODE_MAX_RETRIES, 10)
   }
   return DEFAULT_MAX_RETRIES
 }

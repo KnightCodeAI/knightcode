@@ -149,7 +149,7 @@ export function Doctor({ onDone }: Props): React.ReactNode {
         upperLimit: TASK_MAX_OUTPUT_UPPER_LIMIT,
       },
       {
-        name: 'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
+        name: 'KNIGHTCODE_CODE_MAX_OUTPUT_TOKENS',
         // Check for values against the latest supported model
         ...getModelMaxOutputTokens('claude-opus-4-6'),
       },
@@ -229,7 +229,7 @@ export function Doctor({ onDone }: Props): React.ReactNode {
   }, [toolPermissionContext, tools, agentDefinitions])
 
   const handleDismiss = useCallback(() => {
-    onDone('Claude Code diagnostics dismissed', { display: 'system' })
+    onDone('KnightCode diagnostics dismissed', { display: 'system' })
   }, [onDone])
 
   // Handle dismiss via keybindings (Enter, Escape, or Ctrl+C)

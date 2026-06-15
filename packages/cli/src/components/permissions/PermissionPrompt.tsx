@@ -35,8 +35,8 @@ export type PermissionPromptProps<T extends string> = {
 }
 
 const DEFAULT_PLACEHOLDERS: Record<FeedbackType, string> = {
-  accept: 'tell Claude what to do next',
-  reject: 'tell Claude what to do differently',
+  accept: 'tell KnightCode what to do next',
+  reject: 'tell KnightCode what to do differently',
 }
 
 /**
@@ -131,20 +131,20 @@ export function PermissionPrompt<T extends string>({
       if (type === 'accept') {
         if (acceptInputMode) {
           setAcceptInputMode(false)
-          logEvent('tengu_accept_feedback_mode_collapsed', analyticsProps)
+          logEvent('knightcode_accept_feedback_mode_collapsed', analyticsProps)
         } else {
           setAcceptInputMode(true)
           setAcceptFeedbackModeEntered(true)
-          logEvent('tengu_accept_feedback_mode_entered', analyticsProps)
+          logEvent('knightcode_accept_feedback_mode_entered', analyticsProps)
         }
       } else if (type === 'reject') {
         if (rejectInputMode) {
           setRejectInputMode(false)
-          logEvent('tengu_reject_feedback_mode_collapsed', analyticsProps)
+          logEvent('knightcode_reject_feedback_mode_collapsed', analyticsProps)
         } else {
           setRejectInputMode(true)
           setRejectFeedbackModeEntered(true)
-          logEvent('tengu_reject_feedback_mode_entered', analyticsProps)
+          logEvent('knightcode_reject_feedback_mode_entered', analyticsProps)
         }
       }
     },
@@ -184,9 +184,9 @@ export function PermissionPrompt<T extends string>({
         }
 
         if (option.feedbackConfig.type === 'accept') {
-          logEvent('tengu_accept_submitted', analyticsProps)
+          logEvent('knightcode_accept_submitted', analyticsProps)
         } else if (option.feedbackConfig.type === 'reject') {
-          logEvent('tengu_reject_submitted', analyticsProps)
+          logEvent('knightcode_reject_submitted', analyticsProps)
         }
       }
 
@@ -218,7 +218,7 @@ export function PermissionPrompt<T extends string>({
 
   // Handle cancel (Esc)
   const handleCancel = useCallback(() => {
-    logEvent('tengu_permission_request_escape', {})
+    logEvent('knightcode_permission_request_escape', {})
     // Increment escape count for attribution tracking
     setAppState(prev => ({
       ...prev,

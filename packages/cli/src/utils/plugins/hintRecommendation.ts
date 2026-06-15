@@ -1,4 +1,4 @@
-import type { ClaudeCodeHint } from '../claudeCodeHints.js'
+import type { KnightCodeHint } from '../knightCodeHints.js'
 
 // The plugins subsystem (marketplace, installed-plugin manager, plugin policy)
 // is out of scope. Shell tools scan command output for <claude-code-hint /> tags
@@ -6,4 +6,4 @@ import type { ClaudeCodeHint } from '../claudeCodeHints.js'
 // stripped from model-facing output before this call, so behavior is
 // correct — only the recommendation dialog is deferred.
 
-export function maybeRecordPluginHint(_hint: ClaudeCodeHint): void {}
+export function maybeRecordPluginHint(_hint: KnightCodeHint): void {}

@@ -68,7 +68,7 @@ const MAX_CONSECUTIVE_INIT_FAILURES = 3
  * Watches AppState.replBridgeEnabled — when toggled off (via /config or footer),
  * the bridge is torn down. When toggled back on, it re-initializes.
  *
- * Inbound messages from claude.ai are injected into the REPL via queuedCommands.
+ * Inbound messages from knightcode.raghavseth.in are injected into the REPL via queuedCommands.
  */
 export function useReplBridge(
   messages: Message[],
@@ -191,7 +191,7 @@ export function useReplBridge(
             '../bridge/envLessBridgeConfig.js'
           )
 
-          // Assistant mode: perpetual bridge session — claude.ai shows one
+          // Assistant mode: perpetual bridge session — knightcode.raghavseth.in shows one
           // continuous conversation across CLI restarts instead of a new
           // session per invocation. initBridgeCore reads bridge-pointer.json
           // (the same crash-recovery file #20735 added) and reuses its
@@ -206,7 +206,7 @@ export function useReplBridge(
             perpetual = isAssistantMode()
           }
 
-          // When a user message arrives from claude.ai, inject it into the REPL.
+          // When a user message arrives from knightcode.raghavseth.in, inject it into the REPL.
           // Preserves the original UUID so that when the message is forwarded
           // back to CCR, it matches the original — avoiding duplicate messages.
           //
@@ -349,7 +349,7 @@ export function useReplBridge(
                 // so the connected-state transition isn't blocked.
                 if (
                   getFeatureValue_CACHED_MAY_BE_STALE(
-                    'tengu_bridge_system_init',
+                    'knightcode_bridge_system_init',
                     false,
                   )
                 ) {
@@ -366,7 +366,7 @@ export function useReplBridge(
                           // raw filesystem paths (username, project structure).
                           // CCR v2 persists SDK messages to Spanner — users who
                           // tap "Connect from phone" may not expect these on
-                          // Anthropic's servers. QueryEngine (SDK) still emits
+                          // KnightCode's servers. QueryEngine (SDK) still emits
                           // full lists — SDK consumers expect full telemetry.
                           tools: [],
                           mcpClients: [],
@@ -491,7 +491,7 @@ export function useReplBridge(
               // setAutoModeActive(true) side-effect BEFORE the throw) rather
               // than a graceful reject. Letting that throw escape would:
               // (1) leave STATE.autoModeActive=true while the mode is
-              //     unchanged (3-way invariant violation per src/CLAUDE.md)
+              //     unchanged (3-way invariant violation per src/KNIGHTCODE.md)
               // (2) fail to send a control_response → server kills WS
               // These mirror print.ts handleSetPermissionMode; the bridge
               // can't import the checks directly (bootstrap-isolation), so
@@ -726,7 +726,7 @@ export function useReplBridge(
               createBridgeStatusMessage(
                 url,
                 upgradeNudge
-                  ? 'Please upgrade to the latest version of the Claude mobile app to see your Remote Control sessions.'
+                  ? 'Please upgrade to the latest version of the KnightCode mobile app to see your Remote Control sessions.'
                   : undefined,
               ),
             ])

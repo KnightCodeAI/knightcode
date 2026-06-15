@@ -96,7 +96,7 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
 
   React.useEffect(() => {
     const isHomeDir = homedir() === getCwd()
-    logEvent('tengu_trust_dialog_shown', {
+    logEvent('knightcode_trust_dialog_shown', {
       isHomeDir,
       hasMcpServers,
       hasHooks,
@@ -126,7 +126,7 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
 
     const isHomeDir = homedir() === getCwd()
 
-    logEvent('tengu_trust_dialog_accept', {
+    logEvent('knightcode_trust_dialog_accept', {
       isHomeDir,
       hasMcpServers,
       hasHooks,
@@ -199,11 +199,11 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
           first.
         </Text>
         <Text>
-          Claude Code{"'"}ll be able to read, edit, and execute files here.
+          KnightCode{"'"}ll be able to read, edit, and execute files here.
         </Text>
 
         <Text dimColor>
-          <Link url="https://code.claude.com/docs/en/security">
+          <Link url="https://knightcode.raghavseth.in/docs/en/security">
             Security guide
           </Link>
         </Text>

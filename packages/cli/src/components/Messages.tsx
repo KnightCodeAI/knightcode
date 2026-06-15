@@ -542,7 +542,7 @@ const MessagesImpl = ({
   const isTranscriptMode = screen === 'transcript'
   // Hoisted to mount-time — this component re-renders on every scroll.
   const disableVirtualScroll = useMemo(
-    () => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL),
+    () => isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_VIRTUAL_SCROLL),
     [],
   )
   // Virtual scroll replaces the transcript cap: everything is scrollable and

@@ -1,4 +1,4 @@
-// TODO: remote-control bridge initialization — owned by the claude.ai
+// TODO: remote-control bridge initialization — owned by the knightcode.raghavseth.in
 // remote-control feature. Local-only build never starts a bridge session.
 import type { BridgeState, ReplBridgeHandle } from './replBridge.js'
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'

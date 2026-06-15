@@ -297,7 +297,7 @@ export function Config({
   )
 
   const isFileCheckpointingAvailable = !isEnvTruthy(
-    process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING,
+    process.env.KNIGHTCODE_CODE_DISABLE_FILE_CHECKPOINTING,
   )
 
   const memoryFiles = React.use(getMemoryFiles(true))
@@ -308,7 +308,7 @@ export function Config({
 
   function onChangeMainModelConfig(value: string | null): void {
     const previousModel = mainLoopModel
-    logEvent('tengu_config_model_changed', {
+    logEvent('knightcode_config_model_changed', {
       from_model:
         previousModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       to_model:
@@ -363,7 +363,7 @@ export function Config({
       onChange(autoCompactEnabled: boolean) {
         saveGlobalConfig(current => ({ ...current, autoCompactEnabled }))
         setGlobalConfig({ ...getGlobalConfig(), autoCompactEnabled })
-        logEvent('tengu_auto_compact_setting_changed', {
+        logEvent('knightcode_auto_compact_setting_changed', {
           enabled: autoCompactEnabled,
         })
       },
@@ -382,7 +382,7 @@ export function Config({
           ...prev,
           spinnerTipsEnabled,
         }))
-        logEvent('tengu_tips_setting_changed', {
+        logEvent('knightcode_tips_setting_changed', {
           enabled: spinnerTipsEnabled,
         })
       },
@@ -405,7 +405,7 @@ export function Config({
           ...prev,
           settings: { ...prev.settings, prefersReducedMotion },
         }))
-        logEvent('tengu_reduce_motion_setting_changed', {
+        logEvent('knightcode_reduce_motion_setting_changed', {
           enabled: prefersReducedMotion,
         })
       },
@@ -420,7 +420,7 @@ export function Config({
         updateSettingsForSource('userSettings', {
           alwaysThinkingEnabled: enabled ? undefined : false,
         })
-        logEvent('tengu_thinking_toggled', { enabled })
+        logEvent('knightcode_thinking_toggled', { enabled })
       },
     },
     // Fast mode toggle (ant-only, eliminated from external builds)
@@ -459,7 +459,7 @@ export function Config({
           },
         ]
       : []),
-    ...(getFeatureValue_CACHED_MAY_BE_STALE('tengu_chomp_inflection', false)
+    ...(getFeatureValue_CACHED_MAY_BE_STALE('knightcode_chomp_inflection', false)
       ? [
           {
             id: 'promptSuggestionEnabled',
@@ -498,7 +498,7 @@ export function Config({
                 ...getGlobalConfig(),
                 speculationEnabled: enabled,
               })
-              logEvent('tengu_speculation_setting_changed', {
+              logEvent('knightcode_speculation_setting_changed', {
                 enabled,
               })
             },
@@ -521,7 +521,7 @@ export function Config({
                 ...getGlobalConfig(),
                 fileCheckpointingEnabled: enabled,
               })
-              logEvent('tengu_file_history_snapshots_setting_changed', {
+              logEvent('knightcode_file_history_snapshots_setting_changed', {
                 enabled: enabled,
               })
             },
@@ -546,12 +546,12 @@ export function Config({
           terminalProgressBarEnabled,
         }))
         setGlobalConfig({ ...getGlobalConfig(), terminalProgressBarEnabled })
-        logEvent('tengu_terminal_progress_bar_setting_changed', {
+        logEvent('knightcode_terminal_progress_bar_setting_changed', {
           enabled: terminalProgressBarEnabled,
         })
       },
     },
-    ...(getFeatureValue_CACHED_MAY_BE_STALE('tengu_terminal_sidebar', false)
+    ...(getFeatureValue_CACHED_MAY_BE_STALE('knightcode_terminal_sidebar', false)
       ? [
           {
             id: 'showStatusInTerminalTab',
@@ -567,7 +567,7 @@ export function Config({
                 ...getGlobalConfig(),
                 showStatusInTerminalTab,
               })
-              logEvent('tengu_terminal_tab_status_setting_changed', {
+              logEvent('knightcode_terminal_tab_status_setting_changed', {
                 enabled: showStatusInTerminalTab,
               })
             },
@@ -582,7 +582,7 @@ export function Config({
       onChange(showTurnDuration: boolean) {
         saveGlobalConfig(current => ({ ...current, showTurnDuration }))
         setGlobalConfig({ ...getGlobalConfig(), showTurnDuration })
-        logEvent('tengu_show_turn_duration_setting_changed', {
+        logEvent('knightcode_show_turn_duration_setting_changed', {
           enabled: showTurnDuration,
         })
       },
@@ -641,7 +641,7 @@ export function Config({
         }))
         // Track changes
         setChanges(prev => ({ ...prev, defaultPermissionMode: mode }))
-        logEvent('tengu_config_changed', {
+        logEvent('knightcode_config_changed', {
           setting:
             'defaultPermissionMode' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           value:
@@ -690,7 +690,7 @@ export function Config({
       onChange(respectGitignore: boolean) {
         saveGlobalConfig(current => ({ ...current, respectGitignore }))
         setGlobalConfig({ ...getGlobalConfig(), respectGitignore })
-        logEvent('tengu_respect_gitignore_setting_changed', {
+        logEvent('knightcode_respect_gitignore_setting_changed', {
           enabled: respectGitignore,
         })
       },
@@ -703,7 +703,7 @@ export function Config({
       onChange(copyFullResponse: boolean) {
         saveGlobalConfig(current => ({ ...current, copyFullResponse }))
         setGlobalConfig({ ...getGlobalConfig(), copyFullResponse })
-        logEvent('tengu_config_changed', {
+        logEvent('knightcode_config_changed', {
           setting:
             'copyFullResponse' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           value: String(
@@ -724,7 +724,7 @@ export function Config({
             onChange(copyOnSelect: boolean) {
               saveGlobalConfig(current => ({ ...current, copyOnSelect }))
               setGlobalConfig({ ...getGlobalConfig(), copyOnSelect })
-              logEvent('tengu_config_changed', {
+              logEvent('knightcode_config_changed', {
                 setting:
                   'copyOnSelect' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                 value: String(
@@ -824,7 +824,7 @@ export function Config({
           },
           {
             id: 'agentPushNotifEnabled',
-            label: 'Push when Claude decides',
+            label: 'Push when KnightCode decides',
             value: globalConfig.agentPushNotifEnabled ?? false,
             type: 'boolean' as const,
             onChange(agentPushNotifEnabled: boolean) {
@@ -879,7 +879,7 @@ export function Config({
               // Reverted on Escape via initialUserMsgOptIn snapshot.
               setUserMsgOptIn(nextBrief)
               setChanges(prev => ({ ...prev, 'Default view': selected }))
-              logEvent('tengu_default_view_setting_changed', {
+              logEvent('knightcode_default_view_setting_changed', {
                 value: (defaultView ??
                   'unset') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               })
@@ -914,7 +914,7 @@ export function Config({
           editorMode: value as GlobalConfig['editorMode'],
         })
 
-        logEvent('tengu_editor_mode_changed', {
+        logEvent('knightcode_editor_mode_changed', {
           mode: value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           source:
             'config_panel' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -938,7 +938,7 @@ export function Config({
           ...getGlobalConfig(),
           prStatusFooterEnabled: enabled,
         })
-        logEvent('tengu_pr_status_footer_setting_changed', {
+        logEvent('knightcode_pr_status_footer_setting_changed', {
           enabled,
         })
       },
@@ -968,7 +968,7 @@ export function Config({
                 diffTool: diffTool as GlobalConfig['diffTool'],
               })
 
-              logEvent('tengu_diff_tool_changed', {
+              logEvent('knightcode_diff_tool_changed', {
                 tool: diffTool as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                 source:
                   'config_panel' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -988,7 +988,7 @@ export function Config({
               saveGlobalConfig(current => ({ ...current, autoConnectIde }))
               setGlobalConfig({ ...getGlobalConfig(), autoConnectIde })
 
-              logEvent('tengu_auto_connect_ide_changed', {
+              logEvent('knightcode_auto_connect_ide_changed', {
                 enabled: autoConnectIde,
                 source:
                   'config_panel' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1011,7 +1011,7 @@ export function Config({
               }))
               setGlobalConfig({ ...getGlobalConfig(), autoInstallIdeExtension })
 
-              logEvent('tengu_auto_install_ide_extension_changed', {
+              logEvent('knightcode_auto_install_ide_extension_changed', {
                 enabled: autoInstallIdeExtension,
                 source:
                   'config_panel' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1021,20 +1021,20 @@ export function Config({
         ]
       : []),
     {
-      id: 'claudeInChromeDefaultEnabled',
-      label: 'Claude in Chrome enabled by default',
-      value: globalConfig.claudeInChromeDefaultEnabled ?? true,
+      id: 'knightcodeInChromeDefaultEnabled',
+      label: 'KnightCode in Chrome enabled by default',
+      value: globalConfig.knightcodeInChromeDefaultEnabled ?? true,
       type: 'boolean' as const,
       onChange(enabled: boolean) {
         saveGlobalConfig(current => ({
           ...current,
-          claudeInChromeDefaultEnabled: enabled,
+          knightcodeInChromeDefaultEnabled: enabled,
         }))
         setGlobalConfig({
           ...getGlobalConfig(),
-          claudeInChromeDefaultEnabled: enabled,
+          knightcodeInChromeDefaultEnabled: enabled,
         })
-        logEvent('tengu_claude_in_chrome_setting_changed', {
+        logEvent('knightcode_claude_in_chrome_setting_changed', {
           enabled,
         })
       },
@@ -1071,7 +1071,7 @@ export function Config({
                   ...getGlobalConfig(),
                   teammateMode: mode,
                 })
-                logEvent('tengu_teammate_mode_changed', {
+                logEvent('knightcode_teammate_mode_changed', {
                   mode: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                 })
               },
@@ -1147,7 +1147,7 @@ export function Config({
       ? [
           {
             id: 'showExternalIncludesDialog',
-            label: 'External CLAUDE.md includes',
+            label: 'External KNIGHTCODE.md includes',
             value: (() => {
               const projectConfig = getCurrentProjectConfig()
               if (projectConfig.hasClaudeMdExternalIncludesApproved) {
@@ -1300,7 +1300,7 @@ export function Config({
     // TODO: Make these proper messages
     const formattedChanges: string[] = Object.entries(changes).map(
       ([key, value]) => {
-        logEvent('tengu_config_changed', {
+        logEvent('knightcode_config_changed', {
           key: key as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           value:
             value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1330,7 +1330,7 @@ export function Config({
       formattedChanges.push(
         `${currentUsingCustomKey ? 'Enabled' : 'Disabled'} custom API key`,
       )
-      logEvent('tengu_config_changed', {
+      logEvent('knightcode_config_changed', {
         key: 'env.OPENROUTER_API_KEY' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         value:
           currentUsingCustomKey as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1663,7 +1663,7 @@ export function Config({
           autoUpdatesChannel: 'latest',
           minimumVersion: undefined,
         }))
-        logEvent('tengu_autoupdate_channel_changed', {
+        logEvent('knightcode_autoupdate_channel_changed', {
           channel:
             'latest' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         })
@@ -1889,7 +1889,7 @@ export function Config({
                 ...prev,
                 teammateDefaultModel: teammateModelDisplayString(model),
               }))
-              logEvent('tengu_teammate_default_model_changed', {
+              logEvent('knightcode_teammate_default_model_changed', {
                 model:
                   model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               })
@@ -1947,7 +1947,7 @@ export function Config({
                 outputStyle: style,
               })
 
-              void logEvent('tengu_output_style_changed', {
+              void logEvent('knightcode_output_style_changed', {
                 style: (style ??
                   DEFAULT_OUTPUT_STYLE_NAME) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                 source:
@@ -1988,7 +1988,7 @@ export function Config({
                 language,
               })
 
-              void logEvent('tengu_language_changed', {
+              void logEvent('knightcode_language_changed', {
                 language: (language ??
                   'default') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                 source:
@@ -2068,7 +2068,7 @@ export function Config({
                   autoUpdatesChannel: channel as 'latest' | 'stable',
                   minimumVersion: undefined,
                 }))
-                logEvent('tengu_autoupdate_enabled', {
+                logEvent('knightcode_autoupdate_enabled', {
                   channel:
                     channel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                 })
@@ -2107,7 +2107,7 @@ export function Config({
               ...prev,
               ...newSettings,
             }))
-            logEvent('tengu_autoupdate_channel_changed', {
+            logEvent('knightcode_autoupdate_channel_changed', {
               channel:
                 'stable' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               minimum_version_set: choice === 'stay',

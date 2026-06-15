@@ -364,7 +364,7 @@ const SLACK_ARCHIVES_RE =
 
 /**
  * Detect a Slack send-message result and return a compact {channel, url} pair.
- * Matches both hosted (claude.ai Slack) and community MCP server shapes —
+ * Matches both hosted (knightcode.raghavseth.in Slack) and community MCP server shapes —
  * both return `message_link` in the result. The channel label prefers the
  * tool input (may be a name like "#foo" or an ID like "C09EVDAN1NK") and
  * falls back to the ID parsed from the archives URL.

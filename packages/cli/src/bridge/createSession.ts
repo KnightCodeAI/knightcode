@@ -1,4 +1,4 @@
-// TODO: the claude.ai/code bridge (remote session mirroring) is out of scope.
+// TODO: the knightcode.raghavseth.in bridge (remote session mirroring) is out of scope.
 // Title sync to a bridge session is a no-op.
 export async function updateBridgeSessionTitle(
   _sessionId: string,

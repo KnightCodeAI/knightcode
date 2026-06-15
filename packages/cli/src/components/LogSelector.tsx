@@ -223,7 +223,7 @@ export function LogSelector({
   // Agentic search state
   const [agenticSearchState, setAgenticSearchState] =
     React.useState<AgenticSearchState>({ status: 'idle' })
-  // Track if the "Search deeply using Claude" option is focused
+  // Track if the "Search deeply using KnightCode" option is focused
   const [isAgenticSearchOptionFocused, setIsAgenticSearchOptionFocused] =
     React.useState(false)
   // AbortController for cancelling agentic search
@@ -238,11 +238,11 @@ export function LogSelector({
       viewMode === 'search' && agenticSearchState.status !== 'searching',
     onExit: () => {
       setViewMode('list')
-      logEvent('tengu_session_search_toggled', { enabled: false })
+      logEvent('knightcode_session_search_toggled', { enabled: false })
     },
     onExitUp: () => {
       setViewMode('list')
-      logEvent('tengu_session_search_toggled', { enabled: false })
+      logEvent('knightcode_session_search_toggled', { enabled: false })
     },
     passthroughCtrlKeys: ['n'],
     initialQuery: initialSearchQuery || '',
@@ -686,12 +686,12 @@ export function LogSelector({
 
   const exitSearchMode = React.useCallback(() => {
     setViewMode('list')
-    logEvent('tengu_session_search_toggled', { enabled: false })
+    logEvent('knightcode_session_search_toggled', { enabled: false })
   }, [])
 
   const enterSearchMode = React.useCallback(() => {
     setViewMode('search')
-    logEvent('tengu_session_search_toggled', { enabled: true })
+    logEvent('knightcode_session_search_toggled', { enabled: true })
   }, [])
 
   // Handler for triggering agentic search
@@ -706,7 +706,7 @@ export function LogSelector({
     agenticSearchAbortRef.current = abortController
 
     setAgenticSearchState({ status: 'searching' })
-    logEvent('tengu_agentic_search_started', {
+    logEvent('knightcode_agentic_search_started', {
       query_length: searchQuery.length,
     })
 
@@ -721,7 +721,7 @@ export function LogSelector({
         return
       }
       setAgenticSearchState({ status: 'results', results, query: searchQuery })
-      logEvent('tengu_agentic_search_completed', {
+      logEvent('knightcode_agentic_search_completed', {
         query_length: searchQuery.length,
         results_count: results.length,
       })
@@ -734,7 +734,7 @@ export function LogSelector({
         status: 'error',
         message: error instanceof Error ? error.message : 'Search failed',
       })
-      logEvent('tengu_agentic_search_error', {
+      logEvent('knightcode_agentic_search_error', {
         query_length: searchQuery.length,
       })
     }
@@ -828,7 +828,7 @@ export function LogSelector({
     () => {
       agenticSearchAbortRef.current?.abort()
       setAgenticSearchState({ status: 'idle' })
-      logEvent('tengu_agentic_search_cancelled', {})
+      logEvent('knightcode_agentic_search_cancelled', {})
     },
     {
       context: 'Confirmation',
@@ -930,7 +930,7 @@ export function LogSelector({
             const newIndex =
               (current + tagTabs.length + offset) % tagTabs.length
             const newTab = tagTabs[newIndex]
-            logEvent('tengu_session_tag_filter_changed', {
+            logEvent('knightcode_session_tag_filter_changed', {
               is_all: newTab === 'All',
               tag_count: uniqueTags.length,
             })
@@ -944,32 +944,32 @@ export function LogSelector({
         // Ctrl+letter shortcuts for actions (freeing up plain letters for type-to-search)
         if (lowerInput === 'a' && key.ctrl && onToggleAllProjects) {
           onToggleAllProjects()
-          logEvent('tengu_session_all_projects_toggled', {
+          logEvent('knightcode_session_all_projects_toggled', {
             enabled: !showAllProjects,
           })
         } else if (lowerInput === 'b' && key.ctrl) {
           const newEnabled = !branchFilterEnabled
           setBranchFilterEnabled(newEnabled)
-          logEvent('tengu_session_branch_filter_toggled', {
+          logEvent('knightcode_session_branch_filter_toggled', {
             enabled: newEnabled,
           })
         } else if (lowerInput === 'w' && key.ctrl && hasMultipleWorktrees) {
           const newValue = !showAllWorktrees
           setShowAllWorktrees(newValue)
-          logEvent('tengu_session_worktree_filter_toggled', {
+          logEvent('knightcode_session_worktree_filter_toggled', {
             enabled: newValue,
           })
         } else if (lowerInput === '/' && keyIsNotCtrlOrMeta) {
           setViewMode('search')
-          logEvent('tengu_session_search_toggled', { enabled: true })
+          logEvent('knightcode_session_search_toggled', { enabled: true })
         } else if (lowerInput === 'r' && key.ctrl && focusedLog) {
           setViewMode('rename')
           setRenameValue('')
-          logEvent('tengu_session_rename_started', {})
+          logEvent('knightcode_session_rename_started', {})
         } else if (lowerInput === 'v' && key.ctrl && focusedLog) {
           setPreviewLog(focusedLog)
           setViewMode('preview')
-          logEvent('tengu_session_preview_opened', {
+          logEvent('knightcode_session_preview_opened', {
             messageCount: focusedLog.messageCount,
           })
         } else if (
@@ -981,7 +981,7 @@ export function LogSelector({
           // Any printable character enters search mode and starts typing
           setViewMode('search')
           setSearchQuery(input)
-          logEvent('tengu_session_search_toggled', { enabled: true })
+          logEvent('knightcode_session_search_toggled', { enabled: true })
         }
       }
     },
@@ -1096,7 +1096,7 @@ export function LogSelector({
         agenticSearchState.results.length > 0 && (
           <Box paddingLeft={1} marginBottom={1} flexShrink={0}>
             <Text dimColor italic>
-              Claude found these results:
+              KnightCode found these results:
             </Text>
           </Box>
         )}
@@ -1139,7 +1139,7 @@ export function LogSelector({
                 color={isAgenticSearchOptionFocused ? 'suggestion' : undefined}
                 bold={isAgenticSearchOptionFocused}
               >
-                Search deeply using Claude →
+                Search deeply using KnightCode →
               </Text>
             </Box>
             <Box height={1} />
@@ -1199,7 +1199,7 @@ export function LogSelector({
                 : null
             if (sessionId) {
               setExpandedGroupSessionIds(prev => new Set(prev).add(sessionId))
-              logEvent('tengu_session_group_expanded', {})
+              logEvent('knightcode_session_group_expanded', {})
             }
           }}
           onCollapse={nodeId => {
@@ -1255,7 +1255,7 @@ export function LogSelector({
         ) : agenticSearchState.status === 'searching' ? (
           <Text dimColor>
             <Byline>
-              <Text>Searching with Claude…</Text>
+              <Text>Searching with KnightCode…</Text>
               <ConfigurableShortcutHint
                 action="confirm:no"
                 context="Confirmation"

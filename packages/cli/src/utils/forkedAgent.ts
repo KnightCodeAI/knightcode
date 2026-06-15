@@ -4,7 +4,7 @@
  * This utility ensures forked agents:
  * 1. Share identical cache-critical params with the parent to guarantee prompt cache hits
  * 2. Track full usage metrics across the entire query loop
- * 3. Log metrics via the tengu_fork_agent_query event when complete
+ * 3. Log metrics via the knightcode_fork_agent_query event when complete
  * 4. Isolate mutable state to prevent interference with the main agent loop
  */
 
@@ -45,7 +45,7 @@ import { createAgentId } from './uuid.js'
 
 /**
  * Parameters that must be identical between the fork and parent API requests
- * to share the parent's prompt cache. The Anthropic API cache key is composed of:
+ * to share the parent's prompt cache. The KnightCode API cache key is composed of:
  * system prompt, tools, model, messages (prefix), and thinking config.
  *
  * CacheSafeParams carries the first five. Thinking config is derived from the
@@ -467,7 +467,7 @@ export function createSubagentContext(
  * This function:
  * 1. Uses identical cache-safe params from parent to enable prompt caching
  * 2. Accumulates usage across all query iterations
- * 3. Logs tengu_fork_agent_query with full usage when complete
+ * 3. Logs knightcode_fork_agent_query with full usage when complete
  *
  * @example
  * ```typescript
@@ -626,7 +626,7 @@ export async function runForkedAgent({
 }
 
 /**
- * Logs the tengu_fork_agent_query event with full NonNullableUsage fields.
+ * Logs the knightcode_fork_agent_query event with full NonNullableUsage fields.
  */
 function logForkAgentQueryEvent({
   forkLabel,
@@ -653,7 +653,7 @@ function logForkAgentQueryEvent({
       ? totalUsage.cache_read_input_tokens / totalInputTokens
       : 0
 
-  logEvent('tengu_fork_agent_query', {
+  logEvent('knightcode_fork_agent_query', {
     // Metadata
     forkLabel:
       forkLabel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

@@ -105,7 +105,7 @@ export async function execAgentHook(
       ]
 
       const systemPrompt = asSystemPrompt([
-        `You are verifying a stop condition in Claude Code. Your task is to verify that the agent completed the given plan. The conversation transcript is available at: ${transcriptPath}\nYou can read this file to analyze the conversation history if needed.
+        `You are verifying a stop condition in KnightCode. Your task is to verify that the agent completed the given plan. The conversation transcript is available at: ${transcriptPath}\nYou can read this file to analyze the conversation history if needed.
 
 Use the available tools to inspect the codebase and verify the condition.
 Use as few steps as possible - be efficient and direct.
@@ -239,7 +239,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
           logForDebugging(
             `Hooks: Agent hook did not complete within ${MAX_AGENT_TURNS} turns`,
           )
-          logEvent('tengu_agent_stop_hook_max_turns', {
+          logEvent('knightcode_agent_stop_hook_max_turns', {
             durationMs: Date.now() - hookStartTime,
             turnCount,
             agentName:
@@ -254,7 +254,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         // For other cases (e.g., agent finished without calling structured output tool),
         // just log and return cancelled (don't show error to user)
         logForDebugging(`Hooks: Agent hook did not return structured output`)
-        logEvent('tengu_agent_stop_hook_error', {
+        logEvent('knightcode_agent_stop_hook_error', {
           durationMs: Date.now() - hookStartTime,
           turnCount,
           errorType: 1, // 1 = no structured output
@@ -284,7 +284,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
 
       // Condition was met
       logForDebugging(`Hooks: Agent hook condition was met`)
-      logEvent('tengu_agent_stop_hook_success', {
+      logEvent('knightcode_agent_stop_hook_success', {
         durationMs: Date.now() - hookStartTime,
         turnCount,
         agentName:
@@ -316,7 +316,7 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
   } catch (error) {
     const errorMsg = errorMessage(error)
     logForDebugging(`Hooks: Agent hook error: ${errorMsg}`)
-    logEvent('tengu_agent_stop_hook_error', {
+    logEvent('knightcode_agent_stop_hook_error', {
       durationMs: Date.now() - hookStartTime,
       errorType: 2, // 2 = general error
       agentName:

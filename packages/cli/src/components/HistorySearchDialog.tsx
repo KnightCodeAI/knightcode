@@ -104,7 +104,7 @@ export function HistorySearchDialog({
       getKey={item => String(item.entry.timestamp)}
       onQueryChange={setQuery}
       onSelect={item => {
-        logEvent('tengu_history_picker_select', {
+        logEvent('knightcode_history_picker_select', {
           result_count: filtered.length,
           query_length: query.length,
         })

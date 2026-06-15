@@ -12,28 +12,28 @@ export type ModelShortName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
 export function getDefaultOpusModel(): ModelName {
-  if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
-    return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  if (process.env.KNIGHTCODE_DEFAULT_OPUS_MODEL) {
+    return process.env.KNIGHTCODE_DEFAULT_OPUS_MODEL
   }
   return getModelStrings().opus46
 }
 
 export function getDefaultSonnetModel(): ModelName {
-  if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
-    return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+  if (process.env.KNIGHTCODE_DEFAULT_SONNET_MODEL) {
+    return process.env.KNIGHTCODE_DEFAULT_SONNET_MODEL
   }
   return getModelStrings().sonnet46
 }
 
 export function getDefaultHaikuModel(): ModelName {
-  if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
-    return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  if (process.env.KNIGHTCODE_DEFAULT_HAIKU_MODEL) {
+    return process.env.KNIGHTCODE_DEFAULT_HAIKU_MODEL
   }
   return getModelStrings().haiku45
 }
 
 export function getSmallFastModel(): ModelName {
-  return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
+  return process.env.KNIGHTCODE_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
 
 export function isNonCustomOpusModel(model: ModelName): boolean {

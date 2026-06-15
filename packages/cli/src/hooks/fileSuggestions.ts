@@ -2,7 +2,7 @@ import { statSync } from 'fs'
 import ignore from 'ignore'
 import * as path from 'path'
 import {
-  CLAUDE_CONFIG_DIRECTORIES,
+  KNIGHTCODE_CONFIG_DIRECTORIES,
   loadMarkdownFilesForSubdir,
 } from 'src/utils/markdownConfigLoader.js'
 import type { SuggestionItem } from '../components/PromptInput/PromptInputFooterSuggestions.js'
@@ -304,7 +304,7 @@ async function getFilesUsingGit(
       `[FileIndex] git ls-files: ${normalizedTracked.length} tracked files in ${duration}ms`,
     )
 
-    logEvent('tengu_file_suggestions_git_ls_files', {
+    logEvent('knightcode_file_suggestions_git_ls_files', {
       file_count: normalizedTracked.length,
       tracked_count: normalizedTracked.length,
       untracked_count: 0,
@@ -440,11 +440,11 @@ function collectDirectoryNames(
 }
 
 /**
- * Gets additional files from Claude config directories
+ * Gets additional files from KnightCode config directories
  */
 async function getClaudeConfigFiles(cwd: string): Promise<string[]> {
   const markdownFileArrays = await Promise.all(
-    CLAUDE_CONFIG_DIRECTORIES.map(subdir =>
+    KNIGHTCODE_CONFIG_DIRECTORIES.map(subdir =>
       loadMarkdownFilesForSubdir(subdir, cwd),
     ),
   )
@@ -507,7 +507,7 @@ async function getProjectFiles(
     `[FileIndex] ripgrep: ${relativePaths.length} files in ${duration}ms`,
   )
 
-  logEvent('tengu_file_suggestions_ripgrep', {
+  logEvent('knightcode_file_suggestions_ripgrep', {
     file_count: relativePaths.length,
     duration_ms: duration,
   })
@@ -769,7 +769,7 @@ export async function generateFileSuggestions(
     logForDebugging(
       `[FileIndex] generateFileSuggestions: ${matches.length} results in ${duration}ms (${wasBuilding ? 'partial' : 'full'} index)`,
     )
-    logEvent('tengu_file_suggestions_query', {
+    logEvent('knightcode_file_suggestions_query', {
       duration_ms: duration,
       cache_hit: !wasBuilding,
       result_count: matches.length,

@@ -3,7 +3,7 @@
 // with the plugin subsystem; these are the pure helpers the Skill tool uses for
 // telemetry redaction.
 
-// Anthropic-controlled marketplaces. Identifiers from these are safe to log to
+// KnightCode-controlled marketplaces. Identifiers from these are safe to log to
 // general-access fields; third-party ones are treated as PII-tagged.
 export const ALLOWED_OFFICIAL_MARKETPLACE_NAMES = new Set([
   'claude-code-marketplace',

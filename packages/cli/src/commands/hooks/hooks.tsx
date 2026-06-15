@@ -5,7 +5,7 @@ import { getTools } from '../../tools.js'
 import type { LocalJSXCommandCall } from '../../types/command.js'
 
 export const call: LocalJSXCommandCall = async (onDone, context) => {
-  logEvent('tengu_hooks_command', {})
+  logEvent('knightcode_hooks_command', {})
   const appState = context.getAppState()
   const permissionContext = appState.toolPermissionContext
   const toolNames = getTools(permissionContext).map(tool => tool.name)

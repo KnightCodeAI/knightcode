@@ -321,8 +321,8 @@ async function countMemoryFileTokens(): Promise<{
   memoryFileDetails: MemoryFile[]
   claudeMdTokens: number
 }> {
-  // Simple mode disables CLAUDE.md loading, so don't report tokens for them
-  if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
+  // Simple mode disables KNIGHTCODE.md loading, so don't report tokens for them
+  if (isEnvTruthy(process.env.KNIGHTCODE_CODE_SIMPLE)) {
     return { memoryFileDetails: [], claudeMdTokens: 0 }
   }
 
@@ -1112,7 +1112,7 @@ export async function analyzeContextUsage(
   let reservedTokens = 0
   let skipReservedBuffer = false
   if (feature('REACTIVE_COMPACT')) {
-    if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_cobalt_raccoon', false)) {
+    if (getFeatureValue_CACHED_MAY_BE_STALE('knightcode_cobalt_raccoon', false)) {
       skipReservedBuffer = true
     }
   }

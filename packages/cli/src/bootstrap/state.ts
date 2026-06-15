@@ -627,7 +627,7 @@ export function getRegisteredHooks(): Partial<
 }
 
 // Extra working directories the user added via /add-dir, included when loading
-// CLAUDE.md files. Held in module state for the session.
+// KNIGHTCODE.md files. Held in module state for the session.
 let additionalDirectoriesForClaudeMd: string[] = []
 
 export function getAdditionalDirectoriesForClaudeMd(): string[] {

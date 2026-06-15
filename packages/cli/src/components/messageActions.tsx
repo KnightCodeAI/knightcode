@@ -267,7 +267,7 @@ export function useMessageActions(
   }, [setCursor, navRef])
 
   const enter = useCallback(() => {
-    logEvent('tengu_message_actions_enter', {})
+    logEvent('knightcode_message_actions_enter', {})
     navRef.current?.enterCursor()
   }, [navRef])
 

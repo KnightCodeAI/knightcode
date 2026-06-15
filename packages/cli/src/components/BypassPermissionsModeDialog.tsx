@@ -14,13 +14,13 @@ export function BypassPermissionsModeDialog({
   onAccept,
 }: Props): React.ReactNode {
   React.useEffect(() => {
-    logEvent('tengu_bypass_permissions_mode_dialog_shown', {})
+    logEvent('knightcode_bypass_permissions_mode_dialog_shown', {})
   }, [])
 
   function onChange(value: 'accept' | 'decline') {
     switch (value) {
       case 'accept': {
-        logEvent('tengu_bypass_permissions_mode_dialog_accept', {})
+        logEvent('knightcode_bypass_permissions_mode_dialog_accept', {})
 
         updateSettingsForSource('userSettings', {
           skipDangerousModePermissionPrompt: true,
@@ -41,13 +41,13 @@ export function BypassPermissionsModeDialog({
 
   return (
     <Dialog
-      title="WARNING: Claude Code running in Bypass Permissions mode"
+      title="WARNING: KnightCode running in Bypass Permissions mode"
       color="error"
       onCancel={handleEscape}
     >
       <Box flexDirection="column" gap={1}>
         <Text>
-          In Bypass Permissions mode, Claude Code will not ask for your approval
+          In Bypass Permissions mode, KnightCode will not ask for your approval
           before running potentially dangerous commands.
           <Newline />
           This mode should only be used in a sandboxed container/VM that has
@@ -58,7 +58,7 @@ export function BypassPermissionsModeDialog({
           running in Bypass Permissions mode.
         </Text>
 
-        <Link url="https://code.claude.com/docs/en/security" />
+        <Link url="https://knightcode.raghavseth.in/docs/en/security" />
       </Box>
 
       <Select

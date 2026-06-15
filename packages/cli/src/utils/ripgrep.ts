@@ -138,7 +138,7 @@ function ripGrepRaw(
   // WSL has severe performance penalty for file reads (3-5x slower on WSL2)
   const defaultTimeout = getPlatform() === 'wsl' ? 60_000 : 20_000
   const parsedSeconds =
-    parseInt(process.env.CLAUDE_CODE_GLOB_TIMEOUT_SECONDS || '', 10) || 0
+    parseInt(process.env.KNIGHTCODE_CODE_GLOB_TIMEOUT_SECONDS || '', 10) || 0
   const timeout = parsedSeconds > 0 ? parsedSeconds * 1000 : defaultTimeout
 
   // For embedded ripgrep, use spawn with argv0 (execFile doesn't support argv0 properly)
@@ -404,7 +404,7 @@ export async function ripGrep(
         logForDebugging(
           `rg EAGAIN error detected, retrying with single-threaded mode (-j 1)`,
         )
-        logEvent('tengu_ripgrep_eagain_retry', {})
+        logEvent('knightcode_ripgrep_eagain_retry', {})
         ripGrepRaw(
           args,
           target,
@@ -450,7 +450,7 @@ export async function ripGrep(
         logError(error)
       }
 
-      // If we timed out with no results, throw an error so Claude knows the search
+      // If we timed out with no results, throw an error so KnightCode knows the search
       // didn't complete rather than thinking there were no matches
       if (isTimeout && lines.length === 0) {
         reject(
@@ -611,7 +611,7 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
     )
 
     // Log telemetry for actual ripgrep availability
-    logEvent('tengu_ripgrep_availability', {
+    logEvent('knightcode_ripgrep_availability', {
       working: working ? 1 : 0,
       using_system: config.mode === 'system' ? 1 : 0,
     })

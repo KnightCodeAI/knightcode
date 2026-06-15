@@ -95,7 +95,7 @@ function useCanUseTool(
           .then(async result => {
             // [ANT-ONLY] Log all tool permission decisions with tool name and args
             if (('external' as string) === 'ant') {
-              logEvent('tengu_internal_tool_permission_decision', {
+              logEvent('knightcode_internal_tool_permission_decision', {
                 toolName: sanitizeToolNameForAnalytics(tool.name),
                 behavior:
                   result.behavior as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

@@ -35,7 +35,7 @@ function setEffortValue(effortValue: EffortValue): EffortCommandResult {
       }
     }
   }
-  logEvent('tengu_effort_command', {
+  logEvent('knightcode_effort_command', {
     effort:
       effortValue as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   })
@@ -45,15 +45,15 @@ function setEffortValue(effortValue: EffortValue): EffortCommandResult {
   // the same, so "Set effort to X" is true and the note is noise.
   const envOverride = getEffortEnvOverride()
   if (envOverride !== undefined && envOverride !== effortValue) {
-    const envRaw = process.env.CLAUDE_CODE_EFFORT_LEVEL
+    const envRaw = process.env.KNIGHTCODE_CODE_EFFORT_LEVEL
     if (persistable === undefined) {
       return {
-        message: `Not applied: CLAUDE_CODE_EFFORT_LEVEL=${envRaw} overrides effort this session, and ${effortValue} is session-only (nothing saved)`,
+        message: `Not applied: KNIGHTCODE_CODE_EFFORT_LEVEL=${envRaw} overrides effort this session, and ${effortValue} is session-only (nothing saved)`,
         effortUpdate: { value: effortValue },
       }
     }
     return {
-      message: `CLAUDE_CODE_EFFORT_LEVEL=${envRaw} overrides this session — clear it and ${effortValue} takes over`,
+      message: `KNIGHTCODE_CODE_EFFORT_LEVEL=${envRaw} overrides this session — clear it and ${effortValue} takes over`,
       effortUpdate: { value: effortValue },
     }
   }
@@ -92,7 +92,7 @@ function unsetEffortLevel(): EffortCommandResult {
       message: `Failed to set effort level: ${result.error.message}`,
     }
   }
-  logEvent('tengu_effort_command', {
+  logEvent('knightcode_effort_command', {
     effort:
       'auto' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   })
@@ -100,9 +100,9 @@ function unsetEffortLevel(): EffortCommandResult {
   // when env is pinning a specific level that will keep overriding.
   const envOverride = getEffortEnvOverride()
   if (envOverride !== undefined && envOverride !== null) {
-    const envRaw = process.env.CLAUDE_CODE_EFFORT_LEVEL
+    const envRaw = process.env.KNIGHTCODE_CODE_EFFORT_LEVEL
     return {
-      message: `Cleared effort from settings, but CLAUDE_CODE_EFFORT_LEVEL=${envRaw} still controls this session`,
+      message: `Cleared effort from settings, but KNIGHTCODE_CODE_EFFORT_LEVEL=${envRaw} still controls this session`,
       effortUpdate: { value: undefined },
     }
   }

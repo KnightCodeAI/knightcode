@@ -51,9 +51,9 @@ export function MemoryFileSelector({
 }: Props): React.ReactNode {
   const existingMemoryFiles = use(getMemoryFiles())
 
-  // Create entries for User and Project CLAUDE.md even if they don't exist
-  const userMemoryPath = join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
-  const projectMemoryPath = join(getOriginalCwd(), 'CLAUDE.md')
+  // Create entries for User and Project KNIGHTCODE.md even if they don't exist
+  const userMemoryPath = join(getKnightcodeConfigHomeDir(), 'KNIGHTCODE.md')
+  const projectMemoryPath = join(getOriginalCwd(), 'KNIGHTCODE.md')
 
   // Check if these are already in the existing files
   const hasUserMemory = existingMemoryFiles.some(f => f.path === userMemoryPath)
@@ -131,13 +131,13 @@ export function MemoryFileSelector({
     const isGit = projectIsInGitRepo(getOriginalCwd())
 
     if (file.type === 'User' && !file.isNested) {
-      description = 'Saved in ~/.knightcode/CLAUDE.md'
+      description = 'Saved in ~/.knightcode/KNIGHTCODE.md'
     } else if (
       file.type === 'Project' &&
       !file.isNested &&
       file.path === projectMemoryPath
     ) {
-      description = `${isGit ? 'Checked in at' : 'Saved in'} ./CLAUDE.md`
+      description = `${isGit ? 'Checked in at' : 'Saved in'} ./KNIGHTCODE.md`
     } else if (file.parent) {
       // For imported files (with @-import)
       description = '@-imported'
@@ -241,14 +241,14 @@ export function MemoryFileSelector({
     const newValue = !autoMemoryOn
     updateSettingsForSource('userSettings', { autoMemoryEnabled: newValue })
     setAutoMemoryOn(newValue)
-    logEvent('tengu_auto_memory_toggled', { enabled: newValue })
+    logEvent('knightcode_auto_memory_toggled', { enabled: newValue })
   }
 
   function handleToggleAutoDream(): void {
     const newValue = !autoDreamOn
     updateSettingsForSource('userSettings', { autoDreamEnabled: newValue })
     setAutoDreamOn(newValue)
-    logEvent('tengu_auto_dream_toggled', { enabled: newValue })
+    logEvent('knightcode_auto_dream_toggled', { enabled: newValue })
   }
 
   useExitOnCtrlCDWithKeybindings()

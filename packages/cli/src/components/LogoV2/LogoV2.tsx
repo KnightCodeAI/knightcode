@@ -144,7 +144,7 @@ export function LogoV2(): React.ReactNode {
   const isCondensedMode =
     !hasReleaseNotes &&
     !showOnboarding &&
-    !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)
+    !isEnvTruthy(process.env.KNIGHTCODE_CODE_FORCE_FULL_LOGO)
 
   useEffect(() => {
     if (showGuestPassesUpsell && !showOnboarding && !isCondensedMode) {
@@ -178,7 +178,7 @@ export function LogoV2(): React.ReactNode {
   } = getLogoDisplayData()
   // Prefer AppState.agent (set from --agent CLI flag) over settings
   const agentName = agent ?? agentNameFromSettings
-  // -20 to account for the max length of subscription name " · Claude Enterprise".
+  // -20 to account for the max length of subscription name " · KnightCode Enterprise".
   const effortSuffix = getEffortSuffix(model, effortValue)
   const modelDisplayName = truncate(
     fullModelDisplayName + effortSuffix,
@@ -189,7 +189,7 @@ export function LogoV2(): React.ReactNode {
   if (
     !hasReleaseNotes &&
     !showOnboarding &&
-    !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)
+    !isEnvTruthy(process.env.KNIGHTCODE_CODE_FORCE_FULL_LOGO)
   ) {
     return (
       <>
@@ -206,15 +206,15 @@ export function LogoV2(): React.ReactNode {
           </Box>
         )}
         <EmergencyTip />
-        {process.env.CLAUDE_CODE_TMUX_SESSION && (
+        {process.env.KNIGHTCODE_CODE_TMUX_SESSION && (
           <Box paddingLeft={2} flexDirection="column">
             <Text dimColor>
-              tmux session: {process.env.CLAUDE_CODE_TMUX_SESSION}
+              tmux session: {process.env.KNIGHTCODE_CODE_TMUX_SESSION}
             </Text>
             <Text dimColor>
-              {process.env.CLAUDE_CODE_TMUX_PREFIX_CONFLICTS
-                ? `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} ${process.env.CLAUDE_CODE_TMUX_PREFIX} d (press prefix twice - Claude uses ${process.env.CLAUDE_CODE_TMUX_PREFIX})`
-                : `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} d`}
+              {process.env.KNIGHTCODE_CODE_TMUX_PREFIX_CONFLICTS
+                ? `Detach: ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX} ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX} d (press prefix twice - KnightCode uses ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX})`
+                : `Detach: ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX} d`}
             </Text>
           </Box>
         )}
@@ -259,8 +259,8 @@ export function LogoV2(): React.ReactNode {
   const layoutMode = getLayoutMode(columns)
 
   const userTheme = resolveThemeSetting(getGlobalConfig().theme)
-  const borderTitle = ` ${color('claude', userTheme)('Claude Code')} ${color('inactive', userTheme)(`v${version}`)} `
-  const compactBorderTitle = color('claude', userTheme)(' Claude Code ')
+  const borderTitle = ` ${color('claude', userTheme)('KnightCode')} ${color('inactive', userTheme)(`v${version}`)} `
+  const compactBorderTitle = color('claude', userTheme)(' KnightCode ')
 
   // Early return for compact mode
   if (layoutMode === 'compact') {
@@ -453,15 +453,15 @@ export function LogoV2(): React.ReactNode {
         </Box>
       )}
       <EmergencyTip />
-      {process.env.CLAUDE_CODE_TMUX_SESSION && (
+      {process.env.KNIGHTCODE_CODE_TMUX_SESSION && (
         <Box paddingLeft={2} flexDirection="column">
           <Text dimColor>
-            tmux session: {process.env.CLAUDE_CODE_TMUX_SESSION}
+            tmux session: {process.env.KNIGHTCODE_CODE_TMUX_SESSION}
           </Text>
           <Text dimColor>
-            {process.env.CLAUDE_CODE_TMUX_PREFIX_CONFLICTS
-              ? `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} ${process.env.CLAUDE_CODE_TMUX_PREFIX} d (press prefix twice - Claude uses ${process.env.CLAUDE_CODE_TMUX_PREFIX})`
-              : `Detach: ${process.env.CLAUDE_CODE_TMUX_PREFIX} d`}
+            {process.env.KNIGHTCODE_CODE_TMUX_PREFIX_CONFLICTS
+              ? `Detach: ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX} ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX} d (press prefix twice - KnightCode uses ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX})`
+              : `Detach: ${process.env.KNIGHTCODE_CODE_TMUX_PREFIX} d`}
           </Text>
         </Box>
       )}

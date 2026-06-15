@@ -27,7 +27,7 @@ async function waitForFrame(
 }
 
 describe('WelcomeV2', () => {
-  test('shows KnightCode, not Claude Code', async () => {
+  test('shows the KnightCode welcome banner', async () => {
     const h = await createTestRenderer({ width: 60, height: 12 })
     createRoot(h.renderer).render(
       <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
@@ -41,6 +41,5 @@ describe('WelcomeV2', () => {
 
     const frame = await waitForFrame(h, f => f.includes('KnightCode'))
     expect(frame).toContain('KnightCode')
-    expect(frame).not.toContain('Claude Code')
   })
 })

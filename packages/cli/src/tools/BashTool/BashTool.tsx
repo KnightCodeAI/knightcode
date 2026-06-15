@@ -38,7 +38,7 @@ import {
   splitCommand_DEPRECATED,
   splitCommandWithOperators,
 } from '../../utils/bash/commands.js'
-import { extractClaudeCodeHints } from '../../utils/claudeCodeHints.js'
+import { extractKnightCodeHints } from '../../utils/knightCodeHints.js'
 import { detectCodeIndexingFromCommand } from '../../utils/codeIndexing.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { isENOENT, ShellError } from '../../utils/errors.js'
@@ -332,7 +332,7 @@ const DISALLOWED_AUTO_BACKGROUND_COMMANDS = [
 // Check if background tasks are disabled at module load time
 const isBackgroundTasksDisabled =
   // eslint-disable-next-line custom-rules/no-process-env-top-level -- Intentional: schema must be defined at module load
-  isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS)
+  isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_BACKGROUND_TASKS)
 
 const fullInputSchema = lazySchema(() =>
   z.strictObject({
@@ -554,7 +554,7 @@ export function detectBlockedSleepPattern(command: string): string | null {
 /**
  * Checks if a command contains tools that shouldn't run in sandbox
  * This includes:
- * - Dynamic config-based disabled commands and substrings (tengu_sandbox_disabled_commands)
+ * - Dynamic config-based disabled commands and substrings (knightcode_sandbox_disabled_commands)
  * - User-configured commands from settings.json (sandbox.excludedCommands)
  *
  * User-configured commands support the same pattern syntax as permission rules:
@@ -712,7 +712,7 @@ export const BashTool = buildTool({
     // `new RegExp` per call. userFacingName runs per-render for every bash
     // message in history; with ~50 msgs + one slow-to-tokenize command, this
     // exceeds the shimmer tick → transition abort → infinite retry (#21605).
-    return isEnvTruthy(process.env.CLAUDE_CODE_BASH_SANDBOX_SHOW_INDICATOR) &&
+    return isEnvTruthy(process.env.KNIGHTCODE_CODE_BASH_SANDBOX_SHOW_INDICATOR) &&
       shouldUseSandbox(input)
       ? 'SandboxedBash'
       : 'Bash'
@@ -789,7 +789,7 @@ export const BashTool = buildTool({
       }
     }
 
-    // For image data, format as image content block for Claude
+    // For image data, format as image content block for KnightCode
     if (isImage) {
       const block = buildImageToolResult(stdout, toolUseID)
       if (block) return block
@@ -937,7 +937,7 @@ export const BashTool = buildTool({
         result.stdout &&
         result.stdout.includes(".git/index.lock': File exists")
       ) {
-        logEvent('tengu_git_index_lock_error', {})
+        logEvent('knightcode_git_index_lock_error', {})
       }
 
       if (interpretationResult.isError && !isInterrupt) {
@@ -1013,7 +1013,7 @@ export const BashTool = buildTool({
 
     const commandType = input.command.split(' ')[0]
 
-    logEvent('tengu_bash_tool_command_executed', {
+    logEvent('knightcode_bash_tool_command_executed', {
       command_type:
         commandType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       stdout_length: stdout.length,
@@ -1025,7 +1025,7 @@ export const BashTool = buildTool({
     // Log code indexing tool usage
     const codeIndexingTool = detectCodeIndexingFromCommand(input.command)
     if (codeIndexingTool) {
-      logEvent('tengu_code_indexing_tool_used', {
+      logEvent('knightcode_code_indexing_tool_used', {
         tool: codeIndexingTool as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         source:
           'cli' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1035,13 +1035,13 @@ export const BashTool = buildTool({
 
     let strippedStdout = stripEmptyLines(stdout)
 
-    // Claude Code hints protocol: CLIs/SDKs gated on CLAUDECODE=1 emit a
+    // KnightCode hints protocol: CLIs/SDKs gated on CLAUDECODE=1 emit a
     // `<claude-code-hint />` tag to stderr (merged into stdout here). Scan,
-    // record for useClaudeCodeHintRecommendation to surface, then strip
+    // record for useKnightCodeHintRecommendation to surface, then strip
     // so the model never sees the tag — a zero-token side channel.
     // Stripping runs unconditionally (subagent output must stay clean too);
     // only the dialog recording is main-thread-only.
-    const extracted = extractClaudeCodeHints(strippedStdout, input.command)
+    const extracted = extractKnightCodeHints(strippedStdout, input.command)
     strippedStdout = extracted.stripped
     if (isMainThread && extracted.hints.length > 0) {
       for (const hint of extracted.hints) maybeRecordPluginHint(hint)
@@ -1265,7 +1265,7 @@ async function* runShellCommand({
   if (shellCommand.onTimeout && shouldAutoBackground) {
     shellCommand.onTimeout(backgroundFn => {
       startBackgrounding(
-        'tengu_bash_command_timeout_backgrounded',
+        'knightcode_bash_command_timeout_backgrounded',
         backgroundFn,
       )
     })
@@ -1287,19 +1287,19 @@ async function* runShellCommand({
         backgroundShellId === undefined
       ) {
         assistantAutoBackgrounded = true
-        startBackgrounding('tengu_bash_command_assistant_auto_backgrounded')
+        startBackgrounding('knightcode_bash_command_assistant_auto_backgrounded')
       }
     }, ASSISTANT_BLOCKING_BUDGET_MS).unref()
   }
 
-  // Handle Claude asking to run it in the background explicitly
+  // Handle KnightCode asking to run it in the background explicitly
   // When explicitly requested via run_in_background, always honor the request
   // regardless of the command type (isAutobackgroundingAllowed only applies to automatic backgrounding)
   // Skip if background tasks are disabled - run in foreground instead
   if (run_in_background === true && !isBackgroundTasksDisabled) {
     const shellId = await spawnBackgroundTask()
 
-    logEvent('tengu_bash_command_explicitly_backgrounded', {
+    logEvent('knightcode_bash_command_explicitly_backgrounded', {
       command_type: getCommandTypeForLogging(command),
     })
 

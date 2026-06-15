@@ -149,7 +149,7 @@ async function executeForkedSkill(
     : undefined
   const queryDepth = context.queryTracking?.depth ?? 0
   const parentAgentId = getAgentContext()?.agentId
-  logEvent('tengu_skill_tool_invocation', {
+  logEvent('knightcode_skill_tool_invocation', {
     command_name:
       forkedSanitizedName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     // _PROTO_skill_name routes to the privileged skill_name BQ column
@@ -344,7 +344,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
   prompt: async () => getPrompt(getProjectRoot()),
 
   // Only one skill/command should run at a time, since the tool expands the
-  // command into a full prompt that Claude must process before continuing.
+  // command into a full prompt that KnightCode must process before continuing.
   // Skill-coach needs the skill name to avoid false-positive "you could have
   // used skill X" suggestions when X was actually invoked. Backseat classifies
   // downstream tool calls from the expanded prompt, not this wrapper, so the
@@ -365,7 +365,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     // Remove leading slash if present (for compatibility)
     const hasLeadingSlash = trimmed.startsWith('/')
     if (hasLeadingSlash) {
-      logEvent('tengu_skill_tool_slash_prefix', {})
+      logEvent('knightcode_skill_tool_slash_prefix', {})
     }
     const normalizedCommandName = hasLeadingSlash
       ? trimmed.substring(1)
@@ -672,7 +672,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
         : undefined
     const queryDepth = context.queryTracking?.depth ?? 0
     const parentAgentId = getAgentContext()?.agentId
-    logEvent('tengu_skill_tool_invocation', {
+    logEvent('knightcode_skill_tool_invocation', {
       command_name:
         sanitizedCommandName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       // _PROTO_skill_name routes to the privileged skill_name BQ column
@@ -1026,7 +1026,7 @@ async function executeRemoteSkill(
   // remote from local invocations without joining on skill name prefixes.
   const queryDepth = context.queryTracking?.depth ?? 0
   const parentAgentId = getAgentContext()?.agentId
-  logEvent('tengu_skill_tool_invocation', {
+  logEvent('knightcode_skill_tool_invocation', {
     command_name:
       'remote_skill' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     // _PROTO_skill_name routes to the privileged skill_name BQ column
@@ -1067,23 +1067,23 @@ async function executeRemoteSkill(
   // content unchanged if no frontmatter is present.
   const { content: bodyContent } = parseFrontmatter(content, skillPath)
 
-  // Inject base directory header + ${CLAUDE_SKILL_DIR}/${CLAUDE_SESSION_ID}
+  // Inject base directory header + ${KNIGHTCODE_SKILL_DIR}/${KNIGHTCODE_SESSION_ID}
   // substitution (matches loadSkillsDir.ts) so the model can resolve relative
   // refs like ./schemas/foo.json against the cache dir.
   const skillDir = dirname(skillPath)
   const normalizedDir =
     process.platform === 'win32' ? skillDir.replace(/\\/g, '/') : skillDir
   let finalContent = `Base directory for this skill: ${normalizedDir}\n\n${bodyContent}`
-  finalContent = finalContent.replace(/\$\{CLAUDE_SKILL_DIR\}/g, normalizedDir)
+  finalContent = finalContent.replace(/\$\{KNIGHTCODE_SKILL_DIR\}/g, normalizedDir)
   finalContent = finalContent.replace(
-    /\$\{CLAUDE_SESSION_ID\}/g,
+    /\$\{KNIGHTCODE_SESSION_ID\}/g,
     getSessionId(),
   )
 
   // Register with compaction-preservation state. Use the cached file path so
   // post-compact restoration knows where the content came from. Must use
   // finalContent (not raw content) so the base directory header and
-  // ${CLAUDE_SKILL_DIR} substitutions survive compaction — matches how local
+  // ${KNIGHTCODE_SKILL_DIR} substitutions survive compaction — matches how local
   // skills store their already-transformed content via processSlashCommand.
   addInvokedSkill(
     commandName,

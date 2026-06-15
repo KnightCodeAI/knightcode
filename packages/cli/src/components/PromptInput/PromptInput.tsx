@@ -1048,7 +1048,7 @@ function PromptInput({
     if (feature('ULTRAPLAN') && ultraplanTriggers.length) {
       addNotification({
         key: 'ultraplan-active',
-        text: 'This prompt will launch an ultraplan session in Claude Code on the web',
+        text: 'This prompt will launch an ultraplan session in KnightCode on the web',
         priority: 'immediate',
         timeoutMs: 5000,
       })
@@ -1061,7 +1061,7 @@ function PromptInput({
     if (isUltrareviewEnabled() && ultrareviewTriggers.length) {
       addNotification({
         key: 'ultrareview-active',
-        text: 'Run /ultrareview after Claude finishes to review these changes in the cloud',
+        text: 'Run /ultrareview after KnightCode finishes to review these changes in the cloud',
         priority: 'immediate',
         timeoutMs: 5000,
       })
@@ -1148,7 +1148,7 @@ function PromptInput({
   const onChange = useCallback(
     (value: string) => {
       if (value === '?') {
-        logEvent('tengu_help_toggled', {})
+        logEvent('knightcode_help_toggled', {})
         setHelpOpen(v => !v)
         return
       }
@@ -1452,7 +1452,7 @@ function PromptInput({
       // Route input to viewed agent (in-process teammate or named local_agent).
       const activeAgent = getActiveAgentForInput(store.getState())
       if (activeAgent.type !== 'leader' && onAgentSubmit) {
-        logEvent('tengu_transcript_input_to_teammate', {})
+        logEvent('knightcode_transcript_input_to_teammate', {})
         await onAgentSubmit(inputParam, activeAgent.task, {
           setCursorOffset,
           clearBuffer,
@@ -1550,7 +1550,7 @@ function PromptInput({
     dimensions?: ImageDimensions,
     sourcePath?: string,
   ) {
-    logEvent('tengu_paste_image', {})
+    logEvent('knightcode_paste_image', {})
     onModeChange('prompt')
 
     const pasteId = nextPasteIdRef.current++
@@ -1693,7 +1693,7 @@ function PromptInput({
   // Insert the at-mentioned reference (the file and, optionally, a line range) when
   // we receive an at-mentioned notification the IDE.
   const onIdeAtMentioned = function (atMentioned: IDEAtMentioned) {
-    logEvent('tengu_ext_at_mentioned', {})
+    logEvent('knightcode_ext_at_mentioned', {})
     let atMentionedText: string
     const relativePath = path.relative(getCwd(), atMentioned.filePath)
     if (atMentioned.lineStart && atMentioned.lineEnd) {
@@ -1742,7 +1742,7 @@ function PromptInput({
 
   // Handler for chat:externalEditor - edit in $EDITOR
   const handleExternalEditor = useCallback(async () => {
-    logEvent('tengu_external_editor_used', {})
+    logEvent('knightcode_external_editor_used', {})
     setIsExternalEditorActive(true)
 
     try {
@@ -1852,7 +1852,7 @@ function PromptInput({
       // Pass undefined for teamContext (unused but kept for API compatibility)
       const nextMode = getNextPermissionMode(teammateContext, undefined)
 
-      logEvent('tengu_mode_cycle', {
+      logEvent('knightcode_mode_cycle', {
         to: nextMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
 
@@ -1951,7 +1951,7 @@ function PromptInput({
     if (feature('TRANSCRIPT_CLASSIFIER')) {
       if (showAutoModeOptIn || autoModeOptInTimeoutRef.current) {
         if (showAutoModeOptIn) {
-          logEvent('tengu_auto_mode_opt_in_dialog_decline', {})
+          logEvent('knightcode_auto_mode_opt_in_dialog_decline', {})
         }
         setShowAutoModeOptIn(false)
         if (autoModeOptInTimeoutRef.current) {
@@ -1971,7 +1971,7 @@ function PromptInput({
       teamContext,
     )
 
-    logEvent('tengu_mode_cycle', {
+    logEvent('knightcode_mode_cycle', {
       to: nextMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
 
@@ -2640,7 +2640,7 @@ function PromptInput({
         priority: 'immediate',
         timeoutMs: 3000,
       })
-      logEvent('tengu_model_picker_hotkey', {
+      logEvent('knightcode_model_picker_hotkey', {
         model:
           model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
@@ -2717,7 +2717,7 @@ function PromptInput({
         thinkingEnabled: enabled,
       }))
       setShowThinkingToggle(false)
-      logEvent('tengu_thinking_toggled_hotkey', { enabled })
+      logEvent('knightcode_thinking_toggled_hotkey', { enabled })
       addNotification({
         key: 'thinking-toggled-hotkey',
         jsx: (

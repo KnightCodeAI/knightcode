@@ -110,7 +110,7 @@ const teamMemPrompts = feature('TEAMMEM')
 
 /**
  * Shared guidance text appended to each memory directory prompt line.
- * Shipped because Claude was burning turns on `ls`/`mkdir -p` before writing.
+ * Shipped because KnightCode was burning turns on `ls`/`mkdir -p` before writing.
  * Harness guarantees the directory exists via ensureMemoryDirExists().
  */
 export const DIR_EXISTS_GUIDANCE =
@@ -171,7 +171,7 @@ function logMemoryDirCounts(
           subdirCount++
         }
       }
-      logEvent('tengu_memdir_loaded', {
+      logEvent('knightcode_memdir_loaded', {
         ...baseMetadata,
         total_file_count: fileCount,
         total_subdir_count: subdirCount,
@@ -179,7 +179,7 @@ function logMemoryDirCounts(
     },
     () => {
       // Directory unreadable — log without counts
-      logEvent('tengu_memdir_loaded', baseMetadata)
+      logEvent('knightcode_memdir_loaded', baseMetadata)
     },
   )
 }
@@ -373,7 +373,7 @@ function buildAssistantDailyLogPrompt(skipIndex = false): string {
  * Build the "Searching past context" section if the feature gate is enabled.
  */
 export function buildSearchingPastContextSection(autoMemDir: string): string[] {
-  if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_coral_fern', false)) {
+  if (!getFeatureValue_CACHED_MAY_BE_STALE('knightcode_coral_fern', false)) {
     return []
   }
   const projectDir = getProjectDir(getOriginalCwd())
@@ -420,14 +420,14 @@ export async function loadMemoryPrompt(): Promise<string | null> {
   const autoEnabled = isAutoMemoryEnabled()
 
   const skipIndex = getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_moth_copse',
+    'knightcode_moth_copse',
     false,
   )
 
   // KAIROS daily-log mode takes precedence over TEAMMEM: the append-only
   // log paradigm does not compose with team sync (which expects a shared
   // MEMORY.md that both sides read + write). Gating on `autoEnabled` here
-  // means the !autoEnabled case falls through to the tengu_memdir_disabled
+  // means the !autoEnabled case falls through to the knightcode_memdir_disabled
   // telemetry block below, matching the non-KAIROS path.
   if (feature('KAIROS') && autoEnabled && getKairosActive()) {
     logMemoryDirCounts(getAutoMemPath(), {
@@ -439,7 +439,7 @@ export async function loadMemoryPrompt(): Promise<string | null> {
 
   // Cowork injects memory-policy text via env var; thread into all builders.
   const coworkExtraGuidelines =
-    process.env.CLAUDE_COWORK_MEMORY_EXTRA_GUIDELINES
+    process.env.KNIGHTCODE_COWORK_MEMORY_EXTRA_GUIDELINES
   const extraGuidelines =
     coworkExtraGuidelines && coworkExtraGuidelines.trim().length > 0
       ? [coworkExtraGuidelines]
@@ -489,19 +489,19 @@ export async function loadMemoryPrompt(): Promise<string | null> {
     ).join('\n')
   }
 
-  logEvent('tengu_memdir_disabled', {
+  logEvent('knightcode_memdir_disabled', {
     disabled_by_env_var: isEnvTruthy(
-      process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY,
+      process.env.KNIGHTCODE_CODE_DISABLE_AUTO_MEMORY,
     ),
     disabled_by_setting:
-      !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY) &&
+      !isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_AUTO_MEMORY) &&
       getInitialSettings().autoMemoryEnabled === false,
   })
   // Gate on the GB flag directly, not isTeamMemoryEnabled() — that function
   // checks isAutoMemoryEnabled() first, which is definitionally false in this
   // branch. We want "was this user in the team-memory cohort at all."
-  if (getFeatureValue_CACHED_MAY_BE_STALE('tengu_herring_clock', false)) {
-    logEvent('tengu_team_memdir_disabled', {})
+  if (getFeatureValue_CACHED_MAY_BE_STALE('knightcode_herring_clock', false)) {
+    logEvent('knightcode_team_memdir_disabled', {})
   }
   return null
 }

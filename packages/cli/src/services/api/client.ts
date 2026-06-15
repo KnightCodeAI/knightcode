@@ -5,9 +5,9 @@ import { getUserAgent } from '../../utils/http.js'
 import { getProxyFetchOptions } from '../../utils/proxy.js'
 
 /**
- * The model gateway speaks the Anthropic Messages protocol natively, so the
+ * The model gateway speaks the KnightCode Messages protocol natively, so the
  * SDK client is pointed at it directly — streaming, tool use, and beta
- * params work unchanged for both Anthropic and non-Anthropic models.
+ * params work unchanged for both KnightCode and non-KnightCode models.
  *
  * Environment variables:
  * - OPENROUTER_API_KEY: API key (or save one via onboarding)
@@ -39,7 +39,7 @@ export async function getAnthropicClient({
   const defaultHeaders: { [key: string]: string } = {
     'x-app': 'cli',
     'User-Agent': getUserAgent(),
-    'X-Claude-Code-Session-Id': getSessionId(),
+    'X-KnightCode-Code-Session-Id': getSessionId(),
     // Attribution headers the gateway uses to identify the calling app.
     'X-Title': 'KnightCode',
   }

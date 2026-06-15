@@ -2,7 +2,7 @@
 export const FILE_EDIT_TOOL_NAME = 'Edit'
 
 // Permission pattern for granting session-level access to the project's .knightcode/ folder
-export const CLAUDE_FOLDER_PERMISSION_PATTERN = '/.knightcode/**'
+export const KNIGHTCODE_FOLDER_PERMISSION_PATTERN = '/.knightcode/**'
 
 // Permission pattern for granting session-level access to the global ~/.knightcode/ folder
 export const GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN = '~/.knightcode/**'

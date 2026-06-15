@@ -4,8 +4,8 @@ import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
 
 export function getPlanModeV2AgentCount(): number {
   // Environment variable override takes precedence
-  if (process.env.CLAUDE_CODE_PLAN_V2_AGENT_COUNT) {
-    const count = parseInt(process.env.CLAUDE_CODE_PLAN_V2_AGENT_COUNT, 10)
+  if (process.env.KNIGHTCODE_CODE_PLAN_V2_AGENT_COUNT) {
+    const count = parseInt(process.env.KNIGHTCODE_CODE_PLAN_V2_AGENT_COUNT, 10)
     if (!isNaN(count) && count > 0 && count <= 10) {
       return count
     }
@@ -29,9 +29,9 @@ export function getPlanModeV2AgentCount(): number {
 }
 
 export function getPlanModeV2ExploreAgentCount(): number {
-  if (process.env.CLAUDE_CODE_PLAN_V2_EXPLORE_AGENT_COUNT) {
+  if (process.env.KNIGHTCODE_CODE_PLAN_V2_EXPLORE_AGENT_COUNT) {
     const count = parseInt(
-      process.env.CLAUDE_CODE_PLAN_V2_EXPLORE_AGENT_COUNT,
+      process.env.KNIGHTCODE_CODE_PLAN_V2_EXPLORE_AGENT_COUNT,
       10,
     )
     if (!isNaN(count) && count > 0 && count <= 10) {
@@ -45,18 +45,18 @@ export function getPlanModeV2ExploreAgentCount(): number {
 /**
  * Check if plan mode interview phase is enabled.
  *
- * Config: ant=always_on, external=tengu_plan_mode_interview_phase gate, envVar=true
+ * Config: ant=always_on, external=knightcode_plan_mode_interview_phase gate, envVar=true
  */
 export function isPlanModeInterviewPhaseEnabled(): boolean {
   // Always on for ants
   if (process.env.USER_TYPE === 'ant') return true
 
-  const env = process.env.CLAUDE_CODE_PLAN_MODE_INTERVIEW_PHASE
+  const env = process.env.KNIGHTCODE_CODE_PLAN_MODE_INTERVIEW_PHASE
   if (isEnvTruthy(env)) return true
   if (isEnvDefinedFalsy(env)) return false
 
   return getFeatureValue_CACHED_MAY_BE_STALE(
-    'tengu_plan_mode_interview_phase',
+    'knightcode_plan_mode_interview_phase',
     false,
   )
 }
@@ -64,7 +64,7 @@ export function isPlanModeInterviewPhaseEnabled(): boolean {
 export type PewterLedgerVariant = 'trim' | 'cut' | 'cap' | null
 
 /**
- * tengu_pewter_ledger — plan file structure prompt experiment.
+ * knightcode_pewter_ledger — plan file structure prompt experiment.
  *
  * Controls the Phase 4 "Final Plan" bullets in the 5-phase plan mode
  * workflow (messages.ts getPlanPhase4Section). 5-phase is 99% of plan
@@ -79,7 +79,7 @@ export type PewterLedgerVariant = 'trim' | 'cut' | 'cap' | null
  *
  * Primary: session-level Avg Cost (fact__201omjcij85f) — Opus output is
  *   5× input price so cost is an output-weighted proxy. planLengthChars
- *   on tengu_plan_exit is the mechanism but NOT the goal — the cap arm
+ *   on knightcode_plan_exit is the mechanism but NOT the goal — the cap arm
  *   could shrink the plan file while increasing total output via
  *   write→count→edit cycles.
  * Guardrail: feedback-bad rate, requests/session (too-thin plans →
@@ -87,7 +87,7 @@ export type PewterLedgerVariant = 'trim' | 'cut' | 'cap' | null
  */
 export function getPewterLedgerVariant(): PewterLedgerVariant {
   const raw = getFeatureValue_CACHED_MAY_BE_STALE<string | null>(
-    'tengu_pewter_ledger',
+    'knightcode_pewter_ledger',
     null,
   )
   if (raw === 'trim' || raw === 'cut' || raw === 'cap') return raw

@@ -27,7 +27,7 @@ type Props = {
   defaultTab: 'Status' | 'Config' | 'Usage' | 'Gates'
 }
 
-// TODO: the feature-gates debug panel is Anthropic-internal ("ant"-build only);
+// TODO: the feature-gates debug panel is KnightCode-internal ("ant"-build only);
 // the tab is gated off in this build, so this is an inert placeholder.
 function Gates(_props: any): null {
   return null

@@ -103,7 +103,7 @@ function extractConversationContext(
   messages: Message[],
   maxChars = 1000,
 ): string {
-  // Get recent assistant messages (they contain Claude's reasoning)
+  // Get recent assistant messages (they contain KnightCode's reasoning)
   const assistantMessages = messages
     .filter((m): m is AssistantMessage => m.type === 'assistant')
     .slice(-3) // Last 3 assistant messages
@@ -206,7 +206,7 @@ Explain this command in context.`
           risk: result.data.risk,
         }
 
-        logEvent('tengu_permission_explainer_generated', {
+        logEvent('knightcode_permission_explainer_generated', {
           tool_name: sanitizeToolNameForAnalytics(toolName),
           risk_level: RISK_LEVEL_NUMERIC[explanation.riskLevel],
           latency_ms: latencyMs,
@@ -219,7 +219,7 @@ Explain this command in context.`
     }
 
     // No valid JSON in response
-    logEvent('tengu_permission_explainer_error', {
+    logEvent('knightcode_permission_explainer_error', {
       tool_name: sanitizeToolNameForAnalytics(toolName),
       error_type: ERROR_TYPE_PARSE,
       latency_ms: latencyMs,
@@ -237,7 +237,7 @@ Explain this command in context.`
 
     logForDebugging(`Permission explainer error: ${errorMessage(error)}`)
     logError(error)
-    logEvent('tengu_permission_explainer_error', {
+    logEvent('knightcode_permission_explainer_error', {
       tool_name: sanitizeToolNameForAnalytics(toolName),
       error_type:
         error instanceof Error && error.name === 'AbortError'

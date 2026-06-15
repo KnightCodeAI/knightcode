@@ -44,7 +44,7 @@ function ModelPickerWrapper({
   const setAppState = useSetAppState()
 
   function handleCancel(): void {
-    logEvent('tengu_model_command_menu', {
+    logEvent('knightcode_model_command_menu', {
       action:
         'cancel' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
@@ -58,7 +58,7 @@ function ModelPickerWrapper({
     model: string | null,
     effort: EffortLevel | undefined,
   ): void {
-    logEvent('tengu_model_command_menu', {
+    logEvent('knightcode_model_command_menu', {
       action:
         model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       from_model:
@@ -160,7 +160,7 @@ function SetModelAndClose({
       // @[MODEL LAUNCH]: Update check for 1M access.
       if (model && isOpus1mUnavailable(model)) {
         onDone(
-          `Opus 4.6 with 1M context is not available for your account. Learn more: https://code.claude.com/docs/en/model-config#extended-context-with-1m`,
+          `Opus 4.6 with 1M context is not available for your account. Learn more: https://knightcode.raghavseth.in/docs/en/model-config#extended-context-with-1m`,
           { display: 'system' },
         )
         return
@@ -168,7 +168,7 @@ function SetModelAndClose({
 
       if (model && isSonnet1mUnavailable(model)) {
         onDone(
-          `Sonnet 4.6 with 1M context is not available for your account. Learn more: https://code.claude.com/docs/en/model-config#extended-context-with-1m`,
+          `Sonnet 4.6 with 1M context is not available for your account. Learn more: https://knightcode.raghavseth.in/docs/en/model-config#extended-context-with-1m`,
           { display: 'system' },
         )
         return
@@ -306,7 +306,7 @@ function ShowModelAndClose({
 export const call: LocalJSXCommandCall = async (onDone, _context, args) => {
   args = args?.trim() || ''
   if (COMMON_INFO_ARGS.includes(args)) {
-    logEvent('tengu_model_command_inline_help', {
+    logEvent('knightcode_model_command_inline_help', {
       args: args as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
     return <ShowModelAndClose onDone={onDone} />
@@ -320,7 +320,7 @@ export const call: LocalJSXCommandCall = async (onDone, _context, args) => {
   }
 
   if (args) {
-    logEvent('tengu_model_command_inline', {
+    logEvent('knightcode_model_command_inline', {
       args: args as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
     return <SetModelAndClose args={args} onDone={onDone} />

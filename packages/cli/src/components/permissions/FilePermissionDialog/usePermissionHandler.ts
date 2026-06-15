@@ -5,7 +5,7 @@ import {
 import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js'
 import type { ToolPermissionContext } from '../../../Tool.js'
 import {
-  CLAUDE_FOLDER_PERMISSION_PATTERN,
+  KNIGHTCODE_FOLDER_PERMISSION_PATTERN,
   FILE_EDIT_TOOL_NAME,
   GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN,
 } from '../../../tools/FileEditTool/constants.js'
@@ -70,7 +70,7 @@ function handleAcceptOnce(
   logPermissionEvent('accept', completionType, languageName, messageId)
 
   // Log accept submission with feedback context
-  logEvent('tengu_accept_submitted', {
+  logEvent('knightcode_accept_submitted', {
     toolName: sanitizeToolNameForAnalytics(
       toolUseConfirm.tool.name,
     ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -109,7 +109,7 @@ function handleAcceptSession(
     const pattern =
       options.scope === 'global-claude-folder'
         ? GLOBAL_CLAUDE_FOLDER_PERMISSION_PATTERN
-        : CLAUDE_FOLDER_PERMISSION_PATTERN
+        : KNIGHTCODE_FOLDER_PERMISSION_PATTERN
     const suggestions: PermissionUpdate[] = [
       {
         type: 'addRules',
@@ -160,7 +160,7 @@ function handleReject(
   )
 
   // Log reject submission with feedback context
-  logEvent('tengu_reject_submitted', {
+  logEvent('knightcode_reject_submitted', {
     toolName: sanitizeToolNameForAnalytics(
       toolUseConfirm.tool.name,
     ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

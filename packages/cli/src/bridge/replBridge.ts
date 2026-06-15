@@ -1,4 +1,4 @@
-// TODO: remote-control bridge — owned by the claude.ai remote-control feature.
+// TODO: remote-control bridge — owned by the knightcode.raghavseth.in remote-control feature.
 // Types only; no bridge runtime is wired in the local-only build.
 import type { SDKControlRequest, SDKControlResponse } from '../entrypoints/sdk/controlTypes.js'
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'

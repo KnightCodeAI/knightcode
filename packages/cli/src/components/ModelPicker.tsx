@@ -185,7 +185,7 @@ export function ModelPicker({
   )
 
   function handleSelect(value: string): void {
-    logEvent('tengu_model_command_menu_effort', {
+    logEvent('knightcode_model_command_menu_effort', {
       effort:
         effort as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
@@ -229,7 +229,7 @@ export function ModelPicker({
           </Text>
           <Text dimColor>
             {headerText ??
-              'Switch between Claude models. Applies to this session and future Claude Code sessions. For other/previous model names, specify with --model.'}
+              'Switch between KnightCode models. Applies to this session and future KnightCode sessions. For other/previous model names, specify with --model.'}
           </Text>
           {sessionModel && (
             <Text dimColor>

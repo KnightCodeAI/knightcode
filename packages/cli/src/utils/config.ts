@@ -47,7 +47,7 @@ export type GlobalConfig = {
   promptQueueUseCount?: number
   autoUpdates?: boolean
   cachedExtraUsageDisabledReason?: string | null
-  claudeInChromeDefaultEnabled?: boolean
+  knightcodeInChromeDefaultEnabled?: boolean
   copyFullResponse?: boolean
   customApiKeyResponses?: { approved?: string[]; rejected?: string[] }
   diffTool?: string
@@ -105,7 +105,7 @@ export type GlobalConfig = {
   /** Per-skill usage stats used to rank command suggestions. */
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
   /** ISO timestamp of the user's first token (onboarding bookkeeping). */
-  claudeCodeFirstTokenDate?: string
+  knightcodeFirstTokenDate?: string
   /** Preferred OS notification channel ('auto', 'terminal', etc.). */
   preferredNotifChannel: string
   /** Enable model-generated explanations for permission requests (default true). */
@@ -192,16 +192,16 @@ export function getMemoryPath(memoryType: MemoryType): string {
   const cwd = getOriginalCwd()
   switch (memoryType) {
     case 'User':
-      return join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
+      return join(getKnightcodeConfigHomeDir(), 'KNIGHTCODE.md')
     case 'Local':
-      return join(cwd, 'CLAUDE.local.md')
+      return join(cwd, 'KNIGHTCODE.local.md')
     case 'Project':
-      return join(cwd, 'CLAUDE.md')
+      return join(cwd, 'KNIGHTCODE.md')
     case 'Managed':
     case 'AutoMem':
-      return join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
+      return join(getKnightcodeConfigHomeDir(), 'KNIGHTCODE.md')
   }
-  return join(getKnightcodeConfigHomeDir(), 'CLAUDE.md')
+  return join(getKnightcodeConfigHomeDir(), 'KNIGHTCODE.md')
 }
 
 export function getManagedClaudeRulesDir(): string {

@@ -12,9 +12,9 @@
  * relay content. Servers opt in by declaring
  * capabilities.experimental['claude/channel/permission'].
  *
- * Kenneth's "would this let Claude self-approve?": the approving party is
- * the human via the channel, not Claude. But the trust boundary isn't the
- * terminal — it's the allowlist (tengu_harbor_ledger). A compromised
+ * Kenneth's "would this let KnightCode self-approve?": the approving party is
+ * the human via the channel, not KnightCode. But the trust boundary isn't the
+ * terminal — it's the allowlist (knightcode_harbor_ledger). A compromised
  * channel server CAN fabricate "yes <id>" without the human seeing the
  * prompt. Accepted risk: a compromised channel already has unlimited
  * conversation-injection turns (social-engineer over time, wait for
@@ -27,14 +27,14 @@ import { jsonStringify } from '../../utils/slowOperations.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 
 /**
- * GrowthBook runtime gate — separate from the channels gate (tengu_harbor)
+ * GrowthBook runtime gate — separate from the channels gate (knightcode_harbor)
  * so channels can ship without permission-relay riding along (Kenneth: "no
  * bake time if it goes out tomorrow"). Default false; flip without a release.
  * Checked once at useManageMCPConnections mount — mid-session flag changes
  * don't apply until restart.
  */
 export function isChannelPermissionRelayEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_harbor_permissions', false)
+  return getFeatureValue_CACHED_MAY_BE_STALE('knightcode_harbor_permissions', false)
 }
 
 export type ChannelPermissionResponse = {
@@ -195,7 +195,7 @@ export function filterPermissionRelayClients<
 
 /**
  * Factory for the callbacks object. The pending Map is closed over — NOT
- * module-level (per src/CLAUDE.md), NOT in AppState (functions-in-state
+ * module-level (per src/KNIGHTCODE.md), NOT in AppState (functions-in-state
  * causes issues with equality/serialization). Same lifetime pattern as
  * `replBridgePermissionCallbacks`: constructed once per session inside
  * a React hook, stable reference stored in AppState.

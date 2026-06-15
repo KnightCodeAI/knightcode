@@ -65,7 +65,7 @@ export function initBundledSkills(): void {
     /* eslint-enable @typescript-eslint/no-require-imports */
     registerClaudeApiSkill()
   }
-  // TODO: the Claude-in-Chrome bundled skill is out of scope (chrome integration).
+  // TODO: the KnightCode-in-Chrome bundled skill is out of scope (chrome integration).
   if (feature('RUN_SKILL_GENERATOR')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const { registerRunSkillGeneratorSkill } = require('./runSkillGenerator.js')

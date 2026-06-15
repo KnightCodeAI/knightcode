@@ -1,4 +1,4 @@
-// TODO: inbound remote-control message parsing — owned by the claude.ai
+// TODO: inbound remote-control message parsing — owned by the knightcode.raghavseth.in
 // remote-control feature. Local-only build receives no inbound messages.
 import type { UUID } from 'crypto'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'

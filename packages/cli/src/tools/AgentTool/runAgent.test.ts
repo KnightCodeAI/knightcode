@@ -87,7 +87,7 @@ describe('runAgent execution engine', () => {
       isAsync: false,
       querySource: 'test' as never,
       availableTools: [],
-      // Pre-supply context/prompt so the loop skips real CLAUDE.md / env reads.
+      // Pre-supply context/prompt so the loop skips real KNIGHTCODE.md / env reads.
       override: {
         userContext: {},
         systemContext: {},

@@ -31,12 +31,12 @@ export function ThinkingToggle({
     {
       value: 'true',
       label: 'Enabled',
-      description: 'Claude will think before responding',
+      description: 'KnightCode will think before responding',
     },
     {
       value: 'false',
       label: 'Disabled',
-      description: 'Claude will respond without extended thinking',
+      description: 'KnightCode will respond without extended thinking',
     },
   ]
 
