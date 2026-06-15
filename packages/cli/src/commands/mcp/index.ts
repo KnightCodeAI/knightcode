@@ -1,14 +1,12 @@
 import type { Command } from '../../commands.js'
 
-// TODO: MCP management UI (later phase). Hidden, disabled inert stub so the registry still lists the name.
-const command: Command = {
-  type: 'local',
+const mcp = {
+  type: 'local-jsx',
   name: 'mcp',
-  description: 'mcp',
-  isEnabled: () => false,
-  isHidden: true,
-  supportsNonInteractive: false,
-  load: async () => ({ call: async () => ({ type: 'text', value: '' }) }),
-}
+  description: 'Manage MCP servers',
+  immediate: true,
+  argumentHint: '[enable|disable [server-name]]',
+  load: () => import('./mcp.js'),
+} satisfies Command
 
-export default command
+export default mcp

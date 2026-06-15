@@ -21,6 +21,12 @@ describe('command registry', () => {
     expect(names.has('teleport')).toBe(false)
   })
 
+  test('/mcp is an enabled core command', async () => {
+    const commands = await getCommands(process.cwd())
+    const names = new Set(commands.map(c => c.name))
+    expect(names.has('mcp')).toBe(true)
+  })
+
   test('builtInCommandNames includes core command names', () => {
     const names = builtInCommandNames()
     expect(names.has('help')).toBe(true)
