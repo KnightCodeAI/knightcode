@@ -167,8 +167,6 @@ import {
   clearPluginSkillsCache,
 } from './utils/plugins/loadPluginCommands.js'
 import memoize from 'lodash-es/memoize.js'
-import { isUsing3PServices } from './utils/auth.js'
-import { isFirstPartyAnthropicBaseUrl } from './utils/model/providers.js'
 import env from './commands/env/index.js'
 import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
@@ -334,7 +332,8 @@ const COMMANDS = memoize((): Command[] => [
   hooks,
   exportCommand,
   sandboxToggle,
-  ...(!isUsing3PServices() ? [logout, login()] : []),
+  logout,
+  login(),
   passes,
   ...(peersCmd ? [peersCmd] : []),
   tasks,
@@ -421,9 +420,8 @@ export function meetsAvailabilityRequirement(cmd: Command): boolean {
       case 'claude-ai':
         break
       case 'console':
-        // Console API key user = direct 1P API customer (not 3P).
-        if (!isUsing3PServices() && isFirstPartyAnthropicBaseUrl()) return true
-        break
+        // A BYOK API-key user is the "console" (direct API key) case.
+        return true
       default: {
         const _exhaustive: never = a
         void _exhaustive
