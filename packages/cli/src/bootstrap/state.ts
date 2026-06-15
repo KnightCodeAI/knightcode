@@ -199,6 +199,7 @@ export function getStatsStore():
 // lands with the metrics layer. The executor records into it; nothing reads it
 // yet, so accumulation is a no-op for now.
 export function addToToolDuration(_duration: number): void {}
+export function addToTurnHookDuration(_duration: number): void {}
 
 // TODO: classifier-overhead timing is reported by the auto-mode metrics, which
 // land with the classifier layer. Nothing reads it yet.

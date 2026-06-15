@@ -30,6 +30,25 @@ export function endToolExecutionSpan(_metadata?: {
 
 export function endToolSpan(_toolResult?: string, _resultTokens?: number): void {}
 
+// Hook execution tracing. Inert: tracing is an out-of-scope telemetry subsystem.
+export function startHookSpan(
+  _hookEvent: string,
+  _hookName: string,
+  _numHooks: number,
+  _hookDefinitions: string,
+): Span {
+  return null
+}
+export function endHookSpan(
+  _span: Span,
+  _metadata?: {
+    numSuccess?: number
+    numBlocking?: number
+    numNonBlockingError?: number
+    numCancelled?: number
+  },
+): void {}
+
 export function addToolContentEvent(
   _eventName: string,
   _attributes: Record<string, string | number | boolean>,

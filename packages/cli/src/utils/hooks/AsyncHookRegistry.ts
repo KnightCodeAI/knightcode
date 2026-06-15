@@ -22,3 +22,18 @@ export async function checkForAsyncHookResponses(): Promise<AsyncHookResponse[]>
 }
 
 export function removeDeliveredAsyncHooks(_processIds: string[]): void {}
+
+// TODO: tracking spawned async (background) hook processes lands with the async
+// hook execution layer. Until then registration is inert — no pending async
+// hooks are tracked, so none are ever delivered.
+export function registerPendingAsyncHook(_pending: {
+  processId: string
+  hookId: string
+  asyncResponse?: unknown
+  hookName: string
+  hookEvent: HookEvent | 'StatusLine' | 'FileSuggestion'
+  command?: string
+  shellCommand?: unknown
+  toolName?: string
+  pluginId?: string
+}): void {}

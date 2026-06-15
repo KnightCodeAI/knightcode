@@ -437,4 +437,6 @@ export type RenderableMessage =
   | SystemMessage
   | GroupedToolUseMessage
   | CollapsedReadSearchGroup
-export type HookResultMessage = SystemInformationalMessage
+export type HookResultMessage =
+  | AttachmentMessage
+  | ProgressMessage<import('./hooks.js').HookProgress>

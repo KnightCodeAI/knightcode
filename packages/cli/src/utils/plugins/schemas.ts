@@ -4,3 +4,11 @@ import { lazySchema } from '../lazySchema.js';
 // TODO: plugin marketplace schema lands with the plugins subsystem; permissive
 // inert schema so the settings document still parses.
 export const MarketplaceSourceSchema = lazySchema(() => z.object({}).passthrough());
+
+// Anthropic-controlled marketplaces. Used by hook telemetry/plugin classification.
+export const ALLOWED_OFFICIAL_MARKETPLACE_NAMES = new Set([
+  'claude-code-marketplace',
+  'claude-code-plugins',
+  'claude-plugins-official',
+  'anthropic-marketplace',
+]);
