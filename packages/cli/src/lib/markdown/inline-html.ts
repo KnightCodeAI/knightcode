@@ -155,9 +155,8 @@ function expandTableRow(line: string): string[] {
 
 /**
  * Convert `<br>` / `<br/>` / `<br />` into real line breaks in prose
- * markdown. OpenTUI's native markdown engine renders raw HTML literally
- * (claude-code's terminal renderer drops html tokens — utils/markdown.ts,
- * `case 'html'`), so the tag must be rewritten before rendering:
+ * markdown. OpenTUI's native markdown engine renders raw HTML literally, so
+ * the tag must be rewritten before rendering:
  *
  * - Regular prose: a GFM hard break (`"  \n"`); at end of line just the two
  *   trailing spaces, since the existing newline completes the break.

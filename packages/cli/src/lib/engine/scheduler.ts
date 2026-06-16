@@ -11,7 +11,7 @@ import {
   ToolLoopGuard,
 } from "./tool-runner";
 
-/** Max concurrently executing tools inside one safe batch (claude-code: 10). */
+/** Max concurrently executing tools inside one safe batch. */
 const MAX_TOOL_CONCURRENCY = 10;
 
 const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
@@ -109,8 +109,8 @@ function createSemaphore(limit: number) {
 /**
  * The full per-call pipeline. Every path returns a ToolOutcome — the
  * scheduler, not callers, guarantees tool_use/tool_result pairing.
- * Order: loop guard → zod parse → PreToolUse hooks (block beats prompt,
- * claude-code's order) → gate → canUseTool/askQuestion → execute → PostToolUse.
+ * Order: loop guard → zod parse → PreToolUse hooks (block beats prompt) →
+ * gate → canUseTool/askQuestion → execute → PostToolUse.
  */
 async function executeOne(
   toolCall: ToolCallRequest,

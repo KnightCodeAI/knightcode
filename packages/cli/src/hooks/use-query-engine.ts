@@ -10,6 +10,7 @@ import {
   hasNotifications,
 } from "../lib/tools/Agent/notifications";
 import { query } from "../lib/engine/query";
+import type { ContextProvider } from "../lib/engine/context-providers";
 import type {
   PermissionDecision,
   ToolCallRequest,
@@ -26,6 +27,10 @@ import {
   type UserPromptHookResult,
 } from "../lib/hooks";
 import { allowCommand, isCommandAllowed } from "../lib/permissions/permissions";
+import { isMemoryEnabled } from "../lib/memory/config";
+import { createMemoryRecallProvider } from "../lib/memory/recall";
+import { createChangedFilesProvider } from "../lib/inference/changed-files-provider";
+import { scheduleMemoryExtraction } from "../lib/memory/extract-scheduler";
 import { getStore } from "../lib/store/client";
 import {
   ensureSession,
@@ -123,6 +128,14 @@ export function useQueryEngine(
   const permissionResolversRef = useRef(
     new Map<string, (allowed: boolean) => void>(),
   );
+
+  // Memory recall provider, kept across turns so its per-query cache survives
+  // (identical consecutive queries reuse the selection). Rebuilt only when the
+  // model changes.
+  const recallProviderRef = useRef<{
+    model: string;
+    provider: ContextProvider;
+  } | null>(null);
 
   // Turn-clock pause while a prompt/question is up (ported from the old
   // useChat hook).
@@ -382,7 +395,7 @@ export function useQueryEngine(
         const submittedAt = Date.now();
         // @-mentioned paths ride along as a hidden system-reminder part so the
         // model gets their contents directly instead of searching for the
-        // literal "@path" text (claude-code's processAtMentionedFiles).
+        // literal "@path" text.
         let mentionContext: string | null = null;
         try {
           mentionContext = await expandAtMentions(
@@ -419,6 +432,26 @@ export function useQueryEngine(
         const ac = new AbortController();
         abortRef.current = ac;
 
+        // Context providers: a turn-start memory-recall provider (gated by
+        // setting; no-op when no memory files exist) plus a per-round
+        // changed-files reminder rebuilt each turn (it holds per-turn dedup
+        // state, so it must not persist across turns).
+        const memoryEnabled = isMemoryEnabled();
+        const contextProviders: ContextProvider[] = [];
+        if (memoryEnabled) {
+          if (recallProviderRef.current?.model !== params.model) {
+            recallProviderRef.current = {
+              model: params.model,
+              provider: createMemoryRecallProvider({
+                mainModelId: params.model,
+                getApiKey: getOpenRouterApiKey,
+              }),
+            };
+          }
+          contextProviders.push(recallProviderRef.current.provider);
+        }
+        contextProviders.push(createChangedFilesProvider());
+
         const gen = query({
           cwd: process.cwd(),
           messages: base,
@@ -428,6 +461,8 @@ export function useQueryEngine(
           getApiKey: getOpenRouterApiKey,
           host: makeHost(),
           hooks: engineHooks,
+          contextProviders,
+          sessionId,
           alwaysAllowEdits: {
             get: () => alwaysAllowEditsRef.current,
             set: (v) => {
@@ -455,9 +490,11 @@ export function useQueryEngine(
             });
           };
 
+          let terminalReason: string | undefined;
           while (true) {
             const r = await gen.next();
             if (r.done) {
+              terminalReason = r.value.reason;
               if (r.value.reason === "error") {
                 hadError = true;
                 setError(
@@ -511,6 +548,26 @@ export function useQueryEngine(
               console.error("Stop hook error:", err),
             );
           }, 0);
+          // Auto-memory extraction: only on a cleanly completed turn (skip
+          // aborted/error/max_rounds). Best-effort background work — never
+          // blocks the next turn and never throws.
+          if (memoryEnabled && terminalReason === "complete") {
+            // Serialized + coalesced so overlapping turns can't run two forked
+            // extraction agents at once (they'd race on Memory writes / index).
+            scheduleMemoryExtraction(
+              {
+                messages: finalAssistant ? [...base, finalAssistant] : base,
+                cwd: process.cwd(),
+                mainModelId: params.model,
+                getApiKey: getOpenRouterApiKey,
+              },
+              (n) =>
+                toast.show({
+                  variant: "success",
+                  message: `Saved ${n} ${n === 1 ? "memory" : "memories"} (/memory to view)`,
+                }),
+            );
+          }
           // The todo panel has served its purpose once every item is done —
           // clear it on natural turn end so it doesn't linger.
           const todos = todoItemsRef.current;

@@ -45,6 +45,20 @@ export const SUPPORTED_SETTINGS: Record<string, SettingMeta> = {
     type: "string",
     options: ["low", "medium", "high"],
   },
+  /** Cheap model for background side queries (memory recall/extraction).
+   *  Unset → falls back to the turn's main model. */
+  sideQueryModel: { path: ["sideQueryModel"], type: "string" },
+  /** Auto-memory (recall + extraction). On unless explicitly false. */
+  "memory.enabled": { path: ["memory", "enabled"], type: "boolean" },
+  /** Background memory consolidation ("dream"). Off unless explicitly true. */
+  "memory.autoDream": { path: ["memory", "autoDream"], type: "boolean" },
+  /** Min hours between consolidations (default 24). */
+  "memory.dreamMinHours": { path: ["memory", "dreamMinHours"], type: "number" },
+  /** Min sessions since last consolidation before it runs (default 5). */
+  "memory.dreamMinSessions": {
+    path: ["memory", "dreamMinSessions"],
+    type: "number",
+  },
 };
 
 export function isSupportedSetting(key: string): boolean {

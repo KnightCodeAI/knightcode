@@ -29,6 +29,7 @@ import { TaskOutput } from "./TaskOutput";
 import { ToolSearch } from "./ToolSearch";
 import { Agent } from "./Agent";
 import { Config } from "./Config";
+import { Memory } from "./Memory";
 
 export {
   defineTool,
@@ -63,6 +64,7 @@ export {
   ToolSearch,
   Agent,
   Config,
+  Memory,
 };
 
 const ALL_TOOLS_LIST: KnightcodeTool[] = [
@@ -90,6 +92,7 @@ const ALL_TOOLS_LIST: KnightcodeTool[] = [
   ToolSearch,
   Agent,
   Config,
+  Memory,
 ];
 
 export const ALL_TOOLS: Readonly<Record<string, KnightcodeTool>> =

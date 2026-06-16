@@ -34,6 +34,7 @@ import * as TaskOutput from "./TaskOutput/execute";
 import * as ToolSearch from "./ToolSearch/execute";
 import * as Agent from "./Agent/execute";
 import * as Config from "./Config/execute";
+import * as Memory from "./Memory/execute";
 
 export {
   getSessionModifiedFiles,
@@ -81,6 +82,7 @@ const EXECUTORS: Record<string, ToolExecutor> = {
   ToolSearch: ToolSearch.execute,
   Agent: Agent.execute,
   Config: Config.execute,
+  Memory: Memory.execute,
 };
 
 /** Optional execution context — defaults preserve existing behavior. */

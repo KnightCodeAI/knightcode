@@ -43,7 +43,7 @@ export function InterruptedMessage({
         pendingConfirmations={pendingConfirmations}
         answerQuestion={answerQuestion}
       />
-      {/* After the partial content, like claude-code's InterruptedByUser. */}
+      {/* Interruption notice rendered after the partial content. */}
       <box paddingX={3} paddingTop={1} paddingBottom={0}>
         <text fg={colors.warning} attributes={TextAttributes.DIM}>
           Interrupted, what can I do for you instead?

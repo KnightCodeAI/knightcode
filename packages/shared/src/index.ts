@@ -62,6 +62,7 @@ export {
   ToolSearch,
   Agent,
   Config,
+  Memory,
   type AllToolsRecord,
   type KnightcodeTool,
   type ToolMetadata,

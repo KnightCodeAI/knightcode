@@ -21,6 +21,7 @@ import type {
   ToolCallRequest,
   ToolOutcome,
 } from "./events";
+import { runContextProviders } from "./context-providers";
 import { NOOP_ENGINE_HOOKS } from "./hooks";
 import type { Message } from "./messages";
 import { runToolCalls } from "./scheduler";
@@ -136,6 +137,33 @@ export async function* query(
   };
 
   try {
+    // Context providers (engine/context-providers.ts). Output rides along as a
+    // <system-reminder> in the next request — request-view only, never persisted.
+    const providers = params.contextProviders ?? [];
+    const providerTimeoutMs = params.contextProviderTimeoutMs ?? 6000;
+    // Bound the wait: a slow provider yields no context that round rather than
+    // stalling the turn. The call keeps running and may populate its own cache.
+    const runProviders = async (
+      phase: "turn_start" | "per_round",
+      msgs: Message[],
+    ): Promise<string[]> => {
+      if (providers.length === 0 || abortSignal?.aborted) return [];
+      return Promise.race([
+        runContextProviders(providers, phase, {
+          messages: msgs,
+          cwd,
+          sessionId: params.sessionId,
+          signal: abortSignal,
+        }),
+        new Promise<string[]>((resolve) =>
+          setTimeout(() => resolve([]), providerTimeoutMs),
+        ),
+      ]);
+    };
+
+    // turn_start providers (memory recall) run once, before the first response.
+    reminders.push(...(await runProviders("turn_start", transcript)));
+
     for (let round = 0; round < maxRounds; round++) {
       if (abortSignal?.aborted) {
         yield { type: "turn_complete", message: sealTurn(true) };
@@ -146,12 +174,21 @@ export async function* query(
       if (ctx.hasPersistedTasks) {
         for (const name of TASK_SUITE_TOOL_NAMES) loadedDeferred.add(name);
       }
-      const tools = getToolContracts(mode, {
+      let tools = getToolContracts(mode, {
         loaded_deferred: loadedDeferred,
       }) as ToolSet;
-      const availableDeferredTools = getDeferredToolNames(mode).filter(
+      let availableDeferredTools = getDeferredToolNames(mode).filter(
         (name) => !loadedDeferred.has(name),
       );
+      // Forked/background agents (e.g. memory extraction) run a restricted
+      // toolset and shouldn't be told about deferred tools they can't load.
+      if (params.allowedToolNames) {
+        const allow = new Set(params.allowedToolNames);
+        tools = Object.fromEntries(
+          Object.entries(tools).filter(([name]) => allow.has(name)),
+        ) as ToolSet;
+        availableDeferredTools = [];
+      }
 
       // Test seam: a raw LanguageModel injected by unit tests.
       const testModel = (params as { modelOverrideForTest?: unknown })
@@ -165,9 +202,7 @@ export async function* query(
       // Hook systemMessages accumulated this turn ride along as a transient
       // user message (request-view only — never persisted to the transcript).
       // Placed AFTER the assistant message so the model sees them following
-      // the tool calls/results that produced them — claude-code appends
-      // attachments to toolResults the same way (query.ts:1580-1590,
-      // `toolResults.push(attachment)`).
+      // the tool calls/results that produced them.
       // Consume the pending reminders: each one rides along exactly once, in
       // the round after it was produced. Splicing empties the array so reminders
       // pushed while this round's tools run (below) queue for the NEXT round
@@ -212,6 +247,7 @@ export async function* query(
           localInstructions: ctx.localInstructions,
           rules: ctx.rules,
           skillIndex: ctx.skillIndex,
+          memoryIndex: ctx.memoryIndex,
           gitBranchName: ctx.gitBranchName,
           gitStatus: ctx.gitStatus,
           gitDiffSummary: ctx.gitDiffSummary,
@@ -379,6 +415,12 @@ export async function* query(
         yield { type: "turn_complete", message: sealTurn(true) };
         return { reason: "aborted" };
       }
+
+      // per_round providers (changed-file reminders, etc.) run after the tool
+      // round; their output is consumed by the next round's request.
+      reminders.push(
+        ...(await runProviders("per_round", [...transcript, assistant])),
+      );
       // next round continues with the same assistant message accumulating parts
     }
     yield { type: "turn_complete", message: sealTurn(false) };
