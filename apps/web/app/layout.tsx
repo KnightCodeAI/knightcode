@@ -58,8 +58,10 @@ export const metadata: Metadata = {
       { url: "/knightcode_icon_256.png", sizes: "256x256", type: "image/png" },
       { url: "/knightcode-icon.png", sizes: "1024x1024", type: "image/png" },
     ],
-    apple: [{ url: "/knightcode_icon_256.png", sizes: "256x256" }],
-    shortcut: ["/knightcode_icon_256.png"],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    shortcut: ["/favicon.ico"],
   },
   category: "technology",
   robots: { index: true, follow: true },
