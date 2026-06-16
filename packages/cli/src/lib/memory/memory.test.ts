@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { spawn } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { encodeProjectPath, getMemoryDir } from "./paths";
@@ -51,9 +52,20 @@ const rmHome = (dir: string) => {
 };
 
 describe("encodeProjectPath", () => {
-  test("turns separators and drive colon into dashes", () => {
-    expect(encodeProjectPath("C:\\Users\\x\\proj")).toBe("C-Users-x-proj");
-    expect(encodeProjectPath("/home/x/proj")).toBe("home-x-proj");
+  test("turns separators and drive colon into dashes, with a hash suffix", () => {
+    expect(encodeProjectPath("C:\\Users\\x\\proj")).toMatch(
+      /^C-Users-x-proj-[0-9a-f]{8}$/,
+    );
+    expect(encodeProjectPath("/home/x/proj")).toMatch(/^home-x-proj-[0-9a-f]{8}$/);
+  });
+  test("is stable across slash styles for the same directory", () => {
+    expect(encodeProjectPath("C:\\Users\\x\\proj")).toBe(
+      encodeProjectPath("C:/Users/x/proj"),
+    );
+  });
+  test("distinguishes directories that slugify identically", () => {
+    // `/a/b` and `/a-b` both slugify to `a-b`; the hash keeps them apart.
+    expect(encodeProjectPath("/a/b")).not.toBe(encodeProjectPath("/a-b"));
   });
 });
 
@@ -94,6 +106,18 @@ describe("extractJsonArray", () => {
   });
   test("garbage → empty", () => {
     expect(extractJsonArray("no array here")).toEqual([]);
+  });
+  test("stops at the matching close bracket, ignoring trailing prose", () => {
+    expect(extractJsonArray('["a.md","b.md"]. See also [other].')).toEqual([
+      "a.md",
+      "b.md",
+    ]);
+  });
+  test("handles nested arrays and brackets inside strings", () => {
+    expect(extractJsonArray('Result: [["x"],["a]b"]] done')).toEqual([
+      ["x"],
+      ["a]b"],
+    ]);
   });
 });
 
@@ -386,6 +410,20 @@ describe("store + Memory tool (filesystem)", () => {
     ).toBe(0);
   });
 
+  test("Memory tool: update without a description is rejected (no empty index entry)", async () => {
+    const ctx = { executionRoot: cwd };
+    const res = (await memoryToolExecute(
+      { action: "update", name: "no-desc", type: "user", body: "some body" },
+      ctx,
+    )) as { success: boolean; error?: string };
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("description");
+    expect(
+      ((await memoryToolExecute({ action: "list" }, ctx)) as { count: number })
+        .count,
+    ).toBe(0);
+  });
+
   test("Memory tool: delete of a missing name fails cleanly", async () => {
     const res = (await memoryToolExecute(
       { action: "delete", name: "nope" },
@@ -473,15 +511,36 @@ describe("consolidation lock", () => {
     expect(readLastConsolidatedAt(cwd)).toBe(0);
   });
 
-  test("a live holder blocks re-acquire", () => {
-    // First acquire writes our own pid; our process is alive, so a second
-    // acquire within the stale window must be blocked.
+  test("a process reclaims its own (self-pid) lock", () => {
+    // The acquire guard skips our own pid, so a second acquire by the same
+    // process within the stale window reclaims the lock rather than blocking.
     tryAcquireConsolidationLock(cwd);
-    // Simulate a *different* live holder by leaving our pid in place — the
-    // guard skips our own pid, so write a foreign-but-live pid: reuse ours via
-    // a separate file is overkill; instead assert the self-pid reclaim path.
     const second = tryAcquireConsolidationLock(cwd);
     expect(second).not.toBeNull(); // our own pid is reclaimable
+  });
+
+  test("a foreign live holder blocks re-acquire", async () => {
+    // Spawn a real, long-lived process so its pid is foreign-but-alive — this
+    // exercises the blocking branch the self-pid test cannot reach.
+    const child = spawn(
+      process.execPath,
+      ["-e", "setTimeout(function () {}, 100000)"],
+      { stdio: "ignore" },
+    );
+    await new Promise<void>((resolve, reject) => {
+      child.once("spawn", () => resolve());
+      child.once("error", reject);
+    });
+    try {
+      const dir = getMemoryDir(cwd);
+      mkdirSync(dir, { recursive: true });
+      // Fresh mtime (now) keeps the lock inside the stale window; the body is a
+      // foreign, live pid, so acquire must refuse.
+      writeFileSync(join(dir, ".consolidate-lock"), String(child.pid));
+      expect(tryAcquireConsolidationLock(cwd)).toBeNull();
+    } finally {
+      child.kill();
+    }
   });
 });
 

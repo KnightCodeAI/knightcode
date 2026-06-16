@@ -50,11 +50,11 @@ export async function execute(
   }
 
   // update
-  if (!name || !type || !body) {
+  if (!name || !type || !body || !description?.trim()) {
     return {
       action,
       success: false,
-      error: "update requires `name`, `type`, and `body`.",
+      error: "update requires `name`, `type`, `description`, and `body`.",
     };
   }
   const changed = upsertMemory(cwd, { name, description, type, body });

@@ -18,7 +18,16 @@ export function debugLog(scope: string, ...args: unknown[]): void {
   if (!isDebugEnabled()) return;
   try {
     const body = args
-      .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+      .map((a) => {
+        if (typeof a === "string") return a;
+        // Guard each arg: a single unserializable value (BigInt, circular ref)
+        // must not drop the whole log entry.
+        try {
+          return JSON.stringify(a) ?? String(a);
+        } catch {
+          return String(a);
+        }
+      })
       .join(" ");
     const line = `[${new Date().toISOString()}] [${scope}] ${body}\n`;
     appendFileSync(join(knightcodeHome(), "debug.log"), line, "utf-8");

@@ -119,7 +119,7 @@ export function buildExtractionPrompt(
     "",
     "Persist memories with the **Memory** tool: `Memory(action:\"list\")` to review what exists, `Memory(action:\"update\", name, type, description, body)` to save or update one, `Memory(action:\"delete\", name)` to forget one. You also have Read/Grep/Glob if you need to verify a detail before saving — but do not rabbit-hole; you have a limited turn budget.",
     "",
-    "If the user explicitly asked you to remember something, save it as whichever type fits best. If they asked you to forget something, delete the relevant entry. Otherwise, save only durable, non-obvious facts — most turns yield nothing, and saving nothing is correct and common.",
+    "If the user explicitly asked you to remember something, save it as whichever type fits best — unless it falls under \"What NOT to save\" below, in which case follow that guidance instead (e.g. save what was surprising about it rather than the raw list). If they asked you to forget something, delete the relevant entry. Otherwise, save only durable, non-obvious facts — most turns yield nothing, and saving nothing is correct and common.",
     "",
     TYPES_SECTION,
     "",

@@ -11,12 +11,14 @@ const input_schema = z.object({
     .string()
     .optional()
     .describe(
-      "Memory name/slug (the filename without .md). Required for delete and update. Use action:list (or the Memory Index in the system prompt) to get exact names.",
+      "Memory name/slug (the filename without .md). Required for get, delete, and update. Use action:list (or the Memory Index in the system prompt) to get exact names.",
     ),
   description: z
     .string()
     .optional()
-    .describe("One-line summary used for later recall (update only)."),
+    .describe(
+      "One-line summary used for later recall. Required for update (an empty description leaves the memory unfindable).",
+    ),
   type: z
     .enum(["user", "feedback", "project", "reference"])
     .optional()
@@ -28,7 +30,7 @@ export const Memory = defineTool({
   name: "Memory",
   is_read_only: false,
   is_concurrency_safe: false,
-  search_hint: "list, delete, or update saved memories",
+  search_hint: "list, get, delete, or update saved memories",
   input_schema,
   description: `Manage the auto-memory store — the persistent memories listed in the Memory Index of the system prompt. Use this when the user asks you to forget/remove, correct/change, or review what you remember. Memories survive across sessions; this tool is the only way to remove or correct them.
 
