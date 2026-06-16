@@ -1,6 +1,6 @@
 import { source } from "@/lib/source"
 import { DocsBody, DocsPage } from "fumadocs-ui/page"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import type { Metadata } from "next"
 import defaultMdxComponents from "fumadocs-ui/mdx"
 import { PageActions } from "@/components/docs/page-actions"
@@ -9,13 +9,25 @@ export default async function Page(props: {
   params: Promise<{ slug?: string[] }>
 }) {
   const params = await props.params
-  const page = source.getPage(params.slug)
+  const slugs = params.slug ?? []
+
+  if (slugs.length > 0 && slugs[slugs.length - 1].endsWith(".md")) {
+    const cleanSlugs = [...slugs]
+    const last = cleanSlugs[cleanSlugs.length - 1]
+    if (last === "index.md") {
+      cleanSlugs.pop()
+    } else {
+      cleanSlugs[cleanSlugs.length - 1] = last.slice(0, -3)
+    }
+    redirect(`/llms.mdx/docs/${cleanSlugs.join("/")}`)
+  }
+
+  const page = source.getPage(slugs)
 
   if (!page) notFound()
 
   const MDX = page.data.body
 
-  const slugs = params.slug ?? []
   const slugPath = slugs.join("/")
   const gitUrl = `https://github.com/KnightCodeAI/knightcode/blob/main/apps/web/content/docs/${page.path}`
   const rawMarkdownUrl = `/docs/${slugPath ? slugPath + ".md" : "index.md"}`

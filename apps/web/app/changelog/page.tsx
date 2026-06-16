@@ -17,11 +17,11 @@ export const metadata: Metadata = {
 
 const kindStyles: Record<ChangeKind, string> = {
   Added:
-    "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 dark:text-emerald-300",
+    "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   Changed:
-    "border-sky-500/30 bg-sky-500/10 text-sky-300 dark:text-sky-300",
+    "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   Fixed:
-    "border-amber-500/30 bg-amber-500/10 text-amber-300 dark:text-amber-300",
+    "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
 }
 
 function InlineMarkdown({ text }: { text: string }) {
@@ -147,7 +147,7 @@ export default async function ChangelogPage() {
                           </span>
                         ) : null}
                         {isLatest ? (
-                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] tracking-wider text-emerald-300 uppercase">
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] tracking-wider text-emerald-700 dark:text-emerald-300 uppercase">
                             Latest
                           </span>
                         ) : null}
