@@ -85,4 +85,17 @@ export type QueryParams = {
   /** Ms spent waiting on the user this turn — subtracted from durationMs. */
   getTurnPausedMs?: () => number;
   maxRounds?: number; // default 100
+  /** Context providers (memory recall, changed-file reminders). turn_start
+   *  providers run once before the first response; per_round providers run
+   *  after each tool round (re-primed every round). */
+  contextProviders?: import("./context-providers").ContextProvider[];
+  /** Max ms to wait on context providers per phase before proceeding without
+   *  them, so a slow side model can't stall the turn. Default 6000. */
+  contextProviderTimeoutMs?: number;
+  /** Embedder session id, forwarded to context providers that need it
+   *  (e.g. the changed-files reminder). */
+  sessionId?: string;
+  /** Restrict the toolset to these names (a forked/background agent, e.g. memory
+   *  extraction). Intersected with the mode's tools. Undefined = all mode tools. */
+  allowedToolNames?: string[];
 };

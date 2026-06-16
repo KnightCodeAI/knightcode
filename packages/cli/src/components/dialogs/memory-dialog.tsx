@@ -1,70 +1,79 @@
-import { useCallback, useRef } from "react";
-import { type InputRenderable } from "@opentui/core";
-import { useKeyboard } from "@opentui/react";
+import { useCallback, useState } from "react";
 import { useDialog } from "../../providers/dialogs";
 import { useToast } from "../../providers/toast";
 import { useTheme } from "../../providers/theme";
-import { join } from "path";
-import { appendFileSync, existsSync, writeFileSync } from "fs";
+import { DialogSearchList } from "../dialog-search-list";
+import { scanMemoryFiles, type MemoryHeader } from "../../lib/memory/scan";
+import { deleteMemory } from "../../lib/memory/store";
 
 export function MemoryDialogContent() {
   const dialog = useDialog();
   const toast = useToast();
   const { colors } = useTheme();
-  const inputRef = useRef<InputRenderable>(null);
 
-  const handleSubmit = useCallback(() => {
-    const text = inputRef.current?.value?.trim() ?? "";
-    if (!text) {
-      toast.show({ variant: "error", message: "Memory text cannot be empty" });
-      return;
-    }
+  // Snapshot the auto-memories on open; refresh after a delete.
+  const [memories, setMemories] = useState<MemoryHeader[]>(() =>
+    scanMemoryFiles(process.cwd()),
+  );
+  // Two-step delete: first Enter arms (keyed by filePath), second confirms.
+  const [armed, setArmed] = useState<string | null>(null);
 
-    const localDir = process.cwd();
-    const localPath = join(localDir, "KNIGHTCODE.md");
-
-    try {
-      // Ensure file exists
-      if (!existsSync(localPath)) {
-        writeFileSync(
-          localPath,
-          "# Project Memory: KnightCode Guidelines\n\n## Project Rules\n",
-          "utf-8",
-        );
+  const handleSelect = useCallback(
+    (m: MemoryHeader) => {
+      if (armed === m.filePath) {
+        const ok = deleteMemory(process.cwd(), m.name);
+        toast.show({
+          variant: ok ? "success" : "error",
+          message: ok ? `Deleted memory "${m.name}"` : "Delete failed",
+        });
+        const next = scanMemoryFiles(process.cwd());
+        setMemories(next);
+        setArmed(null);
+        if (next.length === 0) dialog.close();
+      } else {
+        setArmed(m.filePath);
+        toast.show({
+          variant: "info",
+          message: `Press Enter again to delete "${m.name}" (or move to cancel)`,
+        });
       }
-      appendFileSync(localPath, `\n- ${text}\n`, "utf-8");
-      toast.show({
-        variant: "success",
-        message: "Added rule to KNIGHTCODE.md!",
-      });
-      dialog.close();
-    } catch (err) {
-      toast.show({
-        variant: "error",
-        message: `Failed to save: ${(err as Error).message}`,
-      });
-    }
-  }, [dialog, toast]);
+    },
+    [armed, toast, dialog],
+  );
 
-  useKeyboard((key) => {
-    if (key.name === "enter" || key.name === "return") {
-      key.preventDefault();
-      handleSubmit();
-    }
-  });
+  if (memories.length === 0) {
+    return (
+      <box flexDirection="column" gap={1} width="100%">
+        <text>No auto-memories saved yet.</text>
+        <text fg={colors.dimSeparator}>
+          Memories are learned automatically as you work. Project guidelines live
+          in KNIGHTCODE.md.
+        </text>
+      </box>
+    );
+  }
 
   return (
     <box flexDirection="column" gap={1} width="100%">
-      <text>Type a guideline or convention to append to KNIGHTCODE.md:</text>
-      <input
-        ref={inputRef}
-        placeholder="e.g. Always write unit tests for utility functions"
-        focused
+      <text fg={colors.dimSeparator}>
+        {`Auto-memory (${memories.length}) — ↑↓ select · Enter deletes (twice to confirm) · Esc closes`}
+      </text>
+      <DialogSearchList
+        items={memories}
+        onSelect={handleSelect}
+        onHighlight={() => setArmed(null)}
+        filterFn={(m, query) =>
+          (m.description || m.name).toLowerCase().includes(query.toLowerCase())
+        }
+        renderItem={(m, isSelected) => (
+          <text fg={isSelected ? colors.inverseText : colors.text}>
+            {`${m.description || m.name}${m.type ? ` [${m.type}]` : ""}`}
+          </text>
+        )}
+        getKey={(m) => m.filePath}
+        placeholder="Search memories"
+        emptyText="No memories"
       />
-      <box flexDirection="row" gap={2} marginTop={1}>
-        <text fg={colors.success}>[Enter] Submit</text>
-        <text fg={colors.dimSeparator}>[Esc] Cancel</text>
-      </box>
     </box>
   );
 }

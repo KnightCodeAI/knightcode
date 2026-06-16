@@ -35,6 +35,10 @@ export function gateToolCall(opts: {
     return "confirm";
   }
   if (toolName === "Agent") return "confirm";
+  if (toolName === "Memory") {
+    const action = (input as { action?: unknown })?.action;
+    return action === "delete" || action === "update" ? "confirm" : "execute";
+  }
 
   return "execute";
 }

@@ -3,6 +3,7 @@ import { loadProjectContextSync } from "../context/project-context";
 import { loadRulesText } from "../context/rules";
 import { buildSkillIndex } from "../context/skills";
 import { loadGitContext } from "../git/git-context";
+import { readMemoryIndex } from "../memory/scan";
 import { detectProjectStackSync } from "../project-detection";
 import { detectShell } from "../shell";
 import { loadAgents, formatAgentLines } from "../agents/loader";
@@ -14,6 +15,8 @@ export type RequestContext = {
   localInstructions?: string;
   rules?: string;
   skillIndex?: string;
+  /** MEMORY.md index — volatile (refreshed each turn after extraction). */
+  memoryIndex?: string;
   gitBranchName?: string;
   gitStatus?: string;
   gitDiffSummary?: string;
@@ -29,7 +32,11 @@ export type RequestContext = {
 /** The expensive-to-compute, rarely-changing slice of the context. */
 type StaticRequestContext = Omit<
   RequestContext,
-  "gitBranchName" | "gitStatus" | "gitDiffSummary" | "hasPersistedTasks"
+  | "gitBranchName"
+  | "gitStatus"
+  | "gitDiffSummary"
+  | "hasPersistedTasks"
+  | "memoryIndex"
 >;
 
 let staticCache: { cwd: string; value: StaticRequestContext } | undefined;
@@ -79,5 +86,6 @@ export function buildRequestContext(cwd: string): RequestContext {
     gitStatus: gitCtx.status,
     gitDiffSummary: gitCtx.diffSummary,
     hasPersistedTasks: hasIncompleteTasksSync(cwd),
+    memoryIndex: readMemoryIndex(cwd),
   };
 }

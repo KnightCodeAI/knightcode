@@ -11,9 +11,8 @@ type Props = {
 
 /**
  * Shared frame for every interactive prompt (permissions, agent spawn,
- * questions), mirroring claude-code's PermissionDialog/PermissionRequestTitle:
- * a top-ruled panel in the permission accent color, a bold title with a dim
- * subtitle below it, then the request-specific content.
+ * questions): a top-ruled panel in the permission accent color, a bold title
+ * with a dim subtitle below it, then the request-specific content.
  */
 export function PermissionPanel({ title, subtitle, children }: Props) {
   const { colors } = useTheme();

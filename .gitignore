@@ -76,8 +76,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 #shenanigans
 Shenanigans.md
 
-/apps/web/
-/claude-code/
-
 # Compiled platform binaries (built by CI / scripts/build.ts, never committed)
 packages/cli-*/bin/

@@ -12,8 +12,7 @@ const MAX_FILE_CHARS = 40_000;
 const MAX_FILE_BYTES = MAX_FILE_CHARS * 4;
 
 /**
- * Extract paths mentioned with the @ symbol, ported from claude-code's
- * extractAtMentionedFiles (attachments.ts). Mentions must be preceded by
+ * Extract paths mentioned with the @ symbol. Mentions must be preceded by
  * start-of-string or whitespace so emails (a@b.com) never match. Quoted
  * mentions (@"my file.txt") support paths with spaces.
  */
@@ -96,7 +95,7 @@ async function describeMention(
     }`;
   } catch {
     // Missing path, unreadable file, outside the project root — the mention
-    // was probably not a path at all. Silently skip, like claude-code.
+    // was probably not a path at all. Silently skip.
     return null;
   }
 }
@@ -104,9 +103,8 @@ async function describeMention(
 /**
  * Resolve every @-mentioned path in a prompt and return one system-reminder
  * block with their contents (directory listings / file bodies), or null when
- * nothing resolved. claude-code expands mentions the same way at submit time
- * (processAtMentionedFiles) so the model never searches for the literal
- * "@path" text.
+ * nothing resolved. Expanding mentions at submit time means the model never
+ * searches for the literal "@path" text.
  */
 export async function expandAtMentions(
   text: string,
