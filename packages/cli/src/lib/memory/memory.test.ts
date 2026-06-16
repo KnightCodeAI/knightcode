@@ -79,22 +79,29 @@ describe("encodeProjectPath", () => {
   });
   test("case folding agrees with the real filesystem", () => {
     const base = mkdtempSync(join(tmpdir(), "kc-case-"));
-    const upper = join(base, "Proj");
-    mkdirSync(upper);
-    const lower = join(base, "proj");
-    // Probe the actual FS: does the lower-cased name resolve to the dir we made?
-    let fsCaseInsensitive = false;
     try {
-      fsCaseInsensitive = statSync(lower).isDirectory();
-    } catch {
-      fsCaseInsensitive = false;
+      const upper = join(base, "Proj");
+      mkdirSync(upper);
+      const lower = join(base, "proj");
+      // Probe the actual FS: does the lower-cased name resolve to the dir we made?
+      let fsCaseInsensitive = false;
+      try {
+        fsCaseInsensitive = statSync(lower).isDirectory();
+      } catch {
+        fsCaseInsensitive = false;
+      }
+      if (fsCaseInsensitive) {
+        expect(encodeProjectPath(upper)).toBe(encodeProjectPath(lower));
+      } else {
+        expect(encodeProjectPath(upper)).not.toBe(encodeProjectPath(lower));
+      }
+      // A trailing separator must not throw off case detection: the same
+      // existing dir with/without a trailing slash encodes identically.
+      expect(encodeProjectPath(upper + "/")).toBe(encodeProjectPath(upper));
+    } finally {
+      // Remove the temp dir even if an assertion above throws.
+      rmSync(base, { recursive: true, force: true });
     }
-    if (fsCaseInsensitive) {
-      expect(encodeProjectPath(upper)).toBe(encodeProjectPath(lower));
-    } else {
-      expect(encodeProjectPath(upper)).not.toBe(encodeProjectPath(lower));
-    }
-    rmSync(base, { recursive: true, force: true });
   });
   test("bounds the encoded folder name to <=255 UTF-8 bytes", () => {
     const deepAscii =

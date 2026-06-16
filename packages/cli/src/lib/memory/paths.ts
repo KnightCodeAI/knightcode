@@ -1,4 +1,4 @@
-import { basename, dirname, join } from "path";
+import { dirname, join } from "path";
 import { existsSync, statSync } from "fs";
 import { createHash } from "crypto";
 import { knightcodeHome } from "../paths";
@@ -28,13 +28,32 @@ function truncateToBytes(s: string, maxBytes: number): string {
 }
 
 /**
+ * Return `p` with the case of one letter flipped, preferring the letter closest
+ * to the leaf so it best reflects the target directory. The Windows drive letter
+ * is skipped (it's always case-insensitive and would mislead). Returns null when
+ * the path has no flippable letter — a path with no letters has no casing to
+ * vary, so detection can safely fall back to case-sensitive.
+ */
+function flipPathCase(p: string): string | null {
+  const drive = /^[a-zA-Z]:/.exec(p);
+  const start = drive ? drive[0].length : 0;
+  // Scan from the end so we flip a leaf letter when present, an ancestor's
+  // otherwise; index directly into `p`, so trailing slashes don't shift it.
+  for (let i = p.length - 1; i >= start; i--) {
+    const c = p[i]!;
+    if (c >= "a" && c <= "z") return p.slice(0, i) + c.toUpperCase() + p.slice(i + 1);
+    if (c >= "A" && c <= "Z") return p.slice(0, i) + c.toLowerCase() + p.slice(i + 1);
+  }
+  return null;
+}
+
+/**
  * Best-effort: is the filesystem backing `path` case-insensitive? Probes the
- * nearest existing ancestor by case-flipping a letter in its leaf component and
- * checking whether the variant resolves to the same inode. Defaults to false
- * (case-sensitive) whenever it can't tell — merging two distinct projects into
- * one store (data loss) is worse than keeping separate stores for the same dir
- * reached via different casing. We flip a letter in the *leaf*, not the drive
- * letter (which is always case-insensitive on Windows and would mislead).
+ * nearest existing ancestor by case-flipping a letter and checking whether the
+ * variant resolves to the same inode. Defaults to false (case-sensitive)
+ * whenever it can't tell — merging two distinct projects into one store (data
+ * loss) is worse than keeping separate stores for the same dir reached via
+ * different casing.
  */
 function isCaseInsensitiveFs(path: string): boolean {
   let probe = path;
@@ -49,16 +68,8 @@ function isCaseInsensitiveFs(path: string): boolean {
   if (cached !== undefined) return cached;
 
   let result = false;
-  const leaf = basename(probe);
-  const letter = leaf.match(/[a-zA-Z]/);
-  if (letter) {
-    const idxInLeaf = leaf.indexOf(letter[0]);
-    const idx = probe.length - leaf.length + idxInLeaf;
-    const flippedChar =
-      letter[0] === letter[0].toLowerCase()
-        ? letter[0].toUpperCase()
-        : letter[0].toLowerCase();
-    const flipped = probe.slice(0, idx) + flippedChar + probe.slice(idx + 1);
+  const flipped = flipPathCase(probe);
+  if (flipped) {
     try {
       const a = statSync(probe);
       const b = statSync(flipped);

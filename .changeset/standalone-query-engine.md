@@ -21,6 +21,12 @@ licensed under Apache-2.0.
 - **Concurrency-aware tool scheduler.** Engine-owned scheduling policy runs tool
   rounds with bounded concurrency. Introduces an engine `ToolHost` contract and a
   hook adapter so the engine can execute tools without depending on the UI layer.
+- **Cross-session project memory.** Durable, non-obvious facts are extracted
+  automatically after completed turns into a per-project store
+  (`~/.knightcode/projects/<cwd>/memory/`) with a `MEMORY.md` recall index.
+  Relevant memories are recalled into the system prompt, a consolidation
+  ("dream") pass merges and prunes the store, and a `Memory` tool lets the model
+  review, correct, or forget entries.
 - **Per-row tool spinners.** Concurrently running tools each get their own inline
   spinner instead of a single shared indicator.
 - **`@`-mention path expansion.** Paths referenced with `@` in a prompt are

@@ -20,12 +20,20 @@ export function debugLog(scope: string, ...args: unknown[]): void {
     const body = args
       .map((a) => {
         if (typeof a === "string") return a;
-        // Guard each arg: a single unserializable value (BigInt, circular ref)
-        // must not drop the whole log entry.
+        // Guard each arg so a single hostile value (BigInt, circular ref, an
+        // object whose toString/Symbol.toPrimitive throws, a null-prototype
+        // object) can't drop the whole log entry. Both JSON.stringify and the
+        // String() coercion fallback can throw, so each is wrapped.
         try {
-          return JSON.stringify(a) ?? String(a);
+          const s = JSON.stringify(a);
+          if (s !== undefined) return s;
         } catch {
+          // fall through to coercion
+        }
+        try {
           return String(a);
+        } catch {
+          return "[unserializable]";
         }
       })
       .join(" ");
