@@ -1,0 +1,27 @@
+---
+title: Security & Guardrails
+description: Configure security boundaries, allowlist trusted commands, and run lifecycle verification hooks.
+icon: Shield
+---
+
+Running agentic AI tools locally on your development machine presents risks, such as executing destructive shell commands or writing malformed code. KnightCode enforces strict guardrails to give you full control.
+
+## Granular Tool Approvals
+
+By default, KnightCode segregates tools into two safety tiers:
+- **Read-Only Tools** (`Read`, `Glob`, `Grep`, `TaskList`): Executed automatically without prompting.
+- **Mutating Tools** (`Write`, `Edit`, `MultiEdit`, `Bash`, `TaskCreate`): In **BUILD** mode, these prompt the developer with an interactive card in the chat log, requiring manual approval. In **AUTO** mode, safe mutating actions are automatically approved to allow autonomous execution loops.
+
+## Allowed Commands (`/allow`)
+
+To make development in `AUTO` mode smoother, you can allowlist specific safe shell command patterns.
+- Open the `/allow` dialog.
+- Add regex patterns for commands that do not need confirmation (e.g., `git status`, `vitest run`, `bun run lint`).
+- The agent can execute matching commands silently in the background, accelerating automation loops.
+
+## Lifecycle Hooks (`/hooks`)
+
+You can set up PreToolUse and PostToolUse hooks to enforce codebase-specific constraints.
+- Run `/hooks` to open the Hooks management dialog.
+- **PreToolUse Hook**: Runs a shell script *before* the agent executes a tool call. If the script exits with a non-zero code, the tool call is blocked. Useful for preventing modifications to sensitive folders.
+- **PostToolUse Hook**: Runs a shell script *after* the agent completes a tool call. Useful for running automatic code formatters (e.g., Prettier/ESLint) or running test suites immediately after edits.

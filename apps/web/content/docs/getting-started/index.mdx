@@ -1,0 +1,61 @@
+---
+title: Install and first run
+description: Install KnightCode on macOS, Linux, or Windows, then run setup to connect your first provider.
+icon: Rocket
+---
+
+KnightCode is distributed via npm and runs on Node.js (>=18). It includes pre-built platform binaries that are installed automatically as optional dependencies.
+
+## Installation
+
+Install KnightCode globally using npm:
+
+```bash
+npm install -g @knightcodeai/cli
+```
+
+Alternatively, you can run it without global installation using `npx`:
+
+```bash
+npx @knightcodeai/cli
+```
+
+If you prefer using **Bun**:
+
+```bash
+bun install -g @knightcodeai/cli
+```
+
+## First Run & Setup
+
+To start a session, navigate to any repository folder in your terminal and launch the client:
+
+```bash
+knightcode
+```
+
+On your very first run, KnightCode will guide you through an interactive onboarding setup:
+1. **Configure API Keys**: Enter your OpenRouter API key. Keys are safely stored in a local configuration file with secure owner-only read/write permissions (`~/.knightcode/credentials.json`).
+2. **Web Search Configuration**: Optionally enable web search capabilities to let the agent search the web using Brave or Tavily API keys.
+
+You can re-run this setup dialog at any time inside the app by executing the `/setup` command.
+
+## Build from Source
+
+Prerequisites: Node.js (>=20), and **Bun** (used as package manager).
+
+```bash
+# Clone the repository and install dependencies
+bun install
+
+# Build the CLI package
+bun run build:cli
+
+# Link the package locally
+bun run link:cli
+```
+
+Now you can start a local development build with hot-reloads:
+```bash
+bun run dev:cli
+```

@@ -1,0 +1,32 @@
+---
+title: Data Locations
+description: Where KnightCode stores configuration, database logs, and project memories on your system.
+icon: Database
+---
+
+KnightCode operates as a local-first application. All persistent settings, conversation histories, and logs are kept in a dedicated directory in your home directory.
+
+## Root Directory
+
+The configuration root is named `.knightcode` and is located in the active user's home directory:
+
+- **macOS / Linux**: `~/.knightcode/` (equivalent to `/Users/<username>/.knightcode/` or `/home/<username>/.knightcode/`)
+- **Windows**: `%USERPROFILE%\.knightcode\` (equivalent to `C:\Users\<username>\.knightcode\`)
+
+## Folder Structure & Files
+
+Inside the `.knightcode` directory, you will find:
+
+| File / Folder | Purpose |
+| --- | --- |
+| **`knightcode.db`** | Local SQLite database. Stores your conversation history, message transcripts, and session metadata. |
+| **`settings.json`** | JSON configuration file storing preferences (selected theme, reasoning level, allowlisted command regexes for `/allow`, custom provider settings, etc.). |
+| **`tasks/`** | Temporary logs for active or completed background tasks spawned via the `TaskCreate` tool. Logs are grouped in subfolders by task ID. |
+| **`projects/`** | Contains persistent Project Memory guidelines and indices. Inside `projects/<path-hash>/memory/` are stored the individual memory Markdown notes and the `MEMORY.md` recall index. |
+| **`debug.log`** | Running logs for diagnostic audits, model responses, and error traces. Enabled when running with `KNIGHTCODE_DEBUG=1`. |
+
+## Backup and Synchronization
+
+Since all configurations are stored in plain text and SQLite files inside a single home folder, you can easily backup your workspace or migrate between machines by copying the `~/.knightcode` directory. 
+
+Ensure KnightCode is fully closed (using `/exit`) before copy operations to prevent database write locks or corrupted SQLite journal files.

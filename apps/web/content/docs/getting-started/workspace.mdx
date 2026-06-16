@@ -1,0 +1,45 @@
+---
+title: TUI Workspace Tour
+description: Tour the KnightCode Terminal TUI - prompt, status bar, side-panel todo list, and dialog panels.
+icon: Layout
+---
+
+KnightCode runs as an interactive full-screen terminal application using **OpenTUI**. The workspace is divided into logical visual sections designed for keyboard-first developer workflows.
+
+## The Chat Area
+
+The main viewport displays the scrollable conversation log. It renders:
+- **User Prompts**: Displayed in styled message blocks.
+- **Agent Responses**: Streams text dynamically.
+- **Reasoning Process**: Shows the agent's internal thought steps before outputting.
+- **Tool Progress Indicators**: Animates spinners for active tool calls (e.g., file reads, terminal executions).
+- **Interactive Prompts**: Displays inline yes/no validation cards for security-sensitive tool invocations.
+
+## Input Bar & Prompt Line
+
+At the bottom of the main viewport is the interactive prompt:
+- **Prompt Prefix**: Starts with `❯` styled to match the active mode (e.g. green for BUILD, purple for PLAN, blue for AUTO).
+- **Text Area**: Support multi-line inputs. Pressing `Enter` submits the prompt, while `Shift + Enter` inserts a newline.
+- **Autocomplete**: Typing `@` opens the file reference menu to easily attach files or folders. Typing `/` opens the command list.
+
+## Todo Side Panel
+
+On the right side of the screen is the Todo Panel, which can be toggled using `Ctrl + T`.
+- Shows a list of current development checklist items.
+- The AI agent dynamically updates, marks, and reorganizes this list as it executes steps in PLAN or AUTO mode.
+- Helps monitor complex refactoring tasks at a glance.
+
+## Status Bar
+
+Located at the very bottom, the status bar displays live stats:
+- **Model Name**: The current active LLM provider and model.
+- **Reasoning Effort**: The active thinking budget (e.g. low, medium, high).
+- **Token Usage**: Running count of input and output tokens for the current conversation.
+- **Session Cost**: Establishes cost metrics in USD based on pricing definitions of the selected model.
+
+## Command Dialogs
+
+Pressing `/` opens the command menu. Commands like `/models`, `/theme`, or `/sessions` overlay modal dialog boxes over the terminal workspace.
+- Navigate lists using arrow keys (`↑` / `↓`).
+- Select options by pressing `Enter`.
+- Dismiss any dialog by pressing `Esc`.

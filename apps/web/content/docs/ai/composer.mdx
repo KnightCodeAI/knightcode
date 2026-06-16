@@ -1,0 +1,34 @@
+---
+title: Input Bar & Chat
+description: Use file referencing, autocomplete, and interactive chat modes to converse with the agent.
+icon: AiIdea
+---
+
+The input bar at the bottom of the TUI is the main control surface for KnightCode. It is keyboard-driven, supporting inline file tagging, command autocompletion, and mode switching.
+
+## Keyboard Mode Toggling
+
+Pressing **`Tab`** while focusing the input bar toggles the active prompt mode. The prompt caret `❯` and border change color to show the active state:
+
+- **BUILD** (Default): The agent executes individual tool tasks (like reading or editing files) but prompts you for approval on all mutating commands.
+- **PLAN**: The agent works in planning mode. It creates lists, designs solutions, and interacts with the Todo panel without executing file edits or shell scripts.
+- **AUTO**: The agent runs autonomously, auto-approving allowlisted commands and file writes (under safety boundaries) to quickly complete a multi-step objective.
+
+## File References with `@`
+
+You can attach file context to your prompt without copy-pasting code:
+- Type **`@`** inside the text box.
+- An autocomplete menu appears showing files and folders in your repository.
+- Type to fuzzy search, select using arrow keys (`↑` / `↓`), and press `Enter` to attach.
+- Selecting a directory appends a trailing `/`, allowing you to traverse down the file tree.
+
+## Command Autocomplete with `/`
+
+Type **`/`** to open the command menu overlay. Start typing to filter commands (e.g., `/undo`, `/models`, `/theme`), then press `Enter` to run the command directly.
+
+## Conversation Compaction
+
+Over long coding sessions, the prompt transcript can grow extremely large and consume too many API tokens.
+
+- **Auto-Compaction**: KnightCode automatically monitors token usage. If the conversation exceeds safety thresholds, the engine compresses older messages, writing a compaction summary block into the chat.
+- **Manual Compaction**: You can manually trigger compaction at any time using the `/compact` command.

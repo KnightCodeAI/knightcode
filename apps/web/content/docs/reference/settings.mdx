@@ -1,0 +1,39 @@
+---
+title: Settings & Diagnostics
+description: Adjust reasoning levels, allowlists, lifecycle hooks, and run diagnostic audits.
+icon: Tools
+---
+
+KnightCode settings are managed directly inside the terminal workspace using interactive dialog boxes. 
+
+## Settings Dialogs
+
+Use slash commands to open individual settings dialogs:
+
+- **`/models`**: View and switch active AI models and providers.
+- **`/theme`**: Choose your terminal colors and styling themes.
+- **`/reasoning`**: Set the thinking/reasoning effort level (Low, Medium, High) for models that support it. This adjusts the thinking token budget.
+- **`/allow`**: Manage allowlisted command patterns. Commands that match the listed regexes are allowed to run automatically without prompting for confirmation.
+- **`/hooks`**: Manage PreToolUse and PostToolUse lifecycle hook scripts to enforce constraints or trigger linters/formatters.
+
+---
+
+## Diagnostics (The Doctor Command)
+
+If you encounter issues with API key authorization, database locks, or environment configurations, you can run a diagnostic audit:
+
+### In-App Diagnostics
+Type **`/doctor`** inside the TUI session. A dialog opens and tests:
+- **Authorization**: Verifies if your provider keys are successfully read from the `credentials.json` file.
+- **Connection**: Sends a test ping to the active AI endpoint.
+- **Database**: Assesses the integrity of the local SQLite storage.
+- **Git State**: Validates repository status and tracked directories.
+
+### CLI Diagnostics
+If the TUI is failing to launch, run the diagnostic tool in headless mode from your standard terminal shell:
+
+```bash
+knightcode doctor
+```
+
+This performs the same audit checks and prints a clean diagnostics summary directly to stdout, exiting with a non-zero code if critical failures are found.

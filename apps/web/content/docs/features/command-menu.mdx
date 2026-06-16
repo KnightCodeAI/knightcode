@@ -1,0 +1,53 @@
+---
+title: Command Menu & Slash Commands
+description: Use the slash-command menu to trigger in-app dialogs and execute session actions.
+icon: Command
+---
+
+KnightCode features a keyboard-driven slash-command menu to interact with settings, manage sessions, revert modifications, and run workflows without leaving the TUI.
+
+Type `/` at the prompt to search and execute any of the following commands.
+
+## Session Control
+
+- `/new`: Starts a fresh conversation session.
+- `/sessions`: Opens a dialog to view, switch, and delete past conversations stored in your local SQLite store.
+- `/rename`: Renames the current conversation title.
+- `/branch`: Forks the current conversation transcript into a new session.
+- `/exit`: Safely terminates background tasks and exits the TUI.
+
+## AI Configuration & Control
+
+- `/models`: Switch between active LLM models (e.g., OpenRouter endpoints, local models).
+- `/reasoning`: Toggle and set the reasoning/thinking effort level (Low, Medium, High) for models that support it.
+- `/agents`: Switch modes (BUILD, PLAN, AUTO) or select custom agent templates.
+- `/setup`: Re-runs the onboarding wizard to configure keys, default models, and search providers.
+
+## Context & Token Utilities
+
+- `/compact`: Compresses the conversation history, summarizing older messages to free up context window tokens.
+- `/clear`: Clears all messages from the current conversation without deleting the session.
+- `/rewind`: Rewinds the last $N$ user/assistant turns to let you correct course.
+- `/copy`: Copies the text content of the last assistant response to your system clipboard.
+- `/export`: Exports the full conversation transcript as a clean markdown file (`knightcode-export-YYYY-MM-DD.md`) into your working directory.
+
+## Diagnostics & History
+
+- `/status`: Displays current session configuration, total messages, model, and active token statistics.
+- `/stats`: Shows token usage and session statistics for the current directory's workspace.
+- `/doctor`: Runs a diagnostic check on the presence and availability of API keys, local databases, and runtime versions.
+- `/files`: Lists all files edited or written during the active session.
+- `/undo`: Undoes all file modifications made by the AI agent in this session, restoring their original state.
+
+## Git & PR Workflows
+
+- `/commit`: Inspects staged changes and uses the agent to generate and commit with a style-matched message.
+- `/commit-push-pr`: Generates a commit message, pushes the branch, and uses the GitHub CLI (`gh`) to open a pull request.
+- `/review`: Downloads and reviews a GitHub PR's changesets inside the terminal session.
+- `/security-review`: Runs a security audit and review on your PR or uncommitted changes.
+
+## Settings & Theme
+
+- `/theme`: Opens the theme dialog to switch terminal color schemes.
+- `/hooks`: Configure PreToolUse and PostToolUse lifecycle scripts.
+- `/allow`: Edit allowlisted commands for automatic execution in AUTO mode.
