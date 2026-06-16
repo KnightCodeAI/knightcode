@@ -66,11 +66,24 @@ export async function generateMetadata(props: {
   params: Promise<{ slug?: string[] }>
 }): Promise<Metadata> {
   const params = await props.params
-  const page = source.getPage(params.slug)
+  const slugs = params.slug ?? []
+
+  if (slugs.length > 0 && slugs[slugs.length - 1].endsWith(".md")) {
+    const cleanSlugs = [...slugs]
+    const last = cleanSlugs[cleanSlugs.length - 1]
+    if (last === "index.md") {
+      cleanSlugs.pop()
+    } else {
+      cleanSlugs[cleanSlugs.length - 1] = last.slice(0, -3)
+    }
+    redirect(`/llms.mdx/docs/${cleanSlugs.join("/")}`)
+  }
+
+  const page = source.getPage(slugs)
 
   if (!page) notFound()
 
-  const ogUrl = `/og/docs/${params.slug?.join("/") ?? ""}`
+  const ogUrl = `/og/docs/${slugs.join("/")}`
 
   return {
     title: page.data.title,
