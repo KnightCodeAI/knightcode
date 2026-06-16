@@ -26,5 +26,5 @@ For large codebases or multi-faceted problems, the primary agent can spawn dedic
 ## Security & Recursion Safety Gates
 
 To prevent runaway API bills or infinite loops:
-- **Depth Limits**: Subagents have a strict maximum recursion depth limit. A subagent cannot spawn a subagent past the configured safety threshold.
-- **Permission Bubbling**: If a subagent attempts to execute a mutating action (like writing a file or running a bash script), the permission request bubbles up to the primary TUI. The session pauses, and you are prompted to confirm or reject the subagent's tool call.
+- **Depth Limits**: Subagent-to-subagent spawning is disabled. Only the primary agent can spawn subagents, preventing complex nested execution loops and ensuring predictable token usage.
+- **Permission Bubbling**: When subagents are spawned in the background, any mutating tool calls (like writing a file or running a shell script) are automatically denied to prevent unauthorized modifications without user presence. For interactive sessions, mutating tool approvals bubble up to the primary TUI where you are prompted to confirm or reject the action.

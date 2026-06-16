@@ -1,23 +1,16 @@
 "use client"
 
-import { StarIcon } from "@hugeicons/core-free-icons"
+import { StarIcon, Menu01Icon, Cancel01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { motion } from "motion/react"
 import Image from "next/image"
 import Link from "next/link"
 import * as React from "react"
 
-import { SITE } from "@/lib/site"
+import { SITE, NAV_LINKS } from "@/lib/site"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./theme-toggle"
-
-const navLinks = [
-  { href: "/#features", label: "Features" },
-  { href: "/about", label: "About" },
-  { href: "/changelog", label: "Changelog" },
-  { href: "/#faq", label: "FAQ" },
-  { href: "/docs", label: "Docs" },
-]
+import { Button } from "@/components/ui/button"
 
 interface HeaderShellProps {
   stars: string | null
@@ -26,6 +19,7 @@ interface HeaderShellProps {
 
 export function HeaderShell({ stars, rawStars }: HeaderShellProps) {
   const [scrolled, setScrolled] = React.useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12)
@@ -95,7 +89,7 @@ export function HeaderShell({ stars, rawStars }: HeaderShellProps) {
         </div>
 
         <nav className="hidden items-center gap-1 md:flex">
-          {navLinks.map((l) => (
+          {NAV_LINKS.map((l) => (
             <Link
               key={l.href}
               href={l.href}
@@ -115,9 +109,59 @@ export function HeaderShell({ stars, rawStars }: HeaderShellProps) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <ThemeToggle />
+          <div className="hidden md:flex">
+            <ThemeToggle />
+          </div>
+
+          <div className="flex items-center gap-2 md:hidden">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
+              className="rounded-full"
+            >
+              <HugeiconsIcon
+                icon={mobileMenuOpen ? Cancel01Icon : Menu01Icon}
+                className="size-4"
+                strokeWidth={2}
+              />
+            </Button>
+          </div>
         </div>
       </div>
+
+      {mobileMenuOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-3 mt-2 rounded-2xl border border-white/10 bg-white/90 p-4 shadow-xl backdrop-blur-xl dark:border-white/[0.08] dark:bg-zinc-950/90 md:hidden"
+        >
+          <nav className="flex flex-col gap-2">
+            {NAV_LINKS.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                {l.label}
+              </Link>
+            ))}
+            <Link
+              href={SITE.github}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setMobileMenuOpen(false)}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              GitHub
+            </Link>
+          </nav>
+        </motion.div>
+      )}
     </header>
   )
 }

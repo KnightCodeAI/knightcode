@@ -70,7 +70,14 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
     finalizeItem()
     if (currentGroup && currentEntry) {
       if (currentGroup.items.length > 0) {
-        currentEntry.groups.push(currentGroup)
+        const existingGroup = currentEntry.groups.find(
+          (g) => g.kind === currentGroup!.kind
+        )
+        if (existingGroup) {
+          existingGroup.items.push(...currentGroup.items)
+        } else {
+          currentEntry.groups.push(currentGroup)
+        }
       }
       currentGroup = null
     }
@@ -89,9 +96,9 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
   for (const line of lines) {
     const trimmed = line.trim()
     
-    if (line.startsWith("## ")) {
+    if (trimmed.startsWith("## ")) {
       finalizeEntry()
-      const versionPart = line.slice(3).trim()
+      const versionPart = trimmed.slice(3).trim()
       // Parse version and date if available, e.g. "0.1.0 - 2026-06-10" or just "0.1.0"
       const dateMatch = versionPart.match(/(.*?)\s*-\s*(\d{4}-\d{2}-\d{2})/)
       let version = versionPart
@@ -105,9 +112,9 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
         date,
         groups: []
       }
-    } else if (line.startsWith("### ")) {
+    } else if (trimmed.startsWith("### ")) {
       finalizeGroup()
-      const heading = line.slice(4).trim()
+      const heading = trimmed.slice(4).trim()
       let kind: ChangeKind = "Changed"
       if (heading.toLowerCase().includes("minor") || heading.toLowerCase().includes("add")) {
         kind = "Added"

@@ -2,12 +2,10 @@
   "title": "Features",
   "icon": "Layout",
   "pages": [
-    "terminal",
-    "editor",
-    "explorer",
-    "source-control",
-    "preview",
-    "themes",
-    "notifications"
+    "command-menu",
+    "tasks",
+    "todo",
+    "approvals",
+    "themes"
   ]
 }

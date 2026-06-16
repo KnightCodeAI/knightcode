@@ -20,7 +20,7 @@ Inside the `.knightcode` directory, you will find:
 | File / Folder | Purpose |
 | --- | --- |
 | **`knightcode.db`** | Local SQLite database. Stores your conversation history, message transcripts, and session metadata. |
-| **`settings.json`** | JSON configuration file storing preferences (selected theme, reasoning level, whitelisted command regexes for `/allow`, custom provider settings, etc.). |
+| **`settings.json`** | JSON configuration file storing preferences (selected theme, reasoning level, allowlisted command regexes for `/allow`, custom provider settings, etc.). |
 | **`tasks/`** | Temporary logs for active or completed background tasks spawned via the `TaskCreate` tool. Logs are grouped in subfolders by task ID. |
 | **`projects/`** | Contains persistent Project Memory guidelines and indices. Inside `projects/<path-hash>/memory/` are stored the individual memory Markdown notes and the `MEMORY.md` recall index. |
 | **`debug.log`** | Running logs for diagnostic audits, model responses, and error traces. Enabled when running with `KNIGHTCODE_DEBUG=1`. |

@@ -6,7 +6,7 @@ import type { IconSvgElement } from "@hugeicons/react"
 import { HugeiconsIcon } from "@hugeicons/react"
 
 import { cn } from "@/lib/utils"
-// import { ScreenshotFrame } from "./screenshot-frame"
+import { ScreenshotFrame } from "./screenshot-frame"
 
 export interface FeatureBullet {
   icon: IconSvgElement
@@ -38,7 +38,9 @@ export function FeatureShowcase({
   title,
   description,
   bullets,
+  image,
   reverse,
+  priority,
 }: FeatureShowcaseProps) {
   return (
     <section

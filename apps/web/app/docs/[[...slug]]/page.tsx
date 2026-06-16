@@ -3,8 +3,6 @@ import { DocsBody, DocsPage } from "fumadocs-ui/page"
 import { notFound } from "next/navigation"
 import type { Metadata } from "next"
 import defaultMdxComponents from "fumadocs-ui/mdx"
-import fs from "node:fs"
-import path from "node:path"
 import { PageActions } from "@/components/docs/page-actions"
 
 export default async function Page(props: {
@@ -16,10 +14,6 @@ export default async function Page(props: {
   if (!page) notFound()
 
   const MDX = page.data.body
-
-  const filePath =
-    page.absolutePath || path.join(process.cwd(), "content/docs", page.path)
-  const rawMarkdown = fs.readFileSync(filePath, "utf-8")
 
   const slugs = params.slug ?? []
   const slugPath = slugs.join("/")
@@ -37,7 +31,6 @@ export default async function Page(props: {
       </h1>
       <p className="mb-4 text-muted-foreground">{page.data.description}</p>
       <PageActions
-        rawMarkdown={rawMarkdown}
         gitUrl={gitUrl}
         rawMarkdownUrl={rawMarkdownUrl}
         sciraUrl={sciraUrl}

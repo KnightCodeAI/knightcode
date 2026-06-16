@@ -3,15 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import Image from "next/image"
 import Link from "next/link"
 
-import { SITE, VERSION } from "@/lib/site"
-
-const productLinks = [
-  { label: "Install", href: "/#download" },
-  { label: "Features", href: "/#features" },
-  { label: "Changelog", href: "/changelog" },
-  { label: "About", href: "/about" },
-  { label: "Docs", href: "/docs" },
-]
+import { SITE, VERSION, PRODUCT_LINKS } from "@/lib/site"
 
 const legalLinks = [
   { label: "Privacy", href: "/privacy" },
@@ -67,7 +59,7 @@ export function SiteFooter() {
           </p>
         </div>
 
-        <FooterCol title="Product" links={productLinks} />
+        <FooterCol title="Product" links={PRODUCT_LINKS as never} />
         <FooterCol title="Legal" links={legalLinks} />
         <FooterCol title="Community" links={communityLinks} />
       </div>

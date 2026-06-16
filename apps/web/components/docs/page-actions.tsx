@@ -17,7 +17,6 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { Button } from "@/components/ui/button"
 
 interface PageActionsProps {
-  rawMarkdown: string
   gitUrl: string
   rawMarkdownUrl: string
   sciraUrl: string
@@ -27,7 +26,6 @@ interface PageActionsProps {
 }
 
 export function PageActions({
-  rawMarkdown,
   gitUrl,
   rawMarkdownUrl,
   sciraUrl,
@@ -38,16 +36,35 @@ export function PageActions({
   const [copied, setCopied] = React.useState(false)
   const [dropdownOpen, setDropdownOpen] = React.useState(false)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
+  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
   const handleCopy = React.useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(rawMarkdown)
+      const response = await fetch(rawMarkdownUrl)
+      if (!response.ok) throw new Error("Failed to fetch markdown")
+      const text = await response.text()
+      await navigator.clipboard.writeText(text)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      timeoutRef.current = setTimeout(() => {
+        setCopied(false)
+      }, 2000)
     } catch (err) {
       console.error("Failed to copy markdown", err)
     }
-  }, [rawMarkdown])
+  }, [rawMarkdownUrl])
+
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   React.useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -101,6 +118,8 @@ export function PageActions({
           type="button"
           size="sm"
           className="cursor-pointer rounded-lg"
+          aria-haspopup="true"
+          aria-expanded={dropdownOpen}
         >
           Open
           <HugeiconsIcon

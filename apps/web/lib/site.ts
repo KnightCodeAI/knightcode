@@ -23,3 +23,19 @@ export const SITE = {
   youtube: "https://www.youtube.com/@Raghav1428",
 } as const
 
+export const NAV_LINKS = [
+  { href: "/#features", label: "Features" },
+  { href: "/about", label: "About" },
+  { href: "/changelog", label: "Changelog" },
+  { href: "/#faq", label: "FAQ" },
+  { href: "/docs", label: "Docs" },
+] as const
+
+export const PRODUCT_LINKS = [
+  { label: "Install", href: "/#download" },
+  { label: "Features", href: "/#features" },
+  { label: "Changelog", href: "/changelog" },
+  { label: "About", href: "/about" },
+  { label: "Docs", href: "/docs" },
+] as const
+

@@ -10,19 +10,19 @@ For complex software development, the agent often needs to run persistent backgr
 
 When the agent executes a background command, it spawns it inside a dedicated task container instead of a blocking foreground shell.
 - **Process Monitoring**: KnightCode runs a heartbeat monitor (`monitorProcessesHeartbeat`) every 5 seconds to ensure spawned tasks are alive.
-- **Durable Logging**: Outputs from background tasks are written to local logs (`.knightcode/tasks/<task-id>/`), which the agent can retrieve and read at any time.
-- **Auto-Cleanup**: When you exit KnightCode (either via `/exit` or normal SIGTERM/SIGINT signals), a hook tears down all active child processes (`cleanupAllProcesses`) to prevent orphan processes.
+- **Process State**: Process state is stored in `.knightcode/processes.json`, which tracks active background subprocesses. Note that background command stdout/stderr is not permanently persisted on disk, and the agent monitors task status through the process state store.
+- **Auto-Cleanup**: When you exit KnightCode (either via `/exit` or SIGTERM, note that Ctrl+C/SIGINT is suppressed to prevent accidental exits), a hook tears down all active child processes (`cleanupAllProcesses`) to prevent orphan processes.
 
 ## Task Tool Suite
 
 The AI agent has access to specific tools to interact with tasks:
 
-1. **`TaskCreate`**: Spawns a new process in the background. Returns a unique `task-id`.
+1. **`TaskCreate`**: Creates a durable task record in the tracking system. Returns a unique `task-id` (actual execution is handled by process tools).
 2. **`TaskList`**: Returns a list of all active background tasks along with their runtimes, commands, and current statuses.
 3. **`TaskGet`**: Queries the details and configuration of a specific background task.
 4. **`TaskOutput`**: Reads the stdout/stderr logs of an active or completed background task.
 5. **`TaskUpdate`**: Sends input signals or stdin data to a running task process.
-6. **`TaskStop`**: Stops and kills a background process using SIGKILL or SIGTERM signals.
+6. **`TaskStop`**: Updates the status of a task record to stopped/completed in the database.
 
 ## Working with Tasks
 

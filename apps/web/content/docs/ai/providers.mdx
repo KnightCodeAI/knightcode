@@ -21,11 +21,11 @@ To re-run key configurations:
 ## Secure Storage
 
 API keys and search credentials are stored locally in the configuration directory:
-- Path: `~/.knightcode/credentials.json` (on macOS/Linux) or `%USERPROFILE%\.knightcode\credentials.json` (on Windows).
+- Path: `~/.knightcode/credentials.json` (on macOS/Linux) or `%USERPROFILE%\.knightcode\credentials.json` (on Windows). If the `KNIGHTCODE_HOME` environment variable is set, the credentials will be stored at `$KNIGHTCODE_HOME/credentials.json` instead.
 
 On macOS, Linux, and other Unix-like systems, KnightCode configures the file permissions to `0600` (owner-only read and write) to prevent other users or unprivileged processes on the system from reading your API keys.
 
-To completely wipe all keys, you can simply delete the `credentials.json` file.
+To completely wipe all keys, you can delete the `credentials.json` file. Note that this does not clear keys provided via environment variables (such as `OPENROUTER_API_KEY`); you will need to unset those environment variables separately.
 
 ## Curated Models list
 
