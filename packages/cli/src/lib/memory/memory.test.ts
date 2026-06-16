@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "fs";
 import { spawn } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -70,26 +70,42 @@ describe("encodeProjectPath", () => {
     // `/a/b` and `/a-b` both slugify to `a-b`; the hash keeps them apart.
     expect(encodeProjectPath("/a/b")).not.toBe(encodeProjectPath("/a-b"));
   });
-  test("maps case-variant paths per the platform's filesystem semantics", () => {
-    const caseInsensitive =
-      process.platform === "win32" || process.platform === "darwin";
-    if (caseInsensitive) {
-      // Same directory on a case-insensitive FS → one store.
-      expect(encodeProjectPath("/Proj/App")).toBe(
-        encodeProjectPath("/proj/app"),
-      );
-    } else {
-      // Genuinely distinct directories on a case-sensitive FS → separate stores.
-      expect(encodeProjectPath("/Proj/App")).not.toBe(
-        encodeProjectPath("/proj/app"),
-      );
-    }
+  test("does not fold case when the path can't be probed (safe default)", () => {
+    // Non-existent paths can't be confirmed case-insensitive, so case is
+    // preserved — distinct projects must never merge into one store.
+    expect(encodeProjectPath("/no/such/Dir")).not.toBe(
+      encodeProjectPath("/no/such/dir"),
+    );
   });
-  test("bounds the encoded folder name length for deep paths", () => {
-    const deep =
+  test("case folding agrees with the real filesystem", () => {
+    const base = mkdtempSync(join(tmpdir(), "kc-case-"));
+    const upper = join(base, "Proj");
+    mkdirSync(upper);
+    const lower = join(base, "proj");
+    // Probe the actual FS: does the lower-cased name resolve to the dir we made?
+    let fsCaseInsensitive = false;
+    try {
+      fsCaseInsensitive = statSync(lower).isDirectory();
+    } catch {
+      fsCaseInsensitive = false;
+    }
+    if (fsCaseInsensitive) {
+      expect(encodeProjectPath(upper)).toBe(encodeProjectPath(lower));
+    } else {
+      expect(encodeProjectPath(upper)).not.toBe(encodeProjectPath(lower));
+    }
+    rmSync(base, { recursive: true, force: true });
+  });
+  test("bounds the encoded folder name to <=255 UTF-8 bytes", () => {
+    const deepAscii =
       "/" + Array.from({ length: 300 }, (_, i) => `segment-${i}`).join("/");
-    const enc = encodeProjectPath(deep);
-    expect(enc.length).toBeLessThanOrEqual(255);
+    expect(
+      Buffer.byteLength(encodeProjectPath(deepAscii), "utf8"),
+    ).toBeLessThanOrEqual(255);
+    // Multibyte: each "あ" is 3 UTF-8 bytes, so a char-based cap would overflow.
+    const deepMultibyte = "/" + "あ".repeat(500);
+    const enc = encodeProjectPath(deepMultibyte);
+    expect(Buffer.byteLength(enc, "utf8")).toBeLessThanOrEqual(255);
     expect(enc).toMatch(/-[0-9a-f]{8}$/); // hash suffix preserved
   });
 });
