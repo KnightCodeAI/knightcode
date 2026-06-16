@@ -1,0 +1,32 @@
+---
+title: Todo Side-panel
+description: Track your progress with a dynamic todo panel that the agent can read and update.
+icon: CheckList
+---
+
+KnightCode provides a dedicated Todo side panel that sits on the right side of the terminal layout. It serves as a visual checklist for complex, multi-phase tasks, helping you and the agent align on what is done, what is in progress, and what remains.
+
+## Toggling the Panel
+
+You can show or hide the Todo panel at any time using the keyboard shortcut:
+
+```bash
+Ctrl + T
+```
+
+When active, the panel splits your terminal window, pushing the chat interface to the left and rendering your active checklist on the right.
+
+## How it Works
+
+The Todo panel is driven by the AI agent through the **`TodoWrite`** tool.
+
+- **Checklist Insertion**: When you start a complex task, the agent often enters PLAN mode to outline its approach. It populates the Todo panel with detailed task steps.
+- **Dynamic Updates**: As the agent executes shell commands, runs tests, or writes files, it calls `TodoWrite` to update the statuses of each item.
+- **Visual Indicators**:
+  - `[ ]` **Pending**: Tasks that have not started.
+  - `[/]` **In Progress**: The active sub-task currently being executed.
+  - `[x]` **Completed**: Tasks successfully finished by the agent.
+
+## User Benefits
+
+The Todo panel is stored as a temporary state file on disk. Having this visual panel makes it easy to monitor the agent's progress, especially during complex refactorings where the agent might make 10-15 tool calls sequentially. You can visually verify if the agent is still on track or if it is stuck on a particular step.

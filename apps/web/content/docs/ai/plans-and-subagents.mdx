@@ -1,0 +1,30 @@
+---
+title: Plans & Subagents
+description: Solve complex, multi-layered problems using Plan Mode and recursive subagent delegation.
+icon: Brain
+---
+
+Complex software engineering tasks rarely succeed on the first attempt without structured planning. KnightCode provides two main mechanisms for structuring complex workflows: **Plan Mode** and **Subagent Delegation**.
+
+## Plan Mode
+
+You can toggle the CLI into **PLAN** mode using the `Tab` key or the `/agents` command menu.
+
+- In Plan Mode, the agent is restricted from making direct file writes or running shell commands.
+- Instead, the agent reviews the files, searches the codebase, and proposes a step-by-step implementation plan.
+- The agent populates the **Todo panel** (`Ctrl + T`) with structured checklist items outlining the milestones of the project.
+- Once you approve the plan, you can switch back to **BUILD** or **AUTO** mode to begin execution.
+
+## Subagent Delegation
+
+For large codebases or multi-faceted problems, the primary agent can spawn dedicated subagents using the **`Agent`** tool.
+
+- **Specialization**: The main agent can spin up a subagent with custom instructions (e.g., *"Act as a typescript typecheck auditor to fix all compiler errors in this folder"*).
+- **Tool Constraints**: Subagents are given a restricted set of tools and a localized context, preventing them from wandering outside their target task.
+- **Visual Nesting**: Subagent activity (thoughts, tool runs) is streamed and displayed nested under the parent agent's message block in the TUI, maintaining clear visibility.
+
+## Security & Recursion Safety Gates
+
+To prevent runaway API bills or infinite loops:
+- **Depth Limits**: Subagents have a strict maximum recursion depth limit. A subagent cannot spawn a subagent past the configured safety threshold.
+- **Permission Bubbling**: If a subagent attempts to execute a mutating action (like writing a file or running a bash script), the permission request bubbles up to the primary TUI. The session pauses, and you are prompted to confirm or reject the subagent's tool call.

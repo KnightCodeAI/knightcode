@@ -1,0 +1,33 @@
+---
+title: Sessions & Project Memory
+description: Save conversation histories locally and maintain persistent project memory across developer sessions.
+icon: Database
+---
+
+KnightCode is designed to be local-first, keeping your conversation logs and project guidelines secure on your local machine.
+
+## SQLite Session Management
+
+Every conversation you start in KnightCode is written to a local SQLite database file in your home directory.
+- **Switch Sessions**: Run `/sessions` to browse, switch, or delete past conversation logs.
+- **Rename Sessions**: Run `/rename` to give the active session a friendly name.
+- **Fork Conversations**: Run `/branch` to copy the active conversation history into a new session.
+
+---
+
+## Project Memory System
+
+To avoid repeating project details, rules, or preferences in every session, KnightCode implements a persistent Project Memory system:
+
+### 1. Guideline Files (`KNIGHTCODE.md`)
+You can place a `KNIGHTCODE.md` file in the root of your project directory. KnightCode automatically scans this file and loads its rules into the agent's system prompt on every session.
+- **Initialize Guideline**: Run `/init` to analyze the codebase and generate an initial `KNIGHTCODE.md` file.
+- **Manual Edit**: You can write rules (e.g., tech stack details, lint preferences) directly into `KNIGHTCODE.md`.
+
+### 2. Automated Memory Recall & Extraction
+KnightCode tracks your feedback, preferences, and workspace facts automatically using localized memory files stored at `~/.knightcode/projects/<project-path-hash>/memory/`.
+
+- **Turn-Start Recall**: At the start of a turn, a cheap side-query identifies relevant memories from your history and injects them as a `<system-reminder>` context block.
+- **Turn-End Extraction**: At the end of a completed turn, a serialized background agent (a forked agent) reviews the conversation. It extracts new facts (e.g., *"User prefers tabs over spaces for Python files"*) and saves them as small Markdown note files, updating the `MEMORY.md` index.
+- **Memory Management**: Run `/memory` to open the Memory Manager dialog where you can browse and delete stored memories.
+- **Memory Tool**: The agent can call the `Memory` tool directly to `list`, `get`, `update`, or `delete` memories (subject to user approval).

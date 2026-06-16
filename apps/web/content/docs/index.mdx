@@ -1,0 +1,24 @@
+---
+title: Welcome
+description: KnightCode is a local-first, interactive AI coding assistant built for your terminal.
+icon: BookOpen
+---
+
+KnightCode is an open-source terminal TUI (Terminal User Interface) built on **OpenTUI** and **React 19**. It runs entirely in your terminal, providing a rich, keyboard-driven environment where you can work with AI agents side-by-side with your repository context.
+
+No account or telemetry is required. KnightCode is BYOK (Bring Your Own Key), routing all your queries securely through OpenRouter to access standard, frontier, or free models.
+
+## What's Inside
+
+- **Keyboard-First TUI**: Run sessions directly from a repository in your terminal. Work in an interactive interface without switching to a web browser.
+- **Interactive Chat**: A scrollable message area displaying agent reasoning, streaming responses, and formatted output.
+- **Task & Todo System**: Ephemeral checklists and durable background tasks (`.knightcode/tasks/`) track progress and keep long-running agent workflows organized.
+- **Verification & Approvals**: Inspect proposed file diffs and command runs. Confirm or deny actions before the agent executes them.
+- **Project Memory**: Automatic recall and extraction of project preferences to local SQLite stores and project-specific `KNIGHTCODE.md` guidelines.
+- **Custom Themes**: Change TUI appearance with bundled presets (nord, tokyo-night, catppuccin, etc.) or custom ANSI palettes.
+
+## Where to Start
+
+1. [Install KnightCode](/docs/getting-started) and run the onboarding setup to configure your provider keys.
+2. Take a tour of [TUI Workspace layout](/docs/getting-started/workspace).
+3. Review available [Slash Commands](/docs/features/command-menu) to control the application.

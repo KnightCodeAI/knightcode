@@ -1,0 +1,32 @@
+---
+title: Background Tasks
+description: Run and manage long-running background processes (dev servers, tests) directly within your session.
+icon: Record
+---
+
+For complex software development, the agent often needs to run persistent background services (e.g., a dev server, webpack compilation, or test runners) while continuing the conversation loop. KnightCode implements a robust task execution manager to track, query, and clean up these subprocesses.
+
+## How Background Tasks Work
+
+When the agent executes a background command, it spawns it inside a dedicated task container instead of a blocking foreground shell.
+- **Process Monitoring**: KnightCode runs a heartbeat monitor (`monitorProcessesHeartbeat`) every 5 seconds to ensure spawned tasks are alive.
+- **Durable Logging**: Outputs from background tasks are written to local logs (`.knightcode/tasks/<task-id>/`), which the agent can retrieve and read at any time.
+- **Auto-Cleanup**: When you exit KnightCode (either via `/exit` or normal SIGTERM/SIGINT signals), a hook tears down all active child processes (`cleanupAllProcesses`) to prevent orphan processes.
+
+## Task Tool Suite
+
+The AI agent has access to specific tools to interact with tasks:
+
+1. **`TaskCreate`**: Spawns a new process in the background. Returns a unique `task-id`.
+2. **`TaskList`**: Returns a list of all active background tasks along with their runtimes, commands, and current statuses.
+3. **`TaskGet`**: Queries the details and configuration of a specific background task.
+4. **`TaskOutput`**: Reads the stdout/stderr logs of an active or completed background task.
+5. **`TaskUpdate`**: Sends input signals or stdin data to a running task process.
+6. **`TaskStop`**: Stops and kills a background process using SIGKILL or SIGTERM signals.
+
+## Working with Tasks
+
+You do not need to manually run task tools; the agent uses them automatically. If the agent proposes running a test server:
+- You will see a tool approval card for **`TaskCreate`**.
+- Once approved, the task launches, and the conversation continues immediately.
+- The agent can periodically check the logs of the task (using **`TaskOutput`**) to verify that the server started successfully without throwing errors.

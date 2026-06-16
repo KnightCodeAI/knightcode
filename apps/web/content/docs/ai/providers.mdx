@@ -1,0 +1,46 @@
+---
+title: AI Providers & Models
+description: Configure model connections, bring your own OpenRouter API key, and select models.
+icon: Cpu
+---
+
+KnightCode is built on a bring-your-own-key (BYOK) architecture. It does not run proprietary proxy servers or charge markup fees for inference. Instead, KnightCode **exclusively** uses **OpenRouter** as the gateway to connect to language models. 
+
+This means you only need to obtain and configure a single API key from OpenRouter to access a wide variety of state-of-the-art models.
+
+## Managing Models and Keys
+
+To view available models or switch between them:
+1. Type `/models` in the TUI input bar to open the **Select Model** dialog.
+2. Select from the predefined list of supported models.
+
+To re-run key configurations:
+1. Type `/setup` in the input bar.
+2. Follow the onboarding prompt to input your OpenRouter API key.
+
+## Secure Storage
+
+API keys and search credentials are stored locally in the configuration directory:
+- Path: `~/.knightcode/credentials.json` (on macOS/Linux) or `%USERPROFILE%\.knightcode\credentials.json` (on Windows).
+
+On macOS, Linux, and other Unix-like systems, KnightCode configures the file permissions to `0600` (owner-only read and write) to prevent other users or unprivileged processes on the system from reading your API keys.
+
+To completely wipe all keys, you can simply delete the `credentials.json` file.
+
+## Curated Models list
+
+Through OpenRouter, KnightCode provides access to a curated selection of frontier and free models:
+
+- **Free Tier Models**:
+  - `z-ai/glm-4.5-air:free` (GLM 4.5 Air)
+  - `deepseek/deepseek-v4-flash:free` (DeepSeek V4 Flash)
+  - `openai/gpt-oss-120b:free` (GPT-OSS 120B)
+- **Standard & Frontier Models**:
+  - `anthropic/claude-sonnet-4.6` (Claude Sonnet 4.6)
+  - `anthropic/claude-opus-4.8` (Claude Opus 4.8)
+  - `openai/gpt-5.5` (GPT-5.5)
+  - `openai/gpt-5.4-mini` (GPT-5.4 Mini)
+  - `z-ai/glm-5.1` (GLM 5.1)
+  - `moonshotai/kimi-k2.6` (Kimi K2.6)
+  - `openai/gpt-5.3-codex` (GPT-5.3 Codex)
+

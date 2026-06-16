@@ -1,0 +1,30 @@
+---
+title: Approvals & Diffs
+description: Keep complete control of what the agent executes with granular approvals and interactive diff reviews.
+icon: CheckList
+---
+
+KnightCode prioritizes developer security and transparency. Every operation that modifies your files or executes commands on your operating system is gated by an interactive approval flow.
+
+## The Approval Card
+
+When the agent attempts to call a security-sensitive tool (like writing a file or executing a shell script), KnightCode pauses execution and renders an approval card:
+
+- **Approve (Y)**: Accepts the action. The agent proceeds with execution.
+- **Reject (N)**: Rejects the action. The agent is notified and continues without executing the tool.
+- **Provide Feedback**: You can type a response (e.g., *"No, use the existing database schema instead"*) to guide the agent to a different approach.
+
+## Visual Diff Viewer
+
+When the agent uses editing tools (like `Edit` or `MultiEdit`), KnightCode doesn't silently rewrite files.
+- It displays a side-by-side or unified diff directly inside the TUI showing the exact line insertions, deletions, and modifications.
+- This lets you review the code changes hunk-by-hunk before hitting **Approve**.
+
+## Auto-Allowed Commands
+
+If you are running the agent in `AUTO` mode, constantly approving simple read-only commands (like `git status` or `ls`) can be repetitive.
+
+KnightCode provides an **Allowlist** for commands:
+- Open the `/allow` dialog.
+- You can review or add regex patterns for trusted commands (e.g., `git diff.*`, `npm test`, `vitest`).
+- When the agent attempts to run a matching shell command, it runs automatically without prompting.
