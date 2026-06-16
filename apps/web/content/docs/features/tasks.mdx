@@ -22,7 +22,7 @@ The AI agent has access to specific tools to interact with tasks:
 3. **`TaskGet`**: Queries the details and configuration of a specific background task.
 4. **`TaskOutput`**: Reads the stdout/stderr logs of an active or completed background task.
 5. **`TaskUpdate`**: Sends input signals or stdin data to a running task process.
-6. **`TaskStop`**: Stops and kills a background process using SIGKILL or SIGTERM signals.
+6. **`TaskStop`**: Stops an `in_progress` task by setting it back to `pending` and clearing its owner.
 
 ## Working with Tasks
 
