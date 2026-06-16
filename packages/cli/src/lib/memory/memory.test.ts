@@ -52,11 +52,14 @@ const rmHome = (dir: string) => {
 };
 
 describe("encodeProjectPath", () => {
+  // Case-insensitive match: the slug is case-folded on win32/darwin.
   test("turns separators and drive colon into dashes, with a hash suffix", () => {
     expect(encodeProjectPath("C:\\Users\\x\\proj")).toMatch(
-      /^C-Users-x-proj-[0-9a-f]{8}$/,
+      /^c-users-x-proj-[0-9a-f]{8}$/i,
     );
-    expect(encodeProjectPath("/home/x/proj")).toMatch(/^home-x-proj-[0-9a-f]{8}$/);
+    expect(encodeProjectPath("/home/x/proj")).toMatch(
+      /^home-x-proj-[0-9a-f]{8}$/i,
+    );
   });
   test("is stable across slash styles for the same directory", () => {
     expect(encodeProjectPath("C:\\Users\\x\\proj")).toBe(
@@ -66,6 +69,28 @@ describe("encodeProjectPath", () => {
   test("distinguishes directories that slugify identically", () => {
     // `/a/b` and `/a-b` both slugify to `a-b`; the hash keeps them apart.
     expect(encodeProjectPath("/a/b")).not.toBe(encodeProjectPath("/a-b"));
+  });
+  test("maps case-variant paths per the platform's filesystem semantics", () => {
+    const caseInsensitive =
+      process.platform === "win32" || process.platform === "darwin";
+    if (caseInsensitive) {
+      // Same directory on a case-insensitive FS → one store.
+      expect(encodeProjectPath("/Proj/App")).toBe(
+        encodeProjectPath("/proj/app"),
+      );
+    } else {
+      // Genuinely distinct directories on a case-sensitive FS → separate stores.
+      expect(encodeProjectPath("/Proj/App")).not.toBe(
+        encodeProjectPath("/proj/app"),
+      );
+    }
+  });
+  test("bounds the encoded folder name length for deep paths", () => {
+    const deep =
+      "/" + Array.from({ length: 300 }, (_, i) => `segment-${i}`).join("/");
+    const enc = encodeProjectPath(deep);
+    expect(enc.length).toBeLessThanOrEqual(255);
+    expect(enc).toMatch(/-[0-9a-f]{8}$/); // hash suffix preserved
   });
 });
 
