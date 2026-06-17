@@ -55,7 +55,9 @@ export function PromptConfigProvider({ children }: PromptConfigProviderProps) {
     useState<ReasoningEffortLevel>("medium");
 
   const toggleMode = useCallback(() => {
-    setMode((m) => (m === Mode.BUILD ? Mode.PLAN : Mode.BUILD));
+    setMode((m) =>
+      m === Mode.BUILD ? Mode.PLAN : m === Mode.PLAN ? Mode.AUTO : Mode.BUILD,
+    );
   }, []);
 
   return (

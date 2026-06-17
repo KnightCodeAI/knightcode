@@ -1,159 +1,91 @@
 # Turborepo starter
 
-This Turborepo starter is maintained by the Turborepo core team.
+# @knightcodeai/cli
 
-## Using this example
+`knightcode` — a local-first, bring-your-own-key AI coding CLI for your terminal.
 
-Run the following command:
+## Install
 
-```sh
-npx create-turbo@latest
+```bash
+npm install -g @knightcodeai/cli
 ```
 
-## What's inside?
+You don't need Bun — it's bundled into the platform binary. The small launcher
+(`bin/knightcode`) that spawns it runs on Node.js (>=18), which you already have
+if you installed with npm. The right platform binary installs automatically as
+an optional dependency.
 
-This Turborepo includes the following packages/apps:
+## Quick start
 
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```bash
+knightcode
 ```
 
-Without global `turbo`, use your package manager:
+On first run, set your OpenRouter API key from inside the app.
 
-```sh
-cd my-turborepo
-npx turbo build
-bun dlx turbo build
-bun exec turbo build
+## Configuration
+
+State lives in `~/.knightcode/` (sessions, settings, local SQLite database).
+
+| Command / env var | Effect |
+| ----------------- | ------ |
+| `knightcode --version` | Print the installed version |
+| `knightcode doctor` | Print diagnostics (config, database, API key, runtime) |
+| `KNIGHTCODE_NO_UPDATE_CHECK=1` | Disable the background update check |
+
+## Supported platforms
+
+Linux (x64, arm64), macOS (x64, arm64), Windows (x64).
+
+## Repository layout
+
+This is a [Turborepo](https://turborepo.dev/) monorepo managed with
+[bun](https://bun.sh/).
+
+| Path | Description |
+| ---- | ----------- |
+| `packages/cli` | The `@knightcodeai/cli` package — the `knightcode` CLI source |
+| `packages/cli-*` | Per-platform prebuilt binaries published as optional deps |
+| `packages/shared` | Shared library code used across packages |
+| `packages/ui` | Shared React component library |
+| `packages/eslint-config`, `packages/typescript-config` | Shared tooling config |
+| `apps/web` | Marketing / docs website |
+
+## Development
+
+Requires [bun](https://bun.sh/) (`bun@1.3.3`) and Node.js >=20.
+
+```bash
+bun install        # install dependencies
+bun run dev:cli    # run the CLI from source with watch mode
+bun run build:cli  # build the standalone binary
+bun run link:cli   # build and link `knightcode` globally
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Other useful scripts:
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+bun run lint         # lint all packages
+bun run check-types  # type-check all packages
+bun run format       # format with Prettier
+bun run sync:docs    # regenerate the root README.md and CHANGELOG.md
 ```
 
-Without global `turbo`:
+## Releases
 
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
+Releases are managed with [Changesets](https://github.com/changesets/changesets).
+To record a change for the next release:
+
+```bash
+bunx changeset
 ```
 
-### Develop
+Pick a bump type (patch/minor/major) and write one sentence. Commit the generated
+`.changeset/*.md` file with your PR. On merge to `main`, the Changesets bot opens a
+"Version Packages" PR; merging that PR publishes all `@knightcodeai/cli*` packages.
 
-To develop all apps and packages, run the following command:
+See [`CHANGELOG.md`](./CHANGELOG.md) for the release history.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## License
 
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+[Apache-2.0](./LICENSE). Copyright 2026 KnightCodeAI.

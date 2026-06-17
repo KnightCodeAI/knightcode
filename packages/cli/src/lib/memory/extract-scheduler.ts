@@ -7,6 +7,7 @@ type ExtractionParams = {
   messages: Message[];
   cwd: string;
   mainModelId: string;
+  sessionId?: string;
   getApiKey?: () => string | undefined;
 };
 
@@ -20,6 +21,10 @@ type ExtractionParams = {
 let inFlight = false;
 let pending: { params: ExtractionParams; onSaved?: (n: number) => void } | null =
   null;
+/** The promise for the currently-executing run, or null when idle. A coalesced
+ *  trailing run replaces this in the run's `finally`, so awaiting to completion
+ *  means looping until it settles to null. */
+let activeRun: Promise<void> | null = null;
 
 /** Test seam: the extractor invoked per run (defaults to the real one). */
 let extractor: (p: ExtractionParams) => Promise<number> = extractMemories;
@@ -36,7 +41,7 @@ export function scheduleMemoryExtraction(
     return;
   }
   inFlight = true;
-  void (async () => {
+  activeRun = (async () => {
     try {
       const n = await extractor(params);
       if (n > 0) onSaved?.(n);
@@ -54,9 +59,22 @@ export function scheduleMemoryExtraction(
       inFlight = false;
       const next = pending;
       pending = null;
+      // Reschedule reassigns activeRun to the trailing run; otherwise we go idle.
       if (next) scheduleMemoryExtraction(next.params, next.onSaved);
+      else activeRun = null;
     }
   })();
+}
+
+/**
+ * Await any in-flight extraction (and its coalesced trailing run) to completion.
+ * Resolves immediately when idle. Call on shutdown so a forked extraction agent
+ * mid-run isn't dropped. Best-effort — never rejects.
+ */
+export async function drainMemoryExtraction(): Promise<void> {
+  while (activeRun) {
+    await activeRun.catch(() => {});
+  }
 }
 
 /** Test seam: reset state and optionally inject a fake extractor. */
@@ -65,5 +83,6 @@ export function __setExtractorForTest(
 ): void {
   inFlight = false;
   pending = null;
+  activeRun = null;
   extractor = fn ?? extractMemories;
 }

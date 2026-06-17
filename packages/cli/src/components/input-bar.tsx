@@ -1,4 +1,5 @@
 import { markIntentionalExit } from "../lib/exit-guard";
+import { drainMemoryExtraction } from "../lib/memory/extract-scheduler";
 import { Mode } from "@repo/shared";
 import {
   ScrollBoxRenderable,
@@ -508,7 +509,13 @@ export function InputBar({
         command.action({
           exit: () => {
             markIntentionalExit();
-            renderer.destroy();
+            // Let an in-flight memory extraction finish persisting before we
+            // tear down, but never let a slow/hung side model block exit.
+            // Resolves instantly in the common case (nothing in flight).
+            void Promise.race([
+              drainMemoryExtraction(),
+              new Promise((r) => setTimeout(r, 3000)),
+            ]).finally(() => renderer.destroy());
           },
           toast,
           dialog,

@@ -63,3 +63,27 @@ export function latestUserText(messages: Message[]): string {
   }
   return "";
 }
+
+/**
+ * The most recently used tool names, newest-first and de-duplicated, capped at
+ * `limit`. Tool parts are typed `tool-<Name>` (e.g. `tool-Read`); this strips
+ * the prefix. Used as a secondary recall signal — what the model was just doing
+ * hints at which memories are relevant to the current task.
+ */
+export function recentToolNames(messages: Message[], limit = 8): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  outer: for (let i = messages.length - 1; i >= 0; i--) {
+    const parts = messages[i]?.parts ?? [];
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const type = (parts[j] as { type?: string }).type;
+      if (typeof type !== "string" || !type.startsWith("tool-")) continue;
+      const name = type.slice("tool-".length);
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      names.push(name);
+      if (names.length >= limit) break outer;
+    }
+  }
+  return names;
+}

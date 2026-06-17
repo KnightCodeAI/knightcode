@@ -11,7 +11,8 @@
     "check-types": "turbo run check-types",
     "build:cli": "bun run scripts/build.ts --single",
     "link:cli": "bun run build:cli && cd packages/cli && bun link",
-    "ci:version": "changeset version && bun install",
+    "sync:docs": "bun run scripts/sync-root-docs.ts",
+    "ci:version": "changeset version && bun run sync:docs && bun install",
     "ci:publish": "bun run scripts/pack-test.ts && changeset publish"
   },
   "devDependencies": {

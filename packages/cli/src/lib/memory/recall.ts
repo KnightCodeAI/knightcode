@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { debugLog } from "../debug";
 import { sideQuery } from "../inference/side-query";
 import type { ContextProvider } from "../engine/context-providers";
-import { latestUserText } from "../engine/context-providers";
+import { latestUserText, recentToolNames } from "../engine/context-providers";
 import { extractJsonArray } from "./json";
 import { scanMemoryFiles, stripFrontmatter, type MemoryHeader } from "./scan";
 
@@ -15,6 +15,8 @@ const RECALL_MAX_TOKENS = 2048;
 export type SideQueryFn = typeof sideQuery;
 
 const SELECT_SYSTEM = `You are selecting memories that will help a coding assistant answer a user's request. You are given the user's query and a list of available memory files (filename + description).
+
+You may also be given the tools the assistant used most recently, as a hint about what it is currently working on.
 
 Return ONLY a JSON array of filenames (strings) for the memories that will CLEARLY be useful — at most 5. Be selective:
 - Include a memory only if you are confident it helps with this specific query.
@@ -30,6 +32,7 @@ export async function findRelevantMemories(opts: {
   query: string;
   cwd: string;
   mainModelId: string;
+  recentTools?: string[];
   getApiKey?: () => string | undefined;
   signal?: AbortSignal;
   sideQueryImpl?: SideQueryFn;
@@ -41,10 +44,14 @@ export async function findRelevantMemories(opts: {
   const manifest = memories
     .map((m) => `- ${m.filename}: ${m.description}`)
     .join("\n");
+  const toolsHint =
+    opts.recentTools && opts.recentTools.length > 0
+      ? `\n\nRecent tools used: ${opts.recentTools.join(", ")}`
+      : "";
   const run = opts.sideQueryImpl ?? sideQuery;
   const raw = await run({
     system: SELECT_SYSTEM,
-    prompt: `User query:\n${opts.query}\n\nAvailable memories:\n${manifest}`,
+    prompt: `User query:\n${opts.query}${toolsHint}\n\nAvailable memories:\n${manifest}`,
     mainModelId: opts.mainModelId,
     getApiKey: opts.getApiKey,
     signal: opts.signal,
@@ -117,6 +124,7 @@ export function createMemoryRecallProvider(opts: {
         query,
         cwd,
         mainModelId: opts.mainModelId,
+        recentTools: recentToolNames(messages),
         getApiKey: opts.getApiKey,
         signal,
         sideQueryImpl: opts.sideQueryImpl,

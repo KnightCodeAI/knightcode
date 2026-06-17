@@ -11,13 +11,18 @@ import {
   stripFrontmatter,
 } from "./scan";
 import { extractJsonArray } from "./json";
-import { latestUserText } from "../engine/context-providers";
+import { latestUserText, recentToolNames } from "../engine/context-providers";
 import type { Message } from "../engine/messages";
 import {
   createMemoryRecallProvider,
   findRelevantMemories,
 } from "./recall";
 import { extractMemories, hasExtractableSignal } from "./extract";
+import {
+  getExtractCursor,
+  resetExtractCursors,
+  setExtractCursor,
+} from "./extract-cursor";
 import {
   deleteMemory,
   slugifyMemoryName,
@@ -26,6 +31,7 @@ import {
 import { execute as memoryToolExecute } from "../tools/Memory/execute";
 import {
   scheduleMemoryExtraction,
+  drainMemoryExtraction,
   __setExtractorForTest,
 } from "./extract-scheduler";
 import {
@@ -189,6 +195,49 @@ describe("latestUserText", () => {
   });
 });
 
+describe("recentToolNames", () => {
+  test("returns recent distinct tool names, newest first", () => {
+    const messages = [
+      {
+        role: "assistant",
+        parts: [
+          { type: "tool-Read", toolCallId: "1" },
+          { type: "tool-Grep", toolCallId: "2" },
+        ],
+      },
+      { role: "user", parts: [{ type: "text", text: "go on" }] },
+      {
+        role: "assistant",
+        parts: [
+          { type: "tool-Edit", toolCallId: "3" },
+          { type: "tool-Read", toolCallId: "4" },
+        ],
+      },
+    ] as unknown as Message[];
+    // newest part first, de-duplicated: Read (latest), Edit, then Grep.
+    expect(recentToolNames(messages)).toEqual(["Read", "Edit", "Grep"]);
+  });
+
+  test("no tool parts → empty", () => {
+    expect(
+      recentToolNames([
+        { role: "user", parts: [{ type: "text", text: "hi" }] },
+      ] as unknown as Message[]),
+    ).toEqual([]);
+  });
+
+  test("caps the number of names returned", () => {
+    const parts = Array.from({ length: 20 }, (_, i) => ({
+      type: `tool-T${i}`,
+      toolCallId: String(i),
+    }));
+    const messages = [
+      { role: "assistant", parts },
+    ] as unknown as Message[];
+    expect(recentToolNames(messages, 5)).toHaveLength(5);
+  });
+});
+
 describe("scan + index (filesystem)", () => {
   let home: string;
   const cwd = "/proj/demo";
@@ -279,6 +328,42 @@ describe("recall + extract (mocked side query)", () => {
       sideQueryImpl: async () => '```json\n["a.md"]\n```',
     });
     expect(selected.map((m) => m.filename)).toEqual(["a.md"]);
+  });
+
+  test("findRelevantMemories passes recent tools to the selector", async () => {
+    let seenPrompt = "";
+    await findRelevantMemories({
+      query: "about A",
+      cwd,
+      mainModelId: "x/y",
+      recentTools: ["Read", "Grep"],
+      sideQueryImpl: async ({ prompt }) => {
+        seenPrompt = prompt;
+        return "[]";
+      },
+    });
+    expect(seenPrompt).toContain("Read");
+    expect(seenPrompt).toContain("Grep");
+  });
+
+  test("recall provider derives recent tools from the transcript", async () => {
+    let seenPrompt = "";
+    const provider = createMemoryRecallProvider({
+      mainModelId: "x/y",
+      sideQueryImpl: async ({ prompt }) => {
+        seenPrompt = prompt;
+        return "[]";
+      },
+    });
+    const messages = [
+      {
+        role: "assistant",
+        parts: [{ type: "tool-Glob", toolCallId: "1" }],
+      },
+      { role: "user", parts: [{ type: "text", text: "about A please" }] },
+    ] as unknown as Message[];
+    await provider.run({ messages, cwd });
+    expect(seenPrompt).toContain("Glob");
   });
 
   test("recall provider caches identical consecutive queries", async () => {
@@ -374,6 +459,73 @@ describe("recall + extract (mocked side query)", () => {
     });
     expect(n).toBe(0);
     expect(called).toBe(false);
+  });
+});
+
+describe("extract session cursor", () => {
+  beforeEach(() => resetExtractCursors());
+  afterEach(() => resetExtractCursors());
+
+  const sub = (text: string) =>
+    ({ role: "user", parts: [{ type: "text", text }] }) as unknown as Message;
+  const asst = (text: string) =>
+    ({ role: "assistant", parts: [{ type: "text", text }] }) as unknown as Message;
+
+  test("advances the cursor to the message count after a run", async () => {
+    const messages = [
+      sub("set up the linter the way I described earlier"),
+      asst("done"),
+    ];
+    await extractMemories({
+      messages,
+      cwd: "/c",
+      mainModelId: "m",
+      sessionId: "S1",
+      runner: async () => 0,
+    });
+    expect(getExtractCursor("S1")).toBe(2);
+  });
+
+  test("counts messages since the cursor so skipped turns stay in scope", async () => {
+    setExtractCursor("S2", 1);
+    let promptText = "";
+    const messages = [
+      sub("hello there friend"),
+      asst("a"),
+      sub("here is the real instruction to remember"),
+      asst("b"),
+    ];
+    await extractMemories({
+      messages,
+      cwd: "/c",
+      mainModelId: "m",
+      sessionId: "S2",
+      runner: async ({ messages: m }) => {
+        promptText = (m[m.length - 1]!.parts[0] as { text: string }).text;
+        return 0;
+      },
+    });
+    // 4 total − cursor 1 = 3 messages framed as new (not just the last turn).
+    expect(promptText).toContain("~3 messages");
+    expect(getExtractCursor("S2")).toBe(4);
+  });
+
+  test("a trivial (gate-skipped) turn does not advance the cursor", async () => {
+    setExtractCursor("S3", 2);
+    let called = false;
+    const n = await extractMemories({
+      messages: [sub("ok")],
+      cwd: "/c",
+      mainModelId: "m",
+      sessionId: "S3",
+      runner: async () => {
+        called = true;
+        return 1;
+      },
+    });
+    expect(n).toBe(0);
+    expect(called).toBe(false);
+    expect(getExtractCursor("S3")).toBe(2);
   });
 });
 
@@ -530,6 +682,48 @@ describe("extraction scheduler (serialize + coalesce)", () => {
     scheduleMemoryExtraction(params, (n) => (saved = n));
     await tick();
     expect(saved).toBe(3);
+  });
+
+  test("drain resolves after the in-flight run completes", async () => {
+    let done = false;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    __setExtractorForTest(async () => {
+      await gate;
+      done = true;
+      return 0;
+    });
+    scheduleMemoryExtraction(params);
+    const drained = drainMemoryExtraction();
+    expect(done).toBe(false);
+    release();
+    await drained;
+    expect(done).toBe(true);
+  });
+
+  test("drain awaits a coalesced trailing run", async () => {
+    const calls: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let first = true;
+    __setExtractorForTest(async (p) => {
+      calls.push((p as { tag?: string }).tag ?? "?");
+      if (first) {
+        first = false;
+        await gate; // hold the first run open so the second stays stashed
+      }
+      return 0;
+    });
+    scheduleMemoryExtraction({ ...params, tag: "a" } as never);
+    scheduleMemoryExtraction({ ...params, tag: "b" } as never); // stashed
+    const drained = drainMemoryExtraction();
+    release();
+    await drained;
+    expect(calls).toEqual(["a", "b"]);
+  });
+
+  test("drain is a no-op when idle", async () => {
+    await drainMemoryExtraction();
   });
 });
 

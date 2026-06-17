@@ -4,11 +4,8 @@ import { useParams, useLocation, useNavigate } from "react-router";
 import { z } from "zod";
 import { useKeyboard } from "@opentui/react";
 import { copyToClipboard } from "../lib/clipboard";
-import {
-  type ModeType,
-  type SupportedChatModelId,
-  findSupportedChatModel,
-} from "@repo/shared";
+import { type ModeType, type SupportedChatModelId } from "@repo/shared";
+import { computeTokenStats } from "../lib/ui/token-stats";
 import { SessionShell } from "../components/session-shell";
 import {
   UserMessage,
@@ -246,7 +243,7 @@ function SessionChat({
       .filter((m) => m.metadata?.usage)
       .map(
         (m) =>
-          `${m.id}-${m.metadata?.usage?.inputTokens}-${m.metadata?.usage?.outputTokens}`,
+          `${m.id}-${m.metadata?.usage?.inputTokens}-${m.metadata?.usage?.outputTokens}-${m.metadata?.costUsd ?? ""}`,
       )
       .join(",");
   }, [messages]);
@@ -258,34 +255,15 @@ function SessionChat({
         input: m.metadata?.usage?.inputTokens ?? 0,
         output: m.metadata?.usage?.outputTokens ?? 0,
         model: m.metadata?.model || model,
+        costUsd: m.metadata?.costUsd,
       }));
   }, [usageDependency, model]);
 
-  const tokenStats = useMemo(() => {
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let totalCost = 0;
-    let lastInputTokens: number | undefined = undefined;
-
-    for (const item of usageSummary) {
-      const input = item.input;
-      const output = item.output;
-      inputTokens += input;
-      outputTokens += output;
-      lastInputTokens = input;
-
-      const modelDef = findSupportedChatModel(item.model);
-      if (modelDef?.pricing) {
-        const inputCost =
-          (input / 1_000_000) * modelDef.pricing.inputUsdPerMillionTokens;
-        const outputCost =
-          (output / 1_000_000) * modelDef.pricing.outputUsdPerMillionTokens;
-        totalCost += inputCost + outputCost;
-      }
-    }
-
-    return { inputTokens, outputTokens, totalCost, lastInputTokens };
-  }, [usageSummary]);
+  // Cost prefers OpenRouter's real reported cost; falls back to the price table.
+  const tokenStats = useMemo(
+    () => computeTokenStats(usageSummary),
+    [usageSummary],
+  );
 
   // Stop the pending reply when the user leaves this session.
   useEffect(() => {

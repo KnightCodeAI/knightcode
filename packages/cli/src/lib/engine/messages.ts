@@ -14,6 +14,9 @@ export type ChatMessageMetadata = {
   submittedAt?: number;
   durationMs?: number;
   usage?: LanguageModelUsage;
+  /** Actual USD cost of this turn's model calls, as reported by OpenRouter
+   *  (usage accounting). Authoritative; preferred over the local price table. */
+  costUsd?: number;
   isCompaction?: boolean;
   isInterrupted?: boolean;
   originalMessageCount?: number;

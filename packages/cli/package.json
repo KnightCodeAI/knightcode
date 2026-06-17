@@ -6,6 +6,14 @@
   "bin": {
     "knightcode": "./bin/knightcode"
   },
+  "homepage": "https://knightcode.raghavseth.in",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Raghav1428/knightcode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Raghav1428/knightcode/issues"
+  },
   "files": [
     "bin/",
     "README.md"
@@ -40,11 +48,9 @@
     "date-fns": "^4.3.0",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.12",
     "html-to-text": "^10.0.0",
     "open": "^11.0.0",
     "opentui-spinner": "^0.0.6",
-    "pretty-ms": "^9.3.0",
     "react": "^19.2.6",
     "react-router": "7.14.2",
     "safe-regex": "^2.1.1",

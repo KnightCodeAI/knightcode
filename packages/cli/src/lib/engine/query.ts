@@ -104,6 +104,9 @@ export async function* query(
     metadata: { mode: params.mode, model: modelId },
   } as Message;
   let usage: LanguageModelUsage | null = null;
+  // OpenRouter's actual reported cost (USD), summed across this turn's rounds
+  // (usage accounting, enabled in resolveModel). 0 when the provider omits it.
+  let costUsd = 0;
 
   // Stamps final metadata on the assistant message. Called exactly once.
   const sealTurn = (interrupted: boolean): Message => {
@@ -115,6 +118,7 @@ export async function* query(
         Date.now() - turnStartMs - (Number.isFinite(pausedMs) ? pausedMs : 0),
       ),
       ...(usage ? { usage } : {}),
+      ...(costUsd > 0 ? { costUsd } : {}),
       ...(interrupted ? { isInterrupted: true } : {}),
     };
     // Resolve any tool parts that never got a result (abort/error paths).
@@ -197,6 +201,7 @@ export async function* query(
         ? { model: testModel as never, providerOptions: undefined }
         : resolveModel(modelId, reasoningEffort, {
             getApiKey: params.getApiKey,
+            sessionId: params.sessionId,
           });
 
       // Hook systemMessages accumulated this turn ride along as a transient
@@ -334,6 +339,19 @@ export async function* query(
               input: part.input,
             } as never);
             yield { type: "message_update", message: snapshot(assistant) };
+            break;
+          }
+          case "finish-step": {
+            // OpenRouter surfaces the real per-request cost on the step's
+            // provider metadata (usage accounting). One step per round, so sum
+            // across rounds. Defensive optional-chaining: other providers / a
+            // disabled flag simply leave it absent.
+            const orUsage = (
+              part.providerMetadata as
+                | { openrouter?: { usage?: { cost?: number } } }
+                | undefined
+            )?.openrouter?.usage;
+            if (typeof orUsage?.cost === "number") costUsd += orUsage.cost;
             break;
           }
           case "finish":

@@ -1,9 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildOpenRouterHeaders,
   buildOpenRouterReasoningOptions,
   resolveModel,
   toOpenRouterModelId,
 } from "./resolve-model";
+
+describe("buildOpenRouterHeaders", () => {
+  test("sets the app attribution referer and title", () => {
+    const h = buildOpenRouterHeaders();
+    expect(h["HTTP-Referer"]).toBe("https://knightcode.raghavseth.in");
+    expect(h["X-Title"]).toBe("KnightCode");
+  });
+
+  test("omits x-session-id when no session id is given", () => {
+    expect(buildOpenRouterHeaders()).not.toHaveProperty("x-session-id");
+  });
+
+  test("adds the x-session-id header so OpenRouter groups the session", () => {
+    expect(buildOpenRouterHeaders("session-123")["x-session-id"]).toBe(
+      "session-123",
+    );
+  });
+});
 
 describe("buildOpenRouterReasoningOptions", () => {
   test("maps a standard effort straight through", () => {
@@ -73,14 +92,14 @@ describe("resolveModel", () => {
     expect(resolved.modelId).toBe("anthropic/claude-opus-4.8");
     expect(resolved.model).toBeDefined();
     expect(resolved.providerOptions).toEqual({
-      openrouter: { reasoning: { effort: "high" } },
+      openrouter: { usage: { include: true }, reasoning: { effort: "high" } },
     });
   });
 
   test("maps 'max' effort to OpenRouter's 'xhigh'", () => {
     const resolved = resolveModel("openai/gpt-5.5", "max", { apiKey: KEY });
     expect(resolved.providerOptions).toEqual({
-      openrouter: { reasoning: { effort: "xhigh" } },
+      openrouter: { usage: { include: true }, reasoning: { effort: "xhigh" } },
     });
   });
 
@@ -94,7 +113,37 @@ describe("resolveModel", () => {
     });
     expect(resolved.modelId).toBe("vendor/experimental-model");
     expect(resolved.providerOptions).toEqual({
-      openrouter: { reasoning: { effort: "low" } },
+      openrouter: { usage: { include: true }, reasoning: { effort: "low" } },
     });
+  });
+
+  test("always enables usage accounting so real cost comes back", () => {
+    const resolved = resolveModel("anthropic/claude-opus-4.8", "medium", {
+      apiKey: KEY,
+    });
+    expect(
+      (resolved.providerOptions as { openrouter: { usage: unknown } }).openrouter
+        .usage,
+    ).toEqual({ include: true });
+  });
+
+  test("passes the session id to OpenRouter as the user field", () => {
+    const resolved = resolveModel("anthropic/claude-opus-4.8", "medium", {
+      apiKey: KEY,
+      sessionId: "session-123",
+    });
+    expect(
+      (resolved.providerOptions as { openrouter: { user?: string } }).openrouter
+        .user,
+    ).toBe("session-123");
+  });
+
+  test("omits the user field when no session id is given", () => {
+    const resolved = resolveModel("anthropic/claude-opus-4.8", "medium", {
+      apiKey: KEY,
+    });
+    expect(
+      (resolved.providerOptions as { openrouter: { user?: string } }).openrouter,
+    ).not.toHaveProperty("user");
   });
 });
