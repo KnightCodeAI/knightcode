@@ -1,4 +1,4 @@
-# Turborepo starter
+<!-- AUTO-GENERATED — do not edit. Source: packages/cli/README.md plus the README_SUFFIX in scripts/sync-root-docs.ts. Run `bun run sync:docs` to regenerate. -->
 
 # @knightcodeai/cli
 
