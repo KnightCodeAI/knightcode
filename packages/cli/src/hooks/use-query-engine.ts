@@ -559,6 +559,7 @@ export function useQueryEngine(
                 messages: finalAssistant ? [...base, finalAssistant] : base,
                 cwd: process.cwd(),
                 mainModelId: params.model,
+                sessionId,
                 getApiKey: getOpenRouterApiKey,
               },
               (n) =>

@@ -2,6 +2,7 @@ import { debugLog } from "../debug";
 import { query } from "../engine/query";
 import type { Message } from "../engine/messages";
 import { resolveSideQueryModelId } from "../inference/side-query";
+import { getExtractCursor, setExtractCursor } from "./extract-cursor";
 import { createBackgroundToolHost } from "./background-host";
 import { buildExtractionPrompt } from "./prompts";
 import { scanMemoryFiles, type MemoryHeader } from "./scan";
@@ -148,6 +149,9 @@ export async function extractMemories(opts: {
   messages: Message[];
   cwd: string;
   mainModelId: string;
+  /** When set, frames "new messages" relative to this session's cursor and
+   *  advances the cursor once a run completes (reconsiders gate-skipped turns). */
+  sessionId?: string;
   getApiKey?: () => string | undefined;
   signal?: AbortSignal;
   /** Injected for tests; defaults to the real forked agent. */
@@ -163,7 +167,18 @@ export async function extractMemories(opts: {
       return 0;
     }
 
-    const newMessageCount = lastTurnMessageCount(opts.messages);
+    // Count what's new since this session last had a real extraction run, so a
+    // fact mentioned during a previously gate-skipped turn is still in scope.
+    // Falls back to "the last turn" when there's no cursor (or a stale one, e.g.
+    // after compaction shrank the transcript below the cursor).
+    const total = opts.messages.length;
+    const cursor = opts.sessionId
+      ? getExtractCursor(opts.sessionId)
+      : undefined;
+    const newMessageCount =
+      cursor !== undefined && cursor <= total
+        ? Math.max(1, total - cursor)
+        : lastTurnMessageCount(opts.messages);
     const manifest = formatManifest(scanMemoryFiles(opts.cwd));
     const prompt = buildExtractionPrompt(newMessageCount, manifest);
     const extractionMessage: Message = {
@@ -180,6 +195,13 @@ export async function extractMemories(opts: {
       getApiKey: opts.getApiKey,
       signal: opts.signal,
     });
+    // The run reviewed everything up to here; advance the cursor so the next
+    // extraction only reconsiders messages that arrive after this point. Skip
+    // advancing on abort: the runner is best-effort and returns normally even
+    // when cut off, so advancing would permanently skip unprocessed messages.
+    if (opts.sessionId && !opts.signal?.aborted) {
+      setExtractCursor(opts.sessionId, total);
+    }
     debugLog("memory.extract", `written=${written}`);
     return written;
   } catch {

@@ -63,6 +63,28 @@ function textOnlyModel(text: string) {
   });
 }
 
+// A text-only turn whose provider reports an OpenRouter usage-accounting cost
+// on the finish part (the streaming path surfaces it on the fullStream
+// finish-step's providerMetadata).
+function textModelWithCost(cost: number) {
+  return new MockLanguageModelV3({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: "stream-start", warnings: [] },
+        { type: "text-start", id: "1" },
+        { type: "text-delta", id: "1", delta: "hi" },
+        { type: "text-end", id: "1" },
+        {
+          type: "finish",
+          finishReason: v3Finish("stop"),
+          usage: v3Usage(10, 5),
+          providerMetadata: { openrouter: { usage: { cost } } },
+        },
+      ]),
+    }),
+  });
+}
+
 // First call: emits a Read tool call. Second call: plain text.
 function toolThenTextModel() {
   let call = 0;
@@ -140,6 +162,48 @@ describe("query", () => {
     expect(msg.parts.some((p) => (p as { type: string }).type === "text")).toBe(true);
     expect(msg.metadata?.usage?.totalTokens).toBe(15);
     expect(typeof msg.metadata?.durationMs).toBe("number");
+  });
+
+  test("seals OpenRouter's reported cost onto the turn metadata", async () => {
+    const { events } = await drain(
+      query(baseParams(textModelWithCost(0.0042)) as never),
+    );
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    expect(done.message.metadata?.costUsd).toBe(0.0042);
+  });
+
+  test("seals a reported cost of 0 (free turn) so it isn't re-priced from the table", async () => {
+    const { events } = await drain(
+      query(baseParams(textModelWithCost(0)) as never),
+    );
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    // A reported 0 is authoritative — it must be present (not undefined), so the
+    // UI doesn't fall back to price-table estimation for a genuinely free turn.
+    expect(done.message.metadata?.costUsd).toBe(0);
+  });
+
+  test("defaults to 0 when no cost is reported to avoid fallback mispricing", async () => {
+    const { events } = await drain(
+      query(baseParams(textOnlyModel("hi")) as never),
+    );
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    expect(done.message.metadata?.costUsd).toBe(0);
+  });
+
+  test("ignores a non-finite reported cost and defaults to 0", async () => {
+    const { events } = await drain(
+      query(baseParams(textModelWithCost(Infinity)) as never),
+    );
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    expect(done.message.metadata?.costUsd).toBe(0);
   });
 
   test("tool round: runs tool, loops, completes; tool part resolved", async () => {

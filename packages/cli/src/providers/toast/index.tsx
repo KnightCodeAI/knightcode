@@ -14,7 +14,7 @@ import {
 import { useTerminalDimensions } from "@opentui/react";
 import { SplitBorderChars } from "../../components/utils/border";
 import { useTheme } from "../theme";
-import { useMemo } from "hono/jsx";
+import { useMemo } from "react";
 
 export type ToastContextValue = {
   show: (options: ToastOptions) => void;

@@ -29,10 +29,10 @@ describe("completeOnboarding", () => {
   test("persists the key and model, no search by default", () => {
     completeOnboarding({
       openRouterApiKey: "sk-or-abc",
-      model: "z-ai/glm-5.1",
+      model: "z-ai/glm-5.2",
     });
     expect(getOpenRouterApiKey()).toBe("sk-or-abc");
-    expect(getSettingValue("model")).toBe("z-ai/glm-5.1");
+    expect(getSettingValue("model")).toBe("z-ai/glm-5.2");
     expect(getSearchProvider()).toBeUndefined();
     expect(getSearchApiKey()).toBeUndefined();
   });
@@ -50,7 +50,7 @@ describe("completeOnboarding", () => {
   test("ignores a search config whose key is empty/whitespace", () => {
     completeOnboarding({
       openRouterApiKey: "sk-or-abc",
-      model: "z-ai/glm-5.1",
+      model: "z-ai/glm-5.2",
       search: { provider: "brave", apiKey: "   " },
     });
     expect(getSearchProvider()).toBeUndefined();
