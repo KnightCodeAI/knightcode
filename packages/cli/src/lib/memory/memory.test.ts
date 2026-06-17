@@ -236,6 +236,13 @@ describe("recentToolNames", () => {
     ] as unknown as Message[];
     expect(recentToolNames(messages, 5)).toHaveLength(5);
   });
+
+  test("a limit of 0 returns nothing", () => {
+    const messages = [
+      { role: "assistant", parts: [{ type: "tool-Read", toolCallId: "1" }] },
+    ] as unknown as Message[];
+    expect(recentToolNames(messages, 0)).toEqual([]);
+  });
 });
 
 describe("scan + index (filesystem)", () => {
@@ -386,6 +393,26 @@ describe("recall + extract (mocked side query)", () => {
     expect(first[0]).toContain("body a");
   });
 
+  test("recall cache re-selects when recent tools change for the same query", async () => {
+    let calls = 0;
+    const provider = createMemoryRecallProvider({
+      mainModelId: "x/y",
+      sideQueryImpl: async () => {
+        calls++;
+        return '["a.md"]';
+      },
+    });
+    const withTool = (tool: string) =>
+      [
+        { role: "assistant", parts: [{ type: `tool-${tool}`, toolCallId: "1" }] },
+        { role: "user", parts: [{ type: "text", text: "about A please" }] },
+      ] as unknown as Message[];
+    await provider.run({ messages: withTool("Read"), cwd });
+    await provider.run({ messages: withTool("Grep"), cwd });
+    // Same query text, different recent-tool context → not a cache hit.
+    expect(calls).toBe(2);
+  });
+
   test("extractMemories runs the forked agent with the extraction prompt", async () => {
     let received: Message[] | null = null;
     const n = await extractMemories({
@@ -526,6 +553,26 @@ describe("extract session cursor", () => {
     expect(n).toBe(0);
     expect(called).toBe(false);
     expect(getExtractCursor("S3")).toBe(2);
+  });
+
+  test("does not advance the cursor when the run was aborted", async () => {
+    setExtractCursor("S4", 1);
+    const messages = [
+      sub("a substantive instruction to remember please"),
+      asst("ok"),
+    ];
+    await extractMemories({
+      messages,
+      cwd: "/c",
+      mainModelId: "m",
+      sessionId: "S4",
+      signal: AbortSignal.abort(),
+      // Default runner swallows aborts and returns normally; a 0 here mimics
+      // "nothing saved because we were cut off" — the cursor must NOT advance,
+      // or those messages would be permanently skipped next run.
+      runner: async () => 0,
+    });
+    expect(getExtractCursor("S4")).toBe(1);
   });
 });
 

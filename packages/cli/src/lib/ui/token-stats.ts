@@ -1,4 +1,7 @@
 import { findSupportedChatModel } from "@repo/shared";
+import type { TokenStats } from "./status-format";
+
+export type { TokenStats };
 
 export type UsageItem = {
   input: number;
@@ -6,13 +9,6 @@ export type UsageItem = {
   model: string;
   /** OpenRouter's actual reported cost for this message, when available. */
   costUsd?: number;
-};
-
-export type TokenStats = {
-  inputTokens: number;
-  outputTokens: number;
-  totalCost: number;
-  lastInputTokens?: number;
 };
 
 /**

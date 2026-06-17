@@ -117,14 +117,18 @@ export function createMemoryRecallProvider(opts: {
     run: async ({ messages, cwd, signal }) => {
       const query = latestUserText(messages);
       if (!query) return [];
-      const key = `${cwd}\n${query}`;
+      const recentTools = recentToolNames(messages);
+      // Key on recent tools too: identical query text with different recent-tool
+      // context is a different selection signal, so it must not reuse the cache
+      // (retries/regenerations keep the same transcript, so they still hit it).
+      const key = `${cwd}\n${query}\n${recentTools.join(",")}`;
       if (key === cacheKey) return cacheValue;
 
       const selected = await findRelevantMemories({
         query,
         cwd,
         mainModelId: opts.mainModelId,
-        recentTools: recentToolNames(messages),
+        recentTools,
         getApiKey: opts.getApiKey,
         signal,
         sideQueryImpl: opts.sideQueryImpl,

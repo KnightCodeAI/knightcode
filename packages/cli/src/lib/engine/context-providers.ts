@@ -71,6 +71,7 @@ export function latestUserText(messages: Message[]): string {
  * hints at which memories are relevant to the current task.
  */
 export function recentToolNames(messages: Message[], limit = 8): string[] {
+  if (limit <= 0) return [];
   const names: string[] = [];
   const seen = new Set<string>();
   outer: for (let i = messages.length - 1; i >= 0; i--) {

@@ -512,10 +512,18 @@ export function InputBar({
             // Let an in-flight memory extraction finish persisting before we
             // tear down, but never let a slow/hung side model block exit.
             // Resolves instantly in the common case (nothing in flight).
-            void Promise.race([
-              drainMemoryExtraction(),
-              new Promise((r) => setTimeout(r, 3000)),
-            ]).finally(() => renderer.destroy());
+            let timer: ReturnType<typeof setTimeout>;
+            const deadline = new Promise<void>((r) => {
+              timer = setTimeout(r, 3000);
+            });
+            void Promise.race([drainMemoryExtraction(), deadline]).finally(
+              () => {
+                // Clear the timer so a fast drain doesn't leave it pending and
+                // keep the event loop alive (delaying actual process exit).
+                clearTimeout(timer);
+                renderer.destroy();
+              },
+            );
           },
           toast,
           dialog,

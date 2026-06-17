@@ -105,8 +105,11 @@ export async function* query(
   } as Message;
   let usage: LanguageModelUsage | null = null;
   // OpenRouter's actual reported cost (USD), summed across this turn's rounds
-  // (usage accounting, enabled in resolveModel). 0 when the provider omits it.
+  // (usage accounting, enabled in resolveModel). `costReported` distinguishes a
+  // genuine reported 0 (free/cached turn — authoritative) from "never reported"
+  // (no accounting → leave the field off so the UI can fall back to the table).
   let costUsd = 0;
+  let costReported = false;
 
   // Stamps final metadata on the assistant message. Called exactly once.
   const sealTurn = (interrupted: boolean): Message => {
@@ -118,7 +121,7 @@ export async function* query(
         Date.now() - turnStartMs - (Number.isFinite(pausedMs) ? pausedMs : 0),
       ),
       ...(usage ? { usage } : {}),
-      ...(costUsd > 0 ? { costUsd } : {}),
+      ...(costReported ? { costUsd } : {}),
       ...(interrupted ? { isInterrupted: true } : {}),
     };
     // Resolve any tool parts that never got a result (abort/error paths).
@@ -351,7 +354,10 @@ export async function* query(
                 | { openrouter?: { usage?: { cost?: number } } }
                 | undefined
             )?.openrouter?.usage;
-            if (typeof orUsage?.cost === "number") costUsd += orUsage.cost;
+            if (typeof orUsage?.cost === "number") {
+              costUsd += orUsage.cost;
+              costReported = true;
+            }
             break;
           }
           case "finish":

@@ -196,8 +196,12 @@ export async function extractMemories(opts: {
       signal: opts.signal,
     });
     // The run reviewed everything up to here; advance the cursor so the next
-    // extraction only reconsiders messages that arrive after this point.
-    if (opts.sessionId) setExtractCursor(opts.sessionId, total);
+    // extraction only reconsiders messages that arrive after this point. Skip
+    // advancing on abort: the runner is best-effort and returns normally even
+    // when cut off, so advancing would permanently skip unprocessed messages.
+    if (opts.sessionId && !opts.signal?.aborted) {
+      setExtractCursor(opts.sessionId, total);
+    }
     debugLog("memory.extract", `written=${written}`);
     return written;
   } catch {

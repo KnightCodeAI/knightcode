@@ -87,21 +87,21 @@ export const SUPPORTED_CHAT_MODELS = [
     contextWindow: 400000,
   },
   {
-    id: "deepseek/deepseek-v4-flash:free",
+    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
     provider: "openrouter",
     pricing: {
       inputUsdPerMillionTokens: 0,
       outputUsdPerMillionTokens: 0,
     },
     supportsThinking: true,
-    contextWindow: 1048576,
+    contextWindow: 1000000,
   },
   {
-    id: "nvidia/nemotron-3-super-120b-a12b:free",
+    id: "qwen/qwen3.7-plus",
     provider: "openrouter",
     pricing: {
-      inputUsdPerMillionTokens: 0,
-      outputUsdPerMillionTokens: 0,
+      inputUsdPerMillionTokens: 0.4,
+      outputUsdPerMillionTokens: 1.4,
     },
     supportsThinking: true,
     contextWindow: 1000000,
@@ -117,17 +117,17 @@ export const SUPPORTED_CHAT_MODELS = [
     contextWindow: 131072,
   },
   {
-    id: "z-ai/glm-4.5-air:free",
+    id: "z-ai/glm-5.2",
     provider: "openrouter",
     pricing: {
-      inputUsdPerMillionTokens: 0,
-      outputUsdPerMillionTokens: 0,
+      inputUsdPerMillionTokens: 1.5,
+      outputUsdPerMillionTokens: 4.5,
     },
     supportsThinking: true,
-    contextWindow: 131072,
+    contextWindow: 1000000,
   },
   {
-    id: "moonshotai/kimi-k2.6",
+    id: "moonshotai/kimi-k2.7-code",
     provider: "openrouter",
     pricing: {
       inputUsdPerMillionTokens: 1,
@@ -135,16 +135,6 @@ export const SUPPORTED_CHAT_MODELS = [
     },
     supportsThinking: true,
     contextWindow: 262144,
-  },
-  {
-    id: "z-ai/glm-5.1",
-    provider: "openrouter",
-    pricing: {
-      inputUsdPerMillionTokens: 0.9,
-      outputUsdPerMillionTokens: 4.5,
-    },
-    supportsThinking: true,
-    contextWindow: 202752,
   },
   {
     id: "minimax/minimax-m2.7",
@@ -155,6 +145,16 @@ export const SUPPORTED_CHAT_MODELS = [
     },
     supportsThinking: true,
     contextWindow: 204800,
+  },
+  {
+    id: "nex-agi/nex-n2-pro:free",
+    provider: "openrouter",
+    pricing: {
+      inputUsdPerMillionTokens: 0.5,
+      outputUsdPerMillionTokens: 2.5,
+    },
+    supportsThinking: true,
+    contextWindow: 262144,
   },
 ] as const satisfies readonly SupportedChatModelDefinition[];
 
@@ -171,7 +171,7 @@ export function findSupportedChatModel(
 }
 
 export const DEFAULT_CHAT_MODEL_ID: SupportedChatModelId =
-  "z-ai/glm-4.5-air:free";
+  "nvidia/nemotron-3-ultra-550b-a55b:free";
 
 export type ModelShortlistEntry = {
   id: SupportedChatModelId;
@@ -185,11 +185,15 @@ export type ModelShortlistEntry = {
  * OpenRouter id) is always accepted in addition to this list.
  */
 export const MODEL_SHORTLIST: readonly ModelShortlistEntry[] = [
-  { id: "z-ai/glm-4.5-air:free", label: "GLM 4.5 Air (free)" },
-  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash (free)" },
+  {
+    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    label: "Nemotron 3 Ultra 550B (free)",
+  },
   { id: "openai/gpt-oss-120b:free", label: "GPT-OSS 120B (free)" },
-  { id: "z-ai/glm-5.1", label: "GLM 5.1" },
-  { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6" },
+  { id: "nex-agi/nex-n2-pro:free", label: "Nex N2 Pro (free)" },
+  { id: "qwen/qwen3.7-plus", label: "Qwen3.7 Plus" },
+  { id: "z-ai/glm-5.2", label: "GLM 5.2" },
+  { id: "moonshotai/kimi-k2.7-code", label: "Kimi K2.7 Code" },
   { id: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" },
   { id: "openai/gpt-5.5", label: "GPT-5.5" },
   { id: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" },
@@ -212,12 +216,12 @@ export const MODEL_ALIASES = {
   gpt_mini: "openai/gpt-5.4-mini",
   gpt_codex: "openai/gpt-5.3-codex",
   gpt_oss: "openai/gpt-oss-120b:free",
-  glm: "z-ai/glm-5.1",
-  glm_air: "z-ai/glm-4.5-air:free",
-  kimi: "moonshotai/kimi-k2.6",
-  deepseek: "deepseek/deepseek-v4-flash:free",
+  glm: "z-ai/glm-5.2",
+  kimi: "moonshotai/kimi-k2.7-code",
+  qwen: "qwen/qwen3.7-plus",
   minimax: "minimax/minimax-m2.7",
-  nemotron: "nvidia/nemotron-3-super-120b-a12b:free",
+  nemotron: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  nex: "nex-agi/nex-n2-pro:free",
 } as const satisfies Record<string, SupportedChatModelId>;
 
 export type ModelAlias = keyof typeof MODEL_ALIASES;

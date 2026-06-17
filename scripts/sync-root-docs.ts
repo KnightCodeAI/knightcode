@@ -91,8 +91,11 @@ for (const { name, suffix } of FILES) {
   const current = (() => {
     try {
       return readFileSync(dest, "utf8");
-    } catch {
-      return null;
+    } catch (err) {
+      // Only treat a missing destination as "no current content"; surface real
+      // errors (permissions, etc.) instead of silently overwriting.
+      if ((err as { code?: string })?.code === "ENOENT") return null;
+      throw err;
     }
   })();
   if (current === next) {
