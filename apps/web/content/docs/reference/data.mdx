@@ -13,7 +13,13 @@ The global configuration root is named `.knightcode` and is located in the activ
 - **macOS / Linux**: `~/.knightcode/` (equivalent to `/Users/<username>/.knightcode/` or `/home/<username>/.knightcode/`)
 - **Windows**: `%USERPROFILE%\.knightcode\` (equivalent to `C:\Users\<username>\.knightcode\`)
 
-You can relocate most of this directory by setting the `KNIGHTCODE_HOME` environment variable: `knightcode.db`, `credentials.json`, `settings.json`, `projects/`, and `debug.log` then live under `$KNIGHTCODE_HOME` instead. Two files do **not** honor the override and always resolve to `~/.knightcode/` in your real home directory: `preferences.json` (the `/theme` selection) and `permissions.json` (the `/allow` allowlist).
+You can relocate most of this directory by setting the `KNIGHTCODE_HOME` environment variable: `knightcode.db`, `credentials.json`, `settings.json`, `projects/`, and `debug.log` then live under `$KNIGHTCODE_HOME` instead. Several paths do **not** honor the override and always resolve to `~/.knightcode/` in your real home directory:
+
+- `preferences.json` — the `/theme` selection
+- `permissions.json` — the `/allow` allowlist
+- The machine-wide context KnightCode auto-loads from home: `~/.knightcode/KNIGHTCODE.md` (global instructions), `~/.knightcode/rules/` (global rules), and `~/.knightcode/skills/` (global skills)
+
+So if you relocate `KNIGHTCODE_HOME`, your sessions, settings, and credentials move, but your global instructions, rules, skills, theme, and command allowlist stay under `~/.knightcode/`.
 
 ### Folder Structure & Files
 
@@ -28,6 +34,9 @@ Inside the home `.knightcode` directory, you will find:
 | **`permissions.json`** | The allowed command prefixes managed via `/allow`. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
 | **`projects/`** | Per-project auto-memory. Inside `projects/<encoded-cwd>/memory/` are the individual memory Markdown notes and the `MEMORY.md` recall index. |
 | **`debug.log`** | Diagnostic log of model responses and error traces. Only written when `KNIGHTCODE_DEBUG` is set. |
+| **`KNIGHTCODE.md`** | Optional global instructions auto-loaded into every project's context. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+| **`rules/`** | Optional global rule files (`*.md`) auto-loaded into every session. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+| **`skills/`** | Optional global skills (`<name>/SKILL.md`) available in every project. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
 
 ## Project Directory
 

@@ -35,7 +35,7 @@ knightcode
 ```
 
 On your very first run, KnightCode will guide you through an interactive onboarding wizard:
-1. **Enter your OpenRouter API key**: The key is checked against OpenRouter. A key that OpenRouter rejects is refused so you can retry, but the check is advisory — if OpenRouter can't be reached (e.g. you're offline, or it returns a network/server error), the wizard warns and continues with the key you entered. The key is stored in a local credentials file with owner-only read/write permissions (`~/.knightcode/credentials.json`).
+1. **Enter your OpenRouter API key**: The key is checked against OpenRouter. A key that OpenRouter rejects is refused so you can retry, but the check is advisory — if OpenRouter can't be reached (e.g. you're offline, or it returns a network/server error), the wizard warns and continues with the key you entered. The key is stored in a local credentials file — `~/.knightcode/credentials.json` by default, or under `$KNIGHTCODE_HOME` if you've set that variable. On macOS and Linux the file is written with owner-only (`0600`) permissions; on Windows it follows the default filesystem permissions.
 2. **Pick a default model**: Choose from a curated shortlist spanning free to frontier models (you can change it later with `/models`).
 3. **Configure web search (optional)**: Enable web search by selecting a provider — **Brave Search** or **Tavily** — and entering its API key, or skip this step and add it later.
 
