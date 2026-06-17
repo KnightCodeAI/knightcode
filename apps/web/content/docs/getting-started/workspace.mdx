@@ -18,7 +18,7 @@ The main viewport displays the scrollable conversation log. It renders:
 ## Input Bar & Prompt Line
 
 At the bottom of the main viewport is the interactive prompt:
-- **Prompt Prefix**: Starts with `❯` styled to match the active mode (e.g. green for BUILD, purple for PLAN, blue for AUTO).
+- **Prompt Prefix**: Starts with `❯` styled to match the active mode — the brand accent color for BUILD, teal for PLAN, and purple for AUTO. The prompt border picks up the same tint in PLAN and AUTO.
 - **Text Area**: Support multi-line inputs. Pressing `Enter` submits the prompt, while `Shift + Enter` inserts a newline.
 - **Autocomplete**: Typing `@` opens the file reference menu to easily attach files or folders. Typing `/` opens the command list.
 
@@ -33,7 +33,7 @@ On the right side of the screen is the Todo Panel, which can be toggled using `C
 
 Located at the very bottom, the status bar displays live stats:
 - **Model Name**: The current active LLM provider and model.
-- **Reasoning Effort**: The active thinking budget (e.g. low, medium, high).
+- **Reasoning Effort**: The active thinking budget (none, low, medium, high, or max) for models that support reasoning.
 - **Token Usage**: Running count of input and output tokens for the current conversation.
 - **Session Cost**: Establishes cost metrics in USD based on pricing definitions of the selected model.
 

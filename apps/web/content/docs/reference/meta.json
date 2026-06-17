@@ -4,8 +4,6 @@
   "pages": [
     "shortcuts",
     "settings",
-    "shell-integration",
-    "workspaces",
     "data"
   ]
 }

@@ -5,7 +5,8 @@ import Link from "next/link"
 
 import { PageHero, PageShell, Prose } from "@/components/site/page-shell"
 import { Button } from "@/components/ui/button"
-import { SITE, VERSION } from "@/lib/site"
+import { SITE } from "@/lib/site"
+import { getLatestVersion } from "@/lib/version"
 
 export const metadata: Metadata = {
   title: "About",
@@ -21,7 +22,8 @@ const stack = [
   { label: "Shared tool schemas", note: "Agent permissions and actions" },
 ]
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const version = await getLatestVersion()
   return (
     <PageShell>
       <PageHero
@@ -30,7 +32,7 @@ export default function AboutPage() {
         lead="An alpha-stage terminal coding app built with Bun, React, and OpenTUI. Install it from npm, bring your own model key, and run it inside the repo you are working on."
         meta={
           <>
-            <span>v{VERSION}</span>
+            <span>v{version}</span>
             <span className="size-1 rounded-full bg-muted-foreground/40" />
             <span>Apache-2.0</span>
           </>

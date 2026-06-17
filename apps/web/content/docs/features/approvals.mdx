@@ -22,9 +22,9 @@ When the agent uses editing tools (like `Edit` or `MultiEdit`), KnightCode doesn
 
 ## Auto-Allowed Commands
 
-If you are running the agent in `AUTO` mode, constantly approving simple read-only commands (like `git status` or `ls`) can be repetitive.
+In `BUILD` mode, constantly approving the same safe commands (like `git status` or `ls`) can be repetitive. (In `AUTO` mode every tool call runs without prompting — the one exception is `AskUserQuestion`, which always surfaces to you since it is the model explicitly asking for your input, not a permission gate — so the allowlist mainly benefits `BUILD` mode.)
 
 KnightCode provides an **Allowlist** for commands:
 - Open the `/allow` dialog.
-- You can review or add regex patterns for trusted commands (e.g., `git diff.*`, `npm test`, `vitest`).
-- When the agent attempts to run a matching shell command, it runs automatically without prompting.
+- You can review or add **command prefixes** for trusted commands (e.g., `git status`, `npm test`, `bun run lint`).
+- A `Bash` command runs automatically when it exactly matches an allowed prefix, or begins with one followed by extra arguments. As a safety guard, a command whose extra arguments contain shell metacharacters (`;`, `&`, `|`, `` ` ``, `$`, `(`, `)`, redirects, newlines) is **not** auto-allowed and still prompts.

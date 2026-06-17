@@ -3,7 +3,8 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import Image from "next/image"
 import Link from "next/link"
 
-import { SITE, VERSION, PRODUCT_LINKS } from "@/lib/site"
+import { SITE, PRODUCT_LINKS } from "@/lib/site"
+import { getLatestVersion } from "@/lib/version"
 
 const legalLinks = [
   { label: "Privacy", href: "/privacy" },
@@ -34,7 +35,8 @@ function NpmLogo({ className }: { className?: string }) {
   )
 }
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const version = await getLatestVersion()
   return (
     <footer className="relative border-t border-border/50 bg-muted/20">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
@@ -55,7 +57,7 @@ export function SiteFooter() {
             {SITE.tagline}
           </p>
           <p className="mt-6 font-mono text-xs text-muted-foreground/70">
-            v{VERSION} - Alpha
+            v{version} - Alpha
           </p>
         </div>
 

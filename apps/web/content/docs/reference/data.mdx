@@ -6,27 +6,51 @@ icon: Database
 
 KnightCode operates as a local-first application. All persistent settings, conversation histories, and logs are kept in a dedicated directory in your home directory.
 
-## Root Directory
+## Home Directory
 
-The configuration root is named `.knightcode` and is located in the active user's home directory:
+The global configuration root is named `.knightcode` and is located in the active user's home directory:
 
 - **macOS / Linux**: `~/.knightcode/` (equivalent to `/Users/<username>/.knightcode/` or `/home/<username>/.knightcode/`)
 - **Windows**: `%USERPROFILE%\.knightcode\` (equivalent to `C:\Users\<username>\.knightcode\`)
 
-## Folder Structure & Files
+You can relocate most of this directory by setting the `KNIGHTCODE_HOME` environment variable: `knightcode.db`, `credentials.json`, `settings.json`, `projects/`, and `debug.log` then live under `$KNIGHTCODE_HOME` instead. Several paths do **not** honor the override and always resolve to `~/.knightcode/` in your real home directory:
 
-Inside the `.knightcode` directory, you will find:
+- `preferences.json` — the `/theme` selection
+- `permissions.json` — the `/allow` allowlist
+- The machine-wide context KnightCode auto-loads from home: `~/.knightcode/KNIGHTCODE.md` (global instructions), `~/.knightcode/rules/` (global rules), and `~/.knightcode/skills/` (global skills)
+
+So if you relocate `KNIGHTCODE_HOME`, your sessions, settings, and credentials move, but your global instructions, rules, skills, theme, and command allowlist stay under `~/.knightcode/`.
+
+### Folder Structure & Files
+
+Inside the home `.knightcode` directory, you will find:
 
 | File / Folder | Purpose |
 | --- | --- |
-| **`knightcode.db`** | Local SQLite database. Stores your conversation history, message transcripts, and session metadata. |
-| **`settings.json`** | JSON configuration file storing preferences (selected theme, reasoning level, allowlisted command regexes for `/allow`, custom provider settings, etc.). |
-| **`tasks/`** | Temporary logs for active or completed background tasks spawned via the `TaskCreate` tool. Logs are grouped in subfolders by task ID. |
-| **`projects/`** | Contains persistent Project Memory guidelines and indices. Inside `projects/<path-hash>/memory/` are stored the individual memory Markdown notes and the `MEMORY.md` recall index. |
-| **`debug.log`** | Running logs for diagnostic audits, model responses, and error traces. Enabled when running with `KNIGHTCODE_DEBUG=1`. |
+| **`knightcode.db`** | Local SQLite database. Stores your conversation history, message transcripts, session metadata, per-session reasoning effort, and token usage. |
+| **`credentials.json`** | Your OpenRouter API key and web search credentials. On Unix-like systems it is created with `0600` (owner-only) permissions. |
+| **`settings.json`** | Config-tool settings: default model, default mode, reasoning effort, side-query model, memory options, and lifecycle hook definitions. |
+| **`preferences.json`** | Stores the theme selected via the `/theme` dialog. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+| **`permissions.json`** | The allowed command prefixes managed via `/allow`. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+| **`projects/`** | Per-project auto-memory. Inside `projects/<encoded-cwd>/memory/` are the individual memory Markdown notes and the `MEMORY.md` recall index. |
+| **`debug.log`** | Diagnostic log of model responses and error traces. Only written when `KNIGHTCODE_DEBUG` is set. |
+| **`KNIGHTCODE.md`** | Optional global instructions auto-loaded into every project's context. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+| **`rules/`** | Optional global rule files (`*.md`) auto-loaded into every session. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+| **`skills/`** | Optional global skills (`<name>/SKILL.md`) available in every project. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+
+## Project Directory
+
+Some state is stored per-project, inside a `.knightcode` folder in your **working directory** (not the home directory):
+
+| File | Purpose |
+| --- | --- |
+| **`.knightcode/tasks.json`** | The durable, multi-session task ledger used by the `TaskCreate`/`TaskList`/`TaskUpdate`/… tools. |
+| **`.knightcode/processes.json`** | Live registry of background OS processes spawned during the session, kept in sync by the heartbeat monitor and cleaned up on exit. |
+
+Your project may also contain a `KNIGHTCODE.md` guidelines file at its root, which KnightCode loads into the agent's context automatically.
 
 ## Backup and Synchronization
 
-Since all configurations are stored in plain text and SQLite files inside a single home folder, you can easily backup your workspace or migrate between machines by copying the `~/.knightcode` directory. 
+Your global settings, credentials, and history live in plain-text JSON and SQLite files inside the home `~/.knightcode` directory, so you can back up your setup or migrate between machines by copying that folder.
 
 Ensure KnightCode is fully closed (using `/exit`) before copy operations to prevent database write locks or corrupted SQLite journal files.

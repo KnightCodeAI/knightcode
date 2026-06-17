@@ -14,7 +14,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
-import { INSTALL_COMMAND, RUN_COMMAND, SITE, VERSION } from "@/lib/site"
+import { INSTALL_COMMAND, RUN_COMMAND, SITE, FALLBACK_VERSION } from "@/lib/site"
 import { Section, SectionEyebrow, SectionHeading } from "./section"
 import { cn } from "@/lib/utils"
 
@@ -36,7 +36,7 @@ const setupNotes = [
   },
 ]
 
-export function Download() {
+export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
   const [copiedInstall, setCopiedInstall] = useState(false)
   const [copiedRun, setCopiedRun] = useState(false)
 
@@ -67,7 +67,7 @@ export function Download() {
         {/* Left Column: Title & Interactive Quick Start Card */}
         <div className="lg:col-span-6 flex flex-col gap-6">
           <div>
-            <SectionEyebrow>06 - Install - Alpha v{VERSION}</SectionEyebrow>
+            <SectionEyebrow>06 - Install - Alpha v{version}</SectionEyebrow>
             <SectionHeading className="mt-2.5">
               Install the CLI. Open your repo. Start a session.
             </SectionHeading>

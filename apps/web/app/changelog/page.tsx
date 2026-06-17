@@ -6,7 +6,7 @@ import Link from "next/link"
 import { PageHero, PageShell } from "@/components/site/page-shell"
 import { Button } from "@/components/ui/button"
 import { getChangelog, type ChangeKind } from "@/lib/changelog"
-import { SITE, VERSION } from "@/lib/site"
+import { SITE, FALLBACK_VERSION } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
@@ -22,6 +22,8 @@ const kindStyles: Record<ChangeKind, string> = {
     "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   Fixed:
     "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  Removed:
+    "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
 }
 
 function InlineMarkdown({ text }: { text: string }) {
@@ -83,16 +85,17 @@ function InlineMarkdown({ text }: { text: string }) {
 
 export default async function ChangelogPage() {
   const changelog = await getChangelog()
+  const version = changelog[0]?.version ?? FALLBACK_VERSION
 
   return (
     <PageShell>
       <PageHero
         eyebrow="Changelog"
         title="Changelog"
-        lead="A manually curated view of notable alpha changes. It is intentionally shorter than the raw commit history and will stay static until release automation is wired up."
+        lead="Release notes pulled live from the project changelog - the notable changes per version, shorter than the raw commit history."
         meta={
           <>
-            <span>Latest - v{VERSION}</span>
+            <span>Latest - v{version}</span>
             <span className="size-1 rounded-full bg-muted-foreground/40" />
             <span>Apache-2.0</span>
           </>
