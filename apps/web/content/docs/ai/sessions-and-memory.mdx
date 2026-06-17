@@ -25,9 +25,9 @@ You can place a `KNIGHTCODE.md` file in the root of your project directory. Knig
 - **Manual Edit**: You can write rules (e.g., tech stack details, lint preferences) directly into `KNIGHTCODE.md`.
 
 ### 2. Automated Memory Recall & Extraction
-KnightCode tracks your feedback, preferences, and workspace facts automatically using localized memory files stored at `~/.knightcode/projects/<cwd>/memory/`.
+KnightCode tracks your feedback, preferences, and workspace facts automatically, storing them as per-project memory files at `~/.knightcode/projects/<encoded-cwd>/memory/`.
 
 - **Turn-Start Recall**: At the start of a turn, a cheap side-query identifies relevant memories from your history and injects them as a `<system-reminder>` context block.
 - **Turn-End Extraction**: At the end of a completed turn, a serialized background agent (a forked agent) reviews the conversation. It extracts new facts (e.g., *"User prefers tabs over spaces for Python files"*) and saves them as small Markdown note files, updating the `MEMORY.md` index.
 - **Memory Management**: Run `/memory` to open the Memory Manager dialog where you can browse and delete stored memories.
-- **Memory Tool**: The agent can call the `Memory` tool directly to `list`, `get`, `update`, or `delete` memories (subject to user approval).
+- **Memory Tool**: The agent can call the `Memory` tool directly to `list`, `get`, `update`, or `delete` memories. Reads (`list`/`get`) run freely; `update` and `delete` prompt for your approval unless you're in AUTO mode.

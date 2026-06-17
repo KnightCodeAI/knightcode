@@ -12,7 +12,9 @@ This means you only need to obtain and configure a single API key from OpenRoute
 
 To view available models or switch between them:
 1. Type `/models` in the TUI input bar to open the **Select Model** dialog.
-2. Select from the predefined list of supported models.
+2. Search and select from the list of supported models.
+
+The default model on a fresh install is **Nemotron 3 Ultra 550B (free)** (`nvidia/nemotron-3-ultra-550b-a55b:free`).
 
 To re-run key configurations:
 1. Type `/setup` in the input bar.
@@ -27,20 +29,42 @@ On macOS, Linux, and other Unix-like systems, KnightCode configures the file per
 
 To completely wipe all keys, you can delete the `credentials.json` file. Note that this does not clear keys provided via environment variables (such as `OPENROUTER_API_KEY`); you will need to unset those environment variables separately.
 
-## Curated Models list
+## Onboarding Shortlist
 
-Through OpenRouter, KnightCode provides access to a curated selection of frontier and free models:
+The onboarding wizard offers a curated shortlist (free → frontier) to get you started quickly:
 
-- **Free Tier Models**:
-  - `z-ai/glm-4.5-air:free` (GLM 4.5 Air)
-  - `deepseek/deepseek-v4-flash:free` (DeepSeek V4 Flash)
+| Model | ID |
+| --- | --- |
+| Nemotron 3 Ultra 550B (free) | `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| GPT-OSS 120B (free) | `openai/gpt-oss-120b:free` |
+| Nex N2 Pro (free) | `nex-agi/nex-n2-pro:free` |
+| Qwen3.7 Plus | `qwen/qwen3.7-plus` |
+| GLM 5.2 | `z-ai/glm-5.2` |
+| Kimi K2.7 Code | `moonshotai/kimi-k2.7-code` |
+| GPT-5.4 Mini | `openai/gpt-5.4-mini` |
+| GPT-5.5 | `openai/gpt-5.5` |
+| GPT-5.3 Codex | `openai/gpt-5.3-codex` |
+| Claude Sonnet 4.6 | `anthropic/claude-sonnet-4.6` |
+| Claude Opus 4.8 | `anthropic/claude-opus-4.8` |
+
+## All Supported Models
+
+The `/models` dialog lists the full set of supported models. All run through OpenRouter, and all support reasoning/thinking effort.
+
+- **Free**:
+  - `nvidia/nemotron-3-ultra-550b-a55b:free` (Nemotron 3 Ultra 550B)
   - `openai/gpt-oss-120b:free` (GPT-OSS 120B)
-- **Standard & Frontier Models**:
-  - `anthropic/claude-sonnet-4.6` (Claude Sonnet 4.6)
+  - `nex-agi/nex-n2-pro:free` (Nex N2 Pro)
+- **Standard & Frontier**:
   - `anthropic/claude-opus-4.8` (Claude Opus 4.8)
+  - `anthropic/claude-sonnet-4.6` (Claude Sonnet 4.6)
+  - `anthropic/claude-haiku-4.5` (Claude Haiku 4.5)
+  - `openai/gpt-5.5-pro` (GPT-5.5 Pro)
   - `openai/gpt-5.5` (GPT-5.5)
   - `openai/gpt-5.4-mini` (GPT-5.4 Mini)
-  - `z-ai/glm-5.1` (GLM 5.1)
-  - `moonshotai/kimi-k2.6` (Kimi K2.6)
   - `openai/gpt-5.3-codex` (GPT-5.3 Codex)
+  - `qwen/qwen3.7-plus` (Qwen3.7 Plus)
+  - `z-ai/glm-5.2` (GLM 5.2)
+  - `moonshotai/kimi-k2.7-code` (Kimi K2.7 Code)
+  - `minimax/minimax-m2.7` (MiniMax M2.7)
 

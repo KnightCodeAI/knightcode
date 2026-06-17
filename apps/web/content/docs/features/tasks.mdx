@@ -4,29 +4,27 @@ description: Run and manage long-running background processes (dev servers, test
 icon: Record
 ---
 
-For complex software development, the agent often needs to run persistent background services (e.g., a dev server, webpack compilation, or test runners) while continuing the conversation loop. KnightCode implements a robust task execution manager to track, query, and clean up these subprocesses.
+For complex software development, the agent often needs to track long-running work and keep persistent background services (a dev server, a build watcher, test runners) alive while continuing the conversation loop. KnightCode handles this with two related pieces: a **background-process registry** and a **durable task ledger**.
 
-## How Background Tasks Work
+## Background Process Registry
 
-When the agent executes a background command, it spawns it inside a dedicated task container instead of a blocking foreground shell.
-- **Process Monitoring**: KnightCode runs a heartbeat monitor (`monitorProcessesHeartbeat`) every 5 seconds to ensure spawned tasks are alive.
-- **Process State**: Process state is stored in `.knightcode/processes.json`, which tracks active background subprocesses. Note that background command stdout/stderr is not permanently persisted on disk, and the agent monitors task status through the process state store.
-- **Auto-Cleanup**: When you exit KnightCode (either via `/exit` or SIGTERM, note that Ctrl+C/SIGINT is suppressed to prevent accidental exits), a hook tears down all active child processes (`cleanupAllProcesses`) to prevent orphan processes.
+When a real OS subprocess is spawned, KnightCode tracks it so it never leaks:
+
+- **Process Monitoring**: A heartbeat runs every 5 seconds, checking that each registered process is still alive and pruning entries for any that have exited.
+- **Process State**: Live process state is stored in `.knightcode/processes.json` inside your project directory. Background command output is not permanently persisted to disk.
+- **Auto-Cleanup**: When KnightCode exits — via `/exit` or `SIGTERM` — all registered child processes are torn down (`SIGTERM`, or `taskkill` on Windows) to prevent orphans. `Ctrl+C`/`SIGINT` is intentionally suppressed so it cannot accidentally kill the app or its tasks.
 
 ## Task Tool Suite
 
-The AI agent has access to specific tools to interact with tasks:
+Separately, the agent has a suite of tools for **durable, multi-session task tracking**, persisted as a ledger at `.knightcode/tasks.json` in your project. These tools manage task *records* — the actual work is performed by other tools (e.g. `Bash`).
 
-1. **`TaskCreate`**: Creates a durable task record in the tracking system. Returns a unique `task-id` (actual execution is handled by process tools).
-2. **`TaskList`**: Returns a list of all active background tasks along with their runtimes, commands, and current statuses.
-3. **`TaskGet`**: Queries the details and configuration of a specific background task.
-4. **`TaskOutput`**: Reads the stdout/stderr logs of an active or completed background task.
-5. **`TaskUpdate`**: Sends input signals or stdin data to a running task process.
-6. **`TaskStop`**: Updates the status of a task record to stopped/completed in the database.
+1. **`TaskCreate`**: Creates a durable task record and returns its `task-id`.
+2. **`TaskList`**: Returns all tracked tasks with their current statuses.
+3. **`TaskGet`**: Reads the details of a specific task by ID.
+4. **`TaskOutput`**: Fetches the streamed output / progress log appended to a task (with optional `tail` to limit to the most recent entries).
+5. **`TaskUpdate`**: Updates a task's fields — its description or status. Setting the status to `deleted` permanently removes the record.
+6. **`TaskStop`**: Marks a task as stopped/completed in the ledger.
 
 ## Working with Tasks
 
-You do not need to manually run task tools; the agent uses them automatically. If the agent proposes running a test server:
-- You will see a tool approval card for **`TaskCreate`**.
-- Once approved, the task launches, and the conversation continues immediately.
-- The agent can periodically check the logs of the task (using **`TaskOutput`**) to verify that the server started successfully without throwing errors.
+You do not need to run task tools manually; the agent uses them automatically. The read-only and record-keeping task tools (`TaskCreate`, `TaskList`, `TaskGet`, `TaskOutput`, `TaskUpdate`, `TaskStop`) run without an approval prompt — it's the underlying file edits and shell commands that the agent runs alongside them that surface approval cards in BUILD mode. The agent can periodically check a task's output (using `TaskOutput`) to verify, for example, that a dev server started without errors.

@@ -8,20 +8,28 @@ Running agentic AI tools locally on your development machine presents risks, suc
 
 ## Granular Tool Approvals
 
-By default, KnightCode segregates tools into two safety tiers:
-- **Read-Only Tools** (`Read`, `Glob`, `Grep`, `TaskList`): Executed automatically without prompting.
-- **Mutating Tools** (`Write`, `Edit`, `MultiEdit`, `Bash`, `TaskCreate`): In **BUILD** mode, these prompt the developer with an interactive card in the chat log, requiring manual approval. In **AUTO** mode, safe mutating actions are automatically approved to allow autonomous execution loops.
+In **BUILD** mode (the default), KnightCode only pauses for an approval card on the tool calls that can change your machine or environment:
+
+- **Runs automatically** — read-only and bookkeeping tools such as `Read`, `Glob`, `Grep`, `WebSearch`, `WebFetch`, `Skill`, the task ledger tools (`TaskList`, `TaskGet`, `TaskOutput`, `TaskCreate`, `TaskUpdate`, `TaskStop`), `TodoWrite`, and the read actions of `Memory` (`list`/`get`).
+- **Requires approval** — `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` (unless the command matches the allowlist), `Agent` (spawning a subagent), `Config` writes, and the `Memory` `update`/`delete` actions.
+
+In **AUTO** mode every tool call runs without prompting (the one exception is `AskUserQuestion`, where the agent explicitly wants your input). In **PLAN** mode the agent has no file-editing or state-changing tools at all.
 
 ## Allowed Commands (`/allow`)
 
-To make development in `AUTO` mode smoother, you can allowlist specific safe shell command patterns.
+To cut down on repetitive approvals in `BUILD` mode, you can allowlist safe shell command prefixes.
 - Open the `/allow` dialog.
-- Add regex patterns for commands that do not need confirmation (e.g., `git status`, `vitest run`, `bun run lint`).
-- The agent can execute matching commands silently in the background, accelerating automation loops.
+- Add **command prefixes** that do not need confirmation (e.g., `git status`, `bun run lint`, `npm test`).
+- A `Bash` command runs without a prompt when it exactly matches a prefix, or starts with one followed by extra arguments — unless those extra arguments contain shell metacharacters (`;`, `&`, `|`, `` ` ``, `$`, `(`, `)`, redirects, newlines), which are never auto-allowed.
 
 ## Lifecycle Hooks (`/hooks`)
 
-You can set up PreToolUse and PostToolUse hooks to enforce codebase-specific constraints.
-- Run `/hooks` to open the Hooks management dialog.
-- **PreToolUse Hook**: Runs a shell script *before* the agent executes a tool call. If the script exits with a non-zero code, the tool call is blocked. Useful for preventing modifications to sensitive folders.
-- **PostToolUse Hook**: Runs a shell script *after* the agent completes a tool call. Useful for running automatic code formatters (e.g., Prettier/ESLint) or running test suites immediately after edits.
+You can set up lifecycle hooks to enforce codebase-specific constraints. Run `/hooks` to open the Hooks management dialog. Five events are supported:
+
+- **PreToolUse**: Runs *before* a tool call. It can block the call (useful for preventing modifications to sensitive folders).
+- **PostToolUse**: Runs *after* a tool call succeeds. Useful for running formatters (Prettier/ESLint) or tests after edits.
+- **PostToolUseFailure**: Runs *after* a tool call fails.
+- **UserPromptSubmit**: Runs *before* your message is sent to the agent. It can block the submission.
+- **Stop**: Runs when the agent finishes responding.
+
+Each hook is a shell command attached to an optional matcher; hook configuration is stored in `~/.knightcode/settings.json`.

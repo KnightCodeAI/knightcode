@@ -29,4 +29,4 @@ The Todo panel is driven by the AI agent through the **`TodoWrite`** tool.
 
 ## User Benefits
 
-The Todo panel is stored as a temporary state file on disk. Having this visual panel makes it easy to monitor the agent's progress, especially during complex refactorings where the agent might make 10-15 tool calls sequentially. You can visually verify if the agent is still on track or if it is stuck on a particular step.
+The Todo list is ephemeral in-session state held in memory (not written to disk), so it resets when you start a new conversation. Having this visual panel makes it easy to monitor the agent's progress, especially during complex refactorings where the agent might make 10-15 tool calls sequentially. You can visually verify if the agent is still on track or if it is stuck on a particular step.

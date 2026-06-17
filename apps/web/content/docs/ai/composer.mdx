@@ -8,11 +8,11 @@ The input bar at the bottom of the TUI is the main control surface for KnightCod
 
 ## Keyboard Mode Toggling
 
-Pressing **`Tab`** while focusing the input bar toggles the active prompt mode. The prompt caret `❯` and border change color to show the active state:
+Pressing **`Tab`** while focusing the input bar cycles the active prompt mode (BUILD → PLAN → AUTO → BUILD). The prompt caret `❯` (and, in PLAN/AUTO, the prompt border) changes color to show the active state:
 
-- **BUILD** (Default): The agent executes individual tool tasks (like reading or editing files) but prompts you for approval on all mutating commands.
-- **PLAN**: The agent works in planning mode. It creates lists, designs solutions, and interacts with the Todo panel without executing file edits or shell scripts.
-- **AUTO**: The agent runs autonomously, auto-approving allowlisted commands and file writes (under safety boundaries) to quickly complete a multi-step objective.
+- **BUILD** (Default): The agent runs read-only tools automatically but prompts you for approval before file edits, non-allowlisted shell commands, spawning subagents, and writing settings.
+- **PLAN**: A read-only mode. The agent explores the codebase, designs solutions, and populates the Todo panel, but cannot edit files or run state-changing commands.
+- **AUTO**: The agent runs autonomously, executing every tool call without prompting (except when it explicitly asks you a question), to quickly complete a multi-step objective.
 
 ## File References with `@`
 

@@ -12,42 +12,50 @@ Type `/` at the prompt to search and execute any of the following commands.
 
 - `/new`: Starts a fresh conversation session.
 - `/sessions`: Opens a dialog to view, switch, and delete past conversations stored in your local SQLite store.
-- `/rename`: Renames the current conversation title.
+- `/rename`: Renames the current session.
 - `/branch`: Forks the current conversation transcript into a new session.
 - `/exit`: Safely terminates background tasks and exits the TUI.
 
 ## AI Configuration & Control
 
-- `/models`: Switch between active LLM models (e.g., OpenRouter endpoints, local models).
-- `/reasoning`: Toggle and set the reasoning/thinking effort level (Low, Medium, High) for models that support it.
-- `/agents`: Switch modes (BUILD, PLAN, AUTO) or select custom agent templates.
-- `/setup`: Re-runs the onboarding wizard to configure keys, default models, and search providers.
+- `/models`: View and switch between the supported LLM models (all routed through OpenRouter).
+- `/reasoning`: Set the reasoning/thinking effort level (None, Low, Medium, High, Max) for models that support it.
+- `/agents`: Switch the interaction mode (BUILD, PLAN, AUTO).
+- `/setup`: Re-runs the onboarding wizard to configure your API key, default model, and web search provider.
 
 ## Context & Token Utilities
 
-- `/compact`: Compresses the conversation history, summarizing older messages to free up context window tokens.
+- `/compact`: Compresses the conversation history, summarizing older messages to free up context window tokens. Accepts optional custom summarization instructions.
 - `/clear`: Clears all messages from the current conversation without deleting the session.
-- `/rewind`: Rewinds the last $N$ user/assistant turns to let you correct course.
+- `/rewind`: Removes the last N turns from this conversation to let you correct course.
 - `/copy`: Copies the text content of the last assistant response to your system clipboard.
-- `/export`: Exports the full conversation transcript as a clean markdown file (`knightcode-export-YYYY-MM-DD.md`) into your working directory.
+- `/export`: Exports the conversation transcript as a markdown file (`knightcode-export-YYYY-MM-DD.md`) into your working directory.
 
 ## Diagnostics & History
 
-- `/status`: Displays current session configuration, total messages, model, and active token statistics.
-- `/stats`: Shows token usage and session statistics for the current directory's workspace.
-- `/doctor`: Runs a diagnostic check on the presence and availability of API keys, local databases, and runtime versions.
-- `/files`: Lists all files edited or written during the active session.
-- `/undo`: Undoes all file modifications made by the AI agent in this session, restoring their original state.
+- `/status`: Displays current session info — model, mode, message count, and token statistics.
+- `/cost`: Shows the current session's token usage and estimated cost.
+- `/stats`: Shows aggregate token usage across all your sessions.
+- `/doctor`: Runs diagnostics on your OpenRouter API key, local store, Git availability, and runtime.
+- `/files`: Lists all files modified during the active session.
+- `/undo`: Reverts all file changes made by the AI agent in this session, restoring their original state.
+- `/help`: Lists all available slash commands.
+- `/feedback`: Opens the GitHub issues page to report a bug or request a feature.
+
+## Project & Memory
+
+- `/init`: Analyzes the codebase and generates an initial `KNIGHTCODE.md` (plus skills and hooks). Refuses to overwrite an existing `KNIGHTCODE.md`.
+- `/memory`: Opens the auto-memory manager to browse and delete learned memories.
 
 ## Git & PR Workflows
 
 - `/commit`: Inspects staged changes and uses the agent to generate and commit with a style-matched message.
 - `/commit-push-pr`: Generates a commit message, pushes the branch, and uses the GitHub CLI (`gh`) to open a pull request.
-- `/review`: Downloads and reviews a GitHub PR's changesets inside the terminal session.
+- `/review`: Reviews a GitHub pull request inside the terminal session (uses the `gh` CLI).
 - `/security-review`: Runs a security audit and review on your PR or uncommitted changes.
 
 ## Settings & Theme
 
 - `/theme`: Opens the theme dialog to switch terminal color schemes.
-- `/hooks`: Configure PreToolUse and PostToolUse lifecycle scripts.
-- `/allow`: Edit allowlisted commands for automatic execution in AUTO mode.
+- `/hooks`: Manage lifecycle hooks (PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, Stop).
+- `/allow`: Manage allowed command prefixes that run automatically without a prompt.
