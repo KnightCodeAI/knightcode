@@ -105,9 +105,9 @@ export async function* query(
   } as Message;
   let usage: LanguageModelUsage | null = null;
   // OpenRouter's actual reported cost (USD), summed across this turn's rounds
-  // (usage accounting, enabled in resolveModel). `costReported` distinguishes a
-  // genuine reported 0 (free/cached turn — authoritative) from "never reported"
-  // (no accounting → leave the field off so the UI can fall back to the table).
+  // (usage accounting, enabled in resolveModel). When OpenRouter reports a cost
+  // (including 0 for free/cached turns), we use it; otherwise we default to 0,
+  // treating unreported costs as free to avoid incorrect fallback pricing.
   let costUsd = 0;
   let costReported = false;
 
@@ -121,7 +121,7 @@ export async function* query(
         Date.now() - turnStartMs - (Number.isFinite(pausedMs) ? pausedMs : 0),
       ),
       ...(usage ? { usage } : {}),
-      ...(costReported ? { costUsd } : {}),
+      costUsd: costReported ? costUsd : 0,
       ...(interrupted ? { isInterrupted: true } : {}),
     };
     // Resolve any tool parts that never got a result (abort/error paths).

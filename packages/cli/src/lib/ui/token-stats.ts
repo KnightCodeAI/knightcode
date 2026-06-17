@@ -14,8 +14,8 @@ export type UsageItem = {
 /**
  * Aggregate per-message usage into session totals. Cost prefers OpenRouter's
  * actual reported `costUsd` (accurate for every model, including free/cached/
- * uncurated); when a message predates usage accounting or the provider omitted
- * it, falls back to the local price table. A model with neither contributes $0.
+ * uncurated). For messages predating usage accounting (missing `costUsd`),
+ * falls back to the local price table. A model with neither contributes $0.
  */
 export function computeTokenStats(items: UsageItem[]): TokenStats {
   let inputTokens = 0;

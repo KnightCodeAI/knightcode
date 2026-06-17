@@ -186,24 +186,24 @@ describe("query", () => {
     expect(done.message.metadata?.costUsd).toBe(0);
   });
 
-  test("omits costUsd entirely when no cost is reported", async () => {
+  test("defaults to 0 when no cost is reported to avoid fallback mispricing", async () => {
     const { events } = await drain(
       query(baseParams(textOnlyModel("hi")) as never),
     );
     const done = events.find((e) => e.type === "turn_complete") as {
       message: Message;
     };
-    expect(done.message.metadata?.costUsd).toBeUndefined();
+    expect(done.message.metadata?.costUsd).toBe(0);
   });
 
-  test("ignores a non-finite reported cost (malformed provider response)", async () => {
+  test("ignores a non-finite reported cost and defaults to 0", async () => {
     const { events } = await drain(
       query(baseParams(textModelWithCost(Infinity)) as never),
     );
     const done = events.find((e) => e.type === "turn_complete") as {
       message: Message;
     };
-    expect(done.message.metadata?.costUsd).toBeUndefined();
+    expect(done.message.metadata?.costUsd).toBe(0);
   });
 
   test("tool round: runs tool, loops, completes; tool part resolved", async () => {
