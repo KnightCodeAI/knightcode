@@ -121,7 +121,8 @@ export function createMemoryRecallProvider(opts: {
       // Key on recent tools too: identical query text with different recent-tool
       // context is a different selection signal, so it must not reuse the cache
       // (retries/regenerations keep the same transcript, so they still hit it).
-      const key = `${cwd}\n${query}\n${recentTools.join(",")}`;
+      // JSON-encode so no delimiter can collide across cwd/query/tool boundaries.
+      const key = JSON.stringify([cwd, query, recentTools]);
       if (key === cacheKey) return cacheValue;
 
       const selected = await findRelevantMemories({

@@ -354,7 +354,7 @@ export async function* query(
                 | { openrouter?: { usage?: { cost?: number } } }
                 | undefined
             )?.openrouter?.usage;
-            if (typeof orUsage?.cost === "number") {
+            if (typeof orUsage?.cost === "number" && Number.isFinite(orUsage.cost)) {
               costUsd += orUsage.cost;
               costReported = true;
             }

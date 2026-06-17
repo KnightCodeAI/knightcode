@@ -150,8 +150,8 @@ export const SUPPORTED_CHAT_MODELS = [
     id: "nex-agi/nex-n2-pro:free",
     provider: "openrouter",
     pricing: {
-      inputUsdPerMillionTokens: 0.5,
-      outputUsdPerMillionTokens: 2.5,
+      inputUsdPerMillionTokens: 0,
+      outputUsdPerMillionTokens: 0,
     },
     supportsThinking: true,
     contextWindow: 262144,

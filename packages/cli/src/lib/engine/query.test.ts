@@ -196,6 +196,16 @@ describe("query", () => {
     expect(done.message.metadata?.costUsd).toBeUndefined();
   });
 
+  test("ignores a non-finite reported cost (malformed provider response)", async () => {
+    const { events } = await drain(
+      query(baseParams(textModelWithCost(Infinity)) as never),
+    );
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    expect(done.message.metadata?.costUsd).toBeUndefined();
+  });
+
   test("tool round: runs tool, loops, completes; tool part resolved", async () => {
     const calls: string[] = [];
     const host = makeHost(async (tc) => {
