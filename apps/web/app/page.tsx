@@ -7,7 +7,8 @@ import { SiteFooter } from "@/components/site/footer"
 import { SiteHeader } from "@/components/site/header"
 import { Hero } from "@/components/site/hero"
 import { Stats } from "@/components/site/stats"
-import { SITE, VERSION } from "@/lib/site"
+import { SITE } from "@/lib/site"
+import { getLatestVersion } from "@/lib/version"
 
 import {
   BrowserIcon,
@@ -28,7 +29,8 @@ import {
   Search01Icon,
 } from "@hugeicons/core-free-icons"
 
-export default function HomePage() {
+export default async function HomePage() {
+  const version = await getLatestVersion()
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -36,7 +38,7 @@ export default function HomePage() {
     description: SITE.description,
     applicationCategory: "DeveloperApplication",
     operatingSystem: "macOS, Linux, Windows",
-    softwareVersion: VERSION,
+    softwareVersion: version,
     downloadUrl: SITE.npm,
     url: SITE.url,
     license: "https://opensource.org/licenses/Apache-2.0",
@@ -57,7 +59,7 @@ export default function HomePage() {
     <>
       <SiteHeader />
       <main className="relative">
-        <Hero />
+        <Hero version={version} />
         <Stats />
         {/* <Demo /> */}
 
@@ -260,7 +262,7 @@ export default function HomePage() {
         </div>
 
         <FeatureGrid />
-        <Download />
+        <Download version={version} />
         <FAQ />
       </main>
       <SiteFooter />

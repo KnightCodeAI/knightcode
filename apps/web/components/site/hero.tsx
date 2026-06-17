@@ -13,10 +13,10 @@ import Link from "next/link"
 
 import { TypingAnimation } from "@/components/text-typing"
 import { Button } from "@/components/ui/button"
-import { INSTALL_COMMAND, NPM_PACKAGE, SITE, VERSION } from "@/lib/site"
+import { INSTALL_COMMAND, NPM_PACKAGE, SITE, FALLBACK_VERSION } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
-export function Hero() {
+export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -44,13 +44,13 @@ export function Hero() {
           transition={{ duration: 0.5 }}
         >
           <Link
-            href={`${SITE.githubReleases}/tag/${encodeURIComponent(`${NPM_PACKAGE}@${VERSION}`)}`}
+            href={`${SITE.githubReleases}/tag/${encodeURIComponent(`${NPM_PACKAGE}@${version}`)}`}
             target="_blank"
             rel="noreferrer"
             className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/60 px-3 py-1 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase backdrop-blur-md transition-colors hover:text-foreground"
           >
             <span className="size-1.5 rounded-full bg-foreground/70" />
-            <span>Alpha v{VERSION}</span>
+            <span>Alpha v{version}</span>
             <HugeiconsIcon
               icon={ArrowRight01Icon}
               className="size-3 transition-transform group-hover:translate-x-0.5"

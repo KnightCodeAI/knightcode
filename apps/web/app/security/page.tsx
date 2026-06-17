@@ -5,7 +5,8 @@ import Link from "next/link"
 
 import { PageHero, PageShell, Prose } from "@/components/site/page-shell"
 import { Button } from "@/components/ui/button"
-import { SITE, VERSION } from "@/lib/site"
+import { SITE } from "@/lib/site"
+import { getLatestVersion } from "@/lib/version"
 
 export const metadata: Metadata = {
   title: "Security",
@@ -13,7 +14,8 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE.url}/security` },
 }
 
-export default function SecurityPage() {
+export default async function SecurityPage() {
+  const version = await getLatestVersion()
   return (
     <PageShell>
       <PageHero
@@ -22,7 +24,7 @@ export default function SecurityPage() {
         lead="KnightCode is a local CLI that can read files, write files, run commands, and talk to AI providers. If you find a security issue, please report it privately first."
         meta={
           <>
-            <span>Latest - v{VERSION}</span>
+            <span>Latest - v{version}</span>
             <span className="size-1 rounded-full bg-muted-foreground/40" />
             <span>Alpha support - latest release</span>
           </>
