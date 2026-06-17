@@ -13,7 +13,7 @@ In **BUILD** mode (the default), KnightCode only pauses for an approval card on 
 - **Runs automatically** — read-only and bookkeeping tools such as `Read`, `Glob`, `Grep`, `WebSearch`, `WebFetch`, `Skill`, the task ledger tools (`TaskList`, `TaskGet`, `TaskOutput`, `TaskCreate`, `TaskUpdate`, `TaskStop`), `TodoWrite`, and the read actions of `Memory` (`list`/`get`).
 - **Requires approval** — `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` (unless the command matches the allowlist), `Agent` (spawning a subagent), `Config` writes, and the `Memory` `update`/`delete` actions.
 
-In **AUTO** mode every tool call runs without prompting (the one exception is `AskUserQuestion`, where the agent explicitly wants your input). In **PLAN** mode the agent has no file-editing or state-changing tools at all.
+In **AUTO** mode every tool call runs without prompting (the one exception is `AskUserQuestion`, where the agent explicitly wants your input). In **PLAN** mode the agent's file-editing and shell tools are removed entirely — `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, and `Agent` (subagent spawning) are not exposed, so the model cannot edit files or run commands. A few non-file tools remain available for planning, including some that can still change state (`Config` writes and `Memory` `update`/`delete`), so PLAN is not a fully sandboxed read-only mode.
 
 ## Allowed Commands (`/allow`)
 

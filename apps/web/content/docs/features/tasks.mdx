@@ -23,7 +23,7 @@ Separately, the agent has a suite of tools for **durable, multi-session task tra
 3. **`TaskGet`**: Reads the details of a specific task by ID.
 4. **`TaskOutput`**: Fetches the streamed output / progress log appended to a task (with optional `tail` to limit to the most recent entries).
 5. **`TaskUpdate`**: Updates a task's fields — its description or status. Setting the status to `deleted` permanently removes the record.
-6. **`TaskStop`**: Marks a task as stopped/completed in the ledger.
+6. **`TaskStop`**: Abandons an `in_progress` task — it resets the status back to `pending` and clears the task's owner (with an optional `reason` recorded in the output log). It does **not** complete the task; use `TaskUpdate` with `status: completed` for genuinely finished work. The task must currently be `in_progress`, or the call errors.
 
 ## Working with Tasks
 

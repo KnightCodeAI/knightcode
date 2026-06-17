@@ -13,7 +13,7 @@ The global configuration root is named `.knightcode` and is located in the activ
 - **macOS / Linux**: `~/.knightcode/` (equivalent to `/Users/<username>/.knightcode/` or `/home/<username>/.knightcode/`)
 - **Windows**: `%USERPROFILE%\.knightcode\` (equivalent to `C:\Users\<username>\.knightcode\`)
 
-You can relocate this directory entirely by setting the `KNIGHTCODE_HOME` environment variable; everything below then lives under `$KNIGHTCODE_HOME` instead.
+You can relocate most of this directory by setting the `KNIGHTCODE_HOME` environment variable: `knightcode.db`, `credentials.json`, `settings.json`, `projects/`, and `debug.log` then live under `$KNIGHTCODE_HOME` instead. Two files do **not** honor the override and always resolve to `~/.knightcode/` in your real home directory: `preferences.json` (the `/theme` selection) and `permissions.json` (the `/allow` allowlist).
 
 ### Folder Structure & Files
 
@@ -24,8 +24,8 @@ Inside the home `.knightcode` directory, you will find:
 | **`knightcode.db`** | Local SQLite database. Stores your conversation history, message transcripts, session metadata, per-session reasoning effort, and token usage. |
 | **`credentials.json`** | Your OpenRouter API key and web search credentials. On Unix-like systems it is created with `0600` (owner-only) permissions. |
 | **`settings.json`** | Config-tool settings: default model, default mode, reasoning effort, side-query model, memory options, and lifecycle hook definitions. |
-| **`preferences.json`** | Stores the theme selected via the `/theme` dialog. |
-| **`permissions.json`** | The allowed command prefixes managed via `/allow`. |
+| **`preferences.json`** | Stores the theme selected via the `/theme` dialog. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
+| **`permissions.json`** | The allowed command prefixes managed via `/allow`. Always resolves to `~/.knightcode/`; ignores `KNIGHTCODE_HOME`. |
 | **`projects/`** | Per-project auto-memory. Inside `projects/<encoded-cwd>/memory/` are the individual memory Markdown notes and the `MEMORY.md` recall index. |
 | **`debug.log`** | Diagnostic log of model responses and error traces. Only written when `KNIGHTCODE_DEBUG` is set. |
 

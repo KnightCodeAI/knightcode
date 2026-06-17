@@ -22,7 +22,7 @@ When the agent uses editing tools (like `Edit` or `MultiEdit`), KnightCode doesn
 
 ## Auto-Allowed Commands
 
-In `BUILD` mode, constantly approving the same safe commands (like `git status` or `ls`) can be repetitive. (In `AUTO` mode every tool call runs without prompting, so the allowlist mainly benefits `BUILD` mode.)
+In `BUILD` mode, constantly approving the same safe commands (like `git status` or `ls`) can be repetitive. (In `AUTO` mode every tool call runs without prompting — the one exception is `AskUserQuestion`, which always surfaces to you since it is the model explicitly asking for your input, not a permission gate — so the allowlist mainly benefits `BUILD` mode.)
 
 KnightCode provides an **Allowlist** for commands:
 - Open the `/allow` dialog.
