@@ -30,6 +30,8 @@ import { allowCommand, isCommandAllowed } from "../lib/permissions/permissions";
 import { isMemoryEnabled } from "../lib/memory/config";
 import { createMemoryRecallProvider } from "../lib/memory/recall";
 import { createChangedFilesProvider } from "../lib/inference/changed-files-provider";
+import { isSkillAutoDiscoverEnabled } from "../lib/context/skills/config";
+import { createSkillDiscoveryProvider } from "../lib/context/skills/discovery";
 import { scheduleMemoryExtraction } from "../lib/memory/extract-scheduler";
 import { getStore } from "../lib/store/client";
 import {
@@ -133,6 +135,13 @@ export function useQueryEngine(
   // (identical consecutive queries reuse the selection). Rebuilt only when the
   // model changes.
   const recallProviderRef = useRef<{
+    model: string;
+    provider: ContextProvider;
+  } | null>(null);
+
+  // Skill discovery provider — holds a session-scoped sent-set + query cache,
+  // so like recall it must survive across turns and rebuild only on model change.
+  const discoveryProviderRef = useRef<{
     model: string;
     provider: ContextProvider;
   } | null>(null);
@@ -449,6 +458,18 @@ export function useQueryEngine(
             };
           }
           contextProviders.push(recallProviderRef.current.provider);
+        }
+        if (isSkillAutoDiscoverEnabled()) {
+          if (discoveryProviderRef.current?.model !== params.model) {
+            discoveryProviderRef.current = {
+              model: params.model,
+              provider: createSkillDiscoveryProvider({
+                mainModelId: params.model,
+                getApiKey: getOpenRouterApiKey,
+              }),
+            };
+          }
+          contextProviders.push(discoveryProviderRef.current.provider);
         }
         contextProviders.push(createChangedFilesProvider());
 
