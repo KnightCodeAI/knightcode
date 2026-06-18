@@ -312,6 +312,68 @@ Body.`,
     expect(index).toContain("…");
   });
 
+  it("conditional skills (paths frontmatter) are excluded from the index", async () => {
+    const { buildSkillIndex, isConditionalSkill, listSkills, clearSkillCaches } =
+      await import("./skills");
+    clearSkillCaches();
+
+    const projectDir = join(TEST_ROOT, "conditional");
+    const condDir = join(projectDir, ".knightcode", "skills", "terraform");
+    const plainDir = join(projectDir, ".knightcode", "skills", "always");
+    ensureDir(condDir);
+    ensureDir(plainDir);
+    writeFile(
+      join(condDir, "SKILL.md"),
+      `---
+name: terraform
+description: Terraform helper
+paths: ["**/*.tf"]
+---
+Body.`,
+    );
+    writeFile(
+      join(plainDir, "SKILL.md"),
+      `---
+name: always
+description: Always-available skill
+---
+Body.`,
+    );
+
+    const skills = listSkills(projectDir);
+    expect(isConditionalSkill(skills.find((s) => s.name === "terraform")!)).toBe(
+      true,
+    );
+    expect(isConditionalSkill(skills.find((s) => s.name === "always")!)).toBe(
+      false,
+    );
+
+    const index = buildSkillIndex(projectDir);
+    expect(index).toContain("always");
+    expect(index).not.toContain("terraform");
+  });
+
+  it("a match-all paths glob is NOT treated as conditional", async () => {
+    const { isConditionalSkill, listSkills, clearSkillCaches } = await import(
+      "./skills"
+    );
+    clearSkillCaches();
+    const projectDir = join(TEST_ROOT, "matchall");
+    const dir = join(projectDir, ".knightcode", "skills", "everywhere");
+    ensureDir(dir);
+    writeFile(
+      join(dir, "SKILL.md"),
+      `---
+name: everywhere
+description: Applies everywhere
+paths: ["**"]
+---
+Body.`,
+    );
+    const skill = listSkills(projectDir).find((s) => s.name === "everywhere")!;
+    expect(isConditionalSkill(skill)).toBe(false);
+  });
+
   it("buildSkillIndex caps total size but never drops a skill name", async () => {
     const { buildSkillIndex, SKILL_INDEX_CHAR_BUDGET } = await import(
       "./skills"

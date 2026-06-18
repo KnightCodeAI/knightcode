@@ -5,3 +5,4 @@ export { InlineQuestion } from "./inline-question";
 export { CompactionMessage } from "./compaction-message";
 export { InterruptedMessage } from "./interrupted-message";
 export { ToolPermissionRequest } from "./tool-permission-request";
+export { SkillSurfacedNotice } from "./skill-surfaced-notice";

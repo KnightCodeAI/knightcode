@@ -24,6 +24,9 @@ export type ChatMessageMetadata = {
   summaryCount?: number;
   preservedCount?: number;
   commandProgressMessage?: string;
+  /** Skills surfaced by auto-discovery / path-matching during this turn —
+   *  rendered as a visible "relevant skills" line above the assistant reply. */
+  surfacedSkills?: string[];
 };
 
 type ChatTools = {

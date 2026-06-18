@@ -268,6 +268,26 @@ export function loadSkill(name: string, cwd = process.cwd()): Skill | null {
   return listSkills(cwd).find((s) => s.name === name) ?? null;
 }
 
+/** A glob that matches everything — treated as "no path scoping". */
+function isMatchAllGlob(g: string): boolean {
+  const n = g.trim();
+  return n === "" || n === "**" || n === "**/*" || n === "*";
+}
+
+/**
+ * A "conditional" skill has `paths` frontmatter scoping it to matching files
+ * (mirrors claude-code's path-conditional skills). These are kept OUT of the
+ * always-on skill index and user-text discovery — they surface only when the
+ * model touches a file matching their globs (see skills/conditional.ts).
+ */
+export function isConditionalSkill(s: Skill): boolean {
+  return (
+    !s.disableModelInvocation &&
+    Array.isArray(s.paths) &&
+    s.paths.some((g) => !isMatchAllGlob(g))
+  );
+}
+
 /** Max chars of a single skill's description in the index listing. */
 export const MAX_LISTING_DESC_CHARS = 250;
 /** Max total chars of the rendered skill index (keeps turn-1 tokens bounded). */
@@ -305,7 +325,9 @@ function joinedLength(lines: string[]): number {
  * listing every eligible skill. Returns "" when no eligible skills exist.
  */
 export function buildSkillIndex(cwd = process.cwd()): string {
-  const skills = listSkills(cwd).filter((s) => !s.disableModelInvocation);
+  const skills = listSkills(cwd).filter(
+    (s) => !s.disableModelInvocation && !isConditionalSkill(s),
+  );
   if (skills.length === 0) return "";
 
   // 1. Full descriptions (each capped at MAX_LISTING_DESC_CHARS) if they fit.

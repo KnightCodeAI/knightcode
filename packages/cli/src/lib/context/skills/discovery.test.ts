@@ -140,4 +140,44 @@ describe("skill discovery", () => {
     const provider = createSkillDiscoveryProvider({ mainModelId: "x/y" });
     expect(provider.phase).toBe("turn_start");
   });
+
+  it("excludes conditional (paths) skills from discovery candidates", async () => {
+    const { discoverRelevantSkills } = await import("./discovery");
+    const projectDir = join(TEST_ROOT, "cond-exclude");
+    writeSkill(projectDir, "plain", "A plain skill");
+    // conditional skill with paths — must not be a candidate
+    const condDir = join(projectDir, ".knightcode", "skills", "scoped");
+    ensureDir(condDir);
+    writeFileSync(
+      join(condDir, "SKILL.md"),
+      `---\nname: scoped\ndescription: Scoped skill\npaths: ["**/*.tf"]\n---\nBody.`,
+      "utf-8",
+    );
+    const { clearSkillCaches } = await import("../skills");
+    clearSkillCaches();
+
+    // Side model tries to return both; "scoped" isn't a valid candidate so it's dropped.
+    const names = await discoverRelevantSkills({
+      query: "do something",
+      cwd: projectDir,
+      mainModelId: "x/y",
+      sideQueryImpl: async () => '["plain", "scoped"]',
+    });
+    expect(names).toEqual(["plain"]);
+  });
+
+  it("provider fires onSurface with freshly surfaced skills", async () => {
+    const { createSkillDiscoveryProvider } = await import("./discovery");
+    const projectDir = join(TEST_ROOT, "surface");
+    writeSkill(projectDir, "deploy", "Deploy the app");
+
+    const surfaced: string[][] = [];
+    const provider = createSkillDiscoveryProvider({
+      mainModelId: "x/y",
+      sideQueryImpl: async () => '["deploy"]',
+      onSurface: (names) => surfaced.push(names),
+    });
+    await provider.run({ messages: [userMsg("deploy it")], cwd: projectDir });
+    expect(surfaced).toEqual([["deploy"]]);
+  });
 });

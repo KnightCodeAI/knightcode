@@ -3,7 +3,7 @@ import { sideQuery } from "../../inference/side-query";
 import { extractJsonArray } from "../../memory/json";
 import type { ContextProvider } from "../../engine/context-providers";
 import { latestUserText } from "../../engine/context-providers";
-import { listSkills } from "../skills";
+import { listSkills, isConditionalSkill } from "../skills";
 
 const MAX_DISCOVERED = 5;
 // Reasoning side models spend output tokens before the JSON answer; give the
@@ -39,7 +39,10 @@ export async function discoverRelevantSkills(opts: {
 }): Promise<string[]> {
   if (!opts.query.trim()) return [];
   const candidates = listSkills(opts.cwd).filter(
-    (s) => !s.disableModelInvocation && !(opts.alreadySent?.has(s.name) ?? false),
+    (s) =>
+      !s.disableModelInvocation &&
+      !isConditionalSkill(s) && // path-scoped skills surface via file-match, not here
+      !(opts.alreadySent?.has(s.name) ?? false),
   );
   if (candidates.length === 0) return [];
 
@@ -73,11 +76,18 @@ export async function discoverRelevantSkills(opts: {
   return selected;
 }
 
-/** Render selected skill names into a single nudge reminder. */
+/**
+ * Render selected skill names into a single nudge reminder. Phrased like
+ * claude-code's directive: when a surfaced skill matches the request, loading it
+ * via the Skill tool is a blocking step that should happen before responding.
+ */
 export function renderDiscoveryBlock(names: string[]): string[] {
   if (names.length === 0) return [];
+  const list = names.join(", ");
   return [
-    `These installed skills look relevant to the current request — load one with the Skill tool if it fits: ${names.join(", ")}.`,
+    `These installed skills are relevant to the current request: ${list}. ` +
+      `If one applies, this is a BLOCKING REQUIREMENT: invoke the Skill tool to load it BEFORE responding, then follow its instructions. ` +
+      `Do not mention a skill without loading it.`,
   ];
 }
 
@@ -96,6 +106,10 @@ export function createSkillDiscoveryProvider(opts: {
   mainModelId: string;
   getApiKey?: () => string | undefined;
   sideQueryImpl?: DiscoverySideQueryFn;
+  /** Called with freshly-surfaced skill names so the embedder can show a
+   *  visible "relevant skills" line in the chat (claude-code's skill_discovery
+   *  attachment). Fired once per skill per session. */
+  onSurface?: (names: string[]) => void;
 }): ContextProvider {
   const sent = new Set<string>();
   let cacheKey: string | null = null;
@@ -119,6 +133,7 @@ export function createSkillDiscoveryProvider(opts: {
       });
       const fresh = names.filter((n) => !sent.has(n));
       fresh.forEach((n) => sent.add(n));
+      if (fresh.length > 0) opts.onSurface?.(fresh);
       const block = renderDiscoveryBlock(fresh);
       cacheKey = key;
       cacheValue = block;
