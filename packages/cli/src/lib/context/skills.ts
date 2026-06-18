@@ -273,51 +273,61 @@ export const MAX_LISTING_DESC_CHARS = 250;
 /** Max total chars of the rendered skill index (keeps turn-1 tokens bounded). */
 export const SKILL_INDEX_CHAR_BUDGET = 8000;
 
-function clampDesc(desc: string): string {
+/** Shortest meaningful truncated description; below this we go names-only. */
+const MIN_DESC_CHARS = 20;
+
+function clampDesc(desc: string, cap = MAX_LISTING_DESC_CHARS): string {
   const flat = desc.replace(/\s+/g, " ").trim();
-  return flat.length > MAX_LISTING_DESC_CHARS
-    ? flat.slice(0, MAX_LISTING_DESC_CHARS - 1).trimEnd() + "…"
-    : flat;
+  return flat.length > cap ? flat.slice(0, cap - 1).trimEnd() + "…" : flat;
 }
 
-function overflowNote(n: number): string {
-  return `- …and ${n} more skill${n === 1 ? "" : "s"} — ask or use the Skill tool to list them.`;
+/** `description` joined with the whenToUse hint, the way it appears in a listing. */
+function combinedDesc(s: Skill): string {
+  return s.whenToUse ? `${s.description} — Use when: ${s.whenToUse}` : s.description;
+}
+
+function skillEntries(skills: Skill[], descCap: number): string[] {
+  return skills.map((s) => `- **${s.name}** — ${clampDesc(combinedDesc(s), descCap)}`);
+}
+
+/** Char length of the listing once newline-joined. */
+function joinedLength(lines: string[]): number {
+  return lines.reduce((n, l) => n + l.length, 0) + Math.max(0, lines.length - 1);
 }
 
 /**
  * Build the skill index for system prompt injection — model-invokable skills only.
- * Includes `whenToUse` hint when present. Each entry's description is clamped to
- * MAX_LISTING_DESC_CHARS and the whole listing to SKILL_INDEX_CHAR_BUDGET, with
- * an overflow note so the model knows more skills exist.
- * Returns empty string when no eligible skills exist.
+ *
+ * The listing is bounded to SKILL_INDEX_CHAR_BUDGET but **never drops a skill**:
+ * a dropped name is undiscoverable (the model can't load what it can't see), so
+ * like claude-code's `formatCommandsWithinBudget` we degrade gracefully —
+ * full descriptions → uniformly truncated descriptions → names-only — always
+ * listing every eligible skill. Returns "" when no eligible skills exist.
  */
 export function buildSkillIndex(cwd = process.cwd()): string {
   const skills = listSkills(cwd).filter((s) => !s.disableModelInvocation);
   if (skills.length === 0) return "";
 
-  const lines: string[] = [];
-  let used = 0;
-  for (const s of skills) {
-    let entry = `- **${s.name}** — ${clampDesc(s.description)}`;
-    if (s.whenToUse) entry += ` (Use when: ${clampDesc(s.whenToUse)})`;
-    // +1 for the newline join. Always keep at least one entry.
-    if (lines.length > 0 && used + entry.length + 1 > SKILL_INDEX_CHAR_BUDGET) {
-      break;
+  // 1. Full descriptions (each capped at MAX_LISTING_DESC_CHARS) if they fit.
+  const full = skillEntries(skills, MAX_LISTING_DESC_CHARS);
+  if (joinedLength(full) <= SKILL_INDEX_CHAR_BUDGET) return full.join("\n");
+
+  const namesOnly = skills.map((s) => `- **${s.name}**`);
+
+  // 2. Otherwise compute a per-entry description cap that fits all names, and
+  //    truncate every description to it. Reserve the names+markup overhead first.
+  const nameOverhead = joinedLength(namesOnly) + skills.length * 3; // 3 ≈ " — " per entry
+  const perEntryDescBudget = Math.floor(
+    (SKILL_INDEX_CHAR_BUDGET - nameOverhead) / skills.length,
+  );
+  if (perEntryDescBudget >= MIN_DESC_CHARS) {
+    const truncated = skillEntries(skills, perEntryDescBudget);
+    if (joinedLength(truncated) <= SKILL_INDEX_CHAR_BUDGET) {
+      return truncated.join("\n");
     }
-    lines.push(entry);
-    used += entry.length + 1;
   }
 
-  if (lines.length < skills.length) {
-    // Append an overflow note, trimming entries first if needed so the total
-    // (note included) still fits within SKILL_INDEX_CHAR_BUDGET. Keep >=1 entry.
-    let note = overflowNote(skills.length - lines.length);
-    while (lines.length > 1 && used + note.length + 1 > SKILL_INDEX_CHAR_BUDGET) {
-      const removed = lines.pop()!;
-      used -= removed.length + 1;
-      note = overflowNote(skills.length - lines.length);
-    }
-    lines.push(note);
-  }
-  return lines.join("\n");
+  // 3. Floor: names only. Never hides a skill (may exceed budget only when the
+  //    bare name list itself does, which would take hundreds of skills).
+  return namesOnly.join("\n");
 }

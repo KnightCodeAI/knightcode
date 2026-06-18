@@ -312,26 +312,24 @@ Body.`,
     expect(index).toContain("…");
   });
 
-  it("buildSkillIndex caps the total listing and notes the overflow", async () => {
+  it("buildSkillIndex caps total size but never drops a skill name", async () => {
     const { buildSkillIndex, SKILL_INDEX_CHAR_BUDGET } = await import(
       "./skills"
     );
 
     const projectDir = join(TEST_ROOT, "manyskills");
-    // Each entry is ~200 chars; create enough to exceed the budget.
+    // Each full entry is ~200 chars; create enough to blow the budget.
     const count = Math.ceil(SKILL_INDEX_CHAR_BUDGET / 150) + 20;
+    const names: string[] = [];
     for (let i = 0; i < count; i++) {
-      const dir = join(
-        projectDir,
-        ".knightcode",
-        "skills",
-        `skill-${String(i).padStart(3, "0")}`,
-      );
+      const name = `skill-${String(i).padStart(3, "0")}`;
+      names.push(name);
+      const dir = join(projectDir, ".knightcode", "skills", name);
       ensureDir(dir);
       writeFile(
         join(dir, "SKILL.md"),
         `---
-name: skill-${String(i).padStart(3, "0")}
+name: ${name}
 description: ${"d".repeat(120)}
 ---
 Body.`,
@@ -339,8 +337,11 @@ Body.`,
     }
 
     const index = buildSkillIndex(projectDir);
-    // Strict bound: the overflow note must not push the total past the budget.
+    // Bound respected (descriptions degraded to fit)...
     expect(index.length).toBeLessThanOrEqual(SKILL_INDEX_CHAR_BUDGET);
-    expect(index).toMatch(/more skill/i);
+    // ...and EVERY skill name is still present (the whole point: nothing hidden).
+    for (const name of names) expect(index).toContain(name);
+    // No "…and N more" drop note anymore.
+    expect(index).not.toMatch(/more skill/i);
   });
 });
