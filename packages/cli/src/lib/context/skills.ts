@@ -8,6 +8,17 @@ import {
 } from "./file-discovery";
 import { getBundledSkills } from "./skills/bundled";
 
+// Memoize the (FS-scanning) skill list per resolved cwd. The discovery provider
+// and buildSkillIndex hit this every turn; the watcher (lib/context/skills/
+// watcher.ts) calls clearSkillCaches() when a SKILL.md changes so edits appear
+// without a restart.
+const skillListCache = new Map<string, Skill[]>();
+
+/** Drop all memoized skill lists — called by the skill-dir watcher on change. */
+export function clearSkillCaches(): void {
+  skillListCache.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -206,6 +217,9 @@ function parseSkill(
  * Same physical file is loaded only once (deduplication by path).
  */
 export function listSkills(cwd = process.cwd()): Skill[] {
+  const cached = skillListCache.get(cwd);
+  if (cached) return cached;
+
   const skills = new Map<string, Skill>();
   const seenDirs = new Set<string>();
 
@@ -240,9 +254,11 @@ export function listSkills(cwd = process.cwd()): Skill[] {
     }
   }
 
-  return Array.from(skills.values()).sort((a, b) =>
+  const result = Array.from(skills.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+  skillListCache.set(cwd, result);
+  return result;
 }
 
 /**

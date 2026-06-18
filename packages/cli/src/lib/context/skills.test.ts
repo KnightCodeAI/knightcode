@@ -249,4 +249,42 @@ And this`,
     expect(skill!.body).toContain("And this");
     expect(skill!.body).not.toContain("Remove this comment");
   });
+
+  it("caches listSkills per cwd until clearSkillCaches is called", async () => {
+    const { listSkills, clearSkillCaches } = await import("./skills");
+
+    const projectDir = join(TEST_ROOT, "cache");
+    const skillDir = join(projectDir, ".knightcode", "skills", "alpha");
+    ensureDir(skillDir);
+    writeFile(
+      join(skillDir, "SKILL.md"),
+      `---
+name: alpha
+description: First skill
+---
+Body.`,
+    );
+
+    const first = listSkills(projectDir);
+    expect(first.find((s) => s.name === "alpha")).toBeDefined();
+
+    // Add a second skill on disk; cached call should NOT see it yet.
+    const betaDir = join(projectDir, ".knightcode", "skills", "beta");
+    ensureDir(betaDir);
+    writeFile(
+      join(betaDir, "SKILL.md"),
+      `---
+name: beta
+description: Second skill
+---
+Body.`,
+    );
+    const cached = listSkills(projectDir);
+    expect(cached.find((s) => s.name === "beta")).toBeUndefined();
+
+    // After clearing, the fresh scan picks it up.
+    clearSkillCaches();
+    const fresh = listSkills(projectDir);
+    expect(fresh.find((s) => s.name === "beta")).toBeDefined();
+  });
 });
