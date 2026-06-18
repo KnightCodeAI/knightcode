@@ -339,7 +339,8 @@ Body.`,
     }
 
     const index = buildSkillIndex(projectDir);
-    expect(index.length).toBeLessThanOrEqual(SKILL_INDEX_CHAR_BUDGET + 200);
+    // Strict bound: the overflow note must not push the total past the budget.
+    expect(index.length).toBeLessThanOrEqual(SKILL_INDEX_CHAR_BUDGET);
     expect(index).toMatch(/more skill/i);
   });
 });

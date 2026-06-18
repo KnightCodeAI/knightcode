@@ -35,50 +35,70 @@ export function createDebouncedReload(
   };
 }
 
+// Skill bodies live at <.knightcode>/skills/<name>/SKILL.md — three levels below
+// a watched .knightcode root. We watch the .knightcode PARENT dirs rather than
+// the skills dirs directly so that creating the very first skill (or even the
+// first skills/ dir) mid-session is picked up too; getProjectDirsUpToRoot only
+// returns skills dirs that already exist, which would miss that case.
+const WATCH_DEPTH = 3;
+
+/** Existing `.knightcode` roots to watch: global (~/.knightcode) + per-project. */
+export function skillWatchRoots(cwd: string): string[] {
+  const roots = new Set<string>();
+  const globalRoot = join(homedir(), ".knightcode");
+  if (existsSync(globalRoot)) roots.add(globalRoot);
+  // subdir "" → "<dir>/.knightcode"; the helper only returns existing dirs.
+  for (const d of getProjectDirsUpToRoot("", cwd)) {
+    if (existsSync(d)) roots.add(d);
+  }
+  return [...roots];
+}
+
 /**
- * Watch the global + project skill dirs for SKILL.md changes and clear the
- * skill + request-context caches on change, so edited/added/removed skills
+ * Watch the global + project `.knightcode` dirs for skill changes and clear the
+ * skill + request-context caches on change, so added/edited/removed skills
  * appear without a restart. chokidar handles recursion cross-platform. Returns
  * a stop function. No-op (returns a no-op stop) when hot-reload is disabled or
- * no skill dirs exist.
+ * no `.knightcode` dir exists.
  */
 export function startSkillWatcher(cwd = process.cwd()): () => void {
   if (!isSkillHotReloadEnabled()) return () => {};
 
-  const dirs = new Set<string>();
-  const globalDir = join(homedir(), ".knightcode", "skills");
-  if (existsSync(globalDir)) dirs.add(globalDir);
-  for (const d of getProjectDirsUpToRoot("skills", cwd)) {
-    if (existsSync(d)) dirs.add(d);
-  }
-  if (dirs.size === 0) return () => {};
+  const roots = skillWatchRoots(cwd);
+  if (roots.length === 0) return () => {};
 
   const debounced = createDebouncedReload(() => {
     clearSkillCaches();
     invalidateRequestContextCache();
-    debugLog("skills.watcher", "skill dirs changed — caches cleared");
+    debugLog("skills.watcher", "skills changed — caches cleared");
   });
 
   let watcher: FSWatcher | null = null;
   try {
-    watcher = chokidar.watch([...dirs], {
+    watcher = chokidar.watch(roots, {
       // Don't fire for the initial scan — only real post-startup changes.
       ignoreInitial: true,
-      // Skill bodies live at <dir>/<name>/SKILL.md; one level is enough, but
-      // a shallow recursive watch is harmless here (dirs are small).
-      depth: 2,
+      // Reach <.knightcode>/skills/<name>/SKILL.md without watching the whole tree.
+      depth: WATCH_DEPTH,
     });
-    // Only react to SKILL.md content changes and skill dir add/remove; ignore
-    // unrelated files a user might drop alongside a skill.
+    // Only react to events under a skills/ path: a SKILL.md write, or a skill
+    // dir add/remove. Ignores sibling .knightcode content (memory, settings,
+    // debug.log) so unrelated writes don't churn the caches.
     watcher.on("all", (event: string, path: string) => {
-      const isSkillFile = path.replace(/\\/g, "/").endsWith("/SKILL.md");
+      const p = path.replace(/\\/g, "/");
+      const underSkills = p.includes("/skills/") || p.endsWith("/skills");
+      if (!underSkills) return;
+      const isSkillFile = p.endsWith("/SKILL.md");
       const isDirEvent = event === "addDir" || event === "unlinkDir";
       if (isSkillFile || isDirEvent) debounced.trigger();
     });
-    // Never let a watcher error crash the session.
-    watcher.on("error", () => {});
-  } catch {
+    // Surface watcher errors to the debug log rather than swallowing them.
+    watcher.on("error", (err) =>
+      debugLog("skills.watcher", "watch error:", String(err)),
+    );
+  } catch (err) {
     // chokidar refused to start (rare under Bun) — hot-reload is best-effort.
+    debugLog("skills.watcher", "failed to start watcher:", String(err));
     watcher = null;
   }
 

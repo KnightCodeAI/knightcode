@@ -280,6 +280,10 @@ function clampDesc(desc: string): string {
     : flat;
 }
 
+function overflowNote(n: number): string {
+  return `- …and ${n} more skill${n === 1 ? "" : "s"} — ask or use the Skill tool to list them.`;
+}
+
 /**
  * Build the skill index for system prompt injection — model-invokable skills only.
  * Includes `whenToUse` hint when present. Each entry's description is clamped to
@@ -293,23 +297,27 @@ export function buildSkillIndex(cwd = process.cwd()): string {
 
   const lines: string[] = [];
   let used = 0;
-  let dropped = 0;
   for (const s of skills) {
     let entry = `- **${s.name}** — ${clampDesc(s.description)}`;
     if (s.whenToUse) entry += ` (Use when: ${clampDesc(s.whenToUse)})`;
     // +1 for the newline join. Always keep at least one entry.
     if (lines.length > 0 && used + entry.length + 1 > SKILL_INDEX_CHAR_BUDGET) {
-      dropped = skills.length - lines.length;
       break;
     }
     lines.push(entry);
     used += entry.length + 1;
   }
 
-  if (dropped > 0) {
-    lines.push(
-      `- …and ${dropped} more skill${dropped === 1 ? "" : "s"} — ask or use the Skill tool to list them.`,
-    );
+  if (lines.length < skills.length) {
+    // Append an overflow note, trimming entries first if needed so the total
+    // (note included) still fits within SKILL_INDEX_CHAR_BUDGET. Keep >=1 entry.
+    let note = overflowNote(skills.length - lines.length);
+    while (lines.length > 1 && used + note.length + 1 > SKILL_INDEX_CHAR_BUDGET) {
+      const removed = lines.pop()!;
+      used -= removed.length + 1;
+      note = overflowNote(skills.length - lines.length);
+    }
+    lines.push(note);
   }
   return lines.join("\n");
 }
