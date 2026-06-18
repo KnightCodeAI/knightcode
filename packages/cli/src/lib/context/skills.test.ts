@@ -374,6 +374,28 @@ Body.`,
     expect(isConditionalSkill(skill)).toBe(false);
   });
 
+  it("a single '*' glob IS conditional (matches top-level files only)", async () => {
+    const { isConditionalSkill, listSkills, clearSkillCaches } = await import(
+      "./skills"
+    );
+    clearSkillCaches();
+    const projectDir = join(TEST_ROOT, "single-star");
+    const dir = join(projectDir, ".knightcode", "skills", "toplevel");
+    ensureDir(dir);
+    writeFile(
+      join(dir, "SKILL.md"),
+      `---
+name: toplevel
+description: Scoped to top-level files
+paths: ["*"]
+---
+Body.`,
+    );
+    const skill = listSkills(projectDir).find((s) => s.name === "toplevel")!;
+    // '*' is a single-segment wildcard (a scope), not match-all → conditional.
+    expect(isConditionalSkill(skill)).toBe(true);
+  });
+
   it("buildSkillIndex caps total size but never drops a skill name", async () => {
     const { buildSkillIndex, SKILL_INDEX_CHAR_BUDGET } = await import(
       "./skills"

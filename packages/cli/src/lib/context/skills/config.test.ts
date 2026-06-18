@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -22,6 +22,11 @@ describe("skill config", () => {
   afterEach(() => {
     if (prevHome === undefined) delete process.env.KNIGHTCODE_HOME;
     else process.env.KNIGHTCODE_HOME = prevHome;
+    try {
+      rmSync(home, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
   });
 
   it("auto-discover defaults to enabled", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import {
@@ -11,7 +11,25 @@ import {
 const norm = (p: string) =>
   p.replace(/\\/g, "/").toLowerCase().replace(/\/+$/, "");
 
+// Track temp dirs so afterEach can remove them — otherwise each run leaks one.
+const tempDirs: string[] = [];
+function mkTmp(prefix: string): string {
+  const d = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(d);
+  return d;
+}
+
 describe("skill watcher", () => {
+  afterEach(() => {
+    while (tempDirs.length) {
+      try {
+        rmSync(tempDirs.pop()!, { recursive: true, force: true });
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  });
+
   it("debounces multiple triggers into a single reload", async () => {
     let reloads = 0;
     const d = createDebouncedReload(() => reloads++, 20);
@@ -37,7 +55,7 @@ describe("skill watcher", () => {
     // Root-cause coverage for the 'first skill created mid-session' case: the
     // watch root is the .knightcode parent, so a not-yet-created skills/ dir is
     // still covered.
-    const projectDir = mkdtempSync(join(tmpdir(), "kc-watchroot-"));
+    const projectDir = mkTmp("kc-watchroot-");
     mkdirSync(join(projectDir, ".knightcode")); // note: no skills/ subdir
     const roots = skillWatchRoots(projectDir).map(norm);
     expect(roots).toContain(norm(join(resolve(projectDir), ".knightcode")));
@@ -48,7 +66,7 @@ describe("skill watcher", () => {
     let home: string;
     beforeEach(() => {
       prevHome = process.env.KNIGHTCODE_HOME;
-      home = mkdtempSync(join(tmpdir(), "kc-watch-"));
+      home = mkTmp("kc-watch-");
       process.env.KNIGHTCODE_HOME = home;
     });
     afterEach(() => {

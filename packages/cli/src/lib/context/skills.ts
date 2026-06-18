@@ -268,10 +268,14 @@ export function loadSkill(name: string, cwd = process.cwd()): Skill | null {
   return listSkills(cwd).find((s) => s.name === name) ?? null;
 }
 
-/** A glob that matches everything — treated as "no path scoping". */
+/**
+ * A glob that matches every path — treated as "no path scoping". Only the
+ * globstar forms qualify: `*` matches a single path segment (top-level files
+ * only), so it IS a scope and must NOT be treated as match-all.
+ */
 function isMatchAllGlob(g: string): boolean {
   const n = g.trim();
-  return n === "" || n === "**" || n === "**/*" || n === "*";
+  return n === "" || n === "**" || n === "**/*";
 }
 
 /**
