@@ -59,6 +59,13 @@ export const SUPPORTED_SETTINGS: Record<string, SettingMeta> = {
     path: ["memory", "dreamMinSessions"],
     type: "number",
   },
+  /** Side-query skill nudging. On unless explicitly false. */
+  "skills.autoDiscover": {
+    path: ["skills", "autoDiscover"],
+    type: "boolean",
+  },
+  /** Hot-reload skills when SKILL.md files change. On unless explicitly false. */
+  "skills.hotReload": { path: ["skills", "hotReload"], type: "boolean" },
 };
 
 export function isSupportedSetting(key: string): boolean {

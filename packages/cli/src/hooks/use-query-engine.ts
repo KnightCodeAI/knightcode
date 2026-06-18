@@ -30,6 +30,9 @@ import { allowCommand, isCommandAllowed } from "../lib/permissions/permissions";
 import { isMemoryEnabled } from "../lib/memory/config";
 import { createMemoryRecallProvider } from "../lib/memory/recall";
 import { createChangedFilesProvider } from "../lib/inference/changed-files-provider";
+import { isSkillAutoDiscoverEnabled } from "../lib/context/skills/config";
+import { createSkillDiscoveryProvider } from "../lib/context/skills/discovery";
+import { createConditionalSkillProvider } from "../lib/context/skills/conditional";
 import { scheduleMemoryExtraction } from "../lib/memory/extract-scheduler";
 import { getStore } from "../lib/store/client";
 import {
@@ -136,6 +139,22 @@ export function useQueryEngine(
     model: string;
     provider: ContextProvider;
   } | null>(null);
+
+  // Skill discovery provider — holds a session-scoped sent-set + query cache,
+  // so like recall it must survive across turns and rebuild only on model change.
+  const discoveryProviderRef = useRef<{
+    model: string;
+    provider: ContextProvider;
+  } | null>(null);
+
+  // Conditional (path-scoped) skill provider — session-scoped sent-set, model
+  // independent, so created once and reused across turns.
+  const conditionalProviderRef = useRef<ContextProvider | null>(null);
+
+  // Skills surfaced (discovery + path-match) during the in-flight turn; attached
+  // to the assistant message metadata so the chat shows a visible "relevant
+  // skills" line. Reset at the start of each submit.
+  const surfacedSkillsRef = useRef<Set<string>>(new Set());
 
   // Turn-clock pause while a prompt/question is up (ported from the old
   // useChat hook).
@@ -450,6 +469,31 @@ export function useQueryEngine(
           }
           contextProviders.push(recallProviderRef.current.provider);
         }
+        // Fresh per turn: surfaced skills attach to this turn's assistant reply.
+        surfacedSkillsRef.current = new Set();
+        const onSurfaceSkills = (names: string[]) => {
+          for (const n of names) surfacedSkillsRef.current.add(n);
+        };
+        if (isSkillAutoDiscoverEnabled()) {
+          if (discoveryProviderRef.current?.model !== params.model) {
+            discoveryProviderRef.current = {
+              model: params.model,
+              provider: createSkillDiscoveryProvider({
+                mainModelId: params.model,
+                getApiKey: getOpenRouterApiKey,
+                onSurface: onSurfaceSkills,
+              }),
+            };
+          }
+          contextProviders.push(discoveryProviderRef.current.provider);
+          // Path-scoped skills surface when the model edits a matching file.
+          if (!conditionalProviderRef.current) {
+            conditionalProviderRef.current = createConditionalSkillProvider({
+              onSurface: onSurfaceSkills,
+            });
+          }
+          contextProviders.push(conditionalProviderRef.current);
+        }
         contextProviders.push(createChangedFilesProvider());
 
         const gen = query({
@@ -480,12 +524,26 @@ export function useQueryEngine(
           // have flushed the final turn_complete upsert when we persist.
           let finalAssistant: Message | null = null;
           const upsertAssistant = (message: Message) => {
-            finalAssistant = message;
+            // Attach skills surfaced this turn so the chat shows a visible
+            // "relevant skills" line above the reply (request-view metadata only;
+            // not sent back to the model).
+            const surfaced = surfacedSkillsRef.current;
+            const withSkills =
+              surfaced.size > 0
+                ? ({
+                    ...message,
+                    metadata: {
+                      ...message.metadata,
+                      surfacedSkills: [...surfaced],
+                    },
+                  } as Message)
+                : message;
+            finalAssistant = withSkills;
             updateMessages((prev) => {
-              const idx = prev.findIndex((m) => m.id === message.id);
-              if (idx === -1) return [...prev, message];
+              const idx = prev.findIndex((m) => m.id === withSkills.id);
+              if (idx === -1) return [...prev, withSkills];
               const next = [...prev];
-              next[idx] = message;
+              next[idx] = withSkills;
               return next;
             });
           };

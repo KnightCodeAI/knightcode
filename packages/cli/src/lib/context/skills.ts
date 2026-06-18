@@ -8,6 +8,17 @@ import {
 } from "./file-discovery";
 import { getBundledSkills } from "./skills/bundled";
 
+// Memoize the (FS-scanning) skill list per resolved cwd. The discovery provider
+// and buildSkillIndex hit this every turn; the watcher (lib/context/skills/
+// watcher.ts) calls clearSkillCaches() when a SKILL.md changes so edits appear
+// without a restart.
+const skillListCache = new Map<string, Skill[]>();
+
+/** Drop all memoized skill lists — called by the skill-dir watcher on change. */
+export function clearSkillCaches(): void {
+  skillListCache.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -206,6 +217,9 @@ function parseSkill(
  * Same physical file is loaded only once (deduplication by path).
  */
 export function listSkills(cwd = process.cwd()): Skill[] {
+  const cached = skillListCache.get(cwd);
+  if (cached) return cached;
+
   const skills = new Map<string, Skill>();
   const seenDirs = new Set<string>();
 
@@ -240,9 +254,11 @@ export function listSkills(cwd = process.cwd()): Skill[] {
     }
   }
 
-  return Array.from(skills.values()).sort((a, b) =>
+  const result = Array.from(skills.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+  skillListCache.set(cwd, result);
+  return result;
 }
 
 /**
@@ -253,18 +269,91 @@ export function loadSkill(name: string, cwd = process.cwd()): Skill | null {
 }
 
 /**
+ * A glob that matches every path — treated as "no path scoping". Only the
+ * globstar forms qualify: `*` matches a single path segment (top-level files
+ * only), so it IS a scope and must NOT be treated as match-all.
+ */
+function isMatchAllGlob(g: string): boolean {
+  const n = g.trim();
+  return n === "" || n === "**" || n === "**/*";
+}
+
+/**
+ * A "conditional" skill has `paths` frontmatter scoping it to matching files
+ * (mirrors claude-code's path-conditional skills). These are kept OUT of the
+ * always-on skill index and user-text discovery — they surface only when the
+ * model touches a file matching their globs (see skills/conditional.ts).
+ */
+export function isConditionalSkill(s: Skill): boolean {
+  return (
+    !s.disableModelInvocation &&
+    Array.isArray(s.paths) &&
+    s.paths.some((g) => !isMatchAllGlob(g))
+  );
+}
+
+/** Max chars of a single skill's description in the index listing. */
+export const MAX_LISTING_DESC_CHARS = 250;
+/** Max total chars of the rendered skill index (keeps turn-1 tokens bounded). */
+export const SKILL_INDEX_CHAR_BUDGET = 8000;
+
+/** Shortest meaningful truncated description; below this we go names-only. */
+const MIN_DESC_CHARS = 20;
+
+function clampDesc(desc: string, cap = MAX_LISTING_DESC_CHARS): string {
+  const flat = desc.replace(/\s+/g, " ").trim();
+  return flat.length > cap ? flat.slice(0, cap - 1).trimEnd() + "…" : flat;
+}
+
+/** `description` joined with the whenToUse hint, the way it appears in a listing. */
+function combinedDesc(s: Skill): string {
+  return s.whenToUse ? `${s.description} — Use when: ${s.whenToUse}` : s.description;
+}
+
+function skillEntries(skills: Skill[], descCap: number): string[] {
+  return skills.map((s) => `- **${s.name}** — ${clampDesc(combinedDesc(s), descCap)}`);
+}
+
+/** Char length of the listing once newline-joined. */
+function joinedLength(lines: string[]): number {
+  return lines.reduce((n, l) => n + l.length, 0) + Math.max(0, lines.length - 1);
+}
+
+/**
  * Build the skill index for system prompt injection — model-invokable skills only.
- * Includes `whenToUse` hint when present.
- * Returns empty string when no eligible skills exist.
+ *
+ * The listing is bounded to SKILL_INDEX_CHAR_BUDGET but **never drops a skill**:
+ * a dropped name is undiscoverable (the model can't load what it can't see), so
+ * like claude-code's `formatCommandsWithinBudget` we degrade gracefully —
+ * full descriptions → uniformly truncated descriptions → names-only — always
+ * listing every eligible skill. Returns "" when no eligible skills exist.
  */
 export function buildSkillIndex(cwd = process.cwd()): string {
-  const skills = listSkills(cwd).filter((s) => !s.disableModelInvocation);
+  const skills = listSkills(cwd).filter(
+    (s) => !s.disableModelInvocation && !isConditionalSkill(s),
+  );
   if (skills.length === 0) return "";
-  return skills
-    .map((s) => {
-      let entry = `- **${s.name}** — ${s.description}`;
-      if (s.whenToUse) entry += ` (Use when: ${s.whenToUse})`;
-      return entry;
-    })
-    .join("\n");
+
+  // 1. Full descriptions (each capped at MAX_LISTING_DESC_CHARS) if they fit.
+  const full = skillEntries(skills, MAX_LISTING_DESC_CHARS);
+  if (joinedLength(full) <= SKILL_INDEX_CHAR_BUDGET) return full.join("\n");
+
+  const namesOnly = skills.map((s) => `- **${s.name}**`);
+
+  // 2. Otherwise compute a per-entry description cap that fits all names, and
+  //    truncate every description to it. Reserve the names+markup overhead first.
+  const nameOverhead = joinedLength(namesOnly) + skills.length * 3; // 3 ≈ " — " per entry
+  const perEntryDescBudget = Math.floor(
+    (SKILL_INDEX_CHAR_BUDGET - nameOverhead) / skills.length,
+  );
+  if (perEntryDescBudget >= MIN_DESC_CHARS) {
+    const truncated = skillEntries(skills, perEntryDescBudget);
+    if (joinedLength(truncated) <= SKILL_INDEX_CHAR_BUDGET) {
+      return truncated.join("\n");
+    }
+  }
+
+  // 3. Floor: names only. Never hides a skill (may exceed budget only when the
+  //    bare name list itself does, which would take hundreds of skills).
+  return namesOnly.join("\n");
 }

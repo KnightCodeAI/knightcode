@@ -249,4 +249,183 @@ And this`,
     expect(skill!.body).toContain("And this");
     expect(skill!.body).not.toContain("Remove this comment");
   });
+
+  it("caches listSkills per cwd until clearSkillCaches is called", async () => {
+    const { listSkills, clearSkillCaches } = await import("./skills");
+
+    const projectDir = join(TEST_ROOT, "cache");
+    const skillDir = join(projectDir, ".knightcode", "skills", "alpha");
+    ensureDir(skillDir);
+    writeFile(
+      join(skillDir, "SKILL.md"),
+      `---
+name: alpha
+description: First skill
+---
+Body.`,
+    );
+
+    const first = listSkills(projectDir);
+    expect(first.find((s) => s.name === "alpha")).toBeDefined();
+
+    // Add a second skill on disk; cached call should NOT see it yet.
+    const betaDir = join(projectDir, ".knightcode", "skills", "beta");
+    ensureDir(betaDir);
+    writeFile(
+      join(betaDir, "SKILL.md"),
+      `---
+name: beta
+description: Second skill
+---
+Body.`,
+    );
+    const cached = listSkills(projectDir);
+    expect(cached.find((s) => s.name === "beta")).toBeUndefined();
+
+    // After clearing, the fresh scan picks it up.
+    clearSkillCaches();
+    const fresh = listSkills(projectDir);
+    expect(fresh.find((s) => s.name === "beta")).toBeDefined();
+  });
+
+  it("buildSkillIndex truncates long descriptions to the cap", async () => {
+    const { buildSkillIndex, MAX_LISTING_DESC_CHARS } = await import("./skills");
+
+    const projectDir = join(TEST_ROOT, "longdesc");
+    const skillDir = join(projectDir, ".knightcode", "skills", "verbose");
+    ensureDir(skillDir);
+    const longDesc = "x".repeat(MAX_LISTING_DESC_CHARS + 200);
+    writeFile(
+      join(skillDir, "SKILL.md"),
+      `---
+name: verbose
+description: ${longDesc}
+---
+Body.`,
+    );
+
+    const index = buildSkillIndex(projectDir);
+    // The full over-cap description must not appear verbatim.
+    expect(index).not.toContain(longDesc);
+    expect(index).toContain("verbose");
+    // The truncation marker is present.
+    expect(index).toContain("…");
+  });
+
+  it("conditional skills (paths frontmatter) are excluded from the index", async () => {
+    const { buildSkillIndex, isConditionalSkill, listSkills, clearSkillCaches } =
+      await import("./skills");
+    clearSkillCaches();
+
+    const projectDir = join(TEST_ROOT, "conditional");
+    const condDir = join(projectDir, ".knightcode", "skills", "terraform");
+    const plainDir = join(projectDir, ".knightcode", "skills", "always");
+    ensureDir(condDir);
+    ensureDir(plainDir);
+    writeFile(
+      join(condDir, "SKILL.md"),
+      `---
+name: terraform
+description: Terraform helper
+paths: ["**/*.tf"]
+---
+Body.`,
+    );
+    writeFile(
+      join(plainDir, "SKILL.md"),
+      `---
+name: always
+description: Always-available skill
+---
+Body.`,
+    );
+
+    const skills = listSkills(projectDir);
+    expect(isConditionalSkill(skills.find((s) => s.name === "terraform")!)).toBe(
+      true,
+    );
+    expect(isConditionalSkill(skills.find((s) => s.name === "always")!)).toBe(
+      false,
+    );
+
+    const index = buildSkillIndex(projectDir);
+    expect(index).toContain("always");
+    expect(index).not.toContain("terraform");
+  });
+
+  it("a match-all paths glob is NOT treated as conditional", async () => {
+    const { isConditionalSkill, listSkills, clearSkillCaches } = await import(
+      "./skills"
+    );
+    clearSkillCaches();
+    const projectDir = join(TEST_ROOT, "matchall");
+    const dir = join(projectDir, ".knightcode", "skills", "everywhere");
+    ensureDir(dir);
+    writeFile(
+      join(dir, "SKILL.md"),
+      `---
+name: everywhere
+description: Applies everywhere
+paths: ["**"]
+---
+Body.`,
+    );
+    const skill = listSkills(projectDir).find((s) => s.name === "everywhere")!;
+    expect(isConditionalSkill(skill)).toBe(false);
+  });
+
+  it("a single '*' glob IS conditional (matches top-level files only)", async () => {
+    const { isConditionalSkill, listSkills, clearSkillCaches } = await import(
+      "./skills"
+    );
+    clearSkillCaches();
+    const projectDir = join(TEST_ROOT, "single-star");
+    const dir = join(projectDir, ".knightcode", "skills", "toplevel");
+    ensureDir(dir);
+    writeFile(
+      join(dir, "SKILL.md"),
+      `---
+name: toplevel
+description: Scoped to top-level files
+paths: ["*"]
+---
+Body.`,
+    );
+    const skill = listSkills(projectDir).find((s) => s.name === "toplevel")!;
+    // '*' is a single-segment wildcard (a scope), not match-all → conditional.
+    expect(isConditionalSkill(skill)).toBe(true);
+  });
+
+  it("buildSkillIndex caps total size but never drops a skill name", async () => {
+    const { buildSkillIndex, SKILL_INDEX_CHAR_BUDGET } = await import(
+      "./skills"
+    );
+
+    const projectDir = join(TEST_ROOT, "manyskills");
+    // Each full entry is ~200 chars; create enough to blow the budget.
+    const count = Math.ceil(SKILL_INDEX_CHAR_BUDGET / 150) + 20;
+    const names: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const name = `skill-${String(i).padStart(3, "0")}`;
+      names.push(name);
+      const dir = join(projectDir, ".knightcode", "skills", name);
+      ensureDir(dir);
+      writeFile(
+        join(dir, "SKILL.md"),
+        `---
+name: ${name}
+description: ${"d".repeat(120)}
+---
+Body.`,
+      );
+    }
+
+    const index = buildSkillIndex(projectDir);
+    // Bound respected (descriptions degraded to fit)...
+    expect(index.length).toBeLessThanOrEqual(SKILL_INDEX_CHAR_BUDGET);
+    // ...and EVERY skill name is still present (the whole point: nothing hidden).
+    for (const name of names) expect(index).toContain(name);
+    // No "…and N more" drop note anymore.
+    expect(index).not.toMatch(/more skill/i);
+  });
 });

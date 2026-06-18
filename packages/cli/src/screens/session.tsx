@@ -14,6 +14,7 @@ import {
   CompactionMessage,
   InterruptedMessage,
   ToolPermissionRequest,
+  SkillSurfacedNotice,
 } from "../components/messages";
 import { useToast } from "../providers/toast";
 import { useTheme } from "../providers/theme";
@@ -25,6 +26,7 @@ import { getSession, type SessionRow } from "../lib/store";
 import { loadConversation } from "../lib/store/conversation";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { useTodo } from "../providers/todo";
+import { startSkillWatcher } from "../lib/context/skills/watcher";
 
 type SessionData = SessionRow & { messages: Message[] };
 
@@ -132,20 +134,25 @@ function ChatMessage({
   }
 
   return (
-    <BotMessage
-      parts={msg.parts}
-      model={msg.metadata?.model ?? "unknown"}
-      mode={msg.metadata?.mode ?? "BUILD"}
-      durationMs={msg.metadata?.durationMs}
-      streaming={streaming}
-      pendingConfirmations={pendingConfirmations}
-      answerQuestion={answerQuestion}
-      cancelQuestion={cancelQuestion}
-      setConfirmationModelOverride={setConfirmationModelOverride}
-      confirmToolCall={confirmToolCall}
-      activePendingId={activePendingId}
-      runningToolIds={runningToolIds}
-    />
+    <>
+      {msg.metadata?.surfacedSkills && msg.metadata.surfacedSkills.length > 0 ? (
+        <SkillSurfacedNotice skills={msg.metadata.surfacedSkills} />
+      ) : null}
+      <BotMessage
+        parts={msg.parts}
+        model={msg.metadata?.model ?? "unknown"}
+        mode={msg.metadata?.mode ?? "BUILD"}
+        durationMs={msg.metadata?.durationMs}
+        streaming={streaming}
+        pendingConfirmations={pendingConfirmations}
+        answerQuestion={answerQuestion}
+        cancelQuestion={cancelQuestion}
+        setConfirmationModelOverride={setConfirmationModelOverride}
+        confirmToolCall={confirmToolCall}
+        activePendingId={activePendingId}
+        runningToolIds={runningToolIds}
+      />
+    </>
   );
 }
 
@@ -423,6 +430,13 @@ export function Session() {
       setReasoningEffort((session.reasoningEffort as any) || "medium");
     }
   }, [session, setReasoningEffort]);
+
+  // Hot-reload skills: clear caches when a SKILL.md changes so edits appear
+  // without a restart. Started once on mount, stopped on unmount.
+  useEffect(() => {
+    const stop = startSkillWatcher(process.cwd());
+    return stop;
+  }, []);
 
   useEffect(() => {
     // Skip load if session was passed via location state

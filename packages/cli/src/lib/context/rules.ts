@@ -99,7 +99,7 @@ function parseFrontmatter(raw: string): { meta: Frontmatter; body: string } {
  * Convert a glob string to a regex. Supports **, *, and ?.
  * Stays Windows/POSIX-agnostic by normalizing separators.
  */
-function globToRegex(glob: string): RegExp {
+export function globToRegex(glob: string): RegExp {
   const normalized = glob.replace(/\\/g, "/");
   let re = "";
   for (let i = 0; i < normalized.length; i++) {
