@@ -25,6 +25,7 @@ import { getSession, type SessionRow } from "../lib/store";
 import { loadConversation } from "../lib/store/conversation";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { useTodo } from "../providers/todo";
+import { startSkillWatcher } from "../lib/context/skills/watcher";
 
 type SessionData = SessionRow & { messages: Message[] };
 
@@ -423,6 +424,13 @@ export function Session() {
       setReasoningEffort((session.reasoningEffort as any) || "medium");
     }
   }, [session, setReasoningEffort]);
+
+  // Hot-reload skills: clear caches when a SKILL.md changes so edits appear
+  // without a restart. Started once on mount, stopped on unmount.
+  useEffect(() => {
+    const stop = startSkillWatcher(process.cwd());
+    return stop;
+  }, []);
 
   useEffect(() => {
     // Skip load if session was passed via location state
