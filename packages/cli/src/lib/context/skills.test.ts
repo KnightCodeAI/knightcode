@@ -287,4 +287,59 @@ Body.`,
     const fresh = listSkills(projectDir);
     expect(fresh.find((s) => s.name === "beta")).toBeDefined();
   });
+
+  it("buildSkillIndex truncates long descriptions to the cap", async () => {
+    const { buildSkillIndex, MAX_LISTING_DESC_CHARS } = await import("./skills");
+
+    const projectDir = join(TEST_ROOT, "longdesc");
+    const skillDir = join(projectDir, ".knightcode", "skills", "verbose");
+    ensureDir(skillDir);
+    const longDesc = "x".repeat(MAX_LISTING_DESC_CHARS + 200);
+    writeFile(
+      join(skillDir, "SKILL.md"),
+      `---
+name: verbose
+description: ${longDesc}
+---
+Body.`,
+    );
+
+    const index = buildSkillIndex(projectDir);
+    // The full over-cap description must not appear verbatim.
+    expect(index).not.toContain(longDesc);
+    expect(index).toContain("verbose");
+    // The truncation marker is present.
+    expect(index).toContain("…");
+  });
+
+  it("buildSkillIndex caps the total listing and notes the overflow", async () => {
+    const { buildSkillIndex, SKILL_INDEX_CHAR_BUDGET } = await import(
+      "./skills"
+    );
+
+    const projectDir = join(TEST_ROOT, "manyskills");
+    // Each entry is ~200 chars; create enough to exceed the budget.
+    const count = Math.ceil(SKILL_INDEX_CHAR_BUDGET / 150) + 20;
+    for (let i = 0; i < count; i++) {
+      const dir = join(
+        projectDir,
+        ".knightcode",
+        "skills",
+        `skill-${String(i).padStart(3, "0")}`,
+      );
+      ensureDir(dir);
+      writeFile(
+        join(dir, "SKILL.md"),
+        `---
+name: skill-${String(i).padStart(3, "0")}
+description: ${"d".repeat(120)}
+---
+Body.`,
+      );
+    }
+
+    const index = buildSkillIndex(projectDir);
+    expect(index.length).toBeLessThanOrEqual(SKILL_INDEX_CHAR_BUDGET + 200);
+    expect(index).toMatch(/more skill/i);
+  });
 });

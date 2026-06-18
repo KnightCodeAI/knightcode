@@ -268,19 +268,48 @@ export function loadSkill(name: string, cwd = process.cwd()): Skill | null {
   return listSkills(cwd).find((s) => s.name === name) ?? null;
 }
 
+/** Max chars of a single skill's description in the index listing. */
+export const MAX_LISTING_DESC_CHARS = 250;
+/** Max total chars of the rendered skill index (keeps turn-1 tokens bounded). */
+export const SKILL_INDEX_CHAR_BUDGET = 8000;
+
+function clampDesc(desc: string): string {
+  const flat = desc.replace(/\s+/g, " ").trim();
+  return flat.length > MAX_LISTING_DESC_CHARS
+    ? flat.slice(0, MAX_LISTING_DESC_CHARS - 1).trimEnd() + "…"
+    : flat;
+}
+
 /**
  * Build the skill index for system prompt injection — model-invokable skills only.
- * Includes `whenToUse` hint when present.
+ * Includes `whenToUse` hint when present. Each entry's description is clamped to
+ * MAX_LISTING_DESC_CHARS and the whole listing to SKILL_INDEX_CHAR_BUDGET, with
+ * an overflow note so the model knows more skills exist.
  * Returns empty string when no eligible skills exist.
  */
 export function buildSkillIndex(cwd = process.cwd()): string {
   const skills = listSkills(cwd).filter((s) => !s.disableModelInvocation);
   if (skills.length === 0) return "";
-  return skills
-    .map((s) => {
-      let entry = `- **${s.name}** — ${s.description}`;
-      if (s.whenToUse) entry += ` (Use when: ${s.whenToUse})`;
-      return entry;
-    })
-    .join("\n");
+
+  const lines: string[] = [];
+  let used = 0;
+  let dropped = 0;
+  for (const s of skills) {
+    let entry = `- **${s.name}** — ${clampDesc(s.description)}`;
+    if (s.whenToUse) entry += ` (Use when: ${clampDesc(s.whenToUse)})`;
+    // +1 for the newline join. Always keep at least one entry.
+    if (lines.length > 0 && used + entry.length + 1 > SKILL_INDEX_CHAR_BUDGET) {
+      dropped = skills.length - lines.length;
+      break;
+    }
+    lines.push(entry);
+    used += entry.length + 1;
+  }
+
+  if (dropped > 0) {
+    lines.push(
+      `- …and ${dropped} more skill${dropped === 1 ? "" : "s"} — ask or use the Skill tool to list them.`,
+    );
+  }
+  return lines.join("\n");
 }
