@@ -262,7 +262,11 @@ export async function* query(
       // whether to retry (transient + nothing emitted yet) or rethrow.
       const runStream = async function* (): AsyncGenerator<
         EngineEvent,
-        { toolCalls: ToolCallRequest[]; streamAborted: boolean }
+        {
+          toolCalls: ToolCallRequest[];
+          streamAborted: boolean;
+          hadInvalidToolCall: boolean;
+        }
       > {
         yield { type: "stream_start" };
 
@@ -300,6 +304,10 @@ export async function* query(
         // streamText doesn't throw on abort mid-stream: it emits a graceful
         // `abort` part and ends the stream, so track it explicitly.
         let streamAborted = false;
+        // An invalid tool call produces an output-error part but no executable
+        // call; the turn must NOT end on it — the model needs the error back to
+        // self-correct (see the termination guard below).
+        let hadInvalidToolCall = false;
 
         for await (const part of result.fullStream) {
           switch (part.type) {
@@ -336,6 +344,7 @@ export async function* query(
               // history pass) choking on it.
               const invalid = (part as { invalid?: boolean }).invalid === true;
               if (invalid) {
+                hadInvalidToolCall = true;
                 const reason = (part as { error?: unknown }).error;
                 assistant.parts.push({
                   type: `tool-${part.toolName}`,
@@ -395,7 +404,7 @@ export async function* query(
           }
         }
 
-        return { toolCalls, streamAborted };
+        return { toolCalls, streamAborted, hadInvalidToolCall };
       };
 
       // Retry the stream on a transient failure or empty response, but only
@@ -405,6 +414,7 @@ export async function* query(
       const maxStreamRetries = params.maxStreamRetries ?? 2;
       let toolCalls: ToolCallRequest[];
       let streamAborted: boolean;
+      let hadInvalidToolCall: boolean;
       for (let attempt = 0; ; attempt++) {
         try {
           const out = yield* runStream();
@@ -429,6 +439,7 @@ export async function* query(
           }
           toolCalls = out.toolCalls;
           streamAborted = out.streamAborted;
+          hadInvalidToolCall = out.hadInvalidToolCall;
           break;
         } catch (err) {
           const emittedContent = assistant.parts.length > partsBase;
@@ -456,7 +467,12 @@ export async function* query(
         return { reason: "aborted" };
       }
 
-      if (toolCalls.length === 0) {
+      // No executable tool calls. Normally that means the model is done (final
+      // text answer) → complete the turn. But if the round produced an INVALID
+      // tool call, the model isn't done — it emitted a malformed call, got an
+      // error part back, and must be given another round to self-correct. Loop
+      // instead of terminating (runToolCalls below is a no-op on empty calls).
+      if (toolCalls.length === 0 && !hadInvalidToolCall) {
         yield { type: "turn_complete", message: sealTurn(false) };
         return { reason: "complete" };
       }

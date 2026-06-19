@@ -406,7 +406,7 @@ describe("query", () => {
     expect(done.message.metadata?.isInterrupted).toBeUndefined();
   });
 
-  test("invalid (unparsable) tool call is not executed; resolves as error", async () => {
+  test("invalid tool call resolves as error and the model self-corrects next round", async () => {
     let call = 0;
     const model = new MockLanguageModelV3({
       doStream: async () => {
@@ -461,6 +461,12 @@ describe("query", () => {
       (p as { type: string }).type.startsWith("tool-"),
     ) as never as { state: string; errorText?: string };
     expect(toolPart.state).toBe("output-error");
+    // The invalid call must NOT end the turn — the model gets the error back and
+    // self-corrects in a follow-up round (the round-2 text below).
+    const text = done.message.parts.find(
+      (p) => (p as { type: string }).type === "text",
+    ) as never as { text: string } | undefined;
+    expect(text?.text).toBe("self-corrected");
   });
 
   test("abort before tool execution yields interrupted turn", async () => {
