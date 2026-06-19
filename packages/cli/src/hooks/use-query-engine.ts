@@ -590,6 +590,9 @@ export function useQueryEngine(
               case "mode_change":
                 options?.onModeChange?.(event.mode);
                 break;
+              case "retry":
+                setStatus("streaming");
+                break;
               default:
                 break;
             }

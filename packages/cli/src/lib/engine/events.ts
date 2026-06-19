@@ -56,6 +56,8 @@ export type EngineEvent =
   | { type: "tool_result"; toolCallId: string; outcome: ToolOutcome }
   /** A tool result carried a modeTransition; subsequent rounds use the new mode. */
   | { type: "mode_change"; mode: ModeType }
+  /** A retryable stream failure (or empty response) — the round is being retried. */
+  | { type: "retry"; attempt: number; delayMs: number; error: string }
   /** Final assistant message for the turn, metadata (durationMs/usage) attached. */
   | { type: "turn_complete"; message: Message };
 
@@ -85,6 +87,9 @@ export type QueryParams = {
   /** Ms spent waiting on the user this turn — subtracted from durationMs. */
   getTurnPausedMs?: () => number;
   maxRounds?: number; // default 100
+  /** Max retries for a transient stream failure / empty response per round
+   *  (retries only happen before any content is emitted). Default 2. */
+  maxStreamRetries?: number;
   /** Context providers (memory recall, changed-file reminders). turn_start
    *  providers run once before the first response; per_round providers run
    *  after each tool round (re-primed every round). */
