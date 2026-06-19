@@ -1,3 +1,5 @@
+import { CHANGELOG_FALLBACK } from "./changelog-fallback"
+
 export type ChangeKind = "Added" | "Changed" | "Fixed" | "Removed"
 
 export interface ChangelogEntry {
@@ -148,7 +150,7 @@ export function parseChangelog(content: string): ChangelogEntry[] {
       changesetIndex += 1
       changesetHasSection = false
       kind = null
-      let rest = topBullet[1].replace(COMMIT_PREFIX, "")
+      const rest = topBullet[1].replace(COMMIT_PREFIX, "")
       // A kind heading can be glued onto the bullet: "- b529674: ### Added".
       const gluedHeading = rest.match(/^#{2,4}\s+(.*)$/)
       if (gluedHeading) {
@@ -229,8 +231,10 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
       throw new Error(`Fetch failed with status ${res.status}`)
     }
   } catch (err) {
-    console.error("Failed to fetch changelog from GitHub:", err)
-    return []
+    // GitHub unreachable: fall back to the build-time snapshot so the page
+    // still renders entries instead of going empty.
+    console.error("Failed to fetch changelog from GitHub, using bundled fallback:", err)
+    content = CHANGELOG_FALLBACK
   }
 
   return parseChangelog(content)

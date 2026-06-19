@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "predev": "node scripts/generate-changelog-fallback.mjs",
     "dev": "next dev --turbopack",
+    "prebuild": "node scripts/generate-changelog-fallback.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
