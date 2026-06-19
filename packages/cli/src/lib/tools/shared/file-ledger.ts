@@ -53,21 +53,42 @@ export function assertWritable(
 
   let exists = true;
   let currentMtime = 0;
+  let statErrorCode: string | undefined;
   try {
     currentMtime = statSync(resolvedPath).mtimeMs;
-  } catch {
+  } catch (err) {
     exists = false;
+    statErrorCode = (err as NodeJS.ErrnoException)?.code;
   }
 
   if (recorded === undefined) {
-    if (opts.allowCreate && !exists) return; // creating a brand-new file
+    // Only a genuinely-absent file (ENOENT) is a safe brand-new create. A stat
+    // that failed for any OTHER reason (EACCES, EPERM, a broken symlink, …) may
+    // be masking an existing file we never read — don't let allowCreate wave it
+    // through and silently clobber it.
+    if (opts.allowCreate && statErrorCode === "ENOENT") return;
     throw new Error(
       `File has not been read yet. Read ${resolvedPath} first before writing to it.`,
     );
   }
+
+  // We recorded a read for this path, but it's no longer stat-able. A deletion
+  // since the read is a change we never saw, so it can't silently fall through
+  // the staleness check below.
+  if (!exists) {
+    // A create-capable write (Write) legitimately recreates a deleted file —
+    // there is no content left to clobber and nothing to re-read.
+    if (statErrorCode === "ENOENT" && opts.allowCreate) return;
+    throw new Error(
+      statErrorCode === "ENOENT"
+        ? `File has been deleted since you last read it. Read ${resolvedPath} again before writing to it.`
+        : `Could not verify ${resolvedPath} before writing (stat failed: ${statErrorCode}). Read it again before writing to it.`,
+    );
+  }
+
   // Strict `>`: an unchanged file (equal mtime) is fine; only a later mtime is
   // a real external/foreign modification.
-  if (exists && currentMtime > recorded) {
+  if (currentMtime > recorded) {
     throw new Error(
       `File has been modified since you last read it (by you, the user, or a tool). Read ${resolvedPath} again before writing to it.`,
     );

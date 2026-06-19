@@ -68,6 +68,20 @@ describe("file-ledger", () => {
     );
   });
 
+  it("an edit (no allowCreate) on a file deleted after the read is rejected, not bypassed", () => {
+    recordRead(session, file);
+    rmSync(file, { force: true }); // deleted after the read
+    expect(() => assertWritable(session, file)).toThrow(/deleted since/i);
+  });
+
+  it("Write (allowCreate) may recreate a file deleted after the read", () => {
+    recordRead(session, file);
+    rmSync(file, { force: true });
+    expect(() =>
+      assertWritable(session, file, { allowCreate: true }),
+    ).not.toThrow();
+  });
+
   it("clearFileLedger drops the session's state", () => {
     recordRead(session, file);
     clearFileLedger(session);

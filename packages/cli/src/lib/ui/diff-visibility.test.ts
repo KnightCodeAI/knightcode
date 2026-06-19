@@ -12,6 +12,12 @@ describe("shouldRenderDiffBody", () => {
     ).toBe(false);
   });
 
+  it("hides the diff when an error rides along with a success state", () => {
+    // Defense in depth: even if a part somehow carries `output-available` AND an
+    // errorText, the error wins — no diff for a change that didn't apply.
+    expect(shouldRenderDiffBody("output-available", "some error")).toBe(false);
+  });
+
   it("hides the diff while the call is still in flight", () => {
     expect(shouldRenderDiffBody("input-available", undefined)).toBe(false);
     expect(shouldRenderDiffBody("input-streaming", undefined)).toBe(false);

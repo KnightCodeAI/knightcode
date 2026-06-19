@@ -412,9 +412,9 @@ export async function* query(
       // would duplicate output / orphan tool pairs, so the error stays terminal.
       const partsBase = assistant.parts.length;
       const maxStreamRetries = params.maxStreamRetries ?? 2;
-      let toolCalls: ToolCallRequest[];
-      let streamAborted: boolean;
-      let hadInvalidToolCall: boolean;
+      let toolCalls: ToolCallRequest[] = [];
+      let streamAborted = false;
+      let hadInvalidToolCall = false;
       for (let attempt = 0; ; attempt++) {
         try {
           const out = yield* runStream();
@@ -435,6 +435,9 @@ export async function* query(
               error: "empty response",
             };
             await sleep(delayMs, abortSignal);
+            // Abort during the backoff: stop here (the post-loop check seals an
+            // aborted turn) rather than opening another stream.
+            if (abortSignal?.aborted) break;
             continue;
           }
           toolCalls = out.toolCalls;
@@ -459,6 +462,9 @@ export async function* query(
             error: err instanceof Error ? err.message : String(err),
           };
           await sleep(delayMs, abortSignal);
+          // Abort during the backoff: don't open another stream — break to the
+          // post-loop check, which seals an aborted turn.
+          if (abortSignal?.aborted) break;
         }
       }
 

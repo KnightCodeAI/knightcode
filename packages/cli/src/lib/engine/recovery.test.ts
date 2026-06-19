@@ -39,12 +39,39 @@ describe("recovery primitives", () => {
     expect(backoffDelayMs(0, 99999)).toBe(8000); // but still capped
   });
 
-  it("sleep(0) resolves and abort cuts it short", async () => {
+  it("sleep(0) resolves and a pre-aborted signal cuts a long sleep short", async () => {
     await sleep(0);
     const ctrl = new AbortController();
     ctrl.abort();
-    await sleep(10000, ctrl.signal); // returns immediately, not after 10s
-    expect(true).toBe(true);
+    const start = Date.now();
+    await sleep(10000, ctrl.signal); // must return ~immediately, not after 10s
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  it("an abort DURING a sleep resolves it early", async () => {
+    const ctrl = new AbortController();
+    const start = Date.now();
+    const pending = sleep(10000, ctrl.signal);
+    ctrl.abort();
+    await pending;
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  it("withRetry does not call fn again when aborted during backoff", async () => {
+    let calls = 0;
+    const ctrl = new AbortController();
+    await expect(
+      withRetry(
+        async () => {
+          calls++;
+          // Abort mid-flight so the abort lands during the backoff sleep.
+          ctrl.abort();
+          throw { status: 503 };
+        },
+        { maxRetries: 5, signal: ctrl.signal, delayForAttempt: () => 0 },
+      ),
+    ).rejects.toBeDefined();
+    expect(calls).toBe(1); // no extra attempt after the cancel
   });
 
   it("withRetry retries a retryable failure then succeeds", async () => {

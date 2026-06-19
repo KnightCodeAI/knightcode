@@ -93,6 +93,23 @@ describe("edit tools enforce read-before-write", () => {
     }
   });
 
+  it("Edit on a file deleted after the read is rejected with a clear message", async () => {
+    const { dir, file } = setup();
+    writeFileSync(file, "apple cherry", "utf-8");
+    try {
+      await readExecute({ file_path: file }, { executionRoot: dir, sessionId: session });
+      rmSync(file, { force: true }); // deleted after the read
+      await expect(
+        editExecute(
+          { file_path: file, old_string: "apple", new_string: "A", replace_all: false },
+          { executionRoot: dir, sessionId: session },
+        ),
+      ).rejects.toThrow(/deleted since/i);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("two Edits in a row succeed (recordWrite refreshes the ledger)", async () => {
     const { dir, file } = setup();
     writeFileSync(file, "apple cherry", "utf-8");

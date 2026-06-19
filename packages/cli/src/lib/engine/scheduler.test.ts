@@ -475,6 +475,31 @@ describe("runToolCalls", () => {
     expect(resultIds).toEqual(["g1", "g2"]);
   });
 
+  test("identical concurrency-safe but NON-read-only calls (Agent) are NOT deduped", async () => {
+    let executions = 0;
+    const host = makeHost({
+      executeTool: async () => {
+        executions++;
+        return { ok: true };
+      },
+    });
+    // Two byte-identical Agent calls: Agent is concurrency-safe (so they batch
+    // together) but NOT read-only, so each must spawn its own subagent.
+    const { events } = await run(
+      [
+        tc("Agent", { description: "d", prompt: "p" }, "a1"),
+        tc("Agent", { description: "d", prompt: "p" }, "a2"),
+      ],
+      host,
+    );
+    expect(executions).toBe(2);
+    const resultIds = events
+      .filter((e) => e.type === "tool_result")
+      .map((e) => (e as { toolCallId: string }).toolCallId)
+      .sort();
+    expect(resultIds).toEqual(["a1", "a2"]);
+  });
+
   test("distinct safe inputs are NOT deduped", async () => {
     let executions = 0;
     const host = makeHost({

@@ -138,6 +138,9 @@ export async function withRetry<T>(
       const delayMs = delayFor(attempt, getRetryAfterMs(err));
       opts.onRetry?.({ attempt: attempt + 1, delayMs, error: err });
       await sleep(delayMs, opts.signal);
+      // An abort during the backoff must not buy one more fn() call: re-check
+      // after the (abortable) sleep and surface the last error instead.
+      if (opts.signal?.aborted) throw err;
       attempt++;
     }
   }
