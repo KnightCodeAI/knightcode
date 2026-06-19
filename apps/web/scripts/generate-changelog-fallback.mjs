@@ -3,9 +3,9 @@
 // copy ships inside the deploy and is used as an offline fallback so the page
 // never renders empty when GitHub is unreachable.
 //
-// Runs from predev/prebuild. If the source can't be read (e.g. an unusual
-// checkout), it leaves the existing committed snapshot untouched rather than
-// clobbering it with an empty file.
+// Runs from prebuild (the committed snapshot is the local-dev fallback). If the
+// source can't be read (e.g. an unusual checkout), it leaves the existing
+// committed snapshot untouched rather than clobbering it with an empty file.
 
 import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
