@@ -22,7 +22,11 @@ export async function getNpmLatestVersion(): Promise<string | null> {
 // with the entries shown on the page), then the npm registry, then the
 // build-time version baked in at deploy.
 export async function getLatestVersion(): Promise<string> {
-  const entries = await getChangelog()
-  if (entries[0]?.version) return entries[0].version
+  try {
+    const entries = await getChangelog()
+    if (entries[0]?.version) return entries[0].version
+  } catch (err) {
+    console.error("Failed to resolve version from changelog:", err)
+  }
   return (await getNpmLatestVersion()) ?? FALLBACK_VERSION
 }
