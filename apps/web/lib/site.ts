@@ -2,9 +2,8 @@ import cliPackage from "../../../packages/cli/package.json"
 
 // Build-time version. Prefer the live value from getLatestVersion(); this
 // remains as the fallback and for any non-async render path. Defined here (not
-// in version.ts) because this module has no Node-only deps and is safe to
-// import from client components and the edge OG route — version.ts pulls in
-// the changelog parser (Node `fs`) and must only be imported server-side.
+// in version.ts) so client components and the edge OG route can read the
+// version without pulling in version.ts's async changelog/registry fetches.
 export const VERSION = cliPackage.version
 export const FALLBACK_VERSION = VERSION
 export const NPM_PACKAGE = "@knightcodeai/cli"

@@ -237,5 +237,12 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
     content = CHANGELOG_FALLBACK
   }
 
-  return parseChangelog(content)
+  try {
+    return parseChangelog(content)
+  } catch (err) {
+    // A malformed changelog must not crash the page render; degrade to empty
+    // and let callers fall back (npm registry / build-time version).
+    console.error("Failed to parse changelog:", err)
+    return []
+  }
 }
