@@ -12,6 +12,7 @@ import {
   stripTrailingWhitespace,
 } from "../shared/string-matching";
 import { recordOriginalContent } from "../shared/session-snapshot";
+import { assertWritable, recordWrite } from "../shared/file-ledger";
 
 export const tool: KnightcodeTool = Edit;
 
@@ -23,6 +24,7 @@ export async function execute(
     Edit.input_schema.parse(input);
   const { cwd, resolved } = resolveInsideRoot(ctx.executionRoot, file_path, true);
   assertSafeProjectFile(resolved, cwd, "modify");
+  assertWritable(ctx.sessionId, resolved);
   await recordOriginalContent(ctx.sessionId, resolved);
   const content = await readFile(resolved, "utf-8");
 
@@ -33,6 +35,7 @@ export async function execute(
       );
     }
     await writeFile(resolved, new_string, "utf-8");
+    recordWrite(ctx.sessionId, resolved);
     return {
       success: true as const,
       path: relative(cwd, resolved),
@@ -77,6 +80,7 @@ export async function execute(
   }
 
   await writeFile(resolved, updated, "utf-8");
+  recordWrite(ctx.sessionId, resolved);
   return {
     success: true as const,
     path: relative(cwd, resolved),

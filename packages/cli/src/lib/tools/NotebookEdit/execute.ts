@@ -6,6 +6,7 @@ import {
   resolveInsideRoot,
 } from "../shared/path-resolution";
 import { recordOriginalContent } from "../shared/session-snapshot";
+import { assertWritable, recordWrite } from "../shared/file-ledger";
 
 interface NotebookCell {
   id?: string;
@@ -65,6 +66,7 @@ export async function execute(
 
   const { cwd, resolved } = resolveInsideRoot(ctx.executionRoot, notebook_path, true);
   assertSafeProjectFile(resolved, cwd, "modify");
+  assertWritable(ctx.sessionId, resolved);
 
   if (extname(resolved) !== ".ipynb") {
     throw new Error(
@@ -128,6 +130,7 @@ export async function execute(
 
   const updated = JSON.stringify(notebook, null, 1);
   await writeFile(resolved, updated, "utf-8");
+  recordWrite(ctx.sessionId, resolved);
   return {
     success: true as const,
     path: relative(cwd, resolved),

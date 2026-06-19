@@ -27,6 +27,11 @@ describe("scheduler preserves /undo snapshots", () => {
       onAlwaysAllowBash: () => {},
     };
 
+    // Read before editing so the read-before-write ledger guard is satisfied.
+    await executeRegisteredTool("Read", { file_path: file }, "BUILD", sessionId, {
+      cwd: dir,
+    });
+
     const toolCalls: ToolCallRequest[] = [
       {
         toolCallId: "e1",

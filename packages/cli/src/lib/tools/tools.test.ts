@@ -33,6 +33,7 @@ describe("tools dispatcher", () => {
 
   test("Edit replaces single occurrence", async () => {
     await writeFile(testFile, "apple bananana cherry", "utf-8");
+    await executeLocalTool("Read", { file_path: testFile }, Mode.BUILD, "test-session");
     const res = (await executeLocalTool(
       "Edit",
       {
@@ -50,6 +51,7 @@ describe("tools dispatcher", () => {
 
   test("Edit rejects ambiguous match without replace_all", async () => {
     await writeFile(testFile, "hello hello hello", "utf-8");
+    await executeLocalTool("Read", { file_path: testFile }, Mode.BUILD, "test-session");
     expect(
       executeLocalTool(
         "Edit",
@@ -67,6 +69,7 @@ describe("tools dispatcher", () => {
 
   test("MultiEdit applies edits sequentially and atomically", async () => {
     await writeFile(testFile, "alpha bravo charlie", "utf-8");
+    await executeLocalTool("Read", { file_path: testFile }, Mode.BUILD, "test-session");
     const res = (await executeLocalTool(
       "MultiEdit",
       {
@@ -87,6 +90,7 @@ describe("tools dispatcher", () => {
 
   test("MultiEdit rolls back when a later edit fails", async () => {
     await writeFile(testFile, "alpha bravo charlie", "utf-8");
+    await executeLocalTool("Read", { file_path: testFile }, Mode.BUILD, "test-session");
     expect(
       executeLocalTool(
         "MultiEdit",
