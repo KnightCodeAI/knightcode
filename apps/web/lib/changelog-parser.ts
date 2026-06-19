@@ -1,6 +1,3 @@
-import fs from "fs"
-import path from "path"
-
 export type ChangeKind = "Added" | "Changed" | "Fixed" | "Removed"
 
 export interface ChangelogEntry {
@@ -219,27 +216,12 @@ export function parseChangelog(content: string): ChangelogEntry[] {
   return entries
 }
 
-const findChangelogPath = () => {
-  const paths = [
-    path.join(process.cwd(), "../../packages/cli/CHANGELOG.md"),
-    path.join(process.cwd(), "packages/cli/CHANGELOG.md"),
-    path.join(process.cwd(), "../packages/cli/CHANGELOG.md"),
-  ]
-  for (const p of paths) {
-    if (fs.existsSync(p)) {
-      return p
-    }
-  }
-  throw new Error(`CHANGELOG.md not found in searched paths: ${paths.join(", ")}`)
-}
-
 export async function getChangelog(): Promise<ChangelogEntry[]> {
   let content = ""
 
-  // Try fetching from GitHub raw URL first to support runtime updates on Vercel
   try {
     const res = await fetch("https://raw.githubusercontent.com/KnightCodeAI/knightcode/main/packages/cli/CHANGELOG.md", {
-      next: { revalidate: 600 }, // Cache for 10 minutes
+      next: { revalidate: 1 },
     })
     if (res.ok) {
       content = await res.text()
@@ -247,14 +229,8 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
       throw new Error(`Fetch failed with status ${res.status}`)
     }
   } catch (err) {
-    console.warn("Failed to fetch changelog from GitHub, falling back to local file:", err)
-    try {
-      const changelogPath = findChangelogPath()
-      content = fs.readFileSync(changelogPath, "utf-8")
-    } catch (localErr) {
-      console.error("Local changelog read failed:", localErr)
-      return []
-    }
+    console.error("Failed to fetch changelog from GitHub:", err)
+    return []
   }
 
   return parseChangelog(content)

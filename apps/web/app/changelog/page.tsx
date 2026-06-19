@@ -29,19 +29,19 @@ const kindStyles: Record<ChangeKind, string> = {
 function InlineMarkdown({ text }: { text: string }) {
   const parts = []
   let currentIndex = 0
-  
+
   // Simple regex-based inline markdown parser for code, bold, and links
   const regex = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g
   let match
-  
+
   while ((match = regex.exec(text)) !== null) {
     const matchIndex = match.index
     const matchText = match[0]
-    
+
     if (matchIndex > currentIndex) {
       parts.push(text.slice(currentIndex, matchIndex))
     }
-    
+
     if (matchText.startsWith("`")) {
       const code = matchText.slice(1, -1)
       parts.push(
@@ -72,14 +72,14 @@ function InlineMarkdown({ text }: { text: string }) {
         parts.push(matchText)
       }
     }
-    
+
     currentIndex = regex.lastIndex
   }
-  
+
   if (currentIndex < text.length) {
     parts.push(text.slice(currentIndex))
   }
-  
+
   return <>{parts.length > 0 ? parts : text}</>
 }
 

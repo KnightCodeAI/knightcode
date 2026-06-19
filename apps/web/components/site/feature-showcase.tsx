@@ -61,7 +61,7 @@ export function FeatureShowcase({
           className="lg:col-span-8 lg:col-start-3"
         >
           <div className="flex items-center gap-3 font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
-            <span className="text-foreground/40">{index}</span>
+            <span className="text-foreground/55">{index}</span>
             <span className="h-px w-8 bg-border" />
             <span>{eyebrow}</span>
           </div>
