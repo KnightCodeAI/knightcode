@@ -6,6 +6,7 @@ import {
   assertSafeProjectFile,
   resolveInsideRoot,
 } from "../shared/path-resolution";
+import { recordRead } from "../shared/file-ledger";
 import { MAX_FILE_SIZE, DEFAULT_READ_LIMIT } from "../shared/constants";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "ico", "svg"];
@@ -14,11 +15,12 @@ export const tool: KnightcodeTool = Read;
 
 export async function execute(
   input: unknown,
-  ctx: { executionRoot: string },
+  ctx: { executionRoot: string; sessionId: string },
 ): Promise<unknown> {
   const { file_path, offset, limit } = Read.input_schema.parse(input);
   const { cwd, resolved } = resolveInsideRoot(ctx.executionRoot, file_path);
   assertSafeProjectFile(resolved, cwd, "read");
+  recordRead(ctx.sessionId, resolved);
 
   const stats = await stat(resolved);
   const fileSize = stats.size;
