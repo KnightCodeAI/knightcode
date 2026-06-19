@@ -221,7 +221,7 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
 
   try {
     const res = await fetch("https://raw.githubusercontent.com/KnightCodeAI/knightcode/main/packages/cli/CHANGELOG.md", {
-      next: { revalidate: 1 },
+      next: { revalidate: 600 }, // Cache for 10 minutes
     })
     if (res.ok) {
       content = await res.text()
