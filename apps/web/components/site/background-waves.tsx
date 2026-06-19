@@ -10,12 +10,11 @@ export function BackgroundWaves() {
   const pathname = usePathname()
   const isDark = resolvedTheme !== "light"
 
-  // The shader normalizes coords to the viewport without aspect correction, so
-  // a fixed rotation looks far steeper on a tall phone than on a wide desktop.
-  // Use a gentler angle on narrow screens to keep the same visual diagonal.
   const [isMobile, setIsMobile] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
   useEffect(() => {
-    if (typeof window === "undefined") return
+    setMounted(true)
     const mq = window.matchMedia("(max-width: 640px)")
     const update = () => setIsMobile(mq.matches)
     update()
@@ -24,6 +23,7 @@ export function BackgroundWaves() {
   }, [])
 
   if (pathname?.startsWith("/docs")) return null
+  if (!mounted) return null
 
   return (
     <div
@@ -39,17 +39,17 @@ export function BackgroundWaves() {
           outerLineCount={isMobile ? 12 : 15}
           edgeFadeWidth={0}
           colorCycleSpeed={0}
-          brightness={isDark ? 0.35 : 0.1}
+          brightness={isDark ? 0.35 : 0.12}
           color1="#D77757"
-          color2={isDark ? "#B5603F" : "#E8A088"}
-          color3={isDark ? "#1A1A1A" : "#C9A090"}
+          color2={isDark ? "#B5603F" : "#D77757"}
+          color3={isDark ? "#1A1A1A" : "#F7E5DE"}
           enableMouseInteraction
           mouseInfluence={1.6}
         />
       </div>
       {/* Light mode only: a uniform veil of the background color over the
           waves so mid-tone text stays readable. Dark mode is left untouched. */}
-      {!isDark && <div className="absolute inset-0 bg-background/55" />}
+      {!isDark && <div className="absolute inset-0 bg-background/35" />}
       {/* Top + bottom fade so content remains readable */}
       <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-background to-transparent" />
       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
