@@ -6,6 +6,7 @@ import Link from "next/link"
 import { PageHero, PageShell } from "@/components/site/page-shell"
 import { Button } from "@/components/ui/button"
 import { getChangelog, type ChangeKind } from "@/lib/changelog"
+import { getNpmLatestVersion } from "@/lib/version"
 import { SITE, FALLBACK_VERSION } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
@@ -85,7 +86,8 @@ function InlineMarkdown({ text }: { text: string }) {
 
 export default async function ChangelogPage() {
   const changelog = await getChangelog()
-  const version = changelog[0]?.version ?? FALLBACK_VERSION
+  const version =
+    changelog[0]?.version ?? (await getNpmLatestVersion()) ?? FALLBACK_VERSION
 
   return (
     <PageShell>
