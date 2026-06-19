@@ -1,5 +1,4 @@
-import fs from "fs"
-import path from "path"
+import { CHANGELOG_FALLBACK } from "./changelog-fallback"
 
 export type ChangeKind = "Added" | "Changed" | "Fixed" | "Removed"
 
@@ -151,7 +150,7 @@ export function parseChangelog(content: string): ChangelogEntry[] {
       changesetIndex += 1
       changesetHasSection = false
       kind = null
-      let rest = topBullet[1].replace(COMMIT_PREFIX, "")
+      const rest = topBullet[1].replace(COMMIT_PREFIX, "")
       // A kind heading can be glued onto the bullet: "- b529674: ### Added".
       const gluedHeading = rest.match(/^#{2,4}\s+(.*)$/)
       if (gluedHeading) {
@@ -219,24 +218,9 @@ export function parseChangelog(content: string): ChangelogEntry[] {
   return entries
 }
 
-const findChangelogPath = () => {
-  const paths = [
-    path.join(process.cwd(), "../../packages/cli/CHANGELOG.md"),
-    path.join(process.cwd(), "packages/cli/CHANGELOG.md"),
-    path.join(process.cwd(), "../packages/cli/CHANGELOG.md"),
-  ]
-  for (const p of paths) {
-    if (fs.existsSync(p)) {
-      return p
-    }
-  }
-  throw new Error(`CHANGELOG.md not found in searched paths: ${paths.join(", ")}`)
-}
-
 export async function getChangelog(): Promise<ChangelogEntry[]> {
   let content = ""
 
-  // Try fetching from GitHub raw URL first to support runtime updates on Vercel
   try {
     const res = await fetch("https://raw.githubusercontent.com/KnightCodeAI/knightcode/main/packages/cli/CHANGELOG.md", {
       next: { revalidate: 600 }, // Cache for 10 minutes
@@ -247,14 +231,10 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
       throw new Error(`Fetch failed with status ${res.status}`)
     }
   } catch (err) {
-    console.warn("Failed to fetch changelog from GitHub, falling back to local file:", err)
-    try {
-      const changelogPath = findChangelogPath()
-      content = fs.readFileSync(changelogPath, "utf-8")
-    } catch (localErr) {
-      console.error("Local changelog read failed:", localErr)
-      return []
-    }
+    // GitHub unreachable: fall back to the build-time snapshot so the page
+    // still renders entries instead of going empty.
+    console.error("Failed to fetch changelog from GitHub, using bundled fallback:", err)
+    content = CHANGELOG_FALLBACK
   }
 
   return parseChangelog(content)
