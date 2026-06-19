@@ -239,7 +239,10 @@ describe("runToolCalls", () => {
     expect(asked).toBe(1); // second edit auto-approved by the engine flag
   });
 
-  test("loop guard rejects the 9th identical call without executing", async () => {
+  test("loop guard rejects an identical call repeated across rounds", async () => {
+    // Within a round, identical safe calls are deduped to one execution (see the
+    // dedup tests below), so the loop guard's real job is cross-round repeats: a
+    // shared guard threads through successive rounds and rejects the 4th.
     let executions = 0;
     const host = makeHost({
       executeTool: async () => {
@@ -247,12 +250,30 @@ describe("runToolCalls", () => {
         return {};
       },
     });
-    const calls = Array.from({ length: 9 }, (_, i) =>
-      tc("Grep", { pattern: "x" }, `g${i}`),
-    );
-    const { events } = await run(calls, host);
-    expect(executions).toBe(8);
-    const last = resultOf(events, "g8");
+    const loopGuard = new ToolLoopGuard();
+    const oneRound = async (id: string): Promise<SchedulerEvent[]> => {
+      const gen = runToolCalls({
+        toolCalls: [tc("Grep", { pattern: "x" }, id)],
+        host,
+        hooks: NOOP_ENGINE_HOOKS,
+        getMode: () => "BUILD",
+        loopGuard,
+        alwaysAllowEdits: { get: () => false, set: () => {} },
+      });
+      const events: SchedulerEvent[] = [];
+      while (true) {
+        const r = await gen.next();
+        if (r.done) break;
+        events.push(r.value);
+      }
+      return events;
+    };
+    await oneRound("g1");
+    await oneRound("g2");
+    await oneRound("g3");
+    const events = await oneRound("g4"); // 4th identical → rejected
+    expect(executions).toBe(3);
+    const last = resultOf(events, "g4");
     expect(last.outcome.kind).toBe("error");
     expect((last.outcome as { errorText: string }).errorText).toBe(
       LOOP_PROTECTION_ERROR,
@@ -429,5 +450,43 @@ describe("runToolCalls", () => {
     });
     await run([tc("Agent", { description: "d", prompt: "p" }, "a1")], host);
     expect(seen).toBe("openai/gpt-5");
+  });
+
+  test("dedupes identical safe calls in a round: one execution, fanned results", async () => {
+    let executions = 0;
+    const host = makeHost({
+      executeTool: async () => {
+        executions++;
+        return { ok: true };
+      },
+      isCommandAllowed: () => true,
+    });
+    // Two identical Grep calls (concurrency-safe) with distinct ids.
+    const { events } = await run(
+      [tc("Grep", { pattern: "x" }, "g1"), tc("Grep", { pattern: "x" }, "g2")],
+      host,
+    );
+    // Executed once, but both ids got a result.
+    expect(executions).toBe(1);
+    const resultIds = events
+      .filter((e) => e.type === "tool_result")
+      .map((e) => (e as { toolCallId: string }).toolCallId)
+      .sort();
+    expect(resultIds).toEqual(["g1", "g2"]);
+  });
+
+  test("distinct safe inputs are NOT deduped", async () => {
+    let executions = 0;
+    const host = makeHost({
+      executeTool: async () => {
+        executions++;
+        return { ok: true };
+      },
+    });
+    await run(
+      [tc("Grep", { pattern: "x" }, "g1"), tc("Grep", { pattern: "y" }, "g2")],
+      host,
+    );
+    expect(executions).toBe(2);
   });
 });
