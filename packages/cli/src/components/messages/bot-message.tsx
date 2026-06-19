@@ -239,6 +239,7 @@ export function BotMessage({
                     oldString={editInput.old_string}
                     newString={editInput.new_string}
                     pending={false}
+                    state={part.state}
                     errorText={
                       part.state === "output-error" ? part.errorText : undefined
                     }

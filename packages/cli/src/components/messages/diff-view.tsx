@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import { useTheme } from "../../providers/theme";
 import { diffSummary } from "../../lib/ui/diff-summary";
+import { shouldRenderDiffBody } from "../../lib/ui/diff-visibility";
 import { BULLET, RESULT_GUTTER } from "../../lib/ui/figures";
 import { DiffBody } from "./diff-body";
 
@@ -10,6 +11,8 @@ type Props = {
   newString: string;
   pending?: boolean;
   errorText?: string;
+  /** Tool part state — the diff body only renders on `output-available`. */
+  state?: string;
 };
 
 /**
@@ -18,9 +21,16 @@ type Props = {
  *     ⎿ Added N lines, removed M line
  *     <syntax-highlighted diff>
  */
-export function DiffView({ filePath, oldString, newString, errorText }: Props) {
+export function DiffView({
+  filePath,
+  oldString,
+  newString,
+  errorText,
+  state,
+}: Props) {
   const { colors } = useTheme();
   const { additions, removals } = diffSummary(oldString, newString);
+  const showBody = shouldRenderDiffBody(state, errorText);
   const verb = oldString.length === 0 ? "Create" : "Update";
   const dim = TextAttributes.DIM;
   const dimBold = TextAttributes.DIM | TextAttributes.BOLD;
@@ -57,11 +67,13 @@ export function DiffView({ filePath, oldString, newString, errorText }: Props) {
         )}
       </text>
 
-      <DiffBody
-        oldString={oldString}
-        newString={newString}
-        filePath={filePath}
-      />
+      {showBody ? (
+        <DiffBody
+          oldString={oldString}
+          newString={newString}
+          filePath={filePath}
+        />
+      ) : null}
     </box>
   );
 }
