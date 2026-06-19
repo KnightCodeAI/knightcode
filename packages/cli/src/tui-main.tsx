@@ -50,13 +50,25 @@ const heartbeatTimer = setInterval(() => {
   monitorProcessesHeartbeat();
 }, 5000);
 
-// Clean, intentional exit: clears the heartbeat (which otherwise keeps the
-// event loop alive after destroy) and tears down the renderer.
-function handleExit() {
+// Clean, intentional shutdown: clears the heartbeat (which otherwise keeps the
+// event loop alive after destroy), tears down the renderer, then terminates.
+//
+// We must exit explicitly rather than wait for the event loop to drain. OpenTUI's
+// teardown removes the stdin "data" listener and disables raw mode but never
+// pauses or unrefs the stdin TTY handle (it was resumed on start). On Windows
+// that referenced, still-flowing handle keeps the loop alive, so the process
+// hangs after the UI is gone: the shell prompt never returns and the orphaned
+// process holds the terminal — it looks frozen and only closing it recovers.
+function shutdown() {
   clearInterval(heartbeatTimer);
   cleanupAllProcesses();
-  markIntentionalExit();
   _originalDestroy();
+  process.exit(0);
+}
+
+function handleExit() {
+  markIntentionalExit();
+  shutdown();
 }
 
 // ── Ctrl+C cannot quit the app ────────────────────────────────────────────────
@@ -69,9 +81,7 @@ const _originalDestroy = renderer.destroy.bind(renderer);
 
 (renderer as any).destroy = () => {
   if (!isIntentionalExit()) return;
-  clearInterval(heartbeatTimer);
-  cleanupAllProcesses();
-  _originalDestroy();
+  shutdown();
 };
 // ─────────────────────────────────────────────────────────────────────────────
 

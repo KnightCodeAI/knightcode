@@ -9,10 +9,10 @@
   "homepage": "https://knightcode.raghavseth.in",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Raghav1428/knightcode.git"
+    "url": "git+https://github.com/KnightCodeAI/knightcode.git"
   },
   "bugs": {
-    "url": "https://github.com/Raghav1428/knightcode/issues"
+    "url": "https://github.com/KnightCodeAI/knightcode/issues"
   },
   "files": [
     "bin/",

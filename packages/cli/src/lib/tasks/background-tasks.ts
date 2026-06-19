@@ -179,10 +179,17 @@ export function cleanupAllProcesses() {
     } catch {}
   }
 
-  // 2. Cross-platform synchronous sleep for 150ms to allow processes to handle SIGTERM
-  try {
-    spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 150)"]);
-  } catch {}
+  // 2. Synchronous 150ms sleep to let SIGTERM'd processes shut down gracefully
+  // before we force-kill. Use Atomics rather than spawning a sleeper subprocess:
+  // in a compiled standalone binary `process.execPath` is this CLI itself, so
+  // `execPath -e ...` relaunches the TUI (parseCliArgs treats "-e" as the default
+  // command) and spawnSync blocks forever waiting for that interactive child —
+  // which is exactly what froze the terminal on /exit in the packaged build.
+  if (pidsToKill.length > 0) {
+    try {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+    } catch {}
+  }
 
   // 3. Force-kill any remaining alive processes
   for (const pidStr of pidsToKill) {
