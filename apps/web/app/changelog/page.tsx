@@ -142,7 +142,7 @@ export default async function ChangelogPage() {
                     </span>
 
                     <div className="rounded-2xl border border-border/60 bg-card/40 p-6 backdrop-blur-sm sm:p-7">
-                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <h2 className="font-mono text-xl font-semibold tracking-tight">
                           v{entry.version}
                         </h2>
