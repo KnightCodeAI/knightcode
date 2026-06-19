@@ -27,6 +27,7 @@ import type { Message } from "./messages";
 import { runToolCalls } from "./scheduler";
 import { ToolLoopGuard } from "./tool-runner";
 import { INTERRUPTED_TOOL_ERROR, repairTranscript } from "./transcript";
+import { seedFileLedgerFromTranscript } from "../tools/shared/file-ledger";
 
 const DEFAULT_MAX_ROUNDS = 100;
 
@@ -96,6 +97,11 @@ export async function* query(
 
   const transcript = repairTranscript(params.messages);
   const loadedDeferred = extractLoadedDeferredTools(transcript);
+  // Seed the file-read ledger from prior Read calls so the read-before-write
+  // guard survives a resume (the in-memory ledger is empty after a restart).
+  if (params.sessionId) {
+    seedFileLedgerFromTranscript(params.sessionId, transcript, cwd);
+  }
 
   const assistant: Message = {
     id: `asst-${crypto.randomUUID()}`,

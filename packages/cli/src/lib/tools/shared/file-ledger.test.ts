@@ -8,6 +8,7 @@ import {
   assertWritable,
   clearFileLedger,
   getLedgerEntry,
+  seedFileLedgerFromTranscript,
 } from "./file-ledger";
 
 describe("file-ledger", () => {
@@ -71,5 +72,45 @@ describe("file-ledger", () => {
     recordRead(session, file);
     clearFileLedger(session);
     expect(getLedgerEntry(session, file)).toBeUndefined();
+  });
+
+  it("seeds the ledger from Read tool calls in a transcript", () => {
+    const rel = "f.txt"; // relative to `dir` (the execution root)
+    const transcript = [
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-Read",
+            toolCallId: "t1",
+            state: "output-available",
+            input: { file_path: rel },
+            output: { content: "one" },
+          },
+        ],
+      },
+    ];
+    expect(getLedgerEntry(session, file)).toBeUndefined();
+    seedFileLedgerFromTranscript(session, transcript as never, dir);
+    expect(typeof getLedgerEntry(session, file)).toBe("number");
+  });
+
+  it("seeding ignores non-Read parts and missing files", () => {
+    const transcript = [
+      {
+        role: "assistant",
+        parts: [
+          { type: "text", text: "hello" },
+          {
+            type: "tool-Read",
+            toolCallId: "t2",
+            state: "output-available",
+            input: { file_path: "does-not-exist.txt" },
+          },
+        ],
+      },
+    ];
+    seedFileLedgerFromTranscript(session, transcript as never, dir);
+    expect(getLedgerEntry(session, join(dir, "does-not-exist.txt"))).toBeUndefined();
   });
 });

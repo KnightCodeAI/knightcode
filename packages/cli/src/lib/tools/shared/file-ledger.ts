@@ -1,4 +1,5 @@
 import { statSync } from "fs";
+import { resolveInsideRoot } from "./path-resolution";
 
 /**
  * Session-scoped read-state ledger: per session, the resolved absolute path of
@@ -84,4 +85,37 @@ export function getLedgerEntry(
   resolvedPath: string,
 ): number | undefined {
   return sessionReadState.get(sessionId)?.get(resolvedPath);
+}
+
+/**
+ * Seed the ledger from a transcript: every successful `Read` tool call becomes a
+ * recorded read at the file's CURRENT mtime. Lets the guard survive a resume so
+ * the model isn't forced to re-read files it already read this session. Records
+ * current mtime (the transcript has no stored mtime); an external edit made
+ * while the process was down is therefore not detected — acceptable, the same
+ * limitation claude-code accepts. Best-effort: never throws.
+ */
+export function seedFileLedgerFromTranscript(
+  sessionId: string,
+  messages: { parts?: unknown[] }[],
+  cwd: string,
+): void {
+  for (const message of messages ?? []) {
+    for (const part of message?.parts ?? []) {
+      const p = part as {
+        type?: string;
+        state?: string;
+        input?: { file_path?: unknown };
+      };
+      if (p?.type !== "tool-Read" || p?.state !== "output-available") continue;
+      const filePath = p.input?.file_path;
+      if (typeof filePath !== "string" || !filePath) continue;
+      try {
+        const { resolved } = resolveInsideRoot(cwd, filePath);
+        recordRead(sessionId, resolved); // no-op if the file no longer exists
+      } catch {
+        // path outside root / unresolvable — skip
+      }
+    }
+  }
 }
