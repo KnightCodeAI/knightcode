@@ -5,6 +5,22 @@ import { debugLog } from "../debug";
 type TodoStatus = "pending" | "in_progress" | "completed";
 type Todo = { content: string; active_form: string; status: TodoStatus };
 
+const TODO_STATUSES = new Set<TodoStatus>(["pending", "in_progress", "completed"]);
+
+/** Strict guard: every field used in rendering must be present and well-typed —
+ *  `content` and `active_form` are strings and `status` is a known enum value.
+ *  Anything looser would let render() emit `undefined` or an unhandled status. */
+function isTodo(value: unknown): value is Todo {
+  if (!value || typeof value !== "object") return false;
+  const t = value as Partial<Todo>;
+  return (
+    typeof t.content === "string" &&
+    typeof t.active_form === "string" &&
+    typeof t.status === "string" &&
+    TODO_STATUSES.has(t.status)
+  );
+}
+
 /**
  * The most recent TodoWrite todo list in the transcript, or null if none yet.
  * TodoWrite is stateless (it just echoes its input), so the latest call's todos
@@ -21,18 +37,8 @@ function latestTodos(messages: Message[]): Todo[] | null {
       };
       if (part?.type !== "tool-TodoWrite") continue;
       const todos = part.input?.todos ?? part.output?.todos;
-      if (
-        Array.isArray(todos) &&
-        todos.every(
-          (t): t is Todo =>
-            !!t &&
-            typeof (t as Todo).content === "string" &&
-            typeof (t as Todo).status === "string",
-        )
-      ) {
-        return todos as Todo[];
-      }
-      return null; // a TodoWrite without parsable todos — treat as none
+      if (Array.isArray(todos) && todos.every(isTodo)) return todos;
+      return null; // a TodoWrite without a well-formed todo list — treat as none
     }
   }
   return null;
@@ -65,21 +71,30 @@ export function createTodosProvider(): ContextProvider {
     phase: "per_round",
     run: async ({ messages }) => {
       const todos = latestTodos(messages);
-      if (!todos || todos.length === 0) return [];
-      if (todos.every((t) => t.status === "completed")) return [];
+      if (
+        !todos ||
+        todos.length === 0 ||
+        todos.every((t) => t.status === "completed")
+      ) {
+        // Nothing to surface this round. Clear the dedup state so a later active
+        // list is always re-surfaced, even if it matches one shown earlier.
+        lastSignature = null;
+        return [];
+      }
 
-      const signature = todos.map((t) => `${t.status}:${t.content}`).join("\n");
-      if (signature === lastSignature) {
+      // Dedup on the rendered text itself: any change that alters what the model
+      // would see — including an in_progress active_form edit — re-surfaces, and
+      // the key can never drift from the message that's actually injected.
+      const rendered = render(todos);
+      if (rendered === lastSignature) {
         debugLog("context.todos", `unchanged (${todos.length}) - skip`);
         return [];
       }
-      lastSignature = signature;
+      lastSignature = rendered;
       debugLog("context.todos", `injecting ${todos.length} todo(s)`);
 
       return [
-        `Your current todo list (keep it updated as you work — mark items completed the moment they're done):\n${render(
-          todos,
-        )}`,
+        `Your current todo list (keep it updated as you work — mark items completed the moment they're done):\n${rendered}`,
       ];
     },
   };

@@ -85,4 +85,85 @@ describe("todos provider", () => {
     expect(out[0]).toContain("New");
     expect(out[0]).not.toContain("Old");
   });
+
+  // Violation #3: an active_form-only change must re-surface, since render shows
+  // active_form for the in_progress item.
+  test("re-surfaces when only the in_progress active_form changes", async () => {
+    const p = createTodosProvider();
+    const first = await p.run({
+      messages: withTodos([
+        { content: "Build", active_form: "Building", status: "in_progress" },
+      ]),
+      cwd: process.cwd(),
+    });
+    expect(first[0]).toContain("Building");
+
+    const second = await p.run({
+      messages: withTodos([
+        { content: "Build", active_form: "Compiling", status: "in_progress" },
+      ]),
+      cwd: process.cwd(),
+    });
+    expect(second).toHaveLength(1);
+    expect(second[0]).toContain("Compiling");
+  });
+
+  // Violation #2: going all-completed must clear dedup state, so a later active
+  // list is re-surfaced even if it matches a previously-shown one.
+  test("re-surfaces an active list after a fully-completed round", async () => {
+    const p = createTodosProvider();
+    const active = withTodos([
+      { content: "Task", active_form: "Doing task", status: "pending" },
+    ]);
+
+    const first = await p.run({ messages: active, cwd: process.cwd() });
+    expect(first).toHaveLength(1);
+
+    // All done → nothing emitted.
+    const done = withTodos([
+      { content: "Task", active_form: "Doing task", status: "completed" },
+    ]);
+    expect(await p.run({ messages: done, cwd: process.cwd() })).toEqual([]);
+
+    // Re-opened to the SAME signature as the first list → must emit again.
+    const reopened = await p.run({ messages: active, cwd: process.cwd() });
+    expect(reopened).toHaveLength(1);
+    expect(reopened[0]).toContain("Task");
+  });
+
+  // Violation #1: malformed todos (out-of-enum status, missing active_form) are
+  // rejected — the provider treats the list as none rather than rendering junk.
+  test("ignores a malformed todo list", async () => {
+    const raw = (todos: unknown[]): Message[] =>
+      [
+        {
+          id: "m1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-TodoWrite",
+              toolCallId: "t1",
+              state: "output-available",
+              input: { todos },
+            },
+          ],
+        },
+      ] as unknown as Message[];
+
+    const p = createTodosProvider();
+    // bogus status
+    expect(
+      await p.run({
+        messages: raw([{ content: "X", active_form: "Xing", status: "doing" }]),
+        cwd: process.cwd(),
+      }),
+    ).toEqual([]);
+    // missing active_form
+    expect(
+      await p.run({
+        messages: raw([{ content: "Y", status: "in_progress" }]),
+        cwd: process.cwd(),
+      }),
+    ).toEqual([]);
+  });
 });
