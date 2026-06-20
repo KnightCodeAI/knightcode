@@ -223,7 +223,12 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
 
   try {
     const res = await fetch("https://raw.githubusercontent.com/KnightCodeAI/knightcode/main/packages/cli/CHANGELOG.md", {
-      next: { revalidate: 600 }, // Cache for 10 minutes
+      // Always read the live changelog so the version badge and release notes
+      // reflect GitHub `main` immediately after a release. `no-store` opts every
+      // page that calls this (home, footer, changelog) into dynamic rendering,
+      // so there is no stale ISR snapshot to serve. GitHub's raw CDN still
+      // shields us from per-request load.
+      cache: "no-store",
     })
     if (res.ok) {
       content = await res.text()

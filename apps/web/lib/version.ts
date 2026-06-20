@@ -8,7 +8,7 @@ export async function getNpmLatestVersion(): Promise<string | null> {
   try {
     const res = await fetch(`https://registry.npmjs.org/${NPM_PACKAGE}`, {
       headers: { Accept: "application/vnd.npm.install-v1+json" },
-      next: { revalidate: 600 },
+      cache: "no-store",
     })
     if (!res.ok) return null
     const data = (await res.json()) as { "dist-tags"?: { latest?: string } }
