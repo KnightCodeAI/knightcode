@@ -6,6 +6,7 @@ import {
   assertSafeProjectFile,
   resolveInsideRoot,
 } from "../shared/path-resolution";
+import { recordRead } from "../shared/file-ledger";
 import { MAX_FILE_SIZE, DEFAULT_READ_LIMIT } from "../shared/constants";
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "ico", "svg"];
@@ -14,12 +15,27 @@ export const tool: KnightcodeTool = Read;
 
 export async function execute(
   input: unknown,
-  ctx: { executionRoot: string },
+  ctx: { executionRoot: string; sessionId: string },
 ): Promise<unknown> {
   const { file_path, offset, limit } = Read.input_schema.parse(input);
   const { cwd, resolved } = resolveInsideRoot(ctx.executionRoot, file_path);
   assertSafeProjectFile(resolved, cwd, "read");
 
+  // Record the read into the ledger ONLY after the content I/O succeeds — a
+  // failed read (ENOENT, EISDIR on a directory, a permission error) must not
+  // mark the file as "seen", or a later edit would wrongly pass the guard
+  // having shown the model nothing.
+  const result = await produceReadResult(resolved, file_path, offset, limit);
+  recordRead(ctx.sessionId, resolved);
+  return result;
+}
+
+async function produceReadResult(
+  resolved: string,
+  file_path: string,
+  offset: number | undefined,
+  limit: number | undefined,
+): Promise<unknown> {
   const stats = await stat(resolved);
   const fileSize = stats.size;
 

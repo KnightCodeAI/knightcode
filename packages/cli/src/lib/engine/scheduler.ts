@@ -245,20 +245,48 @@ export async function* runToolCalls(
     if (params.abortSignal?.aborted) break;
 
     if (batch.safe && batch.calls.length > 1) {
+      // Collapse identical calls (same tool + input) to one execution, fanning
+      // the single outcome to every matching toolCallId. Only READ-ONLY tools
+      // are deduped: concurrency-safe ≠ idempotent (e.g. Agent is
+      // concurrency-safe but each call spawns a distinct subagent), so a
+      // non-read-only tool gets a per-id key and always runs on its own. Each
+      // id still gets its own tool_start/tool_result so pairing is preserved.
+      const groups = new Map<string, ToolCallRequest[]>();
+      const order: string[] = [];
+      for (const call of batch.calls) {
+        const dedupable = getKnightcodeTool(call.toolName)?.is_read_only ?? false;
+        const key = dedupable
+          ? `${call.toolName}:${JSON.stringify(call.input ?? {})}`
+          : `unique:${call.toolCallId}`;
+        const group = groups.get(key);
+        if (group) {
+          group.push(call);
+        } else {
+          groups.set(key, [call]);
+          order.push(key);
+        }
+      }
+
       const channel = createChannel<SchedulerEvent>();
       const semaphore = createSemaphore(MAX_TOOL_CONCURRENCY);
       const work = Promise.all(
-        batch.calls.map(async (toolCall) => {
+        order.map(async (key) => {
+          const group = groups.get(key)!;
+          const representative = group[0]!;
           await semaphore.acquire();
           try {
             if (params.abortSignal?.aborted) return;
-            channel.push({ type: "tool_start", toolCall });
-            const outcome = await executeOne(toolCall, params, reminders);
-            channel.push({
-              type: "tool_result",
-              toolCallId: toolCall.toolCallId,
-              outcome,
-            });
+            for (const call of group) {
+              channel.push({ type: "tool_start", toolCall: call });
+            }
+            const outcome = await executeOne(representative, params, reminders);
+            for (const call of group) {
+              channel.push({
+                type: "tool_result",
+                toolCallId: call.toolCallId,
+                outcome,
+              });
+            }
           } finally {
             semaphore.release();
           }

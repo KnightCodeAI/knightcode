@@ -126,6 +126,37 @@ function toolThenTextModel() {
   });
 }
 
+// First stream emits a retryable error part; second stream returns text.
+function errorThenTextModel() {
+  let call = 0;
+  return new MockLanguageModelV3({
+    doStream: async () => {
+      call++;
+      if (call === 1) {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: "stream-start", warnings: [] },
+            { type: "error", error: new Error("service overloaded") },
+          ]),
+        };
+      }
+      return {
+        stream: convertArrayToReadableStream([
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "1" },
+          { type: "text-delta", id: "1", delta: "recovered" },
+          { type: "text-end", id: "1" },
+          {
+            type: "finish",
+            finishReason: v3Finish("stop"),
+            usage: v3Usage(10, 5),
+          },
+        ]),
+      };
+    },
+  });
+}
+
 const makeHost = (
   executeTool?: ToolHost["executeTool"],
   overrides: Partial<ToolHost> = {},
@@ -151,6 +182,44 @@ const baseParams = (model: unknown, host?: ToolHost) => ({
 });
 
 describe("query", () => {
+  test("retries a transient stream error then completes", async () => {
+    const { events, terminal } = await drain(
+      query({
+        ...baseParams(errorThenTextModel()),
+        maxStreamRetries: 2,
+      } as never),
+    );
+    expect(terminal.reason).toBe("complete");
+    const retry = events.find((e) => e.type === "retry") as
+      | { type: "retry"; attempt: number; error: string }
+      | undefined;
+    expect(retry).toBeDefined();
+    expect(retry!.attempt).toBe(1);
+    const done = events.find((e) => e.type === "turn_complete") as {
+      message: Message;
+    };
+    const text = done.message.parts.find(
+      (p) => (p as { type: string }).type === "text",
+    ) as never as { text: string };
+    expect(text.text).toBe("recovered"); // no duplicated "service overloaded" content
+  });
+
+  test("a non-retryable stream error is terminal (no retry)", async () => {
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: "stream-start", warnings: [] },
+          { type: "error", error: new Error("invalid api key") },
+        ]),
+      }),
+    });
+    const { events, terminal } = await drain(
+      query({ ...baseParams(model), maxStreamRetries: 2 } as never),
+    );
+    expect(terminal.reason).toBe("error");
+    expect(events.some((e) => e.type === "retry")).toBe(false);
+  });
+
   test("text-only turn: yields message updates and completes", async () => {
     const { events, terminal } = await drain(
       query(baseParams(textOnlyModel("hi there")) as never),
@@ -337,7 +406,7 @@ describe("query", () => {
     expect(done.message.metadata?.isInterrupted).toBeUndefined();
   });
 
-  test("invalid (unparsable) tool call is not executed; resolves as error", async () => {
+  test("invalid tool call resolves as error and the model self-corrects next round", async () => {
     let call = 0;
     const model = new MockLanguageModelV3({
       doStream: async () => {
@@ -392,6 +461,12 @@ describe("query", () => {
       (p as { type: string }).type.startsWith("tool-"),
     ) as never as { state: string; errorText?: string };
     expect(toolPart.state).toBe("output-error");
+    // The invalid call must NOT end the turn — the model gets the error back and
+    // self-corrects in a follow-up round (the round-2 text below).
+    const text = done.message.parts.find(
+      (p) => (p as { type: string }).type === "text",
+    ) as never as { text: string } | undefined;
+    expect(text?.text).toBe("self-corrected");
   });
 
   test("abort before tool execution yields interrupted turn", async () => {

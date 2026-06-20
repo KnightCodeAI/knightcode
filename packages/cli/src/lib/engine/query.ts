@@ -27,6 +27,13 @@ import type { Message } from "./messages";
 import { runToolCalls } from "./scheduler";
 import { ToolLoopGuard } from "./tool-runner";
 import { INTERRUPTED_TOOL_ERROR, repairTranscript } from "./transcript";
+import { seedFileLedgerFromTranscript } from "../tools/shared/file-ledger";
+import {
+  backoffDelayMs,
+  getRetryAfterMs,
+  isRetryableError,
+  sleep,
+} from "./recovery";
 
 const DEFAULT_MAX_ROUNDS = 100;
 
@@ -96,6 +103,11 @@ export async function* query(
 
   const transcript = repairTranscript(params.messages);
   const loadedDeferred = extractLoadedDeferredTools(transcript);
+  // Seed the file-read ledger from prior Read calls so the read-before-write
+  // guard survives a resume (the in-memory ledger is empty after a restart).
+  if (params.sessionId) {
+    seedFileLedgerFromTranscript(params.sessionId, transcript, cwd);
+  }
 
   const assistant: Message = {
     id: `asst-${crypto.randomUUID()}`,
@@ -244,134 +256,215 @@ export async function* query(
         ignoreIncompleteToolCalls: true,
       });
 
-      yield { type: "stream_start" };
+      // One streaming attempt: (re)creates the model stream and folds its parts
+      // into `assistant`, yielding the same UI events. Returns the round's tool
+      // calls. Throws on a stream `error` part — the retry loop below decides
+      // whether to retry (transient + nothing emitted yet) or rethrow.
+      const runStream = async function* (): AsyncGenerator<
+        EngineEvent,
+        {
+          toolCalls: ToolCallRequest[];
+          streamAborted: boolean;
+          hadInvalidToolCall: boolean;
+        }
+      > {
+        yield { type: "stream_start" };
 
-      const result = streamText({
-        model: resolved.model,
-        system: buildSystemPrompt({
-          mode,
-          globalInstructions: ctx.globalInstructions,
-          projectInstructions: ctx.projectInstructions,
-          localInstructions: ctx.localInstructions,
-          rules: ctx.rules,
-          skillIndex: ctx.skillIndex,
-          memoryIndex: ctx.memoryIndex,
-          gitBranchName: ctx.gitBranchName,
-          gitStatus: ctx.gitStatus,
-          gitDiffSummary: ctx.gitDiffSummary,
-          frameworks: ctx.frameworks,
-          packageManager: ctx.packageManager,
-          isTypeScript: ctx.isTypeScript,
-          shellName: ctx.shellName,
-          platform: ctx.platform,
-          availableDeferredTools,
-          agentTypes: ctx.agentTypes,
-        }),
-        messages: modelMessages,
-        tools,
-        providerOptions: resolved.providerOptions,
-        abortSignal,
-      });
+        const result = streamText({
+          model: resolved.model,
+          system: buildSystemPrompt({
+            mode,
+            globalInstructions: ctx.globalInstructions,
+            projectInstructions: ctx.projectInstructions,
+            localInstructions: ctx.localInstructions,
+            rules: ctx.rules,
+            skillIndex: ctx.skillIndex,
+            memoryIndex: ctx.memoryIndex,
+            gitBranchName: ctx.gitBranchName,
+            gitStatus: ctx.gitStatus,
+            gitDiffSummary: ctx.gitDiffSummary,
+            frameworks: ctx.frameworks,
+            packageManager: ctx.packageManager,
+            isTypeScript: ctx.isTypeScript,
+            shellName: ctx.shellName,
+            platform: ctx.platform,
+            availableDeferredTools,
+            agentTypes: ctx.agentTypes,
+          }),
+          messages: modelMessages,
+          tools,
+          providerOptions: resolved.providerOptions,
+          abortSignal,
+        });
 
-      // Assemble assistant parts from the raw stream.
-      const toolCalls: ToolCallRequest[] = [];
-      let activeText: { type: "text"; text: string } | null = null;
-      let activeReasoning: { type: "reasoning"; text: string } | null = null;
-      // streamText doesn't throw on abort mid-stream: it emits a graceful
-      // `abort` part and ends the stream, so track it explicitly.
-      let streamAborted = false;
+        // Assemble assistant parts from the raw stream.
+        const toolCalls: ToolCallRequest[] = [];
+        let activeText: { type: "text"; text: string } | null = null;
+        let activeReasoning: { type: "reasoning"; text: string } | null = null;
+        // streamText doesn't throw on abort mid-stream: it emits a graceful
+        // `abort` part and ends the stream, so track it explicitly.
+        let streamAborted = false;
+        // An invalid tool call produces an output-error part but no executable
+        // call; the turn must NOT end on it — the model needs the error back to
+        // self-correct (see the termination guard below).
+        let hadInvalidToolCall = false;
 
-      for await (const part of result.fullStream) {
-        switch (part.type) {
-          case "text-start":
-            activeText = { type: "text", text: "" };
-            assistant.parts.push(activeText as never);
-            break;
-          case "text-delta":
-            if (activeText) {
-              activeText.text += part.text;
-              yield { type: "message_update", message: snapshot(assistant) };
-            }
-            break;
-          case "text-end":
-            activeText = null;
-            break;
-          case "reasoning-start":
-            activeReasoning = { type: "reasoning", text: "" };
-            assistant.parts.push(activeReasoning as never);
-            break;
-          case "reasoning-delta":
-            if (activeReasoning) {
-              activeReasoning.text += part.text;
-              yield { type: "message_update", message: snapshot(assistant) };
-            }
-            break;
-          case "reasoning-end":
-            activeReasoning = null;
-            break;
-          case "tool-call": {
-            // Unparsable args or unknown tool: never execute — resolve the
-            // part as an error immediately so the model can self-correct on
-            // the next round instead of the executor (or worse, a later
-            // history pass) choking on it.
-            const invalid = (part as { invalid?: boolean }).invalid === true;
-            if (invalid) {
-              const reason = (part as { error?: unknown }).error;
+        for await (const part of result.fullStream) {
+          switch (part.type) {
+            case "text-start":
+              activeText = { type: "text", text: "" };
+              assistant.parts.push(activeText as never);
+              break;
+            case "text-delta":
+              if (activeText) {
+                activeText.text += part.text;
+                yield { type: "message_update", message: snapshot(assistant) };
+              }
+              break;
+            case "text-end":
+              activeText = null;
+              break;
+            case "reasoning-start":
+              activeReasoning = { type: "reasoning", text: "" };
+              assistant.parts.push(activeReasoning as never);
+              break;
+            case "reasoning-delta":
+              if (activeReasoning) {
+                activeReasoning.text += part.text;
+                yield { type: "message_update", message: snapshot(assistant) };
+              }
+              break;
+            case "reasoning-end":
+              activeReasoning = null;
+              break;
+            case "tool-call": {
+              // Unparsable args or unknown tool: never execute — resolve the
+              // part as an error immediately so the model can self-correct on
+              // the next round instead of the executor (or worse, a later
+              // history pass) choking on it.
+              const invalid = (part as { invalid?: boolean }).invalid === true;
+              if (invalid) {
+                hadInvalidToolCall = true;
+                const reason = (part as { error?: unknown }).error;
+                assistant.parts.push({
+                  type: `tool-${part.toolName}`,
+                  toolCallId: part.toolCallId,
+                  state: "output-error",
+                  input: part.input ?? {},
+                  errorText: `Invalid tool call: ${
+                    reason instanceof Error ? reason.message : String(reason ?? "unparsable arguments")
+                  }`,
+                } as never);
+                yield { type: "message_update", message: snapshot(assistant) };
+                break;
+              }
+              const toolCall: ToolCallRequest = {
+                toolCallId: part.toolCallId,
+                toolName: part.toolName,
+                input: part.input,
+              };
+              toolCalls.push(toolCall);
               assistant.parts.push({
                 type: `tool-${part.toolName}`,
                 toolCallId: part.toolCallId,
-                state: "output-error",
-                input: part.input ?? {},
-                errorText: `Invalid tool call: ${
-                  reason instanceof Error ? reason.message : String(reason ?? "unparsable arguments")
-                }`,
+                state: "input-available",
+                input: part.input,
               } as never);
               yield { type: "message_update", message: snapshot(assistant) };
               break;
             }
-            const toolCall: ToolCallRequest = {
-              toolCallId: part.toolCallId,
-              toolName: part.toolName,
-              input: part.input,
-            };
-            toolCalls.push(toolCall);
-            assistant.parts.push({
-              type: `tool-${part.toolName}`,
-              toolCallId: part.toolCallId,
-              state: "input-available",
-              input: part.input,
-            } as never);
-            yield { type: "message_update", message: snapshot(assistant) };
-            break;
-          }
-          case "finish-step": {
-            // OpenRouter surfaces the real per-request cost on the step's
-            // provider metadata (usage accounting). One step per round, so sum
-            // across rounds. Defensive optional-chaining: other providers / a
-            // disabled flag simply leave it absent.
-            const orUsage = (
-              part.providerMetadata as
-                | { openrouter?: { usage?: { cost?: number } } }
-                | undefined
-            )?.openrouter?.usage;
-            if (typeof orUsage?.cost === "number" && Number.isFinite(orUsage.cost)) {
-              costUsd += orUsage.cost;
-              costReported = true;
+            case "finish-step": {
+              // OpenRouter surfaces the real per-request cost on the step's
+              // provider metadata (usage accounting). One step per round, so sum
+              // across rounds. Defensive optional-chaining: other providers / a
+              // disabled flag simply leave it absent.
+              const orUsage = (
+                part.providerMetadata as
+                  | { openrouter?: { usage?: { cost?: number } } }
+                  | undefined
+              )?.openrouter?.usage;
+              if (typeof orUsage?.cost === "number" && Number.isFinite(orUsage.cost)) {
+                costUsd += orUsage.cost;
+                costReported = true;
+              }
+              break;
             }
-            break;
+            case "finish":
+              usage = addUsage(usage, part.totalUsage);
+              break;
+            case "abort":
+              streamAborted = true;
+              break;
+            case "error":
+              throw part.error instanceof Error
+                ? part.error
+                : new Error(String(part.error));
+            default:
+              break;
           }
-          case "finish":
-            usage = addUsage(usage, part.totalUsage);
-            break;
-          case "abort":
-            streamAborted = true;
-            break;
-          case "error":
-            throw part.error instanceof Error
-              ? part.error
-              : new Error(String(part.error));
-          default:
-            break;
+        }
+
+        return { toolCalls, streamAborted, hadInvalidToolCall };
+      };
+
+      // Retry the stream on a transient failure or empty response, but only
+      // while NOTHING has been emitted this round — once content exists, a retry
+      // would duplicate output / orphan tool pairs, so the error stays terminal.
+      const partsBase = assistant.parts.length;
+      const maxStreamRetries = params.maxStreamRetries ?? 2;
+      let toolCalls: ToolCallRequest[] = [];
+      let streamAborted = false;
+      let hadInvalidToolCall = false;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const out = yield* runStream();
+          const emittedContent = assistant.parts.length > partsBase;
+          // Empty response (no content, not aborted): retry once like a transient
+          // failure; otherwise accept it (the model legitimately said nothing).
+          if (
+            !emittedContent &&
+            !out.streamAborted &&
+            !abortSignal?.aborted &&
+            attempt < maxStreamRetries
+          ) {
+            const delayMs = backoffDelayMs(attempt);
+            yield {
+              type: "retry",
+              attempt: attempt + 1,
+              delayMs,
+              error: "empty response",
+            };
+            await sleep(delayMs, abortSignal);
+            // Abort during the backoff: stop here (the post-loop check seals an
+            // aborted turn) rather than opening another stream.
+            if (abortSignal?.aborted) break;
+            continue;
+          }
+          toolCalls = out.toolCalls;
+          streamAborted = out.streamAborted;
+          hadInvalidToolCall = out.hadInvalidToolCall;
+          break;
+        } catch (err) {
+          const emittedContent = assistant.parts.length > partsBase;
+          const canRetry =
+            !emittedContent &&
+            attempt < maxStreamRetries &&
+            !abortSignal?.aborted &&
+            isRetryableError(err);
+          if (!canRetry) throw err;
+          // Drop any partial parts from the failed attempt before retrying.
+          assistant.parts.length = partsBase;
+          const delayMs = backoffDelayMs(attempt, getRetryAfterMs(err));
+          yield {
+            type: "retry",
+            attempt: attempt + 1,
+            delayMs,
+            error: err instanceof Error ? err.message : String(err),
+          };
+          await sleep(delayMs, abortSignal);
+          // Abort during the backoff: don't open another stream — break to the
+          // post-loop check, which seals an aborted turn.
+          if (abortSignal?.aborted) break;
         }
       }
 
@@ -380,7 +473,12 @@ export async function* query(
         return { reason: "aborted" };
       }
 
-      if (toolCalls.length === 0) {
+      // No executable tool calls. Normally that means the model is done (final
+      // text answer) → complete the turn. But if the round produced an INVALID
+      // tool call, the model isn't done — it emitted a malformed call, got an
+      // error part back, and must be given another round to self-correct. Loop
+      // instead of terminating (runToolCalls below is a no-op on empty calls).
+      if (toolCalls.length === 0 && !hadInvalidToolCall) {
         yield { type: "turn_complete", message: sealTurn(false) };
         return { reason: "complete" };
       }

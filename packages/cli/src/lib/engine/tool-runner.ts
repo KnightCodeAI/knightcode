@@ -43,7 +43,7 @@ export function gateToolCall(opts: {
   return "execute";
 }
 
-const LOOP_LIMIT = 8;
+const LOOP_LIMIT = 3;
 
 /** Per-turn repeated-call guard (toolName + serialized input). */
 export class ToolLoopGuard {

@@ -60,9 +60,9 @@ describe("gateToolCall", () => {
 });
 
 describe("ToolLoopGuard", () => {
-  test("rejects the 9th identical call; TodoWrite exempt", () => {
+  test("rejects the 4th identical call; TodoWrite exempt", () => {
     const guard = new ToolLoopGuard();
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 3; i++) {
       expect(guard.check("Grep", { pattern: "x" })).toBe(true);
     }
     expect(guard.check("Grep", { pattern: "x" })).toBe(false);
@@ -74,7 +74,7 @@ describe("ToolLoopGuard", () => {
 
   test("reset clears counts", () => {
     const guard = new ToolLoopGuard();
-    for (let i = 0; i < 9; i++) guard.check("Grep", { pattern: "x" });
+    for (let i = 0; i < 4; i++) guard.check("Grep", { pattern: "x" });
     guard.reset();
     expect(guard.check("Grep", { pattern: "x" })).toBe(true);
   });

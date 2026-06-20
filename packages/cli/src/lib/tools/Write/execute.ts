@@ -7,6 +7,7 @@ import {
 } from "../shared/path-resolution";
 import { detectLineEnding } from "../shared/string-matching";
 import { recordOriginalContent } from "../shared/session-snapshot";
+import { assertWritable, recordWrite } from "../shared/file-ledger";
 
 export const tool: KnightcodeTool = Write;
 
@@ -17,6 +18,7 @@ export async function execute(
   const { file_path, content } = Write.input_schema.parse(input);
   const { cwd, resolved } = resolveInsideRoot(ctx.executionRoot, file_path, true);
   assertSafeProjectFile(resolved, cwd, "modify");
+  assertWritable(ctx.sessionId, resolved, { allowCreate: true });
   await recordOriginalContent(ctx.sessionId, resolved);
   await mkdir(dirname(resolved), { recursive: true });
 
@@ -33,6 +35,7 @@ export async function execute(
   }
 
   await writeFile(resolved, contentToWrite, "utf-8");
+  recordWrite(ctx.sessionId, resolved);
   return {
     success: true as const,
     path: relative(cwd, resolved),
