@@ -1,6 +1,6 @@
 {
   "name": "@knightcodeai/cli",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -22,11 +22,11 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@knightcodeai/cli-linux-x64": "0.3.1",
-    "@knightcodeai/cli-linux-arm64": "0.3.1",
-    "@knightcodeai/cli-darwin-x64": "0.3.1",
-    "@knightcodeai/cli-darwin-arm64": "0.3.1",
-    "@knightcodeai/cli-win32-x64": "0.3.1"
+    "@knightcodeai/cli-linux-x64": "0.4.0",
+    "@knightcodeai/cli-linux-arm64": "0.4.0",
+    "@knightcodeai/cli-darwin-x64": "0.4.0",
+    "@knightcodeai/cli-darwin-arm64": "0.4.0",
+    "@knightcodeai/cli-win32-x64": "0.4.0"
   },
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
