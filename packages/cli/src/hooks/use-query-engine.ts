@@ -30,6 +30,7 @@ import { allowCommand, isCommandAllowed } from "../lib/permissions/permissions";
 import { isMemoryEnabled } from "../lib/memory/config";
 import { createMemoryRecallProvider } from "../lib/memory/recall";
 import { createChangedFilesProvider } from "../lib/inference/changed-files-provider";
+import { createTodosProvider } from "../lib/inference/todos-provider";
 import { isSkillAutoDiscoverEnabled } from "../lib/context/skills/config";
 import { createSkillDiscoveryProvider } from "../lib/context/skills/discovery";
 import { createConditionalSkillProvider } from "../lib/context/skills/conditional";
@@ -453,8 +454,8 @@ export function useQueryEngine(
 
         // Context providers: a turn-start memory-recall provider (gated by
         // setting; no-op when no memory files exist) plus a per-round
-        // changed-files reminder rebuilt each turn (it holds per-turn dedup
-        // state, so it must not persist across turns).
+        // changed-files + todos reminders rebuilt each turn (they hold per-turn
+        // dedup state, so they must not persist across turns).
         const memoryEnabled = isMemoryEnabled();
         const contextProviders: ContextProvider[] = [];
         if (memoryEnabled) {
@@ -495,6 +496,7 @@ export function useQueryEngine(
           contextProviders.push(conditionalProviderRef.current);
         }
         contextProviders.push(createChangedFilesProvider());
+        contextProviders.push(createTodosProvider());
 
         const gen = query({
           cwd: process.cwd(),
