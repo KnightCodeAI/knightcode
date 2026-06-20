@@ -128,3 +128,46 @@ describe("parseChangelog (changesets format)", () => {
     ])
   })
 })
+
+// A changeset that writes a summary line followed by an indented bullet list,
+// WITHOUT any `### Added/Fixed` kind headings (the 0.4.0 release shape). Each
+// bullet must stay a separate item under the bump-type fallback kind, and the
+// summary must become the version highlight — not get merged into one blob.
+const SUMMARY_THEN_BULLETS = `# @knightcodeai/cli
+
+## 0.4.0
+
+### Minor Changes
+
+- aa2645e: Harness reliability: safer edits and recovery from flaky model streams.
+
+  - Session-scoped file-state ledger: a file must be read before it can be edited.
+  - Edit tools collapse identical safe reads within a round.
+  - Streaming recovery: transient stream failures retry with exponential backoff.
+`
+
+describe("parseChangelog (summary line + bullet list, no kind headings)", () => {
+  const [entry] = parseChangelog(SUMMARY_THEN_BULLETS)
+  const added = entry.groups.find((g) => g.kind === "Added")?.items ?? []
+
+  it("keeps each bullet as a separate item under the fallback kind", () => {
+    expect(added).toEqual([
+      "Session-scoped file-state ledger: a file must be read before it can be edited.",
+      "Edit tools collapse identical safe reads within a round.",
+      "Streaming recovery: transient stream failures retry with exponential backoff.",
+    ])
+  })
+
+  it("uses the summary line as the version highlight", () => {
+    expect(entry.highlight).toBe(
+      "Harness reliability: safer edits and recovery from flaky model streams.",
+    )
+  })
+
+  it("does not merge the bullets into a single paragraph", () => {
+    expect(added.length).toBe(3)
+    for (const item of added) {
+      expect(item).not.toContain(" Edit tools collapse")
+    }
+  })
+})

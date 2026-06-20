@@ -194,13 +194,23 @@ export function parseChangelog(content: string): ChangelogEntry[] {
       continue
     }
 
-    // Nested bullet (indented) — a section list item.
+    // Nested bullet (indented) — always a discrete list item, never lead text.
     const subBullet = raw.match(/^\s+[-*]\s+(.*)$/)
     if (subBullet) {
       flushBuffer()
       buffer = subBullet[1].trim()
-      bufferKind = kind
-      bufferIsLead = kind === null
+      // When the changeset has no explicit "### Kind" heading, a bulleted list
+      // still describes real changes: file each bullet under the bump-type
+      // fallback kind and treat the preceding summary as a section, so the
+      // leading text becomes the version highlight instead of swallowing the
+      // bullets into one merged paragraph.
+      if (kind === null) {
+        bufferKind = fallbackKind(bumpType)
+        changesetHasSection = true
+      } else {
+        bufferKind = kind
+      }
+      bufferIsLead = false
       continue
     }
 
