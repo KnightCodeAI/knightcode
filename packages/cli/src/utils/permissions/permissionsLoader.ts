@@ -1,29 +1,74 @@
-// TODO: reading and writing permission rules from settings files is not
-// implemented yet — it depends on the settings persistence layer. These
-// preserve the exact call surface the permission dispatch uses. With no
-// editable settings wired up, no managed-only restriction applies and no rule
-// is ever deleted.
+// Reads permission rules (allow/deny/ask) from the per-source settings files via
+// getSettingsForSource. Writing rules (deletePermissionRuleFromSettings,
+// persisting "always allow") still depends on updateSettingsForSource, which is
+// not wired up yet, so deletion remains a no-op.
 
-import type { EditableSettingSource } from '../settings/constants.js'
-import type { PermissionRule } from './PermissionRule.js'
+import type { EditableSettingSource, SettingSource } from '../settings/constants.js'
+import { getEnabledSettingSources } from '../settings/constants.js'
+import { getSettingsForSource } from '../settings/settings.js'
+import type { SettingsJson } from '../settings/types.js'
+import { permissionRuleValueFromString } from './permissionRuleParser.js'
+import type {
+  PermissionBehavior,
+  PermissionRule,
+  PermissionRuleSource,
+} from './PermissionRule.js'
 
 export type PermissionRuleFromEditableSettings = PermissionRule & {
   source: EditableSettingSource
 }
 
+const SUPPORTED_RULE_BEHAVIORS = [
+  'allow',
+  'deny',
+  'ask',
+] as const satisfies PermissionBehavior[]
+
+// KnightCode has no policySettings (managed/admin) file, so managed-only mode is
+// never active. Kept as a function for call-surface parity with upstream.
 export function shouldAllowManagedPermissionRulesOnly(): boolean {
   return false
 }
 
+// Writing/deleting rules depends on updateSettingsForSource (not yet wired).
 export function deletePermissionRuleFromSettings(
   _rule: PermissionRuleFromEditableSettings,
 ): boolean {
   return false
 }
 
-// No on-disk rules until the settings persistence layer is wired up.
+function settingsJsonToRules(
+  data: SettingsJson | null,
+  source: PermissionRuleSource,
+): PermissionRule[] {
+  if (!data || !data.permissions) return []
+  const { permissions } = data
+  const rules: PermissionRule[] = []
+  for (const behavior of SUPPORTED_RULE_BEHAVIORS) {
+    const behaviorArray = permissions[behavior]
+    if (behaviorArray) {
+      for (const ruleString of behaviorArray) {
+        rules.push({
+          source,
+          ruleBehavior: behavior,
+          ruleValue: permissionRuleValueFromString(ruleString),
+        })
+      }
+    }
+  }
+  return rules
+}
+
+// Loads all permission rules from every enabled settings source.
 export function loadAllPermissionRulesFromDisk(): PermissionRule[] {
-  return []
+  if (shouldAllowManagedPermissionRulesOnly()) {
+    return getPermissionRulesForSource('policySettings')
+  }
+  const rules: PermissionRule[] = []
+  for (const source of getEnabledSettingSources()) {
+    rules.push(...getPermissionRulesForSource(source))
+  }
+  return rules
 }
 
 // Whether the permission dialog should offer "always allow" rule options.
@@ -32,5 +77,9 @@ export function shouldShowAlwaysAllowOptions(): boolean {
   return !shouldAllowManagedPermissionRulesOnly()
 }
 
-// TODO: per-source permission rule loading lands with the rules UI; empty until then.
-export function getPermissionRulesForSource(..._args: any[]): any[] { return [] }
+// Loads permission rules from a specific settings source.
+export function getPermissionRulesForSource(
+  source: SettingSource,
+): PermissionRule[] {
+  return settingsJsonToRules(getSettingsForSource(source), source)
+}

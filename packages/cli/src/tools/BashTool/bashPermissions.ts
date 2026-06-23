@@ -6,9 +6,19 @@
 import type { ToolPermissionContext, ToolUseContext } from '../../Tool.js'
 import type { PermissionResult } from '../../utils/permissions/PermissionResult.js'
 import {
+  hasWildcards,
   matchWildcardPattern as sharedMatchWildcardPattern,
   permissionRuleExtractPrefix as sharedPermissionRuleExtractPrefix,
 } from '../../utils/permissions/shellRuleMatching.js'
+import {
+  permissionRuleValueFromString,
+  permissionRuleValueToString,
+} from '../../utils/permissions/permissionRuleParser.js'
+import type {
+  PermissionRule,
+  PermissionRuleSource,
+} from '../../types/permissions.js'
+import { BASH_TOOL_NAME } from './toolName.js'
 import type { BashTool } from './BashTool.js'
 import type { z } from 'zod/v4'
 
@@ -48,14 +58,102 @@ export function peekSpeculativeClassifierCheck(..._args: unknown[]): any { retur
 export const matchWildcardPattern = sharedMatchWildcardPattern
 export const permissionRuleExtractPrefix = sharedPermissionRuleExtractPrefix
 
-// TODO: the full AST-driven command permission check (compound-command safety,
-// path validation, cd handling) depends on the tree-sitter parser, which is out
-// of scope. Until it lands, every Bash command is routed to the permission
-// prompt — safe (never auto-allows) but more conservative than prefix rules.
+// Shell metacharacters that chain, substitute, redirect, group, or background
+// commands. Without the tree-sitter parser (out of scope) we cannot statically
+// determine everything a command containing these would run, so such commands
+// are NEVER auto-allowed — e.g. an allow rule `Bash(npm test:*)` must not green-
+// light `npm test && rm -rf /`. Deny rules still apply to them.
+const SHELL_METACHARACTERS = /[;&|`$<>(){}\n]/
+
+// True if `command` is matched by a Bash permission rule's content.
+// - undefined content (bare `Bash` rule) matches any command
+// - `prefix:*` (legacy) matches the prefix or prefix followed by a space
+// - patterns with `*` use wildcard matching
+// - otherwise an exact-string match is required
+function bashRuleMatchesCommand(
+  ruleContent: string | undefined,
+  command: string,
+): boolean {
+  if (ruleContent === undefined) return true
+  const pattern = ruleContent.trim()
+  if (pattern === '') return false
+  if (pattern === command) return true
+  const prefix = sharedPermissionRuleExtractPrefix(pattern)
+  if (prefix !== null) {
+    return command === prefix || command.startsWith(`${prefix} `)
+  }
+  if (hasWildcards(pattern)) {
+    return sharedMatchWildcardPattern(pattern, command)
+  }
+  return false
+}
+
+// Collects Bash rules from a per-source rule map into full PermissionRule objects.
+function bashRulesFromSourceMap(
+  rulesBySource: Readonly<Partial<Record<PermissionRuleSource, readonly string[]>>>,
+  ruleBehavior: 'allow' | 'deny',
+): PermissionRule[] {
+  const rules: PermissionRule[] = []
+  for (const [source, ruleStrings] of Object.entries(rulesBySource)) {
+    for (const ruleString of ruleStrings ?? []) {
+      const ruleValue = permissionRuleValueFromString(ruleString)
+      if (ruleValue.toolName === BASH_TOOL_NAME) {
+        rules.push({
+          source: source as PermissionRuleSource,
+          ruleBehavior,
+          ruleValue,
+        })
+      }
+    }
+  }
+  return rules
+}
+
+// Evaluates a Bash command against the configured allow/deny rules. Deny rules
+// take precedence and apply to every command; allow rules only auto-approve a
+// single simple command (no shell metacharacters). Anything else falls through
+// to the permission prompt — safe by construction.
+//
+// Note: the full AST-driven analysis (compound-command decomposition, path
+// validation, cd handling) still depends on the tree-sitter parser, which is
+// out of scope; this is the conservative subset that honors prefix/exact/
+// wildcard rules without it.
 export async function bashToolHasPermission(
-  _input: z.infer<typeof BashTool.inputSchema>,
-  _context: ToolUseContext,
+  input: z.infer<typeof BashTool.inputSchema>,
+  context: ToolUseContext,
 ): Promise<PermissionResult> {
+  const command = (input.command ?? '').trim()
+  const { toolPermissionContext } = context.getAppState()
+
+  // 1. Deny rules win and apply even to compound commands.
+  for (const rule of bashRulesFromSourceMap(
+    toolPermissionContext.alwaysDenyRules,
+    'deny',
+  )) {
+    if (bashRuleMatchesCommand(rule.ruleValue.ruleContent, command)) {
+      return {
+        behavior: 'deny',
+        message: `Permission to run this command was denied by rule "${permissionRuleValueToString(
+          rule.ruleValue,
+        )}".`,
+        decisionReason: { type: 'rule', rule },
+      }
+    }
+  }
+
+  // 2. Only auto-allow a single simple command we can fully vouch for.
+  if (!SHELL_METACHARACTERS.test(command)) {
+    for (const rule of bashRulesFromSourceMap(
+      toolPermissionContext.alwaysAllowRules,
+      'allow',
+    )) {
+      if (bashRuleMatchesCommand(rule.ruleValue.ruleContent, command)) {
+        return { behavior: 'allow', decisionReason: { type: 'rule', rule } }
+      }
+    }
+  }
+
+  // 3. Default: prompt the user.
   return {
     behavior: 'ask',
     message: 'This command requires your approval to run.',

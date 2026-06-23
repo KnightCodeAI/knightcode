@@ -14,6 +14,8 @@ import {
   type Tool,
   type ToolPermissionContext,
 } from '../Tool.js'
+import { syncPermissionRulesFromDisk } from '../utils/permissions/permissions.js'
+import { loadAllPermissionRulesFromDisk } from '../utils/permissions/permissionsLoader.js'
 import type { TaskState } from '../tasks/types.js'
 import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js'
 import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js'
@@ -497,10 +499,15 @@ export function getDefaultAppState(): AppState {
     replBridgeError: undefined,
     replBridgeInitialName: undefined,
     showRemoteCallout: false,
-    toolPermissionContext: {
-      ...getEmptyToolPermissionContext(),
-      mode: initialMode,
-    },
+    // Seed the live permission context with allow/deny/ask rules read from the
+    // user/project/local settings files so configured allowlists take effect.
+    toolPermissionContext: syncPermissionRulesFromDisk(
+      {
+        ...getEmptyToolPermissionContext(),
+        mode: initialMode,
+      },
+      loadAllPermissionRulesFromDisk(),
+    ),
     agent: undefined,
     agentDefinitions: { activeAgents: [], allAgents: [] },
     fileHistory: {

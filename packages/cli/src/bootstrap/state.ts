@@ -3,8 +3,14 @@
 // agent bookkeeping) lands with the harness.
 
 import { randomUUID } from 'crypto'
-import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import { realpathSync } from 'fs'
+import type {
+  BetaMessageStreamParams,
+  BetaUsage,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type { ModelUsage } from '../entrypoints/agentSdkTypes.js'
 import { asSessionId, type SessionId } from '../types/ids.js'
+import { createSignal } from '../utils/signal.js'
 import type { HookEvent } from '../types/hooks.js'
 import type { HookCommand } from '../schemas/hooks.js'
 import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js'
@@ -67,11 +73,26 @@ type State = {
   lastInteractionTime: number
 }
 
+// Resolve symlinks in the launch cwd so session-storage paths stay canonical
+// and consistent with shell.ts (which sets cwd via realpath). When the launch
+// dir contains a symlink component (macOS /tmp, network/CloudStorage mounts),
+// an unresolved path would key session transcripts under a different project.
+function resolveInitialCwd(): string {
+  const rawCwd = process.cwd()
+  try {
+    return realpathSync(rawCwd).normalize('NFC')
+  } catch {
+    // File Provider EPERM on CloudStorage mounts (lstat per path component).
+    return rawCwd.normalize('NFC')
+  }
+}
+const initialCwd = resolveInitialCwd()
+
 const STATE: State = {
   sessionId: asSessionId(randomUUID()),
-  originalCwd: process.cwd().normalize('NFC'),
-  projectRoot: process.cwd().normalize('NFC'),
-  cwd: process.cwd().normalize('NFC'),
+  originalCwd: initialCwd,
+  projectRoot: initialCwd,
+  cwd: initialCwd,
   allowedSettingSources: [
     'userSettings',
     'projectSettings',
@@ -205,25 +226,100 @@ export function addToTurnHookDuration(_duration: number): void {}
 // land with the classifier layer. Nothing reads it yet.
 export function addToTurnClassifierDuration(_duration: number): void {}
 
-// TODO: per-model token accounting is populated by the API cost layer. Until
-// that wiring lands these report zero so telemetry payloads stay well-formed.
+// ── Session cost / usage ledger ──────────────────────────────────────────────
+// Accumulated per API response via addToTotalCostState (called from
+// cost-tracker.addToTotalSessionCost in services/api). In-memory for the live
+// session; cross-session persistence to project config lands with the
+// session-storage layer (setCostStateForRestore below seeds it on resume).
+const sessionStartTimeMs = Date.now()
+let totalCostUSD = 0
+let totalLinesAdded = 0
+let totalLinesRemoved = 0
+// Output-token count snapshotted at the start of the current turn, so
+// getTurnOutputTokens() can report just this turn's output.
+let outputTokensAtTurnStart = 0
+const modelUsageMap: Record<string, ModelUsage> = {}
+
+function makeUsageEntry(): ModelUsage {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    webSearchRequests: 0,
+    costUSD: 0,
+    contextWindow: 0,
+    maxOutputTokens: 0,
+  }
+}
+
+function sumUsage(field: keyof ModelUsage): number {
+  let total = 0
+  for (const usage of Object.values(modelUsageMap)) total += usage[field]
+  return total
+}
+
+// Accumulates one API response's cost + token usage into the session ledger.
+export function addToTotalCostState(
+  costUSD: number,
+  usage: BetaUsage,
+  model: string,
+): void {
+  totalCostUSD += costUSD
+  const entry = (modelUsageMap[model] ??= makeUsageEntry())
+  entry.inputTokens += usage.input_tokens ?? 0
+  entry.outputTokens += usage.output_tokens ?? 0
+  entry.cacheReadInputTokens += usage.cache_read_input_tokens ?? 0
+  entry.cacheCreationInputTokens += usage.cache_creation_input_tokens ?? 0
+  entry.webSearchRequests +=
+    usage.server_tool_use?.web_search_requests ?? 0
+  entry.costUSD += costUSD
+}
+
+export function getModelUsage(): Record<string, ModelUsage> {
+  return modelUsageMap
+}
+
+export function getUsageForModel(model: string): ModelUsage | undefined {
+  return modelUsageMap[model]
+}
+
 export function getTotalInputTokens(): number {
-  return 0
+  return sumUsage('inputTokens')
 }
 
 export function getTotalOutputTokens(): number {
-  return 0
+  return sumUsage('outputTokens')
 }
 
-// TODO: per-turn token budgeting and cost are populated by the API cost layer.
-// Until that wiring lands these report safe defaults so attachment payloads
-// stay well-formed.
+// Output tokens produced during the current turn only (since the last
+// snapshotOutputTokensForTurn call).
 export function getTurnOutputTokens(): number {
-  return 0
+  return Math.max(0, getTotalOutputTokens() - outputTokensAtTurnStart)
 }
 
 export function getCurrentTurnTokenBudget(): number | null {
   return null
+}
+
+export function getTotalDuration(): number {
+  return Date.now() - sessionStartTimeMs
+}
+
+export function addToTotalLinesChanged(
+  additions: number,
+  removals: number,
+): void {
+  totalLinesAdded += additions
+  totalLinesRemoved += removals
+}
+
+export function getTotalLinesAdded(): number {
+  return totalLinesAdded
+}
+
+export function getTotalLinesRemoved(): number {
+  return totalLinesRemoved
 }
 
 let budgetContinuationCount = 0
@@ -232,7 +328,7 @@ export function incrementBudgetContinuationCount(): void {
 }
 
 export function getTotalCostUSD(): number {
-  return 0
+  return totalCostUSD
 }
 
 export function hasExitedPlanModeInSession(): boolean {
@@ -268,11 +364,11 @@ export function setLastEmittedDate(date: string | null): void {
 }
 
 export function getTotalCacheReadInputTokens(): number {
-  return 0
+  return sumUsage('cacheReadInputTokens')
 }
 
 export function getTotalCacheCreationInputTokens(): number {
-  return 0
+  return sumUsage('cacheCreationInputTokens')
 }
 
 // TODO: scroll-draining coordination is owned by the REPL renderer. With no
@@ -519,13 +615,21 @@ export function getInvokedSkillsForAgent(
 // scope, so recording it is a no-op until (if ever) a consumer needs it.
 export function setPromptId(_id: string | null): void {}
 
-// TODO: plan-mode transition side effects (cache breaking, attachment latches)
-// are wired with the plan-mode flow; inert here. Session persistence is always
-// on in this build. Interaction-time tracking feeds the idle notifier.
+// Drives the one-time plan_mode_exit attachment latch from a mode transition,
+// so the next turn can tell the model plan mode is no longer active. Toggling
+// quickly back into plan mode clears the pending latch to avoid sending both
+// plan_mode and plan_mode_exit.
 export function handlePlanModeTransition(
-  _fromMode: string,
-  _toMode: string,
-): void {}
+  fromMode: string,
+  toMode: string,
+): void {
+  if (toMode === 'plan' && fromMode !== 'plan') {
+    STATE.needsPlanModeExitAttachment = false
+  }
+  if (fromMode === 'plan' && toMode !== 'plan') {
+    STATE.needsPlanModeExitAttachment = true
+  }
+}
 
 export function isSessionPersistenceDisabled(): boolean {
   return false
@@ -541,7 +645,13 @@ export function updateLastInteractionTime(_immediate?: boolean): void {
 
 // TODO: skill-invocation tracking + trust/opt-in setters land with their
 // subsystems; inert placeholders so the settings/trust UIs compile.
-export function clearInvokedSkillsForAgent(_agentId?: unknown): void {}
+export function clearInvokedSkillsForAgent(agentId: string): void {
+  for (const [key, skill] of STATE.invokedSkills) {
+    if (skill.agentId === agentId) {
+      STATE.invokedSkills.delete(key)
+    }
+  }
+}
 // SDK background progress summaries are an SDK-only feature; off in this build.
 export function getSdkAgentProgressSummariesEnabled(): boolean {
   return false
@@ -564,8 +674,15 @@ export function resetTurnToolDuration(): void {}
 export function getTurnClassifierDurationMs(): number { return 0 }
 export function getTurnClassifierCount(): number { return 0 }
 export function resetTurnClassifierDuration(): void {}
-export function getBudgetContinuationCount(): number { return 0 }
-export function snapshotOutputTokensForTurn(_budget: number | null): void {}
+export function getBudgetContinuationCount(): number { return budgetContinuationCount }
+export function snapshotOutputTokensForTurn(_budget: number | null): void {
+  // Record the session output-token count at turn start so getTurnOutputTokens()
+  // reports only this turn's output.
+  outputTokensAtTurnStart = getTotalOutputTokens()
+  // Each new turn resets the per-turn budget-continuation nudge counter so
+  // getBudgetContinuationCount() reflects only the current turn.
+  budgetContinuationCount = 0
+}
 export function getActiveTimeCounter(): AttributedCounter | null { return null }
 export function setMainThreadAgentType(_agentType: string | undefined): void {}
 export function setOriginalCwd(cwd: string): void {
@@ -583,32 +700,63 @@ export function getCachedKnightcodeMdContent(): string | null {
   return cachedKnightcodeMdContent
 }
 
+// Records a skill invocation so its content can be preserved/re-surfaced across
+// compaction. Keyed by `${agentId??''}:${skillName}` so the same skill invoked
+// on the main thread and in a subagent are tracked independently.
 export function addInvokedSkill(
-  _skillName: string,
-  _skillPath: string,
-  _content: string,
-  _agentId: string | null = null,
-): void {}
+  skillName: string,
+  skillPath: string,
+  content: string,
+  agentId: string | null = null,
+): void {
+  const key = `${agentId ?? ''}:${skillName}`
+  STATE.invokedSkills.set(key, {
+    skillName,
+    skillPath,
+    content,
+    invokedAt: Date.now(),
+    agentId,
+  })
+}
+// Clears invoked skills, optionally preserving entries owned by the given
+// agent ids (used on compaction to keep live subagents' skills).
 export function clearInvokedSkills(
-  _preservedAgentIds?: ReadonlySet<string>,
-): void {}
+  preservedAgentIds?: ReadonlySet<string>,
+): void {
+  if (!preservedAgentIds || preservedAgentIds.size === 0) {
+    STATE.invokedSkills.clear()
+    return
+  }
+  for (const [key, skill] of STATE.invokedSkills) {
+    if (skill.agentId === null || !preservedAgentIds.has(skill.agentId)) {
+      STATE.invokedSkills.delete(key)
+    }
+  }
+}
+
+// Emitted whenever the active sessionId changes (switchSession /
+// regenerateSessionId). Listeners (e.g. the PID-file updater in
+// concurrentSessions) keep external state in sync with the live session.
+const sessionSwitched = createSignal<[SessionId]>()
 
 export function switchSession(
   sessionId: SessionId,
   _projectDir: string | null = null,
 ): void {
   STATE.sessionId = sessionId
+  sessionSwitched.emit(sessionId)
 }
 export function regenerateSessionId(
   _options: { setCurrentAsParent?: boolean } = {},
 ): SessionId {
   const id = asSessionId(randomUUID())
   STATE.sessionId = id
+  sessionSwitched.emit(id)
   return id
 }
 export const onSessionSwitch = (
-  _cb: (id: SessionId) => void,
-): (() => void) => () => {}
+  cb: (id: SessionId) => void,
+): (() => void) => sessionSwitched.subscribe(cb)
 
 // Hooks registered programmatically (plugin hooks, internal callbacks) outside
 // settings.json. None are registered in this build, so the registry is empty.
@@ -640,13 +788,24 @@ export function setAdditionalDirectoriesForKnightcodeMd(
   additionalDirectoriesForKnightcodeMd = directories
 }
 
-export function setCostStateForRestore(_state: {
+export function setCostStateForRestore(state: {
   totalCostUSD: number
-  totalAPIDuration: number
-  totalAPIDurationWithoutRetries: number
-  totalToolDuration: number
+  totalAPIDuration?: number
+  totalAPIDurationWithoutRetries?: number
+  totalToolDuration?: number
   totalLinesAdded: number
   totalLinesRemoved: number
-  lastDuration: number
-  modelUsage: unknown
-}): void {}
+  lastDuration?: number
+  modelUsage?: Record<string, ModelUsage> | undefined
+}): void {
+  // Seed the ledger from a restored session's persisted totals.
+  totalCostUSD = state.totalCostUSD
+  totalLinesAdded = state.totalLinesAdded
+  totalLinesRemoved = state.totalLinesRemoved
+  for (const key of Object.keys(modelUsageMap)) delete modelUsageMap[key]
+  if (state.modelUsage) {
+    for (const [model, usage] of Object.entries(state.modelUsage)) {
+      modelUsageMap[model] = { ...makeUsageEntry(), ...usage }
+    }
+  }
+}

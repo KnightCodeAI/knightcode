@@ -6,6 +6,8 @@
 import { join, resolve } from 'path'
 import { getOriginalCwd } from '../../bootstrap/state.js'
 import { getKnightcodeConfigHomeDir } from '../envUtils.js'
+import { readFileSync } from '../fileRead.js'
+import { safeParseJSON } from '../json.js'
 import type { SettingsJson } from './types.js'
 import type { SettingSource } from './constants.js'
 
@@ -96,11 +98,23 @@ export function getRelativeSettingsFilePathForSource(
     : '.knightcode/settings.json'
 }
 
-// TODO: per-source settings reads/writes land with the settings phase. Until
-// then every source reads as "no settings file" and writes are dropped (the
-// callers — effort callout, channels notice — degrade to their defaults).
-export function getSettingsForSource(_source: SettingSource): SettingsJson | null {
-  return null
+// Reads and parses the settings file for a single source. Returns null when the
+// source has no on-disk file (policySettings/flagSettings), the file is absent,
+// or the contents are not valid JSON; returns {} for an empty file. Writes are
+// still handled by updateSettingsForSource below.
+export function getSettingsForSource(source: SettingSource): SettingsJson | null {
+  const filePath = getSettingsFilePathForSource(source)
+  if (!filePath) return null
+  let content: string
+  try {
+    content = readFileSync(filePath)
+  } catch {
+    // File does not exist or is unreadable.
+    return null
+  }
+  if (content.trim() === '') return {}
+  const data = safeParseJSON(content, false)
+  return data && typeof data === 'object' ? (data as SettingsJson) : null
 }
 
 export function updateSettingsForSource(
