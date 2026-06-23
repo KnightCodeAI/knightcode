@@ -98,15 +98,12 @@ describe('AskUserQuestionTool registration & flags', () => {
     expect(AskUserQuestionTool.isEnabled()).toBe(true)
     expect(AskUserQuestionTool.isReadOnly()).toBe(true)
     expect(AskUserQuestionTool.requiresUserInteraction?.()).toBe(true)
-    expect(AskUserQuestionTool.isConcurrencySafe({} as never)).toBe(true)
+    expect(AskUserQuestionTool.isConcurrencySafe()).toBe(true)
   })
 
   test('checkPermissions asks the user to answer', async () => {
     const input = validQuestionsInput()
-    const result = await AskUserQuestionTool.checkPermissions!(
-      input as never,
-      {} as never,
-    )
+    const result = await AskUserQuestionTool.checkPermissions!(input as never)
     expect(result.behavior).toBe('ask')
   })
 
@@ -124,20 +121,20 @@ describe('AskUserQuestionTool registration & flags', () => {
 
 describe('AskUserQuestionTool prompt()', () => {
   test('always starts with the base tool prompt', async () => {
-    expect(await AskUserQuestionTool.prompt({} as never)).toContain(
+    expect(await AskUserQuestionTool.prompt()).toContain(
       ASK_USER_QUESTION_TOOL_PROMPT.trimEnd(),
     )
   })
 
   test('appends markdown preview guidance when format is markdown', async () => {
     setQuestionPreviewFormat('markdown')
-    const prompt = await AskUserQuestionTool.prompt({} as never)
+    const prompt = await AskUserQuestionTool.prompt()
     expect(prompt).toContain(PREVIEW_FEATURE_PROMPT.markdown)
   })
 
   test('appends html preview guidance when format is html', async () => {
     setQuestionPreviewFormat('html')
-    const prompt = await AskUserQuestionTool.prompt({} as never)
+    const prompt = await AskUserQuestionTool.prompt()
     expect(prompt).toContain(PREVIEW_FEATURE_PROMPT.html)
   })
 })
@@ -164,34 +161,22 @@ describe('AskUserQuestionTool.validateInput (html preview checks)', () => {
   }
 
   test('accepts a valid HTML fragment', async () => {
-    const r = await AskUserQuestionTool.validateInput!(
-      inputWithPreview('<div>hi</div>') as never,
-      {} as never,
-    )
+    const r = await AskUserQuestionTool.validateInput!(inputWithPreview('<div>hi</div>') as never)
     expect(r.result).toBe(true)
   })
 
   test('rejects a full HTML document', async () => {
-    const r = await AskUserQuestionTool.validateInput!(
-      inputWithPreview('<html><body>x</body></html>') as never,
-      {} as never,
-    )
+    const r = await AskUserQuestionTool.validateInput!(inputWithPreview('<html><body>x</body></html>') as never)
     expect(r.result).toBe(false)
   })
 
   test('rejects script/style tags', async () => {
-    const r = await AskUserQuestionTool.validateInput!(
-      inputWithPreview('<div><script>alert(1)</script></div>') as never,
-      {} as never,
-    )
+    const r = await AskUserQuestionTool.validateInput!(inputWithPreview('<div><script>alert(1)</script></div>') as never)
     expect(r.result).toBe(false)
   })
 
   test('rejects non-HTML preview text', async () => {
-    const r = await AskUserQuestionTool.validateInput!(
-      inputWithPreview('just plain text') as never,
-      {} as never,
-    )
+    const r = await AskUserQuestionTool.validateInput!(inputWithPreview('just plain text') as never)
     expect(r.result).toBe(false)
   })
 })
