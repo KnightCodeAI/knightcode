@@ -37,12 +37,24 @@ import {
 } from './utils/sessionStorage.js'
 import { getWorktreePaths } from './utils/getWorktreePaths.js'
 import type { LogOption } from './types/logs.js'
+import { isMcpSubcommand, runMcpCommand } from './cli/mcpCommand.js'
 import { CommanderError } from 'commander'
 
 // Read the version from the package manifest for --version output.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const VERSION: string =
   (require('../package.json') as { version?: string }).version ?? '0.0.0'
+
+// `knightcode mcp ...` is a non-interactive CLI surface (configure MCP servers,
+// print, exit). It needs no API key and must run before the interactive flag
+// parser would otherwise swallow `mcp` as a positional prompt, so route it here
+// first.
+if (isMcpSubcommand(process.argv)) {
+  await runMcpCommand(process.argv)
+  // The subcommand handlers print + exit themselves; reaching here means a bare
+  // `knightcode mcp` printed help.
+  process.exit(0)
+}
 
 // Parse CLI args. commander (via exitOverride) throws on --help/--version and on
 // parse errors; it has already printed the relevant output, so just exit.
