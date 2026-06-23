@@ -21,19 +21,28 @@ describe('createMemorySavedMessage', () => {
 describe('createAutoMemCanUseTool', () => {
   const canUseTool = createAutoMemCanUseTool('/some/memory/dir')
 
-  test('allows read-only Read unconditionally', async () => {
-    const decision = await canUseTool(
-      { name: FILE_READ_TOOL_NAME } as unknown as Tool,
-      { file_path: '/anywhere.txt' },
+  // createAutoMemCanUseTool only inspects tool + input; the remaining
+  // CanUseToolFn args (context/message/id) are unused, so stub them.
+  const invoke = (tool: Partial<Tool>, input: Record<string, unknown>) =>
+    canUseTool(
+      tool as never,
+      input,
+      {} as never,
+      {} as never,
+      'tool-use-id',
     )
+
+  test('allows read-only Read unconditionally', async () => {
+    const decision = await invoke({ name: FILE_READ_TOOL_NAME }, {
+      file_path: '/anywhere.txt',
+    })
     expect(decision.behavior).toBe('allow')
   })
 
   test('denies an Edit to a path outside the memory directory', async () => {
-    const decision = await canUseTool(
-      { name: FILE_EDIT_TOOL_NAME } as unknown as Tool,
-      { file_path: '/etc/not-memory.conf' },
-    )
+    const decision = await invoke({ name: FILE_EDIT_TOOL_NAME }, {
+      file_path: '/etc/not-memory.conf',
+    })
     expect(decision.behavior).toBe('deny')
   })
 })
