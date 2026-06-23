@@ -9,6 +9,7 @@ import { getEmptyToolPermissionContext } from './Tool.js'
 import { getTools } from './tools.js'
 import { getCommands } from './commands.js'
 import { initBundledSkills } from './skills/bundled/index.js'
+import { handleMcpjsonServerApprovals } from './services/mcpServerApproval.js'
 
 // Thin REPL launcher: the full subcommand surface (doctor/resume/headless
 // flags) lands with the command-line entrypoint later. For now this boots the
@@ -28,6 +29,11 @@ if (!hasKnightcodeApiKeyAuth()) {
   }
 
   const root = await createRoot()
+
+  // Before the REPL mounts, prompt the user to approve/reject any new project
+  // (.mcp.json) MCP servers. Resolves immediately when there are none pending.
+  await handleMcpjsonServerApprovals(root)
+
   const initialState = getDefaultAppState()
   const initialTools = [...getTools(getEmptyToolPermissionContext())]
   // Register bundled skills before the first getCommands() so they appear in
