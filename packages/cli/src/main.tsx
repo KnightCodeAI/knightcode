@@ -38,6 +38,7 @@ import {
 import { getWorktreePaths } from './utils/getWorktreePaths.js'
 import type { LogOption } from './types/logs.js'
 import { isMcpSubcommand, runMcpCommand } from './cli/mcpCommand.js'
+import { isDoctorSubcommand, runDoctorCommand } from './cli/doctorCommand.js'
 import { CommanderError } from 'commander'
 
 // Read the version from the package manifest for --version output.
@@ -53,6 +54,13 @@ if (isMcpSubcommand(process.argv)) {
   await runMcpCommand(process.argv)
   // The subcommand handlers print + exit themselves; reaching here means a bare
   // `knightcode mcp` printed help.
+  process.exit(0)
+}
+
+// `knightcode doctor` is likewise a non-interactive health check that needs no
+// API key — route it before the auth check and flag parser too.
+if (isDoctorSubcommand(process.argv)) {
+  await runDoctorCommand(VERSION)
   process.exit(0)
 }
 
