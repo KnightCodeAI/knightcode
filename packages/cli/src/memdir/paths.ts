@@ -1,48 +1,57 @@
-// TODO: the auto-memory directory feature isn't ported. These inert checks let
-// the permission layer treat no path as an auto-memory path until it lands.
-
+import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
-import { join, sep } from 'path'
-import { getIsNonInteractiveSession } from '../bootstrap/state.js'
+import { isAbsolute, join, normalize, sep } from 'path'
+import {
+  getIsNonInteractiveSession,
+  getProjectRoot,
+} from '../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import {
+  getKnightcodeConfigHomeDir,
+  isEnvDefinedFalsy,
+  isEnvTruthy,
+} from '../utils/envUtils.js'
+import { findCanonicalGitRoot } from '../utils/git.js'
+import { sanitizePath } from '../utils/path.js'
+import {
+  getInitialSettings,
+  getSettingsForSource,
+} from '../utils/settings/settings.js'
 
-export function hasAutoMemPathOverride(): boolean {
-  return false
-}
-
-export function isAutoMemPath(_absolutePath: string): boolean {
-  return false
-}
-
-// TODO: auto-memory storage isn't implemented yet. isAutoMemoryEnabled reports
-// disabled so the relevant-memory prefetch and turn-end extraction stay off;
-// getAutoMemPath still yields a stable directory for callers that compute it
-// before the gate check.
-export function getAutoMemPath(): string {
-  const home = (
-    process.env.KNIGHTCODE_CONFIG_DIR ??
-    join(homedir(), '.knightcode')
-  ).normalize('NFC')
-  return join(home, 'memory') + sep
-}
-
-// The auto-memory entrypoint (MEMORY.md inside the auto-memory dir).
-export function getAutoMemEntrypoint(): string {
-  return join(getAutoMemPath(), 'MEMORY.md')
-}
-
-// Base directory memory files live under (the config home, or a remote override).
-export function getMemoryBaseDir(): string {
-  if (process.env.KNIGHTCODE_REMOTE_MEMORY_DIR) {
-    return process.env.KNIGHTCODE_REMOTE_MEMORY_DIR
-  }
-  return (
-    process.env.KNIGHTCODE_CONFIG_DIR ?? join(homedir(), '.knightcode')
-  ).normalize('NFC')
-}
-
+/**
+ * Whether auto-memory features are enabled (memdir, agent memory, past session search).
+ * Enabled by default. Priority chain (first defined wins):
+ *   1. KNIGHTCODE_CODE_DISABLE_AUTO_MEMORY env var (1/true → OFF, 0/false → ON)
+ *   2. KNIGHTCODE_CODE_SIMPLE (--bare) → OFF
+ *   3. Remote without persistent storage → OFF (no KNIGHTCODE_REMOTE_MEMORY_DIR)
+ *   4. autoMemoryEnabled in settings.json (supports project-level opt-out)
+ *   5. Default: enabled
+ */
 export function isAutoMemoryEnabled(): boolean {
-  return false
+  const envVal = process.env.KNIGHTCODE_CODE_DISABLE_AUTO_MEMORY
+  if (isEnvTruthy(envVal)) {
+    return false
+  }
+  if (isEnvDefinedFalsy(envVal)) {
+    return true
+  }
+  // --bare / SIMPLE: prompts.ts already drops the memory section from the
+  // system prompt via its SIMPLE early-return; this gate stops the other half
+  // (extractMemories turn-end fork, /remember, /dream).
+  if (isEnvTruthy(process.env.KNIGHTCODE_CODE_SIMPLE)) {
+    return false
+  }
+  if (
+    isEnvTruthy(process.env.KNIGHTCODE_CODE_REMOTE) &&
+    !process.env.KNIGHTCODE_REMOTE_MEMORY_DIR
+  ) {
+    return false
+  }
+  const settings = getInitialSettings()
+  if (settings.autoMemoryEnabled !== undefined) {
+    return settings.autoMemoryEnabled
+  }
+  return true
 }
 
 /**
@@ -65,4 +74,188 @@ export function isExtractModeActive(): boolean {
     !getIsNonInteractiveSession() ||
     getFeatureValue_CACHED_MAY_BE_STALE('knightcode_slate_thimble', false)
   )
+}
+
+/**
+ * Returns the base directory for persistent memory storage.
+ * Resolution order:
+ *   1. KNIGHTCODE_REMOTE_MEMORY_DIR env var (explicit override)
+ *   2. ~/.knightcode (default config home)
+ */
+export function getMemoryBaseDir(): string {
+  if (process.env.KNIGHTCODE_REMOTE_MEMORY_DIR) {
+    return process.env.KNIGHTCODE_REMOTE_MEMORY_DIR
+  }
+  return getKnightcodeConfigHomeDir()
+}
+
+const AUTO_MEM_DIRNAME = 'memory'
+const AUTO_MEM_ENTRYPOINT_NAME = 'MEMORY.md'
+
+/**
+ * Normalize and validate a candidate auto-memory directory path.
+ *
+ * SECURITY: Rejects paths that would be dangerous as a read-allowlist root
+ * or that normalize() doesn't fully resolve:
+ * - relative (!isAbsolute): "../foo" — would be interpreted relative to CWD
+ * - root/near-root (length < 3): "/" → "" after strip; "/a" too short
+ * - Windows drive-root (C: regex): "C:\" → "C:" after strip
+ * - UNC paths (\\server\share): network paths — opaque trust boundary
+ * - null byte: survives normalize(), can truncate in syscalls
+ *
+ * Returns the normalized path with exactly one trailing separator,
+ * or undefined if the path is unset/empty/rejected.
+ */
+function validateMemoryPath(
+  raw: string | undefined,
+  expandTilde: boolean,
+): string | undefined {
+  if (!raw) {
+    return undefined
+  }
+  let candidate = raw
+  // Settings.json paths support ~/ expansion (user-friendly). The env var
+  // override does not (it's set programmatically and should always pass
+  // absolute paths). Bare "~", "~/", "~/.", "~/..", etc. are NOT expanded —
+  // they would make isAutoMemPath() match all of $HOME or its parent (same
+  // class of danger as "/" or "C:\").
+  if (
+    expandTilde &&
+    (candidate.startsWith('~/') || candidate.startsWith('~\\'))
+  ) {
+    const rest = candidate.slice(2)
+    // Reject trivial remainders that would expand to $HOME or an ancestor.
+    // normalize('') = '.', normalize('.') = '.', normalize('foo/..') = '.',
+    // normalize('..') = '..', normalize('foo/../..') = '..'
+    const restNorm = normalize(rest || '.')
+    if (restNorm === '.' || restNorm === '..') {
+      return undefined
+    }
+    candidate = join(homedir(), rest)
+  }
+  // normalize() may preserve a trailing separator; strip before adding
+  // exactly one to match the trailing-sep contract of getAutoMemPath()
+  const normalized = normalize(candidate).replace(/[/\\]+$/, '')
+  if (
+    !isAbsolute(normalized) ||
+    normalized.length < 3 ||
+    /^[A-Za-z]:$/.test(normalized) ||
+    normalized.startsWith('\\\\') ||
+    normalized.startsWith('//') ||
+    normalized.includes('\0')
+  ) {
+    return undefined
+  }
+  return (normalized + sep).normalize('NFC')
+}
+
+/**
+ * Direct override for the full auto-memory directory path via env var.
+ * When set, getAutoMemPath()/getAutoMemEntrypoint() return this path directly
+ * instead of computing `{base}/projects/{sanitized-cwd}/memory/`.
+ */
+function getAutoMemPathOverride(): string | undefined {
+  return validateMemoryPath(
+    process.env.KNIGHTCODE_COWORK_MEMORY_PATH_OVERRIDE,
+    false,
+  )
+}
+
+/**
+ * Settings.json override for the full auto-memory directory path.
+ * Supports ~/ expansion for user convenience.
+ *
+ * SECURITY: projectSettings (.knightcode/settings.json committed to the repo)
+ * is intentionally excluded — a malicious repo could otherwise set
+ * autoMemoryDirectory: "~/.ssh" and gain silent write access to sensitive
+ * directories via the filesystem.ts write carve-out (which fires when
+ * isAutoMemPath() matches and hasAutoMemPathOverride() is false).
+ */
+function getAutoMemPathSetting(): string | undefined {
+  const dir =
+    getSettingsForSource('policySettings')?.autoMemoryDirectory ??
+    getSettingsForSource('flagSettings')?.autoMemoryDirectory ??
+    getSettingsForSource('localSettings')?.autoMemoryDirectory ??
+    getSettingsForSource('userSettings')?.autoMemoryDirectory
+  return validateMemoryPath(dir, true)
+}
+
+/**
+ * Check if KNIGHTCODE_COWORK_MEMORY_PATH_OVERRIDE is set to a valid override.
+ * Use this as a signal that the caller has explicitly opted into the
+ * auto-memory mechanics — e.g. to decide whether to inject the memory prompt
+ * when a custom system prompt replaces the default.
+ */
+export function hasAutoMemPathOverride(): boolean {
+  return getAutoMemPathOverride() !== undefined
+}
+
+/**
+ * Returns the canonical git repo root if available, otherwise falls back to
+ * the stable project root. Uses findCanonicalGitRoot so all worktrees of the
+ * same repo share one auto-memory directory.
+ */
+function getAutoMemBase(): string {
+  return findCanonicalGitRoot(getProjectRoot()) ?? getProjectRoot()
+}
+
+/**
+ * Returns the auto-memory directory path.
+ *
+ * Resolution order:
+ *   1. KNIGHTCODE_COWORK_MEMORY_PATH_OVERRIDE env var (full-path override)
+ *   2. autoMemoryDirectory in settings.json (trusted sources only: policy/local/user)
+ *   3. <memoryBase>/projects/<sanitized-git-root>/memory/
+ *      where memoryBase is resolved by getMemoryBaseDir()
+ *
+ * Memoized: render-path callers fire per tool-use message per Messages
+ * re-render; each miss costs getSettingsForSource × 4. Keyed on projectRoot so
+ * tests that change its mock mid-block recompute; env vars / settings.json /
+ * KNIGHTCODE_CONFIG_DIR are session-stable in production.
+ */
+export const getAutoMemPath = memoize(
+  (): string => {
+    const override = getAutoMemPathOverride() ?? getAutoMemPathSetting()
+    if (override) {
+      return override
+    }
+    const projectsDir = join(getMemoryBaseDir(), 'projects')
+    return (
+      join(projectsDir, sanitizePath(getAutoMemBase()), AUTO_MEM_DIRNAME) + sep
+    ).normalize('NFC')
+  },
+  () => getProjectRoot(),
+)
+
+/**
+ * Returns the daily log file path for the given date (defaults to today).
+ * Shape: <autoMemPath>/logs/YYYY/MM/YYYY-MM-DD.md
+ */
+export function getAutoMemDailyLogPath(date: Date = new Date()): string {
+  const yyyy = date.getFullYear().toString()
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0')
+  const dd = date.getDate().toString().padStart(2, '0')
+  return join(getAutoMemPath(), 'logs', yyyy, mm, `${yyyy}-${mm}-${dd}.md`)
+}
+
+/**
+ * Returns the auto-memory entrypoint (MEMORY.md inside the auto-memory dir).
+ * Follows the same resolution order as getAutoMemPath().
+ */
+export function getAutoMemEntrypoint(): string {
+  return join(getAutoMemPath(), AUTO_MEM_ENTRYPOINT_NAME)
+}
+
+/**
+ * Check if an absolute path is within the auto-memory directory.
+ *
+ * When KNIGHTCODE_COWORK_MEMORY_PATH_OVERRIDE is set, this matches against the
+ * env-var override directory. Note that a true return here does NOT imply
+ * write permission in that case — the filesystem.ts write carve-out is gated
+ * on !hasAutoMemPathOverride().
+ */
+export function isAutoMemPath(absolutePath: string): boolean {
+  // SECURITY: Normalize to prevent path traversal bypasses via .. segments
+  const normalizedPath = normalize(absolutePath)
+  return normalizedPath.startsWith(getAutoMemPath())
 }
