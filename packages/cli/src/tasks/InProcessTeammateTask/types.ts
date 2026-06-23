@@ -1,6 +1,7 @@
 // TODO: in-process teammate tasks land with the teammate/swarm subsystem. Only
 // the state shape (as a member of the TaskState union) is modelled today.
 import type { TaskStateBase } from '../../Task.js'
+import type { Message } from '../../types/message.js'
 import type { PermissionMode } from '../../types/permissions.js'
 
 export type InProcessTeammateTaskState = TaskStateBase & {
@@ -13,7 +14,7 @@ export type InProcessTeammateTaskState = TaskStateBase & {
   identity: { color?: string; agentName: string; teamName: string; agentId: string }
   spinnerVerb?: string
   inProgressToolUseIDs?: Set<string>
-  messages?: unknown[]
+  messages?: Message[]
   awaitingPlanApproval?: boolean
   shutdownRequested?: boolean
   startTime?: number
