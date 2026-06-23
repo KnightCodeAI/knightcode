@@ -1,16 +1,28 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import {
   addToTotalLinesChanged,
   addToTotalSessionCost,
   formatTotalCost,
+  getStoredSessionCosts,
   getTotalCost,
   getTotalInputTokens,
   getTotalLinesAdded,
   getTotalLinesRemoved,
   getTotalOutputTokens,
+  resetCostState,
+  restoreCostStateForSession,
+  saveCurrentSessionCosts,
 } from './cost-tracker.js'
-import { getModelUsage, getTurnOutputTokens, snapshotOutputTokensForTurn } from './bootstrap/state.js'
+import {
+  getModelUsage,
+  getSessionId,
+  getTurnOutputTokens,
+  snapshotOutputTokensForTurn,
+} from './bootstrap/state.js'
 
 function usage(input: number, output: number): BetaUsage {
   return {
@@ -64,5 +76,57 @@ describe('cost ledger', () => {
     expect(out).not.toBe('$0.00')
     // cost is well above $0.50 so it renders with 2 decimals
     expect(out).toMatch(/Total cost:\s+\$\d+\.\d{2}/)
+  })
+})
+
+describe('cross-session cost persistence', () => {
+  const prevConfigDir = process.env.KNIGHTCODE_CONFIG_DIR
+  // Throwaway config dir so the persisted global config (where project cost
+  // state lives) is never written into the real ~/.knightcode.
+  const tmpConfigDir = mkdtempSync(join(tmpdir(), 'kc-cost-'))
+
+  beforeEach(() => {
+    process.env.KNIGHTCODE_CONFIG_DIR = tmpConfigDir
+  })
+  afterEach(() => {
+    if (prevConfigDir === undefined) delete process.env.KNIGHTCODE_CONFIG_DIR
+    else process.env.KNIGHTCODE_CONFIG_DIR = prevConfigDir
+  })
+  afterAll(() => {
+    if (prevConfigDir === undefined) delete process.env.KNIGHTCODE_CONFIG_DIR
+    else process.env.KNIGHTCODE_CONFIG_DIR = prevConfigDir
+  })
+
+  test('save → getStored → restore round-trips the ledger for the same session', () => {
+    resetCostState()
+    addToTotalSessionCost(2.0, usage(120, 45), 'model-persist')
+    addToTotalLinesChanged(9, 4)
+    saveCurrentSessionCosts()
+
+    const sid = getSessionId()
+    const stored = getStoredSessionCosts(sid)
+    expect(stored).toBeDefined()
+    expect(stored?.totalCostUSD).toBeCloseTo(2.0, 10)
+    expect(stored?.totalLinesAdded).toBe(9)
+    expect(stored?.totalLinesRemoved).toBe(4)
+    expect(stored?.modelUsage?.['model-persist']?.inputTokens).toBe(120)
+    // derived context-window fields are recomputed, not persisted
+    expect(stored?.modelUsage?.['model-persist']?.contextWindow).toBeGreaterThan(
+      0,
+    )
+
+    // Mutate the live ledger, then restore should snap it back to the snapshot.
+    addToTotalSessionCost(5.0, usage(1, 1), 'model-persist')
+    expect(getTotalCost()).toBeCloseTo(7.0, 10)
+    expect(restoreCostStateForSession(sid)).toBe(true)
+    expect(getTotalCost()).toBeCloseTo(2.0, 10)
+  })
+
+  test('getStored returns undefined for a non-matching session id', () => {
+    resetCostState()
+    addToTotalSessionCost(1.0, usage(1, 1), 'model-x')
+    saveCurrentSessionCosts()
+    expect(getStoredSessionCosts('not-the-saved-session')).toBeUndefined()
+    expect(restoreCostStateForSession('not-the-saved-session')).toBe(false)
   })
 })

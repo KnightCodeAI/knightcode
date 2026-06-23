@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomBytes } from 'crypto'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { getOriginalCwd } from '../bootstrap/state.js'
 import { getKnightcodeConfigHomeDir } from './envUtils.js'
 import { getManagedFilePath } from './settings/managedPath.js'
@@ -128,6 +128,10 @@ export type GlobalConfig = {
   tungstenPanelVisible?: boolean
   /** Whether to auto-install the IDE extension when a supported IDE is found. */
   autoInstallIdeExtension?: boolean
+  /** Per-project config keyed by absolute project path (onboarding state, MCP
+   *  toggles, persisted session costs). Mirrors upstream's nesting of project
+   *  config inside the global config file so it survives across processes. */
+  projects?: Record<string, ProjectConfig>
 }
 
 export type EditorMode = 'emacs' | 'normal' | 'vim'
@@ -223,10 +227,10 @@ export function getOrCreateUserID(): string {
   return userID
 }
 
-// TODO: per-project config persistence (onboarding state, project history,
-// trust) lands with the config layer. This keeps an in-memory project config
-// keyed by cwd so onboarding bookkeeping works within a session; it is not yet
-// written to disk.
+// Per-project config (onboarding state, MCP toggles, persisted session costs).
+// Stored on disk inside the global config's `projects` map, keyed by absolute
+// project path, so it survives across processes (needed for --resume to restore
+// accumulated cost). Mirrors upstream's config nesting.
 export type ProjectConfig = {
   hasCompletedProjectOnboarding?: boolean
   projectOnboardingSeenCount: number
@@ -243,25 +247,76 @@ export type ProjectConfig = {
   hasKnightcodeMdExternalIncludesApproved?: boolean
   /** Whether the external-includes warning has already been shown this project. */
   hasKnightcodeMdExternalIncludesWarningShown?: boolean
+  // ── Persisted session cost/usage (written by cost-tracker on exit/switch,
+  //    read back on resume by restoreCostStateForSession). Keyed by the last
+  //    session that ran in this project so only a matching --resume restores. ──
+  /** Session id the cost figures below belong to. */
+  lastSessionId?: string
+  /** Total accumulated cost (USD) of the last session. */
+  lastCost?: number
+  /** Wall-clock duration (ms) of the last session. */
+  lastDuration?: number
+  /** Cumulative API request duration (ms) of the last session. */
+  lastAPIDuration?: number
+  /** Cumulative API request duration excluding retries (ms). */
+  lastAPIDurationWithoutRetries?: number
+  /** Cumulative in-tool duration (ms) of the last session. */
+  lastToolDuration?: number
+  /** Lines added/removed across the last session. */
+  lastLinesAdded?: number
+  lastLinesRemoved?: number
+  /** Aggregate token counts of the last session. */
+  lastTotalInputTokens?: number
+  lastTotalOutputTokens?: number
+  lastTotalCacheCreationInputTokens?: number
+  lastTotalCacheReadInputTokens?: number
+  lastTotalWebSearchRequests?: number
+  /** Per-model usage breakdown of the last session (context windows recomputed
+   *  on restore, so only the raw counts + cost are stored). */
+  lastModelUsage?: Record<string, StoredModelUsage>
   [key: string]: unknown
+}
+
+/** Per-model usage as persisted in project config (no derived fields). */
+export type StoredModelUsage = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  webSearchRequests: number
+  costUSD: number
 }
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   projectOnboardingSeenCount: 0,
 }
 
-const projectConfigByDir = new Map<string, ProjectConfig>()
+// Absolute, NFC-normalized key under which this project's config is stored in
+// the global config's `projects` map.
+function getProjectPathForConfig(): string {
+  return resolve(process.cwd()).normalize('NFC')
+}
 
 export function getCurrentProjectConfig(): ProjectConfig {
-  const cwd = process.cwd().normalize('NFC')
-  return projectConfigByDir.get(cwd) ?? { ...DEFAULT_PROJECT_CONFIG }
+  const projects = getGlobalConfig().projects
+  return projects?.[getProjectPathForConfig()] ?? { ...DEFAULT_PROJECT_CONFIG }
 }
 
 export function saveCurrentProjectConfig(
   updater: (current: ProjectConfig) => ProjectConfig,
 ): void {
-  const cwd = process.cwd().normalize('NFC')
-  projectConfigByDir.set(cwd, updater(getCurrentProjectConfig()))
+  const absolutePath = getProjectPathForConfig()
+  saveGlobalConfig(current => {
+    const currentProjectConfig =
+      current.projects?.[absolutePath] ?? DEFAULT_PROJECT_CONFIG
+    const newProjectConfig = updater(currentProjectConfig)
+    // No-op when the updater returns the same reference (matches upstream).
+    if (newProjectConfig === currentProjectConfig) return current
+    return {
+      ...current,
+      projects: { ...current.projects, [absolutePath]: newProjectConfig },
+    }
+  })
 }
 
 // TODO: the workspace-trust gate lands with the trust dialog. A local BYOK

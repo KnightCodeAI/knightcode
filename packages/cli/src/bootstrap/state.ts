@@ -244,7 +244,7 @@ export function addToTurnClassifierDuration(_duration: number): void {}
 // cost-tracker.addToTotalSessionCost in services/api). In-memory for the live
 // session; cross-session persistence to project config lands with the
 // session-storage layer (setCostStateForRestore below seeds it on resume).
-const sessionStartTimeMs = Date.now()
+let sessionStartTimeMs = Date.now()
 let totalCostUSD = 0
 let totalLinesAdded = 0
 let totalLinesRemoved = 0
@@ -860,5 +860,10 @@ export function setCostStateForRestore(state: {
     for (const [model, usage] of Object.entries(state.modelUsage)) {
       modelUsageMap[model] = { ...makeUsageEntry(), ...usage }
     }
+  }
+  // Back-date the session start so getTotalDuration() keeps accumulating wall
+  // time from where the prior (resumed) session left off, mirroring upstream.
+  if (state.lastDuration && state.lastDuration > 0) {
+    sessionStartTimeMs = Date.now() - state.lastDuration
   }
 }
