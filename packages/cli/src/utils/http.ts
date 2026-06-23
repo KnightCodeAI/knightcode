@@ -19,3 +19,12 @@ export function getUserAgent(): string {
 export function getMCPUserAgent(): string {
   return getUserAgent()
 }
+
+/**
+ * User-Agent for WebFetch requests to arbitrary sites. The descriptive prefix
+ * lets site operators distinguish user-initiated local CLI fetches from other
+ * automated traffic when matching robots.txt.
+ */
+export function getWebFetchUserAgent(): string {
+  return `Knightcode-User (${getUserAgent()})`
+}

@@ -14,6 +14,7 @@ import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
 import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
 import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
+import { WebFetchTool } from './tools/WebFetchTool/WebFetchTool.js'
 import { getDenyRules } from './utils/permissions/permissions.js'
 import { isEnvTruthy } from './utils/envUtils.js'
 import { getPlatform } from './utils/platform.js'
@@ -57,6 +58,7 @@ export function getAllBaseTools(): Tools {
     NotebookEditTool,
     TodoWriteTool,
     SkillTool,
+    WebFetchTool,
     ListMcpResourcesTool,
     ReadMcpResourceTool,
     // Include ToolSearchTool when tool search might be enabled (optimistic check).
