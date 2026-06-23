@@ -15,6 +15,7 @@ import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResour
 import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
 import { getDenyRules } from './utils/permissions/permissions.js'
+import { isEnvTruthy } from './utils/envUtils.js'
 import { getPlatform } from './utils/platform.js'
 import { isToolSearchEnabledOptimistic } from './utils/toolSearch.js'
 
@@ -85,11 +86,33 @@ export function filterToolsByDenyRules<T extends { name: string }>(
 /**
  * Built-in tools for a permission context: blanket-denied tools removed, then
  * tools whose isEnabled() is false filtered out.
+ *
+ * Simple mode (--bare / KNIGHTCODE_CODE_SIMPLE) restricts the surface to
+ * Bash, Read, and Edit. (Upstream's REPL-mode and coordinator sub-branches are
+ * omitted: KnightCode ships no REPLTool in the base set and coordinator mode is
+ * disabled, so neither path is reachable here.)
  */
 export function getTools(permissionContext: ToolPermissionContext): Tools {
+  if (isEnvTruthy(process.env.KNIGHTCODE_CODE_SIMPLE)) {
+    const simpleTools: Tool[] = [BashTool, FileReadTool, FileEditTool]
+    return filterToolsByDenyRules(simpleTools, permissionContext)
+  }
   const allowed = filterToolsByDenyRules(getAllBaseTools(), permissionContext)
   const isEnabled = allowed.map(tool => tool.isEnabled())
   return allowed.filter((_, i) => isEnabled[i])
+}
+
+/**
+ * All tools — built-ins plus MCP tools — without cache-stable sorting or
+ * dedup. Preferred when the complete list matters (token counting, tool-search
+ * thresholds). Use getTools() when only built-ins are needed; use
+ * assembleToolPool() for the cache-stable, deduplicated model-facing pool.
+ */
+export function getMergedTools(
+  permissionContext: ToolPermissionContext,
+  mcpTools: Tools,
+): Tools {
+  return [...getTools(permissionContext), ...mcpTools]
 }
 
 // The shared pure function REPL and runAgent both use to build the final tool
