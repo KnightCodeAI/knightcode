@@ -422,6 +422,20 @@ export function getHasDevChannels(): boolean {
   return false
 }
 
+// Question-preview format for the AskUserQuestion tool: controls whether an
+// option's optional `preview` field is rendered as markdown or HTML, and
+// whether the matching preview guidance is appended to the tool's prompt.
+// Defaults to undefined (no preview guidance — an SDK consumer that hasn't
+// opted in may not render the field); main.tsx seeds 'markdown' for the
+// interactive CLI.
+let questionPreviewFormat: 'markdown' | 'html' | undefined
+export function getQuestionPreviewFormat(): 'markdown' | 'html' | undefined {
+  return questionPreviewFormat
+}
+export function setQuestionPreviewFormat(format: 'markdown' | 'html'): void {
+  questionPreviewFormat = format
+}
+
 // The app-state model selection is mirrored here so non-React code (e.g. the
 // API layer) can read the active model override. Tracked but not yet consulted
 // by the model resolver until that seam lands.

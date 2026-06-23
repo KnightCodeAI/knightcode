@@ -1,6 +1,7 @@
 import uniqBy from 'lodash-es/uniqBy.js'
 import type { Tool, ToolPermissionContext, Tools } from './Tool.js'
 import { AgentTool } from './tools/AgentTool/AgentTool.js'
+import { AskUserQuestionTool } from './tools/AskUserQuestionTool/AskUserQuestionTool.js'
 import { BashTool } from './tools/BashTool/BashTool.js'
 import { EnterPlanModeTool } from './tools/EnterPlanModeTool/EnterPlanModeTool.js'
 import { ExitPlanModeV2Tool } from './tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
@@ -61,6 +62,7 @@ export function getAllBaseTools(): Tools {
     TodoWriteTool,
     SkillTool,
     WebFetchTool,
+    AskUserQuestionTool,
     EnterPlanModeTool,
     ExitPlanModeV2Tool,
     ListMcpResourcesTool,

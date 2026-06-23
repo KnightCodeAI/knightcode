@@ -4,6 +4,7 @@ import { render, createRoot } from './tui.js'
 import { launchRepl } from './replLauncher.js'
 import { hasKnightcodeApiKeyAuth } from './utils/auth.js'
 import { getDefaultAppState } from './state/AppStateStore.js'
+import { setQuestionPreviewFormat } from './bootstrap/state.js'
 import { getEmptyToolPermissionContext } from './Tool.js'
 import { getTools } from './tools.js'
 import { getCommands } from './commands.js'
@@ -16,6 +17,16 @@ if (!hasKnightcodeApiKeyAuth()) {
   const instance = await render(<MissingKeyNotice />)
   await instance.waitUntilExit()
 } else {
+  // Seed the AskUserQuestion preview format. The TUI renders option previews,
+  // so default the interactive CLI to 'markdown' (upstream does the same for
+  // clientType 'cli'); honor an explicit env override when set.
+  const previewFormat = process.env.KNIGHTCODE_CODE_QUESTION_PREVIEW_FORMAT
+  if (previewFormat === 'markdown' || previewFormat === 'html') {
+    setQuestionPreviewFormat(previewFormat)
+  } else {
+    setQuestionPreviewFormat('markdown')
+  }
+
   const root = await createRoot()
   const initialState = getDefaultAppState()
   const initialTools = [...getTools(getEmptyToolPermissionContext())]
