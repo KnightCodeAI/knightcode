@@ -40,6 +40,15 @@ export type CliOptions = {
   disableSlashCommands: boolean
   /** --strict-mcp-config. */
   strictMcpConfig: boolean
+  /** -c / --continue : resume the most recent conversation in this directory. */
+  continueSession: boolean
+  /**
+   * -r / --resume [value] : `true` opens the interactive picker, a string is a
+   * session id (UUID) or a custom-title search term. `undefined` when absent.
+   */
+  resume?: string | true
+  /** --fork-session : on resume, mint a fresh session id instead of reusing it. */
+  forkSession: boolean
 }
 
 /**
@@ -106,6 +115,23 @@ export function buildProgram(version: string): Command {
       new Option('--permission-mode <mode>', 'Permission mode for the session')
         .choices([...PERMISSION_MODES]),
     )
+    .option(
+      '-c, --continue',
+      'Continue the most recent conversation in the current directory',
+      () => true,
+    )
+    .option(
+      '-r, --resume [value]',
+      'Resume a conversation by session ID, or open the interactive picker ' +
+        '(optionally with a search term)',
+      value => value || true,
+    )
+    .option(
+      '--fork-session',
+      'When resuming, create a new session ID instead of reusing the original ' +
+        '(use with --resume or --continue)',
+      () => true,
+    )
   return program
 }
 
@@ -141,5 +167,11 @@ export function parseCliArgs(argv: string[], version = '0.0.0'): CliOptions {
     bare: opts.bare === true,
     disableSlashCommands: opts.disableSlashCommands === true,
     strictMcpConfig: opts.strictMcpConfig === true,
+    continueSession: opts.continue === true,
+    resume:
+      opts.resume === true || typeof opts.resume === 'string'
+        ? opts.resume
+        : undefined,
+    forkSession: opts.forkSession === true,
   }
 }

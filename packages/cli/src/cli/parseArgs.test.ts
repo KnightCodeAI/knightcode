@@ -79,6 +79,38 @@ describe('parseCliArgs', () => {
     expect(parseCliArgs(['-p']).print).toBe(true)
   })
 
+  test('resume defaults', () => {
+    const o = parseCliArgs([])
+    expect(o.continueSession).toBe(false)
+    expect(o.forkSession).toBe(false)
+    expect(o.resume).toBeUndefined()
+  })
+
+  test('-c / --continue maps to continueSession', () => {
+    expect(parseCliArgs(['-c']).continueSession).toBe(true)
+    expect(parseCliArgs(['--continue']).continueSession).toBe(true)
+  })
+
+  test('--fork-session is a boolean', () => {
+    expect(parseCliArgs(['--fork-session']).forkSession).toBe(true)
+  })
+
+  test('bare --resume / -r resolves to true (interactive picker)', () => {
+    expect(parseCliArgs(['--resume']).resume).toBe(true)
+    expect(parseCliArgs(['-r']).resume).toBe(true)
+  })
+
+  test('--resume with a value carries the session id / search term', () => {
+    expect(parseCliArgs(['--resume', 'abc-123']).resume).toBe('abc-123')
+    expect(parseCliArgs(['-r', 'my title']).resume).toBe('my title')
+  })
+
+  test('--continue and --fork-session combine', () => {
+    const o = parseCliArgs(['--continue', '--fork-session'])
+    expect(o.continueSession).toBe(true)
+    expect(o.forkSession).toBe(true)
+  })
+
   test('--help throws (handled by the caller) rather than returning', () => {
     expect(() => parseCliArgs(['--help'])).toThrow(CommanderError)
   })
