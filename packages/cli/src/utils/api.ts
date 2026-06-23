@@ -24,6 +24,11 @@ import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
 import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../tools/ExitPlanModeTool/constants.js'
 import type { AgentId } from '../types/ids.js'
+import {
+  getPlan,
+  getPlanFilePath,
+  persistFileSnapshotIfRemote,
+} from './plans.js'
 import { CLI_SYSPROMPT_PREFIXES } from '../constants/system.js'
 import { isAgentSwarmsEnabled } from './agentSwarmsEnabled.js'
 import {
@@ -409,14 +414,25 @@ export function splitSysPromptPrefix(
 }
 
 
-// TODO: per-tool input normalization (plan injection, Bash cwd stripping,
-// FileEdit legacy-field stripping) lands with the tool layer; inputs pass
-// through unchanged until then.
+// TODO: most per-tool input normalization (Bash cwd stripping, FileEdit
+// legacy-field stripping) lands with the tool layer; those inputs still pass
+// through unchanged. The ExitPlanMode plan-injection is wired since the tool
+// needs the approved plan recorded in the normalized input seen by hooks/SDK.
 export function normalizeToolInput<T extends Tool>(
-  _tool: T,
+  tool: T,
   input: z.infer<T['inputSchema']>,
-  _agentId?: AgentId,
+  agentId?: AgentId,
 ): z.infer<T['inputSchema']> {
+  if (tool.name === EXIT_PLAN_MODE_V2_TOOL_NAME) {
+    // Always inject plan content and file path for ExitPlanModeV2 so hooks/SDK
+    // get the plan. The V2 tool reads the plan from disk rather than input.
+    const plan = getPlan(agentId)
+    const planFilePath = getPlanFilePath(agentId)
+    void persistFileSnapshotIfRemote()
+    return plan !== null
+      ? ({ ...input, plan, planFilePath } as z.infer<T['inputSchema']>)
+      : input
+  }
   return input
 }
 

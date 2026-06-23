@@ -47,3 +47,8 @@ export function setPlanSlug(_sessionId: any, _slug: string): void {}
 export function clearAllPlanSlugs(): void {}
 export async function copyPlanForFork(..._args: any[]): Promise<void> {}
 export async function copyPlanForResume(..._args: any[]): Promise<void> {}
+
+// TODO: snapshotting the plan file to the remote/CCR store is a cloud-only path
+// (no remote sandbox under BYOK); ExitPlanMode calls this after writing an
+// edited plan to disk. No-op until the remote file-snapshot layer lands.
+export async function persistFileSnapshotIfRemote(): Promise<void> {}

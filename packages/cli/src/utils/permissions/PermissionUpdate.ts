@@ -1,16 +1,18 @@
-// TODO: applying permission-rule updates to the in-memory tool permission
-// context and persisting them to settings files is not implemented yet — it
-// depends on the settings persistence layer. These preserve the exact call
-// surface the permission dispatch uses, returning the context unchanged and
-// persisting nothing for now.
+// In-memory application of permission-rule updates to the tool permission
+// context is fully ported. Persisting updates to settings files is still
+// deferred (depends on the settings-write layer that isn't fully ported); the
+// persist* helpers preserve the call surface but write nothing for now.
 
 import { posix } from 'path'
 import type { ToolPermissionContext } from '../../Tool.js'
+import { logForDebugging } from '../debug.js'
+import { jsonStringify } from '../slowOperations.js'
 import type { PermissionRuleValue } from './PermissionRule.js'
 import type {
   PermissionUpdate,
   PermissionUpdateDestination,
 } from './PermissionUpdateSchema.js'
+import { permissionRuleValueToString } from './permissionRuleParser.js'
 import { toPosixPath } from './filesystem.js'
 
 // Build an "always allow reads under this directory" rule suggestion. Used by
@@ -34,18 +36,154 @@ export function createReadRuleSuggestion(
   }
 }
 
+/**
+ * Applies a single permission update to the context and returns the updated context.
+ */
 export function applyPermissionUpdate(
   context: ToolPermissionContext,
-  _update: PermissionUpdate,
+  update: PermissionUpdate,
 ): ToolPermissionContext {
-  return context
+  switch (update.type) {
+    case 'setMode':
+      logForDebugging(
+        `Applying permission update: Setting mode to '${update.mode}'`,
+      )
+      return {
+        ...context,
+        mode: update.mode,
+      }
+
+    case 'addRules': {
+      const ruleStrings = update.rules.map(rule =>
+        permissionRuleValueToString(rule),
+      )
+      logForDebugging(
+        `Applying permission update: Adding ${update.rules.length} ${update.behavior} rule(s) to destination '${update.destination}': ${jsonStringify(ruleStrings)}`,
+      )
+
+      // Determine which collection to update based on behavior
+      const ruleKind =
+        update.behavior === 'allow'
+          ? 'alwaysAllowRules'
+          : update.behavior === 'deny'
+            ? 'alwaysDenyRules'
+            : 'alwaysAskRules'
+
+      return {
+        ...context,
+        [ruleKind]: {
+          ...context[ruleKind],
+          [update.destination]: [
+            ...(context[ruleKind][update.destination] || []),
+            ...ruleStrings,
+          ],
+        },
+      }
+    }
+
+    case 'replaceRules': {
+      const ruleStrings = update.rules.map(rule =>
+        permissionRuleValueToString(rule),
+      )
+      logForDebugging(
+        `Replacing all ${update.behavior} rules for destination '${update.destination}' with ${update.rules.length} rule(s): ${jsonStringify(ruleStrings)}`,
+      )
+
+      const ruleKind =
+        update.behavior === 'allow'
+          ? 'alwaysAllowRules'
+          : update.behavior === 'deny'
+            ? 'alwaysDenyRules'
+            : 'alwaysAskRules'
+
+      return {
+        ...context,
+        [ruleKind]: {
+          ...context[ruleKind],
+          [update.destination]: ruleStrings, // Replace all rules for this source
+        },
+      }
+    }
+
+    case 'addDirectories': {
+      logForDebugging(
+        `Applying permission update: Adding ${update.directories.length} director${update.directories.length === 1 ? 'y' : 'ies'} with destination '${update.destination}': ${jsonStringify(update.directories)}`,
+      )
+      const newAdditionalDirs = new Map(context.additionalWorkingDirectories)
+      for (const directory of update.directories) {
+        newAdditionalDirs.set(directory, {
+          path: directory,
+          source: update.destination,
+        })
+      }
+      return {
+        ...context,
+        additionalWorkingDirectories: newAdditionalDirs,
+      }
+    }
+
+    case 'removeRules': {
+      const ruleStrings = update.rules.map(rule =>
+        permissionRuleValueToString(rule),
+      )
+      logForDebugging(
+        `Applying permission update: Removing ${update.rules.length} ${update.behavior} rule(s) from source '${update.destination}': ${jsonStringify(ruleStrings)}`,
+      )
+
+      const ruleKind =
+        update.behavior === 'allow'
+          ? 'alwaysAllowRules'
+          : update.behavior === 'deny'
+            ? 'alwaysDenyRules'
+            : 'alwaysAskRules'
+
+      // Filter out the rules to be removed
+      const existingRules = context[ruleKind][update.destination] || []
+      const rulesToRemove = new Set(ruleStrings)
+      const filteredRules = existingRules.filter(
+        rule => !rulesToRemove.has(rule),
+      )
+
+      return {
+        ...context,
+        [ruleKind]: {
+          ...context[ruleKind],
+          [update.destination]: filteredRules,
+        },
+      }
+    }
+
+    case 'removeDirectories': {
+      logForDebugging(
+        `Applying permission update: Removing ${update.directories.length} director${update.directories.length === 1 ? 'y' : 'ies'}: ${jsonStringify(update.directories)}`,
+      )
+      const newAdditionalDirs = new Map(context.additionalWorkingDirectories)
+      for (const directory of update.directories) {
+        newAdditionalDirs.delete(directory)
+      }
+      return {
+        ...context,
+        additionalWorkingDirectories: newAdditionalDirs,
+      }
+    }
+
+    default:
+      return context
+  }
 }
 
+/**
+ * Applies multiple permission updates to the context and returns the updated context.
+ */
 export function applyPermissionUpdates(
   context: ToolPermissionContext,
-  _updates: PermissionUpdate[],
+  updates: PermissionUpdate[],
 ): ToolPermissionContext {
-  return context
+  let updatedContext = context
+  for (const update of updates) {
+    updatedContext = applyPermissionUpdate(updatedContext, update)
+  }
+  return updatedContext
 }
 
 export function persistPermissionUpdates(_updates: PermissionUpdate[]): void {}
