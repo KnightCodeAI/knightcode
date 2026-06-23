@@ -174,8 +174,10 @@ export type SystemCompactBoundaryMessage = SystemMessageBase & {
   content: string
   level: SystemMessageLevel
   compactMetadata: CompactMetadata
-  /** Preserves the logical parent when compaction rewrites history. */
-  logicalParentUuid?: UUID
+  /** Preserves the logical parent when compaction rewrites history.
+   * Nullable: parentUuid is nulled at a compact boundary and the logical
+   * parent it replaced may itself be null (chain root). */
+  logicalParentUuid?: UUID | null
 }
 
 export type SystemMicrocompactBoundaryMessage = SystemMessageBase & {

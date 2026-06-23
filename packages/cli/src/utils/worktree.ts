@@ -8,6 +8,10 @@ export type WorktreeSession = {
   worktreeBranch: string
   originalCwd: string
   originalBranch: string
+  originalHeadCommit?: string
+  sessionId: string
+  tmuxSessionName?: string
+  hookBased?: boolean
   creationDurationMs?: number
   usedSparsePaths?: boolean
 }

@@ -71,6 +71,16 @@ type State = {
   userMsgOptIn: boolean
   // Epoch ms of the user's last interaction; feeds the idle notifier.
   lastInteractionTime: number
+  // Project dir the active session's transcript lives under. null = derive
+  // from originalCwd. Set atomically with sessionId by switchSession so
+  // cross-project/worktree resume reads the right transcript dir.
+  sessionProjectDir: string | null
+  // Per-session plan slug (plan-mode → implementation lineage). Keyed by
+  // sessionId; consumed by session-storage when stamping transcript entries.
+  planSlugCache: Map<string, string>
+  // Correlation id for the current user prompt; stamped onto transcript
+  // user messages so a turn's entries can be grouped on resume.
+  promptId: string | null
 }
 
 // Resolve symlinks in the launch cwd so session-storage paths stay canonical
@@ -123,6 +133,9 @@ const STATE: State = {
   agentColorMap: new Map(),
   userMsgOptIn: false,
   lastInteractionTime: 0,
+  sessionProjectDir: null,
+  planSlugCache: new Map(),
+  promptId: null,
 }
 
 const SLOW_OPERATION_TTL_MS = 5 * 60 * 1000
@@ -611,9 +624,11 @@ export function getInvokedSkillsForAgent(
   return filtered
 }
 
-// TODO: the per-prompt id is a tracing correlation handle; tracing is out of
-// scope, so recording it is a no-op until (if ever) a consumer needs it.
-export function setPromptId(_id: string | null): void {}
+// Records the current prompt's correlation id. Session-storage stamps it onto
+// transcript user messages so a turn's entries can be grouped on resume.
+export function setPromptId(id: string | null): void {
+  STATE.promptId = id
+}
 
 // Drives the one-time plan_mode_exit attachment latch from a mode transition,
 // so the next turn can tell the model plan mode is no longer active. Toggling
@@ -741,16 +756,40 @@ const sessionSwitched = createSignal<[SessionId]>()
 
 export function switchSession(
   sessionId: SessionId,
-  _projectDir: string | null = null,
+  projectDir: string | null = null,
 ): void {
+  // Drop the outgoing session's plan slug — it doesn't carry to the new one.
+  STATE.planSlugCache.delete(STATE.sessionId)
   STATE.sessionId = sessionId
+  STATE.sessionProjectDir = projectDir
   sessionSwitched.emit(sessionId)
+}
+
+/** Project dir the active session's transcript lives under (worktree/cross-
+ * project resume), or null to derive from originalCwd. */
+export function getSessionProjectDir(): string | null {
+  return STATE.sessionProjectDir
+}
+
+/** Per-session plan slug map, keyed by sessionId. */
+export function getPlanSlugCache(): Map<string, string> {
+  return STATE.planSlugCache
+}
+
+/** Correlation id for the current user prompt (used to group transcript
+ * entries on resume). */
+export function getPromptId(): string | null {
+  return STATE.promptId
 }
 export function regenerateSessionId(
   _options: { setCurrentAsParent?: boolean } = {},
 ): SessionId {
+  // New session starts in its own project (originalCwd-derived) with no
+  // inherited plan slug.
+  STATE.planSlugCache.delete(STATE.sessionId)
   const id = asSessionId(randomUUID())
   STATE.sessionId = id
+  STATE.sessionProjectDir = null
   sessionSwitched.emit(id)
   return id
 }
