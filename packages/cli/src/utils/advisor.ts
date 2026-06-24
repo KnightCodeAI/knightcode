@@ -69,7 +69,16 @@ export function isAdvisorEnabled(): boolean {
 }
 
 export function canUserConfigureAdvisor(): boolean {
-  return isAdvisorEnabled() && (getAdvisorConfig().canUserConfigure ?? false)
+  if (isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_ADVISOR_TOOL)) {
+    return false
+  }
+  // When the first-party server advisor is live (growthbook-gated), defer to
+  // its own configurability flag. Under BYOK that gate is off, and the local
+  // client-side advisor is always user-configurable.
+  if (isAdvisorEnabled()) {
+    return getAdvisorConfig().canUserConfigure ?? false
+  }
+  return true
 }
 
 export function getExperimentAdvisorModels():
@@ -87,6 +96,13 @@ export function getExperimentAdvisorModels():
 // @[MODEL LAUNCH]: Add the new model if it supports the advisor tool.
 // Checks whether the main loop model supports calling the advisor tool.
 export function modelSupportsAdvisor(model: string): boolean {
+  // BYOK: the client-side advisor only reads the transcript and queries a
+  // separate reviewer model — it needs no server-side tool capability, so any
+  // main-loop model can drive it. The strict model check applies only when the
+  // first-party server tool is live.
+  if (!isAdvisorEnabled()) {
+    return true
+  }
   const m = model.toLowerCase()
   return (
     m.includes('opus-4-6') ||
@@ -97,12 +113,41 @@ export function modelSupportsAdvisor(model: string): boolean {
 
 // @[MODEL LAUNCH]: Add the new model if it can serve as an advisor model.
 export function isValidAdvisorModel(model: string): boolean {
+  // BYOK: any resolvable model the user has can serve as the reviewer model.
+  // The strict allowlist applies only when the first-party server tool is live.
+  if (!isAdvisorEnabled()) {
+    return model.trim().length > 0
+  }
   const m = model.toLowerCase()
   return (
     m.includes('opus-4-6') ||
     m.includes('sonnet-4-6') ||
     process.env.USER_TYPE === 'ant'
   )
+}
+
+/** The user-configured advisor/reviewer model (via `/advisor <model>`), if any. */
+export function getConfiguredAdvisorModel(): string | undefined {
+  return getInitialSettings().advisorModel
+}
+
+/**
+ * Whether the BYOK client-side advisor tool should be offered to the model.
+ * Distinct from {@link isAdvisorEnabled} (the first-party *server* tool): the
+ * client advisor runs only under BYOK and only once a reviewer model is set
+ * via `/advisor <model>`.
+ */
+export function isClientAdvisorEnabled(): boolean {
+  if (isEnvTruthy(process.env.KNIGHTCODE_CODE_DISABLE_ADVISOR_TOOL)) {
+    return false
+  }
+  // When the first-party server advisor is live, it handles the feature and the
+  // local client tool stands down. Under BYOK that gate is off, so the client
+  // tool is the active path — enabled once a reviewer model is configured.
+  if (isAdvisorEnabled()) {
+    return false
+  }
+  return Boolean(getConfiguredAdvisorModel())
 }
 
 export function getInitialAdvisorSetting(): string | undefined {

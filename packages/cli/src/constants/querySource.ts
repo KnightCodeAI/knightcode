@@ -11,6 +11,7 @@ export type QuerySource =
   | 'agent:default'
   | 'agent_creation'
   | 'agent_summary'
+  | 'advisor'
   | 'auto_dream'
   | 'auto_mode'
   | 'auto_mode_critique'

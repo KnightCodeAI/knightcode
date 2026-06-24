@@ -1,5 +1,6 @@
 import uniqBy from 'lodash-es/uniqBy.js'
 import type { Tool, ToolPermissionContext, Tools } from './Tool.js'
+import { AdvisorTool } from './tools/AdvisorTool/AdvisorTool.js'
 import { AgentTool } from './tools/AgentTool/AgentTool.js'
 import { AskUserQuestionTool } from './tools/AskUserQuestionTool/AskUserQuestionTool.js'
 import { BashTool } from './tools/BashTool/BashTool.js'
@@ -62,6 +63,9 @@ export function getAllBaseTools(): Tools {
     TodoWriteTool,
     SkillTool,
     WebFetchTool,
+    // Client-side advisor reconstruction — self-gates via isClientAdvisorEnabled()
+    // (only active under BYOK once a reviewer model is set with /advisor).
+    AdvisorTool,
     AskUserQuestionTool,
     EnterPlanModeTool,
     ExitPlanModeV2Tool,
