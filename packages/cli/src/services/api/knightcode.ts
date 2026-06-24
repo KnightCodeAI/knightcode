@@ -433,15 +433,34 @@ function configureEffortParams(
   betas: string[],
   model: string,
 ): void {
-  if (!modelSupportsEffort(model) || 'effort' in outputConfig) {
+  if (!modelSupportsEffort(model)) {
+    return
+  }
+
+  if (model.includes('/')) {
+    // OpenRouter reasoning control. `none` disables reasoning; numeric efforts
+    // are a first-party-only concept and are not forwarded here. Any string
+    // effort that reaches this point has already been clamped to the model's
+    // supported set by resolveAppliedEffort().
+    if (effortValue === 'none') {
+      extraBodyParams.reasoning = { enabled: false }
+    } else if (typeof effortValue === 'string') {
+      extraBodyParams.reasoning = { effort: effortValue }
+    }
+    return
+  }
+
+  if ('effort' in outputConfig) {
     return
   }
 
   if (effortValue === undefined) {
     betas.push(EFFORT_BETA_HEADER)
   } else if (typeof effortValue === 'string') {
-    // Send string effort level as is
-    outputConfig.effort = effortValue
+    // Send string effort level as is. resolveAppliedEffort() has already
+    // clamped this to the 1P model's supported set (low/medium/high/max), so
+    // the widened EffortLevel union never carries an OpenRouter-only tier here.
+    outputConfig.effort = effortValue as BetaOutputConfig['effort']
     betas.push(EFFORT_BETA_HEADER)
   } else if (process.env.USER_TYPE === 'ant') {
     // Numeric effort override - ant-only (uses knightcode_internal)

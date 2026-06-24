@@ -396,7 +396,7 @@ function ModeIndicator({
 
   // Build parts array - exclude BackgroundTaskStatus when we have teammate pills
   // (teammate pills get their own row)
-  const parts = [
+  const parts: React.ReactNode[] = [
     // Remote session indicator
     ...(remoteSessionUrl
       ? [

@@ -56,7 +56,7 @@ import {
   useSetAppState,
   useAppStateStore,
 } from '../../state/AppState.js'
-import { ModelPicker } from '../ModelPicker.js'
+import { ModelBrowser } from '../ModelBrowser.js'
 import {
   modelDisplayString,
   isOpus1mMergeEnabled,
@@ -1825,11 +1825,15 @@ export function Config({
         </>
       ) : showSubmenu === 'Model' ? (
         <>
-          <ModelPicker
+          <ModelBrowser
             initial={mainLoopModel}
             onSelect={(model, _effort) => {
               isDirty.current = true
               onChangeMainModelConfig(model)
+              if (_effort !== undefined) {
+                updateSettingsForSource('userSettings', { effortLevel: _effort })
+                setAppState(prev => ({ ...prev, effortValue: _effort }))
+              }
               setShowSubmenu(null)
               setTabsHidden(false)
             }}
@@ -1837,13 +1841,6 @@ export function Config({
               setShowSubmenu(null)
               setTabsHidden(false)
             }}
-            showFastModeNotice={
-              isFastModeEnabled()
-                ? isFastMode &&
-                  isFastModeSupportedByModel(mainLoopModel) &&
-                  isFastModeAvailable()
-                : false
-            }
           />
           <Text dimColor>
             <Byline>
@@ -1859,10 +1856,8 @@ export function Config({
         </>
       ) : showSubmenu === 'TeammateModel' ? (
         <>
-          <ModelPicker
+          <ModelBrowser
             initial={globalConfig.teammateDefaultModel ?? null}
-            skipSettingsWrite
-            headerText="Default model for newly spawned teammates. The leader can override via the tool call's model parameter."
             onSelect={(model, _effort) => {
               setShowSubmenu(null)
               setTabsHidden(false)

@@ -4,7 +4,7 @@
  * Terminals on Windows do not implement the Unicode Bidi Algorithm,
  * so RTL text (Hebrew, Arabic, etc.) appears reversed. This module
  * applies the bidi algorithm to reorder ClusteredChar arrays from
- * logical order to visual order before the renderer's LTR cell placement loop.
+ * logical order to visual order before Ink's LTR cell placement loop.
  *
  * On macOS terminals (Terminal.app, iTerm2) bidi works natively.
  * Windows Terminal (including WSL) does not implement bidi

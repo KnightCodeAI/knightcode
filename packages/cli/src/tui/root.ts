@@ -1,10 +1,9 @@
-import { createCliRenderer, type CliRenderer } from '@opentui/core'
-import { createRoot as createReactRoot } from '@opentui/react'
-import { createElement, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { logForDebugging } from 'src/utils/debug.js'
 import { Stream } from 'stream'
-import App from './components/App.js'
 import type { FrameEvent } from './frame.js'
-import instances, { type TuiInstance } from './instances.js'
+import Ink, { type Options as InkOptions } from './ink.js'
+import instances from './instances.js'
 
 export type RenderOptions = {
   /**
@@ -25,18 +24,14 @@ export type RenderOptions = {
    */
   stderr?: NodeJS.WriteStream
   /**
-   * Configure whether to listen to Ctrl+C keyboard input and exit the app.
-   * This is needed in case `process.stdin` is in raw mode, because then
-   * Ctrl+C is ignored by default and process is expected to handle it
-   * manually.
+   * Configure whether Ink should listen to Ctrl+C keyboard input and exit the app. This is needed in case `process.stdin` is in raw mode, because then Ctrl+C is ignored by default and process is expected to handle it manually.
    *
    * @default true
    */
   exitOnCtrlC?: boolean
 
   /**
-   * Patch console methods to ensure console output doesn't mix with
-   * rendered output.
+   * Patch console methods to ensure console output doesn't mix with Ink output.
    *
    * @default true
    */
@@ -52,20 +47,20 @@ export type Instance = {
   /**
    * Replace previous root node with a new one or update props of the current root node.
    */
-  rerender: (node: ReactNode) => void
+  rerender: Ink['render']
   /**
-   * Manually unmount the whole app.
+   * Manually unmount the whole Ink app.
    */
-  unmount: () => void
+  unmount: Ink['unmount']
   /**
    * Returns a promise, which resolves when app is unmounted.
    */
-  waitUntilExit: () => Promise<void>
+  waitUntilExit: Ink['waitUntilExit']
   cleanup: () => void
 }
 
 /**
- * A managed root, similar to react-dom's createRoot API.
+ * A managed Ink root, similar to react-dom's createRoot API.
  * Separates instance creation from rendering so the same root
  * can be reused for multiple sequential screens.
  */
@@ -75,143 +70,27 @@ export type Root = {
   waitUntilExit: () => Promise<void>
 }
 
-type CreateInstanceOptions = Required<
-  Pick<RenderOptions, 'stdout' | 'stdin' | 'exitOnCtrlC'>
-> &
-  Pick<RenderOptions, 'patchConsole'>
-
-async function createInstance(
-  options: CreateInstanceOptions,
-): Promise<TuiInstance> {
-  const renderer: CliRenderer = await createCliRenderer({
-    stdin: options.stdin,
-    stdout: options.stdout,
-    exitOnCtrlC: false, // ctrl+c is handled in App so exit() resolves waitUntilExit
-  })
-
-  const reactRoot = createReactRoot(renderer)
-
-  let resolveExit: (value?: unknown) => void
-  let rejectExit: (error: Error) => void
-  const exitPromise = new Promise((resolve, reject) => {
-    resolveExit = resolve
-    rejectExit = reject
-  })
-
-  let exited = false
-  const instance: TuiInstance = {
-    render(node: ReactNode) {
-      reactRoot.render(
-        createElement(
-          App,
-          {
-            renderer,
-            exitOnCtrlC: options.exitOnCtrlC,
-            exit: (error?: Error) => {
-              if (exited) return
-              exited = true
-              reactRoot.unmount()
-              renderer.destroy()
-              instances.delete(options.stdout)
-              if (error) {
-                rejectExit(error)
-              } else {
-                resolveExit()
-              }
-            },
-          },
-          node,
-        ),
-      )
-    },
-    unmount() {
-      if (exited) return
-      exited = true
-      reactRoot.unmount()
-      renderer.destroy()
-      instances.delete(options.stdout)
-      resolveExit()
-    },
-    waitUntilExit() {
-      return exitPromise.then(() => undefined)
-    },
-    clear() {
-      renderer.console.clear()
-    },
-    invalidatePrevFrame() {
-      // TODO: OpenTUI diffs frames internally and exposes no prev-frame
-      // contamination hook, so the overlay-unmount ghost-cell guard is a no-op
-      // for now. Overlays still render correctly; only the one-shot full-repaint
-      // optimization on tall-overlay teardown is deferred.
-    },
-    forceRedraw() {
-      // Clear the terminal and ask the renderer to repaint from scratch.
-      renderer.console.clear()
-      renderer.requestRender()
-    },
-    enterAlternateScreen() {
-      // Terminal editor takes over: suspend the renderer (releases the screen
-      // and stdin) so the editor owns the terminal until exitAlternateScreen().
-      renderer.suspend()
-    },
-    exitAlternateScreen() {
-      // Reclaim the terminal and force a full repaint from scratch.
-      renderer.resume()
-    },
-    pause() {
-      renderer.pause()
-    },
-    resume() {
-      renderer.resume()
-    },
-    suspendStdin() {
-      // TODO: OpenTUI has no public granular stdin-only release; suspend() (used
-      // by the alt-screen path) covers full handoff, and pause() already halts
-      // rendering for the GUI-editor path, so this is a no-op for now.
-    },
-    resumeStdin() {
-      // TODO: paired no-op with suspendStdin() — see above.
-    },
-    setAltScreenActive(_active: boolean, _mouseTracking?: boolean) {
-      // TODO: the fullscreen layout writes the alt-screen escape sequences
-      // directly (see components/AlternateScreen); OpenTUI manages its own
-      // viewport, so tracking the flag here is a no-op until the renderer needs
-      // it for sizing/input routing.
-    },
-    clearTextSelection() {
-      // TODO: wire to the renderer's native selection clear once selection is
-      // wired (see tui/selection); no selection state to clear yet.
-    },
-    setSearchHighlight(_query: string) {
-      // TODO: transcript search highlighting is not implemented in the OpenTUI
-      // renderer; the query is dropped and no cells are highlighted.
-    },
-    scanElementSubtree(_el: unknown): any[] {
-      return []
-    },
-    setSearchPositions(_state: unknown) {},
-  }
-
-  return instance
-}
-
-const wrappedRender = async (
+/**
+ * Mount a component and render the output.
+ */
+export const renderSync = (
   node: ReactNode,
   options?: NodeJS.WriteStream | RenderOptions,
-): Promise<Instance> => {
+): Instance => {
   const opts = getOptions(options)
-  const fullOptions: CreateInstanceOptions = {
-    stdout: opts.stdout ?? process.stdout,
-    stdin: opts.stdin ?? process.stdin,
-    exitOnCtrlC: opts.exitOnCtrlC ?? true,
-    patchConsole: opts.patchConsole ?? true,
+  const inkOptions: InkOptions = {
+    stdout: process.stdout,
+    stdin: process.stdin,
+    stderr: process.stderr,
+    exitOnCtrlC: true,
+    patchConsole: true,
+    ...opts,
   }
 
-  let instance = instances.get(fullOptions.stdout)
-  if (!instance) {
-    instance = await createInstance(fullOptions)
-    instances.set(fullOptions.stdout, instance)
-  }
+  const instance: Ink = getInstance(
+    inkOptions.stdout,
+    () => new Ink(inkOptions),
+  )
 
   instance.render(node)
 
@@ -221,30 +100,52 @@ const wrappedRender = async (
       instance.unmount()
     },
     waitUntilExit: instance.waitUntilExit,
-    cleanup: () => instances.delete(fullOptions.stdout),
+    cleanup: () => instances.delete(inkOptions.stdout),
   }
+}
+
+const wrappedRender = async (
+  node: ReactNode,
+  options?: NodeJS.WriteStream | RenderOptions,
+): Promise<Instance> => {
+  // Preserve the microtask boundary that `await loadYoga()` used to provide.
+  // Without it, the first render fires synchronously before async startup work
+  // (e.g. useReplBridge notification state) settles, and the subsequent Static
+  // write overwrites scrollback instead of appending below the logo.
+  await Promise.resolve()
+  const instance = renderSync(node, options)
+  logForDebugging(
+    `[render] first ink render: ${Math.round(process.uptime() * 1000)}ms since process start`,
+  )
+  return instance
 }
 
 export default wrappedRender
 
 /**
- * Create a root without rendering anything yet.
+ * Create an Ink root without rendering anything yet.
  * Like react-dom's createRoot — call root.render() to mount a tree.
  */
 export async function createRoot({
   stdout = process.stdout,
   stdin = process.stdin,
+  stderr = process.stderr,
   exitOnCtrlC = true,
   patchConsole = true,
+  onFrame,
 }: RenderOptions = {}): Promise<Root> {
-  const instance = await createInstance({
+  // See wrappedRender — preserve microtask boundary from the old WASM await.
+  await Promise.resolve()
+  const instance = new Ink({
     stdout,
     stdin,
+    stderr,
     exitOnCtrlC,
     patchConsole,
+    onFrame,
   })
 
-  // Register in the instances map so that code that looks up the live
+  // Register in the instances map so that code that looks up the Ink
   // instance by stdout (e.g. external editor pause/resume) can find it.
   instances.set(stdout, instance)
 
@@ -266,4 +167,18 @@ const getOptions = (
   }
 
   return stdout
+}
+
+const getInstance = (
+  stdout: NodeJS.WriteStream,
+  createInstance: () => Ink,
+): Ink => {
+  let instance = instances.get(stdout)
+
+  if (!instance) {
+    instance = createInstance()
+    instances.set(stdout, instance)
+  }
+
+  return instance
 }

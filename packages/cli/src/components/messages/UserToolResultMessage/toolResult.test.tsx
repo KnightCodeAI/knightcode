@@ -1,15 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../../tui/testing'
 import React from 'react'
-import TuiApp from '../../../tui/components/App'
 import { AppStateProvider } from '../../../state/AppState'
 import { ThemeProvider } from '../../design-system/ThemeProvider'
 import { UserToolErrorMessage } from './UserToolErrorMessage'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -37,9 +35,8 @@ function Wrap({ children }: { children: React.ReactNode }) {
 
 describe('tool result renderer', () => {
   test('renders a tool error result through the fallback view', async () => {
-    const h = await createTestRenderer({ width: 60, height: 8 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 60, height: 8 })
+    h.render(
         <Wrap>
           <UserToolErrorMessage
             progressMessagesForMessage={[]}
@@ -54,7 +51,7 @@ describe('tool result renderer', () => {
             verbose={false}
           />
         </Wrap>
-      </TuiApp>,
+      ,
     )
     const frame = await waitForFrame(h, f =>
       f.replace(/\s/g, '').includes('boomwentthetool'),

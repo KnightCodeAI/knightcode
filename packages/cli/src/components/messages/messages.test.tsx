@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../design-system/ThemeProvider'
 import { AssistantTextMessage } from './AssistantTextMessage'
@@ -10,7 +8,7 @@ import { UserTextMessage } from './UserTextMessage'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -38,9 +36,8 @@ function Wrap({ children }: { children: React.ReactNode }) {
 
 describe('message renderers', () => {
   test('AssistantTextMessage renders the assistant text', async () => {
-    const h = await createTestRenderer({ width: 50, height: 6 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 50, height: 6 })
+    h.render(
         <Wrap>
           <AssistantTextMessage
             param={{ type: 'text', text: 'assistant reply here' }}
@@ -49,7 +46,7 @@ describe('message renderers', () => {
             verbose={false}
           />
         </Wrap>
-      </TuiApp>,
+      ,
     )
     const frame = await waitForFrame(h, f =>
       f.replace(/\s/g, '').includes('assistantreplyhere'),
@@ -58,9 +55,8 @@ describe('message renderers', () => {
   })
 
   test('UserTextMessage renders the user text', async () => {
-    const h = await createTestRenderer({ width: 50, height: 6 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 50, height: 6 })
+    h.render(
         <Wrap>
           <UserTextMessage
             param={{ type: 'text', text: 'a user question' }}
@@ -68,7 +64,7 @@ describe('message renderers', () => {
             verbose={false}
           />
         </Wrap>
-      </TuiApp>,
+      ,
     )
     const frame = await waitForFrame(h, f =>
       f.replace(/\s/g, '').includes('auserquestion'),

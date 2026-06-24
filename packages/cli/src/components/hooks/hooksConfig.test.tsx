@@ -1,14 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../design-system/ThemeProvider'
 import { HooksConfigMenu } from './HooksConfigMenu'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -28,15 +26,14 @@ async function waitForFrame(
 
 describe('HooksConfigMenu', () => {
   test('renders the hook configuration dialog', async () => {
-    const h = await createTestRenderer({ width: 80, height: 20 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 80, height: 20 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <HooksConfigMenu toolNames={['Bash', 'Edit']} onExit={() => {}} />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
     // With hooks enabled (default), the menu opens on the event-selection step.
     const frame = await waitForFrame(h, f => f.includes('Hooks'))

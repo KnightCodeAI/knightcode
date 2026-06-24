@@ -1,14 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../design-system/ThemeProvider'
 import { MCPListPanel } from './MCPListPanel.js'
 import type { ServerInfo } from './types.js'
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -42,9 +40,8 @@ const server = {
 
 describe('MCPListPanel', () => {
   test('renders a configured server by name', async () => {
-    const h = await createTestRenderer({ width: 80, height: 20 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 80, height: 20 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <MCPListPanel
@@ -54,7 +51,7 @@ describe('MCPListPanel', () => {
             />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
     const frame = await waitForFrame(h, f => f.includes('github'))
     expect(frame).toContain('github')

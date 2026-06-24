@@ -12,7 +12,6 @@ import { GenerateStep } from './wizard-steps/GenerateStep.js'
 import { LocationStep } from './wizard-steps/LocationStep.js'
 import { MemoryStep } from './wizard-steps/MemoryStep.js'
 import { MethodStep } from './wizard-steps/MethodStep.js'
-import { ModelStep } from './wizard-steps/ModelStep.js'
 import { PromptStep } from './wizard-steps/PromptStep.js'
 import { ToolsStep } from './wizard-steps/ToolsStep.js'
 import { TypeStep } from './wizard-steps/TypeStep.js'
@@ -39,8 +38,8 @@ export function CreateAgentWizard({
     PromptStep, // 4
     DescriptionStep, // 5
     () => <ToolsStep tools={tools} />, // 6
-    ModelStep, // 7
-    ColorStep, // 8
+    // Model step removed — subagents always inherit the main-loop model.
+    ColorStep, // 7
     // MemoryStep is conditionally included based on GrowthBook gate
     ...(isAutoMemoryEnabled() ? [MemoryStep] : []),
     () => (

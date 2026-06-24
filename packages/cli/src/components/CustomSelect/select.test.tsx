@@ -1,15 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../design-system/ThemeProvider'
 import { Select } from './select'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -35,15 +33,14 @@ const OPTIONS = [
 
 describe('Select', () => {
   test('renders all options', async () => {
-    const h = await createTestRenderer({ width: 40, height: 8 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 40, height: 8 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <Select options={OPTIONS} onChange={() => {}} />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
 
     const frame = await waitForFrame(
@@ -60,15 +57,14 @@ describe('Select', () => {
   // which is wired by the REPL's keybinding setup (ported in a later task);
   // this asserts the focus state the select state machine produces on mount.
   test('focuses the first option by default', async () => {
-    const h = await createTestRenderer({ width: 40, height: 8 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 40, height: 8 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <Select options={OPTIONS} onChange={() => {}} />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
 
     const frame = await waitForFrame(h, f => f.includes('First'))

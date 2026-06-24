@@ -22,7 +22,7 @@ type Options = {
  * However, if user pastes text and it's more than one character, the callback will be called only once and the whole string will be passed as `input`.
  *
  * ```
- * import {useInput} from '../tui.js';
+ * import {useInput} from 'ink';
  *
  * const UserInput = () => {
  *   useInput((input, key) => {

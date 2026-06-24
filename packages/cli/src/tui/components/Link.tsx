@@ -18,11 +18,11 @@ export default function Link({
   const content = children ?? url
 
   if (supportsHyperlinks()) {
-    // Wrap in Text to ensure we're in a text context; the inner anchor
-    // emits an OSC 8 hyperlink around its content.
+    // Wrap in Text to ensure we're in a text context
+    // (ink-link is a text element like ink-text)
     return (
       <Text>
-        <a href={url}>{content}</a>
+        <ink-link href={url}>{content}</ink-link>
       </Text>
     )
   }

@@ -48,7 +48,7 @@ const TAB_STATUS_PRESETS: Record<
  *
  * Pass `null` to opt out. If a status was previously set, transitioning to
  * `null` emits CLEAR_TAB_STATUS so toggling off mid-session doesn't leave
- * a stale dot. Process-exit cleanup is handled by the renderer's unmount path.
+ * a stale dot. Process-exit cleanup is handled by ink.tsx's unmount path.
  */
 export function useTabStatus(kind: TabStatusKind | null): void {
   const writeRaw = useContext(TerminalWriteContext)

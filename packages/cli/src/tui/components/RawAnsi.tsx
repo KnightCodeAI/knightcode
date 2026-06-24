@@ -1,6 +1,4 @@
 import React from 'react'
-import { Ansi } from '../Ansi.js'
-import Box from './Box.js'
 
 type Props = {
   /**
@@ -8,26 +6,34 @@ type Props = {
    * (already wrapped to `width` by the producer) with ANSI escape codes inline.
    */
   lines: string[]
-  /** Column width the producer wrapped to. Fixed leaf width for layout. */
+  /** Column width the producer wrapped to. Sent to Yoga as the fixed leaf width. */
   width: number
 }
 
 /**
- * Render content that arrives as pre-wrapped ANSI-escaped lines.
+ * Bypass the <Ansi> → React tree → Yoga → squash → re-serialize roundtrip for
+ * content that is already terminal-ready.
  *
- * Upstream this bypassed the parse → layout → re-serialize roundtrip with a
- * raw screen-buffer write. OpenTUI owns the buffer here, so the lines go
- * through the same ANSI parser <Ansi> uses, pinned to the producer's width
- * so layout can't re-wrap them.
- * TODO: feed OpenTUI's text buffer directly once a raw-write API exists.
+ * Use this when an external renderer (e.g. the ColorDiff NAPI module) has
+ * already produced ANSI-escaped, width-wrapped output. A normal <Ansi> mount
+ * reparses that output into one React <Text> per style span, lays out each
+ * span as a Yoga flex child, then walks the tree to re-emit the same escape
+ * codes it was given. For a long transcript full of syntax-highlighted diffs
+ * that roundtrip is the dominant cost of the render.
+ *
+ * This component emits a single Yoga leaf with a constant-time measure func
+ * (width × lines.length) and hands the joined string straight to output.write(),
+ * which already splits on '\n' and parses ANSI into the screen buffer.
  */
 export function RawAnsi({ lines, width }: Props): React.ReactNode {
   if (lines.length === 0) {
     return null
   }
   return (
-    <Box width={width} height={lines.length} flexShrink={0}>
-      <Ansi>{lines.join('\n')}</Ansi>
-    </Box>
+    <ink-raw-ansi
+      rawText={lines.join('\n')}
+      rawWidth={width}
+      rawHeight={lines.length}
+    />
   )
 }

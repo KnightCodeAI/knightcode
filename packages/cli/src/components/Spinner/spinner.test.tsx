@@ -1,15 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
+import { createInkTestRenderer } from '../../tui/testing'
 import { ThemeProvider } from '../design-system/ThemeProvider'
 import { GlimmerMessage } from './GlimmerMessage'
 import { getDefaultCharacters, interpolateColor } from './utils'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -45,20 +43,18 @@ describe('Spinner suite', () => {
   })
 
   test('GlimmerMessage renders its message text', async () => {
-    const h = await createTestRenderer({ width: 40, height: 4 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
-        <ThemeProvider initialState="dark">
-          <GlimmerMessage
-            message="Thinking"
-            mode="thinking"
-            messageColor="suggestion"
-            glimmerIndex={0}
-            flashOpacity={1}
-            shimmerColor="suggestion"
-          />
-        </ThemeProvider>
-      </TuiApp>,
+    const h = createInkTestRenderer({ width: 40 })
+    h.render(
+      <ThemeProvider initialState="dark">
+        <GlimmerMessage
+          message="Thinking"
+          mode="thinking"
+          messageColor="suggestion"
+          glimmerIndex={0}
+          flashOpacity={1}
+          shimmerColor="suggestion"
+        />
+      </ThemeProvider>,
     )
 
     // Each grapheme renders as its own shimmer cell, so the message can wrap;

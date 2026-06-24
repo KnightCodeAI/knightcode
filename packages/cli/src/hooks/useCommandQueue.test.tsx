@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../tui/testing'
 import React from 'react'
-import TuiApp from '../tui/components/App'
 import { Text } from '../tui'
 import { AppStateProvider } from '../state/AppState'
 import { ThemeProvider } from '../components/design-system/ThemeProvider'
@@ -16,7 +14,7 @@ import { useCommandQueue } from './useCommandQueue'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -56,15 +54,14 @@ describe('useCommandQueue', () => {
   })
 
   test('reflects enqueued commands and drops the one consumed by dequeue', async () => {
-    const h = await createTestRenderer({ width: 40, height: 4 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 40, height: 4 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <QueueProbe />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
 
     // Starts empty.

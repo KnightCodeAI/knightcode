@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import * as React from 'react'
 import type { CommandResultDisplay } from '../../commands.js'
-import { ModelPicker } from '../../components/ModelPicker.js'
+import { ModelBrowser } from '../../components/ModelBrowser.js'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -29,6 +29,7 @@ import {
 } from '../../utils/model/model.js'
 import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
 import { validateModel } from '../../utils/model/validateModel.js'
+import { updateSettingsForSource } from '../../utils/settings/settings.js'
 
 function ModelPickerWrapper({
   onDone,
@@ -39,7 +40,6 @@ function ModelPickerWrapper({
   ) => void
 }): React.ReactNode {
   const mainLoopModel = useAppState(s => s.mainLoopModel)
-  const mainLoopModelForSession = useAppState(s => s.mainLoopModelForSession)
   const isFastMode = useAppState(s => s.fastMode)
   const setAppState = useSetAppState()
 
@@ -70,7 +70,13 @@ function ModelPickerWrapper({
       ...prev,
       mainLoopModel: model,
       mainLoopModelForSession: null,
+      ...(effort !== undefined && { effortValue: effort }),
     }))
+    // Persist the picked effort so it survives restarts, matching the Config
+    // and PromptInput model-pickers.
+    if (effort !== undefined) {
+      updateSettingsForSource('userSettings', { effortLevel: effort })
+    }
 
     let message = `Set model to ${chalk.bold(renderModelLabel(model))}`
     if (effort !== undefined) {
@@ -117,18 +123,11 @@ function ModelPickerWrapper({
   }
 
   return (
-    <ModelPicker
+    <ModelBrowser
       initial={mainLoopModel}
-      sessionModel={mainLoopModelForSession}
       onSelect={handleSelect}
       onCancel={handleCancel}
       isStandaloneCommand
-      showFastModeNotice={
-        isFastModeEnabled() &&
-        isFastMode &&
-        isFastModeSupportedByModel(mainLoopModel) &&
-        isFastModeAvailable()
-      }
     />
   )
 }

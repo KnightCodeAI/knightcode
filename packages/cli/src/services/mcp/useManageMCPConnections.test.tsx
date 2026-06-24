@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { Box, Text } from '../../tui'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../../components/design-system/ThemeProvider'
@@ -12,7 +10,7 @@ import {
   useMcpToggleEnabled,
 } from './MCPConnectionManager.js'
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -43,9 +41,8 @@ function Child(): React.ReactNode {
 
 describe('MCPConnectionManager', () => {
   test('provides the reconnect/toggle context to children with no servers configured', async () => {
-    const h = await createTestRenderer({ width: 60, height: 8 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 60, height: 8 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <MCPConnectionManager
@@ -56,7 +53,7 @@ describe('MCPConnectionManager', () => {
             </MCPConnectionManager>
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
     const frame = await waitForFrame(h, f => f.includes('mcp-context'))
     expect(frame).toContain('mcp-context-ok')

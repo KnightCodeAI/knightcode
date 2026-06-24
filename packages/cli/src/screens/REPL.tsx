@@ -52,7 +52,6 @@ import {
   stopPreventSleep,
 } from '../services/preventSleep.js'
 import { useTerminalNotification } from '../tui/useTerminalNotification.js'
-import { hasCursorUpViewportYankBug } from '../tui/terminal.js'
 import {
   createFileStateCacheWithSizeLimit,
   mergeFileStateCaches,
@@ -2007,7 +2006,14 @@ export function REPL({
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const reducedMotion =
     useAppState(s => s.settings.prefersReducedMotion) ?? false
-  const showStreamingText = !reducedMotion && !hasCursorUpViewportYankBug()
+  // Live streaming-text preview. This was previously force-disabled on Windows
+  // via hasCursorUpViewportYankBug() because the old Ink renderer redrew the
+  // in-progress line by moving the cursor up into scrollback, which conhost
+  // yanks the viewport for. The OpenTUI renderer doesn't do that — it repaints
+  // the live region in place (below committed scrollback) and never moves the
+  // cursor above the viewport — so the preview is safe to stream on every
+  // platform. Users who don't want it can still turn it off via reduced motion.
+  const showStreamingText = !reducedMotion
   const onStreamingText = useCallback(
     (f: (current: string | null) => string | null) => {
       if (!showStreamingText) return

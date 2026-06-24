@@ -1,13 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createTestRenderer } from "@opentui/core/testing";
-import { createRoot } from "@opentui/react";
+import { createInkTestRenderer } from './tui/testing'
 import React from "react";
 import { Box, Text, ThemeProvider } from "./tui";
-import TuiApp from "./tui/components/App";
 
 const tick = (ms = 25) => new Promise((resolve) => setTimeout(resolve, ms));
 
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>;
+type Harness = ReturnType<typeof createInkTestRenderer>;
 
 async function waitForFrame(
   h: Harness,
@@ -27,22 +25,21 @@ async function waitForFrame(
 
 describe("boot smoke", () => {
   test("a frame renders through the public barrel", async () => {
-    const h = await createTestRenderer({ width: 50, height: 8 });
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 50, height: 8 });
+    h.render(
         <ThemeProvider>
           <Box flexDirection="column" borderStyle="round" paddingX={1}>
             <Text bold>knightcode</Text>
             <Text dimColor>renderer up</Text>
           </Box>
         </ThemeProvider>
-      </TuiApp>,
+      ,
     );
 
     const frame = await waitForFrame(h, (f) => f.includes("knightcode"));
     expect(frame).toContain("renderer up");
     expect(frame).toContain("╭");
 
-    h.renderer.destroy();
+    h.unmount();
   });
 });

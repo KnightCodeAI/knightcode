@@ -3,36 +3,14 @@ import { FocusEvent } from './events/focus-event.js'
 
 const MAX_FOCUS_STACK = 32
 
-// FocusEvent's relatedTarget is typed against the event system's minimal
-// EventTarget ({ parentNode }); renderables expose `parent` instead. The
-// event payload is informational, so adapt at the boundary.
-function asEventTarget(node: DOMElement | null): FocusEventTarget | null {
-  return node as unknown as FocusEventTarget | null
-}
-
-type FocusEventTarget = NonNullable<ConstructorParameters<typeof FocusEvent>[1]>
-
-// Tab order is declared via the tabIndex prop on <Box>. The renderable
-// itself has no such field, so Box registers it here when the ref attaches.
-const tabIndexes = new WeakMap<DOMElement, number>()
-
-export function setTabIndex(node: DOMElement, tabIndex: number | undefined): void {
-  if (tabIndex === undefined) {
-    tabIndexes.delete(node)
-  } else {
-    tabIndexes.set(node, tabIndex)
-  }
-}
-
-export function getTabIndex(node: DOMElement): number | undefined {
-  return tabIndexes.get(node)
-}
-
 /**
- * DOM-like focus manager for the terminal UI.
+ * DOM-like focus manager for the Ink terminal UI.
  *
  * Pure state — tracks activeElement and a focus stack. Has no reference
  * to the tree; callers pass the root when tree walks are needed.
+ *
+ * Stored on the root DOMElement so any node can reach it by walking
+ * parentNode (like browser's `node.ownerDocument`).
  */
 export class FocusManager {
   activeElement: DOMElement | null = null
@@ -57,10 +35,10 @@ export class FocusManager {
       if (idx !== -1) this.focusStack.splice(idx, 1)
       this.focusStack.push(previous)
       if (this.focusStack.length > MAX_FOCUS_STACK) this.focusStack.shift()
-      this.dispatchFocusEvent(previous, new FocusEvent('blur', asEventTarget(node)))
+      this.dispatchFocusEvent(previous, new FocusEvent('blur', node))
     }
     this.activeElement = node
-    this.dispatchFocusEvent(node, new FocusEvent('focus', asEventTarget(previous)))
+    this.dispatchFocusEvent(node, new FocusEvent('focus', previous))
   }
 
   blur(): void {
@@ -72,9 +50,9 @@ export class FocusManager {
   }
 
   /**
-   * Called when a node is removed from the tree. Handles both the exact
-   * node and any focused descendant within the removed subtree.
-   * Dispatches blur and restores focus from stack.
+   * Called by the reconciler when a node is removed from the tree.
+   * Handles both the exact node and any focused descendant within
+   * the removed subtree. Dispatches blur and restores focus from stack.
    */
   handleNodeRemoved(node: DOMElement, root: DOMElement): void {
     // Remove the node and any descendants from the stack
@@ -97,7 +75,7 @@ export class FocusManager {
       const candidate = this.focusStack.pop()!
       if (isInTree(candidate, root)) {
         this.activeElement = candidate
-        this.dispatchFocusEvent(candidate, new FocusEvent('focus', asEventTarget(removed)))
+        this.dispatchFocusEvent(candidate, new FocusEvent('focus', removed))
         return
       }
     }
@@ -108,7 +86,7 @@ export class FocusManager {
   }
 
   handleClickFocus(node: DOMElement): void {
-    const tabIndex = getTabIndex(node)
+    const tabIndex = node.attributes['tabIndex']
     if (typeof tabIndex !== 'number') return
     this.focus(node)
   }
@@ -160,21 +138,44 @@ function collectTabbable(root: DOMElement): DOMElement[] {
 }
 
 function walkTree(node: DOMElement, result: DOMElement[]): void {
-  const tabIndex = getTabIndex(node)
+  const tabIndex = node.attributes['tabIndex']
   if (typeof tabIndex === 'number' && tabIndex >= 0) {
     result.push(node)
   }
 
-  for (const child of node.getChildren()) {
-    walkTree(child as DOMElement, result)
+  for (const child of node.childNodes) {
+    if (child.nodeName !== '#text') {
+      walkTree(child, result)
+    }
   }
 }
 
 function isInTree(node: DOMElement, root: DOMElement): boolean {
-  let current: DOMElement | null = node
+  let current: DOMElement | undefined = node
   while (current) {
     if (current === root) return true
-    current = current.parent as DOMElement | null
+    current = current.parentNode
   }
   return false
+}
+
+/**
+ * Walk up to root and return it. The root is the node that holds
+ * the FocusManager — like browser's `node.getRootNode()`.
+ */
+export function getRootNode(node: DOMElement): DOMElement {
+  let current: DOMElement | undefined = node
+  while (current) {
+    if (current.focusManager) return current
+    current = current.parentNode
+  }
+  throw new Error('Node is not in a tree with a FocusManager')
+}
+
+/**
+ * Walk up to root and return its FocusManager.
+ * Like browser's `node.ownerDocument` — focus belongs to the root.
+ */
+export function getFocusManager(node: DOMElement): FocusManager {
+  return getRootNode(node).focusManager!
 }

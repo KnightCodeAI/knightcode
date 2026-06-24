@@ -200,7 +200,8 @@ import { getEffortNotificationText } from '../EffortIndicator.js'
 import { getFastIconString } from '../FastIcon.js'
 import { GlobalSearchDialog } from '../GlobalSearchDialog.js'
 import { HistorySearchDialog } from '../HistorySearchDialog.js'
-import { ModelPicker } from '../ModelPicker.js'
+import { ModelBrowser } from '../ModelBrowser.js'
+import { updateSettingsForSource } from '../../utils/settings/settings.js'
 import { QuickOpenDialog } from '../QuickOpenDialog.js'
 import TextInput from '../TextInput.js'
 import { ThinkingToggle } from '../ThinkingToggle.js'
@@ -2621,8 +2622,12 @@ function PromptInput({
           mainLoopModelForSession: null,
           // Turn off fast mode if switching to a model that doesn't support it
           ...(wasFastModeDisabled && { fastMode: false }),
+          ...(_effort !== undefined && { effortValue: _effort })
         }
       })
+      if (_effort !== undefined) {
+        updateSettingsForSource('userSettings', { effortLevel: _effort })
+      }
       setShowModelPicker(false)
       const effectiveFastMode = (isFastMode ?? false) && !wasFastModeDisabled
       let message = `Model set to ${modelDisplayString(model)}`
@@ -2658,25 +2663,17 @@ function PromptInput({
     if (!showModelPicker) return null
     return (
       <Box flexDirection="column" marginTop={1}>
-        <ModelPicker
+        <ModelBrowser
           initial={mainLoopModel_}
-          sessionModel={mainLoopModelForSession}
           onSelect={handleModelSelect}
           onCancel={handleModelCancel}
           isStandaloneCommand
-          showFastModeNotice={
-            isFastModeEnabled() &&
-            isFastMode &&
-            isFastModeSupportedByModel(mainLoopModel_) &&
-            isFastModeAvailable()
-          }
         />
       </Box>
     )
   }, [
     showModelPicker,
     mainLoopModel_,
-    mainLoopModelForSession,
     handleModelSelect,
     handleModelCancel,
   ])

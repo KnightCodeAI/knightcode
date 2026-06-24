@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../../components/design-system/ThemeProvider'
 import { SkillsMenu } from '../../components/skills/SkillsMenu'
@@ -10,7 +8,7 @@ import { renderToolResultMessage, renderToolUseMessage } from './UI'
 import type { Command } from '../../commands'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -36,9 +34,8 @@ describe('SkillTool UI', () => {
   })
 
   test('renderToolResultMessage reports a loaded inline skill', async () => {
-    const h = await createTestRenderer({ width: 60, height: 8 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 60, height: 8 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             {renderToolResultMessage({
@@ -48,7 +45,7 @@ describe('SkillTool UI', () => {
             })}
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
     const frame = await waitForFrame(h, f => f.includes('Successfully loaded'))
     expect(frame).toContain('Successfully loaded')
@@ -57,7 +54,7 @@ describe('SkillTool UI', () => {
 
 describe('SkillsMenu', () => {
   test('renders the skills dialog over a bundled skill command', async () => {
-    const h = await createTestRenderer({ width: 70, height: 16 })
+    const h = createInkTestRenderer({ width: 70, height: 16 })
     const skill: Command = {
       type: 'prompt',
       name: 'verify',
@@ -71,14 +68,13 @@ describe('SkillsMenu', () => {
         return [{ type: 'text', text: 'verify' }]
       },
     }
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <SkillsMenu onExit={() => {}} commands={[skill]} />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
     const frame = await waitForFrame(h, f => f.includes('Skills'))
     expect(frame).toContain('Skills')

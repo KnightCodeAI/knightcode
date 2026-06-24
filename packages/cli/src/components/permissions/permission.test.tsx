@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../design-system/ThemeProvider'
 import { Text } from '../../tui'
@@ -16,7 +14,7 @@ import { extractRules, hasRules } from '../../utils/permissions/PermissionUpdate
 // cover the rule-extraction logic the dialog's "always allow" options build on.
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -36,9 +34,8 @@ async function waitForFrame(
 
 describe('PermissionDialog', () => {
   test('renders the request title and body', async () => {
-    const h = await createTestRenderer({ width: 60, height: 10 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 60, height: 10 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <PermissionDialog
@@ -49,7 +46,7 @@ describe('PermissionDialog', () => {
             </PermissionDialog>
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
 
     const frame = await waitForFrame(

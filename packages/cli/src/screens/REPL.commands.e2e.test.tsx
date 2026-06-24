@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../tui/testing'
 import React from 'react'
-import TuiApp from '../tui/components/App'
 import { App } from '../components/App'
 import { ThemeProvider } from '../components/design-system/ThemeProvider'
 import { getDefaultAppState } from '../state/AppStateStore'
@@ -40,11 +38,10 @@ describe('REPL with the real command registry', () => {
     initBundledSkills()
     clearCommandsCache()
     const commands = await getCommands(process.cwd())
-    const h = await createTestRenderer({ width: 80, height: 24 })
+    const h = createInkTestRenderer({ width: 80, height: 24 })
     const initialTools = [...getTools(getEmptyToolPermissionContext())]
 
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    h.render(
         <ThemeProvider initialState="dark">
           <App
             getFpsMetrics={() => undefined}
@@ -58,7 +55,7 @@ describe('REPL with the real command registry', () => {
             />
           </App>
         </ThemeProvider>
-      </TuiApp>,
+      ,
     )
 
     await h.renderOnce()

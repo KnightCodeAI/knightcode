@@ -12,7 +12,7 @@ import { TerminalWriteContext } from '../useTerminalNotification.js'
  * terminal title untouched.
  *
  * On Windows, uses `process.title` (classic conhost doesn't support OSC).
- * Elsewhere, writes OSC 0 (set title+icon) via the renderer's stdout.
+ * Elsewhere, writes OSC 0 (set title+icon) via Ink's stdout.
  */
 export function useTerminalTitle(title: string | null): void {
   const writeRaw = useContext(TerminalWriteContext)

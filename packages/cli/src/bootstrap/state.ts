@@ -672,6 +672,17 @@ export function updateLastInteractionTime(_immediate?: boolean): void {
   STATE.lastInteractionTime = Date.now()
 }
 
+// Called by the Ink renderer before each render cycle. Upstream batches many
+// keypresses into a single Date.now() via a dirty flag; this build updates the
+// interaction time eagerly in updateLastInteractionTime(), so flushing is a
+// no-op kept for API parity with the substrate.
+export function flushInteractionTime(): void {}
+
+// Called by ScrollBox on each scroll event. Upstream gates background intervals
+// on a scroll-drain debounce; this build does not run those intervals, so the
+// activity marker is a no-op kept for API parity with the substrate.
+export function markScrollActivity(): void {}
+
 // TODO: skill-invocation tracking + trust/opt-in setters land with their
 // subsystems; inert placeholders so the settings/trust UIs compile.
 export function clearInvokedSkillsForAgent(agentId: string): void {

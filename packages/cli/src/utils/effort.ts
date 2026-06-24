@@ -7,13 +7,17 @@ import { getAPIProvider } from './model/providers.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
 import { isEnvTruthy } from './envUtils.js'
 import type { EffortLevel } from 'src/entrypoints/sdk/runtimeTypes.js'
+import { getOpenRouterModel } from './model/openRouterModels.js'
 
 export type { EffortLevel }
 
 export const EFFORT_LEVELS = [
+  'none',
+  'minimal',
   'low',
   'medium',
   'high',
+  'xhigh',
   'max',
 ] as const satisfies readonly EffortLevel[]
 
@@ -21,6 +25,9 @@ export type EffortValue = EffortLevel | number
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports the effort parameter.
 export function modelSupportsEffort(model: string): boolean {
+  if (model.includes('/')) {
+    return getSupportedEffortLevels(model).length > 0
+  }
   const m = model.toLowerCase()
   if (isEnvTruthy(process.env.KNIGHTCODE_CODE_ALWAYS_ENABLE_EFFORT)) {
     return true
@@ -51,6 +58,9 @@ export function modelSupportsEffort(model: string): boolean {
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'max' effort.
 // Per API docs, 'max' is Opus 4.6 only for public models — other models return an error.
 export function modelSupportsMaxEffort(model: string): boolean {
+  if (model.includes('/')) {
+    return false
+  }
   const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
   if (supported3P !== undefined) {
     return supported3P
@@ -59,6 +69,166 @@ export function modelSupportsMaxEffort(model: string): boolean {
     return true
   }
   return false
+}
+
+// Levels every OpenRouter reasoning model accepts. `none` is always safe — it
+// is mapped to `reasoning: { enabled: false }` on the wire (see
+// configureEffortParams), not sent as an effort string.
+const OPENROUTER_BASE_EFFORTS: EffortLevel[] = ['none', 'low', 'medium', 'high']
+
+/**
+ * Effort tiers a GPT-5-family model exposes over OpenRouter. Ported (trimmed)
+ * from OpenCode's transform.ts version table. `minimal`/`xhigh` are
+ * OpenAI-specific tiers; everything else is gated to OPENROUTER_BASE_EFFORTS.
+ * Returns null when `id` is not a gpt-5 model.
+ */
+function gpt5EffortLevels(id: string): EffortLevel[] | null {
+  if (!/(?:^|\/)gpt-5(?:[.-]|$)/.test(id)) return null
+  // Version number, e.g. "gpt-5.2" -> 2. Undefined for the base "gpt-5".
+  const version = Number(/(?:^|\/)gpt-5[.-](\d+)(?:[.-]|$)/.exec(id)?.[1]) || undefined
+  if (id.includes('-chat')) {
+    // Unversioned chat models don't expose a reasoning-effort control.
+    return version === undefined ? [] : ['medium']
+  }
+  if (id.includes('-pro')) return ['high']
+  if (id.includes('codex')) {
+    // codex-max and codex v2+ add xhigh; v3+ adds none.
+    if (version !== undefined && version >= 3) {
+      return ['none', 'low', 'medium', 'high', 'xhigh']
+    }
+    if (id.includes('codex-max') || (version !== undefined && version >= 2)) {
+      return ['low', 'medium', 'high', 'xhigh']
+    }
+    return ['low', 'medium', 'high']
+  }
+  if (version !== undefined && version >= 2) {
+    return ['none', 'low', 'medium', 'high', 'xhigh']
+  }
+  if (version === 1) {
+    // gpt-5.1 replaced gpt-5's `minimal` tier with `none`.
+    return ['none', 'low', 'medium', 'high']
+  }
+  // Base gpt-5.
+  return ['none', 'minimal', 'low', 'medium', 'high']
+}
+
+/**
+ * Resolve effort tiers for an OpenRouter model id from id/family patterns
+ * alone, independent of the live catalog. Returns null when no pattern matches
+ * (the caller then falls back to the catalog's reasoning flag). Pure and
+ * deterministic — the unit-testable core of the capability table.
+ */
+export function openRouterEffortLevelsByIdPattern(
+  modelId: string,
+): EffortLevel[] | null {
+  const m = modelId.toLowerCase()
+
+  // GPT-5 family (version-aware). Returns [] for tiers with no effort control
+  // (e.g. unversioned chat), which is a definitive match, not "no match".
+  const gpt5 = gpt5EffortLevels(m)
+  if (gpt5 !== null) return gpt5
+
+  // OpenAI o-series reasoning models.
+  if (/(?:^|\/)o[134](?:-|$)/.test(m)) return OPENROUTER_BASE_EFFORTS
+
+  // xAI grok-3-mini exposes only low/high (per xAI reasoning docs).
+  if (m.includes('grok-3-mini')) return ['low', 'high']
+
+  // anthropic/claude- and google/gemini- reasoning families.
+  if (m.includes('anthropic/claude-') || m.includes('google/gemini')) {
+    return OPENROUTER_BASE_EFFORTS
+  }
+
+  return null
+}
+
+export function getSupportedEffortLevels(model: string): EffortLevel[] {
+  const m = model.toLowerCase()
+
+  if (model.includes('/')) {
+    const orModel = getOpenRouterModel(model)
+    // The live catalog is authoritative: a model it marks non-reasoning gets
+    // no effort control, even if its id looks like a reasoning model.
+    if (orModel && !orModel.supportsReasoning) {
+      return []
+    }
+
+    // Family/version-specific tiers from id patterns.
+    const byPattern = openRouterEffortLevelsByIdPattern(m)
+    if (byPattern !== null) return byPattern
+
+    // Catalog says it reasons but we have no specific table → safe base set.
+    if (orModel?.supportsReasoning) {
+      return OPENROUTER_BASE_EFFORTS
+    }
+
+    // Not in the catalog yet, but the id looks like a reasoning model. Offer
+    // the safe base set rather than hiding the control.
+    if (
+      m.includes('deepseek') ||
+      m.includes('-r1') ||
+      m.includes('reasoning') ||
+      m.includes('thinking')
+    ) {
+      return OPENROUTER_BASE_EFFORTS
+    }
+
+    return []
+  }
+
+  // Legacy / 1P (alias) models — preserve existing first-party behavior.
+  if (!modelSupportsEffort(model)) {
+    return []
+  }
+  if (modelSupportsMaxEffort(model)) {
+    return ['low', 'medium', 'high', 'max']
+  }
+  return ['low', 'medium', 'high']
+}
+
+const ORDERED_EFFORT_LEVELS: EffortLevel[] = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max'
+]
+
+export function clampEffort(
+  requested: EffortLevel,
+  supported: EffortLevel[],
+): EffortLevel | undefined {
+  if (supported.length === 0) {
+    return undefined
+  }
+  if (supported.includes(requested)) {
+    return requested
+  }
+  const requestedIdx = ORDERED_EFFORT_LEVELS.indexOf(requested)
+  // Find the highest supported level whose index <= requestedIdx
+  let best: EffortLevel | undefined = undefined
+  let bestIdx = -1
+  for (const s of supported) {
+    const sIdx = ORDERED_EFFORT_LEVELS.indexOf(s)
+    if (sIdx <= requestedIdx && sIdx > bestIdx) {
+      best = s
+      bestIdx = sIdx
+    }
+  }
+  // If no supported level is <= requested, clamp to the lowest supported level
+  if (best === undefined) {
+    let minIdx = Number.MAX_SAFE_INTEGER
+    for (const s of supported) {
+      const sIdx = ORDERED_EFFORT_LEVELS.indexOf(s)
+      if (sIdx < minIdx) {
+        best = s
+        minIdx = sIdx
+      }
+    }
+  }
+  return best
 }
 
 export function isEffortLevel(value: string): value is EffortLevel {
@@ -85,14 +255,23 @@ export function parseEffortValue(value: unknown): EffortValue | undefined {
 
 /**
  * Numeric values are model-default only and not persisted.
- * 'max' is session-scoped for external users (ants can persist it).
- * Write sites call this before saving to settings so the Zod schema
- * (which only accepts string levels) never rejects a write.
+ * 'max' is session-scoped for external users (ants can persist it) — it is a
+ * first-party-native tier and is never produced for OpenRouter models. All other
+ * string levels (none/minimal/low/medium/high/xhigh) persist as-is.
+ * Write sites call this before saving to settings so the Zod schema never
+ * rejects a write.
  */
 export function toPersistableEffort(
   value: EffortValue | undefined,
 ): EffortLevel | undefined {
-  if (value === 'low' || value === 'medium' || value === 'high') {
+  if (
+    value === 'none' ||
+    value === 'minimal' ||
+    value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'xhigh'
+  ) {
     return value
   }
   if (value === 'max' && process.env.USER_TYPE === 'ant') {
@@ -156,11 +335,14 @@ export function resolveAppliedEffort(
   }
   const resolved =
     envOverride ?? appStateEffortValue ?? getDefaultEffortForModel(model)
-  // API rejects 'max' on non-Opus-4.6 models — downgrade to 'high'.
-  if (resolved === 'max' && !modelSupportsMaxEffort(model)) {
-    return 'high'
+  if (resolved === undefined) {
+    return undefined
   }
-  return resolved
+  if (typeof resolved === 'number') {
+    return resolved
+  }
+  const supported = getSupportedEffortLevels(model)
+  return clampEffort(resolved, supported)
 }
 
 /**
@@ -220,12 +402,18 @@ export function convertEffortValueToLevel(value: EffortValue): EffortLevel {
  */
 export function getEffortLevelDescription(level: EffortLevel): string {
   switch (level) {
+    case 'none':
+      return 'No reasoning effort (thinking disabled)'
+    case 'minimal':
+      return 'Minimal reasoning effort for quick answers'
     case 'low':
       return 'Quick, straightforward implementation with minimal overhead'
     case 'medium':
       return 'Balanced approach with standard implementation and testing'
     case 'high':
       return 'Comprehensive implementation with extensive testing and documentation'
+    case 'xhigh':
+      return 'Extremely high capability with deep thinking'
     case 'max':
       return 'Maximum capability with deepest reasoning (Opus 4.6 only)'
   }

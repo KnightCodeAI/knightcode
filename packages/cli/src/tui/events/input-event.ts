@@ -46,7 +46,7 @@ function parseKey(keypress: ParsedKey): [Key, string] {
     delete: keypress.name === 'delete',
     // `parseKeypress` parses \u001B\u001B[A (meta + up arrow) as meta = false
     // but with option = true, so we need to take this into account here
-    // to avoid breaking changes for existing key handlers.
+    // to avoid breaking changes in Ink.
     // TODO(vadimdemedes): consider removing this in the next major version.
     meta: keypress.meta || keypress.name === 'escape' || keypress.option,
     // Super (Cmd on macOS / Win key) — only arrives via kitty keyboard

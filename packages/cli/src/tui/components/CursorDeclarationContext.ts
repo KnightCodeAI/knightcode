@@ -6,7 +6,7 @@ export type CursorDeclaration = {
   readonly relativeX: number
   /** Line number within the declared node */
   readonly relativeY: number
-  /** The Box DOMElement whose layout provides the absolute origin */
+  /** The ink-box DOMElement whose yoga layout provides the absolute origin */
   readonly node: DOMElement
 }
 

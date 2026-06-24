@@ -2,7 +2,7 @@ import { createContext } from 'react'
 
 export type Props = {
   /**
-   * Exit (unmount) the whole app.
+   * Exit (unmount) the whole Ink app.
    */
   readonly exit: (error?: Error) => void
 }

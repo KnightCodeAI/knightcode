@@ -1,8 +1,8 @@
-import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk'
-import { getSessionId } from '../../bootstrap/state.js'
-import { getKnightcodeApiKey } from '../../utils/auth.js'
-import { getUserAgent } from '../../utils/http.js'
-import { getProxyFetchOptions } from '../../utils/proxy.js'
+import Anthropic, { type ClientOptions } from "@anthropic-ai/sdk";
+import { getSessionId } from "../../bootstrap/state.js";
+import { getKnightcodeApiKey } from "../../utils/auth.js";
+import { getUserAgent } from "../../utils/http.js";
+import { getProxyFetchOptions } from "../../utils/proxy.js";
 
 /**
  * The model gateway speaks the KnightCode Messages protocol natively, so the
@@ -15,12 +15,12 @@ import { getProxyFetchOptions } from '../../utils/proxy.js'
  *   the SDK appends /v1/messages to this base
  * - API_TIMEOUT_MS: per-request timeout override
  */
-export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api'
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
 
-export const CLIENT_REQUEST_ID_HEADER = 'x-client-request-id'
+export const CLIENT_REQUEST_ID_HEADER = "x-client-request-id";
 
 function getBaseURL(): string {
-  return process.env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL
+  return process.env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL;
 }
 
 export async function getKnightcodeClient({
@@ -30,19 +30,20 @@ export async function getKnightcodeClient({
   fetchOverride,
   source: _source,
 }: {
-  apiKey?: string
-  maxRetries: number
-  model?: string
-  fetchOverride?: ClientOptions['fetch']
-  source?: string
+  apiKey?: string;
+  maxRetries: number;
+  model?: string;
+  fetchOverride?: ClientOptions["fetch"];
+  source?: string;
 }): Promise<Anthropic> {
   const defaultHeaders: { [key: string]: string } = {
-    'x-app': 'cli',
-    'User-Agent': getUserAgent(),
-    'X-KnightCode-Code-Session-Id': getSessionId(),
-    // Attribution headers the gateway uses to identify the calling app.
-    'X-Title': 'KnightCode',
-  }
+    "x-app": "cli",
+    "User-Agent": getUserAgent(),
+    "X-KnightCode-Code-Session-Id": getSessionId(),
+    "HTTP-Referer": "https://knightcode.raghavseth.in",
+    "X-Title": "KnightCode",
+    "X-OpenRouter-Categories": "cli-agent",
+  };
 
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
     apiKey: apiKey || getKnightcodeApiKey(),
@@ -53,9 +54,9 @@ export async function getKnightcodeClient({
     dangerouslyAllowBrowser: true,
     fetchOptions: getProxyFetchOptions({
       forKnightcodeAPI: true,
-    }) as ClientOptions['fetchOptions'],
+    }) as ClientOptions["fetchOptions"],
     ...(fetchOverride && { fetch: fetchOverride }),
-  }
+  };
 
-  return new Anthropic(clientConfig)
+  return new Anthropic(clientConfig);
 }

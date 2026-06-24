@@ -1,7 +1,5 @@
-import { createTextAttributes } from '@opentui/core'
 import type { ReactNode } from 'react'
-import React, { createContext, useContext } from 'react'
-import { toOpenTuiColor } from '../opentui-color.js'
+import React from 'react'
 import type { Color, Styles, TextStyles } from '../styles.js'
 
 type BaseProps = {
@@ -36,7 +34,9 @@ type BaseProps = {
   readonly inverse?: boolean
 
   /**
-   * Wrap or truncate text if its width is larger than container.
+   * This property tells Ink to wrap or truncate text if its width is larger than container.
+   * If `wrap` is passed (by default), Ink will wrap text and split it into multiple lines.
+   * If `truncate-*` is passed, Ink will truncate text instead, which will result in one line of text with the rest cut off.
    */
   readonly wrap?: Styles['textWrap']
 
@@ -54,19 +54,59 @@ type WeightProps =
 
 export type Props = BaseProps & WeightProps
 
-// Arbitrary <Text> nesting is allowed for inline styling. OpenTUI's text
-// element hosts inline content as spans, so a Text inside another Text
-// renders a <span> instead of opening a second text block.
-const InsideTextContext = createContext(false)
-
-function wrapMode(wrap: NonNullable<Styles['textWrap']>): 'word' | 'none' {
-  // Truncation modes all map to no-wrap; OpenTUI clips at the box edge.
-  return wrap === 'wrap' || wrap === 'wrap-trim' ? 'word' : 'none'
-}
+const memoizedStylesForWrap: Record<NonNullable<Styles['textWrap']>, Styles> = {
+  wrap: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'wrap',
+  },
+  'wrap-trim': {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'wrap-trim',
+  },
+  end: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'end',
+  },
+  middle: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'middle',
+  },
+  'truncate-end': {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'truncate-end',
+  },
+  truncate: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'truncate',
+  },
+  'truncate-middle': {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'truncate-middle',
+  },
+  'truncate-start': {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexDirection: 'row',
+    textWrap: 'truncate-start',
+  },
+} as const
 
 /**
- * This component can display text, and change its style to make it
- * colorful, bold, underline, italic or strikethrough.
+ * This component can display text, and change its style to make it colorful, bold, underline, italic or strikethrough.
  */
 export default function Text({
   color,
@@ -80,12 +120,11 @@ export default function Text({
   wrap = 'wrap',
   children,
 }: Props): React.ReactNode {
-  const insideText = useContext(InsideTextContext)
-
   if (children === undefined || children === null) {
     return null
   }
 
+  // Build textStyles object with only the properties that are set
   const textStyles: TextStyles = {
     ...(color && { color }),
     ...(backgroundColor && { backgroundColor }),
@@ -97,37 +136,9 @@ export default function Text({
     ...(inverse && { inverse }),
   }
 
-  const attributes = createTextAttributes({
-    bold: textStyles.bold,
-    dim: textStyles.dim,
-    italic: textStyles.italic,
-    underline: textStyles.underline,
-    strikethrough: textStyles.strikethrough,
-    inverse: textStyles.inverse,
-  })
-
-  const fg = toOpenTuiColor(textStyles.color)
-  const bg = toOpenTuiColor(textStyles.backgroundColor)
-
-  if (insideText) {
-    return (
-      <span fg={fg} bg={bg} attributes={attributes}>
-        {children}
-      </span>
-    )
-  }
-
   return (
-    <InsideTextContext.Provider value={true}>
-      <text
-        fg={fg}
-        bg={bg}
-        attributes={attributes}
-        wrapMode={wrapMode(wrap)}
-        truncate={wrap.startsWith('truncate') || wrap === 'end' || wrap === 'middle' ? true : undefined}
-      >
-        {children}
-      </text>
-    </InsideTextContext.Provider>
+    <ink-text style={memoizedStylesForWrap[wrap]} textStyles={textStyles}>
+      {children}
+    </ink-text>
   )
 }

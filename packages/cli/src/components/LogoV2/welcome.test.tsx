@@ -1,14 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../../tui/testing'
 import React from 'react'
-import TuiApp from '../../tui/components/App'
 import { AppStateProvider } from '../../state/AppState'
 import { ThemeProvider } from '../design-system/ThemeProvider'
 import { WelcomeV2 } from './WelcomeV2'
 
 const tick = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms))
-type Harness = Awaited<ReturnType<typeof createTestRenderer>>
+type Harness = ReturnType<typeof createInkTestRenderer>
 
 async function waitForFrame(
   h: Harness,
@@ -28,15 +26,14 @@ async function waitForFrame(
 
 describe('WelcomeV2', () => {
   test('shows the KnightCode welcome banner', async () => {
-    const h = await createTestRenderer({ width: 60, height: 12 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 60, height: 12 })
+    h.render(
         <AppStateProvider>
           <ThemeProvider initialState="dark">
             <WelcomeV2 />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
 
     const frame = await waitForFrame(h, f => f.includes('KnightCode'))

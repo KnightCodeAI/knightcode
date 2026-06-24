@@ -60,6 +60,7 @@ export type GlobalConfig = {
   taskCompleteNotifEnabled?: boolean
   teammateDefaultModel?: string | null
   teammateMode?: 'auto' | 'tmux' | 'in-process'
+  openRouterFavorites?: string[]
   /** Random per-install identifier (created on first use). */
   userID?: string
   /** Server-pushed client data; absent until remote config lands. */
@@ -147,6 +148,14 @@ const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   numStartups: 0,
   messageIdleNotifThresholdMs: 60000,
   btwUseCount: 0,
+  // Boolean toggles the settings panel renders via `value.toString()`. They
+  // must be defined here — an absent key surfaces as `undefined.toString()`,
+  // which throws when /config opens.
+  terminalProgressBarEnabled: true,
+  showTurnDuration: true,
+  respectGitignore: true,
+  copyFullResponse: false,
+  fileCheckpointingEnabled: true,
 }
 
 function globalConfigPath(): string {
@@ -332,3 +341,20 @@ export function getAutoUpdaterDisabledReason(): any { return null }
 export function formatAutoUpdaterDisabledReason(_reason: any): string { return '' }
 
 export function getGlobalConfigWriteCount(): number { return 0 }
+
+export function getOpenRouterFavorites(): string[] {
+  return getGlobalConfig().openRouterFavorites ?? []
+}
+
+export function toggleOpenRouterFavorite(id: string): void {
+  saveGlobalConfig(current => {
+    const favorites = current.openRouterFavorites ?? []
+    const nextFavorites = favorites.includes(id)
+      ? favorites.filter(fav => fav !== id)
+      : [...favorites, id]
+    return {
+      ...current,
+      openRouterFavorites: nextFavorites,
+    }
+  })
+}

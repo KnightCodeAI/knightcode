@@ -16,8 +16,8 @@ type Output = {
  * Measure the dimensions of a particular `<Box>` element.
  */
 const measureElement = (node: DOMElement): Output => ({
-  width: node.width,
-  height: node.height,
+  width: node.yogaNode?.getComputedWidth() ?? 0,
+  height: node.yogaNode?.getComputedHeight() ?? 0,
 })
 
 export default measureElement

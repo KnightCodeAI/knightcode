@@ -7,10 +7,15 @@ export const TEARDROP_ASTERISK = '✻'
 export const UP_ARROW = '\u2191' // ↑ - used for opus 1m merge notice
 export const DOWN_ARROW = '\u2193' // ↓ - used for scroll hint
 export const LIGHTNING_BOLT = '↯' // \u21af - used for fast mode indicator
+export const EFFORT_NONE = '◌' // \u25cc - effort level: none
+export const EFFORT_MINIMAL = '◔' // \u25d4 - effort level: minimal
 export const EFFORT_LOW = '○' // \u25cb - effort level: low
 export const EFFORT_MEDIUM = '◐' // \u25d0 - effort level: medium
 export const EFFORT_HIGH = '●' // \u25cf - effort level: high
+export const EFFORT_XHIGH = '◕' // \u25d5 - effort level: xhigh
 export const EFFORT_MAX = '◉' // \u25c9 - effort level: max (Opus 4.6 only)
+export const STAR_FILLED = '★' // favorited model marker
+export const STAR_OUTLINE = '☆' // non-favorited model marker
 
 // Media/trigger status indicators
 export const PLAY_ICON = '\u25b6' // ▶

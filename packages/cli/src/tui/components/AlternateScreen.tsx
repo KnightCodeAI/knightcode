@@ -27,14 +27,14 @@ type Props = PropsWithChildren<{
  * - Constrains its own height to the terminal row count, so overflow must
  *   be handled via `overflow: scroll` / flexbox (no native scrollback)
  * - Optionally enables SGR mouse tracking (wheel + click/drag) — events
- *   surface as `ParsedKey` (wheel) and update the renderer instance's
+ *   surface as `ParsedKey` (wheel) and update the Ink instance's
  *   selection state (click/drag)
  *
  * On unmount, disables mouse tracking and exits the alt screen, restoring
  * the main screen's content. Safe for use in ctrl-o transcript overlays
  * and similar temporary fullscreen views — the main screen is preserved.
  *
- * Notifies the renderer instance via `setAltScreenActive()` so the renderer
+ * Notifies the Ink instance via `setAltScreenActive()` so the renderer
  * keeps the cursor inside the viewport (preventing the cursor-restore LF
  * from scrolling content) and so signal-exit cleanup can exit the alt
  * screen if the component's own unmount doesn't run.
@@ -48,7 +48,7 @@ export function AlternateScreen({
 
   // useInsertionEffect (not useLayoutEffect): react-reconciler calls
   // resetAfterCommit between the mutation and layout commit phases, and
-  // the renderer's resetAfterCommit triggers onRender. With useLayoutEffect, that
+  // Ink's resetAfterCommit triggers onRender. With useLayoutEffect, that
   // first onRender fires BEFORE this effect — writing a full frame to the
   // main screen with altScreen=false. That frame is preserved when we
   // enter alt screen and revealed on exit as a broken view. Insertion

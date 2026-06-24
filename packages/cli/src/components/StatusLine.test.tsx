@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createTestRenderer } from '@opentui/core/testing'
-import { createRoot } from '@opentui/react'
+import { createInkTestRenderer } from '../tui/testing'
 import React, { useRef } from 'react'
-import TuiApp from '../tui/components/App'
 import { AppStateProvider } from '../state/AppState'
 import { getDefaultAppState } from '../state/AppStateStore'
 import { ThemeProvider } from './design-system/ThemeProvider'
@@ -31,15 +29,14 @@ function StatusLineHarness(): React.ReactNode {
 
 describe('StatusLine', () => {
   test('mounts and paints a frame over the renderer', async () => {
-    const h = await createTestRenderer({ width: 60, height: 6 })
-    createRoot(h.renderer).render(
-      <TuiApp renderer={h.renderer} exit={() => {}} exitOnCtrlC={false}>
+    const h = createInkTestRenderer({ width: 60, height: 6 })
+    h.render(
         <AppStateProvider initialState={getDefaultAppState()}>
           <ThemeProvider initialState="dark">
             <StatusLineHarness />
           </ThemeProvider>
         </AppStateProvider>
-      </TuiApp>,
+      ,
     )
 
     await h.renderOnce()

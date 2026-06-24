@@ -1,14 +1,12 @@
-import type { BorderCharacters, BoxOptions } from '@opentui/core'
-import React, { type PropsWithChildren, type Ref, useCallback } from 'react'
+import '../global.d.ts'
+import React, { type PropsWithChildren, type Ref } from 'react'
 import type { Except } from 'type-fest'
 import type { DOMElement } from '../dom.js'
-import { ClickEvent } from '../events/click-event.js'
+import type { ClickEvent } from '../events/click-event.js'
 import type { FocusEvent } from '../events/focus-event.js'
 import type { KeyboardEvent } from '../events/keyboard-event.js'
-import { setTabIndex } from '../focus.js'
-import { dimColor, toOpenTuiColor } from '../opentui-color.js'
-import { CUSTOM_BORDER_STYLES } from '../render-border.js'
 import type { Styles } from '../styles.js'
+import * as warn from '../warn.js'
 
 export type Props = Except<Styles, 'textWrap'> & {
   ref?: Ref<DOMElement>
@@ -18,12 +16,16 @@ export type Props = Except<Styles, 'textWrap'> & {
    */
   tabIndex?: number
   /**
-   * Focus this element when it mounts.
+   * Focus this element when it mounts. Like the HTML `autofocus`
+   * attribute — the FocusManager calls `focus(node)` during the
+   * reconciler's `commitMount` phase.
    */
   autoFocus?: boolean
   /**
-   * Fired on left-button click. Only works where mouse tracking is
-   * enabled — no-op otherwise.
+   * Fired on left-button click (press + release without drag). Only works
+   * inside `<AlternateScreen>` where mouse tracking is enabled — no-op
+   * otherwise. The event bubbles from the deepest hit Box up through
+   * ancestors; call `event.stopImmediatePropagation()` to stop bubbling.
    */
   onClick?: (event: ClickEvent) => void
   onFocus?: (event: FocusEvent) => void
@@ -32,177 +34,19 @@ export type Props = Except<Styles, 'textWrap'> & {
   onBlurCapture?: (event: FocusEvent) => void
   onKeyDown?: (event: KeyboardEvent) => void
   onKeyDownCapture?: (event: KeyboardEvent) => void
+  /**
+   * Fired when the mouse moves into this Box's rendered rect. Like DOM
+   * `mouseenter`, does NOT bubble — moving between children does not
+   * re-fire on the parent. Only works inside `<AlternateScreen>` where
+   * mode-1003 mouse tracking is enabled.
+   */
   onMouseEnter?: () => void
+  /** Fired when the mouse moves out of this Box's rendered rect. */
   onMouseLeave?: () => void
 }
 
-// Upstream border styles are cli-boxes names; OpenTUI has four native styles and
-// takes explicit characters for everything else.
-const BORDER_STYLE_MAP: Record<string, BoxOptions['borderStyle']> = {
-  single: 'single',
-  double: 'double',
-  round: 'rounded',
-  bold: 'heavy',
-}
-
-type StyleBorderChars = {
-  topLeft: string
-  top: string
-  topRight: string
-  right: string
-  bottomRight: string
-  bottom: string
-  bottomLeft: string
-  left: string
-}
-
-function toBorderCharacters(box: StyleBorderChars): BorderCharacters {
-  return {
-    topLeft: box.topLeft,
-    topRight: box.topRight,
-    bottomLeft: box.bottomLeft,
-    bottomRight: box.bottomRight,
-    horizontal: box.top,
-    vertical: box.left,
-    topT: box.top,
-    bottomT: box.bottom,
-    leftT: box.left,
-    rightT: box.right,
-    cross: '┼',
-  }
-}
-
-/** Translate the Styles object onto OpenTUI box options. */
-export function translateBoxStyles(style: Except<Styles, 'textWrap'>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-
-  // Layout props that pass through with the same name and value space.
-  const passthrough = [
-    'flexGrow',
-    'flexShrink',
-    'flexDirection',
-    'alignItems',
-    'alignSelf',
-    'justifyContent',
-    'width',
-    'height',
-    'minWidth',
-    'minHeight',
-    'maxWidth',
-    'maxHeight',
-    'margin',
-    'marginX',
-    'marginY',
-    'marginTop',
-    'marginBottom',
-    'marginLeft',
-    'marginRight',
-    'padding',
-    'paddingX',
-    'paddingY',
-    'paddingTop',
-    'paddingBottom',
-    'paddingLeft',
-    'paddingRight',
-    'gap',
-    'rowGap',
-    'columnGap',
-    'position',
-    'top',
-    'bottom',
-    'left',
-    'right',
-    'overflow',
-  ] as const
-  for (const key of passthrough) {
-    if (style[key] !== undefined) out[key] = style[key]
-  }
-
-  if (style.flexWrap !== undefined) {
-    out['flexWrap'] = style.flexWrap === 'nowrap' ? 'no-wrap' : style.flexWrap
-  }
-  if (style.flexBasis !== undefined) {
-    out['flexBasis'] = style.flexBasis
-  }
-  if (style.display === 'none') {
-    out['visible'] = false
-  }
-
-  // overflowX/overflowY: OpenTUI has a single overflow axis setting; the
-  // stricter of the two wins so clipped content stays clipped.
-  const overflowAxis = style.overflowY ?? style.overflowX
-  if (out['overflow'] === undefined && overflowAxis !== undefined) {
-    out['overflow'] = overflowAxis
-  }
-
-  if (style.borderStyle !== undefined) {
-    if (typeof style.borderStyle === 'string') {
-      const native = BORDER_STYLE_MAP[style.borderStyle]
-      if (native) {
-        out['borderStyle'] = native
-      } else if (style.borderStyle in CUSTOM_BORDER_STYLES) {
-        out['customBorderChars'] = toBorderCharacters(
-          CUSTOM_BORDER_STYLES[
-            style.borderStyle as keyof typeof CUSTOM_BORDER_STYLES
-          ],
-        )
-      } else {
-        // Other cli-boxes names (classic, arrow, ...) degrade to single.
-        out['borderStyle'] = 'single'
-      }
-    } else {
-      out['customBorderChars'] = toBorderCharacters(style.borderStyle as StyleBorderChars)
-    }
-
-    // Per-side visibility: Styles uses borderTop/borderBottom/... booleans
-    // defaulting to true; OpenTUI takes the list of visible sides.
-    const sides = (['top', 'right', 'bottom', 'left'] as const).filter(side => {
-      const flag = {
-        top: style.borderTop,
-        right: style.borderRight,
-        bottom: style.borderBottom,
-        left: style.borderLeft,
-      }[side]
-      return flag !== false
-    })
-    out['border'] = sides.length === 4 ? true : sides
-
-    let borderColor = toOpenTuiColor(style.borderColor)
-    if (style.borderDimColor && borderColor) {
-      borderColor = dimColor(borderColor)
-    }
-    if (borderColor !== undefined) out['borderColor'] = borderColor
-    // TODO: per-side border colors (borderTopColor etc.) — OpenTUI draws the
-    // whole border in one color, so those degrade to the shared color.
-  }
-
-  if (style.backgroundColor !== undefined) {
-    out['backgroundColor'] = toOpenTuiColor(style.backgroundColor)
-  }
-
-  if (style.borderText !== undefined) {
-    const { content, position, align } = style.borderText
-    const alignment =
-      align === 'start' ? 'left' : align === 'end' ? 'right' : 'center'
-    if (position === 'top') {
-      out['title'] = content
-      out['titleAlignment'] = alignment
-    } else {
-      out['bottomTitle'] = content
-      out['bottomTitleAlignment'] = alignment
-    }
-  }
-
-  if (style.noSelect !== undefined && style.noSelect !== false) {
-    out['selectable'] = false
-  }
-
-  return out
-}
-
 /**
- * `<Box>` is the essential layout component. It's like
- * `<div style="display: flex">` in the browser.
+ * `<Box>` is an essential Ink component to build your layout. It's like `<div style="display: flex">` in the browser.
  */
 function Box({
   children,
@@ -224,58 +68,51 @@ function Box({
   onKeyDownCapture,
   ...style
 }: PropsWithChildren<Props>): React.ReactNode {
-  const setRef = useCallback(
-    (node: DOMElement | null) => {
-      if (node && tabIndex !== undefined) setTabIndex(node, tabIndex)
-      if (typeof ref === 'function') {
-        ref(node)
-      } else if (ref) {
-        ref.current = node
-      }
-    },
-    [ref, tabIndex],
-  )
-
-  // TODO: onFocus/onBlur/onKeyDown/onMouseEnter/onMouseLeave need the
-  // capture/bubble dispatcher from the alt-screen mouse + focus work;
-  // they are accepted (so callers typecheck) but not yet dispatched.
-  void onFocus
-  void onFocusCapture
-  void onBlur
-  void onBlurCapture
-  void onMouseEnter
-  void onMouseLeave
-  void onKeyDown
-  void onKeyDownCapture
-
-  const translated = translateBoxStyles({
-    flexWrap,
-    flexDirection,
-    flexGrow,
-    flexShrink,
-    ...style,
-    overflowX: style.overflowX ?? style.overflow ?? 'visible',
-    overflowY: style.overflowY ?? style.overflow ?? 'visible',
-  })
+  // Warn if spacing values are not integers to prevent fractional layout dimensions
+  warn.ifNotInteger(style.margin, 'margin')
+  warn.ifNotInteger(style.marginX, 'marginX')
+  warn.ifNotInteger(style.marginY, 'marginY')
+  warn.ifNotInteger(style.marginTop, 'marginTop')
+  warn.ifNotInteger(style.marginBottom, 'marginBottom')
+  warn.ifNotInteger(style.marginLeft, 'marginLeft')
+  warn.ifNotInteger(style.marginRight, 'marginRight')
+  warn.ifNotInteger(style.padding, 'padding')
+  warn.ifNotInteger(style.paddingX, 'paddingX')
+  warn.ifNotInteger(style.paddingY, 'paddingY')
+  warn.ifNotInteger(style.paddingTop, 'paddingTop')
+  warn.ifNotInteger(style.paddingBottom, 'paddingBottom')
+  warn.ifNotInteger(style.paddingLeft, 'paddingLeft')
+  warn.ifNotInteger(style.paddingRight, 'paddingRight')
+  warn.ifNotInteger(style.gap, 'gap')
+  warn.ifNotInteger(style.columnGap, 'columnGap')
+  warn.ifNotInteger(style.rowGap, 'rowGap')
 
   return (
-    <box
-      ref={setRef}
-      focusable={tabIndex !== undefined || undefined}
-      focused={autoFocus || undefined}
-      onMouseUp={
-        onClick
-          ? event => {
-              // OpenTUI reports absolute terminal coords; ClickEvent
-              // carries both absolute and handler-relative positions.
-              onClick(new ClickEvent(event.x, event.y, false))
-            }
-          : undefined
-      }
-      {...translated}
+    <ink-box
+      ref={ref}
+      tabIndex={tabIndex}
+      autoFocus={autoFocus}
+      onClick={onClick}
+      onFocus={onFocus}
+      onFocusCapture={onFocusCapture}
+      onBlur={onBlur}
+      onBlurCapture={onBlurCapture}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onKeyDown={onKeyDown}
+      onKeyDownCapture={onKeyDownCapture}
+      style={{
+        flexWrap,
+        flexDirection,
+        flexGrow,
+        flexShrink,
+        ...style,
+        overflowX: style.overflowX ?? style.overflow ?? 'visible',
+        overflowY: style.overflowY ?? style.overflow ?? 'visible',
+      }}
     >
       {children}
-    </box>
+    </ink-box>
   )
 }
 

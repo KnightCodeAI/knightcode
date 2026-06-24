@@ -120,7 +120,7 @@ export function executeEffort(args: string): EffortCommandResult {
 
   if (!isEffortLevel(normalized)) {
     return {
-      message: `Invalid argument: ${args}. Valid options are: low, medium, high, max, auto`,
+      message: `Invalid argument: ${args}. Valid options are: none, minimal, low, medium, high, xhigh, max, auto`,
     }
   }
 
@@ -169,7 +169,7 @@ export async function call(
 
   if (COMMON_HELP_ARGS.includes(args)) {
     onDone(
-      'Usage: /effort [low|medium|high|max|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- max: Maximum capability with deepest reasoning (Opus 4.6 only)\n- auto: Use the default effort level for your model',
+      'Usage: /effort [none|minimal|low|medium|high|xhigh|max|auto]\n\nEffort levels:\n- none: No reasoning effort (thinking disabled)\n- minimal: Minimal reasoning effort for quick answers\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- xhigh: Extremely high capability with deep thinking\n- max: Maximum capability with deepest reasoning (Opus 4.6 only)\n- auto: Use the default effort level for your model',
     )
     return
   }

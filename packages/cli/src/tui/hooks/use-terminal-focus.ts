@@ -6,7 +6,7 @@ import TerminalFocusContext from '../components/TerminalFocusContext.js'
  *
  * Uses DECSET 1004 focus reporting - the terminal sends escape sequences
  * when it gains or loses focus. These are handled automatically
- * by the input layer and filtered from useInput.
+ * by Ink and filtered from useInput.
  *
  * @returns true if the terminal is focused (or focus state is unknown)
  */
