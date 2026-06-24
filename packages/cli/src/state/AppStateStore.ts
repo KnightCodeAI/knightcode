@@ -467,12 +467,18 @@ export function getDefaultAppState(): AppState {
       ? 'plan'
       : 'default'
 
+  const initialSettings = getInitialSettings()
+
   return {
-    settings: getInitialSettings(),
+    settings: initialSettings,
     tasks: {},
     agentNameRegistry: new Map(),
     verbose: false,
-    mainLoopModel: null, // alias, full name (as with --model or env var), or null (default)
+    // Restore the persisted model selection so it survives restarts (onChangeAppState
+    // writes mainLoopModel -> userSettings.model; this is the read-back half). A
+    // --model flag or env override still wins — main.tsx spreads it over this.
+    // null = use the default model.
+    mainLoopModel: initialSettings.model ?? null,
     mainLoopModelForSession: null,
     statusLineText: undefined,
     expandedView: 'none',

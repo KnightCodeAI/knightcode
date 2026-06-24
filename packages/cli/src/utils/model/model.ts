@@ -89,10 +89,28 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   return getDefaultSonnetModel()
 }
 
-// TODO: the user-specified model override (from /model and settings) is read
-// by the harness; until then the main-loop model is the default setting.
+/**
+ * Non-React resolver for the active main-loop model. Mirrors the
+ * {@link useMainLoopModel} hook's resolution for code outside React (spinner,
+ * FileReadTool, micro-compaction, …): the in-session override (set by
+ * onChangeAppState when the user runs /model) → the persisted setting
+ * (userSettings.model, for a fresh session before any change) → the default.
+ *
+ * Imports are called lazily inside the body to avoid an import-cycle TDZ with
+ * bootstrap/state (which type-imports ModelSetting from here).
+ */
 export function getMainLoopModel(): ModelName {
-  return getDefaultMainLoopModelSetting()
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { getMainLoopModelOverride } =
+    require('../../bootstrap/state.js') as typeof import('../../bootstrap/state.js')
+  const { getInitialSettings } =
+    require('../settings/settings.js') as typeof import('../settings/settings.js')
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  return parseUserSpecifiedModel(
+    getMainLoopModelOverride() ??
+      getInitialSettings().model ??
+      getDefaultMainLoopModelSetting(),
+  )
 }
 
 /**

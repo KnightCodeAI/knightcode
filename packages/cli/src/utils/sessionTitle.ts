@@ -13,10 +13,7 @@
  */
 
 import { z } from 'zod/v4'
-import {
-  getIsNonInteractiveSession,
-  getMainLoopModelOverride,
-} from '../bootstrap/state.js'
+import { getIsNonInteractiveSession } from '../bootstrap/state.js'
 import { logEvent } from '../services/analytics/index.js'
 import { queryWithModel } from '../services/api/knightcode.js'
 import type { Message } from '../types/message.js'
@@ -24,7 +21,7 @@ import { logForDebugging } from './debug.js'
 import { safeParseJSON } from './json.js'
 import { lazySchema } from './lazySchema.js'
 import { extractTextContent } from './messages.js'
-import { getDefaultMainLoopModelSetting } from './model/model.js'
+import { getMainLoopModel } from './model/model.js'
 import { asSystemPrompt } from './systemPromptType.js'
 
 const MAX_CONVERSATION_TEXT = 1000
@@ -90,12 +87,9 @@ export async function generateSessionTitle(
   // Route the title request through the user's selected main-loop model — the
   // same model the conversation itself uses — rather than a separate small/fast
   // model. Under BYOK the user configures a single model; a second hardcoded
-  // model may be unavailable on their key or billed separately. The override
-  // mirrors AppState.mainLoopModel (set by onChangeAppState); fall back to the
-  // default setting when no model has been explicitly selected, which is exactly
-  // what the main loop falls back to.
-  const titleModel =
-    getMainLoopModelOverride() ?? getDefaultMainLoopModelSetting()
+  // model may be unavailable on their key or billed separately. getMainLoopModel()
+  // resolves the in-session override, then the persisted setting, then the default.
+  const titleModel = getMainLoopModel()
 
   try {
     const result = await queryWithModel({
