@@ -39,6 +39,7 @@ import {
   logEvent,
 } from '../analytics/index.js'
 import { extractConnectionErrorDetails, formatAPIError } from './errorUtils.js'
+import { RATE_LIMIT_MESSAGE } from '../rateLimitMessages.js'
 
 export const API_ERROR_MESSAGE_PREFIX = 'API Error'
 
@@ -187,7 +188,7 @@ export function classifyApiError(error: unknown): ApiErrorClassification {
       }
     case 429:
       return {
-        message: 'Rate limited — retrying after the reset window',
+        message: RATE_LIMIT_MESSAGE,
         retryable: true,
       }
     case 400:
