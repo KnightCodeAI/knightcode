@@ -1,12 +1,13 @@
-import { feature } from 'src/macros/bun-bundle.js'
 import { z } from 'zod/v4'
 import { getSessionId } from '../../bootstrap/state.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { isTodoV2Enabled } from '../../utils/tasks.js'
 import { TodoListSchema } from '../../utils/todo/types.js'
-import { VERIFICATION_AGENT_TYPE } from '../AgentTool/constants.js'
+import {
+  isVerificationAgentEnabled,
+  VERIFICATION_AGENT_TYPE,
+} from '../AgentTool/constants.js'
 import { TODO_WRITE_TOOL_NAME } from './constants.js'
 import { DESCRIPTION, PROMPT } from './prompt.js'
 
@@ -75,8 +76,7 @@ export const TodoWriteTool = buildTool({
     // happen ("when the last task closed, the loop exited").
     let verificationNudgeNeeded = false
     if (
-      feature('VERIFICATION_AGENT') &&
-      getFeatureValue_CACHED_MAY_BE_STALE('knightcode_hive_evidence', false) &&
+      isVerificationAgentEnabled() &&
       !context.agentId &&
       allDone &&
       todos.length >= 3 &&
