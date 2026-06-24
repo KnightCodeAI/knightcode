@@ -1,26 +1,30 @@
 /**
- * Session title generation via Haiku.
+ * Session title generation via the user's selected main-loop model.
  *
  * Standalone module with minimal dependencies so it can be imported from
  * print.ts (SDK control request handler) without pulling in the React/chalk/
  * git dependency chain that teleport.tsx carries.
  *
  * This is the single source of truth for AI-generated session titles across
- * all surfaces. Previously there were separate Haiku title generators:
+ * all surfaces. Previously there were separate small-fast-model title generators:
  * - teleport.tsx generateTitleAndBranch (6-word title + branch for CCR)
  * - rename/generateSessionName.ts (kebab-case name for /rename)
  * Each remains for backwards compat; new callers should use this module.
  */
 
 import { z } from 'zod/v4'
-import { getIsNonInteractiveSession } from '../bootstrap/state.js'
+import {
+  getIsNonInteractiveSession,
+  getMainLoopModelOverride,
+} from '../bootstrap/state.js'
 import { logEvent } from '../services/analytics/index.js'
-import { queryHaiku } from '../services/api/knightcode.js'
+import { queryWithModel } from '../services/api/knightcode.js'
 import type { Message } from '../types/message.js'
 import { logForDebugging } from './debug.js'
 import { safeParseJSON } from './json.js'
 import { lazySchema } from './lazySchema.js'
 import { extractTextContent } from './messages.js'
+import { getDefaultMainLoopModelSetting } from './model/model.js'
 import { asSystemPrompt } from './systemPromptType.js'
 
 const MAX_CONVERSATION_TEXT = 1000
@@ -83,8 +87,18 @@ export async function generateSessionTitle(
   const trimmed = description.trim()
   if (!trimmed) return null
 
+  // Route the title request through the user's selected main-loop model — the
+  // same model the conversation itself uses — rather than a separate small/fast
+  // model. Under BYOK the user configures a single model; a second hardcoded
+  // model may be unavailable on their key or billed separately. The override
+  // mirrors AppState.mainLoopModel (set by onChangeAppState); fall back to the
+  // default setting when no model has been explicitly selected, which is exactly
+  // what the main loop falls back to.
+  const titleModel =
+    getMainLoopModelOverride() ?? getDefaultMainLoopModelSetting()
+
   try {
-    const result = await queryHaiku({
+    const result = await queryWithModel({
       systemPrompt: asSystemPrompt([SESSION_TITLE_PROMPT]),
       userPrompt: trimmed,
       outputFormat: {
@@ -100,6 +114,7 @@ export async function generateSessionTitle(
       },
       signal,
       options: {
+        model: titleModel,
         querySource: 'generate_session_title',
         agents: [],
         // Reflect the actual session mode — this module is called from
