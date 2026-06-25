@@ -39,6 +39,7 @@ import { getWorktreePaths } from './utils/getWorktreePaths.js'
 import type { LogOption } from './types/logs.js'
 import { isMcpSubcommand, runMcpCommand } from './cli/mcpCommand.js'
 import { isDoctorSubcommand, runDoctorCommand } from './cli/doctorCommand.js'
+import { isAgentsSubcommand, runAgentsCommand } from './cli/agentsCommand.js'
 import { CommanderError } from 'commander'
 
 // Read the version from the package manifest for --version output.
@@ -61,6 +62,13 @@ if (isMcpSubcommand(process.argv)) {
 // API key — route it before the auth check and flag parser too.
 if (isDoctorSubcommand(process.argv)) {
   await runDoctorCommand(VERSION)
+  process.exit(0)
+}
+
+// `knightcode agents` lists configured agents and exits — non-interactive and
+// API-key-free, so route it before the auth check and flag parser too.
+if (isAgentsSubcommand(process.argv)) {
+  await runAgentsCommand(process.argv)
   process.exit(0)
 }
 
