@@ -110,7 +110,11 @@ export const KNIGHTCODE_CODE_GUIDE_AGENT: BuiltInAgentDefinition = {
       ],
   source: 'built-in',
   baseDir: 'built-in',
-  model: 'haiku',
+  // Free OpenRouter model that supports tool calling. The guide agent fetches
+  // and digests large doc pages (WebFetch/WebSearch) and answers CLI/SDK/API
+  // questions, so it wants comprehension + a big context: qwen3-coder is
+  // coder/tool-tuned with a ~1M-token window.
+  model: 'qwen/qwen3-coder:free',
   permissionMode: 'dontAsk',
   getSystemPrompt({ toolUseContext }) {
     const commands = toolUseContext.options.commands

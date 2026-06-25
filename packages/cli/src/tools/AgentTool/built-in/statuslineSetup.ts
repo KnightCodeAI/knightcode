@@ -138,7 +138,10 @@ export const STATUSLINE_SETUP_AGENT: BuiltInAgentDefinition = {
   tools: ['Read', 'Edit'],
   source: 'built-in',
   baseDir: 'built-in',
-  model: 'sonnet',
+  // Free OpenRouter model that supports tool calling. The statusline task is
+  // mechanical (read shell config, regex-extract PS1, write settings.json), so a
+  // small/fast model suffices — nano MoE (~3B active) with a 256k context.
+  model: 'nvidia/nemotron-3-nano-30b-a3b:free',
   color: 'orange',
   getSystemPrompt: () => STATUSLINE_SYSTEM_PROMPT,
 }
