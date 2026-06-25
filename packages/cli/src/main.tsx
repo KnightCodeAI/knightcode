@@ -40,6 +40,10 @@ import type { LogOption } from './types/logs.js'
 import { isMcpSubcommand, runMcpCommand } from './cli/mcpCommand.js'
 import { isDoctorSubcommand, runDoctorCommand } from './cli/doctorCommand.js'
 import { isAgentsSubcommand, runAgentsCommand } from './cli/agentsCommand.js'
+import {
+  isCompletionSubcommand,
+  runCompletionCommand,
+} from './cli/completionCommand.js'
 import { CommanderError } from 'commander'
 
 // Read the version from the package manifest for --version output.
@@ -69,6 +73,14 @@ if (isDoctorSubcommand(process.argv)) {
 // API-key-free, so route it before the auth check and flag parser too.
 if (isAgentsSubcommand(process.argv)) {
   await runAgentsCommand(process.argv)
+  process.exit(0)
+}
+
+// `knightcode completion <shell>` emits a shell completion script and exits —
+// non-interactive and API-key-free, so route it before the auth check + flag
+// parser too.
+if (isCompletionSubcommand(process.argv)) {
+  await runCompletionCommand(process.argv, VERSION)
   process.exit(0)
 }
 
