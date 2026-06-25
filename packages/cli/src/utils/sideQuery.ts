@@ -6,16 +6,12 @@ import {
 } from '../bootstrap/state.js'
 import { STRUCTURED_OUTPUTS_BETA_HEADER } from '../constants/betas.js'
 import type { QuerySource } from '../constants/querySource.js'
-import {
-  getAttributionHeader,
-  getCLISyspromptPrefix,
-} from '../constants/system.js'
+import { getCLISyspromptPrefix } from '../constants/system.js'
 import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/knightcode.js'
 import { getKnightcodeClient } from '../services/api/client.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
-import { computeFingerprint } from './fingerprint.js'
 import { normalizeModelStringForAPI } from './model/model.js'
 
 type MessageParam = Anthropic.MessageParam
@@ -64,29 +60,12 @@ export type SideQueryOptions = {
 }
 
 /**
- * Extract text from first user message for fingerprint computation.
- */
-function extractFirstUserMessageText(messages: MessageParam[]): string {
-  const firstUserMessage = messages.find(m => m.role === 'user')
-  if (!firstUserMessage) return ''
-
-  const content = firstUserMessage.content
-  if (typeof content === 'string') return content
-
-  // Array of content blocks - find first text block
-  const textBlock = content.find(block => block.type === 'text')
-  return textBlock?.type === 'text' ? textBlock.text : ''
-}
-
-/**
  * Lightweight API wrapper for "side queries" outside the main conversation loop.
  *
  * Use this instead of direct client.beta.messages.create() calls to ensure
- * proper OAuth token validation with fingerprint attribution headers.
+ * consistent system prompt and beta handling.
  *
  * This handles:
- * - Fingerprint computation for OAuth validation
- * - Attribution header injection
  * - CLI system prompt prefix
  * - Proper betas for the model
  * - API metadata
@@ -136,17 +115,8 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     betas.push(STRUCTURED_OUTPUTS_BETA_HEADER)
   }
 
-  // Extract first user message text for fingerprint
-  const messageText = extractFirstUserMessageText(messages)
-
-  // Compute fingerprint for OAuth attribution
-  const fingerprint = computeFingerprint(messageText, MACRO.VERSION)
-  const attributionHeader = getAttributionHeader(fingerprint)
-
-  // Build system as array to keep attribution header in its own block
-  // (prevents server-side parsing from including system content in cc_entrypoint)
+  // Build system as an array of text blocks.
   const systemBlocks: TextBlockParam[] = [
-    attributionHeader ? { type: 'text', text: attributionHeader } : null,
     // Skip CLI system prompt prefix for internal classifiers that provide their own prompt
     ...(skipSystemPromptPrefix
       ? []
@@ -164,7 +134,7 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       : system
         ? [{ type: 'text' as const, text: system }]
         : []),
-  ].filter((block): block is TextBlockParam => block !== null)
+  ]
 
   let thinkingConfig: BetaThinkingConfigParam | undefined
   if (thinking === false) {
