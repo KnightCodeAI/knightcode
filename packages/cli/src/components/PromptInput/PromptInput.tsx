@@ -2062,7 +2062,7 @@ function PromptInput({
   const handleAutoModeOptInDecline = useCallback(() => {
     if (feature('TRANSCRIPT_CLASSIFIER')) {
       logForDebugging(
-        `[auto-mode] handleAutoModeOptInDecline: reverting to ${previousModeBeforeAuto}, setting isAutoModeAvailable=false`,
+        `[auto-mode] handleAutoModeOptInDecline: reverting to ${previousModeBeforeAuto}, keeping auto available in the carousel`,
       )
       setShowAutoModeOptIn(false)
       if (autoModeOptInTimeoutRef.current) {
@@ -2070,8 +2070,10 @@ function PromptInput({
         autoModeOptInTimeoutRef.current = null
       }
 
-      // Revert to previous mode and remove auto from the carousel
-      // for the rest of this session
+      // Revert to the previous mode. Auto stays available in the carousel: in
+      // this BYOK build auto mode is always available, so declining the safety
+      // warning should just back out of auto for now, not hide it for the rest
+      // of the session (the warning will show again next time it's entered).
       if (previousModeBeforeAuto) {
         setAutoModeActive(false)
         setAppState(prev => ({
@@ -2079,13 +2081,11 @@ function PromptInput({
           toolPermissionContext: {
             ...prev.toolPermissionContext,
             mode: previousModeBeforeAuto,
-            isAutoModeAvailable: false,
           },
         }))
         setToolPermissionContext({
           ...toolPermissionContext,
           mode: previousModeBeforeAuto,
-          isAutoModeAvailable: false,
         })
         setPreviousModeBeforeAuto(null)
       }

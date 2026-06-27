@@ -342,10 +342,11 @@ export function getSettingsWithSources(): SettingsWithSources {
   return { effective: getInitialSettings(), sources }
 }
 
-// TODO: auto-mode opt-in is part of the account-backed permission system; a BYOK
-// build has no auto-mode, so the opt-in is permanently off.
+// Persistent auto-mode opt-in: the opt-in dialog writes skipAutoPermissionPrompt
+// to userSettings once accepted, which suppresses the warning dialog on
+// subsequent entries into auto mode.
 export function hasAutoModeOptIn(): boolean {
-  return false
+  return getInitialSettings().skipAutoPermissionPrompt === true
 }
 
 // Settings file path relative to the project root, for display in the rule UI.
