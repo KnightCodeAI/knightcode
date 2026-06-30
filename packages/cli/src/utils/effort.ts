@@ -487,6 +487,13 @@ export function getDefaultEffortForModel(
     return 'medium'
   }
 
+  // OpenRouter reasoning-capable models default to 'medium' so the reasoning
+  // applier sends a concrete effort instead of nothing (BYOK has no 1P default
+  // resolution). Slug contains a vendor prefix; catalog says if it reasons.
+  if (model.includes('/') && getOpenRouterModel(model)?.supportsReasoning) {
+    return 'medium'
+  }
+
   // Fallback to undefined, which means we don't set an effort level. This
   // should resolve to high effort level in the API.
   return undefined
