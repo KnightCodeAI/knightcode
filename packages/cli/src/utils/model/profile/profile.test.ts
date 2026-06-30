@@ -31,5 +31,6 @@ describe('resolveModelProfile', () => {
     expect(p1.supportsReasoning).toBe(false)
     const p2 = resolveModelProfile('acme/unknown-cold-1')
     expect(p2).toEqual(p1)
+    expect(p2).not.toBe(p1)
   })
 })

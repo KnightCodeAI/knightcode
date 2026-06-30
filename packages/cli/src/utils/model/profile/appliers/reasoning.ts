@@ -37,8 +37,12 @@ export function applyReasoning(
       }
       return body
     case 'openrouter-effort':
-      body.reasoning = { effort: ctx.effort ?? 'medium' }
-      ensureAnswerFloor(body, ctx.maxOutputTokens)
+      if (ctx.effort === 'none') {
+        body.reasoning = { enabled: false }
+      } else {
+        body.reasoning = { effort: ctx.effort ?? 'medium' }
+        ensureAnswerFloor(body, ctx.maxOutputTokens)
+      }
       return body
     case 'enable-flag':
       Object.assign(body, r.body)

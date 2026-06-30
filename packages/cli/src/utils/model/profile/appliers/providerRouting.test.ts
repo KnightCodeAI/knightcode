@@ -17,4 +17,12 @@ describe('applyProviderRouting', () => {
     const out = applyProviderRouting({}, base({ extraBody: { provider: { order: ['Anthropic'], require_parameters: true } } }))
     expect(out.provider).toEqual({ order: ['Anthropic'], require_parameters: true })
   })
+  test('a user-supplied existing body.provider is preserved and gains require_parameters', () => {
+    const out = applyProviderRouting({ provider: { order: ['DeepInfra'] } }, base())
+    expect(out.provider).toEqual({ order: ['DeepInfra'], require_parameters: true })
+  })
+  test('an array body.provider is ignored (treated as no existing)', () => {
+    const out = applyProviderRouting({ provider: [1, 2] }, base())
+    expect(out.provider).toEqual({ require_parameters: true })
+  })
 })

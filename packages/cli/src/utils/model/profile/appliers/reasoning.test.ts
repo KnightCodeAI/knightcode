@@ -63,4 +63,10 @@ describe('applyReasoning', () => {
     const out = applyReasoning({ max_tokens: 30000 }, base({ reasoning: { kind: 'openrouter-effort' } }), ctx({ maxOutputTokens: 32000 }))
     expect(out.max_tokens).toBe(30000)
   })
+
+  test('openrouter-effort with effort=none sets reasoning.enabled=false and does NOT raise max_tokens', () => {
+    const out = applyReasoning({ max_tokens: 100 }, base({ reasoning: { kind: 'openrouter-effort' } }), ctx({ effort: 'none', maxOutputTokens: 32000 }))
+    expect(out.reasoning).toEqual({ enabled: false })
+    expect(out.max_tokens).toBe(100)
+  })
 })
