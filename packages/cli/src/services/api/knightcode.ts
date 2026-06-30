@@ -192,6 +192,13 @@ import {
   parseUserSpecifiedModel,
 } from '../../utils/model/model.js'
 import {
+  normalizeMessagesForModel,
+  resolveModelProfile,
+  sanitizeToolSchema,
+} from '../../utils/model/profile/index.js'
+import { warmModelCatalog } from '../../utils/model/openRouterModels.js'
+import { applyModelProfileToBody } from './modelProfile.js'
+import {
   startSessionActivity,
   stopSessionActivity,
 } from '../../utils/sessionActivity.js'
@@ -247,6 +254,9 @@ import {
 type JsonValue = string | number | boolean | null | JsonObject | JsonArray
 type JsonObject = { [key: string]: JsonValue }
 type JsonArray = JsonValue[]
+
+// Fire-and-forget OpenRouter catalog warm; runs once per process (see queryModel).
+let catalogWarmed = false
 
 /**
  * Assemble the extra body parameters for the API request, based on the
@@ -1034,6 +1044,14 @@ async function* queryModel(
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
+  // Warm the OpenRouter model catalog once per process on the first real query,
+  // so model profiles (sampling/reasoning/context sizing) have real capability
+  // data without the user opening the model picker. Fire-and-forget; never throws.
+  if (!catalogWarmed) {
+    catalogWarmed = true
+    warmModelCatalog()
+  }
+
   // Check cheap conditions first — the off-switch await blocks on GrowthBook
   // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
   // entirely. Subscribers don't hit this path at all.
@@ -1264,6 +1282,15 @@ async function* queryModel(
 
   queryCheckpoint('query_tool_schema_build_end')
 
+  // Per-model tool-schema sanitization (e.g. Gemini int→string enums). No-op for
+  // models with no schema quirks (e.g. Anthropic).
+  const profileForSchemas = resolveModelProfile(options.model)
+  const sanitizedToolSchemas = isEnvTruthy(
+    process.env.KNIGHTCODE_DISABLE_MODEL_PROFILE,
+  )
+    ? toolSchemas
+    : toolSchemas.map(s => sanitizeToolSchema(s, profileForSchemas) as typeof s)
+
   // Normalize messages before building system prompt (needed for fingerprinting)
   // Instrumentation: Track message count before normalization
   logEvent('knightcode_api_before_normalize', {
@@ -1307,6 +1334,15 @@ async function* queryModel(
   // remote/teleport sessions. Inserts synthetic error tool_results for orphaned
   // tool_uses and strips orphaned tool_results referencing non-existent tool_uses.
   messagesForAPI = ensureToolResultPairing(messagesForAPI)
+
+  // Per-model message normalization (e.g. DeepSeek reasoning blocks, Mistral
+  // tool-id scrubbing). No-op for models with no message quirks (e.g. Anthropic).
+  if (!isEnvTruthy(process.env.KNIGHTCODE_DISABLE_MODEL_PROFILE)) {
+    messagesForAPI = normalizeMessagesForModel(
+      messagesForAPI,
+      resolveModelProfile(options.model),
+    ) as typeof messagesForAPI
+  }
 
   // Strip advisor blocks — the API rejects them without the beta header.
   if (!betas.includes(ADVISOR_BETA_HEADER)) {
@@ -1395,7 +1431,7 @@ async function* queryModel(
       model: advisorModel,
     } as unknown as BetaToolUnion)
   }
-  const allTools = [...toolSchemas, ...extraToolSchemas]
+  const allTools = [...sanitizedToolSchemas, ...extraToolSchemas]
 
   const isFastMode =
     isFastModeEnabled() &&
@@ -1698,7 +1734,7 @@ async function* queryModel(
 
     lastRequestBetas = betasParams
 
-    return {
+    const requestBody = {
       model: normalizeModelStringForAPI(options.model),
       messages: addCacheBreakpoints(
         messagesForAPI,
@@ -1728,6 +1764,23 @@ async function* queryModel(
       }),
       ...(speed !== undefined && { speed }),
     }
+
+    // Layer per-model adaptations (sampling, OpenRouter reasoning + answer-token
+    // floor, extraBody, provider routing) onto the assembled body. The inline
+    // `thinking` above stays authoritative for Anthropic; this never overwrites
+    // it (see applyModelProfileToBody). Mutates requestBody in place.
+    applyModelProfileToBody(
+      requestBody as unknown as Record<string, unknown>,
+      options.model,
+      {
+        effort: typeof effort === 'string' ? effort : undefined,
+        hasThinking,
+        budgetTokens: getMaxThinkingTokensForModel(options.model),
+        maxOutputTokens,
+      },
+    )
+
+    return requestBody
   }
 
   // Compute log scalars synchronously so the fire-and-forget .then() closure
