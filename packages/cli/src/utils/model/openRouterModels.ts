@@ -8,10 +8,13 @@ export type OpenRouterModel = {
   id: string                 // "google/gemini-2.5-flash"
   name: string               // "Gemini 2.5 Flash"
   contextLength: number      // 200000
+  maxCompletionTokens?: number   // top_provider.max_completion_tokens
+  authorSlug: string             // id.split('/')[0], e.g. "nvidia"
   pricing: { prompt: number; completion: number }  // USD per token (from API)
   inputModalities: string[]  // architecture.input_modalities, e.g. ["text","image"]
   supportsTools: boolean     // supported_parameters includes "tools"
   supportsReasoning: boolean // supported_parameters includes "reasoning"
+  supportedParameters: string[]  // raw supported_parameters list
 }
 
 // In-memory memo for the process lifetime.
@@ -102,6 +105,8 @@ export async function getOpenRouterModels(): Promise<OpenRouterModel[]> {
         id: m.id,
         name: m.name || m.id,
         contextLength: m.context_length || 0,
+        maxCompletionTokens: m.top_provider?.max_completion_tokens ?? undefined,
+        authorSlug: String(m.id || '').split('/')[0] || '',
         pricing: {
           prompt: promptPricing,
           completion: completionPricing,
@@ -109,6 +114,7 @@ export async function getOpenRouterModels(): Promise<OpenRouterModel[]> {
         inputModalities,
         supportsTools: supportedParams.includes('tools'),
         supportsReasoning: supportedParams.includes('reasoning'),
+        supportedParameters: Array.isArray(supportedParams) ? supportedParams : [],
       }
     })
 
@@ -162,4 +168,20 @@ export function formatPricing(p: { prompt: number; completion: number }): string
     return `$${perMillion.toFixed(2)}`
   }
   return `${formatNum(p.prompt)}/${formatNum(p.completion)}`
+}
+
+/** Supported request parameters for a model (empty set if unknown). */
+export function getModelSupportedParameters(id: string): Set<string> {
+  return new Set(getOpenRouterModel(id)?.supportedParameters ?? [])
+}
+
+/**
+ * Fire-and-forget catalog warm for startup. Populates the in-memory + disk
+ * cache so context sizing and model profiles have real data without the user
+ * opening the model picker. Never throws.
+ */
+export function warmModelCatalog(): void {
+  void getOpenRouterModels().catch(() => {
+    /* offline / no key — disk snapshot or defaults are used downstream */
+  })
 }
