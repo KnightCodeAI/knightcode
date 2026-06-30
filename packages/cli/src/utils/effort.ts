@@ -490,7 +490,11 @@ export function getDefaultEffortForModel(
   // OpenRouter reasoning-capable models default to 'medium' so the reasoning
   // applier sends a concrete effort instead of nothing (BYOK has no 1P default
   // resolution). Slug contains a vendor prefix; catalog says if it reasons.
-  if (model.includes('/') && getOpenRouterModel(model)?.supportsReasoning) {
+  // Anthropic/Claude ids are excluded: they go through the 1P thinking path and
+  // must not receive a redundant `reasoning` param alongside `thinking`.
+  const lower = model.toLowerCase()
+  const isAnthropic = lower.startsWith('anthropic/') || lower.includes('claude')
+  if (model.includes('/') && !isAnthropic && getOpenRouterModel(model)?.supportsReasoning) {
     return 'medium'
   }
 
