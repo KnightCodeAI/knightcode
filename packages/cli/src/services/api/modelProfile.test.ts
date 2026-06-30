@@ -39,7 +39,19 @@ describe('applyModelProfileToBody', () => {
     )
     expect('thinking' in out).toBe(false)
     expect('reasoning' in out).toBe(false)
+    // applySampling must not add a temperature for Anthropic (the API disallows
+    // temperature when thinking is enabled).
+    expect('temperature' in out).toBe(false)
     // provider routing still applies to Anthropic (intentional, beneficial)
     expect(out.provider).toEqual({ require_parameters: true })
+  })
+
+  test('Anthropic id with hasThinking=false: does not overwrite an inline temperature', () => {
+    const out = applyModelProfileToBody(
+      { max_tokens: 8000, temperature: 1 },
+      'anthropic/claude-sonnet-4.6',
+      { effort: undefined, hasThinking: false, budgetTokens: 0, maxOutputTokens: 32000 },
+    )
+    expect(out.temperature).toBe(1)
   })
 })

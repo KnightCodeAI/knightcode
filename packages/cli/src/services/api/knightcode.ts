@@ -1284,12 +1284,12 @@ async function* queryModel(
 
   // Per-model tool-schema sanitization (e.g. Gemini int→string enums). No-op for
   // models with no schema quirks (e.g. Anthropic).
-  const profileForSchemas = resolveModelProfile(options.model)
+  const modelProfile = resolveModelProfile(options.model)
   const sanitizedToolSchemas = isEnvTruthy(
     process.env.KNIGHTCODE_DISABLE_MODEL_PROFILE,
   )
     ? toolSchemas
-    : toolSchemas.map(s => sanitizeToolSchema(s, profileForSchemas) as typeof s)
+    : toolSchemas.map(s => sanitizeToolSchema(s, modelProfile) as typeof s)
 
   // Normalize messages before building system prompt (needed for fingerprinting)
   // Instrumentation: Track message count before normalization
@@ -1340,7 +1340,7 @@ async function* queryModel(
   if (!isEnvTruthy(process.env.KNIGHTCODE_DISABLE_MODEL_PROFILE)) {
     messagesForAPI = normalizeMessagesForModel(
       messagesForAPI,
-      resolveModelProfile(options.model),
+      modelProfile,
     ) as typeof messagesForAPI
   }
 
