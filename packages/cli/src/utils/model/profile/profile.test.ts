@@ -19,4 +19,17 @@ describe('resolveModelProfile', () => {
     // modelSupportsAdaptiveThinking returns false for it → anthropic-budget
     expect(resolveModelProfile('anthropic/claude-3.5-haiku').reasoning.kind).toBe('anthropic-budget')
   })
+  test('Anthropic id is cached: two calls return the same object reference', () => {
+    const a = resolveModelProfile('anthropic/claude-sonnet-4.6')
+    const b = resolveModelProfile('anthropic/claude-sonnet-4.6')
+    expect(a).toBe(b)
+  })
+  test('unknown non-Anthropic id (cold catalog) returns safe-default profile and is stable across calls', () => {
+    const p1 = resolveModelProfile('acme/unknown-cold-1')
+    expect(p1.reasoning.kind).toBe('none')
+    expect(p1.sampling).toEqual({})
+    expect(p1.supportsReasoning).toBe(false)
+    const p2 = resolveModelProfile('acme/unknown-cold-1')
+    expect(p2).toEqual(p1)
+  })
 })
