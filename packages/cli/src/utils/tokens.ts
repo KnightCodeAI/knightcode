@@ -114,7 +114,9 @@ export function tokenCountWithEstimation(messages: readonly Message[]): number {
   return roughTokenCountEstimationForMessages(messages)
 }
 
-export function finalContextTokensFromLastResponse(messages: Message[]): number {
+export function finalContextTokensFromLastResponse(
+  messages: Message[],
+): number {
   let i = messages.length - 1
   while (i >= 0) {
     const message = messages[i]
@@ -150,12 +152,25 @@ export function doesMostRecentAssistantMessageExceed200k(
 }
 
 // Actual token usage from the last API response, if one carried usage data.
-// Returns null until the message stream records usage.
-export function getCurrentUsage(_messages: Message[]): {
+// Walks back to the most recent assistant message with usage and returns its
+// breakdown. Returns null until the message stream has recorded usage.
+export function getCurrentUsage(messages: Message[]): {
   input_tokens: number
   output_tokens: number
   cache_creation_input_tokens: number
   cache_read_input_tokens: number
 } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    const usage = message ? getTokenUsage(message) : undefined
+    if (usage) {
+      return {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+        cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+      }
+    }
+  }
   return null
 }

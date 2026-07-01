@@ -4,6 +4,7 @@ import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
+import { getOpenRouterModel } from './model/openRouterModels.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -60,7 +61,10 @@ export function getContextWindowForModel(
     process.env.USER_TYPE === 'ant' &&
     process.env.KNIGHTCODE_CODE_MAX_CONTEXT_TOKENS
   ) {
-    const override = parseInt(process.env.KNIGHTCODE_CODE_MAX_CONTEXT_TOKENS, 10)
+    const override = parseInt(
+      process.env.KNIGHTCODE_CODE_MAX_CONTEXT_TOKENS,
+      10,
+    )
     if (!isNaN(override) && override > 0) {
       return override
     }
@@ -69,6 +73,20 @@ export function getContextWindowForModel(
   // [1m] suffix — explicit client-side opt-in, respected over all detection
   if (has1mContext(model)) {
     return 1_000_000
+  }
+
+  // OpenRouter model: use the per-model context length from the fetched model
+  // list (cached on disk). This is the source of truth for OpenRouter-routed
+  // models, which otherwise fall through to the 200k default.
+  const orContextLength = getOpenRouterModel(model)?.contextLength
+  if (orContextLength && orContextLength > 0) {
+    if (
+      orContextLength > MODEL_CONTEXT_WINDOW_DEFAULT &&
+      is1mContextDisabled()
+    ) {
+      return MODEL_CONTEXT_WINDOW_DEFAULT
+    }
+    return orContextLength
   }
 
   const cap = getModelCapability(model)

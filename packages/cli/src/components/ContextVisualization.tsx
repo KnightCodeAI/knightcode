@@ -112,9 +112,14 @@ function groupBySource<
 
 interface Props {
   data: ContextData
+  /** When true, list every item; otherwise show compact summary counts. */
+  expand?: boolean
 }
 
-export function ContextVisualization({ data }: Props): React.ReactNode {
+export function ContextVisualization({
+  data,
+  expand = false,
+}: Props): React.ReactNode {
   const {
     categories,
     totalTokens,
@@ -122,6 +127,7 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
     percentage,
     gridRows,
     model,
+    modelDisplayName,
     memoryFiles,
     mcpTools,
     deferredBuiltinTools = [],
@@ -130,6 +136,8 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
     agents,
     skills,
     messageBreakdown,
+    autoCompactThreshold,
+    isAutoCompactEnabled,
   } = data
 
   // Filter out categories with 0 tokens for the legend, and exclude Free space, Autocompact buffer, and deferred
@@ -154,8 +162,11 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
     <Box flexDirection="column" paddingLeft={1}>
       <Text bold>Context Usage</Text>
       <Box flexDirection="row" gap={2}>
-        {/* Fixed size grid */}
-        <Box flexDirection="column" flexShrink={0}>
+        {/* Fixed-size grid. An explicit height is required: the legend column
+            is taller, and without a pinned height the renderer stretches the
+            grid and distributes its rows (a blank line between each). Pinning
+            height to the row count keeps the rows tightly stacked. */}
+        <Box flexDirection="column" flexShrink={0} height={gridRows.length}>
           {gridRows.map((row, rowIndex) => (
             <Box key={rowIndex} flexDirection="row" marginLeft={-1}>
               {row.map((square, colIndex) => {
@@ -185,9 +196,15 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
 
         {/* Legend to the right */}
         <Box flexDirection="column" gap={0} flexShrink={0}>
+          {/* Model name, id, then usage — one per line so long OpenRouter ids
+              don't wrap into the grid. */}
+          <Text bold>{modelDisplayName ?? model}</Text>
+          {modelDisplayName && modelDisplayName !== model && (
+            <Text dimColor>{model}</Text>
+          )}
           <Text dimColor>
-            {model} · {formatTokens(totalTokens)}/{formatTokens(rawMaxTokens)}{' '}
-            tokens ({percentage}%)
+            {formatTokens(totalTokens)}/{formatTokens(rawMaxTokens)} tokens (
+            {percentage}%)
           </Text>
           <CollapseStatus />
           <Text> </Text>
@@ -248,6 +265,17 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
         </Box>
       </Box>
 
+      {/* Auto-compact window sits below the grid as a full-width line (matches
+          upstream) so it never wraps inside the narrow legend column. */}
+      <Box marginTop={1} marginLeft={-1}>
+        <Text bold>Auto-compact window: </Text>
+        <Text dimColor>
+          {isAutoCompactEnabled && autoCompactThreshold !== undefined
+            ? `auto (${formatTokens(autoCompactThreshold)} tokens)`
+            : 'off'}
+        </Text>
+      </Box>
+
       <Box flexDirection="column" marginLeft={-1}>
         {mcpTools.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
@@ -258,8 +286,15 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
                 · /mcp{hasDeferredMcpTools ? ' (loaded on-demand)' : ''}
               </Text>
             </Box>
+            {!expand && (
+              <Text dimColor>
+                └ {mcpTools.length} {plural(mcpTools.length, 'tool')} ·{' '}
+                {formatTokens(mcpTools.reduce((s, t) => s + t.tokens, 0))}{' '}
+                tokens
+              </Text>
+            )}
             {/* Show loaded tools first */}
-            {mcpTools.some(t => t.isLoaded) && (
+            {expand && mcpTools.some(t => t.isLoaded) && (
               <Box flexDirection="column" marginTop={1}>
                 <Text dimColor>Loaded</Text>
                 {mcpTools
@@ -273,20 +308,23 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
               </Box>
             )}
             {/* Show available (deferred) tools */}
-            {hasDeferredMcpTools && mcpTools.some(t => !t.isLoaded) && (
-              <Box flexDirection="column" marginTop={1}>
-                <Text dimColor>Available</Text>
-                {mcpTools
-                  .filter(t => !t.isLoaded)
-                  .map((tool, i) => (
-                    <Box key={i}>
-                      <Text dimColor>└ {tool.name}</Text>
-                    </Box>
-                  ))}
-              </Box>
-            )}
+            {expand &&
+              hasDeferredMcpTools &&
+              mcpTools.some(t => !t.isLoaded) && (
+                <Box flexDirection="column" marginTop={1}>
+                  <Text dimColor>Available</Text>
+                  {mcpTools
+                    .filter(t => !t.isLoaded)
+                    .map((tool, i) => (
+                      <Box key={i}>
+                        <Text dimColor>└ {tool.name}</Text>
+                      </Box>
+                    ))}
+                </Box>
+              )}
             {/* Show all tools normally when not deferred */}
-            {!hasDeferredMcpTools &&
+            {expand &&
+              !hasDeferredMcpTools &&
               mcpTools.map((tool, i) => (
                 <Box key={i}>
                   <Text>└ {tool.name}: </Text>
@@ -298,7 +336,7 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
 
         {/* Show builtin tools: always-loaded + deferred (ant-only) */}
         {((systemTools && systemTools.length > 0) || hasDeferredBuiltinTools) &&
-          ("external" as string) === 'ant' && (
+          ('external' as string) === 'ant' && (
             <Box flexDirection="column" marginTop={1}>
               <Box>
                 <Text bold>[ANT-ONLY] System tools</Text>
@@ -343,7 +381,7 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
 
         {systemPromptSections &&
           systemPromptSections.length > 0 &&
-          ("external" as string) === 'ant' && (
+          ('external' as string) === 'ant' && (
             <Box flexDirection="column" marginTop={1}>
               <Text bold>[ANT-ONLY] System prompt sections</Text>
               {systemPromptSections.map((section, i) => (
@@ -361,19 +399,28 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
               <Text bold>Custom agents</Text>
               <Text dimColor> · /agents</Text>
             </Box>
-            {Array.from(groupBySource(agents).entries()).map(
-              ([sourceDisplay, sourceAgents]) => (
-                <Box key={sourceDisplay} flexDirection="column" marginTop={1}>
-                  <Text dimColor>{sourceDisplay}</Text>
-                  {sourceAgents.map((agent, i) => (
-                    <Box key={i}>
-                      <Text>└ {agent.agentType}: </Text>
-                      <Text dimColor>{formatTokens(agent.tokens)} tokens</Text>
-                    </Box>
-                  ))}
-                </Box>
-              ),
+            {!expand && (
+              <Text dimColor>
+                └ {agents.length} {plural(agents.length, 'agent')} ·{' '}
+                {formatTokens(agents.reduce((s, a) => s + a.tokens, 0))} tokens
+              </Text>
             )}
+            {expand &&
+              Array.from(groupBySource(agents).entries()).map(
+                ([sourceDisplay, sourceAgents]) => (
+                  <Box key={sourceDisplay} flexDirection="column" marginTop={1}>
+                    <Text dimColor>{sourceDisplay}</Text>
+                    {sourceAgents.map((agent, i) => (
+                      <Box key={i}>
+                        <Text>└ {agent.agentType}: </Text>
+                        <Text dimColor>
+                          {formatTokens(agent.tokens)} tokens
+                        </Text>
+                      </Box>
+                    ))}
+                  </Box>
+                ),
+              )}
           </Box>
         )}
 
@@ -383,12 +430,20 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
               <Text bold>Memory files</Text>
               <Text dimColor> · /memory</Text>
             </Box>
-            {memoryFiles.map((file, i) => (
-              <Box key={i}>
-                <Text>└ {getDisplayPath(file.path)}: </Text>
-                <Text dimColor>{formatTokens(file.tokens)} tokens</Text>
-              </Box>
-            ))}
+            {!expand && (
+              <Text dimColor>
+                └ {memoryFiles.length} {plural(memoryFiles.length, 'file')} ·{' '}
+                {formatTokens(memoryFiles.reduce((s, f) => s + f.tokens, 0))}{' '}
+                tokens
+              </Text>
+            )}
+            {expand &&
+              memoryFiles.map((file, i) => (
+                <Box key={i}>
+                  <Text>└ {getDisplayPath(file.path)}: </Text>
+                  <Text dimColor>{formatTokens(file.tokens)} tokens</Text>
+                </Box>
+              ))}
           </Box>
         )}
 
@@ -398,23 +453,32 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
               <Text bold>Skills</Text>
               <Text dimColor> · /skills</Text>
             </Box>
-            {Array.from(groupBySource(skills.skillFrontmatter).entries()).map(
-              ([sourceDisplay, sourceSkills]) => (
-                <Box key={sourceDisplay} flexDirection="column" marginTop={1}>
-                  <Text dimColor>{sourceDisplay}</Text>
-                  {sourceSkills.map((skill, i) => (
-                    <Box key={i}>
-                      <Text>└ {skill.name}: </Text>
-                      <Text dimColor>{formatTokens(skill.tokens)} tokens</Text>
-                    </Box>
-                  ))}
-                </Box>
-              ),
+            {!expand && (
+              <Text dimColor>
+                └ {skills.totalSkills} {plural(skills.totalSkills, 'skill')} ·{' '}
+                {formatTokens(skills.tokens)} tokens
+              </Text>
             )}
+            {expand &&
+              Array.from(groupBySource(skills.skillFrontmatter).entries()).map(
+                ([sourceDisplay, sourceSkills]) => (
+                  <Box key={sourceDisplay} flexDirection="column" marginTop={1}>
+                    <Text dimColor>{sourceDisplay}</Text>
+                    {sourceSkills.map((skill, i) => (
+                      <Box key={i}>
+                        <Text>└ {skill.name}: </Text>
+                        <Text dimColor>
+                          {formatTokens(skill.tokens)} tokens
+                        </Text>
+                      </Box>
+                    ))}
+                  </Box>
+                ),
+              )}
           </Box>
         )}
 
-        {messageBreakdown && ("external" as string) === 'ant' && (
+        {messageBreakdown && ('external' as string) === 'ant' && (
           <Box flexDirection="column" marginTop={1}>
             <Text bold>[ANT-ONLY] Message breakdown</Text>
 
@@ -488,6 +552,11 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
           </Box>
         )}
       </Box>
+      {!expand && (
+        <Box marginTop={1} marginLeft={-1}>
+          <Text dimColor>/context all to expand</Text>
+        </Box>
+      )}
       <ContextSuggestions suggestions={generateContextSuggestions(data)} />
     </Box>
   )

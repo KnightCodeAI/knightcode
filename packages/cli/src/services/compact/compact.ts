@@ -61,7 +61,6 @@ import {
   createCompactBoundaryMessage,
   createUserMessage,
   getAssistantMessageText,
-  getLastAssistantMessage,
   getMessagesAfterCompactBoundary,
   isCompactBoundaryMessage,
   normalizeMessagesForAPI,
@@ -1133,6 +1132,38 @@ export function createCompactCanUseTool(): CanUseToolFn {
   })
 }
 
+/**
+ * The streaming layer yields ONE AssistantMessage per content block (see
+ * content_block_stop in api/knightcode.ts). A single model turn therefore arrives
+ * as several messages — e.g. [text], then [thinking], then [redacted_thinking].
+ *
+ * Taking the LAST assistant message (getLastAssistantMessage / `response =
+ * event`) assumes the text is last, which holds for first-party models (thinking
+ * precedes text). But OpenRouter reasoning models emit a trailing
+ * `redacted_thinking` block that stops AFTER the text block, so "last" is a
+ * thinking-only message with no summary text → compaction throws "no valid text
+ * content" deterministically, even though the text was streamed correctly.
+ *
+ * Merge every assistant message from the turn into one envelope so the text
+ * block is preserved regardless of block ordering. An API-error message (if
+ * any) is returned as-is so the caller's error handling still fires.
+ */
+export function mergeStreamedAssistantTurn(
+  messages: Message[],
+): AssistantMessage | undefined {
+  const assistants = messages.filter(
+    (m): m is AssistantMessage => m.type === 'assistant',
+  )
+  if (assistants.length === 0) return undefined
+  const apiError = assistants.find(m => m.isApiErrorMessage)
+  if (apiError) return apiError
+  const base = assistants[assistants.length - 1]!
+  const content = assistants.flatMap(m =>
+    Array.isArray(m.message.content) ? m.message.content : [],
+  )
+  return { ...base, message: { ...base.message, content } }
+}
+
 async function streamCompactSummary({
   messages,
   summaryRequest,
@@ -1198,7 +1229,7 @@ async function streamCompactSummary({
           // `signal: context.abortController.signal` below.
           overrides: { abortController: context.abortController },
         })
-        const assistantMsg = getLastAssistantMessage(result.messages)
+        const assistantMsg = mergeStreamedAssistantTurn(result.messages)
         const assistantText = assistantMsg
           ? getAssistantMessageText(assistantMsg)
           : null
@@ -1257,7 +1288,10 @@ async function streamCompactSummary({
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       // Reset state for retry
       let hasStartedStreaming = false
-      let response: AssistantMessage | undefined
+      // Collect every assistant message from the turn — the stream yields one
+      // per content block, and the text block is not necessarily last (see
+      // mergeStreamedAssistantTurn). Merged after the loop.
+      const assistantMessages: AssistantMessage[] = []
       context.setResponseLength?.(() => 0)
 
       // Check if tool search is enabled using the main loop's tools list.
@@ -1350,12 +1384,13 @@ async function streamCompactSummary({
         }
 
         if (event.type === 'assistant') {
-          response = event
+          assistantMessages.push(event)
         }
 
         next = await streamIter.next()
       }
 
+      const response = mergeStreamedAssistantTurn(assistantMessages)
       if (response) {
         return response
       }

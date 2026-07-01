@@ -30,7 +30,11 @@ function toApiView(messages: Message[]): Message[] {
 export async function call(
   onDone: LocalJSXCommandOnDone,
   context: LocalJSXCommandContext,
+  args?: string,
 ): Promise<React.ReactNode> {
+  // `/context all` expands the per-item breakdowns; the default view shows
+  // compact summary counts (matching upstream behavior).
+  const expand = (args ?? '').trim().toLowerCase() === 'all'
   const {
     messages,
     getAppState,
@@ -61,8 +65,13 @@ export async function call(
     apiView, // Original messages for API usage extraction
   )
 
-  // Render to ANSI string to preserve colors and pass to onDone like local commands do
-  const output = await renderToAnsiString(<ContextVisualization data={data} />)
+  // Render to ANSI string to preserve colors and pass to onDone like local
+  // commands do. Render at the real terminal width (not the renderer's 80-col
+  // default) so the legend column doesn't wrap on wider terminals.
+  const output = await renderToAnsiString(
+    <ContextVisualization data={data} expand={expand} />,
+    terminalWidth,
+  )
   onDone(output)
   return null
 }

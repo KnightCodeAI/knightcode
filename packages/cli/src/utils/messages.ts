@@ -60,6 +60,7 @@ import type {
   SystemMessageLevel,
   SystemMicrocompactBoundaryMessage,
   SystemPermissionRetryMessage,
+  SystemScheduledTaskFireMessage,
   SystemStopHookSummaryMessage,
   StopHookInfo,
   ToolUseSummaryMessage,
@@ -1618,6 +1619,19 @@ export function createPermissionRetryMessage(
     content: `Allowed ${commands.join(', ')}`,
     commands,
     level: 'info',
+    isMeta: false,
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+  }
+}
+
+export function createScheduledTaskFireMessage(
+  content: string,
+): SystemScheduledTaskFireMessage {
+  return {
+    type: 'system',
+    subtype: 'scheduled_task_fire',
+    content,
     isMeta: false,
     timestamp: new Date().toISOString(),
     uuid: randomUUID(),
@@ -4236,10 +4250,9 @@ export function stripSignatureBlocks(messages: Message[]): Message[] {
   return changed ? result : messages
 }
 
-// TODO: the real per-round message lookups (sibling tool uses, progress
-// messages, hook counts, tool_use↔tool_result pairing) are computed by the
-// transcript assembly. This typed stub lets the hook-progress renderer reference
-// the return shape; the transcript pass replaces it with the real builder.
+// Per-round message lookups (sibling tool uses, progress messages, hook counts,
+// tool_use↔tool_result pairing) consumed by the message-list renderer. Built
+// once per render by buildMessageLookups().
 export type MessageLookups = {
   siblingToolUseIDs: Map<string, Set<string>>
   progressMessagesByToolUseID: Map<string, ProgressMessage[]>
@@ -4253,19 +4266,168 @@ export type MessageLookups = {
 }
 
 export function buildMessageLookups(
-  _normalizedMessages: NormalizedMessage[],
-  _messages: Message[],
+  normalizedMessages: NormalizedMessage[],
+  messages: Message[],
 ): MessageLookups {
+  // First pass: group assistant messages by id and collect tool-use ids per message.
+  const toolUseIDsByMessageID = new Map<string, Set<string>>()
+  const toolUseIDToMessageID = new Map<string, string>()
+  const toolUseByToolUseID = new Map<string, ToolUseBlockParam>()
+  for (const msg of messages) {
+    if (msg.type === 'assistant') {
+      const id = msg.message.id
+      let toolUseIDs = toolUseIDsByMessageID.get(id)
+      if (!toolUseIDs) {
+        toolUseIDs = new Set()
+        toolUseIDsByMessageID.set(id, toolUseIDs)
+      }
+      for (const content of msg.message.content) {
+        if (content.type === 'tool_use') {
+          toolUseIDs.add(content.id)
+          toolUseIDToMessageID.set(content.id, id)
+          toolUseByToolUseID.set(content.id, content)
+        }
+      }
+    }
+  }
+
+  // Each tool use id maps to the full set of sibling tool use ids in its message.
+  const siblingToolUseIDs = new Map<string, Set<string>>()
+  for (const [toolUseID, messageID] of toolUseIDToMessageID) {
+    siblingToolUseIDs.set(toolUseID, toolUseIDsByMessageID.get(messageID)!)
+  }
+
+  // Single pass over normalizedMessages to build progress, hook, and result lookups.
+  const progressMessagesByToolUseID = new Map<string, ProgressMessage[]>()
+  const inProgressHookCounts = new Map<string, Map<string, number>>()
+  // Unique hook names per (toolUseID, hookEvent) — one hook can emit multiple
+  // attachments (hook_success + hook_additional_context), so dedupe by name.
+  const resolvedHookNames = new Map<string, Map<string, Set<string>>>()
+  const toolResultByToolUseID = new Map<string, NormalizedMessage>()
+  const resolvedToolUseIDs = new Set<string>()
+  const erroredToolUseIDs = new Set<string>()
+
+  for (const msg of normalizedMessages) {
+    if (msg.type === 'progress') {
+      // Index by parentToolUseID — the tool_use id the grouped renderer keys on
+      // (the per-message toolUseID changes for every progress tick).
+      const toolUseID = msg.parentToolUseID
+      const existing = progressMessagesByToolUseID.get(toolUseID)
+      if (existing) {
+        existing.push(msg)
+      } else {
+        progressMessagesByToolUseID.set(toolUseID, [msg])
+      }
+
+      const data = msg.data as { type?: string; hookEvent?: string }
+      if (data.type === 'hook_progress' && data.hookEvent) {
+        let byHookEvent = inProgressHookCounts.get(toolUseID)
+        if (!byHookEvent) {
+          byHookEvent = new Map()
+          inProgressHookCounts.set(toolUseID, byHookEvent)
+        }
+        byHookEvent.set(data.hookEvent, (byHookEvent.get(data.hookEvent) ?? 0) + 1)
+      }
+    }
+
+    if (msg.type === 'user') {
+      for (const content of msg.message.content) {
+        if (content.type === 'tool_result') {
+          toolResultByToolUseID.set(content.tool_use_id, msg)
+          resolvedToolUseIDs.add(content.tool_use_id)
+          if (content.is_error) {
+            erroredToolUseIDs.add(content.tool_use_id)
+          }
+        }
+      }
+    }
+
+    if (msg.type === 'assistant') {
+      for (const content of msg.message.content) {
+        // Server-side *_tool_result blocks (advisor, web_search, code_execution,
+        // mcp, …): any block carrying a tool_use_id is a result.
+        if (
+          'tool_use_id' in content &&
+          typeof (content as { tool_use_id: string }).tool_use_id === 'string'
+        ) {
+          resolvedToolUseIDs.add((content as { tool_use_id: string }).tool_use_id)
+        }
+        if ((content.type as string) === 'advisor_tool_result') {
+          const result = content as {
+            tool_use_id: string
+            content: { type: string }
+          }
+          if (result.content.type === 'advisor_tool_result_error') {
+            erroredToolUseIDs.add(result.tool_use_id)
+          }
+        }
+      }
+    }
+
+    // Count resolved hooks (deduped by hook name).
+    if (isHookAttachmentMessage(msg)) {
+      const att = msg.attachment as {
+        toolUseID: string
+        hookEvent?: string
+        hookName?: string
+      }
+      if (att.hookEvent && att.hookName !== undefined) {
+        let byHookEvent = resolvedHookNames.get(att.toolUseID)
+        if (!byHookEvent) {
+          byHookEvent = new Map()
+          resolvedHookNames.set(att.toolUseID, byHookEvent)
+        }
+        let names = byHookEvent.get(att.hookEvent)
+        if (!names) {
+          names = new Set()
+          byHookEvent.set(att.hookEvent, names)
+        }
+        names.add(att.hookName)
+      }
+    }
+  }
+
+  const resolvedHookCounts = new Map<string, Map<string, number>>()
+  for (const [toolUseID, byHookEvent] of resolvedHookNames) {
+    const countMap = new Map<string, number>()
+    for (const [hookEvent, names] of byHookEvent) {
+      countMap.set(hookEvent, names.size)
+    }
+    resolvedHookCounts.set(toolUseID, countMap)
+  }
+
+  // Mark orphaned server_tool_use / mcp_tool_use blocks (no matching result) as
+  // errored so the UI shows them failed instead of perpetually spinning. Skip
+  // the last original message if it's an assistant — it may still be in progress.
+  const lastMsg = messages.at(-1)
+  const lastAssistantMsgId =
+    lastMsg?.type === 'assistant' ? lastMsg.message.id : undefined
+  for (const msg of normalizedMessages) {
+    if (msg.type !== 'assistant') continue
+    if (msg.message.id === lastAssistantMsgId) continue
+    for (const content of msg.message.content) {
+      if (
+        (content.type === 'server_tool_use' ||
+          content.type === 'mcp_tool_use') &&
+        !resolvedToolUseIDs.has((content as { id: string }).id)
+      ) {
+        const id = (content as { id: string }).id
+        resolvedToolUseIDs.add(id)
+        erroredToolUseIDs.add(id)
+      }
+    }
+  }
+
   return {
-    siblingToolUseIDs: new Map(),
-    progressMessagesByToolUseID: new Map(),
-    inProgressHookCounts: new Map(),
-    resolvedHookCounts: new Map(),
-    toolResultByToolUseID: new Map(),
-    toolUseByToolUseID: new Map(),
-    normalizedMessageCount: 0,
-    resolvedToolUseIDs: new Set(),
-    erroredToolUseIDs: new Set(),
+    siblingToolUseIDs,
+    progressMessagesByToolUseID,
+    inProgressHookCounts,
+    resolvedHookCounts,
+    toolResultByToolUseID,
+    toolUseByToolUseID,
+    normalizedMessageCount: normalizedMessages.length,
+    resolvedToolUseIDs,
+    erroredToolUseIDs,
   }
 }
 

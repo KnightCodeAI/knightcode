@@ -169,20 +169,43 @@ function roughTokenCountEstimationForBlock(
   return roughTokenCountEstimation(jsonStringify(block))
 }
 
-// TODO: server-side token counting (the /count_tokens API and a Haiku-model
-// fallback) lands with the model phase. The /context analyzer uses these to size
-// the conversation precisely; until then it falls back to the rough estimator,
-// so these report "no API count available".
+// No provider in this build exposes a server-side /count_tokens endpoint
+// (OpenRouter does not), so token counting is done locally with the rough
+// char-per-token estimator. This is what the /context analyzer relies on to
+// size the system prompt, tools, memory files and conversation; returning null
+// here would make every API-counted category collapse to 0.
 export async function countMessagesTokensWithAPI(
-  _messages: Anthropic.Beta.Messages.BetaMessageParam[],
-  _tools: Anthropic.Beta.Messages.BetaToolUnion[],
+  messages: Anthropic.Beta.Messages.BetaMessageParam[],
+  tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
-  return null
+  let total = 0
+  for (const message of messages) {
+    const content = message.content
+    if (typeof content === 'string') {
+      total += roughTokenCountEstimation(content)
+    } else if (Array.isArray(content)) {
+      for (const block of content) {
+        total += roughTokenCountEstimationForBlock(
+          block as Anthropic.ContentBlockParam,
+        )
+      }
+    }
+  }
+  for (const tool of tools) {
+    // Tool definitions are mostly English descriptions (with some JSON schema),
+    // so the default ~4 chars/token ratio tracks the real tokenizer far better
+    // than the dense-JSON ratio of 2 (which roughly doubled the System tools
+    // category relative to the actual count).
+    total += roughTokenCountEstimation(jsonStringify(tool))
+  }
+  return total
 }
 
+// Same local estimator; kept as a distinct export so the analyzer's
+// API-then-Haiku fallback chain has a second source that also succeeds.
 export async function countTokensViaHaikuFallback(
-  _messages: Anthropic.Beta.Messages.BetaMessageParam[],
-  _tools: Anthropic.Beta.Messages.BetaToolUnion[],
+  messages: Anthropic.Beta.Messages.BetaMessageParam[],
+  tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
-  return null
+  return countMessagesTokensWithAPI(messages, tools)
 }

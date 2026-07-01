@@ -56,6 +56,7 @@ import { errorMessage, toError } from './errors.js'
 import { logError } from './log.js'
 import { normalizeMessagesForAPI } from './messages.js'
 import { getRuntimeMainLoopModel } from './model/model.js'
+import { getOpenRouterModel } from './model/openRouterModels.js'
 import type { SettingSource } from './settings/constants.js'
 import { jsonStringify } from './slowOperations.js'
 import { buildEffectiveSystemPrompt } from './systemPrompt.js'
@@ -195,6 +196,8 @@ export interface ContextData {
   readonly percentage: number
   readonly gridRows: GridSquare[][]
   readonly model: string
+  /** Friendly model name for display (e.g. OpenRouter's `name`); falls back to id. */
+  readonly modelDisplayName?: string
   readonly memoryFiles: MemoryFile[]
   readonly mcpTools: McpTool[]
   /** Ant-only: per-tool breakdown of deferred built-in tools */
@@ -1112,7 +1115,9 @@ export async function analyzeContextUsage(
   let reservedTokens = 0
   let skipReservedBuffer = false
   if (feature('REACTIVE_COMPACT')) {
-    if (getFeatureValue_CACHED_MAY_BE_STALE('knightcode_cobalt_raccoon', false)) {
+    if (
+      getFeatureValue_CACHED_MAY_BE_STALE('knightcode_cobalt_raccoon', false)
+    ) {
       skipReservedBuffer = true
     }
   }
@@ -1348,6 +1353,7 @@ export async function analyzeContextUsage(
     percentage: Math.round((finalTotalTokens / contextWindow) * 100),
     gridRows,
     model: runtimeModel,
+    modelDisplayName: getOpenRouterModel(runtimeModel)?.name,
     memoryFiles: memoryFileDetails,
     mcpTools: mcpToolDetails,
     deferredBuiltinTools:
