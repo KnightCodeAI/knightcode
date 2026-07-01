@@ -81,6 +81,28 @@ type State = {
   // Correlation id for the current user prompt; stamped onto transcript
   // user messages so a turn's entries can be grouped on resume.
   promptId: string | null
+  // Session-only flag gating the .knightcode/scheduled_tasks.json watcher
+  // (useScheduledTasks). Set by cronScheduler.start() when the JSON has
+  // entries, or by CronCreateTool. Not persisted.
+  scheduledTasksEnabled: boolean
+  // Session-only cron tasks created via CronCreate with durable: false.
+  // Fire on schedule like file-backed tasks but are never written to
+  // .knightcode/scheduled_tasks.json — they die with the process.
+  sessionCronTasks: SessionCronTask[]
+}
+
+export type SessionCronTask = {
+  id: string
+  cron: string
+  prompt: string
+  createdAt: number
+  recurring?: boolean
+  /**
+   * When set, the task was created by an in-process teammate (not the team lead).
+   * The scheduler routes fires to that teammate's pendingUserMessages queue
+   * instead of the main REPL command queue. Session-only — never written to disk.
+   */
+  agentId?: string
 }
 
 // Resolve symlinks in the launch cwd so session-storage paths stay canonical
@@ -136,6 +158,39 @@ const STATE: State = {
   sessionProjectDir: null,
   planSlugCache: new Map(),
   promptId: null,
+  scheduledTasksEnabled: false,
+  sessionCronTasks: [],
+}
+
+export function setScheduledTasksEnabled(enabled: boolean): void {
+  STATE.scheduledTasksEnabled = enabled
+}
+
+export function getScheduledTasksEnabled(): boolean {
+  return STATE.scheduledTasksEnabled
+}
+
+export function getSessionCronTasks(): SessionCronTask[] {
+  return STATE.sessionCronTasks
+}
+
+export function addSessionCronTask(task: SessionCronTask): void {
+  STATE.sessionCronTasks.push(task)
+}
+
+/**
+ * Returns the number of tasks actually removed. Callers use this to skip
+ * downstream work (e.g. the disk read in removeCronTasks) when all ids
+ * were accounted for here.
+ */
+export function removeSessionCronTasks(ids: readonly string[]): number {
+  if (ids.length === 0) return 0
+  const idSet = new Set(ids)
+  const remaining = STATE.sessionCronTasks.filter(t => !idSet.has(t.id))
+  const removed = STATE.sessionCronTasks.length - remaining.length
+  if (removed === 0) return 0
+  STATE.sessionCronTasks = remaining
+  return removed
 }
 
 const SLOW_OPERATION_TTL_MS = 5 * 60 * 1000
@@ -877,4 +932,37 @@ export function setCostStateForRestore(state: {
   if (state.lastDuration && state.lastDuration > 0) {
     sessionStartTimeMs = Date.now() - state.lastDuration
   }
+}
+
+// Teams created during this session (by TeamCreate), tracked so orphaned team
+// directories can be cleaned up at session exit. Session-scoped — not persisted.
+const sessionCreatedTeams = new Set<string>()
+
+export function getSessionCreatedTeams(): Set<string> {
+  return sessionCreatedTeams
+}
+
+// --- Compatibility shims for the teammate/swarm subsystem ---
+// These back features not ported into this build (chrome devtools flag,
+// inline plugins, flag-settings file, session bypass-permissions). Safe
+// defaults mirror the flag-off behavior.
+
+/** Chrome devtools flag override — not ported; always undefined. */
+export function getChromeFlagOverride(): boolean | undefined {
+  return undefined
+}
+
+/** Path to a flag-settings JSON file — not ported; always undefined. */
+export function getFlagSettingsPath(): string | undefined {
+  return undefined
+}
+
+/** Inline plugin specs passed at startup — not ported; always empty. */
+export function getInlinePlugins(): Array<string> {
+  return []
+}
+
+/** Whether the session is in bypass-permissions mode — not tracked here; false. */
+export function getSessionBypassPermissionsMode(): boolean {
+  return false
 }

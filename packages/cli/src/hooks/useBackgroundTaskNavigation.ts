@@ -20,6 +20,7 @@ import {
   isInProcessTeammateTask,
 } from '../tasks/InProcessTeammateTask/types.js'
 import { isBackgroundTask } from '../tasks/types.js'
+import { logForDebugging } from '../utils/debug.js'
 
 // Step teammate selection by delta, wrapping across leader(-1)..teammates(0..n-1)..hide(n).
 // First step from a collapsed tree expands it and parks on leader.
@@ -244,7 +245,25 @@ export function useBackgroundTaskNavigation(options?: {
   // KeyboardEvent until the consumer is migrated (separate PR).
   // TODO(onKeyDown-migration): remove once REPL passes handleKeyDown.
   useInput((_input, _key, event) => {
-    handleKeyDown(new KeyboardEvent(event.keypress))
+    const kbEvent = new KeyboardEvent(event.keypress)
+    // Opt-in diagnostics for "Shift+Down doesn't expand the agent tree".
+    // The handler + key parser are correct in code, so the failure is at
+    // runtime: either the terminal doesn't emit a modified Shift+Down
+    // sequence (many Windows consoles send a bare ESC[B, so `shift` is never
+    // set) or a higher-priority input handler consumes it first. Run with
+    // `--debug-file <path>` and press Shift+Down with teammates running; this
+    // line records exactly what reached the handler. Only up/down keys are
+    // logged to keep the signal clean.
+    if (kbEvent.key === 'up' || kbEvent.key === 'down') {
+      const kp = event.keypress as { sequence?: string; raw?: string }
+      logForDebugging(
+        `[teammate-nav] key=${kbEvent.key} shift=${kbEvent.shift} ` +
+          `ctrl=${kbEvent.ctrl} meta=${kbEvent.meta} ` +
+          `teammates=${teammateCount} ` +
+          `raw=${JSON.stringify(kp.sequence ?? kp.raw ?? '')}`,
+      )
+    }
+    handleKeyDown(kbEvent)
   })
 
   return { handleKeyDown }
