@@ -1283,7 +1283,7 @@ async function* queryModel(
   queryCheckpoint('query_tool_schema_build_end')
 
   // Per-model tool-schema sanitization (e.g. Gemini int→string enums). No-op for
-  // models with no schema quirks (e.g. Anthropic).
+  // models with no schema quirks (e.g. first-party models).
   const modelProfile = resolveModelProfile(options.model)
   const sanitizedToolSchemas = isEnvTruthy(
     process.env.KNIGHTCODE_DISABLE_MODEL_PROFILE,
@@ -1336,7 +1336,7 @@ async function* queryModel(
   messagesForAPI = ensureToolResultPairing(messagesForAPI)
 
   // Per-model message normalization (e.g. DeepSeek reasoning blocks, Mistral
-  // tool-id scrubbing). No-op for models with no message quirks (e.g. Anthropic).
+  // tool-id scrubbing). No-op for models with no message quirks (e.g. first-party models).
   if (!isEnvTruthy(process.env.KNIGHTCODE_DISABLE_MODEL_PROFILE)) {
     messagesForAPI = normalizeMessagesForModel(
       messagesForAPI,
@@ -1767,7 +1767,7 @@ async function* queryModel(
 
     // Layer per-model adaptations (sampling, OpenRouter reasoning + answer-token
     // floor, extraBody, provider routing) onto the assembled body. The inline
-    // `thinking` above stays authoritative for Anthropic; this never overwrites
+    // `thinking` above stays authoritative for first-party models; this never overwrites
     // it (see applyModelProfileToBody). Mutates requestBody in place.
     applyModelProfileToBody(
       requestBody as unknown as Record<string, unknown>,

@@ -16,7 +16,7 @@ function ensureAnswerFloor(body: Record<string, any>, maxOutputTokens: number) {
 
 /**
  * Set the reasoning signal appropriate to the model. Sets exactly one of
- * `thinking` (Anthropic) / `reasoning` (OpenRouter) / an enable-flag merge.
+ * `thinking` (first-party) / `reasoning` (OpenRouter) / an enable-flag merge.
  * No-op when reasoning is disabled for this turn or unsupported.
  */
 export function applyReasoning(

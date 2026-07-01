@@ -28,12 +28,12 @@ export function resolveModelProfile(id: string): ModelProfile {
   const supportsReasoning = entry?.supportsReasoning ?? false
   const quirks = matchQuirks(id)
 
-  // Anthropic/Claude ids do not depend on the OpenRouter catalog for reasoning
+  // First-party ids do not depend on the OpenRouter catalog for reasoning
   // capability — they resolve via modelSupportsAdaptiveThinking. All other ids
   // rely on catalog data; if the catalog hasn't warmed yet (entry === undefined)
   // we must NOT cache the profile so that the next call (after warm) recomputes
   // with real capabilities instead of stale safe-defaults.
-  const isAnthropic = id.toLowerCase().startsWith('anthropic/') || id.toLowerCase().includes('claude')
+  const isFirstParty = id.toLowerCase().startsWith('anthropic/') || id.toLowerCase().includes('claude')
 
   const profile: ModelProfile = {
     id,
@@ -49,7 +49,7 @@ export function resolveModelProfile(id: string): ModelProfile {
     messageTransforms: quirks.messageTransforms ?? [],
   }
 
-  if (entry !== undefined || isAnthropic) {
+  if (entry !== undefined || isFirstParty) {
     cache.set(id, profile)
   }
 

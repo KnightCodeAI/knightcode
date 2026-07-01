@@ -20,8 +20,8 @@ export type ReasoningCtx = {
  * hatch.
  *
  * The inline thinking block in knightcode.ts remains authoritative for
- * Anthropic `thinking` (it handles every env/override edge case), so we SKIP
- * applyReasoning for Anthropic reasoning kinds here — that prevents this layer
+ * first-party `thinking` (it handles every env/override edge case), so we SKIP
+ * applyReasoning for first-party reasoning kinds here — that prevents this layer
  * from ever overwriting the inline thinking value. applyReasoning therefore
  * only adds reasoning + the answer-token floor for OpenRouter models.
  */

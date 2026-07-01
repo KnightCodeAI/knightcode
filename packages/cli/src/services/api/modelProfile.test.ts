@@ -31,7 +31,7 @@ describe('applyModelProfileToBody', () => {
     expect('provider' in out).toBe(false)
   })
 
-  test('Anthropic id: applier never sets thinking or reasoning (inline block owns thinking)', () => {
+  test('first-party id: applier never sets thinking or reasoning (inline block owns thinking)', () => {
     const out = applyModelProfileToBody(
       { max_tokens: 8000 },
       'anthropic/claude-sonnet-4.6',
@@ -39,14 +39,14 @@ describe('applyModelProfileToBody', () => {
     )
     expect('thinking' in out).toBe(false)
     expect('reasoning' in out).toBe(false)
-    // applySampling must not add a temperature for Anthropic (the API disallows
+    // applySampling must not add a temperature for first-party models (the API disallows
     // temperature when thinking is enabled).
     expect('temperature' in out).toBe(false)
-    // provider routing still applies to Anthropic (intentional, beneficial)
+    // provider routing still applies to first-party models (intentional, beneficial)
     expect(out.provider).toEqual({ require_parameters: true })
   })
 
-  test('Anthropic id with hasThinking=false: does not overwrite an inline temperature', () => {
+  test('first-party id with hasThinking=false: does not overwrite an inline temperature', () => {
     const out = applyModelProfileToBody(
       { max_tokens: 8000, temperature: 1 },
       'anthropic/claude-sonnet-4.6',
