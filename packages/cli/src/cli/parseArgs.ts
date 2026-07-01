@@ -49,6 +49,14 @@ export type CliOptions = {
   resume?: string | true
   /** --fork-session : on resume, mint a fresh session id instead of reusing it. */
   forkSession: boolean
+  /** --output-format : output format for headless mode (only with --print). */
+  outputFormat?: 'text' | 'json' | 'stream-json'
+  /** --max-turns : maximum agentic turns in headless mode. */
+  maxTurns?: number
+  /** --allowedTools / --allowed-tools : comma or space-separated tool rules to allow. */
+  allowedTools: string[]
+  /** --disallowedTools / --disallowed-tools : comma or space-separated tool rules to deny. */
+  disallowedTools: string[]
 }
 
 /**
@@ -69,7 +77,7 @@ export function buildProgram(version: string): Command {
     .version(version, '-v, --version', 'Output the version number')
     .option(
       '-p, --print',
-      'Print response and exit (headless). Not available in this build.',
+      'Print response and exit (headless). Reads the prompt from the argument or stdin.',
       () => true,
     )
     .option('--verbose', 'Enable verbose output', () => true)
@@ -132,6 +140,26 @@ export function buildProgram(version: string): Command {
         '(use with --resume or --continue)',
       () => true,
     )
+    .addOption(
+      new Option(
+        '--output-format <format>',
+        'Output format (only with --print): "text" (default), "json", or "stream-json"',
+      ).choices(['text', 'json', 'stream-json']),
+    )
+    .addOption(
+      new Option(
+        '--max-turns <turns>',
+        'Maximum agentic turns in headless mode; exits early when reached (only with --print)',
+      ).argParser(Number),
+    )
+    .option(
+      '--allowedTools, --allowed-tools <tools...>',
+      'Comma or space-separated tool rules to allow (e.g. "Bash(git:*) Edit")',
+    )
+    .option(
+      '--disallowedTools, --disallowed-tools <tools...>',
+      'Comma or space-separated tool rules to deny',
+    )
   return program
 }
 
@@ -147,6 +175,9 @@ export function parseCliArgs(argv: string[], version = '0.0.0'): CliOptions {
 
   const opts = program.opts()
   const prompt = program.args[0]
+
+  const splitToolRules = (v: unknown): string[] =>
+    Array.isArray(v) ? v.flatMap(s => String(s).split(',')).map(s => s.trim()).filter(Boolean) : []
 
   return {
     prompt: prompt && prompt.length > 0 ? prompt : undefined,
@@ -173,5 +204,9 @@ export function parseCliArgs(argv: string[], version = '0.0.0'): CliOptions {
         ? opts.resume
         : undefined,
     forkSession: opts.forkSession === true,
+    outputFormat: opts.outputFormat as 'text' | 'json' | 'stream-json' | undefined,
+    maxTurns: typeof opts.maxTurns === 'number' && !Number.isNaN(opts.maxTurns) ? opts.maxTurns : undefined,
+    allowedTools: splitToolRules(opts.allowedTools),
+    disallowedTools: splitToolRules(opts.disallowedTools),
   }
 }

@@ -130,3 +130,25 @@ describe('parseCliArgs', () => {
     )
   })
 })
+
+describe('headless flags', () => {
+  test('--output-format parses and validates choices', () => {
+    expect(parseCliArgs(['-p', 'hi', '--output-format', 'json']).outputFormat).toBe('json')
+    expect(parseCliArgs(['-p', 'hi']).outputFormat).toBeUndefined()
+    expect(() => parseCliArgs(['-p', 'hi', '--output-format', 'yaml'])).toThrow()
+  })
+  test('--max-turns parses as a number', () => {
+    expect(parseCliArgs(['-p', 'hi', '--max-turns', '3']).maxTurns).toBe(3)
+    expect(parseCliArgs(['-p', 'hi']).maxTurns).toBeUndefined()
+  })
+  test('--allowedTools / --disallowedTools accept space- and comma-separated values', () => {
+    const o = parseCliArgs(['-p', 'hi', '--allowedTools', 'Bash(git:*)', 'Edit', '--disallowedTools', 'WebSearch,WebFetch'])
+    expect(o.allowedTools).toEqual(['Bash(git:*)', 'Edit'])
+    expect(o.disallowedTools).toEqual(['WebSearch', 'WebFetch'])
+  })
+  test('defaults are empty arrays', () => {
+    const o = parseCliArgs(['-p', 'hi'])
+    expect(o.allowedTools).toEqual([])
+    expect(o.disallowedTools).toEqual([])
+  })
+})
