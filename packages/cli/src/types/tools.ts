@@ -48,8 +48,20 @@ export type ToolProgressData =
       agentId: string
       [key: string]: unknown
     }
-  | { type: 'task_output_progress'; [key: string]: unknown }
+  | {
+      type: 'waiting_for_task'
+      taskDescription?: string
+      taskType?: string
+      [key: string]: unknown
+    }
   | { type: 'web_search_progress'; [key: string]: unknown }
+  | { type: 'query_update'; query: string; [key: string]: unknown }
+  | {
+      type: 'search_results_received'
+      resultCount: number
+      query: string
+      [key: string]: unknown
+    }
 
 // Carries a sub-agent's streamed message up to the parent's progress renderer.
 export type AgentToolProgress = {
@@ -78,8 +90,11 @@ export type PowerShellProgress = ToolProgressData & {
 export type REPLToolProgress = ToolProgressData & { type: 'repl_progress' }
 export type SkillToolProgress = ToolProgressData & { type: 'skill_progress' }
 export type TaskOutputProgress = ToolProgressData & {
-  type: 'task_output_progress'
+  type: 'waiting_for_task'
+  taskDescription?: string
+  taskType?: string
 }
-export type WebSearchProgress = ToolProgressData & {
-  type: 'web_search_progress'
-}
+export type WebSearchProgress = Extract<
+  ToolProgressData,
+  { type: 'query_update' | 'search_results_received' | 'web_search_progress' }
+>

@@ -19,9 +19,34 @@ import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResour
 import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
 import { WebFetchTool } from './tools/WebFetchTool/WebFetchTool.js'
+import { TaskCreateTool } from './tools/TaskCreateTool/TaskCreateTool.js'
+import { TaskGetTool } from './tools/TaskGetTool/TaskGetTool.js'
+import { TaskUpdateTool } from './tools/TaskUpdateTool/TaskUpdateTool.js'
+import { TaskListTool } from './tools/TaskListTool/TaskListTool.js'
+import { TaskOutputTool } from './tools/TaskOutputTool/TaskOutputTool.js'
+import { TaskStopTool } from './tools/TaskStopTool/TaskStopTool.js'
+import { EnterWorktreeTool } from './tools/EnterWorktreeTool/EnterWorktreeTool.js'
+import { ExitWorktreeTool } from './tools/ExitWorktreeTool/ExitWorktreeTool.js'
+import { SleepTool } from './tools/SleepTool/SleepTool.js'
+import { CronCreateTool } from './tools/ScheduleCronTool/CronCreateTool.js'
+import { CronDeleteTool } from './tools/ScheduleCronTool/CronDeleteTool.js'
+import { CronListTool } from './tools/ScheduleCronTool/CronListTool.js'
+import { ConfigTool } from './tools/ConfigTool/ConfigTool.js'
+// LSPTool: code intelligence (definitions, references, symbols, hover). Its
+// backend (services/lsp/*) spawns language servers on demand; the tool self-
+// gates via isEnabled() -> isLspConnected(), so it only appears when a
+// supported language server (typescript-language-server, pyright, gopls,
+// rust-analyzer) is installed on PATH.
+import { LSPTool } from './tools/LSPTool/LSPTool.js'
+import { WebSearchTool } from './tools/WebSearchTool/WebSearchTool.js'
+import { TeamCreateTool } from './tools/TeamCreateTool/TeamCreateTool.js'
+import { TeamDeleteTool } from './tools/TeamDeleteTool/TeamDeleteTool.js'
+import { SendMessageTool } from './tools/SendMessageTool/SendMessageTool.js'
+import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js'
 import { getDenyRules } from './utils/permissions/permissions.js'
 import { isEnvTruthy } from './utils/envUtils.js'
 import { getPlatform } from './utils/platform.js'
+import { isTodoV2Enabled } from './utils/tasks.js'
 import { isToolSearchEnabledOptimistic } from './utils/toolSearch.js'
 
 // The set of tools a sub-agent may never call. Defined in constants/tools.ts;
@@ -52,10 +77,14 @@ export function parseToolPreset(preset: string): ToolPreset | null {
 export function getAllBaseTools(): Tools {
   return [
     AgentTool,
+    TaskOutputTool,
     BashTool,
     ...(getPlatform() === 'windows' ? [PowerShellTool] : []),
     GlobTool,
     GrepTool,
+    // Self-gates via isEnabled() -> isLspConnected(): only present when a
+    // supported language server is installed on PATH.
+    LSPTool,
     FileReadTool,
     FileEditTool,
     FileWriteTool,
@@ -63,6 +92,28 @@ export function getAllBaseTools(): Tools {
     TodoWriteTool,
     SkillTool,
     WebFetchTool,
+    WebSearchTool,
+    TaskStopTool,
+    // Task-management tools (TaskCreate/Get/Update/List) replace TodoWrite in
+    // interactive sessions; isTodoV2Enabled() is false in non-interactive mode.
+    ...(isTodoV2Enabled()
+      ? [TaskCreateTool, TaskGetTool, TaskUpdateTool, TaskListTool]
+      : []),
+    EnterWorktreeTool,
+    ExitWorktreeTool,
+    // Agent-teams / teammate tools. Self-gate via isEnabled() ->
+    // isAgentSwarmsEnabled() (on for everyone unless opted out). SendMessage
+    // also backs teammate↔teammate messaging.
+    ...(isAgentSwarmsEnabled()
+      ? [TeamCreateTool, TeamDeleteTool, SendMessageTool]
+      : []),
+    SleepTool,
+    // Cron scheduling tools (CronCreate/Delete/List). Self-gate via isEnabled()
+    // -> isKairosCronEnabled() (on for everyone unless KNIGHTCODE_CODE_DISABLE_CRON).
+    CronCreateTool,
+    CronDeleteTool,
+    CronListTool,
+    ConfigTool,
     // Client-side advisor reconstruction — self-gates via isClientAdvisorEnabled()
     // (only active under BYOK once a reviewer model is set with /advisor).
     AdvisorTool,

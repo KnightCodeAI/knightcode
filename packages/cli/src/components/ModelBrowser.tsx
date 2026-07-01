@@ -69,6 +69,11 @@ export function ModelBrowser({
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [isSearchMode, setIsSearchMode] = useState(true)
+  // Focus zones top-to-bottom: tabs → search → list. tabsFocused overlays the
+  // other two — when true, ←/→ switch tabs and ↓ drops back to search.
+  // Reached by pressing ↑ from the search box (see useSearchInput onExitUp).
+  const [tabsFocused, setTabsFocused] = useState(false)
+  const searchInputActive = isSearchMode && !tabsFocused
 
   const { rows } = useTerminalSize()
   // Reserve ~11 rows for chrome (header, tab row, search box, gaps, effort
@@ -109,12 +114,14 @@ export function ModelBrowser({
     setQuery: setSearchQuery,
     cursorOffset: searchCursorOffset,
   } = useSearchInput({
-    isActive: isSearchMode && !loading && !error,
+    isActive: searchInputActive && !loading && !error,
     onExit: () => {
       setIsSearchMode(false)
       setSelectedIndex(0)
       setScrollOffset(0)
     },
+    // ↑ from the search box moves focus up to the tab row.
+    onExitUp: () => setTabsFocused(true),
     onCancel,
   })
 
@@ -231,8 +238,9 @@ export function ModelBrowser({
   //   - esc/n cancel                       → 'Confirmation' context
   // Registering everything under 'ModelPicker' (which only binds left/right)
   // left up/down/enter unresolved, freezing the list at index 0.
-  // Inactive in search mode (search owns the keyboard then).
-  const listKeysActive = !loading && !error && !isSearchMode
+  // Inactive in search mode (search owns the keyboard then) and while the tab
+  // row is focused.
+  const listKeysActive = !loading && !error && !isSearchMode && !tabsFocused
   useKeybindings(
     {
       'select:previous': () => {
@@ -266,9 +274,39 @@ export function ModelBrowser({
     { context: 'ModelPicker', isActive: listKeysActive },
   )
 
+  // Tab-row focus zone (reached via ↑ from search). ←/→ switch tabs and
+  // ↓/Enter drop back to the search box. Reuses the ModelPicker (left/right)
+  // and Select (down/accept) contexts, gated to the tab zone so they never
+  // collide with effort cycling or list navigation (those need listKeysActive,
+  // which is false here). Keybinding-driven — not onKeyDown — so arrow keys are
+  // delivered the same proven way as list nav.
+  const tabsKeysActive = tabsFocused && !loading && !error
+  const switchToOtherTab = useCallback(
+    () => switchTab(activeTab === 'favorites' ? 'all' : 'favorites'),
+    [switchTab, activeTab],
+  )
+  const leaveTabsForSearch = useCallback(() => {
+    setTabsFocused(false)
+    setIsSearchMode(true)
+  }, [])
+  useKeybindings(
+    {
+      'modelPicker:decreaseEffort': switchToOtherTab,
+      'modelPicker:increaseEffort': switchToOtherTab,
+    },
+    { context: 'ModelPicker', isActive: tabsKeysActive },
+  )
+  useKeybindings(
+    {
+      'select:next': leaveTabsForSearch,
+      'select:accept': leaveTabsForSearch,
+    },
+    { context: 'Select', isActive: tabsKeysActive },
+  )
+
   useKeybindings(
     { 'confirm:no': () => onCancel?.() },
-    { context: 'Confirmation', isActive: !isSearchMode },
+    { context: 'Confirmation', isActive: !searchInputActive },
   )
 
   // Non-configurable list-mode keys: Tab switches tabs, Space favorites, and
@@ -283,6 +321,8 @@ export function ModelBrowser({
         }
         return
       }
+      // tabsFocused implies isSearchMode is still true, so this early-return
+      // also covers the tab zone — its nav is keybinding-driven (see below).
       if (isSearchMode) return
 
       if (e.key === 'tab') {
@@ -317,7 +357,7 @@ export function ModelBrowser({
     ],
   )
 
-  const listIsFocused = !isSearchMode
+  const listIsFocused = !isSearchMode && !tabsFocused
 
   const content = (
     <Box flexDirection="column" width="100%" tabIndex={0} autoFocus onKeyDown={handleKeyDown}>
@@ -365,7 +405,7 @@ export function ModelBrowser({
           <Box marginY={1}>
             <SearchBox
               query={searchQuery}
-              isFocused={isSearchMode}
+              isFocused={searchInputActive}
               isTerminalFocused={true}
               cursorOffset={searchCursorOffset}
               placeholder="Filter by name or id…"
@@ -477,9 +517,21 @@ export function ModelBrowser({
 
       {!loading && !error && (
         <Text dimColor>
-          {isSearchMode ? (
+          {tabsFocused ? (
+            <Byline>
+              <KeyboardShortcutHint shortcut="←/→" action="switch tab" />
+              <KeyboardShortcutHint shortcut="↓" action="search" />
+              <ConfigurableShortcutHint
+                action="confirm:no"
+                context="Confirmation"
+                fallback="Esc"
+                description="cancel"
+              />
+            </Byline>
+          ) : isSearchMode ? (
             <Byline>
               <Text>Type to filter</Text>
+              <KeyboardShortcutHint shortcut="↑" action="tabs" />
               <KeyboardShortcutHint shortcut="Enter/↓" action="focus list" />
               <ConfigurableShortcutHint
                 action="confirm:no"

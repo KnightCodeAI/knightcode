@@ -5,6 +5,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "dev:cli": "cd packages/cli && bun --env-file=../../.env run --watch src/main.tsx",
+    "start:cli": "cd packages/cli && bun --env-file=../../.env run src/main.tsx",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",

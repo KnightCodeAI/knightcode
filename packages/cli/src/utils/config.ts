@@ -122,6 +122,10 @@ export type GlobalConfig = {
   lastReleaseNotesSeen?: string
   /** Whether the user has ever backgrounded a session (Ctrl+B hint gating). */
   hasUsedBackgroundTask?: boolean
+  /** iTerm2 it2 integration setup bookkeeping. */
+  iterm2It2SetupComplete?: boolean
+  /** Whether the user prefers tmux over iTerm2 split panes for swarm. */
+  preferTmuxOverIterm2?: boolean
   /** Persisted UI toggles mirrored from app state. */
   showExpandedTodos?: boolean
   showSpinnerTree?: boolean

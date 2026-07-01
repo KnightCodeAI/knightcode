@@ -62,8 +62,8 @@ export interface StatusLineCommandInput {
   worktree?: {
     name: string
     path: string
-    branch: string
+    branch?: string
     original_cwd: string
-    original_branch: string
+    original_branch?: string
   }
 }

@@ -73,9 +73,15 @@ export const EXPLORE_AGENT: BuiltInAgentDefinition = {
   ],
   source: 'built-in',
   baseDir: 'built-in',
-  // Ants get inherit to use the main agent's model; external users get haiku for speed
-  // Note: For ants, getAgentModel() checks knightcode_explore_agent GrowthBook flag at runtime
-  model: process.env.USER_TYPE === 'ant' ? 'inherit' : 'haiku',
+  // Inherit the leader's model. Pinning 'haiku' resolved to a paid/limited
+  // first-party gateway slug under an OpenRouter key (fails or bills the user),
+  // so a fast read-only search agent ended up unusable. Inheriting keeps it on
+  // the same working model as the main session.
+  model: 'inherit',
+  // Backstop against a model tool-looping forever (the "agent ran 15+ minutes"
+  // failure mode). A read-only search rarely needs many turns; 40 is generous
+  // headroom while still failing fast on a runaway loop.
+  maxTurns: 40,
   // Explore is a fast read-only search agent — it doesn't need commit/PR/lint
   // rules from KNIGHTCODE.md. The main agent has full context and interprets results.
   omitKnightcodeMd: true,

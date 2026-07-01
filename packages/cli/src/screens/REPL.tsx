@@ -413,9 +413,10 @@ const useProactive =
   feature('PROACTIVE') || feature('KAIROS')
     ? require('../proactive/useProactive.js').useProactive
     : null
-const useScheduledTasks = feature('AGENT_TRIGGERS')
-  ? require('../hooks/useScheduledTasks.js').useScheduledTasks
-  : null
+// Cron scheduler is available to all users (no AGENT_TRIGGERS gate). The
+// runtime isKairosCronEnabled() check lives inside the hook's effect.
+const useScheduledTasks = require('../hooks/useScheduledTasks.js')
+  .useScheduledTasks as typeof import('../hooks/useScheduledTasks.js').useScheduledTasks
 // Dead code elimination: companion observer (BUDDY) and the ultraplan flow
 // (ULTRAPLAN) are gated-off feature subsystems. The features are disabled
 // externally, so these references are dead; inert no-op/null stands keep the
@@ -2022,14 +2023,17 @@ export function REPL({
     [showStreamingText],
   )
 
-  // Hide the in-progress source line so text streams line-by-line, not
-  // char-by-char. lastIndexOf returns -1 when no newline, giving '' → null.
+  // Stream the full in-progress text, including the not-yet-terminated final
+  // line, so output appears token-by-token rather than only when a newline
+  // arrives. Safe because <StreamingMarkdown> re-parses only the trailing
+  // block per delta and handles partial/unclosed markdown (e.g. open code
+  // fences) correctly. The previous last-newline truncation was a holdover
+  // from the old Ink renderer's cursor-yank bug (see note above); the OpenTUI
+  // renderer repaints the live region in place, so per-token reveal is safe.
   // Guard on showStreamingText so toggling reducedMotion mid-stream
   // immediately hides the streaming preview.
   const visibleStreamingText =
-    streamingText && showStreamingText
-      ? streamingText.substring(0, streamingText.lastIndexOf('\n') + 1) || null
-      : null
+    streamingText && showStreamingText ? streamingText : null
 
   const [lastQueryCompletionTime, setLastQueryCompletionTime] = useState(0)
   const [spinnerMessage, setSpinnerMessage] = useState<string | null>(null)
@@ -5425,18 +5429,15 @@ export function REPL({
 
   useMailboxBridge({ isLoading, onSubmitMessage: handleIncomingPrompt })
 
-  // Scheduled tasks from .knightcode/scheduled_tasks.json (CronCreate/Delete/List)
-  if (feature('AGENT_TRIGGERS')) {
-    // Assistant mode bypasses the isLoading gate (the proactive tick →
-    // Sleep → tick loop would otherwise starve the scheduler).
-    // kairosEnabled is set once in initialState (main.tsx) and never mutated — no
-    // subscription needed. The knightcode_kairos_cron runtime gate is checked inside
-    // useScheduledTasks's effect (not here) since wrapping a hook call in a dynamic
-    // condition would break rules-of-hooks.
-    const assistantMode = store.getState().kairosEnabled
-    // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-    useScheduledTasks!({ isLoading, assistantMode, setMessages })
-  }
+  // Scheduled tasks from .knightcode/scheduled_tasks.json (CronCreate/Delete/List).
+  // Available to all users — the runtime isKairosCronEnabled() gate is checked
+  // inside the hook's effect, so the hook is called unconditionally here to
+  // satisfy rules-of-hooks.
+  // Assistant mode bypasses the isLoading gate (the proactive tick → Sleep →
+  // tick loop would otherwise starve the scheduler). kairosEnabled is set once
+  // in initialState (main.tsx) and never mutated — no subscription needed.
+  const assistantMode = store.getState().kairosEnabled
+  useScheduledTasks({ isLoading, assistantMode, setMessages })
 
   // Note: Permission polling is now handled by useInboxPoller
   // - Workers receive permission responses via mailbox messages

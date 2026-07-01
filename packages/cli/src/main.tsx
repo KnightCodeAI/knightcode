@@ -9,6 +9,7 @@ import {
   getOriginalCwd,
   setAdditionalDirectoriesForKnightcodeMd,
   setAllowedSettingSources,
+  setIsInteractive,
   setQuestionPreviewFormat,
 } from './bootstrap/state.js'
 import { getEmptyToolPermissionContext } from './Tool.js'
@@ -106,6 +107,12 @@ if (!hasKnightcodeApiKeyAuth()) {
   const instance = await render(<MissingKeyNotice />)
   await instance.waitUntilExit()
 } else {
+  // Headless print mode exits above, so reaching here means an interactive
+  // session. Mark it as such before any subsystem reads the flag — command
+  // resolution (e.g. /context's grid vs. markdown-table variant), MCP approval,
+  // file history, and beta headers all branch on getIsNonInteractiveSession().
+  setIsInteractive(true)
+
   // --bare: minimal mode. Set before any subsystem reads it.
   if (cli.bare) {
     process.env.KNIGHTCODE_CODE_SIMPLE = '1'
@@ -268,7 +275,7 @@ if (!hasKnightcodeApiKeyAuth()) {
         if (matches.length === 1) {
           matchedLog = matches[0] ?? null
           maybeSessionId = matchedLog
-            ? getSessionIdFromLog(matchedLog) ?? null
+            ? (getSessionIdFromLog(matchedLog) ?? null)
             : null
         } else {
           searchTerm = trimmed
@@ -320,9 +327,8 @@ if (!hasKnightcodeApiKeyAuth()) {
     } else {
       // No direct match → interactive picker (same-repo + worktree sessions).
       const { App } = await import('./components/App.js')
-      const { ResumeConversation } = await import(
-        './screens/ResumeConversation.js'
-      )
+      const { ResumeConversation } =
+        await import('./screens/ResumeConversation.js')
       const worktreePaths = await getWorktreePaths(getOriginalCwd())
       await renderAndRun(
         root,

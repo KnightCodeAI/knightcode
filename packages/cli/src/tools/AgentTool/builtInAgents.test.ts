@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { EXPLORE_AGENT } from './built-in/exploreAgent.js'
 import { getBuiltInAgents } from './builtInAgents.js'
 import { isBuiltInAgent } from './loadAgentsDir.js'
 
@@ -15,6 +16,20 @@ describe('built-in agent definitions', () => {
       expect(agent.source).toBe('built-in')
       expect(isBuiltInAgent(agent)).toBe(true)
     }
+  })
+
+  test('Explore inherits the leader model instead of pinning a gateway slug', () => {
+    // Pinning 'haiku' resolved to a paid/limited first-party gateway slug under
+    // an OpenRouter key (fails or bills the user). Inherit the leader instead.
+    expect(EXPLORE_AGENT.model).toBe('inherit')
+  })
+
+  test('Explore has a bounded maxTurns so a runaway loop fails fast', () => {
+    // Backstop against a weak/slow model tool-looping forever (the "agent ran
+    // 15+ minutes" failure mode). Explore is a fast read-only search agent, so
+    // a generous-but-finite cap is safe.
+    expect(EXPLORE_AGENT.maxTurns).toBeGreaterThan(0)
+    expect(EXPLORE_AGENT.maxTurns).toBeLessThanOrEqual(50)
   })
 
   test('Explore and Plan are gated behind the explore/plan feature flag', () => {

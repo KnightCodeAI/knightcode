@@ -89,6 +89,9 @@
     "shell-quote": "^1.8.0",
     "tree-kill": "^1.2.2",
     "turndown": "^7.2.4",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.18.0",
+    "vscode-languageserver-types": "^3.18.0",
     "ws": "^8.18.0",
     "xss": "^1.0.15",
     "yaml": "^2.6.1"

@@ -92,10 +92,15 @@ export async function glob(
   // --files: list files instead of searching content
   // --glob: filter by pattern
   // --sort=modified: sort by modification time (oldest first)
-  // --no-ignore: don't respect .gitignore (default true, set KNIGHTCODE_CODE_GLOB_NO_IGNORE=false to respect .gitignore)
+  // --no-ignore: don't respect .gitignore. Default OFF so Glob respects
+  //   .gitignore (node_modules/.next/dist etc. stay out of the agent's
+  //   context, matching GrepTool and the file picker). Set
+  //   KNIGHTCODE_CODE_GLOB_NO_IGNORE=true to include ignored files.
   // --hidden: include hidden files (default true, set KNIGHTCODE_CODE_GLOB_HIDDEN=false to exclude)
-  // Note: use || instead of ?? to treat empty string as unset (defaulting to true)
-  const noIgnore = isEnvTruthy(process.env.KNIGHTCODE_CODE_GLOB_NO_IGNORE || 'true')
+  // Note: use || instead of ?? to treat empty string as unset.
+  const noIgnore = isEnvTruthy(
+    process.env.KNIGHTCODE_CODE_GLOB_NO_IGNORE || 'false',
+  )
   const hidden = isEnvTruthy(process.env.KNIGHTCODE_CODE_GLOB_HIDDEN || 'true')
   const args = [
     '--files',

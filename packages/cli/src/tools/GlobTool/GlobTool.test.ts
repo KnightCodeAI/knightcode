@@ -51,3 +51,36 @@ describe('GlobTool.call', () => {
     expect(result.data.numFiles).toBe(0)
   })
 })
+
+describe('GlobTool.call gitignore handling', () => {
+  let gdir: string
+
+  beforeAll(() => {
+    gdir = mkdtempSync(join(tmpdir(), 'knightcode-glob-gi-'))
+    // ripgrep only applies .gitignore rules inside a git repo, so mark this
+    // temp dir as one. An empty .git directory is enough for the heuristic.
+    mkdirSync(join(gdir, '.git'), { recursive: true })
+    mkdirSync(join(gdir, 'node_modules', 'pkg'), { recursive: true })
+    mkdirSync(join(gdir, 'src'), { recursive: true })
+    writeFileSync(join(gdir, '.gitignore'), 'node_modules/\n')
+    writeFileSync(join(gdir, 'src', 'app.ts'), 'export const x = 1\n')
+    writeFileSync(
+      join(gdir, 'node_modules', 'pkg', 'index.ts'),
+      'export const y = 2\n',
+    )
+  })
+
+  afterAll(() => {
+    rmSync(gdir, { recursive: true, force: true })
+  })
+
+  test('excludes gitignored files by default', async () => {
+    const result = await GlobTool.call(
+      { pattern: '**/*.ts', path: gdir },
+      ctx(),
+    )
+    const names = result.data.filenames.map(f => f.replace(/\\/g, '/'))
+    expect(names.some(n => n.endsWith('src/app.ts'))).toBe(true)
+    expect(names.some(n => n.includes('node_modules'))).toBe(false)
+  })
+})
