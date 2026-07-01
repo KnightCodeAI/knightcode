@@ -22,6 +22,13 @@ const ALLOW: RegExp[] = [
   /\.not\.toContain\(/,
   /a legacy CLAUDE\.md/,
   /legacy should be ignored/,
+  // Model-profile functional identifiers: reasoning-strategy discriminators,
+  // the `anthropic/` OpenRouter slug-namespace check, the includes-claude
+  // model-id guard, and the OpenRouter provider name in routing preferences.
+  /anthropic-(adaptive|budget)/,
+  /'anthropic\//,
+  /includes\('claude'\)/,
+  /\['Anthropic'\]/,
 ]
 
 function allowed(line: string): boolean {

@@ -1,5 +1,12 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { setModelCatalogForTests } from '../openRouterModels.js'
 import { resolveModelProfile } from './profile.js'
+
+// Pin an empty (warm-but-empty) catalog so these tests are deterministic on
+// machines with a real disk cache and immune to catalog state left behind by
+// other test files.
+beforeAll(() => setModelCatalogForTests([]))
+afterAll(() => setModelCatalogForTests(null))
 
 describe('resolveModelProfile', () => {
   test('folds quirk sampling into the profile', () => {
@@ -11,20 +18,20 @@ describe('resolveModelProfile', () => {
     expect(p.sampling).toEqual({})
     expect(p.supportsReasoning).toBe(false)
   })
-  test('anthropic models resolve to adaptive reasoning', () => {
+  test('first-party models resolve to adaptive reasoning', () => {
     expect(resolveModelProfile('anthropic/claude-sonnet-4.6').reasoning.kind).toBe('anthropic-adaptive')
   })
-  test('anthropic model without adaptive thinking resolves to budget reasoning', () => {
+  test('first-party model without adaptive thinking resolves to budget reasoning', () => {
     // claude-3.5-haiku canonical = 'claude-3-5-haiku' which contains 'haiku'
     // modelSupportsAdaptiveThinking returns false for it → anthropic-budget
     expect(resolveModelProfile('anthropic/claude-3.5-haiku').reasoning.kind).toBe('anthropic-budget')
   })
-  test('Anthropic id is cached: two calls return the same object reference', () => {
+  test('first-party id is cached: two calls return the same object reference', () => {
     const a = resolveModelProfile('anthropic/claude-sonnet-4.6')
     const b = resolveModelProfile('anthropic/claude-sonnet-4.6')
     expect(a).toBe(b)
   })
-  test('unknown non-Anthropic id (cold catalog) returns safe-default profile and is stable across calls', () => {
+  test('unknown non-first-party id (cold catalog) returns safe-default profile and is stable across calls', () => {
     const p1 = resolveModelProfile('acme/unknown-cold-1')
     expect(p1.reasoning.kind).toBe('none')
     expect(p1.sampling).toEqual({})

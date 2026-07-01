@@ -176,6 +176,18 @@ export function getModelSupportedParameters(id: string): Set<string> {
 }
 
 /**
+ * Test-only seam: pin the in-memory catalog. Pass a models array to simulate a
+ * warm catalog ([] = warm but empty — no disk fallback), or null to reset to
+ * the cold state (next read falls back to the disk cache). Tests must use this
+ * instead of mock.module: bun module mocks are process-global and cannot be
+ * reliably restored for already-linked importers, so they poison every test
+ * file that runs later in the same process.
+ */
+export function setModelCatalogForTests(models: OpenRouterModel[] | null): void {
+  memoizedModels = models
+}
+
+/**
  * Fire-and-forget catalog warm for startup. Populates the in-memory + disk
  * cache so context sizing and model profiles have real data without the user
  * opening the model picker. Never throws.
