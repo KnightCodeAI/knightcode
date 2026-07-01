@@ -10,3 +10,10 @@ export interface LiveSessionInfo {
 export async function listAllLiveSessions(): Promise<LiveSessionInfo[]> {
   return []
 }
+
+export async function sendToUdsSocket(
+  _socketPath: string,
+  _message: string,
+): Promise<void> {
+  throw new Error('Unix domain socket IPC is not supported in this build')
+}

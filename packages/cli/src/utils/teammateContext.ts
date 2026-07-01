@@ -1,12 +1,24 @@
-// TODO: in-process teammate context (the async-local store that marks the
-// current execution as running inside a swarm teammate) is not implemented yet.
-// The attachment pipeline checks this to decide whether to surface the leader's
-// inbox; until the swarm subsystem lands the harness is never an in-process
-// teammate.
-export function isInProcessTeammate(): boolean {
-  return false
-}
+/**
+ * TeammateContext - Runtime context for in-process teammates
+ *
+ * This module provides AsyncLocalStorage-based context for in-process teammates,
+ * enabling concurrent teammate execution without global state conflicts.
+ *
+ * Relationship with other teammate identity mechanisms:
+ * - Env vars (KNIGHTCODE_CODE_AGENT_ID): Process-based teammates spawned via tmux
+ * - dynamicTeamContext (teammate.ts): Process-based teammates joining at runtime
+ * - TeammateContext (this file): In-process teammates via AsyncLocalStorage
+ *
+ * The helper functions in teammate.ts check AsyncLocalStorage first, then
+ * dynamicTeamContext, then env vars.
+ */
 
+import { AsyncLocalStorage } from 'async_hooks'
+
+/**
+ * Runtime context for in-process teammates.
+ * Stored in AsyncLocalStorage for concurrent access.
+ */
 export type TeammateContext = {
   /** Full agent ID, e.g., "researcher@my-team" */
   agentId: string
@@ -26,9 +38,59 @@ export type TeammateContext = {
   abortController: AbortController
 }
 
-// TODO: returns the current in-process teammate's context once the swarm
-// subsystem lands. The local-only build never runs inside a teammate, so there
-// is no context to return.
+const teammateContextStorage = new AsyncLocalStorage<TeammateContext>()
+
+/**
+ * Get the current in-process teammate context, if running as one.
+ * Returns undefined if not running within an in-process teammate context.
+ */
 export function getTeammateContext(): TeammateContext | undefined {
-  return undefined
+  return teammateContextStorage.getStore()
+}
+
+/**
+ * Run a function with teammate context set.
+ * Used when spawning an in-process teammate to establish its execution context.
+ *
+ * @param context - The teammate context to set
+ * @param fn - The function to run with the context
+ * @returns The return value of fn
+ */
+export function runWithTeammateContext<T>(
+  context: TeammateContext,
+  fn: () => T,
+): T {
+  return teammateContextStorage.run(context, fn)
+}
+
+/**
+ * Check if current execution is within an in-process teammate.
+ * This is faster than getTeammateContext() !== undefined for simple checks.
+ */
+export function isInProcessTeammate(): boolean {
+  return teammateContextStorage.getStore() !== undefined
+}
+
+/**
+ * Create a TeammateContext from spawn configuration.
+ * The abortController is passed in by the caller. For in-process teammates,
+ * this is typically an independent controller (not linked to parent) so teammates
+ * continue running when the leader's query is interrupted.
+ *
+ * @param config - Configuration for the teammate context
+ * @returns A complete TeammateContext with isInProcess: true
+ */
+export function createTeammateContext(config: {
+  agentId: string
+  agentName: string
+  teamName: string
+  color?: string
+  planModeRequired: boolean
+  parentSessionId: string
+  abortController: AbortController
+}): TeammateContext {
+  return {
+    ...config,
+    isInProcess: true,
+  }
 }
