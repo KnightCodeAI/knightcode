@@ -23,8 +23,11 @@ async function behavior(
 }
 
 describe('bashToolHasPermission', () => {
-  test('no rules -> ask', async () => {
-    expect(await behavior('npm test', {})).toBe('ask')
+  // No bash rule yields a decision -> 'passthrough', which the permission
+  // pipeline (permissions.ts:168 groups passthrough with ask) resolves to a
+  // user prompt. 'passthrough' never auto-allows.
+  test('no rules -> passthrough (pipeline prompts)', async () => {
+    expect(await behavior('npm test', {})).toBe('passthrough')
   })
 
   test('exact allow rule allows the exact command', async () => {
@@ -43,8 +46,9 @@ describe('bashToolHasPermission', () => {
   })
 
   test('prefix allow rule does NOT allow a different command', async () => {
+    // Non-matching command -> no decision -> passthrough (pipeline prompts).
     expect(await behavior('npm run build', { allow: ['Bash(npm test:*)'] })).toBe(
-      'ask',
+      'passthrough',
     )
   })
 
