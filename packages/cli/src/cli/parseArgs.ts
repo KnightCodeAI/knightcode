@@ -1,10 +1,10 @@
 // Command-line argument parsing for the interactive entrypoint.
 //
 // This is the BYOK-relevant slice of the upstream commander program: the flags
-// that configure an interactive session. The cloud/SDK surface (headless print
-// protocol, auth/plugin/server/ssh/doctor/update subcommands) is out of scope
-// for a BYOK build — `-p/--print` is recognized and reported as unsupported
-// rather than silently dropping into the REPL.
+// that configure an interactive session. The cloud/SDK surface (auth/plugin/server/ssh/doctor/update
+// subcommands) is out of scope for a BYOK build. The `-p/--print` headless
+// print mode is now supported; the flags parsed here configure both the
+// interactive session and headless print mode.
 //
 // parseCliArgs is pure (no side effects) and unit-tested; applying the parsed
 // options to runtime state happens in main.tsx.
@@ -16,7 +16,7 @@ import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
 export type CliOptions = {
   /** Positional prompt to pre-submit on launch. */
   prompt?: string
-  /** --print / -p : headless mode (unsupported in this build). */
+  /** --print / -p : headless mode. */
   print: boolean
   /** --model <m> : alias or full model id for the session. */
   model?: string

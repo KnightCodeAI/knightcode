@@ -151,4 +151,7 @@ describe('headless flags', () => {
     expect(o.allowedTools).toEqual([])
     expect(o.disallowedTools).toEqual([])
   })
+  test('--max-turns with a non-numeric value is silently treated as unset', () => {
+    expect(parseCliArgs(['-p', 'hi', '--max-turns', 'abc']).maxTurns).toBeUndefined()
+  })
 })
