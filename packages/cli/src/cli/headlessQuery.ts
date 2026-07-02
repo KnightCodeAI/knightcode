@@ -57,6 +57,7 @@ export type HeadlessTurnOptions = {
   appendSystemPrompt?: string
   verbose: boolean
   queryFn?: typeof defaultQuery
+  recordTranscriptFn?: typeof recordTranscript
 }
 
 // Reads the four wire usage fields off a raw stream-event usage object,
@@ -90,18 +91,18 @@ function mergeWireUsage(prev: Usage, raw: unknown): Usage {
 
 // Last text block of an assistant message, mirroring QueryEngine's result-text
 // extraction: only the final content block counts, and only if it's text (a
-// turn ending in a tool_use yields no result text).
-function lastAssistantText(message: Message): string | null {
-  if (message.type !== 'assistant') return null
+// turn ending in a tool_use yields no result text — this returns '').
+function lastAssistantText(message: Message): string {
+  if (message.type !== 'assistant') return ''
   const content = message.message.content
   if (!Array.isArray(content)) {
-    return typeof content === 'string' ? content : null
+    return typeof content === 'string' ? content : ''
   }
   const last = content[content.length - 1]
   if (last && typeof last === 'object' && 'type' in last && last.type === 'text') {
     return (last as { text: string }).text
   }
-  return null
+  return ''
 }
 
 /**
@@ -119,6 +120,8 @@ function buildHeadlessToolUseContext(args: {
   verbose: boolean
   messages: Message[]
   abortController: AbortController
+  customSystemPrompt?: string
+  appendSystemPrompt?: string
 }): ProcessUserInputContext {
   const { store, permissionContext, commands, model, verbose, messages } = args
 
@@ -141,6 +144,8 @@ function buildHeadlessToolUseContext(args: {
       isNonInteractiveSession: true,
       agentDefinitions: store.getState().agentDefinitions,
       refreshTools,
+      customSystemPrompt: args.customSystemPrompt,
+      appendSystemPrompt: args.appendSystemPrompt,
       // LocalJSXCommandContext options — headless has no IDE integration or
       // theme surface, so these are inert defaults.
       ideInstallationStatus: null,
@@ -199,6 +204,7 @@ export async function* runHeadlessTurn(
 ): AsyncGenerator<SDKMessage> {
   const startTime = Date.now()
   const queryFn = opts.queryFn ?? defaultQuery
+  const recordTranscriptFn = opts.recordTranscriptFn ?? recordTranscript
 
   // Transcript of yielded assistant/user messages, seeded with the user's
   // prompt. Kept separate from the array handed to query() so query()'s
@@ -242,6 +248,8 @@ export async function* runHeadlessTurn(
       verbose: opts.verbose,
       messages: transcript,
       abortController,
+      customSystemPrompt: opts.systemPrompt,
+      appendSystemPrompt: opts.appendSystemPrompt,
     })
 
     // System prompt: opts.systemPrompt replaces the default; appendSystemPrompt
@@ -290,8 +298,7 @@ export async function* runHeadlessTurn(
           if (message.message.stop_reason != null) {
             stopReason = message.message.stop_reason
           }
-          const text = lastAssistantText(message)
-          if (text != null) resultText = text
+          resultText = lastAssistantText(message)
           transcript.push(message)
           const envelope = toSdkEnvelope(message)
           if (envelope) yield envelope
@@ -349,7 +356,7 @@ export async function* runHeadlessTurn(
     // Best-effort transcript persistence — a session-storage failure must not
     // turn a successful turn into an error.
     try {
-      await recordTranscript(transcript)
+      await recordTranscriptFn(transcript)
     } catch {
       // ignore
     }
