@@ -95,17 +95,18 @@ try {
   process.exit(code)
 }
 
-if (cli.print) {
-  process.stderr.write(
-    'Headless print mode (-p/--print) is not available in this build. ' +
-      'KnightCode runs as an interactive session.\n',
-  )
-  process.exit(1)
-}
-
 if (!hasKnightcodeApiKeyAuth()) {
+  if (cli.print) {
+    process.stderr.write(
+      'Error: no API key configured. Set OPENROUTER_API_KEY or run knightcode to log in.\n',
+    )
+    process.exit(1)
+  }
   const instance = await render(<MissingKeyNotice />)
   await instance.waitUntilExit()
+} else if (cli.print) {
+  const { runPrintMode } = await import('./cli/print.js')
+  process.exit(await runPrintMode(cli))
 } else {
   // Headless print mode exits above, so reaching here means an interactive
   // session. Mark it as such before any subsystem reads the flag — command

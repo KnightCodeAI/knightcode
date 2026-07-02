@@ -58,6 +58,12 @@ export type HeadlessTurnOptions = {
   verbose: boolean
   queryFn?: typeof defaultQuery
   recordTranscriptFn?: typeof recordTranscript
+  /**
+   * External abort signal (e.g. SIGINT from `--print`'s orchestrator). When
+   * it aborts, the turn's internal `abortController` is aborted too, so the
+   * query loop sees the cancellation the same way an in-TUI Esc would.
+   */
+  abortSignal?: AbortSignal
 }
 
 // Reads the four wire usage fields off a raw stream-event usage object,
@@ -240,6 +246,17 @@ export async function* runHeadlessTurn(
     const commands = await getCommands(opts.cwd)
 
     const abortController = new AbortController()
+    if (opts.abortSignal) {
+      if (opts.abortSignal.aborted) {
+        abortController.abort()
+      } else {
+        opts.abortSignal.addEventListener(
+          'abort',
+          () => abortController.abort(),
+          { once: true },
+        )
+      }
+    }
     const toolUseContext = buildHeadlessToolUseContext({
       store,
       permissionContext,
