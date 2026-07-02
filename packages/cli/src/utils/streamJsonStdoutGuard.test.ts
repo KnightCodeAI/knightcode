@@ -6,8 +6,13 @@ import {
 } from './streamJsonStdoutGuard.js'
 import { writeToStdout } from './process.js'
 
+const REAL_WRITE = process.stdout.write
+const REAL_STDERR_WRITE = process.stderr.write
+
 afterEach(() => {
   _resetStreamJsonStdoutGuardForTesting()
+  process.stdout.write = REAL_WRITE
+  process.stderr.write = REAL_STDERR_WRITE
 })
 
 test('guard diverts non-JSON stdout lines to stderr, passes JSON and writeToStdout', () => {
