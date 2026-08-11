@@ -493,7 +493,16 @@ export const HARNESS_TELEMETRY_SCHEMA = {
 		},
 		"knightcode.harness.sleep": {
 			description: "One retry delay",
-			parents: { kind: "spans", spans: ["knightcode.harness.step", "knightcode.harness.run"] },
+			parents: {
+				kind: "spans",
+				spans: [
+					"knightcode.harness.run",
+					"knightcode.harness.compaction",
+					"knightcode.harness.navigation",
+					"knightcode.harness.turn",
+					"knightcode.harness.checkpoint",
+				],
+			},
 			startAttributes: {
 				"knightcode.operation.id": {
 					type: "string",
@@ -538,40 +547,50 @@ export const HARNESS_TELEMETRY_SCHEMA = {
 			status: { default: "ok", errorWhen: "The listener throws" },
 		},
 		"knightcode.session.write": {
-			description: "One committed session mutation",
+			description: "One committed session transaction",
 			parents: { kind: "any" },
 			startAttributes: {
-				"knightcode.lane.name": {
+				"knightcode.session.id": {
 					type: "string",
 					required: true,
 					cardinality: "high",
-					description: "Lane name",
+					description: "Session id",
+				},
+				"knightcode.lane.name": {
+					type: "string",
+					required: false,
+					cardinality: "high",
+					description: "Lane name when supplied by the caller",
 				},
 				"knightcode.operation.id": {
 					type: "string",
 					required: false,
 					cardinality: "high",
-					description: "Durable operation id when accepted",
+					description: "Durable operation id when supplied by the caller",
 				},
-				"knightcode.session.mutation": {
-					type: "string",
+				"knightcode.session.item_count": {
+					type: "number",
 					required: true,
-					values: ["entry", "record", "lane", "fact"],
-					description: "Session mutation kind",
+					description: "Number of writes in the transaction",
 				},
-				"knightcode.session.item_type": {
-					type: "string",
-					required: false,
-					description: "Entry, record, lane, or fact subtype",
+				"knightcode.session.item_kinds": {
+					type: "string[]",
+					required: true,
+					elementValues: ["entry", "usage", "register"],
+					description: "Distinct write kinds in the transaction",
 				},
 			},
 			endAttributes: {
-				"knightcode.session.seq": {
+				"knightcode.session.first_seq": {
 					type: "number",
-					description: "Committed session sequence when exposed",
+					description: "First committed sequence in the transaction",
+				},
+				"knightcode.session.last_seq": {
+					type: "number",
+					description: "Last committed sequence in the transaction",
 				},
 			},
-			status: { default: "ok", errorWhen: "Storage rejects the mutation" },
+			status: { default: "ok", errorWhen: "Storage rejects the transaction" },
 		},
 	},
 } as const satisfies TelemetrySchemaDefinition;

@@ -14,7 +14,7 @@ import {
 } from "@knightcode/ai";
 import type { AgentMessage, ThinkingLevel } from "../../types.ts";
 import { convertToLlm, createBranchSummaryMessage, createCompactionSummaryMessage } from "../messages.ts";
-import { buildSessionContext, isDroppedFromContext } from "../session/context.ts";
+import { buildSessionContext } from "../session/context.ts";
 import type { CompactionEntry, Entry } from "../session/types.ts";
 import { CompactionError, err, ok, type Result } from "../types.ts";
 import {
@@ -49,13 +49,20 @@ function extractFileOperations(
 	const fileOps = createFileOps();
 	if (prevCompactionIndex >= 0) {
 		const prevCompaction = entries[prevCompactionIndex] as CompactionEntry;
-		if (prevCompaction.details) {
-			const details = prevCompaction.details as CompactionDetails;
-			if (Array.isArray(details.readFiles)) {
-				for (const f of details.readFiles) fileOps.read.add(f);
+		if (
+			typeof prevCompaction.details === "object" &&
+			prevCompaction.details !== null &&
+			!Array.isArray(prevCompaction.details)
+		) {
+			if (Array.isArray(prevCompaction.details.readFiles)) {
+				for (const path of prevCompaction.details.readFiles) {
+					if (typeof path === "string") fileOps.read.add(path);
+				}
 			}
-			if (Array.isArray(details.modifiedFiles)) {
-				for (const f of details.modifiedFiles) fileOps.edited.add(f);
+			if (Array.isArray(prevCompaction.details.modifiedFiles)) {
+				for (const path of prevCompaction.details.modifiedFiles) {
+					if (typeof path === "string") fileOps.edited.add(path);
+				}
 			}
 		}
 	}
@@ -82,9 +89,7 @@ function getMessageFromEntryForCompaction(entry: Entry): AgentMessage | undefine
 	if (entry.type === "compaction") {
 		return undefined;
 	}
-	// Responses that never enter provider context must not enter it via the summary either.
-	const message = getMessageFromEntry(entry);
-	return message && isDroppedFromContext(message) ? undefined : message;
+	return getMessageFromEntry(entry);
 }
 
 /** Generated compaction data ready to be persisted as a compaction entry. */
@@ -332,9 +337,6 @@ function findValidCutPoints(entries: Entry[], startIndex: number, endIndex: numb
 				}
 				break;
 			}
-			case "thinking_level_change":
-			case "model_change":
-			case "active_tools_change":
 			case "compaction":
 			case "branch_summary":
 			case "custom":
@@ -390,10 +392,8 @@ export function findCutPoint(
 	for (let i = endIndex - 1; i >= startIndex; i--) {
 		const entry = entries[i];
 		if (entry.type !== "message") continue;
-		const message = entry.message as AgentMessage;
-		// Dropped responses never reach the provider, so they must not spend the retention budget.
-		if (isDroppedFromContext(message)) continue;
-		accumulatedTokens += estimateTokens(message);
+		const messageTokens = estimateTokens(entry.message as AgentMessage);
+		accumulatedTokens += messageTokens;
 		if (accumulatedTokens >= keepRecentTokens) {
 			for (let c = 0; c < cutPoints.length; c++) {
 				if (cutPoints[c] >= i) {
