@@ -14,7 +14,7 @@ import {
 } from "@knightcode/ai";
 import type { AgentMessage, ThinkingLevel } from "../../types.ts";
 import { convertToLlm, createBranchSummaryMessage, createCompactionSummaryMessage } from "../messages.ts";
-import { buildSessionContext } from "../session/context.ts";
+import { buildSessionContext, isDroppedFromContext } from "../session/context.ts";
 import type { CompactionEntry, Entry } from "../session/types.ts";
 import { CompactionError, err, ok, type Result } from "../types.ts";
 import {
@@ -89,7 +89,9 @@ function getMessageFromEntryForCompaction(entry: Entry): AgentMessage | undefine
 	if (entry.type === "compaction") {
 		return undefined;
 	}
-	return getMessageFromEntry(entry);
+	// Responses that never enter provider context must not enter it via the summary either.
+	const message = getMessageFromEntry(entry);
+	return message && isDroppedFromContext(message) ? undefined : message;
 }
 
 /** Generated compaction data ready to be persisted as a compaction entry. */
@@ -392,8 +394,10 @@ export function findCutPoint(
 	for (let i = endIndex - 1; i >= startIndex; i--) {
 		const entry = entries[i];
 		if (entry.type !== "message") continue;
-		const messageTokens = estimateTokens(entry.message as AgentMessage);
-		accumulatedTokens += messageTokens;
+		const message = entry.message as AgentMessage;
+		// Dropped responses never reach the provider, so they must not spend the retention budget.
+		if (isDroppedFromContext(message)) continue;
+		accumulatedTokens += estimateTokens(message);
 		if (accumulatedTokens >= keepRecentTokens) {
 			for (let c = 0; c < cutPoints.length; c++) {
 				if (cutPoints[c] >= i) {
