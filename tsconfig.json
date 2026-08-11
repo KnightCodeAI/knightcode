@@ -12,6 +12,7 @@
       "@knightcode/ai/oauth": ["./packages/ai/src/oauth.ts"],
       "@knightcode/ai/*": ["./packages/ai/src/*.ts", "./packages/ai/src/providers/*.ts"],
       "@knightcode/agent": ["./packages/agent/src/index.ts"],
+      "@knightcode/agent/session/testing": ["./packages/agent/src/harness/session/testing/index.ts"],
       "@knightcode/agent/node": ["./packages/agent/src/node.ts"],
       "@knightcode/agent/*": ["./packages/agent/src/*"],
       "@knightcode/session-backend-sqlite": ["./packages/session-backend-sqlite/src/index.ts"],
