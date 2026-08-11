@@ -46,6 +46,7 @@ const assistantMessage: AssistantMessage = {
 	model: "test-model",
 	responseModel: "resolved-model",
 	responseId: "response-1",
+	providerThinkingLevel: "high",
 	diagnostics: [{ type: "retry", timestamp: NOW, error: { message: "temporary", code: 503 } }],
 	usage,
 	stopReason: "toolUse",

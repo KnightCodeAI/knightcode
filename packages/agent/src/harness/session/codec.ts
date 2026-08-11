@@ -116,6 +116,7 @@ const AssistantMessageSchema = strict({
 	model: StringSchema,
 	responseModel: Type.Optional(StringSchema),
 	responseId: Type.Optional(StringSchema),
+	providerThinkingLevel: Type.Optional(StringSchema),
 	diagnostics: Type.Optional(Type.Array(AssistantDiagnosticSchema)),
 	usage: UsageSchema,
 	stopReason: literals("stop", "length", "toolUse", "error", "aborted", "deferred"),
