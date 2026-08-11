@@ -588,6 +588,8 @@ export function createStorageConformance(factory: StorageFixtureFactory): readon
 			const register = await storage.getRegister("fact.custom", "object");
 			ok(register !== undefined);
 			(register.value as { nested: number[] }).nested[0] = 88;
+			const listed = await storage.listRegisters("fact.custom");
+			(listed[0]!.value as { nested: number[] }).nested[0] = 77;
 			const rows = await storage.scanUsage({ order: "asc" });
 			(rows[0]!.details as { source: { name: string } }).source.name = "changed";
 			rows[0]!.usage.input = 88;
@@ -611,6 +613,7 @@ export function createStorageConformance(factory: StorageFixtureFactory): readon
 				value: { nested: [3, 4] },
 				seq: register.seq,
 			});
+			deepStrictEqual((await storage.listRegisters("fact.custom"))[0]?.value, { nested: [3, 4] });
 			deepStrictEqual(await storage.scanUsage({ order: "asc" }), [
 				{
 					id: "usage",
