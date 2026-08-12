@@ -91,8 +91,11 @@ export function createSessionRepoConformance(
 			);
 			await rejects(repo.open(first.metadata));
 			await first.close();
+			await rejects(first.getName());
 			const reopened = await repo.open(first.metadata);
+			strictEqual(reopened === first, false);
 			strictEqual(await reopened.getName(), "preserved");
+			await rejects(repo.open(first.metadata));
 			await reopened.close();
 		}),
 		createCase(factory, "lifecycle", "deletes closed sessions without affecting other sessions", async ({ repo }) => {
