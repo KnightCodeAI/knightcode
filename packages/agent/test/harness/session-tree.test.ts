@@ -443,7 +443,13 @@ describe("StorageBackedSession SessionTree", () => {
 		storage.block = true;
 
 		const append = session.appendCustomEntry("admitted");
-		while (!storage.admitted) await Promise.resolve();
+		// A bare microtask spin starves the timer queue, so vitest's testTimeout cannot fire
+		// and a broken append path would hang CI instead of failing.
+		const deadline = Date.now() + 5_000;
+		while (!storage.admitted) {
+			if (Date.now() > deadline) throw new Error("append never reached the blocked commit");
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
 		const close = session.close();
 		storage.release();
 
