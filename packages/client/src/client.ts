@@ -1,6 +1,7 @@
 import {
 	createRpcClient,
 	encodeClientMessage,
+	isServiceId,
 	ProtocolValidationError,
 	type ResponseEnvelope,
 	type ServerHello,
@@ -33,7 +34,9 @@ export class KnightClient {
 	#disposePromise: Promise<void> | undefined;
 
 	constructor(options: KnightClientOptions) {
-		if (!options.serviceId) throw new TypeError("KnightClient serviceId must not be empty");
+		if (!isServiceId(options.serviceId)) {
+			throw new TypeError("KnightClient serviceId must be 32 lowercase hexadecimal characters");
+		}
 		this.#options = options;
 		this.#connection = new Connection({
 			transportFactory: options.transportFactory,

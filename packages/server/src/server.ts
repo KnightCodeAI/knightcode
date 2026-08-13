@@ -5,6 +5,7 @@ import {
 	ClientMessageDecoder,
 	DEFAULT_MAX_FRAME_LENGTH,
 	encodeServerMessage,
+	isServiceId,
 	isSupportedProtocolVersion,
 	PROTOCOL_VERSION,
 	type ProtocolError,
@@ -350,7 +351,9 @@ export class KnightServer {
 
 function resolveOptions(options: KnightServerOptions): { maxFrameLength: number; handshakeTimeoutMs: number } {
 	if (!Array.isArray(options.listeners)) throw new TypeError("KnightServer listeners must be an array");
-	if (!options.serviceId) throw new TypeError("KnightServer serviceId must not be empty");
+	if (!isServiceId(options.serviceId)) {
+		throw new TypeError("KnightServer serviceId must be 32 lowercase hexadecimal characters");
+	}
 	const maxFrameLength = options.maxFrameLength ?? DEFAULT_MAX_FRAME_LENGTH;
 	if (!Number.isSafeInteger(maxFrameLength) || maxFrameLength <= 0 || maxFrameLength > MAX_UINT32) {
 		throw new TypeError(`KnightServer maxFrameLength must be an integer between 1 and ${MAX_UINT32}`);
