@@ -2,11 +2,12 @@
 
 Run these commands from `packages/agent`.
 
-`bench:session:timing` runs under Vitest and works as-is. `bench:session:memory` and
-`bench:session:allocations` need `tsx`, which this repository does not install: their
-runner spawns Node with `--expose-gc --import tsx` and the worker requires Node's
-`globalThis.gc`, so neither Bun nor a plain Node run substitutes for it. Install `tsx`
-before using those two.
+`bench:session:timing` runs under Vitest and works as-is.
+
+`bench:session:memory` and `bench:session:allocations` both spawn Node with `--import tsx`,
+so both need `tsx`, which this repository does not install. `bench:session:memory` also
+passes `--expose-gc` and its worker requires Node's `globalThis.gc`, so Bun does not
+substitute for it. Install `tsx` before using either.
 
 These benchmarks use deterministic synthetic data. The scale datasets are linear branches of user-message entries with fixed 256-byte text payloads, deterministic IDs, and 250-entry seed transactions. They exercise explicit storage structures and make no claim to reproduce production traffic.
 
