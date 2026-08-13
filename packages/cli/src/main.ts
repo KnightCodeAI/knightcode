@@ -27,6 +27,10 @@ import {
 	validateAuthCommandArgs,
 } from "./cli/auth-command.ts";
 import { resolveCredentialForPrint } from "./cli/credential-print.ts";
+import { experimentalCli } from "./cli/experimental/cli.ts";
+import type { ClientCommand } from "./cli/experimental/commands/client.ts";
+import type { ServerCommand } from "./cli/experimental/commands/server.ts";
+import { runExperimentalClient, startExperimentalMemoryServer } from "./cli/experimental/runtime.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
@@ -42,6 +46,7 @@ import {
 } from "./core/agent-session-services.ts";
 import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage, ReadOnlyAuthStorage } from "./core/auth-storage.ts";
+import { areExperimentalFeaturesEnabled } from "./core/experimental.ts";
 import { exportFromFile } from "./core/export-html/index.ts";
 import type { InlineExtension } from "./core/extensions/types.ts";
 import { applyHttpProxySettings, configureHttpDispatcher } from "./core/http-dispatcher.ts";
@@ -554,6 +559,61 @@ async function promptForMissingSessionCwd(
 	]);
 }
 
+async function waitForTermination(): Promise<void> {
+	await new Promise<void>((resolve) => {
+		const finish = (): void => {
+			process.off("SIGINT", finish);
+			process.off("SIGTERM", finish);
+			resolve();
+		};
+		process.once("SIGINT", finish);
+		process.once("SIGTERM", finish);
+	});
+}
+
+async function runExperimentalServerCommand(command: ServerCommand): Promise<void> {
+	if (command.auth !== undefined) throw new Error("Authentication is not supported by the local demo server");
+	if (command.listen !== undefined) throw new Error("The local demo server uses its service-addressed Unix socket");
+	const runtime = await startExperimentalMemoryServer();
+	console.log(`Service: ${runtime.serviceId}`);
+	console.log(`Socket: ${runtime.socketPath}`);
+	try {
+		await waitForTermination();
+	} finally {
+		await runtime.close();
+	}
+}
+
+async function runExperimentalClientCommand(command: ClientCommand): Promise<void> {
+	const result = await runExperimentalClient(command);
+	if (result.kind === "attached") {
+		console.log(`${result.serviceId}	${result.sessionId}	attached`);
+		return;
+	}
+	for (const session of result.sessions) console.log(`${session.serviceId}	${session.sessionId}`);
+}
+
+async function runExperimentalCommand(args: string[]): Promise<boolean> {
+	if (!areExperimentalFeaturesEnabled()) return false;
+	try {
+		const result = await experimentalCli.execute(args, {
+			runKnightcode: () => {},
+			runServer: runExperimentalServerCommand,
+			runClient: runExperimentalClientCommand,
+		});
+		if (!result.ok) {
+			for (const error of result.errors) console.error(chalk.red(`Error: ${error}`));
+			process.exitCode = 1;
+			return true;
+		}
+		return result.command.command !== "knightcode";
+	} catch (error) {
+		console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+		process.exitCode = 1;
+		return true;
+	}
+}
+
 export interface MainOptions {
 	extensionFactories?: InlineExtension[];
 }
@@ -568,6 +628,10 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await runAuthCommand(args)) {
+		return;
+	}
+
+	if (await runExperimentalCommand(args)) {
 		return;
 	}
 
