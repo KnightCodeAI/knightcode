@@ -12,4 +12,7 @@ export interface UnixListenerOptions {
 	onError?: (error: Error) => void;
 }
 
-export interface UnixServerOptions extends Omit<KnightServerOptions, "listeners">, UnixListenerOptions {}
+export interface UnixServerOptions extends Omit<KnightServerOptions, "listeners">, Omit<UnixListenerOptions, "path"> {
+	/** Defaults to ~/.pi/server/<serviceId>.sock. */
+	path?: string;
+}
