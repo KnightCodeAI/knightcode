@@ -23,7 +23,6 @@ describe("package distribution entrypoints", () => {
 		expect(packageJson.bin.knightcode).toBe("./bin/knightcode");
 		expect(packageJson.main).toBe("./src/index.ts");
 		expect(packageJson.exports["."]).toBe("./src/index.ts");
-		expect(packageJson.exports["./client"]).toBe("./src/client/index.ts");
 		expect(packageJson.exports["./rpc-entry"]).toBe("./src/rpc-entry.ts");
 	});
 

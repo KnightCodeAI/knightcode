@@ -20,7 +20,7 @@ async function makeSocketPath(nested = false): Promise<string> {
 }
 
 function makeServer(path: string): KnightServer {
-	const server = createUnixServer(new TestServerService(), { path });
+	const server = createUnixServer(new TestServerService(), { path, serviceId: "service-1" });
 	servers.add(server);
 	return server;
 }

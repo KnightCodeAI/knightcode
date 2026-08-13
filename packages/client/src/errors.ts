@@ -13,7 +13,7 @@ export class KnightServerError extends Error {
 }
 
 export class KnightDisconnectedError extends Error {
-	constructor(message = "KnightCode client is disconnected") {
+	constructor(message = "Pi client is disconnected") {
 		super(message);
 		this.name = "KnightDisconnectedError";
 	}
@@ -21,28 +21,8 @@ export class KnightDisconnectedError extends Error {
 
 export class KnightClientDisposedError extends Error {
 	constructor() {
-		super("KnightCode client is disposed");
+		super("Pi client is disposed");
 		this.name = "KnightClientDisposedError";
-	}
-}
-
-export class KnightSessionOwnershipError extends Error {
-	readonly sessionId: string;
-
-	constructor(sessionId: string, message: string) {
-		super(message);
-		this.name = "KnightSessionOwnershipError";
-		this.sessionId = sessionId;
-	}
-}
-
-export class KnightSessionDetachedError extends Error {
-	readonly sessionId: string;
-
-	constructor(sessionId: string) {
-		super(`Session ${sessionId} is not attached`);
-		this.name = "KnightSessionDetachedError";
-		this.sessionId = sessionId;
 	}
 }
 

@@ -2,13 +2,12 @@ import type { JsonValue, ProtocolErrorCode } from "@knightcode/protocol";
 
 export type KnightServerOperationErrorCode = Extract<
 	ProtocolErrorCode,
-	"busy" | "session_locked" | "not_found" | "invalid_request" | "not_implemented"
+	"wrong_service" | "session_not_found" | "session_locked" | "server_busy" | "server_restarting" | "invalid_request"
 >;
 
 export const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error";
-export const NOT_IMPLEMENTED_MESSAGE = "Operation is not implemented";
 
-/** A service/runtime error that can safely cross the protocol boundary. */
+/** A host or lifecycle error that can safely cross the protocol boundary. */
 export class KnightServerError extends Error {
 	readonly code: KnightServerOperationErrorCode;
 	readonly details: JsonValue | undefined;
@@ -21,10 +20,10 @@ export class KnightServerError extends Error {
 	}
 }
 
-export class SessionBusyError extends KnightServerError {
-	constructor(message = "Session is busy", details?: JsonValue) {
-		super("busy", message, details);
-		this.name = "SessionBusyError";
+export class WrongServiceError extends KnightServerError {
+	constructor() {
+		super("wrong_service", "Request was addressed to another service");
+		this.name = "WrongServiceError";
 	}
 }
 
@@ -37,15 +36,22 @@ export class SessionLockedError extends KnightServerError {
 
 export class SessionNotFoundError extends KnightServerError {
 	constructor(message = "Session was not found", details?: JsonValue) {
-		super("not_found", message, details);
+		super("session_not_found", message, details);
 		this.name = "SessionNotFoundError";
 	}
 }
 
-export class NotImplementedError extends KnightServerError {
+export class ServerBusyError extends KnightServerError {
+	constructor(message = "Server is busy", details?: JsonValue) {
+		super("server_busy", message, details);
+		this.name = "ServerBusyError";
+	}
+}
+
+export class ServerRestartingError extends KnightServerError {
 	constructor() {
-		super("not_implemented", NOT_IMPLEMENTED_MESSAGE);
-		this.name = "NotImplementedError";
+		super("server_restarting", "Server is restarting");
+		this.name = "ServerRestartingError";
 	}
 }
 

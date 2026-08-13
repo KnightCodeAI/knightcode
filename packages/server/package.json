@@ -13,7 +13,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
-    "@knightcode/ai": "workspace:*",
+    "@knightcode/agent": "workspace:*",
     "@knightcode/protocol": "workspace:*"
   },
   "scripts": {

@@ -11,6 +11,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@knightcode/agent": "workspace:*",
     "typebox": "1.3.7"
   },
   "scripts": {

@@ -9,6 +9,9 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
+			"@knightcode/agent": fileURLToPath(new URL("../agent/src/index.ts", import.meta.url)),
+			"@knightcode/ai": fileURLToPath(new URL("../ai/src/index.ts", import.meta.url)),
+			"@knightcode/telemetry": fileURLToPath(new URL("../telemetry/src/index.ts", import.meta.url)),
 			"@knightcode/protocol": fileURLToPath(new URL("../protocol/src/index.ts", import.meta.url)),
 		},
 	},

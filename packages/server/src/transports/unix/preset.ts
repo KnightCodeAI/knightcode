@@ -17,7 +17,7 @@ export function createUnixServer(service: KnightServerService, options: UnixServ
 		listeners: [listener],
 		maxFrameLength: options.maxFrameLength,
 		handshakeTimeoutMs: options.handshakeTimeoutMs,
-		serverId: options.serverId,
+		serviceId: options.serviceId,
 		onError: options.onError,
 	});
 }
