@@ -2,7 +2,7 @@ import { lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ServerMessageDecoder } from "@knightcode/protocol";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import type { ByteConnection } from "../src/connection.ts";
 import { KnightServer } from "../src/index.ts";
 import { TestServerService } from "../src/testing/index.ts";
@@ -61,18 +61,23 @@ test.skipIf(process.platform === "win32")(
 	},
 );
 
-test("handshake timeout cleanup does not wait for a blocked output queue", async () => {
-	class BlockedConnection implements ByteConnection {
+test("handshake timeout closes with a final hello_error frame", async () => {
+	let resolveClosed: (() => void) | undefined;
+	const closed = new Promise<void>((resolve) => {
+		resolveClosed = resolve;
+	});
+	class TimedOutConnection implements ByteConnection {
 		closed = false;
 		finalChunk?: Uint8Array;
 
 		send(): Promise<void> {
-			return new Promise(() => {});
+			return Promise.reject(new Error("handshake timeout must use the terminal close frame"));
 		}
 
 		close(finalChunk?: Uint8Array): void {
 			this.finalChunk = finalChunk;
 			this.closed = true;
+			resolveClosed?.();
 		}
 	}
 	const core = new KnightServer(service, {
@@ -81,10 +86,11 @@ test("handshake timeout cleanup does not wait for a blocked output queue", async
 		maxFrameLength: 1024,
 		handshakeTimeoutMs: 10,
 	});
-	const connection = new BlockedConnection();
+	const connection = new TimedOutConnection();
 	core.accept(connection);
 
-	await vi.waitFor(() => expect(connection.closed).toBe(true));
+	await closed;
+	expect(connection.closed).toBe(true);
 	expect(connection.finalChunk).toBeInstanceOf(Uint8Array);
 	const messages = new ServerMessageDecoder().push(connection.finalChunk!);
 	expect(messages).toMatchObject([{ type: "hello_error", error: { code: "invalid_request" } }]);
