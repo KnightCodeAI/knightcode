@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -115,6 +115,17 @@ describe("SqliteSessionRepo safety", () => {
 			await access(first.path);
 			const reopened = (await repo.open(first as never)) as TestMetadata;
 			expect(reopened.id).toBe("duplicate");
+		});
+	});
+
+	it("does not remove a pre-existing non-database file when create fails", async () => {
+		await withTempDir(async (directory) => {
+			const repo = new SqliteSessionRepo({ directory, databaseFactory: createNodeSqliteFactory() });
+			const path = join(directory, "session.sqlite");
+			await writeFile(path, "not a sqlite database");
+
+			await expect(repo.create({ id: "session" })).rejects.toThrow();
+			await expect(access(path)).resolves.toBeUndefined();
 		});
 	});
 
