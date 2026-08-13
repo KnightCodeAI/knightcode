@@ -13,6 +13,6 @@ export interface UnixListenerOptions {
 }
 
 export interface UnixServerOptions extends Omit<KnightServerOptions, "listeners">, Omit<UnixListenerOptions, "path"> {
-	/** Defaults to ~/.pi/server/<serviceId>.sock. */
+	/** Defaults to ~/.knightcode/server/<serviceId>.sock. */
 	path?: string;
 }

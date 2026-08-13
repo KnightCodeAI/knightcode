@@ -24,7 +24,7 @@ export interface UnixServiceRoute {
 }
 
 export interface DiscoverUnixServicesOptions {
-	/** Defaults to ~/.pi/server. */
+	/** Defaults to ~/.knightcode/server. */
 	directory?: string;
 	/** Maximum time for each connection and handshake. Defaults to 1,000 ms. */
 	timeoutMs?: number;
@@ -33,7 +33,7 @@ export interface DiscoverUnixServicesOptions {
 /** Discover reachable local Pi services by probing service-addressed Unix sockets. */
 export async function discoverUnixServices(options: DiscoverUnixServicesOptions = {}): Promise<UnixServiceRoute[]> {
 	if (process.platform === "win32") throw new Error("Unix transport is not supported on Windows");
-	const directory = options.directory ?? join(homedir(), ".pi", "server");
+	const directory = options.directory ?? join(homedir(), ".knightcode", "server");
 	const timeoutMs = options.timeoutMs ?? DEFAULT_DISCOVERY_TIMEOUT_MS;
 	if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_DELAY_MS) {
 		throw new TypeError(`Unix discovery timeoutMs must be an integer between 1 and ${MAX_TIMER_DELAY_MS}`);

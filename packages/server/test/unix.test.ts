@@ -59,7 +59,7 @@ test.skipIf(process.platform === "win32")(
 
 		expect(serviceId).toMatch(/^[0-9a-f]{32}$/);
 		expect(path).toBe(join(directory, `${serviceId}.sock`));
-		expect(getUnixSocketPath(serviceId)).toBe(join(homedir(), ".pi", "server", `${serviceId}.sock`));
+		expect(getUnixSocketPath(serviceId)).toBe(join(homedir(), ".knightcode", "server", `${serviceId}.sock`));
 
 		const first = createUnixServer(new TestServerService(), { serviceId, path });
 		servers.add(first);
