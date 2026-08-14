@@ -5,8 +5,6 @@ import { describe, expect, it } from "vitest";
 import type { SqliteDatabase } from "../src/index.ts";
 import { createNodeSqliteFactory, SqliteSessionRepo, sql } from "../src/index.ts";
 
-type TestMetadata = { id: string; path: string; createdAt: number; storageVersion: number };
-
 async function withTempDir<T>(run: (directory: string) => Promise<T>): Promise<T> {
 	const directory = await mkdtemp(join(tmpdir(), "knightcode-sqlite-session-"));
 	try {
@@ -34,7 +32,8 @@ describe("SqliteSessionRepo", () => {
 				now: () => 1_700_000_000_000,
 			});
 
-			const metadata = (await repo.create({ id: "session" })) as TestMetadata;
+			const session = await repo.create({ id: "session" });
+			const metadata = session.metadata;
 			expect(metadata).toMatchObject({
 				id: "session",
 				createdAt: 1_700_000_000_000,
@@ -66,6 +65,7 @@ describe("SqliteSessionRepo", () => {
 					},
 				]);
 			});
+			await session.close();
 		});
 	});
 
@@ -76,12 +76,14 @@ describe("SqliteSessionRepo", () => {
 				databaseFactory: createNodeSqliteFactory(),
 				now: () => 1,
 			});
-			const metadata = (await repo.create({ id: "session" })) as TestMetadata;
+			const session = await repo.create({ id: "session" });
+			const { metadata } = session;
 
 			await expect(repo.list()).resolves.toMatchObject([{ id: "session", path: metadata.path }]);
 			await withDb(metadata.path, (db) => {
 				expect(sql`SELECT owner_id, fence FROM writer_lease`.all(db)).toEqual([]);
 			});
+			await session.close();
 		});
 	});
 
@@ -92,9 +94,13 @@ describe("SqliteSessionRepo", () => {
 				databaseFactory: createNodeSqliteFactory(),
 				now: () => 1,
 			});
-			const metadata = (await repo.create({ id: "session" })) as TestMetadata;
+			const created = await repo.create({ id: "session" });
+			const { metadata } = created;
+			await created.close();
 
-			await expect(repo.open(metadata)).resolves.toMatchObject({ id: "session", path: metadata.path });
+			const opened = await repo.open(metadata);
+			expect(opened.metadata).toMatchObject({ id: "session", path: metadata.path });
+			await opened.close();
 
 			await withDb(metadata.path, (db) => {
 				sql`INSERT INTO writer_lease (owner_id, fence, expires_at_ms) VALUES (${"external"}, ${1}, ${1_000})`.run(db);
@@ -108,13 +114,16 @@ describe("SqliteSessionRepo safety", () => {
 	it("leaves an existing session untouched when create is given a duplicate id", async () => {
 		await withTempDir(async (directory) => {
 			const repo = new SqliteSessionRepo({ directory, databaseFactory: createNodeSqliteFactory() });
-			const first = (await repo.create({ id: "duplicate" })) as TestMetadata;
+			const created = await repo.create({ id: "duplicate" });
+			const first = created.metadata;
+			await created.close();
 
 			await expect(repo.create({ id: "duplicate" })).rejects.toThrow();
 
 			await access(first.path);
-			const reopened = (await repo.open(first as never)) as TestMetadata;
-			expect(reopened.id).toBe("duplicate");
+			const reopened = await repo.open(first);
+			expect(reopened.metadata.id).toBe("duplicate");
+			await reopened.close();
 		});
 	});
 
@@ -132,10 +141,12 @@ describe("SqliteSessionRepo safety", () => {
 	it("keeps a traversing id inside the repository directory", async () => {
 		await withTempDir(async (directory) => {
 			const repo = new SqliteSessionRepo({ directory, databaseFactory: createNodeSqliteFactory() });
-			const metadata = (await repo.create({ id: "../escape" })) as TestMetadata;
+			const session = await repo.create({ id: "../escape" });
+			const { metadata } = session;
 
 			expect(resolve(dirname(metadata.path))).toBe(resolve(directory));
 			await access(metadata.path);
+			await session.close();
 		});
 	});
 });
