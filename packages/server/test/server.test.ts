@@ -5,10 +5,10 @@ import { ServerMessageDecoder } from "@knightcode/protocol";
 import { afterEach, expect, test } from "vitest";
 import type { ByteConnection } from "../src/connection.ts";
 import { KnightServer } from "../src/index.ts";
-import { TestServerService } from "../src/testing/index.ts";
+import { TestServerHost } from "../src/testing/index.ts";
 import { createUnixServer } from "../src/transports/unix/index.ts";
 
-const service = new TestServerService();
+const service = new TestServerHost();
 
 let server: KnightServer | undefined;
 let tempDirectory: string | undefined;

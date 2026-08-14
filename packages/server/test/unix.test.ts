@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { generateServiceId, type KnightServer } from "../src/index.ts";
-import { connectUnixTestClient, type ProtocolTestClient, TestServerService } from "../src/testing/index.ts";
+import { connectUnixTestClient, type ProtocolTestClient, TestServerHost } from "../src/testing/index.ts";
 import { createUnixServer, getUnixSocketPath } from "../src/transports/unix/index.ts";
 
 const servers = new Set<KnightServer>();
@@ -20,7 +20,7 @@ async function makeSocketPath(nested = false): Promise<string> {
 }
 
 function makeServer(path: string): KnightServer {
-	const server = createUnixServer(new TestServerService(), { path, serviceId: "00000000000000000000000000000001" });
+	const server = createUnixServer(new TestServerHost(), { path, serviceId: "00000000000000000000000000000001" });
 	servers.add(server);
 	return server;
 }
@@ -61,7 +61,7 @@ test.skipIf(process.platform === "win32")(
 		expect(path).toBe(join(directory, `${serviceId}.sock`));
 		expect(getUnixSocketPath(serviceId)).toBe(join(homedir(), ".knightcode", "server", `${serviceId}.sock`));
 
-		const first = createUnixServer(new TestServerService(), { serviceId, path });
+		const first = createUnixServer(new TestServerHost(), { serviceId, path });
 		servers.add(first);
 		await first.start();
 		const firstClient = await connectUnixTestClient(path);
@@ -72,7 +72,7 @@ test.skipIf(process.platform === "win32")(
 		await first.close();
 		servers.delete(first);
 
-		const replacement = createUnixServer(new TestServerService(), { serviceId, path });
+		const replacement = createUnixServer(new TestServerHost(), { serviceId, path });
 		servers.add(replacement);
 		await replacement.start();
 		const replacementClient = await connectUnixTestClient(path);

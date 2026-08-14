@@ -1,7 +1,7 @@
-import type { AgentHarness, Session, SessionMetadata } from "@knightcode/agent";
+import type { Session, SessionMetadata } from "@knightcode/agent";
 import { MemorySessionRepo } from "@knightcode/agent";
 import { SessionLockedError } from "../errors.ts";
-import type { KnightServerService } from "../types.ts";
+import type { HostedHarnessHandle, KnightServerHost } from "../types.ts";
 
 export class Deferred<T> {
 	readonly promise: Promise<T>;
@@ -26,6 +26,8 @@ interface OpenGate {
 export class TestHarness {
 	readonly session: Session;
 	readonly closed = new Deferred<void>();
+	readonly #termination = new Deferred<Error | undefined>();
+	readonly terminated = this.#termination.promise;
 	closeCount = 0;
 
 	constructor(session: Session) {
@@ -36,6 +38,12 @@ export class TestHarness {
 		this.closeCount += 1;
 		await this.session.close();
 		this.closed.resolve(undefined);
+		this.#termination.resolve(undefined);
+	}
+
+	async terminate(error: Error): Promise<void> {
+		await this.session.close();
+		this.#termination.resolve(error);
 	}
 }
 
@@ -44,14 +52,14 @@ interface ListDelay {
 	release: Deferred<void>;
 }
 
-export class TestServerService implements KnightServerService {
+export class TestServerHost implements KnightServerHost {
 	readonly repo = new MemorySessionRepo({ now: () => 1 });
 	readonly harnesses = new Map<string, TestHarness[]>();
 	readonly locked = new Set<string>();
 	openCount = 0;
 	failNextOpen?: Error;
 	failNextHarness?: Error;
-	readonly sessions: KnightServerService["sessions"] = {
+	readonly sessions: KnightServerHost["sessions"] = {
 		list: async () => {
 			const delay = this.nextListDelay;
 			if (delay) {
@@ -81,7 +89,7 @@ export class TestServerService implements KnightServerService {
 	private nextListDelay?: ListDelay;
 	private nextOpenGate?: OpenGate;
 
-	async createHarness(session: Session): Promise<Pick<AgentHarness, "close">> {
+	async createHarness(session: Session): Promise<HostedHarnessHandle> {
 		if (this.failNextHarness) {
 			const error = this.failNextHarness;
 			this.failNextHarness = undefined;
