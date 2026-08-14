@@ -33,10 +33,10 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 		const directory = await mkdtemp(join("/tmp", "pep-"));
 		directories.add(directory);
 		await chmod(directory, 0o750);
-		const serviceId = "00000000000000000000000000000001";
+		const serverId = "00000000-0000-4000-8000-000000000001";
 		const runtime = await startExperimentalMemoryServer({
-			path: join(directory, `${serviceId}.sock`),
-			serviceId,
+			path: join(directory, `${serverId}.sock`),
+			serverId,
 		});
 		servers.add(runtime);
 
@@ -49,8 +49,8 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 		await expect(runExperimentalClient({ command: "client" }, { directory })).resolves.toEqual({
 			kind: "list",
 			sessions: [
-				{ serviceId: runtime.serviceId, sessionId: "demo-1" },
-				{ serviceId: runtime.serviceId, sessionId: "demo-2" },
+				{ serverId: runtime.serverId, sessionId: "demo-1" },
+				{ serverId: runtime.serverId, sessionId: "demo-2" },
 			],
 		});
 		expect(runtime.workerPids.size).toBe(0);
@@ -63,7 +63,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 
 		await expect(runExperimentalClient({ command: "client", sessionId: "demo-1" }, { directory })).resolves.toEqual({
 			kind: "attached",
-			serviceId: runtime.serviceId,
+			serverId: runtime.serverId,
 			sessionId: "demo-1",
 		});
 		expect([...runtime.workerPids.keys()]).toEqual(["demo-1"]);
@@ -120,7 +120,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 		]);
 		for (const generation of generations) servers.add(generation);
 
-		expect(generations[0].serviceId).toBe(generations[1].serviceId);
+		expect(generations[0].serverId).toBe(generations[1].serverId);
 		const closed = await Promise.all(
 			generations.map((generation) =>
 				Promise.race([
@@ -165,7 +165,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 		servers.add(replacement);
 		await first.closed;
 
-		expect(replacement.serviceId).toBe(first.serviceId);
+		expect(replacement.serverId).toBe(first.serverId);
 		expect(replacement.workerPids.size).toBe(0);
 		expect(first.workerPids.size).toBe(0);
 		expect(processExists(firstWorkerPid!)).toBe(false);
@@ -175,8 +175,8 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 		await expect(runExperimentalClient({ command: "client" }, { directory: firstDirectory })).resolves.toMatchObject({
 			kind: "list",
 			sessions: [
-				{ serviceId: first.serviceId, sessionId: "demo-1" },
-				{ serviceId: first.serviceId, sessionId: "demo-2" },
+				{ serverId: first.serverId, sessionId: "demo-1" },
+				{ serverId: first.serverId, sessionId: "demo-2" },
 			],
 		});
 		await runExperimentalClient({ command: "client", sessionId: "demo-1" }, { directory: firstDirectory });
@@ -194,10 +194,10 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 
 		await expect(
 			runExperimentalClient({ command: "client", sessionId: "missing" }, { directory: sharedDirectory }),
-		).rejects.toThrow("No discovered service contains session missing");
+		).rejects.toThrow("No discovered server contains session missing");
 		await expect(
 			runExperimentalClient({ command: "client", sessionId: "demo-1" }, { directory: sharedDirectory }),
-		).rejects.toThrow("Session demo-1 is available from more than one service");
+		).rejects.toThrow("Session demo-1 is available from more than one server");
 	});
 });
 

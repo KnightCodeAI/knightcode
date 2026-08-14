@@ -1,7 +1,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { createConnection, type Socket } from "node:net";
 import { join } from "node:path";
-import { DEFAULT_MAX_FRAME_LENGTH, isServiceId, ProtocolValidationError, type ServiceId } from "@knightcode/protocol";
+import { DEFAULT_MAX_FRAME_LENGTH, isServerId, ProtocolValidationError, type ServerId } from "@knightcode/protocol";
 import { KnightClient } from "./client.ts";
 import { KnightDisconnectedError, KnightServerError } from "./errors.ts";
 import type { ByteTransport, ByteTransportFactory, ByteTransportHandlers } from "./transport.ts";
@@ -17,20 +17,20 @@ export interface UnixTransportOptions {
 	maxPendingBytes?: number;
 }
 
-export interface UnixServiceRoute {
-	serviceId: ServiceId;
+export interface UnixServerRoute {
+	serverId: ServerId;
 	path: string;
 }
 
-export interface DiscoverUnixServicesOptions {
-	/** Directory containing service-addressed Unix sockets. */
+export interface DiscoverUnixServersOptions {
+	/** Directory containing server-addressed Unix sockets. */
 	directory: string;
 	/** Maximum time for each connection and handshake. Defaults to 1,000 ms. */
 	timeoutMs?: number;
 }
 
-/** Discover reachable local Pi services by probing service-addressed Unix sockets. */
-export async function discoverUnixServices(options: DiscoverUnixServicesOptions): Promise<UnixServiceRoute[]> {
+/** Discover reachable local Pi servers by probing server-addressed Unix sockets. */
+export async function discoverUnixServers(options: DiscoverUnixServersOptions): Promise<UnixServerRoute[]> {
 	if (process.platform === "win32") throw new Error("Unix transport is not supported on Windows");
 	const directory = options.directory;
 	const timeoutMs = options.timeoutMs ?? DEFAULT_DISCOVERY_TIMEOUT_MS;
@@ -46,12 +46,12 @@ export async function discoverUnixServices(options: DiscoverUnixServicesOptions)
 		throw error;
 	}
 
-	const candidates = names.flatMap((name): UnixServiceRoute[] => {
+	const candidates = names.flatMap((name): UnixServerRoute[] => {
 		if (!name.endsWith(UNIX_SOCKET_SUFFIX)) return [];
-		const serviceId = name.slice(0, -UNIX_SOCKET_SUFFIX.length);
-		return isServiceId(serviceId) ? [{ serviceId, path: join(directory, name) }] : [];
+		const serverId = name.slice(0, -UNIX_SOCKET_SUFFIX.length);
+		return isServerId(serverId) ? [{ serverId, path: join(directory, name) }] : [];
 	});
-	const routes: UnixServiceRoute[] = [];
+	const routes: UnixServerRoute[] = [];
 	let nextIndex = 0;
 	let failure: { error: unknown } | undefined;
 	const workerCount = Math.min(MAX_CONCURRENT_DISCOVERY_PROBES, candidates.length);
@@ -68,7 +68,7 @@ export async function discoverUnixServices(options: DiscoverUnixServicesOptions)
 						if (isErrorCode(error, "ENOENT")) continue;
 						throw error;
 					}
-					const route = await probeUnixService(candidate, timeoutMs);
+					const route = await probeUnixServer(candidate, timeoutMs);
 					if (route) routes.push(route);
 				} catch (error) {
 					failure ??= { error };
@@ -77,7 +77,7 @@ export async function discoverUnixServices(options: DiscoverUnixServicesOptions)
 		}),
 	);
 	if (failure) throw failure.error;
-	return routes.sort((left, right) => left.serviceId.localeCompare(right.serviceId));
+	return routes.sort((left, right) => left.serverId.localeCompare(right.serverId));
 }
 
 /** Creates fresh Unix-domain socket transports for KnightClient connection attempts in Node-compatible runtimes. */
@@ -233,11 +233,11 @@ class UnixByteTransport implements ByteTransport {
 	}
 }
 
-async function probeUnixService(route: UnixServiceRoute, timeoutMs: number): Promise<UnixServiceRoute | undefined> {
+async function probeUnixServer(route: UnixServerRoute, timeoutMs: number): Promise<UnixServerRoute | undefined> {
 	const maxPendingBytes = validateUnixTransportOptions({ path: route.path });
 	let socket: Socket | undefined;
 	const client = new KnightClient({
-		serviceId: route.serviceId,
+		serverId: route.serverId,
 		transportFactory: (handlers) =>
 			connectUnixSocket(route.path, maxPendingBytes, handlers, (created) => {
 				socket = created;
@@ -258,7 +258,7 @@ async function probeUnixService(route: UnixServiceRoute, timeoutMs: number): Pro
 		return route;
 	} catch (error) {
 		// Missing/refused sockets are stale or shutting down. Protocol failures mean
-		// the endpoint is not the advertised Pi service. Both are safe to omit.
+		// the endpoint is not the advertised Pi server. Both are safe to omit.
 		if (
 			error instanceof UnixDiscoveryTimeoutError ||
 			error instanceof ProtocolValidationError ||

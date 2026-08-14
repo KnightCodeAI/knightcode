@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { chmod, lstat, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -5,13 +6,13 @@ import { setTimeout as delay } from "node:timers/promises";
 import { MemorySessionRepo } from "@knightcode/agent";
 import { KnightClient } from "@knightcode/client";
 import { requestServerDrain } from "@knightcode/client/control";
-import { createUnixTransportFactory, discoverUnixServices, type UnixServiceRoute } from "@knightcode/client/unix";
-import { isServiceId } from "@knightcode/protocol";
-import { generateServiceId, type KnightServer, type KnightServerHost } from "@knightcode/server";
+import { createUnixTransportFactory, discoverUnixServers, type UnixServerRoute } from "@knightcode/client/unix";
+import { isServerId } from "@knightcode/protocol";
+import type { KnightServer, KnightServerHost } from "@knightcode/server";
 import { createUnixServer, getUnixSocketPath } from "@knightcode/server/unix";
 import type { ClientCommand } from "./commands/client.ts";
 import { DEMO_SESSION_IDS } from "./demo-sessions.ts";
-import { acquireExperimentalServiceProfile } from "./service-profile.ts";
+import { acquireExperimentalServerProfile } from "./server-profile.ts";
 import { startExperimentalSessionWorker } from "./session-worker.ts";
 
 const SOCKET_RELEASE_TIMEOUT_MS = 10_000;
@@ -19,7 +20,7 @@ const SOCKET_RELEASE_POLL_MS = 10;
 const EXPERIMENTAL_SOCKET_ROOT = "/tmp";
 
 export interface ExperimentalMemoryServer {
-	readonly serviceId: string;
+	readonly serverId: string;
 	readonly socketPath: string;
 	readonly server: KnightServer;
 	readonly workerPids: ReadonlyMap<string, number>;
@@ -30,15 +31,15 @@ export interface ExperimentalMemoryServer {
 export type ExperimentalClientResult =
 	| {
 			readonly kind: "list";
-			readonly sessions: readonly { serviceId: string; sessionId: string }[];
+			readonly sessions: readonly { serverId: string; sessionId: string }[];
 	  }
-	| { readonly kind: "attached"; readonly serviceId: string; readonly sessionId: string };
+	| { readonly kind: "attached"; readonly serverId: string; readonly sessionId: string };
 
 export interface StartExperimentalMemoryServerOptions {
-	/** Directory for service-addressed Unix sockets. Defaults to a short, private per-user runtime directory. */
+	/** Directory for server-addressed Unix sockets. Defaults to a short, private per-user runtime directory. */
 	readonly directory?: string;
 	readonly path?: string;
-	readonly serviceId?: string;
+	readonly serverId?: string;
 }
 
 export interface StartExperimentalServerGenerationOptions {
@@ -57,7 +58,7 @@ export interface RunExperimentalClientOptions {
 export async function startExperimentalMemoryServer(
 	options: StartExperimentalMemoryServerOptions = {},
 ): Promise<ExperimentalMemoryServer> {
-	const serviceId = options.serviceId ?? generateServiceId();
+	const serverId = options.serverId ?? randomUUID();
 	const repo = new MemorySessionRepo();
 	for (const id of DEMO_SESSION_IDS) {
 		const session = await repo.create({ id });
@@ -98,9 +99,9 @@ export async function startExperimentalMemoryServer(
 	if (socketPath === undefined) {
 		const socketDirectory = options.directory ?? getExperimentalSocketDirectory();
 		await ensurePrivateSocketDirectory(socketDirectory);
-		socketPath = getUnixSocketPath(serviceId, socketDirectory);
+		socketPath = getUnixSocketPath(serverId, socketDirectory);
 	}
-	const server = createUnixServer(host, { serviceId, path: socketPath, mode: 0o600 });
+	const server = createUnixServer(host, { serverId, path: socketPath, mode: 0o600 });
 	try {
 		await server.start();
 	} catch (error) {
@@ -125,7 +126,7 @@ export async function startExperimentalMemoryServer(
 		},
 	);
 	return {
-		serviceId,
+		serverId,
 		socketPath,
 		server,
 		workerPids,
@@ -141,22 +142,22 @@ export async function startExperimentalMemoryServer(
 	};
 }
 
-/** Start the experimental local service, replacing an existing generation for the same service directory. */
+/** Start the experimental local server, replacing an existing generation for the same profile. */
 export async function startExperimentalServerGeneration(
 	options: StartExperimentalServerGenerationOptions = {},
 ): Promise<ExperimentalMemoryServer> {
 	const directory = options.directory ?? join(homedir(), ".pi", "server");
 	const socketDirectory = options.socketDirectory ?? getExperimentalSocketDirectory();
-	const { serviceId, release } = await acquireExperimentalServiceProfile(directory);
+	const { serverId, release } = await acquireExperimentalServerProfile(directory);
 	let runtime: ExperimentalMemoryServer;
 	try {
 		await ensurePrivateSocketDirectory(socketDirectory);
-		const socketPath = getUnixSocketPath(serviceId, socketDirectory);
-		await drainExistingGeneration(serviceId, socketPath);
+		const socketPath = getUnixSocketPath(serverId, socketDirectory);
+		await drainExistingGeneration(serverId, socketPath);
 		runtime = await startExperimentalMemoryServer({
 			directory,
 			path: socketPath,
-			serviceId,
+			serverId,
 		});
 	} catch (error) {
 		try {
@@ -180,10 +181,10 @@ export async function startExperimentalServerGeneration(
 	return runtime;
 }
 
-async function drainExistingGeneration(serviceId: string, socketPath: string): Promise<void> {
+async function drainExistingGeneration(serverId: string, socketPath: string): Promise<void> {
 	try {
 		await requestServerDrain({
-			serviceId,
+			serverId,
 			transportFactory: createUnixTransportFactory({ path: socketPath }),
 		});
 		await waitForSocketRelease(socketPath);
@@ -195,7 +196,7 @@ async function drainExistingGeneration(serviceId: string, socketPath: string): P
 	}
 }
 
-/** Discover local services, then list sessions or attach to one selected session. */
+/** Discover local servers, then list sessions or attach to one selected session. */
 export async function runExperimentalClient(
 	command: ClientCommand,
 	options: RunExperimentalClientOptions = {},
@@ -203,12 +204,12 @@ export async function runExperimentalClient(
 	if (command.auth !== undefined) throw new Error("Authentication is not supported by the local demo server");
 	const routes = command.connect
 		? [routeFromExplicitPath(command.connect.path)]
-		: await discoverUnixServices({ directory: options.directory ?? getExperimentalSocketDirectory() });
-	const discovered: { route: UnixServiceRoute; sessionIds: string[] }[] = [];
+		: await discoverUnixServers({ directory: options.directory ?? getExperimentalSocketDirectory() });
+	const discovered: { route: UnixServerRoute; sessionIds: string[] }[] = [];
 
 	for (const route of routes) {
 		const client = await KnightClient.connect({
-			serviceId: route.serviceId,
+			serverId: route.serverId,
 			transportFactory: createUnixTransportFactory({ path: route.path }),
 		});
 		try {
@@ -224,37 +225,36 @@ export async function runExperimentalClient(
 		return {
 			kind: "list",
 			sessions: discovered
-				.flatMap(({ route, sessionIds }) => sessionIds.map((sessionId) => ({ serviceId: route.serviceId, sessionId })))
+				.flatMap(({ route, sessionIds }) => sessionIds.map((sessionId) => ({ serverId: route.serverId, sessionId })))
 				.sort(
-					(left, right) =>
-						left.serviceId.localeCompare(right.serviceId) || left.sessionId.localeCompare(right.sessionId),
+					(left, right) => left.serverId.localeCompare(right.serverId) || left.sessionId.localeCompare(right.sessionId),
 				),
 		};
 	}
 
 	const matches = discovered.filter((candidate) => candidate.sessionIds.includes(sessionId));
-	if (matches.length === 0) throw new Error(`No discovered service contains session ${sessionId}`);
-	if (matches.length > 1) throw new Error(`Session ${sessionId} is available from more than one service`);
+	if (matches.length === 0) throw new Error(`No discovered server contains session ${sessionId}`);
+	if (matches.length > 1) throw new Error(`Session ${sessionId} is available from more than one server`);
 	const route = matches[0]!.route;
 	const client = await KnightClient.connect({
-		serviceId: route.serviceId,
+		serverId: route.serverId,
 		transportFactory: createUnixTransportFactory({ path: route.path }),
 	});
 	try {
 		const attached = await client.attachSession(sessionId);
-		return { kind: "attached", serviceId: route.serviceId, sessionId: attached.sessionId };
+		return { kind: "attached", serverId: route.serverId, sessionId: attached.sessionId };
 	} finally {
 		await client.dispose();
 	}
 }
 
-function routeFromExplicitPath(path: string): UnixServiceRoute {
+function routeFromExplicitPath(path: string): UnixServerRoute {
 	const name = basename(path);
-	const serviceId = name.endsWith(".sock") ? name.slice(0, -".sock".length) : "";
-	if (!isServiceId(serviceId)) {
-		throw new Error("--connect path must end with <32-character-service-id>.sock");
+	const serverId = name.endsWith(".sock") ? name.slice(0, -".sock".length) : "";
+	if (!isServerId(serverId)) {
+		throw new Error("--connect path must end with <uuidv4-server-id>.sock");
 	}
-	return { serviceId, path };
+	return { serverId, path };
 }
 
 async function waitForSocketRelease(path: string): Promise<void> {

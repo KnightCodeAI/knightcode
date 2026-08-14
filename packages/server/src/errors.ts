@@ -2,7 +2,7 @@ import type { ProtocolErrorCode } from "@knightcode/protocol";
 
 type KnightServerOperationErrorCode = Extract<
 	ProtocolErrorCode,
-	"wrong_service" | "session_not_found" | "server_draining"
+	"wrong_server" | "session_not_found" | "server_draining"
 >;
 
 export const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error";
@@ -18,10 +18,10 @@ export class KnightServerError extends Error {
 	}
 }
 
-export class WrongServiceError extends KnightServerError {
+export class WrongServerError extends KnightServerError {
 	constructor() {
-		super("wrong_service", "Request was addressed to another service");
-		this.name = "WrongServiceError";
+		super("wrong_server", "Request was addressed to another server");
+		this.name = "WrongServerError";
 	}
 }
 

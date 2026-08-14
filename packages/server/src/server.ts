@@ -4,7 +4,7 @@ import {
 	ClientMessageDecoder,
 	DEFAULT_MAX_FRAME_LENGTH,
 	encodeServerMessage,
-	isServiceId,
+	isServerId,
 	isSupportedProtocolVersion,
 	PROTOCOL_VERSION,
 	type ProtocolError,
@@ -23,7 +23,7 @@ import {
 	type ConnectionState,
 	isTerminalConnection,
 } from "./connection.ts";
-import { INTERNAL_SERVER_ERROR_MESSAGE, KnightServerError, ServerDrainingError, WrongServiceError } from "./errors.ts";
+import { INTERNAL_SERVER_ERROR_MESSAGE, KnightServerError, ServerDrainingError, WrongServerError } from "./errors.ts";
 import { HostedHarnessManager } from "./hosted-harness-manager.ts";
 import type { KnightServerListener } from "./listener.ts";
 import type { KnightServerHost, KnightServerOptions } from "./types.ts";
@@ -33,7 +33,7 @@ const MAX_UINT32 = 0xffff_ffff;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 export class KnightServer {
-	readonly serviceId: string;
+	readonly serverId: string;
 	/** Resolves after shutdown, or rejects when listener or hosted-Harness cleanup fails. */
 	readonly closed: Promise<void>;
 
@@ -54,7 +54,7 @@ export class KnightServer {
 	constructor(host: KnightServerHost, options: KnightServerOptions) {
 		const resolved = resolveOptions(options);
 		this.listeners = options.listeners;
-		this.serviceId = options.serviceId;
+		this.serverId = options.serverId;
 		this.maxFrameLength = resolved.maxFrameLength;
 		this.handshakeTimeoutMs = resolved.handshakeTimeoutMs;
 		this.onError = options.onError;
@@ -244,7 +244,7 @@ export class KnightServer {
 		const sent = await this.sendMessage(state, {
 			type: "hello",
 			version: PROTOCOL_VERSION,
-			serviceId: this.serviceId,
+			serverId: this.serverId,
 		} satisfies ServerHello);
 		if (sent && !state.disconnected && state.stage === "handshaking") {
 			state.stage = "ready";
@@ -256,7 +256,7 @@ export class KnightServer {
 		const draining = envelope.call.method === "drain";
 		let ownsDrain = false;
 		try {
-			if (envelope.serviceId !== this.serviceId) throw new WrongServiceError();
+			if (envelope.serverId !== this.serverId) throw new WrongServerError();
 			let result: ProtocolRpcResult;
 			if (draining) {
 				if (this.closing) throw new ServerDrainingError();
@@ -398,8 +398,8 @@ export class KnightServer {
 
 function resolveOptions(options: KnightServerOptions): { maxFrameLength: number; handshakeTimeoutMs: number } {
 	if (!Array.isArray(options.listeners)) throw new TypeError("KnightServer listeners must be an array");
-	if (!isServiceId(options.serviceId)) {
-		throw new TypeError("KnightServer serviceId must be 32 lowercase hexadecimal characters");
+	if (!isServerId(options.serverId)) {
+		throw new TypeError("KnightServer serverId must be a canonical lowercase UUIDv4");
 	}
 	const maxFrameLength = options.maxFrameLength ?? DEFAULT_MAX_FRAME_LENGTH;
 	if (!Number.isSafeInteger(maxFrameLength) || maxFrameLength <= 0 || maxFrameLength > MAX_UINT32) {

@@ -1,7 +1,7 @@
 import {
 	createRpcClient,
 	encodeClientMessage,
-	isServiceId,
+	isServerId,
 	ProtocolValidationError,
 	type ResponseEnvelope,
 	type ServerHello,
@@ -32,13 +32,13 @@ export class KnightClient {
 	#disposePromise: Promise<void> | undefined;
 
 	constructor(options: KnightClientOptions) {
-		if (!isServiceId(options.serviceId)) {
-			throw new TypeError("KnightClient serviceId must be 32 lowercase hexadecimal characters");
+		if (!isServerId(options.serverId)) {
+			throw new TypeError("KnightClient serverId must be a canonical lowercase UUIDv4");
 		}
 		this.#options = options;
 		this.#connection = new Connection({
 			transportFactory: options.transportFactory,
-			serviceId: options.serviceId,
+			serverId: options.serverId,
 			maxFrameLength: options.maxFrameLength,
 			onHandshake: (hello) => {
 				this.#hello = hello;
@@ -117,7 +117,7 @@ export class KnightClient {
 		let frame: Uint8Array;
 		try {
 			frame = encodeClientMessage(
-				{ type: "request", id, serviceId: this.#options.serviceId, call },
+				{ type: "request", id, serverId: this.#options.serverId, call },
 				{ maxFrameLength: this.#connection.maxFrameLength },
 			);
 		} catch (error) {
