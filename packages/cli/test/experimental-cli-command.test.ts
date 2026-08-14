@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { experimentalCli } from "../src/cli/experimental/cli.ts";
 
 describe("experimental CLI commands", () => {
-	test("selects knightcode mode and parses existing CLI arguments", () => {
+	test("selects pi mode and parses existing CLI arguments", () => {
 		expect(
 			experimentalCli.parse([
 				"--provider",
@@ -34,6 +34,16 @@ describe("experimental CLI commands", () => {
 			command: {
 				command: "server",
 				listen: [{ transport: "unix", path: "/tmp/knightcode.sock" }],
+			},
+		});
+	});
+
+	test("parses an experimental server session directory", () => {
+		expect(experimentalCli.parse(["server", "--session-dir", "~/knightcode-sessions"])).toEqual({
+			ok: true,
+			command: {
+				command: "server",
+				sessionDir: "~/knightcode-sessions",
 			},
 		});
 	});
@@ -147,6 +157,11 @@ describe("experimental CLI commands", () => {
 			"The experimental server command does not support existing CLI options yet",
 		],
 		[["client", "--connect", "ws://localhost:8080"], 'Unsupported --connect transport "ws:"'],
+		[["server", "--session-dir"], "--session-dir requires a value"],
+		[
+			["server", "--session-dir", "/tmp/first", "--session-dir=/tmp/second"],
+			"--session-dir may only be specified once",
+		],
 		[["--listen"], "--listen requires a value"],
 		[["--connect="], "--connect is only valid for client mode"],
 	] as const)("rejects invalid experimental input %j", (argv, error) => {

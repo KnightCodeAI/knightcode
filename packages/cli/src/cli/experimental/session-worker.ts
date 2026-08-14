@@ -1,9 +1,13 @@
 import { type ChildProcess, fork, spawn } from "node:child_process";
+import { isAbsolute } from "node:path";
 import { isBunBinary } from "../../config.ts";
 import type { SessionWorkerCommand, SessionWorkerEvent } from "./session-worker-process.ts";
 
 /** Names the session the worker must host, and marks a re-entered executable as that worker. */
 export const SESSION_WORKER_ENV = "KNIGHTCODE_EXPERIMENTAL_SESSION_WORKER";
+
+/** Names the directory the worker stores sessions in. */
+export const SESSION_WORKER_DIR_ENV = "KNIGHTCODE_EXPERIMENTAL_SESSION_WORKER_DIR";
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 5_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000;
@@ -17,6 +21,7 @@ export interface ExperimentalSessionWorker {
 }
 
 export interface StartExperimentalSessionWorkerOptions {
+	readonly sessionDir: string;
 	readonly startupTimeoutMs?: number;
 	readonly shutdownTimeoutMs?: number;
 	readonly workerUrl?: URL;
@@ -24,14 +29,15 @@ export interface StartExperimentalSessionWorkerOptions {
 
 export async function startExperimentalSessionWorker(
 	sessionId: string,
-	options: StartExperimentalSessionWorkerOptions = {},
+	options: StartExperimentalSessionWorkerOptions,
 ): Promise<ExperimentalSessionWorker> {
+	if (!isAbsolute(options.sessionDir)) throw new TypeError("Session worker sessionDir must be absolute");
 	const startupTimeoutMs = validateTimeout(options.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS, "startupTimeoutMs");
 	const shutdownTimeoutMs = validateTimeout(
 		options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
 		"shutdownTimeoutMs",
 	);
-	const child = spawnWorker(sessionId, options.workerUrl);
+	const child = spawnWorker(sessionId, options.sessionDir, options.workerUrl);
 
 	try {
 		const ready = await waitForReady(child, sessionId, startupTimeoutMs);
@@ -50,11 +56,12 @@ function validateTimeout(value: number, name: string): number {
 	return value;
 }
 
-function spawnWorker(sessionId: string, workerUrl: URL | undefined): ChildProcess {
+function spawnWorker(sessionId: string, sessionDir: string, workerUrl: URL | undefined): ChildProcess {
 	const stdio: ["ignore", "ignore", "inherit", "ipc"] = ["ignore", "ignore", "inherit", "ipc"];
-	const env = { ...process.env, [SESSION_WORKER_ENV]: sessionId };
-	// A compiled binary has no worker module on disk, so it re-enters its own
-	// executable instead, which main() routes back to the worker entry point.
+	// Both values travel in the environment rather than argv: a compiled binary has
+	// no worker module on disk, so it re-enters its own executable, where the parent
+	// cannot control the child's argv.
+	const env = { ...process.env, [SESSION_WORKER_ENV]: sessionId, [SESSION_WORKER_DIR_ENV]: sessionDir };
 	if (workerUrl === undefined && isBunBinary) return spawn(process.execPath, [], { env, stdio });
 	const url = workerUrl ?? defaultWorkerUrl();
 	return fork(url, [], { env, execArgv: workerExecArgv(url), stdio });
