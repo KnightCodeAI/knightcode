@@ -46,6 +46,10 @@ export class HookRegistry implements Hooks {
 		};
 	}
 
+	has(name: HookName): boolean {
+		return (this.registrations.get(name)?.length ?? 0) !== 0;
+	}
+
 	/** Invoke one accepted-operation aggregate after synchronously passing its effect gate. */
 	runWithGate<TName extends HookName>(
 		name: TName,
@@ -169,11 +173,7 @@ export class HookRegistry implements Hooks {
 					...(data === undefined ? {} : { resumeData: data }),
 				});
 			} catch (error) {
-				await this.reportError(
-					error instanceof Error ? error : new Error(String(error)),
-					"before_resume",
-					event.lane,
-				);
+				await this.reportError(error instanceof Error ? error : new Error(String(error)), "before_resume", event.lane);
 			}
 		}
 	}
@@ -238,11 +238,7 @@ export class HookRegistry implements Hooks {
 					changed = true;
 				}
 			} catch (error) {
-				await this.reportError(
-					error instanceof Error ? error : new Error(String(error)),
-					"before_request",
-					event.lane,
-				);
+				await this.reportError(error instanceof Error ? error : new Error(String(error)), "before_request", event.lane);
 			}
 		}
 		return changed ? { streamOptions: createStreamOptionsPatch(event.streamOptions, streamOptions) } : undefined;
@@ -255,11 +251,7 @@ export class HookRegistry implements Hooks {
 				const result = (await registration.handler({ ...event, payload })) as HookMap["before_payload"]["result"];
 				if (result?.payload !== undefined) payload = result.payload;
 			} catch (error) {
-				await this.reportError(
-					error instanceof Error ? error : new Error(String(error)),
-					"before_payload",
-					event.lane,
-				);
+				await this.reportError(error instanceof Error ? error : new Error(String(error)), "before_payload", event.lane);
 			}
 		}
 		return { payload };
@@ -272,11 +264,7 @@ export class HookRegistry implements Hooks {
 				const result = (await registration.handler({ ...event, message })) as HookMap["after_response"]["result"];
 				if (result?.message !== undefined) message = result.message;
 			} catch (error) {
-				await this.reportError(
-					error instanceof Error ? error : new Error(String(error)),
-					"after_response",
-					event.lane,
-				);
+				await this.reportError(error instanceof Error ? error : new Error(String(error)), "after_response", event.lane);
 			}
 		}
 		return { message };
@@ -357,7 +345,7 @@ export class HookRegistry implements Hooks {
 	}
 }
 
-function applyStreamOptionsPatch(
+export function applyStreamOptionsPatch(
 	base: AgentHarnessStreamOptions,
 	patch: AgentHarnessStreamOptionsPatch,
 ): AgentHarnessStreamOptions {
