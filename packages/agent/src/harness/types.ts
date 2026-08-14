@@ -77,6 +77,14 @@ export interface AgentHarnessResources<
 	skills?: TSkill[];
 }
 
+/** Stable harness identity for one logical tool call, unchanged during safe replay. */
+export interface AgentHarnessToolInvocation {
+	/** Opaque session-unique id equal to the call's reserved result-entry id. */
+	invocationId: string;
+	operationId: string;
+	turnId: string;
+}
+
 /** Tool definition executed by an {@link AgentHarness} with an application-defined context. */
 export type AgentHarnessTool<
 	TContext extends object | undefined,
@@ -90,12 +98,14 @@ export type AgentHarnessTool<
 		signal: AbortSignal | undefined,
 		onUpdate: AgentToolUpdateCallback<TDetails> | undefined,
 		context: TContext,
+		invocation: AgentHarnessToolInvocation,
 	): Promise<AgentToolResult<TDetails>>;
 };
 
 /** Static tool context or zero-argument provider resolved for each turn snapshot. */
 export type AgentHarnessToolContextSource<TContext extends object | undefined> =
-	TContext | (() => TContext | Promise<TContext>);
+	| TContext
+	| (() => TContext | Promise<TContext>);
 
 /** Curated provider request options owned by the harness and snapshotted per turn. */
 export interface AgentHarnessStreamOptions {
@@ -118,10 +128,8 @@ export interface AgentHarnessStreamOptions {
 }
 
 /** Per-request stream option patch returned by provider hooks. */
-export interface AgentHarnessStreamOptionsPatch extends Omit<
-	Partial<AgentHarnessStreamOptions>,
-	"headers" | "metadata"
-> {
+export interface AgentHarnessStreamOptionsPatch
+	extends Omit<Partial<AgentHarnessStreamOptions>, "headers" | "metadata"> {
 	/** Header patch. `undefined` values delete keys; explicit `headers: undefined` clears all headers. */
 	headers?: Record<string, string | undefined>;
 	/** Metadata patch. `undefined` values delete keys; explicit `metadata: undefined` clears all metadata. */
@@ -159,7 +167,12 @@ export class FileError extends Error {
 
 /** Stable, backend-independent execution error codes returned by {@link ExecutionEnv.exec}. */
 export type ExecutionErrorCode =
-	"aborted" | "timeout" | "shell_unavailable" | "spawn_error" | "callback_error" | "unknown";
+	| "aborted"
+	| "timeout"
+	| "shell_unavailable"
+	| "spawn_error"
+	| "callback_error"
+	| "unknown";
 
 /** Error returned by {@link ExecutionEnv.exec}. */
 export class ExecutionError extends Error {
