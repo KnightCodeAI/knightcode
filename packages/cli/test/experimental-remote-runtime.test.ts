@@ -39,7 +39,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 				{ serviceId: runtime.serviceId, sessionId: "demo-2" },
 			],
 		});
-		expect(runtime.server.hostedSessions).toEqual([]);
+		expect(runtime.workerPids.size).toBe(0);
 		const socket = await lstat(runtime.socketPath);
 		expect(socket.mode & 0o777).toBe(0o600);
 	});
@@ -52,7 +52,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 			serviceId: runtime.serviceId,
 			sessionId: "demo-1",
 		});
-		expect(runtime.server.hostedSessions.map(({ sessionId }) => sessionId)).toEqual(["demo-1"]);
+		expect([...runtime.workerPids.keys()]).toEqual(["demo-1"]);
 		const firstPid = runtime.workerPids.get("demo-1");
 		expect(firstPid).toEqual(expect.any(Number));
 
@@ -61,7 +61,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 			sessionId: "demo-1",
 			connect: { transport: "unix", path: runtime.socketPath },
 		});
-		expect(runtime.server.hostedSessions.map(({ sessionId }) => sessionId)).toEqual(["demo-1"]);
+		expect([...runtime.workerPids.keys()]).toEqual(["demo-1"]);
 		expect(runtime.workerPids.get("demo-1")).toBe(firstPid);
 	});
 
@@ -72,8 +72,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 		expect(firstPid).toEqual(expect.any(Number));
 
 		process.kill(firstPid!, "SIGKILL");
-		await expect.poll(() => runtime.server.hostedSessions).toEqual([]);
-		expect(runtime.workerPids.has("demo-1")).toBe(false);
+		await expect.poll(() => runtime.workerPids.has("demo-1")).toBe(false);
 
 		await runExperimentalClient({ command: "client", sessionId: "demo-1" }, { directory });
 		const replacementPid = runtime.workerPids.get("demo-1");

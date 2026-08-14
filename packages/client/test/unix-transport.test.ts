@@ -13,7 +13,7 @@ const servers = new Set<Server>();
 const sockets = new Set<Socket>();
 
 async function makeSocketPath(): Promise<string> {
-	const directory = await mkdtemp(join(tmpdir(), "pi-client-transport-"));
+	const directory = await mkdtemp(join(tmpdir(), "knightcode-client-transport-"));
 	tempDirectories.add(directory);
 	return join(directory, "pi.sock");
 }
@@ -64,7 +64,6 @@ describe.runIf(process.platform !== "win32")("createUnixTransportFactory", () =>
 						const frame = encodeServerMessage({
 							type: "hello",
 							version: PROTOCOL_VERSION,
-							connectionId: "unix-connection",
 							serviceId,
 						});
 						for (const byte of frame) socket.write(Uint8Array.of(byte));
@@ -87,7 +86,7 @@ describe.runIf(process.platform !== "win32")("createUnixTransportFactory", () =>
 		const client = new KnightClient({ serviceId, transportFactory: createUnixTransportFactory({ path }) });
 
 		try {
-			await expect(client.connect()).resolves.toMatchObject({ connectionId: "unix-connection", serviceId });
+			await expect(client.connect()).resolves.toMatchObject({ serviceId });
 			await expect(client.listSessions()).resolves.toEqual([]);
 			expect(receivedMethods).toEqual(["list"]);
 		} finally {
@@ -106,7 +105,6 @@ describe.runIf(process.platform !== "win32")("createUnixTransportFactory", () =>
 							encodeServerMessage({
 								type: "hello",
 								version: PROTOCOL_VERSION,
-								connectionId: "unix-truncated",
 								serviceId,
 							}),
 						);

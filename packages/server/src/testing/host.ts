@@ -1,6 +1,5 @@
 import type { Session, SessionMetadata } from "@knightcode/agent";
 import { MemorySessionRepo } from "@knightcode/agent";
-import { SessionLockedError } from "../errors.ts";
 import type { HostedHarnessHandle, KnightServerHost } from "../types.ts";
 
 export class Deferred<T> {
@@ -74,7 +73,6 @@ interface ListDelay {
 export class TestServerHost implements KnightServerHost {
 	readonly repo = new MemorySessionRepo({ now: () => 1 });
 	readonly harnesses = new Map<string, TestHarness[]>();
-	readonly locked = new Set<string>();
 	openCount = 0;
 	failNextOpen?: Error;
 	failNextHarness?: Error;
@@ -101,7 +99,6 @@ export class TestServerHost implements KnightServerHost {
 				this.failNextOpen = undefined;
 				throw error;
 			}
-			if (this.locked.has(metadata.id)) throw new SessionLockedError(`Session is locked: ${metadata.id}`);
 			return this.repo.open(metadata);
 		},
 	};

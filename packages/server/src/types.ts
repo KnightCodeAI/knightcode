@@ -1,4 +1,4 @@
-import type { AgentHarness, Session, SessionMetadata, SessionRepo } from "@knightcode/agent";
+import type { AgentHarness, Session, SessionRepo } from "@knightcode/agent";
 import type { KnightServerListener } from "./listener.ts";
 
 export interface KnightServerOptions {
@@ -22,9 +22,4 @@ export interface HostedHarnessHandle extends Pick<AgentHarness, "close"> {
 export interface KnightServerHost {
 	readonly sessions: Pick<SessionRepo, "list" | "open">;
 	createHarness(session: Session): Promise<HostedHarnessHandle>;
-}
-
-export interface HostedSessionInfo {
-	readonly sessionId: string;
-	readonly metadata: SessionMetadata;
 }

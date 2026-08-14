@@ -57,7 +57,6 @@ test.skipIf(process.platform === "win32")(
 		await expect(server.start()).rejects.toThrow(/starting/);
 		await starting;
 		await server.close();
-		expect(server.addresses[0]).toBeUndefined();
 		await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
 	},
 );

@@ -31,10 +31,7 @@ describe("KnightClient service operations", () => {
 	test("connects only to the expected logical service", async () => {
 		const matching = new MemoryByteServer();
 		const client = await connectClient(matching);
-		expect(client.hello).toMatchObject({
-			serviceId: "00000000000000000000000000000001",
-			connectionId: "connection-1",
-		});
+		expect(client.hello).toMatchObject({ serviceId: "00000000000000000000000000000001" });
 		await client.dispose();
 
 		const wrong = new MemoryByteServer("00000000000000000000000000000002");
@@ -136,7 +133,6 @@ describe("KnightClient connection lifecycle", () => {
 					encodeServerMessage({
 						type: "hello",
 						version: PROTOCOL_VERSION,
-						connectionId: "connection-1",
 						serviceId: "00000000000000000000000000000001",
 					}),
 				);
@@ -210,7 +206,9 @@ describe("KnightClient connection lifecycle", () => {
 		first.disconnect();
 
 		await expect(pending).rejects.toBeInstanceOf(KnightDisconnectedError);
-		await expect(client.reconnect()).resolves.toMatchObject({ connectionId: "connection-1" });
+		await expect(client.reconnect()).resolves.toMatchObject({
+			serviceId: "00000000000000000000000000000001",
+		});
 		expect(connection).toBe(2);
 		expect(client.connected).toBe(true);
 		expect(states).toEqual(["connecting", "connected", "disconnected", "connecting", "connected"]);
