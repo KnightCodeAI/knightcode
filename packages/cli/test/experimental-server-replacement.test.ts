@@ -69,14 +69,32 @@ async function waitForOutput(process: RunningCli, pattern: RegExp, timeoutMs = 1
 	});
 }
 
-async function waitForExit(process: ChildProcess): Promise<void> {
+const EXIT_TIMEOUT_MS = 10_000;
+
+// A child that ignores SIGTERM - hung in runtime.close() on a lingering session
+// worker, say - would otherwise leave `once(child, "exit")` pending forever, and an
+// unbounded wait inside afterEach wedges the whole run with no failing test to
+// point at. Escalate to SIGKILL and let the case fail instead of hanging.
+async function waitForExit(process: ChildProcess, timeoutMs = EXIT_TIMEOUT_MS): Promise<void> {
 	if (process.exitCode !== null || process.signalCode !== null) return;
-	await once(process, "exit");
+	const exited = once(process, "exit");
+	let timer: NodeJS.Timeout | undefined;
+	const expired = new Promise<"timeout">((resolve) => {
+		timer = setTimeout(() => resolve("timeout"), timeoutMs);
+	});
+	try {
+		if ((await Promise.race([exited.then(() => "exited" as const), expired])) === "exited") return;
+		process.kill("SIGKILL");
+		await exited;
+		throw new Error(`Child ${process.pid} ignored SIGTERM for ${timeoutMs}ms and was killed`);
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 async function stop(process: ChildProcess): Promise<void> {
 	if (process.exitCode !== null || process.signalCode !== null) return;
-	const exited = once(process, "exit");
+	const exited = waitForExit(process);
 	process.kill("SIGTERM");
 	await exited;
 }
