@@ -1,10 +1,14 @@
+import type { SessionMetadata } from "@knightcode/agent";
 import { KnightServer } from "../../server.ts";
 import type { KnightServerHost } from "../../types.ts";
 import { createUnixListener } from "./listener.ts";
 import type { UnixServerOptions } from "./types.ts";
 
 /** Compose KnightServer with one Unix-domain socket listener. */
-export function createUnixServer(host: KnightServerHost, options: UnixServerOptions): KnightServer {
+export function createUnixServer<TMetadata extends SessionMetadata>(
+	host: KnightServerHost<TMetadata>,
+	options: UnixServerOptions,
+): KnightServer<TMetadata> {
 	const listener = createUnixListener({
 		path: options.path,
 		mode: options.mode,

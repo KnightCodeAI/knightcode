@@ -1,4 +1,4 @@
-import type { AgentHarness, Session, SessionRepo } from "@knightcode/agent";
+import type { AgentHarness, SessionMetadata, SessionRepo } from "@knightcode/agent";
 import type { KnightServerListener } from "./listener.ts";
 
 export interface KnightServerOptions {
@@ -19,7 +19,7 @@ export interface HostedHarnessHandle extends Pick<AgentHarness, "close"> {
 }
 
 /** Host capabilities used directly by the list and attach control-plane operations. */
-export interface KnightServerHost {
-	readonly sessions: Pick<SessionRepo, "list" | "open">;
-	createHarness(session: Session): Promise<HostedHarnessHandle>;
+export interface KnightServerHost<TMetadata extends SessionMetadata = SessionMetadata> {
+	readonly sessions: Pick<SessionRepo<TMetadata>, "list">;
+	createHarness(metadata: TMetadata): Promise<HostedHarnessHandle>;
 }
