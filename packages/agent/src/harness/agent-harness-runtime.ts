@@ -1252,7 +1252,10 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 					if (state.phase.kind === "failure_drain") {
 						const finished = await this.finishRun(lane, active, state.phase.error, options);
 						if (finished === undefined) return Result.ok({ kind: "yielded", operationId: active.operationId });
-						runSpan.setAttributes({ "knightcode.operation.outcome": "failed", "knightcode.error.code": state.phase.error.code });
+						runSpan.setAttributes({
+							"knightcode.operation.outcome": "failed",
+							"knightcode.error.code": state.phase.error.code,
+						});
 						return Result.ok({ kind: "settled", operationId: active.operationId, outcome: finished });
 					}
 					throw new RuntimeSliceNotImplemented(`drive(run.${state.phase.kind})`);
@@ -1612,7 +1615,7 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 								providerOptions: SimpleStreamOptions,
 							): Promise<AssistantMessageEventStream> => {
 								await lane.breakpoint.hit({
-									kind: "assistant_request",
+									kind: "assistant.request",
 									description: "Request assistant response",
 									details: {
 										operationId: active.operationId,
