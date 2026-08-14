@@ -27,7 +27,7 @@ test("requires a 128-bit service identity", () => {
 	);
 });
 
-describe("KnightClient list and attach", () => {
+describe("KnightClient service operations", () => {
 	test("connects only to the expected logical service", async () => {
 		const matching = new MemoryByteServer();
 		const client = await connectClient(matching);

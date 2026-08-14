@@ -22,6 +22,7 @@
       "@knightcode/protocol": ["./packages/protocol/src/index.ts"],
       "@knightcode/protocol/*": ["./packages/protocol/src/*"],
       "@knightcode/client": ["./packages/client/src/index.ts"],
+      "@knightcode/client/control": ["./packages/client/src/control.ts"],
       "@knightcode/client/unix": ["./packages/client/src/unix.ts"],
       "@knightcode/client/*": ["./packages/client/src/*"],
       "@knightcode/server": ["./packages/server/src/index.ts"],

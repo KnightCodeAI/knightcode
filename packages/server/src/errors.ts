@@ -2,7 +2,7 @@ import type { JsonValue, ProtocolErrorCode } from "@knightcode/protocol";
 
 export type KnightServerOperationErrorCode = Extract<
 	ProtocolErrorCode,
-	"wrong_service" | "session_not_found" | "session_locked" | "server_busy" | "server_restarting" | "invalid_request"
+	"wrong_service" | "session_not_found" | "session_locked" | "server_busy" | "server_draining" | "invalid_request"
 >;
 
 export const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error";
@@ -48,10 +48,10 @@ export class ServerBusyError extends KnightServerError {
 	}
 }
 
-export class ServerRestartingError extends KnightServerError {
+export class ServerDrainingError extends KnightServerError {
 	constructor() {
-		super("server_restarting", "Server is restarting");
-		this.name = "ServerRestartingError";
+		super("server_draining", "Server is draining");
+		this.name = "ServerDrainingError";
 	}
 }
 

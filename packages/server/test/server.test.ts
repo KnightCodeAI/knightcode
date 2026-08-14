@@ -5,10 +5,11 @@ import { ServerMessageDecoder } from "@knightcode/protocol";
 import { afterEach, expect, test } from "vitest";
 import type { ByteConnection } from "../src/connection.ts";
 import { KnightServer } from "../src/index.ts";
+import type { KnightServerListener } from "../src/listener.ts";
 import { TestServerHost } from "../src/testing/index.ts";
 import { createUnixServer } from "../src/transports/unix/index.ts";
 
-const service = new TestServerHost();
+const host = new TestServerHost();
 
 let server: KnightServer | undefined;
 let tempDirectory: string | undefined;
@@ -26,14 +27,14 @@ afterEach(async () => {
 });
 
 test("requires explicit listeners and a 128-bit service identity", () => {
-	expect(() => Reflect.construct(KnightServer, [service, {}])).toThrow(/listeners/);
-	expect(() => new KnightServer(service, { listeners: [], serviceId: "" })).toThrow(/serviceId/);
-	expect(() => new KnightServer(service, { listeners: [], serviceId: "invalid-service" })).toThrow(/serviceId/);
+	expect(() => Reflect.construct(KnightServer, [host, {}])).toThrow(/listeners/);
+	expect(() => new KnightServer(host, { listeners: [], serviceId: "" })).toThrow(/serviceId/);
+	expect(() => new KnightServer(host, { listeners: [], serviceId: "invalid-service" })).toThrow(/serviceId/);
 });
 
 test("rejects Unix socket paths that cannot fit in sockaddr_un", () => {
 	expect(() =>
-		createUnixServer(service, { path: `/tmp/${"x".repeat(512)}`, serviceId: "00000000000000000000000000000001" }),
+		createUnixServer(host, { path: `/tmp/${"x".repeat(512)}`, serviceId: "00000000000000000000000000000001" }),
 	).toThrow(/too long/);
 });
 
@@ -41,7 +42,7 @@ test("rejects an overlong derived private Unix bind path", async () => {
 	const maxLength = process.platform === "linux" ? 107 : 103;
 	const suffixLength = Buffer.byteLength("/tmp//s");
 	const path = `/tmp/${"x".repeat(maxLength - suffixLength)}/s`;
-	server = createUnixServer(service, { path, serviceId: "00000000000000000000000000000001" });
+	server = createUnixServer(host, { path, serviceId: "00000000000000000000000000000001" });
 
 	await expect(server.start()).rejects.toThrow(/private Unix bind path.*too long/);
 });
@@ -51,7 +52,7 @@ test.skipIf(process.platform === "win32")(
 	"rejects concurrent start calls without leaking the Unix listener",
 	async () => {
 		const path = await makeSocketPath();
-		server = createUnixServer(service, { path, serviceId: "00000000000000000000000000000001" });
+		server = createUnixServer(host, { path, serviceId: "00000000000000000000000000000001" });
 		const starting = server.start();
 		await expect(server.start()).rejects.toThrow(/starting/);
 		await starting;
@@ -80,7 +81,7 @@ test("handshake timeout closes with a final hello_error frame", async () => {
 			resolveClosed?.();
 		}
 	}
-	const core = new KnightServer(service, {
+	const core = new KnightServer(host, {
 		listeners: [],
 		serviceId: "00000000000000000000000000000001",
 		maxFrameLength: 1024,
@@ -100,14 +101,14 @@ test("handshake timeout closes with a final hello_error frame", async () => {
 test("rejects timeout values above Node's maximum timer delay", () => {
 	const path = "/tmp/knightcode-server-timeout-test.sock";
 	expect(() =>
-		createUnixServer(service, {
+		createUnixServer(host, {
 			path,
 			serviceId: "00000000000000000000000000000001",
 			handshakeTimeoutMs: 2_147_483_648,
 		}),
 	).toThrow(/handshakeTimeoutMs/);
 	expect(() =>
-		createUnixServer(service, {
+		createUnixServer(host, {
 			path,
 			serviceId: "00000000000000000000000000000001",
 			gracefulCloseTimeoutMs: 2_147_483_648,
@@ -118,11 +119,29 @@ test("rejects timeout values above Node's maximum timer delay", () => {
 test("rejects pending-byte limits smaller than one maximum frame", async () => {
 	const path = await makeSocketPath();
 	expect(() =>
-		createUnixServer(service, {
+		createUnixServer(host, {
 			path,
 			serviceId: "00000000000000000000000000000001",
 			maxFrameLength: 128,
 			maxPendingBytes: 131,
 		}),
 	).toThrow(/maxPendingBytes/);
+});
+
+test("rejects close and closed when listener shutdown fails", async () => {
+	const failure = new Error("listener close failed");
+	const listener: KnightServerListener = {
+		start: async () => {},
+		close: async () => {
+			throw failure;
+		},
+	};
+	const core = new KnightServer(host, {
+		listeners: [listener],
+		serviceId: "00000000000000000000000000000001",
+	});
+	await core.start();
+
+	await expect(core.close()).rejects.toBe(failure);
+	await expect(core.closed).rejects.toBe(failure);
 });

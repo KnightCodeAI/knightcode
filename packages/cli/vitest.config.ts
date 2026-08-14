@@ -23,6 +23,10 @@ export default mergeConfig(
 		resolve: {
 			alias: [
 				{
+					find: /^@knightcode\/client\/control$/,
+					replacement: fileURLToPath(new URL("../client/src/control.ts", import.meta.url)),
+				},
+				{
 					find: /^@knightcode\/client\/unix$/,
 					replacement: fileURLToPath(new URL("../client/src/unix.ts", import.meta.url)),
 				},
