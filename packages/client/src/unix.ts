@@ -1,6 +1,5 @@
 import { lstat, readdir } from "node:fs/promises";
 import { createConnection, type Socket } from "node:net";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_MAX_FRAME_LENGTH, isServiceId, ProtocolValidationError, type ServiceId } from "@knightcode/protocol";
 import { KnightClient } from "./client.ts";
@@ -24,16 +23,16 @@ export interface UnixServiceRoute {
 }
 
 export interface DiscoverUnixServicesOptions {
-	/** Defaults to ~/.knightcode/server. */
-	directory?: string;
+	/** Directory containing service-addressed Unix sockets. */
+	directory: string;
 	/** Maximum time for each connection and handshake. Defaults to 1,000 ms. */
 	timeoutMs?: number;
 }
 
 /** Discover reachable local Pi services by probing service-addressed Unix sockets. */
-export async function discoverUnixServices(options: DiscoverUnixServicesOptions = {}): Promise<UnixServiceRoute[]> {
+export async function discoverUnixServices(options: DiscoverUnixServicesOptions): Promise<UnixServiceRoute[]> {
 	if (process.platform === "win32") throw new Error("Unix transport is not supported on Windows");
-	const directory = options.directory ?? join(homedir(), ".knightcode", "server");
+	const directory = options.directory;
 	const timeoutMs = options.timeoutMs ?? DEFAULT_DISCOVERY_TIMEOUT_MS;
 	if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_DELAY_MS) {
 		throw new TypeError(`Unix discovery timeoutMs must be an integer between 1 and ${MAX_TIMER_DELAY_MS}`);
@@ -258,13 +257,12 @@ async function probeUnixService(route: UnixServiceRoute, timeoutMs: number): Pro
 		]);
 		return route;
 	} catch (error) {
-		// Missing/refused sockets are stale or shutting down, and an endpoint that
-		// drops the probe at any point is equally unusable. Protocol failures mean
-		// the endpoint is not the advertised Pi service. All are safe to omit.
+		// Missing/refused sockets are stale or shutting down. Protocol failures mean
+		// the endpoint is not the advertised Pi service. Both are safe to omit.
 		if (
 			error instanceof UnixDiscoveryTimeoutError ||
 			error instanceof ProtocolValidationError ||
-			error instanceof KnightDisconnectedError ||
+			(error instanceof KnightDisconnectedError && error.cause === undefined) ||
 			(error instanceof KnightServerError && error.code === "version") ||
 			isErrorCode(error, "ENOENT") ||
 			isErrorCode(error, "ECONNREFUSED") ||

@@ -2,7 +2,6 @@ import { type ChildProcess, fork } from "node:child_process";
 import { once } from "node:events";
 import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { KnightServer } from "../../server/src/server.ts";
@@ -16,7 +15,7 @@ const rawSockets = new Set<Socket>();
 const children = new Set<ChildProcess>();
 
 async function makeDirectory(): Promise<string> {
-	const directory = await mkdtemp(join(tmpdir(), "pc-"));
+	const directory = await mkdtemp(join("/tmp", "pc-"));
 	tempDirectories.add(directory);
 	return directory;
 }
@@ -154,24 +153,10 @@ describe.skipIf(process.platform === "win32")("discoverUnixServices", () => {
 			await startSilentSocket(join(directory, `${serviceId(index)}.sock`), connections);
 		}
 
-		// Nothing retires on its own under a timeout this long, so the first batch
-		// stays pinned however slowly it is established and the peak is exactly the
-		// concurrency limit.
-		const discovery = discoverUnixServices({ directory, timeoutMs: 30_000 });
+		const discovery = discoverUnixServices({ directory, timeoutMs: 100 });
 		await expect.poll(() => connections.active).toBe(16);
 		expect(connections.maximum).toBe(16);
-
-		// Release probes as they land rather than waiting the timeout out. Past this
-		// point the peak means nothing: a server-side close lags the client that
-		// caused it, so the next probe connects before this one is counted out.
-		const release = setInterval(() => {
-			for (const socket of rawSockets) socket.destroy();
-		}, 10);
-		try {
-			await expect(discovery).resolves.toEqual([]);
-		} finally {
-			clearInterval(release);
-		}
+		await expect(discovery).resolves.toEqual([]);
 		expect(connections.total).toBe(20);
 	});
 

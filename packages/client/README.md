@@ -6,18 +6,18 @@ Transport-neutral client for the initial Pi `list` and `attach` protocol slice.
 import { KnightClient, type ByteTransportFactory } from "@knightcode/client";
 
 const transportFactory: ByteTransportFactory = async (handlers) => {
-  // Connect using WebSocket, Unix socket, or another ordered byte transport.
-  return {
-    async send(chunk) {
-      // Deliver bytes in invocation order and honor backpressure.
-    },
-    close() {},
-  };
+	// Connect using WebSocket, Unix socket, or another ordered byte transport.
+	return {
+		async send(chunk) {
+			// Deliver bytes in invocation order and honor backpressure.
+		},
+		close() {},
+	};
 };
 
 const client = await KnightClient.connect({
-  serviceId: "0123456789abcdef0123456789abcdef",
-  transportFactory,
+	serviceId: "0123456789abcdef0123456789abcdef",
+	transportFactory,
 });
 const sessions = await client.listSessions();
 const attachment = await client.attachSession(sessions[0].id);
@@ -57,21 +57,22 @@ import { KnightClient } from "@knightcode/client";
 import { createUnixTransportFactory } from "@knightcode/client/unix";
 
 const client = new KnightClient({
-  serviceId: "0123456789abcdef0123456789abcdef",
-  transportFactory: createUnixTransportFactory({ path: "/tmp/pi.sock" }),
+	serviceId: "0123456789abcdef0123456789abcdef",
+	transportFactory: createUnixTransportFactory({ path: "/tmp/pi.sock" }),
 });
 await client.connect();
 ```
 
-Unix discovery scans `~/.knightcode/server/*.sock`, derives each expected service ID from its filename, and verifies it through the existing handshake:
+Unix discovery scans an explicit physical-route directory, derives each expected service ID from its filename, and verifies it through the existing handshake:
 
 ```ts
 import { discoverUnixServices } from "@knightcode/client/unix";
 
-const routes = await discoverUnixServices();
-// [{ serviceId: "...", path: "/home/me/.knightcode/server/<serviceId>.sock" }]
+const routes = await discoverUnixServices({ directory: "/run/user/1000/pi" });
+// [{ serviceId: "...", path: "/run/user/1000/pi/<serviceId>.sock" }]
 ```
 
-Malformed entries, non-sockets, stale or unresponsive endpoints, and service-ID mismatches are ignored. Discovery is read-only and probes at most 16 sockets concurrently. Unexpected filesystem and socket errors reject discovery. Pass `directory` or `timeoutMs` to override the defaults.
+Malformed entries, non-sockets, stale or unresponsive endpoints, and service-ID mismatches are ignored. Discovery is read-only and probes at most 16 sockets concurrently. Unexpected filesystem and socket errors reject discovery. The caller must choose a short, private directory because Unix socket path limits are substantially lower than normal filesystem path limits.
+Pass `timeoutMs` to override the default probe timeout.
 
 `KnightClientOptions.maxFrameLength` bounds protocol payloads. `maxPendingBytes` bounds queued Unix transport output. Configure matching limits on both peers.

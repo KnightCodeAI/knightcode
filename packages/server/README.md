@@ -14,23 +14,25 @@ Concurrent attachments to one session reuse one hosted Harness. Attachment is a 
 ```ts
 import { MemorySessionRepo } from "@knightcode/agent";
 import { generateServiceId, type KnightServerHost } from "@knightcode/server";
-import { createUnixServer } from "@knightcode/server/unix";
+import { createUnixServer, getUnixSocketPath } from "@knightcode/server/unix";
 
 const sessions = new MemorySessionRepo();
 const host: KnightServerHost = {
-  sessions,
-  async createHarness(session) {
-    return createApplicationHarness({ session });
-  },
+	sessions,
+	async createHarness(session) {
+		return createApplicationHarness({ session });
+	},
 };
 
+const serviceId = generateServiceId();
 const server = createUnixServer(host, {
-  serviceId: generateServiceId(),
+	serviceId,
+	path: getUnixSocketPath(serviceId, "/run/user/1000/pi"),
 });
 await server.start();
 ```
 
-Applications supply the repository and Harness factory. `serviceId` is a logical identity supplied by the launcher, not a socket address. `generateServiceId()` creates an in-memory 128-bit identity. The Unix preset defaults to `~/.knightcode/server/<serviceId>.sock`; pass `path` to override it. A long-lived launcher can reuse the same ID and path when replacing a server process.
+Applications supply the repository and Harness factory. `serviceId` is a logical identity supplied by the launcher, not a socket address. `generateServiceId()` creates an in-memory 128-bit identity. The Unix preset requires an explicit physical `path`; `getUnixSocketPath()` derives one from a caller-selected directory. Choose a short, private runtime directory rather than deriving the route from an unbounded home-directory path. A long-lived launcher can reuse the same ID and path when replacing a server process.
 
 `KnightServer` composes authenticated transports through `KnightServerListener`. The Unix submodule provides `createUnixListener()` and `createUnixServer()`. Low-level CBOR framing and validation come from `@knightcode/protocol`.
 

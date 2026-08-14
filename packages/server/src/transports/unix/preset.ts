@@ -1,13 +1,12 @@
 import { KnightServer } from "../../server.ts";
 import type { KnightServerHost } from "../../types.ts";
-import { getUnixSocketPath } from "./address.ts";
 import { createUnixListener } from "./listener.ts";
 import type { UnixServerOptions } from "./types.ts";
 
 /** Compose KnightServer with one Unix-domain socket listener. */
 export function createUnixServer(host: KnightServerHost, options: UnixServerOptions): KnightServer {
 	const listener = createUnixListener({
-		path: options.path ?? getUnixSocketPath(options.serviceId),
+		path: options.path,
 		mode: options.mode,
 		maxFrameLength: options.maxFrameLength,
 		maxPendingBytes: options.maxPendingBytes,
