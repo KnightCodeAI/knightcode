@@ -1201,13 +1201,13 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 		const recovery = !this.attachedOperationIds.has(active.operationId);
 		return startHarnessSpan(
 			this.telemetryContext,
-			"pi.harness.run",
+			"knightcode.harness.run",
 			{
-				"pi.session.id": this.sessionStorage.metadata.id,
-				"pi.lane.name": lane.name,
-				"pi.operation.id": active.operationId,
-				"pi.operation.recovery": recovery,
-				"pi.operation.kind": "run",
+				"knightcode.session.id": this.sessionStorage.metadata.id,
+				"knightcode.lane.name": lane.name,
+				"knightcode.operation.id": active.operationId,
+				"knightcode.operation.recovery": recovery,
+				"knightcode.operation.kind": "run",
 			},
 			async (runSpan) => {
 				if (recovery) {
@@ -1220,7 +1220,7 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 					if (restored.current === undefined) {
 						const terminal = await this.settledOrMismatch(lane.name, active.operationId, restored);
 						if (terminal.ok && terminal.value.kind === "settled" && terminal.value.outcome.operation === "run") {
-							runSpan.setAttributes({ "pi.operation.outcome": terminal.value.outcome.kind });
+							runSpan.setAttributes({ "knightcode.operation.outcome": terminal.value.outcome.kind });
 						}
 						return terminal;
 					}
@@ -1238,7 +1238,7 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 						}
 						const finished = await this.finishRun(lane, active, undefined, options);
 						if (finished === undefined) return Result.ok({ kind: "yielded", operationId: active.operationId });
-						runSpan.setAttributes({ "pi.operation.outcome": "completed" });
+						runSpan.setAttributes({ "knightcode.operation.outcome": "completed" });
 						return Result.ok({ kind: "settled", operationId: active.operationId, outcome: finished });
 					}
 					if (state.phase.kind === "assistant") {
@@ -1252,7 +1252,7 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 					if (state.phase.kind === "failure_drain") {
 						const finished = await this.finishRun(lane, active, state.phase.error, options);
 						if (finished === undefined) return Result.ok({ kind: "yielded", operationId: active.operationId });
-						runSpan.setAttributes({ "pi.operation.outcome": "failed", "pi.error.code": state.phase.error.code });
+						runSpan.setAttributes({ "knightcode.operation.outcome": "failed", "knightcode.error.code": state.phase.error.code });
 						return Result.ok({ kind: "settled", operationId: active.operationId, outcome: finished });
 					}
 					throw new RuntimeSliceNotImplemented(`drive(run.${state.phase.kind})`);
@@ -1351,11 +1351,11 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 		const stepId = this.sessionStorage.idGenerator.next();
 		await startHarnessSpan(
 			runTelemetry,
-			"pi.harness.checkpoint",
+			"knightcode.harness.checkpoint",
 			{
-				"pi.lane.name": lane.name,
-				"pi.operation.id": active.operationId,
-				"pi.checkpoint.kind": "normal",
+				"knightcode.lane.name": lane.name,
+				"knightcode.operation.id": active.operationId,
+				"knightcode.checkpoint.kind": "normal",
 			},
 			async () => {
 				try {
@@ -1532,21 +1532,21 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 		);
 		const message = await startHarnessSpan(
 			runTelemetry,
-			"pi.harness.turn",
+			"knightcode.harness.turn",
 			{
-				"pi.lane.name": lane.name,
-				"pi.operation.id": active.operationId,
-				"pi.turn.id": context.stepId,
+				"knightcode.lane.name": lane.name,
+				"knightcode.operation.id": active.operationId,
+				"knightcode.turn.id": context.stepId,
 			},
 			(turnSpan) =>
 				startHarnessSpan(
 					turnSpan,
-					"pi.harness.step",
+					"knightcode.harness.step",
 					{
-						"pi.lane.name": lane.name,
-						"pi.operation.id": active.operationId,
-						"pi.step.kind": "assistant",
-						"pi.step.attempt": ready.nextAttempt,
+						"knightcode.lane.name": lane.name,
+						"knightcode.operation.id": active.operationId,
+						"knightcode.step.kind": "assistant",
+						"knightcode.step.attempt": ready.nextAttempt,
 					},
 					async (stepSpan) => {
 						const settled = await streamHarnessAssistant(messages, {
@@ -1658,7 +1658,7 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 							signal: active.effectGate.signal,
 						});
 						stepSpan.setAttributes({
-							"pi.step.outcome":
+							"knightcode.step.outcome":
 								settled.stopReason === "stop" || settled.stopReason === "length" ? "succeeded" : "failed",
 						});
 						return settled;
