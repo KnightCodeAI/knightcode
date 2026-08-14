@@ -499,6 +499,20 @@ describe("SqliteStorage", () => {
 		]);
 	});
 
+	it("bounds a prefix ending at the last code point before the surrogate range", async () => {
+		await withStorage(async (storage, db) => {
+			const inside = "pre퟿inside";
+			const privateUse = "preoutside";
+			sql`INSERT INTO registers (namespace, key, seq, value) VALUES
+				(${"fact.custom"}, ${inside}, ${1}, ${JSON.stringify(1)}),
+				(${"fact.custom"}, ${privateUse}, ${2}, ${JSON.stringify(2)})`.run(db);
+
+			// Incrementing U+D7FF lands on a lone surrogate, which is stored as U+FFFD and
+			// would admit every key between the two.
+			expect((await storage.listRegisters("fact.custom", "pre퟿")).map((row) => row.key)).toEqual([inside]);
+		});
+	});
+
 	it("reads and advances the next commit sequence", async () => {
 		await withStorage(async (_storage, db) => {
 			sql`INSERT INTO session

@@ -61,7 +61,10 @@ function nextPrefixBoundary(prefix: string): string | undefined {
 		const codePoint = codePoints[index]?.codePointAt(0);
 		if (codePoint === undefined) throw new Error("Invalid register key prefix");
 		if (codePoint < 0x10ffff) {
-			return `${codePoints.slice(0, index).join("")}${String.fromCodePoint(codePoint + 1)}`;
+			// Skipping the surrogate range keeps the bound a real scalar value; a lone
+			// surrogate is stored as U+FFFD and would admit every key above it.
+			const nextCodePoint = codePoint >= 0xd7ff && codePoint < 0xe000 ? 0xe000 : codePoint + 1;
+			return `${codePoints.slice(0, index).join("")}${String.fromCodePoint(nextCodePoint)}`;
 		}
 	}
 	return undefined;
