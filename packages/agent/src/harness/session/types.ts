@@ -66,7 +66,7 @@ export interface LaneConfiguration {
 	activeToolNames: string[];
 }
 
-export interface Operation {
+export interface OperationMeta {
 	operationId: string;
 	lane: string;
 	sourceLeafId: string | null;
@@ -284,6 +284,7 @@ export type NavigationState =
 	  };
 
 export type OperationState = RunState | CompactionState | NavigationState;
+export type Operation = { meta: OperationMeta; state: OperationState };
 
 export interface LaneState {
 	currentOperationId: string | null;
@@ -365,7 +366,7 @@ export interface RegisterValues {
 	"lane.config": LaneConfiguration;
 	"lane.state": LaneState;
 	"lane.lastResult": LaneLastResult;
-	"op.meta": Operation;
+	"op.meta": OperationMeta;
 	"op.state": OperationState;
 	"op.tool_args": Record<string, JsonValue>;
 	"op.preparation": DurableStructuralPreparation;
