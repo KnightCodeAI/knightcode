@@ -13,10 +13,10 @@ import type {
 } from "@knightcode/ai";
 import type { TelemetryContext } from "@knightcode/telemetry";
 import type { AgentMessage, AgentToolResult, QueueMode, ThinkingLevel } from "../types.ts";
-import { createAgentHarness } from "./agent-harness-runtime.ts";
 import type { BranchPreparation, BranchSummaryResult } from "./compaction/branch-summarization.ts";
 import type { CompactionPreparation, CompactionSettings, CompactResult } from "./compaction/compaction.ts";
 import { type Result, TaggedError } from "./result.ts";
+import { createAgentHarness } from "./runtime/agent-harness-runtime.ts";
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
@@ -102,8 +102,7 @@ export class HarnessClosed extends Error {
 }
 
 export type OptionalFinalAssistant =
-	| { finalEntryId: string; finalMessage: AssistantMessage }
-	| { finalEntryId?: never; finalMessage?: never };
+	{ finalEntryId: string; finalMessage: AssistantMessage } | { finalEntryId?: never; finalMessage?: never };
 
 export type MissingIdentitySuspension = {
 	kind: "suspended";
@@ -363,8 +362,7 @@ export type HarnessEventPayload =
 	  ))
 	| { type: "fault"; code: string; message: string }
 	| ({ type: "handler_error"; error: string; stack?: string } & (
-			| { kind: "hook"; hook: string }
-			| { kind: "event"; event: string }
+			{ kind: "hook"; hook: string } | { kind: "event"; event: string }
 	  ))
 	| { type: "turn_start"; runId: string; turnId: string }
 	| {
