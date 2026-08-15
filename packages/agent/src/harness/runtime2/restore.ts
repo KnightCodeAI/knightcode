@@ -7,9 +7,7 @@ import type { LaneState } from "./types.ts";
 export async function restoreSession(session: Session): Promise<Map<string, Lane>> {
 	const lanes = await session.listRegisters("lane.leaf");
 	if (!lanes.some((lane) => lane.key === "main")) throw new SessionInvariantError("Session is missing main lane");
-	const restored = await Promise.all(
-		lanes.map(({ key }) => session.mutate(key, (reader) => restoreLane(reader, key))),
-	);
+	const restored = await Promise.all(lanes.map(({ key }) => session.mutate(key, (reader) => restoreLane(reader, key))));
 	return new Map(restored.map((lane) => [lane.name, lane]));
 }
 
