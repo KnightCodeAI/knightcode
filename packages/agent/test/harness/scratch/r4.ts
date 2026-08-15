@@ -10,7 +10,7 @@ import { InMemoryTelemetryContext } from "@knightcode/telemetry";
 import { NodeExecutionEnv } from "../../../src/harness/env/nodejs.ts";
 import { AgentHarness, createReadTool, getOrThrow, MemorySessionRepo } from "../../../src/index.ts";
 
-const directory = await mkdtemp(join(tmpdir(), "pi-agent-r4-"));
+const directory = await mkdtemp(join(tmpdir(), "knightcode-agent-r4-"));
 const env = new NodeExecutionEnv({ cwd: directory });
 const repo = new MemorySessionRepo();
 const session = await repo.create({});
