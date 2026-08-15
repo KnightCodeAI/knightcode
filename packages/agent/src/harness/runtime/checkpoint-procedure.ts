@@ -15,9 +15,7 @@ import {
 } from "./types.ts";
 
 export type CheckpointDisposition =
-	| { kind: "advanced" }
-	| { kind: "yielded" }
-	| { kind: "settled"; outcome: TerminalOperationOutcome };
+	{ kind: "advanced" } | { kind: "yielded" } | { kind: "settled"; outcome: TerminalOperationOutcome };
 
 export async function driveCheckpoint<TContext extends object | undefined>(
 	runtime: RuntimeProcedureContext<TContext>,
@@ -147,16 +145,12 @@ export async function finishRun<TContext extends object | undefined>(
 					{ kind: "register", op: "delete", namespace: "op.meta", key: active.operationId },
 					{ kind: "register", op: "delete", namespace: "op.state", key: active.operationId },
 					...toolArgs.map(
-						(register) =>
-							({ kind: "register", op: "delete", namespace: "op.tool_args", key: register.key }) as const,
+						(register) => ({ kind: "register", op: "delete", namespace: "op.tool_args", key: register.key }) as const,
 					),
 					...preparations.map(
-						(register) =>
-							({ kind: "register", op: "delete", namespace: "op.preparation", key: register.key }) as const,
+						(register) => ({ kind: "register", op: "delete", namespace: "op.preparation", key: register.key }) as const,
 					),
-					...pendingIds.map(
-						(id) => ({ kind: "register", op: "delete", namespace: "pending.entry", key: id }) as const,
-					),
+					...pendingIds.map((id) => ({ kind: "register", op: "delete", namespace: "pending.entry", key: id }) as const),
 					{ kind: "register", op: "set", namespace: "lane.lastResult", key: lane.name, value: result },
 					{
 						kind: "register",

@@ -10,9 +10,7 @@ export class AbortRequested extends Error {
 }
 
 type EffectGateState =
-	| { status: "open" }
-	| { status: "aborting"; cancellation: Promise<void> }
-	| { status: "closed"; error: Error };
+	{ status: "open" } | { status: "aborting"; cancellation: Promise<void> } | { status: "closed"; error: Error };
 
 /** Process-local admission gate for one operation's external work. */
 export interface EffectGate {

@@ -104,8 +104,7 @@ export type AgentHarnessTool<
 
 /** Static tool context or zero-argument provider resolved for each turn snapshot. */
 export type AgentHarnessToolContextSource<TContext extends object | undefined> =
-	| TContext
-	| (() => TContext | Promise<TContext>);
+	TContext | (() => TContext | Promise<TContext>);
 
 /** Curated provider request options owned by the harness and snapshotted per turn. */
 export interface AgentHarnessStreamOptions {
@@ -128,8 +127,10 @@ export interface AgentHarnessStreamOptions {
 }
 
 /** Per-request stream option patch returned by provider hooks. */
-export interface AgentHarnessStreamOptionsPatch
-	extends Omit<Partial<AgentHarnessStreamOptions>, "headers" | "metadata"> {
+export interface AgentHarnessStreamOptionsPatch extends Omit<
+	Partial<AgentHarnessStreamOptions>,
+	"headers" | "metadata"
+> {
 	/** Header patch. `undefined` values delete keys; explicit `headers: undefined` clears all headers. */
 	headers?: Record<string, string | undefined>;
 	/** Metadata patch. `undefined` values delete keys; explicit `metadata: undefined` clears all metadata. */
@@ -167,12 +168,7 @@ export class FileError extends Error {
 
 /** Stable, backend-independent execution error codes returned by {@link ExecutionEnv.exec}. */
 export type ExecutionErrorCode =
-	| "aborted"
-	| "timeout"
-	| "shell_unavailable"
-	| "spawn_error"
-	| "callback_error"
-	| "unknown";
+	"aborted" | "timeout" | "shell_unavailable" | "spawn_error" | "callback_error" | "unknown";
 
 /** Error returned by {@link ExecutionEnv.exec}. */
 export class ExecutionError extends Error {

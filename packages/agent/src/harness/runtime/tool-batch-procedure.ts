@@ -42,8 +42,7 @@ type ToolEventOrigin = "live" | "recovery";
 type ToolTurnState = "not_started" | "already_started";
 
 type ToolBatchMode =
-	| { kind: "ordinary"; eventOrigin: ToolEventOrigin; turn: ToolTurnState }
-	| { kind: "recovery"; turn: ToolTurnState };
+	{ kind: "ordinary"; eventOrigin: ToolEventOrigin; turn: ToolTurnState } | { kind: "recovery"; turn: ToolTurnState };
 
 type ToolCallStartMode =
 	| { kind: "ordinary"; eventOrigin: ToolEventOrigin }
@@ -151,8 +150,7 @@ async function executeToolBatch<TContext extends object | undefined>(
 			(call, index): call is Extract<DurableToolCall, { status: "effect_pending" }> => {
 				if (call.status === "completed") return false;
 				return (
-					batch.calls.slice(0, index).every((prior) => prior.status !== "planned") &&
-					call.status === "effect_pending"
+					batch.calls.slice(0, index).every((prior) => prior.status !== "planned") && call.status === "effect_pending"
 				);
 			},
 		);
@@ -201,15 +199,7 @@ async function executeToolBatch<TContext extends object | undefined>(
 					});
 					return { kind: "yielded" };
 				}
-				const committed = await settleStartedToolCall(
-					runtime,
-					lane,
-					active,
-					batch,
-					started,
-					turnTelemetry,
-					"recovery",
-				);
+				const committed = await settleStartedToolCall(runtime, lane, active, batch, started, turnTelemetry, "recovery");
 				toolResults.push(committed.message);
 				batchCompleted = committed.batchCompleted;
 			}
@@ -242,8 +232,7 @@ async function executeToolBatch<TContext extends object | undefined>(
 				(call, index): call is Extract<DurableToolCall, { status: "effect_pending" }> => {
 					if (call.status === "completed") return false;
 					return (
-						batch.calls.slice(0, index).every((prior) => prior.status !== "planned") &&
-						call.status === "effect_pending"
+						batch.calls.slice(0, index).every((prior) => prior.status !== "planned") && call.status === "effect_pending"
 					);
 				},
 			);
@@ -307,15 +296,7 @@ async function executeToolBatch<TContext extends object | undefined>(
 				}
 			}
 			for (const started of startedPrefix) {
-				const committed = await settleStartedToolCall(
-					runtime,
-					lane,
-					active,
-					batch,
-					started,
-					turnTelemetry,
-					"recovery",
-				);
+				const committed = await settleStartedToolCall(runtime, lane, active, batch, started, turnTelemetry, "recovery");
 				toolResults.push(committed.message);
 			}
 			if (recoveryTurn === "already_started") {
@@ -397,15 +378,7 @@ async function executeToolBatch<TContext extends object | undefined>(
 				await closeRecoveryTurn();
 				return mode.kind === "recovery" || !progressed ? { kind: "yielded" } : { kind: "advanced" };
 			}
-			const committed = await settleStartedToolCall(
-				runtime,
-				lane,
-				active,
-				batch,
-				started,
-				turnTelemetry,
-				eventOrigin,
-			);
+			const committed = await settleStartedToolCall(runtime, lane, active, batch, started, turnTelemetry, eventOrigin);
 			toolResults.push(committed.message);
 			progressed = true;
 			batchCompleted = committed.batchCompleted;

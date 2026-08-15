@@ -292,9 +292,7 @@ export async function acceptLane<TContext extends object | undefined>(
 			const result = await mutator.commit({
 				writes: [
 					...entryWrites,
-					...pendingIds.map(
-						(id) => ({ kind: "register", op: "delete", namespace: "pending.entry", key: id }) as const,
-					),
+					...pendingIds.map((id) => ({ kind: "register", op: "delete", namespace: "pending.entry", key: id }) as const),
 					{ kind: "register", op: "set", namespace: "lane.leaf", key: lane.name, value: triggerEntryId },
 					{ kind: "register", op: "set", namespace: "op.meta", key: provisional.operationId, value: operation },
 					{ kind: "register", op: "set", namespace: "op.state", key: provisional.operationId, value: state },

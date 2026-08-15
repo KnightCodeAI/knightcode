@@ -48,11 +48,7 @@ export async function executeDrivePass<TContext extends object | undefined>(
 		}
 		if (state?.kind === "run" && state.phase.kind === "deferred" && state.phase.deferred.status === "suspended") {
 			const source = current?.entries.get(state.phase.deferred.sourceEntryId);
-			if (
-				source?.type !== "message" ||
-				source.message.role !== "assistant" ||
-				source.message.deferred === undefined
-			) {
+			if (source?.type !== "message" || source.message.role !== "assistant" || source.message.deferred === undefined) {
 				throw new SessionInvariantError("Deferred suspension source is invalid");
 			}
 			return Result.ok({

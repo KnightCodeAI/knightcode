@@ -1191,7 +1191,9 @@ describe("AgentHarness R3 generation recovery and retry", () => {
 		const failureCheckpoint = failedTelemetry
 			.getSpans()
 			.find(
-				(span) => span.name === "knightcode.harness.checkpoint" && span.attributes["knightcode.checkpoint.kind"] === "failure_drain",
+				(span) =>
+					span.name === "knightcode.harness.checkpoint" &&
+					span.attributes["knightcode.checkpoint.kind"] === "failure_drain",
 			);
 		expect(failureCheckpoint).toMatchObject({ parentId: failedRun?.id, status: { status: "ok" } });
 

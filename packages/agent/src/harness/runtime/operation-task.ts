@@ -105,9 +105,7 @@ function startDrivePass<TContext extends object | undefined>(
 		} catch (error) {
 			await removeActiveOperation(runtime, lane.name, active);
 			active.reject(
-				error instanceof HarnessClosed ||
-					error instanceof HarnessFault ||
-					error instanceof RuntimeSliceNotImplemented
+				error instanceof HarnessClosed || error instanceof HarnessFault || error instanceof RuntimeSliceNotImplemented
 					? error
 					: runtime.fault(error),
 			);

@@ -614,8 +614,7 @@ export async function executeAssistantGeneration<TContext extends object | undef
 		if (deadlineReached(options)) return { kind: "yielded" };
 	}
 	const operation = restored.current?.operation;
-	if (operation?.intent.kind !== "run")
-		throw new SessionInvariantError("Assistant generation is missing run metadata");
+	if (operation?.intent.kind !== "run") throw new SessionInvariantError("Assistant generation is missing run metadata");
 	const systemPrompt = operation.intent.systemPromptOverride ?? (await resolveSystemPrompt(runtime));
 	const responseEntryId = runtime.sessionStorage.idGenerator.next();
 	const usageId = runtime.sessionStorage.idGenerator.next();
