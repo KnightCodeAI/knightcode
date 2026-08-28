@@ -1,12 +1,19 @@
 {
-  "extends": "@repo/typescript-config/bun.json",
-  "compilerOptions": {
-    "types": ["bun"],
-    "baseUrl": ".",
-    "paths": {
-      "src/*": ["./src/*"],
-      "@ant/knightcode-for-chrome-mcp": ["./src/stubs/knightcode-for-chrome-mcp.ts"]
-    }
-  },
-  "include": ["src"]
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"paths": {
+			"@knightcode/agent": ["../agent/dist/index.d.ts"],
+			"@knightcode/agent/*": ["../agent/dist/*.d.ts"],
+			"@knightcode/ai": ["../ai/dist/index.d.ts"],
+			"@knightcode/ai/*": ["../ai/dist/*.d.ts", "../ai/dist/providers/*.d.ts"],
+			"@knightcode/client": ["../client/dist/index.d.ts"],
+			"@knightcode/protocol": ["../protocol/dist/index.d.ts"],
+			"@knightcode/tui": ["../tui/dist/index.d.ts"],
+			"@knightcode/tui/*": ["../tui/dist/*.d.ts", "../tui/dist/components/*.d.ts"]
+		},
+		"rootDir": "./src"
+	},
+	"include": ["src/**/*.ts", "src/**/*.d.ts"],
+	"exclude": ["node_modules", "dist"]
 }

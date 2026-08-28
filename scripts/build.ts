@@ -1,11 +1,64 @@
 // scripts/build.ts — run with `bun run scripts/build.ts [--single]`
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../packages/cli/package.json";
 import process from "node:process";
 
 const ROOT = join(import.meta.dir, "..");
-const ENTRY = join(ROOT, "packages/cli/src/main.tsx");
+// src/bun/cli.ts statically registers the bedrock provider and the Bun OAuth
+// flows, which the plain node entry (src/cli.ts) loads dynamically. The image
+// worker is a second entrypoint because it is spawned as its own module.
+const ENTRY = join(ROOT, "packages/cli/src/bun/cli.ts");
+const WORKER_ENTRY = join(ROOT, "packages/cli/src/utils/image-resize-worker.ts");
+
+// In a compiled binary `getPackageDir()` is `dirname(process.execPath)` (see
+// packages/cli/src/config.ts), so the runtime looks for package.json, themes,
+// assets and templates *next to the executable*. Without this the binary
+// reports version 0.0.0 and cannot load a theme.
+const CLI = join(ROOT, "packages/cli");
+function copyRuntimeAssets(outDir: string): void {
+  cpSync(join(CLI, "package.json"), join(outDir, "package.json"));
+  for (const f of ["README.md", "CHANGELOG.md"]) {
+    const src = join(CLI, f);
+    if (existsSync(src)) cpSync(src, join(outDir, f));
+  }
+
+  const theme = join(outDir, "theme");
+  mkdirSync(theme, { recursive: true });
+  const themeSrc = join(CLI, "src/modes/interactive/theme");
+  for (const f of readdirSync(themeSrc)) {
+    if (f.endsWith(".json")) cpSync(join(themeSrc, f), join(theme, f));
+  }
+
+  const assets = join(outDir, "assets");
+  mkdirSync(assets, { recursive: true });
+  const assetsSrc = join(CLI, "src/modes/interactive/assets");
+  if (existsSync(assetsSrc)) {
+    for (const f of readdirSync(assetsSrc)) cpSync(join(assetsSrc, f), join(assets, f));
+  }
+
+  const exportSrc = join(CLI, "src/core/export-html");
+  const exportOut = join(outDir, "export-html");
+  mkdirSync(join(exportOut, "vendor"), { recursive: true });
+  for (const f of ["template.html", "template.css", "template.js"]) {
+    const src = join(exportSrc, f);
+    if (existsSync(src)) cpSync(src, join(exportOut, f));
+  }
+  const vendorSrc = join(exportSrc, "vendor");
+  if (existsSync(vendorSrc)) cpSync(vendorSrc, join(exportOut, "vendor"), { recursive: true });
+
+  const docs = join(CLI, "docs");
+  if (existsSync(docs)) cpSync(docs, join(outDir, "docs"), { recursive: true });
+
+  // photon-node reads photon_rs_bg.wasm relative to itself; see utils/photon.ts.
+  for (const base of [join(CLI, "node_modules"), join(ROOT, "node_modules")]) {
+    const wasm = join(base, "@silvia-odwyer/photon-node/photon_rs_bg.wasm");
+    if (existsSync(wasm)) {
+      cpSync(wasm, join(outDir, "photon_rs_bg.wasm"));
+      break;
+    }
+  }
+}
 
 type Target = { os: string; arch: string; bunTarget: Bun.Build.CompileTarget };
 
@@ -63,7 +116,7 @@ for (const target of targets) {
 
   console.log(`Building ${target.os}-${target.arch} → ${outfile}`);
   const result = await Bun.build({
-    entrypoints: [ENTRY],
+    entrypoints: [ENTRY, WORKER_ENTRY],
     target: "bun",
     compile: { target: target.bunTarget, outfile },
     define: {
@@ -76,6 +129,8 @@ for (const target of targets) {
     for (const log of result.logs) console.error(log);
     process.exit(1);
   }
+
+  copyRuntimeAssets(outDir);
 
   // Compiled binaries must be executable on POSIX (npm preserves the mode bit).
   if (target.os !== "win32") chmodSync(outfile, 0o755);

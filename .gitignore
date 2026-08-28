@@ -81,3 +81,7 @@ Shenanigans.md
 
 # Compiled platform binaries (built by CI / scripts/build.ts, never committed)
 packages/cli-*/bin/
+
+# Vendored reference trees kept on disk for porting work only (upstream pi source,
+# the pre-port Claude Code tree, scratch experiments). Never committed.
+shenanigans/
