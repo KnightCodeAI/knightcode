@@ -1,6 +1,6 @@
 # Examples
 
-Example code for pi-coding-agent SDK and extensions.
+Example code for @knightcodeai/cli SDK and extensions.
 
 ## Directories
 

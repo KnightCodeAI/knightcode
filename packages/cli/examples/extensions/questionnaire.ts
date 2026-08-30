@@ -81,8 +81,8 @@ function errorResult(
 	};
 }
 
-export default function questionnaire(pi: ExtensionAPI) {
-	pi.registerTool({
+export default function questionnaire(knightcode: ExtensionAPI) {
+	knightcode.registerTool({
 		name: "questionnaire",
 		label: "Questionnaire",
 		description:

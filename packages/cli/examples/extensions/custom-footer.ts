@@ -12,10 +12,10 @@ import type { AssistantMessage } from "@knightcode/ai";
 import type { ExtensionAPI } from "@knightcodeai/cli";
 import { truncateToWidth, visibleWidth } from "@knightcode/tui";
 
-export default function (pi: ExtensionAPI) {
+export default function (knightcode: ExtensionAPI) {
 	let enabled = false;
 
-	pi.registerCommand("footer", {
+	knightcode.registerCommand("footer", {
 		description: "Toggle custom footer",
 		handler: async (_args, ctx) => {
 			enabled = !enabled;

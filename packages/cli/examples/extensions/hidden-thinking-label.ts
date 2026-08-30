@@ -5,7 +5,7 @@
  * when thinking blocks are hidden.
  *
  * Usage:
- *   pi --extension examples/extensions/hidden-thinking-label.ts
+ *   knightcode --extension examples/extensions/hidden-thinking-label.ts
  *
  * Test:
  *   1. Load this extension
@@ -22,18 +22,18 @@ import type { ExtensionAPI, ExtensionContext } from "@knightcodeai/cli";
 
 const DEFAULT_LABEL = "Pondering...";
 
-export default function (pi: ExtensionAPI) {
+export default function (knightcode: ExtensionAPI) {
 	let label = DEFAULT_LABEL;
 
 	const applyLabel = (ctx: ExtensionContext) => {
 		ctx.ui.setHiddenThinkingLabel(label);
 	};
 
-	pi.on("session_start", async (_event, ctx) => {
+	knightcode.on("session_start", async (_event, ctx) => {
 		applyLabel(ctx);
 	});
 
-	pi.registerCommand("thinking-label", {
+	knightcode.registerCommand("thinking-label", {
 		description: "Set the hidden thinking label. Use without args to reset.",
 		handler: async (args, ctx) => {
 			const nextLabel = args.trim();

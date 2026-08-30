@@ -4,8 +4,8 @@ import type { ExtensionAPI } from "@knightcodeai/cli";
 
 const baseDir = dirname(fileURLToPath(import.meta.url));
 
-export default function (pi: ExtensionAPI) {
-	pi.on("resources_discover", () => {
+export default function (knightcode: ExtensionAPI) {
+	knightcode.on("resources_discover", () => {
 		return {
 			skillPaths: [join(baseDir, "SKILL.md")],
 			promptPaths: [join(baseDir, "dynamic.md")],

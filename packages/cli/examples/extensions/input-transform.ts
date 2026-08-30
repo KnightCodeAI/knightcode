@@ -1,18 +1,18 @@
 /**
  * Input Transform Example - demonstrates the `input` event for intercepting user input.
  *
- * Start pi with this extension:
- *   pi -e ./examples/extensions/input-transform.ts
+ * Start knightcode with this extension:
+ *   knightcode -e ./examples/extensions/input-transform.ts
  *
- * Then type these inside pi:
+ * Then type these inside knightcode:
  *   ?quick What is TypeScript?  → "Respond briefly: What is TypeScript?"
  *   ping                        → "pong" (instant, no LLM)
  *   time                        → current time (instant, no LLM)
  */
 import type { ExtensionAPI } from "@knightcodeai/cli";
 
-export default function (pi: ExtensionAPI) {
-	pi.on("input", async (event, ctx) => {
+export default function (knightcode: ExtensionAPI) {
+	knightcode.on("input", async (event, ctx) => {
 		// Source-based logic: skip processing for extension-injected messages
 		if (event.source === "extension") {
 			return { action: "continue" };
