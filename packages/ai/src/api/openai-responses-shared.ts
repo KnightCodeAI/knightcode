@@ -227,7 +227,7 @@ export function convertResponsesMessages<TApi extends Api>(
 					const textBlock = block as TextContent;
 					const parsedSignature = parseTextSignature(textBlock.textSignature);
 					const fallbackMessageId =
-						textBlockIndex === 0 ? `msg_pi_${msgIndex}` : `msg_pi_${msgIndex}_${textBlockIndex}`;
+						textBlockIndex === 0 ? `msg_kc_${msgIndex}` : `msg_kc_${msgIndex}_${textBlockIndex}`;
 					textBlockIndex++;
 					// OpenAI requires id to be max 64 characters
 					let msgId = parsedSignature?.id;
