@@ -1,5 +1,5 @@
 [install]
-# Upstream pi is an npm-workspaces monorepo, so its tests assume a hoisted
+# Upstream knightcode is an npm-workspaces monorepo, so its tests assume a hoisted
 # node_modules with ONE physical copy of each dependency. Bun's default isolated
 # layout gave packages/ai and packages/cli separate copies of `openai`, which
 # broke `vi.mock("openai")` in cli tests: the mock applied to cli's copy while
