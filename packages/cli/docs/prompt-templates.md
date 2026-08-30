@@ -8,7 +8,7 @@ Prompt templates are Markdown snippets that expand into full prompts. Type `/nam
 
 KnightCode loads prompt templates from:
 
-- Global: `~/.pi/agent/prompts/*.md`
+- Global: `~/.knightcode/agent/prompts/*.md`
 - Project: `.knightcode/prompts/*.md` (only after the project is trusted)
 - Packages: `prompts/` directories or `knightcode.prompts` entries in `package.json`
 - Settings: `prompts` array with files or directories

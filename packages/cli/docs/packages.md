@@ -8,7 +8,7 @@ KnightCode packages bundle extensions, skills, prompt templates, and themes so y
 
 - [Install and Manage](#install-and-manage)
 - [Package Sources](#package-sources)
-- [Creating a KnightCode Package](#creating-a-pi-package)
+- [Creating a KnightCode Package](#creating-a-knightcode-package)
 - [Package Structure](#package-structure)
 - [Dependencies](#dependencies)
 - [Package Filtering](#package-filtering)
@@ -40,7 +40,7 @@ knightcode update --extension npm:@foo/bar
 
 These commands manage knightcode packages and `knightcode update` can update the knightcode CLI installation. For experimental installer-managed installations, `knightcode update` installs the exact checked version into a staged, lockfile-backed release and activates it only after verification, leaving the current release intact if the update fails. Managed installations do not support `--force`; rerun the installer to repair one. To uninstall knightcode itself, see [Quickstart](quickstart.md#uninstall).
 
-By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.knightcode/settings.json`) instead. Project settings can be shared with your team, and knightcode installs any missing packages automatically on startup after the project is trusted.
+By default, `install` and `remove` write to user settings (`~/.knightcode/agent/settings.json`). Use `-l` to write to project settings (`.knightcode/settings.json`) instead. Project settings can be shared with your team, and knightcode installs any missing packages automatically on startup after the project is trusted.
 
 To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
 
@@ -61,7 +61,7 @@ npm:pkg
 ```
 
 - Versioned specs are pinned and skipped by package updates (`knightcode update --extensions`, `knightcode update --all`).
-- User installs go under `~/.pi/agent/npm/`.
+- User installs go under `~/.knightcode/agent/npm/`.
 - Project installs go under `.knightcode/npm/`.
 - Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.
 
@@ -89,7 +89,7 @@ ssh://git@github.com/user/repo@v1
 - For non-interactive runs (for example CI), you can set `GIT_TERMINAL_PROMPT=0` to disable credential prompts and set `GIT_SSH_COMMAND` (for example `ssh -o BatchMode=yes -o ConnectTimeout=5`) to fail fast.
 - Refs are pinned tags or commits. `knightcode update --extensions` and `knightcode update --all` do not move them to newer refs, but they do reconcile an existing clone to the configured ref.
 - Use `knightcode install git:host/user/repo@new-ref` to update settings and move an existing package to a new pinned ref.
-- Cloned to `~/.pi/agent/git/<host>/<path>` (global) or `.knightcode/git/<host>/<path>` (project).
+- Cloned to `~/.knightcode/agent/git/<host>/<path>` (global) or `.knightcode/git/<host>/<path>` (project).
 - When reconciliation changes the checkout, knightcode resets and cleans the clone, then runs `npm install` if `package.json` exists.
 
 **SSH examples:**
@@ -115,12 +115,12 @@ Local paths point to files or directories on disk and are added to settings with
 
 ## Creating a KnightCode Package
 
-Add a `knightcode` manifest to `package.json` or use conventional directories. Include the `pi-package` keyword for discoverability.
+Add a `knightcode` manifest to `package.json` or use conventional directories. Include the `knightcode-package` keyword for discoverability.
 
 ```json
 {
   "name": "my-package",
-  "keywords": ["pi-package"],
+  "keywords": ["knightcode-package"],
   "knightcode": {
     "extensions": ["./extensions"],
     "skills": ["./skills"],
@@ -134,12 +134,12 @@ Paths are relative to the package root. Arrays support glob patterns and `!exclu
 
 ### Gallery Metadata
 
-The [package gallery](https://knightcode.raghavseth.in/packages) displays packages tagged with `pi-package`. Add `video` or `image` fields to show a preview:
+The [package gallery](https://knightcode.raghavseth.in/packages) displays packages tagged with `knightcode-package`. Add `video` or `image` fields to show a preview:
 
 ```json
 {
   "name": "my-package",
-  "keywords": ["pi-package"],
+  "keywords": ["knightcode-package"],
   "knightcode": {
     "extensions": ["./extensions"],
     "video": "https://example.com/demo.mp4",
@@ -217,7 +217,7 @@ Filter what a package loads using the object form in settings:
 
 ## Enable and Disable Resources
 
-Use `knightcode config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. `knightcode config` starts in global settings (`~/.pi/agent/settings.json`); press Tab to switch between global and project-local modes. Use `knightcode config -l` to start in project overrides (`.knightcode/settings.json`) with inherited global resources dimmed.
+Use `knightcode config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. `knightcode config` starts in global settings (`~/.knightcode/agent/settings.json`); press Tab to switch between global and project-local modes. Use `knightcode config -l` to start in project overrides (`.knightcode/settings.json`) with inherited global resources dimmed.
 
 ## Scope and Deduplication
 

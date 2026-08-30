@@ -19,7 +19,7 @@ Themes are JSON files that define colors for the TUI.
 KnightCode loads themes from:
 
 - Built-in: `dark`, `light`
-- Global: `~/.pi/agent/themes/*.json`
+- Global: `~/.knightcode/agent/themes/*.json`
 - Project: `.knightcode/themes/*.json` (only after the project is trusted)
 - Packages: `themes/` directories or `knightcode.themes` entries in `package.json`
 - Settings: `themes` array with files or directories
@@ -61,8 +61,8 @@ and saves it normally.
 1. Create a theme file:
 
 ```bash
-mkdir -p ~/.pi/agent/themes
-vim ~/.pi/agent/themes/my-theme.json
+mkdir -p ~/.knightcode/agent/themes
+vim ~/.knightcode/agent/themes/my-theme.json
 ```
 
 2. Define the theme with all required colors (see [Color Tokens](#color-tokens)):

@@ -4,7 +4,7 @@
 
 Extensions are TypeScript modules that extend knightcode's behavior. They can subscribe to lifecycle events, register custom tools callable by the LLM, add commands, and more.
 
-> **Placement for /reload:** Put extensions in `~/.pi/agent/extensions/` (global) or `.knightcode/extensions/` (project-local) for auto-discovery. Use `knightcode -e ./path.ts` only for quick tests. Extensions in auto-discovered locations can be hot-reloaded with `/reload`.
+> **Placement for /reload:** Put extensions in `~/.knightcode/agent/extensions/` (global) or `.knightcode/extensions/` (project-local) for auto-discovery. Use `knightcode -e ./path.ts` only for quick tests. Extensions in auto-discovered locations can be hot-reloaded with `/reload`.
 
 **Key capabilities:**
 - **Custom tools** - Register tools the LLM can call via `knightcode.registerTool()`
@@ -55,7 +55,7 @@ See [examples/extensions/](../examples/extensions/) for working implementations.
 
 ## Quick Start
 
-Create `~/.pi/agent/extensions/my-extension.ts`:
+Create `~/.knightcode/agent/extensions/my-extension.ts`:
 
 ```typescript
 import type { ExtensionAPI } from "@knightcodeai/cli";
@@ -114,8 +114,8 @@ Extensions are auto-discovered from trusted locations. Project-local `.knightcod
 
 | Location | Scope |
 |----------|-------|
-| `~/.pi/agent/extensions/*.ts` | Global (all projects) |
-| `~/.pi/agent/extensions/*/index.ts` | Global (subdirectory) |
+| `~/.knightcode/agent/extensions/*.ts` | Global (all projects) |
+| `~/.knightcode/agent/extensions/*/index.ts` | Global (subdirectory) |
 | `.knightcode/extensions/*.ts` | Project-local |
 | `.knightcode/extensions/*/index.ts` | Project-local (subdirectory) |
 
@@ -228,14 +228,14 @@ Defer background resource startup until `session_start` or the command/tool/even
 **Single file** - simplest, for small extensions:
 
 ```
-~/.pi/agent/extensions/
+~/.knightcode/agent/extensions/
 └── my-extension.ts
 ```
 
 **Directory with index.ts** - for multi-file extensions:
 
 ```
-~/.pi/agent/extensions/
+~/.knightcode/agent/extensions/
 └── my-extension/
     ├── index.ts        # Entry point (exports default function)
     ├── tools.ts        # Helper module
@@ -245,7 +245,7 @@ Defer background resource startup until `session_start` or the command/tool/even
 **Package with dependencies** - for extensions that need npm packages:
 
 ```
-~/.pi/agent/extensions/
+~/.knightcode/agent/extensions/
 └── my-extension/
     ├── package.json    # Declares dependencies and entry points
     ├── package-lock.json
@@ -1012,7 +1012,7 @@ ctx.sessionManager.getLeafId()              // Current leaf entry ID
 
 ### ctx.modelRegistry / ctx.model / ctx.thinkingLevel / ctx.scopedModels
 
-Access to models, providers, and resolved authentication. `ctx.modelRegistry.getProvider(id)` returns the effective pi-ai provider, while `getProviderAuth(id)` resolves its current API key, headers, base URL, and provider-scoped environment without requiring a loaded model. `ctx.model` is the active model, and `ctx.thinkingLevel` is its current effective thinking level.
+Access to models, providers, and resolved authentication. `ctx.modelRegistry.getProvider(id)` returns the effective @knightcode/ai provider, while `getProviderAuth(id)` resolves its current API key, headers, base URL, and provider-scoped environment without requiring a loaded model. `ctx.model` is the active model, and `ctx.thinkingLevel` is its current effective thinking level.
 
 `ctx.scopedModels` is the read-only list of models scoped to the current session — the same set the `/scoped-models` command shows. It is resolved at session start from the `--models` CLI flag and the `enabledModels` setting (matched against the available catalogue with minimatch on `provider/modelId` or a bare `modelId`). It is empty when no scoping is configured, meaning every available model is usable. Each entry is `{ model, thinkingLevel? }`, where `thinkingLevel` is set only when a pattern pinned it (e.g. `anthropic/*:high`). Use it to populate a model picker that mirrors the built-in one instead of enumerating the whole catalogue via `ctx.modelRegistry.getAvailable()`.
 
@@ -1843,7 +1843,7 @@ knightcode.registerProvider("corporate-ai", {
 });
 ```
 
-The object form accepts a complete pi-ai `Provider`, including native `auth`, `getModels`, `refreshModels`, `filterModels`, `stream`, and `streamSimple` behavior.
+The object form accepts a complete @knightcode/ai `Provider`, including native `auth`, `getModels`, `refreshModels`, `filterModels`, `stream`, and `streamSimple` behavior.
 
 **Legacy config options:**
 - `name` - Display name for the provider in UI such as `/login`.

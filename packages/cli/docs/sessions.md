@@ -4,7 +4,7 @@ KnightCode saves conversations as sessions so you can continue work, branch from
 
 ## Session Storage
 
-Sessions auto-save to `~/.pi/agent/sessions/`, organized by working directory. Each session is a JSONL file with a tree structure.
+Sessions auto-save to `~/.knightcode/agent/sessions/`, organized by working directory. Each session is a JSONL file with a tree structure.
 
 ```bash
 knightcode -c                  # Continue most recent session

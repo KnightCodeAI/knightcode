@@ -4,7 +4,7 @@ KnightCode uses environment variables in three ways:
 
 - Variables such as `KNIGHTCODE_OFFLINE` configure the KnightCode process.
 - KnightCode sets process markers so child processes can identify KnightCode as the launching agent.
-- Commands run by the LLM-callable shell tools receive `PI_*` variables describing the current session.
+- Commands run by the LLM-callable shell tools receive `KNIGHTCODE_*` variables describing the current session.
 
 Provider API-key variables are documented separately in [Providers](providers.md#environment-variables-or-auth-file).
 
@@ -13,7 +13,7 @@ Provider API-key variables are documented separately in [Providers](providers.md
 The CLI and RPC entry points set two process markers:
 
 - `AI_AGENT=knightcode` is a generic marker that lets tooling identify KnightCode as the agent that launched the process.
-- `KNIGHTCODE_CODING_AGENT=true` is Pi-specific and lets child processes detect that they run inside KnightCode.
+- `KNIGHTCODE_CODING_AGENT=true` is KnightCode-specific and lets child processes detect that they run inside KnightCode.
 
 Child processes inherit both markers. They are not session-specific and are not set automatically when KnightCode is embedded through the SDK.
 
@@ -78,7 +78,7 @@ These variables are read by KnightCode itself:
 
 | Variable | Description |
 |----------|-------------|
-| `KNIGHTCODE_CODING_AGENT_DIR` | Override the config directory; default is `~/.pi/agent` |
+| `KNIGHTCODE_CODING_AGENT_DIR` | Override the config directory; default is `~/.knightcode/agent` |
 | `KNIGHTCODE_CODING_AGENT_SESSION_DIR` | Override session storage; overridden by `--session-dir` |
 | `KNIGHTCODE_PACKAGE_DIR` | Override the package directory, useful for Nix/Guix store paths |
 | `KNIGHTCODE_OFFLINE` | Disable startup network operations, including update checks, package updates, and install/update telemetry |

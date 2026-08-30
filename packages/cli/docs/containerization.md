@@ -24,8 +24,8 @@ Use the [example extension](../examples/extensions/gondolin) when you want `knig
 Setup:
 
 ```bash
-cp -R packages/coding-agent/examples/extensions/gondolin ~/.pi/agent/extensions/gondolin
-cd ~/.pi/agent/extensions/gondolin
+cp -R packages/coding-agent/examples/extensions/gondolin ~/.knightcode/agent/extensions/gondolin
+cd ~/.knightcode/agent/extensions/gondolin
 npm install --ignore-scripts
 ```
 
@@ -33,7 +33,7 @@ Run from the project you want mounted:
 
 ```bash
 cd /path/to/project
-knightcode -e ~/.pi/agent/extensions/gondolin
+knightcode -e ~/.knightcode/agent/extensions/gondolin
 ```
 
 The extension mounts the host cwd at `/workspace` in the VM and overrides `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls`.
@@ -46,7 +46,7 @@ Requirements: Node.js >= 23.6.0 for `@KnightCodeAI/gondolin`, plus QEMU (require
 
 Run the whole `knightcode` process in Docker when you want the simplest local container boundary.
 
-`Dockerfile.pi`:
+`Dockerfile.knightcode`:
 
 ```dockerfile
 FROM node:24-bookworm-slim
@@ -63,18 +63,18 @@ ENTRYPOINT ["knightcode"]
 Build and run:
 
 ```bash
-docker build -t pi-sandbox -f Dockerfile.pi .
+docker build -t knightcode-sandbox -f Dockerfile.knightcode .
 
 docker run --rm -it \
   -e ANTHROPIC_API_KEY \
   -v "$PWD:/workspace" \
-  -v pi-agent-home:/root/.pi/agent \
-  pi-sandbox
+  -v knightcode-agent-home:/root/.knightcode/agent \
+  knightcode-sandbox
 ```
 
 The `-v "$PWD:/workspace"` mounts your current directory into the container at /workspace such that reads and writes in `/workspace` inside Docker directly affect your host files, like in the Gondolin example.
 
-Use a named volume for `/root/.pi/agent` if you want container-local settings and sessions. Mounting your host `~/.pi/agent` exposes host auth and session files to the container.
+Use a named volume for `/root/.knightcode/agent` if you want container-local settings and sessions. Mounting your host `~/.knightcode/agent` exposes host auth and session files to the container.
 
 ## OpenShell
 
@@ -92,7 +92,7 @@ openshell gateway select <name>
 Launch `knightcode` inside an OpenShell sandbox:
 
 ```bash
-openshell sandbox create --name pi-sandbox --from knightcode -- knightcode
+openshell sandbox create --name knightcode-sandbox --from knightcode -- knightcode
 ```
 
 In this pattern, the whole `knightcode` process runs inside the sandbox.
@@ -102,8 +102,8 @@ If the gateway is remote, project files are not bind-mounted from the host, mean
 Clone the repository inside the sandbox or use OpenShell file transfer commands:
 
 ```bash
-openshell sandbox upload pi-sandbox ./repo /workspace
-openshell sandbox download pi-sandbox /workspace/repo ./repo-out
+openshell sandbox upload knightcode-sandbox ./repo /workspace
+openshell sandbox download knightcode-sandbox /workspace/repo ./repo-out
 ```
 
 OpenShell providers can keep raw model API keys outside the sandbox.

@@ -30,7 +30,7 @@ yarn global remove @knightcodeai/cli
 bun uninstall -g @knightcodeai/cli
 ```
 
-Uninstalling knightcode leaves settings, credentials, sessions, and installed knightcode packages in `~/.pi/agent/`.
+Uninstalling knightcode leaves settings, credentials, sessions, and installed knightcode packages in `~/.knightcode/agent/`.
 
 Then start knightcode in the project directory you want it to work on:
 
@@ -62,7 +62,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 knightcode
 ```
 
-You can also run `/login` and select an API-key provider to store the key in `~/.pi/agent/auth.json`.
+You can also run `/login` and select an API-key provider to store the key in `~/.knightcode/agent/auth.json`.
 
 See [Providers](providers.md) for all supported providers, environment variables, and cloud-provider setup.
 
@@ -97,7 +97,7 @@ KnightCode loads context files at startup. Add an `AGENTS.md` file to tell it ho
 
 KnightCode loads:
 
-- `~/.pi/agent/AGENTS.md` for global instructions
+- `~/.knightcode/agent/AGENTS.md` for global instructions
 - `AGENTS.md` or `CLAUDE.md` from parent directories and the current directory
 
 If a directory contains `AGENTS.override.md`, KnightCode loads it instead of `AGENTS.md` or `CLAUDE.md` from that directory.

@@ -6,7 +6,7 @@ See [AGENTS.md](https://github.com/KnightCodeAI/knightcode/blob/main/AGENTS.md) 
 
 ```bash
 git clone https://github.com/KnightCodeAI/knightcode
-cd pi-mono
+cd knightcode
 npm install
 npm run build
 ```
@@ -14,7 +14,7 @@ npm run build
 Run from source:
 
 ```bash
-/path/to/pi-mono/pi-test.sh
+/path/to/knightcode/knightcode-test.sh
 ```
 
 The script can be run from any directory. KnightCode keeps the caller's current working directory.
@@ -48,7 +48,7 @@ Never use `__dirname` directly for package assets.
 
 ## Debug Command
 
-`/debug` (hidden) writes to `~/.pi/agent/pi-debug.log`:
+`/debug` (hidden) writes to `~/.knightcode/agent/knightcode-debug.log`:
 - Rendered TUI lines with ANSI codes
 - Last messages sent to the LLM
 

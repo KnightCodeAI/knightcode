@@ -30,7 +30,7 @@ See these complete provider examples:
 
 ## Quick Reference
 
-Extensions can register either a complete pi-ai `Provider` or use the legacy provider-config form. Prefer a complete provider when custom authentication, filtering, refresh, or streaming behavior is required. KnightCode composes `models.json` overrides above registered native providers.
+Extensions can register either a complete @knightcode/ai `Provider` or use the legacy provider-config form. Prefer a complete provider when custom authentication, filtering, refresh, or streaming behavior is required. KnightCode composes `models.json` overrides above registered native providers.
 
 ```typescript
 import { createProvider, openAICompletionsApi } from "@knightcode/ai";
@@ -382,7 +382,7 @@ interface OAuthLoginCallbacks {
 
 ### OAuthCredentials
 
-Credentials are persisted in `~/.pi/agent/auth.json`:
+Credentials are persisted in `~/.knightcode/agent/auth.json`:
 
 ```typescript
 interface OAuthCredentials {

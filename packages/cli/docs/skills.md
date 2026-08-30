@@ -24,7 +24,7 @@ KnightCode implements the [Agent Skills standard](https://agentskills.io/specifi
 KnightCode loads skills from:
 
 - Global:
-  - `~/.pi/agent/skills/`
+  - `~/.knightcode/agent/skills/`
   - `~/.agents/skills/`
 - Project (only after the project is trusted):
   - `.knightcode/skills/`
@@ -34,7 +34,7 @@ KnightCode loads skills from:
 - CLI: `--skill <path>` (repeatable, additive even with `--no-skills`)
 
 Discovery rules:
-- In `~/.pi/agent/skills/` and `.knightcode/skills/`, direct root `.md` files are discovered as individual skills when they have valid skill frontmatter with a non-empty `description`
+- In `~/.knightcode/agent/skills/` and `.knightcode/skills/`, direct root `.md` files are discovered as individual skills when they have valid skill frontmatter with a non-empty `description`
 - In all skill locations, directories containing `SKILL.md` are discovered recursively
 - In `~/.agents/skills/` and project `.agents/skills/`, root `.md` files are ignored, but nested `.md` files in grouping folders are discovered when they declare skill frontmatter
 - Root Markdown files other than `SKILL.md` that do not look like skills are ignored silently
@@ -229,4 +229,3 @@ cd /path/to/brave-search && npm install
 ## Skill Repositories
 
 - [Anthropic Skills](https://github.com/anthropics/skills) - Document processing (docx, pdf, pptx, xlsx), web development
-- [KnightCode Skills](https://github.com/badlogic/pi-skills) - Web search, browser automation, Google APIs, transcription

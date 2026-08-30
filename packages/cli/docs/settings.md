@@ -4,22 +4,22 @@ KnightCode uses JSON settings files with project settings overriding global sett
 
 | Location | Scope |
 |----------|-------|
-| `~/.pi/agent/settings.json` | Global (all projects) |
+| `~/.knightcode/agent/settings.json` | Global (all projects) |
 | `.knightcode/settings.json` | Project (current directory) |
 
 Edit directly or use `/settings` for common options. To save startup model defaults interactively, use `/model` and press Ctrl+S on the desired model. To save the startup thinking level, use `/thinking` and press Ctrl+S.
 
 ## Project Trust
 
-On interactive startup, knightcode asks before trusting a project folder that contains project-local settings, resources, or project `.agents/skills` and has no saved decision for the folder or a parent folder in `~/.pi/agent/trust.json`. Trusting a project allows knightcode to load `.knightcode/settings.json` and `.knightcode` resources, install missing project packages, and execute project extensions.
+On interactive startup, knightcode asks before trusting a project folder that contains project-local settings, resources, or project `.agents/skills` and has no saved decision for the folder or a parent folder in `~/.knightcode/agent/trust.json`. Trusting a project allows knightcode to load `.knightcode/settings.json` and `.knightcode` resources, install missing project packages, and execute project extensions.
 
 Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trust prompt. Without an applicable saved trust decision, they use `defaultProjectTrust` from global settings: `ask` (default) and `never` ignore those project resources, while `always` trusts them. Pass `--approve`/`-a` or `--no-approve`/`-na` to override project trust for one run.
 
-If no extension or saved decision applies, `defaultProjectTrust` controls the fallback behavior. Set it to `"ask"`, `"always"`, or `"never"` in `~/.pi/agent/settings.json`, or change it with `/settings`.
+If no extension or saved decision applies, `defaultProjectTrust` controls the fallback behavior. Set it to `"ask"`, `"always"`, or `"never"` in `~/.knightcode/agent/settings.json`, or change it with `/settings`.
 
 `knightcode config` and package commands use the same project trust flow, except `knightcode update` never prompts. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them.
 
-Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.pi/agent/trust.json` only; the current session is not reloaded, so restart knightcode for changes to take effect.
+Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.knightcode/agent/trust.json` only; the current session is not reloaded, so restart knightcode for changes to take effect.
 
 ## All Settings
 
@@ -216,7 +216,7 @@ Windows paths in JSON must use forward slashes or escaped backslashes:
 }
 ```
 
-`npmCommand` is used for all npm package-manager operations, including installs, uninstalls, and dependency installs inside git packages. User-scoped npm packages install under `~/.pi/agent/npm/`; project-scoped npm packages install under `.knightcode/npm/`. Use argv-style entries exactly as the process should be launched. When `npmCommand` is configured, git package dependency installs use plain `install` to avoid npm-specific flags in wrappers or alternate package managers.
+`npmCommand` is used for all npm package-manager operations, including installs, uninstalls, and dependency installs inside git packages. User-scoped npm packages install under `~/.knightcode/agent/npm/`; project-scoped npm packages install under `.knightcode/npm/`. Use argv-style entries exactly as the process should be launched. When `npmCommand` is configured, git package dependency installs use plain `install` to avoid npm-specific flags in wrappers or alternate package managers.
 
 ### Tools
 
@@ -277,7 +277,7 @@ When multiple sources specify a session directory, precedence is `--session-dir`
 
 These settings define where to load extensions, skills, prompts, and themes from.
 
-Paths in `~/.pi/agent/settings.json` resolve relative to `~/.pi/agent`. Paths in `.knightcode/settings.json` resolve relative to `.knightcode`. Absolute paths and `~` are supported.
+Paths in `~/.knightcode/agent/settings.json` resolve relative to `~/.knightcode/agent`. Paths in `.knightcode/settings.json` resolve relative to `.knightcode`. Absolute paths and `~` are supported.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -296,7 +296,7 @@ String form loads all resources from a package:
 
 ```json
 {
-  "packages": ["pi-skills", "@org/my-extension"]
+  "packages": ["knightcode-skills", "@org/my-extension"]
 }
 ```
 
@@ -306,7 +306,7 @@ Object form filters which resources to load:
 {
   "packages": [
     {
-      "source": "pi-skills",
+      "source": "knightcode-skills",
       "skills": ["brave-search", "transcribe"],
       "extensions": []
     }
@@ -340,7 +340,7 @@ See [packages.md](packages.md) for package management details.
   "warnings": {
     "anthropicExtraUsage": true
   },
-  "packages": ["pi-skills"]
+  "packages": ["knightcode-skills"]
 }
 ```
 
@@ -349,7 +349,7 @@ See [packages.md](packages.md) for package management details.
 Project settings (`.knightcode/settings.json`) override global settings. Nested objects are merged:
 
 ```json
-// ~/.pi/agent/settings.json (global)
+// ~/.knightcode/agent/settings.json (global)
 {
   "theme": "dark",
   "compaction": { "enabled": true, "reserveTokens": 16384 }

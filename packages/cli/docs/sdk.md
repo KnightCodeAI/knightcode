@@ -337,7 +337,7 @@ const { session } = await createAgentSession({
   cwd: process.cwd(), // default
   
   // Global config directory
-  agentDir: "~/.pi/agent", // default (expands ~)
+  agentDir: "~/.knightcode/agent", // default (expands ~)
 });
 ```
 
@@ -353,7 +353,7 @@ const { session } = await createAgentSession({
 `agentDir` is used by `DefaultResourceLoader` for:
 - Global extensions (`extensions/`)
 - Global skills:
-  - `skills/` under `agentDir` (for example `~/.pi/agent/skills/`)
+  - `skills/` under `agentDir` (for example `~/.knightcode/agent/skills/`)
   - `~/.agents/skills/`
 - Global prompts (`prompts/`)
 - Global context file (`AGENTS.md`)
@@ -409,7 +409,7 @@ If no model is provided:
 2. Uses default from settings
 3. Falls back to first available model
 
-Remote catalogs are persisted locally so later runtimes can restore them without a network request. The default file is `~/.pi/agent/models-store.json`; set `modelsStorePath` to choose another location, or inject `modelsStore` to control persistence. Network refreshes are throttled to once per provider every four hours unless forced. To force an immediate refresh, call `await modelRuntime.refresh({ allowNetwork: true, force: true, signal })`. Setting `KNIGHTCODE_OFFLINE` disables model network access.
+Remote catalogs are persisted locally so later runtimes can restore them without a network request. The default file is `~/.knightcode/agent/models-store.json`; set `modelsStorePath` to choose another location, or inject `modelsStore` to control persistence. Network refreshes are throttled to once per provider every four hours unless forced. To force an immediate refresh, call `await modelRuntime.refresh({ allowNetwork: true, force: true, signal })`. Setting `KNIGHTCODE_OFFLINE` disables model network access.
 
 To match CLI model parsing, use the exported resolver helpers:
 
@@ -451,7 +451,7 @@ Authentication resolution priority (handled by `ModelRuntime`):
 import { InMemoryCredentialStore } from "@knightcode/ai";
 import { createAgentSession, ModelRuntime } from "@knightcodeai/cli";
 
-// Default: uses ~/.pi/agent/auth.json and ~/.pi/agent/models.json
+// Default: uses ~/.knightcode/agent/auth.json and ~/.knightcode/agent/models.json
 const modelRuntime = await ModelRuntime.create();
 
 // Provider-owned auth methods and current status
@@ -469,7 +469,7 @@ const customRuntime = await ModelRuntime.create({
   modelsPath: "/my/app/models.json",
 });
 
-// Or inject any pi-ai CredentialStore
+// Or inject any @knightcode/ai CredentialStore
 const credentials = new InMemoryCredentialStore();
 const inMemoryRuntime = await ModelRuntime.create({ credentials });
 
@@ -612,7 +612,7 @@ If you pass `tools`, include each custom or extension tool name you want enabled
 
 ### Extensions
 
-Extensions are loaded by the `ResourceLoader`. `DefaultResourceLoader` discovers extensions from `~/.pi/agent/extensions/`, `.knightcode/extensions/`, and settings.json extension sources.
+Extensions are loaded by the `ResourceLoader`. `DefaultResourceLoader` discovers extensions from `~/.knightcode/agent/extensions/`, `.knightcode/extensions/`, and settings.json extension sources.
 
 ```typescript
 import { createAgentSession, DefaultResourceLoader } from "@knightcodeai/cli";
@@ -891,8 +891,8 @@ const { session } = await createAgentSession({
 **Project-specific settings:**
 
 Settings load from two locations and merge:
-1. Global: `~/.pi/agent/settings.json`
-2. Project: `<cwd>/.pi/settings.json`
+1. Global: `~/.knightcode/agent/settings.json`
+2. Project: `<cwd>/.knightcode/settings.json`
 
 Project overrides global. Nested objects merge keys. Setters modify global settings by default.
 
@@ -1174,7 +1174,7 @@ createAgentSessionRuntime
 AgentSessionRuntime
 
 // Auth and Models
-ModelRuntime // implements pi-ai Models and owns credential storage
+ModelRuntime // implements @knightcode/ai Models and owns credential storage
 ModelRegistry // synchronous extension compatibility facade
 CredentialSynchronizationError
 resolveCliModel

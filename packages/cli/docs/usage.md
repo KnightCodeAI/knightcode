@@ -75,7 +75,7 @@ Configure delivery in [Settings](settings.md) with `steeringMode` and `followUpM
 
 ## Sessions
 
-Sessions are saved automatically to `~/.pi/agent/sessions/`, organized by working directory.
+Sessions are saved automatically to `~/.knightcode/agent/sessions/`, organized by working directory.
 
 ```bash
 knightcode -c                  # Continue most recent session
@@ -100,7 +100,7 @@ See [Sessions](sessions.md) and [Compaction](compaction.md) for details.
 
 KnightCode loads `AGENTS.md` or `CLAUDE.md` at startup from:
 
-- `~/.pi/agent/AGENTS.md` for global instructions
+- `~/.knightcode/agent/AGENTS.md` for global instructions
 - parent directories, walking up from the current working directory
 - the current directory
 
@@ -113,23 +113,23 @@ Use context files for project conventions, commands, safety rules, and preferenc
 Replace the default system prompt with:
 
 - `.knightcode/SYSTEM.md` for a project
-- `~/.pi/agent/SYSTEM.md` globally
+- `~/.knightcode/agent/SYSTEM.md` globally
 
 Append to the default prompt without replacing it with `APPEND_SYSTEM.md` in either location.
 
 ### Project Trust
 
-On interactive startup, knightcode asks before trusting a project folder that contains project-local settings, resources, or project `.agents/skills` and has no saved decision for the folder or a parent folder in `~/.pi/agent/trust.json`. Trusting a project allows knightcode to load `.knightcode/settings.json` and `.knightcode` resources, install missing project packages, and execute project extensions.
+On interactive startup, knightcode asks before trusting a project folder that contains project-local settings, resources, or project `.agents/skills` and has no saved decision for the folder or a parent folder in `~/.knightcode/agent/trust.json`. Trusting a project allows knightcode to load `.knightcode/settings.json` and `.knightcode` resources, install missing project packages, and execute project extensions.
 
 Before the trust decision, knightcode loads only context files, user/global extensions, and CLI `-e` extensions so they can handle the `project_trust` event. Project-local extensions, project package-managed extensions, and project settings are loaded only after the project is trusted. This split also applies when switching to a session from a different cwd whose trust has not been resolved in the current process.
 
 Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trust prompt. Without an applicable saved trust decision, they use `defaultProjectTrust` from global settings: `ask` (default) and `never` ignore those project resources, while `always` trusts them. Pass `--approve`/`-a` or `--no-approve`/`-na` to override project trust for one run.
 
-If no extension or saved decision applies, `defaultProjectTrust` controls the fallback behavior. Set it to `"ask"`, `"always"`, or `"never"` in `~/.pi/agent/settings.json`, or change it with `/settings`.
+If no extension or saved decision applies, `defaultProjectTrust` controls the fallback behavior. Set it to `"ask"`, `"always"`, or `"never"` in `~/.knightcode/agent/settings.json`, or change it with `/settings`.
 
 `knightcode config` and package commands use the same project trust flow, except `knightcode update` never prompts. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them.
 
-Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.pi/agent/trust.json` only; the current session is not reloaded, so restart knightcode for changes to take effect.
+Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.knightcode/agent/trust.json` only; the current session is not reloaded, so restart knightcode for changes to take effect.
 
 
 ## Exporting and Sharing Sessions
@@ -137,8 +137,6 @@ Use `/trust` in interactive mode to save a project trust decision for future ses
 Use `/export [file]` to write a session to HTML.
 
 Use `/share` to upload a private GitHub gist with a shareable HTML link.
-
-If you use knightcode for open source work and want to publish sessions for model, prompt, tool, and evaluation research, see [`badlogic/pi-share-hf`](https://github.com/badlogic/pi-share-hf). It publishes sessions to Hugging Face datasets.
 
 ## CLI Reference
 
@@ -307,5 +305,3 @@ knightcode --exclude-tools ask_question
 KnightCode keeps the core small and pushes workflow-specific behavior into extensions, skills, prompt templates, and packages.
 
 It intentionally does not include built-in MCP, sub-agents, permission popups, plan mode, to-dos, or background bash. You can build or install those workflows as extensions or packages, or use external tools such as containers and tmux.
-
-For the full rationale, read the [blog post](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/).
