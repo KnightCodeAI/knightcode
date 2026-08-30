@@ -217,7 +217,7 @@ describe("azure-openai-responses base URL normalization", () => {
 });
 
 describe("azure-openai-responses user agent", () => {
-	it("uses pi's User-Agent by default", async () => {
+	it("uses knightcode's User-Agent by default", async () => {
 		expect((await captureClientHeaders())["User-Agent"]).toBe(KNIGHTCODE_USER_AGENT);
 	});
 

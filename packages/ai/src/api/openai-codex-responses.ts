@@ -1607,7 +1607,7 @@ function buildBaseCodexHeaders(
 	headers.set("Authorization", `Bearer ${token}`);
 	headers.set("chatgpt-account-id", accountId);
 	// Not branding: upstream-recognised client identifier. Renaming it breaks auth.
-	headers.set("originator", "pi");
+	headers.set("originator", "knightcode");
 	headers.set("User-Agent", getKnightcodeUserAgent());
 	return headers;
 }

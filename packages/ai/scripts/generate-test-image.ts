@@ -19,7 +19,7 @@ ctx.fillRect(0, 0, 200, 200);
 // Draw a red circle in the center
 ctx.fillStyle = "red";
 ctx.beginPath();
-ctx.arc(100, 100, 50, 0, Math.PI * 2);
+ctx.arc(100, 100, 50, 0, Math.KNIGHTCODE * 2);
 ctx.fill();
 
 // Save the image

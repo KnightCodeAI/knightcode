@@ -170,7 +170,7 @@ describe("Mistral HTTP transport", () => {
 					content: [
 						{ type: "thinking", thinking: "reason" },
 						{ type: "text", text: "answer" },
-						{ type: "toolCall", id: "abc123456", name: "lookup", arguments: { query: "pi" } },
+						{ type: "toolCall", id: "abc123456", name: "lookup", arguments: { query: "knightcode" } },
 					],
 					usage: {
 						input: 0,
@@ -218,7 +218,7 @@ describe("Mistral HTTP transport", () => {
 					{
 						id: "abc123456",
 						type: "function",
-						function: { name: "lookup", arguments: '{"query":"pi"}' },
+						function: { name: "lookup", arguments: '{"query":"knightcode"}' },
 						index: 0,
 					},
 				],
@@ -294,7 +294,7 @@ describe("Mistral HTTP transport", () => {
 								{
 									id: "abc123456",
 									index: 0,
-									function: { name: "lookup", arguments: '"pi"}' },
+									function: { name: "lookup", arguments: '"knightcode"}' },
 								},
 							],
 						},
@@ -318,7 +318,7 @@ describe("Mistral HTTP transport", () => {
 		expect(message.content).toEqual([
 			{ type: "thinking", thinking: "reason" },
 			{ type: "text", text: "answer" },
-			{ type: "toolCall", id: "abc123456", name: "lookup", arguments: { query: "pi" } },
+			{ type: "toolCall", id: "abc123456", name: "lookup", arguments: { query: "knightcode" } },
 		]);
 		expect(message.usage).toMatchObject({ input: 7, output: 4, cacheRead: 3, cacheWrite: 0, totalTokens: 14 });
 	});

@@ -184,7 +184,7 @@ describe("Google raw stop reasons", () => {
 });
 
 describe("Google Generative AI user agent", () => {
-	it("uses pi's User-Agent by default", async () => {
+	it("uses knightcode's User-Agent by default", async () => {
 		expect((await captureGoogleHeaders())["User-Agent"]).toBe(KNIGHTCODE_USER_AGENT);
 	});
 
