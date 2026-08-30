@@ -395,7 +395,10 @@ describe("harness compaction", () => {
 			prepareCompaction([user, errored, aborted, deferred, kept], DEFAULT_COMPACTION_SETTINGS),
 		);
 		const texts = [...(preparation?.messagesToSummarize ?? []), ...(preparation?.retainedTail ?? [])].flatMap(
-			(message) => message.content.filter((part) => part.type === "text").map((part) => part.text),
+			(message) =>
+				message.role === "assistant"
+					? message.content.filter((part) => part.type === "text").map((part) => part.text)
+					: [],
 		);
 		expect(texts).not.toContain("errored");
 		expect(texts).not.toContain("aborted");
