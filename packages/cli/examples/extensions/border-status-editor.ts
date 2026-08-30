@@ -1,3 +1,4 @@
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "@knightcodeai/cli";
 import type { Component, EditorTheme, TUI } from "@knightcode/tui";
 import { truncateToWidth, visibleWidth } from "@knightcode/tui";
@@ -35,13 +36,14 @@ function fitBorder(
 }
 
 function formatCwd(cwd: string): string {
-	// HOME is commonly unset on Windows, and a bare prefix test would also rewrite a sibling
-	// directory such as /home/aliceworkspace when HOME is /home/alice.
+	// HOME is commonly unset on Windows. A prefix test would also rewrite a sibling directory such
+	// as /home/aliceworkspace when HOME is /home/alice, and would miss C:\Users vs c:\users on
+	// Windows, where paths are case-insensitive; relative() normalizes both away.
 	const home = process.env.HOME || process.env.USERPROFILE;
 	if (!home) return cwd;
-	const rest = cwd.slice(home.length);
-	if (!cwd.startsWith(home) || (rest !== "" && rest[0] !== "/" && rest[0] !== "\\")) return cwd;
-	return `~${rest}`;
+	const rest = relative(resolve(home), resolve(cwd));
+	if (rest === ".." || rest.startsWith(`..${sep}`) || isAbsolute(rest)) return cwd;
+	return rest === "" ? "~" : `~${sep}${rest}`;
 }
 
 function formatContext(ctx: ExtensionContext): string {

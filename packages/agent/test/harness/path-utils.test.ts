@@ -15,7 +15,10 @@ describe("resolveToolPath drive mounts", () => {
 		["/c/Users/dev/notes.md", "C:/Users/dev/notes.md"],
 		["/mnt/d/repo/src", "D:/repo/src"],
 		["/cygdrive/c/tmp", "C:/tmp"],
-		["/c", "C:"],
+		// A bare mount root keeps its slash: `C:` alone is drive-relative on Windows.
+		["/c", "C:/"],
+		["/mnt/d", "D:/"],
+		["/cygdrive/c", "C:/"],
 		["C:/already/native", "C:/already/native"],
 		["/usr/local/share", "/usr/local/share"],
 		["/mnt/data/blob", "/mnt/data/blob"],

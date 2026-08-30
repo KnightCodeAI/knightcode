@@ -66,7 +66,7 @@ export function buildContextEntries(pathEntries: readonly Entry[], options: Sess
  * Harness spec 2.5 rule 3: assistant responses that stopped with `error`, `aborted`, or `deferred`
  * never enter provider context. A genuine output-limit `length` response is retained.
  */
-function isDroppedFromContext(message: AgentMessage): boolean {
+export function isDroppedFromContext(message: AgentMessage): boolean {
 	if (message.role !== "assistant") return false;
 	const stopReason = message.stopReason;
 	return stopReason === "error" || stopReason === "aborted" || stopReason === "deferred";

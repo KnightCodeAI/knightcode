@@ -14,7 +14,7 @@ import {
 } from "@knightcode/ai";
 import type { AgentMessage, ThinkingLevel } from "../../types.ts";
 import { convertToLlm, createBranchSummaryMessage, createCompactionSummaryMessage } from "../messages.ts";
-import { buildSessionContext } from "../session/context.ts";
+import { buildSessionContext, isDroppedFromContext } from "../session/context.ts";
 import type { CompactionEntry, Entry } from "../session/types.ts";
 import { CompactionError, err, ok, type Result } from "../types.ts";
 import {
@@ -82,7 +82,9 @@ function getMessageFromEntryForCompaction(entry: Entry): AgentMessage | undefine
 	if (entry.type === "compaction") {
 		return undefined;
 	}
-	return getMessageFromEntry(entry);
+	// Responses that never enter provider context must not enter it via the summary either.
+	const message = getMessageFromEntry(entry);
+	return message && isDroppedFromContext(message) ? undefined : message;
 }
 
 /** Generated compaction data ready to be persisted as a compaction entry. */

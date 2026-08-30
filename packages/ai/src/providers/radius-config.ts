@@ -28,7 +28,10 @@ export type RadiusOAuthCredential = OAuthCredential & {
 function hasCostRates(value: unknown): boolean {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 	const cost = value as Record<string, unknown>;
-	return ["input", "output", "cacheRead", "cacheWrite"].every((rate) => typeof cost[rate] === "number");
+	return ["input", "output", "cacheRead", "cacheWrite"].every((rate) => {
+		const amount = cost[rate];
+		return typeof amount === "number" && Number.isFinite(amount) && amount >= 0;
+	});
 }
 
 function isRadiusGatewayCost(value: unknown): boolean {
@@ -63,7 +66,7 @@ function sanitizeRadiusGatewayConfig(config: unknown): RadiusGatewayConfig | und
 	if (typeof baseUrl !== "string" || !Array.isArray(models)) return undefined;
 	// Reject the whole config rather than filtering: a silently emptied catalog would be persisted
 	// by the refresh in radius.ts and would wipe the cached models.
-	if (!models.every(isRadiusGatewayModel)) return undefined;
+	if (models.length === 0 || !models.every(isRadiusGatewayModel)) return undefined;
 	return {
 		baseUrl,
 		models: models.map((model) => ({ ...model })),

@@ -39,9 +39,18 @@ describe("Radius gateway config validation", () => {
 		["missing a rate", model({ cost: { input: 1, output: 2, cacheRead: 0.1 } })],
 		["non-array tiers", model({ cost: { ...COST, tiers: "cheap" } })],
 		["tier without a threshold", model({ cost: { ...COST, tiers: [COST] } })],
+		["a negative rate", model({ cost: { ...COST, output: -1 } })],
+		["a NaN rate", model({ cost: { ...COST, input: Number.NaN } })],
+		["an infinite rate", model({ cost: { ...COST, cacheWrite: Number.POSITIVE_INFINITY } })],
 	])("rejects the whole config when a model has %s", (_label, bad) => {
 		// calculateCost divides by every rate and iterates tiers, and a silently emptied catalog
 		// would be persisted over the cached one — so one bad model invalidates the response.
 		expect(getRadiusCredentialConfig(credential([model(), bad]))).toBeUndefined();
+	});
+
+	it("rejects an empty catalog", () => {
+		// `[].every(...)` is true, so this passed validation and the refresh in radius.ts persisted
+		// the empty catalog over the cached models.
+		expect(getRadiusCredentialConfig(credential([]))).toBeUndefined();
 	});
 });

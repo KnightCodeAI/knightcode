@@ -15,7 +15,12 @@ const POSIX_DRIVE_MOUNT = /^\/(?:mnt\/|cygdrive\/)?([A-Za-z])(?=\/|$)/;
  */
 function normalizeDriveMount(cwd: string, path: string): string {
 	if (!WINDOWS_CWD.test(cwd)) return path;
-	return path.replace(POSIX_DRIVE_MOUNT, (_match, drive: string) => `${drive.toUpperCase()}:`);
+	// A bare mount root (`/c`, `/mnt/c`) must keep its slash: `C:` alone is drive-relative on
+	// Windows, so absolutePath would resolve the drive root to the current directory instead.
+	return path.replace(
+		POSIX_DRIVE_MOUNT,
+		(match, drive: string) => `${drive.toUpperCase()}:${match.length === path.length ? "/" : ""}`,
+	);
 }
 
 function normalizeToolPath(path: string): string {

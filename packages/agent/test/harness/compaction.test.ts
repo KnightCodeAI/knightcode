@@ -382,6 +382,26 @@ describe("harness compaction", () => {
 		expect(preparation?.tokensBefore).toBe(estimateContextTokens(buildSessionContext(pathEntries).messages).tokens);
 	});
 
+	it("keeps error, aborted and deferred responses out of every compaction message list", () => {
+		// Harness spec 2.5 rule 3 drops these from provider context; feeding them to the summarizer
+		// put them back in through the generated summary.
+		const user = createMessageEntry(createUserMessage("user msg"));
+		const errored = createMessageEntry({ ...createAssistantMessage("errored"), stopReason: "error" }, user.id);
+		const aborted = createMessageEntry({ ...createAssistantMessage("aborted"), stopReason: "aborted" }, errored.id);
+		const deferred = createMessageEntry({ ...createAssistantMessage("deferred"), stopReason: "deferred" }, aborted.id);
+		const kept = createMessageEntry(createAssistantMessage("kept"), deferred.id);
+
+		const preparation = getOrThrow(
+			prepareCompaction([user, errored, aborted, deferred, kept], DEFAULT_COMPACTION_SETTINGS),
+		);
+		const texts = [...(preparation?.messagesToSummarize ?? []), ...(preparation?.retainedTail ?? [])].flatMap(
+			(message) => message.content.filter((part) => part.type === "text").map((part) => part.text),
+		);
+		expect(texts).not.toContain("errored");
+		expect(texts).not.toContain("aborted");
+		expect(texts).not.toContain("deferred");
+	});
+
 	it("carries a previous compaction's retained tail into the next preparation", () => {
 		const retainedUser = createUserMessage("retained user");
 		const retainedAssistant = createAssistantMessage("retained assistant");

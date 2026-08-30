@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AssistantMessageEventStream } from "../src/utils/event-stream.ts";
+import { AssistantMessageEventStream, EventStream } from "../src/utils/event-stream.ts";
 
 describe("EventStream termination", () => {
 	it("rejects result() when the source ends without a terminal event", async () => {
@@ -19,5 +19,20 @@ describe("EventStream termination", () => {
 		stream.end();
 
 		await expect(stream.result()).resolves.toBe(message);
+	});
+
+	it("rejects result() when extractResult throws for the terminal event", async () => {
+		const stream = new EventStream<{ done: boolean }, string>(
+			(event) => event.done,
+			() => {
+				throw new Error("bad terminal event");
+			},
+		);
+		// push() marks the result settled before extracting, so a throw here left end() unable to
+		// reject and awaiting result() hung forever.
+		expect(() => stream.push({ done: true })).not.toThrow();
+		stream.end();
+
+		await expect(stream.result()).rejects.toThrow("bad terminal event");
 	});
 });

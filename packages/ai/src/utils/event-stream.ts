@@ -29,7 +29,12 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 		if (this.isComplete(event)) {
 			this.done = true;
 			this.finalResultSettled = true;
-			this.resolveFinalResult(this.extractResult(event));
+			// A throwing extractResult must reject result(); end() will not, the flag is already set.
+			try {
+				this.resolveFinalResult(this.extractResult(event));
+			} catch (error) {
+				this.rejectFinalResult(error);
+			}
 		}
 
 		// Deliver to waiting consumer or queue it
