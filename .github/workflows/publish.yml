@@ -19,6 +19,9 @@ on:
 # Queue overlapping runs instead of cancelling them.
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+# Deny by default; every job below re-grants exactly what it needs.
+permissions: {}
+
 jobs:
   # Manages the "Version Packages" PR on every push. When changesets are present
   # it opens/updates the PR and stops. The build + publish jobs below only run
@@ -76,12 +79,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Build each binary on its own native OS so bun build --compile embeds the
-  # correct platform-native libs (OpenTUI's per-platform packages carry
-  # libopentui), then run it headlessly before it goes anywhere near npm.
-  # Only darwin-x64 has no free native runner (GitHub retired the Intel image);
-  # it is cross-compiled on the arm64 mac after fetching its native lib, and
-  # skips the smoke test.
+  # Build each binary on its own native OS and run it headlessly before it goes
+  # anywhere near npm — a compiled binary that cannot start is the one failure
+  # `npm pack` can never catch. Only darwin-x64 has no free native runner
+  # (GitHub retired the Intel image); it is cross-compiled on the arm64 mac and
+  # skips the smoke test, since macOS runners ship without Rosetta.
   build:
     needs: version
     if: needs.version.outputs.hasChangesets == 'false' && needs.version.outputs.needsPublish == 'true'
@@ -99,7 +101,7 @@ jobs:
             smoke: true
           - target: darwin-x64
             runner: macos-latest
-            smoke: false # cross-compiled from arm64 — no free Intel runner
+            smoke: false # cross-compiled from arm64 — no free Intel runner, no Rosetta
           - target: darwin-arm64
             runner: macos-latest
             smoke: true
@@ -118,23 +120,6 @@ jobs:
 
       - run: bun install
 
-      # darwin-x64 has no free native runner, so it is cross-compiled on the
-      # arm64 mac. bun install only fetched the host's OpenTUI native package, so
-      # fetch the x64 one (it carries libopentui) before compiling — otherwise
-      # `bun build --compile` cannot resolve @opentui/core-darwin-x64. Uses
-      # npm pack (not bun add) so it doesn't rewrite the lockfile.
-      - name: Fetch cross-target native lib (darwin-x64)
-        if: matrix.target == 'darwin-x64'
-        shell: bash
-        run: |
-          ver=$(cd packages/cli && bun -e "console.log(require('@opentui/core/package.json').version)")
-          tmp=$(mktemp -d)
-          npm pack "@opentui/core-darwin-x64@${ver}" --pack-destination "$tmp"
-          tar -xzf "$tmp"/opentui-core-darwin-x64-*.tgz -C "$tmp"
-          mkdir -p node_modules/@opentui/core-darwin-x64
-          cp -R "$tmp"/package/. node_modules/@opentui/core-darwin-x64/
-          echo "Installed @opentui/core-darwin-x64@${ver} for cross-compile"
-
       - name: Build ${{ matrix.target }}
         env:
           TARGET: ${{ matrix.target }}
@@ -151,8 +136,11 @@ jobs:
           if [ "$TARGET" = "win32-x64" ]; then bin="$bin.exe"; fi
           echo "→ knightcode --version"
           "$bin" --version
-          echo "→ knightcode doctor"
-          "$bin" doctor
+          # --help, not an invented subcommand: unrecognised argv is treated as a
+          # prompt and sent to the provider, so a bad smoke command would either
+          # hang on a missing API key or quietly bill a real request.
+          echo "→ knightcode --help"
+          "$bin" --help | grep -q "Usage:"
 
       - name: Upload binary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -169,8 +157,12 @@ jobs:
     needs: [version, build]
     if: needs.version.outputs.hasChangesets == 'false' && needs.version.outputs.needsPublish == 'true'
     runs-on: ubuntu-latest
+    # GitHub creates this environment on first use. Add required reviewers to it
+    # to hold releases for approval, and scope NPM_TOKEN to it.
+    environment: npm-publish
     permissions:
       contents: write # push tags + create the GitHub Release
+      id-token: write # npm publish --provenance (OIDC); without it publish fails
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -187,6 +179,12 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - run: bun install
+
+      - name: Check types
+        run: bun run check-types
+
+      - name: Test
+        run: bun run test
 
       - name: Download all binaries
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -219,6 +217,39 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" --tags
 
+      # Ship the same binaries npm got as downloadable release assets, with
+      # checksums, so `curl | tar` is a supported install path and anyone can
+      # verify what they downloaded. Each archive is the whole bin/ directory:
+      # the compiled binary resolves themes, assets and docs next to itself.
+      - name: Package release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          for dir in packages/cli-*/bin; do
+            target="${dir#packages/cli-}"
+            target="${target%/bin}"
+            if [ "$target" = "win32-x64" ]; then
+              (cd "$dir" && zip -qr "${GITHUB_WORKSPACE}/release-assets/knightcode-${target}.zip" .)
+            else
+              tar -czf "release-assets/knightcode-${target}.tar.gz" -C "$dir" .
+            fi
+          done
+          cd release-assets
+          # One archive per platform package, or the release is missing a binary
+          # someone will only discover after it is public.
+          count=$(ls -1 knightcode-* | wc -l)
+          if [ "$count" -ne 5 ]; then
+            echo "::error::expected 5 platform archives, packaged ${count}"
+            ls -la
+            exit 1
+          fi
+          # Glob the archives explicitly: `*` would race SHA256SUMS into its own
+          # checksum list and `sha256sum -c` would then fail on it.
+          sha256sum knightcode-* > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          ls -la
+
       # One clean GitHub Release per version for the main package (not the 5
       # platform packages). Body = the CHANGELOG.md section Changesets wrote.
       # Idempotent: skips if the release already exists (re-runs / no-op pushes).
@@ -241,4 +272,7 @@ jobs:
           if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
             notes="Release ${version}."
           fi
-          printf '%s\n' "$notes" | gh release create "$tag" --title "v${version}" --notes-file -
+          printf '%s\n' "$notes" | gh release create "$tag" \
+            --title "v${version}" \
+            --notes-file - \
+            release-assets/*
