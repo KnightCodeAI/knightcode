@@ -7,7 +7,8 @@
 //
 //   1. assert the publish set is lockstep-versioned
 //   2. assert every platform package actually carries its binary, and that no
-//      published manifest depends on a `workspace:` package
+//      published manifest depends on a `workspace:` package or lacks the
+//      repository field npm provenance requires
 //   3. validate the real install path end-to-end (scripts/pack-test.ts)
 //   4. validate each tarball with `npm pack --dry-run`
 //   5. skip anything already on npm, publish the rest with provenance
@@ -85,6 +86,28 @@ for (const pkg of packages) {
 				);
 			}
 		}
+	}
+}
+
+// 2c. `npm publish --provenance` refuses (E422) any manifest whose repository.url
+// does not match the building repo, and it only finds out after signing and
+// uploading — mid-loop, with earlier packages already live. Check it up front.
+const expectedRepo = process.env.GITHUB_REPOSITORY;
+for (const pkg of packages) {
+	const raw = JSON.parse(readFileSync(join(pkg.dir, "package.json"), "utf8")) as {
+		repository?: string | { url?: string };
+	};
+	const url = typeof raw.repository === "string" ? raw.repository : (raw.repository?.url ?? "");
+	const slug = url
+		.replace(/^git\+/, "")
+		.replace(/\.git$/, "")
+		.replace(/^https:\/\/github\.com\//, "");
+	if (!slug || (expectedRepo && slug !== expectedRepo)) {
+		throw new Error(
+			`${pkg.name} has repository.url "${url}"` +
+				`${expectedRepo ? `, which does not resolve to ${expectedRepo}` : " (empty)"}. ` +
+				`npm rejects the provenance attestation without a matching repository field.`,
+		);
 	}
 }
 
