@@ -1,0 +1,39 @@
+---
+title: Settings & Diagnostics
+description: Adjust reasoning levels, allowlists, lifecycle hooks, and run diagnostic audits.
+icon: Tools
+---
+
+KnightCode settings are managed directly inside the terminal workspace using interactive dialog boxes. 
+
+## Settings Dialogs
+
+Use slash commands to open individual settings dialogs:
+
+- **`/models`**: View and switch the active AI model (all models route through OpenRouter).
+- **`/theme`**: Choose your terminal colors and styling themes.
+- **`/reasoning`**: Set the thinking/reasoning effort level (None, Low, Medium, High, Max) for models that support it. This adjusts the thinking token budget.
+- **`/allow`**: Manage allowed command prefixes. A `Bash` command that matches a listed prefix runs automatically without prompting for confirmation.
+- **`/hooks`**: Manage lifecycle hook scripts (PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, Stop) to enforce constraints or trigger linters/formatters.
+
+---
+
+## Diagnostics (The Doctor Command)
+
+If you encounter issues with API key authorization, database locks, or environment configurations, you can run a diagnostic audit:
+
+### In-App Diagnostics
+Type **`/doctor`** inside the TUI session. A dialog opens and runs four checks:
+- **OpenRouter API key**: Verifies an API key is available (from `credentials.json` or the environment). A missing key is a warning, not a failure.
+- **Local store**: Confirms the local SQLite store is readable and ready.
+- **Git available**: Checks that `git` is installed and reports its version.
+- **Runtime**: Reports the runtime version KnightCode is running on.
+
+### CLI Diagnostics
+If the TUI is failing to launch, run the diagnostic tool in headless mode from your standard terminal shell:
+
+```bash
+knightcode doctor
+```
+
+This performs the same audit checks and prints a clean diagnostics summary directly to stdout, exiting with a non-zero code if critical failures are found.

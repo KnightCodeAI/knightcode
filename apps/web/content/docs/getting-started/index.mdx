@@ -1,0 +1,62 @@
+---
+title: Install and first run
+description: Install KnightCode on macOS, Linux, or Windows, then run setup to connect your first provider.
+icon: Rocket
+---
+
+KnightCode is distributed via npm and runs on Node.js (>=18). It includes pre-built platform binaries that are installed automatically as optional dependencies.
+
+## Installation
+
+Install KnightCode globally using npm:
+
+```bash
+npm install -g @knightcodeai/cli
+```
+
+Alternatively, you can run it without global installation using `npx`:
+
+```bash
+npx @knightcodeai/cli
+```
+
+If you prefer using **Bun**:
+
+```bash
+bun install -g @knightcodeai/cli
+```
+
+## First Run & Setup
+
+To start a session, navigate to any repository folder in your terminal and launch the client:
+
+```bash
+knightcode
+```
+
+On your very first run, KnightCode will guide you through an interactive onboarding wizard:
+1. **Enter your OpenRouter API key**: The key is checked against OpenRouter. A key that OpenRouter rejects is refused so you can retry, but the check is advisory — if OpenRouter can't be reached (e.g. you're offline, or it returns a network/server error), the wizard warns and continues with the key you entered. The key is stored in a local credentials file — `~/.knightcode/credentials.json` by default, or under `$KNIGHTCODE_HOME` if you've set that variable. On macOS and Linux the file is written with owner-only (`0600`) permissions; on Windows it follows the default filesystem permissions.
+2. **Pick a default model**: Choose from a curated shortlist spanning free to frontier models (you can change it later with `/models`).
+3. **Configure web search (optional)**: Enable web search by selecting a provider — **Brave Search** or **Tavily** — and entering its API key, or skip this step and add it later.
+
+You can re-run this setup dialog at any time inside the app by executing the `/setup` command.
+
+## Build from Source
+
+Prerequisites: Node.js (>=20), and **Bun** (used as package manager).
+
+```bash
+# Clone the repository and install dependencies
+bun install
+
+# Build the CLI package
+bun run build:cli
+
+# Link the package locally
+bun run link:cli
+```
+
+Now you can start a local development build with hot-reloads:
+```bash
+bun run dev:cli
+```

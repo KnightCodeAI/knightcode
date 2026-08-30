@@ -1,0 +1,11 @@
+{
+  "title": "Features",
+  "icon": "Layout",
+  "pages": [
+    "command-menu",
+    "tasks",
+    "todo",
+    "approvals",
+    "themes"
+  ]
+}

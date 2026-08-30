@@ -1,0 +1,31 @@
+---
+title: Themes
+description: Switch terminal color palettes to customize your interactive CLI experience.
+icon: PaintBrush
+---
+
+KnightCode features a terminal theme engine that adapts styles and colors for high readability during long terminal sessions. It maps colors directly onto standard ANSI rendering sequences and hex mappings supported by modern terminal emulators.
+
+## Selecting a Theme
+
+Open the theme selector at any time inside the app by executing the slash command:
+
+```bash
+/theme
+```
+
+This opens a dialog displaying the list of available themes.
+- Use the arrow keys (`↑` / `↓`) to scroll through the list.
+- KnightCode dynamically updates the TUI theme in the background as you highlight each option, allowing you to preview how it looks.
+- Press `Enter` to confirm and save your selection, or `Esc` to revert to your original theme.
+
+## Built-In Themes
+
+KnightCode bundles six standard themes:
+
+1. **Dark**: The default theme featuring a dark slate background, warm brand accent color, and bright white text.
+2. **Light**: A clean light-theme variation for developers working in light-background terminal emulators.
+3. **Dark Daltonized**: A high-contrast dark theme optimized for color blindness, swapping red/green indicators for clear blue/orange shades.
+4. **Light Daltonized**: High-contrast Daltonized theme optimized for light terminal environments.
+5. **Dark ANSI**: A pure black background theme that uses standardized ANSI-color code maps. Highly compatible with traditional terminal interfaces and SSH clients.
+6. **Light ANSI**: A standardized ANSI theme mapped for white-background terminal windows.

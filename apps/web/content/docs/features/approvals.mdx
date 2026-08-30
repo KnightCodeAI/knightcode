@@ -1,0 +1,30 @@
+---
+title: Approvals & Diffs
+description: Keep complete control of what the agent executes with granular approvals and interactive diff reviews.
+icon: CheckList
+---
+
+KnightCode prioritizes developer security and transparency. Every operation that modifies your files or executes commands on your operating system is gated by an interactive approval flow.
+
+## The Approval Card
+
+When the agent attempts to call a security-sensitive tool (like writing a file or executing a shell script), KnightCode pauses execution and renders an approval card:
+
+- **Approve (Y)**: Accepts the action. The agent proceeds with execution.
+- **Reject (N)**: Rejects the action. The agent is notified and continues without executing the tool.
+- **Provide Feedback**: You can type a response (e.g., *"No, use the existing database schema instead"*) to guide the agent to a different approach.
+
+## Visual Diff Viewer
+
+When the agent uses editing tools (like `Edit` or `MultiEdit`), KnightCode doesn't silently rewrite files.
+- It displays a side-by-side or unified diff directly inside the TUI showing the exact line insertions, deletions, and modifications.
+- This lets you review the code changes hunk-by-hunk before hitting **Approve**.
+
+## Auto-Allowed Commands
+
+In `BUILD` mode, constantly approving the same safe commands (like `git status` or `ls`) can be repetitive. (In `AUTO` mode every tool call runs without prompting — the one exception is `AskUserQuestion`, which always surfaces to you since it is the model explicitly asking for your input, not a permission gate — so the allowlist mainly benefits `BUILD` mode.)
+
+KnightCode provides an **Allowlist** for commands:
+- Open the `/allow` dialog.
+- You can review or add **command prefixes** for trusted commands (e.g., `git status`, `npm test`, `bun run lint`).
+- A `Bash` command runs automatically when it exactly matches an allowed prefix, or begins with one followed by extra arguments. As a safety guard, a command whose extra arguments contain shell metacharacters (`;`, `&`, `|`, `` ` ``, `$`, `(`, `)`, redirects, newlines) is **not** auto-allowed and still prompts.

@@ -1,0 +1,24 @@
+{
+  "pages": [
+    "---Overview---",
+    "index",
+    "getting-started/index",
+    "getting-started/workspace",
+    "---Features---",
+    "features/command-menu",
+    "features/tasks",
+    "features/approvals",
+    "features/themes",
+    "features/todo",
+    "---AI---",
+    "ai/providers",
+    "ai/composer",
+    "ai/plans-and-subagents",
+    "ai/sessions-and-memory",
+    "ai/security",
+    "---Reference---",
+    "reference/shortcuts",
+    "reference/settings",
+    "reference/data"
+  ]
+}
