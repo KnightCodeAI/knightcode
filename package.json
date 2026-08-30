@@ -8,16 +8,28 @@
     "check-types": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "build:cli": "bun run scripts/build.ts --single",
+    "build:linux": "bun run scripts/build.ts --target=linux-x64",
+    "bench": "bun run scripts/bench.ts",
+    "eval": "bun run --filter '@knightcode/evals' eval --",
     "link:cli": "bun run build:cli && cd packages/cli && bun link",
-    "test": "bun run --filter '*' test"
+    "test": "bun run --filter '*' test",
+    "generate:models": "bun run --filter '@knightcode/ai' generate-models && bun run --filter '@knightcode/ai' generate-image-models",
+    "hydrate:model-data": "bun run --filter '@knightcode/ai' hydrate-model-data",
+    "check:model-data": "bun run --filter '@knightcode/ai' check:model-data",
+    "generate:model-catalog": "bun run --filter '@knightcode/ai' generate-model-catalog",
+    "check:model-catalog": "node scripts/publish-model-catalog.mjs --input .artifacts/model-catalog --dry-run",
+    "ci:version": "bun run scripts/ci-version.ts",
+    "ci:publish": "bun run scripts/ci-publish.ts",
+    "ci:publish:dry": "bun run scripts/ci-publish.ts --dry-run"
   },
   "devDependencies": {
+    "@changesets/cli": "2.31.0",
     "@types/node": "22.19.19",
+    "@vitest/coverage-v8": "4.1.9",
+    "@xterm/headless": "5.5.0",
     "prettier": "^3.8.3",
     "typescript": "5.9.3",
-    "vitest": "4.1.9",
-    "@vitest/coverage-v8": "4.1.9",
-    "@xterm/headless": "5.5.0"
+    "vitest": "4.1.9"
   },
   "engines": {
     "node": ">=22"
