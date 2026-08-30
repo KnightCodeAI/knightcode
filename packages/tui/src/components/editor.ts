@@ -1793,9 +1793,7 @@ export class Editor implements Component, Focusable {
 	/**
 	 * Find the visual line index for the current cursor position.
 	 */
-	private findCurrentVisualLine(
-		visualLines: Array<{ logicalLine: number; startCol: number; length: number }>,
-	): number {
+	private findCurrentVisualLine(visualLines: Array<{ logicalLine: number; startCol: number; length: number }>): number {
 		return this.findVisualLineAt(visualLines, this.state.cursorLine, this.state.cursorCol);
 	}
 
@@ -2056,11 +2054,7 @@ export class Editor implements Component, Focusable {
 			const isCurrentLine = lineIdx === this.state.cursorLine;
 
 			// Current line: start after/before cursor; other lines: search full line
-			const searchFrom = isCurrentLine
-				? isForward
-					? this.state.cursorCol + 1
-					: this.state.cursorCol - 1
-				: undefined;
+			const searchFrom = isCurrentLine ? (isForward ? this.state.cursorCol + 1 : this.state.cursorCol - 1) : undefined;
 
 			const idx = isForward ? line.indexOf(char, searchFrom) : line.lastIndexOf(char, searchFrom);
 

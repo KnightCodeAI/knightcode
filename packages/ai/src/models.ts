@@ -133,11 +133,7 @@ export interface Provider<TApi extends Api = Api> {
 	 */
 	filterModels?(models: readonly Model<TApi>[], credential: Credential | undefined): readonly Model<TApi>[];
 
-	stream<T extends TApi>(
-		model: Model<T>,
-		context: Context,
-		options?: ApiStreamOptions<T>,
-	): AssistantMessageEventStream;
+	stream<T extends TApi>(model: Model<T>, context: Context, options?: ApiStreamOptions<T>): AssistantMessageEventStream;
 
 	streamSimple(model: Model<TApi>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream;
 	fetchDeferred?(
@@ -849,10 +845,7 @@ export function createProvider<TApi extends Api = Api>(input: CreateProviderOpti
 		provider.cancelDeferred = async (model, handle, options) => {
 			const implementation = apiFor(model);
 			if (!implementation?.cancelDeferred) {
-				throw new ModelsError(
-					"provider",
-					`Provider ${input.id} cannot cancel deferred responses for "${model.api}"`,
-				);
+				throw new ModelsError("provider", `Provider ${input.id} cannot cancel deferred responses for "${model.api}"`);
 			}
 			await implementation.cancelDeferred(model, handle, options);
 		};

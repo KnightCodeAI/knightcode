@@ -226,12 +226,20 @@ describe("detectCapabilities", () => {
 
 	it("applies environment overrides", () => {
 		assert.deepStrictEqual(
-			withEnv({ KNIGHTCODE_HYPERLINKS: "1", KNIGHTCODE_IMAGE_PROTOCOL: "kitty", KNIGHTCODE_TRUE_COLOR: "1" }, () => detectCapabilities()),
+			withEnv({ KNIGHTCODE_HYPERLINKS: "1", KNIGHTCODE_IMAGE_PROTOCOL: "kitty", KNIGHTCODE_TRUE_COLOR: "1" }, () =>
+				detectCapabilities(),
+			),
 			{ images: "kitty", trueColor: true, hyperlinks: true },
 		);
 		assert.deepStrictEqual(
-			withEnv({ TERM_PROGRAM: "iterm.app", KNIGHTCODE_HYPERLINKS: "0", KNIGHTCODE_IMAGE_PROTOCOL: "none", KNIGHTCODE_TRUE_COLOR: "0" }, () =>
-				detectCapabilities(),
+			withEnv(
+				{
+					TERM_PROGRAM: "iterm.app",
+					KNIGHTCODE_HYPERLINKS: "0",
+					KNIGHTCODE_IMAGE_PROTOCOL: "none",
+					KNIGHTCODE_TRUE_COLOR: "0",
+				},
+				() => detectCapabilities(),
 			),
 			{ images: null, trueColor: false, hyperlinks: false },
 		);
@@ -589,11 +597,7 @@ describe("Kitty image cursor movement", () => {
 	it("truncates long image fallback lines to render width", () => {
 		setCapabilities({ images: null, trueColor: false, hyperlinks: false });
 		try {
-			const longPath = join(
-				homedir(),
-				"images",
-				`${"generated-image-with-a-very-long-absolute-path".repeat(4)}.png`,
-			);
+			const longPath = join(homedir(), "images", `${"generated-image-with-a-very-long-absolute-path".repeat(4)}.png`);
 			const width = 40;
 			const image = new Image(
 				"AAAA",
@@ -630,23 +634,27 @@ describe("imageFallback", () => {
 	});
 
 	// Skipped on Windows: asserts POSIX separators in the shortened display path.
-	it("wraps shortened absolute paths in OSC 8 file links when hyperlinks are enabled", { skip: process.platform === "win32" }, () => {
-		setCapabilities({ images: null, trueColor: false, hyperlinks: true });
-		try {
-			const abs = join(homedir(), ".knightcode", "agent", "shot.png");
-			const result = imageFallback("image/png", { widthPx: 10, heightPx: 10 }, abs);
-			assert.ok(result.includes("\x1b]8;;file://"), "expected OSC 8 file link");
-			assert.ok(
-				result.includes(abs.replaceAll("\\", "/")) || result.includes(abs),
-				"file URL should target absolute path",
-			);
-			// Visible text must use ~/... not the expanded home path.
-			const visible = result.replace(/\x1b\]8;;.*?\x1b\\/g, "");
-			assert.strictEqual(visible, "[Image: ~/.knightcode/agent/shot.png [image/png] 10x10]");
-		} finally {
-			resetCapabilitiesCache();
-		}
-	});
+	it(
+		"wraps shortened absolute paths in OSC 8 file links when hyperlinks are enabled",
+		{ skip: process.platform === "win32" },
+		() => {
+			setCapabilities({ images: null, trueColor: false, hyperlinks: true });
+			try {
+				const abs = join(homedir(), ".knightcode", "agent", "shot.png");
+				const result = imageFallback("image/png", { widthPx: 10, heightPx: 10 }, abs);
+				assert.ok(result.includes("\x1b]8;;file://"), "expected OSC 8 file link");
+				assert.ok(
+					result.includes(abs.replaceAll("\\", "/")) || result.includes(abs),
+					"file URL should target absolute path",
+				);
+				// Visible text must use ~/... not the expanded home path.
+				const visible = result.replace(/\x1b\]8;;.*?\x1b\\/g, "");
+				assert.strictEqual(visible, "[Image: ~/.knightcode/agent/shot.png [image/png] 10x10]");
+			} finally {
+				resetCapabilitiesCache();
+			}
+		},
+	);
 
 	it("leaves bare basenames unchanged and does not hyperlink them", () => {
 		setCapabilities({ images: null, trueColor: false, hyperlinks: true });

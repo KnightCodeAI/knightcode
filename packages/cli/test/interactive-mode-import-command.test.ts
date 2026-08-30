@@ -29,9 +29,9 @@ describe("InteractiveMode /import parsing", () => {
 		expect(interactiveModePrototype.getPathCommandArgument('/import "path/to/session.jsonl"', "/import")).toBe(
 			"path/to/session.jsonl",
 		);
-		expect(
-			interactiveModePrototype.getPathCommandArgument('/import "path with spaces/session.jsonl"', "/import"),
-		).toBe("path with spaces/session.jsonl");
+		expect(interactiveModePrototype.getPathCommandArgument('/import "path with spaces/session.jsonl"', "/import")).toBe(
+			"path with spaces/session.jsonl",
+		);
 	});
 
 	it("preserves apostrophes in unquoted /import path arguments", () => {
@@ -41,9 +41,7 @@ describe("InteractiveMode /import parsing", () => {
 	});
 
 	it("enforces command token boundaries", () => {
-		expect(interactiveModePrototype.getPathCommandArgument("/important /tmp/session.jsonl", "/import")).toBe(
-			undefined,
-		);
+		expect(interactiveModePrototype.getPathCommandArgument("/important /tmp/session.jsonl", "/import")).toBe(undefined);
 		expect(interactiveModePrototype.getPathCommandArgument("/exporter out.html", "/export")).toBe(undefined);
 		expect(interactiveModePrototype.getPathCommandArgument("/import /tmp/session.jsonl", "/import")).toBe(
 			"/tmp/session.jsonl",

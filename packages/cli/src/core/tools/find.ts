@@ -239,7 +239,7 @@ export function createFindToolDefinition(
 						// .gitignore rules stop at nested repo boundaries:
 						// https://github.com/KnightCodeAI/knightcode/issues/5960
 						let insideGitRepo = false;
-						for (let current = searchPath; ; ) {
+						for (let current = searchPath; ;) {
 							if (await pathExists(path.join(current, ".git"))) {
 								insideGitRepo = true;
 								break;
@@ -261,8 +261,7 @@ export function createFindToolDefinition(
 								effectivePattern = `**/${pattern}`;
 							}
 							// fd matches full paths using native separators on Windows.
-							if (process.platform === "win32")
-								effectivePattern = effectivePattern.replaceAll("/", String.raw`[/\\]`);
+							if (process.platform === "win32") effectivePattern = effectivePattern.replaceAll("/", String.raw`[/\\]`);
 						}
 						args.push("--", effectivePattern, searchPath);
 

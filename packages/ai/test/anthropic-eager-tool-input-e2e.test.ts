@@ -143,13 +143,9 @@ describe("Anthropic Messages eager tool input streaming E2E", () => {
 		for (const testCase of forcedEagerProbeCases) {
 			const model = withEagerToolInputStreaming(testCase.model);
 
-			it.skipIf(!testCase.apiKey)(
-				`${testCase.name} accepts forced eager_input_streaming`,
-				{ retry: 2 },
-				async () => {
-					await expectToolEnabledRequestAccepted(model, testCase.apiKey);
-				},
-			);
+			it.skipIf(!testCase.apiKey)(`${testCase.name} accepts forced eager_input_streaming`, { retry: 2 }, async () => {
+				await expectToolEnabledRequestAccepted(model, testCase.apiKey);
+			});
 		}
 	});
 });

@@ -503,10 +503,7 @@ const validPrefixCases = [
 		{ record: attempt(4, "run-1", "assistant", 2, "assistant-attempt-2") },
 		{ record: usageRecord(5, "assistant-attempt-2", "stop", 2) },
 		{
-			entry: persistedEntry(
-				messageTarget("assistant-attempt-2", assistantMessage([{ type: "text", text: "ok" }])),
-				6,
-			),
+			entry: persistedEntry(messageTarget("assistant-attempt-2", assistantMessage([{ type: "text", text: "ok" }])), 6),
 		},
 	]),
 	...validPrefixes("terminal assistant failure", [

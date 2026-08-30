@@ -240,9 +240,7 @@ describe("viewport layout", () => {
 		const automatic = new ScrollView(fittingContent, { scrollbar: "auto", scrollbarStyle });
 		renderLayoutFrame(automatic, 6, 4, () => {});
 		automatic.scrollBy(1);
-		assert.ok(
-			renderLayoutFrame(automatic, 6, 4, () => {}).lines.every((line) => !line.includes(scrollbarBackground)),
-		);
+		assert.ok(renderLayoutFrame(automatic, 6, 4, () => {}).lines.every((line) => !line.includes(scrollbarBackground)));
 
 		const alwaysFitting = new ScrollView(fittingContent, { scrollbar: "always", scrollbarStyle });
 		const alwaysFittingFrame = renderLayoutFrame(alwaysFitting, 6, 4, () => {});

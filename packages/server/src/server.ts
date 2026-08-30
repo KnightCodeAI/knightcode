@@ -385,11 +385,7 @@ function resolveOptions(options: KnightServerOptions): { maxFrameLength: number;
 		throw new TypeError(`KnightServer maxFrameLength must be an integer between 1 and ${MAX_UINT32}`);
 	}
 	const handshakeTimeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
-	if (
-		!Number.isSafeInteger(handshakeTimeoutMs) ||
-		handshakeTimeoutMs <= 0 ||
-		handshakeTimeoutMs > MAX_TIMER_DELAY_MS
-	) {
+	if (!Number.isSafeInteger(handshakeTimeoutMs) || handshakeTimeoutMs <= 0 || handshakeTimeoutMs > MAX_TIMER_DELAY_MS) {
 		throw new TypeError(`KnightServer handshakeTimeoutMs must be an integer between 1 and ${MAX_TIMER_DELAY_MS}`);
 	}
 	return { maxFrameLength, handshakeTimeoutMs };

@@ -1,6 +1,5 @@
 export type AuthInput =
-	| { readonly type: "token"; readonly token: string }
-	| { readonly type: "file"; readonly path: string };
+	{ readonly type: "token"; readonly token: string } | { readonly type: "file"; readonly path: string };
 
 export interface RawAuthOptions {
 	readonly authToken?: string;

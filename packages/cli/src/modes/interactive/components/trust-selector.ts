@@ -56,10 +56,7 @@ export class TrustSelectorComponent extends Container {
 		this.addChild(new Spacer(1));
 		this.addChild(
 			new Text(
-				theme.fg(
-					"muted",
-					`Saved decision: ${formatDecision(this.trustOptions[0]?.savedPath, options.savedDecision)}`,
-				),
+				theme.fg("muted", `Saved decision: ${formatDecision(this.trustOptions[0]?.savedPath, options.savedDecision)}`),
 				1,
 				0,
 			),

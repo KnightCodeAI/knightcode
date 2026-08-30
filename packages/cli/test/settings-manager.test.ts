@@ -607,10 +607,7 @@ describe("SettingsManager", () => {
 		});
 
 		it("should expand ~ in shellPath", () => {
-			writeFileSync(
-				join(agentDir, "settings.json"),
-				JSON.stringify({ shellPath: "~/.local/bin/agent-shell-sandbox" }),
-			);
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ shellPath: "~/.local/bin/agent-shell-sandbox" }));
 			const manager = SettingsManager.create(projectDir, agentDir);
 			expect(manager.getShellPath()).toBe(join(homedir(), ".local/bin/agent-shell-sandbox"));
 		});

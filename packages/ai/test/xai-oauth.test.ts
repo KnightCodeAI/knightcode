@@ -142,11 +142,7 @@ describe("xAI OAuth device flow", () => {
 
 		await vi.advanceTimersByTimeAsync(10_000);
 		const credentials = await loginPromise;
-		expect(pollTimes).toEqual([
-			startTime.getTime() + 5000,
-			startTime.getTime() + 10_000,
-			startTime.getTime() + 20_000,
-		]);
+		expect(pollTimes).toEqual([startTime.getTime() + 5000, startTime.getTime() + 10_000, startTime.getTime() + 20_000]);
 		expect(credentials).toEqual({
 			type: "oauth",
 			access: "access-token",
@@ -235,27 +231,22 @@ describe("xAI OAuth device flow", () => {
 		},
 	);
 
-	it.each(["access_denied", "authorization_denied"])(
-		"fails when device authorization is denied: %s",
-		async (error) => {
-			vi.useFakeTimers();
-			let requestCount = 0;
-			vi.stubGlobal(
-				"fetch",
-				vi.fn(async () => {
-					requestCount += 1;
-					return requestCount === 1
-						? jsonResponse(deviceCodeResponse({ interval: 1 }))
-						: jsonResponse({ error }, 400);
-				}),
-			);
+	it.each(["access_denied", "authorization_denied"])("fails when device authorization is denied: %s", async (error) => {
+		vi.useFakeTimers();
+		let requestCount = 0;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				requestCount += 1;
+				return requestCount === 1 ? jsonResponse(deviceCodeResponse({ interval: 1 })) : jsonResponse({ error }, 400);
+			}),
+		);
 
-			const loginPromise = loginXaiForTest({ onDeviceCode: () => {} });
-			const assertion = expect(loginPromise).rejects.toThrow("xAI device authorization was denied");
-			await vi.advanceTimersByTimeAsync(1000);
-			await assertion;
-		},
-	);
+		const loginPromise = loginXaiForTest({ onDeviceCode: () => {} });
+		const assertion = expect(loginPromise).rejects.toThrow("xAI device authorization was denied");
+		await vi.advanceTimersByTimeAsync(1000);
+		await assertion;
+	});
 
 	it("cancels while waiting for the first token poll", async () => {
 		vi.useFakeTimers();

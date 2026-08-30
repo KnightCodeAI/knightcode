@@ -1,9 +1,4 @@
-import {
-	CustomEditor,
-	type ExtensionAPI,
-	type ExtensionContext,
-	type KeybindingsManager,
-} from "@knightcodeai/cli";
+import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "@knightcodeai/cli";
 import type { Component, EditorTheme, TUI } from "@knightcode/tui";
 import { truncateToWidth, visibleWidth } from "@knightcode/tui";
 
@@ -40,11 +35,13 @@ function fitBorder(
 }
 
 function formatCwd(cwd: string): string {
-	const home = process.env.HOME;
-	if (home && cwd.startsWith(home)) {
-		return `~${cwd.slice(home.length)}`;
-	}
-	return cwd;
+	// HOME is commonly unset on Windows, and a bare prefix test would also rewrite a sibling
+	// directory such as /home/aliceworkspace when HOME is /home/alice.
+	const home = process.env.HOME || process.env.USERPROFILE;
+	if (!home) return cwd;
+	const rest = cwd.slice(home.length);
+	if (!cwd.startsWith(home) || (rest !== "" && rest[0] !== "/" && rest[0] !== "\\")) return cwd;
+	return `~${rest}`;
 }
 
 function formatContext(ctx: ExtensionContext): string {
@@ -110,7 +107,9 @@ export default function (knightcode: ExtensionAPI) {
 		let branch: string | undefined;
 
 		const refreshBranch = async () => {
-			const result = await knightcode.exec("git", ["branch", "--show-current"], { cwd: ctx.cwd }).catch(() => undefined);
+			const result = await knightcode
+				.exec("git", ["branch", "--show-current"], { cwd: ctx.cwd })
+				.catch(() => undefined);
 			const stdout = result?.stdout.trim();
 			branch = stdout && stdout.length > 0 ? stdout : undefined;
 			activeTui?.requestRender();

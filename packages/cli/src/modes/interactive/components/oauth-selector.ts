@@ -1,13 +1,5 @@
 import type { ApiKeyAuth, AuthCheck, OAuthAuth } from "@knightcode/ai";
-import {
-	Container,
-	type Focusable,
-	fuzzyFilter,
-	getKeybindings,
-	Input,
-	Spacer,
-	TruncatedText,
-} from "@knightcode/tui";
+import { Container, type Focusable, fuzzyFilter, getKeybindings, Input, Spacer, TruncatedText } from "@knightcode/tui";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 

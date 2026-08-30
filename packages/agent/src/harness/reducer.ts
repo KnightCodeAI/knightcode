@@ -552,8 +552,7 @@ export function reduceLaneState(input: LaneReductionInput): LaneReductionResult 
 				.map((record) => clone(record.target));
 	const pendingWrites = operationRecords
 		.filter(
-			(record): record is WriteDeferredRecord =>
-				record.type === "write_deferred" && !entriesById.has(record.target.id),
+			(record): record is WriteDeferredRecord => record.type === "write_deferred" && !entriesById.has(record.target.id),
 		)
 		.map((record) => clone(record.target));
 	const missingInitialMessages =

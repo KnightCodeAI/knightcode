@@ -287,21 +287,17 @@ export class ModelRuntime implements Models {
 		const [available, checks, credentials] = await Promise.all([
 			this.models.getAvailable(undefined, { signal }),
 			Promise.all(
-				providers.map(
-					async (provider): Promise<[string, AuthCheck | undefined]> => [
-						provider.id,
-						await this.models.checkAuth(provider.id, { signal }),
-					],
-				),
+				providers.map(async (provider): Promise<[string, AuthCheck | undefined]> => [
+					provider.id,
+					await this.models.checkAuth(provider.id, { signal }),
+				]),
 			),
 			this.credentials.list({ signal }),
 		]);
 		if (seq !== this.availabilityRefreshSeq) return;
 		const auth = new Map(checks);
 		const configuredProviders = new Set(
-			checks
-				.filter((entry): entry is [string, AuthCheck] => entry[1] !== undefined)
-				.map(([providerId]) => providerId),
+			checks.filter((entry): entry is [string, AuthCheck] => entry[1] !== undefined).map(([providerId]) => providerId),
 		);
 		this.snapshot = {
 			all: [...this.models.getModels()],
@@ -537,12 +533,7 @@ export class ModelRuntime implements Models {
 		const signal = operationSignal(options.signal);
 		return this.enqueueCredentialOperation(providerId, signal, async () => {
 			this.credentials.setRuntimeApiKey(providerId, apiKey);
-			await this.synchronizeCredentialState(
-				providerId,
-				"setRuntimeApiKey",
-				{ type: "api_key", key: apiKey },
-				signal,
-			);
+			await this.synchronizeCredentialState(providerId, "setRuntimeApiKey", { type: "api_key", key: apiKey }, signal);
 		});
 	}
 
@@ -592,9 +583,7 @@ export class ModelRuntime implements Models {
 		let headers = mergeHeaders(resolution.auth.headers, providerOptions.headers);
 		if (transformHeaders) headers = await transformHeaders(headers ?? {});
 		const env =
-			resolution.env || providerOptions.env
-				? { ...(resolution.env ?? {}), ...(providerOptions.env ?? {}) }
-				: undefined;
+			resolution.env || providerOptions.env ? { ...(resolution.env ?? {}), ...(providerOptions.env ?? {}) } : undefined;
 		return {
 			provider,
 			model: resolution.auth.baseUrl ? { ...model, baseUrl: resolution.auth.baseUrl } : model,

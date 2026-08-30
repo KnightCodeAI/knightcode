@@ -843,9 +843,7 @@ describe("openai-codex streaming", () => {
 		await streamOpenAICodexResponses(
 			model,
 			{
-				messages: [
-					{ role: "user", content: "Do not call ping. Respond with text instead.", timestamp: Date.now() },
-				],
+				messages: [{ role: "user", content: "Do not call ping. Respond with text instead.", timestamp: Date.now() }],
 				tools: [
 					{
 						name: "ping",

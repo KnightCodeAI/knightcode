@@ -136,11 +136,7 @@ describe("createAgentSession stream options", () => {
 	});
 
 	it("lets request timeoutMs override httpIdleTimeoutMs for OpenAI Codex", async () => {
-		const options = await captureStreamOptions(
-			"openai-codex-responses",
-			{ httpIdleTimeoutMs: 1234 },
-			{ timeoutMs: 0 },
-		);
+		const options = await captureStreamOptions("openai-codex-responses", { httpIdleTimeoutMs: 1234 }, { timeoutMs: 0 });
 
 		expect(options?.timeoutMs).toBe(0);
 	});

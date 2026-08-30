@@ -52,8 +52,7 @@ export class FileModelsStore implements ModelsStore {
 	constructor(path: string = join(getAgentDir(), "models-store.json")) {
 		this.path = normalizePath(path);
 		this.storage = new FileAuthStorageBackend(this.path);
-		this.readState =
-			sharedModelsFileReadState?.path === this.path ? sharedModelsFileReadState.readState : { data: {} };
+		this.readState = sharedModelsFileReadState?.path === this.path ? sharedModelsFileReadState.readState : { data: {} };
 		if (!sharedModelsFileReadState) {
 			sharedModelsFileReadState = { path: this.path, readState: this.readState };
 		}

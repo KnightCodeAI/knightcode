@@ -74,8 +74,7 @@ function refreshWriteHighlightPrefix(cache: WriteHighlightCache): void {
 	const prefixSource = cache.normalizedLines.slice(0, prefixCount).join("\n");
 	const prefixHighlighted = highlightCode(prefixSource, cache.lang);
 	for (let i = 0; i < prefixCount; i++) {
-		cache.highlightedLines[i] =
-			prefixHighlighted[i] ?? highlightSingleLine(cache.normalizedLines[i] ?? "", cache.lang);
+		cache.highlightedLines[i] = prefixHighlighted[i] ?? highlightSingleLine(cache.normalizedLines[i] ?? "", cache.lang);
 	}
 }
 

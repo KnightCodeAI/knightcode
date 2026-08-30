@@ -807,9 +807,7 @@ describe("default model selection", () => {
 		};
 		const registry = {
 			getModel: (provider: string, modelId: string) =>
-				provider === savedDeepSeekModel.provider && modelId === savedDeepSeekModel.id
-					? savedDeepSeekModel
-					: undefined,
+				provider === savedDeepSeekModel.provider && modelId === savedDeepSeekModel.id ? savedDeepSeekModel : undefined,
 			hasConfiguredAuth: (provider: string) => provider === "spark-two",
 			getAvailableSnapshot: () => [localDeepSeekModel],
 		} as unknown as Parameters<typeof findInitialModel>[0]["modelRuntime"];

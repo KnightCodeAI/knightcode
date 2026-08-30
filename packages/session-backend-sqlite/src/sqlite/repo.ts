@@ -442,8 +442,7 @@ class SqliteSessionStorage implements SessionStorage<SqliteSessionMetadata> {
 
 	async moveLane(lane: string, to: string | null): Promise<void> {
 		return this.enqueueWrite(() => {
-			if (!readLane(this.db, this.metadata.id, lane))
-				throw new SessionError("invalid_lane", `Lane not found: ${lane}`);
+			if (!readLane(this.db, this.metadata.id, lane)) throw new SessionError("invalid_lane", `Lane not found: ${lane}`);
 			if (to !== null && !readEntryRow(this.db, this.metadata.id, to)) {
 				throw new SessionError("not_found", `Entry not found: ${to}`);
 			}
@@ -821,10 +820,7 @@ export class SqliteSessionRepository
 				if (selectedEntryId !== null) {
 					const target = readEntryRow(db, source.id, selectedEntryId);
 					if (!target || target.type !== "message") {
-						throw new SessionError(
-							"invalid_fork_target",
-							`Fork target is not a message entry: ${selectedEntryId}`,
-						);
+						throw new SessionError("invalid_fork_target", `Fork target is not a message entry: ${selectedEntryId}`);
 					}
 					const position = options.position ?? (options.entryId === undefined ? "at" : "before");
 					branchForkTargetId = position === "at" ? target.id : target.parent_id;

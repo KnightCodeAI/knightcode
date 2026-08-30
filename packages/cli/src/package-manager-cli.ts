@@ -103,12 +103,7 @@ async function runManagedNpmCi(stageDir: string): Promise<void> {
 }
 
 function verifyManagedRelease(releaseDir: string, expectedVersion: string): void {
-	const binPath = join(
-		releaseDir,
-		"node_modules",
-		".bin",
-		process.platform === "win32" ? `${APP_NAME}.cmd` : APP_NAME,
-	);
+	const binPath = join(releaseDir, "node_modules", ".bin", process.platform === "win32" ? `${APP_NAME}.cmd` : APP_NAME);
 	const result = spawnProcessSync(binPath, ["--version"], {
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "pipe"],
@@ -523,8 +518,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			updateTarget = { type: "models" };
 		} else if (extensionFlagSource) {
 			if (selfFlag || extensionsFlag || allFlag) {
-				conflictingOptions =
-					conflictingOptions ?? "--extension cannot be combined with --self, --extensions, or --all";
+				conflictingOptions = conflictingOptions ?? "--extension cannot be combined with --self, --extensions, or --all";
 			}
 			if (source) {
 				conflictingOptions = conflictingOptions ?? "--extension cannot be combined with a positional source";
@@ -537,8 +531,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			} else {
 				if (extensionsFlag || selfFlag || allFlag) {
 					conflictingOptions =
-						conflictingOptions ??
-						"positional update targets cannot be combined with --self, --extensions, or --all";
+						conflictingOptions ?? "positional update targets cannot be combined with --self, --extensions, or --all";
 				}
 				updateTarget = { type: "extensions", source };
 			}
@@ -1006,9 +999,7 @@ export async function handlePackageCommand(
 			case "update": {
 				const target = options.updateTarget ?? { type: "self" };
 				if (options.showExtensionsSkippedNote) {
-					console.log(
-						chalk.dim(`Extensions are skipped. Run ${APP_NAME} update --extensions to update extensions.`),
-					);
+					console.log(chalk.dim(`Extensions are skipped. Run ${APP_NAME} update --extensions to update extensions.`));
 				}
 				if (updateTargetIncludesExtensions(target)) {
 					const updateSource = target.type === "extensions" ? target.source : undefined;
@@ -1053,9 +1044,7 @@ export async function handlePackageCommand(
 
 					const installMethod = detectInstallMethod();
 					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
-						console.error(
-							chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`),
-						);
+						console.error(chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`));
 						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
 						process.exitCode = 1;
 						return true;

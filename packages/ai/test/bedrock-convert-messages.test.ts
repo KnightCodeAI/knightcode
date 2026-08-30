@@ -139,7 +139,8 @@ describe("Bedrock tool arguments", () => {
 					contentBlockIndex: 0,
 					delta: {
 						toolUse: {
-							input: '{"path":"/workspace/foobar/file.js","edits":[{"oldText":"first","newText":"updated first"},{"oldText":"second","newText":"updated second","":""}]}',
+							input:
+								'{"path":"/workspace/foobar/file.js","edits":[{"oldText":"first","newText":"updated first"},{"oldText":"second","newText":"updated second","":""}]}',
 						},
 					},
 				},

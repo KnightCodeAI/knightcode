@@ -1,13 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-	AnthropicMessagesCompat,
-	Api,
-	Context,
-	Model,
-	OpenAICompletionsCompat,
-} from "@knightcode/ai/compat";
+import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@knightcode/ai/compat";
 import { getApiProvider, getSupportedThinkingLevels } from "@knightcode/ai/compat";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
@@ -650,9 +644,9 @@ describe("ModelRegistry", () => {
 			const models = getModelsForProvider(registry, "openrouter");
 
 			expect(models.some((m) => m.id === "custom/openrouter-model")).toBe(true);
-			expect(
-				models.some((m) => m.id === "anthropic/claude-sonnet-4" && m.name === "Overridden Built-in Sonnet"),
-			).toBe(true);
+			expect(models.some((m) => m.id === "anthropic/claude-sonnet-4" && m.name === "Overridden Built-in Sonnet")).toBe(
+				true,
+			);
 		});
 
 		test("refresh() reloads merged custom models from disk", async () => {
@@ -938,9 +932,9 @@ describe("ModelRegistry", () => {
 			});
 
 			const registry = await createModelRegistry(authStorage, modelsJsonPath);
-			expect(
-				getModelsForProvider(registry, "openrouter").find((m) => m.id === "anthropic/claude-sonnet-4")?.name,
-			).toBe("First Name");
+			expect(getModelsForProvider(registry, "openrouter").find((m) => m.id === "anthropic/claude-sonnet-4")?.name).toBe(
+				"First Name",
+			);
 
 			// Update and refresh
 			writeRawModelsJson({
@@ -954,9 +948,9 @@ describe("ModelRegistry", () => {
 			});
 			await registry.refresh();
 
-			expect(
-				getModelsForProvider(registry, "openrouter").find((m) => m.id === "anthropic/claude-sonnet-4")?.name,
-			).toBe("Second Name");
+			expect(getModelsForProvider(registry, "openrouter").find((m) => m.id === "anthropic/claude-sonnet-4")?.name).toBe(
+				"Second Name",
+			);
 		});
 
 		test("removing model override restores built-in values", async () => {
@@ -1293,8 +1287,7 @@ describe("ModelRegistry", () => {
 			try {
 				getApiProvider("openai-completions")?.streamSimple(openAiModel, emptyContext);
 			} catch (error) {
-				threwCustomOverrideAfterUnregister =
-					error instanceof Error && error.message === "custom streamSimple override";
+				threwCustomOverrideAfterUnregister = error instanceof Error && error.message === "custom streamSimple override";
 			}
 			expect(threwCustomOverrideAfterUnregister).toBe(false);
 		});
@@ -1347,10 +1340,7 @@ describe("ModelRegistry", () => {
 				);
 				await registry.refresh();
 
-				expect(getModelsForProvider(registry, "custom-provider").map((m) => m.id)).toEqual([
-					"custom-a",
-					"custom-b",
-				]);
+				expect(getModelsForProvider(registry, "custom-provider").map((m) => m.id)).toEqual(["custom-a", "custom-b"]);
 			});
 
 			test("baseUrl-only override keeps custom provider models after refresh", async () => {
@@ -1363,14 +1353,9 @@ describe("ModelRegistry", () => {
 				registry.registerProvider("custom-provider", { baseUrl: "https://proxy.test/custom" });
 				await registry.refresh();
 
-				expect(getModelsForProvider(registry, "custom-provider").map((m) => m.id)).toEqual([
-					"custom-a",
-					"custom-b",
-				]);
+				expect(getModelsForProvider(registry, "custom-provider").map((m) => m.id)).toEqual(["custom-a", "custom-b"]);
 				expect(
-					getModelsForProvider(registry, "custom-provider").every(
-						(m) => m.baseUrl === "https://proxy.test/custom",
-					),
+					getModelsForProvider(registry, "custom-provider").every((m) => m.baseUrl === "https://proxy.test/custom"),
 				).toBe(true);
 			});
 
@@ -1532,9 +1517,7 @@ describe("ModelRegistry", () => {
 			const originalPartB = process.env.TEST_INTERPOLATED_PART_B_12345;
 			process.env.TEST_INTERPOLATED_PART_A_12345 = "left";
 			process.env.TEST_INTERPOLATED_PART_B_12345 = "right";
-			const interpolatedKey = ["$", "{TEST_INTERPOLATED_PART_A_12345}_$", "{TEST_INTERPOLATED_PART_B_12345}"].join(
-				"",
-			);
+			const interpolatedKey = ["$", "{TEST_INTERPOLATED_PART_A_12345}_$", "{TEST_INTERPOLATED_PART_B_12345}"].join("");
 
 			try {
 				writeRawModelsJson({

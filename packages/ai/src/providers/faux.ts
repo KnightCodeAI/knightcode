@@ -509,12 +509,7 @@ export function createFauxCore(options: RegisterFauxProviderOptions) {
 			try {
 				await streamOptions?.onResponse?.({ status: 200, headers: {} }, requestModel);
 				if (!step) {
-					let message = createErrorMessage(
-						new Error("No more faux responses queued"),
-						api,
-						provider,
-						requestModel.id,
-					);
+					let message = createErrorMessage(new Error("No more faux responses queued"), api, provider, requestModel.id);
 					message = withUsageEstimate(message, context, streamOptions, promptCache);
 					outer.push({ type: "error", reason: "error", error: message });
 					outer.end(message);
@@ -612,14 +607,7 @@ export function createFauxCore(options: RegisterFauxProviderOptions) {
 						entry.final = createErrorMessage(error, api, provider, entry.model.id);
 					}
 				}
-				await streamWithDeltas(
-					outer,
-					entry.final,
-					minTokenSize,
-					maxTokenSize,
-					tokensPerSecond,
-					fetchOptions?.signal,
-				);
+				await streamWithDeltas(outer, entry.final, minTokenSize, maxTokenSize, tokensPerSecond, fetchOptions?.signal);
 			} catch (error) {
 				const message = createErrorMessage(error, api, provider, requestModel.id);
 				outer.push({ type: "error", reason: "error", error: message });

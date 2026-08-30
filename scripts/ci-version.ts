@@ -22,7 +22,7 @@ const PLATFORM_TARGETS = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm6
 type Manifest = { name: string; version: string; optionalDependencies?: Record<string, string> };
 
 function manifest(dir: string): Manifest {
-  return JSON.parse(readFileSync(join(ROOT, "packages", dir, "package.json"), "utf8"));
+	return JSON.parse(readFileSync(join(ROOT, "packages", dir, "package.json"), "utf8"));
 }
 
 await $`bun x changeset version`.cwd(ROOT);
@@ -34,22 +34,22 @@ const platforms = PLATFORM_TARGETS.map((target) => manifest(`cli-${target}`));
 
 const versions = new Set([cli.version, ...platforms.map((p) => p.version)]);
 if (versions.size !== 1) {
-  const listed = [cli, ...platforms].map((p) => `  ${p.name}: ${p.version}`).join("\n");
-  throw new Error(
-    `Fixed-group packages are not lockstep after \`changeset version\`:\n${listed}\n` +
-      `Check the \`fixed\` array in .changeset/config.json.`,
-  );
+	const listed = [cli, ...platforms].map((p) => `  ${p.name}: ${p.version}`).join("\n");
+	throw new Error(
+		`Fixed-group packages are not lockstep after \`changeset version\`:\n${listed}\n` +
+			`Check the \`fixed\` array in .changeset/config.json.`,
+	);
 }
 
 const optional = cli.optionalDependencies ?? {};
 const mismatched = platforms
-  .filter((p) => optional[p.name] !== cli.version)
-  .map((p) => `  ${p.name}: pinned ${optional[p.name] ?? "(absent)"}, expected ${cli.version}`);
+	.filter((p) => optional[p.name] !== cli.version)
+	.map((p) => `  ${p.name}: pinned ${optional[p.name] ?? "(absent)"}, expected ${cli.version}`);
 if (mismatched.length > 0) {
-  throw new Error(
-    `${MAIN} optionalDependencies do not pin the release version:\n${mismatched.join("\n")}\n` +
-      `Publishing this would ship a launcher whose platform package does not exist on npm.`,
-  );
+	throw new Error(
+		`${MAIN} optionalDependencies do not pin the release version:\n${mismatched.join("\n")}\n` +
+			`Publishing this would ship a launcher whose platform package does not exist on npm.`,
+	);
 }
 
 // Record the workspace version bumps in the lockfile so the Version PR is

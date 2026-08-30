@@ -647,21 +647,27 @@ describe("InteractiveMode.showLoadedResources", () => {
 			},
 			{
 				path: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts", {
-					source: "npm:knightcode-markdown-preview",
-					scope: "project",
-					origin: "package",
-					baseDir: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview",
-				}),
+				sourceInfo: createSourceInfo(
+					"/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts",
+					{
+						source: "npm:knightcode-markdown-preview",
+						scope: "project",
+						origin: "package",
+						baseDir: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview",
+					},
+				),
 			},
 			{
 				path: "/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped/extensions/index.ts", {
-					source: "npm:@scope/knightcode-scoped",
-					scope: "project",
-					origin: "package",
-					baseDir: "/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped",
-				}),
+				sourceInfo: createSourceInfo(
+					"/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped/extensions/index.ts",
+					{
+						source: "npm:@scope/knightcode-scoped",
+						scope: "project",
+						origin: "package",
+						baseDir: "/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped",
+					},
+				),
 			},
 			{
 				path: "/tmp/project/.knightcode/git/github.com/HazAT/knightcode-interactive-subagents/extensions/index.ts",
@@ -1027,12 +1033,15 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const extensions: ExtensionFixture[] = [
 			{
 				path: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts", {
-					source: "npm:knightcode-markdown-preview",
-					scope: "project",
-					origin: "package",
-					baseDir: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview",
-				}),
+				sourceInfo: createSourceInfo(
+					"/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts",
+					{
+						source: "npm:knightcode-markdown-preview",
+						scope: "project",
+						origin: "package",
+						baseDir: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview",
+					},
+				),
 			},
 		];
 
@@ -1164,7 +1173,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
 			cwd,
-			contextFiles: [{ path: path.join(home, ".knightcode", "agent", "AGENTS.md") }, { path: path.join(cwd, "AGENTS.md") }],
+			contextFiles: [
+				{ path: path.join(home, ".knightcode", "agent", "AGENTS.md") },
+				{ path: path.join(cwd, "AGENTS.md") },
+			],
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
@@ -1203,7 +1215,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 			quietStartup: false,
 			toolOutputExpanded: true,
 			cwd,
-			contextFiles: [{ path: path.join(home, ".knightcode", "agent", "AGENTS.md") }, { path: path.join(cwd, "AGENTS.md") }],
+			contextFiles: [
+				{ path: path.join(home, ".knightcode", "agent", "AGENTS.md") },
+				{ path: path.join(cwd, "AGENTS.md") },
+			],
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {

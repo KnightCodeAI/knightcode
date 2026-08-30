@@ -139,10 +139,7 @@ export function allocateStackSizes(
 	gap: number,
 ): number[] {
 	const sizes = entries.map((entry, index) =>
-		clampSize(
-			entry.basis === undefined || entry.basis === "auto" ? (intrinsicSizes[index] ?? 0) : entry.basis,
-			entry,
-		),
+		clampSize(entry.basis === undefined || entry.basis === "auto" ? (intrinsicSizes[index] ?? 0) : entry.basis, entry),
 	);
 	if (availableSize === undefined) return sizes;
 

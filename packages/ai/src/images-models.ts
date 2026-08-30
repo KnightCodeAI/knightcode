@@ -206,8 +206,7 @@ class ImagesModelsImpl implements MutableImagesModels {
 			// Explicit request options win per-field; headers/env merge per key.
 			const apiKey = options?.apiKey ?? auth.apiKey;
 			const headers = auth.headers || options?.headers ? { ...auth.headers, ...options?.headers } : undefined;
-			const env =
-				resolution.env || options?.env ? { ...(resolution.env ?? {}), ...(options?.env ?? {}) } : undefined;
+			const env = resolution.env || options?.env ? { ...(resolution.env ?? {}), ...(options?.env ?? {}) } : undefined;
 
 			return await provider.generateImages(requestModel, context, { ...options, apiKey, headers, env });
 		} catch (error) {

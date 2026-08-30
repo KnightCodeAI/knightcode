@@ -149,10 +149,7 @@ describe("loadEntriesFromFile", () => {
 
 	it("opens session files larger than Node's max string length", () => {
 		const file = join(tempDir, "large.jsonl");
-		writeFileSync(
-			file,
-			'{"type":"session","version":3,"id":"abc","timestamp":"2025-01-01T00:00:00Z","cwd":"/tmp"}\n',
-		);
+		writeFileSync(file, '{"type":"session","version":3,"id":"abc","timestamp":"2025-01-01T00:00:00Z","cwd":"/tmp"}\n');
 
 		const fd = openSync(file, "r+");
 		try {

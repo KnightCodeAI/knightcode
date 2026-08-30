@@ -143,9 +143,7 @@ describe("AgentSession dynamic tool registration", () => {
 		const readTool = allTools.find((tool) => tool.name === "read");
 
 		expect(allTools.map((tool) => tool.name)).toContain("dynamic_tool");
-		expect(dynamicTool?.promptGuidelines).toEqual([
-			"Use dynamic_tool when the user asks for dynamic behavior tests.",
-		]);
+		expect(dynamicTool?.promptGuidelines).toEqual(["Use dynamic_tool when the user asks for dynamic behavior tests."]);
 		expect(dynamicTool?.sourceInfo).toMatchObject({
 			path: "<inline:1>",
 			source: "inline",

@@ -4,10 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSy
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { getEffortThinkingLevelMap, type ModelsDevReasoningOption } from "./models-dev-reasoning-options.ts";
-import {
-	getOpenRouterThinkingLevelMap,
-	type OpenRouterReasoningMetadata,
-} from "./openrouter-reasoning-options.ts";
+import { getOpenRouterThinkingLevelMap, type OpenRouterReasoningMetadata } from "./openrouter-reasoning-options.ts";
 import {
 	CLOUDFLARE_AI_GATEWAY_ANTHROPIC_BASE_URL,
 	CLOUDFLARE_AI_GATEWAY_COMPAT_BASE_URL,
@@ -78,7 +75,8 @@ function readGeneratorOptions(args: string[]): {
 	}
 
 	if (jsonOnly && !jsonOutputDir) throw new Error("--json-only requires --json-output");
-	if (dataOnly && (jsonOnly || jsonOutputDir)) throw new Error("--data-only cannot be combined with JSON catalog output");
+	if (dataOnly && (jsonOnly || jsonOutputDir))
+		throw new Error("--data-only cannot be combined with JSON catalog output");
 	return { strict, dataOnly, jsonOnly, jsonOutputDir, pretty };
 }
 
@@ -193,10 +191,7 @@ const TOGETHER_TOGGLE_REASONING_EFFORT_COMPAT: OpenAICompletionsCompat = {
 	...TOGETHER_TOGGLE_REASONING_COMPAT,
 	supportsReasoningEffort: true,
 };
-const TOGETHER_REASONING_ONLY_MODELS = new Set([
-	"deepseek-ai/DeepSeek-R1",
-	"MiniMaxAI/MiniMax-M2.7",
-]);
+const TOGETHER_REASONING_ONLY_MODELS = new Set(["deepseek-ai/DeepSeek-R1", "MiniMaxAI/MiniMax-M2.7"]);
 const TOGETHER_REASONING_EFFORT_MODELS = new Set(["openai/gpt-oss-20b", "openai/gpt-oss-120b"]);
 const TOGETHER_TOGGLE_REASONING_EFFORT_MODELS = new Set(["deepseek-ai/DeepSeek-V4-Pro"]);
 const TOGETHER_FIXED_REASONING_LEVEL_MAP = {
@@ -678,8 +673,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 	const isGrok = provider === "xai" || baseUrl.includes("api.x.ai");
 	const isOpenRouterDeveloperRoleModel =
 		isOpenRouter && (model.id.startsWith("anthropic/") || model.id.startsWith("openai/"));
-	const cacheControlFormat =
-		provider === "openrouter" && /^~?anthropic\//.test(model.id) ? "anthropic" : undefined;
+	const cacheControlFormat = provider === "openrouter" && /^~?anthropic\//.test(model.id) ? "anthropic" : undefined;
 
 	return {
 		supportsStore: !isNonStandard,
@@ -787,10 +781,7 @@ function applyAnthropicAllowedFallbackModelMetadata(models: readonly Model<"anth
 }
 
 function applyStrictToolCompatMetadata(model: Model<Api>): void {
-	if (
-		(model.provider === "openai" || model.provider === "cloudflare-ai-gateway") &&
-		model.api === "openai-responses"
-	) {
+	if ((model.provider === "openai" || model.provider === "cloudflare-ai-gateway") && model.api === "openai-responses") {
 		model.compat = { ...(model.compat as OpenAIResponsesCompat | undefined), supportsStrictMode: true };
 	} else if (model.provider === "anthropic" && model.api === "anthropic-messages") {
 		mergeAnthropicMessagesCompat(model, { supportsStrictTools: true });
@@ -809,11 +800,7 @@ const OPENAI_GRAMMAR_TOOL_PROVIDERS = new Set([
 	"opencode",
 	"cloudflare-ai-gateway",
 ]);
-const OPENAI_GRAMMAR_TOOL_APIS = new Set<Api>([
-	"openai-responses",
-	"azure-openai-responses",
-	"openai-codex-responses",
-]);
+const OPENAI_GRAMMAR_TOOL_APIS = new Set<Api>(["openai-responses", "azure-openai-responses", "openai-codex-responses"]);
 
 function applyOpenAIGrammarToolCompatMetadata(model: Model<Api>): void {
 	if (!OPENAI_GRAMMAR_TOOL_APIS.has(model.api) || !OPENAI_GRAMMAR_TOOL_PROVIDERS.has(model.provider)) return;
@@ -862,10 +849,7 @@ function isGemma4Model(modelId: string): boolean {
 }
 
 function applyThinkingLevelMetadata(model: Model<any>): void {
-	if (
-		(model.api === "openai-responses" || model.api === "azure-openai-responses") &&
-		model.id.startsWith("gpt-5")
-	) {
+	if ((model.api === "openai-responses" || model.api === "azure-openai-responses") && model.id.startsWith("gpt-5")) {
 		mergeThinkingLevelMap(model, { off: null });
 	}
 	if (model.provider === "github-copilot" && model.id.startsWith("gpt-5")) {
@@ -933,7 +917,7 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 			model.provider === "openrouter"
 				? { ...DEEPSEEK_V4_THINKING_LEVEL_MAP, xhigh: "xhigh", max: null }
 				: (model.provider === "deepseek" || model.provider === "opencode" || model.provider === "opencode-go") &&
-					model.id.includes("deepseek-v4-flash")
+					  model.id.includes("deepseek-v4-flash")
 					? DEEPSEEK_V4_FLASH_THINKING_LEVEL_MAP
 					: DEEPSEEK_V4_THINKING_LEVEL_MAP,
 		);
@@ -1373,9 +1357,7 @@ function processFireworksModels(provider: ModelsDevProvider | undefined): Model<
 	for (const [modelId, model] of Object.entries(provider.models)) {
 		if (model.tool_call !== true) continue;
 
-		const input: ("text" | "image")[] = model.modalities?.input?.includes("image")
-			? ["text", "image"]
-			: ["text"];
+		const input: ("text" | "image")[] = model.modalities?.input?.includes("image") ? ["text", "image"] : ["text"];
 		const common = {
 			id: modelId,
 			name: model.name || modelId,
@@ -2021,9 +2003,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				if (api === "openai-completions") {
 					compat = { ...(compat ?? {}), maxTokensField: "max_tokens" };
 					if (
-						OPENCODE_OPENAI_COMPLETIONS_LONG_CACHE_RETENTION_UNSUPPORTED_MODELS.has(
-							`${variant.provider}:${modelId}`,
-						)
+						OPENCODE_OPENAI_COMPLETIONS_LONG_CACHE_RETENTION_UNSUPPORTED_MODELS.has(`${variant.provider}:${modelId}`)
 					) {
 						compat = { ...compat, supportsLongCacheRetention: false };
 					}
@@ -2091,13 +2071,15 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					headers: { ...COPILOT_STATIC_HEADERS },
 					...(anthropicCompat ? { compat: anthropicCompat } : {}),
 					// compat only applies to openai-completions
-					...(api === "openai-completions" ? {
-						compat: {
-							supportsStore: false,
-							supportsDeveloperRole: false,
-							supportsReasoningEffort: false,
-						},
-					} : {}),
+					...(api === "openai-completions"
+						? {
+								compat: {
+									supportsStore: false,
+									supportsDeveloperRole: false,
+									supportsReasoningEffort: false,
+								},
+							}
+						: {}),
 				};
 
 				models.push(copilotModel);
@@ -2667,8 +2649,7 @@ async function generateModels() {
 				...candidate.compat,
 				...(preservesNativeReasoningEffort
 					? {
-							requiresReasoningContentOnAssistantMessages:
-								deepseekCompat.requiresReasoningContentOnAssistantMessages,
+							requiresReasoningContentOnAssistantMessages: deepseekCompat.requiresReasoningContentOnAssistantMessages,
 						}
 					: deepseekCompat),
 			};
@@ -2784,7 +2765,7 @@ async function generateModels() {
 	allModels.push(...codexModels);
 
 	// Add missing Mistral Medium 3.5 model until models.dev includes it
-	if (!allModels.some(m => m.provider === "mistral" && m.id === "mistral-medium-3.5")) {
+	if (!allModels.some((m) => m.provider === "mistral" && m.id === "mistral-medium-3.5")) {
 		allModels.push({
 			id: "mistral-medium-3.5",
 			name: "Mistral Medium 3.5",
@@ -2805,7 +2786,7 @@ async function generateModels() {
 	}
 
 	// Add "auto" alias for openrouter/auto
-	if (!allModels.some(m => m.provider === "openrouter" && m.id === "auto")) {
+	if (!allModels.some((m) => m.provider === "openrouter" && m.id === "auto")) {
 		allModels.push({
 			id: "auto",
 			name: "Auto",
@@ -2817,10 +2798,10 @@ async function generateModels() {
 			cost: {
 				// we dont know about the costs because OpenRouter auto routes to different models
 				// and then charges you for the underlying used model
-				input:0,
-				output:0,
-				cacheRead:0,
-				cacheWrite:0,
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
 			},
 			contextWindow: 2000000,
 			maxTokens: 30000,
@@ -2831,7 +2812,7 @@ async function generateModels() {
 	// router alias/plugin entry point; its model metadata does not advertise
 	// tools, but the alias resolves to a concrete model that can invoke caller
 	// tools and has the openrouter:fusion server tool auto-injected.
-	if (!allModels.some(m => m.provider === "openrouter" && m.id === "openrouter/fusion")) {
+	if (!allModels.some((m) => m.provider === "openrouter" && m.id === "openrouter/fusion")) {
 		allModels.push({
 			id: "openrouter/fusion",
 			name: "OpenRouter: Fusion",
@@ -3060,7 +3041,7 @@ async function generateModels() {
 
 	// Print statistics
 	const totalModels = allModels.length;
-	const reasoningModels = allModels.filter(m => m.reasoning).length;
+	const reasoningModels = allModels.filter((m) => m.reasoning).length;
 
 	console.log(`\nModel Statistics:`);
 	console.log(`  Total tool-capable models: ${totalModels}`);

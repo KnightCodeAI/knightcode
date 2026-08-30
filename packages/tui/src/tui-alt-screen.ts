@@ -504,8 +504,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 				const baseIndex = exactIndex >= 0 ? exactIndex : Math.min(search.selectedIndex, matches.length - 1);
 				selectedIndex = baseIndex < 0 ? matches.length - 1 : (baseIndex - 1 + matches.length) % matches.length;
 			} else {
-				selectedIndex =
-					exactIndex >= 0 ? exactIndex : Math.min(Math.max(0, search.selectedIndex), matches.length - 1);
+				selectedIndex = exactIndex >= 0 ? exactIndex : Math.min(Math.max(0, search.selectedIndex), matches.length - 1);
 			}
 		}
 
@@ -720,12 +719,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		for (const scrollView of getScrollViewsAt(this.currentLayout, x, y)) {
 			const box = getScrollViewBox(this.currentLayout, scrollView);
 			const geometry = box ? getScrollbarGeometry(box) : undefined;
-			if (
-				geometry &&
-				x === geometry.column &&
-				y >= geometry.thumbTop &&
-				y < geometry.thumbTop + geometry.thumbHeight
-			) {
+			if (geometry && x === geometry.column && y >= geometry.thumbTop && y < geometry.thumbTop + geometry.thumbHeight) {
 				return { scrollView, geometry };
 			}
 		}
@@ -753,9 +747,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 				this.stopScrollbarDrag();
 				return true;
 			}
-			const box = this.currentLayout
-				? getScrollViewBox(this.currentLayout, this.scrollbarDrag.scrollView)
-				: undefined;
+			const box = this.currentLayout ? getScrollViewBox(this.currentLayout, this.scrollbarDrag.scrollView) : undefined;
 			const geometry = box ? getScrollbarGeometry(box) : undefined;
 			if (geometry) {
 				const maxThumbOffset = geometry.trackHeight - geometry.thumbHeight;
@@ -763,8 +755,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 					0,
 					Math.min(maxThumbOffset, event.y - geometry.trackTop - this.scrollbarDrag.grabOffset),
 				);
-				const scrollTop =
-					maxThumbOffset === 0 ? 0 : Math.round((thumbOffset / maxThumbOffset) * geometry.maxScrollTop);
+				const scrollTop = maxThumbOffset === 0 ? 0 : Math.round((thumbOffset / maxThumbOffset) * geometry.maxScrollTop);
 				this.scrollbarDrag.scrollView.scrollTo(scrollTop);
 			}
 			return true;
@@ -843,9 +834,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 			segments.push({ start, end, selectable: segment.isWordLike === true || joiner, joiner });
 			start = end;
 		}
-		const clickedSegmentIndex = segments.findIndex(
-			(segment) => point.col >= segment.start && point.col < segment.end,
-		);
+		const clickedSegmentIndex = segments.findIndex((segment) => point.col >= segment.start && point.col < segment.end);
 		if (clickedSegmentIndex < 0) return undefined;
 
 		const canJoin = (
@@ -1025,9 +1014,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		this.stopSelectionAutoScroll();
 		this.selectionPressActive = true;
 		const scrollView =
-			!this.hasOverlay() && this.currentLayout
-				? getScrollViewsAt(this.currentLayout, event.x, event.y)[0]
-				: undefined;
+			!this.hasOverlay() && this.currentLayout ? getScrollViewsAt(this.currentLayout, event.x, event.y)[0] : undefined;
 		const anchor = this.getSelectionPoint(event, scrollView);
 		const word = this.getWordSelection(anchor);
 		const clickCount = this.getClickCount(anchor, word);
@@ -1052,10 +1039,7 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		const anchorBeforeFocus =
 			this.selectionAnchor.row < this.selectionFocus.row ||
 			(this.selectionAnchor.row === this.selectionFocus.row && this.selectionAnchor.col < this.selectionFocus.col);
-		if (
-			this.selectionAnchor.row === this.selectionFocus.row &&
-			this.selectionAnchor.col === this.selectionFocus.col
-		) {
+		if (this.selectionAnchor.row === this.selectionFocus.row && this.selectionAnchor.col === this.selectionFocus.col) {
 			return undefined;
 		}
 		return anchorBeforeFocus

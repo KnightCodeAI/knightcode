@@ -220,9 +220,7 @@ export default function(knightcode) {
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload({
 				resolveProjectTrust: async ({ extensionsResult }) => {
-					expect(extensionsResult.extensions.map((extension) => extension.path)).toEqual([
-						join(userExtDir, "user.ts"),
-					]);
+					expect(extensionsResult.extensions.map((extension) => extension.path)).toEqual([join(userExtDir, "user.ts")]);
 					return true;
 				},
 			});
@@ -450,9 +448,7 @@ Project skill content`,
 			await loader.reload();
 
 			expect(loader.getSystemPrompt()).toBe("Global system prompt.");
-			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(agentDir, "AGENTS.md"))).toBe(
-				true,
-			);
+			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(agentDir, "AGENTS.md"))).toBe(true);
 			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(true);
 			expect(loader.getExtensions().extensions).toHaveLength(0);
 			expect(loader.getExtensions().errors).toEqual([]);
@@ -741,9 +737,9 @@ Extension prompt content`,
 			expect(loader.getSkills().skills.find((skill) => skill.name === "package-skill")?.sourceInfo).toMatchObject(
 				packageSourceInfo,
 			);
-			expect(
-				loader.getPrompts().prompts.find((prompt) => prompt.name === "package-prompt")?.sourceInfo,
-			).toMatchObject(packageSourceInfo);
+			expect(loader.getPrompts().prompts.find((prompt) => prompt.name === "package-prompt")?.sourceInfo).toMatchObject(
+				packageSourceInfo,
+			);
 			expect(loader.getThemes().themes.find((theme) => theme.name === "package-theme")?.sourceInfo).toMatchObject(
 				packageSourceInfo,
 			);

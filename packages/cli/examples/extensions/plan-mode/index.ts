@@ -71,9 +71,7 @@ export default function planModeExtension(knightcode: ExtensionAPI): void {
 		if (executionMode && todoItems.length > 0) {
 			const lines = todoItems.map((item) => {
 				if (item.completed) {
-					return (
-						ctx.ui.theme.fg("success", "☑ ") + ctx.ui.theme.fg("muted", ctx.ui.theme.strikethrough(item.text))
-					);
+					return ctx.ui.theme.fg("success", "☑ ") + ctx.ui.theme.fg("muted", ctx.ui.theme.strikethrough(item.text));
 				}
 				return `${ctx.ui.theme.fg("muted", "☐ ")}${item.text}`;
 			});
@@ -95,10 +93,7 @@ export default function planModeExtension(knightcode: ExtensionAPI): void {
 	}
 
 	function getNormalModeTools(activeToolNames: string[]): string[] {
-		return uniqueToolNames([
-			...NORMAL_MODE_TOOLS,
-			...activeToolNames.filter((name) => !PLAN_MANAGED_TOOLS.has(name)),
-		]);
+		return uniqueToolNames([...NORMAL_MODE_TOOLS, ...activeToolNames.filter((name) => !PLAN_MANAGED_TOOLS.has(name))]);
 	}
 
 	function enablePlanModeTools(): void {
@@ -188,9 +183,7 @@ export default function planModeExtension(knightcode: ExtensionAPI): void {
 					return !content.includes("[PLAN MODE ACTIVE]");
 				}
 				if (Array.isArray(content)) {
-					return !content.some(
-						(c) => c.type === "text" && (c as TextContent).text?.includes("[PLAN MODE ACTIVE]"),
-					);
+					return !content.some((c) => c.type === "text" && (c as TextContent).text?.includes("[PLAN MODE ACTIVE]"));
 				}
 				return true;
 			}),

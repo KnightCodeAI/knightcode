@@ -474,9 +474,7 @@ function streamCustomAnthropic(
 						output.content.push({
 							type: "toolCall",
 							id: event.content_block.id,
-							name: isOAuth
-								? fromClaudeCodeName(event.content_block.name, context.tools)
-								: event.content_block.name,
+							name: isOAuth ? fromClaudeCodeName(event.content_block.name, context.tools) : event.content_block.name,
 							arguments: {},
 							partialJson: "",
 							index: event.index,

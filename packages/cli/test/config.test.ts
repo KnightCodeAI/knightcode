@@ -73,18 +73,7 @@ function createPnpmGlobalInstall(): { root: string; packageDir: string } {
 	tempDir = temp;
 	process.env.PATH = `${binDir}${delimiter}${originalPath ?? ""}`;
 	process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
-	setExecPath(
-		join(
-			root,
-			".pnpm",
-			"@knightcodeai+cli@0.0.0",
-			"node_modules",
-			"@knightcodeai",
-			"cli",
-			"dist",
-			"cli.js",
-		),
-	);
+	setExecPath(join(root, ".pnpm", "@knightcodeai+cli@0.0.0", "node_modules", "@knightcodeai", "cli", "dist", "cli.js"));
 	return { root, packageDir };
 }
 
@@ -189,15 +178,7 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("npm");
 		expect(command).toEqual({
 			command: "npm",
-			args: [
-				"--prefix",
-				prefix,
-				"install",
-				"-g",
-				"--ignore-scripts",
-				"--min-release-age=0",
-				"@knightcodeai/cli",
-			],
+			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@knightcodeai/cli"],
 			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli`,
 		});
 	});
@@ -212,15 +193,7 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: [
-				"--prefix",
-				prefix,
-				"install",
-				"-g",
-				"--ignore-scripts",
-				"--min-release-age=0",
-				"@knightcodeai/cli@1.2.3",
-			],
+			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@knightcodeai/cli@1.2.3"],
 			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli@1.2.3`,
 		});
 	});
@@ -242,7 +215,15 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "npm",
-					args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/knightcode"],
+					args: [
+						"--prefix",
+						prefix,
+						"install",
+						"-g",
+						"--ignore-scripts",
+						"--min-release-age=0",
+						"@new-scope/knightcode",
+					],
 					display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
 				},
 			],
@@ -257,15 +238,7 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: [
-				"--prefix",
-				prefix,
-				"install",
-				"-g",
-				"--ignore-scripts",
-				"--min-release-age=0",
-				"@knightcodeai/cli",
-			],
+			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@knightcodeai/cli"],
 			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli`,
 		});
 	});
@@ -446,8 +419,6 @@ describe("detectInstallMethod", () => {
 		chmodSync(packageDir, 0o500);
 
 		expect(getSelfUpdateCommand("@knightcodeai/cli")).toBeUndefined();
-		expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli")).toContain(
-			"the install path is not writable",
-		);
+		expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli")).toContain("the install path is not writable");
 	});
 });

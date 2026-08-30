@@ -93,9 +93,7 @@ export function transformMessages<TApi extends Api>(
 		if (msg.role === "assistant") {
 			const assistantMsg = msg as AssistantMessage;
 			const isSameModel =
-				assistantMsg.provider === model.provider &&
-				assistantMsg.api === model.api &&
-				assistantMsg.model === model.id;
+				assistantMsg.provider === model.provider && assistantMsg.api === model.api && assistantMsg.model === model.id;
 
 			const transformedContent = assistantMsg.content.flatMap((block) => {
 				if (block.type === "thinking") {

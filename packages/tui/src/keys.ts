@@ -871,8 +871,7 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 				return data === "\t" || matchesKittySequence(data, CODEPOINTS.tab, 0);
 			}
 			return (
-				matchesKittySequence(data, CODEPOINTS.tab, modifier) ||
-				matchesModifyOtherKeys(data, CODEPOINTS.tab, modifier)
+				matchesKittySequence(data, CODEPOINTS.tab, modifier) || matchesModifyOtherKeys(data, CODEPOINTS.tab, modifier)
 			);
 
 		case "enter":
@@ -1047,8 +1046,7 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 			}
 			if (modifier === 0) {
 				return (
-					matchesLegacySequence(data, LEGACY_KEY_SEQUENCES.up) ||
-					matchesKittySequence(data, ARROW_CODEPOINTS.up, 0)
+					matchesLegacySequence(data, LEGACY_KEY_SEQUENCES.up) || matchesKittySequence(data, ARROW_CODEPOINTS.up, 0)
 				);
 			}
 			if (matchesLegacyModifierSequence(data, "up", modifier)) {
@@ -1062,8 +1060,7 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 			}
 			if (modifier === 0) {
 				return (
-					matchesLegacySequence(data, LEGACY_KEY_SEQUENCES.down) ||
-					matchesKittySequence(data, ARROW_CODEPOINTS.down, 0)
+					matchesLegacySequence(data, LEGACY_KEY_SEQUENCES.down) || matchesKittySequence(data, ARROW_CODEPOINTS.down, 0)
 				);
 			}
 			if (matchesLegacyModifierSequence(data, "down", modifier)) {
@@ -1089,8 +1086,7 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 			}
 			if (modifier === 0) {
 				return (
-					matchesLegacySequence(data, LEGACY_KEY_SEQUENCES.left) ||
-					matchesKittySequence(data, ARROW_CODEPOINTS.left, 0)
+					matchesLegacySequence(data, LEGACY_KEY_SEQUENCES.left) || matchesKittySequence(data, ARROW_CODEPOINTS.left, 0)
 				);
 			}
 			if (matchesLegacyModifierSequence(data, "left", modifier)) {
@@ -1191,8 +1187,7 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 
 		if (modifier !== 0) {
 			return (
-				matchesKittySequence(data, codepoint, modifier) ||
-				matchesPrintableModifyOtherKeys(data, codepoint, modifier)
+				matchesKittySequence(data, codepoint, modifier) || matchesPrintableModifyOtherKeys(data, codepoint, modifier)
 			);
 		}
 

@@ -25,6 +25,5 @@ export function setBedrockProviderModule(module: ProviderStreams): void {
 
 export const bedrockConverseStreamApi = (): ProviderStreams =>
 	lazyApi(
-		async () =>
-			bedrockModuleOverride ?? ((await importNodeOnlyApi("./bedrock-converse-stream.ts")) as ProviderStreams),
+		async () => bedrockModuleOverride ?? ((await importNodeOnlyApi("./bedrock-converse-stream.ts")) as ProviderStreams),
 	);

@@ -36,10 +36,7 @@ function isStructuredSchema(schema: unknown): boolean {
 	if (!isJsonSchemaObject(schema)) return false;
 	const types = typeof schema.type === "string" ? [schema.type] : Array.isArray(schema.type) ? schema.type : [];
 	return (
-		types.includes("object") ||
-		types.includes("array") ||
-		schema.properties !== undefined ||
-		schema.items !== undefined
+		types.includes("object") || types.includes("array") || schema.properties !== undefined || schema.items !== undefined
 	);
 }
 
@@ -220,9 +217,7 @@ export function resolveJsonSchemaStrictSampling(tool: Tool, supportsStrictMode: 
 		}
 	}
 	if (config.strict === "require") {
-		throw new Error(
-			`Tool "${tool.name}" requires JSON-schema constrained sampling, but strict tools are unsupported.`,
-		);
+		throw new Error(`Tool "${tool.name}" requires JSON-schema constrained sampling, but strict tools are unsupported.`);
 	}
 	return undefined;
 }

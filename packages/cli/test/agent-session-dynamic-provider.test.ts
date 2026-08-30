@@ -80,9 +80,7 @@ describe("AgentSession dynamic provider registration", () => {
 		return session;
 	}
 
-	async function capturePromptBaseUrl(
-		session: Awaited<ReturnType<typeof createSession>>,
-	): Promise<string | undefined> {
+	async function capturePromptBaseUrl(session: Awaited<ReturnType<typeof createSession>>): Promise<string | undefined> {
 		let baseUrl: string | undefined;
 		session.agent.streamFunction = async (model) => {
 			baseUrl = model.baseUrl;

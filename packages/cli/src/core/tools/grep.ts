@@ -287,8 +287,7 @@ export function createGrepToolDefinition(
 								const filePath = event.data?.path?.text;
 								const lineNumber = event.data?.line_number;
 								const lineText = event.data?.lines?.text;
-								if (filePath && typeof lineNumber === "number")
-									matches.push({ filePath, lineNumber, lineText });
+								if (filePath && typeof lineNumber === "number") matches.push({ filePath, lineNumber, lineText });
 								if (matchCount >= effectiveLimit) {
 									matchLimitReached = true;
 									stopChild(true);
@@ -312,9 +311,7 @@ export function createGrepToolDefinition(
 								return;
 							}
 							if (matchCount === 0) {
-								settle(() =>
-									resolve({ content: [{ type: "text", text: "No matches found" }], details: undefined }),
-								);
+								settle(() => resolve({ content: [{ type: "text", text: "No matches found" }], details: undefined }));
 								return;
 							}
 
@@ -322,10 +319,7 @@ export function createGrepToolDefinition(
 							for (const match of matches) {
 								if (contextValue === 0 && match.lineText !== undefined) {
 									const relativePath = formatPath(match.filePath);
-									const sanitized = match.lineText
-										.replace(/\r\n/g, "\n")
-										.replace(/\r/g, "")
-										.replace(/\n$/, "");
+									const sanitized = match.lineText.replace(/\r\n/g, "\n").replace(/\r/g, "").replace(/\n$/, "");
 									const { text: truncatedText, wasTruncated } = truncateLine(sanitized);
 									if (wasTruncated) linesTruncated = true;
 									outputLines.push(`${relativePath}:${match.lineNumber}: ${truncatedText}`);
@@ -353,9 +347,7 @@ export function createGrepToolDefinition(
 								details.truncation = truncation;
 							}
 							if (linesTruncated) {
-								notices.push(
-									`Some lines truncated to ${GREP_MAX_LINE_LENGTH} chars. Use read tool to see full lines`,
-								);
+								notices.push(`Some lines truncated to ${GREP_MAX_LINE_LENGTH} chars. Use read tool to see full lines`);
 								details.linesTruncated = true;
 							}
 							if (notices.length > 0) output += `\n\n[${notices.join(". ")}]`;

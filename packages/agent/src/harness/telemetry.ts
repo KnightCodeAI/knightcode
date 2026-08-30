@@ -354,7 +354,12 @@ export const HARNESS_TELEMETRY_SCHEMA = {
 			description: "One durable retry attempt",
 			parents: {
 				kind: "spans",
-				spans: ["knightcode.harness.turn", "knightcode.harness.checkpoint", "knightcode.harness.compaction", "knightcode.harness.navigation"],
+				spans: [
+					"knightcode.harness.turn",
+					"knightcode.harness.checkpoint",
+					"knightcode.harness.compaction",
+					"knightcode.harness.navigation",
+				],
 			},
 			startAttributes: {
 				"knightcode.lane.name": {

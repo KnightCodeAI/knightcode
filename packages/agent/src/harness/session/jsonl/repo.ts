@@ -106,9 +106,11 @@ function sessionFileName(createdAt: number, id: string): string {
 	return `${timestamp}_${id}.jsonl`;
 }
 
-export class JsonlSessionRepo
-	implements SessionRepo<JsonlSessionMetadata, JsonlSessionCreateOptions, JsonlSessionListOptions>
-{
+export class JsonlSessionRepo implements SessionRepo<
+	JsonlSessionMetadata,
+	JsonlSessionCreateOptions,
+	JsonlSessionListOptions
+> {
 	private readonly fs: JsonlSessionRepoFileSystem;
 	private readonly sessionsRootInput: string;
 	private readonly activeCreateDestinations = new Set<string>();

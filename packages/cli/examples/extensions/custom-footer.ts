@@ -49,7 +49,9 @@ export default function (knightcode: ExtensionAPI) {
 							const branchStr = branch ? ` (${branch})` : "";
 							const right = theme.fg("dim", `${ctx.model?.id || "no-model"}${branchStr}`);
 
-							const pad = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
+							// Zero padding when the two halves exactly fill the width; forcing a space here
+							// would push the last character of the model name out of the line.
+							const pad = " ".repeat(Math.max(0, width - visibleWidth(left) - visibleWidth(right)));
 							return [truncateToWidth(left + pad + right, width)];
 						},
 					};

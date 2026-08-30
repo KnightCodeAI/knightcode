@@ -71,9 +71,7 @@ describe("branch summarization", () => {
 				stream.push({
 					type: "done",
 					reason: "toolUse",
-					message: response([
-						{ type: "toolCall", id: "tool-call-1", name: "read", arguments: { path: "README.md" } },
-					]),
+					message: response([{ type: "toolCall", id: "tool-call-1", name: "read", arguments: { path: "README.md" } }]),
 				}),
 			);
 			return stream;

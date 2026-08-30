@@ -20,9 +20,7 @@ export class HStack extends Stack {
 			return lines.reduce((max, line) => Math.max(max, visibleWidth(line)), 0);
 		});
 		const widths = allocateStackSizes(entries, intrinsicWidths, safeWidth, this.gap);
-		const rendered = entries.map((entry, index) =>
-			widths[index] === 0 ? [] : entry.component.render(widths[index]!),
-		);
+		const rendered = entries.map((entry, index) => (widths[index] === 0 ? [] : entry.component.render(widths[index]!)));
 		const height = rendered.reduce((max, lines) => Math.max(max, lines.length), 0);
 		const result = Array.from({ length: height }, () => "");
 		let x = 0;

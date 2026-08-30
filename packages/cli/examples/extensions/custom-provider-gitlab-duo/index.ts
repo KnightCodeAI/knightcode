@@ -195,9 +195,7 @@ async function getDirectAccessToken(gitlabAccessToken: string): Promise<DirectAc
 	if (!response.ok) {
 		const errorText = await response.text();
 		if (response.status === 403) {
-			throw new Error(
-				`GitLab Duo access denied. Ensure GitLab Duo is enabled for your account. Error: ${errorText}`,
-			);
+			throw new Error(`GitLab Duo access denied. Ensure GitLab Duo is enabled for your account. Error: ${errorText}`);
 		}
 		throw new Error(`Failed to get direct access token: ${response.status} ${errorText}`);
 	}
@@ -337,11 +335,7 @@ export function streamGitLabDuo(
 							context,
 							streamOptions,
 						)
-					: openAIResponsesApi().streamSimple(
-							modelWithBaseUrl as Model<"openai-responses">,
-							context,
-							streamOptions,
-						);
+					: openAIResponsesApi().streamSimple(modelWithBaseUrl as Model<"openai-responses">, context, streamOptions);
 
 			for await (const event of innerStream) stream.push(event);
 			stream.end();

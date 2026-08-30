@@ -271,9 +271,7 @@ describe("AgentSession model and extension characterization", () => {
 		await harness.session.prompt("hi");
 
 		expect(getAssistantTexts(harness)).toContain("Blocked by test");
-		expect(
-			harness.session.messages.find((message) => message.role === "toolResult" && message.isError),
-		).toBeDefined();
+		expect(harness.session.messages.find((message) => message.role === "toolResult" && message.isError)).toBeDefined();
 	});
 
 	it("allows extension tool_result handlers to modify tool results", async () => {

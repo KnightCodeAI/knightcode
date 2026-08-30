@@ -849,8 +849,10 @@ export interface Model<TApi extends Api> {
 					: never;
 }
 
-export interface ImagesModel<TApi extends ImagesApi>
-	extends Omit<Model<Api>, "api" | "provider" | "reasoning" | "contextWindow" | "maxTokens" | "compat"> {
+export interface ImagesModel<TApi extends ImagesApi> extends Omit<
+	Model<Api>,
+	"api" | "provider" | "reasoning" | "contextWindow" | "maxTokens" | "compat"
+> {
 	api: TApi;
 	provider: ImagesProviderId;
 	output: ("text" | "image")[];

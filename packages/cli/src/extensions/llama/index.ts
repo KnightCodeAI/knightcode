@@ -107,9 +107,7 @@ export default function llamaExtension(knightcode: ExtensionAPI): void {
 			}
 			const refreshed = await syncCatalog(ctx, client);
 			const loadedModel = refreshed.find((model) => model.id === target.id);
-			ctx.ui.notify(
-				loadedModel?.status.value === "loaded" ? `Loaded ${target.id}` : `Load started for ${target.id}`,
-			);
+			ctx.ui.notify(loadedModel?.status.value === "loaded" ? `Loaded ${target.id}` : `Load started for ${target.id}`);
 		} catch (error) {
 			if (replace) {
 				try {
@@ -211,8 +209,7 @@ export default function llamaExtension(knightcode: ExtensionAPI): void {
 					try {
 						if (action.type === "download") await downloadModel(ctx, ui, client);
 						else if (modelIsLoaded(action.model)) await unloadModel(ctx, ui, client, action.model);
-						else if (action.model.status.value === "unloaded")
-							await loadModel(ctx, ui, client, catalog, action.model);
+						else if (action.model.status.value === "unloaded") await loadModel(ctx, ui, client, catalog, action.model);
 						else ctx.ui.notify(`${action.model.id} is ${action.model.status.value}`, "warning");
 					} catch (error) {
 						actionError = error;

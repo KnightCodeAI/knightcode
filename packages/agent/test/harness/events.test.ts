@@ -62,4 +62,28 @@ describe("HarnessEventBus", () => {
 		events.emit(runStartEvent);
 		expect(received).toEqual([runStartEvent, runEndEvent]);
 	});
+
+	it("isolates a failing listener from the emitter and from later subscribers", async () => {
+		const events = new HarnessEventBus();
+		const reached: string[] = [];
+		events.on("run_start", () => {
+			throw new Error("sync listener failure");
+		});
+		events.on("run_start", async () => {
+			reached.push("async");
+			throw new Error("async listener failure");
+		});
+		events.on("run_start", () => {
+			reached.push("later");
+		});
+		const watch = events.watch(() => null);
+		watch.start(() => {
+			reached.push("watcher");
+		});
+
+		expect(() => events.emit(runStartEvent)).not.toThrow();
+		// Let the rejected listener promise settle; an unhandled rejection would fail the run.
+		await Promise.resolve();
+		expect(reached).toEqual(["async", "later", "watcher"]);
+	});
 });

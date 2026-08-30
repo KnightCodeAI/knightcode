@@ -300,9 +300,9 @@ describe("harness compaction", () => {
 		expect(estimateTokens(branchSummaryMessage)).toBeGreaterThan(0);
 		expect(estimateTokens(compactionSummaryMessage)).toBeGreaterThan(0);
 		expect(estimateTokens({ role: "unknown", timestamp: Date.now() } as unknown as AgentMessage)).toBe(0);
-		expect(
-			getLastAssistantUsage([createMessageEntry(createUserMessage("user")), createMessageEntry(assistant)]),
-		).toBe(usage);
+		expect(getLastAssistantUsage([createMessageEntry(createUserMessage("user")), createMessageEntry(assistant)])).toBe(
+			usage,
+		);
 		expect(
 			getLastAssistantUsage([
 				createMessageEntry({ ...assistant, stopReason: "aborted" }),

@@ -83,9 +83,7 @@ describe.sequential("OAuthAuth adapters", () => {
 	it("anthropic refresh exchanges the refresh token and returns a typed credential", async () => {
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () =>
-				jsonResponse({ access_token: "new-access", refresh_token: "new-refresh", expires_in: 3600 }),
-			),
+			vi.fn(async () => jsonResponse({ access_token: "new-access", refresh_token: "new-refresh", expires_in: 3600 })),
 		);
 
 		const refreshed = await anthropicOAuth.refresh(

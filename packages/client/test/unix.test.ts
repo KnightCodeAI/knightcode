@@ -2,12 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	ClientMessageDecoder,
-	encodeServerMessage,
-	PROTOCOL_VERSION,
-	type ServerSnapshot,
-} from "@knightcode/protocol";
+import { ClientMessageDecoder, encodeServerMessage, PROTOCOL_VERSION, type ServerSnapshot } from "@knightcode/protocol";
 import { describe, expect, test } from "vitest";
 import { KnightClient } from "../src/index.ts";
 import { createUnixTransportFactory } from "../src/unix.ts";

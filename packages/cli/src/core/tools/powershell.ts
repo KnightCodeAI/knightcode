@@ -26,8 +26,10 @@ export type PowerShellSpawnHook = BashSpawnHook;
 export type PowerShellToolDetails = BashToolDetails;
 export type PowerShellToolInput = BashToolInput;
 
-export interface PowerShellToolOptions
-	extends Pick<BashToolOptions, "operations" | "exposeSessionEnvironment" | "spawnHook"> {}
+export interface PowerShellToolOptions extends Pick<
+	BashToolOptions,
+	"operations" | "exposeSessionEnvironment" | "spawnHook"
+> {}
 
 export function createLocalPowerShellOperations(): PowerShellOperations {
 	const operations = createLocalShellOperations("PowerShell", getPowerShellConfig);

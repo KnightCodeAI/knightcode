@@ -214,9 +214,9 @@ describe.skipIf(process.platform === "win32")("Unix transport conformance", () =
 			result: { command: "detach", sessionId: "first" },
 		});
 		expect(service.latestRuntime("first").disposeCount).toBe(1);
-		expect(
-			await client.request({ command: "set_thinking", sessionId: "second", thinkingLevel: "high" }),
-		).toMatchObject({ ok: true, result: { session: { id: "second", thinkingLevel: "high" } } });
+		expect(await client.request({ command: "set_thinking", sessionId: "second", thinkingLevel: "high" })).toMatchObject(
+			{ ok: true, result: { session: { id: "second", thinkingLevel: "high" } } },
+		);
 
 		const secondRuntime = service.latestRuntime("second");
 		await client.close();
@@ -365,18 +365,21 @@ describe.skipIf(process.platform === "win32")("Unix transport conformance", () =
 });
 
 // Unix domain sockets are unavailable on Windows (`listen EACCES`).
-test.skipIf(process.platform === "win32")("Unix socket decodes multiple framed requests from one raw chunk", async () => {
-	const { server } = await startServer();
-	const client = await connect(server);
-	await client.hello();
-	const first = encodeClientMessage({ type: "request", id: "first", request: { command: "list" } });
-	const second = encodeClientMessage({ type: "request", id: "second", request: { command: "list" } });
-	const combined = new Uint8Array(first.byteLength + second.byteLength);
-	combined.set(first);
-	combined.set(second, first.byteLength);
-	const firstResponse = client.next((message) => message.type === "response" && message.id === "first");
-	const secondResponse = client.next((message) => message.type === "response" && message.id === "second");
-	await client.sendBytes(combined);
-	expect(await firstResponse).toMatchObject({ type: "response", id: "first", ok: true });
-	expect(await secondResponse).toMatchObject({ type: "response", id: "second", ok: true });
-});
+test.skipIf(process.platform === "win32")(
+	"Unix socket decodes multiple framed requests from one raw chunk",
+	async () => {
+		const { server } = await startServer();
+		const client = await connect(server);
+		await client.hello();
+		const first = encodeClientMessage({ type: "request", id: "first", request: { command: "list" } });
+		const second = encodeClientMessage({ type: "request", id: "second", request: { command: "list" } });
+		const combined = new Uint8Array(first.byteLength + second.byteLength);
+		combined.set(first);
+		combined.set(second, first.byteLength);
+		const firstResponse = client.next((message) => message.type === "response" && message.id === "first");
+		const secondResponse = client.next((message) => message.type === "response" && message.id === "second");
+		await client.sendBytes(combined);
+		expect(await firstResponse).toMatchObject({ type: "response", id: "first", ok: true });
+		expect(await secondResponse).toMatchObject({ type: "response", id: "second", ok: true });
+	},
+);

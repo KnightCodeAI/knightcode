@@ -99,8 +99,7 @@ async function postForm(url: string, fields: Record<string, string>, signal: Abo
 
 function requestFailure(action: string, response: OAuthHttpResponse): Error {
 	const error = typeof response.body.error === "string" ? response.body.error : undefined;
-	const description =
-		typeof response.body.error_description === "string" ? response.body.error_description : undefined;
+	const description = typeof response.body.error_description === "string" ? response.body.error_description : undefined;
 	const detail = [error, description].filter(Boolean).join(": ");
 	return new Error(`xAI OAuth ${action} failed (HTTP ${response.status})${detail ? `: ${detail}` : ""}`);
 }

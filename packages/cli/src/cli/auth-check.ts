@@ -7,10 +7,7 @@ import { AuthCommandError, getAuthCredential, validateAuthCommandArgs } from "./
 
 export type AuthCheckStatus = "ready" | "not_ready" | "invalid";
 export type AuthCheckReason =
-	| "provider_not_found"
-	| "credentials_not_configured"
-	| "credential_not_available"
-	| "invalid_state";
+	"provider_not_found" | "credentials_not_configured" | "credential_not_available" | "invalid_state";
 
 export interface AuthCheckResult {
 	status: AuthCheckStatus;

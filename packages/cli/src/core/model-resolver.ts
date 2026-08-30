@@ -3,13 +3,7 @@
  */
 
 import type { ThinkingLevel } from "@knightcode/agent";
-import {
-	type Api,
-	type AuthOperationOptions,
-	type KnownProvider,
-	type Model,
-	modelsAreEqual,
-} from "@knightcode/ai";
+import { type Api, type AuthOperationOptions, type KnownProvider, type Model, modelsAreEqual } from "@knightcode/ai";
 import chalk from "chalk";
 import { minimatch } from "minimatch";
 import { isValidThinkingLevel } from "../cli/args.ts";
@@ -114,8 +108,7 @@ export function findExactModelReferenceMatch(
 		if (provider && modelId) {
 			const providerMatches = availableModels.filter(
 				(model) =>
-					model.provider.toLowerCase() === provider.toLowerCase() &&
-					model.id.toLowerCase() === modelId.toLowerCase(),
+					model.provider.toLowerCase() === provider.toLowerCase() && model.id.toLowerCase() === modelId.toLowerCase(),
 			);
 			if (providerMatches.length === 1) {
 				return providerMatches[0];

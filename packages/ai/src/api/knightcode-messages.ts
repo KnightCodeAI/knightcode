@@ -162,7 +162,10 @@ function createEmptyUsage(): KnightCodeMessagesUsage {
 	};
 }
 
-function appendRewriteDiagnostic(message: AssistantMessage, rewrite: KnightCodeMessagesRewriteImpact | undefined): void {
+function appendRewriteDiagnostic(
+	message: AssistantMessage,
+	rewrite: KnightCodeMessagesRewriteImpact | undefined,
+): void {
 	if (!rewrite) {
 		return;
 	}
@@ -244,8 +247,7 @@ function createEventConverter(model: Model<"knightcode-messages">) {
 			case "toolcall_delta": {
 				const json = `${toolJson.get(event.contentIndex) ?? ""}${event.delta}`;
 				toolJson.set(event.contentIndex, json);
-				(partial.content[event.contentIndex] as ToolCall).arguments =
-					parseStreamingJson<ToolCall["arguments"]>(json);
+				(partial.content[event.contentIndex] as ToolCall).arguments = parseStreamingJson<ToolCall["arguments"]>(json);
 				break;
 			}
 			case "toolcall_end":
@@ -263,7 +265,9 @@ function createEventConverter(model: Model<"knightcode-messages">) {
 	};
 }
 
-async function* readKnightCodeMessagesEvents(stream: ReadableStream<Uint8Array>): AsyncGenerator<KnightCodeMessagesEvent> {
+async function* readKnightCodeMessagesEvents(
+	stream: ReadableStream<Uint8Array>,
+): AsyncGenerator<KnightCodeMessagesEvent> {
 	const decoder = new TextDecoder();
 	const reader = stream.getReader();
 	let buffer = "";
@@ -310,7 +314,11 @@ function parseKnightCodeMessagesEvent(raw: string): KnightCodeMessagesEvent | un
 	return data && data !== "[DONE]" ? (JSON.parse(data) as KnightCodeMessagesEvent) : undefined;
 }
 
-function createErrorEvent(model: Model<"knightcode-messages">, error: unknown, aborted: boolean): AssistantMessageEvent {
+function createErrorEvent(
+	model: Model<"knightcode-messages">,
+	error: unknown,
+	aborted: boolean,
+): AssistantMessageEvent {
 	const reason = aborted ? "aborted" : "error";
 	const assistantMessage: AssistantMessage = {
 		role: "assistant",

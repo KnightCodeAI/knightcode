@@ -80,14 +80,11 @@ export class ModelRegistry {
 			};
 		} catch (error) {
 			const cause = error instanceof Error ? error.cause : undefined;
-			const message =
-				cause instanceof Error ? cause.message : error instanceof Error ? error.message : String(error);
+			const message = cause instanceof Error ? cause.message : error instanceof Error ? error.message : String(error);
 			return {
 				ok: false,
 				error:
-					message === "authHeader requires a resolved API key"
-						? `No API key found for "${model.provider}"`
-						: message,
+					message === "authHeader requires a resolved API key" ? `No API key found for "${model.provider}"` : message,
 			};
 		}
 	}

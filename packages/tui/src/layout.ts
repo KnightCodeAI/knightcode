@@ -130,15 +130,7 @@ function layoutComponent(
 	if (node.type === "scroll") {
 		const previousScrollTop = node.state.scrollTop;
 		const contentWidth = node.state.getContentWidth(safeWidth);
-		const childBox = layoutComponent(
-			context,
-			node.component,
-			x,
-			y - previousScrollTop,
-			contentWidth,
-			undefined,
-			clip,
-		);
+		const childBox = layoutComponent(context, node.component, x, y - previousScrollTop, contentWidth, undefined, clip);
 		const contentHeight = childBox.rect.height;
 		const viewportHeight = height === undefined ? contentHeight : Math.max(0, Math.floor(height));
 		node.state.updateLayout(contentHeight, viewportHeight, context.requestRender);

@@ -109,10 +109,7 @@ export class DaxnutsComponent implements Component {
 		lines.push("");
 
 		// Scanline reveal effect: show rows progressively
-		const revealedRows = Math.min(
-			this.image.length,
-			Math.floor((this.tick / this.maxTicks) * (this.image.length + 3)),
-		);
+		const revealedRows = Math.min(this.image.length, Math.floor((this.tick / this.maxTicks) * (this.image.length + 3)));
 
 		for (let i = 0; i < this.image.length; i++) {
 			if (i < revealedRows) {

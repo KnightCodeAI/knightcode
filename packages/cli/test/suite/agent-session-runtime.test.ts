@@ -23,10 +23,7 @@ import type {
 } from "../../src/index.ts";
 
 type RecordedSessionEvent =
-	| SessionBeforeSwitchEvent
-	| SessionBeforeForkEvent
-	| SessionShutdownEvent
-	| SessionStartEvent;
+	SessionBeforeSwitchEvent | SessionBeforeForkEvent | SessionShutdownEvent | SessionStartEvent;
 
 describe("AgentSessionRuntime characterization", () => {
 	const cleanups: Array<() => Promise<void> | void> = [];
@@ -395,7 +392,10 @@ describe("AgentSessionRuntime characterization", () => {
 	});
 
 	it("duplicates the current active branch in-memory when forking at the current position", async () => {
-		const tempDir = join(tmpdir(), `knightcode-runtime-suite-in-memory-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		const tempDir = join(
+			tmpdir(),
+			`knightcode-runtime-suite-in-memory-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+		);
 		mkdirSync(tempDir, { recursive: true });
 
 		const faux = registerFauxProvider({
@@ -547,11 +547,7 @@ describe("AgentSessionRuntime characterization", () => {
 				noThemes: true,
 			},
 		};
-		const createOtherRuntime: CreateAgentSessionRuntimeFactory = async ({
-			cwd,
-			sessionManager,
-			sessionStartEvent,
-		}) => {
+		const createOtherRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
 			const services = await createAgentSessionServices({
 				...otherRuntimeOptions,
 				cwd,
@@ -620,11 +616,7 @@ describe("AgentSessionRuntime characterization", () => {
 				noThemes: true,
 			},
 		};
-		const createOtherRuntime: CreateAgentSessionRuntimeFactory = async ({
-			cwd,
-			sessionManager,
-			sessionStartEvent,
-		}) => {
+		const createOtherRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
 			const services = await createAgentSessionServices({
 				...otherRuntimeOptions,
 				cwd,

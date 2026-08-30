@@ -446,9 +446,7 @@ export class SettingsSelectorComponent extends Container {
 		const cycleThinkingKey = keyDisplayText("app.thinking.cycle");
 		let currentWarnings = { ...config.warnings };
 		const currentModelThinkingLevels = { ...config.modelThinkingLevels };
-		const defaultModelByValue = new Map(
-			config.availableDefaultModels.map((model) => [modelSettingKey(model), model]),
-		);
+		const defaultModelByValue = new Map(config.availableDefaultModels.map((model) => [modelSettingKey(model), model]));
 		const currentDefaultModelKey = defaultModelByValue.has(config.defaultModel) ? config.defaultModel : undefined;
 		const currentModelKey = config.currentModel ? modelSettingKey(config.currentModel) : undefined;
 
@@ -621,9 +619,7 @@ export class SettingsSelectorComponent extends Container {
 							options: (ctx) => {
 								const model = defaultModelByValue.get(ctx.model);
 								if (!model) return [];
-								const levels = (
-									model.reasoning ? getSupportedThinkingLevels(model) : ["off"]
-								) as ThinkingLevel[];
+								const levels = (model.reasoning ? getSupportedThinkingLevels(model) : ["off"]) as ThinkingLevel[];
 								const items: SelectItem[] = levels.map((level) => ({
 									value: level,
 									label: level,
@@ -653,11 +649,7 @@ export class SettingsSelectorComponent extends Container {
 								callbacks.onModelThinkingLevelRemove(model.provider, model.id);
 								delete currentModelThinkingLevels[selections.model];
 							} else {
-								callbacks.onModelThinkingLevelChange(
-									model.provider,
-									model.id,
-									selections.level as ThinkingLevel,
-								);
+								callbacks.onModelThinkingLevelChange(model.provider, model.id, selections.level as ThinkingLevel);
 								currentModelThinkingLevels[selections.model] = selections.level as ThinkingLevel;
 							}
 						},
@@ -879,9 +871,7 @@ export class SettingsSelectorComponent extends Container {
 						callbacks.onDoubleEscapeActionChange(newValue as "fork" | "tree");
 						break;
 					case "tree-filter-mode":
-						callbacks.onTreeFilterModeChange(
-							newValue as "default" | "no-tools" | "user-only" | "labeled-only" | "all",
-						);
+						callbacks.onTreeFilterModeChange(newValue as "default" | "no-tools" | "user-only" | "labeled-only" | "all");
 						break;
 					case "show-hardware-cursor":
 						callbacks.onShowHardwareCursorChange(newValue === "true");

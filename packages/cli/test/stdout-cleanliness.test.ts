@@ -37,11 +37,9 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 	const fakeNpmPath = join(tempRoot, "fake-npm.mjs");
 	writeFileSync(
 		fakeNpmPath,
-		[
-			'console.log("changed 1 package in 471ms");',
-			'console.log("found 0 vulnerabilities");',
-			"process.exit(0);",
-		].join("\n"),
+		['console.log("changed 1 package in 471ms");', 'console.log("found 0 vulnerabilities");', "process.exit(0);"].join(
+			"\n",
+		),
 		"utf-8",
 	);
 

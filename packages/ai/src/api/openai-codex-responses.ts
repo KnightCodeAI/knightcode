@@ -403,10 +403,7 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
 					} finally {
 						combinedSignal.cleanup();
 					}
-					await options?.onResponse?.(
-						{ status: response.status, headers: headersToRecord(response.headers) },
-						model,
-					);
+					await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
 
 					if (response.ok) {
 						break;
@@ -742,9 +739,7 @@ async function* mapCodexEvents(
 			if (typeof response?.end_turn === "boolean") {
 				output.endTurn = response.end_turn;
 			}
-			const normalizedResponse = response
-				? { ...response, status: normalizeCodexStatus(response.status) }
-				: response;
+			const normalizedResponse = response ? { ...response, status: normalizeCodexStatus(response.status) } : response;
 			yield { ...event, type: "response.completed", response: normalizedResponse } as ResponseStreamEvent;
 			return;
 		}
@@ -1560,9 +1555,7 @@ async function parseErrorResponse(response: Response): Promise<{ message: string
 			const code = err.code || err.type || "";
 			if (/usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code) || response.status === 429) {
 				const plan = err.plan_type ? ` (${err.plan_type.toLowerCase()} plan)` : "";
-				const mins = err.resets_at
-					? Math.max(0, Math.round((err.resets_at * 1000 - Date.now()) / 60000))
-					: undefined;
+				const mins = err.resets_at ? Math.max(0, Math.round((err.resets_at * 1000 - Date.now()) / 60000)) : undefined;
 				const when = mins !== undefined ? ` Try again in ~${mins} min.` : "";
 				friendlyMessage = `You have hit your ChatGPT usage limit${plan}.${when}`.trim();
 			}

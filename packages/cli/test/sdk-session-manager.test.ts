@@ -66,34 +66,37 @@ describe("createAgentSession session manager defaults", () => {
 	});
 
 	// Skipped on Windows: compares a POSIX-normalised cwd against a drive-letter path.
-	it.skipIf(process.platform === "win32")("derives cwd from an explicit sessionManager when cwd is omitted", async () => {
-		const model = getModel("anthropic", "claude-sonnet-4-5");
-		expect(model).toBeTruthy();
+	it.skipIf(process.platform === "win32")(
+		"derives cwd from an explicit sessionManager when cwd is omitted",
+		async () => {
+			const model = getModel("anthropic", "claude-sonnet-4-5");
+			expect(model).toBeTruthy();
 
-		const sessionCwd = join(tempDir, "session-project");
-		mkdirSync(sessionCwd, { recursive: true });
-		const sessionManager = SessionManager.inMemory(sessionCwd);
-		const { session } = await createAgentSession({
-			agentDir,
-			model: model!,
-			sessionManager,
-		});
+			const sessionCwd = join(tempDir, "session-project");
+			mkdirSync(sessionCwd, { recursive: true });
+			const sessionManager = SessionManager.inMemory(sessionCwd);
+			const { session } = await createAgentSession({
+				agentDir,
+				model: model!,
+				sessionManager,
+			});
 
-		expect(session.sessionManager).toBe(sessionManager);
-		expect(session.systemPrompt).toContain(`Current working directory: ${sessionCwd}`);
+			expect(session.sessionManager).toBe(sessionManager);
+			expect(session.systemPrompt).toContain(`Current working directory: ${sessionCwd}`);
 
-		const bashTool = session.agent.state.tools.find((tool) => tool.name === "bash");
-		expect(bashTool).toBeTruthy();
-		const result = await bashTool!.execute("test", { command: "pwd" });
-		const output = result.content
-			.filter((item): item is { type: "text"; text: string } => item.type === "text")
-			.map((item) => item.text)
-			.join("");
+			const bashTool = session.agent.state.tools.find((tool) => tool.name === "bash");
+			expect(bashTool).toBeTruthy();
+			const result = await bashTool!.execute("test", { command: "pwd" });
+			const output = result.content
+				.filter((item): item is { type: "text"; text: string } => item.type === "text")
+				.map((item) => item.text)
+				.join("");
 
-		expect(realpathSync(output.trim())).toBe(realpathSync(sessionCwd));
+			expect(realpathSync(output.trim())).toBe(realpathSync(sessionCwd));
 
-		session.dispose();
-	});
+			session.dispose();
+		},
+	);
 
 	it("exposes current session state to the built-in bash tool", async () => {
 		const model = getModel("anthropic", "claude-sonnet-4-5");

@@ -134,10 +134,8 @@ function startInMemorySpan<T>(
 	}
 
 	const span: TelemetrySpan = {
-		startSpan: <Result>(
-			childOptions: SpanOptions,
-			childCallback: (child: TelemetrySpan) => Result | Promise<Result>,
-		) => startInMemorySpan(state, recordedSpan, childOptions, childCallback),
+		startSpan: <Result>(childOptions: SpanOptions, childCallback: (child: TelemetrySpan) => Result | Promise<Result>) =>
+			startInMemorySpan(state, recordedSpan, childOptions, childCallback),
 		addEvent(name, attributes) {
 			if (recordedSpan.settled) return;
 			try {

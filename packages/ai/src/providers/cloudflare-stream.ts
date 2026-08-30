@@ -20,8 +20,7 @@ export function resolveCloudflareModel<TApi extends Api>(
  */
 export function cloudflareStreams(streams: ProviderStreams): ProviderStreams {
 	return {
-		stream: (model, context, options) =>
-			streams.stream(resolveCloudflareModel(model, options?.env), context, options),
+		stream: (model, context, options) => streams.stream(resolveCloudflareModel(model, options?.env), context, options),
 		streamSimple: (model, context, options) =>
 			streams.streamSimple(resolveCloudflareModel(model, options?.env), context, options),
 	};

@@ -32,10 +32,7 @@ describe("SQLite session writer leases", () => {
 
 	it.each([
 		[{ ttlMs: 0, heartbeatIntervalMs: 1 }, "writerLease.ttlMs must be positive"],
-		[
-			{ ttlMs: 100, heartbeatIntervalMs: 100 },
-			"writerLease.heartbeatIntervalMs must be positive and less than ttlMs",
-		],
+		[{ ttlMs: 100, heartbeatIntervalMs: 100 }, "writerLease.heartbeatIntervalMs must be positive and less than ttlMs"],
 	])("rejects invalid lease timing %o", (writerLease, message) => {
 		const root = createTempDir();
 		expect(
@@ -180,10 +177,7 @@ describe("SQLite session writer leases", () => {
 		const second = await repository.create({ cwd: root, id: "session-2" });
 
 		await expect(
-			Promise.all([
-				first.appendMessage(createUserMessage("first")),
-				second.appendMessage(createUserMessage("second")),
-			]),
+			Promise.all([first.appendMessage(createUserMessage("first")), second.appendMessage(createUserMessage("second"))]),
 		).resolves.toHaveLength(2);
 	});
 

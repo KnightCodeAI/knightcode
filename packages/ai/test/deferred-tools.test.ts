@@ -287,8 +287,7 @@ describe("deferred tools", () => {
 		expect(payload.tools).toMatchObject([{ name: "base_tool" }, { name: "Read", defer_loading: true }]);
 		const content = findAnthropicToolResult(payload).content;
 		expect(
-			Array.isArray(content) &&
-				content.some((block) => block.type === "tool_reference" && block.tool_name === "Read"),
+			Array.isArray(content) && content.some((block) => block.type === "tool_reference" && block.tool_name === "Read"),
 		).toBe(true);
 	});
 

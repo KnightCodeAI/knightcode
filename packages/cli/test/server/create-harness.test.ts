@@ -96,7 +96,9 @@ describe("coding-agent Harness construction", () => {
 		expect(prompt).toContain("- read: Read file contents");
 		expect(prompt).toContain("- bash: Execute bash commands (ls, grep, find, etc.)");
 		expect(prompt).toContain("Use read to examine files instead of cat or sed.");
-		expect(prompt).toContain("You can inspect KNIGHTCODE_* environment variables for current model and session details.");
+		expect(prompt).toContain(
+			"You can inspect KNIGHTCODE_* environment variables for current model and session details.",
+		);
 		expect(prompt.indexOf("Use read to examine files")).toBeLessThan(
 			prompt.indexOf("You can inspect KNIGHTCODE_* environment variables"),
 		);

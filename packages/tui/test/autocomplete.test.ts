@@ -281,8 +281,7 @@ describe("CombinedAutocompleteProvider", () => {
 		test("includes scoped direct children when recursive @ matches are flooded", async () => {
 			const floodedDirs = Array.from(
 				{ length: 250 },
-				(_, index) =>
-					`scope/a${String(index + 1).padStart(3, "0")}/venv/lib/python3.12/site-packages/pkg/core/profile`,
+				(_, index) => `scope/a${String(index + 1).padStart(3, "0")}/venv/lib/python3.12/site-packages/pkg/core/profile`,
 			);
 			setupFolder(baseDir, {
 				dirs: ["scope/projects", ...floodedDirs],
@@ -418,9 +417,7 @@ describe("CombinedAutocompleteProvider", () => {
 				(result?.items ?? []).map((item) => `${item.label} :: ${item.description ?? ""}`).sort();
 
 			assert.deepStrictEqual(normalize(queryInPathResult), normalize(normalResult));
-			assert.ok(
-				normalize(normalResult).includes("plan-mode/ :: packages/coding-agent/examples/extensions/plan-mode"),
-			);
+			assert.ok(normalize(normalResult).includes("plan-mode/ :: packages/coding-agent/examples/extensions/plan-mode"));
 			assert.ok(normalize(normalResult).includes("plan.md :: packages/tui/docs/plan.md"));
 		});
 

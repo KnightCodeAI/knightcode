@@ -6,15 +6,7 @@
  */
 
 import type { ExtensionAPI } from "@knightcodeai/cli";
-import {
-	Editor,
-	type EditorTheme,
-	Key,
-	matchesKey,
-	Text,
-	visibleWidth,
-	wrapTextWithAnsi,
-} from "@knightcode/tui";
+import { Editor, type EditorTheme, Key, matchesKey, Text, visibleWidth, wrapTextWithAnsi } from "@knightcode/tui";
 import { Type } from "typebox";
 
 // Types

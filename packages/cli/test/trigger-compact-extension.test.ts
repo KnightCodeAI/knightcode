@@ -27,8 +27,7 @@ function createContext(tokens: number | null, compact = vi.fn()): ExtensionConte
 describe("trigger-compact example extension", () => {
 	test("only auto-compacts when context usage crosses the threshold", () => {
 		let turnEndHandler:
-			| ((event: { type: "turn_end" }, ctx: ExtensionContext | ExtensionCommandContext) => void)
-			| undefined;
+			((event: { type: "turn_end" }, ctx: ExtensionContext | ExtensionCommandContext) => void) | undefined;
 
 		const api = {
 			on: (event: string, handler: (event: { type: "turn_end" }, ctx: ExtensionContext) => void) => {

@@ -12,10 +12,7 @@ export default function (knightcode: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 
 		if (event.reason === "new") {
-			const confirmed = await ctx.ui.confirm(
-				"Clear session?",
-				"This will delete all messages in the current session.",
-			);
+			const confirmed = await ctx.ui.confirm("Clear session?", "This will delete all messages in the current session.");
 
 			if (!confirmed) {
 				ctx.ui.notify("Clear cancelled", "info");
@@ -24,11 +21,15 @@ export default function (knightcode: ExtensionAPI) {
 			return;
 		}
 
-		// reason === "resume" - check if there are unsaved changes (messages since last assistant response)
+		// reason === "resume" - check if there are unsaved changes (messages since last assistant response).
+		// Scanning the whole session instead would prompt on every resume of a completed session.
 		const entries = ctx.sessionManager.getEntries();
-		const hasUnsavedWork = entries.some(
-			(e): e is SessionMessageEntry => e.type === "message" && e.message.role === "user",
+		const lastAssistantIndex = entries.findLastIndex(
+			(e): e is SessionMessageEntry => e.type === "message" && e.message.role === "assistant",
 		);
+		const hasUnsavedWork = entries
+			.slice(lastAssistantIndex + 1)
+			.some((e): e is SessionMessageEntry => e.type === "message" && e.message.role === "user");
 
 		if (hasUnsavedWork) {
 			const confirmed = await ctx.ui.confirm(

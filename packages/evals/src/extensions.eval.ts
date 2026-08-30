@@ -119,8 +119,7 @@ describe.for(extensionHarnessTable)("$name", ({ harness }) => {
 					{ type: "reload" },
 					{
 						type: "prompt",
-						content:
-							"Use the hello tool to greet Bob. Respond with exactly the tool's greeting and nothing else.",
+						content: "Use the hello tool to greet Bob. Respond with exactly the tool's greeting and nothing else.",
 					},
 				]);
 				if (result.output.extensionSource !== null) {

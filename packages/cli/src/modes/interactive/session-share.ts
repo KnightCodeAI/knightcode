@@ -130,9 +130,7 @@ async function tryShareViaRadius(tmpFile: string, context: SessionShareContext):
 		if (loader.signal.aborted) return true;
 		restoreEditor(loader, context);
 		if (!response.ok || !json?.artifact) {
-			context.showError(
-				`Failed to upload Radius artifact: ${json?.error || response.statusText || response.status}`,
-			);
+			context.showError(`Failed to upload Radius artifact: ${json?.error || response.statusText || response.status}`);
 			return true;
 		}
 		const shareUrl = json.artifact.canonical_url;

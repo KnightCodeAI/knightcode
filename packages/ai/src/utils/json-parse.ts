@@ -107,18 +107,21 @@ export function parseStreamingJson<T = Record<string, unknown>>(partialJson: str
 	}
 
 	try {
-		return parseJsonWithRepair<T>(partialJson);
+		return asObject<T>(parseJsonWithRepair(partialJson));
 	} catch {
 		try {
-			const result = partialParse(partialJson);
-			return (result ?? {}) as T;
+			return asObject<T>(partialParse(partialJson));
 		} catch {
 			try {
-				const result = partialParse(repairJson(partialJson));
-				return (result ?? {}) as T;
+				return asObject<T>(partialParse(repairJson(partialJson)));
 			} catch {
 				return {} as T;
 			}
 		}
 	}
+}
+
+/** Callers (tool-call arguments) require a plain record; a top-level array or primitive is not one. */
+function asObject<T>(value: unknown): T {
+	return (typeof value === "object" && value !== null && !Array.isArray(value) ? value : {}) as T;
 }

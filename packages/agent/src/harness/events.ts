@@ -34,6 +34,19 @@ export interface WatchHandle<TSnapshot> {
 	unsubscribe(): void;
 }
 
+/**
+ * Invoke one listener without letting its failure reach the emitter. A listener that throws
+ * synchronously, or returns a rejected promise, must not abort delivery to the remaining
+ * listeners or surface as an unhandled rejection.
+ */
+function deliver(listener: HarnessEventListener, event: HarnessEvent): void {
+	try {
+		void listener(event)?.catch(() => {});
+	} catch {
+		// Listener failures are the listener's problem; delivery continues.
+	}
+}
+
 export class HarnessEventBus implements Events {
 	private readonly listeners = new Map<HarnessEventType, Set<HarnessEventListener>>();
 	private readonly watchListeners = new Set<(event: HarnessEvent) => void>();
@@ -66,7 +79,7 @@ export class HarnessEventBus implements Events {
 	emit(event: HarnessEvent): void {
 		// Deliver only to direct listeners registered for this event type.
 		// Async results are not awaited because emit() is synchronous.
-		for (const listener of this.listeners.get(event.type) ?? []) void listener(event);
+		for (const listener of this.listeners.get(event.type) ?? []) deliver(listener, event);
 
 		// Deliver every event to each watcher; watch() handles buffering until start().
 		for (const listener of this.watchListeners) listener(event);
@@ -76,7 +89,7 @@ export class HarnessEventBus implements Events {
 		let listener: HarnessEventListener | undefined;
 		let buffered: HarnessEvent[] = [];
 		const receive = (event: HarnessEvent): void => {
-			if (listener) void listener(event);
+			if (listener) deliver(listener, event);
 			else buffered.push(event);
 		};
 		this.watchListeners.add(receive);
@@ -89,7 +102,7 @@ export class HarnessEventBus implements Events {
 				while (buffered.length > 0) {
 					const pending = buffered;
 					buffered = [];
-					for (const event of pending) void nextListener(event);
+					for (const event of pending) deliver(nextListener, event);
 				}
 				listener = nextListener;
 			},

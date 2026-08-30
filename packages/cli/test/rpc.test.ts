@@ -150,8 +150,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 			.map((line) => JSON.parse(line));
 
 		const bashMessages = entries.filter(
-			(e: { type: string; message?: { role: string } }) =>
-				e.type === "message" && e.message?.role === "bashExecution",
+			(e: { type: string; message?: { role: string } }) => e.type === "message" && e.message?.role === "bashExecution",
 		);
 		expect(bashMessages.length).toBe(1);
 		expect(bashMessages[0].message.output).toContain(uniqueValue);

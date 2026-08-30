@@ -494,9 +494,7 @@ export class TuiMainScreen extends TuiBase implements TUI {
 			if (imageReservedRows > 1) {
 				const imageStartScreenRow = i - viewportTop;
 				if (imageStartScreenRow < 0 || imageStartScreenRow + imageReservedRows > height) {
-					logRedraw(
-						`kitty image pre-clear would scroll (${imageStartScreenRow} + ${imageReservedRows} > ${height})`,
-					);
+					logRedraw(`kitty image pre-clear would scroll (${imageStartScreenRow} + ${imageReservedRows} > ${height})`);
 					fullRender(true);
 					return;
 				}

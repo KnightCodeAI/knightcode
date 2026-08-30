@@ -54,9 +54,7 @@ async function loadRadiusOAuthDiscovery(gateway: string, signal: AbortSignal): P
 	});
 
 	if (!response.ok) {
-		throw new Error(
-			`Could not load Radius OAuth config from ${gateway}: ${response.status} ${await response.text()}`,
-		);
+		throw new Error(`Could not load Radius OAuth config from ${gateway}: ${response.status} ${await response.text()}`);
 	}
 
 	const discovery = (await response.json()) as Partial<RadiusOAuthDiscovery>;

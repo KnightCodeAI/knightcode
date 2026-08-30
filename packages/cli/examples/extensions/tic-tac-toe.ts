@@ -811,11 +811,7 @@ Decide the target cell first, then dump every action for the turn in one go.
 						if (gameState.status === "playing") {
 							// IMPORTANT: user play does NOT touch the agent cursor.
 							// The agent cursor is only reset after a successful agent play.
-							const boardAscii = boardToAscii(
-								gameState.board,
-								gameState.agentCursorRow,
-								gameState.agentCursorCol,
-							);
+							const boardAscii = boardToAscii(gameState.board, gameState.agentCursorRow, gameState.agentCursorCol);
 							knightcode.sendMessage(
 								{
 									customType: MOVE_MESSAGE_TYPE,

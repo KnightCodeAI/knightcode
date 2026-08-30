@@ -30,9 +30,7 @@ export function spawnProcessSync(
 	args: string[],
 	options: SpawnSyncOptionsWithStringEncoding,
 ): SpawnSyncReturns<string> {
-	return process.platform === "win32"
-		? crossSpawn.sync(command, args, options)
-		: nodeSpawnSync(command, args, options);
+	return process.platform === "win32" ? crossSpawn.sync(command, args, options) : nodeSpawnSync(command, args, options);
 }
 
 /**

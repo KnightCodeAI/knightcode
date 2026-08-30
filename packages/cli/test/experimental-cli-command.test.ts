@@ -118,8 +118,14 @@ describe("experimental CLI commands", () => {
 		[["--listen", "/tmp/knightcode.sock"], 'Invalid --listen address "/tmp/knightcode.sock"'],
 		[["--listen", "ws://localhost:8080"], 'Unsupported --listen transport "ws:"'],
 		[["--listen", "unix://relative.sock"], "Unix transport address must not include an authority"],
-		[["--listen", "unix:///tmp/knightcode.sock?wrong=value"], 'Invalid --listen address "unix:///tmp/knightcode.sock?wrong=value"'],
-		[["--listen", "unix:///tmp/knightcode.sock#fragment"], 'Invalid --listen address "unix:///tmp/knightcode.sock#fragment"'],
+		[
+			["--listen", "unix:///tmp/knightcode.sock?wrong=value"],
+			'Invalid --listen address "unix:///tmp/knightcode.sock?wrong=value"',
+		],
+		[
+			["--listen", "unix:///tmp/knightcode.sock#fragment"],
+			'Invalid --listen address "unix:///tmp/knightcode.sock#fragment"',
+		],
 		[["--listen", "unix:/tmp/knightcode.sock"], 'Invalid --listen address "unix:/tmp/knightcode.sock"'],
 		[["--listen", "unix:///tmp/%00pi.sock"], 'Invalid --listen address "unix:///tmp/%00pi.sock"'],
 		[

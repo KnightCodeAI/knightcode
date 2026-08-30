@@ -118,8 +118,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY)(
 			);
 
 			const toolCallBlock = assistantResponse.content.find((block) => block.type === "toolCall") as
-				| ToolCall
-				| undefined;
+				ToolCall | undefined;
 
 			if (!toolCallBlock) {
 				throw new Error("Missing tool call from OpenAI Responses - model did not use the tool");
@@ -219,8 +218,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY)(
 			);
 
 			const toolCallBlock = assistantResponse.content.find((block) => block.type === "toolCall") as
-				| ToolCall
-				| undefined;
+				ToolCall | undefined;
 
 			if (!toolCallBlock) {
 				throw new Error("Missing tool call from Anthropic - model did not use the tool");

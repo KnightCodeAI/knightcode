@@ -89,10 +89,7 @@ describe("wrapTextWithAnsi", () => {
 			for (let i = 0; i < wrapped.length - 1; i++) {
 				const line = wrapped[i];
 				// If this line has underline on, it should end with underline off (not full reset)
-				if (
-					(line.includes("[4m") || line.includes("[4;") || line.includes(";4m")) &&
-					!line.includes(underlineOff)
-				) {
+				if ((line.includes("[4m") || line.includes("[4;") || line.includes(";4m")) && !line.includes(underlineOff)) {
 					assert.strictEqual(line.endsWith(underlineOff), true);
 					assert.strictEqual(line.endsWith("\x1b[0m"), false);
 				}

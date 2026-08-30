@@ -270,12 +270,8 @@ export function convertResponsesMessages<TApi extends Api>(
 							id: itemId,
 							call_id: callId,
 							name: toolCall.name,
-							input: sanitizeSurrogates(
-								getGrammarToolInput(toolCall.name, toolCall.arguments, customInputProperty),
-							),
-							...(canReplayNamespace && toolCall.namespace !== undefined
-								? { namespace: toolCall.namespace }
-								: {}),
+							input: sanitizeSurrogates(getGrammarToolInput(toolCall.name, toolCall.arguments, customInputProperty)),
+							...(canReplayNamespace && toolCall.namespace !== undefined ? { namespace: toolCall.namespace } : {}),
 						} satisfies ResponseOutputItem);
 					} else {
 						output.push({
@@ -284,9 +280,7 @@ export function convertResponsesMessages<TApi extends Api>(
 							call_id: callId,
 							name: toolCall.name,
 							arguments: JSON.stringify(toolCall.arguments),
-							...(canReplayNamespace && toolCall.namespace !== undefined
-								? { namespace: toolCall.namespace }
-								: {}),
+							...(canReplayNamespace && toolCall.namespace !== undefined ? { namespace: toolCall.namespace } : {}),
 						});
 					}
 				}
@@ -558,8 +552,7 @@ export async function processResponsesStream<TApi extends Api>(
 		}
 		if (response?.usage) {
 			const inputDetails = response.usage.input_tokens_details as
-				| { cached_tokens?: number; cache_write_tokens?: number }
-				| undefined;
+				{ cached_tokens?: number; cache_write_tokens?: number } | undefined;
 			const cachedTokens = inputDetails?.cached_tokens || 0;
 			const cacheWriteTokens = inputDetails?.cache_write_tokens || 0;
 			output.usage = {
@@ -705,11 +698,7 @@ export async function processResponsesStream<TApi extends Api>(
 					partial: output,
 				});
 				outputSlots.delete(event.output_index);
-			} else if (
-				item.type === "function_call" &&
-				slot?.type === "toolCall" &&
-				slot.block.partialJson !== undefined
-			) {
+			} else if (item.type === "function_call" && slot?.type === "toolCall" && slot.block.partialJson !== undefined) {
 				slot.block.arguments = parseStreamingJson(item.arguments || slot.block.partialJson || "{}");
 				if (item.namespace !== undefined) slot.block.namespace = item.namespace;
 				// Finalize in-place and strip the scratch buffer so replay only

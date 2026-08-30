@@ -101,17 +101,13 @@ describe.skipIf(process.platform === "win32")("KnightServer Unix integration", (
 		await client.nextFrom(
 			messageIndex,
 			(message) =>
-				message.type === "event" &&
-				message.event.type === "server_snapshot" &&
-				message.event.snapshot.revision === 2,
+				message.type === "event" && message.event.type === "server_snapshot" && message.event.snapshot.revision === 2,
 		);
 
 		const revisions = client.messages
 			.slice(messageIndex)
 			.flatMap((message) =>
-				message.type === "event" && message.event.type === "server_snapshot"
-					? [message.event.snapshot.revision]
-					: [],
+				message.type === "event" && message.event.type === "server_snapshot" ? [message.event.snapshot.revision] : [],
 			);
 		expect(revisions).toEqual([1, 2]);
 	});

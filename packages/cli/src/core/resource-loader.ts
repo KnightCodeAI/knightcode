@@ -607,9 +607,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 			loadedByPath.set(extension.resolvedPath, extension);
 		}
 
-		const inlineExtensions = preTrustExtensions.extensions.filter((extension) =>
-			extension.path.startsWith("<inline:"),
-		);
+		const inlineExtensions = preTrustExtensions.extensions.filter((extension) => extension.path.startsWith("<inline:"));
 		const orderedExtensions = extensionPaths
 			.map((path) => loadedByPath.get(this.resolveExtensionLoadPath(path)))
 			.filter((extension): extension is Extension => extension !== undefined);

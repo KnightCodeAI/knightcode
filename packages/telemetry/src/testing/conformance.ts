@@ -62,27 +62,22 @@ export function createTelemetryAdapterConformance(
 	factory: TelemetryAdapterFixtureFactory,
 ): readonly TelemetryAdapterConformanceCase[] {
 	return [
-		createCase(
-			factory,
-			"callback lifecycle",
-			"admits once synchronously and preserves the result",
-			async (fixture) => {
-				let admitted = false;
-				let calls = 0;
-				const expected = { value: 42 };
-				const result = fixture.context.startSpan({ name: "success" }, () => {
-					admitted = true;
-					calls++;
-					return expected;
-				});
+		createCase(factory, "callback lifecycle", "admits once synchronously and preserves the result", async (fixture) => {
+			let admitted = false;
+			let calls = 0;
+			const expected = { value: 42 };
+			const result = fixture.context.startSpan({ name: "success" }, () => {
+				admitted = true;
+				calls++;
+				return expected;
+			});
 
-				strictEqual(admitted, true);
-				strictEqual(calls, 1);
-				strictEqual(await result, expected);
-				deepStrictEqual(findSpan(await fixture.getSpans(), "success").status, { status: "ok" });
-				strictEqual(findSpan(await fixture.getSpans(), "success").settled, true);
-			},
-		),
+			strictEqual(admitted, true);
+			strictEqual(calls, 1);
+			strictEqual(await result, expected);
+			deepStrictEqual(findSpan(await fixture.getSpans(), "success").status, { status: "ok" });
+			strictEqual(findSpan(await fixture.getSpans(), "success").settled, true);
+		}),
 
 		createCase(
 			factory,
@@ -120,9 +115,7 @@ export function createTelemetryAdapterConformance(
 
 				const asyncUnreadableError = unreadable({ kind: "async-unreadable" });
 				await rejectsWithSameValue(
-					fixture.context.startSpan({ name: "async-unreadable-error" }, () =>
-						Promise.reject(asyncUnreadableError),
-					),
+					fixture.context.startSpan({ name: "async-unreadable-error" }, () => Promise.reject(asyncUnreadableError)),
 					asyncUnreadableError,
 				);
 

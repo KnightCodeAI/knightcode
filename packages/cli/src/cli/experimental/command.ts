@@ -3,16 +3,13 @@ export interface NamedCommandInvocation {
 }
 
 export type CommandParseResult<TInvocation extends NamedCommandInvocation = NamedCommandInvocation> =
-	| { readonly ok: true; readonly command: TInvocation }
-	| { readonly ok: false; readonly errors: readonly string[] };
+	{ readonly ok: true; readonly command: TInvocation } | { readonly ok: false; readonly errors: readonly string[] };
 
 export type CommandExecutionResult<TInvocation extends NamedCommandInvocation = NamedCommandInvocation> =
-	| { readonly ok: true; readonly command: TInvocation }
-	| { readonly ok: false; readonly errors: readonly string[] };
+	{ readonly ok: true; readonly command: TInvocation } | { readonly ok: false; readonly errors: readonly string[] };
 
 export type CommandOptionParseResult<TValue> =
-	| { readonly ok: true; readonly value: TValue }
-	| { readonly ok: false; readonly error: string };
+	{ readonly ok: true; readonly value: TValue } | { readonly ok: false; readonly error: string };
 
 export interface CommandOption<TValue> {
 	readonly name: `--${string}`;
@@ -37,8 +34,7 @@ export interface ParsedCommandInput {
 }
 
 export type CommandBuildResult<TInvocation extends NamedCommandInvocation> =
-	| { readonly ok: true; readonly command: TInvocation }
-	| { readonly ok: false; readonly errors: readonly string[] };
+	{ readonly ok: true; readonly command: TInvocation } | { readonly ok: false; readonly errors: readonly string[] };
 
 interface MutableParsedCommandInput {
 	readonly values: Map<string, unknown[]>;

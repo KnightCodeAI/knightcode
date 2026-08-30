@@ -459,15 +459,10 @@ async function loginGitHubCopilot(interaction: ProviderAuthInteraction): Promise
 		enterpriseDomain ?? undefined,
 		interaction.signal,
 	);
-	const models = await fetchGitHubCopilotModels(
-		credentials.access,
-		enterpriseDomain ?? undefined,
-		interaction.signal,
-		{
-			maxRetries: 2,
-			maxElapsedMs: 5000,
-		},
-	);
+	const models = await fetchGitHubCopilotModels(credentials.access, enterpriseDomain ?? undefined, interaction.signal, {
+		maxRetries: 2,
+		maxElapsedMs: 5000,
+	});
 	let enabledModelIds: string[] = [];
 	if (models.policyModelIds.length > 0) {
 		interaction.notify({ type: "progress", message: "Enabling models..." });

@@ -46,8 +46,6 @@ describe("#5998 blocked tool termination", () => {
 		expect(harness.getPendingResponseCount()).toBe(1);
 		expect(getAssistantTexts(harness)).not.toContain("should not run");
 		expect(harness.eventsOfType("tool_execution_end")[0]?.result).toHaveProperty("terminate", true);
-		expect(
-			harness.session.messages.find((message) => message.role === "toolResult" && message.isError),
-		).toBeDefined();
+		expect(harness.session.messages.find((message) => message.role === "toolResult" && message.isError)).toBeDefined();
 	});
 });

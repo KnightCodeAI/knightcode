@@ -209,9 +209,7 @@ describe("SQLite branch cache", () => {
 
 		const db = await sqlite.open(databasePath);
 		try {
-			expect(await db.prepare("SELECT entry_id FROM branch_entries WHERE session_id = ?").all("session-1")).toEqual(
-				[],
-			);
+			expect(await db.prepare("SELECT entry_id FROM branch_entries WHERE session_id = ?").all("session-1")).toEqual([]);
 			expect(await db.prepare("SELECT tip_id FROM branch_tips WHERE session_id = ?").all("session-1")).toEqual([]);
 		} finally {
 			await db.close();

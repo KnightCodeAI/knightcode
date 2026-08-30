@@ -1,10 +1,11 @@
 /**
  * Custom Compaction Extension
  *
- * Replaces the default compaction behavior with a full summary of the entire context.
- * Instead of keeping the last 20k tokens of conversation turns, this extension:
- * 1. Summarizes ALL messages (messagesToSummarize + turnPrefixMessages)
- * 2. Discards all old turns completely, keeping only the summary
+ * Replaces the default compaction summary with one written by a different model.
+ * 1. Summarizes everything the preparation offers for summarization
+ *    (messagesToSummarize + turnPrefixMessages)
+ * 2. Keeps the preparation's retained tail via firstKeptEntryId, so the most recent
+ *    entries survive compaction unsummarized, exactly as default compaction does
  *
  * This example also demonstrates using a different model (Gemini Flash) for summarization,
  * which can be cheaper/faster than the main conversation model.
@@ -61,7 +62,7 @@ export default function (knightcode: ExtensionAPI) {
 5. Any blockers, issues, or open questions
 6. Next steps that were planned or suggested
 
-Be thorough but concise. The summary will replace the ENTIRE conversation history, so include all information needed to continue the work effectively.
+Be thorough but concise. The summary replaces everything before the most recent entries, so include all information needed to continue the work effectively.
 
 Format the summary as structured markdown with clear sections.
 

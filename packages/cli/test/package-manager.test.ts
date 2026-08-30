@@ -106,9 +106,7 @@ describe("DefaultPackageManager", () => {
 			expect(result.extensions).toEqual([]);
 			expect(result.prompts).toEqual([]);
 			expect(result.themes).toEqual([]);
-			expect(result.skills.every((r) => r.metadata.source === "auto" && r.metadata.origin === "top-level")).toBe(
-				true,
-			);
+			expect(result.skills.every((r) => r.metadata.source === "auto" && r.metadata.origin === "top-level")).toBe(true);
 		});
 
 		it("should resolve local extension paths from settings", async () => {
@@ -286,12 +284,8 @@ Content`,
 			const result = await packageManager.resolve();
 
 			// Should find the extensions declared in package.json knightcode.extensions
-			expect(result.extensions.some((r) => r.path === join(pkgDir, "extensions", "clip.ts") && r.enabled)).toBe(
-				true,
-			);
-			expect(result.extensions.some((r) => r.path === join(pkgDir, "extensions", "cost.ts") && r.enabled)).toBe(
-				true,
-			);
+			expect(result.extensions.some((r) => r.path === join(pkgDir, "extensions", "clip.ts") && r.enabled)).toBe(true);
+			expect(result.extensions.some((r) => r.path === join(pkgDir, "extensions", "cost.ts") && r.enabled)).toBe(true);
 
 			// Should NOT find helper.ts (not declared in manifest)
 			expect(result.extensions.some((r) => pathEndsWith(r.path, "helper.ts"))).toBe(false);
@@ -979,11 +973,9 @@ Content`,
 			vi.spyOn(managerWithInternals, "runCommandCapture").mockImplementation(async (_command, args) =>
 				args[1] === "HEAD" ? "old-head" : "new-head",
 			);
-			const runCommandSpy = vi
-				.spyOn(managerWithInternals, "runCommand")
-				.mockImplementation(async (_command, args) => {
-					if (args[0] === "clean") throw new Error("simulated clean failure");
-				});
+			const runCommandSpy = vi.spyOn(managerWithInternals, "runCommand").mockImplementation(async (_command, args) => {
+				if (args[0] === "clean") throw new Error("simulated clean failure");
+			});
 
 			await expect(packageManager.update(source)).rejects.toThrow("simulated clean failure");
 
@@ -1107,9 +1099,9 @@ Content`,
 			expect(first.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled)).toBe(
 				true,
 			);
-			expect(
-				second.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled),
-			).toBe(true);
+			expect(second.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled)).toBe(
+				true,
+			);
 			expect(runCommandSpy).toHaveBeenCalledTimes(1);
 			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
 		});
@@ -1150,9 +1142,9 @@ Content`,
 
 			const result = await packageManager.resolve();
 
-			expect(
-				result.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled),
-			).toBe(true);
+			expect(result.extensions.some((r) => r.path === join(packagePath, "extensions", "index.ts") && r.enabled)).toBe(
+				true,
+			);
 			expect(runCommandSpy).not.toHaveBeenCalled();
 			expect(packageManager.getInstalledPath("npm:pnpm-pkg", "user")).toBe(packagePath);
 		});
@@ -1546,10 +1538,7 @@ Content`,
 				join(skillsDir, "good-skill", "SKILL.md"),
 				"---\nname: good-skill\ndescription: Good\n---\nContent",
 			);
-			writeFileSync(
-				join(skillsDir, "bad-skill", "SKILL.md"),
-				"---\nname: bad-skill\ndescription: Bad\n---\nContent",
-			);
+			writeFileSync(join(skillsDir, "bad-skill", "SKILL.md"), "---\nname: bad-skill\ndescription: Bad\n---\nContent");
 
 			settingsManager.setSkillPaths(["skills", "!**/bad-skill"]);
 
@@ -1858,23 +1847,30 @@ Content`,
 		});
 
 		// Skipped on Windows: isolates via process.env.HOME, which os.homedir() ignores there, so the real ~/.agents leaks in.
-		it.skipIf(process.platform === "win32")("should resolve autoload-disabled package entries as positive-only without a global package", async () => {
-			vi.stubEnv("HOME", tempDir);
-			const pkgDir = join(tempDir, "positive-only-pkg");
-			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
-			mkdirSync(join(pkgDir, "skills", "foo"), { recursive: true });
-			writeFileSync(join(pkgDir, "extensions", "foo.ts"), "export default function() {}");
-			writeFileSync(join(pkgDir, "extensions", "bar.ts"), "export default function() {}");
-			writeFileSync(join(pkgDir, "skills", "foo", "SKILL.md"), "# Foo\n");
-			settingsManager.setProjectPackages([
-				{ source: relative(join(tempDir, ".knightcode"), pkgDir), autoload: false, extensions: ["+extensions/foo.ts"] },
-			]);
+		it.skipIf(process.platform === "win32")(
+			"should resolve autoload-disabled package entries as positive-only without a global package",
+			async () => {
+				vi.stubEnv("HOME", tempDir);
+				const pkgDir = join(tempDir, "positive-only-pkg");
+				mkdirSync(join(pkgDir, "extensions"), { recursive: true });
+				mkdirSync(join(pkgDir, "skills", "foo"), { recursive: true });
+				writeFileSync(join(pkgDir, "extensions", "foo.ts"), "export default function() {}");
+				writeFileSync(join(pkgDir, "extensions", "bar.ts"), "export default function() {}");
+				writeFileSync(join(pkgDir, "skills", "foo", "SKILL.md"), "# Foo\n");
+				settingsManager.setProjectPackages([
+					{
+						source: relative(join(tempDir, ".knightcode"), pkgDir),
+						autoload: false,
+						extensions: ["+extensions/foo.ts"],
+					},
+				]);
 
-			const result = await packageManager.resolve();
+				const result = await packageManager.resolve();
 
-			expect(result.extensions.map((resource) => resource.path)).toEqual([join(pkgDir, "extensions", "foo.ts")]);
-			expect(result.skills).toEqual([]);
-		});
+				expect(result.extensions.map((resource) => resource.path)).toEqual([join(pkgDir, "extensions", "foo.ts")]);
+				expect(result.skills).toEqual([]);
+			},
+		);
 	});
 
 	describe("force-include patterns", () => {
@@ -2350,10 +2346,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 						"--legacy-peer-deps",
 					]);
 					mkdirSync(managedPath, { recursive: true });
-					writeFileSync(
-						join(managedPath, "package.json"),
-						JSON.stringify({ name: "legacy-pkg", version: "1.0.0" }),
-					);
+					writeFileSync(join(managedPath, "package.json"), JSON.stringify({ name: "legacy-pkg", version: "1.0.0" }));
 				});
 
 			expect(packageManager.getInstalledPath("npm:legacy-pkg", "user")).toBe(legacyPath);
@@ -2376,14 +2369,8 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 				mkdirSync(installPath, { recursive: true });
 			}
 			writeFileSync(join(userOldPath, "package.json"), JSON.stringify({ name: "user-old", version: "1.0.0" }));
-			writeFileSync(
-				join(userCurrentPath, "package.json"),
-				JSON.stringify({ name: "user-current", version: "1.0.0" }),
-			);
-			writeFileSync(
-				join(userUnknownPath, "package.json"),
-				JSON.stringify({ name: "user-unknown", version: "1.0.0" }),
-			);
+			writeFileSync(join(userCurrentPath, "package.json"), JSON.stringify({ name: "user-current", version: "1.0.0" }));
+			writeFileSync(join(userUnknownPath, "package.json"), JSON.stringify({ name: "user-unknown", version: "1.0.0" }));
 			writeFileSync(join(projectOldPath, "package.json"), JSON.stringify({ name: "project-old", version: "1.0.0" }));
 			writeFileSync(
 				join(projectCurrentPath, "package.json"),
@@ -2458,14 +2445,7 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(runCommandSpy).toHaveBeenNthCalledWith(
 				1,
 				"npm",
-				[
-					"install",
-					"user-old@latest",
-					"user-unknown@latest",
-					"--prefix",
-					join(agentDir, "npm"),
-					"--legacy-peer-deps",
-				],
+				["install", "user-old@latest", "user-unknown@latest", "--prefix", join(agentDir, "npm"), "--legacy-peer-deps"],
 				undefined,
 			);
 			expect(runCommandSpy).toHaveBeenNthCalledWith(

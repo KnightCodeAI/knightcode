@@ -8,7 +8,11 @@
 import type { ExtensionAPI } from "@knightcodeai/cli";
 
 export default function (knightcode: ExtensionAPI) {
-	knightcode.on("session_shutdown", async (_event, ctx) => {
+	knightcode.on("session_shutdown", async (event, ctx) => {
+		// Only commit when the process is really exiting. session_shutdown also fires when the
+		// session is replaced (reload/new/resume/fork), and those must not create commits.
+		if (event.reason !== "quit") return;
+
 		// Check for uncommitted changes
 		const { stdout: status, code } = await knightcode.exec("git", ["status", "--porcelain"]);
 
@@ -38,8 +42,10 @@ export default function (knightcode: ExtensionAPI) {
 		const firstLine = lastAssistantText.split("\n")[0] || "Work in progress";
 		const commitMessage = `[knightcode] ${firstLine.slice(0, 50)}${firstLine.length > 50 ? "..." : ""}`;
 
-		// Stage and commit
-		await knightcode.exec("git", ["add", "-A"]);
+		// Stage and commit. Bail on a failed stage: committing anyway would capture whatever was
+		// already staged rather than the work this shutdown was meant to save.
+		const { code: addCode } = await knightcode.exec("git", ["add", "-A"]);
+		if (addCode !== 0) return;
 		const { code: commitCode } = await knightcode.exec("git", ["commit", "-m", commitMessage]);
 
 		if (commitCode === 0 && ctx.hasUI) {

@@ -70,9 +70,7 @@ describe("provider retry classification", () => {
 
 	it("keeps provider limit errors non-retryable", () => {
 		expect(
-			isRetryableAssistantError(
-				fauxAssistantMessage("", { stopReason: "error", errorMessage: "429 quota exceeded" }),
-			),
+			isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage: "429 quota exceeded" })),
 		).toBe(false);
 	});
 

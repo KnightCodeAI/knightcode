@@ -36,15 +36,7 @@ describe("max thinking level", () => {
 			const model = getModel("openai-codex", modelId);
 			expect(model).toBeDefined();
 			expect(model?.thinkingLevelMap).toMatchObject({ xhigh: "xhigh", max: "max" });
-			expect(getSupportedThinkingLevels(model!)).toEqual([
-				"off",
-				"minimal",
-				"low",
-				"medium",
-				"high",
-				"xhigh",
-				"max",
-			]);
+			expect(getSupportedThinkingLevels(model!)).toEqual(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 		},
 	);
 

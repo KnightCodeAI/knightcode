@@ -580,10 +580,7 @@ export async function generateSummaryWithUsage(
 	}
 	if (response.stopReason === "error") {
 		return err(
-			new CompactionError(
-				"summarization_failed",
-				`Summarization failed: ${response.errorMessage || "Unknown error"}`,
-			),
+			new CompactionError("summarization_failed", `Summarization failed: ${response.errorMessage || "Unknown error"}`),
 		);
 	}
 

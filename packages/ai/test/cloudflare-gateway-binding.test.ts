@@ -204,9 +204,7 @@ describe("createGatewayBindingFetch", () => {
 		const { binding, runs } = fakeBinding();
 		const fetchFn = createGatewayBindingFetch({ binding, baseUrl: BASE_URL, gateway: "my-gateway" });
 
-		await expect(fetchFn(`${BASE_URL}/anthropic/v1/messages`, { method: "GET" })).rejects.toThrow(
-			"cannot express GET",
-		);
+		await expect(fetchFn(`${BASE_URL}/anthropic/v1/messages`, { method: "GET" })).rejects.toThrow("cannot express GET");
 		await expect(fetchFn(`${BASE_URL}/anthropic/v1/messages`, { method: "POST", body: "not json" })).rejects.toThrow(
 			"non-JSON body",
 		);
@@ -222,9 +220,9 @@ describe("createGatewayBindingFetch", () => {
 		const { binding, runs } = fakeBinding();
 		const fetchFn = createGatewayBindingFetch({ binding, baseUrl: BASE_URL, gateway: "my-gateway" });
 
-		await expect(
-			fetchFn("https://api.openai.com/v1/chat/completions", { method: "POST", body: "{}" }),
-		).rejects.toThrow("outside the configured gateway prefix");
+		await expect(fetchFn("https://api.openai.com/v1/chat/completions", { method: "POST", body: "{}" })).rejects.toThrow(
+			"outside the configured gateway prefix",
+		);
 		// Same origin, different path (another account's gateway) is just as out-of-prefix.
 		await expect(
 			fetchFn("https://gateway.ai.cloudflare.com/v1/other-account/my-gateway/anthropic/v1/messages", {

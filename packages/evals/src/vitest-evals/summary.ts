@@ -239,8 +239,7 @@ function summarizeMetric(
 		eligiblePairs: baselineValues.length,
 		baselineMean,
 		candidateMean,
-		meanDelta:
-			baselineMean === null || candidateMean === null ? null : preciseDifference(candidateMean, baselineMean),
+		meanDelta: baselineMean === null || candidateMean === null ? null : preciseDifference(candidateMean, baselineMean),
 	};
 }
 

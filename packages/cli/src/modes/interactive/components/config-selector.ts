@@ -212,10 +212,7 @@ class ConfigSelectorHeader implements Component {
 				? theme.fg("muted", `${CONFIG_DIR_NAME}/settings.json · inherited global resources are dimmed`)
 				: theme.fg("muted", `~/${CONFIG_DIR_NAME}/agent/settings.json`);
 
-		return [
-			truncateToWidth(`${title}${" ".repeat(spacing)}${hint}`, width, ""),
-			truncateToWidth(scopeHint, width, ""),
-		];
+		return [truncateToWidth(`${title}${" ".repeat(spacing)}${hint}`, width, ""), truncateToWidth(scopeHint, width, "")];
 	}
 }
 
@@ -431,11 +428,7 @@ class ResourceList implements Component, Focusable {
 				const nameText = isSelected && !dimmed ? theme.bold(item.displayName) : item.displayName;
 				const name = dimmed ? theme.fg("dim", nameText) : nameText;
 				lines.push(
-					truncateToWidth(
-						`${cursor}    ${this.renderCheckbox(item)} ${name}${this.getItemSuffix(item)}`,
-						width,
-						"...",
-					),
+					truncateToWidth(`${cursor}    ${this.renderCheckbox(item)} ${name}${this.getItemSuffix(item)}`, width, "..."),
 				);
 			}
 		}
@@ -822,9 +815,7 @@ class ResourceList implements Component, Focusable {
 
 	private findMatchingPackageSource(item: ResourceItem, targetScope: SettingsScope): PackageSource | undefined {
 		const settings =
-			targetScope === "project"
-				? this.settingsManager.getProjectSettings()
-				: this.settingsManager.getGlobalSettings();
+			targetScope === "project" ? this.settingsManager.getProjectSettings() : this.settingsManager.getGlobalSettings();
 		return (settings.packages ?? []).find((pkg) =>
 			this.packageSourceStringMatches(
 				item.metadata.source,

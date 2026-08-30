@@ -17,7 +17,10 @@ function allowedValues(definition: TelemetryAttributeDefinition): string {
 }
 
 function attributeNotes(definition: TelemetryAttributeDefinition): string {
-	return [definition.cardinality ? `${definition.cardinality} cardinality` : "", definition.sensitive ? "sensitive" : ""]
+	return [
+		definition.cardinality ? `${definition.cardinality} cardinality` : "",
+		definition.sensitive ? "sensitive" : "",
+	]
 		.filter(Boolean)
 		.join(", ");
 }
@@ -110,8 +113,5 @@ export function generateTelemetryDocs(outputPath: string, check: boolean): void 
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-	generateTelemetryDocs(
-		resolve(import.meta.dirname, "../docs/telemetry-schema.md"),
-		process.argv.includes("--check"),
-	);
+	generateTelemetryDocs(resolve(import.meta.dirname, "../docs/telemetry-schema.md"), process.argv.includes("--check"));
 }

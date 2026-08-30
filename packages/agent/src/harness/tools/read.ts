@@ -26,8 +26,7 @@ export interface ReadToolDetails {
 }
 
 export type ReadImageProcessorResult =
-	| { ok: true; data: string; mimeType: string; hints: string[] }
-	| { ok: false; message: string };
+	{ ok: true; data: string; mimeType: string; hints: string[] } | { ok: false; message: string };
 
 export type ReadImageProcessor = (
 	bytes: Uint8Array,

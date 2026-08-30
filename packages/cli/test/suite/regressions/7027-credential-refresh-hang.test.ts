@@ -40,8 +40,7 @@ describe("issues #7027 and #7113 credential refresh hang", () => {
 				apiKey: {
 					name: "API key",
 					login: async () => ({ type: "api_key", key: "secret" }),
-					check: async ({ credential }) =>
-						credential?.key ? { type: "api_key", source: "stored key" } : undefined,
+					check: async ({ credential }) => (credential?.key ? { type: "api_key", source: "stored key" } : undefined),
 					resolve: async ({ credential }) => ({
 						auth: { apiKey: credential?.key ?? "ambient-key" },
 						source: credential?.key ? "stored key" : "ambient key",

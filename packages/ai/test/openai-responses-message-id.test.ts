@@ -37,8 +37,7 @@ describe("OpenAI Responses message ID conversion", () => {
 		const input = convertResponsesMessages(model, context, new Set(["openai", "openai-codex", "opencode"]));
 		const messageIds = input
 			.filter(
-				(item): item is ResponseOutputMessage =>
-					item.type === "message" && "id" in item && typeof item.id === "string",
+				(item): item is ResponseOutputMessage => item.type === "message" && "id" in item && typeof item.id === "string",
 			)
 			.map((item) => item.id);
 

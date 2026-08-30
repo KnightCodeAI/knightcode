@@ -787,9 +787,7 @@ function applyPatterns(allPaths: string[], patterns: string[], baseDir: string):
 function applyAutoloadDisabledPatterns(allPaths: string[], patterns: string[], baseDir: string): Map<string, boolean> {
 	const result = new Map<string, boolean>();
 	for (const pattern of patterns) {
-		const target = pattern.slice(
-			pattern.startsWith("+") || pattern.startsWith("-") || pattern.startsWith("!") ? 1 : 0,
-		);
+		const target = pattern.slice(pattern.startsWith("+") || pattern.startsWith("-") || pattern.startsWith("!") ? 1 : 0);
 		const enabled = !pattern.startsWith("-") && !pattern.startsWith("!");
 		const exact = pattern.startsWith("+") || pattern.startsWith("-");
 		for (const filePath of allPaths) {
@@ -1318,8 +1316,7 @@ export class DefaultPackageManager implements PackageManager {
 		const identity = this.getPackageIdentity(pkg.source, scope);
 		const userEntry = sources.find(
 			(entry) =>
-				entry.scope === "user" &&
-				this.getPackageIdentity(this.getPackageSourceString(entry.pkg), "user") === identity,
+				entry.scope === "user" && this.getPackageIdentity(this.getPackageSourceString(entry.pkg), "user") === identity,
 		);
 		return userEntry ? { source: this.getPackageSourceString(userEntry.pkg), scope: "user" } : undefined;
 	}
@@ -1587,13 +1584,7 @@ export class DefaultPackageManager implements PackageManager {
 			return {
 				ref: "@{upstream}",
 				head,
-				fetchArgs: [
-					"fetch",
-					"--prune",
-					"--no-tags",
-					"origin",
-					`+refs/heads/${branch}:refs/remotes/origin/${branch}`,
-				],
+				fetchArgs: ["fetch", "--prune", "--no-tags", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
 			};
 		} catch {
 			await this.runCommand("git", ["remote", "set-head", "origin", "-a"], { cwd: installedPath }).catch(() => {});
@@ -1610,13 +1601,7 @@ export class DefaultPackageManager implements PackageManager {
 				return {
 					ref: "origin/HEAD",
 					head,
-					fetchArgs: [
-						"fetch",
-						"--prune",
-						"--no-tags",
-						"origin",
-						`+refs/heads/${branch}:refs/remotes/origin/${branch}`,
-					],
+					fetchArgs: ["fetch", "--prune", "--no-tags", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
 				};
 			}
 			return {
@@ -1884,11 +1869,7 @@ export class DefaultPackageManager implements PackageManager {
 
 		try {
 			const manifest = JSON.parse(stripBom(readFileSync(packageJsonPath, "utf-8"))) as { dependencies?: unknown };
-			if (
-				!manifest.dependencies ||
-				typeof manifest.dependencies !== "object" ||
-				Array.isArray(manifest.dependencies)
-			) {
+			if (!manifest.dependencies || typeof manifest.dependencies !== "object" || Array.isArray(manifest.dependencies)) {
 				return false;
 			}
 
@@ -2506,13 +2487,7 @@ export class DefaultPackageManager implements PackageManager {
 			userOverrides.prompts,
 			globalBaseDir,
 		);
-		addResources(
-			"themes",
-			collectAutoThemeEntries(userDirs.themes),
-			userMetadata,
-			userOverrides.themes,
-			globalBaseDir,
-		);
+		addResources("themes", collectAutoThemeEntries(userDirs.themes), userMetadata, userOverrides.themes, globalBaseDir);
 	}
 
 	private collectFilesFromPaths(paths: string[], resourceType: ResourceType): string[] {
@@ -2574,9 +2549,7 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private toResolvedPaths(accumulator: ResourceAccumulator): ResolvedPaths {
-		const mapToResolved = (
-			entries: Map<string, { metadata: PathMetadata; enabled: boolean }>,
-		): ResolvedResource[] => {
+		const mapToResolved = (entries: Map<string, { metadata: PathMetadata; enabled: boolean }>): ResolvedResource[] => {
 			const resolved = Array.from(entries.entries()).map(([path, { metadata, enabled }]) => ({
 				path,
 				enabled,

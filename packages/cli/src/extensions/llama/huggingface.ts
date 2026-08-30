@@ -108,8 +108,7 @@ export class HuggingFaceClient {
 		const payload = await this.request(`/api/models?${params}`, signal);
 		if (!Array.isArray(payload)) throw new Error("Hugging Face returned invalid search results");
 		return payload.flatMap((value) => {
-			if (typeof value !== "object" || value === null || typeof (value as { id?: unknown }).id !== "string")
-				return [];
+			if (typeof value !== "object" || value === null || typeof (value as { id?: unknown }).id !== "string") return [];
 			const model = value as { id: string; downloads?: unknown };
 			return [{ id: model.id, downloads: typeof model.downloads === "number" ? model.downloads : 0 }];
 		});

@@ -1,10 +1,7 @@
 import { join } from "node:path";
 import type { SessionMetadata, SessionRepo } from "@knightcode/agent";
 import { NodeExecutionEnv } from "@knightcode/agent/node";
-import {
-	createSessionBackendConformance,
-	type SessionBackendFixture,
-} from "@knightcode/agent/session/testing";
+import { createSessionBackendConformance, type SessionBackendFixture } from "@knightcode/agent/session/testing";
 import { describe, it } from "vitest";
 import { createNodeSqliteFactory, type SqliteSessionMetadata, SqliteSessionRepository } from "../src/index.ts";
 import { createTempDir } from "./test-utils.ts";

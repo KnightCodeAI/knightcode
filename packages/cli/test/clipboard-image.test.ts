@@ -147,9 +147,7 @@ describe("readClipboardImage", () => {
 
 	test("Non-Wayland: uses clipboard", async () => {
 		mocks.spawnSync.mockImplementation(() => {
-			throw new Error(
-				"spawnSync should not be called for non-Wayland sessions when native clipboard returns an image",
-			);
+			throw new Error("spawnSync should not be called for non-Wayland sessions when native clipboard returns an image");
 		});
 
 		mocks.clipboard.hasImage.mockReturnValue(true);

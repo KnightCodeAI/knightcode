@@ -62,6 +62,16 @@ export function buildContextEntries(pathEntries: readonly Entry[], options: Sess
 	return entries;
 }
 
+/**
+ * Harness spec 2.5 rule 3: assistant responses that stopped with `error`, `aborted`, or `deferred`
+ * never enter provider context. A genuine output-limit `length` response is retained.
+ */
+function isDroppedFromContext(message: AgentMessage): boolean {
+	if (message.role !== "assistant") return false;
+	const stopReason = message.stopReason;
+	return stopReason === "error" || stopReason === "aborted" || stopReason === "deferred";
+}
+
 export function sessionEntryToContextMessages(
 	entry: Entry,
 	index: number,
@@ -69,13 +79,12 @@ export function sessionEntryToContextMessages(
 	options: SessionContextBuildOptions = {},
 ): AgentMessage[] {
 	if (entry.type === "message") {
-		if (entry.message.role === "assistant" && entry.message.stopReason === "deferred") return [];
-		return [entry.message];
+		return isDroppedFromContext(entry.message) ? [] : [entry.message];
 	}
 	if (entry.type === "compaction") {
 		return [
 			createCompactionSummaryMessage(entry.summary, entry.tokensBefore, entry.timestamp),
-			...entry.retainedTail,
+			...entry.retainedTail.filter((message) => !isDroppedFromContext(message)),
 		];
 	}
 	if (entry.type === "branch_summary" && entry.summary) {

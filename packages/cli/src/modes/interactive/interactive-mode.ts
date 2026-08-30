@@ -1767,9 +1767,7 @@ export class InteractiveMode {
 			];
 			if (contextFiles.length > 0) {
 				this.loadedResourcesContainer.addChild(new Spacer(1));
-				const contextList = contextFiles
-					.map((f) => theme.fg("dim", `  ${this.formatDisplayPath(f.path)}`))
-					.join("\n");
+				const contextList = contextFiles.map((f) => theme.fg("dim", `  ${this.formatDisplayPath(f.path)}`)).join("\n");
 				const contextCompactList = formatCompactList(
 					contextFiles.map((contextFile) => this.formatContextPath(contextFile.path)),
 					{ sort: false },
@@ -1814,8 +1812,7 @@ export class InteractiveMode {
 				const groups = this.buildScopeGroups(extensions);
 				const extList = this.formatScopeGroups(groups, {
 					formatPath: (item) => this.formatExtensionDisplayPath(item.path),
-					formatPackagePath: (item) =>
-						this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
+					formatPackagePath: (item) => this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
 				});
 				const extensionCompactList = formatCompactList(this.getCompactExtensionLabels(extensions));
 				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
@@ -2274,9 +2271,7 @@ export class InteractiveMode {
 		this.workingVisible = true;
 		this.setWorkingIndicator();
 		if (this.activeStatusIndicator?.kind === "working") {
-			this.activeStatusIndicator.setMessage(
-				`${this.defaultWorkingMessage} (${keyText("app.interrupt")} to interrupt)`,
-			);
+			this.activeStatusIndicator.setMessage(`${this.defaultWorkingMessage} (${keyText("app.interrupt")} to interrupt)`);
 		}
 		this.setHiddenThinkingLabel();
 	}
@@ -2322,8 +2317,7 @@ export class InteractiveMode {
 	 */
 	private setExtensionFooter(
 		factory:
-			| ((tui: TUI, thm: Theme, footerData: ReadonlyFooterDataProvider) => Component & { dispose?(): void })
-			| undefined,
+			((tui: TUI, thm: Theme, footerData: ReadonlyFooterDataProvider) => Component & { dispose?(): void }) | undefined,
 	): void {
 		// Dispose existing custom footer
 		if (this.customFooter?.dispose) {
@@ -2795,9 +2789,7 @@ export class InteractiveMode {
 						const resolveOptions = (): OverlayOptions | undefined => {
 							if (options?.overlayOptions) {
 								const opts =
-									typeof options.overlayOptions === "function"
-										? options.overlayOptions()
-										: options.overlayOptions;
+									typeof options.overlayOptions === "function" ? options.overlayOptions() : options.overlayOptions;
 								return opts;
 							}
 							// Fallback: use component's width property if available
@@ -3415,11 +3407,7 @@ export class InteractiveMode {
 					// The latest compaction is prepended for model context; append it below at its chronological position.
 					this.renderSessionEntries(entries.slice(1));
 					this.addMessageToChat(
-						createCompactionSummaryMessage(
-							event.result.summary,
-							event.result.tokensBefore,
-							new Date().toISOString(),
-						),
+						createCompactionSummaryMessage(event.result.summary, event.result.tokensBefore, new Date().toISOString()),
 					);
 					if (event.result.usage) {
 						this.addCompactionCostNotice({
@@ -3448,9 +3436,7 @@ export class InteractiveMode {
 				this.defaultEditor.onEscape = () => {
 					this.session.abortRetry();
 				};
-				this.showStatusIndicator(
-					new RetryStatusIndicator(this.ui, event.attempt, event.maxAttempts, event.delayMs),
-				);
+				this.showStatusIndicator(new RetryStatusIndicator(this.ui, event.attempt, event.maxAttempts, event.delayMs));
 				this.ui.requestRender();
 				break;
 			}
@@ -3472,9 +3458,7 @@ export class InteractiveMode {
 
 			case "summarization_retry_scheduled": {
 				this.showError(event.errorMessage);
-				this.showStatusIndicator(
-					new RetryStatusIndicator(this.ui, event.attempt, event.maxAttempts, event.delayMs),
-				);
+				this.showStatusIndicator(new RetryStatusIndicator(this.ui, event.attempt, event.maxAttempts, event.delayMs));
 				this.ui.requestRender();
 				break;
 			}
@@ -3623,10 +3607,7 @@ export class InteractiveMode {
 					const skillBlock = parseSkillBlock(textContent);
 					if (skillBlock) {
 						// Render skill block (collapsible)
-						const component = new SkillInvocationMessageComponent(
-							skillBlock,
-							this.getMarkdownThemeWithSettings(),
-						);
+						const component = new SkillInvocationMessageComponent(skillBlock, this.getMarkdownThemeWithSettings());
 						component.setExpanded(this.toolOutputExpanded);
 						this.chatContainer.addChild(component);
 						// Render user message separately if present
@@ -5430,8 +5411,7 @@ export class InteractiveMode {
 
 		return this.getLoginProviderOptions().filter(
 			(provider) =>
-				provider.id.toLowerCase() === normalizedProviderRef ||
-				provider.name.toLowerCase() === normalizedProviderRef,
+				provider.id.toLowerCase() === normalizedProviderRef || provider.name.toLowerCase() === normalizedProviderRef,
 		);
 	}
 
@@ -5719,11 +5699,7 @@ export class InteractiveMode {
 			providerOption.name,
 			`${providerOption.name} setup`,
 		);
-		dialog.showInfo(
-			`${providerOption.method?.name ?? "Authentication"} is configured outside ${APP_NAME}.`,
-			[],
-			true,
-		);
+		dialog.showInfo(`${providerOption.method?.name ?? "Authentication"} is configured outside ${APP_NAME}.`, [], true);
 
 		this.editorContainer.clear();
 		this.editorContainer.addChild(dialog);
@@ -5885,9 +5861,7 @@ export class InteractiveMode {
 			restoreEditor();
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			if (error instanceof CredentialSynchronizationError) {
-				this.showError(
-					`Logged in to ${providerName}, but local model state could not be synchronized: ${errorMsg}`,
-				);
+				this.showError(`Logged in to ${providerName}, but local model state could not be synchronized: ${errorMsg}`);
 			} else if (errorMsg !== "Login cancelled") {
 				this.showError(`Failed to login to ${providerName}: ${errorMsg}`);
 			}
@@ -6166,8 +6140,7 @@ export class InteractiveMode {
 		if (promptTokens > 0 && (cacheRead > 0 || cacheWrite > 0)) {
 			const hitRate = theme.fg("dim", `(${((cacheRead / promptTokens) * 100).toFixed(1)}%)`);
 			info += `  ${theme.fg("dim", "Cached:")} ${cacheRead.toLocaleString()} ${hitRate}\n`;
-			const written =
-				cacheWrite > 0 ? ` ${theme.fg("dim", `(${cacheWrite.toLocaleString()} written to cache)`)}` : "";
+			const written = cacheWrite > 0 ? ` ${theme.fg("dim", `(${cacheWrite.toLocaleString()} written to cache)`)}` : "";
 			info += `  ${theme.fg("dim", "Uncached:")} ${(input + cacheWrite).toLocaleString()}${written}\n`;
 		}
 		info += `${theme.fg("dim", "Output:")} ${stats.tokens.output.toLocaleString()}\n`;

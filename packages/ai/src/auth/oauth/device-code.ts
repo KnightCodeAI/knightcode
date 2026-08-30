@@ -9,9 +9,7 @@ const DEFAULT_POLL_INTERVAL_SECONDS = 5;
 const SLOW_DOWN_INTERVAL_INCREMENT_MS = 5000;
 
 type OAuthDeviceCodeIncompletePollResult =
-	| { status: "pending" }
-	| { status: "slow_down"; intervalSeconds?: number }
-	| { status: "failed"; message: string };
+	{ status: "pending" } | { status: "slow_down"; intervalSeconds?: number } | { status: "failed"; message: string };
 
 export type OAuthDeviceCodePollResult<T> = OAuthDeviceCodeIncompletePollResult | { status: "complete"; value: T };
 

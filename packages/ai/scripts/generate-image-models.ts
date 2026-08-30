@@ -33,14 +33,9 @@ interface OpenRouterModelRecord {
 	};
 }
 
-export function parseOpenRouterImageModels(
-	payload: unknown,
-	strict: boolean,
-): ImagesModel<"openrouter-images">[] {
+export function parseOpenRouterImageModels(payload: unknown, strict: boolean): ImagesModel<"openrouter-images">[] {
 	const data =
-		typeof payload === "object" && payload !== null
-			? (payload as { data?: OpenRouterModelRecord[] }).data
-			: undefined;
+		typeof payload === "object" && payload !== null ? (payload as { data?: OpenRouterModelRecord[] }).data : undefined;
 	if (!Array.isArray(data) || data.length === 0) {
 		if (strict) throw new Error("OpenRouter API returned a missing or empty image model list");
 		return [];

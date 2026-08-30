@@ -7,15 +7,20 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 	private done = false;
 	private finalResultPromise: Promise<R>;
 	private resolveFinalResult!: (result: R) => void;
+	private rejectFinalResult!: (error: unknown) => void;
+	private finalResultSettled = false;
 	private isComplete: (event: T) => boolean;
 	private extractResult: (event: T) => R;
 
 	constructor(isComplete: (event: T) => boolean, extractResult: (event: T) => R) {
 		this.isComplete = isComplete;
 		this.extractResult = extractResult;
-		this.finalResultPromise = new Promise((resolve) => {
+		this.finalResultPromise = new Promise((resolve, reject) => {
 			this.resolveFinalResult = resolve;
+			this.rejectFinalResult = reject;
 		});
+		// result() may never be called; keep an unconsumed rejection from surfacing as unhandled.
+		this.finalResultPromise.catch(() => {});
 	}
 
 	push(event: T): void {
@@ -23,6 +28,7 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 
 		if (this.isComplete(event)) {
 			this.done = true;
+			this.finalResultSettled = true;
 			this.resolveFinalResult(this.extractResult(event));
 		}
 
@@ -38,7 +44,13 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 	end(result?: R): void {
 		this.done = true;
 		if (result !== undefined) {
+			this.finalResultSettled = true;
 			this.resolveFinalResult(result);
+		} else if (!this.finalResultSettled) {
+			// A source that ends without a terminal event (a truncated SSE response, for example)
+			// would otherwise leave result() pending forever.
+			this.finalResultSettled = true;
+			this.rejectFinalResult(new Error("Stream ended without a result"));
 		}
 		// Notify all waiting consumers that we're done
 		while (this.waiting.length > 0) {

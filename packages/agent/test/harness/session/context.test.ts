@@ -57,12 +57,7 @@ describe("v4 session context", () => {
 		];
 
 		const context = buildSessionContext(entries);
-		expect(context.messages.map((message) => message.role)).toEqual([
-			"compactionSummary",
-			"user",
-			"assistant",
-			"user",
-		]);
+		expect(context.messages.map((message) => message.role)).toEqual(["compactionSummary", "user", "assistant", "user"]);
 		expect(context.model).toEqual({ provider: "openai", modelId: "gpt-5" });
 		expect(context.thinkingLevel).toBe("high");
 	});
@@ -120,5 +115,39 @@ describe("v4 session context", () => {
 		});
 		expect(context.messages.map((message) => message.role)).toEqual(["user", "user"]);
 		expect(context.messages[1]).toMatchObject({ content: [{ type: "text", text: "note: project me" }] });
+	});
+
+	// Harness spec 2.5 rule 3.
+	it("drops error and aborted assistant responses, in entries and in a retained tail", () => {
+		const failed: AssistantMessage = { ...assistantMessage("failed"), stopReason: "error" };
+		const cancelled: AssistantMessage = { ...assistantMessage("cancelled"), stopReason: "aborted" };
+		const truncated: AssistantMessage = { ...assistantMessage("truncated"), stopReason: "length" };
+		const entries: Entry[] = [
+			entry(
+				{
+					type: "compaction",
+					id: "compact",
+					parentId: null,
+					summary: "summary",
+					retainedTail: [userMessage("retained"), failed, cancelled, truncated],
+					tokensBefore: 100,
+				},
+				1,
+			),
+			entry({ type: "message", id: "failed", parentId: "compact", message: failed }, 2),
+			entry({ type: "message", id: "cancelled", parentId: "failed", message: cancelled }, 3),
+			entry({ type: "message", id: "kept", parentId: "cancelled", message: assistantMessage("kept") }, 4),
+		];
+
+		const context = buildSessionContext(entries);
+		// Only the retained tail's user message, its genuine `length` response, and "kept" survive.
+		expect(context.messages.map((message) => message.role)).toEqual([
+			"compactionSummary",
+			"user",
+			"assistant",
+			"assistant",
+		]);
+		expect(context.messages[2]).toMatchObject({ content: [{ type: "text", text: "truncated" }] });
+		expect(context.messages[3]).toMatchObject({ content: [{ type: "text", text: "kept" }] });
 	});
 });

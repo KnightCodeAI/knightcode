@@ -32,9 +32,9 @@ describe("SQLite branch queries", () => {
 			await db.close();
 		}
 
-		expect((await session.findEntriesOnBranch({ start: leafId, stopAtId: leafId })).map((entry) => entry.id)).toEqual(
-			[leafId],
-		);
+		expect((await session.findEntriesOnBranch({ start: leafId, stopAtId: leafId })).map((entry) => entry.id)).toEqual([
+			leafId,
+		]);
 		expect(
 			(
 				await session.findEntriesOnBranch({
@@ -103,9 +103,9 @@ describe("SQLite branch queries", () => {
 		} finally {
 			await db.close();
 		}
-		expect(
-			(await session.findEntriesOnBranch({ start: childId, stopAtId: childId })).map((entry) => entry.id),
-		).toEqual([childId]);
+		expect((await session.findEntriesOnBranch({ start: childId, stopAtId: childId })).map((entry) => entry.id)).toEqual(
+			[childId],
+		);
 		expect(
 			(await session.findEntriesOnBranch({ start: childId, stopAtType: "message" })).map((entry) => entry.id),
 		).toEqual([childId]);
@@ -125,9 +125,9 @@ describe("SQLite branch queries", () => {
 		} finally {
 			await cycleDb.close();
 		}
-		expect(
-			(await session.findEntriesOnBranch({ start: childId, stopAtId: childId })).map((entry) => entry.id),
-		).toEqual([childId]);
+		expect((await session.findEntriesOnBranch({ start: childId, stopAtId: childId })).map((entry) => entry.id)).toEqual(
+			[childId],
+		);
 		expect(
 			(await session.findEntriesOnBranch({ start: childId, stopAtType: "message" })).map((entry) => entry.id),
 		).toEqual([childId]);

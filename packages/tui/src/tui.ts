@@ -363,7 +363,8 @@ export abstract class TuiBase extends Container implements TUI {
 	constructor(terminal: Terminal, showHardwareCursor?: boolean, logDirectory?: string) {
 		super();
 		this.terminal = terminal;
-		this.logDirectory = logDirectory ?? process.env.KNIGHTCODE_CODING_AGENT_DIR ?? path.join(os.homedir(), ".knightcode", "agent");
+		this.logDirectory =
+			logDirectory ?? process.env.KNIGHTCODE_CODING_AGENT_DIR ?? path.join(os.homedir(), ".knightcode", "agent");
 		if (showHardwareCursor !== undefined) {
 			this.showHardwareCursor = showHardwareCursor;
 		}
@@ -664,9 +665,7 @@ export abstract class TuiBase extends Container implements TUI {
 
 	/** Check if the focused component is a visible overlay */
 	protected isOverlayFocused(): boolean {
-		return this.overlayStack.some(
-			(entry) => entry.component === this.focusedComponent && this.isOverlayVisible(entry),
-		);
+		return this.overlayStack.some((entry) => entry.component === this.focusedComponent && this.isOverlayVisible(entry));
 	}
 
 	/** Check if an overlay entry is currently visible */

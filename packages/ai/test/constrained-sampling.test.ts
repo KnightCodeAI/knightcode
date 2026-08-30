@@ -102,9 +102,7 @@ describe("constrained tool sampling", () => {
 			convertResponsesTools([makeTool({ constrainedSampling: { type: "grammar", variants: {} } })], {
 				supportsOpenAIGrammarTools: true,
 			}),
-		).toThrow(
-			'Tool "sample_tool" cannot use grammar constrained sampling: no supported grammar variant was provided',
-		);
+		).toThrow('Tool "sample_tool" cannot use grammar constrained sampling: no supported grammar variant was provided');
 
 		const fallback = convertResponsesTools([grammarTool], {
 			supportsOpenAIGrammarTools: false,

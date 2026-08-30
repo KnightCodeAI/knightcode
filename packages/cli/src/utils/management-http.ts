@@ -65,10 +65,7 @@ export async function fetchWithRetry(
 			if (
 				parentSignal?.aborted ||
 				timeoutSignal?.aborted ||
-				(error instanceof Error &&
-					error.name === "AbortError" &&
-					!attemptTimedOut &&
-					timeoutSignal === undefined) ||
+				(error instanceof Error && error.name === "AbortError" && !attemptTimedOut && timeoutSignal === undefined) ||
 				attempt >= maxRetries
 			) {
 				throw error;

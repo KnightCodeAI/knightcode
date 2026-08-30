@@ -539,15 +539,7 @@ class TreeList implements Component {
 			// Add children in reverse order (to process in forward order via stack)
 			for (let i = children.length - 1; i >= 0; i--) {
 				const childIsLast = i === children.length - 1;
-				stack.push([
-					children[i],
-					childIndent,
-					multipleChildren,
-					multipleChildren,
-					childIsLast,
-					childGutters,
-					false,
-				]);
+				stack.push([children[i], childIndent, multipleChildren, multipleChildren, childIsLast, childGutters, false]);
 			}
 		}
 
@@ -693,8 +685,7 @@ class TreeList implements Component {
 
 			// Build prefix with gutters at their correct positions
 			// Each gutter has a position (displayIndent where its connector was shown)
-			const connector =
-				flatNode.showConnector && !flatNode.isVirtualRootChild ? (flatNode.isLast ? "└─ " : "├─ ") : "";
+			const connector = flatNode.showConnector && !flatNode.isVirtualRootChild ? (flatNode.isLast ? "└─ " : "├─ ") : "";
 			const connectorPosition = connector ? displayIndent - 1 : -1;
 
 			// Build prefix char by char, placing gutters and connector at their positions

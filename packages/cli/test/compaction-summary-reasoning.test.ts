@@ -200,9 +200,7 @@ describe("generateSummary reasoning options", () => {
 			settings: { enabled: true, reserveTokens: 2000, keepRecentTokens: 20 },
 		};
 
-		await expect(compact(preparation, createModel(false), "test-key")).rejects.toThrow(
-			"generation hit the token cap",
-		);
+		await expect(compact(preparation, createModel(false), "test-key")).rejects.toThrow("generation hit the token cap");
 	});
 
 	it("does not set reasoning when thinking is off", async () => {

@@ -395,9 +395,7 @@ describe("JSONL v4 per-session storage", () => {
 			(await restored.findRecords({ runId: "compaction", order: "oldestFirst" })).map((record) => record.id),
 		).toEqual(["compaction", "compaction-attempt", "compaction-finished"]);
 		expect(
-			(await restored.findRecords({ type: "usage", afterSeq: records[6]!.seq, limit: 2 })).map(
-				(record) => record.id,
-			),
+			(await restored.findRecords({ type: "usage", afterSeq: records[6]!.seq, limit: 2 })).map((record) => record.id),
 		).toEqual(["adjustment", "hook-usage"]);
 		expect((await restored.findOpenOperations("main", { limit: 2 })).map((record) => record.id)).toEqual([
 			"navigation",

@@ -52,8 +52,7 @@ export function getTextOutput(
 		const imageIndicators = imageBlocks
 			.map((img) => {
 				const mimeType = img.mimeType ?? "image/unknown";
-				const dims =
-					img.data && img.mimeType ? (getImageDimensions(img.data, img.mimeType) ?? undefined) : undefined;
+				const dims = img.data && img.mimeType ? (getImageDimensions(img.data, img.mimeType) ?? undefined) : undefined;
 				return imageFallback(mimeType, dims);
 			})
 			.join("\n");

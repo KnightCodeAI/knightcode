@@ -154,11 +154,7 @@ export class AssistantMessageComponent extends Container {
 								italic: true,
 							},
 							{
-								transform: createMarkdownTransform(
-									"assistant-thinking",
-									this.isStreaming,
-									this.markdownTransformers,
-								),
+								transform: createMarkdownTransform("assistant-thinking", this.isStreaming, this.markdownTransformers),
 							},
 						),
 					);

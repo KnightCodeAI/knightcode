@@ -106,10 +106,7 @@ function getAliases(): Record<string, string> {
 	// strict superset of the core entrypoint).
 	const knightAiCompatEntry = resolveWorkspaceOrImport("ai/dist/compat.js", "@knightcode/ai/compat");
 	const knightAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@knightcode/ai/oauth");
-	const knightAiProvidersEntry = resolveWorkspaceOrImport(
-		"ai/dist/providers/all.js",
-		"@knightcode/ai/providers/all",
-	);
+	const knightAiProvidersEntry = resolveWorkspaceOrImport("ai/dist/providers/all.js", "@knightcode/ai/providers/all");
 
 	_aliases = {
 		"@knightcodeai/cli": knightCliEntry,
@@ -305,9 +302,7 @@ function createExtensionAPI(
 		): void {
 			assertActive();
 			if (options.default !== undefined && typeof options.default !== options.type) {
-				throw new Error(
-					`Invalid default for flag "${name}": expected ${options.type}, got ${typeof options.default}`,
-				);
+				throw new Error(`Invalid default for flag "${name}": expected ${options.type}, got ${typeof options.default}`);
 			}
 			extension.flags.set(name, { name, extensionPath: extension.path, ...options });
 			if (options.default !== undefined && !runtime.flagValues.has(name)) {

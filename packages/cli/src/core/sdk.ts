@@ -279,9 +279,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					const hasImages = content.some((c) => c.type === "image");
 					if (hasImages) {
 						const filteredContent = content
-							.map((c) =>
-								c.type === "image" ? { type: "text" as const, text: "Image reading is disabled." } : c,
-							)
+							.map((c) => (c.type === "image" ? { type: "text" as const, text: "Image reading is disabled." } : c))
 							.filter(
 								(c, i, arr) =>
 									// Dedupe consecutive "Image reading is disabled." texts
@@ -328,12 +326,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				maxRetries: options?.maxRetries ?? providerRetrySettings.maxRetries,
 				maxRetryDelayMs: options?.maxRetryDelayMs ?? providerRetrySettings.maxRetryDelayMs,
 				transformHeaders: async (requestHeaders) => {
-					const headers = mergeProviderAttributionHeaders(
-						model,
-						settingsManager,
-						options?.sessionId,
-						requestHeaders,
-					);
+					const headers = mergeProviderAttributionHeaders(model, settingsManager, options?.sessionId, requestHeaders);
 					return headerRunner?.hasHandlers("before_provider_headers")
 						? headerRunner.emitBeforeProviderHeaders(headers ?? {})
 						: (headers ?? {});

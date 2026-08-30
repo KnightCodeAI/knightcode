@@ -387,10 +387,7 @@ export class Agent {
 		await this.runContinuation();
 	}
 
-	private normalizePromptInput(
-		input: string | AgentMessage | AgentMessage[],
-		images?: ImageContent[],
-	): AgentMessage[] {
+	private normalizePromptInput(input: string | AgentMessage | AgentMessage[], images?: ImageContent[]): AgentMessage[] {
 		if (Array.isArray(input)) {
 			return input;
 		}

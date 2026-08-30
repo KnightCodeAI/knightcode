@@ -96,11 +96,7 @@ export class SessionState {
 
 	applyMutation(mutation: SessionMutation, invalid: InvalidMutation = invalidMutation): void {
 		const seq =
-			mutation.kind === "entry"
-				? mutation.entry.seq
-				: mutation.kind === "record"
-					? mutation.record.seq
-					: mutation.seq;
+			mutation.kind === "entry" ? mutation.entry.seq : mutation.kind === "record" ? mutation.record.seq : mutation.seq;
 		if (seq !== this.sequence + 1) invalid(`has non-consecutive seq ${seq}`);
 
 		switch (mutation.kind) {

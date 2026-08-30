@@ -10,9 +10,7 @@ describe("sql", () => {
 			sql`INSERT INTO entries (id, kind, active) VALUES (${"two"}, ${"message"}, ${0})`.run(db);
 			const filters = joinSqlFragments([sql`kind = ${"message"}`, sql`active = ${1}`], " AND ");
 
-			expect(sql`SELECT id FROM entries WHERE ${filters} LIMIT ${10}`.all<{ id: string }>(db)).toEqual([
-				{ id: "one" },
-			]);
+			expect(sql`SELECT id FROM entries WHERE ${filters} LIMIT ${10}`.all<{ id: string }>(db)).toEqual([{ id: "one" }]);
 		} finally {
 			db.close();
 		}

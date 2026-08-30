@@ -104,12 +104,7 @@ function toPosixPath(filePath: string): string {
 function getKnightcodeDocsClassification(absolutePath: string): CompactReadClassification | undefined {
 	const packageRoot = dirname(getReadmePath());
 	const relativePath = relative(resolvePath(packageRoot), resolvePath(absolutePath));
-	if (
-		relativePath === "" ||
-		relativePath === ".." ||
-		relativePath.startsWith(`..${sep}`) ||
-		isAbsolute(relativePath)
-	) {
+	if (relativePath === "" || relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
 		return undefined;
 	}
 
@@ -337,9 +332,7 @@ export function createReadToolDefinition(
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 			const classification = !context.expanded ? getCompactReadClassification(args, context.cwd) : undefined;
 			text.setText(
-				classification
-					? formatCompactReadCall(classification, args, theme)
-					: formatReadCall(args, theme, context.cwd),
+				classification ? formatCompactReadCall(classification, args, theme) : formatReadCall(args, theme, context.cwd),
 			);
 			return text;
 		},

@@ -349,8 +349,7 @@ export function createEditToolDefinition(
 					await ops.access(absolutePath);
 				} catch (error: unknown) {
 					throwIfAborted();
-					const errorMessage =
-						error instanceof Error && "code" in error ? `Error code: ${error.code}` : String(error);
+					const errorMessage = error instanceof Error && "code" in error ? `Error code: ${error.code}` : String(error);
 					throw new Error(`Could not edit file: ${path}. ${errorMessage}.`);
 				}
 				throwIfAborted();
@@ -387,9 +386,7 @@ export function createEditToolDefinition(
 		renderCall(args, theme, context) {
 			const component = getEditCallRenderComponent(context.state, context.lastComponent);
 			const previewInput = getRenderablePreviewInput(args as RenderableEditArgs | undefined);
-			const argsKey = previewInput
-				? JSON.stringify({ path: previewInput.path, edits: previewInput.edits })
-				: undefined;
+			const argsKey = previewInput ? JSON.stringify({ path: previewInput.path, edits: previewInput.edits }) : undefined;
 
 			if (component.previewArgsKey !== argsKey) {
 				component.preview = undefined;
@@ -414,9 +411,7 @@ export function createEditToolDefinition(
 		renderResult(result, _options, theme, context) {
 			const callComponent = context.state.callComponent;
 			const previewInput = getRenderablePreviewInput(context.args as RenderableEditArgs | undefined);
-			const argsKey = previewInput
-				? JSON.stringify({ path: previewInput.path, edits: previewInput.edits })
-				: undefined;
+			const argsKey = previewInput ? JSON.stringify({ path: previewInput.path, edits: previewInput.edits }) : undefined;
 			const typedResult = result as EditToolResultLike;
 			const resultDiff = !context.isError ? typedResult.details?.diff : undefined;
 			let changed = false;
@@ -434,12 +429,7 @@ export function createEditToolDefinition(
 					changed = true;
 				}
 				if (changed) {
-					buildEditCallComponent(
-						callComponent,
-						context.args as RenderableEditArgs | undefined,
-						theme,
-						context.cwd,
-					);
+					buildEditCallComponent(callComponent, context.args as RenderableEditArgs | undefined, theme, context.cwd);
 				}
 			}
 

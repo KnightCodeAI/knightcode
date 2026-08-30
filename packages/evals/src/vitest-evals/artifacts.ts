@@ -92,8 +92,7 @@ export async function persistEvalArtifactReferences(
 	const references: Array<{ name: string; path: string }> = [];
 	for (const artifact of artifacts) {
 		if (
-			(artifact.type !== "@knightcode/evals:session" &&
-				artifact.type !== "@knightcode/evals:source") ||
+			(artifact.type !== "@knightcode/evals:session" && artifact.type !== "@knightcode/evals:source") ||
 			artifact.runId !== runId
 		) {
 			continue;

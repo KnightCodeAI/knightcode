@@ -110,8 +110,7 @@ export function getCwdRelativePath(filePath: string, cwd: string): string | unde
 	const resolvedPath = resolvePath(filePath, resolvedCwd);
 	const relativePath = relative(resolvedCwd, resolvedPath);
 	const isInsideCwd =
-		relativePath === "" ||
-		(relativePath !== ".." && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath));
+		relativePath === "" || (relativePath !== ".." && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath));
 
 	return isInsideCwd ? relativePath || "." : undefined;
 }

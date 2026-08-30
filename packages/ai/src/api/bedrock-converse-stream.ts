@@ -62,6 +62,8 @@ import {
 	buildBaseOptions,
 	clampMaxTokensToContext,
 	clampReasoning,
+	clampThinkingBudgetToAnswerRoom,
+	MIN_ANSWER_TOKENS,
 } from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
 
@@ -540,6 +542,13 @@ export const streamSimple: StreamFunction<"bedrock-converse-stream", SimpleStrea
 		);
 
 		const maxTokens = clampMaxTokensToContext(model, context, adjusted.maxTokens);
+		const thinkingBudget = clampThinkingBudgetToAnswerRoom(adjusted.thinkingBudget, maxTokens);
+
+		// A near-full context can leave no room for both thinking and an answer. Budget-based Claude
+		// rejects anything below its 1024 minimum, so drop back to a non-reasoning request.
+		if (thinkingBudget < MIN_ANSWER_TOKENS) {
+			return stream(model, context, { ...base, maxTokens, reasoning: undefined } satisfies BedrockOptions);
+		}
 
 		return stream(model, context, {
 			...base,
@@ -547,7 +556,7 @@ export const streamSimple: StreamFunction<"bedrock-converse-stream", SimpleStrea
 			reasoning: options.reasoning,
 			thinkingBudgets: {
 				...(options.thinkingBudgets || {}),
-				[clampReasoning(options.reasoning)!]: Math.min(adjusted.thinkingBudget, Math.max(0, maxTokens - 1024)),
+				[clampReasoning(options.reasoning)!]: thinkingBudget,
 			},
 		} satisfies BedrockOptions);
 	}
@@ -635,8 +644,7 @@ function handleContentBlockDelta(
 			// `thinkingSignature` holds either an Anthropic signature or an opaque redacted
 			// payload, never both: mixing them would corrupt whichever arrived first.
 			if (delta.reasoningContent.signature && !thinkingBlock.redacted) {
-				thinkingBlock.thinkingSignature =
-					(thinkingBlock.thinkingSignature || "") + delta.reasoningContent.signature;
+				thinkingBlock.thinkingSignature = (thinkingBlock.thinkingSignature || "") + delta.reasoningContent.signature;
 			}
 			if (delta.reasoningContent.redactedContent?.length) {
 				// Encrypted reasoning from non-Anthropic models on Bedrock (e.g. OpenAI GPT-5.6).

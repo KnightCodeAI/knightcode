@@ -85,8 +85,7 @@ describe("AgentSession prompt characterization", () => {
 			description: `${name} tool`,
 			parameters: Type.Object({ value: Type.String() }),
 			execute: async (_toolCallId, params) => {
-				const value =
-					typeof params === "object" && params !== null && "value" in params ? String(params.value) : "";
+				const value = typeof params === "object" && params !== null && "value" in params ? String(params.value) : "";
 				await new Promise((resolve) => setTimeout(resolve, delayMs));
 				toolRuns.push(`${name}:${value}`);
 				return {
@@ -499,8 +498,6 @@ describe("AgentSession prompt characterization", () => {
 		const harness = await createHarness({ withConfiguredAuth: false });
 		harnesses.push(harness);
 
-		await expect(harness.session.prompt("hi")).rejects.toThrow(
-			`No API key found for ${harness.getModel().provider}.`,
-		);
+		await expect(harness.session.prompt("hi")).rejects.toThrow(`No API key found for ${harness.getModel().provider}.`);
 	});
 });

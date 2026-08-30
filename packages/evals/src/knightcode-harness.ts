@@ -50,7 +50,9 @@ export function resolveModelSelection(
 	const provider = (explicitModel?.provider ?? environment.KNIGHTCODE_PROVIDER)?.trim();
 	const id = (explicitModel?.id ?? environment.KNIGHTCODE_MODEL)?.trim();
 	if (!provider || !id) {
-		throw new Error("Select a harness model explicitly or set both KNIGHTCODE_PROVIDER and KNIGHTCODE_MODEL as defaults.");
+		throw new Error(
+			"Select a harness model explicitly or set both KNIGHTCODE_PROVIDER and KNIGHTCODE_MODEL as defaults.",
+		);
 	}
 	return { provider, id };
 }
@@ -97,9 +99,7 @@ async function promptAgent(session: AgentSession, input: string, signal: AbortSi
 		.find((message) => message.role === "assistant");
 	if (!assistant) throw new Error("Agent run completed without an assistant message.");
 	if (assistant.stopReason !== "stop") {
-		throw new Error(
-			assistant.errorMessage ?? `Agent run ended with unexpected stop reason: ${assistant.stopReason}.`,
-		);
+		throw new Error(assistant.errorMessage ?? `Agent run ended with unexpected stop reason: ${assistant.stopReason}.`);
 	}
 	const output = session.getLastAssistantText();
 	if (!output) throw new Error("Agent run produced no assistant text.");

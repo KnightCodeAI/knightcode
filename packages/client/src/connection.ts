@@ -46,11 +46,7 @@ export class Connection {
 	constructor(options: ConnectionOptions) {
 		this.#options = options;
 		this.#maxFrameLength = options.maxFrameLength ?? DEFAULT_MAX_FRAME_LENGTH;
-		if (
-			!Number.isSafeInteger(this.#maxFrameLength) ||
-			this.#maxFrameLength <= 0 ||
-			this.#maxFrameLength > MAX_UINT32
-		) {
+		if (!Number.isSafeInteger(this.#maxFrameLength) || this.#maxFrameLength <= 0 || this.#maxFrameLength > MAX_UINT32) {
 			throw new TypeError(`KnightClient maxFrameLength must be an integer between 1 and ${MAX_UINT32}`);
 		}
 	}

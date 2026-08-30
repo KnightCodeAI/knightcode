@@ -1210,11 +1210,7 @@ describe("openai-completions tool_choice", () => {
 		await streamSimple(
 			model,
 			{
-				messages: [
-					{ role: "user", content: "Read README.md", timestamp: Date.now() },
-					assistantMessage,
-					toolResult,
-				],
+				messages: [{ role: "user", content: "Read README.md", timestamp: Date.now() }, assistantMessage, toolResult],
 			},
 			{
 				apiKey: "test",

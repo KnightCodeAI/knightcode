@@ -134,9 +134,7 @@ const LATEX_MARKDOWN_EXTENSIONS: readonly TokenizerExtension[] = [
 		name: "latex",
 		level: "inline",
 		start(source) {
-			const indices = [source.indexOf("$"), source.indexOf("\\("), source.indexOf("\\[")].filter(
-				(index) => index >= 0,
-			);
+			const indices = [source.indexOf("$"), source.indexOf("\\("), source.indexOf("\\[")].filter((index) => index >= 0);
 			return indices.length > 0 ? Math.min(...indices) : undefined;
 		},
 		tokenizer: tokenizeInlineLatex,
@@ -879,10 +877,7 @@ export class Markdown implements Component {
 			for (let i = 0; i < row.length; i++) {
 				const cellText = this.renderInlineTokens(row[i].tokens || [], styleContext);
 				naturalWidths[i] = Math.max(naturalWidths[i] || 0, visibleWidth(cellText));
-				minWordWidths[i] = Math.max(
-					minWordWidths[i] || 1,
-					this.getLongestWordWidth(cellText, maxUnbrokenWordWidth),
-				);
+				minWordWidths[i] = Math.max(minWordWidths[i] || 1, this.getLongestWordWidth(cellText, maxUnbrokenWordWidth));
 			}
 		}
 

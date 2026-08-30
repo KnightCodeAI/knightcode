@@ -80,9 +80,7 @@ export function getBuiltinModels<TProvider extends BuiltinProvider>(
 	provider: TProvider,
 ): Model<BuiltinModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[] {
 	const models = MODELS[provider] as Record<string, Model<Api>> | undefined;
-	return models
-		? (Object.values(models) as Model<BuiltinModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[])
-		: [];
+	return models ? (Object.values(models) as Model<BuiltinModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[]) : [];
 }
 
 /** All built-in providers, freshly constructed. */

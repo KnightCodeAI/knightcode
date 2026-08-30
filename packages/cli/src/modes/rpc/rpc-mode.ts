@@ -77,10 +77,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 	};
 
 	// Pending extension UI requests waiting for response
-	const pendingExtensionRequests = new Map<
-		string,
-		{ resolve: (value: any) => void; reject: (error: Error) => void }
-	>();
+	const pendingExtensionRequests = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void }>();
 
 	// Shutdown request flag
 	let shutdownRequested = false;
@@ -766,12 +763,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 		}
 
 		// Handle extension UI responses
-		if (
-			typeof parsed === "object" &&
-			parsed !== null &&
-			"type" in parsed &&
-			parsed.type === "extension_ui_response"
-		) {
+		if (typeof parsed === "object" && parsed !== null && "type" in parsed && parsed.type === "extension_ui_response") {
 			const response = parsed as RpcExtensionUIResponse;
 			const pending = pendingExtensionRequests.get(response.id);
 			if (pending) {
@@ -791,11 +783,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			await checkShutdownRequested();
 		} catch (commandError: unknown) {
 			output(
-				error(
-					command.id,
-					command.type,
-					commandError instanceof Error ? commandError.message : String(commandError),
-				),
+				error(command.id, command.type, commandError instanceof Error ? commandError.message : String(commandError)),
 			);
 			await waitForRawStdoutBackpressure();
 		}

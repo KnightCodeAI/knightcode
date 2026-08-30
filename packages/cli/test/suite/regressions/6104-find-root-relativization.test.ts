@@ -66,9 +66,7 @@ describe("issue #6104 find relativizes root search paths", () => {
 		});
 
 		it("keeps a trailing slash on directories resolved through path.relative", () => {
-			expect(relativizeFindResultPath("/tmp/results/dir/", "/workspace/project", posix)).toBe(
-				"../../tmp/results/dir/",
-			);
+			expect(relativizeFindResultPath("/tmp/results/dir/", "/workspace/project", posix)).toBe("../../tmp/results/dir/");
 		});
 	});
 

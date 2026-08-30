@@ -195,7 +195,11 @@ async function startCallbackServer(
 
 			try {
 				const result = await exchangeAuthorizationCode(code, verifier, signal);
-				sendHtml(response, 200, oauthSuccessHtml("openrouter", "Signed in to OpenRouter. You may now close this page."));
+				sendHtml(
+					response,
+					200,
+					oauthSuccessHtml("openrouter", "Signed in to OpenRouter. You may now close this page."),
+				);
 				finish({ credential: result });
 			} catch (error) {
 				const message = error instanceof Error ? error.message : "Unknown token exchange error";

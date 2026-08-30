@@ -114,11 +114,9 @@ async function verifyToolResultImagesStayInFunctionCallOutput<TApi extends Api>(
 
 	const outputItems = functionCallOutput.output;
 	const textItem = outputItems.find((item) => (item as { type?: unknown } | null)?.type === "input_text") as
-		| InputTextItem
-		| undefined;
+		InputTextItem | undefined;
 	const imageItem = outputItems.find((item) => (item as { type?: unknown } | null)?.type === "input_image") as
-		| InputImageItem
-		| undefined;
+		InputImageItem | undefined;
 
 	expect(textItem).toBeTruthy();
 	expect(imageItem).toBeTruthy();

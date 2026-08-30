@@ -78,9 +78,7 @@ describe("strict model generation", () => {
 		expect(`${result.stdout}\n${result.stderr}`).toContain(
 			"qwen-token-plan-individual model IDs do not match (missing: deepseek-v4-flash-0731)",
 		);
-		expect(generatedPaths.map((path) => readFileSync(join(isolatedPackageRoot, path), "utf8"))).toEqual(
-			isolatedBefore,
-		);
+		expect(generatedPaths.map((path) => readFileSync(join(isolatedPackageRoot, path), "utf8"))).toEqual(isolatedBefore);
 		expect(generatedPaths.map((path) => readFileSync(join(packageRoot, path), "utf8"))).toEqual(sourceBefore);
 	});
 });

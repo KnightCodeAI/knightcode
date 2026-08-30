@@ -1060,8 +1060,7 @@ export class AgentSession {
 
 		const loaderSystemPrompt = this._resourceLoader.getSystemPrompt();
 		const loaderAppendSystemPrompt = this._resourceLoader.getAppendSystemPrompt();
-		const appendSystemPrompt =
-			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
+		const appendSystemPrompt = loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
 		const loadedSkills = this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
@@ -2009,8 +2008,7 @@ export class AgentSession {
 
 			// Get the saved compaction entry for the extension event
 			const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary) as
-				| CompactionEntry
-				| undefined;
+				CompactionEntry | undefined;
 
 			if (this._extensionRunner && savedCompactionEntry) {
 				await this._extensionRunner.emit({
@@ -2334,8 +2332,7 @@ export class AgentSession {
 
 			// Get the saved compaction entry for the extension event
 			const savedCompactionEntry = newEntries.find((e) => e.type === "compaction" && e.summary === summary) as
-				| CompactionEntry
-				| undefined;
+				CompactionEntry | undefined;
 
 			if (this._extensionRunner && savedCompactionEntry) {
 				await this._extensionRunner.emit({

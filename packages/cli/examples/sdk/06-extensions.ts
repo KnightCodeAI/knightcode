@@ -13,12 +13,7 @@
  *   export default function (knightcode: ExtensionAPI) { ... }
  */
 
-import {
-	createAgentSession,
-	DefaultResourceLoader,
-	getAgentDir,
-	SessionManager,
-} from "@knightcodeai/cli";
+import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager } from "@knightcodeai/cli";
 
 // Extensions are discovered automatically from standard locations.
 // You can also add paths via settings.json or DefaultResourceLoader options.

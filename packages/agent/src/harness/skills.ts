@@ -9,11 +9,7 @@ const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"];
 type IgnoreMatcher = ReturnType<typeof ignore>;
 
 export type SkillDiagnosticCode =
-	| "file_info_failed"
-	| "list_failed"
-	| "read_failed"
-	| "parse_failed"
-	| "invalid_metadata";
+	"file_info_failed" | "list_failed" | "read_failed" | "parse_failed" | "invalid_metadata";
 
 /** Warning produced while loading skills. */
 export interface SkillDiagnostic {

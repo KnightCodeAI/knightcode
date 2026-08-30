@@ -355,9 +355,7 @@ describe("AgentSession concurrent prompt guard", () => {
 			parameters: Type.Object({ q: Type.String() }),
 			execute: async (_toolCallId: string, params: unknown) => {
 				const q =
-					typeof params === "object" && params !== null && "q" in params
-						? String((params as { q: unknown }).q)
-						: "";
+					typeof params === "object" && params !== null && "q" in params ? String((params as { q: unknown }).q) : "";
 				return {
 					content: [{ type: "text" as const, text: `result:${q}` }],
 					details: {},
@@ -501,9 +499,7 @@ describe("AgentSession concurrent prompt guard", () => {
 			parameters: Type.Object({ q: Type.String() }),
 			execute: async (_toolCallId: string, params: unknown) => {
 				const q =
-					typeof params === "object" && params !== null && "q" in params
-						? String((params as { q: unknown }).q)
-						: "";
+					typeof params === "object" && params !== null && "q" in params ? String((params as { q: unknown }).q) : "";
 				return {
 					content: [{ type: "text" as const, text: `result:${q}` }],
 					details: {},
@@ -629,11 +625,6 @@ describe("AgentSession concurrent prompt guard", () => {
 		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		const messageEntries = sessionManager.getEntries().filter((entry) => entry.type === "message");
-		expect(messageEntries.map((entry) => entry.message.role)).toEqual([
-			"user",
-			"assistant",
-			"toolResult",
-			"assistant",
-		]);
+		expect(messageEntries.map((entry) => entry.message.role)).toEqual(["user", "assistant", "toolResult", "assistant"]);
 	});
 });

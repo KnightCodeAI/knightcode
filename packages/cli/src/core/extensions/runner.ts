@@ -144,10 +144,7 @@ type SessionBeforeEvent = Extract<
 >;
 
 type SessionBeforeEventResult =
-	| SessionBeforeSwitchResult
-	| SessionBeforeForkResult
-	| SessionBeforeCompactResult
-	| SessionBeforeTreeResult;
+	SessionBeforeSwitchResult | SessionBeforeForkResult | SessionBeforeCompactResult | SessionBeforeTreeResult;
 
 type RunnerEmitResult<TEvent extends RunnerEmitEvent> = TEvent extends { type: "session_before_switch" }
 	? SessionBeforeSwitchResult | undefined
@@ -443,8 +440,7 @@ export class ExtensionRunner {
 			...ui,
 			select: (title, options, opts) => this.withUIPrompt("select", title, () => ui.select(title, options, opts)),
 			confirm: (title, message, opts) => this.withUIPrompt("confirm", title, () => ui.confirm(title, message, opts)),
-			input: (title, placeholder, opts) =>
-				this.withUIPrompt("input", title, () => ui.input(title, placeholder, opts)),
+			input: (title, placeholder, opts) => this.withUIPrompt("input", title, () => ui.input(title, placeholder, opts)),
 			editor: (title, prefill) => this.withUIPrompt("editor", title, () => ui.editor(title, prefill)),
 			custom: (factory, options) => this.withUIPrompt("custom", undefined, () => ui.custom(factory, options)),
 		};
@@ -1135,10 +1131,7 @@ export class ExtensionRunner {
 		systemPromptOptions: BuildSystemPromptOptions,
 	): Promise<BeforeAgentStartCombinedResult | undefined> {
 		let currentSystemPrompt = systemPrompt;
-		const ctx = Object.defineProperties(
-			{},
-			Object.getOwnPropertyDescriptors(this.createContext()),
-		) as ExtensionContext;
+		const ctx = Object.defineProperties({}, Object.getOwnPropertyDescriptors(this.createContext())) as ExtensionContext;
 		ctx.getSystemPrompt = () => {
 			this.assertActive();
 			return currentSystemPrompt;

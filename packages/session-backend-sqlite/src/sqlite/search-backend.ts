@@ -1,10 +1,4 @@
-import type {
-	FileError,
-	Result,
-	SessionSearch,
-	SessionSearchHit,
-	SessionSearchOptions,
-} from "@knightcode/agent";
+import type { FileError, Result, SessionSearch, SessionSearchHit, SessionSearchOptions } from "@knightcode/agent";
 import { SessionError } from "@knightcode/agent";
 import { applyMigrations } from "./migrations.ts";
 import { sql } from "./sql.ts";
@@ -168,10 +162,7 @@ class SqliteSessionSearch implements SessionSearch<SqliteSessionSearchHit> {
 					ORDER BY score
 					LIMIT ?`,
 				)
-				.iterate<SessionRow & { entry_id: string; timestamp: number; score: number }>(
-					...params,
-					options.limit ?? -1,
-				);
+				.iterate<SessionRow & { entry_id: string; timestamp: number; score: number }>(...params, options.limit ?? -1);
 			const path = await this.getDatabasePath();
 			for (const row of rows) {
 				throwIfAborted(options.signal);

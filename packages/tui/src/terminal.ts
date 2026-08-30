@@ -17,8 +17,7 @@ const KEYBOARD_PROTOCOL_RESPONSE_FRAGMENT_TIMEOUT_MS = 150;
 const KITTY_KEYBOARD_PROTOCOL_QUERY = `\x1b[>${DESIRED_KITTY_KEYBOARD_PROTOCOL_FLAGS}u\x1b[?u\x1b[c`;
 
 export type KeyboardProtocolNegotiationSequence =
-	| { type: "kitty-flags"; flags: number }
-	| { type: "device-attributes" };
+	{ type: "kitty-flags"; flags: number } | { type: "device-attributes" };
 
 export function parseKeyboardProtocolNegotiationSequence(
 	sequence: string,

@@ -21,7 +21,9 @@ async function appendHarnessRunReport(test: TestCase): Promise<void> {
 	const artifactRunId = run.artifacts?.runId;
 	const runId = typeof artifactRunId === "string" ? artifactRunId : randomUUID();
 	const metadata = Object.fromEntries(
-		Object.entries(run.artifacts ?? {}).filter(([name]) => name !== "runId" && name !== KNIGHTCODE_SESSION_SNAPSHOT_ARTIFACT),
+		Object.entries(run.artifacts ?? {}).filter(
+			([name]) => name !== "runId" && name !== KNIGHTCODE_SESSION_SNAPSHOT_ARTIFACT,
+		),
 	);
 	const record = {
 		schemaVersion: 1,

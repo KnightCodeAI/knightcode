@@ -394,9 +394,7 @@ export function sessionEntryToContextMessages(entry: SessionEntry): AgentMessage
 		return [message];
 	}
 	if (entry.type === "custom_message") {
-		return [
-			createCustomMessage(entry.customType, entry.content ?? [], entry.display, entry.details, entry.timestamp),
-		];
+		return [createCustomMessage(entry.customType, entry.content ?? [], entry.display, entry.details, entry.timestamp)];
 	}
 	if (entry.type === "branch_summary" && entry.summary) {
 		return [createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp)];
@@ -643,8 +641,7 @@ export function findMostRecentSession(sessionDir: string, cwd?: string): string 
 			.map((path) => ({ path, header: readSessionHeaderForDiscovery(path) }))
 			.filter(
 				(file): file is { path: string; header: SessionHeader } =>
-					file.header !== null &&
-					(!resolvedCwd || sessionCwdMatches(getSessionHeaderCwd(file.header), resolvedCwd)),
+					file.header !== null && (!resolvedCwd || sessionCwdMatches(getSessionHeaderCwd(file.header), resolvedCwd)),
 			)
 			.map(({ path }) => ({ path, mtime: statSync(path).mtime }))
 			.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());

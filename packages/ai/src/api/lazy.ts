@@ -49,7 +49,9 @@ export function lazyStream(
 ): AssistantMessageEventStream {
 	const outer = new AssistantMessageEventStream();
 
-	setup()
+	// Call setup inside the chain so a synchronous throw terminates the stream like a rejection does.
+	Promise.resolve()
+		.then(setup)
 		.then((inner) => forwardStream(outer, inner))
 		.catch((error) => {
 			const message = createSetupErrorMessage(model, error);
@@ -72,8 +74,7 @@ export interface LazyApiCapabilities {
 
 export function lazyApi(load: () => Promise<ProviderStreams>, capabilities?: LazyApiCapabilities): ProviderStreams {
 	const api: ProviderStreams = {
-		stream: (model, context, options) =>
-			lazyStream(model, async () => (await load()).stream(model, context, options)),
+		stream: (model, context, options) => lazyStream(model, async () => (await load()).stream(model, context, options)),
 		streamSimple: (model, context, options) =>
 			lazyStream(model, async () => (await load()).streamSimple(model, context, options)),
 	};

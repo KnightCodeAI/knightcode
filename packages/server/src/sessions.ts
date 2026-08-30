@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { Command, EventEnvelope, SessionMetadata, SessionSnapshot } from "@knightcode/protocol";
 import type { ByteConnection, ConnectionState } from "./connection.ts";
 import { KnightServerError } from "./errors.ts";
-import type { CreateSessionOptions, KnightServerService, KnightSessionRuntime, KnightSessionRuntimeEvent } from "./types.ts";
+import type {
+	CreateSessionOptions,
+	KnightServerService,
+	KnightSessionRuntime,
+	KnightSessionRuntimeEvent,
+} from "./types.ts";
 
 interface LiveSession {
 	id: string;
@@ -64,9 +69,7 @@ export class LiveSessionManager {
 				return { command: "create" as const, session };
 			}
 			case "attach": {
-				const live = await this.acquire(command.sessionId, () =>
-					this.options.service.openSession(command.sessionId),
-				);
+				const live = await this.acquire(command.sessionId, () => this.options.service.openSession(command.sessionId));
 				await this.attach(connection, live);
 				const session = this.forConnection(await this.broadcastSnapshot(live), connection);
 				this.options.broadcastServerSnapshot();
@@ -89,9 +92,7 @@ export class LiveSessionManager {
 			}
 			case "prompt": {
 				const live = this.requireAttached(connection, command.sessionId);
-				const session = await this.runOperation(connection, live, () =>
-					live.runtime.prompt({ text: command.text }),
-				);
+				const session = await this.runOperation(connection, live, () => live.runtime.prompt({ text: command.text }));
 				return { command: "prompt" as const, session };
 			}
 			case "steer": {

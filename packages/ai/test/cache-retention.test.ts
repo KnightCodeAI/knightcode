@@ -74,27 +74,30 @@ describe("Cache Retention (KNIGHTCODE_CACHE_RETENTION)", () => {
 			},
 		);
 
-		it.skipIf(!process.env.ANTHROPIC_API_KEY)("should use 1h cache TTL when KNIGHTCODE_CACHE_RETENTION=long", async () => {
-			process.env.KNIGHTCODE_CACHE_RETENTION = "long";
-			const model = getModel("anthropic", "claude-haiku-4-5");
-			let capturedPayload: any = null;
+		it.skipIf(!process.env.ANTHROPIC_API_KEY)(
+			"should use 1h cache TTL when KNIGHTCODE_CACHE_RETENTION=long",
+			async () => {
+				process.env.KNIGHTCODE_CACHE_RETENTION = "long";
+				const model = getModel("anthropic", "claude-haiku-4-5");
+				let capturedPayload: any = null;
 
-			const s = stream(model, context, {
-				onPayload: stopAfterPayload((payload) => {
-					capturedPayload = payload;
-				}),
-			});
+				const s = stream(model, context, {
+					onPayload: stopAfterPayload((payload) => {
+						capturedPayload = payload;
+					}),
+				});
 
-			// Consume the stream to trigger the request
-			for await (const _ of s) {
-				// Just consume
-			}
+				// Consume the stream to trigger the request
+				for await (const _ of s) {
+					// Just consume
+				}
 
-			expect(capturedPayload).not.toBeNull();
-			// System prompt should have cache_control with ttl: "1h"
-			expect(capturedPayload.system).toBeDefined();
-			expect(capturedPayload.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
-		});
+				expect(capturedPayload).not.toBeNull();
+				// System prompt should have cache_control with ttl: "1h"
+				expect(capturedPayload.system).toBeDefined();
+				expect(capturedPayload.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+			},
+		);
 
 		it("should add ttl for non-api.anthropic.com baseUrl by default", async () => {
 			process.env.KNIGHTCODE_CACHE_RETENTION = "long";

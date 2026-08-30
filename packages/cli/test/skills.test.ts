@@ -49,9 +49,9 @@ describe("skills", () => {
 
 			expect(skills).toHaveLength(1);
 			expect(skills[0].name).toBe("different-name");
-			expect(
-				diagnostics.some((d: ResourceDiagnostic) => d.message.includes("does not match parent directory")),
-			).toBe(false);
+			expect(diagnostics.some((d: ResourceDiagnostic) => d.message.includes("does not match parent directory"))).toBe(
+				false,
+			);
 		});
 
 		it("should warn when name contains invalid characters", () => {
@@ -205,9 +205,7 @@ describe("skills", () => {
 			expect(skills[0].name).toBe("disable-model-invocation");
 			expect(skills[0].disableModelInvocation).toBe(true);
 			// Should not warn about unknown field
-			expect(diagnostics.some((d: ResourceDiagnostic) => d.message.includes("unknown frontmatter field"))).toBe(
-				false,
-			);
+			expect(diagnostics.some((d: ResourceDiagnostic) => d.message.includes("unknown frontmatter field"))).toBe(false);
 		});
 
 		it("should default disableModelInvocation to false when not specified", () => {

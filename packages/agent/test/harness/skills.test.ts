@@ -60,9 +60,7 @@ Use this skill.
 			"---\nname: example\ndescription: Example skill\n---\nUse this skill.",
 		);
 
-		const { skills, diagnostics } = await loadSourcedSkills(env, [
-			{ path: "user", source: { type: "user" as const } },
-		]);
+		const { skills, diagnostics } = await loadSourcedSkills(env, [{ path: "user", source: { type: "user" as const } }]);
 
 		expect(diagnostics).toEqual([]);
 		expect(skills).toEqual([
@@ -85,9 +83,7 @@ Use this skill.
 		await env.createDir("user/broken", { recursive: true });
 		await env.writeFile("user/broken/SKILL.md", "---\nname: broken\n---\nMissing description.");
 
-		const { skills, diagnostics } = await loadSourcedSkills(env, [
-			{ path: "user", source: { type: "user" as const } },
-		]);
+		const { skills, diagnostics } = await loadSourcedSkills(env, [{ path: "user", source: { type: "user" as const } }]);
 
 		expect(skills).toEqual([]);
 		expect(diagnostics).toEqual([

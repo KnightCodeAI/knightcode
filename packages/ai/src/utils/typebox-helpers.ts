@@ -18,7 +18,8 @@ export function StringEnum<T extends readonly string[]>(
 	return Type.Unsafe<T[number]>({
 		type: "string",
 		enum: values as any,
-		...(options?.description && { description: options.description }),
-		...(options?.default && { default: options.default }),
+		// Test for presence, not truthiness: "" is a valid description and a valid enum default.
+		...(options?.description !== undefined && { description: options.description }),
+		...(options?.default !== undefined && { default: options.default }),
 	});
 }

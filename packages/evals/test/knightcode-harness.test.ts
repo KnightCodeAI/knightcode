@@ -12,7 +12,9 @@ describe("resolveModelSelection", () => {
 	});
 
 	it("uses trimmed environment defaults when the harness has no explicit model", () => {
-		expect(resolveModelSelection(undefined, { KNIGHTCODE_PROVIDER: " openai-codex ", KNIGHTCODE_MODEL: " gpt-5.6-sol " })).toEqual({
+		expect(
+			resolveModelSelection(undefined, { KNIGHTCODE_PROVIDER: " openai-codex ", KNIGHTCODE_MODEL: " gpt-5.6-sol " }),
+		).toEqual({
 			provider: "openai-codex",
 			id: "gpt-5.6-sol",
 		});

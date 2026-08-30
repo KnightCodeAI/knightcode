@@ -15,9 +15,7 @@ describe("tree navigation during an active response", () => {
 			harness.setResponses([
 				async () => {
 					const activeLeafId = harness.sessionManager.getLeafId();
-					navigationResult = await harness.session
-						.navigateTree(targetId, { summarize: false })
-						.catch((error) => error);
+					navigationResult = await harness.session.navigateTree(targetId, { summarize: false }).catch((error) => error);
 					leafUnchanged = activeLeafId !== targetId && harness.sessionManager.getLeafId() === activeLeafId;
 					return fauxAssistantMessage("response");
 				},

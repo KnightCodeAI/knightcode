@@ -8,12 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage, AgentTool } from "@knightcode/agent";
 import { Agent } from "@knightcode/agent";
-import type {
-	FauxModelDefinition,
-	FauxProviderRegistration,
-	FauxResponseStep,
-	Model,
-} from "@knightcode/ai/compat";
+import type { FauxModelDefinition, FauxProviderRegistration, FauxResponseStep, Model } from "@knightcode/ai/compat";
 import { registerFauxProvider, streamSimple } from "@knightcode/ai/compat";
 import { AgentSession, type AgentSessionEvent } from "../../src/core/agent-session.ts";
 import { AuthStorage } from "../../src/core/auth-storage.ts";

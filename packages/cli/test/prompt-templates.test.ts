@@ -309,9 +309,7 @@ describe("substituteArgs - array slicing", () => {
 	});
 
 	test("should handle slice in middle of text", () => {
-		expect(substituteArgs(`Process \${@:2} with $1`, ["tool", "file1", "file2"])).toBe(
-			"Process file1 file2 with tool",
-		);
+		expect(substituteArgs(`Process \${@:2} with $1`, ["tool", "file1", "file2"])).toBe("Process file1 file2 with tool");
 	});
 
 	test("should handle multiple slices in one template", () => {
@@ -480,9 +478,7 @@ describe("parseCommandArgs + substituteArgs integration", () => {
 		const args = parseCommandArgs(input);
 		const template = "Create a React component named $1 with features: $ARGUMENTS";
 		const result = substituteArgs(template, args);
-		expect(result).toBe(
-			"Create a React component named Button with features: Button onClick handler disabled support",
-		);
+		expect(result).toBe("Create a React component named Button with features: Button onClick handler disabled support");
 	});
 
 	test("should produce same result with $@ and $ARGUMENTS", () => {

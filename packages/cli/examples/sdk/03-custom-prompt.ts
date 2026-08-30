@@ -4,12 +4,7 @@
  * Shows how to replace or modify the default system prompt.
  */
 
-import {
-	createAgentSession,
-	DefaultResourceLoader,
-	getAgentDir,
-	SessionManager,
-} from "@knightcodeai/cli";
+import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager } from "@knightcodeai/cli";
 
 const cwd = process.cwd();
 const agentDir = getAgentDir();

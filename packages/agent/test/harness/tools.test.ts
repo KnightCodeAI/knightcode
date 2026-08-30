@@ -180,17 +180,9 @@ describe("AgentHarness tools", () => {
 
 		it("does not count a trailing newline as an extra line at the truncation limit", async () => {
 			const context = createContext();
-			getOrThrow(
-				await context.env.writeFile("exact.txt", `${Array.from({ length: 2000 }, () => "x").join("\n")}\n`),
-			);
+			getOrThrow(await context.env.writeFile("exact.txt", `${Array.from({ length: 2000 }, () => "x").join("\n")}\n`));
 
-			const result = await createReadTool().execute(
-				"read-exact",
-				{ path: "exact.txt" },
-				undefined,
-				undefined,
-				context,
-			);
+			const result = await createReadTool().execute("read-exact", { path: "exact.txt" }, undefined, undefined, context);
 
 			expect(result.details).toBeUndefined();
 			expect(textOutput(result)).not.toContain("Use offset=");
@@ -544,34 +536,37 @@ describe("AgentHarness tools", () => {
 		});
 
 		// Skipped on Windows: compares a bash $PWD against Node canonicalPath().
-		it.skipIf(process.platform === "win32")("prepares command, cwd, and an explicit environment with the turn context", async () => {
-			const env = new NodeExecutionEnv({
-				cwd: createTempDir(),
-				shellEnv: { KNIGHTCODE_BASH_PREPARE_INHERITED: "inherited" },
-			});
-			getOrThrow(await env.createDir("workspace"));
-			const context = { env, workspace: `${env.cwd}/workspace` };
-			const controller = new AbortController();
-			let receivedContext: typeof context | undefined;
-			let receivedSignal: AbortSignal | undefined;
-			const tool = createBashTool<typeof context>({
-				commandPrefix: "prefix=ready",
-				prepare: async (execution, turnContext, signal) => {
-					receivedContext = turnContext;
-					receivedSignal = signal;
-					execution.cwd = turnContext.workspace;
-					execution.env = { KNIGHTCODE_BASH_PREPARE_EXPLICIT: "explicit" };
-					execution.inheritEnv = false;
-					execution.command += `\nprintf '%s:%s:%s:%s' "$prefix" "\${KNIGHTCODE_BASH_PREPARE_INHERITED-}" "$KNIGHTCODE_BASH_PREPARE_EXPLICIT" "$PWD"`;
-				},
-			});
+		it.skipIf(process.platform === "win32")(
+			"prepares command, cwd, and an explicit environment with the turn context",
+			async () => {
+				const env = new NodeExecutionEnv({
+					cwd: createTempDir(),
+					shellEnv: { KNIGHTCODE_BASH_PREPARE_INHERITED: "inherited" },
+				});
+				getOrThrow(await env.createDir("workspace"));
+				const context = { env, workspace: `${env.cwd}/workspace` };
+				const controller = new AbortController();
+				let receivedContext: typeof context | undefined;
+				let receivedSignal: AbortSignal | undefined;
+				const tool = createBashTool<typeof context>({
+					commandPrefix: "prefix=ready",
+					prepare: async (execution, turnContext, signal) => {
+						receivedContext = turnContext;
+						receivedSignal = signal;
+						execution.cwd = turnContext.workspace;
+						execution.env = { KNIGHTCODE_BASH_PREPARE_EXPLICIT: "explicit" };
+						execution.inheritEnv = false;
+						execution.command += `\nprintf '%s:%s:%s:%s' "$prefix" "\${KNIGHTCODE_BASH_PREPARE_INHERITED-}" "$KNIGHTCODE_BASH_PREPARE_EXPLICIT" "$PWD"`;
+					},
+				});
 
-			const result = await tool.execute("bash-prepare", { command: ":" }, controller.signal, undefined, context);
+				const result = await tool.execute("bash-prepare", { command: ":" }, controller.signal, undefined, context);
 
-			expect(receivedContext).toBe(context);
-			expect(receivedSignal).toBe(controller.signal);
-			expect(textOutput(result)).toBe(`ready::explicit:${getOrThrow(await env.canonicalPath(context.workspace))}`);
-		});
+				expect(receivedContext).toBe(context);
+				expect(receivedSignal).toBe(controller.signal);
+				expect(textOutput(result)).toBe(`ready::explicit:${getOrThrow(await env.canonicalPath(context.workspace))}`);
+			},
+		);
 
 		it("supports command prefixes", async () => {
 			const context = createContext();

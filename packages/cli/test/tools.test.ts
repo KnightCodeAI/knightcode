@@ -482,9 +482,7 @@ describe("Coding Agent Tools", () => {
 		});
 
 		it("should handle command errors", async () => {
-			await expect(bashTool.execute("test-call-9", { command: "exit 1" })).rejects.toThrow(
-				/(Command failed|code 1)/,
-			);
+			await expect(bashTool.execute("test-call-9", { command: "exit 1" })).rejects.toThrow(/(Command failed|code 1)/);
 		});
 
 		it("should respect timeout", async () => {

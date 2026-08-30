@@ -27,11 +27,14 @@ import type { ExtensionAPI } from "@knightcodeai/cli";
 function findMarkdownFiles(dir: string, basePath: string = ""): string[] {
 	const results: string[] = [];
 
-	if (!fs.existsSync(dir)) {
+	// A missing, unreadable, or non-directory path yields no rules rather than throwing out of
+	// the session_start handler.
+	let entries: fs.Dirent[];
+	try {
+		entries = fs.readdirSync(dir, { withFileTypes: true });
+	} catch {
 		return results;
 	}
-
-	const entries = fs.readdirSync(dir, { withFileTypes: true });
 
 	for (const entry of entries) {
 		const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name;

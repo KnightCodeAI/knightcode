@@ -21,8 +21,7 @@ describe("Documentation example", () => {
 				const { preparation, branchEntries } = event;
 				// sessionManager, modelRegistry, and model come from ctx
 				const { sessionManager, modelRegistry } = ctx;
-				const { messagesToSummarize, turnPrefixMessages, tokensBefore, firstKeptEntryId, isSplitTurn } =
-					preparation;
+				const { messagesToSummarize, turnPrefixMessages, tokensBefore, firstKeptEntryId, isSplitTurn } = preparation;
 
 				// Verify types
 				expect(Array.isArray(messagesToSummarize)).toBe(true);

@@ -117,6 +117,22 @@ describe("Anthropic thinking disable payload", () => {
 		expect(payload.output_config).toBeUndefined();
 	});
 
+	it("disables budget thinking when a near-full context leaves no answer room", async () => {
+		// A tiny remaining window drives the clamped budget under Anthropic's 1024 minimum, which the
+		// API rejects. Shrinking contextWindow reproduces that without a megabyte of filler text.
+		const nearlyFull = { ...getModel("anthropic", "claude-sonnet-4-5"), contextWindow: 6000 };
+		const payload = await capturePayload(nearlyFull, { reasoning: "high" });
+
+		expect(payload.thinking).toEqual({ type: "disabled" });
+	});
+
+	it("still sends a usable budget when the context leaves room", async () => {
+		const payload = await capturePayload(getModel("anthropic", "claude-sonnet-4-5"), { reasoning: "high" });
+
+		expect(payload.thinking?.type).toBe("enabled");
+		expect(payload.thinking?.budget_tokens).toBeGreaterThanOrEqual(1024);
+	});
+
 	it("sends thinking.type=disabled for adaptive reasoning models when thinking is off", async () => {
 		const payload = await capturePayload(getModel("anthropic", "claude-opus-4-6"));
 

@@ -40,7 +40,13 @@ import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 
 import { getJsonSchemaToolParameters, resolveJsonSchemaStrictSampling } from "./constrained-sampling.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
-import { adjustMaxTokensForThinking, buildBaseOptions, clampMaxTokensToContext } from "./simple-options.ts";
+import {
+	adjustMaxTokensForThinking,
+	buildBaseOptions,
+	clampMaxTokensToContext,
+	clampThinkingBudgetToAnswerRoom,
+	MIN_ANSWER_TOKENS,
+} from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
 
 /**
@@ -640,9 +646,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (
 						const block: Block = {
 							type: "toolCall",
 							id: event.content_block.id,
-							name: isOAuth
-								? fromClaudeCodeName(event.content_block.name, context.tools)
-								: event.content_block.name,
+							name: isOAuth ? fromClaudeCodeName(event.content_block.name, context.tools) : event.content_block.name,
 							arguments: (event.content_block.input as Record<string, any>) ?? {},
 							partialJson: "",
 							index: event.index,
@@ -861,12 +865,19 @@ export const streamSimple: StreamFunction<"anthropic-messages", SimpleStreamOpti
 	);
 
 	const maxTokens = clampMaxTokensToContext(model, context, adjusted.maxTokens);
+	const thinkingBudgetTokens = clampThinkingBudgetToAnswerRoom(adjusted.thinkingBudget, maxTokens);
+
+	// A near-full context can leave no room for both thinking and an answer. Anthropic rejects any
+	// budget below its 1024 minimum, so drop back to a non-thinking request instead of sending one.
+	if (thinkingBudgetTokens < MIN_ANSWER_TOKENS) {
+		return stream(model, context, { ...base, maxTokens, thinkingEnabled: false } satisfies AnthropicOptions);
+	}
 
 	return stream(model, context, {
 		...base,
 		maxTokens,
 		thinkingEnabled: true,
-		thinkingBudgetTokens: Math.min(adjusted.thinkingBudget, Math.max(0, maxTokens - 1024)),
+		thinkingBudgetTokens,
 	} satisfies AnthropicOptions);
 };
 
@@ -1071,9 +1082,7 @@ function buildParams(
 					// The Anthropic SDK types can lag newly supported effort values such as "xhigh".
 					params.output_config =
 						options.effort === "xhigh"
-							? ({ effort: options.effort } as unknown as NonNullable<
-									MessageCreateParamsStreaming["output_config"]
-								>)
+							? ({ effort: options.effort } as unknown as NonNullable<MessageCreateParamsStreaming["output_config"]>)
 							: { effort: options.effort };
 				}
 			} else {

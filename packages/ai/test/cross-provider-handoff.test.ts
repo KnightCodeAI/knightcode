@@ -443,9 +443,7 @@ describe.skipIf(!hasAnyApiKey())("Cross-Provider Handoff", () => {
 					continue;
 				}
 
-				const model: Model<Api> = targetPair.apiOverride
-					? { ...baseModel, api: targetPair.apiOverride }
-					: baseModel;
+				const model: Model<Api> = targetPair.apiOverride ? { ...baseModel, api: targetPair.apiOverride } : baseModel;
 				const supportsReasoning = model.reasoning === true;
 				const headers = getHeaders(targetPair);
 

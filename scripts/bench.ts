@@ -27,25 +27,25 @@ const args = process.argv.slice(2);
 const has = (...flags: string[]) => flags.some((f) => args.includes(f));
 
 if (has("-h", "--help")) {
-  console.log(
-    [
-      "bun run bench [--no-build] <harbor run flags>",
-      "",
-      "  -t <task-id>          run a single task",
-      "  -l <n> / -k <n>       limit tasks / attempts per task",
-      "  -n <n>                concurrent trials",
-      "  -e daytona|modal      run off local Docker",
-      "  -m <provider/model>   override the default model",
-      "  --ak thinking=<lvl>   off|minimal|low|medium|high|xhigh|max",
-      "",
-      `Defaults: -m ${MODEL}`,
-      `          -d ${DATASET}`,
-      `          -a ${AGENT}`,
-      "",
-      "Needs OPENROUTER_API_KEY in the environment.",
-    ].join("\n"),
-  );
-  process.exit(0);
+	console.log(
+		[
+			"bun run bench [--no-build] <harbor run flags>",
+			"",
+			"  -t <task-id>          run a single task",
+			"  -l <n> / -k <n>       limit tasks / attempts per task",
+			"  -n <n>                concurrent trials",
+			"  -e daytona|modal      run off local Docker",
+			"  -m <provider/model>   override the default model",
+			"  --ak thinking=<lvl>   off|minimal|low|medium|high|xhigh|max",
+			"",
+			`Defaults: -m ${MODEL}`,
+			`          -d ${DATASET}`,
+			`          -a ${AGENT}`,
+			"",
+			"Needs OPENROUTER_API_KEY in the environment.",
+		].join("\n"),
+	);
+	process.exit(0);
 }
 
 const forwarded = args.filter((a) => a !== "--no-build");
@@ -55,21 +55,21 @@ const forwarded = args.filter((a) => a !== "--no-build");
 const env = { ...process.env, PYTHONPATH: ROOT };
 
 if (!args.includes("--no-build")) {
-  console.log("Building linux-x64 binary…");
-  const build = Bun.spawnSync({
-    cmd: ["bun", "run", join(ROOT, "scripts/build.ts"), "--target=linux-x64"],
-    cwd: ROOT,
-    stdio: ["inherit", "inherit", "inherit"],
-  });
-  if (build.exitCode !== 0) process.exit(build.exitCode ?? 1);
+	console.log("Building linux-x64 binary…");
+	const build = Bun.spawnSync({
+		cmd: ["bun", "run", join(ROOT, "scripts/build.ts"), "--target=linux-x64"],
+		cwd: ROOT,
+		stdio: ["inherit", "inherit", "inherit"],
+	});
+	if (build.exitCode !== 0) process.exit(build.exitCode ?? 1);
 } else if (!existsSync(BINARY)) {
-  console.error(`bench: no binary at ${BINARY}. Drop --no-build.`);
-  process.exit(1);
+	console.error(`bench: no binary at ${BINARY}. Drop --no-build.`);
+	process.exit(1);
 }
 
 if (!Bun.which("harbor")) {
-  console.error("bench: `harbor` not found on PATH. Install it with:\n  uv tool install harbor");
-  process.exit(1);
+	console.error("bench: `harbor` not found on PATH. Install it with:\n  uv tool install harbor");
+	process.exit(1);
 }
 
 const cmd = ["harbor", "run"];

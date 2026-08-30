@@ -38,8 +38,7 @@ export type EvalHarnessTableCandidatesOptions<TInput, TOutput extends JsonValue 
 };
 
 export type EvalHarnessTableOptions<TInput, TOutput extends JsonValue | undefined> =
-	| EvalHarnessTablePairOptions<TInput, TOutput>
-	| EvalHarnessTableCandidatesOptions<TInput, TOutput>;
+	EvalHarnessTablePairOptions<TInput, TOutput> | EvalHarnessTableCandidatesOptions<TInput, TOutput>;
 
 type EvalHarnessIterationPlan = Omit<EvalHarnessIterationArtifact, "groupKey">;
 
