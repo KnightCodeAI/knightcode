@@ -76,7 +76,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 #shenanigans
 Shenanigans.md
 
-/apps/web/
 /claude-code/
 
 # Compiled platform binaries (built by CI / scripts/build.ts, never committed)
@@ -94,3 +93,6 @@ __pycache__/
 
 # Release assets staged by .github/workflows/publish.yml
 release-assets/
+
+# Local agent/editor config
+.claude/
