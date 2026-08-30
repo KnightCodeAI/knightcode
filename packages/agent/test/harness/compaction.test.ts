@@ -198,6 +198,21 @@ describe("harness compaction", () => {
 		expect(entries[result.firstKeptEntryIndex]?.type).toBe("message");
 	});
 
+	it("does not spend the retention budget on responses dropped from context", () => {
+		const big = (text: string, tokens: number) => text.repeat(tokens * 4);
+		const entries: Entry[] = [
+			createMessageEntry(createUserMessage(big("a", 1000))),
+			createMessageEntry(createAssistantMessage(big("b", 1000))),
+			createMessageEntry(createUserMessage(big("c", 1000))),
+			createMessageEntry({ ...createAssistantMessage(big("d", 10000)), stopReason: "aborted" }),
+			createMessageEntry(createUserMessage(big("e", 1000))),
+			createMessageEntry(createAssistantMessage(big("f", 1000))),
+		];
+
+		// The aborted response never reaches the provider, so the kept tail must still be ~2500 real tokens.
+		expect(findCutPoint(entries, 0, entries.length, 2500).firstKeptEntryIndex).toBe(2);
+	});
+
 	it("covers cut-point and turn-start edge cases", () => {
 		const thinking = createThinkingLevelEntry("high");
 		const modelChange = createModelChangeEntry("openai", "gpt-4", thinking.id);

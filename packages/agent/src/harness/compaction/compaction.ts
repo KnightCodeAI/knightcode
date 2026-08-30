@@ -390,8 +390,10 @@ export function findCutPoint(
 	for (let i = endIndex - 1; i >= startIndex; i--) {
 		const entry = entries[i];
 		if (entry.type !== "message") continue;
-		const messageTokens = estimateTokens(entry.message as AgentMessage);
-		accumulatedTokens += messageTokens;
+		const message = entry.message as AgentMessage;
+		// Dropped responses never reach the provider, so they must not spend the retention budget.
+		if (isDroppedFromContext(message)) continue;
+		accumulatedTokens += estimateTokens(message);
 		if (accumulatedTokens >= keepRecentTokens) {
 			for (let c = 0; c < cutPoints.length; c++) {
 				if (cutPoints[c] >= i) {
