@@ -722,7 +722,7 @@ export interface BeforeAgentStartEvent {
 	images?: ImageContent[];
 	/** The fully assembled system prompt string. */
 	systemPrompt: string;
-	/** Structured options used to build the system prompt. Extensions can inspect this to understand what Pi loaded without re-discovering resources. */
+	/** Structured options used to build the system prompt. Extensions can inspect this to understand what KnightCode loaded without re-discovering resources. */
 	systemPromptOptions: BuildSystemPromptOptions;
 }
 
@@ -744,7 +744,7 @@ export interface AgentSettledEvent {
 
 export type UIPromptKind = "select" | "confirm" | "input" | "editor" | "custom";
 
-/** Fired when Pi starts waiting on a blocking user-facing extension UI prompt. */
+/** Fired when KnightCode starts waiting on a blocking user-facing extension UI prompt. */
 export interface UIPromptStartEvent {
 	type: "ui_prompt_start";
 	reason: "ui_prompt";
@@ -752,7 +752,7 @@ export interface UIPromptStartEvent {
 	title?: string;
 }
 
-/** Fired when Pi is no longer waiting on a blocking user-facing extension UI prompt. */
+/** Fired when KnightCode is no longer waiting on a blocking user-facing extension UI prompt. */
 export interface UIPromptEndEvent {
 	type: "ui_prompt_end";
 	reason: "ui_prompt";
@@ -1351,7 +1351,7 @@ export interface ExtensionAPI {
 	/** Register a custom renderer for CustomMessageEntry. */
 	registerMessageRenderer<T = unknown>(customType: string, renderer: MessageRenderer<T>): void;
 
-	/** Register a transformer for user and assistant Markdown before Pi renders it in the interactive transcript. */
+	/** Register a transformer for user and assistant Markdown before KnightCode renders it in the interactive transcript. */
 	registerMarkdownTransformer(transformer: MarkdownTransformer): void;
 
 	/** Register a custom renderer for CustomEntry. Custom entries do not participate in LLM context. */
@@ -1664,7 +1664,7 @@ export interface ExtensionRuntimeState {
 	flagValues: Map<string, boolean | string>;
 	/** Legacy provider-config registrations queued during extension loading, processed when runner binds. */
 	pendingProviderRegistrations: Array<{ name: string; config: ProviderConfig; extensionPath: string }>;
-	/** Native pi-ai provider registrations queued during extension loading, processed when runner binds. */
+	/** Native @knightcode/ai provider registrations queued during extension loading, processed when runner binds. */
 	pendingNativeProviderRegistrations: Array<{ provider: Provider; extensionPath: string }>;
 	/** Throws when this extension instance is stale after runtime replacement. */
 	assertActive: () => void;

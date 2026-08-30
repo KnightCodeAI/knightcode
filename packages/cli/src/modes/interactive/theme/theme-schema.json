@@ -1,7 +1,7 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "Pi Coding Agent Theme",
-	"description": "Theme schema for Pi coding agent",
+	"title": "KnightCode Coding Agent Theme",
+	"description": "Theme schema for KnightCode coding agent",
 	"type": "object",
 	"required": ["name", "colors"],
 	"properties": {

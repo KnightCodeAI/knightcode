@@ -7,13 +7,13 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as _bundledPiAgentCore from "@knightcode/agent";
+import * as _bundledKnightAgent from "@knightcode/agent";
 import type { Provider } from "@knightcode/ai";
-import * as _bundledPiAiCompat from "@knightcode/ai/compat";
-import * as _bundledPiAiOauth from "@knightcode/ai/oauth";
-import * as _bundledPiAiProviders from "@knightcode/ai/providers/all";
+import * as _bundledKnightAiCompat from "@knightcode/ai/compat";
+import * as _bundledKnightAiOauth from "@knightcode/ai/oauth";
+import * as _bundledKnightAiProviders from "@knightcode/ai/providers/all";
 import type { KeyId } from "@knightcode/tui";
-import * as _bundledPiTui from "@knightcode/tui";
+import * as _bundledKnightTui from "@knightcode/tui";
 import { createJiti } from "jiti/static";
 // Static imports of packages that extensions may use.
 // These MUST be static so Bun bundles them into the compiled binary.
@@ -24,7 +24,7 @@ import * as _bundledTypeboxValue from "typebox/value";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
 // NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
 // avoiding a circular dependency. Extensions can import from @knightcodeai/cli.
-import * as _bundledPiCodingAgent from "../../index.ts";
+import * as _bundledKnightCli from "../../index.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
@@ -54,23 +54,15 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@sinclair/typebox": _bundledTypebox,
 	"@sinclair/typebox/compile": _bundledTypeboxCompile,
 	"@sinclair/typebox/value": _bundledTypeboxValue,
-	"@knightcode/agent": _bundledPiAgentCore,
-	"@knightcode/tui": _bundledPiTui,
-	// Extensions resolve the pi-ai root to the compat entrypoint (a strict
-	// superset of the core entrypoint): existing extensions using the old
-	// global API keep working at runtime until compat is removed.
-	"@knightcode/ai": _bundledPiAiCompat,
-	"@knightcode/ai/compat": _bundledPiAiCompat,
-	"@knightcode/ai/oauth": _bundledPiAiOauth,
-	"@knightcode/ai/providers/all": _bundledPiAiProviders,
-	"@knightcodeai/cli": _bundledPiCodingAgent,
-	"@mariozechner/pi-agent-core": _bundledPiAgentCore,
-	"@mariozechner/pi-tui": _bundledPiTui,
-	"@mariozechner/pi-ai": _bundledPiAiCompat,
-	"@mariozechner/pi-ai/compat": _bundledPiAiCompat,
-	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
-	"@mariozechner/pi-ai/providers/all": _bundledPiAiProviders,
-	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
+	"@knightcode/agent": _bundledKnightAgent,
+	"@knightcode/tui": _bundledKnightTui,
+	// Extensions resolve the @knightcode/ai root to the compat entrypoint (a
+	// strict superset of the core entrypoint).
+	"@knightcode/ai": _bundledKnightAiCompat,
+	"@knightcode/ai/compat": _bundledKnightAiCompat,
+	"@knightcode/ai/oauth": _bundledKnightAiOauth,
+	"@knightcode/ai/providers/all": _bundledKnightAiProviders,
+	"@knightcodeai/cli": _bundledKnightCli,
 };
 
 const require = createRequire(import.meta.url);
@@ -110,9 +102,8 @@ function getAliases(): Record<string, string> {
 	const knightCliEntry = packageIndex;
 	const knightAgentEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@knightcode/agent");
 	const knightTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@knightcode/tui");
-	// Extensions resolve the pi-ai root to the compat entrypoint (a strict
-	// superset of the core entrypoint): existing extensions using the old
-	// global API keep working at runtime until compat is removed.
+	// Extensions resolve the @knightcode/ai root to the compat entrypoint (a
+	// strict superset of the core entrypoint).
 	const knightAiCompatEntry = resolveWorkspaceOrImport("ai/dist/compat.js", "@knightcode/ai/compat");
 	const knightAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@knightcode/ai/oauth");
 	const knightAiProvidersEntry = resolveWorkspaceOrImport(
@@ -128,13 +119,6 @@ function getAliases(): Record<string, string> {
 		"@knightcode/ai/compat": knightAiCompatEntry,
 		"@knightcode/ai/oauth": knightAiOauthEntry,
 		"@knightcode/ai": knightAiCompatEntry,
-		"@mariozechner/pi-coding-agent": knightCliEntry,
-		"@mariozechner/pi-agent-core": knightAgentEntry,
-		"@mariozechner/pi-tui": knightTuiEntry,
-		"@mariozechner/pi-ai/providers/all": knightAiProvidersEntry,
-		"@mariozechner/pi-ai/compat": knightAiCompatEntry,
-		"@mariozechner/pi-ai/oauth": knightAiOauthEntry,
-		"@mariozechner/pi-ai": knightAiCompatEntry,
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,
