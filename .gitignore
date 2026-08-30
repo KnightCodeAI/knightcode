@@ -82,6 +82,15 @@ Shenanigans.md
 # Compiled platform binaries (built by CI / scripts/build.ts, never committed)
 packages/cli-*/bin/
 
-# Vendored reference trees kept on disk for porting work only (upstream pi source,
+# Vendored reference trees kept on disk for porting work only (upstream knightcode source,
 # the pre-port Claude Code tree, scratch experiments). Never committed.
 shenanigans/
+
+# Python (bench adapter)
+__pycache__/
+
+# Generated model catalog bundle (scripts/publish-model-catalog.mjs input)
+.artifacts/
+
+# Release assets staged by .github/workflows/publish.yml
+release-assets/
