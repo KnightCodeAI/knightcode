@@ -56,9 +56,9 @@ build to run first.
 
 ## Names that are third-party, not branding — do not rebrand
 
-The pi→KnightCode rebrand is complete. Exactly two `pi` strings remain in
-source, both identifiers owned by a third party, each carrying an inline
-comment saying so. Do not "fix" them:
+The pi→KnightCode rebrand is complete. Two `pi` strings remain in source, both
+identifiers owned by a third party, each carrying an inline comment saying so.
+Do not "fix" them:
 
 - `DEFAULT_RADIUS_GATEWAY = "https://radius.pi.dev"` (`ai/src/providers/radius-config.ts`) — Radius's own hostname.
 - `OAUTH_CLIENT_ID = "pi-gateway"` (`ai/src/auth/oauth/radius.ts`) — the OAuth client id Radius issues.
