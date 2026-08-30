@@ -94,7 +94,7 @@ describe("agent telemetry schemas", () => {
 			},
 			(span) => {
 				span.setAttributes({ "knightcode.ai.response.stop_reason": "tool_use" });
-				// @ts-expect-error pi.ai.request declares no span events
+				// @ts-expect-error knightcode.ai.request declares no span events
 				span.addEvent("chunk");
 			},
 		);
