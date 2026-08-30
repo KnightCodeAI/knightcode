@@ -115,7 +115,7 @@ async function startCallbackServer(expectedState: string): Promise<CallbackServe
 				const url = new URL(req.url || "", "http://localhost");
 				if (url.pathname !== CALLBACK_PATH) {
 					res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-					res.end(oauthErrorHtml("Callback route not found."));
+					res.end(oauthErrorHtml("anthropic", "Callback route not found."));
 					return;
 				}
 
@@ -125,24 +125,24 @@ async function startCallbackServer(expectedState: string): Promise<CallbackServe
 
 				if (error) {
 					res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-					res.end(oauthErrorHtml("Anthropic authentication did not complete.", `Error: ${error}`));
+					res.end(oauthErrorHtml("anthropic", "Anthropic authentication did not complete.", `Error: ${error}`));
 					return;
 				}
 
 				if (!code || !state) {
 					res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-					res.end(oauthErrorHtml("Missing code or state parameter."));
+					res.end(oauthErrorHtml("anthropic", "Missing code or state parameter."));
 					return;
 				}
 
 				if (state !== expectedState) {
 					res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-					res.end(oauthErrorHtml("State mismatch."));
+					res.end(oauthErrorHtml("anthropic", "State mismatch."));
 					return;
 				}
 
 				res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-				res.end(oauthSuccessHtml("Anthropic authentication completed. You can close this window."));
+				res.end(oauthSuccessHtml("anthropic", "Anthropic authentication completed. You can close this window."));
 				settleWait?.({ code, state });
 			} catch {
 				res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });

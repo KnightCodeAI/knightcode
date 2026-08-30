@@ -149,7 +149,7 @@ async function requestDeviceCode(signal: AbortSignal): Promise<XaiDeviceCode> {
 			client_id: XAI_CLIENT_ID,
 			scope: XAI_SCOPE,
 			// Not branding: upstream-recognised client identifier. Renaming it breaks auth.
-			referrer: "pi",
+			referrer: "knightcode",
 		},
 		signal,
 	);

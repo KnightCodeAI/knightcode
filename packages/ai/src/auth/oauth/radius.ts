@@ -1,7 +1,7 @@
 /**
  * Radius gateway OAuth flow.
  *
- * Radius is a pi-messages gateway. OAuth client APIs live on the configured
+ * Radius is a knightcode-messages gateway. OAuth client APIs live on the configured
  * gateway; only the interactive browser authorization endpoint is discovered.
  * Model catalog loading is owned by the Radius provider.
  *
@@ -30,6 +30,7 @@ const REDIRECT_URI = `http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const LOGIN_METHOD_BROWSER = "browser";
 const LOGIN_METHOD_DEVICE_CODE = "device-code";
+// Radius is a third-party gateway; this is the client id it issues, not KnightCode branding.
 const OAUTH_CLIENT_ID = "pi-gateway";
 const OAUTH_SCOPE = "gateway offline_access";
 const OAUTH_DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
@@ -174,28 +175,28 @@ function startOAuthCallbackServer(expectedState: string, signal: AbortSignal): P
 	const server = _http.createServer((request, response) => {
 		const url = new URL(request.url ?? "/", REDIRECT_URI);
 		if (url.pathname !== CALLBACK_PATH) {
-			sendPage(response, 404, oauthErrorHtml("Callback route not found."));
+			sendPage(response, 404, oauthErrorHtml("radius", "Callback route not found."));
 			return;
 		}
 		if (url.searchParams.get("state") !== expectedState) {
-			sendPage(response, 400, oauthErrorHtml("OAuth state mismatch."));
+			sendPage(response, 400, oauthErrorHtml("radius", "OAuth state mismatch."));
 			return;
 		}
 
 		const error = url.searchParams.get("error");
 		if (error) {
-			sendPage(response, 400, oauthErrorHtml(url.searchParams.get("error_description") ?? error));
+			sendPage(response, 400, oauthErrorHtml("radius", url.searchParams.get("error_description") ?? error));
 			finish(null);
 			return;
 		}
 
 		const code = url.searchParams.get("code");
 		if (!code) {
-			sendPage(response, 400, oauthErrorHtml("Missing authorization code."));
+			sendPage(response, 400, oauthErrorHtml("radius", "Missing authorization code."));
 			return;
 		}
 
-		sendPage(response, 200, oauthSuccessHtml("Signed in to Radius. You may now close this page."));
+		sendPage(response, 200, oauthSuccessHtml("radius", "Signed in to Radius. You may now close this page."));
 		finish(code);
 	});
 

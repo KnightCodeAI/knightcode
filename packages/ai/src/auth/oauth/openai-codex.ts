@@ -292,7 +292,7 @@ async function pollOpenAICodexDeviceAuth(device: DeviceAuthInfo, signal: AbortSi
 
 async function createAuthorizationFlow(
 	// Not branding: upstream-recognised client identifier. Renaming it breaks auth.
-	originator: string = "pi",
+	originator: string = "knightcode",
 ): Promise<{ verifier: string; state: string; url: string }> {
 	const { verifier, challenge } = await generatePKCE();
 	const state = createState();
@@ -339,30 +339,30 @@ function startLocalOAuthServer(state: string): Promise<OAuthServerInfo> {
 			if (url.pathname !== "/auth/callback") {
 				res.statusCode = 404;
 				res.setHeader("Content-Type", "text/html; charset=utf-8");
-				res.end(oauthErrorHtml("Callback route not found."));
+				res.end(oauthErrorHtml("openaiCodex", "Callback route not found."));
 				return;
 			}
 			if (url.searchParams.get("state") !== state) {
 				res.statusCode = 400;
 				res.setHeader("Content-Type", "text/html; charset=utf-8");
-				res.end(oauthErrorHtml("State mismatch."));
+				res.end(oauthErrorHtml("openaiCodex", "State mismatch."));
 				return;
 			}
 			const code = url.searchParams.get("code");
 			if (!code) {
 				res.statusCode = 400;
 				res.setHeader("Content-Type", "text/html; charset=utf-8");
-				res.end(oauthErrorHtml("Missing authorization code."));
+				res.end(oauthErrorHtml("openaiCodex", "Missing authorization code."));
 				return;
 			}
 			res.statusCode = 200;
 			res.setHeader("Content-Type", "text/html; charset=utf-8");
-			res.end(oauthSuccessHtml("OpenAI authentication completed. You can close this window."));
+			res.end(oauthSuccessHtml("openaiCodex", "OpenAI authentication completed. You can close this window."));
 			settleWait?.({ code });
 		} catch {
 			res.statusCode = 500;
 			res.setHeader("Content-Type", "text/html; charset=utf-8");
-			res.end(oauthErrorHtml("Internal error while processing OAuth callback."));
+			res.end(oauthErrorHtml("openaiCodex", "Internal error while processing OAuth callback."));
 		}
 	});
 

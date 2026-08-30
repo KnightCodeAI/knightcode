@@ -170,36 +170,36 @@ async function startCallbackServer(
 		void (async () => {
 			const requestUrl = new URL(request.url ?? "/", `http://${callbackHost}`);
 			if (request.method !== "GET" || requestUrl.pathname !== callbackPath) {
-				sendHtml(response, 404, oauthErrorHtml("OAuth callback route not found."));
+				sendHtml(response, 404, oauthErrorHtml("openrouter", "OAuth callback route not found."));
 				return;
 			}
 			if (claimed || settled) {
-				sendHtml(response, 409, oauthErrorHtml("This OAuth callback has already been used."));
+				sendHtml(response, 409, oauthErrorHtml("openrouter", "This OAuth callback has already been used."));
 				return;
 			}
 
 			const oauthError = requestUrl.searchParams.get("error");
 			if (oauthError) {
 				const description = requestUrl.searchParams.get("error_description") ?? oauthError;
-				sendHtml(response, 400, oauthErrorHtml("OpenRouter authorization was denied.", description));
+				sendHtml(response, 400, oauthErrorHtml("openrouter", "OpenRouter authorization was denied.", description));
 				finish({ error: new Error(`OpenRouter authorization failed: ${description}`) });
 				return;
 			}
 
 			const code = requestUrl.searchParams.get("code");
 			if (!code) {
-				sendHtml(response, 400, oauthErrorHtml("OpenRouter returned no authorization code."));
+				sendHtml(response, 400, oauthErrorHtml("openrouter", "OpenRouter returned no authorization code."));
 				return;
 			}
 			claimed = true;
 
 			try {
 				const result = await exchangeAuthorizationCode(code, verifier, signal);
-				sendHtml(response, 200, oauthSuccessHtml("Signed in to OpenRouter. You may now close this page."));
+				sendHtml(response, 200, oauthSuccessHtml("openrouter", "Signed in to OpenRouter. You may now close this page."));
 				finish({ credential: result });
 			} catch (error) {
 				const message = error instanceof Error ? error.message : "Unknown token exchange error";
-				sendHtml(response, 502, oauthErrorHtml("OpenRouter key exchange failed.", message));
+				sendHtml(response, 502, oauthErrorHtml("openrouter", "OpenRouter key exchange failed.", message));
 				finish({ error: error instanceof Error ? error : new Error(message) });
 			}
 		})();
