@@ -66,12 +66,18 @@ try {
   }
   console.log(`✓ --version → ${version}`);
 
-  // doctor must exit 0.
-  const doctor = await $`node ${launcher} doctor`.cwd(proj).nothrow();
-  if (doctor.exitCode !== 0) {
-    throw new Error(`doctor exited ${doctor.exitCode}`);
+  // --help must exit 0 and print the usage banner. It is the only command that
+  // exercises the launcher → binary → arg-parsing path without needing an API
+  // key: anything unrecognised is treated as a prompt and sent to the provider,
+  // so an invented subcommand "passes" by talking to a model instead of failing.
+  const help = await $`node ${launcher} --help`.cwd(proj).nothrow();
+  if (help.exitCode !== 0) {
+    throw new Error(`--help exited ${help.exitCode}`);
   }
-  console.log("✓ doctor exit 0");
+  if (!help.stdout.toString().includes("Usage:")) {
+    throw new Error("--help printed no usage banner");
+  }
+  console.log("✓ --help exit 0");
 
   console.log(`pack-test passed for ${platform}-${arch}`);
 } finally {
