@@ -6,7 +6,7 @@ import { getNativeModuleCandidates } from "../src/native-module-path.ts";
 
 describe("getNativeModuleCandidates", () => {
 	it("resolves native helpers from the installed TUI package when the module is bundled elsewhere", () => {
-		const packageRoot = resolve("virtual", "node_modules", "@KnightCodeAI", "pi-tui");
+		const packageRoot = resolve("virtual", "node_modules", "@KnightCodeAI", "@knightcode/tui");
 		const bundledModule = resolve("virtual", "cli", "dist", "bundle", "chunks", "chunk.js");
 		const nativePath = join("native", "win32", "prebuilds", "win32-arm64", "win32-console-mode.node");
 
@@ -24,8 +24,8 @@ describe("getNativeModuleCandidates", () => {
 	});
 
 	it("keeps standalone binary fallbacks when the TUI package is unavailable", () => {
-		const bundledModule = resolve("virtual", "pi", "bundle", "chunks", "chunk.js");
-		const execPath = resolve("virtual", "pi", "pi.exe");
+		const bundledModule = resolve("virtual", "knightcode", "bundle", "chunks", "chunk.js");
+		const execPath = resolve("virtual", "knightcode", "knightcode.exe");
 		const nativePath = join("native", "darwin", "prebuilds", "darwin-arm64", "darwin-modifiers.node");
 
 		const candidates = getNativeModuleCandidates(nativePath, {

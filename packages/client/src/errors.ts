@@ -13,7 +13,7 @@ export class KnightServerError extends Error {
 }
 
 export class KnightDisconnectedError extends Error {
-	constructor(message = "Pi client is disconnected") {
+	constructor(message = "KnightCode client is disconnected") {
 		super(message);
 		this.name = "KnightDisconnectedError";
 	}
@@ -21,7 +21,7 @@ export class KnightDisconnectedError extends Error {
 
 export class KnightClientDisposedError extends Error {
 	constructor() {
-		super("Pi client is disposed");
+		super("KnightCode client is disposed");
 		this.name = "KnightClientDisposedError";
 	}
 }

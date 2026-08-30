@@ -180,7 +180,7 @@ describe.skipIf(process.platform === "win32")("KnightServer Unix integration", (
 				updatedAt: 1,
 				parentSessionId: "parent-1",
 				sessionName: "Live name",
-				cwd: "/tmp/pi-server-conformance",
+				cwd: "/tmp/knightcode-server-conformance",
 			},
 		]);
 	});
@@ -274,7 +274,7 @@ describe.skipIf(process.platform === "win32")("KnightServer Unix integration", (
 				createdAt: 1,
 				updatedAt: 1,
 				sessionName: "Session session-1",
-				cwd: "/tmp/pi-server-conformance",
+				cwd: "/tmp/knightcode-server-conformance",
 			},
 		]);
 		await attach(second, "session-1");

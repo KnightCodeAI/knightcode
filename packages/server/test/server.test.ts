@@ -84,7 +84,7 @@ test("handshake timeout cleanup does not wait for a blocked output queue", async
 });
 
 test("rejects timeout values above Node's maximum timer delay", () => {
-	const unix = { path: "/tmp/pi-server-timeout-test.sock" };
+	const unix = { path: "/tmp/knightcode-server-timeout-test.sock" };
 	expect(() => createUnixServer(service, { path: unix.path, handshakeTimeoutMs: 2_147_483_648 })).toThrow(
 		/handshakeTimeoutMs/,
 	);

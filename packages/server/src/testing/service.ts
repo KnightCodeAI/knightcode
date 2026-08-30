@@ -238,7 +238,7 @@ export class TestServerService implements KnightServerService {
 	seed(
 		id = "session-1",
 		name = `Session ${id}`,
-		cwd = "/tmp/pi-server-conformance",
+		cwd = "/tmp/knightcode-server-conformance",
 		model: ModelRef = { provider: TEST_MODEL.provider, id: TEST_MODEL.id },
 		thinkingLevel: ThinkingLevel = "off",
 	): void {

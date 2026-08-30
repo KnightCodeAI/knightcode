@@ -839,8 +839,8 @@ after`,
 \[
 A=
 \begin{pmatrix}
-\pi & 0\\
-0 & \frac{1}{\pi}
+\knightcode & 0\\
+0 & \frac{1}{\knightcode}
 \end{pmatrix}.
 \]`,
 				0,
