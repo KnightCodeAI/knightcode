@@ -10,7 +10,7 @@ describe("issue #8337 UTF-8 BOM parsing", () => {
 	let testDir: string;
 
 	beforeEach(() => {
-		testDir = mkdtempSync(join(tmpdir(), "pi-8337-"));
+		testDir = mkdtempSync(join(tmpdir(), "knightcode-8337-"));
 	});
 
 	afterEach(() => {

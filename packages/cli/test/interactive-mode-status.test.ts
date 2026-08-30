@@ -646,44 +646,44 @@ describe("InteractiveMode.showLoadedResources", () => {
 				}),
 			},
 			{
-				path: "/tmp/project/.knightcode/npm/node_modules/pi-markdown-preview/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/pi-markdown-preview/extensions/index.ts", {
-					source: "npm:pi-markdown-preview",
+				path: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts",
+				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts", {
+					source: "npm:knightcode-markdown-preview",
 					scope: "project",
 					origin: "package",
-					baseDir: "/tmp/project/.knightcode/npm/node_modules/pi-markdown-preview",
+					baseDir: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview",
 				}),
 			},
 			{
-				path: "/tmp/project/.knightcode/npm/node_modules/@scope/pi-scoped/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/@scope/pi-scoped/extensions/index.ts", {
-					source: "npm:@scope/pi-scoped",
+				path: "/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped/extensions/index.ts",
+				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped/extensions/index.ts", {
+					source: "npm:@scope/knightcode-scoped",
 					scope: "project",
 					origin: "package",
-					baseDir: "/tmp/project/.knightcode/npm/node_modules/@scope/pi-scoped",
+					baseDir: "/tmp/project/.knightcode/npm/node_modules/@scope/knightcode-scoped",
 				}),
 			},
 			{
-				path: "/tmp/project/.knightcode/git/github.com/HazAT/pi-interactive-subagents/extensions/index.ts",
+				path: "/tmp/project/.knightcode/git/github.com/HazAT/knightcode-interactive-subagents/extensions/index.ts",
 				sourceInfo: createSourceInfo(
-					"/tmp/project/.knightcode/git/github.com/HazAT/pi-interactive-subagents/extensions/index.ts",
+					"/tmp/project/.knightcode/git/github.com/HazAT/knightcode-interactive-subagents/extensions/index.ts",
 					{
-						source: "git:github.com/HazAT/pi-interactive-subagents",
+						source: "git:github.com/HazAT/knightcode-interactive-subagents",
 						scope: "project",
 						origin: "package",
-						baseDir: "/tmp/project/.knightcode/git/github.com/HazAT/pi-interactive-subagents",
+						baseDir: "/tmp/project/.knightcode/git/github.com/HazAT/knightcode-interactive-subagents",
 					},
 				),
 			},
 			{
-				path: "/tmp/project/.knightcode/git/github.com/HazAT/pi-interactive-subagents/extensions/subagents/index.ts",
+				path: "/tmp/project/.knightcode/git/github.com/HazAT/knightcode-interactive-subagents/extensions/subagents/index.ts",
 				sourceInfo: createSourceInfo(
-					"/tmp/project/.knightcode/git/github.com/HazAT/pi-interactive-subagents/extensions/subagents/index.ts",
+					"/tmp/project/.knightcode/git/github.com/HazAT/knightcode-interactive-subagents/extensions/subagents/index.ts",
 					{
-						source: "git:github.com/HazAT/pi-interactive-subagents",
+						source: "git:github.com/HazAT/knightcode-interactive-subagents",
 						scope: "project",
 						origin: "package",
-						baseDir: "/tmp/project/.knightcode/git/github.com/HazAT/pi-interactive-subagents",
+						baseDir: "/tmp/project/.knightcode/git/github.com/HazAT/knightcode-interactive-subagents",
 					},
 				),
 			},
@@ -779,7 +779,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 "[Extensions]
-  @scope/pi-scoped, answer.ts, cli-extension.ts, HazAT/pi-interactive-subagents, HazAT/pi-interactive-subagents:subagents, local-index, pi-markdown-preview, user-index"`);
+  @scope/knightcode-scoped, answer.ts, cli-extension.ts, HazAT/knightcode-interactive-subagents, HazAT/knightcode-interactive-subagents:subagents, knightcode-markdown-preview, local-index, user-index"`);
 	});
 
 	test("adds more parent folders until local extension labels are unique", () => {
@@ -1026,12 +1026,12 @@ describe("InteractiveMode.showLoadedResources", () => {
 	test("package extensions still strip index.ts correctly (regression guard)", () => {
 		const extensions: ExtensionFixture[] = [
 			{
-				path: "/tmp/project/.knightcode/npm/node_modules/pi-markdown-preview/extensions/index.ts",
-				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/pi-markdown-preview/extensions/index.ts", {
-					source: "npm:pi-markdown-preview",
+				path: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts",
+				sourceInfo: createSourceInfo("/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview/extensions/index.ts", {
+					source: "npm:knightcode-markdown-preview",
 					scope: "project",
 					origin: "package",
-					baseDir: "/tmp/project/.knightcode/npm/node_modules/pi-markdown-preview",
+					baseDir: "/tmp/project/.knightcode/npm/node_modules/knightcode-markdown-preview",
 				}),
 			},
 		];
@@ -1048,7 +1048,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
 "[Extensions]
-  pi-markdown-preview"`);
+  knightcode-markdown-preview"`);
 	});
 
 	test("labels npm sibling extensions relative to the declaring package", () => {
@@ -1089,9 +1089,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 	});
 
 	test("labels Windows npm sibling extensions relative to the declaring package", () => {
-		const primaryPath = "C:\\Users\\me\\.pi\\agent\\npm\\node_modules\\primary-package\\index.ts";
-		const siblingPath = "C:\\Users\\me\\.pi\\agent\\npm\\node_modules\\sibling-package\\index.ts";
-		const baseDir = "C:\\Users\\me\\.pi\\agent\\npm\\node_modules\\primary-package";
+		const primaryPath = "C:\\Users\\me\\.knightcode\\agent\\npm\\node_modules\\primary-package\\index.ts";
+		const siblingPath = "C:\\Users\\me\\.knightcode\\agent\\npm\\node_modules\\sibling-package\\index.ts";
+		const baseDir = "C:\\Users\\me\\.knightcode\\agent\\npm\\node_modules\\primary-package";
 		const extensions: ExtensionFixture[] = [
 			{
 				path: primaryPath,
@@ -1145,12 +1145,12 @@ describe("InteractiveMode.showLoadedResources", () => {
   project
     /tmp/project/.knightcode/extensions/answer.ts
     /tmp/project/.knightcode/extensions/local-index
-    git:github.com/HazAT/pi-interactive-subagents
+    git:github.com/HazAT/knightcode-interactive-subagents
       extensions
       extensions/subagents
-    npm:@scope/pi-scoped
+    npm:@scope/knightcode-scoped
       extensions
-    npm:pi-markdown-preview
+    npm:knightcode-markdown-preview
       extensions
   user
     /tmp/agent/extensions/user-index
@@ -1160,7 +1160,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 	test("shows context paths relative to cwd while preserving full external paths", () => {
 		const home = homedir();
-		const cwd = path.join(home, "Development", "pi-mono");
+		const cwd = path.join(home, "Development", "knightcode");
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
 			cwd,
@@ -1198,7 +1198,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 	test("shows full context paths when expanded", () => {
 		const home = homedir();
-		const cwd = path.join(home, "Development", "pi-mono");
+		const cwd = path.join(home, "Development", "knightcode");
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
 			toolOutputExpanded: true,
@@ -1213,7 +1213,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
 		expect(output).toContain("[Context]");
 		expect(output).toContain("~/.knightcode/agent/AGENTS.md");
-		expect(output).toContain("~/Development/pi-mono/AGENTS.md");
+		expect(output).toContain("~/Development/knightcode/AGENTS.md");
 		expect(output).not.toContain("~/.knightcode/agent/AGENTS.md, AGENTS.md");
 	});
 

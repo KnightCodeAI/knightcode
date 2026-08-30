@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
-// KnightCode's distribution differs from upstream pi's on purpose. pi publishes a
-// bundled `dist/` and points `bin.pi` at `dist/bundle/cli.js`. KnightCode ships
+// KnightCode's distribution differs from upstream knightcode's on purpose. knightcode publishes a
+// bundled `dist/` and points `bin.knightcode` at `dist/bundle/cli.js`. KnightCode ships
 // prebuilt per-platform binaries as optionalDependencies and a dependency-free
 // launcher (`bin/knightcode`) that resolves and spawns the right one, so nothing
 // is published from `dist/`. Source runs directly under Bun, so the package

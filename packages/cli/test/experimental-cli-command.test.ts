@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { experimentalCli } from "../src/cli/experimental/cli.ts";
 
 describe("experimental CLI commands", () => {
-	test("selects pi mode and parses existing CLI arguments", () => {
+	test("selects knightcode mode and parses existing CLI arguments", () => {
 		expect(
 			experimentalCli.parse([
 				"--provider",
@@ -29,21 +29,21 @@ describe("experimental CLI commands", () => {
 	});
 
 	test("parses a server listener", () => {
-		expect(experimentalCli.parse(["server", "--listen", "unix:///tmp/pi.sock"])).toEqual({
+		expect(experimentalCli.parse(["server", "--listen", "unix:///tmp/knightcode.sock"])).toEqual({
 			ok: true,
 			command: {
 				command: "server",
-				listen: [{ transport: "unix", path: "/tmp/pi.sock" }],
+				listen: [{ transport: "unix", path: "/tmp/knightcode.sock" }],
 			},
 		});
 	});
 
 	test("leaves experimental-looking existing option values with the existing parser", () => {
-		expect(experimentalCli.parse(["--system-prompt", "--listen", "unix:///tmp/pi.sock"])).toMatchObject({
+		expect(experimentalCli.parse(["--system-prompt", "--listen", "unix:///tmp/knightcode.sock"])).toMatchObject({
 			ok: true,
 			command: {
 				command: "knightcode",
-				options: { systemPrompt: "--listen", messages: ["unix:///tmp/pi.sock"] },
+				options: { systemPrompt: "--listen", messages: ["unix:///tmp/knightcode.sock"] },
 			},
 		});
 	});
@@ -60,11 +60,11 @@ describe("experimental CLI commands", () => {
 	});
 
 	test("parses a client transport address", () => {
-		expect(experimentalCli.parse(["client", "--connect", "unix:///tmp/pi.sock"])).toEqual({
+		expect(experimentalCli.parse(["client", "--connect", "unix:///tmp/knightcode.sock"])).toEqual({
 			ok: true,
 			command: {
 				command: "client",
-				connect: { transport: "unix", path: "/tmp/pi.sock" },
+				connect: { transport: "unix", path: "/tmp/knightcode.sock" },
 			},
 		});
 	});
@@ -89,12 +89,12 @@ describe("experimental CLI commands", () => {
 	);
 
 	test("passes unknown options, file arguments, and the positional separator to the existing parser", () => {
-		const result = experimentalCli.parse(["--unknown", "@prompt.md", "--", "--listen", "unix:///tmp/pi.sock"]);
+		const result = experimentalCli.parse(["--unknown", "@prompt.md", "--", "--listen", "unix:///tmp/knightcode.sock"]);
 		expect(result).toMatchObject({
 			ok: true,
 			command: {
 				command: "knightcode",
-				options: { fileArgs: ["prompt.md"], messages: ["--listen", "unix:///tmp/pi.sock"] },
+				options: { fileArgs: ["prompt.md"], messages: ["--listen", "unix:///tmp/knightcode.sock"] },
 			},
 		});
 		if (!result.ok || result.command.command !== "knightcode") return;
@@ -103,7 +103,7 @@ describe("experimental CLI commands", () => {
 
 	test.each([
 		[
-			["--listen", "unix:///tmp/pi.sock", "--listen", "unix:///tmp/pi-admin.sock"],
+			["--listen", "unix:///tmp/knightcode.sock", "--listen", "unix:///tmp/knightcode-admin.sock"],
 			"--listen may only be specified once",
 		],
 		[
@@ -115,19 +115,19 @@ describe("experimental CLI commands", () => {
 			["--auth-token-file", "/tmp/first", "--auth-token-file=/tmp/second"],
 			"--auth-token-file may only be specified once",
 		],
-		[["--listen", "/tmp/pi.sock"], 'Invalid --listen address "/tmp/pi.sock"'],
+		[["--listen", "/tmp/knightcode.sock"], 'Invalid --listen address "/tmp/knightcode.sock"'],
 		[["--listen", "ws://localhost:8080"], 'Unsupported --listen transport "ws:"'],
 		[["--listen", "unix://relative.sock"], "Unix transport address must not include an authority"],
-		[["--listen", "unix:///tmp/pi.sock?wrong=value"], 'Invalid --listen address "unix:///tmp/pi.sock?wrong=value"'],
-		[["--listen", "unix:///tmp/pi.sock#fragment"], 'Invalid --listen address "unix:///tmp/pi.sock#fragment"'],
-		[["--listen", "unix:/tmp/pi.sock"], 'Invalid --listen address "unix:/tmp/pi.sock"'],
+		[["--listen", "unix:///tmp/knightcode.sock?wrong=value"], 'Invalid --listen address "unix:///tmp/knightcode.sock?wrong=value"'],
+		[["--listen", "unix:///tmp/knightcode.sock#fragment"], 'Invalid --listen address "unix:///tmp/knightcode.sock#fragment"'],
+		[["--listen", "unix:/tmp/knightcode.sock"], 'Invalid --listen address "unix:/tmp/knightcode.sock"'],
 		[["--listen", "unix:///tmp/%00pi.sock"], 'Invalid --listen address "unix:///tmp/%00pi.sock"'],
 		[
-			["client", "--listen", "unix:///tmp/pi.sock"],
+			["client", "--listen", "unix:///tmp/knightcode.sock"],
 			"The experimental client command does not support existing CLI options yet",
 		],
 		[
-			["server", "--connect", "unix:///tmp/pi.sock"],
+			["server", "--connect", "unix:///tmp/knightcode.sock"],
 			"The experimental server command does not support existing CLI options yet",
 		],
 		[["client", "--connect", "ws://localhost:8080"], 'Unsupported --connect transport "ws:"'],

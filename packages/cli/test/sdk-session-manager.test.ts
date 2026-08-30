@@ -12,7 +12,7 @@ describe("createAgentSession session manager defaults", () => {
 	let agentDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-sdk-session-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = join(tmpdir(), `knightcode-sdk-session-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		cwd = join(tempDir, "project");
 		agentDir = join(tempDir, "agent");
 		mkdirSync(cwd, { recursive: true });
@@ -107,7 +107,7 @@ describe("createAgentSession session manager defaults", () => {
 		});
 		expect(session.sessionFile).toBeTruthy();
 		expect(session.systemPrompt).toContain(
-			"You can inspect PI_* environment variables for current model and session details.",
+			"You can inspect KNIGHTCODE_* environment variables for current model and session details.",
 		);
 
 		const bashTool = session.agent.state.tools.find((tool) => tool.name === "bash");

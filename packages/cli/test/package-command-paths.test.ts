@@ -52,7 +52,7 @@ describe("package commands", () => {
 		writeFileSync(join(managedRoot, "current-version"), `${VERSION}\n`);
 		writeFileSync(
 			join(managedRoot, "managed-install.json"),
-			`${JSON.stringify({ kind: "pi-managed-install", schemaVersion: 1, layout: "releases-v1" })}\n`,
+			`${JSON.stringify({ kind: "knightcode-managed-install", schemaVersion: 1, layout: "releases-v1" })}\n`,
 		);
 
 		const binDir = join(tempDir, "managed-bin");
@@ -135,7 +135,7 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 
 	beforeEach(() => {
 		allowNetwork();
-		tempDir = join(tmpdir(), `pi-package-commands-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = join(tmpdir(), `knightcode-package-commands-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		agentDir = join(tempDir, "agent");
 		projectDir = join(tempDir, "project");
 		packageDir = join(tempDir, "local-package");
@@ -313,8 +313,8 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 			await expect(
 				main(["list"], {
 					extensionFactories: [
-						(pi) => {
-							pi.on("project_trust", () => ({ trusted: "yes" }));
+						(knightcode) => {
+							knightcode.on("project_trust", () => ({ trusted: "yes" }));
 						},
 					],
 				}),
@@ -350,8 +350,8 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 			await expect(
 				main(["update", "--extensions"], {
 					extensionFactories: [
-						(pi) => {
-							pi.on("project_trust", () => {
+						(knightcode) => {
+							knightcode.on("project_trust", () => {
 								projectTrustCalled = true;
 								return { trusted: "yes" };
 							});
@@ -497,9 +497,9 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 	// Skipped on Windows: asserts POSIX separators in the recorded extension path.
 	it.skipIf(process.platform === "win32")("cycles project package overrides in config local mode", async () => {
 		const storage = new InMemorySettingsStorage();
-		storage.withLock("global", () => JSON.stringify({ packages: ["npm:pi-tools"] }));
+		storage.withLock("global", () => JSON.stringify({ packages: ["npm:knightcode-tools"] }));
 		const settingsManager = SettingsManager.fromStorage(storage, { projectTrusted: true });
-		const resolvedPaths = extensionPaths(join(tempDir, "pkg"), "npm:pi-tools", "user", ["bar.ts"]);
+		const resolvedPaths = extensionPaths(join(tempDir, "pkg"), "npm:knightcode-tools", "user", ["bar.ts"]);
 		const selector = new ConfigSelectorComponent(
 			{ global: resolvedPaths, project: resolvedPaths },
 			settingsManager,
@@ -514,12 +514,12 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 
 		selector.getResourceList().handleInput(" ");
 		expect(settingsManager.getProjectSettings().packages).toEqual([
-			{ source: "npm:pi-tools", autoload: false, extensions: ["-extensions/bar.ts"] },
+			{ source: "npm:knightcode-tools", autoload: false, extensions: ["-extensions/bar.ts"] },
 		]);
 
 		selector.getResourceList().handleInput(" ");
 		expect(settingsManager.getProjectSettings().packages).toEqual([
-			{ source: "npm:pi-tools", autoload: false, extensions: ["+extensions/bar.ts"] },
+			{ source: "npm:knightcode-tools", autoload: false, extensions: ["+extensions/bar.ts"] },
 		]);
 
 		selector.getResourceList().handleInput(" ");
@@ -607,7 +607,7 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 		}
 	});
 
-	it("updates installer-managed Pi through a staged immutable release", async () => {
+	it("updates installer-managed KnightCode through a staged immutable release", async () => {
 		const targetVersion = getNewerPatchVersion();
 		const { managedRoot, npmRecordPath } = prepareManagedInstall(targetVersion);
 		const abandonedStage = join(managedRoot, "staging", "update-abandoned");
@@ -696,12 +696,12 @@ if (process.platform !== "win32") fs.chmodSync(piPath, 0o755);
 	it("keeps npm self-updates non-managed when the managed environment is inherited", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
 		const projectPrefix = join(tempDir, "project-prefix");
-		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@KnightCodeAI", "pi-coding-agent");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@KnightCodeAI", "@knightcodeai/cli");
 		const inheritedManagedRoot = join(tempDir, "inherited-managed-install");
 		mkdirSync(join(inheritedManagedRoot, "releases"), { recursive: true });
 		writeFileSync(
 			join(inheritedManagedRoot, "managed-install.json"),
-			JSON.stringify({ kind: "pi-managed-install", schemaVersion: 1, layout: "releases-v1" }),
+			JSON.stringify({ kind: "knightcode-managed-install", schemaVersion: 1, layout: "releases-v1" }),
 		);
 		vi.stubEnv("KNIGHTCODE_MANAGED_INSTALL_ROOT", inheritedManagedRoot);
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
@@ -755,7 +755,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 
 	it("uses the current package name when the update check omits packageName", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
-		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@mariozechner", "pi-coding-agent");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@knightcodeai", "cli");
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -801,7 +801,7 @@ else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
 
 	it("installs the active package name from the update check during self-update", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
-		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@mariozechner", "pi-coding-agent");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@knightcodeai", "cli");
 		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
 		const recordPath = join(tempDir, "self-update.json");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -825,7 +825,7 @@ else {
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
 		});
-		const activePackageName = PACKAGE_NAME === "@new-scope/pi" ? "@newer-scope/pi" : "@new-scope/pi";
+		const activePackageName = PACKAGE_NAME === "@new-scope/knightcode" ? "@newer-scope/knightcode" : "@new-scope/knightcode";
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => Response.json({ packageName: activePackageName, version: "0.73.0" })),
@@ -852,7 +852,7 @@ else {
 
 	it("prints a pnpm metadata hint when self-update fails", async () => {
 		const globalRoot = join(tempDir, "pnpm", "global", "v11");
-		const selfPackageDir = join(globalRoot, "node_modules", "@KnightCodeAI", "pi-coding-agent");
+		const selfPackageDir = join(globalRoot, "node_modules", "@KnightCodeAI", "@knightcodeai/cli");
 		const fakeBinDir = join(tempDir, "bin");
 		const fakePnpmPath = join(fakeBinDir, process.platform === "win32" ? "pnpm.cmd" : "pnpm");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -896,7 +896,7 @@ else {
 
 	it("fails self-update when renamed npm package installation fails", async () => {
 		const globalPrefix = join(tempDir, "global-prefix");
-		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@mariozechner", "pi-coding-agent");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@knightcodeai", "cli");
 		const fakeNpmPath = join(tempDir, "fake-npm-fail.cjs");
 		const recordPath = join(tempDir, "self-update-fail.json");
 		mkdirSync(selfPackageDir, { recursive: true });
@@ -922,7 +922,7 @@ if(args.includes("install")) process.exit(23);
 			value: join(selfPackageDir, "dist", "cli.js"),
 			configurable: true,
 		});
-		const activePackageName = PACKAGE_NAME === "@new-scope/pi" ? "@newer-scope/pi" : "@new-scope/pi";
+		const activePackageName = PACKAGE_NAME === "@new-scope/knightcode" ? "@newer-scope/knightcode" : "@new-scope/knightcode";
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => Response.json({ packageName: activePackageName, version: "0.73.0" })),
@@ -952,22 +952,22 @@ if(args.includes("install")) process.exit(23);
 
 	it("suggests the configured source when update input omits the npm prefix", async () => {
 		const settingsPath = join(agentDir, "settings.json");
-		writeFileSync(settingsPath, JSON.stringify({ packages: ["npm:pi-formatter"] }, null, 2));
+		writeFileSync(settingsPath, JSON.stringify({ packages: ["npm:knightcode-formatter"] }, null, 2));
 
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 		try {
-			await expect(main(["update", "pi-formatter"])).resolves.toBeUndefined();
+			await expect(main(["update", "knightcode-formatter"])).resolves.toBeUndefined();
 
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
 			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
-			expect(stderr).toContain("Did you mean npm:pi-formatter?");
+			expect(stderr).toContain("Did you mean npm:knightcode-formatter?");
 			expect(stdout).not.toContain("Updated knightcode-formatter");
 			expect(process.exitCode).toBe(1);
 
 			const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as { packages?: string[] };
-			expect(settings.packages).toContain("npm:pi-formatter");
+			expect(settings.packages).toContain("npm:knightcode-formatter");
 		} finally {
 			errorSpy.mockRestore();
 			logSpy.mockRestore();

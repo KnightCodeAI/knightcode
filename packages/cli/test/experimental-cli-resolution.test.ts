@@ -5,10 +5,10 @@ const UNSUPPORTED_SERVER_OPTIONS = "The experimental server command does not sup
 const UNSUPPORTED_CLIENT_OPTIONS = "The experimental client command does not support existing CLI options yet";
 
 describe("experimental CLI command composition", () => {
-	test("composes pi command options with the existing parser", () => {
+	test("composes knightcode command options with the existing parser", () => {
 		const result = experimentalCli.parse([
 			"--listen",
-			"unix:///tmp/pi.sock",
+			"unix:///tmp/knightcode.sock",
 			"--auth-token",
 			"secret",
 			"--provider",
@@ -24,7 +24,7 @@ describe("experimental CLI command composition", () => {
 			ok: true,
 			command: {
 				command: "knightcode",
-				listen: [{ transport: "unix", path: "/tmp/pi.sock" }],
+				listen: [{ transport: "unix", path: "/tmp/knightcode.sock" }],
 				auth: { type: "token", token: "secret" },
 				options: {
 					provider: "anthropic",
@@ -36,7 +36,7 @@ describe("experimental CLI command composition", () => {
 		});
 	});
 
-	test.each(["--help", "--version"] as const)("keeps Pi %s handling in existing CLI options", (option) => {
+	test.each(["--help", "--version"] as const)("keeps KnightCode %s handling in existing CLI options", (option) => {
 		expect(experimentalCli.parse([option])).toMatchObject({
 			ok: true,
 			command: { command: "knightcode", options: { [option === "--help" ? "help" : "version"]: true } },

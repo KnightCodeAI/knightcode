@@ -60,7 +60,7 @@ Skill content here.`,
 		});
 
 		it("should ignore extra markdown files in auto-discovered skill dirs", async () => {
-			const skillDir = join(agentDir, "skills", "pi-skills", "browser-tools");
+			const skillDir = join(agentDir, "skills", "knightcode-skills", "browser-tools");
 			mkdirSync(skillDir, { recursive: true });
 			writeFileSync(
 				join(skillDir, "SKILL.md"),
@@ -163,8 +163,8 @@ Project skill`,
 			mkdirSync(sharedExtDir, { recursive: true });
 			writeFileSync(
 				join(sharedExtDir, "shared.ts"),
-				`export default function(pi) {
-	pi.registerCommand("shared", {
+				`export default function(knightcode) {
+	knightcode.registerCommand("shared", {
 		description: "shared command",
 		handler: async () => {},
 	});
@@ -199,9 +199,9 @@ Project skill`,
 			writeFileSync(
 				join(userExtDir, "user.ts"),
 				`globalThis[${JSON.stringify(loadCountKey)}] = (globalThis[${JSON.stringify(loadCountKey)}] ?? 0) + 1;
-export default function(pi) {
-	pi.on("project_trust", () => ({ trusted: "yes" }));
-	pi.registerCommand("user-trust", {
+export default function(knightcode) {
+	knightcode.on("project_trust", () => ({ trusted: "yes" }));
+	knightcode.registerCommand("user-trust", {
 		description: "user trust",
 		handler: async () => {},
 	});
@@ -209,8 +209,8 @@ export default function(pi) {
 			);
 			writeFileSync(
 				join(projectExtDir, "project.ts"),
-				`export default function(pi) {
-	pi.registerCommand("project-trusted", {
+				`export default function(knightcode) {
+	knightcode.registerCommand("project-trusted", {
 		description: "project trusted",
 		handler: async () => {},
 	});
@@ -243,12 +243,12 @@ export default function(pi) {
 
 			writeFileSync(
 				join(projectExtDir, "project.ts"),
-				`export default function(pi) {
-	pi.registerCommand("deploy", {
+				`export default function(knightcode) {
+	knightcode.registerCommand("deploy", {
 		description: "project deploy",
 		handler: async () => {},
 	});
-	pi.registerCommand("project-only", {
+	knightcode.registerCommand("project-only", {
 		description: "project only",
 		handler: async () => {},
 	});
@@ -257,12 +257,12 @@ export default function(pi) {
 
 			writeFileSync(
 				join(userExtDir, "user.ts"),
-				`export default function(pi) {
-	pi.registerCommand("deploy", {
+				`export default function(knightcode) {
+	knightcode.registerCommand("deploy", {
 		description: "user deploy",
 		handler: async () => {},
 	});
-	pi.registerCommand("user-only", {
+	knightcode.registerCommand("user-only", {
 		description: "user only",
 		handler: async () => {},
 	});
@@ -404,7 +404,7 @@ Content`,
 			expect(agentsFiles).toEqual([]);
 		});
 
-		it("should discover SYSTEM.md from cwd/.pi", async () => {
+		it("should discover SYSTEM.md from cwd/.knightcode", async () => {
 			const piDir = join(cwd, ".knightcode");
 			mkdirSync(piDir, { recursive: true });
 			writeFileSync(join(piDir, "SYSTEM.md"), "You are a helpful assistant.");
@@ -855,8 +855,8 @@ Content`,
 				`
 import type { ExtensionAPI } from "@knightcodeai/cli";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(knightcode: ExtensionAPI) {
+  knightcode.registerTool({
     name: "duplicate-tool",
     description: "First",
     parameters: Type.Object({}),
@@ -870,8 +870,8 @@ export default function(pi: ExtensionAPI) {
 				`
 import type { ExtensionAPI } from "@knightcodeai/cli";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(knightcode: ExtensionAPI) {
+  knightcode.registerTool({
     name: "duplicate-tool",
     description: "Second",
     parameters: Type.Object({}),
@@ -897,14 +897,14 @@ export default function(pi: ExtensionAPI) {
 				`
 import type { ExtensionAPI } from "@knightcodeai/cli";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(knightcode: ExtensionAPI) {
+  knightcode.registerTool({
     name: "duplicate-tool",
     description: "global tool",
     parameters: Type.Object({}),
     execute: async () => ({ result: "global" }),
   });
-  pi.registerCommand("deploy", {
+  knightcode.registerCommand("deploy", {
     description: "global command",
     handler: async () => {},
   });
@@ -916,14 +916,14 @@ export default function(pi: ExtensionAPI) {
 				`
 import type { ExtensionAPI } from "@knightcodeai/cli";
 import { Type } from "typebox";
-export default function(pi: ExtensionAPI) {
-  pi.registerTool({
+export default function(knightcode: ExtensionAPI) {
+  knightcode.registerTool({
     name: "duplicate-tool",
     description: "explicit tool",
     parameters: Type.Object({}),
     execute: async () => ({ result: "explicit" }),
   });
-  pi.registerCommand("deploy", {
+  knightcode.registerCommand("deploy", {
     description: "explicit command",
     handler: async () => {},
   });

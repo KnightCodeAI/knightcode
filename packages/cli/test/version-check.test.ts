@@ -92,14 +92,14 @@ describe("version checks", () => {
 	it("returns the active package metadata from the version check api", async () => {
 		const fetchMock = vi.fn(async () =>
 			Response.json({
-				packageName: "@new-scope/pi",
+				packageName: "@new-scope/knightcode",
 				version: "1.2.4",
 			}),
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
 		await expect(getLatestPiRelease("1.2.3")).resolves.toEqual({
-			packageName: "@new-scope/pi",
+			packageName: "@new-scope/knightcode",
 			version: "1.2.4",
 		});
 	});

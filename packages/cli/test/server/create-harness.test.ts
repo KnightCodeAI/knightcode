@@ -52,7 +52,7 @@ function createPromptTool(name: string, promptSnippet?: string, promptGuidelines
 const defaultPromptTools = [
 	createPromptTool("read", "Read file contents", ["Use read to examine files instead of cat or sed."]),
 	createPromptTool("bash", "Execute bash commands (ls, grep, find, etc.)", [
-		"You can inspect PI_* environment variables for current model and session details.",
+		"You can inspect KNIGHTCODE_* environment variables for current model and session details.",
 	]),
 	createPromptTool("edit", "Edit files", ["Edit carefully."]),
 	createPromptTool("write", "Create or overwrite files", ["Use write only for new files or complete rewrites."]),
@@ -96,9 +96,9 @@ describe("coding-agent Harness construction", () => {
 		expect(prompt).toContain("- read: Read file contents");
 		expect(prompt).toContain("- bash: Execute bash commands (ls, grep, find, etc.)");
 		expect(prompt).toContain("Use read to examine files instead of cat or sed.");
-		expect(prompt).toContain("You can inspect PI_* environment variables for current model and session details.");
+		expect(prompt).toContain("You can inspect KNIGHTCODE_* environment variables for current model and session details.");
 		expect(prompt.indexOf("Use read to examine files")).toBeLessThan(
-			prompt.indexOf("You can inspect PI_* environment variables"),
+			prompt.indexOf("You can inspect KNIGHTCODE_* environment variables"),
 		);
 	});
 
@@ -171,7 +171,7 @@ describe("coding-agent Harness construction", () => {
 		}
 	});
 
-	test("keeps bash PI model variables synchronized with Harness state", async () => {
+	test("keeps bash KNIGHTCODE model variables synchronized with Harness state", async () => {
 		const session = new Session(new InMemorySessionStorage({ id: "dynamic-bash-session", createdAt: 1 }));
 		const env = new CapturingExecutionEnv({
 			cwd: process.cwd(),
@@ -290,7 +290,7 @@ describe("coding-agent Harness construction", () => {
 		[
 			"bash",
 			"Execute bash commands (ls, grep, find, etc.)",
-			"You can inspect PI_* environment variables for current model and session details.",
+			"You can inspect KNIGHTCODE_* environment variables for current model and session details.",
 		],
 		["read", "Read file contents", "Use read to examine files instead of cat or sed."],
 		[
@@ -342,7 +342,7 @@ describe("coding-agent Harness construction", () => {
 		expect(prompt).toContain("- write: Create or overwrite files");
 		expect(prompt).toContain("- read: Read file contents");
 		expect(prompt).not.toContain("- bash:");
-		expect(prompt).not.toContain("You can inspect PI_* environment variables");
+		expect(prompt).not.toContain("You can inspect KNIGHTCODE_* environment variables");
 		expect(prompt).toContain('<project_instructions path="/workspace/AGENTS.md">');
 		expect(prompt).toContain("<name>review</name>");
 		expect(prompt.indexOf("Use write only for new files or complete rewrites.")).toBeLessThan(

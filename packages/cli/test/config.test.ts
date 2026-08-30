@@ -49,7 +49,7 @@ afterEach(() => {
 	}
 });
 
-function createNpmPrefixInstall(template = "pi-prefix-"): { prefix: string; packageDir: string } {
+function createNpmPrefixInstall(template = "knightcode-prefix-"): { prefix: string; packageDir: string } {
 	const prefix = mkdtempSync(join(tmpdir(), template));
 	const root = join(prefix, "lib", "node_modules");
 	const scopeDir = join(root, "@knightcodeai");
@@ -62,7 +62,7 @@ function createNpmPrefixInstall(template = "pi-prefix-"): { prefix: string; pack
 }
 
 function createPnpmGlobalInstall(): { root: string; packageDir: string } {
-	const temp = mkdtempSync(join(tmpdir(), "pi-pnpm-"));
+	const temp = mkdtempSync(join(tmpdir(), "knightcode-pnpm-"));
 	const binDir = join(temp, "bin");
 	const root = join(temp, "pnpm", "global", "5", "node_modules");
 	const packageDir = join(root, "@knightcodeai", "cli");
@@ -77,7 +77,7 @@ function createPnpmGlobalInstall(): { root: string; packageDir: string } {
 		join(
 			root,
 			".pnpm",
-			"@mariozechner+pi-coding-agent@0.0.0",
+			"@knightcodeai+cli@0.0.0",
 			"node_modules",
 			"@knightcodeai",
 			"cli",
@@ -89,7 +89,7 @@ function createPnpmGlobalInstall(): { root: string; packageDir: string } {
 }
 
 function createYarnGlobalInstall(): { globalDir: string; packageDir: string } {
-	const temp = mkdtempSync(join(tmpdir(), "pi-yarn-"));
+	const temp = mkdtempSync(join(tmpdir(), "knightcode-yarn-"));
 	const binDir = join(temp, "bin");
 	const globalDir = join(temp, "yarn", "global");
 	const packageDir = join(globalDir, "node_modules", "@knightcodeai", "cli");
@@ -105,7 +105,7 @@ function createYarnGlobalInstall(): { globalDir: string; packageDir: string } {
 }
 
 function createBunGlobalInstall(): { packageDir: string } {
-	const temp = mkdtempSync(join(tmpdir(), "pi-bun-"));
+	const temp = mkdtempSync(join(tmpdir(), "knightcode-bun-"));
 	const prefix = join(temp, ".bun");
 	const bunBin = join(prefix, "bin");
 	const root = join(prefix, "install", "global", "node_modules");
@@ -148,7 +148,7 @@ function createFakeBunScript(bunBin: string): string {
 
 describe("findNodePackageDir", () => {
 	test("skips binary metadata copied into dist", () => {
-		tempDir = mkdtempSync(join(tmpdir(), "pi-package-dir-"));
+		tempDir = mkdtempSync(join(tmpdir(), "knightcode-package-dir-"));
 		const distDir = join(tempDir, "dist");
 		const bundleDir = join(distDir, "bundle");
 		mkdirSync(bundleDir, { recursive: true });
@@ -162,7 +162,7 @@ describe("findNodePackageDir", () => {
 describe("detectInstallMethod", () => {
 	test("detects pnpm from Windows .pnpm install paths", () => {
 		setExecPath(
-			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@KnightCodeAI+pi-coding-agent@0.67.68\\node_modules\\@KnightCodeAI\\pi-coding-agent\\dist\\cli.js",
+			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@KnightCodeAI+@knightcodeai/cli@0.67.68\\node_modules\\@KnightCodeAI\\@knightcodeai/cli\\dist\\cli.js",
 		);
 
 		expect(detectInstallMethod()).toBe("pnpm");
@@ -228,22 +228,22 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed packages from the current install prefix", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
 
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/pi"],
-			display: `npm --prefix ${prefix} uninstall -g @mariozechner/pi-coding-agent && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/pi`,
+			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/knightcode"],
+			display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
 			steps: [
 				{
 					command: "npm",
-					args: ["--prefix", prefix, "uninstall", "-g", "@mariozechner/pi-coding-agent"],
-					display: `npm --prefix ${prefix} uninstall -g @mariozechner/pi-coding-agent`,
+					args: ["--prefix", prefix, "uninstall", "-g", "@knightcodeai/cli"],
+					display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli`,
 				},
 				{
 					command: "npm",
-					args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/pi"],
-					display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/pi`,
+					args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/knightcode"],
+					display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
 				},
 			],
 		});
@@ -287,7 +287,7 @@ describe("detectInstallMethod", () => {
 	});
 
 	test("quotes npm self-update display paths", () => {
-		const { prefix } = createNpmPrefixInstall("pi prefix ");
+		const { prefix } = createNpmPrefixInstall("knightcode prefix ");
 
 		const command = getSelfUpdateCommand("@knightcodeai/cli");
 
@@ -297,7 +297,7 @@ describe("detectInstallMethod", () => {
 	});
 
 	test("does not infer Windows npm custom prefixes from package paths", () => {
-		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@KnightCodeAI\\pi-coding-agent";
+		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@KnightCodeAI\\@knightcodeai/cli";
 		process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
 		setExecPath(`${packageDir}\\dist\\cli.js`);
 
@@ -323,31 +323,31 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed pnpm global installs by removing the old package first", () => {
 		createPnpmGlobalInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
 
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/pi"],
+			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/knightcode"],
 			display:
-				"pnpm remove -g @mariozechner/pi-coding-agent && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/pi",
+				"pnpm remove -g @knightcodeai/cli && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
 			steps: [
 				{
 					command: "pnpm",
-					args: ["remove", "-g", "@mariozechner/pi-coding-agent"],
-					display: "pnpm remove -g @mariozechner/pi-coding-agent",
+					args: ["remove", "-g", "@knightcodeai/cli"],
+					display: "pnpm remove -g @knightcodeai/cli",
 				},
 				{
 					command: "pnpm",
-					args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/pi"],
-					display: "pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/pi",
+					args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/knightcode"],
+					display: "pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
 				},
 			],
 		});
 	});
 
 	test("self-updates pnpm v11 global installs resolved through the store", () => {
-		const temp = mkdtempSync(join(tmpdir(), "pi-pnpm11-"));
+		const temp = mkdtempSync(join(tmpdir(), "knightcode-pnpm11-"));
 		const binDir = join(temp, "bin");
 		const root = join(temp, "Library", "pnpm", "global", "v11");
 		const packageName = "@knightcodeai/cli";
@@ -392,23 +392,23 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed yarn global installs by removing the old package first", () => {
 		createYarnGlobalInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
 
 		expect(detectInstallMethod()).toBe("yarn");
 		expect(command).toEqual({
 			command: "yarn",
-			args: ["global", "add", "--ignore-scripts", "@new-scope/pi"],
-			display: "yarn global remove @mariozechner/pi-coding-agent && yarn global add --ignore-scripts @new-scope/pi",
+			args: ["global", "add", "--ignore-scripts", "@new-scope/knightcode"],
+			display: "yarn global remove @knightcodeai/cli && yarn global add --ignore-scripts @new-scope/knightcode",
 			steps: [
 				{
 					command: "yarn",
-					args: ["global", "remove", "@mariozechner/pi-coding-agent"],
-					display: "yarn global remove @mariozechner/pi-coding-agent",
+					args: ["global", "remove", "@knightcodeai/cli"],
+					display: "yarn global remove @knightcodeai/cli",
 				},
 				{
 					command: "yarn",
-					args: ["global", "add", "--ignore-scripts", "@new-scope/pi"],
-					display: "yarn global add --ignore-scripts @new-scope/pi",
+					args: ["global", "add", "--ignore-scripts", "@new-scope/knightcode"],
+					display: "yarn global add --ignore-scripts @new-scope/knightcode",
 				},
 			],
 		});
@@ -417,24 +417,24 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed bun global installs by removing the old package first", () => {
 		createBunGlobalInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
 
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
-			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/pi"],
+			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/knightcode"],
 			display:
-				"bun uninstall -g @mariozechner/pi-coding-agent && bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/pi",
+				"bun uninstall -g @knightcodeai/cli && bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/knightcode",
 			steps: [
 				{
 					command: "bun",
-					args: ["uninstall", "-g", "@mariozechner/pi-coding-agent"],
-					display: "bun uninstall -g @mariozechner/pi-coding-agent",
+					args: ["uninstall", "-g", "@knightcodeai/cli"],
+					display: "bun uninstall -g @knightcodeai/cli",
 				},
 				{
 					command: "bun",
-					args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/pi"],
-					display: "bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/pi",
+					args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/knightcode"],
+					display: "bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/knightcode",
 				},
 			],
 		});

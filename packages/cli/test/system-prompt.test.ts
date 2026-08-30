@@ -60,7 +60,7 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain(expected);
 		});
 
-		test("instructs models to resolve pi docs and examples under absolute base paths", () => {
+		test("instructs models to resolve knightcode docs and examples under absolute base paths", () => {
 			const prompt = buildSystemPrompt({
 				contextFiles: [],
 				skills: [],

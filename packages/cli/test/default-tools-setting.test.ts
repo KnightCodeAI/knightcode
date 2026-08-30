@@ -17,7 +17,7 @@ describe("defaultTools setting", () => {
 	let agentDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-default-tools-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = join(tmpdir(), `knightcode-default-tools-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		agentDir = join(tempDir, "agent");
 		mkdirSync(agentDir, { recursive: true });
 	});
@@ -94,16 +94,16 @@ describe("defaultTools setting", () => {
 				],
 			},
 			[
-				(pi) => {
-					pi.registerTool({
+				(knightcode) => {
+					knightcode.registerTool({
 						name: "static_tool",
 						label: "Static Tool",
 						description: "Statically registered extension tool",
 						parameters: Type.Object({}),
 						execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }),
 					});
-					pi.on("session_start", () => {
-						pi.registerTool({
+					knightcode.on("session_start", () => {
+						knightcode.registerTool({
 							name: "dynamic_tool",
 							label: "Dynamic Tool",
 							description: "Dynamically registered extension tool",
