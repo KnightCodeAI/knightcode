@@ -1,31 +1,35 @@
 # Development Rules
 
-## Project
+## The Core Constraint
 
-KnightCode — a local, BYOK terminal coding agent. `@knightcodeai/cli` on npm,
-`knightcode` on the command line.
+KnightCode's system prompt and tool definitions sit at a measured floor of
+roughly **1,100 tokens**. Every byte added to the core is paid for on every
+request, by every user, forever. Before adding to `packages/cli/src/core` or to a
+built-in tool description, ask whether it belongs in an extension, a skill, or a
+prompt template instead. See `CONTRIBUTING.md`.
 
-Derived from [pi](https://github.com/earendil-works/pi) (MIT, Mario Zechner),
-rebranded and re-scoped to `@knightcode/*`. That attribution in `LICENSE`,
-`README.md`, and this file is a license condition — never remove it.
+## Layout
 
-- **Runtime**: Bun. Source runs directly; no build step for development.
-- **Language**: TypeScript, ESM, `.ts` extensions in relative imports.
-- **Packages**: bun workspaces (`packages/*`). No npm, no `package-lock.json` —
-  the lockfile is `bun.lock`.
-- **Terminal UI**: `@knightcode/tui` — imperative components with
-  `render(width): string[]`. **Not React.**
+Bun workspaces: `packages/*` and `apps/*`. Source runs directly under Bun; there
+is no build step for development.
 
-Layout: `packages/cli` is the binary and the bulk of the product;
-`packages/ai` is the multi-provider layer; `packages/agent` is the loop and
-harness; `tui`, `client`, `server`, `protocol`, `telemetry`,
-`session-backend-sqlite` support them; `packages/cli-<platform>` are the
-compiled-binary distribution stubs (their `bin/` is built by CI, never
-committed).
+| Package | What it is |
+| --- | --- |
+| `packages/cli` | `@knightcodeai/cli` — the `knightcode` binary: CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills. The only published package with source |
+| `packages/cli-{linux,darwin,win32}-*` | Published platform packages; hold a compiled binary in `bin/`, no source |
+| `packages/ai` | Multi-provider LLM layer: providers, API adapters, OAuth, model catalog |
+| `packages/agent` | Agent loop, harness, compaction, session state, built-in tools |
+| `packages/tui` | Terminal UI library with differential rendering |
+| `packages/protocol` · `client` · `server` | RPC protocol and transports |
+| `packages/session-backend-sqlite` · `telemetry` · `evals` | Session storage, telemetry contracts, eval harness |
+| `apps/web` | The website. Separate toolchain; not covered by the root type check |
 
-Typechecking is a single root `tsc --noEmit` — the root `tsconfig.json` maps
-every `@knightcode/*` specifier to package source, so there is no per-package
-build to run first.
+Everything except `packages/cli*` is private and consumed through the workspace.
+The root `tsconfig.json` maps every `@knightcode/*` and `@knightcodeai/cli`
+specifier to package source, so imports resolve without a build.
+
+User-facing documentation lives in `packages/cli/docs/`. Keep it in sync when you
+change flags, settings, keybindings, providers, or the session format.
 
 ## Conversational Style
 
@@ -42,134 +46,72 @@ build to run first.
 ## Code Quality
 
 - Read files in full before wide-ranging changes, before editing files you have not fully inspected, and when asked to investigate or audit. Do not rely on search snippets for broad changes.
-- Maintain existing style conventions (tabs, biome-style formatting).
+- Formatting is Prettier, configured in `.prettierrc`: tabs, 120 columns, LF. `bun run format` formats `.ts`/`.tsx`; check without writing via `bun x prettier --check "**/*.ts"`. Prose is not formatted — Markdown is hand-wrapped, keep it that way.
+- `.prettierignore` covers what must not be touched: generated model catalogs, test fixtures (several are deliberately malformed), Changesets-owned changelogs, and `apps/` (own config and toolchain). Don't format those by hand either.
 - No `any` unless absolutely necessary.
 - Inline single-line helpers that have only one call site.
-- Check node_modules for external API types; don't guess.
+- Check `node_modules` for external API types; don't guess.
 - **No inline imports** (`await import()`, `import("pkg").Type`, dynamic type imports). Top-level imports only.
 - Never remove or downgrade code to fix type errors from outdated deps; upgrade the dep instead.
-- Use only erasable TypeScript syntax (Node strip-only mode) in code checked by the root config (`packages/*/src`, `packages/*/test`, `packages/cli/examples`): no parameter properties, `enum`, `namespace`/`module`, `import =`, `export =`, or other constructs needing JS emit. Use explicit fields with constructor assignments.
+- The root config sets `erasableSyntaxOnly` and covers `packages/*/src` and `packages/*/test`: no parameter properties, `enum`, `namespace`/`module`, `import =`, `export =`, or other constructs needing JS emit. Use explicit fields with constructor assignments.
 - Always ask before removing functionality or code that appears intentional.
-- Do not preserve backward compatibility unless the user asks for it. This is a fork with no external installed base; pi-era compatibility shims are dead weight, not obligations.
-- Never hardcode key checks (e.g. `matchesKey(keyData, "ctrl+x")`). Add defaults to `KEYBINDINGS` (`packages/cli/src/core/keybindings.ts`) or `TUI_KEYBINDINGS` (`packages/tui/src/keybindings.ts`) so they stay configurable.
-- Never modify `packages/ai/src/models.generated.ts` or `packages/ai/src/providers/data/*.json` directly; update `packages/ai/scripts/generate-models.ts` instead, then regenerate. Including the resulting diff is always OK, even if regeneration sweeps in unrelated upstream model metadata changes.
-
-## Names that are third-party, not branding — do not rebrand
-
-The pi→KnightCode rebrand is complete. Two `pi` strings remain in source, both
-identifiers owned by a third party, each carrying an inline comment saying so.
-Do not "fix" them:
-
-- `DEFAULT_RADIUS_GATEWAY = "https://radius.pi.dev"` (`ai/src/providers/radius-config.ts`) — Radius's own hostname.
-- `OAUTH_CLIENT_ID = "pi-gateway"` (`ai/src/auth/oauth/radius.ts`) — the OAuth client id Radius issues.
-
-Also legitimate and not to be swept: `@mariozechner/clipboard` (a real
-published dependency), `cchistory.mariozechner.at` (a source citation in
-`ai/src/api/anthropic-messages.ts`), `\pi`/`\Pi` in `tui/src/latex.ts`, and the
-math builtins inside the vendored `cli/src/core/export-html/vendor/highlight.min.js`.
-
-`originator` (OpenAI Codex) and `referrer` (xAI OAuth) now send `"knightcode"`.
-These are client identifiers the providers recognise — **if ChatGPT-subscription
-or xAI OAuth sign-in starts failing, look here first.**
+- Do not preserve backward compatibility unless the user asks for it.
+- Never hardcode key checks (e.g. `matchesKey(keyData, "ctrl+x")`). Add the binding to `KEYBINDINGS` in `packages/cli/src/core/keybindings.ts` or `TUI_KEYBINDINGS` in `packages/tui/src/keybindings.ts` so it stays configurable.
+- Never edit `packages/ai/src/models.generated.ts` or `image-models.generated.ts` directly; change `packages/ai/scripts/generate-models.ts` (or `generate-image-models.ts`) and regenerate with `bun run generate:models`. Including the resulting generated diff is always OK, even when regeneration pulls in unrelated upstream model metadata.
+- Code must work on Windows as well as POSIX. Path joins, spawned shells, and line endings are the usual breakages; `.gitattributes` normalizes to LF except for `.bat`/`.cmd`/`.ps1`.
 
 ## Commands
 
-Run from the repo root unless noted.
+Run from the repo root unless stated otherwise.
 
-- **After code changes (not docs): `bun run check-types`** (full output, no tail).
-  Fix every error before committing. Does not run tests.
-- `bun run dev` — watch mode. `bun run start` — run once.
-- `bun run format` — prettier over `**/*.{ts,tsx,md}`.
-- Never run `bun run build:cli` or the full test suite unless the user asks.
-- Tests are vitest in every package except `packages/tui`, which uses `node --test`.
-  - Whole package: `cd packages/<pkg> && bun run test`
-  - One vitest file: `cd packages/<pkg> && npx vitest --run test/specific.test.ts`
-  - One tui file: `cd packages/tui && node --test test/specific.test.ts`
-  - **Do not** pass `--root packages/<pkg>` from the repo root — tests that read
-    `process.cwd()` (e.g. `cli/test/resource-loader.test.ts`) break on the wrong cwd.
-- `bun run test` (every package in parallel) is **not reliably green on
-  Windows**, and was not before any recent change — a pristine checkout fails
-  too. Each run fails a different 2–5 tests and every one of them spawns a child
-  process (`agent/test/harness/nodejs-env`, `cli/test/bash-close-hang-windows`,
-  `git-update`, `resolve-config-value`, `startup-session-name`, `auth-storage`,
-  `generate-models-strict`), on 3 s timeouts and `EPERM` temp-dir cleanups.
-  **Before believing a full-suite failure, re-run that file alone or the whole
-  package alone.** Only then is it a real regression.
-- If you create or modify a test file, run it and iterate until it passes.
-- For `packages/cli/test/suite/`, use `test/suite/harness.ts` + the faux
-  provider (`ai/src/providers/faux.ts`). No real provider APIs, keys, or paid tokens.
-- Regression tests for a GitHub issue: name the file with the issue number
-  (see `cli/test/suite/regressions/`) and comment the issue number in the test.
-- For ad-hoc scripts, write to a temp file, run, edit if needed, remove when
-  done. Don't embed multi-line scripts in `bash` commands.
+- After code changes (not docs): `bun run check-types` (full output, no tail). Fix every error before committing. It does not run tests.
+- Never run `bun run build:cli` or the full `bun run test` unless the user asks.
+- Tests are per-package. Run the specific test you touched from the package root:
+  - Vitest packages (`ai`, `agent`, `cli`, `client`, `server`, `protocol`, `session-backend-sqlite`, `evals`): `bun x vitest --run test/specific.test.ts`
+  - `packages/tui` (`node:test`): `node --test test/specific.test.ts`
+- Whole-package runs work (`cd packages/cli && bun run test`), but on Windows full-suite runs flake on tests that spawn shells. Re-run a failure in isolation before treating it as a regression.
+- Some `packages/ai` tests hit real provider endpoints. They self-skip when the credential is absent (`describe.skipIf(!oauthToken)`, `it.skipIf(!process.env.X_API_KEY)`) — but a populated root `.env` activates them, so a full `packages/ai` run spends real tokens and can fail on provider rate limits (HTTP 429) rather than on your change. They are not confined to `*-e2e.test.ts`; `stream.test.ts`, `tokens.test.ts` and others carry live suites too. Check the failure message before treating one as a regression, and never add a live-endpoint test without that guard.
+- If you create or modify a test file, run it and iterate on test or implementation until it passes.
+- For `packages/cli/test/suite/`, use `test/suite/harness.ts` with the faux provider (`packages/ai/src/providers/faux.ts`). No real provider APIs, keys, or paid tokens.
+- When adding a regression test for a GitHub issue, put the issue number in a comment next to the test.
+- For ad-hoc scripts, write them to a temp file, run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
 - Never commit unless the user asks.
 
-## Model catalog
+## Adding a Provider
 
-Two separate things share one generator (`packages/ai/scripts/generate-models.ts`,
-network only, no API keys):
+`packages/ai/src/providers/` holds one `<name>.ts` per provider, a
+`<name>.models.ts` catalog module, and a `data/<name>.json` metadata file.
 
-**Built-in catalog** — `packages/ai/src/providers/data/*.json` plus the
-`src/models.generated.ts` aggregator, compiled into the binary.
+1. Add the provider module and register it in `providers/all.ts`.
+2. Regenerate the catalog with `bun run generate:models` (or `bun run hydrate:model-data` for metadata only). Verify with `bun run check:model-data`.
+3. Add tests under `packages/ai/test/` named `<provider>-*.test.ts`. Required at minimum: request construction (headers, base URL, auth), streaming/SSE parsing, and model catalog presence. Follow the closest existing provider's tests.
+4. Anything needing a live key goes in a `*-e2e.test.ts` gated on that key's env var.
 
-```bash
-bun run hydrate:model-data     # refresh the data JSONs only
-bun run generate:models        # data + models.generated.ts + image models
-bun run check:model-data       # validate without regenerating
-```
-
-Regenerating fails with `EPERM` while `bun run dev`/`--watch` is running: bun's
-watcher holds a handle on `src/providers/data`, which the script renames. Stop
-watchers first. It cuts both ways — it picks up real pricing fixes but also
-churning marketing names, so assert router-wide properties in tests rather than
-a specific tier string.
-
-**Published catalog** — the same data as a bundle uploaded to R2, so shipped
-clients pick up new models without a release.
-`packages/cli/src/core/remote-catalog-provider.ts` overlays it on the built-in
-catalog every 4 hours.
-
-```bash
-bun run generate:model-catalog   # → .artifacts/model-catalog/
-bun run check:model-catalog      # validate the bundle, upload nothing
-```
-
-`.github/workflows/publish-model-catalog.yml` runs both on a schedule, then
-`scripts/publish-model-catalog.mjs` uploads. Revisions are content-addressed
-(`models/v1/revisions/sha256-<digest>/`) and immutable; `models/v1/index.json`
-is the only mutable object, written last, so a bad catalog is rolled back by
-repointing it rather than by overwriting anything. Publishing is gated on
-required providers being present and a >=500 model floor.
-
-**Not yet wired up** — the workflow needs an R2 bucket (`knightcode-artifacts`),
-the `KNIGHTCODE_ARTIFACTS_R2_*` secrets, an `R2_ENDPOINT` variable, and a
-`knightcode-model-upload` environment. Separately, the client fetches
-`https://knightcode.raghavseth.in/api/models/providers/<id>`, and **nothing in
-this repo serves that path** — pi's equivalent lives in its closed-source site,
-so it has to be written (a Worker over the R2 bucket is the natural fit).
+User-facing notes belong in `packages/cli/docs/providers.md`, or
+`custom-provider.md` for endpoint-configured providers.
 
 ## Dependency and Install Security
 
-- Treat dependency and lockfile changes as reviewed code. Direct external deps stay pinned to exact versions.
+- Treat dependency and `bun.lock` changes as reviewed code. Direct external deps stay pinned to exact versions (`.npmrc` sets `save-exact=true`; `min-release-age=2` blocks freshly published versions).
 - When updating `undici`, you MUST read its changelog/release notes for the target version and evaluate whether any changes may affect functionality before applying the update.
-- Install with `bun install`. `bunfig.toml` sets `linker = "hoisted"` on
-  purpose — the vendored suite assumes ONE physical copy of each dependency, and
-  bun's default isolated layout gives `packages/ai` and `packages/cli` separate
-  copies of `openai`, which breaks `vi.mock("openai")`. **Do not remove it.**
-- If a `packages/*/node_modules` from an older layout is shadowing the hoisted copies, delete it.
+- Install with `bun install`; CI-style with `bun install --frozen-lockfile`.
+- `bunfig.toml` pins `linker = "hoisted"` on purpose: the isolated layout gives `packages/ai` and `packages/cli` separate copies of a dependency, which breaks `vi.mock()` across package boundaries. Do not change it.
+- New deps with lifecycle scripts require review; never add one silently.
 
 ## Git
 
-Multiple KnightCode sessions may be running in this cwd at the same time, each modifying different files. Git operations that touch unstaged, staged, or untracked files outside your own changes will stomp on other sessions' work. Follow these rules:
+Multiple sessions may be running in this cwd at the same time, each modifying
+different files. Git operations that touch unstaged, staged, or untracked files
+outside your own changes will stomp on other sessions' work. Follow these rules:
 
 Committing:
 
 - Only commit files YOU changed in THIS session.
 - Stage explicit paths (`git add <path1> <path2>`); never `git add -A` / `git add .`.
 - Before committing, run `git status` and verify you are only staging your files.
-- Generated model catalog files may always be included alongside your files.
-- Message format: `{feat,fix,docs}[(ai,tui,agent,cli)]: <commit message> (optionally multiple lines)`. Message is informative and concise.
-- No `Co-Authored-By` trailers.
+- `packages/ai/src/models.generated.ts` may always be included alongside your files.
+- Message format: `{feat,fix,docs,refactor,chore}[(<scope>)]: <message>`, scope being the package short name (`ai`, `agent`, `cli`, `tui`, `server`, `client`, `protocol`, `telemetry`, `evals`, `web`). Informative and concise.
+- Never add `Co-Authored-By` or other AI-attribution trailers to commit messages.
 
 Never run (destroys other agents' work or bypasses checks):
 
@@ -183,15 +125,14 @@ If rebase conflicts occur:
 
 ## Issues and PRs
 
+See `CONTRIBUTING.md` for the contributor gate (auto-close workflows,
+`lgtm`/`lgtmi`, quality bar).
+
 When reviewing PRs:
 
 - Do not run `gh pr checkout`, `git switch`, or otherwise move the worktree to the PR branch unless the user explicitly asks.
 - Use `gh pr view`, `gh pr diff`, `gh api`, and local `git show`/`git diff` against fetched refs to inspect PR metadata, commits, and patches without changing branches.
 - If you need PR file contents, fetch/read them into temporary files or use `git show <ref>:<path>` without switching branches.
-
-When creating issues:
-
-- Add `pkg:*` labels for affected packages (`pkg:agent`, `pkg:ai`, `pkg:cli`, `pkg:tui`); use all that apply.
 
 When posting issue/PR comments:
 
@@ -199,13 +140,18 @@ When posting issue/PR comments:
 - Keep comments concise, technical, in the user's tone.
 - End every AI-posted comment with the AI-generated disclaimer line specified by the originating prompt.
 
+Triage labels are managed by `.github/workflows/issue-triage-labels.yml`:
+`untriaged`, `to-discuss`, `inprogress`, `last-read`, `no-action`. Do not set
+them by hand unless the user asks.
+
 When closing issues via commit:
 
 - Include `fixes #<number>` or `closes #<number>` in the message so merging auto-closes the issue. For multiple issues, repeat the keyword per issue (`closes #1, closes #2`); a shared keyword (`closes #1, #2`) only closes the first.
 
-## Testing interactive mode with tmux
+## Testing Interactive Mode
 
-Run the TUI in a controlled terminal (from the repo root):
+`bun run start` runs the TUI from source with `.env` loaded. For scripted
+interaction, drive it in a controlled terminal (POSIX; from the repo root):
 
 ```bash
 tmux new-session -d -s kc-test -x 80 -y 24
@@ -216,39 +162,41 @@ tmux send-keys -t kc-test Escape               # special keys (also C-o for ctrl
 tmux kill-session -t kc-test
 ```
 
-## Changelog and releases
+There is no tmux on Windows. Either run `bun run start` and let the user drive
+it, or exercise the same paths headlessly with `bun run start --print "..."`.
 
-Bun workspaces + **changesets**. `packages/*/CHANGELOG.md` is generated — never
-edit it by hand, and never touch a released version's section.
+## Changelog and Releasing
 
-To record a change, add a changeset (`bun x changeset`) describing it. The six
-`@knightcodeai/cli*` packages are a **fixed group** in `.changeset/config.json`:
-they always version and publish together. Anything listed in `ignore` must
-actually exist, or changesets refuses to run at all.
+Changelogs are **generated by Changesets**. Never hand-edit
+`packages/*/CHANGELOG.md`.
 
-Release flow is `.github/workflows/publish.yml`, on push to `main`. Never
-hand-run a release or push a version tag.
+For a user-visible change, add a changeset and commit it with your work:
 
-1. **version** — `changesets/action` calls `bun run ci:version`
-   (`scripts/ci-version.ts`): `changeset version`, then asserts the six packages
-   came out lockstep and that `@knightcodeai/cli`'s `optionalDependencies` pin
-   exactly that version. Drift there ships a launcher whose platform package was
-   never published. While changesets are pending this only opens/updates the
-   "chore(release): version packages" PR.
-2. **build** — merging that PR leaves no changesets and a version not on npm, so
-   the 5-target matrix compiles each binary on its own native OS and smoke tests
-   it (`--version`, `doctor`). `darwin-x64` is cross-compiled from arm64 — no
-   free Intel runner — so it is the one target not smoke tested.
-3. **publish** — `bun run ci:publish` (`scripts/ci-publish.ts`) re-asserts
-   lockstep, checks every platform package actually carries its binary, runs
-   `scripts/pack-test.ts` against the real npm install path, validates each
-   tarball with `npm pack --dry-run`, then publishes only what is not already on
-   npm and tags the release.
+```bash
+bun x changeset
+```
 
-Steps 1-3 are all idempotent and skip-if-published on purpose: six npm publishes
-are not transactional, so a failure after the third must be safe to re-run.
-`--provenance` needs `id-token: write` on the publish job.
+The six `@knightcodeai/cli*` packages are a fixed group in
+`.changeset/config.json` — they always version together, so one changeset naming
+`@knightcodeai/cli` covers the platform packages too. Private `@knightcode/*`
+packages are never published and take no changeset.
+
+Releases are automated by `.github/workflows/publish.yml`; there is no local
+release command and nothing to publish by hand:
+
+1. A push to `main` with changesets present opens or updates a `chore(release): version packages` PR (`bun run ci:version`).
+2. Merging that PR leaves no changesets and a version npm does not have, which triggers the build matrix: each binary is compiled on its own native OS and smoke-tested (`--version`, `--help`) before it goes near npm. `darwin-x64` is cross-compiled and skips the smoke test — there is no free Intel runner.
+3. The `publish` job re-runs `check-types` and `test`, reassembles the tested binaries into the platform packages, runs `bun run ci:publish` (pack-test plus `changeset publish` with npm provenance), pushes tags, and creates a GitHub Release with per-platform archives and `SHA256SUMS`.
+
+The `npm-publish` environment holds `NPM_TOKEN` and can gate releases behind
+required reviewers. If a publish fails partway, re-run the job — `ci:publish`
+skips versions already on npm. Do not bump versions by hand to work around it.
+
+The model catalog is published separately by
+`.github/workflows/publish-model-catalog.yml` from `bun run
+generate:model-catalog`; dry-run locally with `bun run check:model-catalog`.
 
 ## User Override
 
-If the user's instructions conflict with any rule in this document, ask for explicit confirmation before overriding. Only then execute their instructions.
+If the user's instructions conflict with any rule in this document, ask for
+explicit confirmation before overriding. Only then execute their instructions.
