@@ -1,6 +1,7 @@
 {
   "name": "knightcode",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "bun --env-file=.env run --watch packages/cli/src/bun/cli.ts",
