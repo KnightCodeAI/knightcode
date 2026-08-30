@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build-check-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.3
+
+      # packages/cli/src/core/tools/{grep,find}.ts shell out to ripgrep and fd.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fd-find ripgrep
+          sudo ln -s "$(which fdfind)" /usr/local/bin/fd
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check types
+        run: bun run check-types
+
+      - name: Test
+        run: bun run test
+
+      # Compiling the binary is part of the release path; break here rather than
+      # in the publish workflow, where a failure blocks an in-flight release.
+      - name: Build binary
+        run: bun run build:cli
+
+      # --help, not an invented subcommand: unrecognised argv is treated as a
+      # prompt and sent to the provider, which needs an API key CI does not have.
+      - name: Smoke test binary
+        run: |
+          packages/cli-linux-x64/bin/knightcode --version
+          packages/cli-linux-x64/bin/knightcode --help | grep -q "Usage:"

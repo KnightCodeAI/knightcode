@@ -1,28 +1,39 @@
 {
   "name": "knightcode",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "MIT",
+  "type": "module",
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "dev:cli": "bun run --watch packages/cli/src/index.tsx",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types",
+    "dev": "bun --env-file=.env run --watch packages/cli/src/bun/cli.ts",
+    "start": "bun --env-file=.env run packages/cli/src/bun/cli.ts",
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
     "build:cli": "bun run scripts/build.ts --single",
+    "build:linux": "bun run scripts/build.ts --target=linux-x64",
+    "bench": "bun run scripts/bench.ts",
+    "eval": "bun run --filter '@knightcode/evals' eval --",
     "link:cli": "bun run build:cli && cd packages/cli && bun link",
-    "sync:docs": "bun run scripts/sync-root-docs.ts",
-    "ci:version": "changeset version && bun run sync:docs && bun install",
-    "ci:publish": "bun run scripts/pack-test.ts && changeset publish"
+    "test": "bun run --filter '*' test",
+    "generate:models": "bun run --filter '@knightcode/ai' generate-models && bun run --filter '@knightcode/ai' generate-image-models",
+    "hydrate:model-data": "bun run --filter '@knightcode/ai' hydrate-model-data",
+    "check:model-data": "bun run --filter '@knightcode/ai' check:model-data",
+    "generate:model-catalog": "bun run --filter '@knightcode/ai' generate-model-catalog",
+    "check:model-catalog": "node scripts/publish-model-catalog.mjs --input .artifacts/model-catalog --dry-run",
+    "ci:version": "bun run scripts/ci-version.ts",
+    "ci:publish": "bun run scripts/ci-publish.ts",
+    "ci:publish:dry": "bun run scripts/ci-publish.ts --dry-run"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.10",
+    "@changesets/cli": "2.31.0",
+    "@types/node": "22.19.19",
+    "@vitest/coverage-v8": "4.1.9",
+    "@xterm/headless": "5.5.0",
     "prettier": "^3.8.3",
-    "turbo": "^2.9.14",
-    "typescript": "5.9.2"
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "packageManager": "bun@1.3.3",
   "workspaces": [

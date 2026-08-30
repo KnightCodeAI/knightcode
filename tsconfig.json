@@ -1,0 +1,35 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "paths": {
+      "*": ["./*"],
+      "@knightcode/telemetry": ["./packages/telemetry/src/index.ts"],
+      "@knightcode/telemetry/testing": ["./packages/telemetry/src/testing/index.ts"],
+      "@knightcode/ai": ["./packages/ai/src/index.ts"],
+      "@knightcode/ai/oauth": ["./packages/ai/src/oauth.ts"],
+      "@knightcode/ai/*": ["./packages/ai/src/*.ts", "./packages/ai/src/providers/*.ts"],
+      "@knightcode/agent": ["./packages/agent/src/index.ts"],
+      "@knightcode/agent/node": ["./packages/agent/src/node.ts"],
+      "@knightcode/agent/session/testing": ["./packages/agent/src/harness/session/testing/index.ts"],
+      "@knightcode/agent/*": ["./packages/agent/src/*"],
+      "@knightcode/session-backend-sqlite": ["./packages/session-backend-sqlite/src/index.ts"],
+      "@knightcodeai/cli": ["./packages/cli/src/index.ts"],
+      "@knightcodeai/cli/hooks": ["./packages/cli/src/core/hooks/index.ts"],
+      "@knightcodeai/cli/*": ["./packages/cli/src/*"],
+      "@knightcode/protocol": ["./packages/protocol/src/index.ts"],
+      "@knightcode/protocol/*": ["./packages/protocol/src/*"],
+      "@knightcode/client": ["./packages/client/src/index.ts"],
+      "@knightcode/client/*": ["./packages/client/src/*"],
+      "@knightcode/server": ["./packages/server/src/index.ts"],
+      "@knightcode/server/*": ["./packages/server/src/*"],
+      "@knightcode/tui": ["./packages/tui/src/index.ts"],
+      "@knightcode/tui/*": ["./packages/tui/src/*"],
+      "typebox": ["./node_modules/typebox"]
+    }
+  },
+  "include": ["packages/*/src/**/*", "packages/*/test/**/*"],
+  "exclude": ["**/dist/**", "**/node_modules/**"]
+}

@@ -1,61 +1,76 @@
 {
   "name": "@knightcodeai/cli",
   "version": "0.4.1",
-  "license": "Apache-2.0",
+  "description": "KnightCode — a local, BYOK terminal coding agent powered by OpenRouter.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KnightCodeAI/knightcode.git"
+  },
+  "homepage": "https://knightcode.raghavseth.in",
+  "license": "MIT",
+  "knightcodeConfig": {
+    "configDir": ".knightcode"
+  },
   "bin": {
     "knightcode": "./bin/knightcode"
   },
-  "homepage": "https://knightcode.raghavseth.in",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/KnightCodeAI/knightcode.git"
-  },
-  "bugs": {
-    "url": "https://github.com/KnightCodeAI/knightcode/issues"
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rpc-entry": "./src/rpc-entry.ts",
+    "./client": "./src/client/index.ts",
+    "./package.json": "./package.json",
+    "./*": "./src/*.ts"
   },
   "files": [
     "bin/",
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "bun --env-file=../../.env run --watch src/bun/cli.ts",
+    "start": "bun --env-file=../../.env run src/bun/cli.ts",
+    "check-types": "tsc --noEmit -p ../../tsconfig.json",
+    "test": "vitest --run"
   },
   "optionalDependencies": {
     "@knightcodeai/cli-linux-x64": "0.4.1",
     "@knightcodeai/cli-linux-arm64": "0.4.1",
     "@knightcodeai/cli-darwin-x64": "0.4.1",
     "@knightcodeai/cli-darwin-arm64": "0.4.1",
-    "@knightcodeai/cli-win32-x64": "0.4.1"
-  },
-  "scripts": {
-    "dev": "bun run --watch src/index.tsx",
-    "check-types": "tsc --noEmit",
-    "test": "bun test src/**/*.test.ts"
+    "@knightcodeai/cli-win32-x64": "0.4.1",
+    "@mariozechner/clipboard": "0.3.9"
   },
   "devDependencies": {
-    "@ai-sdk/provider-utils": "^4.0.27",
-    "@repo/shared": "workspace:*",
-    "@openrouter/ai-sdk-provider": "^2.9.0",
-    "@opentui/core": "^0.2.10",
-    "@opentui/react": "^0.2.10",
-    "@repo/eslint-config": "*",
-    "@repo/typescript-config": "workspace:*",
-    "@types/bun": "latest",
-    "@types/html-to-text": "^9.0.4",
-    "@types/react": "^19.2.6",
-    "ai": "^6.0.191",
-    "chokidar": "^5.0.0",
-    "date-fns": "^4.3.0",
-    "drizzle-kit": "^0.31.10",
-    "drizzle-orm": "^0.45.2",
-    "html-to-text": "^10.0.0",
-    "open": "^11.0.0",
-    "opentui-spinner": "^0.0.6",
-    "react": "^19.2.6",
-    "react-router": "7.14.2",
-    "safe-regex": "^2.1.1",
-    "typescript": "^5",
-    "zod": "^4.3.6"
+    "@knightcode/agent": "workspace:*",
+    "@knightcode/ai": "workspace:*",
+    "@knightcode/client": "workspace:*",
+    "@knightcode/protocol": "workspace:*",
+    "@knightcode/server": "workspace:*",
+    "@knightcode/session-backend-sqlite": "workspace:*",
+    "@knightcode/tui": "workspace:*",
+    "@silvia-odwyer/photon-node": "0.3.4",
+    "@types/cross-spawn": "6.0.6",
+    "@types/hosted-git-info": "3.0.5",
+    "@types/proper-lockfile": "4.1.4",
+    "@types/semver": "7.7.1",
+    "chalk": "5.6.2",
+    "cross-spawn": "7.0.6",
+    "diff": "8.0.4",
+    "grok-mermaid": "0.2.2",
+    "highlight.js": "10.7.3",
+    "hosted-git-info": "9.0.3",
+    "ignore": "7.0.5",
+    "jiti": "2.7.0",
+    "minimatch": "10.2.5",
+    "proper-lockfile": "4.1.2",
+    "semver": "7.8.0",
+    "typebox": "1.3.7",
+    "undici": "8.9.0",
+    "yaml": "2.9.0"
   }
 }

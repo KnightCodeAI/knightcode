@@ -1,91 +1,56 @@
-<!-- AUTO-GENERATED — do not edit. Source: packages/cli/README.md plus the README_SUFFIX in scripts/sync-root-docs.ts. Run `bun run sync:docs` to regenerate. -->
+# KnightCode
 
-# @knightcodeai/cli
-
-`knightcode` — a local-first, bring-your-own-key AI coding CLI for your terminal.
-
-## Install
-
-```bash
-npm install -g @knightcodeai/cli
-```
-
-You don't need Bun — it's bundled into the platform binary. The small launcher
-(`bin/knightcode`) that spawns it runs on Node.js (>=18), which you already have
-if you installed with npm. The right platform binary installs automatically as
-an optional dependency.
-
-## Quick start
+A local, BYOK terminal coding agent. Bring your own OpenRouter key (or any of
+~39 other providers) and run an agent that reads files, runs commands, edits
+code, and writes new files — with a token floor of roughly **1,100 tokens** per
+request instead of the 20k+ typical of hosted agents.
 
 ```bash
+npm install -g --ignore-scripts @knightcodeai/cli
+export OPENROUTER_API_KEY=sk-or-...
 knightcode
 ```
 
-On first run, set your OpenRouter API key from inside the app.
+## Why
 
-## Configuration
+Most terminal agents spend 20–25k tokens on tool descriptions and system prompt
+before you type anything. On a 200k model that is over 10% of the window every
+turn, and open-weight models on gateways mostly do not get prompt caching — so
+you pay it in latency and cash on every request. KnightCode's floor is ~1,100
+tokens, measured.
 
-State lives in `~/.knightcode/` (sessions, settings, local SQLite database).
+## Layout
 
-| Command / env var | Effect |
-| ----------------- | ------ |
-| `knightcode --version` | Print the installed version |
-| `knightcode doctor` | Print diagnostics (config, database, API key, runtime) |
-| `KNIGHTCODE_NO_UPDATE_CHECK=1` | Disable the background update check |
-
-## Supported platforms
-
-Linux (x64, arm64), macOS (x64, arm64), Windows (x64).
-
-## Repository layout
-
-This is a [Turborepo](https://turborepo.dev/) monorepo managed with
-[bun](https://bun.sh/).
-
-| Path | Description |
-| ---- | ----------- |
-| `packages/cli` | The `@knightcodeai/cli` package — the `knightcode` CLI source |
-| `packages/cli-*` | Per-platform prebuilt binaries published as optional deps |
-| `packages/shared` | Shared library code used across packages |
-| `packages/ui` | Shared React component library |
-| `packages/eslint-config`, `packages/typescript-config` | Shared tooling config |
-| `apps/web` | Marketing / docs website |
+| Package | What it is |
+| --- | --- |
+| `packages/cli` | The `knightcode` binary — CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills |
+| `packages/ai` | Multi-provider LLM layer: ~39 providers, 20 API adapters, OAuth, model catalog |
+| `packages/agent` | Agent loop, harness, compaction, session state, built-in tools |
+| `packages/tui` | Terminal UI library with differential rendering |
+| `packages/telemetry` | Vendor-neutral telemetry contracts |
+| `packages/protocol` · `client` · `server` | RPC protocol and transports |
+| `packages/session-backend-sqlite` | SQLite session storage backend |
 
 ## Development
 
-Requires [bun](https://bun.sh/) (`bun@1.3.3`) and Node.js >=20.
-
 ```bash
-bun install        # install dependencies
-bun run dev:cli    # run the CLI from source with watch mode
-bun run build:cli  # build the standalone binary
-bun run link:cli   # build and link `knightcode` globally
+bun install
+bun run check-types          # tsc --noEmit across every package
+bun run start                # run from source
+bun run build:cli            # compile a single-file binary for this platform
 ```
 
-Other useful scripts:
+Source runs directly under Bun — there is no build step for development. The
+root `tsconfig.json` maps every `@knightcode/*` specifier to package source.
 
-```bash
-bun run lint         # lint all packages
-bun run check-types  # type-check all packages
-bun run format       # format with Prettier
-bun run sync:docs    # regenerate the root README.md and CHANGELOG.md
-```
+## Configuration
 
-## Releases
-
-Releases are managed with [Changesets](https://github.com/changesets/changesets).
-To record a change for the next release:
-
-```bash
-bunx changeset
-```
-
-Pick a bump type (patch/minor/major) and write one sentence. Commit the generated
-`.changeset/*.md` file with your PR. On merge to `main`, the Changesets bot opens a
-"Version Packages" PR; merging that PR publishes all `@knightcodeai/cli*` packages.
-
-See [`CHANGELOG.md`](./CHANGELOG.md) for the release history.
+Config lives in `.knightcode/` (project) and `~/.knightcode/` (user). Provider
+keys come from the environment (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, …)
+or from `knightcode auth`. Run `knightcode --help` for flags and
+`packages/cli/docs/` for the full documentation.
 
 ## License
 
-[Apache-2.0](./LICENSE). Copyright 2026 KnightCodeAI.
+MIT. KnightCode is derived from [pi](https://github.com/earendil-works/pi) by
+Mario Zechner, also MIT — see [LICENSE](LICENSE) for the retained notice.

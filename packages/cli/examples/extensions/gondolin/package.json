@@ -1,0 +1,19 @@
+{
+	"name": "knightcode-extension-gondolin",
+	"private": true,
+	"version": "0.84.3",
+	"type": "module",
+	"scripts": {
+		"clean": "echo 'nothing to clean'",
+		"build": "echo 'nothing to build'",
+		"check": "echo 'nothing to check'"
+	},
+	"knightcode": {
+		"extensions": [
+			"./index.ts"
+		]
+	},
+	"dependencies": {
+		"@KnightCodeAI/gondolin": "0.12.0"
+	}
+}

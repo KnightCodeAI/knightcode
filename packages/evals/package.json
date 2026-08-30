@@ -1,0 +1,15 @@
+{
+	"name": "@knightcode/evals",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"eval": "node scripts/run-evals.mjs",
+		"test": "vitest run --config vitest.test.config.ts"
+	},
+	"devDependencies": {
+		"@knightcode/ai": "workspace:*",
+		"@knightcodeai/cli": "workspace:*",
+		"vitest-evals": "0.15.0"
+	}
+}

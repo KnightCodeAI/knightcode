@@ -18,14 +18,14 @@ const binName = platform === "win32" ? "knightcode.exe" : "knightcode";
 const binPath = join(platformDir, "bin", binName);
 
 if (!existsSync(platformDir)) {
-  console.error(`No platform package for ${platform}-${arch} (${platformDir})`);
-  process.exit(1);
+	console.error(`No platform package for ${platform}-${arch} (${platformDir})`);
+	process.exit(1);
 }
 
 // Ensure the current-platform binary exists; build it if missing.
 if (!existsSync(binPath)) {
-  console.log("Binary missing — building current platform...");
-  await $`bun run ${join(ROOT, "scripts", "build.ts")} --single`.cwd(ROOT);
+	console.log("Binary missing — building current platform...");
+	await $`bun run ${join(ROOT, "scripts", "build.ts")} --single`.cwd(ROOT);
 }
 
 const work = mkdtempSync(join(tmpdir(), "kc-packtest-"));
@@ -33,51 +33,42 @@ const proj = join(work, "proj");
 await $`mkdir -p ${proj}`.nothrow();
 
 try {
-  // Pack both packages into the temp dir (npm prints the tarball filename).
-  const mainTgz = (
-    await $`npm pack --silent --pack-destination ${work}`.cwd(mainDir).text()
-  ).trim();
-  const platformTgz = (
-    await $`npm pack --silent --pack-destination ${work}`.cwd(platformDir).text()
-  ).trim();
+	// Pack both packages into the temp dir (npm prints the tarball filename).
+	const mainTgz = (await $`npm pack --silent --pack-destination ${work}`.cwd(mainDir).text()).trim();
+	const platformTgz = (await $`npm pack --silent --pack-destination ${work}`.cwd(platformDir).text()).trim();
 
-  await $`npm init -y`.cwd(proj);
-  // Install both local tarballs together so the optionalDependency is satisfied
-  // locally (the registry has nothing yet).
-  await $`npm install --no-audit --no-fund ${join(work, mainTgz)} ${join(work, platformTgz)}`.cwd(
-    proj,
-  );
+	await $`npm init -y`.cwd(proj);
+	// Install both local tarballs together so the optionalDependency is satisfied
+	// locally (the registry has nothing yet).
+	await $`npm install --no-audit --no-fund ${join(work, mainTgz)} ${join(work, platformTgz)}`.cwd(proj);
 
-  const launcher = join(
-    proj,
-    "node_modules",
-    "@knightcodeai",
-    "cli",
-    "bin",
-    "knightcode",
-  );
+	const launcher = join(proj, "node_modules", "@knightcodeai", "cli", "bin", "knightcode");
 
-  // --version must print exactly the package version.
-  const version = (await $`node ${launcher} --version`.cwd(proj).text()).trim();
-  if (version !== expectedVersion) {
-    throw new Error(
-      `--version mismatch: got "${version}", expected "${expectedVersion}"`,
-    );
-  }
-  console.log(`✓ --version → ${version}`);
+	// --version must print exactly the package version.
+	const version = (await $`node ${launcher} --version`.cwd(proj).text()).trim();
+	if (version !== expectedVersion) {
+		throw new Error(`--version mismatch: got "${version}", expected "${expectedVersion}"`);
+	}
+	console.log(`✓ --version → ${version}`);
 
-  // doctor must exit 0.
-  const doctor = await $`node ${launcher} doctor`.cwd(proj).nothrow();
-  if (doctor.exitCode !== 0) {
-    throw new Error(`doctor exited ${doctor.exitCode}`);
-  }
-  console.log("✓ doctor exit 0");
+	// --help must exit 0 and print the usage banner. It is the only command that
+	// exercises the launcher → binary → arg-parsing path without needing an API
+	// key: anything unrecognised is treated as a prompt and sent to the provider,
+	// so an invented subcommand "passes" by talking to a model instead of failing.
+	const help = await $`node ${launcher} --help`.cwd(proj).nothrow();
+	if (help.exitCode !== 0) {
+		throw new Error(`--help exited ${help.exitCode}`);
+	}
+	if (!help.stdout.toString().includes("Usage:")) {
+		throw new Error("--help printed no usage banner");
+	}
+	console.log("✓ --help exit 0");
 
-  console.log(`pack-test passed for ${platform}-${arch}`);
+	console.log(`pack-test passed for ${platform}-${arch}`);
 } finally {
-  try {
-    rmSync(work, { recursive: true, force: true });
-  } catch {
-    // Windows may hold a handle on the temp sqlite db — OS reaps it.
-  }
+	try {
+		rmSync(work, { recursive: true, force: true });
+	} catch {
+		// Windows may hold a handle on the temp sqlite db — OS reaps it.
+	}
 }
