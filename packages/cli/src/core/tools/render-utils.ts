@@ -2,6 +2,7 @@ import * as os from "node:os";
 import { pathToFileURL } from "node:url";
 import type { ImageContent, TextContent } from "@knightcode/ai";
 import { getCapabilities, getImageDimensions, hyperlink, imageFallback } from "@knightcode/tui";
+import { keyText } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../utils/ansi.ts";
 import { resolvePath } from "../../utils/paths.ts";
@@ -81,4 +82,24 @@ export function renderToolPath(
 	const value = rawPath || options?.emptyFallback;
 	if (!value) return theme.fg("toolOutput", "...");
 	return linkPath(theme.fg("accent", shortenPath(value)), value, cwd);
+}
+
+/**
+ * Render a tool call header: a bold display name with its arguments in parentheses.
+ * `argSummary` is expected to be pre-themed by the caller (paths coloured, etc.).
+ */
+export function formatToolCall(theme: Theme, displayName: string, argSummary?: string): string {
+	const title = theme.fg("toolTitle", theme.bold(displayName));
+	return argSummary ? `${title}(${argSummary})` : title;
+}
+
+/** One-line collapsed result summary, optionally followed by the expand hint. */
+export function formatToolSummary(theme: Theme, summary: string, expandable: boolean): string {
+	if (!expandable) return theme.fg("toolOutput", summary);
+	return `${theme.fg("toolOutput", summary)} ${theme.fg("muted", `(${keyText("app.tools.expand")} to expand)`)}`;
+}
+
+/** Pluralising count helper, e.g. `3 lines` / `1 line`. */
+export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+	return `${count} ${count === 1 ? singular : pluralForm}`;
 }

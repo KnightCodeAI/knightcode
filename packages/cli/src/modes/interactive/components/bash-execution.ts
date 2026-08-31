@@ -2,7 +2,7 @@
  * Component for displaying bash command execution with streaming output.
  */
 
-import { Container, Loader, Spacer, Text, type TUI } from "@knightcode/tui";
+import { type Component, Container, Gutter, Loader, Spacer, Text, type TUI } from "@knightcode/tui";
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -10,13 +10,24 @@ import {
 	truncateTail,
 } from "../../../core/tools/truncate.ts";
 import { stripAnsi } from "../../../utils/ansi.ts";
+import { RESULT_GUTTER, RESULT_INDENT, USER_GUTTER, USER_INDENT } from "../glyphs.ts";
 import { theme } from "../theme/theme.ts";
-import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
 import { truncateToVisualLines } from "./visual-truncate.ts";
 
 // Preview line limit when not expanded (matches tool execution behavior)
 const PREVIEW_LINES = 20;
+
+/** The loader opens with a blank spacing line, which the result gutter must not land on. */
+function withoutLeadingBlank(component: Component): Component {
+	return {
+		render: (width: number) => {
+			const lines = component.render(width);
+			return lines.length > 0 && lines[0].trim() === "" ? lines.slice(1) : lines;
+		},
+		invalidate: () => component.invalidate?.(),
+	};
+}
 
 export class BashExecutionComponent extends Container {
 	private command: string;
@@ -24,44 +35,41 @@ export class BashExecutionComponent extends Container {
 	private status: "running" | "complete" | "cancelled" | "error" = "running";
 	private exitCode: number | undefined = undefined;
 	private loader: Loader;
+	private loaderRow: Component;
 	private truncationResult?: TruncationResult;
 	private fullOutputPath?: string;
 	private expanded = false;
 	private contentContainer: Container;
+	private colorKey: "dim" | "bashMode";
 
 	constructor(command: string, ui: TUI, excludeFromContext = false) {
 		super();
 		this.command = command;
 
-		// Use dim border for excluded-from-context commands (!! prefix)
-		const colorKey = excludeFromContext ? "dim" : "bashMode";
-		const borderColor = (str: string) => theme.fg(colorKey, str);
+		// Dim the whole block for commands excluded from context (the `!!` prefix)
+		this.colorKey = excludeFromContext ? "dim" : "bashMode";
 
-		// Add spacer
 		this.addChild(new Spacer(1));
 
-		// Top border
-		this.addChild(new DynamicBorder(borderColor));
+		// The command echoes back behind the user marker, since the user typed it
+		this.addChild(new Gutter(this.commandLine(), theme.fg("dim", USER_GUTTER), USER_INDENT));
 
-		// Content container (holds dynamic content between borders)
+		// Output and status hang off the result marker
 		this.contentContainer = new Container();
-		this.addChild(this.contentContainer);
+		this.addChild(new Gutter(this.contentContainer, theme.fg("dim", RESULT_GUTTER), RESULT_INDENT));
 
-		// Command header
-		const header = new Text(theme.fg(colorKey, theme.bold(`$ ${command}`)), 1, 0);
-		this.contentContainer.addChild(header);
-
-		// Loader
 		this.loader = new Loader(
 			ui,
-			(spinner) => theme.fg(colorKey, spinner),
+			(spinner) => theme.fg(this.colorKey, spinner),
 			(text) => theme.fg("muted", text),
 			`Running... (${keyText("tui.select.cancel")} to cancel)`, // Plain text for loader
 		);
-		this.contentContainer.addChild(this.loader);
+		this.loaderRow = withoutLeadingBlank(this.loader);
+		this.contentContainer.addChild(this.loaderRow);
+	}
 
-		// Bottom border
-		this.addChild(new DynamicBorder(borderColor));
+	private commandLine(): Text {
+		return new Text(theme.fg(this.colorKey, theme.bold(`!${this.command}`)), 0, 0);
 	}
 
 	/**
@@ -134,26 +142,21 @@ export class BashExecutionComponent extends Container {
 		// Rebuild content container
 		this.contentContainer.clear();
 
-		// Command header
-		const header = new Text(theme.fg("bashMode", theme.bold(`$ ${this.command}`)), 1, 0);
-		this.contentContainer.addChild(header);
-
 		// Output
 		if (availableLines.length > 0) {
 			if (this.expanded) {
 				// Show all lines
 				const displayText = availableLines.map((line) => theme.fg("muted", line)).join("\n");
-				this.contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
+				this.contentContainer.addChild(new Text(displayText, 0, 0));
 			} else {
 				// Use shared visual truncation utility with width-aware caching
 				const styledOutput = previewLogicalLines.map((line) => theme.fg("muted", line)).join("\n");
-				const styledInput = `\n${styledOutput}`;
 				let cachedWidth: number | undefined;
 				let cachedLines: string[] | undefined;
 				this.contentContainer.addChild({
 					render: (width: number) => {
 						if (cachedLines === undefined || cachedWidth !== width) {
-							const result = truncateToVisualLines(styledInput, PREVIEW_LINES, width, 1);
+							const result = truncateToVisualLines(styledOutput, PREVIEW_LINES, width, 0);
 							cachedLines = result.visualLines;
 							cachedWidth = width;
 						}
@@ -169,7 +172,7 @@ export class BashExecutionComponent extends Container {
 
 		// Loader or status
 		if (this.status === "running") {
-			this.contentContainer.addChild(this.loader);
+			this.contentContainer.addChild(this.loaderRow);
 		} else {
 			const statusParts: string[] = [];
 
@@ -199,7 +202,7 @@ export class BashExecutionComponent extends Container {
 			}
 
 			if (statusParts.length > 0) {
-				this.contentContainer.addChild(new Text(`\n${statusParts.join("\n")}`, 1, 0));
+				this.contentContainer.addChild(new Text(statusParts.join("\n"), 0, 0));
 			}
 		}
 	}

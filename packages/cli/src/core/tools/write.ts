@@ -9,7 +9,16 @@ import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
-import { normalizeDisplayText, renderToolPath, replaceTabs, str } from "./render-utils.ts";
+import {
+	formatToolCall,
+	formatToolSummary,
+	normalizeDisplayText,
+	plural,
+	renderToolPath,
+	replaceTabs,
+	shortenPath,
+	str,
+} from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 const writeSchema = Type.Object({
@@ -143,7 +152,7 @@ function formatWriteCall(
 	const rawPath = str(args?.file_path ?? args?.path);
 	const fileContent = str(args?.content);
 	const pathDisplay = renderToolPath(rawPath, theme, cwd);
-	let text = `${theme.fg("toolTitle", theme.bold("write"))} ${pathDisplay}`;
+	let text = formatToolCall(theme, "Write", pathDisplay);
 
 	if (fileContent === null) {
 		text += `\n\n${theme.fg("error", "[invalid content arg - expected string]")}`;
@@ -168,10 +177,17 @@ function formatWriteCall(
 
 function formatWriteResult(
 	result: { content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>; isError?: boolean },
+	args: { path?: string; file_path?: string; content?: string } | undefined,
 	theme: Theme,
 ): string | undefined {
 	if (!result.isError) {
-		return undefined;
+		const rawPath = str(args?.file_path ?? args?.path);
+		const fileContent = str(args?.content);
+		if (rawPath === null || fileContent === null) {
+			return undefined;
+		}
+		const lineCount = trimTrailingEmptyLines(normalizeDisplayText(fileContent).split("\n")).length;
+		return formatToolSummary(theme, `Wrote ${plural(lineCount, "line")} to ${shortenPath(rawPath)}`, false);
 	}
 	const output = result.content
 		.filter((c) => c.type === "text")
@@ -180,7 +196,7 @@ function formatWriteResult(
 	if (!output) {
 		return undefined;
 	}
-	return `\n${theme.fg("error", output)}`;
+	return theme.fg("error", output);
 }
 
 export function createWriteToolDefinition(
@@ -255,7 +271,11 @@ export function createWriteToolDefinition(
 			return component;
 		},
 		renderResult(result, _options, theme, context) {
-			const output = formatWriteResult({ ...result, isError: context.isError }, theme);
+			const output = formatWriteResult(
+				{ ...result, isError: context.isError },
+				context.args as { path?: string; file_path?: string; content?: string } | undefined,
+				theme,
+			);
 			if (!output) {
 				const component = (context.lastComponent as Container | undefined) ?? new Container();
 				component.clear();

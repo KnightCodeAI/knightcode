@@ -1,20 +1,21 @@
-import { Box, Markdown, type MarkdownTheme, Text } from "@knightcode/tui";
+import { Markdown, type MarkdownTheme, Text } from "@knightcode/tui";
 import type { ParsedSkillBlock } from "../../../core/agent-session.ts";
+import { BULLET_GUTTER } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { GutteredBox } from "./guttered-box.ts";
 import { keyText } from "./keybinding-hints.ts";
 
 /**
  * Component that renders a skill invocation message with collapsed/expanded state.
- * Uses same background color as custom messages for visual consistency.
  * Only renders the skill block itself - user message is rendered separately.
  */
-export class SkillInvocationMessageComponent extends Box {
+export class SkillInvocationMessageComponent extends GutteredBox {
 	private expanded = false;
 	private skillBlock: ParsedSkillBlock;
 	private markdownTheme: MarkdownTheme;
 
 	constructor(skillBlock: ParsedSkillBlock, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
-		super(1, 1, (t) => theme.bg("customMessageBg", t));
+		super(() => theme.fg("customMessageLabel", BULLET_GUTTER));
 		this.skillBlock = skillBlock;
 		this.markdownTheme = markdownTheme;
 		this.updateDisplay();

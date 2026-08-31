@@ -1,19 +1,20 @@
-import { Box, Markdown, type MarkdownTheme, Spacer, Text } from "@knightcode/tui";
+import { Markdown, type MarkdownTheme, Spacer, Text } from "@knightcode/tui";
 import type { BranchSummaryMessage } from "../../../core/messages.ts";
+import { BULLET_GUTTER } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { GutteredBox } from "./guttered-box.ts";
 import { keyText } from "./keybinding-hints.ts";
 
 /**
  * Component that renders a branch summary message with collapsed/expanded state.
- * Uses same background color as custom messages for visual consistency.
  */
-export class BranchSummaryMessageComponent extends Box {
+export class BranchSummaryMessageComponent extends GutteredBox {
 	private expanded = false;
 	private message: BranchSummaryMessage;
 	private markdownTheme: MarkdownTheme;
 
 	constructor(message: BranchSummaryMessage, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
-		super(1, 1, (t) => theme.bg("customMessageBg", t));
+		super(() => theme.fg("customMessageLabel", BULLET_GUTTER));
 		this.message = message;
 		this.markdownTheme = markdownTheme;
 		this.updateDisplay();

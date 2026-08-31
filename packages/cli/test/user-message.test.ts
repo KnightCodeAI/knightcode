@@ -6,22 +6,30 @@ import { stripAnsi } from "../src/utils/ansi.ts";
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
 const OSC133_ZONE_FINAL = "\x1b]133;C\x07";
-const BG_RESET = "\x1b[49m";
 
 describe("UserMessageComponent", () => {
-	test("keeps user message height stable while moving closing OSC markers off line end", () => {
+	test("wraps the message in OSC 133 zone markers, opening before closing", () => {
 		initTheme("dark");
 
 		const component = new UserMessageComponent("hello");
 		const lines = component.render(20);
 
-		expect(lines).toHaveLength(3);
-		expect(lines[0]).toContain(OSC133_ZONE_START);
-		expect(lines[0].endsWith(BG_RESET)).toBe(true);
+		expect(lines).toHaveLength(1);
+		expect(stripAnsi(lines[0])).toContain("> hello");
+		expect(lines[0].startsWith(OSC133_ZONE_START)).toBe(true);
+		expect(lines[0].endsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
+	});
+
+	test("keeps the zone markers on the first and last line of a wrapped message", () => {
+		initTheme("dark");
+
+		const component = new UserMessageComponent("hello there this wraps over several lines");
+		const lines = component.render(20);
+
+		expect(lines.length).toBeGreaterThan(1);
+		expect(lines[0].startsWith(OSC133_ZONE_START)).toBe(true);
 		expect(lines[0]).not.toContain(OSC133_ZONE_END);
-		expect(lines[1]).toContain("hello");
-		expect(lines[2].startsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
-		expect(lines[2].endsWith(BG_RESET)).toBe(true);
+		expect(lines[lines.length - 1].endsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
 	});
 
 	test("chains Markdown transformers with user message context", () => {

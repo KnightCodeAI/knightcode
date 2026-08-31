@@ -1,5 +1,6 @@
-import { Box, Container, Markdown, type MarkdownTheme } from "@knightcode/tui";
+import { Container, Gutter, Markdown, type MarkdownTheme } from "@knightcode/tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
+import { USER_GUTTER, USER_INDENT } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
 
@@ -37,24 +38,23 @@ export class UserMessageComponent extends Container {
 
 	private rebuild(): void {
 		this.clear();
-		const contentBox = new Box(this.outputPad, 1, (content: string) => theme.bg("userMessageBg", content));
-		contentBox.addChild(
-			new Markdown(
-				this.text,
-				0,
-				0,
-				this.markdownTheme,
-				{
-					color: (content: string) => theme.fg("userMessageText", content),
-				},
-				{
-					preserveOrderedListMarkers: true,
-					preserveBackslashEscapes: true,
-					transform: createMarkdownTransform("user", false, this.markdownTransformers),
-				},
-			),
+		// The gutter supplies the left indent, so outputPad only shifts it further right.
+		const offset = " ".repeat(Math.max(0, this.outputPad - 1));
+		const body = new Markdown(
+			this.text,
+			0,
+			0,
+			this.markdownTheme,
+			{
+				color: (content: string) => theme.fg("userMessageText", content),
+			},
+			{
+				preserveOrderedListMarkers: true,
+				preserveBackslashEscapes: true,
+				transform: createMarkdownTransform("user", false, this.markdownTransformers),
+			},
 		);
-		this.addChild(contentBox);
+		this.addChild(new Gutter(body, offset + theme.fg("dim", USER_GUTTER), offset + USER_INDENT));
 	}
 
 	override render(width: number): string[] {
@@ -63,8 +63,10 @@ export class UserMessageComponent extends Container {
 			return lines;
 		}
 
+		// Close the zone at the end of the last line: a one-line message would
+		// otherwise emit the end marker ahead of the start marker.
 		lines[0] = OSC133_ZONE_START + lines[0];
-		lines[lines.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + lines[lines.length - 1];
+		lines[lines.length - 1] = lines[lines.length - 1] + OSC133_ZONE_END + OSC133_ZONE_FINAL;
 		return lines;
 	}
 }

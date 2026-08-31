@@ -114,7 +114,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [], details: { diff: "+1 after", firstChangedLine: 1 }, isError: false });
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("edit");
+		expect(rendered).toContain("Update(");
 		expect(rendered).toContain("README.md");
 		expect(rendered).not.toContain(":1");
 	});
@@ -130,7 +130,7 @@ describe("ToolExecutionComponent parity", () => {
 			process.cwd(),
 		);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("read");
+		expect(rendered).toContain("Read");
 		expect(rendered).toContain("README.md");
 	});
 
@@ -185,8 +185,9 @@ describe("ToolExecutionComponent parity", () => {
 
 		const rendered = stripAnsi(component.render(200).join("\n"));
 		expect(rendered.match(/Full output:/g)?.length ?? 0).toBe(1);
-		expect(rendered).toMatch(/line-4000[^\n]*\n[^\S\n]*\n \[Full output:/);
-		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\n \[Full output:/);
+		// The truncation footer follows the output directly, with no blank line between.
+		expect(rendered).toMatch(/line-4000[^\n]*\n\s*\[Full output:/);
+		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n\s*\[Full output:/);
 		expect(rendered).toContain("Truncated: showing 2000 of 4000 lines");
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
 	});
@@ -203,7 +204,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [{ type: "text", text: "hello" }], details: undefined, isError: false }, false);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered.match(/\bread\b/g)?.length ?? 0).toBe(1);
+		expect(rendered.match(/README\.md/g)?.length ?? 0).toBe(1);
 	});
 
 	test("inherits missing built-in result renderer slot from the built-in tool", () => {
@@ -245,7 +246,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [{ type: "text", text: "hello" }], details: undefined, isError: false }, false);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("read");
+		expect(rendered).toContain("Read");
 		expect(rendered).toContain("README.md");
 		expect(rendered).toContain("override result");
 	});
@@ -445,8 +446,9 @@ describe("ToolExecutionComponent parity", () => {
 		);
 
 		const collapsed = stripAnsi(component.render(120).join("\n"));
-		expect(collapsed).toContain("read");
+		expect(collapsed).toContain("Read(");
 		expect(collapsed).toContain("notes.txt");
+		expect(collapsed).toContain("Read 1 line");
 		expect(collapsed).not.toContain("hidden content");
 
 		component.setExpanded(true);
@@ -461,13 +463,13 @@ describe("ToolExecutionComponent parity", () => {
 			content: "---\nname: attio\ndescription: CRM helper\n---\n\n# Hidden skill instructions",
 			compact: "[skill] attio",
 			hidden: "Hidden skill instructions",
-			absent: "read skill attio",
+			absent: "Read skill(",
 		},
 		{
 			title: "AGENTS.md",
 			path: join(process.cwd(), ".knightcode", "AGENTS.md"),
 			content: "Hidden resource instructions",
-			compact: "read resource .knightcode/AGENTS.md",
+			compact: "Read resource(.knightcode/AGENTS.md)",
 			hidden: "Hidden resource instructions",
 			absent: undefined,
 		},
@@ -475,7 +477,7 @@ describe("ToolExecutionComponent parity", () => {
 			title: "AGENTS.override.md",
 			path: join(process.cwd(), ".knightcode", "AGENTS.override.md"),
 			content: "Hidden override instructions",
-			compact: "read resource .knightcode/AGENTS.override.md",
+			compact: "Read resource(.knightcode/AGENTS.override.md)",
 			hidden: "Hidden override instructions",
 			absent: undefined,
 		},
@@ -483,7 +485,7 @@ describe("ToolExecutionComponent parity", () => {
 			title: "outside AGENTS.md",
 			path: resolve(process.cwd(), "..", "AGENTS.md"),
 			content: "Hidden outside resource instructions",
-			compact: `read resource ${resolve(process.cwd(), "..", "AGENTS.md").replace(/\\/g, "/")}`,
+			compact: `Read resource(${resolve(process.cwd(), "..", "AGENTS.md").replace(/\\/g, "/")})`,
 			hidden: "Hidden outside resource instructions",
 			absent: undefined,
 		},
@@ -491,7 +493,7 @@ describe("ToolExecutionComponent parity", () => {
 			title: "KnightCode documentation",
 			path: getReadmePath(),
 			content: "Hidden docs content",
-			compact: "read docs README.md",
+			compact: "Read docs(README.md)",
 			hidden: "Hidden docs content",
 			absent: undefined,
 		},
@@ -526,7 +528,7 @@ describe("ToolExecutionComponent parity", () => {
 
 	for (const scenario of [
 		{ title: "SKILL.md", path: join(process.cwd(), "attio", "SKILL.md"), compact: "[skill] attio:120-329" },
-		{ title: "KnightCode documentation", path: getReadmePath(), compact: "read docs README.md:120-329" },
+		{ title: "KnightCode documentation", path: getReadmePath(), compact: "Read docs(README.md:120-329)" },
 	] as const) {
 		test(`shows the read line range in compact ${scenario.title} reads before the expand hint`, () => {
 			const component = new ToolExecutionComponent(
@@ -538,9 +540,14 @@ describe("ToolExecutionComponent parity", () => {
 				createFakeTui(),
 				process.cwd(),
 			);
+			component.updateResult(
+				{ content: [{ type: "text", text: "some content" }], details: undefined, isError: false },
+				false,
+			);
 
 			const collapsed = stripAnsi(component.render(120).join("\n"));
 			expect(collapsed).toContain(scenario.compact);
+			// The range belongs to the call line, the expand hint to the result line below it.
 			expect(collapsed.indexOf(":120-329")).toBeLessThan(collapsed.indexOf("to expand"));
 		});
 	}
