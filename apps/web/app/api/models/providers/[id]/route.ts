@@ -98,12 +98,17 @@ export async function GET(
     const lastModified =
       httpDate(catalog.publishedAt) ??
       httpDate(shard.headers.get("last-modified"))
+    // Without a trusted timestamp the CLI treats the response as older than its
+    // built-in catalog and discards it. Do not cache a successful response that
+    // can never be used; a transient error lets the client retain its overlay
+    // and retry on the next refresh.
+    if (!lastModified) return new Response(null, { status: 502 })
 
     return new Response(await shard.text(), {
       headers: {
         "content-type": "application/json; charset=utf-8",
         etag,
-        ...(lastModified ? { "last-modified": lastModified } : {}),
+        "last-modified": lastModified,
         // The body is selected by the caller's version, so a shared cache keyed
         // on the URL alone would hand one client another's revision and defeat
         // the gate.
