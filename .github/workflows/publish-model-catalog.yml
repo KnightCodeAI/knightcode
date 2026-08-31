@@ -25,11 +25,13 @@ on:
       - "package.json"
       - "packages/ai/**"
       - "scripts/publish-model-catalog.mjs"
-  # Cron is UTC. Run hourly candidates across the CET/CEST boundary; the publish
-  # job itself only uploads inside the business-hours window checked below, so a
-  # bad catalog lands when someone is around to roll it back.
+  # Cron is UTC; IST is a fixed UTC+5:30 (no DST), so 04:47-08:47 UTC is
+  # 10:17-14:17 Asia/Kolkata — five candidates inside the publication window
+  # checked below, because GitHub routinely fires a schedule an hour or more
+  # late. Revisions are content-addressed, so a run whose catalog is unchanged
+  # uploads nothing (see publish-model-catalog.mjs).
   schedule:
-    - cron: "17 8-13 * * 1-5"
+    - cron: "47 4-8 * * 1-5"
   workflow_dispatch:
     inputs:
       source_ref:
@@ -115,9 +117,10 @@ jobs:
       - name: Verify AWS CLI
         run: aws --version
 
-      # Only upload Mon-Fri 10:00-15:00 Europe/Vienna, and on the cron path only
-      # at 10:17/12:17/14:17 — a catalog regression should land while someone can
-      # repoint index.json at the previous revision.
+      # Only upload Mon-Fri 10:00-15:00 Asia/Kolkata, so a catalog regression
+      # lands while someone is around to repoint index.json at the previous
+      # revision. Any run inside the window publishes — pinning the cron path to
+      # exact hours would lose every schedule GitHub fires late.
       - name: Check publication window
         id: publication-window
         env:
@@ -126,23 +129,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          local_day="$(TZ=Europe/Vienna date +%u)"
-          local_hour_text="$(TZ=Europe/Vienna date +%H)"
-          local_hour="$((10#$local_hour_text))"
-          local_time="$(TZ=Europe/Vienna date '+%Y-%m-%d %H:%M:%S %Z')"
+          local_day="$(TZ=Asia/Kolkata date +%u)"
+          local_hour="$((10#$(TZ=Asia/Kolkata date +%H)))"
+          local_time="$(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M:%S %Z')"
           allowed=false
-          reason="outside the Monday-Friday 10:00-15:00 Europe/Vienna publication window"
+          reason="outside the Monday-Friday 10:00-15:00 Asia/Kolkata publication window"
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$MANUAL_PUBLISH" == "true" ]]; then
             allowed=true
             reason="manual publication"
           elif (( local_day <= 5 && local_hour >= 10 && local_hour < 15 )); then
-            if [[ "$EVENT_NAME" != "schedule" ]] || (( (local_hour - 10) % 2 == 0 )); then
-              allowed=true
-              reason="business-hours publication"
-            else
-              reason="not a scheduled 10:17, 12:17, or 14:17 Europe/Vienna publication"
-            fi
+            allowed=true
+            reason="business-hours publication"
           fi
 
           echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
