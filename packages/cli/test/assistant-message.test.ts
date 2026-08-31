@@ -41,7 +41,7 @@ describe("AssistantMessageComponent", () => {
 
 		expect(lines).not.toHaveLength(0);
 		expect(lines[0]).toContain(OSC133_ZONE_START);
-		expect(lines[lines.length - 1].endsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
+		expect(lines[lines.length - 1].startsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
 	});
 
 	test("does not add OSC 133 zone markers when assistant message contains tool calls", () => {
@@ -106,15 +106,13 @@ describe("AssistantMessageComponent", () => {
 		);
 		const lines = component.render(80).map((line) => stripAnsi(line));
 
-		// At the default pad the marker sits at column 0 and the text follows it.
-		expect(lines.some((line) => /^.\shello/.test(line))).toBe(true);
-		expect(lines.some((line) => /^.\sreasoning/.test(line))).toBe(true);
+		expect(lines.some((line) => line.includes(" hello"))).toBe(true);
+		expect(lines.some((line) => line.includes(" reasoning"))).toBe(true);
 
-		// Larger pads shift the whole block, marker included, further right.
-		component.setOutputPad(3);
+		component.setOutputPad(0);
 		const updatedLines = component.render(80).map((line) => stripAnsi(line));
-		expect(updatedLines.some((line) => /^ {2}.\shello/.test(line))).toBe(true);
-		expect(updatedLines.some((line) => /^ {2}.\sreasoning/.test(line))).toBe(true);
+		expect(updatedLines.some((line) => line.startsWith("hello"))).toBe(true);
+		expect(updatedLines.some((line) => line.startsWith("reasoning"))).toBe(true);
 	});
 
 	test("chains Markdown transformers in registration order", () => {
@@ -234,10 +232,10 @@ describe("AssistantMessageComponent", () => {
 
 		const paddedComponent = new UserMessageComponent("hello", undefined, 1);
 		const paddedLines = paddedComponent.render(40).map((line) => stripAnsi(line));
-		expect(paddedLines.some((line) => line.startsWith("> hello"))).toBe(true);
+		expect(paddedLines.some((line) => line.startsWith(" hello"))).toBe(true);
 
-		const shiftedComponent = new UserMessageComponent("hello", undefined, 3);
-		const shiftedLines = shiftedComponent.render(40).map((line) => stripAnsi(line));
-		expect(shiftedLines.some((line) => line.startsWith("  > hello"))).toBe(true);
+		const unpaddedComponent = new UserMessageComponent("hello", undefined, 0);
+		const unpaddedLines = unpaddedComponent.render(40).map((line) => stripAnsi(line));
+		expect(unpaddedLines.some((line) => line.startsWith("hello"))).toBe(true);
 	});
 });

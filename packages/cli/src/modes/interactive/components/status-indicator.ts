@@ -2,7 +2,6 @@ import { type Component, Loader, type TUI } from "@knightcode/tui";
 import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
-import { formatTokens } from "./footer.ts";
 import { keyText } from "./keybinding-hints.ts";
 
 export type StatusIndicatorKind = "working" | "retry" | "compaction" | "branchSummary";
@@ -27,18 +26,8 @@ export class StatusIndicator extends Loader {
 	}
 }
 
-/**
- * The working spinner. Beside the verb it ticks a live
- * `(12s · ↑1.2k tokens · esc to interrupt)` suffix, so a long turn always shows
- * that something is still moving.
- */
 export class WorkingStatusIndicator extends StatusIndicator {
-	private label: string;
-	private startedAt = Date.now();
-	private getTokens?: () => number;
-	private ticker: ReturnType<typeof setInterval> | undefined;
-
-	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions, getTokens?: () => number) {
+	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions) {
 		super(
 			"working",
 			ui,
@@ -47,36 +36,6 @@ export class WorkingStatusIndicator extends StatusIndicator {
 			message,
 			indicator,
 		);
-		this.label = message;
-		this.getTokens = getTokens;
-		super.setMessage(this.compose());
-		this.ticker = setInterval(() => super.setMessage(this.compose()), 1000);
-	}
-
-	private compose(): string {
-		const parts = [`${Math.round((Date.now() - this.startedAt) / 1000)}s`];
-		const tokens = this.getTokens?.() ?? 0;
-		if (tokens > 0) {
-			parts.push(`↑${formatTokens(tokens)} tokens`);
-		}
-		const interrupt = keyText("app.interrupt");
-		if (interrupt) {
-			parts.push(`${interrupt} to interrupt`);
-		}
-		return `${this.label} (${parts.join(" · ")})`;
-	}
-
-	override setMessage(message: string): void {
-		this.label = message;
-		super.setMessage(this.compose());
-	}
-
-	override dispose(): void {
-		if (this.ticker) {
-			clearInterval(this.ticker);
-			this.ticker = undefined;
-		}
-		super.dispose();
 	}
 }
 

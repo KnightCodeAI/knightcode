@@ -1,11 +1,9 @@
 import type { TextContent } from "@knightcode/ai";
 import type { Component } from "@knightcode/tui";
-import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@knightcode/tui";
+import { Box, Container, Markdown, type MarkdownTheme, Spacer, Text } from "@knightcode/tui";
 import type { MessageRenderer } from "../../../core/extensions/types.ts";
 import type { CustomMessage } from "../../../core/messages.ts";
-import { BULLET_GUTTER } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
-import { GutteredBox } from "./guttered-box.ts";
 
 /**
  * Component that renders a custom message entry from extensions.
@@ -14,7 +12,7 @@ import { GutteredBox } from "./guttered-box.ts";
 export class CustomMessageComponent extends Container {
 	private message: CustomMessage<unknown>;
 	private customRenderer?: MessageRenderer;
-	private box: GutteredBox;
+	private box: Box;
 	private customComponent?: Component;
 	private markdownTheme: MarkdownTheme;
 	private _expanded = false;
@@ -34,8 +32,8 @@ export class CustomMessageComponent extends Container {
 
 		this.addChild(new Spacer(1));
 
-		// Default rendering hangs the block off a bullet in the custom-message accent
-		this.box = new GutteredBox(() => theme.fg("customMessageLabel", BULLET_GUTTER));
+		// Create box with purple background (used for default rendering)
+		this.box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
 
 		this.rebuild();
 	}

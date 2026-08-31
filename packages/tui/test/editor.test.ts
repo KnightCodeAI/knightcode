@@ -14,25 +14,6 @@ function createTestTUI(cols = 80, rows = 24): TUI {
 	return new TuiMainScreen(new VirtualTerminal(cols, rows));
 }
 
-/**
- * Columns the input box chrome takes from the render width before any text:
- * the two frame columns, the prompt marker, and the column kept free for a
- * cursor sitting at end-of-line. Add `paddingX * 2` on top.
- */
-const CHROME_COLUMNS = 5;
-
-/** Render width needed to give the text `textWidth` columns to wrap in. */
-function widthForText(textWidth: number, paddingX = 0): number {
-	return textWidth + CHROME_COLUMNS + paddingX * 2;
-}
-
-/** Strip the frame, prompt marker and padding from a rendered content line. */
-function contentText(line: string): string {
-	return stripVTControlCharacters(line)
-		.replace(/^│\s*(?:>\s)?/, "")
-		.replace(/\s*│$/, "");
-}
-
 /** Standard applyCompletion that replaces prefix with item.value */
 function applyCompletion(
 	lines: string[],
@@ -734,8 +715,8 @@ describe("Editor component", () => {
 			const topBorder = lines[0]!;
 			const bottomBorder = lines.at(-1)!;
 
-			assert.match(stripVTControlCharacters(topBorder), /^╭─── ↑/);
-			assert.match(stripVTControlCharacters(bottomBorder), /^╰─── ↓/);
+			assert.match(stripVTControlCharacters(topBorder), /^─── ↑/);
+			assert.match(stripVTControlCharacters(bottomBorder), /^─── ↓/);
 			assert.strictEqual(topBorder, borderColor(stripVTControlCharacters(topBorder)));
 			assert.strictEqual(bottomBorder, borderColor(stripVTControlCharacters(bottomBorder)));
 			for (const line of lines) {
@@ -791,7 +772,7 @@ describe("Editor component", () => {
 
 		it("wraps CJK characters correctly (each is 2 columns wide)", () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
-			const width = widthForText(10);
+			const width = 10 + 1; // +1 col reserved for cursor
 
 			// Each CJK char is 2 columns. "日本語テスト" = 6 chars = 12 columns
 			editor.setText("日本語テスト");
@@ -803,7 +784,7 @@ describe("Editor component", () => {
 			}
 
 			// Verify content split correctly
-			const contentLines = lines.slice(1, -1).map(contentText);
+			const contentLines = lines.slice(1, -1).map((l) => stripVTControlCharacters(l).trim());
 			assert.strictEqual(contentLines.length, 2);
 			assert.strictEqual(contentLines[0], "日本語テス"); // 5 chars = 10 columns
 			assert.strictEqual(contentLines[1], "ト"); // 1 char = 2 columns (+ padding)
@@ -811,9 +792,9 @@ describe("Editor component", () => {
 
 		it("handles mixed ASCII and wide characters in wrapping", () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
-			const width = widthForText(15);
+			const width = 15 + 1; // +1 col reserved for cursor
 
-			// "Test ✅ OK 日本" = 4 + 1 + 2 + 1 + 2 + 1 + 4 = 15 columns
+			// "Test ✅ OK 日本" = 4 + 1 + 2 + 1 + 2 + 1 + 4 = 15 columns (fits in width-1=15)
 			editor.setText("Test ✅ OK 日本");
 			const lines = editor.render(width);
 
@@ -857,25 +838,20 @@ describe("Editor component", () => {
 		});
 
 		it("shows cursor at end of line before wrap, wraps on next char", () => {
-			const textWidth = 9;
+			const width = 10;
 			for (const paddingX of [0, 1]) {
-				const width = widthForText(textWidth, paddingX);
-				const editor = new Editor(createTestTUI(width), defaultEditorTheme, { paddingX });
+				const editor = new Editor(createTestTUI(width + paddingX), defaultEditorTheme, { paddingX });
 
 				// Type 9 chars → fills layoutWidth exactly, cursor at end on same line
 				for (const ch of "aaaaaaaaa") editor.handleInput(ch);
-				let lines = editor.render(width);
+				let lines = editor.render(width + paddingX);
 				let contentLines = lines.slice(1, -1);
 				assert.strictEqual(contentLines.length, 1, "Should be 1 content line before wrap");
-				assert.ok(
-					stripVTControlCharacters(contentLines[0]!).endsWith("│"),
-					"Content line should be closed by the frame",
-				);
-				assert.ok(contentLines[0]!.includes("\x1b[7m \x1b[0m"), "Cursor should be at end of text");
+				assert.ok(contentLines[0]!.endsWith("\x1b[7m \x1b[0m"), "Cursor should be at end of line");
 
 				// Type 1 more → text wraps to second line
 				editor.handleInput("a");
-				lines = editor.render(width);
+				lines = editor.render(width + paddingX);
 				contentLines = lines.slice(1, -1);
 				assert.strictEqual(contentLines.length, 2, "Should wrap to 2 content lines");
 			}
@@ -891,7 +867,7 @@ describe("Editor component", () => {
 			const lines = editor.render(width);
 
 			// Get content lines (between borders)
-			const contentLines = lines.slice(1, -1).map((l) => contentText(l).trim());
+			const contentLines = lines.slice(1, -1).map((l) => stripVTControlCharacters(l).trim());
 
 			// Should NOT break mid-word
 			// Line 1 should end with a complete word
@@ -965,7 +941,7 @@ describe("Editor component", () => {
 
 		it("handles single word that fits exactly", () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);
-			const width = widthForText(10);
+			const width = 10 + 1; // +1 col reserved for cursor
 
 			editor.setText("1234567890");
 			const lines = editor.render(width);
@@ -3495,7 +3471,7 @@ describe("Editor component", () => {
 			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 15 });
 
 			// Render with narrower width to simulate resize
-			editor.render(widthForText(11));
+			editor.render(12); // Width 12
 
 			// Move down - sticky should be clamped to new width
 			editor.handleInput("\x1b[B"); // Down - line 1
@@ -3522,9 +3498,9 @@ describe("Editor component", () => {
 			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 5 });
 
 			// Narrow the editor
-			editor.render(widthForText(9));
+			editor.render(10);
 
-			// Move down - preferredVisualCol was 15, but the text column is 9 wide
+			// Move down - preferredVisualCol was 15, but width is 10
 			// Should land on line 1, clamped to width (visual col 9, which is logical col 9)
 			editor.handleInput("\x1b[B"); // Down to line 1
 			assert.deepStrictEqual(editor.getCursor(), { line: 1, col: 8 });
@@ -3549,9 +3525,9 @@ describe("Editor component", () => {
 			positionCursor(editor, 0, 18);
 			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 18 });
 
-			// Narrow the text column to 9.
+			// Narrow to width 10 (layoutWidth = 9).
 			// Line 0 last segment has visual col max 9, line 1 first segment max 8
-			editor.render(widthForText(9));
+			editor.render(10);
 
 			// Move down: cursor clamps to 8
 			editor.handleInput("\x1b[B");
@@ -3575,8 +3551,8 @@ describe("Editor component", () => {
 			positionCursor(editor, 0, 18);
 			assert.deepStrictEqual(editor.getCursor(), { line: 0, col: 18 });
 
-			// Narrow the text column to 9. Moving down clamps to col 8
-			editor.render(widthForText(9));
+			// Narrow to width 10 (layoutWidth = 9). Moving down clamps to col 8
+			editor.render(10);
 			editor.handleInput("\x1b[B");
 			assert.deepStrictEqual(editor.getCursor(), { line: 1, col: 8 });
 
@@ -4046,7 +4022,7 @@ describe("Editor component", () => {
 		});
 
 		it("does not get stuck moving down from a multi-visual-line paste marker", () => {
-			const tui = createTestTUI(widthForText(19), 24);
+			const tui = createTestTUI(20, 24);
 			const editor = new Editor(tui, defaultEditorTheme);
 
 			// Build:
@@ -4069,7 +4045,7 @@ describe("Editor component", () => {
 			for (const ch of "ijklmnopqr") editor.handleInput(ch);
 			editor.handleInput("\n");
 			for (const ch of "123456789012345678") editor.handleInput(ch);
-			editor.render(widthForText(19));
+			editor.render(20);
 
 			const text = editor.getText();
 			const markerMatch = text.match(/\[paste #\d+ \+\d+ lines]/);
@@ -4107,7 +4083,7 @@ describe("Editor component", () => {
 		});
 
 		it("skips marker continuation VLs when preferred col falls in marker tail", () => {
-			const tui = createTestTUI(widthForText(19), 24);
+			const tui = createTestTUI(20, 24);
 			const editor = new Editor(tui, defaultEditorTheme);
 
 			// Same layout. Start at col 3 ("d"). Preferred col 3 maps to VL3
@@ -4124,7 +4100,7 @@ describe("Editor component", () => {
 			for (const ch of "ijklmnopqr") editor.handleInput(ch);
 			editor.handleInput("\n");
 			for (const ch of "123456789012345678") editor.handleInput(ch);
-			editor.render(widthForText(19));
+			editor.render(20);
 
 			// Navigate to line 0, col 3 (on "d")
 			editor.handleInput("\x1b[A"); // Up to line 0

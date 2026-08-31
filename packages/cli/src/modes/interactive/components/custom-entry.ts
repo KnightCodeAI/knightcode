@@ -1,10 +1,8 @@
 import type { Component } from "@knightcode/tui";
-import { Container, Spacer, Text } from "@knightcode/tui";
+import { Box, Container, Spacer, Text } from "@knightcode/tui";
 import type { EntryRenderer } from "../../../core/extensions/types.ts";
 import type { CustomEntry } from "../../../core/session-manager.ts";
-import { BULLET_GUTTER } from "../glyphs.ts";
 import { theme } from "../theme/theme.ts";
-import { GutteredBox } from "./guttered-box.ts";
 
 /**
  * Component that renders a custom session entry from extensions.
@@ -48,7 +46,7 @@ export class CustomEntryComponent extends Container {
 			component = this.renderer(this.entry, { expanded: this._expanded }, theme);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			const box = new GutteredBox(() => theme.fg("error", BULLET_GUTTER));
+			const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
 			box.addChild(new Text(theme.fg("error", `[${this.entry.customType}] renderer failed: ${message}`), 0, 0));
 			component = box;
 		}

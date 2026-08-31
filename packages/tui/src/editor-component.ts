@@ -59,9 +59,6 @@ export interface EditorComponent extends Component {
 	/** Set the autocomplete provider */
 	setAutocompleteProvider?(provider: AutocompleteProvider): void;
 
-	/** Whether a suggestion list is currently open below the input */
-	isShowingAutocomplete?(): boolean;
-
 	// =========================================================================
 	// Appearance (optional)
 	// =========================================================================
