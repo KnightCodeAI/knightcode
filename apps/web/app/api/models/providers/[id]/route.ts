@@ -3,7 +3,7 @@ import {
   isValidProviderId,
   parseClientVersion,
   parseIndex,
-  pickRevision,
+  pickCatalog,
   providerShardKey,
 } from "@/lib/model-catalog"
 
@@ -39,6 +39,12 @@ function matches(ifNoneMatch: string | null, etag: string) {
   return ifNoneMatch !== null && ifNoneMatch.replace(/^W\//, "") === etag
 }
 
+function httpDate(value: string | null | undefined) {
+  if (!value) return undefined
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? undefined : new Date(parsed).toUTCString()
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -51,42 +57,61 @@ export async function GET(
   const { id } = await params
   if (!isValidProviderId(id)) return new Response(null, { status: 404 })
 
-  const indexResponse = await readObject(
-    catalogIndexKey(),
-    INDEX_REVALIDATE_SECONDS
-  )
-  // Anything else is transient as far as the client is concerned: it keeps the
-  // catalog it already has and revalidates on the next refresh.
-  if (!indexResponse.ok) return new Response(null, { status: 502 })
-  const index = parseIndex(await indexResponse.json())
-  if (!index) return new Response(null, { status: 502 })
+  try {
+    const indexResponse = await readObject(
+      catalogIndexKey(),
+      INDEX_REVALIDATE_SECONDS
+    )
+    // Anything else is transient as far as the client is concerned: it keeps
+    // the catalog it already has and revalidates on the next refresh. An
+    // unreachable upstream or unparseable body lands in the catch for the same
+    // reason, rather than escaping as a 500 with an HTML body.
+    if (!indexResponse.ok) return new Response(null, { status: 502 })
+    const index = parseIndex(await indexResponse.json())
+    if (!index) return new Response(null, { status: 502 })
 
-  const revision = pickRevision(
-    index,
-    parseClientVersion(request.headers.get("user-agent"))
-  )
-  // Below every minimum-version gate: there is no catalog this client can read.
-  if (!revision) return new Response(null, { status: 404 })
+    const catalog = pickCatalog(
+      index,
+      parseClientVersion(request.headers.get("user-agent"))
+    )
+    // Below every minimum-version gate: no catalog this client can read.
+    if (!catalog) return new Response(null, { status: 404 })
 
-  // Revisions are immutable, so revision + provider identifies the body exactly.
-  // A revalidating client then costs one cached index read and no shard body.
-  const etag = `"${revision}-${id}"`
-  if (matches(request.headers.get("if-none-match"), etag)) {
-    return new Response(null, { status: 304, headers: { etag } })
+    // Revisions are immutable, so revision + provider identifies the body
+    // exactly. A revalidating client then costs one cached index read and no
+    // shard body.
+    const etag = `"${catalog.revision}-${id}"`
+    if (matches(request.headers.get("if-none-match"), etag)) {
+      return new Response(null, { status: 304, headers: { etag } })
+    }
+
+    const shard = await readObject(
+      providerShardKey(catalog.revision, id),
+      SHARD_REVALIDATE_SECONDS
+    )
+    if (shard.status === 404) return new Response(null, { status: 404 })
+    if (!shard.ok) return new Response(null, { status: 502 })
+
+    // Required, not decorative: the client compares this against the build
+    // timestamp of its own model data and discards the whole overlay when the
+    // header is missing or older (remote-catalog-provider.ts, remoteModels).
+    const lastModified =
+      httpDate(catalog.publishedAt) ??
+      httpDate(shard.headers.get("last-modified"))
+
+    return new Response(await shard.text(), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        etag,
+        ...(lastModified ? { "last-modified": lastModified } : {}),
+        // The body is selected by the caller's version, so a shared cache keyed
+        // on the URL alone would hand one client another's revision and defeat
+        // the gate.
+        vary: "user-agent",
+        "cache-control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      },
+    })
+  } catch {
+    return new Response(null, { status: 502 })
   }
-
-  const shard = await readObject(
-    providerShardKey(revision, id),
-    SHARD_REVALIDATE_SECONDS
-  )
-  if (shard.status === 404) return new Response(null, { status: 404 })
-  if (!shard.ok) return new Response(null, { status: 502 })
-
-  return new Response(await shard.text(), {
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      etag,
-      "cache-control": "public, s-maxage=3600, stale-while-revalidate=86400",
-    },
-  })
 }

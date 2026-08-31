@@ -4,7 +4,7 @@ import {
   isValidProviderId,
   parseClientVersion,
   parseIndex,
-  pickRevision,
+  pickCatalog,
   providerShardKey,
 } from "./model-catalog"
 
@@ -17,8 +17,16 @@ const INDEX = {
   schemaVersion: 1,
   defaultRevision: CURRENT,
   catalogs: [
-    { minimumKnightcodeVersion: "0.1.0", revision: OLD },
-    { minimumKnightcodeVersion: "0.5.0", revision: CURRENT },
+    {
+      minimumKnightcodeVersion: "0.1.0",
+      revision: OLD,
+      publishedAt: "2026-08-01T10:00:00.000Z",
+    },
+    {
+      minimumKnightcodeVersion: "0.5.0",
+      revision: CURRENT,
+      publishedAt: "2026-08-31T18:48:00.000Z",
+    },
   ],
 }
 
@@ -37,30 +45,63 @@ describe("parseIndex", () => {
   it("drops catalog entries that are not usable", () => {
     const index = parseIndex({
       ...INDEX,
-      catalogs: [...INDEX.catalogs, { minimumKnightcodeVersion: "9.0.0" }],
+      catalogs: [
+        ...INDEX.catalogs,
+        { minimumKnightcodeVersion: "9.0.0" },
+        { minimumKnightcodeVersion: "9.0.0", revision: "latest" },
+      ],
     })
     expect(index?.catalogs).toHaveLength(2)
   })
+
+  // compareVersions is numeric: a gate that is not a version compares as NaN,
+  // which reads as satisfied by every client and would leak a gated revision.
+  it("drops a gate that is not a version", () => {
+    const index = parseIndex({
+      ...INDEX,
+      catalogs: [
+        ...INDEX.catalogs,
+        { minimumKnightcodeVersion: "not-a-version", revision: OLD },
+      ],
+    })
+    expect(index?.catalogs).toHaveLength(2)
+    expect(pickCatalog(index!, "0.0.1")).toBeUndefined()
+  })
+
+  it("rejects an index left with no usable gate at all", () => {
+    expect(parseIndex({ ...INDEX, catalogs: [] })).toBeUndefined()
+    expect(
+      parseIndex({ ...INDEX, catalogs: [{ revision: CURRENT }] })
+    ).toBeUndefined()
+  })
 })
 
-describe("pickRevision", () => {
+describe("pickCatalog", () => {
   const index = parseIndex(INDEX)!
 
   it("picks the newest gate the client satisfies", () => {
-    expect(pickRevision(index, "0.5.0")).toBe(CURRENT)
-    expect(pickRevision(index, "1.2.0")).toBe(CURRENT)
+    expect(pickCatalog(index, "0.5.0")?.revision).toBe(CURRENT)
+    expect(pickCatalog(index, "1.2.0")?.revision).toBe(CURRENT)
   })
 
   it("holds an older client on the revision it can read", () => {
-    expect(pickRevision(index, "0.4.1")).toBe(OLD)
+    expect(pickCatalog(index, "0.4.1")?.revision).toBe(OLD)
   })
 
   it("gives a client below every gate nothing", () => {
-    expect(pickRevision(index, "0.0.9")).toBeUndefined()
+    expect(pickCatalog(index, "0.0.9")).toBeUndefined()
   })
 
   it("falls back to the default revision without a client version", () => {
-    expect(pickRevision(index, undefined)).toBe(CURRENT)
+    expect(pickCatalog(index, undefined)?.revision).toBe(CURRENT)
+  })
+
+  // The client discards the whole overlay when Last-Modified is missing or
+  // older than its built-in model data, so the entry has to carry the stamp.
+  it("carries publishedAt through, for the Last-Modified header", () => {
+    expect(pickCatalog(index, "0.5.0")?.publishedAt).toBe(
+      "2026-08-31T18:48:00.000Z"
+    )
   })
 })
 
