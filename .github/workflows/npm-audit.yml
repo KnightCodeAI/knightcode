@@ -25,8 +25,15 @@ jobs:
       - name: Install dependencies without lifecycle scripts
         run: bun install --frozen-lockfile --ignore-scripts
 
-      # bun audit has no --omit=dev; it reports the whole tree. bun also has no
-      # equivalent of `npm audit signatures`, so registry-signature verification
-      # is left to the npm publish path (--provenance in ci-publish.ts).
+      # Deliberately the whole workspace, not just production dependencies the
+      # way pi's `npm audit --omit=dev` does. Dev dependencies are not inert
+      # here: they build the site apps/web deploys, and they are the toolchain
+      # that compiles the published binaries. A compromised one reaches a
+      # shipped artifact either way, just a different artifact. bun audit
+      # resolves the root lockfile, which covers every workspace.
+      #
+      # bun has no equivalent of `npm audit signatures`, so registry-signature
+      # verification is left to the npm publish path (--provenance in
+      # ci-publish.ts).
       - name: Audit dependencies
         run: bun audit --audit-level=moderate
