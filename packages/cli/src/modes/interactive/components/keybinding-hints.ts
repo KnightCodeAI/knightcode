@@ -9,8 +9,15 @@ export interface KeyTextFormatOptions {
 	capitalize?: boolean;
 }
 
+/** Shorter spellings for keys whose full name reads long in an inline hint. */
+const KEY_DISPLAY_NAMES: Record<string, string> = {
+	escape: "esc",
+};
+
 function formatKeyPart(part: string, options: KeyTextFormatOptions): string {
-	const displayPart = process.platform === "darwin" && part.toLowerCase() === "alt" ? "option" : part;
+	const lower = part.toLowerCase();
+	const displayPart =
+		process.platform === "darwin" && lower === "alt" ? "option" : (KEY_DISPLAY_NAMES[lower] ?? part);
 	return options.capitalize ? displayPart.charAt(0).toUpperCase() + displayPart.slice(1) : displayPart;
 }
 

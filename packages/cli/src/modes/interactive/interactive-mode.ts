@@ -125,7 +125,8 @@ import { DynamicBorder } from "./components/dynamic-border.ts";
 import { ExtensionEditorComponent } from "./components/extension-editor.ts";
 import { ExtensionInputComponent } from "./components/extension-input.ts";
 import { ExtensionSelectorComponent } from "./components/extension-selector.ts";
-import { FooterComponent, formatTokens } from "./components/footer.ts";
+import { FooterComponent, formatCwdForFooter, formatTokens } from "./components/footer.ts";
+import { HintLineComponent } from "./components/hint-line.ts";
 import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./components/keybinding-hints.ts";
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { createMermaidMarkdownTransformer } from "./components/mermaid.ts";
@@ -139,6 +140,7 @@ import { ScopedModelsSelectorComponent } from "./components/scoped-models-select
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
+import { pickSpinnerVerb } from "./components/spinner-verbs.ts";
 import {
 	BranchSummaryStatusIndicator,
 	CompactionStatusIndicator,
@@ -154,6 +156,7 @@ import { TrustSelectorComponent } from "./components/trust-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
 import { editInExternalEditor } from "./external-editor.ts";
+import { ASTERISK } from "./glyphs.ts";
 import { refreshModelCatalogs } from "./model-catalog-refresh.ts";
 import { getModelSearchText } from "./model-search.ts";
 import { shareSession } from "./session-share.ts";
@@ -436,6 +439,7 @@ export class InteractiveMode {
 	private autocompleteProviderWrappers: AutocompleteProviderFactory[] = [];
 	private fdPath: string | undefined;
 	private editorContainer: Container;
+	private hintLine: HintLineComponent;
 	private activeSelectorToken?: object;
 	private activeSelectorDispose?: () => void;
 	private footer: FooterComponent;
@@ -452,7 +456,6 @@ export class InteractiveMode {
 	private workingMessage: string | undefined = undefined;
 	private workingVisible = true;
 	private workingIndicatorOptions: WorkingIndicatorOptions | undefined = undefined;
-	private readonly defaultWorkingMessage = "Working...";
 	private readonly defaultHiddenThinkingLabel = "Thinking...";
 	private hiddenThinkingLabel = this.defaultHiddenThinkingLabel;
 
@@ -605,6 +608,8 @@ export class InteractiveMode {
 		this.editor = this.defaultEditor;
 		this.editorContainer = new Container();
 		this.editorContainer.addChild(this.editor as Component);
+		this.hintLine = new HintLineComponent(() => this.editor.isShowingAutocomplete?.() ?? false);
+		this.editorContainer.addChild(this.hintLine);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
@@ -956,7 +961,12 @@ export class InteractiveMode {
 
 		// Add header with keybindings from config (unless silenced)
 		if (this.options.verbose || !this.settingsManager.getQuietStartup()) {
-			const logo = theme.bold(theme.fg("accent", APP_NAME)) + theme.fg("dim", ` v${this.version}`);
+			const welcome =
+				theme.fg("accent", `${ASTERISK} `) +
+				theme.bold(theme.fg("accent", `Welcome to ${APP_NAME}`)) +
+				theme.fg("dim", ` v${this.version}`);
+			const cwdLine = theme.fg("dim", `  ${formatCwdForFooter(this.sessionManager.getCwd(), os.homedir())}`);
+			const logo = `${welcome}\n${cwdLine}`;
 
 			// Build startup instructions using keybinding hint helpers
 			const hint = (keybinding: AppKeybinding, description: string) => keyHint(keybinding, description);
@@ -982,24 +992,19 @@ export class InteractiveMode {
 				hint("app.clipboard.pasteImage", "to paste image (with text fallback)"),
 				rawKeyHint("drop files", "to attach"),
 			].join("\n");
-			const compactInstructions = [
-				hint("app.interrupt", "interrupt"),
-				rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
-				rawKeyHint("/", "commands"),
-				rawKeyHint("!", "bash"),
-				hint("app.tools.expand", "more"),
-			].join(theme.fg("muted", " · "));
+			// The shortcut reminder lives under the input box now, so the banner
+			// only advertises the way to the full list.
 			const compactOnboarding = theme.fg(
 				"dim",
-				`Press ${keyText("app.tools.expand")} to show full startup help and loaded resources.`,
+				`  Press ${keyText("app.tools.expand")} for full startup help and loaded resources.`,
 			);
 			const onboarding = theme.fg(
 				"dim",
-				`KnightCode can explain its own features and look up its docs. Ask it how to use or extend KnightCode.`,
+				`  ${APP_NAME} can explain its own features and look up its docs. Ask it how to use or extend ${APP_NAME}.`,
 			);
 			this.builtInHeader = new ExpandableText(
-				() => `${logo}\n${compactInstructions}\n${compactOnboarding}\n\n${onboarding}`,
-				() => `${logo}\n${expandedInstructions}\n\n${onboarding}`,
+				() => `${logo}\n${compactOnboarding}\n${onboarding}`,
+				() => `${logo}\n\n${expandedInstructions}\n\n${onboarding}`,
 				this.getStartupExpansionState(),
 				1,
 				0,
@@ -2156,15 +2161,25 @@ export class InteractiveMode {
 			return;
 		}
 		if (this.session.isStreaming && this.activeStatusIndicator?.kind !== "working") {
-			this.showStatusIndicator(
-				new WorkingStatusIndicator(
-					this.ui,
-					this.workingMessage ?? this.defaultWorkingMessage,
-					this.workingIndicatorOptions,
-				),
-			);
+			this.showStatusIndicator(this.createWorkingStatusIndicator());
 		}
 		this.ui.requestRender();
+	}
+
+	/** The spinner label for a turn: whatever an extension set, else a fresh verb. */
+	private workingLabel(): string {
+		return this.workingMessage ?? pickSpinnerVerb();
+	}
+
+	/** Output tokens streamed so far this turn, for the spinner suffix. */
+	private streamedOutputTokens(): number {
+		return this.streamingMessage?.usage?.output ?? 0;
+	}
+
+	private createWorkingStatusIndicator(): WorkingStatusIndicator {
+		return new WorkingStatusIndicator(this.ui, this.workingLabel(), this.workingIndicatorOptions, () =>
+			this.streamedOutputTokens(),
+		);
 	}
 
 	private setWorkingIndicator(options?: WorkingIndicatorOptions): void {
@@ -2271,7 +2286,8 @@ export class InteractiveMode {
 		this.workingVisible = true;
 		this.setWorkingIndicator();
 		if (this.activeStatusIndicator?.kind === "working") {
-			this.activeStatusIndicator.setMessage(`${this.defaultWorkingMessage} (${keyText("app.interrupt")} to interrupt)`);
+			// The indicator appends its own elapsed/interrupt suffix.
+			this.activeStatusIndicator.setMessage(this.workingLabel());
 		}
 		this.setHiddenThinkingLabel();
 	}
@@ -2434,7 +2450,7 @@ export class InteractiveMode {
 			setWorkingMessage: (message) => {
 				this.workingMessage = message;
 				if (this.activeStatusIndicator?.kind === "working") {
-					this.activeStatusIndicator.setMessage(message ?? this.defaultWorkingMessage);
+					this.activeStatusIndicator.setMessage(message ?? this.workingLabel());
 				}
 			},
 			setWorkingVisible: (visible) => this.setWorkingVisible(visible),
@@ -3168,13 +3184,7 @@ export class InteractiveMode {
 					this.retryEscapeHandler = undefined;
 				}
 				if (this.workingVisible) {
-					this.showStatusIndicator(
-						new WorkingStatusIndicator(
-							this.ui,
-							this.workingMessage ?? this.defaultWorkingMessage,
-							this.workingIndicatorOptions,
-						),
-					);
+					this.showStatusIndicator(this.createWorkingStatusIndicator());
 				} else {
 					this.clearStatusIndicator();
 				}

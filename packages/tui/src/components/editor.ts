@@ -267,6 +267,19 @@ function createScrollBorder(direction: "↑" | "↓", hiddenLineCount: number, w
 	return sliceByColumn(indicator, 0, indicatorWidth, true) + ellipsis;
 }
 
+/** Rounded frame around the input. */
+const BORDER = {
+	topLeft: "╭",
+	topRight: "╮",
+	bottomLeft: "╰",
+	bottomRight: "╯",
+	horizontal: "─",
+	vertical: "│",
+} as const;
+
+/** Marker shown before the first line of input. */
+const PROMPT_MARKER = "> ";
+
 export class Editor implements Component, Focusable {
 	private state: EditorState = {
 		lines: [""],
@@ -480,18 +493,19 @@ export class Editor implements Component, Focusable {
 	}
 
 	render(width: number): string[] {
-		const maxPadding = Math.max(0, Math.floor((width - 1) / 2));
-		const paddingX = Math.min(this.paddingX, maxPadding);
-		const contentWidth = Math.max(1, width - paddingX * 2);
-
-		// Layout width: with padding the cursor can overflow into it,
-		// without padding we reserve 1 column for the cursor.
-		const layoutWidth = Math.max(1, contentWidth - (paddingX ? 0 : 1));
+		// Frame (2 cols) + inner padding on both sides + the prompt marker column,
+		// plus one column kept free so a cursor at end-of-line never pushes the
+		// right border out.
+		const frameWidth = 2;
+		const promptWidth = visibleWidth(PROMPT_MARKER);
+		const maxPadding = Math.max(0, Math.floor((width - frameWidth - promptWidth - 2) / 2));
+		const paddingX = Math.min(this.paddingX, Math.max(0, maxPadding));
+		const innerWidth = Math.max(1, width - frameWidth);
+		const contentWidth = Math.max(1, innerWidth - paddingX * 2);
+		const layoutWidth = Math.max(1, contentWidth - promptWidth - 1);
 
 		// Store for cursor navigation (must match wrapping width)
 		this.lastWidth = layoutWidth;
-
-		const horizontal = this.borderColor("─");
 
 		// Layout the text
 		const layoutLines = this.layoutText(layoutWidth);
@@ -521,14 +535,14 @@ export class Editor implements Component, Focusable {
 		const result: string[] = [];
 		const leftPadding = " ".repeat(paddingX);
 		const rightPadding = leftPadding;
+		const vertical = this.borderColor(BORDER.vertical);
 
 		// Render top border (with scroll indicator if scrolled down)
-		if (this.scrollOffset > 0) {
-			const border = createScrollBorder("↑", this.scrollOffset, width);
-			result.push(this.borderColor(border));
-		} else {
-			result.push(horizontal.repeat(width));
-		}
+		const topFill =
+			this.scrollOffset > 0
+				? createScrollBorder("↑", this.scrollOffset, innerWidth)
+				: BORDER.horizontal.repeat(innerWidth);
+		result.push(this.borderColor(BORDER.topLeft + topFill + BORDER.topRight));
 
 		// Render each visible layout line
 		// Emit hardware cursor marker when focused so TUI can position the
@@ -536,10 +550,14 @@ export class Editor implements Component, Focusable {
 		// autocomplete (e.g. slash-command menu) is visible.
 		const emitCursorMarker = this.focused;
 
-		for (const layoutLine of visibleLines) {
+		// The prompt marker belongs to the very first line of input; when scrolled
+		// past it, the column stays but goes blank rather than lying about position.
+		const blankPrompt = " ".repeat(promptWidth);
+
+		for (const [index, layoutLine] of visibleLines.entries()) {
+			const prompt = index === 0 && this.scrollOffset === 0 ? this.borderColor(PROMPT_MARKER) : blankPrompt;
 			let displayText = layoutLine.text;
-			let lineVisibleWidth = visibleWidth(layoutLine.text);
-			let cursorInPadding = false;
+			let lineVisibleWidth = visibleWidth(layoutLine.text) + promptWidth;
 
 			// Add cursor if this line has it
 			if (layoutLine.hasCursor && layoutLine.cursorPos !== undefined) {
@@ -563,37 +581,27 @@ export class Editor implements Component, Focusable {
 					const cursor = "\x1b[7m \x1b[0m";
 					displayText = before + marker + cursor;
 					lineVisibleWidth = lineVisibleWidth + 1;
-					// If cursor overflows content width into the padding, flag it
-					if (lineVisibleWidth > contentWidth && paddingX > 0) {
-						cursorInPadding = true;
-					}
 				}
 			}
 
 			// Calculate padding based on actual visible width
 			const padding = " ".repeat(Math.max(0, contentWidth - lineVisibleWidth));
-			const lineRightPadding = cursorInPadding ? rightPadding.slice(1) : rightPadding;
-
-			// Render the line (no side borders, just horizontal lines above and below)
-			result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);
+			result.push(`${vertical}${leftPadding}${prompt}${displayText}${padding}${rightPadding}${vertical}`);
 		}
 
 		// Render bottom border (with scroll indicator if more content below)
 		const linesBelow = layoutLines.length - (this.scrollOffset + visibleLines.length);
-		if (linesBelow > 0) {
-			const border = createScrollBorder("↓", linesBelow, width);
-			result.push(this.borderColor(border));
-		} else {
-			result.push(horizontal.repeat(width));
-		}
+		const bottomFill =
+			linesBelow > 0 ? createScrollBorder("↓", linesBelow, innerWidth) : BORDER.horizontal.repeat(innerWidth);
+		result.push(this.borderColor(BORDER.bottomLeft + bottomFill + BORDER.bottomRight));
 
-		// Add autocomplete list if active
+		// Add autocomplete list below the box, aligned with the input text
 		if (this.autocompleteState && this.autocompleteList) {
-			const autocompleteResult = this.autocompleteList.render(contentWidth);
-			for (const line of autocompleteResult) {
-				const lineWidth = visibleWidth(line);
-				const linePadding = " ".repeat(Math.max(0, contentWidth - lineWidth));
-				result.push(`${leftPadding}${line}${linePadding}${rightPadding}`);
+			const listIndent = " ".repeat(Math.min(width, 1 + paddingX + promptWidth));
+			const listWidth = Math.max(1, width - listIndent.length);
+			for (const line of this.autocompleteList.render(listWidth)) {
+				const linePadding = " ".repeat(Math.max(0, listWidth - visibleWidth(line)));
+				result.push(`${listIndent}${line}${linePadding}`);
 			}
 		}
 

@@ -134,6 +134,7 @@ export class FooterComponent implements Component {
 		if ((usageTotals.cacheRead > 0 || usageTotals.cacheWrite > 0) && latestCacheHitRate !== undefined) {
 			statsParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
 		}
+		const separator = " · ";
 
 		// Kimi Coding is subscription-backed despite using API-key authentication.
 		const usingSubscription = state.model
@@ -160,10 +161,10 @@ export class FooterComponent implements Component {
 		}
 		statsParts.push(contextPercentStr);
 		if (areExperimentalFeaturesEnabled()) {
-			statsParts.push(`${theme.fg("dim", "•")} ${theme.bold(theme.fg("warning", "xp"))}`);
+			statsParts.push(theme.bold(theme.fg("warning", "xp")));
 		}
 
-		let statsLeft = statsParts.join(" ");
+		let statsLeft = statsParts.join(separator);
 
 		// Add model name on the right side, plus thinking level if model supports it
 		const modelName = state.model?.id || "no-model";
@@ -184,7 +185,9 @@ export class FooterComponent implements Component {
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
 			rightSideWithoutProvider =
-				thinkingLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${thinkingLevel}`;
+				thinkingLevel === "off"
+					? `${modelName}${separator}thinking off`
+					: `${modelName}${separator}${thinkingLevel}`;
 		}
 
 		// Prepend the provider in parentheses if there are multiple providers and there's enough room

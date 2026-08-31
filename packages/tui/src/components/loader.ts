@@ -8,8 +8,12 @@ export interface LoaderIndicatorOptions {
 	intervalMs?: number;
 }
 
-const DEFAULT_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const DEFAULT_INTERVAL_MS = 80;
+// A pulsing asterisk: the glyphs grow out and back so the marker breathes.
+// `✳` is not reliably present in the default fonts off macOS, so `*` stands in.
+const PULSE_CHARACTERS =
+	process.platform === "darwin" ? ["·", "✢", "✳", "✶", "✻", "✽"] : ["·", "✢", "*", "✶", "✻", "✽"];
+const DEFAULT_FRAMES = [...PULSE_CHARACTERS, ...[...PULSE_CHARACTERS].reverse()];
+const DEFAULT_INTERVAL_MS = 120;
 
 /**
  * Loader component that updates with an optional spinning animation.
