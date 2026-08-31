@@ -127,6 +127,8 @@ describe("isValidProviderId", () => {
     expect(isValidProviderId("../../index")).toBe(false)
     expect(isValidProviderId("a/b")).toBe(false)
     expect(isValidProviderId("")).toBe(false)
+    // Passes the character class and is caught only by the dot-dot check.
+    expect(isValidProviderId("a..b")).toBe(false)
   })
 
   it("keeps a valid id inside the revision prefix", () => {
