@@ -5,6 +5,8 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
+import { createGrepToolDefinition } from "../src/core/tools/grep.ts";
+import { createLsToolDefinition } from "../src/core/tools/ls.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
@@ -551,4 +553,91 @@ describe("ToolExecutionComponent parity", () => {
 			expect(collapsed.indexOf(":120-329")).toBeLessThan(collapsed.indexOf("to expand"));
 		});
 	}
+});
+
+describe("collapsed result counts ignore appended notices", () => {
+	beforeAll(() => {
+		initTheme("dark");
+	});
+
+	function collapsed(
+		name: string,
+		definition: ConstructorParameters<typeof ToolExecutionComponent>[4],
+		args: Record<string, unknown>,
+		result: { content: Array<{ type: "text"; text: string }>; details?: unknown },
+	): string {
+		const component = new ToolExecutionComponent(
+			name,
+			`tool-count-${name}`,
+			args,
+			{},
+			definition,
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.updateResult({ ...result, isError: false } as never, false);
+		return stripAnsi(component.render(120).join("\n"));
+	}
+
+	test("grep reports matches, not rendered rows", () => {
+		const noMatches = collapsed(
+			"grep",
+			createGrepToolDefinition(process.cwd()),
+			{ pattern: "x" },
+			{
+				content: [{ type: "text", text: "No matches found" }],
+				details: { matchCount: 0 },
+			},
+		);
+		expect(noMatches).toContain("Found 0 matches");
+
+		// Two matches rendered with context lines plus a trailing notice block.
+		const withContext = collapsed(
+			"grep",
+			createGrepToolDefinition(process.cwd()),
+			{ pattern: "x" },
+			{
+				content: [{ type: "text", text: "a.ts:1: x\na.ts:2: y\nb.ts:9: x\n\n[100 matches limit reached]" }],
+				details: { matchCount: 2, matchLimitReached: 100 },
+			},
+		);
+		expect(withContext).toContain("Found 2 matches");
+	});
+
+	test("ls reports paths, not rendered rows", () => {
+		const empty = collapsed(
+			"ls",
+			createLsToolDefinition(process.cwd()),
+			{ path: "." },
+			{
+				content: [{ type: "text", text: "(empty directory)" }],
+				details: { pathCount: 0 },
+			},
+		);
+		expect(empty).toContain("Listed 0 paths");
+
+		const limited = collapsed(
+			"ls",
+			createLsToolDefinition(process.cwd()),
+			{ path: "." },
+			{
+				content: [{ type: "text", text: "a.ts\nb.ts\n\n[500 entries limit reached. Use limit=1000 for more]" }],
+				details: { pathCount: 2, entryLimitReached: 500 },
+			},
+		);
+		expect(limited).toContain("Listed 2 paths");
+	});
+
+	test("read reports file lines and flags truncation", () => {
+		const rendered = collapsed(
+			"read",
+			createReadToolDefinition(process.cwd()),
+			{ path: "notes.txt" },
+			{
+				content: [{ type: "text", text: "one\ntwo\n\n[Showing lines 1-2 of 9. Use offset=3 to continue.]" }],
+				details: { lineCount: 2, truncation: { truncated: true, truncatedBy: "lines", outputLines: 2, totalLines: 9 } },
+			},
+		);
+		expect(rendered).toContain("Read 2 lines (truncated)");
+	});
 });

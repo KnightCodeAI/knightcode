@@ -428,7 +428,15 @@ export function createEditToolDefinition(
 					changed = true;
 				}
 				if (changed) {
-					buildEditCallComponent(callComponent, context.args as RenderableEditArgs | undefined, theme, context.cwd, false);
+					// Keep the preview visible on failure: formatEditResult() suppresses an error that
+					// duplicates the preflight one, so hiding it here would leave only the header.
+					buildEditCallComponent(
+						callComponent,
+						context.args as RenderableEditArgs | undefined,
+						theme,
+						context.cwd,
+						context.isError,
+					);
 				}
 			}
 

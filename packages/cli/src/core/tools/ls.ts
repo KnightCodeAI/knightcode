@@ -25,6 +25,8 @@ export type LsToolInput = Static<typeof lsSchema>;
 const DEFAULT_LIMIT = 500;
 
 export interface LsToolDetails {
+	/** Number of paths listed. Not derivable from the output: notices add rows. */
+	pathCount: number;
 	truncation?: TruncationResult;
 	entryLimitReached?: number;
 }
@@ -75,8 +77,9 @@ function formatLsResult(
 	const output = getTextOutput(result, showImages).trim();
 	const lines = output ? output.split("\n") : [];
 	let text = "";
+	const pathCount = result.details?.pathCount ?? lines.length;
 	if (!options.expanded) {
-		text = formatToolSummary(theme, `Listed ${plural(lines.length, "path")}`, lines.length > 0);
+		text = formatToolSummary(theme, `Listed ${plural(pathCount, "path")}`, lines.length > 0);
 	} else if (lines.length > 0) {
 		text = lines.map((line) => theme.fg("toolOutput", line)).join("\n");
 	}
@@ -173,7 +176,7 @@ export function createLsToolDefinition(
 						signal?.removeEventListener("abort", onAbort);
 
 						if (results.length === 0) {
-							resolve({ content: [{ type: "text", text: "(empty directory)" }], details: undefined });
+							resolve({ content: [{ type: "text", text: "(empty directory)" }], details: { pathCount: 0 } });
 							return;
 						}
 
@@ -181,7 +184,8 @@ export function createLsToolDefinition(
 						// Apply byte truncation. There is no separate line limit because entry count is already capped.
 						const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 						let output = truncation.content;
-						const details: LsToolDetails = {};
+						// Byte truncation can drop trailing entries, so count the rows that survived.
+						const details: LsToolDetails = { pathCount: truncation.outputLines };
 						// Build actionable notices for truncation and entry limits.
 						const notices: string[] = [];
 						if (entryLimitReached) {
@@ -198,7 +202,7 @@ export function createLsToolDefinition(
 
 						resolve({
 							content: [{ type: "text", text: output }],
-							details: Object.keys(details).length > 0 ? details : undefined,
+							details,
 						});
 					} catch (e: any) {
 						signal?.removeEventListener("abort", onAbort);

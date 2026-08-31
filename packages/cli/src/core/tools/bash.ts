@@ -239,7 +239,7 @@ function formatShellCall(args: { command?: string; timeout?: number } | undefine
 	const command = str(args?.command);
 	const timeout = args?.timeout as number | undefined;
 	const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
-	const commandDisplay = command === null ? invalidArgText(theme) : command ? command : theme.fg("toolOutput", "...");
+	const commandDisplay = command === null ? invalidArgText(theme) : theme.fg("toolOutput", command ? command : "...");
 	return formatToolCall(theme, displayName, commandDisplay) + timeoutSuffix;
 }
 

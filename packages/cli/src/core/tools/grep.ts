@@ -51,6 +51,8 @@ export type GrepToolInput = Static<typeof grepSchema>;
 const DEFAULT_LIMIT = 100;
 
 export interface GrepToolDetails {
+	/** Number of matches found. Not derivable from the output: context lines and notices add rows. */
+	matchCount: number;
 	truncation?: TruncationResult;
 	matchLimitReached?: number;
 	linesTruncated?: boolean;
@@ -107,8 +109,9 @@ function formatGrepResult(
 	const output = getTextOutput(result, showImages).trim();
 	const lines = output ? output.split("\n") : [];
 	let text = "";
+	const matchCount = result.details?.matchCount ?? lines.length;
 	if (!options.expanded) {
-		text = formatToolSummary(theme, `Found ${plural(lines.length, "match", "matches")}`, lines.length > 0);
+		text = formatToolSummary(theme, `Found ${plural(matchCount, "match", "matches")}`, lines.length > 0);
 	} else if (lines.length > 0) {
 		text = lines.map((line) => theme.fg("toolOutput", line)).join("\n");
 	}
@@ -312,7 +315,9 @@ export function createGrepToolDefinition(
 								return;
 							}
 							if (matchCount === 0) {
-								settle(() => resolve({ content: [{ type: "text", text: "No matches found" }], details: undefined }));
+								settle(() =>
+									resolve({ content: [{ type: "text", text: "No matches found" }], details: { matchCount: 0 } }),
+								);
 								return;
 							}
 
@@ -334,7 +339,7 @@ export function createGrepToolDefinition(
 							// Apply byte truncation. There is no line limit here because the match limit already capped rows.
 							const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 							let output = truncation.content;
-							const details: GrepToolDetails = {};
+							const details: GrepToolDetails = { matchCount };
 							// Build actionable notices for truncation and match limits.
 							const notices: string[] = [];
 							if (matchLimitReached) {
@@ -355,7 +360,7 @@ export function createGrepToolDefinition(
 							settle(() =>
 								resolve({
 									content: [{ type: "text", text: output }],
-									details: Object.keys(details).length > 0 ? details : undefined,
+									details,
 								}),
 							);
 						});

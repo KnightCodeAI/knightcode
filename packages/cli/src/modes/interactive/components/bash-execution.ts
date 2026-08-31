@@ -41,6 +41,7 @@ export class BashExecutionComponent extends Container {
 	private expanded = false;
 	private contentContainer: Container;
 	private colorKey: "dim" | "bashMode";
+	private marker: string;
 
 	constructor(command: string, ui: TUI, excludeFromContext = false) {
 		super();
@@ -48,6 +49,8 @@ export class BashExecutionComponent extends Container {
 
 		// Dim the whole block for commands excluded from context (the `!!` prefix)
 		this.colorKey = excludeFromContext ? "dim" : "bashMode";
+		// Echo the prefix the user typed - dim alone is lost wherever colour is stripped.
+		this.marker = excludeFromContext ? "!!" : "!";
 
 		this.addChild(new Spacer(1));
 
@@ -69,7 +72,7 @@ export class BashExecutionComponent extends Container {
 	}
 
 	private commandLine(): Text {
-		return new Text(theme.fg(this.colorKey, theme.bold(`!${this.command}`)), 0, 0);
+		return new Text(theme.fg(this.colorKey, theme.bold(`${this.marker}${this.command}`)), 0, 0);
 	}
 
 	/**
