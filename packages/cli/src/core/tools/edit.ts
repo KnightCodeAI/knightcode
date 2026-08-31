@@ -1,5 +1,5 @@
 import type { AgentTool } from "@knightcode/agent";
-import { Box, Container, Spacer, Text } from "@knightcode/tui";
+import { Box, Container, Text } from "@knightcode/tui";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
 import { type Static, Type } from "typebox";
@@ -22,7 +22,7 @@ import {
 } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
-import { renderToolPath, str } from "./render-utils.ts";
+import { formatToolCall, formatToolSummary, plural, renderToolPath, shortenPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 type EditPreview = EditDiffResult | EditDiffError;
@@ -174,7 +174,7 @@ type EditCallRenderComponent = Box & {
 };
 
 function createEditCallRenderComponent(): EditCallRenderComponent {
-	return Object.assign(new Box(1, 1, (text: string) => text), {
+	return Object.assign(new Box(0, 0), {
 		preview: undefined as EditPreview | undefined,
 		previewArgsKey: undefined as string | undefined,
 		previewPending: false,
@@ -223,7 +223,18 @@ function getRenderablePreviewInput(args: RenderableEditArgs | undefined): { path
 
 function formatEditCall(args: RenderableEditArgs | undefined, theme: Theme, cwd: string): string {
 	const pathDisplay = renderToolPath(str(args?.file_path ?? args?.path), theme, cwd);
-	return `${theme.fg("toolTitle", theme.bold("edit"))} ${pathDisplay}`;
+	return formatToolCall(theme, "Update", pathDisplay);
+}
+
+/** Count changed lines in a display diff (`+123 text` / `-123 text` / ` 123 text`). */
+function summarizeDiff(diff: string): { additions: number; removals: number } {
+	let additions = 0;
+	let removals = 0;
+	for (const line of diff.split("\n")) {
+		if (line.startsWith("+")) additions++;
+		else if (line.startsWith("-")) removals++;
+	}
+	return { additions, removals };
 }
 
 function formatEditResult(
@@ -247,29 +258,19 @@ function formatEditResult(
 		return theme.fg("error", errorText);
 	}
 
-	const resultDiff = result.details?.diff;
-	if (resultDiff && resultDiff !== previewDiff) {
-		return renderDiff(resultDiff, { filePath: rawPath ?? undefined });
+	const diff = result.details?.diff ?? previewDiff;
+	if (!diff) {
+		return undefined;
 	}
 
-	return undefined;
-}
-
-function getEditHeaderBg(
-	preview: EditPreview | undefined,
-	settledError: boolean | undefined,
-	theme: Theme,
-): (text: string) => string {
-	if (preview) {
-		if ("error" in preview) {
-			return (text: string) => theme.bg("toolErrorBg", text);
-		}
-		return (text: string) => theme.bg("toolSuccessBg", text);
-	}
-	if (settledError) {
-		return (text: string) => theme.bg("toolErrorBg", text);
-	}
-	return (text: string) => theme.bg("toolPendingBg", text);
+	const { additions, removals } = summarizeDiff(diff);
+	const target = rawPath ? shortenPath(rawPath) : "file";
+	const summary = formatToolSummary(
+		theme,
+		`Updated ${target} with ${plural(additions, "addition")} and ${plural(removals, "removal")}`,
+		false,
+	);
+	return `${summary}\n${renderDiff(diff, { filePath: rawPath ?? undefined })}`;
 }
 
 function buildEditCallComponent(
@@ -277,18 +278,17 @@ function buildEditCallComponent(
 	args: RenderableEditArgs | undefined,
 	theme: Theme,
 	cwd: string,
+	showPreview: boolean,
 ): EditCallRenderComponent {
-	component.setBgFn(getEditHeaderBg(component.preview, component.settledError, theme));
 	component.clear();
 	component.addChild(new Text(formatEditCall(args, theme, cwd), 0, 0));
 
-	if (!component.preview) {
+	if (!showPreview || !component.preview) {
 		return component;
 	}
 
 	const body =
 		"error" in component.preview ? theme.fg("error", component.preview.error) : renderDiff(component.preview.diff);
-	component.addChild(new Spacer(1));
 	component.addChild(new Text(body, 0, 0));
 	return component;
 }
@@ -327,7 +327,6 @@ export function createEditToolDefinition(
 		promptGuidelines: [...editToolSystemPromptContribution.guidelines],
 		parameters: editSchema,
 		constrainedSampling: getExperimentalToolSampling(),
-		renderShell: "self",
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, _ctx?) {
 			const { path, edits } = validateEditInput(input);
@@ -406,7 +405,7 @@ export function createEditToolDefinition(
 				});
 			}
 
-			return buildEditCallComponent(component, args, theme, context.cwd);
+			return buildEditCallComponent(component, args, theme, context.cwd, context.isPartial);
 		},
 		renderResult(result, _options, theme, context) {
 			const callComponent = context.state.callComponent;
@@ -429,7 +428,15 @@ export function createEditToolDefinition(
 					changed = true;
 				}
 				if (changed) {
-					buildEditCallComponent(callComponent, context.args as RenderableEditArgs | undefined, theme, context.cwd);
+					// Keep the preview visible on failure: formatEditResult() suppresses an error that
+					// duplicates the preflight one, so hiding it here would leave only the header.
+					buildEditCallComponent(
+						callComponent,
+						context.args as RenderableEditArgs | undefined,
+						theme,
+						context.cwd,
+						context.isError,
+					);
 				}
 			}
 
@@ -439,8 +446,7 @@ export function createEditToolDefinition(
 			if (!output) {
 				return component;
 			}
-			component.addChild(new Spacer(1));
-			component.addChild(new Text(output, 1, 0));
+			component.addChild(new Text(output, 0, 0));
 			return component;
 		},
 	};

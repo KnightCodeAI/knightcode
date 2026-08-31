@@ -57,7 +57,8 @@ describe("context token estimation", () => {
 			trailingTokens: 1_005,
 			lastUsageIndex: null,
 		});
-		expect(buildBaseOptions(model, context).maxTokens).toBe(4_899);
+		// 10_000 - ceil(1_005 * 1.5) - 4_096
+		expect(buildBaseOptions(model, context).maxTokens).toBe(4_396);
 	});
 
 	it("uses assistant usage again after a response to the inserted context", () => {
@@ -77,5 +78,28 @@ describe("context token estimation", () => {
 			trailingTokens: 1,
 			lastUsageIndex: 3,
 		});
+	});
+
+	it("keeps max_tokens inside the window when chars/4 under-counts the context", () => {
+		// Field failure (openrouter/moonshotai/kimi-k2.6): the estimator said 59,256 tokens for a
+		// context the provider counted at 65,872, so max_tokens = 262,144 - 59,256 - 4,096 = 198,792
+		// and the request overflowed the window by 2,520 tokens.
+		const bigModel: Model<"openai-responses"> = { ...model, contextWindow: 262_144, maxTokens: 235_929 };
+		const context: Context = {
+			messages: [{ role: "user", content: "x".repeat(59_256 * 4), timestamp: 1 }],
+		};
+		const actualPromptTokens = Math.ceil(estimateContextTokens(context).tokens * 1.12);
+		const maxTokens = buildBaseOptions(bigModel, context).maxTokens!;
+
+		expect(actualPromptTokens + maxTokens).toBeLessThanOrEqual(bigModel.contextWindow);
+	});
+
+	it("does not pad tokens the provider already reported", () => {
+		const context: Context = {
+			messages: [{ role: "user", content: "hi", timestamp: 100 }, createAssistant(200, 5_000)],
+		};
+
+		// 10_000 - 5_000 (exact usage) - ceil(0 * 1.5) - 4_096
+		expect(buildBaseOptions(model, context).maxTokens).toBe(904);
 	});
 });

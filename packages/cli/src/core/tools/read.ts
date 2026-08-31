@@ -6,7 +6,7 @@ import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile } from "fs/promises";
 import { type Static, Type } from "typebox";
 import { getReadmePath } from "../../config.ts";
-import { keyHint, keyText } from "../../modes/interactive/components/keybinding-hints.ts";
+import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import { processImage } from "../../utils/image-process.ts";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
@@ -14,7 +14,15 @@ import { formatPathRelativeToCwdOrAbsolute } from "../../utils/paths.ts";
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import { resolveReadPathAsync, resolveToCwd } from "./path-utils.ts";
-import { getTextOutput, renderToolPath, replaceTabs, str } from "./render-utils.ts";
+import {
+	formatToolCall,
+	formatToolSummary,
+	getTextOutput,
+	plural,
+	renderToolPath,
+	replaceTabs,
+	str,
+} from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
 
@@ -32,6 +40,8 @@ export const readToolSystemPromptContribution = {
 export type ReadToolInput = Static<typeof readSchema>;
 
 export interface ReadToolDetails {
+	/** Lines of file content returned. Not derivable from the output: continuation notices add rows. */
+	lineCount?: number;
 	truncation?: TruncationResult;
 }
 
@@ -79,7 +89,7 @@ function formatReadLineRange(args: ReadRenderArgs | undefined, theme: Theme): st
 
 function formatReadCall(args: ReadRenderArgs | undefined, theme: Theme, cwd: string): string {
 	const pathDisplay = renderToolPath(str(args?.file_path ?? args?.path), theme, cwd);
-	return `${theme.fg("toolTitle", theme.bold("read"))} ${pathDisplay}${formatReadLineRange(args, theme)}`;
+	return formatToolCall(theme, "Read", `${pathDisplay}${formatReadLineRange(args, theme)}`);
 }
 
 function trimTrailingEmptyLines(lines: string[]): string[] {
@@ -143,22 +153,19 @@ function formatCompactReadCall(
 	args: ReadRenderArgs | undefined,
 	theme: Theme,
 ): string {
-	const expandHint = theme.fg("dim", ` (${keyText("app.tools.expand")} to expand)`);
 	if (classification.kind === "skill") {
 		return (
 			theme.fg("customMessageLabel", `\x1b[1m[skill]\x1b[22m `) +
 			theme.fg("customMessageText", classification.label) +
-			formatReadLineRange(args, theme) +
-			expandHint
+			formatReadLineRange(args, theme)
 		);
 	}
 
-	return (
-		theme.fg("toolTitle", theme.bold(`read ${classification.kind}`)) +
-		" " +
-		theme.fg("accent", classification.label) +
-		formatReadLineRange(args, theme) +
-		expandHint
+	// The expand hint rides on the result summary line, not here.
+	return formatToolCall(
+		theme,
+		`Read ${classification.kind}`,
+		theme.fg("accent", classification.label) + formatReadLineRange(args, theme),
 	);
 }
 
@@ -171,19 +178,28 @@ function formatReadResult(
 	_cwd: string,
 	isError: boolean,
 ): string {
-	if (!options.expanded && !isError) {
-		return "";
-	}
-
 	const rawPath = str(args?.file_path ?? args?.path);
 	const output = getTextOutput(result, showImages);
+
+	if (!options.expanded && !isError) {
+		if (result.content.some((c) => c.type === "image")) {
+			return formatToolSummary(theme, "Read image", false);
+		}
+		// Prefer the recorded count: `output` carries the tool's `[Showing lines ...]` notices as rows.
+		const lineCount = result.details?.lineCount ?? trimTrailingEmptyLines(output.split("\n")).length;
+		const truncated = result.details?.truncation?.truncated ? " (truncated)" : "";
+		return formatToolSummary(theme, `Read ${plural(lineCount, "line")}${truncated}`, lineCount > 0);
+	}
+
 	const lang = !isError && rawPath ? getLanguageFromPath(rawPath) : undefined;
 	const renderedLines = lang ? highlightCode(replaceTabs(output), lang) : output.split("\n");
 	const lines = trimTrailingEmptyLines(renderedLines);
 	const maxLines = options.expanded ? lines.length : 10;
 	const displayLines = lines.slice(0, maxLines);
 	const remaining = lines.length - maxLines;
-	let text = `\n${displayLines.map((line) => (lang ? replaceTabs(line) : theme.fg("toolOutput", replaceTabs(line)))).join("\n")}`;
+	let text = displayLines
+		.map((line) => (lang ? replaceTabs(line) : theme.fg("toolOutput", replaceTabs(line))))
+		.join("\n");
 	if (remaining > 0) {
 		text += `${theme.fg("muted", `\n... (${remaining} more lines,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
 	}
@@ -288,12 +304,15 @@ export function createReadToolDefinition(
 								}
 								// Apply truncation, respecting both line and byte limits.
 								const truncation = truncateHead(selectedContent);
+								// Every branch below may append a `[...]` notice to the output, so the row count
+								// of `outputText` is not the line count. Capture the content lines here instead.
+								const lineCount = truncation.firstLineExceedsLimit ? 0 : truncation.outputLines;
 								let outputText: string;
 								if (truncation.firstLineExceedsLimit) {
 									// First line alone exceeds the byte limit. Point the model at a bash fallback.
 									const firstLineSize = formatSize(Buffer.byteLength(allLines[startLine], "utf-8"));
 									outputText = `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${path} | head -c ${DEFAULT_MAX_BYTES}]`;
-									details = { truncation };
+									details = { lineCount, truncation };
 								} else if (truncation.truncated) {
 									// Truncation occurred. Build an actionable continuation notice.
 									const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
@@ -304,15 +323,17 @@ export function createReadToolDefinition(
 									} else {
 										outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
 									}
-									details = { truncation };
+									details = { lineCount, truncation };
 								} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
 									// User-specified limit stopped early, but the file still has more content.
 									const remaining = allLines.length - (startLine + userLimitedLines);
 									const nextOffset = startLine + userLimitedLines + 1;
 									outputText = `${truncation.content}\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue.]`;
+									details = { lineCount };
 								} else {
 									// No truncation and no remaining user-limited content.
 									outputText = truncation.content;
+									details = { lineCount };
 								}
 								content = [{ type: "text", text: outputText }];
 							}

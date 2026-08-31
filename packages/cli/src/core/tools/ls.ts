@@ -3,11 +3,10 @@ import type { AgentTool } from "@knightcode/agent";
 import { Text } from "@knightcode/tui";
 import nodePath from "path";
 import { type Static, Type } from "typebox";
-import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
-import { getTextOutput, renderToolPath, str } from "./render-utils.ts";
+import { formatToolCall, formatToolSummary, getTextOutput, plural, renderToolPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
 
@@ -26,6 +25,8 @@ export type LsToolInput = Static<typeof lsSchema>;
 const DEFAULT_LIMIT = 500;
 
 export interface LsToolDetails {
+	/** Number of paths listed. Not derivable from the output: notices add rows. */
+	pathCount: number;
 	truncation?: TruncationResult;
 	entryLimitReached?: number;
 }
@@ -57,11 +58,11 @@ export interface LsToolOptions {
 function formatLsCall(args: { path?: string; limit?: number } | undefined, theme: Theme, cwd: string): string {
 	const limit = args?.limit;
 	const pathDisplay = renderToolPath(str(args?.path), theme, cwd, { emptyFallback: "." });
-	let text = `${theme.fg("toolTitle", theme.bold("ls"))} ${pathDisplay}`;
+	let callArgs = pathDisplay;
 	if (limit !== undefined) {
-		text += theme.fg("toolOutput", ` (limit ${limit})`);
+		callArgs += theme.fg("toolOutput", `, limit ${limit}`);
 	}
-	return text;
+	return formatToolCall(theme, "List", callArgs);
 }
 
 function formatLsResult(
@@ -74,16 +75,13 @@ function formatLsResult(
 	showImages: boolean,
 ): string {
 	const output = getTextOutput(result, showImages).trim();
+	const lines = output ? output.split("\n") : [];
 	let text = "";
-	if (output) {
-		const lines = output.split("\n");
-		const maxLines = options.expanded ? lines.length : 20;
-		const displayLines = lines.slice(0, maxLines);
-		const remaining = lines.length - maxLines;
-		text += `\n${displayLines.map((line) => theme.fg("toolOutput", line)).join("\n")}`;
-		if (remaining > 0) {
-			text += `${theme.fg("muted", `\n... (${remaining} more lines,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
-		}
+	const pathCount = result.details?.pathCount ?? lines.length;
+	if (!options.expanded) {
+		text = formatToolSummary(theme, `Listed ${plural(pathCount, "path")}`, lines.length > 0);
+	} else if (lines.length > 0) {
+		text = lines.map((line) => theme.fg("toolOutput", line)).join("\n");
 	}
 
 	const entryLimit = result.details?.entryLimitReached;
@@ -92,7 +90,7 @@ function formatLsResult(
 		const warnings: string[] = [];
 		if (entryLimit) warnings.push(`${entryLimit} entries limit`);
 		if (truncation?.truncated) warnings.push(`${formatSize(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit`);
-		text += `\n${theme.fg("warning", `[Truncated: ${warnings.join(", ")}]`)}`;
+		text += `${text ? "\n" : ""}${theme.fg("warning", `[Truncated: ${warnings.join(", ")}]`)}`;
 	}
 	return text;
 }
@@ -178,7 +176,7 @@ export function createLsToolDefinition(
 						signal?.removeEventListener("abort", onAbort);
 
 						if (results.length === 0) {
-							resolve({ content: [{ type: "text", text: "(empty directory)" }], details: undefined });
+							resolve({ content: [{ type: "text", text: "(empty directory)" }], details: { pathCount: 0 } });
 							return;
 						}
 
@@ -186,7 +184,8 @@ export function createLsToolDefinition(
 						// Apply byte truncation. There is no separate line limit because entry count is already capped.
 						const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 						let output = truncation.content;
-						const details: LsToolDetails = {};
+						// Byte truncation can drop trailing entries, so count the rows that survived.
+						const details: LsToolDetails = { pathCount: truncation.outputLines };
 						// Build actionable notices for truncation and entry limits.
 						const notices: string[] = [];
 						if (entryLimitReached) {
@@ -203,7 +202,7 @@ export function createLsToolDefinition(
 
 						resolve({
 							content: [{ type: "text", text: output }],
-							details: Object.keys(details).length > 0 ? details : undefined,
+							details,
 						});
 					} catch (e: any) {
 						signal?.removeEventListener("abort", onAbort);

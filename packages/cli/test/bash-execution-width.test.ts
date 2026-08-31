@@ -78,3 +78,19 @@ describe("BashExecutionComponent width handling (#2569)", () => {
 		}
 	});
 });
+
+describe("BashExecutionComponent command echo", () => {
+	beforeAll(() => {
+		initTheme(undefined, false);
+	});
+
+	it("echoes the prefix the user typed, so !! survives colour stripping", () => {
+		const { stub } = createTuiStub(80);
+		const included = new BashExecutionComponent("pwd", stub).render(80).join("\n");
+		const excluded = new BashExecutionComponent("pwd", stub, true).render(80).join("\n");
+
+		expect(included).toContain("!pwd");
+		expect(included).not.toContain("!!pwd");
+		expect(excluded).toContain("!!pwd");
+	});
+});

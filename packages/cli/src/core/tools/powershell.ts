@@ -41,6 +41,7 @@ export function createLocalPowerShellOperations(): PowerShellOperations {
 const powershellToolConfig: ShellToolConfig = {
 	name: "powershell",
 	label: "powershell",
+	displayName: "PowerShell",
 	shellName: "PowerShell",
 	prompt: "PS>",
 	promptSnippet: powershellToolSystemPromptContribution.snippet,
