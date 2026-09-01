@@ -1,5 +1,27 @@
 # @knightcodeai/cli
 
+## 0.5.2
+
+### Patch Changes
+
+- 736f894: Read EXIF orientation from JPEGs whose first APP1 segment holds XMP instead of
+  EXIF. Such images previously rendered unrotated.
+- ec0f150: Clear a delivered steering or follow-up message that carried only images. The
+  entry previously stayed in the queue forever, leaving the pending count wrong
+  and the message re-queued.
+- 13586e1: Give each `/share` its own temp directory so two shares running at once no
+  longer overwrite each other's export or delete the other's file mid-upload.
+- a90f2eb: Keep skills in the system prompt when `read` is disabled but a shell tool is
+  available, and tell the model to load `SKILL.md` with `bash` (or PowerShell)
+  instead. Skills previously vanished entirely from bash-only tool setups.
+- d28f07d: Ignore Kitty image conversions that land after the tool image at that position
+  changed, so a streamed partial image no longer replaces the final result.
+- e0fb2d8: Add AgentRouter as a built-in provider. `AGENTROUTER_API_KEY` enables five
+  AgentRouter models, defaulting to `agentrouter/glm-5.3`, with Claude routed through
+  the Anthropic Messages endpoint and the rest through the OpenAI-compatible one.
+  Token prices come from AgentRouter's rate table rather than upstream list prices;
+  cache costs remain estimates because AgentRouter does not publish its cache ratios.
+
 ## 0.5.1
 
 ### Patch Changes
