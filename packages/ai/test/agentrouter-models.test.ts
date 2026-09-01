@@ -8,7 +8,7 @@ const OPENAI_MODEL_IDS = ["deepseek-v4-flash", "glm-5.3", "gpt-5.6-sol"] as cons
 const ALL_MODEL_IDS = [...ANTHROPIC_MODEL_IDS, ...OPENAI_MODEL_IDS] as const;
 
 // Pinned deliberately: AgentRouter publishes no cache ratios, so these are chosen
-// constants in generate-models.ts, not fetched values. See docs/agentrouterplan.md.
+// constants in generate-models.ts, not fetched values.
 const CACHE_READ_RATIO = 0.1;
 const CACHE_WRITE_RATIO = 1.25;
 
