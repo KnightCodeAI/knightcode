@@ -58,8 +58,8 @@
 		"mdHr": "gray",
 		"mdListBullet": "accent",
 
-		"toolDiffAdded": "green",
-		"toolDiffRemoved": "red",
+		"toolDiffAdded": "#57ab5a",
+		"toolDiffRemoved": "#e5534b",
 		"toolDiffContext": "gray",
 
 		"syntaxComment": "#6A9955",
