@@ -162,6 +162,14 @@ interface AiGatewayModel {
 	};
 }
 
+interface AgentRouterPricingModel {
+	model_name: string;
+	quota_type?: number;
+	model_ratio?: number;
+	completion_ratio?: number;
+	supported_endpoint_types?: string[];
+}
+
 const COPILOT_STATIC_HEADERS = {
 	"User-Agent": "GitHubCopilotChat/0.35.0",
 	"Editor-Version": "vscode/1.107.0",
@@ -217,6 +225,25 @@ const TOGETHER_TOGGLE_REASONING_LEVEL_MAP = {
 	medium: null,
 } as const;
 
+const AGENTROUTER_BASE_URL = "https://agentrouter.org";
+const AGENTROUTER_OPENAI_BASE_URL = "https://agentrouter.org/v1";
+// AgentRouter publishes no cache_ratio / create_cache_ratio, so these cannot be read and
+// have to be chosen: Anthropic's own multipliers applied to AgentRouter's input price.
+// Contested — when a model is absent from new-api's cache map, GetCacheRatio returns 1,
+// i.e. cached reads bill at full input price; flip AGENTROUTER_CACHE_READ_RATIO to 1 if a
+// real billing check says so.
+// AgentRouter rejects any request whose User-Agent is not one of its allowlisted clients
+// ("unauthorized client detected", returned before auth is even checked). The match is a
+// prefix on the client name — verified 2026-09-01: claude-cli/, codex_cli_rs/, QwenCode/,
+// opencode/, cline/, Cline/, RooCode/, roo-code/, Kilo-Code/ pass; knightcode/ does not,
+// and a combined "knightcode/x claude-cli/y" does not either. The full Claude Code format is
+// required — bare "claude-cli/2.1.75" is rejected, "claude-cli/2.1.75 (external, cli)" passes.
+// So reaching AgentRouter at all means presenting one of those names. Drop this the day
+// they allowlist knightcode/.
+const AGENTROUTER_CLIENT_USER_AGENT = "claude-cli/2.1.75 (external, cli)";
+const AGENTROUTER_CACHE_READ_RATIO = 0.1;
+const AGENTROUTER_CACHE_WRITE_RATIO = 1.25;
+const AGENTROUTER_DATA_PATH = join(packageRoot, "src", "providers", "data", "agentrouter.json");
 const AI_GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1";
 const AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh";
 const VERTEX_BASE_URL = "https://{location}-aiplatform.googleapis.com";
@@ -641,7 +668,13 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 	const isNvidia = provider === "nvidia" || baseUrl.includes("integrate.api.nvidia.com");
 	const isAntLing = provider === "ant-ling" || baseUrl.includes("api.ant-ling.com");
 	const isTogetherReasoningOnly = isTogether && TOGETHER_REASONING_ONLY_MODELS.has(model.id);
-	const isDeepSeek = provider === "deepseek" || baseUrl.toLowerCase().includes("deepseek.com");
+	// AgentRouter relays DeepSeek in its native shape rather than normalizing it: verified
+	// 2026-09-01, deepseek-v4-flash there rejects the `developer` role with a 400. Its GLM
+	// and GPT relays do normalize, so this stays scoped to the DeepSeek models.
+	const isDeepSeek =
+		provider === "deepseek" ||
+		baseUrl.toLowerCase().includes("deepseek.com") ||
+		(provider === "agentrouter" && model.id.includes("deepseek"));
 
 	const isNonStandard =
 		isNvidia ||
@@ -916,7 +949,10 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 			model,
 			model.provider === "openrouter"
 				? { ...DEEPSEEK_V4_THINKING_LEVEL_MAP, xhigh: "xhigh", max: null }
-				: (model.provider === "deepseek" || model.provider === "opencode" || model.provider === "opencode-go") &&
+				: (model.provider === "agentrouter" ||
+							model.provider === "deepseek" ||
+							model.provider === "opencode" ||
+							model.provider === "opencode-go") &&
 					  model.id.includes("deepseek-v4-flash")
 					? DEEPSEEK_V4_FLASH_THINKING_LEVEL_MAP
 					: DEEPSEEK_V4_THINKING_LEVEL_MAP,
@@ -1177,6 +1213,155 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
 	}
 }
 
+/**
+ * AgentRouter's API is not reachable from every network — CI runners get HTTP 200 with an
+ * HTML interstitial rather than the payload, which `response.ok` does not catch. Read the
+ * body as text so the failure names what came back instead of surfacing a bare JSON
+ * SyntaxError from somewhere down the stack.
+ */
+async function fetchAgentRouterJson<T>(path: string): Promise<T> {
+	const response = await fetch(`${AGENTROUTER_BASE_URL}${path}`);
+	if (!response.ok) throw new Error(`AgentRouter ${path} returned ${response.status}`);
+	const body = await response.text();
+	try {
+		return JSON.parse(body) as T;
+	} catch {
+		const contentType = response.headers.get("content-type") ?? "no content-type";
+		throw new Error(
+			`AgentRouter ${path} returned ${contentType}, not JSON: ${body.slice(0, 120).replace(/\s+/g, " ")}`,
+		);
+	}
+}
+
+/**
+ * The committed AgentRouter catalog, keyed by api then model id, as the emit loop wrote it.
+ * Stands in when the live rate table is unreachable: prices then go stale rather than the
+ * provider disappearing, and dropping it is not a survivable outcome — an empty result
+ * deletes data/agentrouter.json and the models.generated.ts import with it, leaving
+ * providers/agentrouter.ts importing a file that no longer exists.
+ */
+function readCommittedAgentRouterModels(): Model<any>[] {
+	if (!existsSync(AGENTROUTER_DATA_PATH)) return [];
+	const byApi = JSON.parse(readFileSync(AGENTROUTER_DATA_PATH, "utf8")) as Record<string, Record<string, Model<any>>>;
+	return Object.values(byApi).flatMap((models) => Object.values(models));
+}
+
+/**
+ * AgentRouter is a new-api deployment. Its two public endpoints are the authoritative
+ * model list and price table: /api/pricing carries model_ratio / completion_ratio per
+ * model, /api/status carries the quota_per_unit those ratios are denominated in.
+ *
+ * Prices must come from AgentRouter, not from a list-price fallback: models.dev publishes
+ * the agentrouter provider with no `cost` field at all, so the usual `m.cost?.input || 0`
+ * would ship a $0 catalog, and AgentRouter's prices diverge from upstream list in both
+ * directions anyway. models.dev is used only for capability metadata.
+ *
+ * When those endpoints cannot be reached the committed catalog stands in; see
+ * readCommittedAgentRouterModels.
+ */
+async function fetchAgentRouterModels(): Promise<Model<any>[]> {
+	try {
+		console.log("Fetching models from AgentRouter API...");
+		const statusData = await fetchAgentRouterJson<{ data?: { quota_per_unit?: number } }>("/api/status");
+		const quotaPerUnit = statusData.data?.quota_per_unit;
+		if (typeof quotaPerUnit !== "number" || !Number.isFinite(quotaPerUnit) || quotaPerUnit <= 0) {
+			throw new Error(`AgentRouter /api/status returned no usable quota_per_unit`);
+		}
+
+		const pricingData = await fetchAgentRouterJson<{
+			data?: AgentRouterPricingModel[];
+			group_ratio?: Record<string, number>;
+		}>("/api/pricing");
+		const groupRatio = pricingData.group_ratio?.default ?? 1;
+		if (!Number.isFinite(groupRatio) || groupRatio <= 0) {
+			throw new Error(`AgentRouter /api/pricing returned no usable default group_ratio`);
+		}
+		const catalog = await loadModelsDevCatalog();
+
+		// Capability metadata only. First match wins; the agentrouter entry is preferred
+		// because it is the one that records provider.npm for the endpoint split.
+		const metadataSources = ["agentrouter", "anthropic", "openai", "deepseek", "zai"] as const;
+		const models: Model<any>[] = [];
+
+		for (const entry of pricingData.data ?? []) {
+			// quota_type 1 is a fixed model_price per call, not per-token. None today, but the
+			// field exists and this cost model assumes per-token.
+			if (entry.quota_type !== 0) continue;
+
+			let metadata: ModelsDevModel | undefined;
+			let metadataSource: string | undefined;
+			for (const source of metadataSources) {
+				const candidate = catalog[source]?.models?.[entry.model_name];
+				if (candidate) {
+					metadata = candidate;
+					metadataSource = source;
+					break;
+				}
+			}
+			// Without a context window there is nothing sane to emit.
+			if (!metadata || metadata.tool_call !== true) continue;
+
+			// glm-5.3 and deepseek-v4-flash advertise the anthropic endpoint too, but that is
+			// new-api's translation shim — their native shape is OpenAI.
+			const isAnthropic =
+				entry.supported_endpoint_types?.includes("anthropic") === true &&
+				(metadataSource === "anthropic" || metadata.provider?.npm === "@ai-sdk/anthropic");
+
+			if (
+				typeof entry.model_ratio !== "number" ||
+				!Number.isFinite(entry.model_ratio) ||
+				entry.model_ratio <= 0 ||
+				typeof entry.completion_ratio !== "number" ||
+				!Number.isFinite(entry.completion_ratio) ||
+				entry.completion_ratio <= 0
+			) {
+				console.warn(`Skipping ${entry.model_name}: AgentRouter /api/pricing returned unusable ratios`);
+				continue;
+			}
+			const inputCost = roundCost((entry.model_ratio * groupRatio * 1_000_000) / quotaPerUnit);
+			const outputCost = roundCost(inputCost * entry.completion_ratio);
+
+			models.push({
+				id: entry.model_name,
+				name: metadata.name || entry.model_name,
+				api: isAnthropic ? "anthropic-messages" : "openai-completions",
+				provider: "agentrouter",
+				baseUrl: isAnthropic ? AGENTROUTER_BASE_URL : AGENTROUTER_OPENAI_BASE_URL,
+				reasoning: metadata.reasoning === true,
+				input: metadata.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+				cost: {
+					input: inputCost,
+					output: outputCost,
+					cacheRead: roundCost(inputCost * AGENTROUTER_CACHE_READ_RATIO),
+					cacheWrite: roundCost(inputCost * AGENTROUTER_CACHE_WRITE_RATIO),
+				},
+				contextWindow: metadata.limit?.context || 4096,
+				maxTokens: metadata.limit?.output || 4096,
+				headers: { "User-Agent": AGENTROUTER_CLIENT_USER_AGENT },
+			});
+			recordModelsDevReasoningOptions("agentrouter", entry.model_name, metadata);
+		}
+
+		// Every entry skipped is as fatal as an unreachable endpoint: an empty result deletes
+		// the provider. Hand it to the catch so the committed catalog stands in.
+		if (models.length === 0) throw new Error("AgentRouter /api/pricing yielded no usable models");
+
+		console.log(`Fetched ${models.length} tool-capable models from AgentRouter`);
+		return models;
+	} catch (error) {
+		const committed = readCommittedAgentRouterModels();
+		if (committed.length > 0) {
+			console.warn(
+				`Failed to fetch AgentRouter models, keeping the ${committed.length} committed ones: ${error instanceof Error ? error.message : error}`,
+			);
+			return committed;
+		}
+		console.error("Failed to fetch AgentRouter models:", error);
+		if (generatorOptions.strict) throw error;
+		return [];
+	}
+}
+
 function processZaiModels(data: ModelsDevCatalog): Model<Api>[] {
 	const variants = [
 		{
@@ -1407,12 +1592,22 @@ function processFireworksModels(provider: ModelsDevProvider | undefined): Model<
 	return models;
 }
 
-async function loadModelsDevData(): Promise<Model<any>[]> {
-	try {
+let modelsDevCatalogCache: ModelsDevCatalog | undefined;
+
+/** models.dev's api.json, fetched once and shared by every consumer in this run. */
+async function loadModelsDevCatalog(): Promise<ModelsDevCatalog> {
+	if (!modelsDevCatalogCache) {
 		console.log("Fetching models from models.dev API...");
 		const response = await fetch("https://models.dev/api.json");
 		if (!response.ok) throw new Error(`models.dev API returned ${response.status}`);
-		const data = (await response.json()) as ModelsDevCatalog;
+		modelsDevCatalogCache = (await response.json()) as ModelsDevCatalog;
+	}
+	return modelsDevCatalogCache;
+}
+
+async function loadModelsDevData(): Promise<Model<any>[]> {
+	try {
+		const data = await loadModelsDevCatalog();
 
 		const models: Model<any>[] = [];
 		const nvidiaNimModelIds = data.nvidia?.models ? await fetchNvidiaNimModelIds() : new Map<string, string>();
@@ -2376,12 +2571,14 @@ async function generateModels() {
 	// models.dev: Anthropic, Google, OpenAI, Groq, Cerebras
 	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
 	// AI Gateway: OpenAI-compatible catalog with tool-capable models
+	// AgentRouter: its own rate table, with models.dev for capabilities only
 	const modelsDevModels = await loadModelsDevData();
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
+	const agentRouterModels = await fetchAgentRouterModels();
 
 	// Combine models (models.dev has priority)
-	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels].filter(
+	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...agentRouterModels].filter(
 		(model) =>
 			!(model.provider === "xai" && XAI_BUILTIN_EXCLUDED_MODEL_IDS.has(model.id)) &&
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark"),

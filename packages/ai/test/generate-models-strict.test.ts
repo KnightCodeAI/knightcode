@@ -82,3 +82,57 @@ describe("strict model generation", () => {
 		expect(generatedPaths.map((path) => readFileSync(join(packageRoot, path), "utf8"))).toEqual(sourceBefore);
 	});
 });
+
+describe("AgentRouter catalog fallback", () => {
+	it("keeps the committed models when every live entry has unusable ratios", () => {
+		const fixtureRoot = mkdtempSync(join(tmpdir(), "knightcode-generate-models-"));
+		temporaryRoots.push(fixtureRoot);
+		const isolatedPackageRoot = join(fixtureRoot, "package");
+		mkdirSync(isolatedPackageRoot);
+		for (const entry of ["package.json", "scripts", "src"]) {
+			cpSync(join(packageRoot, entry), join(isolatedPackageRoot, entry), { recursive: true });
+		}
+
+		// A live rate table whose ratios are all unusable, so every entry is skipped and the
+		// fetch yields nothing. Dropping the provider is not survivable — the committed
+		// catalog has to stand in, exactly as it does for an unreachable endpoint.
+		const responses = {
+			"https://models.dev/api.json": {
+				agentrouter: {
+					models: {
+						"glm-5.3": { id: "glm-5.3", name: "GLM 5.3", tool_call: true, limit: { context: 200000, output: 8192 } },
+					},
+				},
+			},
+			"https://openrouter.ai/api/v1/models": { data: [] },
+			"https://ai-gateway.vercel.sh/v1/models": { data: [] },
+			"https://agentrouter.org/api/status": { data: { quota_per_unit: 500000 } },
+			"https://agentrouter.org/api/pricing": {
+				group_ratio: { default: 1 },
+				data: [{ model_name: "glm-5.3", quota_type: 0, model_ratio: 0, completion_ratio: 1 }],
+			},
+		};
+		const preloadPath = join(fixtureRoot, "mock-fetch.mjs");
+		writeFileSync(
+			preloadPath,
+			`const responses = ${JSON.stringify(responses)};\n` +
+				`globalThis.fetch = async (input) => {\n` +
+				`  const body = responses[String(input)];\n` +
+				`  if (body === undefined) throw new Error(\`Unexpected fetch: \${String(input)}\`);\n` +
+				`  return new Response(JSON.stringify(body), { status: 200 });\n` +
+				`};\n`,
+		);
+
+		const catalogPath = "src/providers/data/agentrouter.json";
+		const committedCatalog = readFileSync(join(isolatedPackageRoot, catalogPath), "utf8");
+
+		const result = spawnSync(process.execPath, ["--import", pathToFileURL(preloadPath).href, "scripts/generate-models.ts"], {
+			cwd: isolatedPackageRoot,
+			encoding: "utf8",
+			timeout: 60_000,
+		});
+
+		expect(`${result.stdout}\n${result.stderr}`).toContain("Failed to fetch AgentRouter models, keeping the");
+		expect(readFileSync(join(isolatedPackageRoot, catalogPath), "utf8")).toBe(committedCatalog);
+	});
+});
