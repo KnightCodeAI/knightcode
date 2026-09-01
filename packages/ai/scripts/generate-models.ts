@@ -1342,6 +1342,10 @@ async function fetchAgentRouterModels(): Promise<Model<any>[]> {
 			recordModelsDevReasoningOptions("agentrouter", entry.model_name, metadata);
 		}
 
+		// Every entry skipped is as fatal as an unreachable endpoint: an empty result deletes
+		// the provider. Hand it to the catch so the committed catalog stands in.
+		if (models.length === 0) throw new Error("AgentRouter /api/pricing yielded no usable models");
+
 		console.log(`Fetched ${models.length} tool-capable models from AgentRouter`);
 		return models;
 	} catch (error) {
