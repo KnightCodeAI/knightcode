@@ -243,6 +243,7 @@ const AGENTROUTER_OPENAI_BASE_URL = "https://agentrouter.org/v1";
 const AGENTROUTER_CLIENT_USER_AGENT = "claude-cli/2.1.75 (external, cli)";
 const AGENTROUTER_CACHE_READ_RATIO = 0.1;
 const AGENTROUTER_CACHE_WRITE_RATIO = 1.25;
+const AGENTROUTER_DATA_PATH = join(packageRoot, "src", "providers", "data", "agentrouter.json");
 const AI_GATEWAY_MODELS_URL = "https://ai-gateway.vercel.sh/v1";
 const AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh";
 const VERTEX_BASE_URL = "https://{location}-aiplatform.googleapis.com";
@@ -1213,6 +1214,39 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
 }
 
 /**
+ * AgentRouter's API is not reachable from every network — CI runners get HTTP 200 with an
+ * HTML interstitial rather than the payload, which `response.ok` does not catch. Read the
+ * body as text so the failure names what came back instead of surfacing a bare JSON
+ * SyntaxError from somewhere down the stack.
+ */
+async function fetchAgentRouterJson<T>(path: string): Promise<T> {
+	const response = await fetch(`${AGENTROUTER_BASE_URL}${path}`);
+	if (!response.ok) throw new Error(`AgentRouter ${path} returned ${response.status}`);
+	const body = await response.text();
+	try {
+		return JSON.parse(body) as T;
+	} catch {
+		const contentType = response.headers.get("content-type") ?? "no content-type";
+		throw new Error(
+			`AgentRouter ${path} returned ${contentType}, not JSON: ${body.slice(0, 120).replace(/\s+/g, " ")}`,
+		);
+	}
+}
+
+/**
+ * The committed AgentRouter catalog, keyed by api then model id, as the emit loop wrote it.
+ * Stands in when the live rate table is unreachable: prices then go stale rather than the
+ * provider disappearing, and dropping it is not a survivable outcome — an empty result
+ * deletes data/agentrouter.json and the models.generated.ts import with it, leaving
+ * providers/agentrouter.ts importing a file that no longer exists.
+ */
+function readCommittedAgentRouterModels(): Model<any>[] {
+	if (!existsSync(AGENTROUTER_DATA_PATH)) return [];
+	const byApi = JSON.parse(readFileSync(AGENTROUTER_DATA_PATH, "utf8")) as Record<string, Record<string, Model<any>>>;
+	return Object.values(byApi).flatMap((models) => Object.values(models));
+}
+
+/**
  * AgentRouter is a new-api deployment. Its two public endpoints are the authoritative
  * model list and price table: /api/pricing carries model_ratio / completion_ratio per
  * model, /api/status carries the quota_per_unit those ratios are denominated in.
@@ -1221,25 +1255,25 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
  * the agentrouter provider with no `cost` field at all, so the usual `m.cost?.input || 0`
  * would ship a $0 catalog, and AgentRouter's prices diverge from upstream list in both
  * directions anyway. models.dev is used only for capability metadata.
+ *
+ * When those endpoints cannot be reached the committed catalog stands in; see
+ * readCommittedAgentRouterModels.
  */
-async function fetchAgentRouterModels(catalog: ModelsDevCatalog): Promise<Model<any>[]> {
+async function fetchAgentRouterModels(): Promise<Model<any>[]> {
 	try {
 		console.log("Fetching models from AgentRouter API...");
-		const statusResponse = await fetch(`${AGENTROUTER_BASE_URL}/api/status`);
-		if (!statusResponse.ok) throw new Error(`AgentRouter API returned ${statusResponse.status}`);
-		const statusData = (await statusResponse.json()) as { data?: { quota_per_unit?: number } };
+		const statusData = await fetchAgentRouterJson<{ data?: { quota_per_unit?: number } }>("/api/status");
 		const quotaPerUnit = statusData.data?.quota_per_unit;
 		if (typeof quotaPerUnit !== "number" || !Number.isFinite(quotaPerUnit) || quotaPerUnit <= 0) {
 			throw new Error(`AgentRouter /api/status returned no usable quota_per_unit`);
 		}
 
-		const pricingResponse = await fetch(`${AGENTROUTER_BASE_URL}/api/pricing`);
-		if (!pricingResponse.ok) throw new Error(`AgentRouter API returned ${pricingResponse.status}`);
-		const pricingData = (await pricingResponse.json()) as {
+		const pricingData = await fetchAgentRouterJson<{
 			data?: AgentRouterPricingModel[];
 			group_ratio?: Record<string, number>;
-		};
+		}>("/api/pricing");
 		const groupRatio = pricingData.group_ratio?.default ?? 1;
+		const catalog = await loadModelsDevCatalog();
 
 		// Capability metadata only. First match wins; the agentrouter entry is preferred
 		// because it is the one that records provider.npm for the endpoint split.
@@ -1297,6 +1331,13 @@ async function fetchAgentRouterModels(catalog: ModelsDevCatalog): Promise<Model<
 		console.log(`Fetched ${models.length} tool-capable models from AgentRouter`);
 		return models;
 	} catch (error) {
+		const committed = readCommittedAgentRouterModels();
+		if (committed.length > 0) {
+			console.warn(
+				`Failed to fetch AgentRouter models, keeping the ${committed.length} committed ones: ${error instanceof Error ? error.message : error}`,
+			);
+			return committed;
+		}
 		console.error("Failed to fetch AgentRouter models:", error);
 		if (generatorOptions.strict) throw error;
 		return [];
@@ -1533,12 +1574,22 @@ function processFireworksModels(provider: ModelsDevProvider | undefined): Model<
 	return models;
 }
 
-async function loadModelsDevData(): Promise<Model<any>[]> {
-	try {
+let modelsDevCatalogCache: ModelsDevCatalog | undefined;
+
+/** models.dev's api.json, fetched once and shared by every consumer in this run. */
+async function loadModelsDevCatalog(): Promise<ModelsDevCatalog> {
+	if (!modelsDevCatalogCache) {
 		console.log("Fetching models from models.dev API...");
 		const response = await fetch("https://models.dev/api.json");
 		if (!response.ok) throw new Error(`models.dev API returned ${response.status}`);
-		const data = (await response.json()) as ModelsDevCatalog;
+		modelsDevCatalogCache = (await response.json()) as ModelsDevCatalog;
+	}
+	return modelsDevCatalogCache;
+}
+
+async function loadModelsDevData(): Promise<Model<any>[]> {
+	try {
+		const data = await loadModelsDevCatalog();
 
 		const models: Model<any>[] = [];
 		const nvidiaNimModelIds = data.nvidia?.models ? await fetchNvidiaNimModelIds() : new Map<string, string>();
@@ -2489,8 +2540,6 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 		}
 
 		console.log(`Loaded ${models.length} tool-capable models from models.dev`);
-		// AgentRouter prices come from its own endpoints; models.dev supplies only capabilities.
-		models.push(...(await fetchAgentRouterModels(data)));
 		return models;
 	} catch (error) {
 		console.error("Failed to load models.dev data:", error);
@@ -2504,12 +2553,14 @@ async function generateModels() {
 	// models.dev: Anthropic, Google, OpenAI, Groq, Cerebras
 	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
 	// AI Gateway: OpenAI-compatible catalog with tool-capable models
+	// AgentRouter: its own rate table, with models.dev for capabilities only
 	const modelsDevModels = await loadModelsDevData();
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
+	const agentRouterModels = await fetchAgentRouterModels();
 
 	// Combine models (models.dev has priority)
-	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels].filter(
+	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...agentRouterModels].filter(
 		(model) =>
 			!(model.provider === "xai" && XAI_BUILTIN_EXCLUDED_MODEL_IDS.has(model.id)) &&
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark"),

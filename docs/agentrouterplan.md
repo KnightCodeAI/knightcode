@@ -69,6 +69,11 @@ Two things this plan did not know, both settled live on 2026-09-01 and recorded 
   before auth ("unauthorized client detected"); `knightcode/` is not on the list. See
   `AGENTROUTER_CLIENT_USER_AGENT` in the generator.
 
+- **AgentRouter is not reachable from CI.** GitHub runner IPs get HTTP 200 with an HTML
+  interstitial instead of the API payload, so the generator falls back to the committed
+  `data/agentrouter.json` rather than failing the catalog publish. Prices refresh whenever a
+  maintainer regenerates from a reachable network.
+
 "Open risk" below was settled the same day: the GLM and GPT relays do normalize to standard
 OpenAI shape, the DeepSeek one does not, so `isDeepSeek` was extended for that model only.
 
