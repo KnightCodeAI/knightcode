@@ -2,8 +2,8 @@
 "@knightcodeai/cli": patch
 ---
 
-Add AgentRouter as a built-in provider. `AGENTROUTER_API_KEY` now selects
-`agentrouter/claude-opus-5` and the four other models AgentRouter publishes, with
-Claude routed through the Anthropic Messages endpoint and the rest through the
-OpenAI-compatible one. Prices come from AgentRouter's own rate table rather than
-upstream list prices, so `/cost` reports what the gateway actually bills.
+Add AgentRouter as a built-in provider. `AGENTROUTER_API_KEY` enables five
+AgentRouter models, defaulting to `agentrouter/glm-5.3`, with Claude routed through
+the Anthropic Messages endpoint and the rest through the OpenAI-compatible one.
+Token prices come from AgentRouter's rate table rather than upstream list prices;
+cache costs remain estimates because AgentRouter does not publish its cache ratios.

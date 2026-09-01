@@ -25,8 +25,9 @@ plus `group_ratio: { default: 1 }`. No `cache_ratio` or `create_cache_ratio` on 
 
 **`GET https://agentrouter.org/api/status`** — `quota_per_unit: 500000`.
 
-Outcome: `AGENTROUTER_API_KEY=... knightcode --model agentrouter/claude-opus-5` works,
-`/login` lists AgentRouter, `/cost` reports real spend, and the catalog stays regenerable.
+Outcome: `AGENTROUTER_API_KEY=... knightcode --model agentrouter/glm-5.3` works,
+`/login` lists AgentRouter, `/cost` uses AgentRouter's token rates (with estimated cache
+ratios), and the catalog stays regenerable.
 
 ## Pricing model, verified against new-api source
 
@@ -91,7 +92,8 @@ OpenAI shape, the DeepSeek one does not, so `isDeepSeek` was extended for that m
   three of them under `agentrouter`; the other two get capability metadata (name, context
   window, reasoning flags, modalities) from the canonical upstream entry with the same id.
   Cost never comes from the fallback.
-- **Default model: `claude-opus-5`.**
+- **Default model: `glm-5.3`.** The Opus budget pool is drained; see the divergence note
+  above.
 - **Cache costs: `cacheRead = 0.1x input`, `cacheWrite = 1.25x input`** — Anthropic's own
   multipliers applied to AgentRouter's input price. See the next section; this is a
   deliberate choice made against contrary evidence, not an unexamined default.
@@ -205,7 +207,7 @@ export function agentrouterProvider(): Provider<"anthropic-messages" | "openai-c
 - `packages/ai/src/providers/all.ts` — `import { agentrouterProvider } from "./agentrouter.ts";`
   and add `agentrouterProvider(),` to `builtinProviders()`. Both lists are alphabetical.
 - `packages/ai/src/env-api-keys.ts` — `agentrouter: "AGENTROUTER_API_KEY",` in `envMap`.
-- `packages/cli/src/core/model-resolver.ts` — `agentrouter: "claude-opus-5",` in
+- `packages/cli/src/core/model-resolver.ts` — `agentrouter: "glm-5.3",` in
   `defaultModelPerProvider`. That is `Record<KnownProvider, string>`; omitting it fails
   `check-types`.
 

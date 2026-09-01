@@ -1273,6 +1273,9 @@ async function fetchAgentRouterModels(): Promise<Model<any>[]> {
 			group_ratio?: Record<string, number>;
 		}>("/api/pricing");
 		const groupRatio = pricingData.group_ratio?.default ?? 1;
+		if (!Number.isFinite(groupRatio) || groupRatio <= 0) {
+			throw new Error(`AgentRouter /api/pricing returned no usable default group_ratio`);
+		}
 		const catalog = await loadModelsDevCatalog();
 
 		// Capability metadata only. First match wins; the agentrouter entry is preferred
@@ -1304,8 +1307,18 @@ async function fetchAgentRouterModels(): Promise<Model<any>[]> {
 				entry.supported_endpoint_types?.includes("anthropic") === true &&
 				(metadataSource === "anthropic" || metadata.provider?.npm === "@ai-sdk/anthropic");
 
-			const inputCost = roundCost(((entry.model_ratio ?? 0) * groupRatio * 1_000_000) / quotaPerUnit);
-			const outputCost = roundCost(inputCost * (entry.completion_ratio ?? 1));
+			if (
+				typeof entry.model_ratio !== "number" ||
+				!Number.isFinite(entry.model_ratio) ||
+				entry.model_ratio <= 0 ||
+				typeof entry.completion_ratio !== "number" ||
+				!Number.isFinite(entry.completion_ratio) ||
+				entry.completion_ratio <= 0
+			) {
+				throw new Error(`AgentRouter /api/pricing returned unusable ratios for ${entry.model_name}`);
+			}
+			const inputCost = roundCost((entry.model_ratio * groupRatio * 1_000_000) / quotaPerUnit);
+			const outputCost = roundCost(inputCost * entry.completion_ratio);
 
 			models.push({
 				id: entry.model_name,
