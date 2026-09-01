@@ -344,6 +344,17 @@ function loadSkillFromFile(
 	};
 }
 
+/** Tools that can load a skill's file, in the order the prompt prefers them. */
+export const SKILL_FILE_READ_TOOLS = ["read", "bash", "powershell"] as const;
+
+export type SkillFileReadTool = (typeof SKILL_FILE_READ_TOOLS)[number];
+
+const SKILL_FILE_READ_INSTRUCTIONS: Record<SkillFileReadTool, string> = {
+	read: "Use the read tool to load a skill's file when the task matches its description.",
+	bash: "Use bash to load a skill's file when the task matches its description.",
+	powershell: "Use PowerShell to load a skill's file when the task matches its description.",
+};
+
 /**
  * Format skills for inclusion in a system prompt.
  * Uses XML format per Agent Skills standard.
@@ -352,7 +363,7 @@ function loadSkillFromFile(
  * Skills with disableModelInvocation=true are excluded from the prompt
  * (they can only be invoked explicitly via /skill:name commands).
  */
-export function formatSkillsForPrompt(skills: Skill[]): string {
+export function formatSkillsForPrompt(skills: Skill[], fileReadTool: SkillFileReadTool = "read"): string {
 	const visibleSkills = skills.filter((s) => !s.disableModelInvocation);
 
 	if (visibleSkills.length === 0) {
@@ -361,7 +372,7 @@ export function formatSkillsForPrompt(skills: Skill[]): string {
 
 	const lines = [
 		"\n\nThe following skills provide specialized instructions for specific tasks.",
-		"Use the read tool to load a skill's file when the task matches its description.",
+		SKILL_FILE_READ_INSTRUCTIONS[fileReadTool],
 		"When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
 		"",
 		"<available_skills>",
