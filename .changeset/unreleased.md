@@ -1,5 +1,5 @@
 ---
-"@knightcodeai/cli": patch
+"@knightcodeai/cli": minor
 ---
 
 Add AgentRouter as a built-in provider. `AGENTROUTER_API_KEY` enables five

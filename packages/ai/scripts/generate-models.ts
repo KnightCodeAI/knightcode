@@ -230,8 +230,8 @@ const AGENTROUTER_OPENAI_BASE_URL = "https://agentrouter.org/v1";
 // AgentRouter publishes no cache_ratio / create_cache_ratio, so these cannot be read and
 // have to be chosen: Anthropic's own multipliers applied to AgentRouter's input price.
 // Contested — when a model is absent from new-api's cache map, GetCacheRatio returns 1,
-// i.e. cached reads bill at full input price. See docs/agentrouterplan.md
-// "Cache-cost decision"; flip AGENTROUTER_CACHE_READ_RATIO to 1 if the console log says so.
+// i.e. cached reads bill at full input price; flip AGENTROUTER_CACHE_READ_RATIO to 1 if a
+// real billing check says so.
 // AgentRouter rejects any request whose User-Agent is not one of its allowlisted clients
 // ("unauthorized client detected", returned before auth is even checked). The match is a
 // prefix on the client name — verified 2026-09-01: claude-cli/, codex_cli_rs/, QwenCode/,
@@ -1315,7 +1315,8 @@ async function fetchAgentRouterModels(): Promise<Model<any>[]> {
 				!Number.isFinite(entry.completion_ratio) ||
 				entry.completion_ratio <= 0
 			) {
-				throw new Error(`AgentRouter /api/pricing returned unusable ratios for ${entry.model_name}`);
+				console.warn(`Skipping ${entry.model_name}: AgentRouter /api/pricing returned unusable ratios`);
+				continue;
 			}
 			const inputCost = roundCost((entry.model_ratio * groupRatio * 1_000_000) / quotaPerUnit);
 			const outputCost = roundCost(inputCost * entry.completion_ratio);
