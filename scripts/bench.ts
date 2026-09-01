@@ -14,10 +14,12 @@ import process from "node:process";
 
 const ROOT = join(import.meta.dir, "..");
 const AGENT = "bench.knightcode_agent:KnightCode";
-// Pinned: an unpinned ref resolves to the `latest` tag, which moves when they
-// publish. 4.0.0 is what `latest` points at today — 66 tasks, content hash
-// 39d9f44b… Bump deliberately so two runs stay comparable.
-const DATASET = "terminal-bench/terminal-bench@4.0.0";
+// Terminal-Bench 2.1 — 89 tasks, the dataset the tbench.ai 2.1 leaderboard runs
+// (26 of 2.0's tasks fixed for bugs, timeouts and reward hacking). The hub only
+// tags it `latest`, which moves on republish, so pin the revision instead: @6 is
+// what `latest` points at today, content hash 7d7bdc1c… Bump deliberately so two
+// runs stay comparable. Terminal-Bench 4: -d terminal-bench/terminal-bench@4.0.0
+const DATASET = "terminal-bench/terminal-bench-2-1@6";
 // In KnightCode's own catalog (providers/data/openrouter.json), so the agent runs
 // on the built-in entry — 1M context, openrouter thinking format, real cost data.
 const MODEL = "openrouter/deepseek/deepseek-v4-flash-0731";

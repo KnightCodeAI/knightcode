@@ -7,7 +7,7 @@ last published to npm.
 Use `bun run bench` — it builds the binary, sets PYTHONPATH, and forwards flags to
 `harbor run`. To call harbor directly, repo root must be importable:
 
-    PYTHONPATH=. harbor run -d terminal-bench/terminal-bench \
+    PYTHONPATH=. harbor run -d terminal-bench/terminal-bench-2-1@6 \
       -a bench.knightcode_agent:KnightCode \
       -m openrouter/deepseek/deepseek-v4-flash-0731 -n 4
 
