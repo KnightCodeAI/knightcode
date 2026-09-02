@@ -77,9 +77,9 @@ describe("streamProxy", () => {
 		});
 	});
 
-	it("processes a terminal event that is not newline-terminated", async () => {
+	it("processes terminal metadata when the event is not newline-terminated", async () => {
 		const start = `data: ${JSON.stringify({ type: "start" })}\n\n`;
-		const done = `data: ${JSON.stringify({ type: "done", reason: "stop", usage })}`;
+		const done = `data: ${JSON.stringify({ type: "done", reason: "stop", usage, providerThinkingLevel: "high" })}`;
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => new Response(start + done, { status: 200 })),
