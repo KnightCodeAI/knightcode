@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun --env-file=.env run --watch packages/cli/src/bun/cli.ts",
     "start": "bun --env-file=.env run packages/cli/src/bun/cli.ts",
+    "changeset": "bun run scripts/new-changeset.ts",
     "check-types": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx}\"",

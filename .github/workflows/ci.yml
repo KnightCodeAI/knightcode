@@ -44,6 +44,10 @@ jobs:
       - name: Check types
         run: bun run check-types
 
+      # Release tooling, exercised only during a release otherwise.
+      - name: Check changelog regrouping
+        run: bun run scripts/changelog-sections.ts
+
       - name: Test
         run: bun run test
 
