@@ -276,6 +276,10 @@ describe("ToolExecutionComponent parity", () => {
 		}
 		expect(lastOutputIndex).toBeGreaterThanOrEqual(0);
 		expect(hintIndex).toBeGreaterThan(lastOutputIndex);
+
+		// The ellipsis carries the command's colour rather than the terminal default:
+		// truncateToWidth resets before appending whatever ellipsis it was handed.
+		expect(component.render(100)[headerIndex]).toContain(theme.fg("toolOutput", "…"));
 	});
 
 	test("shell tool call headers never overflow the width, invalid args and narrow terminals included", () => {

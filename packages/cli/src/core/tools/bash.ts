@@ -249,11 +249,14 @@ function formatShellCall(
 	// A fragment of `(timeout 120s)` tells the reader nothing, so the suffix is all or
 	// nothing: it survives only while the command still has a column left to live in.
 	const suffix = framing + visibleWidth(timeoutSuffix) < width ? timeoutSuffix : "";
-	const argText =
-		command === null ? invalidArgText(theme) : theme.fg("toolOutput", (command || "...").replace(/\s+/g, " "));
-	// Styling before truncating keeps both branches on one path: at a zero budget each
-	// yields "", which formatToolCall renders as a bare title rather than empty parens.
-	const argSummary = truncateToWidth(argText, Math.max(width - framing - visibleWidth(suffix), 0), "…");
+	const invalid = command === null;
+	const argText = invalid ? invalidArgText(theme) : theme.fg("toolOutput", (command || "...").replace(/\s+/g, " "));
+	// truncateToWidth resets the colour before appending its ellipsis, so hand it one
+	// already dressed in the branch's own colour rather than the terminal default.
+	// Styling before truncating also keeps both branches on one path: at a zero budget
+	// each yields "", which formatToolCall renders as a bare title, not empty parens.
+	const argEllipsis = theme.fg(invalid ? "error" : "toolOutput", "…");
+	const argSummary = truncateToWidth(argText, Math.max(width - framing - visibleWidth(suffix), 0), argEllipsis);
 	// The name and parens can still outgrow a very narrow terminal, so clamp the
 	// assembled header too - render() emits this line as-is, nothing rewraps it.
 	return truncateToWidth(formatToolCall(theme, displayName, argSummary) + suffix, width, "…");
