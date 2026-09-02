@@ -7,8 +7,8 @@ import {
 	type AgentSessionServices,
 	type CreateAgentSessionRuntimeFactory,
 	createAgentSessionFromServices,
-} from "../../../src/core/agent-session-runtime.ts";
-import { createHarness } from "../harness.ts";
+} from "../../src/core/agent-session-runtime.ts";
+import { createHarness } from "./harness.ts";
 
 describe("in-memory fork during an active tool turn", () => {
 	const cleanups: Array<() => Promise<void> | void> = [];
@@ -19,7 +19,8 @@ describe("in-memory fork during an active tool turn", () => {
 		}
 	});
 
-	it("does not append the aborted turn to the replacement session", async () => {
+	/** Build a runtime over an unpersisted session whose only tool blocks until aborted. */
+	async function createForkRuntime() {
 		let markToolStarted = () => {};
 		const toolStarted = new Promise<void>((resolve) => {
 			markToolStarted = resolve;
@@ -66,6 +67,11 @@ describe("in-memory fork during an active tool turn", () => {
 			}
 			harness.cleanup();
 		});
+		return { harness, runtime, toolStarted };
+	}
+
+	it("does not append the aborted turn to the replacement session", async () => {
+		const { harness, runtime, toolStarted } = await createForkRuntime();
 
 		harness.setResponses([
 			fauxAssistantMessage("first response"),
@@ -96,5 +102,41 @@ describe("in-memory fork during an active tool turn", () => {
 		await runtime.session.prompt("next prompt");
 
 		expect(capturedRoles).toEqual(["user"]);
+	});
+
+	it("keeps a branched replacement session to the branch path", async () => {
+		const { harness, runtime, toolStarted } = await createForkRuntime();
+
+		harness.setResponses([
+			fauxAssistantMessage("first response"),
+			fauxAssistantMessage(fauxToolCall("block", {}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("unused after abort"),
+		]);
+		await runtime.session.prompt("first prompt");
+		const firstUserEntryId = runtime.session.getUserMessagesForForking()[0]?.entryId;
+		expect(firstUserEntryId).toBeDefined();
+
+		const outgoingPrompt = runtime.session.prompt("start blocking tool");
+		await toolStarted;
+		// `position: "at"` keeps the selected entry, so the fork takes the
+		// createBranchedSession path rather than starting an empty session.
+		const forkResult = await runtime.fork(firstUserEntryId!, { position: "at" });
+		await outgoingPrompt;
+		await runtime.session.bindExtensions({});
+
+		expect(forkResult).toEqual({ cancelled: false });
+		expect(runtime.session.messages.map((message) => message.role)).toEqual(["user"]);
+		expect(runtime.session.messages.some((message) => message.role === "toolResult")).toBe(false);
+
+		let capturedRoles: string[] = [];
+		harness.setResponses([
+			(context) => {
+				capturedRoles = context.messages.map((message) => message.role);
+				return fauxAssistantMessage("next response");
+			},
+		]);
+		await runtime.session.prompt("next prompt");
+
+		expect(capturedRoles).toEqual(["user", "user"]);
 	});
 });
