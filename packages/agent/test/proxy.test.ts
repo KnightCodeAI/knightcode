@@ -99,6 +99,7 @@ describe("streamProxy", () => {
 
 		expect(events.map((event) => event.type)).toEqual(["start", "done"]);
 		expect(result.stopReason).toBe("stop");
+		expect(result.providerThinkingLevel).toBe("high");
 	});
 
 	it("emits an error instead of hanging when the stream ends without a terminal event", async () => {

@@ -167,6 +167,9 @@ function modelFromJson(
 
 function findModelDefaults(models: readonly Model<Api>[], modelId: string, api?: Api): Model<Api> | undefined {
 	return (
+		// A same-id model on another api would hand over that api's baseUrl, which is wrong now
+		// that one provider can serve two apis under overlapping model ids.
+		(api ? models.find((model) => model.id === modelId && model.api === api) : undefined) ??
 		models.find((model) => model.id === modelId) ??
 		(api ? models.find((model) => model.api === api) : undefined) ??
 		models.find((model) => model.api === "openai-completions") ??

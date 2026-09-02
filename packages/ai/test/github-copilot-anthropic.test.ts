@@ -114,6 +114,7 @@ describe("Copilot Claude via Anthropic Messages", () => {
 		const model = getModel("github-copilot", "claude-sonnet-4.6");
 		const s = streamAnthropic(model, context, {
 			apiKey: "tid_copilot_session_test_token",
+			thinkingEnabled: true,
 			interleavedThinking: true,
 		});
 		for await (const event of s) {

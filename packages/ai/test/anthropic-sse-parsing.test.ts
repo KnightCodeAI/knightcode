@@ -153,7 +153,7 @@ describe("Anthropic raw SSE parsing", () => {
 		expect(streaming).toBe(true);
 	});
 
-	it("omits the interleaved-thinking beta when thinking is disabled", async () => {
+	it("adds the interleaved-thinking beta only while thinking is enabled", async () => {
 		let betaFeatures: string[] | undefined;
 		const client = {
 			beta: {
@@ -165,13 +165,15 @@ describe("Anthropic raw SSE parsing", () => {
 				},
 			},
 		} as unknown as Anthropic;
+		// Reasoning and not force-adaptive, so this model is one that does carry the beta.
+		// A non-reasoning model omits it under every setting and asserts nothing.
+		const model = getModel("openrouter", "anthropic/claude-sonnet-4");
+		const context = { messages: [{ role: "user" as const, content: "Hello", timestamp: 1 }] };
 
-		await streamAnthropic(
-			getModel("openrouter", "anthropic/claude-3-haiku"),
-			{ messages: [{ role: "user", content: "Hello", timestamp: 1 }] },
-			{ client, thinkingEnabled: false },
-		).result();
+		await streamAnthropic(model, context, { client, thinkingEnabled: true }).result();
+		expect(betaFeatures ?? []).toContain("interleaved-thinking-2025-05-14");
 
+		await streamAnthropic(model, context, { client, thinkingEnabled: false }).result();
 		expect(betaFeatures ?? []).not.toContain("interleaved-thinking-2025-05-14");
 	});
 
