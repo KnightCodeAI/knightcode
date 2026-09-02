@@ -322,6 +322,49 @@ describe("Mistral HTTP transport", () => {
 		expect(message.usage).toMatchObject({ input: 7, output: 4, cacheRead: 3, cacheWrite: 0, totalTokens: 14 });
 	});
 
+	it("merges tool call name fragments split across chunks", async () => {
+		const model = getModel("mistral", "mistral-large-latest");
+		const context: Context = {
+			messages: [{ role: "user", content: "hello", timestamp: 1 }],
+		};
+		const events = [
+			{
+				id: "response-1",
+				model: model.id,
+				choices: [
+					{
+						index: 0,
+						finish_reason: null,
+						delta: {
+							tool_calls: [{ id: "abc123456", index: 0, function: { name: "look", arguments: "" } }],
+						},
+					},
+				],
+			},
+			{
+				id: "response-1",
+				model: model.id,
+				choices: [
+					{
+						index: 0,
+						finish_reason: "tool_calls",
+						delta: {
+							tool_calls: [{ index: 0, function: { name: "up", arguments: '{"query":"knightcode"}' } }],
+						},
+					},
+				],
+				usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+			},
+		];
+		const fetch: FetchFunction = async () => createSseResponse(events);
+
+		const message = await streamMistral(model, context, { apiKey: "test", fetch }).result();
+
+		expect(message.content).toEqual([
+			{ type: "toolCall", id: "abc123456", name: "lookup", arguments: { query: "knightcode" } },
+		]);
+	});
+
 	it("parses SSE and UTF-8 sequences split across transport chunks", async () => {
 		const model = getModel("mistral", "mistral-large-latest");
 		const context: Context = {
