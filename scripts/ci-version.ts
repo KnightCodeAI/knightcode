@@ -9,8 +9,9 @@
 // drifts, `npm install @knightcodeai/cli` resolves a platform package that was
 // never published and the launcher has no binary to exec.
 import { $ } from "bun";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { regroupTopSection } from "./changelog-sections.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -26,6 +27,22 @@ function manifest(dir: string): Manifest {
 }
 
 await $`bun x changeset version`.cwd(ROOT);
+
+// Changesets groups the new section by semver bump; regroup it under Keep a
+// Changelog headings, the way pi's changelogs read. Only the top section is
+// touched, and never its `## <version>` line — publish.yml matches on that
+// exactly to build the GitHub Release body.
+for (const dir of ["cli", ...PLATFORM_TARGETS.map((target) => `cli-${target}`)]) {
+	const path = join(ROOT, "packages", dir, "CHANGELOG.md");
+	const { markdown, uncategorised } = regroupTopSection(readFileSync(path, "utf8"));
+	writeFileSync(path, markdown);
+	for (const entry of uncategorised) {
+		console.warn(
+			`${dir}/CHANGELOG.md: entry does not start with Added/Changed/Deprecated/Removed/` +
+				`Fixed/Security, filed under Changed:\n  ${entry.split("\n")[0]}`,
+		);
+	}
+}
 
 // changesets rewrites package.json files; re-read from disk, never from an
 // import cache that predates the bump.

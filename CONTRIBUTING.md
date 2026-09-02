@@ -93,6 +93,15 @@ your change is user-visible, add a changeset instead:
 bun x changeset
 ```
 
+Start the summary with the word that categorises it — `Added`, `Changed`,
+`Deprecated`, `Removed`, `Fixed` or `Security` — and keep writing from there:
+
+> Fixed Windows shell aborts crashing KnightCode when `taskkill.exe` is missing.
+
+That first word is what groups the entry under a `### Fixed` heading in the
+released changelog. An entry that starts with anything else still ships, filed
+under `### Changed`, with a warning in the release log.
+
 Commit the generated file in `.changeset/` with your PR. The release workflow
 turns accumulated changesets into a "Version Packages" PR; merging that PR
 publishes to npm.
