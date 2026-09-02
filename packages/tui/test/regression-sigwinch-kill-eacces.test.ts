@@ -39,7 +39,7 @@ describe("refreshTerminalDimensions", () => {
 		assert.strictEqual(killCalled, false, "kill should not be called on win32");
 	});
 
-	it("preserves other error codes", () => {
+	it("ignores other error codes", () => {
 		Object.defineProperty(process, "platform", { value: "linux" });
 		process.kill = ((): typeof process.kill => {
 			return () => {
