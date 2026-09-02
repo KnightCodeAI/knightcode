@@ -119,12 +119,72 @@ describe("parseChangelog (changesets format)", () => {
     ])
   })
 
-  it("orders kinds Added, Changed, Fixed, Removed", () => {
+  it("orders kinds the way Keep a Changelog does", () => {
     expect(byVersion("0.2.1").groups.map((g) => g.kind)).toEqual([
       "Added",
       "Changed",
-      "Fixed",
       "Removed",
+      "Fixed",
+    ])
+  })
+})
+
+// The shape scripts/changelog-sections.ts writes for the newest release: kind
+// headings at column 0, one bullet per entry, no bump header, no commit prefix.
+// Older sections keep the old shape, so one pass over the file has to read both.
+const REGROUPED = `# @knightcodeai/cli
+
+## 0.5.4
+
+### Added
+
+- Added a \`--foo\` flag.
+
+### Deprecated
+
+- Deprecated the old path.
+
+### Fixed
+
+- Fixed a thing.
+
+  With a second paragraph.
+
+### Security
+
+- Security fix for the token store.
+
+## 0.5.3
+
+### Patch Changes
+
+- 6ffe494: Run the auto-compaction threshold check between turns.
+`
+
+describe("parseChangelog (regrouped Keep a Changelog sections)", () => {
+  const entries = parseChangelog(REGROUPED)
+  const latest = entries[0]
+  const items = (kind: string) =>
+    latest.groups.find((g) => g.kind === kind)?.items ?? []
+
+  it("files each bullet under the column-0 heading above it", () => {
+    expect(items("Added")).toEqual(["Added a `--foo` flag."])
+    expect(items("Deprecated")).toEqual(["Deprecated the old path."])
+    expect(items("Security")).toEqual(["Security fix for the token store."])
+  })
+
+  it("does not promote the first entry to the version highlight", () => {
+    expect(latest.highlight).toBeUndefined()
+  })
+
+  it("keeps a continuation paragraph under the same kind", () => {
+    expect(items("Fixed")).toEqual(["Fixed a thing.", "With a second paragraph."])
+  })
+
+  it("still reads the older bump-header section in the same file", () => {
+    expect(entries.map((e) => e.version)).toEqual(["0.5.4", "0.5.3"])
+    expect(entries[1].groups.flatMap((g) => g.items)).toEqual([
+      "Run the auto-compaction threshold check between turns.",
     ])
   })
 })
