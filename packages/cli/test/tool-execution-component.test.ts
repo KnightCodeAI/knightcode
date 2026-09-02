@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { resetCapabilitiesCache, setCapabilities, Text, type TUI } from "@knightcode/tui";
+import { resetCapabilitiesCache, setCapabilities, Text, type TUI, visibleWidth } from "@knightcode/tui";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
@@ -276,6 +276,29 @@ describe("ToolExecutionComponent parity", () => {
 		}
 		expect(lastOutputIndex).toBeGreaterThanOrEqual(0);
 		expect(hintIndex).toBeGreaterThan(lastOutputIndex);
+	});
+
+	test("shell tool call headers never overflow the width, invalid args and narrow terminals included", () => {
+		const tool = createBashToolDefinition(process.cwd(), { exposeSessionEnvironment: false });
+		// `Bash() (timeout 120s)` is 21 columns of framing on its own, so the narrow
+		// widths here also cover the case where the command budget collapses to zero.
+		const cases = [{ command: 123 as never, timeout: 120 }, { command: "curl ".repeat(40), timeout: 120 }, {}];
+		for (const args of cases) {
+			for (const width of [80, 40, 30, 20, 12]) {
+				const component = new ToolExecutionComponent(
+					"bash",
+					"tool-bash-width",
+					args,
+					{},
+					tool,
+					createFakeTui(),
+					process.cwd(),
+				);
+				for (const line of component.render(width)) {
+					expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+				}
+			}
+		}
 	});
 
 	test("does not duplicate built-in headers when passed the active built-in definition", () => {

@@ -243,15 +243,17 @@ function formatShellCall(
 	const command = str(args?.command);
 	const timeout = args?.timeout as number | undefined;
 	const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
-	if (command === null) {
-		return formatToolCall(theme, displayName, invalidArgText(theme)) + timeoutSuffix;
-	}
 	// Keep the header on one line. Commands run to hundreds of characters of quoted
 	// URL, and wrapping the whole thing buries the rest of the transcript.
-	const singleLine = (command || "...").replace(/\s+/g, " ");
 	const framing = visibleWidth(displayName) + 2 + visibleWidth(timeoutSuffix);
-	const commandDisplay = theme.fg("toolOutput", truncateToWidth(singleLine, Math.max(width - framing, 0), "…"));
-	return formatToolCall(theme, displayName, commandDisplay) + timeoutSuffix;
+	const argBudget = Math.max(width - framing, 0);
+	const argSummary =
+		command === null
+			? truncateToWidth(invalidArgText(theme), argBudget, "…")
+			: theme.fg("toolOutput", truncateToWidth((command || "...").replace(/\s+/g, " "), argBudget, "…"));
+	// The name and the timeout suffix can outgrow a narrow terminal on their own, so
+	// clamp the assembled header too - render() emits this line as-is, nothing rewraps it.
+	return truncateToWidth(formatToolCall(theme, displayName, argSummary) + timeoutSuffix, width, "…");
 }
 
 /** Renders the `Bash(...)` header, clamped to the available width. */
