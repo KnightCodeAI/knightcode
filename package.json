@@ -8,6 +8,7 @@
     "start": "bun --env-file=.env run packages/cli/src/bun/cli.ts",
     "check-types": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx}\"",
     "build:cli": "bun run scripts/build.ts --single",
     "build:linux": "bun run scripts/build.ts --target=linux-x64",
     "bench": "bun run scripts/bench.ts",

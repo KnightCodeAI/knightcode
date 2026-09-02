@@ -126,11 +126,15 @@ describe("AgentRouter catalog fallback", () => {
 		const catalogPath = "src/providers/data/agentrouter.json";
 		const committedCatalog = readFileSync(join(isolatedPackageRoot, catalogPath), "utf8");
 
-		const result = spawnSync(process.execPath, ["--import", pathToFileURL(preloadPath).href, "scripts/generate-models.ts"], {
-			cwd: isolatedPackageRoot,
-			encoding: "utf8",
-			timeout: 60_000,
-		});
+		const result = spawnSync(
+			process.execPath,
+			["--import", pathToFileURL(preloadPath).href, "scripts/generate-models.ts"],
+			{
+				cwd: isolatedPackageRoot,
+				encoding: "utf8",
+				timeout: 60_000,
+			},
+		);
 
 		expect(`${result.stdout}\n${result.stderr}`).toContain("Failed to fetch AgentRouter models, keeping the");
 		expect(readFileSync(join(isolatedPackageRoot, catalogPath), "utf8")).toBe(committedCatalog);

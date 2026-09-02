@@ -23,8 +23,7 @@ describe("parallel preflight abort", () => {
 			description: "Perform an external write",
 			parameters: Type.Object({ value: Type.String() }),
 			execute: async (_toolCallId, params) => {
-				const value =
-					typeof params === "object" && params !== null && "value" in params ? String(params.value) : "";
+				const value = typeof params === "object" && params !== null && "value" in params ? String(params.value) : "";
 				executions.push(value);
 				return { content: [{ type: "text", text: value }], details: { value } };
 			},
