@@ -15,6 +15,7 @@ import { createLsToolDefinition } from "../src/core/tools/ls.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
+import { RESULT_MARKER } from "../src/modes/interactive/glyphs.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -236,6 +237,45 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n\s*\[Full output:/);
 		expect(rendered).toContain("Truncated: showing 2000 of 4000 lines");
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
+	});
+
+	test("bash header stays on one line and the expand hint follows the output", async () => {
+		const operations: BashOperations = {
+			exec: async (_command, _cwd, { onData }) => {
+				for (let i = 1; i <= 8; i++) onData(Buffer.from(`out-${i}\n`));
+				return { exitCode: 0 };
+			},
+		};
+		const args = { command: `curl ${"https://example.com/very/long/path?query=x&".repeat(12)}`, timeout: 120 };
+		const tool = createBashToolDefinition(process.cwd(), { operations, exposeSessionEnvironment: false });
+		const result = await tool.execute("tool-bash-clamp", args, undefined, undefined, {} as never);
+		const component = new ToolExecutionComponent(
+			"bash",
+			"tool-bash-clamp",
+			args,
+			{},
+			tool,
+			createFakeTui(),
+			process.cwd(),
+		);
+		component.updateResult({ ...result, isError: false }, false);
+
+		const lines = stripAnsi(component.render(100).join("\n")).split("\n");
+		const headerIndex = lines.findIndex((line) => line.includes("Bash("));
+		expect(headerIndex).toBeGreaterThanOrEqual(0);
+		// One line, ellipsised, with the timeout suffix intact - not three lines of wrapped URL.
+		expect(lines[headerIndex]).toContain("\u2026");
+		expect(lines[headerIndex]).toContain("(timeout 120s)");
+		expect(lines[headerIndex].length).toBeLessThanOrEqual(100);
+		expect(lines[headerIndex + 1]).toContain(RESULT_MARKER);
+
+		const hintIndex = lines.findIndex((line) => line.includes("earlier line"));
+		let lastOutputIndex = -1;
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].includes("out-8")) lastOutputIndex = i;
+		}
+		expect(lastOutputIndex).toBeGreaterThanOrEqual(0);
+		expect(hintIndex).toBeGreaterThan(lastOutputIndex);
 	});
 
 	test("does not duplicate built-in headers when passed the active built-in definition", () => {
