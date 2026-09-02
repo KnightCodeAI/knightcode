@@ -2,7 +2,7 @@ import type { AgentTool } from "@knightcode/agent";
 import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHarness, getMessageText, type Harness } from "../harness.ts";
+import { createHarness, getMessageText, type Harness } from "./harness.ts";
 
 describe("parallel preflight abort", () => {
 	const harnesses: Harness[] = [];
