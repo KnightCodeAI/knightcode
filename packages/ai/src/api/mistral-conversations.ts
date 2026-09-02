@@ -715,9 +715,11 @@ async function consumeChatStream(
 				output.content.push(block);
 				toolBlocksByKey.set(key, output.content.length - 1);
 				stream.push({ type: "toolcall_start", contentIndex: output.content.length - 1, partial: output });
-			} else if (toolCall.function.name) {
+			} else if (toolCall.function.name && toolCall.function.name !== block.name) {
 				// Mistral may split the tool name across deltas the same way it splits
 				// arguments, so continuation fragments are appended rather than dropped.
+				// OpenAI-compatible streams instead repeat the complete name on later
+				// deltas; appending that would double it, so an exact repeat is skipped.
 				block.name += toolCall.function.name;
 			}
 
