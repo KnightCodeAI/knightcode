@@ -3,6 +3,7 @@
  */
 
 import { type Component, Container, Gutter, Loader, Spacer, Text, type TUI } from "@knightcode/tui";
+import { plural } from "../../../core/tools/render-utils.ts";
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -187,7 +188,7 @@ export class BashExecutionComponent extends Container {
 					);
 				} else {
 					statusParts.push(
-						`${theme.fg("muted", `... ${hiddenLineCount} more lines (`)}${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`,
+						`${theme.fg("muted", `... ${plural(hiddenLineCount, "more line")} (`)}${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`,
 					);
 				}
 			}

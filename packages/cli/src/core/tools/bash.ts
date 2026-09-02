@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
 import type { AgentTool } from "@knightcode/agent";
-import { Container, Text, truncateToWidth } from "@knightcode/tui";
+import { type Component, Container, Text, truncateToWidth, visibleWidth } from "@knightcode/tui";
 import { spawn } from "child_process";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
@@ -19,7 +19,7 @@ import {
 import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext, ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
-import { formatToolCall, getTextOutput, invalidArgText, str } from "./render-utils.ts";
+import { formatToolCall, getTextOutput, invalidArgText, plural, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult } from "./truncate.ts";
 
@@ -235,12 +235,47 @@ function formatDuration(ms: number): string {
 	return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function formatShellCall(args: { command?: string; timeout?: number } | undefined, displayName: string): string {
+function formatShellCall(
+	args: { command?: string; timeout?: number } | undefined,
+	displayName: string,
+	width: number,
+): string {
 	const command = str(args?.command);
 	const timeout = args?.timeout as number | undefined;
 	const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
-	const commandDisplay = command === null ? invalidArgText(theme) : theme.fg("toolOutput", command ? command : "...");
-	return formatToolCall(theme, displayName, commandDisplay) + timeoutSuffix;
+	// Keep the header on one line. Commands run to hundreds of characters of quoted
+	// URL, and wrapping the whole thing buries the rest of the transcript.
+	const framing = visibleWidth(displayName) + 2;
+	// A fragment of `(timeout 120s)` tells the reader nothing, so the suffix is all or
+	// nothing: it survives only while the command still has a column left to live in.
+	const suffix = framing + visibleWidth(timeoutSuffix) < width ? timeoutSuffix : "";
+	const invalid = command === null;
+	const argText = invalid ? invalidArgText(theme) : theme.fg("toolOutput", (command || "...").replace(/\s+/g, " "));
+	// truncateToWidth resets the colour before appending its ellipsis, so hand it one
+	// already dressed in the branch's own colour rather than the terminal default.
+	// Styling before truncating also keeps both branches on one path: at a zero budget
+	// each yields "", which formatToolCall renders as a bare title, not empty parens.
+	const argEllipsis = theme.fg(invalid ? "error" : "toolOutput", "…");
+	const argSummary = truncateToWidth(argText, Math.max(width - framing - visibleWidth(suffix), 0), argEllipsis);
+	// The name and parens can still outgrow a very narrow terminal, so clamp the
+	// assembled header too - render() emits this line as-is, nothing rewraps it.
+	return truncateToWidth(formatToolCall(theme, displayName, argSummary) + suffix, width, "…");
+}
+
+/** Renders the `Bash(...)` header, clamped to the available width. */
+class ShellCallRenderComponent implements Component {
+	args: { command?: string; timeout?: number } | undefined;
+	private displayName: string;
+
+	constructor(displayName: string) {
+		this.displayName = displayName;
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		return [formatShellCall(this.args, this.displayName, width)];
+	}
 }
 
 function rebuildBashResultRenderComponent(
@@ -286,9 +321,9 @@ function rebuildBashResultRenderComponent(
 					}
 					if (state.cachedSkipped && state.cachedSkipped > 0) {
 						const hint =
-							theme.fg("muted", `... (${state.cachedSkipped} earlier lines,`) +
+							theme.fg("muted", `... (${plural(state.cachedSkipped, "earlier line")},`) +
 							` ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
-						return [truncateToWidth(hint, width, "..."), ...(state.cachedLines ?? [])];
+						return [...(state.cachedLines ?? []), truncateToWidth(hint, width, "...")];
 					}
 					return [...(state.cachedLines ?? [])];
 				},
@@ -486,9 +521,12 @@ export function createShellToolDefinition(
 				state.startedAt = Date.now();
 				state.endedAt = undefined;
 			}
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatShellCall(args, config.displayName));
-			return text;
+			const component =
+				context.lastComponent instanceof ShellCallRenderComponent
+					? context.lastComponent
+					: new ShellCallRenderComponent(config.displayName);
+			component.args = args;
+			return component;
 		},
 		renderResult(result, options, _theme, context) {
 			const state = context.state;
