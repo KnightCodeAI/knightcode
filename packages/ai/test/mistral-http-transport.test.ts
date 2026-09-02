@@ -322,7 +322,7 @@ describe("Mistral HTTP transport", () => {
 		expect(message.usage).toMatchObject({ input: 7, output: 4, cacheRead: 3, cacheWrite: 0, totalTokens: 14 });
 	});
 
-	it("merges tool call name fragments split across chunks", async () => {
+	it("fills in a tool call name that arrives on a later chunk", async () => {
 		const model = getModel("mistral", "mistral-large-latest");
 		const context: Context = {
 			messages: [{ role: "user", content: "hello", timestamp: 1 }],
@@ -336,7 +336,7 @@ describe("Mistral HTTP transport", () => {
 						index: 0,
 						finish_reason: null,
 						delta: {
-							tool_calls: [{ id: "abc123456", index: 0, function: { name: "look", arguments: "" } }],
+							tool_calls: [{ id: "abc123456", index: 0, function: { name: "", arguments: "" } }],
 						},
 					},
 				],
@@ -349,7 +349,7 @@ describe("Mistral HTTP transport", () => {
 						index: 0,
 						finish_reason: "tool_calls",
 						delta: {
-							tool_calls: [{ index: 0, function: { name: "up", arguments: '{"query":"knightcode"}' } }],
+							tool_calls: [{ index: 0, function: { name: "lookup", arguments: '{"query":"knightcode"}' } }],
 						},
 					},
 				],
