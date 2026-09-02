@@ -284,7 +284,7 @@ describe("ToolExecutionComponent parity", () => {
 		// widths here also cover the case where the command budget collapses to zero.
 		const cases = [{ command: 123 as never, timeout: 120 }, { command: "curl ".repeat(40), timeout: 120 }, {}];
 		for (const args of cases) {
-			for (const width of [80, 40, 30, 20, 12]) {
+			for (const width of [80, 40, 30, 24, 23, 22, 21, 20, 12, 6, 3]) {
 				const component = new ToolExecutionComponent(
 					"bash",
 					"tool-bash-width",
@@ -296,6 +296,13 @@ describe("ToolExecutionComponent parity", () => {
 				);
 				for (const line of component.render(width)) {
 					expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+					const plain = stripAnsi(line);
+					// The timeout suffix is all or nothing, never a fragment like `(timeout 1…`.
+					if (plain.includes("(timeout")) {
+						expect(plain).toContain("(timeout 120s)");
+					}
+					// Valid and invalid commands collapse the same way: a bare title, not `Bash()`.
+					expect(plain).not.toContain("()");
 				}
 			}
 		}

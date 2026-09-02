@@ -245,15 +245,18 @@ function formatShellCall(
 	const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
 	// Keep the header on one line. Commands run to hundreds of characters of quoted
 	// URL, and wrapping the whole thing buries the rest of the transcript.
-	const framing = visibleWidth(displayName) + 2 + visibleWidth(timeoutSuffix);
-	const argBudget = Math.max(width - framing, 0);
-	const argSummary =
-		command === null
-			? truncateToWidth(invalidArgText(theme), argBudget, "…")
-			: theme.fg("toolOutput", truncateToWidth((command || "...").replace(/\s+/g, " "), argBudget, "…"));
-	// The name and the timeout suffix can outgrow a narrow terminal on their own, so
-	// clamp the assembled header too - render() emits this line as-is, nothing rewraps it.
-	return truncateToWidth(formatToolCall(theme, displayName, argSummary) + timeoutSuffix, width, "…");
+	const framing = visibleWidth(displayName) + 2;
+	// A fragment of `(timeout 120s)` tells the reader nothing, so the suffix is all or
+	// nothing: it survives only while the command still has a column left to live in.
+	const suffix = framing + visibleWidth(timeoutSuffix) < width ? timeoutSuffix : "";
+	const argText =
+		command === null ? invalidArgText(theme) : theme.fg("toolOutput", (command || "...").replace(/\s+/g, " "));
+	// Styling before truncating keeps both branches on one path: at a zero budget each
+	// yields "", which formatToolCall renders as a bare title rather than empty parens.
+	const argSummary = truncateToWidth(argText, Math.max(width - framing - visibleWidth(suffix), 0), "…");
+	// The name and parens can still outgrow a very narrow terminal, so clamp the
+	// assembled header too - render() emits this line as-is, nothing rewraps it.
+	return truncateToWidth(formatToolCall(theme, displayName, argSummary) + suffix, width, "…");
 }
 
 /** Renders the `Bash(...)` header, clamped to the available width. */
