@@ -29,9 +29,13 @@ function stripCommitPrefix(entry: string): string {
 	return entry.replace(/^- [0-9a-f]{7,40}: /, "- ");
 }
 
-function categoryOf(entry: string): Category | null {
-	const match = /^- (Added|Changed|Deprecated|Removed|Fixed|Security)\b/.exec(entry);
-	return match ? (match[1] as Category) : null;
+// The category is the first word — of a bare changeset summary, or of the "- …"
+// entry generated from it. One predicate for both, so the CI check accepts
+// exactly what the release grouping files under a heading. A verb with nothing
+// after it is not a category; that is an unfinished changeset.
+function categoryOf(text: string): Category | null {
+	const match = /^(?:- )?(Added|Changed|Deprecated|Removed|Fixed|Security)\b(.*)/.exec(text);
+	return match && match[2]!.trim() !== "" ? (match[1] as Category) : null;
 }
 
 /**
@@ -159,6 +163,16 @@ if (import.meta.main) {
 	strictEqual(fallback.markdown.includes("### Changed"), true);
 	strictEqual(fallback.markdown.includes("abc1234"), false);
 
+	// One predicate for a bare summary and for the entry made from it, so the CI
+	// check and the release grouping never disagree: punctuation or a tab after
+	// the category is fine, a lone verb is an unfinished changeset, and a word
+	// that merely starts with one is not a category.
+	strictEqual(categoryOf("Added: a flag."), "Added");
+	strictEqual(categoryOf("- Added: a flag."), "Added");
+	strictEqual(categoryOf("Added\ta flag."), "Added");
+	strictEqual(categoryOf("Fixed"), null);
+	strictEqual(categoryOf("Addedstuff a flag."), null);
+
 	// A platform package's bare version heading is left exactly as it was.
 	const bare = "# @knightcodeai/cli-linux-x64\n\n## 0.5.3\n\n## 0.5.2\n";
 	strictEqual(regroupTopSection(bare).markdown, bare);
@@ -177,13 +191,13 @@ if (import.meta.main) {
 		if (file === "README.md") continue;
 		// Frontmatter, then the summary: "---", packages, "---", the sentence.
 		const summary = (await Bun.file(join(dir, file)).text()).split(/^---\s*$/m)[2]?.trim() ?? "";
-		if (!CATEGORIES.some((category) => summary.startsWith(`${category} `))) {
-			bad.push(`.changeset/${file}`);
-		}
+		if (categoryOf(summary) === null) bad.push(`.changeset/${file}`);
 	}
 	if (bad.length > 0) {
 		console.error(
-			`Changeset summary must start with ${CATEGORIES.join("/")} — see CONTRIBUTING.md:\n  ` + bad.join("\n  "),
+			`Changeset summary must start with ${CATEGORIES.join("/")}, then the sentence — ` +
+				`see CONTRIBUTING.md:\n  ` +
+				bad.join("\n  "),
 		);
 		process.exit(1);
 	}
