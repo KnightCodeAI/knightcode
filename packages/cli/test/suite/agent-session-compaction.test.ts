@@ -503,7 +503,6 @@ describe("AgentSession compaction characterization", () => {
 				resumedRequest = JSON.stringify(context.messages);
 				return fauxAssistantMessage("finished after compaction");
 			},
-			fauxAssistantMessage("finished after delayed steering"),
 		]);
 
 		await harness.session.prompt("seed old history");
