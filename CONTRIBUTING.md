@@ -106,7 +106,14 @@ miscategorised entry never reaches a release.
 
 One changeset per change: an entry that describes two things has to be filed
 under one heading, and one of them ends up in the wrong place. Two changes in a
-branch means two changesets.
+branch means two changesets — run the command again and it takes the next free
+`-2` suffix.
+
+Check it before pushing, the same way CI does:
+
+```bash
+bun run scripts/changelog-sections.ts
+```
 
 Reach for `bun x changeset` on the rare change that releases some other package.
 
