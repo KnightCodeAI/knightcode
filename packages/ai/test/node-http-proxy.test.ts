@@ -73,4 +73,41 @@ describe("node HTTP proxy resolution", () => {
 			UNSUPPORTED_PROXY_PROTOCOL_MESSAGE,
 		);
 	});
+
+	it("handles subdomain wildcards, IPv6, and ports in NO_PROXY", () => {
+		resetProxyEnv();
+		process.env.HTTPS_PROXY = "http://proxy.example:8080";
+		process.env.NO_PROXY = "example.com, .wildcard.org, *.star.net, ::1, [2001:db8::1], 127.0.0.1:8080";
+
+		expect(resolveHttpProxyUrlForTarget("https://example.com")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://api.example.com")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://wildcard.org")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://api.wildcard.org")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://star.net")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://api.star.net")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://notexample.com")?.toString()).toBe("http://proxy.example:8080/");
+
+		expect(resolveHttpProxyUrlForTarget("https://[::1]:80")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://[2001:db8::1]")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://127.0.0.1:8080")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://127.0.0.1:3000")?.toString()).toBe("http://proxy.example:8080/");
+	});
+
+	it("honours a bare * alongside other NO_PROXY entries", () => {
+		resetProxyEnv();
+		process.env.HTTPS_PROXY = "http://proxy.example:8080";
+		process.env.NO_PROXY = "example.com, *";
+
+		expect(resolveHttpProxyUrlForTarget("https://example.com")).toBeUndefined();
+		expect(resolveHttpProxyUrlForTarget("https://anything.else")).toBeUndefined();
+	});
+
+	it("drops NO_PROXY entries with a malformed bracketed port", () => {
+		resetProxyEnv();
+		process.env.HTTPS_PROXY = "http://proxy.example:8080";
+		process.env.NO_PROXY = "[2001:db8::1]:notaport";
+
+		expect(resolveHttpProxyUrlForTarget("https://[2001:db8::1]:443")?.toString()).toBe("http://proxy.example:8080/");
+		expect(resolveHttpProxyUrlForTarget("https://[2001:db8::1]:8080")?.toString()).toBe("http://proxy.example:8080/");
+	});
 });
