@@ -215,6 +215,44 @@ describe("InteractiveMode copy confirmation", () => {
 		}
 	});
 
+	it("copies the last assistant message when copy-on-select is disabled and nothing is selected", async () => {
+		const terminal = new RecordingTerminal(40, 4);
+		const ui = createInteractiveTui({
+			tuiMode: "fullscreen",
+			showHardwareCursor: false,
+			logDirectory: "/tmp",
+			terminal,
+			fullscreenCopyOnSelect: false,
+		});
+		const getLastAssistantText = vi.fn(() => "assistant response");
+		const showStatus = vi.fn();
+		const showError = vi.fn();
+		const context: CopyCommandContext = {
+			session: { getLastAssistantText },
+			ui,
+			showStatus,
+			showError,
+		};
+		ui.addChild(new Text("alpha\nbeta\ngamma\ndelta", 0, 0));
+
+		ui.start();
+		try {
+			await terminal.waitForRender();
+			clipboardMocks.copyToClipboard.mockClear();
+
+			await copyCommandPrototype.handleCopyCommand.call(context, { flashConfirmation: true, preferSelection: true });
+			await terminal.waitForRender();
+
+			expect(clipboardMocks.copyToClipboard).toHaveBeenCalledOnce();
+			expect(clipboardMocks.copyToClipboard).toHaveBeenCalledWith("assistant response");
+			expect(getLastAssistantText).toHaveBeenCalledOnce();
+			expect(showError).not.toHaveBeenCalled();
+			expect(terminal.getViewport().some((line) => line.includes("Copied!"))).toBe(true);
+		} finally {
+			ui.stop();
+		}
+	});
+
 	it("copies the last assistant message with an active fullscreen selection when copy-on-select is enabled", async () => {
 		const terminal = new RecordingTerminal(40, 4);
 		const ui = createInteractiveTui({
