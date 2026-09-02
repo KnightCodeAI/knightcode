@@ -29,12 +29,14 @@ function stripCommitPrefix(entry: string): string {
 	return entry.replace(/^- [0-9a-f]{7,40}: /, "- ");
 }
 
-// The category is the first word — of a bare changeset summary, or of the "- …"
-// entry generated from it. One predicate for both, so the CI check accepts
-// exactly what the release grouping files under a heading. A verb with nothing
-// after it is not a category; that is an unfinished changeset.
-function categoryOf(text: string): Category | null {
-	const match = /^(?:- )?(Added|Changed|Deprecated|Removed|Fixed|Security)\b(.*)/.exec(text);
+// The category is the first word of the changeset summary — the sentence a
+// contributor writes, never the "- " bullet the generator wraps it in. Both
+// callers hand this the same bare form, so the CI check and the release
+// grouping cannot disagree; accepting either form is what let a summary that
+// is itself a bullet pass CI and then render as "- - Added …". A verb with
+// nothing after it is not a category either; that is an unfinished changeset.
+function categoryOf(summary: string): Category | null {
+	const match = /^(Added|Changed|Deprecated|Removed|Fixed|Security)\b(.*)/.exec(summary);
 	return match && match[2]!.trim() !== "" ? (match[1] as Category) : null;
 }
 
@@ -77,7 +79,8 @@ export function regroupTopSection(markdown: string): { markdown: string; uncateg
 	for (const entry of entries) {
 		const trimmed = stripCommitPrefix(entry.replace(/\s+$/, ""));
 		if (trimmed === "") continue;
-		const category = categoryOf(trimmed);
+		// The bullet belongs to the rendered entry, not to the summary.
+		const category = categoryOf(trimmed.replace(/^- /, ""));
 		if (category === null) uncategorised.push(trimmed);
 		const bucket = category ?? FALLBACK;
 		grouped.set(bucket, [...(grouped.get(bucket) ?? []), trimmed]);
@@ -163,15 +166,25 @@ if (import.meta.main) {
 	strictEqual(fallback.markdown.includes("### Changed"), true);
 	strictEqual(fallback.markdown.includes("abc1234"), false);
 
-	// One predicate for a bare summary and for the entry made from it, so the CI
-	// check and the release grouping never disagree: punctuation or a tab after
-	// the category is fine, a lone verb is an unfinished changeset, and a word
-	// that merely starts with one is not a category.
+	// The predicate reads a bare summary, and the CI check hands it the same
+	// form, so the two never disagree: punctuation or a tab after the category is
+	// fine; a lone verb is an unfinished changeset; a word that merely starts
+	// with one is not a category; and neither is an already-bulleted summary.
 	strictEqual(categoryOf("Added: a flag."), "Added");
-	strictEqual(categoryOf("- Added: a flag."), "Added");
 	strictEqual(categoryOf("Added\ta flag."), "Added");
 	strictEqual(categoryOf("Fixed"), null);
 	strictEqual(categoryOf("Addedstuff a flag."), null);
+	strictEqual(categoryOf("- Added a flag."), null);
+
+	// A summary written as a bullet renders as "- - Added …". It is reported
+	// rather than categorised, and CI rejects the same summary up front.
+	const nested = regroupTopSection(`## 0.1.0
+
+### Patch Changes
+
+- abc1234: - Added a flag.
+`);
+	deepStrictEqual(nested.uncategorised, ["- - Added a flag."]);
 
 	// A platform package's bare version heading is left exactly as it was.
 	const bare = "# @knightcodeai/cli-linux-x64\n\n## 0.5.3\n\n## 0.5.2\n";
