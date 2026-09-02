@@ -44,8 +44,10 @@ jobs:
       - name: Check types
         run: bun run check-types
 
-      # Release tooling, exercised only during a release otherwise.
-      - name: Check changelog regrouping
+      # Self-checks the release-time regrouping, which is otherwise exercised
+      # only during a release, then checks the category verb on every pending
+      # changeset — the release log's warning would come far too late.
+      - name: Check changesets
         run: bun run scripts/changelog-sections.ts
 
       - name: Test

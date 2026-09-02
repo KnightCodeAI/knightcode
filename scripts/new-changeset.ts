@@ -40,14 +40,17 @@ const slug = branch
 	.replace(/[^a-zA-Z0-9]+/g, "-")
 	.replace(/^-|-$/g, "")
 	.toLowerCase();
-if (slug === "" || slug === "main") {
+// `main` is checked before the prefix strip, so a branch named `feat/main` is
+// still fine; an empty slug means a detached HEAD or an all-punctuation name.
+if (branch === "main" || slug === "") {
 	throw new Error(`Branch "${branch}" gives no usable changeset name — branch before writing one.`);
 }
 
-const path = join(ROOT, ".changeset", `${slug}.md`);
-if (existsSync(path)) {
-	throw new Error(`.changeset/${slug}.md already exists — edit it rather than starting a second one.`);
-}
+// A branch carrying two user-visible changes needs two changesets — see
+// CONTRIBUTING.md — so take the next free suffix rather than refuse the second.
+let name = slug;
+for (let n = 2; existsSync(join(ROOT, ".changeset", `${name}.md`)); n++) name = `${slug}-${n}`;
+const path = join(ROOT, ".changeset", `${name}.md`);
 
 writeFileSync(
 	path,
@@ -58,7 +61,7 @@ writeFileSync(
 ${category} `,
 );
 
-console.log(`.changeset/${slug}.md
+console.log(`.changeset/${name}.md
 
 Finish the sentence after "${category}" — it becomes the changelog entry verbatim,
 under a "### ${category}" heading. Commit it with your PR.`);

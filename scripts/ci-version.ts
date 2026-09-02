@@ -9,7 +9,7 @@
 // drifts, `npm install @knightcodeai/cli` resolves a platform package that was
 // never published and the launcher has no binary to exec.
 import { $ } from "bun";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { regroupTopSection } from "./changelog-sections.ts";
 
@@ -34,6 +34,9 @@ await $`bun x changeset version`.cwd(ROOT);
 // exactly to build the GitHub Release body.
 for (const dir of ["cli", ...PLATFORM_TARGETS.map((target) => `cli-${target}`)]) {
 	const path = join(ROOT, "packages", dir, "CHANGELOG.md");
+	// A newly added platform package has no changelog until its first release;
+	// throwing here would leave the bumped package.json files half-written.
+	if (!existsSync(path)) continue;
 	const { markdown, uncategorised } = regroupTopSection(readFileSync(path, "utf8"));
 	writeFileSync(path, markdown);
 	for (const entry of uncategorised) {

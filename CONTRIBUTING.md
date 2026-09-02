@@ -101,8 +101,8 @@ That writes `.changeset/<your-branch>.md`, already filled in for
 The first word is the category — `Added`, `Changed`, `Deprecated`, `Removed`,
 `Fixed` or `Security` — and it groups the entry under the matching heading in
 the released changelog. Keep it as the first word of the sentence; the rest is
-copied verbatim. An entry that starts with anything else still ships, filed
-under `### Changed`, with a warning in the release log.
+copied verbatim. CI rejects an entry that starts with anything else, so the
+miscategorised entry never reaches a release.
 
 One changeset per change: an entry that describes two things has to be filed
 under one heading, and one of them ends up in the wrong place. Two changes in a

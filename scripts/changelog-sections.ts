@@ -15,6 +15,9 @@
 // The generator prefixes each entry with the commit that added the changeset
 // file ("- 6ffe494: Fixed …"). That is dropped here: it identifies the changeset,
 // not the change, and an entry reads better as a plain sentence.
+import { Glob } from "bun";
+import { deepStrictEqual, strictEqual } from "node:assert/strict";
+import { join } from "node:path";
 
 // Keep a Changelog order. Anything uncategorised lands in Changed.
 export const CATEGORIES = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"] as const;
@@ -90,8 +93,6 @@ export function regroupTopSection(markdown: string): { markdown: string; uncateg
 }
 
 if (import.meta.main) {
-	const { strictEqual, deepStrictEqual } = await import("node:assert/strict");
-
 	// Two bump buckets collapse into one set of categories, ordered Added before
 	// Fixed however they appeared, commit prefixes are dropped, a multi-paragraph
 	// entry keeps its continuation lines, and 0.5.2 is untouched.
@@ -166,4 +167,24 @@ if (import.meta.main) {
 	strictEqual(regroupTopSection("# @knightcodeai/cli\n").markdown, "# @knightcodeai/cli\n");
 
 	console.log("changelog-sections self-check passed");
+
+	// The category is only ever the first word of a summary, so check it here,
+	// where a contributor can still fix it. The release job's warning arrives
+	// after the entry has already been filed under the wrong heading.
+	const dir = join(import.meta.dir, "..", ".changeset");
+	const bad: string[] = [];
+	for await (const file of new Glob("*.md").scan(dir)) {
+		if (file === "README.md") continue;
+		// Frontmatter, then the summary: "---", packages, "---", the sentence.
+		const summary = (await Bun.file(join(dir, file)).text()).split(/^---\s*$/m)[2]?.trim() ?? "";
+		if (!CATEGORIES.some((category) => summary.startsWith(`${category} `))) {
+			bad.push(`.changeset/${file}`);
+		}
+	}
+	if (bad.length > 0) {
+		console.error(
+			`Changeset summary must start with ${CATEGORIES.join("/")} — see CONTRIBUTING.md:\n  ` + bad.join("\n  "),
+		);
+		process.exit(1);
+	}
 }
