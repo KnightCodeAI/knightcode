@@ -1,5 +1,50 @@
 # @knightcodeai/cli
 
+## 0.5.3
+
+### Patch Changes
+
+- 6ffe494: Run the auto-compaction threshold check between turns of an agent run, so a
+  tool batch that fills the context window is compacted before the next
+  assistant request instead of overflowing it.
+- 6cfef9a: Add a `fullscreenCopyOnSelect` setting (default `true`). Turn it off and a
+  fullscreen mouse selection stays highlighted instead of being copied on mouse
+  release, and `Ctrl+X` copies the active selection rather than the last
+  assistant message.
+- eb15117: Settle the running turn before an in-memory `/fork`, so the aborted assistant
+  message and its tool results are no longer appended to the freshly forked
+  session.
+- 9a492f9: Merge Mistral streaming tool-call chunks by their `index`, so a call whose id
+  and name arrive only in the first chunk is no longer split into two tool
+  calls with truncated arguments. A name that arrives on a later chunk is
+  picked up rather than left empty.
+- 766dbca: Match `NO_PROXY` entries against the root domain and its subdomains, and parse
+  IPv6 hosts and `host:port` entries correctly, so a bare `example.com` entry
+  also bypasses the proxy for `api.example.com` and `notexample.com` no longer
+  matches it. A bare `*` entry now bypasses everything even when listed
+  alongside other entries, and an entry with a malformed port is dropped rather
+  than widened into a host-wide bypass.
+- 3ad5109: Add a `supportsMaxOutputTokens` compat flag for `openai-responses` models
+  (default `true`). Set it to `false` for a gateway that rejects
+  `max_output_tokens` and the parameter is omitted instead of failing the
+  request.
+- 94e9d3b: Stop already-prepared tool calls from running when a parallel batch is aborted
+  during preflight, so cancelling at a permission prompt no longer lets the
+  remaining tools in that batch execute.
+- 00c4a60: Ignore a failing SIGWINCH self-signal at terminal startup, so sandboxes whose
+  seccomp or LSM policy denies `kill(2)` no longer crash on launch. The
+  dimension refresh is skipped instead.
+- c058c12: Tidy the tool call transcript block. The dark theme's `green` and `red` now hold
+  the pinned diff hexes, so the success bullet, `✓` marks, bash mode and markdown
+  code blocks match the diff colours instead of staying olive. Shell tool call
+  headers are clamped to a single line — a long command no longer wraps several
+  rows of quoted URL over the transcript — and the bash expand hint follows its
+  output rather than preceding it, matching every other tool renderer. Line
+  counts in the expand hints are pluralised.
+- 743bca2: Detect Zed's integrated terminal so it gets truecolor and hyperlinks instead
+  of falling through to the conservative default, and document the Zed key
+  bindings needed for `Shift+Enter` and friends.
+
 ## 0.5.2
 
 ### Patch Changes
