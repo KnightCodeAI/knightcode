@@ -299,6 +299,27 @@ describe("ModelRegistry", () => {
 			expect(model?.baseUrl).toBe("https://openrouter.ai/api/v1");
 		});
 
+		test("retargeting to an api the provider has no model for requires an explicit baseUrl", async () => {
+			// anthropic serves only anthropic-messages, so there is no openai-completions model to
+			// take defaults from. Inheriting https://api.anthropic.com here would send completions
+			// requests to the Messages endpoint.
+			writeRawModelsJson({
+				anthropic: {
+					models: [
+						{
+							id: "claude-opus-5",
+							api: "openai-completions",
+							reasoning: true,
+							input: ["text"],
+						},
+					],
+				},
+			});
+
+			const registry = await createModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.getError()).toContain("baseUrl");
+		});
+
 		test("non-built-in provider custom models still require baseUrl", async () => {
 			writeRawModelsJson({
 				"my-custom-provider": {
