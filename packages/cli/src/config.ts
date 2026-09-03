@@ -71,32 +71,44 @@ function makeSelfUpdateCommandStep(command: string, args: string[]): SelfUpdateC
 	};
 }
 
-export function detectInstallMethod(): InstallMethod {
-	if (isBunBinary) {
-		return "bun-binary";
-	}
-
+/** `runtime` is injectable so tests can cover the compiled-binary case from Node. */
+export function detectInstallMethod(runtime: { bunBinary?: boolean; bunRuntime?: boolean } = {}): InstallMethod {
+	const bunBinary = runtime.bunBinary ?? isBunBinary;
+	const bunRuntime = runtime.bunRuntime ?? isBunRuntime;
 	const resolvedPath = `${__dirname}\0${process.execPath || ""}`.toLowerCase().replace(/\\/g, "/");
 
+	// The markers below are substring tests, which a standalone binary can match
+	// by accident: /opt/npm/knightcode is a download whose parent merely happens
+	// to be named npm. Every manager stages the package under node_modules, so a
+	// binary outside one is a download no matter what its ancestors are called.
+	if (bunBinary && !resolvedPath.includes("/node_modules/")) {
+		return "bun-binary";
+	}
 	if (resolvedPath.includes("/pnpm/") || resolvedPath.includes("/.pnpm/")) {
 		return "pnpm";
 	}
 	if (resolvedPath.includes("/yarn/") || resolvedPath.includes("/.yarn/")) {
 		return "yarn";
 	}
-	if (isBunRuntime || resolvedPath.includes("/install/global/node_modules/")) {
+	// bin/knightcode resolves the compiled binary out of node_modules and spawns
+	// it, so an installed KnightCode always runs as a Bun binary. Classify it by
+	// where it sits, not by how it was compiled: only a binary outside a package
+	// manager's tree is a standalone download that cannot self-update. The
+	// "running under Bun" shortcut is the one test a binary must not take, since
+	// it holds for every compiled binary regardless of install method.
+	if ((bunRuntime && !bunBinary) || resolvedPath.includes("/install/global/node_modules/")) {
 		return "bun";
 	}
 	if (resolvedPath.includes("/npm/") || resolvedPath.includes("/node_modules/")) {
 		return "npm";
 	}
 
-	return "unknown";
+	return bunBinary ? "bun-binary" : "unknown";
 }
 
-function getInferredNpmInstall(): { root: string; prefix: string } | undefined {
-	const packageDir = getPackageDir();
-	const path = process.platform === "win32" || packageDir.includes("\\") ? win32 : { basename, dirname };
+type PathApi = { basename: (path: string) => string; dirname: (path: string) => string };
+
+function inferNpmInstallFrom(path: PathApi, packageDir: string): { root: string; prefix: string } | undefined {
 	const parent = path.dirname(packageDir);
 	let root: string | undefined;
 	if (path.basename(parent).startsWith("@") && path.basename(path.dirname(parent)) === "node_modules") {
@@ -110,6 +122,22 @@ function getInferredNpmInstall(): { root: string; prefix: string } | undefined {
 	// Windows global npm prefixes use `<prefix>\\node_modules`, which is
 	// indistinguishable from local project installs by path shape alone. Do not
 	// infer unsupported Windows custom prefixes without `npm root -g` evidence.
+	return undefined;
+}
+
+function getInferredNpmInstall(): { root: string; prefix: string } | undefined {
+	const packageDir = getPackageDir();
+	const path = process.platform === "win32" || packageDir.includes("\\") ? win32 : { basename, dirname };
+	// A compiled binary reports the directory holding the executable, which is
+	// <package>/bin — one level below the package root a node entry point
+	// reports. Without this the custom-prefix inference never fires for a binary
+	// install, and `npm install -g` silently targets the default prefix instead
+	// of the one the package actually lives in.
+	const candidates = path.basename(packageDir) === "bin" ? [packageDir, path.dirname(packageDir)] : [packageDir];
+	for (const candidate of candidates) {
+		const inferred = inferNpmInstallFrom(path, candidate);
+		if (inferred) return inferred;
+	}
 	return undefined;
 }
 
@@ -326,14 +354,21 @@ export function getSelfUpdateCommand(
 	return command;
 }
 
+/** `runtime` is injectable for the same reason as in `detectInstallMethod`. */
 export function getSelfUpdateUnavailableInstruction(
 	packageName: string,
 	npmCommand?: string[],
 	updatePackageTarget: SelfUpdatePackageTarget = packageName,
+	runtime: { bunBinary?: boolean; bunRuntime?: boolean } = {},
 ): string {
-	const method = detectInstallMethod();
+	const method = detectInstallMethod(runtime);
+	const bunBinary = runtime.bunBinary ?? isBunBinary;
 	const target = normalizeSelfUpdatePackageTarget(updatePackageTarget);
-	if (method === "bun-binary") {
+	// Path markers are heuristics: a binary can sit below a node_modules it was
+	// merely copied into, or under a prefix whose name matches another manager.
+	// The manager's own global root is the authority, so a binary it does not
+	// own is a standalone download whatever the path suggested.
+	if (method === "bun-binary" || (bunBinary && !isManagedByGlobalPackageManager(method, packageName, npmCommand))) {
 		return `Download from: https://github.com/KnightCodeAI/knightcode/releases/latest`;
 	}
 	const command = getSelfUpdateCommandForMethod(method, packageName, target, npmCommand);

@@ -704,7 +704,7 @@ async function runSelfUpdate(command: SelfUpdateCommand): Promise<void> {
 	}
 }
 
-function prepareWindowsNpmSelfUpdate(): void {
+function prepareWindowsSelfUpdate(): void {
 	if (process.platform !== "win32") {
 		return;
 	}
@@ -1063,8 +1063,10 @@ export async function handlePackageCommand(
 						printSelfUpdateNote(selfUpdatePlan.note);
 					}
 					try {
-						if (installMethod === "npm") {
-							prepareWindowsNpmSelfUpdate();
+						// Both managers reinstall over a running executable, and the Windows
+						// gate above lets both through.
+						if (installMethod === "npm" || installMethod === "pnpm") {
+							prepareWindowsSelfUpdate();
 						}
 						await runSelfUpdate(selfUpdateCommand);
 					} catch (error: unknown) {
