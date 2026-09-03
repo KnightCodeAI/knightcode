@@ -52,5 +52,5 @@ or from `knightcode auth`. Run `knightcode --help` for flags and
 
 ## License
 
-MIT. KnightCode is derived from [pi](https://github.com/earendil-works/pi) by
-Mario Zechner, also MIT — see [LICENSE](LICENSE) for the retained notice.
+MIT — see [LICENSE](LICENSE), which also carries the notices for the
+third-party code included in this distribution.

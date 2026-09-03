@@ -24,11 +24,11 @@ SOFTWARE.
 
 THIRD-PARTY NOTICES
 
-KnightCode is derived from pi (https://github.com/earendil-works/pi). The
-packages `ai`, `agent`, `telemetry`, `tui`, `protocol`, `client`, `server`,
-`session-backend-sqlite`, and `cli` contain substantial portions of that work,
-used and modified under the MIT License reproduced below. This notice is
-retained as that license requires.
+This distribution includes code from the project listed below, used and
+modified under its own license. That license and its copyright notice are
+reproduced here as it requires.
+
+pi - https://github.com/earendil-works/pi
 
 MIT License
 
