@@ -3188,6 +3188,14 @@ export class AgentSession {
 				if (result?.label !== undefined) {
 					label = result.label;
 				}
+
+				// The hook is handed the branch-summary signal and may be async, so an
+				// abort can land while it is still running. Committing its result then
+				// would mutate the tree after the caller asked to stop; the default
+				// summarizer below reports the same aborted shape.
+				if (this._branchSummaryAbortController.signal.aborted) {
+					return { cancelled: true, aborted: true };
+				}
 			}
 
 			// Run default summarizer if needed
