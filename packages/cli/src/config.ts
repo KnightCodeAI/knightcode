@@ -354,14 +354,21 @@ export function getSelfUpdateCommand(
 	return command;
 }
 
+/** `runtime` is injectable for the same reason as in `detectInstallMethod`. */
 export function getSelfUpdateUnavailableInstruction(
 	packageName: string,
 	npmCommand?: string[],
 	updatePackageTarget: SelfUpdatePackageTarget = packageName,
+	runtime: { bunBinary?: boolean; bunRuntime?: boolean } = {},
 ): string {
-	const method = detectInstallMethod();
+	const method = detectInstallMethod(runtime);
+	const bunBinary = runtime.bunBinary ?? isBunBinary;
 	const target = normalizeSelfUpdatePackageTarget(updatePackageTarget);
-	if (method === "bun-binary") {
+	// Path markers are heuristics: a binary can sit below a node_modules it was
+	// merely copied into, or under a prefix whose name matches another manager.
+	// The manager's own global root is the authority, so a binary it does not
+	// own is a standalone download whatever the path suggested.
+	if (method === "bun-binary" || (bunBinary && !isManagedByGlobalPackageManager(method, packageName, npmCommand))) {
 		return `Download from: https://github.com/KnightCodeAI/knightcode/releases/latest`;
 	}
 	const command = getSelfUpdateCommandForMethod(method, packageName, target, npmCommand);

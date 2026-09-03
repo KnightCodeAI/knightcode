@@ -464,6 +464,21 @@ describe("detectInstallMethod for compiled binaries", () => {
 		},
 	);
 
+	test("points a binary copied under an unrelated node_modules at the download", () => {
+		const temp = mkdtempSync(join(tmpdir(), "knightcode-copied-"));
+		const packageDir = join(temp, "node_modules", "somewhere", "bin");
+		mkdirSync(packageDir, { recursive: true });
+		tempDir = temp;
+		process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
+		setExecPath(join(packageDir, "knightcode"));
+
+		expect(detectInstallMethod(binary)).toBe("npm");
+		expect(getSelfUpdateCommand("@knightcodeai/cli")).toBeUndefined();
+		expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli", undefined, undefined, binary)).toBe(
+			"Download from: https://github.com/KnightCodeAI/knightcode/releases/latest",
+		);
+	});
+
 	test("self-updates a binary installed into a custom npm prefix", () => {
 		const { prefix, packageDir } = createNpmPrefixInstall();
 		// A binary's package dir is the executable's own directory, not the package root.
