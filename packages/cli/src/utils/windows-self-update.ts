@@ -47,6 +47,20 @@ function getLoadedSharedObjectsInPackageDir(packageDir: string): string[] {
 	return loadedFiles;
 }
 
+/**
+ * The compiled binary that bin/knightcode spawns lives inside the installed
+ * package, and Windows refuses to delete or overwrite a running executable — so
+ * the reinstall needs it moved aside for exactly the same reason a loaded native
+ * addon does.
+ */
+function getRunningExecutableInPackageDir(packageDir: string): string[] {
+	const execPath = normalizePath(process.execPath);
+	if (getCwdRelativePath(execPath.toLowerCase(), packageDir.toLowerCase()) === undefined) {
+		return [];
+	}
+	return [execPath];
+}
+
 export function cleanupWindowsSelfUpdateQuarantine(packageDir: string): void {
 	const quarantineRoot = getQuarantineRoot(packageDir);
 	if (!quarantineRoot) {
@@ -66,7 +80,12 @@ export function quarantineWindowsNativeDependencies(packageDir: string): void {
 		return;
 	}
 
-	const loadedFiles = getLoadedSharedObjectsInPackageDir(resolvedPackageDir);
+	const loadedFiles = [
+		...new Set([
+			...getRunningExecutableInPackageDir(resolvedPackageDir),
+			...getLoadedSharedObjectsInPackageDir(resolvedPackageDir),
+		]),
+	];
 	if (loadedFiles.length === 0) {
 		return;
 	}

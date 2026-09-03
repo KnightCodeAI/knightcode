@@ -71,11 +71,10 @@ function makeSelfUpdateCommandStep(command: string, args: string[]): SelfUpdateC
 	};
 }
 
-export function detectInstallMethod(): InstallMethod {
-	if (isBunBinary) {
-		return "bun-binary";
-	}
-
+/** `runtime` is injectable so tests can cover the compiled-binary case from Node. */
+export function detectInstallMethod(runtime: { bunBinary?: boolean; bunRuntime?: boolean } = {}): InstallMethod {
+	const bunBinary = runtime.bunBinary ?? isBunBinary;
+	const bunRuntime = runtime.bunRuntime ?? isBunRuntime;
 	const resolvedPath = `${__dirname}\0${process.execPath || ""}`.toLowerCase().replace(/\\/g, "/");
 
 	if (resolvedPath.includes("/pnpm/") || resolvedPath.includes("/.pnpm/")) {
@@ -84,14 +83,20 @@ export function detectInstallMethod(): InstallMethod {
 	if (resolvedPath.includes("/yarn/") || resolvedPath.includes("/.yarn/")) {
 		return "yarn";
 	}
-	if (isBunRuntime || resolvedPath.includes("/install/global/node_modules/")) {
+	// bin/knightcode resolves the compiled binary out of node_modules and spawns
+	// it, so an installed KnightCode always runs as a Bun binary. Classify it by
+	// where it sits, not by how it was compiled: only a binary outside a package
+	// manager's tree is a standalone download that cannot self-update. The
+	// "running under Bun" shortcut is the one test a binary must not take, since
+	// it holds for every compiled binary regardless of install method.
+	if ((bunRuntime && !bunBinary) || resolvedPath.includes("/install/global/node_modules/")) {
 		return "bun";
 	}
 	if (resolvedPath.includes("/npm/") || resolvedPath.includes("/node_modules/")) {
 		return "npm";
 	}
 
-	return "unknown";
+	return bunBinary ? "bun-binary" : "unknown";
 }
 
 function getInferredNpmInstall(): { root: string; prefix: string } | undefined {

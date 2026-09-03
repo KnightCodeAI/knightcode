@@ -1,5 +1,5 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
+import { homedir, tmpdir } from "os";
 import { delimiter, join } from "path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
@@ -420,5 +420,38 @@ describe("detectInstallMethod", () => {
 
 		expect(getSelfUpdateCommand("@knightcodeai/cli")).toBeUndefined();
 		expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli")).toContain("the install path is not writable");
+	});
+});
+
+describe("detectInstallMethod for compiled binaries", () => {
+	// bin/knightcode spawns the compiled binary out of node_modules, so every
+	// installed KnightCode runs as one. Only a binary outside a package manager's
+	// tree is a standalone download.
+	const binary = { bunBinary: true, bunRuntime: true };
+
+	test("classifies an npm-installed binary by its install path, not its build", () => {
+		setExecPath(join("/usr/lib/node_modules/@knightcodeai/cli-linux-x64/bin/knightcode"));
+
+		expect(detectInstallMethod(binary)).toBe("npm");
+	});
+
+	test("classifies a pnpm-installed binary as pnpm", () => {
+		setExecPath(
+			"C:\\Users\\Admin\\AppData\\Local\\pnpm\\global\\5\\.pnpm\\@knightcodeai+cli-win32-x64\\node_modules\\@knightcodeai\\cli-win32-x64\\bin\\knightcode.exe",
+		);
+
+		expect(detectInstallMethod(binary)).toBe("pnpm");
+	});
+
+	test("classifies a bun-installed binary as bun", () => {
+		setExecPath(join(homedir(), ".bun/install/global/node_modules/@knightcodeai/cli-linux-x64/bin/knightcode"));
+
+		expect(detectInstallMethod(binary)).toBe("bun");
+	});
+
+	test("still reports a standalone download as bun-binary", () => {
+		setExecPath("/opt/knightcode/knightcode");
+
+		expect(detectInstallMethod(binary)).toBe("bun-binary");
 	});
 });
