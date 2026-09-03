@@ -454,4 +454,26 @@ describe("detectInstallMethod for compiled binaries", () => {
 
 		expect(detectInstallMethod(binary)).toBe("bun-binary");
 	});
+
+	test.each(["/opt/npm/knightcode", "/opt/pnpm/knightcode", "/srv/yarn/knightcode"])(
+		"does not mistake %s for a package manager install",
+		(execPath) => {
+			setExecPath(execPath);
+
+			expect(detectInstallMethod(binary)).toBe("bun-binary");
+		},
+	);
+
+	test("self-updates a binary installed into a custom npm prefix", () => {
+		const { prefix, packageDir } = createNpmPrefixInstall();
+		// A binary's package dir is the executable's own directory, not the package root.
+		const binDir = join(packageDir, "bin");
+		mkdirSync(binDir, { recursive: true });
+		process.env.KNIGHTCODE_PACKAGE_DIR = binDir;
+		setExecPath(join(binDir, "knightcode"));
+
+		const command = getSelfUpdateCommand("@knightcodeai/cli");
+
+		expect(command?.args.slice(0, 2)).toEqual(["--prefix", prefix]);
+	});
 });

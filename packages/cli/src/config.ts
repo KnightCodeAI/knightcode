@@ -77,6 +77,13 @@ export function detectInstallMethod(runtime: { bunBinary?: boolean; bunRuntime?:
 	const bunRuntime = runtime.bunRuntime ?? isBunRuntime;
 	const resolvedPath = `${__dirname}\0${process.execPath || ""}`.toLowerCase().replace(/\\/g, "/");
 
+	// The markers below are substring tests, which a standalone binary can match
+	// by accident: /opt/npm/knightcode is a download whose parent merely happens
+	// to be named npm. Every manager stages the package under node_modules, so a
+	// binary outside one is a download no matter what its ancestors are called.
+	if (bunBinary && !resolvedPath.includes("/node_modules/")) {
+		return "bun-binary";
+	}
 	if (resolvedPath.includes("/pnpm/") || resolvedPath.includes("/.pnpm/")) {
 		return "pnpm";
 	}
@@ -99,9 +106,9 @@ export function detectInstallMethod(runtime: { bunBinary?: boolean; bunRuntime?:
 	return bunBinary ? "bun-binary" : "unknown";
 }
 
-function getInferredNpmInstall(): { root: string; prefix: string } | undefined {
-	const packageDir = getPackageDir();
-	const path = process.platform === "win32" || packageDir.includes("\\") ? win32 : { basename, dirname };
+type PathApi = { basename: (path: string) => string; dirname: (path: string) => string };
+
+function inferNpmInstallFrom(path: PathApi, packageDir: string): { root: string; prefix: string } | undefined {
 	const parent = path.dirname(packageDir);
 	let root: string | undefined;
 	if (path.basename(parent).startsWith("@") && path.basename(path.dirname(parent)) === "node_modules") {
@@ -115,6 +122,22 @@ function getInferredNpmInstall(): { root: string; prefix: string } | undefined {
 	// Windows global npm prefixes use `<prefix>\\node_modules`, which is
 	// indistinguishable from local project installs by path shape alone. Do not
 	// infer unsupported Windows custom prefixes without `npm root -g` evidence.
+	return undefined;
+}
+
+function getInferredNpmInstall(): { root: string; prefix: string } | undefined {
+	const packageDir = getPackageDir();
+	const path = process.platform === "win32" || packageDir.includes("\\") ? win32 : { basename, dirname };
+	// A compiled binary reports the directory holding the executable, which is
+	// <package>/bin — one level below the package root a node entry point
+	// reports. Without this the custom-prefix inference never fires for a binary
+	// install, and `npm install -g` silently targets the default prefix instead
+	// of the one the package actually lives in.
+	const candidates = path.basename(packageDir) === "bin" ? [packageDir, path.dirname(packageDir)] : [packageDir];
+	for (const candidate of candidates) {
+		const inferred = inferNpmInstallFrom(path, candidate);
+		if (inferred) return inferred;
+	}
 	return undefined;
 }
 
