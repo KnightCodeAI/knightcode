@@ -112,9 +112,13 @@ describe("Copilot Claude via Anthropic Messages", () => {
 
 	it("omits interleaved-thinking beta for adaptive-thinking models", async () => {
 		const model = getModel("github-copilot", "claude-sonnet-4.6");
+		// thinkingEnabled must be on: getBetaFeatures skips the interleaved beta for any
+		// request without it, so omitting it would pass this test without ever reaching the
+		// adaptive-thinking branch it exists to cover.
 		const s = streamAnthropic(model, context, {
 			apiKey: "tid_copilot_session_test_token",
 			interleavedThinking: true,
+			thinkingEnabled: true,
 		});
 		for await (const event of s) {
 			if (event.type === "error") break;
