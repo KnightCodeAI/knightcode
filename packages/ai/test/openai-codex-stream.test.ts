@@ -209,6 +209,38 @@ describe("openai-codex streaming", () => {
 		expect(sawDone).toBe(true);
 	});
 
+	// Regression: a terminal event flushed without its trailing blank line was dropped,
+	// so the stream ended with no text and no stop reason.
+	it("processes a terminal SSE event without a trailing blank line", async () => {
+		const token = mockToken();
+		const sse = buildSSEPayload({ status: "completed" }).trimEnd();
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.1-codex",
+			name: "GPT-5.1 Codex",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 400000,
+			maxTokens: 128000,
+		};
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+		const resultStream = streamOpenAICodexResponses(model, context, {
+			apiKey: token,
+			transport: "sse",
+			fetch: async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }),
+		});
+		const result = await resultStream.result();
+
+		expect(result.stopReason).toBe("stop");
+		expect(result.content.find((content) => content.type === "text")?.text).toBe("Hello");
+	});
+
 	it("completes after response.completed even when the SSE body stays open", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "knightcode-codex-stream-"));
 		process.env.KNIGHTCODE_CODING_AGENT_DIR = tempDir;
