@@ -71,6 +71,7 @@ export type KnightCodeMessagesEvent =
 			reason: Extract<KnightCodeMessagesStopReason, "stop" | "length" | "toolUse">;
 			usage: KnightCodeMessagesUsage;
 			responseId?: string;
+			providerThinkingLevel?: string;
 			rewrite?: KnightCodeMessagesRewriteImpact;
 	  }
 	| {
@@ -79,6 +80,7 @@ export type KnightCodeMessagesEvent =
 			usage: KnightCodeMessagesUsage;
 			errorMessage?: string;
 			responseId?: string;
+			providerThinkingLevel?: string;
 			rewrite?: KnightCodeMessagesRewriteImpact;
 	  };
 
@@ -197,6 +199,9 @@ function createEventConverter(model: Model<"knightcode-messages">) {
 					usage: event.usage,
 					responseId: event.responseId,
 				});
+				if (event.providerThinkingLevel !== undefined) {
+					partial.providerThinkingLevel = event.providerThinkingLevel;
+				}
 				appendRewriteDiagnostic(partial, event.rewrite);
 				return { type: "done", reason: event.reason, message: partial };
 			case "error":
@@ -206,6 +211,9 @@ function createEventConverter(model: Model<"knightcode-messages">) {
 					errorMessage: event.errorMessage,
 					responseId: event.responseId,
 				});
+				if (event.providerThinkingLevel !== undefined) {
+					partial.providerThinkingLevel = event.providerThinkingLevel;
+				}
 				appendRewriteDiagnostic(partial, event.rewrite);
 				return { type: "error", reason: event.reason, error: partial };
 			case "start":
