@@ -45,7 +45,7 @@ describe("streamProxy", () => {
 					namespace: "dynamic_tools",
 				},
 			},
-			{ type: "done", reason: "toolUse", usage },
+			{ type: "done", reason: "toolUse", usage, providerThinkingLevel: "high" },
 		];
 		const body = proxyEvents.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
 		vi.stubGlobal(
@@ -75,5 +75,6 @@ describe("streamProxy", () => {
 			arguments: { value: "hello" },
 			namespace: "dynamic_tools",
 		});
+		expect(result.providerThinkingLevel).toBe("high");
 	});
 });
