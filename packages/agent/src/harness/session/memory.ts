@@ -1,5 +1,6 @@
-import { type Usage, uuidv7 } from "@knightcode/ai";
+import { uuidv7 } from "@knightcode/ai";
 import type { AgentMessage } from "../../types.ts";
+import { createForkSnapshot } from "./fork.ts";
 import { StorageBackedSession } from "./session.ts";
 import { StorageState, type StorageStateSnapshot } from "./storage-state.ts";
 import type {
@@ -35,21 +36,6 @@ export interface MemoryStorageOptions {
 
 export interface MemorySessionRepoOptions {
 	now?: () => number;
-}
-
-function registerKey(namespace: RegisterNamespace, key: string): string {
-	return `${namespace}\u0000${key}`;
-}
-
-function emptyUsage(): Usage {
-	return {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 0,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-	};
 }
 
 export class MemoryStorage implements Storage {
@@ -130,7 +116,7 @@ export class MemoryStorage implements Storage {
 			const snapshot = this.storageState.snapshot();
 			return {
 				entries: [...snapshot.entries.values()].sort((left, right) => left.seq - right.seq),
-				registers: [...snapshot.registers.values()],
+				registers: snapshot.registers,
 			};
 		});
 		this.commitQueue = result.then(
@@ -403,8 +389,8 @@ export class MemorySessionRepo implements SessionRepo {
 		this.reserveId(id);
 
 		try {
-			const snapshot = await sourceRecord.storage.snapshot();
-			const storage = this.createForkStorage(snapshot, options);
+			const snapshot = createForkSnapshot(await sourceRecord.storage.snapshot(), options);
+			const storage = MemoryStorage.fromSnapshot({ now: this.now }, snapshot);
 			const metadata: SessionMetadata = {
 				id,
 				createdAt,
@@ -433,112 +419,6 @@ export class MemorySessionRepo implements SessionRepo {
 		return new MemorySessionFacade(record.session, () => {
 			record.open = false;
 		});
-	}
-
-	private createForkStorage(
-		snapshot: { entries: Entry[]; registers: Register[] },
-		options: ForkOptions,
-	): MemoryStorage {
-		const sourceEntries = new Map(snapshot.entries.map((entry) => [entry.id, entry]));
-		const sourceRegisters = new Map(
-			snapshot.registers.map((register) => [registerKey(register.namespace, register.key), register]),
-		);
-		const sourceLeaves = snapshot.registers.filter((register) => register.namespace === "lane.leaf");
-		this.validateForkSourceSnapshot(snapshot, sourceEntries, sourceRegisters, sourceLeaves);
-
-		const copiedEntryIds = new Set<string>();
-		const destinationLeaves = new Map<string, string | null>();
-		if (options.scope === "tree") {
-			for (const id of sourceEntries.keys()) copiedEntryIds.add(id);
-			for (const register of sourceLeaves) destinationLeaves.set(register.key, register.value as string | null);
-		} else {
-			const mainLeaf = sourceRegisters.get(registerKey("lane.leaf", "main"));
-			if (mainLeaf === undefined) throw new Error("Source session is missing main lane");
-			const requested = options.entryId ?? (mainLeaf.value as string | null);
-			let leaf = requested;
-			if (requested !== null) {
-				const target = sourceEntries.get(requested);
-				if (target === undefined) throw new Error(`Unknown fork entry: ${requested}`);
-				if (options.position === "before") leaf = target.parentId;
-			}
-			let entryId = leaf;
-			while (entryId !== null) {
-				const entry = sourceEntries.get(entryId);
-				if (entry === undefined) throw new Error(`Corrupt source branch: missing parent ${entryId}`);
-				copiedEntryIds.add(entryId);
-				entryId = entry.parentId;
-			}
-			destinationLeaves.set("main", leaf);
-		}
-
-		const entries = new Map<string, Entry>();
-		for (const id of copiedEntryIds) entries.set(id, sourceEntries.get(id)!);
-		const registers = new Map<string, Register>();
-		let nextSeq = Math.max(0, ...[...entries.values()].map((entry) => entry.seq)) + 1;
-		const setRegister = (namespace: RegisterNamespace, key: string, value: Register["value"]): void => {
-			registers.set(registerKey(namespace, key), { namespace, key, value, seq: nextSeq++ } as Register);
-		};
-		for (const [lane, leaf] of destinationLeaves) {
-			const configuration = sourceRegisters.get(registerKey("lane.config", lane));
-			if (configuration !== undefined) setRegister("lane.config", lane, configuration.value);
-			setRegister("lane.leaf", lane, leaf);
-			setRegister("lane.state", lane, { currentOperationId: null, pendingNextRun: [] });
-		}
-		for (const register of snapshot.registers) {
-			if (
-				register.namespace === "fact.name" ||
-				register.namespace === "fact.custom" ||
-				(register.namespace === "fact.label" && copiedEntryIds.has(register.key))
-			) {
-				setRegister(register.namespace, register.key, register.value);
-			}
-		}
-		return MemoryStorage.fromSnapshot(
-			{ now: this.now },
-			{
-				entries,
-				registers,
-				usage: new Map(),
-				stats: {
-					messageCount: [...entries.values()].filter((entry) => entry.type === "message").length,
-					usage: emptyUsage(),
-				},
-				nextSeq,
-			},
-		);
-	}
-
-	private validateForkSourceSnapshot(
-		snapshot: { entries: Entry[]; registers: Register[] },
-		sourceEntries: Map<string, Entry>,
-		sourceRegisters: Map<string, Register>,
-		sourceLeaves: Register[],
-	): void {
-		const sourceLeafKeys = new Set(sourceLeaves.map((register) => register.key));
-
-		// TODO: do all these validations need to happen here? maybe somewhere else when the source session is loaded?
-		if (!sourceLeafKeys.has("main")) throw new Error("Source session is missing main lane");
-		for (const register of snapshot.registers) {
-			if (
-				(register.namespace === "lane.config" ||
-					register.namespace === "lane.state" ||
-					register.namespace === "lane.lastResult") &&
-				!sourceLeafKeys.has(register.key)
-			) {
-				throw new Error(`Source session lane ${JSON.stringify(register.key)} is missing lane.leaf`);
-			}
-		}
-		for (const leaf of sourceLeaves) {
-			if (!sourceRegisters.has(registerKey("lane.state", leaf.key))) {
-				throw new Error(`Source session lane ${JSON.stringify(leaf.key)} is missing lane.state`);
-			}
-			if (leaf.key !== "main" && !sourceRegisters.has(registerKey("lane.config", leaf.key))) {
-				throw new Error(`Source session lane ${JSON.stringify(leaf.key)} is missing lane.config`);
-			}
-			if (leaf.value !== null && !sourceEntries.has(leaf.value as string)) {
-				throw new Error(`Source session lane ${JSON.stringify(leaf.key)} has an unknown leaf`);
-			}
-		}
 	}
 
 	private reserveId(id: string): void {

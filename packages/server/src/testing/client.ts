@@ -4,10 +4,10 @@ import {
 	type ClientMessage,
 	encodeClientMessage,
 	PROTOCOL_VERSION,
+	type ProtocolRpcCall,
 	type ResponseEnvelope,
 	type ServerMessage,
 	ServerMessageDecoder,
-	type ServiceRpcCall,
 } from "@knightcode/protocol";
 import { Deferred } from "./host.ts";
 
@@ -47,14 +47,14 @@ export class ProtocolTestClient {
 	}
 
 	async request(
-		serviceId: string,
-		call: ServiceRpcCall,
+		serverId: string,
+		call: ProtocolRpcCall,
 		id = `request-${++this.requestSequence}`,
 	): Promise<ResponseEnvelope> {
 		const response = this.next(
 			(message): message is ResponseEnvelope => message.type === "response" && message.id === id,
 		);
-		await this.sendMessage({ type: "request", id, serviceId, call });
+		await this.sendMessage({ type: "request", id, serverId, call });
 		return (await response) as ResponseEnvelope;
 	}
 

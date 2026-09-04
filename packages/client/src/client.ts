@@ -1,14 +1,13 @@
 import {
 	createRpcClient,
 	encodeClientMessage,
-	isServiceId,
+	isServerId,
 	ProtocolValidationError,
 	type ResponseEnvelope,
 	type ServerHello,
 	ServiceRpc,
 	type ServiceRpcCall,
 	type ServiceRpcResult,
-	type ServiceRpcResultUnion,
 	type SessionMetadata,
 } from "@knightcode/protocol";
 import { Connection } from "./connection.ts";
@@ -17,8 +16,7 @@ import { createPromiseResolvers } from "./promise.ts";
 import type { ConnectionState, ConnectionStateChange, KnightClientOptions, Unsubscribe } from "./types.ts";
 
 interface PendingRequest {
-	call: ServiceRpcCall;
-	resolve(result: ServiceRpcResultUnion): void;
+	resolve(result: unknown): void;
 	reject(error: Error): void;
 }
 
@@ -34,13 +32,13 @@ export class KnightClient {
 	#disposePromise: Promise<void> | undefined;
 
 	constructor(options: KnightClientOptions) {
-		if (!isServiceId(options.serviceId)) {
-			throw new TypeError("KnightClient serviceId must be 32 lowercase hexadecimal characters");
+		if (!isServerId(options.serverId)) {
+			throw new TypeError("KnightClient serverId must be a canonical lowercase UUIDv4");
 		}
 		this.#options = options;
 		this.#connection = new Connection({
 			transportFactory: options.transportFactory,
-			serviceId: options.serviceId,
+			serverId: options.serverId,
 			maxFrameLength: options.maxFrameLength,
 			onHandshake: (hello) => {
 				this.#hello = hello;
@@ -110,16 +108,16 @@ export class KnightClient {
 		return this.#rpc.attach(sessionId);
 	}
 
-	#request(call: ServiceRpcCall): Promise<ServiceRpcResultUnion> {
+	#request(call: ServiceRpcCall): Promise<unknown> {
 		if (this.#disposed) return Promise.reject(new KnightClientDisposedError());
 		if (!this.connected) return Promise.reject(new KnightDisconnectedError());
 		const id = `request-${++this.#requestSequence}`;
-		const { promise, resolve, reject } = createPromiseResolvers<ServiceRpcResultUnion>();
-		this.#pendingRequests.set(id, { call, resolve, reject });
+		const { promise, resolve, reject } = createPromiseResolvers<unknown>();
+		this.#pendingRequests.set(id, { resolve, reject });
 		let frame: Uint8Array;
 		try {
 			frame = encodeClientMessage(
-				{ type: "request", id, serviceId: this.#options.serviceId, call },
+				{ type: "request", id, serverId: this.#options.serverId, call },
 				{ maxFrameLength: this.#connection.maxFrameLength },
 			);
 		} catch (error) {

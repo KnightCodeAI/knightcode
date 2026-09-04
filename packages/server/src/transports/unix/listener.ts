@@ -42,7 +42,6 @@ class UnixListener implements KnightServerListener {
 	private server?: Server;
 	private socketIdentity?: FileIdentity;
 	private ownedBindPath?: string;
-	private boundPath?: string;
 	private closing = false;
 	private closePromise?: Promise<void>;
 	private accept?: ByteConnectionAcceptor;
@@ -51,10 +50,6 @@ class UnixListener implements KnightServerListener {
 		this.options = resolveUnixListenerOptions(options);
 		this.path = this.options.path;
 		this.mode = this.options.mode;
-	}
-
-	get address(): string | undefined {
-		return this.boundPath;
 	}
 
 	async start(accept: ByteConnectionAcceptor): Promise<void> {
@@ -90,7 +85,6 @@ class UnixListener implements KnightServerListener {
 			this.socketIdentity = { dev: stats.dev, ino: stats.ino };
 			await link(ownedBindPath, this.path);
 			await setSocketMode(this.path, this.mode);
-			this.boundPath = this.path;
 		} catch (error) {
 			await this.closeServerAndCleanup(server);
 			this.server = undefined;
@@ -137,7 +131,6 @@ class UnixListener implements KnightServerListener {
 	}
 
 	private async closeInternal(): Promise<void> {
-		this.boundPath = undefined;
 		const serverClosed = this.server ? this.closeServerAndCleanup(this.server) : this.cleanupOwnedSocket();
 		await Promise.all([...this.connections].map((connection) => connection.close()));
 		await serverClosed;
@@ -151,9 +144,11 @@ class UnixListener implements KnightServerListener {
 		try {
 			await closeNetServer(server, (error) => this.reportError(error));
 		} finally {
-			await this.cleanupOwnedSocket();
+			// Remove the private bind path before the public route. Launchers use the
+			// public route disappearing as the signal that a successor may bind safely.
 			if (this.ownedBindPath) await removePath(this.ownedBindPath);
 			this.ownedBindPath = undefined;
+			await this.cleanupOwnedSocket();
 		}
 	}
 

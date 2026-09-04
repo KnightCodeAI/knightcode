@@ -1,55 +1,57 @@
 import type { SessionMetadata } from "@knightcode/agent";
 import {
 	createRpcDispatcher,
+	type SessionMetadata as ProtocolSessionMetadata,
 	ProtocolValidationError,
 	ServiceRpc,
 	type ServiceRpcCall,
 	type ServiceRpcResultUnion,
 } from "@knightcode/protocol";
-import type { ConnectionState } from "./connection.ts";
-import { ServerRestartingError, SessionNotFoundError } from "./errors.ts";
-import type { HostedHarnessHandle, HostedSessionInfo, KnightServerHost } from "./types.ts";
+import { ServerDrainingError, SessionNotFoundError } from "./errors.ts";
+import type { HostedHarnessHandle, KnightServerHost } from "./types.ts";
+
+class HarnessCleanupError extends AggregateError {}
+
+function toProtocolSessionMetadata(metadata: SessionMetadata): ProtocolSessionMetadata {
+	return {
+		id: metadata.id,
+		createdAt: metadata.createdAt,
+		storageVersion: metadata.storageVersion,
+		...(metadata.cwd === undefined ? {} : { cwd: metadata.cwd }),
+		...(metadata.parentSessionId === undefined ? {} : { parentSessionId: metadata.parentSessionId }),
+		...(metadata.legacyParentSessionPath === undefined
+			? {}
+			: { legacyParentSessionPath: metadata.legacyParentSessionPath }),
+	};
+}
 
 interface HostedSession {
 	readonly id: string;
-	readonly metadata: SessionMetadata;
 	readonly harness: HostedHarnessHandle;
-	readonly connections: Set<ConnectionState>;
 }
 
-interface HostedHarnessManagerOptions {
-	host: KnightServerHost;
+interface HostedHarnessManagerOptions<TMetadata extends SessionMetadata> {
+	host: KnightServerHost<TMetadata>;
 	isClosing: () => boolean;
 	reportError: (error: unknown) => void;
 }
 
-export class HostedHarnessManager {
-	private readonly options: HostedHarnessManagerOptions;
+export class HostedHarnessManager<TMetadata extends SessionMetadata = SessionMetadata> {
+	private readonly options: HostedHarnessManagerOptions<TMetadata>;
 	private readonly hostedSessions = new Map<string, HostedSession>();
 	private readonly openingSessions = new Map<string, Promise<HostedSession>>();
-	private readonly dispatchRpc: (call: ServiceRpcCall, connection: ConnectionState) => Promise<ServiceRpcResultUnion>;
+	private closePromise?: Promise<void>;
+	private readonly dispatchRpc: (call: ServiceRpcCall, context: undefined) => Promise<ServiceRpcResultUnion>;
 
-	constructor(options: HostedHarnessManagerOptions) {
+	constructor(options: HostedHarnessManagerOptions<TMetadata>) {
 		this.options = options;
 		this.dispatchRpc = createRpcDispatcher(
 			ServiceRpc,
 			{
-				list: async () => (await this.options.host.sessions.list()).map(toWireMetadata),
-				attach: async (connection, sessionId) => {
-					if (this.options.isClosing()) throw new ServerRestartingError();
+				list: async () => (await this.options.host.sessions.list()).map(toProtocolSessionMetadata),
+				attach: async (_context, sessionId) => {
+					if (this.options.isClosing()) throw new ServerDrainingError();
 					const hosted = await this.acquire(sessionId);
-					// A harness can terminate while acquire() unwinds, which drops it from
-					// the map; attaching to it would hand a dead worker back to the client.
-					if (
-						this.hostedSessions.get(hosted.id) !== hosted ||
-						connection.disconnected ||
-						connection.stage !== "ready" ||
-						connection.connection.closed
-					) {
-						throw new ServerRestartingError();
-					}
-					connection.sessionIds.add(hosted.id);
-					hosted.connections.add(connection);
 					return { sessionId: hosted.id };
 				},
 			},
@@ -57,33 +59,49 @@ export class HostedHarnessManager {
 		);
 	}
 
-	get hosted(): readonly HostedSessionInfo[] {
-		return [...this.hostedSessions.values()].map(({ id, metadata }) => ({ sessionId: id, metadata }));
+	executeCall(call: ServiceRpcCall): Promise<ServiceRpcResultUnion> {
+		return this.dispatchRpc(call, undefined);
 	}
 
-	executeCall(connection: ConnectionState, call: ServiceRpcCall): Promise<ServiceRpcResultUnion> {
-		return this.dispatchRpc(call, connection);
+	close(): Promise<void> {
+		this.closePromise ??= this.closeInternal();
+		return this.closePromise;
 	}
 
-	disconnect(connection: ConnectionState): void {
-		for (const sessionId of connection.sessionIds) this.hostedSessions.get(sessionId)?.connections.delete(connection);
-		connection.sessionIds.clear();
-	}
-
-	async close(): Promise<void> {
+	private async closeInternal(): Promise<void> {
 		const openingResults = await Promise.allSettled(this.openingSessions.values());
+		const closeErrors: unknown[] = [];
 		for (const result of openingResults) {
-			if (result.status === "rejected") this.options.reportError(result.reason);
+			if (result.status !== "rejected") continue;
+			this.options.reportError(result.reason);
+			if (result.reason instanceof HarnessCleanupError) closeErrors.push(result.reason);
 		}
 		const hosted = [...this.hostedSessions.values()];
-		this.hostedSessions.clear();
 		const closeResults = await Promise.allSettled(hosted.map(({ harness }) => harness.close()));
-		for (const result of closeResults) {
-			if (result.status === "rejected") this.options.reportError(result.reason);
+		for (let index = 0; index < closeResults.length; index++) {
+			const result = closeResults[index]!;
+			const session = hosted[index]!;
+			if (result.status === "fulfilled") {
+				if (this.hostedSessions.get(session.id) === session) this.hostedSessions.delete(session.id);
+				continue;
+			}
+			this.options.reportError(result.reason);
+			closeErrors.push(result.reason);
 		}
+		if (closeErrors.length > 0) throw new AggregateError(closeErrors, "Failed to close hosted Harnesses");
 	}
 
 	private async acquire(sessionId: string): Promise<HostedSession> {
+		const hosted = await this.openOrJoin(sessionId);
+		// The Harness can terminate while this attachment unwinds; an invalidated entry must not
+		// report success, or the caller would attach to a Session this server no longer hosts.
+		if (this.hostedSessions.get(hosted.id) !== hosted) {
+			throw new SessionNotFoundError(`Session is no longer hosted: ${sessionId}`);
+		}
+		return hosted;
+	}
+
+	private async openOrJoin(sessionId: string): Promise<HostedSession> {
 		const existing = this.hostedSessions.get(sessionId);
 		if (existing) return existing;
 		const opening = this.openingSessions.get(sessionId);
@@ -100,19 +118,20 @@ export class HostedHarnessManager {
 	private async open(sessionId: string): Promise<HostedSession> {
 		const metadata = (await this.options.host.sessions.list()).find((candidate) => candidate.id === sessionId);
 		if (!metadata) throw new SessionNotFoundError(`Unknown session: ${sessionId}`);
-		const session = await this.options.host.sessions.open(metadata);
-		let harness: HostedHarnessHandle;
-		try {
-			harness = await this.options.host.createHarness(session);
-		} catch (error) {
-			await session.close().catch((closeError: unknown) => this.options.reportError(closeError));
-			throw error;
-		}
+		const harness = await this.options.host.createHarness(metadata);
 		if (this.options.isClosing()) {
-			await harness.close().catch((error: unknown) => this.options.reportError(error));
-			throw new ServerRestartingError();
+			try {
+				await harness.close();
+			} catch (error) {
+				this.options.reportError(error);
+				throw new HarnessCleanupError(
+					[new ServerDrainingError(), error],
+					"Failed to close Harness acquired while draining",
+				);
+			}
+			throw new ServerDrainingError();
 		}
-		const hosted: HostedSession = { id: metadata.id, metadata, harness, connections: new Set() };
+		const hosted: HostedSession = { id: metadata.id, harness };
 		this.hostedSessions.set(hosted.id, hosted);
 		if (harness.terminated) {
 			void harness.terminated.then(
@@ -126,25 +145,12 @@ export class HostedHarnessManager {
 	private invalidate(hosted: HostedSession, error: Error | undefined): void {
 		if (this.hostedSessions.get(hosted.id) !== hosted) return;
 		this.hostedSessions.delete(hosted.id);
-		for (const connection of hosted.connections) connection.sessionIds.delete(hosted.id);
-		hosted.connections.clear();
 		if (!error) return;
 		this.options.reportError(error);
-		// Nobody will call close() on a harness that failed on its own, so the
-		// Session it holds open would block every later attach.
-		void hosted.harness.close().catch((closeError: unknown) => this.options.reportError(closeError));
+		// An unexpected termination says nothing about the handle's Session, which may still be
+		// held. Close it best-effort so a later attachment can acquire that Session again.
+		void Promise.resolve()
+			.then(() => hosted.harness.close())
+			.catch((closeError: unknown) => this.options.reportError(closeError));
 	}
-}
-
-/** SessionRepo backends return backend-specific fields that the strict wire schema rejects. */
-function toWireMetadata(metadata: SessionMetadata): SessionMetadata {
-	const wire: SessionMetadata = {
-		id: metadata.id,
-		createdAt: metadata.createdAt,
-		storageVersion: metadata.storageVersion,
-	};
-	if (metadata.cwd !== undefined) wire.cwd = metadata.cwd;
-	if (metadata.parentSessionId !== undefined) wire.parentSessionId = metadata.parentSessionId;
-	if (metadata.legacyParentSessionPath !== undefined) wire.legacyParentSessionPath = metadata.legacyParentSessionPath;
-	return wire;
 }

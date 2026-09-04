@@ -1,6 +1,5 @@
 import type { Session, SessionMetadata } from "@knightcode/agent";
 import { MemorySessionRepo } from "@knightcode/agent";
-import { SessionLockedError } from "../errors.ts";
 import type { HostedHarnessHandle, KnightServerHost } from "../types.ts";
 
 export class Deferred<T> {
@@ -29,6 +28,8 @@ export class TestHarness {
 	readonly #termination = new Deferred<Error | undefined>();
 	readonly terminated = this.#termination.promise;
 	closeCount = 0;
+	failClose?: Error;
+	private nextCloseGate?: OpenGate;
 
 	constructor(session: Session) {
 		this.session = session;
@@ -36,6 +37,17 @@ export class TestHarness {
 
 	async close(): Promise<void> {
 		this.closeCount += 1;
+		const gate = this.nextCloseGate;
+		if (gate) {
+			this.nextCloseGate = undefined;
+			gate.entered.resolve(undefined);
+			await gate.release.promise;
+		}
+		if (this.failClose) {
+			const error = this.failClose;
+			this.failClose = undefined;
+			throw error;
+		}
 		await this.session.close();
 		this.closed.resolve(undefined);
 		this.#termination.resolve(undefined);
@@ -44,6 +56,12 @@ export class TestHarness {
 	async terminate(error: Error): Promise<void> {
 		await this.session.close();
 		this.#termination.resolve(error);
+	}
+
+	gateNextClose(): OpenGate {
+		const gate = { entered: new Deferred<void>(), release: new Deferred<void>() };
+		this.nextCloseGate = gate;
+		return gate;
 	}
 }
 
@@ -55,10 +73,9 @@ interface ListDelay {
 export class TestServerHost implements KnightServerHost {
 	readonly repo = new MemorySessionRepo({ now: () => 1 });
 	readonly harnesses = new Map<string, TestHarness[]>();
-	readonly locked = new Set<string>();
-	openCount = 0;
-	failNextOpen?: Error;
-	failNextHarness?: Error;
+	createHarnessCount = 0;
+	nextCreateHarnessError?: Error;
+	nextHarnessCloseError?: Error;
 	readonly sessions: KnightServerHost["sessions"] = {
 		list: async () => {
 			const delay = this.nextListDelay;
@@ -69,37 +86,38 @@ export class TestServerHost implements KnightServerHost {
 			}
 			return this.repo.list();
 		},
-		open: async (metadata) => {
-			this.openCount += 1;
-			const gate = this.nextOpenGate;
-			if (gate) {
-				this.nextOpenGate = undefined;
-				gate.entered.resolve(undefined);
-				await gate.release.promise;
-			}
-			if (this.failNextOpen) {
-				const error = this.failNextOpen;
-				this.failNextOpen = undefined;
-				throw error;
-			}
-			if (this.locked.has(metadata.id)) throw new SessionLockedError(`Session is locked: ${metadata.id}`);
-			return this.repo.open(metadata);
-		},
 	};
 	private nextListDelay?: ListDelay;
-	private nextOpenGate?: OpenGate;
+	private nextCreateHarnessGate?: OpenGate;
 
-	async createHarness(session: Session): Promise<HostedHarnessHandle> {
-		if (this.failNextHarness) {
-			const error = this.failNextHarness;
-			this.failNextHarness = undefined;
+	async createHarness(metadata: SessionMetadata): Promise<HostedHarnessHandle> {
+		this.createHarnessCount += 1;
+		const gate = this.nextCreateHarnessGate;
+		if (gate) {
+			this.nextCreateHarnessGate = undefined;
+			gate.entered.resolve(undefined);
+			await gate.release.promise;
+		}
+		const session = await this.repo.open(metadata);
+		try {
+			if (this.nextCreateHarnessError) {
+				const error = this.nextCreateHarnessError;
+				this.nextCreateHarnessError = undefined;
+				throw error;
+			}
+			const harness = new TestHarness(session);
+			if (this.nextHarnessCloseError) {
+				harness.failClose = this.nextHarnessCloseError;
+				this.nextHarnessCloseError = undefined;
+			}
+			const harnesses = this.harnesses.get(metadata.id) ?? [];
+			harnesses.push(harness);
+			this.harnesses.set(metadata.id, harnesses);
+			return harness;
+		} catch (error) {
+			await session.close();
 			throw error;
 		}
-		const harness = new TestHarness(session);
-		const harnesses = this.harnesses.get(session.metadata.id) ?? [];
-		harnesses.push(harness);
-		this.harnesses.set(session.metadata.id, harnesses);
-		return harness;
 	}
 
 	async seed(id = "session-1", parentSessionId?: string): Promise<SessionMetadata> {
@@ -115,9 +133,9 @@ export class TestServerHost implements KnightServerHost {
 		return delay;
 	}
 
-	gateNextOpen(): OpenGate {
+	gateNextCreateHarness(): OpenGate {
 		const gate = { entered: new Deferred<void>(), release: new Deferred<void>() };
-		this.nextOpenGate = gate;
+		this.nextCreateHarnessGate = gate;
 		return gate;
 	}
 

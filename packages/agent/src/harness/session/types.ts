@@ -66,7 +66,7 @@ export interface LaneConfiguration {
 	activeToolNames: string[];
 }
 
-export interface Operation {
+export interface OperationMeta {
 	operationId: string;
 	lane: string;
 	sourceLeafId: string | null;
@@ -284,26 +284,61 @@ export type NavigationState =
 	  };
 
 export type OperationState = RunState | CompactionState | NavigationState;
+export type Operation = { meta: OperationMeta; state: OperationState };
 
 export interface LaneState {
 	currentOperationId: string | null;
 	pendingNextRun: string[];
 }
 
-export type LaneLastResult = {
-	operationId: string;
-	kind: "run" | "compaction" | "navigation";
-	leafId: string | null;
-	finalAssistantEntryId?: string;
-} & (
-	| { outcome: "failed"; error: OperationError; runCompletion?: never }
-	| {
-			outcome: "completed";
-			error?: never;
-			runCompletion?: "assistant" | "terminated_tools";
-	  }
-	| { outcome: "declined" | "aborted"; error?: never; runCompletion?: never }
-);
+type FailedLaneLastResult = { outcome: "failed"; error: OperationError; runCompletion?: never };
+type AbortedLaneLastResult = { outcome: "aborted"; error?: never; runCompletion?: never };
+type StructuralLaneLastResultOutcome =
+	| FailedLaneLastResult
+	| AbortedLaneLastResult
+	| { outcome: "declined"; error?: never; runCompletion?: never }
+	| { outcome: "completed"; error?: never; runCompletion?: never };
+
+export type LaneLastResult =
+	| ({
+			operationId: string;
+			kind: "run";
+			leafId: string;
+	  } & (
+			| ((FailedLaneLastResult | AbortedLaneLastResult) & { finalAssistantEntryId?: string })
+			// A completed assistant run finishes on its final assistant entry; an all-terminating
+			// tool batch finishes on a tool result and has none.
+			| {
+					outcome: "completed";
+					error?: never;
+					runCompletion: "assistant";
+					finalAssistantEntryId: string;
+			  }
+			| {
+					outcome: "completed";
+					error?: never;
+					runCompletion: "terminated_tools";
+					finalAssistantEntryId?: never;
+			  }
+	  ))
+	| ({
+			operationId: string;
+			kind: "compaction";
+			leafId: string;
+			finalAssistantEntryId?: never;
+	  } & StructuralLaneLastResultOutcome)
+	| ({
+			operationId: string;
+			kind: "navigation";
+			leafId: string | null;
+			oldLeafId: string | null;
+			finalAssistantEntryId?: never;
+	  } & (
+			| FailedLaneLastResult
+			| AbortedLaneLastResult
+			| { outcome: "declined"; error?: never; runCompletion?: never; summaryEntryId?: never }
+			| { outcome: "completed"; error?: never; runCompletion?: never; summaryEntryId?: string }
+	  ));
 
 export type PendingEntry =
 	{ type: "message"; payload: AgentMessage } | { type: "custom"; customType: string; payload?: JsonValue };
@@ -338,7 +373,7 @@ export interface RegisterValues {
 	"lane.config": LaneConfiguration;
 	"lane.state": LaneState;
 	"lane.lastResult": LaneLastResult;
-	"op.meta": Operation;
+	"op.meta": OperationMeta;
 	"op.state": OperationState;
 	"op.tool_args": Record<string, JsonValue>;
 	"op.preparation": DurableStructuralPreparation;
@@ -531,7 +566,34 @@ export interface SessionCreateOptions {
 }
 
 export type ForkOptions =
-	{ scope?: "branch"; entryId?: string; position?: "before" | "at"; id?: string } | { scope: "tree"; id?: string };
+	| {
+			/**
+			 * Copy one branch path into the destination session's main lane. This is
+			 * the default scope. The destination starts idle with a fresh lane state,
+			 * no operation registers, no pending entries, no last result, and an empty
+			 * usage ledger.
+			 */
+			scope?: "branch";
+			/** Entry to fork from. Defaults to the source main lane's current leaf. */
+			entryId?: string;
+			/**
+			 * Whether the fork includes the selected entry or stops at its parent.
+			 * Defaults to including the selected entry.
+			 */
+			position?: "before" | "at";
+			/** Optional destination session id. */
+			id?: string;
+	  }
+	| {
+			/**
+			 * Copy the whole conversation tree and every lane leaf/configuration. The
+			 * destination starts idle with fresh lane states, no operation registers,
+			 * no pending entries, no last results, and an empty usage ledger.
+			 */
+			scope: "tree";
+			/** Optional destination session id. */
+			id?: string;
+	  };
 
 export interface SessionRepo<
 	TMetadata extends SessionMetadata = SessionMetadata,

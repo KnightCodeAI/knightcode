@@ -1,0 +1,59 @@
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
+import { acquireExperimentalServerProfile } from "../src/cli/experimental/server-profile.ts";
+
+const directories = new Set<string>();
+
+async function makeDirectory(): Promise<string> {
+	const directory = await mkdtemp(join(tmpdir(), "psp-"));
+	directories.add(directory);
+	return directory;
+}
+
+afterEach(async () => {
+	await Promise.all([...directories].map((directory) => rm(directory, { recursive: true, force: true })));
+	directories.clear();
+});
+
+describe("experimental server profile", () => {
+	test("serializes launchers and preserves the server identity", async () => {
+		const directory = await makeDirectory();
+		const first = await acquireExperimentalServerProfile(directory);
+		let secondAcquired = false;
+		const pendingSecond = acquireExperimentalServerProfile(directory).then((profile) => {
+			secondAcquired = true;
+			return profile;
+		});
+
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		expect(secondAcquired).toBe(false);
+		await first.release();
+
+		const second = await pendingSecond;
+		expect(secondAcquired).toBe(true);
+		expect(second.serverId).toBe(first.serverId);
+		await second.release();
+	});
+
+	test("does not serialize or share identity across server profiles", async () => {
+		const firstDirectory = await makeDirectory();
+		const secondDirectory = await makeDirectory();
+
+		const [first, second] = await Promise.all([
+			acquireExperimentalServerProfile(firstDirectory),
+			acquireExperimentalServerProfile(secondDirectory),
+		]);
+		expect(first.serverId).not.toBe(second.serverId);
+		await Promise.all([first.release(), second.release()]);
+	});
+
+	test("rejects corrupt identity and releases the launcher lock", async () => {
+		const directory = await makeDirectory();
+		await writeFile(join(directory, "server-id"), "invalid\n");
+
+		await expect(acquireExperimentalServerProfile(directory)).rejects.toThrow(/Invalid experimental server identity/);
+		await expect(access(join(directory, ".launcher.lock"))).rejects.toMatchObject({ code: "ENOENT" });
+	});
+});

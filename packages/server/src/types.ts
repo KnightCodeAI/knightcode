@@ -1,10 +1,10 @@
-import type { AgentHarness, Session, SessionMetadata, SessionRepo } from "@knightcode/agent";
+import type { AgentHarness, SessionMetadata, SessionRepo } from "@knightcode/agent";
 import type { KnightServerListener } from "./listener.ts";
 
 export interface KnightServerOptions {
 	listeners: readonly KnightServerListener[];
-	/** Stable logical identity supplied by the server installation or profile. */
-	serviceId: string;
+	/** Stable logical server identity supplied by the installation or profile. */
+	serverId: string;
 	maxFrameLength?: number;
 	handshakeTimeoutMs?: number;
 	onError?: (error: Error) => void;
@@ -19,12 +19,7 @@ export interface HostedHarnessHandle extends Pick<AgentHarness, "close"> {
 }
 
 /** Host capabilities used directly by the list and attach control-plane operations. */
-export interface KnightServerHost {
-	readonly sessions: Pick<SessionRepo, "list" | "open">;
-	createHarness(session: Session): Promise<HostedHarnessHandle>;
-}
-
-export interface HostedSessionInfo {
-	readonly sessionId: string;
-	readonly metadata: SessionMetadata;
+export interface KnightServerHost<TMetadata extends SessionMetadata = SessionMetadata> {
+	readonly sessions: Pick<SessionRepo<TMetadata>, "list">;
+	createHarness(metadata: TMetadata): Promise<HostedHarnessHandle>;
 }

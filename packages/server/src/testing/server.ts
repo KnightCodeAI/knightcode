@@ -2,9 +2,9 @@ import { KnightServer } from "../server.ts";
 import type { KnightServerHost, KnightServerOptions } from "../types.ts";
 import { TestServerHost } from "./host.ts";
 
-export interface TestServerOptions extends Omit<KnightServerOptions, "serviceId"> {
+export interface TestServerOptions extends Omit<KnightServerOptions, "serverId"> {
 	host?: KnightServerHost;
-	serviceId?: string;
+	serverId?: string;
 }
 
 export interface TestServer {
@@ -20,7 +20,7 @@ export function createTestServer(options: TestServerOptions): TestServer {
 			listeners: options.listeners,
 			maxFrameLength: options.maxFrameLength,
 			handshakeTimeoutMs: options.handshakeTimeoutMs,
-			serviceId: options.serviceId ?? "00000000000000000000000000000001",
+			serverId: options.serverId ?? "00000000-0000-4000-8000-000000000001",
 			onError: options.onError,
 		}),
 		host,

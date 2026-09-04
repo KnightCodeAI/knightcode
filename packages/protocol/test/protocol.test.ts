@@ -17,6 +17,7 @@ import {
 	ProtocolValidationError,
 	parseClientMessage,
 	parseServerMessage,
+	ServerControlRpc,
 	type ServerHello,
 	type ServerMessage,
 	ServerMessageDecoder,
@@ -27,8 +28,7 @@ const clientHello: ClientHello = { type: "hello", version: PROTOCOL_VERSION };
 const serverHello: ServerHello = {
 	type: "hello",
 	version: PROTOCOL_VERSION,
-	connectionId: "connection-1",
-	serviceId: "00000000000000000000000000000001",
+	serverId: "00000000-0000-4000-8000-000000000001",
 };
 
 const metadata = {
@@ -44,7 +44,8 @@ describe("RPC manifest", () => {
 		const calls: unknown[] = [];
 		const client = createRpcClient(ServiceRpc, async (call) => {
 			calls.push(call);
-			return call.method === "list" ? [metadata] : { sessionId: call.args[0] };
+			if (call.method === "list") return [metadata];
+			return { sessionId: call.args[0] };
 		});
 
 		await expect(client.list()).resolves.toEqual([metadata]);
@@ -78,6 +79,22 @@ describe("RPC manifest", () => {
 		await expect(dispatch({ method: "list", args: [] }, undefined)).rejects.toThrow(/Invalid result.*list/);
 	});
 
+	test("keeps launcher control methods separate from session operations", async () => {
+		const calls: unknown[] = [];
+		const control = createRpcClient(ServerControlRpc, async (call) => {
+			calls.push(call);
+			return {};
+		});
+		const dispatch = createRpcDispatcher(ServerControlRpc, {
+			drain: () => ({}),
+		});
+
+		await expect(control.drain()).resolves.toEqual({});
+		await expect(dispatch({ method: "drain", args: [] }, undefined)).resolves.toEqual({});
+		expect(calls).toEqual([{ method: "drain", args: [] }]);
+		expect("drain" in createRpcClient(ServiceRpc, async () => [])).toBe(false);
+	});
+
 	test("rejects empty manifests instead of creating unusable RPC clients", () => {
 		expect(() => defineRpc({})).toThrow(/at least one method/);
 	});
@@ -104,35 +121,45 @@ describe("protocol validation", () => {
 		expect(() => parseClientMessage(message)).toThrow(ProtocolValidationError);
 	});
 
-	test.each(["", "service-1", "0".repeat(31), "0".repeat(33), "A".repeat(32)])(
-		"rejects non-128-bit service ID %j",
-		(serviceId) => {
-			expect(() =>
-				parseClientMessage({
-					type: "request",
-					id: "request-1",
-					serviceId,
-					call: { method: "list", args: [] },
-				}),
-			).toThrow(ProtocolValidationError);
-		},
-	);
+	test.each([
+		"",
+		"server-1",
+		"00000000-0000-7000-8000-000000000001",
+		"00000000-0000-4000-7000-000000000001",
+		"00000000-0000-4000-8000-00000000000A",
+	])("rejects non-canonical UUIDv4 server ID %j", (serverId) => {
+		expect(() =>
+			parseClientMessage({
+				type: "request",
+				id: "request-1",
+				serverId,
+				call: { method: "list", args: [] },
+			}),
+		).toThrow(ProtocolValidationError);
+	});
 
-	test("validates list and attach RPC calls with logical targets", () => {
+	test("validates service and launcher-control RPC calls with logical targets", () => {
 		const list: ClientMessage = {
 			type: "request",
 			id: "request-1",
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			call: { method: "list", args: [] },
 		};
 		const attach: ClientMessage = {
 			type: "request",
 			id: "request-2",
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			call: { method: "attach", args: ["session-1"] },
+		};
+		const drain: ClientMessage = {
+			type: "request",
+			id: "request-3",
+			serverId: "00000000-0000-4000-8000-000000000001",
+			call: { method: "drain", args: [] },
 		};
 		expect(parseClientMessage(list)).toEqual(list);
 		expect(parseClientMessage(attach)).toEqual(attach);
+		expect(parseClientMessage(drain)).toEqual(drain);
 		expect(() => parseClientMessage({ ...attach, call: { method: "attach", args: [] } })).toThrow(
 			ProtocolValidationError,
 		);
@@ -164,17 +191,33 @@ describe("protocol validation", () => {
 		expect(parseServerMessage(message)).toEqual(message);
 	});
 
+	test("validates drain acknowledgements", () => {
+		const message: ServerMessage = {
+			type: "response",
+			id: "request-1",
+			ok: true,
+			result: {},
+		};
+		expect(parseServerMessage(message)).toEqual(message);
+		expect(() => parseServerMessage({ ...message, result: { sessionIds: [] } })).toThrow(ProtocolValidationError);
+	});
+
 	test.each([
 		[
 			"empty request id",
-			{ type: "request", id: "", serviceId: "00000000000000000000000000000001", call: { method: "list", args: [] } },
+			{
+				type: "request",
+				id: "",
+				serverId: "00000000-0000-4000-8000-000000000001",
+				call: { method: "list", args: [] },
+			},
 		],
 		[
 			"empty session id",
 			{
 				type: "request",
 				id: "request-1",
-				serviceId: "00000000000000000000000000000001",
+				serverId: "00000000-0000-4000-8000-000000000001",
 				call: { method: "attach", args: [""] },
 			},
 		],
@@ -183,7 +226,7 @@ describe("protocol validation", () => {
 			{
 				type: "request",
 				id: "request-1",
-				serviceId: "00000000000000000000000000000001",
+				serverId: "00000000-0000-4000-8000-000000000001",
 				call: { method: "list", args: [], extra: true },
 			},
 		],
@@ -192,30 +235,25 @@ describe("protocol validation", () => {
 	});
 
 	test.each([
-		["empty connection id", { ...serverHello, connectionId: "" }],
-		["invalid service id", { ...serverHello, serviceId: "service-1" }],
+		["invalid server id", { ...serverHello, serverId: "server-1" }],
 		["missing response result", { type: "response", id: "request-1", ok: true }],
 		["extra response field", { type: "response", id: "request-1", ok: true, result: [], extra: true }],
 	] as const)("rejects malformed server boundaries: %s", (_label, message) => {
 		expect(() => parseServerMessage(message)).toThrow(ProtocolValidationError);
 	});
 
-	test.each([
-		"wrong_service",
-		"session_not_found",
-		"session_locked",
-		"server_busy",
-		"server_restarting",
-		"internal_error",
-	] as const)("accepts the %s error code", (code) => {
-		const message: ServerMessage = {
-			type: "response",
-			id: "request-1",
-			ok: false,
-			error: { code, message: "safe" },
-		};
-		expect(parseServerMessage(message)).toEqual(message);
-	});
+	test.each(["wrong_server", "session_not_found", "server_draining", "internal_error"] as const)(
+		"accepts the %s error code",
+		(code) => {
+			const message: ServerMessage = {
+				type: "response",
+				id: "request-1",
+				ok: false,
+				error: { code, message: "safe" },
+			};
+			expect(parseServerMessage(message)).toEqual(message);
+		},
+	);
 
 	test("rejects unknown messages and fields", () => {
 		expect(() => parseServerMessage({ ...serverHello, snapshot: {} })).toThrow(ProtocolValidationError);
@@ -225,24 +263,6 @@ describe("protocol validation", () => {
 	test("does not parse JSON strings as messages", () => {
 		expect(() => parseClientMessage(JSON.stringify(clientHello))).toThrow(ProtocolValidationError);
 		expect(() => parseServerMessage(JSON.stringify(serverHello))).toThrow(ProtocolValidationError);
-	});
-
-	test("rejects cyclic JSON error details without retaining the payload", () => {
-		const details: Record<string, unknown> = {};
-		details.self = details;
-		let thrown: unknown;
-		try {
-			parseServerMessage({
-				type: "response",
-				id: "request-1",
-				ok: false,
-				error: { code: "invalid_request", message: "invalid", details },
-			});
-		} catch (error) {
-			thrown = error;
-		}
-		expect(thrown).toBeInstanceOf(ProtocolValidationError);
-		expect(Object.hasOwn(thrown as object, "value")).toBe(false);
 	});
 });
 
@@ -263,7 +283,7 @@ describe("validated framed protocol APIs", () => {
 		const request: ClientMessage = {
 			type: "request",
 			id: "request-1",
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			call: { method: "list", args: [] },
 		};
 		const first = encodeClientMessage(clientHello);
@@ -293,22 +313,6 @@ describe("validated framed protocol APIs", () => {
 		expect(decoder.push(wire.subarray(0, split))).toEqual([serverHello]);
 		expect(decoder.push(wire.subarray(split))).toEqual([response]);
 		decoder.end();
-	});
-
-	test("rejects non-JSON CBOR values in nested protocol details", () => {
-		const wire = encodeFrame(
-			encodeCbor({
-				type: "response",
-				id: "request-1",
-				ok: false,
-				error: {
-					code: "invalid_request",
-					message: "invalid",
-					details: { bytes: new Uint8Array([1, 2, 3]) },
-				},
-			}),
-		);
-		expect(() => new ServerMessageDecoder().push(wire)).toThrow(ProtocolValidationError);
 	});
 
 	test.each([

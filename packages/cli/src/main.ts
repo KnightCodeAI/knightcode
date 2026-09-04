@@ -30,7 +30,7 @@ import { resolveCredentialForPrint } from "./cli/credential-print.ts";
 import { experimentalCli } from "./cli/experimental/cli.ts";
 import type { ClientCommand } from "./cli/experimental/commands/client.ts";
 import type { ServerCommand } from "./cli/experimental/commands/server.ts";
-import { runExperimentalClient, startExperimentalMemoryServer } from "./cli/experimental/runtime.ts";
+import { runExperimentalClient, startExperimentalServerGeneration } from "./cli/experimental/runtime.ts";
 import { SESSION_WORKER_ENV } from "./cli/experimental/session-worker.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
@@ -560,26 +560,34 @@ async function promptForMissingSessionCwd(
 	]);
 }
 
-async function waitForTermination(): Promise<void> {
-	await new Promise<void>((resolve) => {
-		const finish = (): void => {
+async function waitForTermination(serverClosed: Promise<void>): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		const cleanup = (): void => {
 			process.off("SIGINT", finish);
 			process.off("SIGTERM", finish);
+		};
+		const finish = (): void => {
+			cleanup();
 			resolve();
+		};
+		const fail = (error: unknown): void => {
+			cleanup();
+			reject(error);
 		};
 		process.once("SIGINT", finish);
 		process.once("SIGTERM", finish);
+		void serverClosed.then(finish, fail);
 	});
 }
 
 async function runExperimentalServerCommand(command: ServerCommand): Promise<void> {
 	if (command.auth !== undefined) throw new Error("Authentication is not supported by the local demo server");
-	if (command.listen !== undefined) throw new Error("The local demo server uses its service-addressed Unix socket");
-	const runtime = await startExperimentalMemoryServer();
-	console.log(`Service: ${runtime.serviceId}`);
+	if (command.listen !== undefined) throw new Error("The local demo server uses its server-addressed Unix socket");
+	const runtime = await startExperimentalServerGeneration({ sessionDir: command.sessionDir });
+	console.log(`Server: ${runtime.serverId}`);
 	console.log(`Socket: ${runtime.socketPath}`);
 	try {
-		await waitForTermination();
+		await waitForTermination(runtime.closed);
 	} finally {
 		await runtime.close();
 	}
@@ -588,10 +596,10 @@ async function runExperimentalServerCommand(command: ServerCommand): Promise<voi
 async function runExperimentalClientCommand(command: ClientCommand): Promise<void> {
 	const result = await runExperimentalClient(command);
 	if (result.kind === "attached") {
-		console.log(`${result.serviceId}	${result.sessionId}	attached`);
+		console.log(`${result.serverId}	${result.sessionId}	attached`);
 		return;
 	}
-	for (const session of result.sessions) console.log(`${session.serviceId}	${session.sessionId}`);
+	for (const session of result.sessions) console.log(`${session.serverId}	${session.sessionId}`);
 }
 
 async function runExperimentalCommand(args: string[]): Promise<boolean> {

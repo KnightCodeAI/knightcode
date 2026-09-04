@@ -5,7 +5,7 @@ const UNSUPPORTED_SERVER_OPTIONS = "The experimental server command does not sup
 const UNSUPPORTED_CLIENT_OPTIONS = "The experimental client command does not support existing CLI options yet";
 
 describe("experimental CLI command composition", () => {
-	test("composes knightcode command options with the existing parser", () => {
+	test("composes pi command options with the existing parser", () => {
 		const result = experimentalCli.parse([
 			"--listen",
 			"unix:///tmp/knightcode.sock",
@@ -36,7 +36,7 @@ describe("experimental CLI command composition", () => {
 		});
 	});
 
-	test.each(["--help", "--version"] as const)("keeps KnightCode %s handling in existing CLI options", (option) => {
+	test.each(["--help", "--version"] as const)("keeps Pi %s handling in existing CLI options", (option) => {
 		expect(experimentalCli.parse([option])).toMatchObject({
 			ok: true,
 			command: { command: "knightcode", options: { [option === "--help" ? "help" : "version"]: true } },
@@ -78,6 +78,21 @@ describe("experimental CLI command composition", () => {
 			ok: true,
 			command: { command: "server" },
 		});
+	});
+
+	test("passes the server session directory to the command action", async () => {
+		const runServer = vi.fn(() => undefined);
+		const result = await experimentalCli.execute(["server", "--session-dir", "./sessions"], {
+			runKnightcode: vi.fn(() => undefined),
+			runServer,
+			runClient: vi.fn(() => undefined),
+		});
+
+		expect(result).toEqual({
+			ok: true,
+			command: { command: "server", sessionDir: "./sessions" },
+		});
+		expect(runServer).toHaveBeenCalledWith({ command: "server", sessionDir: "./sessions" });
 	});
 
 	test.each(["knightcode", "server", "client"] as const)("executes the parsed %s command", async (name) => {

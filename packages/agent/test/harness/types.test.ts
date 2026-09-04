@@ -3,6 +3,8 @@ import { expectTypeOf, it } from "vitest";
 import type {
 	AgentHarnessOptions,
 	AgentHarnessStreamOptions,
+	AgentHarnessTool,
+	AgentHarnessToolInvocation,
 	AgentLane,
 	AgentMessage,
 	AgentTool,
@@ -13,6 +15,7 @@ import type {
 	Control,
 	CustomEntry,
 	Deferred,
+	DriveResult,
 	EntryProjector,
 	Generation,
 	GenerationContext,
@@ -22,11 +25,14 @@ import type {
 	HookName,
 	IdGenerator,
 	LaneConfiguration,
+	LaneExecutionInfo,
 	LaneLastResult,
 	LaneSnapshot,
 	NavigationState,
 	NewEntry,
-	Operation,
+	OperationAdmissionResult,
+	OperationMeta,
+	OperationRequest,
 	OperationState,
 	RegisterSetWrite,
 	RegisterValues,
@@ -218,7 +224,7 @@ const operations = [
 		startedAt: 3,
 		intent: { kind: "navigation", targetId: "target", summarize: true, label: "target" },
 	},
-] satisfies Operation[];
+] satisfies OperationMeta[];
 
 const lastResult = {
 	operationId: "run",
@@ -317,7 +323,7 @@ it("covers the complete durable storage and Part 3 discriminants", () => {
 		| "fact.label"
 		| "fact.custom"
 	>();
-	expectTypeOf<Operation["intent"]["kind"]>().toEqualTypeOf<"run" | "compaction" | "navigation">();
+	expectTypeOf<OperationMeta["intent"]["kind"]>().toEqualTypeOf<"run" | "compaction" | "navigation">();
 	expectTypeOf<Control["status"]>().toEqualTypeOf<"running" | "cancel_requested">();
 	expectTypeOf<Generation["status"]>().toEqualTypeOf<"ready" | "effect_pending" | "retry_wait">();
 	expectTypeOf<ToolCall["status"]>().toEqualTypeOf<"planned" | "effect_pending" | "completed">();
@@ -410,7 +416,9 @@ it("covers Part 5 results, events, hooks, snapshots, tools, and stream options",
 		| "config_update"
 		| "compaction_start"
 		| "compaction_end"
+		| "compaction_suspend"
 		| "navigation_start"
+		| "navigation_suspend"
 		| "navigation_end"
 		| "lane_created"
 		| "usage"
@@ -432,6 +440,13 @@ it("covers Part 5 results, events, hooks, snapshots, tools, and stream options",
 	expectTypeOf<HookHandler<"before_resume">>().returns.toEqualTypeOf<void | Promise<void>>();
 	expectTypeOf<LaneSnapshot["operation"]>().not.toEqualTypeOf<SessionSnapshot>();
 	expectTypeOf<AgentLane["getLastResult"]>().returns.toEqualTypeOf<Promise<LaneLastResult | undefined>>();
+	expectTypeOf<AgentLane["accept"]>().returns.toEqualTypeOf<Promise<OperationAdmissionResult>>();
+	expectTypeOf<AgentLane["drive"]>().returns.toEqualTypeOf<Promise<DriveResult>>();
+	expectTypeOf<AgentLane["inspectExecution"]>().returns.toEqualTypeOf<Promise<LaneExecutionInfo>>();
+	expectTypeOf<OperationRequest["kind"]>().toEqualTypeOf<
+		"prompt" | "skill" | "prompt_template" | "compaction" | "navigation"
+	>();
+	expectTypeOf<Parameters<AgentHarnessTool<object>["execute"]>[5]>().toEqualTypeOf<AgentHarnessToolInvocation>();
 	expectTypeOf<AgentTool["replay"]>().toEqualTypeOf<"never" | "safe" | undefined>();
 	expectTypeOf<AgentHarnessStreamOptions["deferred"]>().toEqualTypeOf<
 		boolean | { window?: "15m" | "1h" | "24h" } | undefined

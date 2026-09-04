@@ -1,6 +1,5 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig, mergeConfig } from "vitest/config";
-import baseConfig, { workspaceSourcePaths } from "../../vitest.base.ts";
+import baseConfig from "../../vitest.base.ts";
 
 export default mergeConfig(
 	baseConfig,
@@ -19,30 +18,6 @@ export default mergeConfig(
 					external: [/@silvia-odwyer\/photon-node/],
 				},
 			},
-		},
-		resolve: {
-			alias: [
-				{
-					find: /^@knightcode\/client\/unix$/,
-					replacement: fileURLToPath(new URL("../client/src/unix.ts", import.meta.url)),
-				},
-				{
-					find: /^@knightcode\/server\/unix$/,
-					replacement: fileURLToPath(new URL("../server/src/transports/unix/index.ts", import.meta.url)),
-				},
-				{
-					find: /^@knightcode\/server$/,
-					replacement: fileURLToPath(new URL("../server/src/index.ts", import.meta.url)),
-				},
-				{
-					find: /^@knightcode\/client$/,
-					replacement: fileURLToPath(new URL("../client/src/index.ts", import.meta.url)),
-				},
-				{
-					find: /^@knightcode\/protocol$/,
-					replacement: fileURLToPath(new URL("../protocol/src/index.ts", import.meta.url)),
-				},
-			],
 		},
 	}),
 );

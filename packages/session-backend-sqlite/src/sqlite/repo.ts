@@ -1,6 +1,7 @@
 import { access, mkdir, open as openFile, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { SessionCreateOptions } from "@knightcode/agent";
+import { StorageBackedSession } from "@knightcode/agent";
 import { uuidv7 } from "@knightcode/ai";
 import { applyInitialSchema } from "./migrations.ts";
 import { insertInitialMainLaneRegisters } from "./session/registers.ts";
@@ -11,13 +12,16 @@ import {
 	readSingleSessionRow,
 	type SqliteSessionMetadata,
 } from "./session/session-row.ts";
-import { claimWriterLease, releaseWriterLease } from "./session/writer-lease.ts";
+import { claimWriterLease, releaseWriterLease, type WriterLeaseRow } from "./session/writer-lease.ts";
+import { SqliteOpenSession } from "./session.ts";
+import { SqliteStorage } from "./storage.ts";
 import type { SqliteDatabase, SqliteDatabaseFactory } from "./types.ts";
 
 export const SQLITE_STORAGE_VERSION = 1;
 export const SQLITE_SESSION_EXTENSION = ".sqlite";
 
 const DEFAULT_WRITER_LEASE_MS = 30_000;
+const WRITER_LEASE_RENEW_MS = DEFAULT_WRITER_LEASE_MS / 3;
 const FIRST_AVAILABLE_COMMIT_SEQ = 3;
 
 export type SqliteSessionCreateOptions = SessionCreateOptions;
@@ -55,7 +59,6 @@ function configureConnection(db: SqliteDatabase): void {
 	db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
 }
 
-// TODO: Implement SessionRepo<SqliteSessionMetadata, SqliteSessionCreateOptions> once SqliteStorage returns real Sessions.
 export class SqliteSessionRepo {
 	private readonly directory: string;
 	private readonly databaseFactory: SqliteDatabaseFactory;
@@ -68,16 +71,17 @@ export class SqliteSessionRepo {
 		this.now = options.now ?? Date.now;
 	}
 
-	// TODO: Return an open Session<SqliteSessionMetadata> once SqliteStorage is wired in.
-	async create(options: SqliteSessionCreateOptions = {}): Promise<unknown> {
+	async create(options: SqliteSessionCreateOptions = {}): Promise<SqliteOpenSession> {
 		await mkdir(this.directory, { recursive: true });
 		const createdAt = this.now();
 		const id = options.id ?? uuidv7(createdAt);
 		this.reserveId(id);
 		const path = sessionPath(this.directory, id);
 		let db: SqliteDatabase | undefined;
+		let lease: WriterLeaseRow | undefined;
 		let reservedFile = false;
 		let initialized = false;
+		let session: SqliteOpenSession | undefined;
 		try {
 			const file = await openFile(path, "wx");
 			await file.close();
@@ -93,35 +97,34 @@ export class SqliteSessionRepo {
 				...(options.parentSessionId === undefined ? {} : { parentSessionId: options.parentSessionId }),
 				path,
 			};
-			activeDb.transaction(() => {
+			lease = activeDb.transaction(() => {
 				if (readSessionRowCount(activeDb) !== 0) throw new Error(`SQLite session already exists at ${path}`);
 				insertSessionRow(activeDb, metadata, SQLITE_STORAGE_VERSION, FIRST_AVAILABLE_COMMIT_SEQ);
 				insertInitialMainLaneRegisters(activeDb);
-				// TODO: Keep this lease until Session.close() once SqliteStorage exists.
-				const lease = claimWriterLease(activeDb, uuidv7(this.now()), this.now(), DEFAULT_WRITER_LEASE_MS);
-				releaseWriterLease(activeDb, lease.owner_id, lease.fence);
+				return claimWriterLease(activeDb, uuidv7(this.now()), this.now(), DEFAULT_WRITER_LEASE_MS);
 			});
 			initialized = true;
-			return metadata;
+			session = this.openStorageBackedSession(metadata, activeDb, lease);
+			return session;
 		} catch (error) {
 			if (reservedFile && !initialized) await removeSessionFiles(path, { force: true });
 			throw error;
 		} finally {
-			db?.close();
-			this.pendingIds.delete(id);
+			if (session === undefined) this.discardConnection(db, lease, id);
 		}
 	}
 
-	// TODO: Return an open Session<SqliteSessionMetadata> once SqliteStorage is wired in.
-	async open(metadata: SqliteSessionMetadata): Promise<unknown> {
+	async open(metadata: SqliteSessionMetadata): Promise<SqliteOpenSession> {
 		this.reserveId(metadata.id);
 		let db: SqliteDatabase | undefined;
+		let lease: WriterLeaseRow | undefined;
+		let session: SqliteOpenSession | undefined;
 		try {
 			await access(metadata.path);
 			const activeDb = await this.databaseFactory.open(metadata.path);
 			db = activeDb;
 			configureConnection(activeDb);
-			return activeDb.transaction(() => {
+			const claimed = activeDb.transaction(() => {
 				const id = sessionIdFromPath(metadata.path);
 				const stored = metadataFromSessionRow(
 					metadata.path,
@@ -132,14 +135,13 @@ export class SqliteSessionRepo {
 				if (stored.id !== metadata.id) {
 					throw new Error(`SQLite session path ${metadata.path} contains ${stored.id}, not ${metadata.id}`);
 				}
-				// TODO: Keep this lease until Session.close() once SqliteStorage exists.
-				const lease = claimWriterLease(activeDb, uuidv7(this.now()), this.now(), DEFAULT_WRITER_LEASE_MS);
-				releaseWriterLease(activeDb, lease.owner_id, lease.fence);
-				return stored;
+				return { stored, lease: claimWriterLease(activeDb, uuidv7(this.now()), this.now(), DEFAULT_WRITER_LEASE_MS) };
 			});
+			lease = claimed.lease;
+			session = this.openStorageBackedSession(claimed.stored, activeDb, lease);
+			return session;
 		} finally {
-			db?.close();
-			this.pendingIds.delete(metadata.id);
+			if (session === undefined) this.discardConnection(db, lease, metadata.id);
 		}
 	}
 
@@ -168,6 +170,40 @@ export class SqliteSessionRepo {
 		// TODO: Reject missing files and live external writer leases before unlinking once repo/session ownership is wired.
 		if (this.pendingIds.has(metadata.id)) throw new Error(`Session is open: ${metadata.id}`);
 		await rm(metadata.path, { force: true });
+	}
+
+	private openStorageBackedSession(
+		metadata: SqliteSessionMetadata,
+		db: SqliteDatabase,
+		lease: WriterLeaseRow,
+	): SqliteOpenSession {
+		const storage = new SqliteStorage(db, { now: this.now });
+		const session = new StorageBackedSession(metadata, storage);
+		// The claim is this session's exclusive write ownership: renew it while the session is
+		// open so it cannot expire under a live writer, and release it only after queued writes
+		// drain in close(). A renewal that loses the row means another writer took the file.
+		const renewal = setInterval(() => {
+			try {
+				claimWriterLease(db, lease.owner_id, this.now(), DEFAULT_WRITER_LEASE_MS);
+			} catch {
+				clearInterval(renewal);
+			}
+		}, WRITER_LEASE_RENEW_MS);
+		renewal.unref();
+		return new SqliteOpenSession(session, () => {
+			clearInterval(renewal);
+			this.discardConnection(db, lease, metadata.id);
+		});
+	}
+
+	/** Releases this connection's own fenced claim, then drops the connection and the open-id reservation. */
+	private discardConnection(db: SqliteDatabase | undefined, lease: WriterLeaseRow | undefined, id: string): void {
+		try {
+			if (db !== undefined && lease !== undefined) releaseWriterLease(db, lease.owner_id, lease.fence);
+		} finally {
+			db?.close();
+			this.pendingIds.delete(id);
+		}
 	}
 
 	private reserveId(id: string): void {

@@ -1,6 +1,7 @@
+import { isAbsolute } from "node:path";
 import { type AgentHarness, MemorySessionRepo } from "@knightcode/agent";
 import { isDemoSessionId } from "./demo-sessions.ts";
-import { SESSION_WORKER_ENV } from "./session-worker.ts";
+import { SESSION_WORKER_DIR_ENV, SESSION_WORKER_ENV } from "./session-worker.ts";
 
 // Prototype-only control protocol. Real Harness operations will require a
 // transport-independent protocol rather than additional ad hoc IPC messages.
@@ -23,11 +24,13 @@ function send(event: SessionWorkerEvent): Promise<void> {
 
 async function run(): Promise<void> {
 	// Prototype-only catalog validation. A production worker will resolve the
-	// requested session through durable storage. The environment names the
-	// session because a compiled binary re-enters itself, where the parent
-	// cannot control the child's argv.
+	// requested session through durable storage. The environment carries both
+	// values because a compiled binary re-enters itself, where the parent cannot
+	// control the child's argv.
 	const sessionId = process.env[SESSION_WORKER_ENV];
 	if (!sessionId || !isDemoSessionId(sessionId)) throw new Error(`Unknown demo session: ${sessionId ?? ""}`);
+	const sessionDir = process.env[SESSION_WORKER_DIR_ENV];
+	if (!sessionDir || !isAbsolute(sessionDir)) throw new Error("Session worker requires an absolute session directory");
 
 	// Prototype-only isolated state. The parent and child intentionally seed
 	// separate repositories; this does not provide persistence or shared state.

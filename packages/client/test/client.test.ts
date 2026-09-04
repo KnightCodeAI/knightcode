@@ -16,32 +16,29 @@ import { MemoryByteServer } from "./support.ts";
 
 async function connectClient(
 	server: MemoryByteServer,
-	serviceId = "00000000000000000000000000000001",
+	serverId = "00000000-0000-4000-8000-000000000001",
 ): Promise<KnightClient> {
-	return KnightClient.connect({ serviceId, transportFactory: (handlers) => server.connect(handlers) });
+	return KnightClient.connect({ serverId, transportFactory: (handlers) => server.connect(handlers) });
 }
 
-test("requires a 128-bit service identity", () => {
-	expect(() => new KnightClient({ serviceId: "invalid-service", transportFactory: () => Promise.reject() })).toThrow(
-		/serviceId/,
+test("requires a canonical UUIDv4 server identity", () => {
+	expect(() => new KnightClient({ serverId: "invalid-server", transportFactory: () => Promise.reject() })).toThrow(
+		/serverId/,
 	);
 });
 
-describe("KnightClient list and attach", () => {
-	test("connects only to the expected logical service", async () => {
+describe("KnightClient service operations", () => {
+	test("connects only to the expected logical server", async () => {
 		const matching = new MemoryByteServer();
 		const client = await connectClient(matching);
-		expect(client.hello).toMatchObject({
-			serviceId: "00000000000000000000000000000001",
-			connectionId: "connection-1",
-		});
+		expect(client.hello).toMatchObject({ serverId: "00000000-0000-4000-8000-000000000001" });
 		await client.dispose();
 
-		const wrong = new MemoryByteServer("00000000000000000000000000000002");
+		const wrong = new MemoryByteServer("00000000-0000-4000-8000-000000000002");
 		await expect(connectClient(wrong)).rejects.toBeInstanceOf(ProtocolValidationError);
 	});
 
-	test("addresses list and attach requests to the configured service", async () => {
+	test("addresses list and attach requests to the configured server", async () => {
 		const server = new MemoryByteServer();
 		const client = await connectClient(server);
 		const listing = client.listSessions();
@@ -49,7 +46,7 @@ describe("KnightClient list and attach", () => {
 		expect(server.messages[1]).toEqual({
 			type: "request",
 			id: "request-1",
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			call: { method: "list", args: [] },
 		});
 		server.send({
@@ -64,7 +61,7 @@ describe("KnightClient list and attach", () => {
 		await server.waitForMessages(3);
 		expect(server.messages[2]).toMatchObject({
 			type: "request",
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			call: { method: "attach", args: ["session-1"] },
 		});
 		server.send({
@@ -130,14 +127,13 @@ describe("KnightClient connection lifecycle", () => {
 		let closeCount = 0;
 		let sendCount = 0;
 		const client = new KnightClient({
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			transportFactory: (handlers) => {
 				handlers.onData(
 					encodeServerMessage({
 						type: "hello",
 						version: PROTOCOL_VERSION,
-						connectionId: "connection-1",
-						serviceId: "00000000000000000000000000000001",
+						serverId: "00000000-0000-4000-8000-000000000001",
 					}),
 				);
 				return {
@@ -164,7 +160,7 @@ describe("KnightClient connection lifecycle", () => {
 		let handlers: Parameters<ByteTransportFactory>[0];
 		let closeCount = 0;
 		const client = new KnightClient({
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			transportFactory: (createdHandlers) => {
 				handlers = createdHandlers;
 				return {
@@ -199,7 +195,7 @@ describe("KnightClient connection lifecycle", () => {
 		const transportFactory: ByteTransportFactory = (handlers) =>
 			(connection++ === 0 ? first : second).connect(handlers);
 		const client = new KnightClient({
-			serviceId: "00000000000000000000000000000001",
+			serverId: "00000000-0000-4000-8000-000000000001",
 			transportFactory,
 		});
 		const states: string[] = [];
@@ -210,7 +206,9 @@ describe("KnightClient connection lifecycle", () => {
 		first.disconnect();
 
 		await expect(pending).rejects.toBeInstanceOf(KnightDisconnectedError);
-		await expect(client.reconnect()).resolves.toMatchObject({ connectionId: "connection-1" });
+		await expect(client.reconnect()).resolves.toMatchObject({
+			serverId: "00000000-0000-4000-8000-000000000001",
+		});
 		expect(connection).toBe(2);
 		expect(client.connected).toBe(true);
 		expect(states).toEqual(["connecting", "connected", "disconnected", "connecting", "connected"]);

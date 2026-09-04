@@ -1,17 +1,19 @@
-import { randomUUID } from "node:crypto";
+import type { SessionMetadata } from "@knightcode/agent";
 import {
 	type ClientHello,
 	type ClientMessage,
 	ClientMessageDecoder,
 	DEFAULT_MAX_FRAME_LENGTH,
 	encodeServerMessage,
-	isServiceId,
+	isServerId,
 	isSupportedProtocolVersion,
 	PROTOCOL_VERSION,
 	type ProtocolError,
+	type ProtocolRpcResult,
 	ProtocolValidationError,
 	type RequestEnvelope,
 	type ResponseEnvelope,
+	type ServerControlRpcResult,
 	type ServerHello,
 	type ServerHelloError,
 	type ServerMessage,
@@ -22,33 +24,38 @@ import {
 	type ConnectionState,
 	isTerminalConnection,
 } from "./connection.ts";
-import { INTERNAL_SERVER_ERROR_MESSAGE, InternalServerError, KnightServerError, WrongServiceError } from "./errors.ts";
+import { INTERNAL_SERVER_ERROR_MESSAGE, KnightServerError, ServerDrainingError, WrongServerError } from "./errors.ts";
 import { HostedHarnessManager } from "./hosted-harness-manager.ts";
 import type { KnightServerListener } from "./listener.ts";
-import type { HostedSessionInfo, KnightServerHost, KnightServerOptions } from "./types.ts";
+import type { KnightServerHost, KnightServerOptions } from "./types.ts";
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
 const MAX_UINT32 = 0xffff_ffff;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
-export class KnightServer {
-	readonly serviceId: string;
+export class KnightServer<TMetadata extends SessionMetadata = SessionMetadata> {
+	readonly serverId: string;
+	/** Resolves after shutdown, or rejects when listener or hosted-Harness cleanup fails. */
+	readonly closed: Promise<void>;
 
 	private readonly listeners: readonly KnightServerListener[];
 	private readonly maxFrameLength: number;
 	private readonly handshakeTimeoutMs: number;
 	private readonly onError: ((error: Error) => void) | undefined;
 	private readonly connections = new Set<ConnectionState>();
-	private readonly sessions: HostedHarnessManager;
+	private readonly sessions: HostedHarnessManager<TMetadata>;
 	private closing = false;
 	private closePromise?: Promise<void>;
+	private closedSettled = false;
+	private rejectClosed!: (error: unknown) => void;
+	private resolveClosed!: () => void;
 	private startPromise?: Promise<this>;
 	private started = false;
 
-	constructor(host: KnightServerHost, options: KnightServerOptions) {
+	constructor(host: KnightServerHost<TMetadata>, options: KnightServerOptions) {
 		const resolved = resolveOptions(options);
 		this.listeners = options.listeners;
-		this.serviceId = options.serviceId;
+		this.serverId = options.serverId;
 		this.maxFrameLength = resolved.maxFrameLength;
 		this.handshakeTimeoutMs = resolved.handshakeTimeoutMs;
 		this.onError = options.onError;
@@ -57,14 +64,11 @@ export class KnightServer {
 			isClosing: () => this.closing,
 			reportError: (error) => this.reportError(error),
 		});
-	}
-
-	get addresses(): readonly string[] {
-		return this.listeners.flatMap((listener) => (listener.address === undefined ? [] : [listener.address]));
-	}
-
-	get hostedSessions(): readonly HostedSessionInfo[] {
-		return this.sessions.hosted;
+		this.closed = new Promise((resolve, reject) => {
+			this.resolveClosed = resolve;
+			this.rejectClosed = reject;
+		});
+		void this.closed.catch(() => {});
 	}
 
 	start(): Promise<this> {
@@ -86,8 +90,24 @@ export class KnightServer {
 			return this;
 		} catch (error) {
 			this.closing = true;
-			await Promise.allSettled(started.map((listener) => listener.close()));
-			await this.closeServerState();
+			const cleanupErrors: unknown[] = [];
+			// The async wrapper turns a listener's synchronous throw into a rejected result, so
+			// cleanup always reaches closeServerState and `closed` always settles.
+			const listenerResults = await Promise.allSettled(started.map(async (listener) => listener.close()));
+			for (const result of listenerResults) {
+				if (result.status === "rejected") cleanupErrors.push(result.reason);
+			}
+			try {
+				await this.closeServerState();
+			} catch (cleanupError) {
+				cleanupErrors.push(cleanupError);
+			}
+			if (cleanupErrors.length > 0) {
+				const failure = new AggregateError([error, ...cleanupErrors], "Server startup and cleanup failed");
+				this.settleClosed(failure);
+				throw failure;
+			}
+			this.settleClosed();
 			throw error;
 		} finally {
 			this.startPromise = undefined;
@@ -113,13 +133,10 @@ export class KnightServer {
 		}, this.handshakeTimeoutMs);
 		handshakeTimeout.unref();
 		state = {
-			id: randomUUID(),
 			connection,
 			decoder: new ClientMessageDecoder({ maxFrameLength: this.maxFrameLength }),
-			sessionIds: new Set(),
 			stage: "awaitingHello",
 			disconnected: false,
-			handshakeComplete: false,
 			handshakeTimeout,
 		};
 		this.connections.add(state);
@@ -144,12 +161,26 @@ export class KnightServer {
 	private async closeInternal(): Promise<void> {
 		const starting = this.startPromise;
 		if (starting) await starting.catch(() => {});
-		try {
-			await Promise.all(this.listeners.map((listener) => listener.close()));
-		} finally {
-			await this.closeServerState();
-			this.started = false;
+		const errors: unknown[] = [];
+		const listenerResults = await Promise.allSettled(this.listeners.map(async (listener) => listener.close()));
+		for (const result of listenerResults) {
+			if (result.status === "rejected") errors.push(result.reason);
 		}
+		try {
+			await this.closeServerState();
+		} catch (error) {
+			errors.push(error);
+		}
+		this.started = false;
+		if (errors.length > 0) {
+			const failure =
+				errors.length === 1 && errors[0] instanceof Error
+					? errors[0]
+					: new AggregateError(errors, "Server shutdown failed");
+			this.settleClosed(failure);
+			throw failure;
+		}
+		this.settleClosed();
 	}
 
 	private receive(state: ConnectionState, chunk: Uint8Array): void {
@@ -216,20 +247,28 @@ export class KnightServer {
 		const sent = await this.sendMessage(state, {
 			type: "hello",
 			version: PROTOCOL_VERSION,
-			connectionId: state.id,
-			serviceId: this.serviceId,
+			serverId: this.serverId,
 		} satisfies ServerHello);
 		if (sent && !state.disconnected && state.stage === "handshaking") {
-			state.handshakeComplete = true;
 			state.stage = "ready";
 			clearTimeout(state.handshakeTimeout);
 		}
 	}
 
 	private async handleRequest(state: ConnectionState, envelope: RequestEnvelope): Promise<void> {
+		const draining = envelope.call.method === "drain";
+		let ownsDrain = false;
 		try {
-			if (envelope.serviceId !== this.serviceId) throw new WrongServiceError();
-			const result = await this.sessions.executeCall(state, envelope.call);
+			if (envelope.serverId !== this.serverId) throw new WrongServerError();
+			let result: ProtocolRpcResult;
+			if (draining) {
+				if (this.closing) throw new ServerDrainingError();
+				this.closing = true;
+				ownsDrain = true;
+				result = await this.drain();
+			} else {
+				result = await this.sessions.executeCall(envelope.call);
+			}
 			await this.sendMessage(state, {
 				type: "response",
 				id: envelope.id,
@@ -243,7 +282,18 @@ export class KnightServer {
 				ok: false,
 				error: this.toProtocolError(error),
 			} satisfies ResponseEnvelope);
+		} finally {
+			if (ownsDrain) this.scheduleClose();
 		}
+	}
+
+	private async drain(): Promise<ServerControlRpcResult<"drain">> {
+		await this.sessions.close();
+		return {};
+	}
+
+	private scheduleClose(): void {
+		void this.close().catch((error: unknown) => this.reportError(error));
 	}
 
 	private transportClosed(connection: ConnectionState): void {
@@ -263,7 +313,6 @@ export class KnightServer {
 		connection.stage = "closed";
 		clearTimeout(connection.handshakeTimeout);
 		this.connections.delete(connection);
-		this.sessions.disconnect(connection);
 	}
 
 	private async sendMessage(connection: ConnectionState, message: ServerMessage): Promise<boolean> {
@@ -324,14 +373,8 @@ export class KnightServer {
 	}
 
 	private toProtocolError(error: unknown): ProtocolError {
-		if (error instanceof InternalServerError) {
-			this.reportError(error.cause);
-			return { code: "internal_error", message: INTERNAL_SERVER_ERROR_MESSAGE };
-		}
 		if (error instanceof KnightServerError) {
-			return error.details === undefined
-				? { code: error.code, message: error.message }
-				: { code: error.code, message: error.message, details: error.details };
+			return { code: error.code, message: error.message };
 		}
 		if (error instanceof ProtocolValidationError) {
 			return { code: "invalid_request", message: error.message };
@@ -347,12 +390,19 @@ export class KnightServer {
 			// Error observers cannot affect server state.
 		}
 	}
+
+	private settleClosed(error?: unknown): void {
+		if (this.closedSettled) return;
+		this.closedSettled = true;
+		if (error === undefined) this.resolveClosed();
+		else this.rejectClosed(error);
+	}
 }
 
 function resolveOptions(options: KnightServerOptions): { maxFrameLength: number; handshakeTimeoutMs: number } {
 	if (!Array.isArray(options.listeners)) throw new TypeError("KnightServer listeners must be an array");
-	if (!isServiceId(options.serviceId)) {
-		throw new TypeError("KnightServer serviceId must be 32 lowercase hexadecimal characters");
+	if (!isServerId(options.serverId)) {
+		throw new TypeError("KnightServer serverId must be a canonical lowercase UUIDv4");
 	}
 	const maxFrameLength = options.maxFrameLength ?? DEFAULT_MAX_FRAME_LENGTH;
 	if (!Number.isSafeInteger(maxFrameLength) || maxFrameLength <= 0 || maxFrameLength > MAX_UINT32) {
