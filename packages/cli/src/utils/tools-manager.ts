@@ -6,6 +6,7 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { APP_NAME, getBinDir } from "../config.ts";
 import { fetchWithRetry } from "./management-http.ts";
+import { formatVersionCheckError } from "./version-check.ts";
 
 const TOOLS_DIR = getBinDir();
 const NETWORK_TIMEOUT_MS = 10_000;
@@ -132,9 +133,24 @@ export async function getLatestVersion(repo: string): Promise<string> {
 		throw new Error(`Failed to resolve latest ${repo} release: HTTP ${response.status} without redirect`);
 	}
 
-	const tag = new URL(location, "https://github.com").pathname.split("/").pop();
-	if (!tag || !location.includes("/releases/tag/")) {
-		throw new Error(`Failed to resolve latest ${repo} release: unexpected redirect to ${location}`);
+	// Match the release path exactly. A substring test would also accept the marker
+	// appearing in a query string, or on another repository's path, and hand back
+	// whatever the last path segment happened to be.
+	const unexpectedRedirect = () =>
+		new Error(`Failed to resolve latest ${repo} release: unexpected redirect to ${location}`);
+	let redirect: URL;
+	try {
+		redirect = new URL(location, "https://github.com");
+	} catch {
+		throw unexpectedRedirect();
+	}
+	const tagPrefix = `/${repo}/releases/tag/`;
+	if (redirect.origin !== "https://github.com" || !redirect.pathname.startsWith(tagPrefix)) {
+		throw unexpectedRedirect();
+	}
+	const tag = redirect.pathname.slice(tagPrefix.length);
+	if (!tag || tag.includes("/")) {
+		throw unexpectedRedirect();
 	}
 	return decodeURIComponent(tag).replace(/^v/, "");
 }
@@ -381,17 +397,13 @@ export async function ensureTool(
 		onStatus?.({ type: "info", message: `${config.name} installed to ${path}` });
 		return path;
 	} catch (e) {
-		// Include the error cause chain: fetch failures surface as a bare
-		// "fetch failed" TypeError with the actionable detail (DNS, TLS,
-		// timeout) hidden in the cause. Depth-capped to guard against
-		// circular cause chains.
-		const messages: string[] = [];
-		for (let current: unknown = e, depth = 0; current instanceof Error && depth < 5; current = current.cause, depth++) {
-			if (!messages.includes(current.message)) messages.push(current.message);
-		}
+		// A fetch failure surfaces as a bare "fetch failed" TypeError with the
+		// actionable detail (DNS, TLS, timeout) in the cause, and Node wraps
+		// multi-address attempts in an AggregateError. formatVersionCheckError
+		// already unpacks both.
 		onStatus?.({
 			type: "warning",
-			message: `Failed to download ${config.name}: ${messages.length > 0 ? messages.join(": ") : String(e)}`,
+			message: `Failed to download ${config.name}: ${formatVersionCheckError(e)}`,
 		});
 		return undefined;
 	}

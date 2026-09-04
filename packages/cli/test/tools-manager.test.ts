@@ -96,6 +96,42 @@ describe("getLatestVersion", () => {
 			"Failed to resolve latest sharkdp/fd release: unexpected redirect to https://github.com/login",
 		);
 	});
+
+	it("rejects a redirect to another host", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => redirectResponse("https://example.invalid/sharkdp/fd/releases/tag/v9.9.9")),
+		);
+
+		await expect(getLatestVersion("sharkdp/fd")).rejects.toThrow("unexpected redirect");
+	});
+
+	it("rejects a redirect carrying the release path only in the query string", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => redirectResponse("https://github.com/login?return_to=/releases/tag/v9.9.9")),
+		);
+
+		await expect(getLatestVersion("sharkdp/fd")).rejects.toThrow("unexpected redirect");
+	});
+
+	it("rejects a release tag belonging to another repository", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => redirectResponse("https://github.com/someone/else/releases/tag/v9.9.9")),
+		);
+
+		await expect(getLatestVersion("sharkdp/fd")).rejects.toThrow("unexpected redirect");
+	});
+
+	it("rejects a malformed Location header", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => redirectResponse("http://[")),
+		);
+
+		await expect(getLatestVersion("sharkdp/fd")).rejects.toThrow("unexpected redirect");
+	});
 });
 
 describe("ensureTool", () => {
@@ -117,7 +153,7 @@ describe("ensureTool", () => {
 		consoleLog.mockRestore();
 	});
 
-	it("surfaces the error cause chain when a download fails", async () => {
+	it("surfaces the error cause when a download fails", async () => {
 		delete process.env.KNIGHTCODE_OFFLINE;
 		const cause = new Error("connect ETIMEDOUT 140.82.113.3:443");
 		vi.stubGlobal(
@@ -135,8 +171,30 @@ describe("ensureTool", () => {
 			{ type: "info", message: "fd not found. Downloading..." },
 			{
 				type: "warning",
-				message: "Failed to download fd: fetch failed: connect ETIMEDOUT 140.82.113.3:443",
+				message: "Failed to download fd: fetch failed (cause: connect ETIMEDOUT 140.82.113.3:443)",
 			},
 		]);
+	});
+
+	it("surfaces every address attempt when the cause is an AggregateError", async () => {
+		delete process.env.KNIGHTCODE_OFFLINE;
+		const cause = new AggregateError([
+			Object.assign(new Error("connect ETIMEDOUT 140.82.113.3:443"), { code: "ETIMEDOUT" }),
+			Object.assign(new Error("connect ENETUNREACH 2606:50c0::1:443"), { code: "ENETUNREACH" }),
+		]);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new TypeError("fetch failed", { cause });
+			}),
+		);
+		const statuses: ToolStatus[] = [];
+
+		await ensureTool("fd", (status) => statuses.push(status));
+
+		expect(statuses.at(-1)).toEqual({
+			type: "warning",
+			message: "Failed to download fd: fetch failed (ETIMEDOUT, ENETUNREACH)",
+		});
 	});
 });
