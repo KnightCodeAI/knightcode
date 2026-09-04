@@ -309,7 +309,7 @@ const DEEPSEEK_V4_FLASH_THINKING_LEVEL_MAP = {
 	...DEEPSEEK_V4_THINKING_LEVEL_MAP,
 	low: "low",
 } as const;
-const QWEN_TOKEN_PLAN_HIGH_MAX_THINKING_LEVEL_MAP = {
+const QWEN_TOKEN_PLAN_FALLBACK_THINKING_LEVEL_MAP = {
 	minimal: null,
 	low: null,
 	medium: null,
@@ -317,25 +317,7 @@ const QWEN_TOKEN_PLAN_HIGH_MAX_THINKING_LEVEL_MAP = {
 	xhigh: null,
 	max: "max",
 } as const;
-const QWEN_TOKEN_PLAN_QWEN38_THINKING_LEVEL_MAP = {
-	minimal: null,
-	low: "low",
-	medium: "medium",
-	high: null,
-	xhigh: "xhigh",
-	max: null,
-} as const;
-const QWEN_TOKEN_PLAN_REASONING_EFFORT_UNSUPPORTED_MODEL_IDS = new Set([
-	"MiniMax-M2.5",
-	"deepseek-v3.2",
-	"kimi-k2.5",
-	"kimi-k2.6",
-	"kimi-k2.7-code",
-	"qwen3.6-flash",
-	"qwen3.6-plus",
-	"qwen3.7-max",
-	"qwen3.7-plus",
-]);
+const QWEN_TOKEN_PLAN_REASONING_EFFORT_FALLBACK_MODEL_IDS = new Set(["glm-5", "glm-5.1"]);
 // Retired preview id — models.dev may still list it after GA ships.
 const QWEN_TOKEN_PLAN_EXCLUDED_MODEL_IDS = new Set(["qwen3.8-max-preview"]);
 const QWEN_TOKEN_PLAN_PROVIDER_IDS = new Set<string>([
@@ -343,7 +325,7 @@ const QWEN_TOKEN_PLAN_PROVIDER_IDS = new Set<string>([
 	"qwen-token-plan-cn",
 	"qwen-token-plan-individual",
 ]);
-// QwenCloud Token Plan Individual text-model allowlist, verified 2026-08-05.
+// QwenCloud Token Plan Individual text-model allowlist, verified 2026-09-03.
 // Retired models remain excluded above even if the public catalog lags.
 // https://docs.qwencloud.com/token-plan/personal/token-plan-personal-overview
 const QWEN_TOKEN_PLAN_INDIVIDUAL_MODEL_IDS = new Set<string>([
@@ -354,6 +336,7 @@ const QWEN_TOKEN_PLAN_INDIVIDUAL_MODEL_IDS = new Set<string>([
 	"qwen3.6-flash",
 	"qwen3.7-max",
 	"qwen3.7-plus",
+	"qwen3.8-flash",
 	"qwen3.8-max",
 ]);
 
@@ -1561,7 +1544,7 @@ function processFireworksModels(provider: ModelsDevProvider | undefined): Model<
 			maxTokens: model.limit?.output || 4096,
 		};
 
-		if (modelId.includes("glm-5p2")) {
+		if (modelId.includes("glm-")) {
 			models.push({
 				...common,
 				api: "openai-completions",
@@ -2236,7 +2219,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				if (m.status === "deprecated") continue;
 
 				// Claude 4.x and 5.x models route to Anthropic Messages API
-				const isCopilotClaude = /^claude-(haiku|sonnet|opus)-[45]([.\-]|$)/.test(modelId);
+				const isCopilotClaude = /^claude-(haiku|sonnet|opus|fable)-[45]([.\-]|$)/.test(modelId);
 				// Grok, gpt-5, oswe, and MAI-Code models are only served through
 				// the Copilot /responses endpoint.
 				const needsResponsesApi =
@@ -2520,7 +2503,16 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				if (m.tool_call !== true) continue;
 				if (QWEN_TOKEN_PLAN_EXCLUDED_MODEL_IDS.has(modelId)) continue;
 				if (modelIds && !modelIds.has(modelId)) continue;
-				const supportsReasoningEffort = !QWEN_TOKEN_PLAN_REASONING_EFFORT_UNSUPPORTED_MODEL_IDS.has(modelId);
+				const derivedThinkingLevelMap = getEffortThinkingLevelMap(m.reasoning_options ?? []);
+				// getEffortThinkingLevelMap marks "off" unsupported when the catalog lists no
+				// "none" effort value, but these endpoints do accept a thinking-disabled request.
+				// Drop the key so "off" stays available, as the hand-written maps had it.
+				if (derivedThinkingLevelMap?.off === null) delete derivedThinkingLevelMap.off;
+				const thinkingLevelMap =
+					derivedThinkingLevelMap ??
+					(QWEN_TOKEN_PLAN_REASONING_EFFORT_FALLBACK_MODEL_IDS.has(modelId)
+						? QWEN_TOKEN_PLAN_FALLBACK_THINKING_LEVEL_MAP
+						: undefined);
 
 				models.push({
 					id: modelId,
@@ -2528,17 +2520,8 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					api: "openai-completions",
 					provider,
 					baseUrl,
-					compat: supportsReasoningEffort
-						? qwenTokenPlanCompat
-						: { ...qwenTokenPlanCompat, supportsReasoningEffort: false },
-					...(supportsReasoningEffort
-						? {
-								thinkingLevelMap:
-									modelId === "qwen3.8-max"
-										? QWEN_TOKEN_PLAN_QWEN38_THINKING_LEVEL_MAP
-										: QWEN_TOKEN_PLAN_HIGH_MAX_THINKING_LEVEL_MAP,
-							}
-						: {}),
+					compat: thinkingLevelMap ? qwenTokenPlanCompat : { ...qwenTokenPlanCompat, supportsReasoningEffort: false },
+					...(thinkingLevelMap ? { thinkingLevelMap } : {}),
 					reasoning: m.reasoning === true,
 					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
 					cost: {
@@ -2551,7 +2534,6 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					maxTokens: m.limit?.output || 4096,
 				});
 				emittedModelIds?.add(modelId);
-				recordModelsDevReasoningOptions(provider, modelId, m);
 			}
 
 			if (modelIds && emittedModelIds && generatorOptions.strict) {

@@ -133,7 +133,7 @@ Set `KNIGHTCODE_SKIP_VERSION_CHECK=1` to disable the KnightCode version update c
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `branchSummary.reserveTokens` | number | `16384` | Tokens reserved for branch summarization |
+| `branchSummary.reserveTokens` | number | `16384` | Tokens reserved when selecting branch history; output is capped at 4096 tokens |
 | `branchSummary.skipPrompt` | boolean | `false` | Skip "Summarize branch?" prompt on `/tree` navigation (defaults to no summary) |
 
 ### Retry

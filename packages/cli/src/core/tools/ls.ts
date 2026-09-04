@@ -4,7 +4,7 @@ import { Text } from "@knightcode/tui";
 import nodePath from "path";
 import { type Static, Type } from "typebox";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ExtensionContext, ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
 import { formatToolCall, formatToolSummary, getTextOutput, plural, renderToolPath, str } from "./render-utils.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -111,7 +111,7 @@ export function createLsToolDefinition(
 			{ path, limit }: { path?: string; limit?: number },
 			signal?: AbortSignal,
 			_onUpdate?,
-			_ctx?,
+			ctx?: ExtensionContext,
 		) {
 			return new Promise((resolve, reject) => {
 				if (signal?.aborted) {
@@ -124,7 +124,7 @@ export function createLsToolDefinition(
 
 				(async () => {
 					try {
-						const dirPath = resolveToCwd(path || ".", cwd);
+						const dirPath = resolveToCwd(path || ".", ctx?.cwd || cwd);
 						const effectiveLimit = limit ?? DEFAULT_LIMIT;
 
 						// Check if path exists.

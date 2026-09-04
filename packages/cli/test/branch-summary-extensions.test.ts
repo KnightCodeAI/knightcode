@@ -54,4 +54,42 @@ describe("Branch summary extensions", () => {
 		expect(stats.tokens).toEqual({ input: 12, output: 22, cacheRead: 30, cacheWrite: 40, total: 104 });
 		expect(stats.cost).toBe(1);
 	});
+
+	it("discards an extension summary produced after the navigation was aborted", async () => {
+		let hookEntered!: () => void;
+		const hookRunning = new Promise<void>((resolve) => {
+			hookEntered = resolve;
+		});
+		const harness = await createHarness({
+			extensionFactories: [
+				(knightcode) => {
+					// Returns a summary only once its signal has been aborted, which is what
+					// a slow hook racing a session abort looks like.
+					knightcode.on("session_before_tree", async (event) => {
+						await new Promise<void>((resolve) => {
+							event.signal.addEventListener("abort", () => resolve(), { once: true });
+							hookEntered();
+						});
+						return { summary: { summary: "Summary produced after the abort" } };
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+
+		const targetId = harness.sessionManager.appendMessage(userMsg("first branch"));
+		harness.sessionManager.appendMessage(assistantMsg("first reply"));
+		harness.sessionManager.appendMessage(userMsg("abandoned branch work"));
+		harness.sessionManager.appendMessage(assistantMsg("abandoned reply"));
+		const entriesBefore = harness.sessionManager.getEntries().length;
+
+		const navigation = harness.session.navigateTree(targetId, { summarize: true });
+		await hookRunning;
+		harness.session.abortBranchSummary();
+		const result = await navigation;
+
+		expect(result).toMatchObject({ cancelled: true, aborted: true });
+		expect(result.summaryEntry).toBeUndefined();
+		expect(harness.sessionManager.getEntries()).toHaveLength(entriesBefore);
+	});
 });

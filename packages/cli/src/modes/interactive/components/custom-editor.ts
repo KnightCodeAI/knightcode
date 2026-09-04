@@ -1,11 +1,19 @@
-import { Editor, type EditorOptions, type EditorTheme, type TUI } from "@knightcode/tui";
+import { Editor, type EditorOptions, type EditorTheme, type TUI, visibleWidth } from "@knightcode/tui";
 import type { AppKeybinding, KeybindingsManager } from "../../../core/keybindings.ts";
+import type { WorkingStatusIndicator } from "./status-indicator.ts";
+
+export type CustomEditorOptions = EditorOptions & {
+	/** Render the streaming working status in the editor's top border. */
+	embedWorkingStatus?: boolean;
+};
 
 /**
- * Custom editor that handles app-level keybindings for coding-agent.
+ * Custom editor that handles app-level keybindings for the coding agent.
  */
 export class CustomEditor extends Editor {
 	private keybindings: KeybindingsManager;
+	private workingStatusIndicator: WorkingStatusIndicator | undefined;
+	public readonly embedWorkingStatus: boolean;
 	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
 
 	// Special handlers that can be dynamically replaced
@@ -15,9 +23,58 @@ export class CustomEditor extends Editor {
 	/** Handler for extension-registered shortcuts. Returns true if handled. */
 	public onExtensionShortcut?: (data: string) => boolean;
 
-	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: EditorOptions) {
+	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: CustomEditorOptions) {
 		super(tui, theme, options);
 		this.keybindings = keybindings;
+		this.embedWorkingStatus = options?.embedWorkingStatus ?? false;
+	}
+
+	setWorkingStatusIndicator(indicator: WorkingStatusIndicator | undefined): void {
+		this.workingStatusIndicator = indicator;
+	}
+
+	protected override renderTopBorder(width: number, hiddenLineCount: number): string {
+		if (!this.embedWorkingStatus || !this.workingStatusIndicator || width <= 0) {
+			return super.renderTopBorder(width, hiddenLineCount);
+		}
+
+		const message = this.workingStatusIndicator.renderInBorder(Math.max(1, width - 5));
+		const messageWidth = visibleWidth(message);
+		if (messageWidth === 0) return super.renderTopBorder(width, hiddenLineCount);
+
+		const overflowLabel = hiddenLineCount > 0 ? ` ↑ ${hiddenLineCount} more ` : undefined;
+		const overflowLabelWidth = overflowLabel ? visibleWidth(overflowLabel) : 0;
+		const overflowStart = Math.floor((width - overflowLabelWidth) / 2);
+		// Whether a status of the given width leaves room for the centred overflow label.
+		const fitsBesideOverflow = (statusWidth: number) =>
+			overflowLabel !== undefined && overflowLabelWidth + 2 <= width && overflowStart - (3 + statusWidth + 1) >= 1;
+
+		const withOverflow = (status: string, statusWidth: number) =>
+			this.borderColor("── ") +
+			status +
+			this.borderColor(
+				` ${"─".repeat(overflowStart - (3 + statusWidth + 1))}${overflowLabel}${"─".repeat(width - overflowStart - overflowLabelWidth)}`,
+			);
+
+		// Widest first: message beside the overflow count, then the message alone,
+		// then the bare glyph. The message is kept for as long as it fits — a glyph
+		// in a wide border says less than the message does, and the hidden lines are
+		// still reachable by scrolling. It was rendered at `width - 5`, which is
+		// exactly what the message-alone layout needs, so the glyph is only reached
+		// on a border too narrow for even that.
+		if (fitsBesideOverflow(messageWidth)) return withOverflow(message, messageWidth);
+		if (width >= messageWidth + 5) {
+			return this.borderColor("── ") + message + this.borderColor(` ${"─".repeat(width - messageWidth - 4)}`);
+		}
+
+		const spinner = this.workingStatusIndicator.renderSpinnerInBorder(width);
+		const spinnerWidth = visibleWidth(spinner);
+		const prefixWidth = Math.min(3, Math.max(0, width - spinnerWidth));
+		return (
+			this.borderColor("─".repeat(prefixWidth)) +
+			spinner +
+			this.borderColor("─".repeat(Math.max(0, width - prefixWidth - spinnerWidth)))
+		);
 	}
 
 	/**
