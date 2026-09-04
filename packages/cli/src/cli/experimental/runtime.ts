@@ -27,7 +27,6 @@ export type ExperimentalClientResult =
 export interface StartExperimentalMemoryServerOptions {
 	/** Directory for service-addressed Unix sockets. Defaults to ~/.knightcode/server. */
 	readonly directory?: string;
-	readonly path?: string;
 }
 
 export interface RunExperimentalClientOptions {
@@ -76,7 +75,9 @@ export async function startExperimentalMemoryServer(
 			};
 		},
 	};
-	const socketPath = options.path ?? getUnixSocketPath(serviceId, options.directory);
+	// The socket file name carries the service ID, which is how both discovery
+	// and an explicit --connect path resolve the service they are addressing.
+	const socketPath = getUnixSocketPath(serviceId, options.directory);
 	const server = createUnixServer(host, { serviceId, path: socketPath });
 	try {
 		await server.start();
