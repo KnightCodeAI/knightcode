@@ -27,12 +27,23 @@ export class StatusIndicator extends Loader {
 }
 
 export class WorkingStatusIndicator extends StatusIndicator {
-	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions, colorFn?: (text: string) => string) {
+	/**
+	 * @param embeddedColor Resolved on every frame rather than captured, because the
+	 * indicator outlives editor swaps: it returns the editor's border colour while the
+	 * indicator is drawn in that border, and undefined while it is on the standalone
+	 * row, where it takes the same accent/muted styling as every other indicator.
+	 */
+	constructor(
+		ui: TUI,
+		message: string,
+		indicator?: WorkingIndicatorOptions,
+		embeddedColor?: () => ((text: string) => string) | undefined,
+	) {
 		super(
 			"working",
 			ui,
-			colorFn ?? ((spinner) => theme.fg("accent", spinner)),
-			colorFn ?? ((text) => theme.fg("muted", text)),
+			(spinner) => (embeddedColor?.() ?? ((text: string) => theme.fg("accent", text)))(spinner),
+			(text) => (embeddedColor?.() ?? ((value: string) => theme.fg("muted", value)))(text),
 			message,
 			indicator,
 		);

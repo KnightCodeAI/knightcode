@@ -2166,6 +2166,9 @@ export class InteractiveMode {
 		this.setEditorWorkingStatusIndicator(undefined);
 		if (indicator instanceof WorkingStatusIndicator && this.setEditorWorkingStatusIndicator(indicator)) {
 			this.activeWorkingIndicatorEmbedded = true;
+			// The indicator rendered its first frame before this flag was set, so repaint
+			// it in the border colour rather than leaving one frame of accent/muted.
+			indicator.invalidate();
 			return;
 		}
 		this.statusContainer.addChild(indicator);
@@ -2193,16 +2196,15 @@ export class InteractiveMode {
 	}
 
 	private showWorkingStatusIndicator(): void {
-		const colorFn = isWorkingStatusEditor(this.editor)
-			? (text: string) =>
-					(this.editor.borderColor ?? theme.getThinkingBorderColor(this.session.thinkingLevel || "off"))(text)
-			: undefined;
 		this.showStatusIndicator(
 			new WorkingStatusIndicator(
 				this.ui,
 				this.workingMessage ?? this.defaultWorkingMessage,
 				this.workingIndicatorOptions,
-				colorFn,
+				() =>
+					this.activeWorkingIndicatorEmbedded
+						? (this.editor.borderColor ?? theme.getThinkingBorderColor(this.session.thinkingLevel || "off"))
+						: undefined,
 			),
 		);
 	}
@@ -2779,6 +2781,8 @@ export class InteractiveMode {
 			if (!this.activeWorkingIndicatorEmbedded) {
 				this.statusContainer.addChild(this.activeStatusIndicator);
 			}
+			// Moving between the border and the standalone row changes which colour applies.
+			this.activeStatusIndicator.invalidate();
 		}
 		this.ui.setFocus(this.editor as Component);
 		this.ui.requestRender();

@@ -38,43 +38,43 @@ export class CustomEditor extends Editor {
 			return super.renderTopBorder(width, hiddenLineCount);
 		}
 
-		let status = this.workingStatusIndicator.renderInBorder(Math.max(1, width - 5));
-		let statusWidth = visibleWidth(status);
-		if (statusWidth === 0) return super.renderTopBorder(width, hiddenLineCount);
+		const message = this.workingStatusIndicator.renderInBorder(Math.max(1, width - 5));
+		const messageWidth = visibleWidth(message);
+		if (messageWidth === 0) return super.renderTopBorder(width, hiddenLineCount);
 
 		const overflowLabel = hiddenLineCount > 0 ? ` ↑ ${hiddenLineCount} more ` : undefined;
 		const overflowLabelWidth = overflowLabel ? visibleWidth(overflowLabel) : 0;
 		const overflowStart = Math.floor((width - overflowLabelWidth) / 2);
-		const canFitOverflow = () =>
+		// Whether a status of the given width leaves room for the centred overflow label.
+		const fitsBesideOverflow = (statusWidth: number) =>
 			overflowLabel !== undefined && overflowLabelWidth + 2 <= width && overflowStart - (3 + statusWidth + 1) >= 1;
 
-		if (overflowLabel && !canFitOverflow()) {
-			status = this.workingStatusIndicator.renderSpinnerInBorder(width);
-			statusWidth = visibleWidth(status);
-		}
-
-		if (canFitOverflow()) {
-			const leftBlockWidth = 3 + statusWidth + 1;
-			return (
-				this.borderColor("── ") +
-				status +
-				this.borderColor(
-					` ${"─".repeat(overflowStart - leftBlockWidth)}${overflowLabel}${"─".repeat(width - overflowStart - overflowLabelWidth)}`,
-				)
+		const withOverflow = (status: string, statusWidth: number) =>
+			this.borderColor("── ") +
+			status +
+			this.borderColor(
+				` ${"─".repeat(overflowStart - (3 + statusWidth + 1))}${overflowLabel}${"─".repeat(width - overflowStart - overflowLabelWidth)}`,
 			);
+
+		// Widest first: message beside the overflow count, then the message alone,
+		// then the spinner glyph beside the count, then the glyph alone. The message
+		// is kept for as long as it fits — a bare glyph in a wide border says less
+		// than the message does, and the hidden lines are still reachable by
+		// scrolling.
+		if (fitsBesideOverflow(messageWidth)) return withOverflow(message, messageWidth);
+		if (width >= messageWidth + 5) {
+			return this.borderColor("── ") + message + this.borderColor(` ${"─".repeat(width - messageWidth - 4)}`);
 		}
 
-		if (width >= statusWidth + 5) {
-			return this.borderColor("── ") + status + this.borderColor(` ${"─".repeat(width - statusWidth - 4)}`);
-		}
+		const spinner = this.workingStatusIndicator.renderSpinnerInBorder(width);
+		const spinnerWidth = visibleWidth(spinner);
+		if (fitsBesideOverflow(spinnerWidth)) return withOverflow(spinner, spinnerWidth);
 
-		status = this.workingStatusIndicator.renderSpinnerInBorder(width);
-		statusWidth = visibleWidth(status);
-		const prefixWidth = Math.min(3, Math.max(0, width - statusWidth));
+		const prefixWidth = Math.min(3, Math.max(0, width - spinnerWidth));
 		return (
 			this.borderColor("─".repeat(prefixWidth)) +
-			status +
-			this.borderColor("─".repeat(Math.max(0, width - prefixWidth - statusWidth)))
+			spinner +
+			this.borderColor("─".repeat(Math.max(0, width - prefixWidth - spinnerWidth)))
 		);
 	}
 
