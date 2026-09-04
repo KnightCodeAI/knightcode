@@ -154,10 +154,13 @@ describe.skipIf(process.platform === "win32")("discoverUnixServices", () => {
 			await startSilentSocket(join(directory, `${serviceId(index)}.sock`), connections);
 		}
 
-		const discovery = discoverUnixServices({ directory, timeoutMs: 100 });
-		await expect.poll(() => connections.active).toBe(16);
-		expect(connections.maximum).toBe(16);
+		// The probe timeout has to outlast establishing the whole first batch, or a
+		// loaded machine retires probes before the peak is reached. `maximum` is
+		// monotonic, unlike `active`, so polling it cannot observe a shrinking peak.
+		const discovery = discoverUnixServices({ directory, timeoutMs: 500 });
+		await expect.poll(() => connections.maximum).toBe(16);
 		await expect(discovery).resolves.toEqual([]);
+		expect(connections.maximum).toBe(16);
 		expect(connections.total).toBe(20);
 	});
 
