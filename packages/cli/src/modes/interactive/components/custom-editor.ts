@@ -57,10 +57,11 @@ export class CustomEditor extends Editor {
 			);
 
 		// Widest first: message beside the overflow count, then the message alone,
-		// then the spinner glyph beside the count, then the glyph alone. The message
-		// is kept for as long as it fits — a bare glyph in a wide border says less
-		// than the message does, and the hidden lines are still reachable by
-		// scrolling.
+		// then the bare glyph. The message is kept for as long as it fits — a glyph
+		// in a wide border says less than the message does, and the hidden lines are
+		// still reachable by scrolling. It was rendered at `width - 5`, which is
+		// exactly what the message-alone layout needs, so the glyph is only reached
+		// on a border too narrow for even that.
 		if (fitsBesideOverflow(messageWidth)) return withOverflow(message, messageWidth);
 		if (width >= messageWidth + 5) {
 			return this.borderColor("── ") + message + this.borderColor(` ${"─".repeat(width - messageWidth - 4)}`);
@@ -68,8 +69,6 @@ export class CustomEditor extends Editor {
 
 		const spinner = this.workingStatusIndicator.renderSpinnerInBorder(width);
 		const spinnerWidth = visibleWidth(spinner);
-		if (fitsBesideOverflow(spinnerWidth)) return withOverflow(spinner, spinnerWidth);
-
 		const prefixWidth = Math.min(3, Math.max(0, width - spinnerWidth));
 		return (
 			this.borderColor("─".repeat(prefixWidth)) +

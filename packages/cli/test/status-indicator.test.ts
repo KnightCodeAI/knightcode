@@ -98,6 +98,26 @@ describe("status indicators", () => {
 		indicator.dispose();
 	});
 
+	it("degrades to the bare glyph on a border too narrow for the message", () => {
+		initTheme("dark");
+		const tui = { requestRender: vi.fn(), terminal: { rows: 10 } } as unknown as TUI;
+		const editor = new CustomEditor(tui, getEditorTheme(), KeybindingsManager.create(), {
+			embedWorkingStatus: true,
+		});
+		const indicator = new WorkingStatusIndicator(tui, "Working");
+		editor.setWorkingStatusIndicator(indicator);
+		const renderTopBorder = (editor as unknown as { renderTopBorder(width: number, hidden: number): string })
+			.renderTopBorder;
+
+		// Wide enough for both, then the message alone. The message is rendered at
+		// width - 5, exactly what the message-alone layout needs, so it wins at every
+		// width that can hold it and the glyph is only reached below that.
+		expect(stripAnsi(renderTopBorder.call(editor, 40, 4))).toBe("── ⠋ Working ── ↑ 4 more ───────────────");
+		expect(stripAnsi(renderTopBorder.call(editor, 20, 4))).toBe("── ⠋ Working ───────");
+		expect(stripAnsi(renderTopBorder.call(editor, 5, 4))).toBe("───⠋─");
+		indicator.dispose();
+	});
+
 	it("disposes retry countdown updates", () => {
 		initTheme("dark");
 		vi.useFakeTimers();
