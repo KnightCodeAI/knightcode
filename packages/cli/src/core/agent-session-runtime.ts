@@ -371,9 +371,9 @@ export class AgentSessionRuntime {
 
 		let destinationPath = join(sessionDir, basename(resolvedPath));
 		const sourceAlreadyStored = resolve(destinationPath) === resolvedPath;
+		const { name, ext } = parse(destinationPath);
+		let suffix = 1;
 		if (!sourceAlreadyStored) {
-			const { name, ext } = parse(destinationPath);
-			let suffix = 1;
 			while (existsSync(destinationPath)) {
 				destinationPath = join(sessionDir, `${name}-${suffix++}${ext}`);
 			}
@@ -389,10 +389,9 @@ export class AgentSessionRuntime {
 			// can be taken by the time we get here - by a second import, or by a
 			// session_before_switch handler writing to the very path it was handed.
 			// COPYFILE_EXCL is what actually claims the name, so let it drive: on
-			// EEXIST take the next suffix instead of failing an import that only needs
-			// a different name. Each attempt advances, so this terminates.
-			const { name, ext } = parse(join(sessionDir, basename(resolvedPath)));
-			let suffix = 1;
+			// EEXIST resume the search where it left off instead of failing an import
+			// that only needs a different name. Each attempt advances, so this
+			// terminates, and names the search already rejected are never retried.
 			for (;;) {
 				try {
 					copyFileSync(resolvedPath, destinationPath, constants.COPYFILE_EXCL);

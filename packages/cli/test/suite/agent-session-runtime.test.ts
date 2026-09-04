@@ -258,6 +258,7 @@ describe("AgentSessionRuntime characterization", () => {
 				writeFileSync(claimed, "claimed after the name was chosen\n");
 			});
 		});
+		const sessionDir = runtime.session.sessionManager.getSessionDir();
 		const importDir = join(tempDir, "import");
 		const importPath = join(importDir, "race.jsonl");
 		const importedSession = `${JSON.stringify({
@@ -267,16 +268,22 @@ describe("AgentSessionRuntime characterization", () => {
 			timestamp: new Date().toISOString(),
 			cwd: tempDir,
 		})}\n`;
+		mkdirSync(sessionDir, { recursive: true });
 		mkdirSync(importDir, { recursive: true });
+		// Occupying the first two names puts the pre-hook search partway through its
+		// walk, so the retry has to resume from there rather than start over.
+		writeFileSync(join(sessionDir, "race.jsonl"), "stored\n");
+		writeFileSync(join(sessionDir, "race-1.jsonl"), "stored\n");
 		writeFileSync(importPath, importedSession);
 
 		await runtime.importFromJsonl(importPath);
 
-		expect(claimed).toBeDefined();
+		// The search stopped at race-2, the hook took it, and the copy took race-3.
+		expect(claimed).toBe(join(sessionDir, "race-2.jsonl"));
 		// The squatted file is left exactly as the hook wrote it, and the import
 		// landed beside it rather than failing with EEXIST.
 		expect(readFileSync(claimed!, "utf8")).toBe("claimed after the name was chosen\n");
-		expect(runtime.session.sessionFile).not.toBe(claimed);
+		expect(runtime.session.sessionFile).toBe(join(sessionDir, "race-3.jsonl"));
 		expect(readFileSync(runtime.session.sessionFile!, "utf8")).toContain('"id":"imported"');
 	});
 
