@@ -1,5 +1,61 @@
 # @knightcodeai/cli
 
+## 0.5.4
+
+### Added
+
+- Added an entries argument to `SessionManager.inMemory()`, so an SDK embedder can resume a session held outside the filesystem — in a database, say — without writing it to a temporary `.jsonl` file first.
+
+- Added the relational algebra join operators to LaTeX rendering: `\bowtie`, `\Join`, `\ltimes`, `\rtimes`, `\leftouterjoin`, `\rightouterjoin` and `\fullouterjoin`.
+
+- Added a `vllmPriority` compat flag for custom `openai-completions` providers. Set it on a model and requests carry a top-level `priority` field, which a vLLM server running with `--scheduling-policy priority` uses to order work; lower values are served first. Unset by default, so nothing changes for providers that do not want it.
+
+### Changed
+
+- Changed the branch summary output cap from 2048 to 4096 tokens, clamped to the model's own limit, so summaries of long branches are no longer cut off mid-sentence.
+
+- Changed the Cloudflare AI Gateway binding transport to pass requests straight to the Workers AI binding's `fetch` rather than translating them into universal-endpoint calls. `createGatewayBindingFetch` is replaced by `createAiBindingFetch(env.AI)`, which supports every method, non-JSON bodies and streaming request bodies instead of rejecting them.
+
+- Changed the bundled model catalog to a fresh regeneration from models.dev. GitHub Copilot drops eight models that the provider no longer serves (`claude-opus-4.5`, `claude-opus-4.6`, `claude-sonnet-4`, `claude-sonnet-4.5`, `gemini-3.1-pro-preview`, `gpt-4.1`, `gpt-5.2`, `gpt-5.2-codex`) and gains `claude-fable-5.1` and `gemini-3.8-flash`. This regeneration is also what activates the Copilot Fable 5 routing fix, which changed only the generator and so never reached the committed data. Baseten gains `zai-org/GLM-5.3-Fast`, Cloudflare AI Gateway gains `claude-fable-5.1`, and OpenCode Go gains `omen-alpha`.
+
+  Removals only take effect through regenerated data: the remote catalog overlay merges by id and can add or update models, but never removes them, so a model that disappears upstream keeps appearing until the bundled catalog is refreshed.
+
+- Changed the selectors in `/thinking`, `/model`, `/scoped-models`, `/trust` and per-model thinking settings to keep the active option marked while browsing, by moving the marker into a fixed column ahead of the label. `/scoped-models` now uses the same per-item toggle as the rest, strikes through models that are no longer available, and no longer collapses to a single model when the first one is toggled off.
+
+- Changed the theme settings selectors to keep the configured theme marked while browsing, matching the other selectors. Both the fixed-theme list and the light/dark lists behind Automatic now show the marker in a fixed column.
+
+- Changed the streaming working indicator to render in the editor's top border instead of on its own row above it, so the editor no longer shifts up and down as a turn starts and finishes. It picks up the editor's border colour, which already tracks the thinking level. Custom editors from extensions keep the standalone row unless they opt in with `embedWorkingStatus`.
+
+### Fixed
+
+- Fixed aborting a session leaving an in-progress compaction or branch summary running. Escape during `/compact`, or an RPC `abort`, now cancels it and waits for the session to actually be idle before returning.
+
+- Fixed Baseten's GLM-5.2 and GLM-5.2-Fast being advertised as accepting images. The catalog reports image input for them but the endpoints are text-only, so attaching an image produced a provider error instead of being caught up front.
+
+- Fixed a Codex response being dropped when the server closed the stream without a blank line after the final event. The last frame is now processed at EOF instead of being discarded with the buffer.
+
+- Fixed GitHub Copilot Claude Fable models being served through the OpenAI completions adapter, which dropped the selected reasoning level. They now route through the Anthropic Messages adapter like the other Claude 4.x and 5.x models on that provider.
+
+- Fixed Fireworks GLM models other than GLM-5.2 being served through the Anthropic-compatible endpoint, which does not accept them. Every `glm-` model on Fireworks now uses the OpenAI completions endpoint, so GLM-5.3 and GLM-5.3 Flash work.
+
+- Fixed forking a compacted session losing the messages after the compaction boundary when that boundary pointed at a label. Labels are dropped from the forked path, which left the boundary pointing at an entry that no longer existed.
+
+- Fixed importing a session file silently overwriting a stored session that happened to have the same filename. The import is now written alongside it under a numbered name.
+
+- Fixed a proxied request hanging when the server closed the stream without sending a terminal event, and a final event that arrived without a trailing newline being dropped. The first now surfaces as an error, the second is processed.
+
+- Fixed proxied plain-HTTP provider requests hanging after a tool call by tunneling them with CONNECT again, restoring the behaviour Undici changed in 8.7.
+
+- Fixed Qwen3.8 Flash offering the wrong thinking levels on the Qwen Token Plan providers: it advertised high and max, which it does not accept, instead of low, medium and xhigh. It is also now listed on the Individual plan, where it is available.
+
+- Fixed the built-in tools ignoring the working directory supplied on the extension context. `read`, `write`, `edit`, `ls`, `find`, `grep` and the shell tool resolved relative paths against the directory captured when the tool was created, so a caller running a tool against a different directory operated in the session's directory instead of its own.
+
+- Fixed `fd` and `ripgrep` failing to download behind shared egress IPs, where the anonymous GitHub API rate limit is permanently exhausted. The latest release is now resolved from the release page redirect, which costs no API quota. A failed download also reports the underlying network error instead of a bare "fetch failed".
+
+- Fixed `knightcode update` reporting every install as a standalone binary. `bin/knightcode` spawns the compiled binary out of `node_modules`, so install detection now classifies a binary by where it sits rather than by how it was built, and moves the running executable aside on Windows so npm can replace it.
+
+- Fixed the write tool reporting UTF-16 code-unit counts as byte counts by removing the misleading count from its result.
+
 ## 0.5.3
 
 ### Patch Changes
