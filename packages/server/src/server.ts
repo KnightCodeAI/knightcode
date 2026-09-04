@@ -5,6 +5,7 @@ import {
 	ClientMessageDecoder,
 	DEFAULT_MAX_FRAME_LENGTH,
 	encodeServerMessage,
+	isServiceId,
 	isSupportedProtocolVersion,
 	PROTOCOL_VERSION,
 	type ProtocolError,
@@ -21,65 +22,49 @@ import {
 	type ConnectionState,
 	isTerminalConnection,
 } from "./connection.ts";
-import {
-	INTERNAL_SERVER_ERROR_MESSAGE,
-	InternalServerError,
-	NOT_IMPLEMENTED_MESSAGE,
-	KnightServerError,
-} from "./errors.ts";
+import { INTERNAL_SERVER_ERROR_MESSAGE, InternalServerError, KnightServerError, WrongServiceError } from "./errors.ts";
+import { HostedHarnessManager } from "./hosted-harness-manager.ts";
 import type { KnightServerListener } from "./listener.ts";
-import { LiveSessionManager } from "./sessions.ts";
-import { ServerSnapshotPublisher } from "./snapshots.ts";
-import type { KnightServerOptions, KnightServerService } from "./types.ts";
+import type { HostedSessionInfo, KnightServerHost, KnightServerOptions } from "./types.ts";
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
 const MAX_UINT32 = 0xffff_ffff;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 export class KnightServer {
-	readonly id: string;
+	readonly serviceId: string;
 
 	private readonly listeners: readonly KnightServerListener[];
 	private readonly maxFrameLength: number;
 	private readonly handshakeTimeoutMs: number;
 	private readonly onError: ((error: Error) => void) | undefined;
 	private readonly connections = new Set<ConnectionState>();
-	private readonly sessions: LiveSessionManager;
-	private readonly snapshots: ServerSnapshotPublisher;
+	private readonly sessions: HostedHarnessManager;
 	private closing = false;
 	private closePromise?: Promise<void>;
 	private startPromise?: Promise<this>;
 	private started = false;
 
-	constructor(service: KnightServerService, options: KnightServerOptions) {
+	constructor(host: KnightServerHost, options: KnightServerOptions) {
 		const resolved = resolveOptions(options);
 		this.listeners = options.listeners;
-		this.id = options.serverId ?? randomUUID();
+		this.serviceId = options.serviceId;
 		this.maxFrameLength = resolved.maxFrameLength;
 		this.handshakeTimeoutMs = resolved.handshakeTimeoutMs;
 		this.onError = options.onError;
-		this.sessions = new LiveSessionManager({
-			service,
+		this.sessions = new HostedHarnessManager({
+			host,
 			isClosing: () => this.closing,
-			sendMessage: (connection, message) => this.sendMessage(connection, message),
-			closeConnection: (connection) => this.closeConnection(connection),
-			disconnect: (connection) => this.disconnect(connection),
-			broadcastServerSnapshot: () => void this.snapshots.broadcast(),
-			reportError: (error) => this.reportError(error),
-		});
-		this.snapshots = new ServerSnapshotPublisher({
-			serverId: this.id,
-			service,
-			connections: this.connections,
-			isClosing: () => this.closing,
-			listSessions: () => this.sessions.listMetadata(),
-			sendMessage: (connection, message) => this.sendMessage(connection, message),
 			reportError: (error) => this.reportError(error),
 		});
 	}
 
 	get addresses(): readonly string[] {
 		return this.listeners.flatMap((listener) => (listener.address === undefined ? [] : [listener.address]));
+	}
+
+	get hostedSessions(): readonly HostedSessionInfo[] {
+		return this.sessions.hosted;
 	}
 
 	start(): Promise<this> {
@@ -227,31 +212,24 @@ export class KnightServer {
 			return;
 		}
 
-		const snapshot = await this.snapshots.get();
 		if (this.closing || state.disconnected || state.stage !== "handshaking" || state.connection.closed) return;
 		const sent = await this.sendMessage(state, {
 			type: "hello",
 			version: PROTOCOL_VERSION,
 			connectionId: state.id,
-			snapshot,
+			serviceId: this.serviceId,
 		} satisfies ServerHello);
 		if (sent && !state.disconnected && state.stage === "handshaking") {
 			state.handshakeComplete = true;
 			state.stage = "ready";
 			clearTimeout(state.handshakeTimeout);
-			if (snapshot.revision !== this.snapshots.currentRevision) {
-				const current = await this.snapshots.get();
-				await this.sendMessage(state, {
-					type: "event",
-					event: { type: "server_snapshot", snapshot: current },
-				});
-			}
 		}
 	}
 
 	private async handleRequest(state: ConnectionState, envelope: RequestEnvelope): Promise<void> {
 		try {
-			const result = await this.sessions.executeCommand(state, envelope.request);
+			if (envelope.serviceId !== this.serviceId) throw new WrongServiceError();
+			const result = await this.sessions.executeCall(state, envelope.call);
 			await this.sendMessage(state, {
 				type: "response",
 				id: envelope.id,
@@ -276,18 +254,16 @@ export class KnightServer {
 				this.reportError(error);
 			}
 		}
-		void this.disconnect(connection);
+		this.disconnect(connection);
 	}
 
-	private async disconnect(connection: ConnectionState): Promise<void> {
+	private disconnect(connection: ConnectionState): void {
 		if (connection.disconnected) return;
-		const handshakeComplete = connection.handshakeComplete;
 		connection.disconnected = true;
 		connection.stage = "closed";
 		clearTimeout(connection.handshakeTimeout);
 		this.connections.delete(connection);
-		await this.sessions.disconnect(connection);
-		if (!this.closing && handshakeComplete) void this.snapshots.broadcast();
+		this.sessions.disconnect(connection);
 	}
 
 	private async sendMessage(connection: ConnectionState, message: ServerMessage): Promise<boolean> {
@@ -298,7 +274,7 @@ export class KnightServer {
 		} catch (error) {
 			this.reportError(error);
 			await this.closeConnection(connection.connection);
-			await this.disconnect(connection);
+			this.disconnect(connection);
 			return false;
 		}
 		try {
@@ -307,7 +283,7 @@ export class KnightServer {
 		} catch (error) {
 			this.reportError(error);
 			await this.closeConnection(connection.connection);
-			await this.disconnect(connection);
+			this.disconnect(connection);
 			return false;
 		}
 	}
@@ -324,7 +300,7 @@ export class KnightServer {
 			this.reportError(encodeError);
 		}
 		await this.closeConnection(connection.connection, finalFrame);
-		await this.disconnect(connection);
+		this.disconnect(connection);
 	}
 
 	private async closeServerState(): Promise<void> {
@@ -334,8 +310,7 @@ export class KnightServer {
 			clearTimeout(connection.handshakeTimeout);
 		}
 		await Promise.all(connections.map((connection) => this.closeConnection(connection.connection)));
-		await Promise.all(connections.map((connection) => this.disconnect(connection)));
-
+		for (const connection of connections) this.disconnect(connection);
 		await this.sessions.close();
 		this.connections.clear();
 	}
@@ -354,9 +329,6 @@ export class KnightServer {
 			return { code: "internal_error", message: INTERNAL_SERVER_ERROR_MESSAGE };
 		}
 		if (error instanceof KnightServerError) {
-			if (error.code === "not_implemented") {
-				return { code: "not_implemented", message: NOT_IMPLEMENTED_MESSAGE };
-			}
 			return error.details === undefined
 				? { code: error.code, message: error.message }
 				: { code: error.code, message: error.message, details: error.details };
@@ -379,7 +351,9 @@ export class KnightServer {
 
 function resolveOptions(options: KnightServerOptions): { maxFrameLength: number; handshakeTimeoutMs: number } {
 	if (!Array.isArray(options.listeners)) throw new TypeError("KnightServer listeners must be an array");
-	if (options.serverId === "") throw new TypeError("KnightServer serverId must not be empty");
+	if (!isServiceId(options.serviceId)) {
+		throw new TypeError("KnightServer serviceId must be 32 lowercase hexadecimal characters");
+	}
 	const maxFrameLength = options.maxFrameLength ?? DEFAULT_MAX_FRAME_LENGTH;
 	if (!Number.isSafeInteger(maxFrameLength) || maxFrameLength <= 0 || maxFrameLength > MAX_UINT32) {
 		throw new TypeError(`KnightServer maxFrameLength must be an integer between 1 and ${MAX_UINT32}`);

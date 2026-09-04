@@ -1,63 +1,30 @@
-import type {
-	Command,
-	ModelMetadata,
-	ModelRef,
-	SessionMetadata,
-	SessionPhase,
-	SessionSnapshot,
-	ThinkingLevel,
-	TranscriptProgress,
-} from "@knightcode/protocol";
-import type { KnightServerError } from "./errors.ts";
+import type { AgentHarness, Session, SessionMetadata, SessionRepo } from "@knightcode/agent";
 import type { KnightServerListener } from "./listener.ts";
 
 export interface KnightServerOptions {
 	listeners: readonly KnightServerListener[];
+	/** Stable logical identity supplied by the server installation or profile. */
+	serviceId: string;
 	maxFrameLength?: number;
 	handshakeTimeoutMs?: number;
-	serverId?: string;
 	onError?: (error: Error) => void;
 }
 
 export type MaybePromise<T> = T | Promise<T>;
 
-export type PromptInput = Omit<Extract<Command, { command: "prompt" }>, "command" | "sessionId">;
-export type SteerInput = Omit<Extract<Command, { command: "steer" }>, "command" | "sessionId">;
-
-export interface CreateSessionOptions {
-	/** A collision-resistant ID assigned by KnightServer. The service must persist this exact ID. */
-	id: string;
-	cwd?: string;
-	name?: string;
-	model?: ModelRef;
-	thinkingLevel?: ThinkingLevel;
+/** A handle that can optionally report when its hosted Harness can no longer serve its Session. */
+export interface HostedHarnessHandle extends Pick<AgentHarness, "close"> {
+	/** Resolves with an error for unexpected termination, or undefined after an expected close. */
+	readonly terminated?: Promise<Error | undefined>;
 }
 
-export type KnightSessionRuntimeEvent =
-	| { type: "snapshot" }
-	| { type: "progress"; progress: TranscriptProgress }
-	| { type: "error"; error: KnightServerError };
-
-/** One acquired durable session. Conflicting operations must reject rather than queue. */
-export interface KnightSessionRuntime {
-	snapshot(): MaybePromise<SessionSnapshot>;
-	getPhase(): SessionPhase;
-	prompt(input: PromptInput): Promise<void>;
-	steer(input: SteerInput): Promise<void>;
-	abort(): Promise<void>;
-	setModel(model: ModelRef): Promise<void>;
-	setThinking(thinkingLevel: ThinkingLevel): Promise<void>;
-	subscribe(listener: (event: KnightSessionRuntimeEvent) => void): () => void;
-	dispose(): Promise<void>;
+/** Host capabilities used directly by the list and attach control-plane operations. */
+export interface KnightServerHost {
+	readonly sessions: Pick<SessionRepo, "list" | "open">;
+	createHarness(session: Session): Promise<HostedHarnessHandle>;
 }
 
-/** Service boundary for durable sessions and exclusively acquired runtimes. */
-export interface KnightServerService {
-	listSessions(): Promise<SessionMetadata[]>;
-	listModels(): Promise<ModelMetadata[]>;
-	createSession(options: CreateSessionOptions): Promise<KnightSessionRuntime>;
-	openSession(sessionId: string): Promise<KnightSessionRuntime>;
+export interface HostedSessionInfo {
+	readonly sessionId: string;
+	readonly metadata: SessionMetadata;
 }
-
-export type SessionRuntime = KnightSessionRuntime;
-export type SessionRuntimeEvent = KnightSessionRuntimeEvent;

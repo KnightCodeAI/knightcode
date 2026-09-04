@@ -1,385 +1,297 @@
-import { lstat, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { encodeClientMessage, encodeFrame, PROTOCOL_VERSION } from "@knightcode/protocol";
 import { afterEach, describe, expect, test } from "vitest";
-import { InternalServerError, NotImplementedError, type KnightServer, KnightServerError } from "../src/index.ts";
-import { connectUnixTestClient, Deferred, type ProtocolTestClient, TestServerService } from "../src/testing/index.ts";
-import { createUnixServer, type UnixServerOptions } from "../src/transports/unix/index.ts";
+import type { ByteConnection, ByteConnectionHandler } from "../src/connection.ts";
+import { KnightServer } from "../src/server.ts";
+import { ProtocolTestClient, TestServerHost, type WireChannel } from "../src/testing/index.ts";
+import type { KnightServerHost } from "../src/types.ts";
 
 const servers = new Set<KnightServer>();
-const clients = new Set<ProtocolTestClient>();
-const tempDirectories = new Set<string>();
 
-async function startServer(
-	service = new TestServerService(),
-	overrides: Partial<UnixServerOptions> = {},
-): Promise<{ server: KnightServer; service: TestServerService }> {
-	const directory = await mkdtemp(join(tmpdir(), "pis-"));
-	tempDirectories.add(directory);
-	const server = createUnixServer(service, {
-		path: join(directory, "server.sock"),
-		...overrides,
-	});
+function createServer(service: TestServerHost, serviceId = "00000000000000000000000000000001"): KnightServer {
+	const server = new KnightServer(service, { listeners: [], serviceId });
 	servers.add(server);
-	await server.start();
-	return { server, service };
+	return server;
 }
 
-async function connect(server: KnightServer): Promise<ProtocolTestClient> {
-	const client = await connectUnixTestClient(server.addresses[0]!);
-	clients.add(client);
+function connect(server: KnightServer): ProtocolTestClient {
+	let handler: ByteConnectionHandler;
+	let client: ProtocolTestClient;
+	let closed = false;
+	const connection: ByteConnection = {
+		get closed() {
+			return closed;
+		},
+		async send(chunk) {
+			client.receive(chunk);
+		},
+		close(finalChunk) {
+			if (finalChunk) client.receive(finalChunk);
+			closed = true;
+			client.markClosed();
+		},
+	};
+	const channel: WireChannel = {
+		async send(chunk) {
+			handler.onData(chunk);
+		},
+		async sendFragmented(chunk, splitAt) {
+			handler.onData(chunk.subarray(0, splitAt));
+			handler.onData(chunk.subarray(splitAt));
+		},
+		async close() {
+			if (closed) return;
+			closed = true;
+			handler.onClose();
+			client.markClosed();
+		},
+	};
+	client = new ProtocolTestClient(channel);
+	handler = server.accept(connection);
 	return client;
 }
 
 afterEach(async () => {
-	await Promise.all([...clients].map((client) => client.close()));
-	clients.clear();
 	await Promise.all([...servers].map((server) => server.close()));
 	servers.clear();
-	await Promise.all([...tempDirectories].map((directory) => rm(directory, { recursive: true, force: true })));
-	tempDirectories.clear();
 });
 
-// Unix domain sockets are unavailable on Windows: binding one fails with
-// `listen EACCES`. These suites exercise the Unix transport specifically,
-// so they are skipped there rather than reported as failures.
-describe.skipIf(process.platform === "win32")("Unix transport conformance", () => {
-	test("accepts a transport-fragmented framed-CBOR hello", async () => {
-		const { server } = await startServer();
-		const client = await connect(server);
-		const response = client.next((message) => message.type === "hello");
-		await client.sendFragmentedMessage({ type: "hello", version: PROTOCOL_VERSION }, 2);
-		expect(await response).toMatchObject({ type: "hello", version: PROTOCOL_VERSION });
+describe("list and attach protocol", () => {
+	test("handshake identifies the logical service without listing sessions", async () => {
+		const service = new TestServerHost();
+		await service.seed();
+		const client = connect(createServer(service));
+
+		expect(await client.hello()).toMatchObject({ type: "hello", serviceId: "00000000000000000000000000000001" });
+		expect(service.harnesses.size).toBe(0);
 	});
 
-	test("enforces version and exactly one first-message hello", async () => {
-		const { server } = await startServer();
+	test("list returns SessionRepo metadata without opening a session", async () => {
+		const service = new TestServerHost();
+		const metadata = await service.seed("session-1", "parent-1");
+		const client = connect(createServer(service));
+		await client.hello();
 
-		const badVersion = await connect(server);
-		expect(await badVersion.hello(PROTOCOL_VERSION + 1)).toMatchObject({
-			type: "hello_error",
-			error: { code: "version" },
+		await expect(client.request("00000000000000000000000000000001", { method: "list", args: [] })).resolves.toEqual({
+			type: "response",
+			id: "request-1",
+			ok: true,
+			result: [metadata],
 		});
-		await badVersion.waitForClose();
-
-		const requestFirst = await connect(server);
-		const firstError = requestFirst.next((message) => message.type === "hello_error");
-		await requestFirst.sendMessage({ type: "request", id: "too-early", request: { command: "list" } });
-		expect(await firstError).toMatchObject({ type: "hello_error", error: { code: "invalid_request" } });
-		await requestFirst.waitForClose();
-
-		const duplicate = await connect(server);
-		expect(await duplicate.hello()).toMatchObject({ type: "hello" });
-		const duplicateError = duplicate.next((message) => message.type === "hello_error");
-		await duplicate.sendMessage({ type: "hello", version: PROTOCOL_VERSION });
-		expect(await duplicateError).toMatchObject({ type: "hello_error", error: { code: "invalid_request" } });
-		await duplicate.waitForClose();
+		expect(service.harnesses.size).toBe(0);
 	});
 
-	test("closes connections that do not complete hello before the timeout", async () => {
-		const { server } = await startServer(new TestServerService(), { handshakeTimeoutMs: 20 });
-		const client = await connect(server);
-		await client.waitForClose();
-		expect(client.messages).toContainEqual(
-			expect.objectContaining({ type: "hello_error", error: expect.objectContaining({ code: "invalid_request" }) }),
-		);
-	});
-
-	test("keeps the handshake timeout active until the server hello is sent", async () => {
-		const service = new TestServerService();
-		const delay = service.delayNextList();
-		const { server } = await startServer(service, { handshakeTimeoutMs: 20 });
-		const client = await connect(server);
-		await client.sendMessage({ type: "hello", version: PROTOCOL_VERSION });
-		await delay.entered.promise;
-		await client.waitForClose();
-		delay.release.resolve(undefined);
-		expect(client.messages).toContainEqual(
-			expect.objectContaining({ type: "hello_error", error: expect.objectContaining({ code: "invalid_request" }) }),
-		);
-	});
-
-	test("bounds and closes malformed or oversized frames", async () => {
-		const malformedServer = await startServer();
-		const malformed = await connect(malformedServer.server);
-		const malformedError = malformed.next((message) => message.type === "hello_error");
-		await malformed.sendBytes(encodeFrame(Uint8Array.of(0xff)));
-		expect(await malformedError).toMatchObject({
-			type: "hello_error",
-			error: { code: "invalid_request" },
-		});
-		await malformed.waitForClose();
-
-		const boundedServer = await startServer(new TestServerService(), { maxFrameLength: 128 });
-		const oversized = await connect(boundedServer.server);
-		const frame = new Uint8Array(4 + 129);
-		frame[3] = 129;
-		await oversized.sendBytes(frame);
-		await oversized.waitForClose();
-		expect(oversized.messages.some((message) => message.type === "hello")).toBe(false);
-
-		const outboundServer = await startServer(new TestServerService(), { maxFrameLength: 128 });
-		const outbound = await connect(outboundServer.server);
-		await outbound.sendMessage({ type: "hello", version: PROTOCOL_VERSION });
-		await outbound.waitForClose();
-		expect(outbound.messages).toEqual([]);
-	});
-
-	test("catches up a handshaking client after a concurrent server change", async () => {
-		class RacingService extends TestServerService {
-			readonly entered = new Deferred<void>();
-			readonly release = new Deferred<void>();
-			race = false;
-
-			override async listSessions() {
-				const sessions = await super.listSessions();
-				if (!this.race) return sessions;
-				this.entered.resolve(undefined);
-				await this.release.promise;
-				return sessions;
-			}
-		}
-		const service = new RacingService();
-		service.seed("shared");
-		const { server } = await startServer(service);
-		const controller = await connect(server);
-		await controller.hello();
-		service.race = true;
-		const joining = await connect(server);
-		const hello = joining.hello();
-		await service.entered.promise;
-		await controller.request({ command: "attach", sessionId: "shared" });
-		service.release.resolve(undefined);
-		const handshake = await hello;
-		if (handshake.type !== "hello") throw new Error("Expected server hello");
-		const catchup = await joining.next(
-			(message) =>
-				message.type === "event" &&
-				message.event.type === "server_snapshot" &&
-				message.event.snapshot.revision > handshake.snapshot.revision,
-		);
-		expect(catchup).toMatchObject({
-			type: "event",
-			event: {
-				type: "server_snapshot",
-				snapshot: { sessions: [{ id: "shared", sessionName: "Session shared" }] },
+	test("list projects backend metadata onto the wire schema", async () => {
+		const service = new TestServerHost();
+		const metadata = await service.seed("session-1");
+		// JsonlSessionRepo and SqliteSessionRepo both return backend fields the
+		// strict wire schema rejects, so list has to project them away.
+		const host: KnightServerHost = {
+			sessions: {
+				list: async () =>
+					(await service.sessions.list()).map((row) => ({ ...row, path: "/sessions/session-1", modifiedAt: 7 })),
+				open: service.sessions.open,
 			},
-		});
-	});
-
-	test("shares request, event, attachment, and disconnect behavior", async () => {
-		const service = new TestServerService();
-		service.seed("first");
-		service.seed("second");
-		const { server } = await startServer(service);
-		const client = await connect(server);
-		expect(await client.hello()).toMatchObject({
-			type: "hello",
-			snapshot: { sessions: [{ id: "first" }, { id: "second" }] },
-		});
-
-		const listed = await client.request({ command: "list" });
-		expect(listed).toMatchObject({
-			ok: true,
-			result: { command: "list", sessions: [{ id: "first" }, { id: "second" }] },
-		});
-		expect(await client.request({ command: "attach", sessionId: "first" })).toMatchObject({
-			ok: true,
-			result: { command: "attach", session: { id: "first", attached: true } },
-		});
-		expect(await client.request({ command: "attach", sessionId: "second" })).toMatchObject({
-			ok: true,
-			result: { command: "attach", session: { id: "second", attached: true } },
-		});
-
-		const progress = {
-			type: "assistant_delta" as const,
-			messageId: "assistant-1",
-			contentIndex: 0,
-			kind: "text" as const,
-			delta: "hello",
+			createHarness: (session) => service.createHarness(session),
 		};
-		const progressEvent = client.next(
-			(message) => message.type === "event" && message.event.type === "session_progress",
-		);
-		service.latestRuntime("first").emitProgress(progress);
-		expect(await progressEvent).toEqual({
-			type: "event",
-			event: { type: "session_progress", sessionId: "first", progress },
-		});
+		const server = new KnightServer(host, { listeners: [], serviceId: "00000000000000000000000000000001" });
+		servers.add(server);
+		const client = connect(server);
+		await client.hello();
 
-		expect(await client.request({ command: "detach", sessionId: "first" })).toMatchObject({
+		await expect(client.request("00000000000000000000000000000001", { method: "list", args: [] })).resolves.toEqual({
+			type: "response",
+			id: "request-1",
 			ok: true,
-			result: { command: "detach", sessionId: "first" },
-		});
-		expect(service.latestRuntime("first").disposeCount).toBe(1);
-		expect(await client.request({ command: "set_thinking", sessionId: "second", thinkingLevel: "high" })).toMatchObject(
-			{ ok: true, result: { session: { id: "second", thinkingLevel: "high" } } },
-		);
-
-		const secondRuntime = service.latestRuntime("second");
-		await client.close();
-		await secondRuntime.disposed.promise;
-		expect(secondRuntime.disposeCount).toBe(1);
-	});
-
-	test("disconnects attached clients when a runtime reports a terminal error", async () => {
-		const service = new TestServerService();
-		service.seed("terminal");
-		const errors: Error[] = [];
-		const { server } = await startServer(service, { onError: (error) => errors.push(error) });
-		const client = await connect(server);
-		await client.hello();
-		await client.request({ command: "attach", sessionId: "terminal" });
-		const runtime = service.latestRuntime("terminal");
-
-		runtime.setPhase("turn");
-		runtime.emitError(new KnightServerError("session_locked", "lock ownership lost"));
-		await client.waitForClose();
-		await runtime.disposed.promise;
-		expect(runtime.disposeCount).toBe(1);
-		expect(service.locked.has("terminal")).toBe(false);
-		expect(errors).toContainEqual(expect.objectContaining({ code: "session_locked" }));
-
-		const nextClient = await connect(server);
-		await nextClient.hello();
-		expect(await nextClient.request({ command: "attach", sessionId: "terminal" })).toMatchObject({
-			ok: true,
-			result: { command: "attach", session: { id: "terminal" } },
-		});
-		expect(service.latestRuntime("terminal")).not.toBe(runtime);
-	});
-
-	test("does not expose unexpected service errors to clients", async () => {
-		class FailingService extends TestServerService {
-			private listCount = 0;
-
-			override async listSessions() {
-				this.listCount += 1;
-				if (this.listCount > 1) throw new Error("private service detail");
-				return super.listSessions();
-			}
-		}
-		const errors: Error[] = [];
-		const service = new FailingService();
-		const { server } = await startServer(service, {
-			onError: (error) => {
-				errors.push(error);
-				throw new Error("observer failure");
-			},
-		});
-		const client = await connect(server);
-		await client.hello();
-		expect(await client.request({ command: "list" })).toMatchObject({
-			ok: false,
-			error: { code: "internal_error", message: "Internal server error" },
-		});
-		expect(errors).toContainEqual(expect.objectContaining({ message: "private service detail" }));
-	});
-
-	test("keeps not_implemented stable", async () => {
-		class IncompleteService extends TestServerService {
-			private listCount = 0;
-
-			override async listSessions() {
-				this.listCount += 1;
-				if (this.listCount > 1) throw new NotImplementedError();
-				return super.listSessions();
-			}
-		}
-		const { server } = await startServer(new IncompleteService());
-		const client = await connect(server);
-		await client.hello();
-		expect(await client.request({ command: "list" })).toMatchObject({
-			ok: false,
-			error: { code: "not_implemented", message: "Operation is not implemented" },
+			result: [metadata],
 		});
 	});
 
-	test("reports wrapped internal causes without exposing them", async () => {
-		const cause = new Error("private storage detail", { cause: new Error("private root cause") });
-		class WrappedFailureService extends TestServerService {
-			private listCount = 0;
-
-			override async listSessions() {
-				this.listCount += 1;
-				if (this.listCount > 1) throw new InternalServerError(cause);
-				return super.listSessions();
-			}
-		}
-		const errors: Error[] = [];
-		const { server } = await startServer(new WrappedFailureService(), { onError: (error) => errors.push(error) });
-		const client = await connect(server);
-		await client.hello();
-		const response = await client.request({ command: "list" });
-		expect(response).toMatchObject({
-			ok: false,
-			error: { code: "internal_error", message: "Internal server error" },
-		});
-		expect(JSON.stringify(response)).not.toContain("private");
-		expect(errors).toContain(cause);
-		expect(errors).not.toContainEqual(expect.objectContaining({ name: "InternalServerError" }));
-	});
-
-	test("can respond out of request order after the handshake", async () => {
-		const service = new TestServerService();
-		service.seed("first");
-		const { server } = await startServer(service);
-		const client = await connect(server);
-		await client.hello();
+	test("attach opens the Session and creates one hosted Harness", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		const server = createServer(service);
+		const first = connect(server);
+		const second = connect(server);
+		await Promise.all([first.hello(), second.hello()]);
 
 		const delay = service.delayNextList();
-		const slow = client.request({ command: "list" }, "slow");
+		const firstAttach = first.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] });
 		await delay.entered.promise;
-		const fast = client.request({ command: "attach", sessionId: "first" }, "fast");
-		expect(await fast).toMatchObject({ ok: true, id: "fast", result: { command: "attach" } });
-		expect(client.messages.some((message) => message.type === "response" && message.id === "slow")).toBe(false);
-
+		const secondAttach = second.request("00000000000000000000000000000001", {
+			method: "attach",
+			args: ["session-1"],
+		});
 		delay.release.resolve(undefined);
-		expect(await slow).toMatchObject({ ok: true, id: "slow", result: { command: "list" } });
-		const responseIds = client.messages
-			.filter((message) => message.type === "response" && (message.id === "slow" || message.id === "fast"))
-			.map((message) => (message.type === "response" ? message.id : ""));
-		expect(responseIds).toEqual(["fast", "slow"]);
+
+		await expect(Promise.all([firstAttach, secondAttach])).resolves.toMatchObject([
+			{ ok: true, result: { sessionId: "session-1" } },
+			{ ok: true, result: { sessionId: "session-1" } },
+		]);
+		expect(service.harnesses.get("session-1")).toHaveLength(1);
+		expect(server.hostedSessions.map(({ sessionId }) => sessionId)).toEqual(["session-1"]);
 	});
 
-	test("gracefully closes connections, sessions, and listener resources", async () => {
-		const service = new TestServerService();
-		service.seed("first");
-		const { server } = await startServer(service);
-		const socketPath = server.addresses[0];
-		const client = await connect(server);
+	test("rejects requests addressed to another service before repository access", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		const client = connect(createServer(service));
 		await client.hello();
-		await client.request({ command: "attach", sessionId: "first" });
-		const runtime = service.latestRuntime("first");
-		const clientClosed = client.waitForClose();
 
+		await expect(
+			client.request("00000000000000000000000000000002", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({
+			ok: false,
+			error: { code: "wrong_service" },
+		});
+		expect(service.harnesses.size).toBe(0);
+	});
+
+	test("reports an unknown session without creating a Harness", async () => {
+		const service = new TestServerHost();
+		const client = connect(createServer(service));
+		await client.hello();
+
+		await expect(
+			client.request("00000000000000000000000000000001", { method: "attach", args: ["missing"] }),
+		).resolves.toMatchObject({
+			ok: false,
+			error: { code: "session_not_found" },
+		});
+		expect(service.harnesses.size).toBe(0);
+	});
+
+	test("invalidates a terminated Harness handle and allows a later attach", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		const server = createServer(service);
+		const client = connect(server);
+		await client.hello();
+		await client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] });
+		const firstHarness = service.latestHarness("session-1");
+
+		await firstHarness.terminate(new Error("worker crashed"));
+		await firstHarness.terminated;
+		expect(server.hostedSessions).toEqual([]);
+
+		await expect(
+			client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({ ok: true, result: { sessionId: "session-1" } });
+		expect(service.harnesses.get("session-1")).toHaveLength(2);
+	});
+
+	test("rejects an attach whose Harness terminates while the attach unwinds", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		let closeCount = 0;
+		service.createHarness = async (session) => ({
+			close: async () => {
+				closeCount += 1;
+				await session.close();
+			},
+			terminated: Promise.resolve(new Error("worker crashed")),
+		});
+		const server = createServer(service);
+		const client = connect(server);
+		await client.hello();
+
+		await expect(
+			client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({ ok: false, error: { code: "server_restarting" } });
+		expect(server.hostedSessions).toEqual([]);
+		// A Harness that failed on its own is never close()d by the host, so the
+		// invalidation has to release the Session it still holds open.
+		expect(closeCount).toBe(1);
+	});
+
+	test("connection loss does not close a hosted Harness, but server shutdown does", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		const server = createServer(service);
+		const client = connect(server);
+		await client.hello();
+		await client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] });
+		const harness = service.latestHarness("session-1");
+
+		await client.close();
+		expect(harness.closeCount).toBe(0);
 		await server.close();
-		await clientClosed;
-		expect(runtime.disposeCount).toBe(1);
-		expect(server.addresses).toEqual([]);
-		if (socketPath) await expect(lstat(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
-		await server.close();
+		expect(harness.closeCount).toBe(1);
 	});
 });
 
-// Unix domain sockets are unavailable on Windows (`listen EACCES`).
-test.skipIf(process.platform === "win32")(
-	"Unix socket decodes multiple framed requests from one raw chunk",
-	async () => {
-		const { server } = await startServer();
-		const client = await connect(server);
+describe("hosted Harness acquisition failures", () => {
+	test("shares an opening failure and allows a later retry", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		service.failNextOpen = new Error("open failed");
+		const server = createServer(service);
+		const first = connect(server);
+		const second = connect(server);
+		await Promise.all([first.hello(), second.hello()]);
+		const gate = service.gateNextOpen();
+
+		const firstAttach = first.request("00000000000000000000000000000001", {
+			method: "attach",
+			args: ["session-1"],
+		});
+		await gate.entered.promise;
+		const secondAttach = second.request("00000000000000000000000000000001", {
+			method: "attach",
+			args: ["session-1"],
+		});
+		gate.release.resolve(undefined);
+
+		await expect(Promise.all([firstAttach, secondAttach])).resolves.toMatchObject([
+			{ ok: false, error: { code: "internal_error" } },
+			{ ok: false, error: { code: "internal_error" } },
+		]);
+		expect(service.openCount).toBe(1);
+		expect(server.hostedSessions).toEqual([]);
+
+		await expect(
+			first.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({ ok: true, result: { sessionId: "session-1" } });
+		expect(service.openCount).toBe(2);
+		expect(service.harnesses.get("session-1")).toHaveLength(1);
+	});
+
+	test("releases the opened Session when Harness creation fails", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		service.failNextHarness = new Error("harness failed");
+		const server = createServer(service);
+		const client = connect(server);
 		await client.hello();
-		const first = encodeClientMessage({ type: "request", id: "first", request: { command: "list" } });
-		const second = encodeClientMessage({ type: "request", id: "second", request: { command: "list" } });
-		const combined = new Uint8Array(first.byteLength + second.byteLength);
-		combined.set(first);
-		combined.set(second, first.byteLength);
-		const firstResponse = client.next((message) => message.type === "response" && message.id === "first");
-		const secondResponse = client.next((message) => message.type === "response" && message.id === "second");
-		await client.sendBytes(combined);
-		expect(await firstResponse).toMatchObject({ type: "response", id: "first", ok: true });
-		expect(await secondResponse).toMatchObject({ type: "response", id: "second", ok: true });
-	},
-);
+
+		await expect(
+			client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({ ok: false, error: { code: "internal_error" } });
+		expect(server.hostedSessions).toEqual([]);
+
+		await expect(
+			client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({ ok: true, result: { sessionId: "session-1" } });
+		expect(service.openCount).toBe(2);
+		expect(service.harnesses.get("session-1")).toHaveLength(1);
+	});
+
+	test("closes a Harness acquired while server shutdown is in progress", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		const server = createServer(service);
+		const client = connect(server);
+		await client.hello();
+		const gate = service.gateNextOpen();
+		const attach = client.request("00000000000000000000000000000001", {
+			method: "attach",
+			args: ["session-1"],
+		});
+		await gate.entered.promise;
+		const closing = server.close();
+		gate.release.resolve(undefined);
+
+		await closing;
+		await expect(attach).rejects.toThrow(/closed/i);
+		expect(service.latestHarness("session-1").closeCount).toBe(1);
+		expect(server.hostedSessions).toEqual([]);
+	});
+});

@@ -23,6 +23,18 @@ export default mergeConfig(
 		resolve: {
 			alias: [
 				{
+					find: /^@knightcode\/client\/unix$/,
+					replacement: fileURLToPath(new URL("../client/src/unix.ts", import.meta.url)),
+				},
+				{
+					find: /^@knightcode\/server\/unix$/,
+					replacement: fileURLToPath(new URL("../server/src/transports/unix/index.ts", import.meta.url)),
+				},
+				{
+					find: /^@knightcode\/server$/,
+					replacement: fileURLToPath(new URL("../server/src/index.ts", import.meta.url)),
+				},
+				{
 					find: /^@knightcode\/client$/,
 					replacement: fileURLToPath(new URL("../client/src/index.ts", import.meta.url)),
 				},

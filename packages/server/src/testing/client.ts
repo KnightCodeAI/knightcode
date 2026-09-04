@@ -2,14 +2,14 @@ import { once } from "node:events";
 import { createConnection, type Socket } from "node:net";
 import {
 	type ClientMessage,
-	type Command,
 	encodeClientMessage,
 	PROTOCOL_VERSION,
 	type ResponseEnvelope,
 	type ServerMessage,
 	ServerMessageDecoder,
+	type ServiceRpcCall,
 } from "@knightcode/protocol";
-import { Deferred } from "./service.ts";
+import { Deferred } from "./host.ts";
 
 interface MessageWaiter {
 	predicate: (message: ServerMessage) => boolean;
@@ -46,11 +46,15 @@ export class ProtocolTestClient {
 		return response;
 	}
 
-	async request(command: Command, id = `request-${++this.requestSequence}`): Promise<ResponseEnvelope> {
+	async request(
+		serviceId: string,
+		call: ServiceRpcCall,
+		id = `request-${++this.requestSequence}`,
+	): Promise<ResponseEnvelope> {
 		const response = this.next(
 			(message): message is ResponseEnvelope => message.type === "response" && message.id === id,
 		);
-		await this.sendMessage({ type: "request", id, request: command });
+		await this.sendMessage({ type: "request", id, serviceId, call });
 		return (await response) as ResponseEnvelope;
 	}
 
