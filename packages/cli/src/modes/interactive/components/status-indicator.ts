@@ -1,4 +1,4 @@
-import { type Component, Loader, type TUI } from "@knightcode/tui";
+import { type Component, Loader, type TUI, truncateToWidth } from "@knightcode/tui";
 import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
@@ -27,15 +27,35 @@ export class StatusIndicator extends Loader {
 }
 
 export class WorkingStatusIndicator extends StatusIndicator {
-	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions) {
+	/**
+	 * @param embeddedColor Resolved on every frame rather than captured, because the
+	 * indicator outlives editor swaps: it returns the editor's border colour while the
+	 * indicator is drawn in that border, and undefined while it is on the standalone
+	 * row, where it takes the same accent/muted styling as every other indicator.
+	 */
+	constructor(
+		ui: TUI,
+		message: string,
+		indicator?: WorkingIndicatorOptions,
+		embeddedColor?: () => ((text: string) => string) | undefined,
+	) {
 		super(
 			"working",
 			ui,
-			(spinner) => theme.fg("accent", spinner),
-			(text) => theme.fg("muted", text),
+			(spinner) => (embeddedColor?.() ?? ((text: string) => theme.fg("accent", text)))(spinner),
+			(text) => (embeddedColor?.() ?? ((value: string) => theme.fg("muted", value)))(text),
 			message,
 			indicator,
 		);
+	}
+
+	renderInBorder(width: number): string {
+		const line = super.render(width + 2)[1] ?? "";
+		return truncateToWidth(line.startsWith(" ") ? line.slice(1).trimEnd() : line.trimEnd(), width, "");
+	}
+
+	renderSpinnerInBorder(width: number): string {
+		return truncateToWidth(this.getRenderedIndicator(), width, "");
 	}
 }
 

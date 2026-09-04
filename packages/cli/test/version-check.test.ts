@@ -89,6 +89,52 @@ describe("version checks", () => {
 		expect(formatVersionCheckError(error)).toBe("fetch failed (ETIMEDOUT, ENETUNREACH)");
 	});
 
+	it("formats errno details buried below the first cause", () => {
+		const error = new Error("fetch failed", {
+			cause: new Error("Client network socket disconnected", {
+				cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+			}),
+		});
+
+		expect(formatVersionCheckError(error)).toBe("fetch failed (ECONNRESET)");
+	});
+
+	it("formats errno details nested inside an aggregate entry", () => {
+		const error = new Error("fetch failed", {
+			cause: new AggregateError([
+				new Error("attempt failed", { cause: Object.assign(new Error("dns"), { code: "EAI_AGAIN" }) }),
+			]),
+		});
+
+		expect(formatVersionCheckError(error)).toBe("fetch failed (EAI_AGAIN)");
+	});
+
+	it("formats an errno carried by a plain object cause", () => {
+		// undici hands back causes that are not `instanceof Error` but still carry the errno.
+		const error = new Error("fetch failed", { cause: { code: "ECONNREFUSED", message: "connect ECONNREFUSED" } });
+
+		expect(formatVersionCheckError(error)).toBe("fetch failed (ECONNREFUSED)");
+	});
+
+	it("prefers the deepest cause message when no errno is present", () => {
+		const error = new Error("fetch failed", {
+			cause: new Error("Client network socket disconnected", {
+				cause: new Error("connect ECONNREFUSED 10.0.0.1:443"),
+			}),
+		});
+
+		expect(formatVersionCheckError(error)).toBe("fetch failed (cause: connect ECONNREFUSED 10.0.0.1:443)");
+	});
+
+	it("stops walking a self-referential cause chain", () => {
+		const looping = new Error("looping cause");
+		Object.defineProperty(looping, "cause", { value: looping });
+
+		expect(formatVersionCheckError(new Error("fetch failed", { cause: looping }))).toBe(
+			"fetch failed (cause: looping cause)",
+		);
+	});
+
 	it("returns the active package metadata from the version check api", async () => {
 		const fetchMock = vi.fn(async () =>
 			Response.json({

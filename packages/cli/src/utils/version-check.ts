@@ -11,24 +11,42 @@ export interface LatestPiRelease {
 	note?: string;
 }
 
+/** Depth bound for the cause walk below; also what stops a self-referential chain. */
+const MAX_CAUSE_DEPTH = 5;
+
 /** Include useful errno details hidden behind Node's generic "fetch failed" error. */
 export function formatVersionCheckError(error: unknown): string {
 	const rootMessage = error instanceof Error && error.message ? error.message : String(error);
-	const cause = error instanceof Error ? error.cause : undefined;
-	const causes = cause instanceof AggregateError ? cause.errors : cause === undefined ? [] : [cause];
-	const codes = causes
-		.map((value) =>
-			typeof value === "object" && value !== null && "code" in value && typeof value.code === "string"
-				? value.code
-				: undefined,
-		)
-		.filter((code): code is string => code !== undefined);
 
-	if (codes.length > 0) return `${rootMessage} (${[...new Set(codes)].join(", ")})`;
-	const causeMessage = causes.find(
-		(value): value is Error => value instanceof Error && Boolean(value.message),
-	)?.message;
-	return causeMessage ? `${rootMessage} (cause: ${causeMessage})` : rootMessage;
+	// The actionable detail (DNS, TLS, timeout) sits somewhere below the generic
+	// top-level message: Node nests causes arbitrarily deep and wraps multi-address
+	// attempts in an AggregateError, so walk both branches rather than one level.
+	// Everything is matched structurally - undici hands back plain objects and
+	// cross-realm errors that carry an errno without being `instanceof Error`.
+	const codes = new Set<string>();
+	let deepest: { depth: number; message: string } | undefined;
+	const visit = (value: unknown, depth: number): void => {
+		if (depth > MAX_CAUSE_DEPTH || typeof value !== "object" || value === null) return;
+		const candidate = value as { code?: unknown; message?: unknown; cause?: unknown; errors?: unknown };
+		if (typeof candidate.code === "string") {
+			codes.add(candidate.code);
+		}
+		// Deepest wins: the outer layers are the generic wrappers ("fetch failed",
+		// "Client network socket disconnected") and the specific detail is at the bottom.
+		if (typeof candidate.message === "string" && candidate.message && (!deepest || depth > deepest.depth)) {
+			deepest = { depth, message: candidate.message };
+		}
+		if (Array.isArray(candidate.errors)) {
+			for (const entry of candidate.errors) {
+				visit(entry, depth + 1);
+			}
+		}
+		visit(candidate.cause, depth + 1);
+	};
+	visit(error instanceof Error ? error.cause : undefined, 1);
+
+	if (codes.size > 0) return `${rootMessage} (${[...codes].join(", ")})`;
+	return deepest ? `${rootMessage} (cause: ${deepest.message})` : rootMessage;
 }
 
 export function comparePackageVersions(leftVersion: string, rightVersion: string): number | undefined {

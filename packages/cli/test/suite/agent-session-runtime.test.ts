@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, parse } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from "@knightcode/ai/compat";
@@ -104,7 +104,12 @@ describe("AgentSessionRuntime characterization", () => {
 		const runtime = await createAgentSessionRuntime(createRuntime, {
 			cwd: tempDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(tempDir),
+			// Without an explicit session dir SessionManager falls back to the real
+			// store under ~/.knightcode, so fixtures written here would show up in the
+			// user's session listings and cleanup would have to delete from it. Every
+			// session the runtime derives inherits this dir, so one argument keeps the
+			// whole suite inside tempDir.
+			sessionManager: SessionManager.create(tempDir, join(tempDir, "sessions")),
 		});
 		await runtime.session.bindExtensions({});
 
@@ -209,6 +214,79 @@ describe("AgentSessionRuntime characterization", () => {
 		]);
 	});
 
+	it("preserves an existing session when importing a file with the same name", async () => {
+		const { runtime, tempDir } = await createRuntimeForTest(() => {});
+		const sessionDir = runtime.session.sessionManager.getSessionDir();
+		const importDir = join(tempDir, "import");
+		const filename = "collision.jsonl";
+		const storedPath = join(sessionDir, filename);
+		const importPath = join(importDir, filename);
+		const storedSession = `${JSON.stringify({
+			type: "session",
+			version: 3,
+			id: "stored",
+			timestamp: new Date().toISOString(),
+			cwd: tempDir,
+		})}\n`;
+		const importedSession = `${JSON.stringify({
+			type: "session",
+			version: 3,
+			id: "imported",
+			timestamp: new Date().toISOString(),
+			cwd: tempDir,
+		})}\n`;
+		mkdirSync(sessionDir, { recursive: true });
+		mkdirSync(importDir, { recursive: true });
+		writeFileSync(storedPath, storedSession);
+		writeFileSync(importPath, importedSession);
+
+		await runtime.importFromJsonl(importPath);
+
+		expect(readFileSync(storedPath, "utf8")).toBe(storedSession);
+		expect(runtime.session.sessionFile).not.toBe(storedPath);
+		expect(readFileSync(runtime.session.sessionFile!, "utf8")).toContain('"id":"imported"');
+	});
+
+	it("takes the next free name when the destination is claimed after the hook", async () => {
+		// The hook is handed the destination and writes to it, which is the race the
+		// pre-hook existsSync search cannot see: a second import would do the same.
+		let claimed: string | undefined;
+		const { runtime, tempDir } = await createRuntimeForTest((knightcode: ExtensionAPI) => {
+			knightcode.on("session_before_switch", (event) => {
+				if (claimed || !event.targetSessionFile) return;
+				claimed = event.targetSessionFile;
+				writeFileSync(claimed, "claimed after the name was chosen\n");
+			});
+		});
+		const sessionDir = runtime.session.sessionManager.getSessionDir();
+		const importDir = join(tempDir, "import");
+		const importPath = join(importDir, "race.jsonl");
+		const importedSession = `${JSON.stringify({
+			type: "session",
+			version: 3,
+			id: "imported",
+			timestamp: new Date().toISOString(),
+			cwd: tempDir,
+		})}\n`;
+		mkdirSync(sessionDir, { recursive: true });
+		mkdirSync(importDir, { recursive: true });
+		// Occupying the first two names puts the pre-hook search partway through its
+		// walk, so the retry has to resume from there rather than start over.
+		writeFileSync(join(sessionDir, "race.jsonl"), "stored\n");
+		writeFileSync(join(sessionDir, "race-1.jsonl"), "stored\n");
+		writeFileSync(importPath, importedSession);
+
+		await runtime.importFromJsonl(importPath);
+
+		// The search stopped at race-2, the hook took it, and the copy took race-3.
+		expect(claimed).toBe(join(sessionDir, "race-2.jsonl"));
+		// The squatted file is left exactly as the hook wrote it, and the import
+		// landed beside it rather than failing with EEXIST.
+		expect(readFileSync(claimed!, "utf8")).toBe("claimed after the name was chosen\n");
+		expect(runtime.session.sessionFile).toBe(join(sessionDir, "race-3.jsonl"));
+		expect(readFileSync(runtime.session.sessionFile!, "utf8")).toContain('"id":"imported"');
+	});
+
 	it("emits session_before_switch and session_start for new and resume flows", async () => {
 		const events: RecordedSessionEvent[] = [];
 		const { runtime } = await createRuntimeForTest((knightcode: ExtensionAPI) => {
@@ -280,7 +358,8 @@ describe("AgentSessionRuntime characterization", () => {
 		events.length = 0;
 		const otherDir = join(tmpdir(), `knightcode-runtime-other-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(otherDir, { recursive: true });
-		const otherSession = SessionManager.create(otherDir);
+		cleanups.push(() => rmSync(otherDir, { recursive: true, force: true }));
+		const otherSession = SessionManager.create(otherDir, join(otherDir, "sessions"));
 		otherSession.appendMessage({ role: "user", content: [{ type: "text", text: "other" }], timestamp: Date.now() });
 		const otherSessionFile = otherSession.getSessionFile();
 		cancelReason = "resume";
@@ -516,6 +595,10 @@ describe("AgentSessionRuntime characterization", () => {
 		const secondDir = join(tmpdir(), `knightcode-runtime-cwd-b-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(firstDir, { recursive: true });
 		mkdirSync(secondDir, { recursive: true });
+		cleanups.push(() => {
+			rmSync(firstDir, { recursive: true, force: true });
+			rmSync(secondDir, { recursive: true, force: true });
+		});
 		const { runtime, faux, tempDir } = await createRuntimeForTest(() => {}, { cwd: firstDir });
 		const otherAuthStorage = AuthStorage.inMemory();
 		await otherAuthStorage.modify(faux.getModel().provider, async () => ({ type: "api_key", key: "faux-key" }));
@@ -565,7 +648,7 @@ describe("AgentSessionRuntime characterization", () => {
 		const otherRuntime = await createAgentSessionRuntime(createOtherRuntime, {
 			cwd: secondDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(secondDir),
+			sessionManager: SessionManager.create(secondDir, join(secondDir, "sessions")),
 		});
 		cleanups.push(async () => {
 			await otherRuntime.dispose();
@@ -634,7 +717,7 @@ describe("AgentSessionRuntime characterization", () => {
 		const otherRuntime = await createAgentSessionRuntime(createOtherRuntime, {
 			cwd: otherDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(otherDir),
+			sessionManager: SessionManager.create(otherDir, join(otherDir, "sessions")),
 		});
 		cleanups.push(async () => {
 			await otherRuntime.dispose();

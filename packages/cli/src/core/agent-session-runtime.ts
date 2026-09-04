@@ -1,5 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { constants, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { basename, join, parse, resolve } from "node:path";
 import { resolvePath } from "../utils/paths.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { AgentSessionRuntimeDiagnostic, AgentSessionServices } from "./agent-session-services.ts";
@@ -369,15 +369,38 @@ export class AgentSessionRuntime {
 			mkdirSync(sessionDir, { recursive: true });
 		}
 
-		const destinationPath = join(sessionDir, basename(resolvedPath));
+		let destinationPath = join(sessionDir, basename(resolvedPath));
+		const sourceAlreadyStored = resolve(destinationPath) === resolvedPath;
+		const { name, ext } = parse(destinationPath);
+		let suffix = 1;
+		if (!sourceAlreadyStored) {
+			while (existsSync(destinationPath)) {
+				destinationPath = join(sessionDir, `${name}-${suffix++}${ext}`);
+			}
+		}
 		const beforeResult = await this.emitBeforeSwitch("resume", destinationPath);
 		if (beforeResult.cancelled) {
 			return beforeResult;
 		}
 
 		const previousSessionFile = this.session.sessionFile;
-		if (resolve(destinationPath) !== resolvedPath) {
-			copyFileSync(resolvedPath, destinationPath);
+		if (!sourceAlreadyStored) {
+			// The search above picked a free name before the hook awaited, so the name
+			// can be taken by the time we get here - by a second import, or by a
+			// session_before_switch handler writing to the very path it was handed.
+			// COPYFILE_EXCL is what actually claims the name, so let it drive: on
+			// EEXIST resume the search where it left off instead of failing an import
+			// that only needs a different name. Each attempt advances, so this
+			// terminates, and names the search already rejected are never retried.
+			for (;;) {
+				try {
+					copyFileSync(resolvedPath, destinationPath, constants.COPYFILE_EXCL);
+					break;
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+					destinationPath = join(sessionDir, `${name}-${suffix++}${ext}`);
+				}
+			}
 		}
 
 		const sessionManager = SessionManager.open(destinationPath, sessionDir, cwdOverride);

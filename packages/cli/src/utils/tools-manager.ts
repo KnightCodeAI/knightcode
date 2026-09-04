@@ -6,6 +6,7 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { APP_NAME, getBinDir } from "../config.ts";
 import { fetchWithRetry } from "./management-http.ts";
+import { formatVersionCheckError } from "./version-check.ts";
 
 const TOOLS_DIR = getBinDir();
 const NETWORK_TIMEOUT_MS = 10_000;
@@ -103,22 +104,71 @@ export function getToolPath(tool: "fd" | "rg"): string | null {
 	return null;
 }
 
-// Fetch latest release version from GitHub
-async function getLatestVersion(repo: string): Promise<string> {
+// Resolve the latest release version from the release page redirect.
+// The api.github.com releases endpoint counts against the anonymous API
+// quota (60 requests/hour per IP), which is permanently exhausted behind
+// shared egress IPs such as corporate proxies and CI runners. The web
+// endpoint answers with a redirect to the tagged release at no quota cost
+// and lives on the same origin as the binary download itself.
+export async function getLatestVersion(repo: string): Promise<string> {
 	const response = await fetchWithRetry(
-		`https://api.github.com/repos/${repo}/releases/latest`,
+		`https://github.com/${repo}/releases/latest`,
 		{
-			headers: { "User-Agent": `${APP_NAME}-coding-agent` },
+			headers: { "User-Agent": `${APP_NAME}-cli` },
+			redirect: "manual",
 		},
 		{ timeoutMs: NETWORK_TIMEOUT_MS },
 	);
 
-	if (!response.ok) {
-		throw new Error(`GitHub API error: ${response.status}`);
+	// Only the status and headers matter here. Discard the body so the
+	// connection can be reused.
+	try {
+		await response.body?.cancel();
+	} catch {
+		// Discarding the body is best-effort.
 	}
 
-	const data = (await response.json()) as { tag_name: string };
-	return data.tag_name.replace(/^v/, "");
+	const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+	if (!location) {
+		throw new Error(`Failed to resolve latest ${repo} release: HTTP ${response.status} without redirect`);
+	}
+
+	// Match the release path exactly. A substring test would also accept the marker
+	// appearing in a query string, or on another repository's path, and hand back
+	// whatever the last path segment happened to be.
+	const unexpectedRedirect = () =>
+		new Error(`Failed to resolve latest ${repo} release: unexpected redirect to ${location}`);
+	let redirect: URL;
+	try {
+		redirect = new URL(location, "https://github.com");
+	} catch {
+		throw unexpectedRedirect();
+	}
+	const tagPrefix = `/${repo}/releases/tag/`;
+	// pathname omits the query and fragment, so those are rejected separately -
+	// releases/latest redirects to a bare tag URL and anything else is not it.
+	if (
+		redirect.origin !== "https://github.com" ||
+		redirect.search !== "" ||
+		redirect.hash !== "" ||
+		!redirect.pathname.startsWith(tagPrefix)
+	) {
+		throw unexpectedRedirect();
+	}
+	// Validate the decoded tag, not the encoded pathname: %2F, %3F and %23 decode
+	// back into separators, and the decoded value is what gets interpolated into
+	// the download URL and the asset name. A malformed escape makes
+	// decodeURIComponent throw, which is just another unexpected redirect.
+	let tag: string;
+	try {
+		tag = decodeURIComponent(redirect.pathname.slice(tagPrefix.length));
+	} catch {
+		throw unexpectedRedirect();
+	}
+	if (!/^[\w.+-]+$/.test(tag) || tag.includes("..")) {
+		throw unexpectedRedirect();
+	}
+	return tag.replace(/^v/, "");
 }
 
 // Download a file from URL
@@ -126,7 +176,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 	const response = await fetchWithRetry(url, undefined, { timeoutMs: DOWNLOAD_TIMEOUT_MS });
 
 	if (!response.ok) {
-		throw new Error(`Failed to download: ${response.status}`);
+		throw new Error(`Download failed with HTTP ${response.status}: ${url}`);
 	}
 
 	if (!response.body) {
@@ -246,11 +296,9 @@ async function downloadTool(tool: "fd" | "rg"): Promise<string> {
 	const plat = platform();
 	const architecture = arch();
 
-	// Get latest version
-	let version = await getLatestVersion(config.repo);
-	if (tool === "fd" && plat === "darwin" && architecture === "x64") {
-		version = "10.3.0";
-	}
+	// fd is pinned on darwin/x64, so skip the version lookup there.
+	const version =
+		tool === "fd" && plat === "darwin" && architecture === "x64" ? "10.3.0" : await getLatestVersion(config.repo);
 
 	// Get asset name for this platform
 	const assetName = config.getAssetName(version, plat, architecture);
@@ -365,9 +413,13 @@ export async function ensureTool(
 		onStatus?.({ type: "info", message: `${config.name} installed to ${path}` });
 		return path;
 	} catch (e) {
+		// A fetch failure surfaces as a bare "fetch failed" TypeError with the
+		// actionable detail (DNS, TLS, timeout) in the cause, and Node wraps
+		// multi-address attempts in an AggregateError. formatVersionCheckError
+		// already unpacks both.
 		onStatus?.({
 			type: "warning",
-			message: `Failed to download ${config.name}: ${e instanceof Error ? e.message : e}`,
+			message: `Failed to download ${config.name}: ${formatVersionCheckError(e)}`,
 		});
 		return undefined;
 	}
