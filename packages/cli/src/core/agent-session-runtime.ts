@@ -385,7 +385,23 @@ export class AgentSessionRuntime {
 
 		const previousSessionFile = this.session.sessionFile;
 		if (!sourceAlreadyStored) {
-			copyFileSync(resolvedPath, destinationPath, constants.COPYFILE_EXCL);
+			// The search above picked a free name before the hook awaited, so the name
+			// can be taken by the time we get here - by a second import, or by a
+			// session_before_switch handler writing to the very path it was handed.
+			// COPYFILE_EXCL is what actually claims the name, so let it drive: on
+			// EEXIST take the next suffix instead of failing an import that only needs
+			// a different name. Each attempt advances, so this terminates.
+			const { name, ext } = parse(join(sessionDir, basename(resolvedPath)));
+			let suffix = 1;
+			for (;;) {
+				try {
+					copyFileSync(resolvedPath, destinationPath, constants.COPYFILE_EXCL);
+					break;
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+					destinationPath = join(sessionDir, `${name}-${suffix++}${ext}`);
+				}
+			}
 		}
 
 		const sessionManager = SessionManager.open(destinationPath, sessionDir, cwdOverride);

@@ -247,6 +247,39 @@ describe("AgentSessionRuntime characterization", () => {
 		expect(readFileSync(runtime.session.sessionFile!, "utf8")).toContain('"id":"imported"');
 	});
 
+	it("takes the next free name when the destination is claimed after the hook", async () => {
+		// The hook is handed the destination and writes to it, which is the race the
+		// pre-hook existsSync search cannot see: a second import would do the same.
+		let claimed: string | undefined;
+		const { runtime, tempDir } = await createRuntimeForTest((knightcode: ExtensionAPI) => {
+			knightcode.on("session_before_switch", (event) => {
+				if (claimed || !event.targetSessionFile) return;
+				claimed = event.targetSessionFile;
+				writeFileSync(claimed, "claimed after the name was chosen\n");
+			});
+		});
+		const importDir = join(tempDir, "import");
+		const importPath = join(importDir, "race.jsonl");
+		const importedSession = `${JSON.stringify({
+			type: "session",
+			version: 3,
+			id: "imported",
+			timestamp: new Date().toISOString(),
+			cwd: tempDir,
+		})}\n`;
+		mkdirSync(importDir, { recursive: true });
+		writeFileSync(importPath, importedSession);
+
+		await runtime.importFromJsonl(importPath);
+
+		expect(claimed).toBeDefined();
+		// The squatted file is left exactly as the hook wrote it, and the import
+		// landed beside it rather than failing with EEXIST.
+		expect(readFileSync(claimed!, "utf8")).toBe("claimed after the name was chosen\n");
+		expect(runtime.session.sessionFile).not.toBe(claimed);
+		expect(readFileSync(runtime.session.sessionFile!, "utf8")).toContain('"id":"imported"');
+	});
+
 	it("emits session_before_switch and session_start for new and resume flows", async () => {
 		const events: RecordedSessionEvent[] = [];
 		const { runtime } = await createRuntimeForTest((knightcode: ExtensionAPI) => {
