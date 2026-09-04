@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { createTypedSpanStarter, NOOP_TELEMETRY_CONTEXT, type TelemetryContext } from "@knightcode/telemetry";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { renderAgentTelemetrySchemaMarkdown } from "../../scripts/generate-telemetry-docs.ts";
+import { BACKGROUND_CONTEXT, withTelemetryContext } from "../../src/harness/context.ts";
 import {
 	AGENT_TELEMETRY_SCHEMAS,
 	AI_TELEMETRY_SCHEMA,
@@ -82,8 +83,8 @@ describe("agent telemetry schemas", () => {
 		>();
 
 		const telemetryContext: TelemetryContext = NOOP_TELEMETRY_CONTEXT;
+		const context = withTelemetryContext(telemetryContext, BACKGROUND_CONTEXT);
 		await startAiSpan(
-			telemetryContext,
 			"knightcode.ai.request",
 			{
 				"knightcode.ai.operation": "stream",
@@ -97,6 +98,7 @@ describe("agent telemetry schemas", () => {
 				// @ts-expect-error knightcode.ai.request declares no span events
 				span.addEvent("chunk");
 			},
+			context,
 		);
 
 		const compileTimeFailures = () => {
@@ -109,9 +111,9 @@ describe("agent telemetry schemas", () => {
 				"knightcode.ai.unknown": true,
 			} as const;
 			// @ts-expect-error variables with unknown attributes are rejected
-			void startAiSpan(telemetryContext, "knightcode.ai.request", extraAttributes, () => {});
+			void startAiSpan("knightcode.ai.request", extraAttributes, () => {}, context);
 			// @ts-expect-error missing required start attributes
-			void startAiSpan(telemetryContext, "knightcode.ai.request", { "knightcode.ai.operation": "stream" }, () => {});
+			void startAiSpan("knightcode.ai.request", { "knightcode.ai.operation": "stream" }, () => {}, context);
 		};
 		expectTypeOf(compileTimeFailures).toBeFunction();
 	});
@@ -128,7 +130,7 @@ describe("agent telemetry schemas", () => {
 		const writeStart = {
 			"knightcode.session.id": "session",
 			"knightcode.session.item_count": 2,
-			"knightcode.session.item_kinds": ["entry", "register"],
+			"knightcode.session.item_kinds": ["entry", "value", "list"],
 		} satisfies WriteStart;
 		const writeEnd = {
 			"knightcode.session.first_seq": 1,
@@ -138,8 +140,8 @@ describe("agent telemetry schemas", () => {
 		expectTypeOf(writeEnd["knightcode.session.last_seq"]).toEqualTypeOf<number>();
 
 		const telemetryContext: TelemetryContext = NOOP_TELEMETRY_CONTEXT;
+		const context = withTelemetryContext(telemetryContext, BACKGROUND_CONTEXT);
 		await startHarnessSpan(
-			telemetryContext,
 			"knightcode.harness.run",
 			{
 				"knightcode.session.id": "session",
@@ -154,6 +156,7 @@ describe("agent telemetry schemas", () => {
 				// @ts-expect-error the harness schema declares no span events
 				span.addEvent("result");
 			},
+			context,
 		);
 
 		const compileTimeFailures = () => {
@@ -166,9 +169,8 @@ describe("agent telemetry schemas", () => {
 				"knightcode.unknown": true,
 			} as const;
 			// @ts-expect-error variables with unknown attributes are rejected
-			void startHarnessSpan(telemetryContext, "knightcode.harness.run", extraRunAttributes, () => {});
+			void startHarnessSpan("knightcode.harness.run", extraRunAttributes, () => {}, context);
 			void startHarnessSpan(
-				telemetryContext,
 				"knightcode.harness.checkpoint",
 				{
 					"knightcode.lane.name": "main",
@@ -179,9 +181,9 @@ describe("agent telemetry schemas", () => {
 					// @ts-expect-error empty end schemas reject every attribute
 					span.setAttributes({ "knightcode.unknown": true });
 				},
+				context,
 			);
 			void startHarnessSpan(
-				telemetryContext,
 				"knightcode.harness.run",
 				{
 					"knightcode.session.id": "session",
@@ -192,9 +194,10 @@ describe("agent telemetry schemas", () => {
 					"knightcode.operation.recovery": false,
 				},
 				() => {},
+				context,
 			);
 			// @ts-expect-error missing required run start attributes
-			void startHarnessSpan(telemetryContext, "knightcode.harness.run", {}, () => {});
+			void startHarnessSpan("knightcode.harness.run", {}, () => {}, context);
 		};
 		expectTypeOf(compileTimeFailures).toBeFunction();
 	});

@@ -1,7 +1,7 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { FileEntry, SessionEntry, SessionMessageEntry } from "../../src/core/session-manager.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
-import { resolvePath } from "../../src/utils/paths.ts";
 
 const UUID_V7_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -101,8 +101,7 @@ describe("SessionManager.inMemory with preloaded entries", () => {
 
 		expect(session.getSessionId()).toBe("restored-session");
 		expect(session.getHeader()!.id).toBe("restored-session");
-		// The manager resolves its cwd, which on Windows makes "/project" drive-qualified.
-		expect(session.getHeader()!.cwd).toBe(resolvePath("/project"));
+		expect(session.getHeader()!.cwd).toBe(resolve("/project"));
 	});
 
 	it("generates a session id when the options carry none", () => {

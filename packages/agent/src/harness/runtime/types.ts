@@ -1,189 +1,146 @@
-import type { DeferredHandle, Message, Models, RetryPolicy, ToolResultMessage, Usage } from "@knightcode/ai";
-import type { TelemetryContext } from "@knightcode/telemetry";
-import type { AgentMessage, QueueMode } from "../../types.ts";
-import type {
-	AgentHarnessOptions,
-	Closed,
-	DriveResult,
-	HarnessClosed,
-	HarnessFault,
-	Resources,
-	SuspendedOperation,
-} from "../agent-harness.ts";
+import type { RetryPolicy } from "@knightcode/ai";
+import type { QueueMode } from "../../types.ts";
+import type { AgentHarnessOptions, DriveOptions, DriveOutcome, HarnessEvent, Resources } from "../agent-harness.ts";
 import type { CompactionSettings } from "../compaction/compaction.ts";
-import type { HarnessEventBus } from "../events.ts";
-import type { BreakpointBarrier } from "../execution/breakpoint.ts";
-import type { OperationEffectGate } from "../execution/effect-gate.ts";
-import type { ClearedToolCall, ExecutedToolCall, FinalizedToolCall } from "../execution/tools.ts";
-import type { HookRegistry } from "../hooks.ts";
+import { type Context, withoutAbortSignal } from "../context.ts";
+import { createGate, type Gate, type GateControl } from "../execution/effect-gate.ts";
 import type {
-	Entry,
-	EntryProjector,
-	OperationError,
-	RunState,
-	Session,
-	SessionTree,
-	SettledAssistantMessage,
-	UsageRow,
+	CommitResult,
+	InboxItem,
+	LaneConfiguration,
+	Operation,
+	OperationResultRecord,
+	OperationState,
+	Write,
 } from "../session/types.ts";
-import type { AgentHarnessStreamOptions, AgentHarnessTool, AgentHarnessToolContextSource } from "../types.ts";
+import type { AgentHarnessStreamOptions, AgentHarnessTool } from "../types.ts";
 
-export class RuntimeSliceNotImplemented extends Error {
+export class SliceNotImplemented extends Error {
 	constructor(operation: string) {
-		super(`${operation} is not implemented until its later AgentHarness runtime slice`);
-		this.name = "RuntimeSliceNotImplemented";
+		super(`${operation} is not implemented until its later AgentHarness slice`);
+		this.name = "SliceNotImplemented";
 	}
 }
 
-export interface RuntimeSettings<TContext extends object | undefined> {
-	tools: AgentHarnessTool<TContext>[];
-	resources: Resources;
-	streamOptions: AgentHarnessStreamOptions;
-	retryPolicy: RetryPolicy;
-	compaction: CompactionSettings;
-	steeringMode: QueueMode;
-	followUpMode: QueueMode;
-	toolExecution: "sequential" | "parallel";
+/** Current process-local harness configuration. */
+export interface Config<TContext extends object | undefined> {
+	readonly tools: AgentHarnessTool<TContext>[];
+	readonly resources: Resources;
+	readonly streamOptions: AgentHarnessStreamOptions;
+	readonly retryPolicy: RetryPolicy;
+	readonly compaction: CompactionSettings;
+	readonly steeringMode: QueueMode;
+	readonly followUpMode: QueueMode;
+	readonly toolExecution: "sequential" | "parallel";
+	readonly toolContext: AgentHarnessOptions<TContext>["toolContext"];
+	readonly systemPrompt: AgentHarnessOptions<TContext>["systemPrompt"];
+	readonly toProviderMessages: NonNullable<AgentHarnessOptions<TContext>["toProviderMessages"]>;
+	readonly entryProjectors: Readonly<NonNullable<AgentHarnessOptions<TContext>["entryProjectors"]>>;
 }
 
-export interface DeferredValue<T> {
-	promise: Promise<T>;
-	resolve(value: T): void;
-	reject(error: unknown): void;
+/** The current durable state owned by one lane. */
+export interface LaneState {
+	readonly tipId: string | null;
+	readonly configuration: LaneConfiguration;
+	readonly inbox: InboxItem[];
+	readonly lastOperationId: string | null;
+	readonly operation: Operation | null;
 }
 
-export interface ActiveOperation {
-	operationId: string;
-	operationKind: "run" | "compaction" | "navigation";
-	completion: Promise<DriveResult>;
-	resolve: (result: DriveResult) => void;
-	reject: (error: unknown) => void;
-	effectGate: OperationEffectGate;
-	task?: Promise<void>;
+type Synchronous<TResult> = TResult extends PromiseLike<unknown> ? never : TResult;
+
+interface CommitDecision<TResult> {
+	kind: "commit";
+	writes: Write[];
+	materialize(commit: CommitResult): Synchronous<TResult>;
+	events?(commit: CommitResult): HarnessEvent[];
 }
 
-export interface AdmissionReservation {
-	operationId: string;
-	operationKind: "run" | "compaction" | "navigation";
-	completion: Promise<void>;
-	resolve(): void;
+/** One effect-free decision made on a lane's serialized mutation line. */
+export type LaneCommand<TResult> =
+	| (CommitDecision<TResult> & { next: LaneState })
+	| { kind: "return"; result: TResult }
+	| { kind: "reject"; error: Error };
+
+export type ContinueOperationResult<TResult> = { kind: "cancel_requested" } | { kind: "result"; value: TResult };
+
+/** A durable operation transition. The Lane pairs the state write with projection publication. */
+type LanePatch = Partial<Pick<LaneState, "tipId" | "configuration" | "inbox">>;
+
+interface FinishDecision<TResult> {
+	kind: "finish";
+	writes: Write[];
+	record: OperationResultRecord;
+	lane?: LanePatch;
+	materialize(commit: CommitResult): Synchronous<TResult>;
+	events?(commit: CommitResult): HarnessEvent[];
 }
 
-export type DriveArbitration =
-	| { kind: "result"; result: DriveResult }
-	| { kind: "join"; completion: Promise<DriveResult> }
-	| { kind: "installed"; active: ActiveOperation };
+export type OperationCommand<TResult> =
+	| (CommitDecision<TResult> & { operationState: OperationState; lane?: LanePatch })
+	| FinishDecision<TResult>
+	| { kind: "return"; result: TResult };
 
-export interface NormalizedRunRequest {
-	operationId: string;
-	startedAt: number;
-	messages: AgentMessage[];
-	resources: Resources;
+/** One installed process-local drive pass. */
+export class Drive {
+	readonly operationId: string;
+	readonly completion: Promise<DriveOutcome>;
+	readonly gate: Gate;
+	readonly context: Context;
+	readonly waitForRetry: boolean;
+	readonly closeSignal: AbortSignal;
+	deferredPermits: number;
+
+	private readonly control: GateControl;
+	private readonly closeController: AbortController;
+	private readonly resolveCompletion: (outcome: DriveOutcome) => void;
+	private readonly rejectCompletion: (error: unknown) => void;
+
+	constructor(options: DriveOptions, context: Context) {
+		this.operationId = options.operationId;
+		this.context = withoutAbortSignal(context);
+		this.waitForRetry = options.waitForRetry ?? false;
+		this.deferredPermits = options.pollDeferred === true ? 1 : 0;
+		let resolveCompletion!: (outcome: DriveOutcome) => void;
+		let rejectCompletion!: (error: unknown) => void;
+		this.completion = new Promise<DriveOutcome>((resolve, reject) => {
+			resolveCompletion = resolve;
+			rejectCompletion = reject;
+		});
+		this.resolveCompletion = resolveCompletion;
+		this.rejectCompletion = rejectCompletion;
+		void this.completion.catch(() => {});
+		const { gate, control } = createGate();
+		this.gate = gate;
+		this.control = control;
+		this.closeController = new AbortController();
+		this.closeSignal = this.closeController.signal;
+	}
+
+	settle(outcome: DriveOutcome): void {
+		this.resolveCompletion(outcome);
+	}
+
+	fail(error: unknown): void {
+		this.rejectCompletion(error);
+	}
+
+	beginAbort(cancellation: Promise<void>): void {
+		this.control.beginAbort(cancellation);
+	}
+
+	signalAbort(): void {
+		this.control.signalAbort();
+	}
+
+	closeGate(error: Error): void {
+		this.control.close(error);
+		if (!this.closeSignal.aborted) this.closeController.abort(error);
+		this.rejectCompletion(error);
+	}
 }
 
-export interface AcceptancePublication {
-	admission: { operationId: string; kind: "run"; startedAt: number };
-	entries: Entry[];
-	capturedNextRun: boolean;
-}
-
-export type AssistantSettlementOutcome =
-	| { kind: "completed" }
-	| { kind: "aborted" }
-	| { kind: "deferred"; handle: DeferredHandle }
-	| { kind: "tools"; genuineLength: boolean }
-	| { kind: "retry"; nextAttempt: number; delayMs: number; notBefore: number; errorMessage: string }
-	| { kind: "failed"; error: OperationError };
-
-export interface AssistantSettlementDecision {
-	message: SettledAssistantMessage;
-	phase: RunState["phase"];
-	outcome: AssistantSettlementOutcome;
-}
-
-export interface CommittedAssistantSettlement {
-	entry: Entry;
-	row: { id: string; seq: number; usage: Usage; entryId: string; adjustment: false };
-	totals: Usage;
-	message: SettledAssistantMessage;
-	outcome: AssistantSettlementOutcome;
-}
-
-export type AssistantExecutionResult =
-	| { kind: "advanced" }
-	| { kind: "yielded" }
-	| { kind: "missing_identities"; missing: { tools: string[]; models: string[] } };
-
-export type ToolBatchExecutionResult = AssistantExecutionResult;
-
-export type StartedToolCall =
-	| {
-			kind: "immediate";
-			sourceIndex: number;
-			finalized: FinalizedToolCall;
-			recovery: boolean;
-			durableStatus: "planned" | "effect_pending";
-	  }
-	| {
-			kind: "running";
-			sourceIndex: number;
-			cleared: ClearedToolCall;
-			execution: Promise<ExecutedToolCall>;
-			recovery: boolean;
-	  };
-
-export interface CommittedToolSettlement {
-	entry: Entry;
-	message: ToolResultMessage;
-	row?: UsageRow;
-	totals?: Usage;
-	batchCompleted: boolean;
-}
-
-export interface RuntimeLane {
-	readonly name: string;
-	readonly session: SessionTree;
-	readonly breakpoint: BreakpointBarrier;
-}
-
-export interface RuntimeProcedureContext<TContext extends object | undefined> {
-	readonly sessionStorage: Session;
-	readonly models: Models;
-	readonly hooks: HookRegistry;
-	readonly events: HarnessEventBus;
-	readonly telemetryContext: TelemetryContext;
-	readonly toolContext: AgentHarnessToolContextSource<TContext> | undefined;
-	readonly systemPromptSource: AgentHarnessOptions<TContext>["systemPrompt"];
-	readonly toProviderMessages: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
-	readonly entryProjectors: Readonly<Record<string, EntryProjector>>;
-	readonly attachedOperationIds: Set<string>;
-	readonly resumedOperationIds: Set<string>;
-	readonly resumeEventOperationIds: Set<string>;
-	readonly restoredSuspensions: Map<string, SuspendedOperation>;
-	readSettings<Result>(read: (settings: RuntimeSettings<TContext>) => Result): Promise<Result>;
-	snapshotSettings(): Promise<RuntimeSettings<TContext>>;
-	assertOpen(): void;
-	isOpen(): boolean;
-	fault(cause: unknown): HarnessFault | HarnessClosed;
-}
-
-export interface OperationTaskContext<TContext extends object | undefined> extends RuntimeProcedureContext<TContext> {
-	readonly activeOperations: Map<string, ActiveOperation>;
-	readonly admissionReservations: Map<string, AdmissionReservation>;
-	readonly state: "open" | "faulted" | "closing" | "closed";
-	resultClosedError(): Closed | undefined;
-}
-
-export interface LaneRuntimeContext<TContext extends object | undefined> extends OperationTaskContext<TContext> {
-	readonly driveMode: "automatic" | "manual";
-	closedError(): Closed;
-}
-
-export const ZERO_USAGE: Usage = {
-	input: 0,
-	output: 0,
-	cacheRead: 0,
-	cacheWrite: 0,
-	totalTokens: 0,
-	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
+export type ProcedureResult =
+	| { kind: "continue" }
+	| { kind: "waiting"; outcome: DriveOutcome }
+	| { kind: "settled"; outcome: OperationResultRecord };

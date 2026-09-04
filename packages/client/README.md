@@ -1,44 +1,39 @@
 # @knightcode/client
 
-Transport-neutral client for the initial Pi `list` and `attach` protocol slice.
+Transport-neutral client for the experimental KnightCode service protocol.
 
 ```ts
-import { KnightClient, type ByteTransportFactory } from "@knightcode/client";
+import { Client, type ByteTransportFactory } from "@knightcode/client";
 
 const transportFactory: ByteTransportFactory = async (handlers) => {
-	// Connect using WebSocket, Unix socket, or another ordered byte transport.
-	return {
-		async send(chunk) {
-			// Deliver bytes in invocation order and honor backpressure.
-		},
-		close() {},
-	};
+  // Connect using WebSocket, Unix socket, or another ordered byte transport.
+  return {
+    async send(chunk) {
+      // Deliver bytes in invocation order and honor backpressure.
+    },
+    close() {},
+  };
 };
 
-const client = await KnightClient.connect({
-	serverId: "01234567-89ab-4def-8123-456789abcdef",
-	transportFactory,
+const client = await Client.connect({
+  serverId: "01234567-89ab-4def-8123-456789abcdef",
+  transportFactory,
 });
-const sessions = await client.listSessions();
-const attachment = await client.attachSession(sessions[0].id);
+const result = await client.request(
+  { serverId: client.hello.serverId },
+  { serviceId: "example.service", member: "read", args: [] },
+);
 ```
 
-The client verifies that the physical endpoint reports the expected logical `serverId`. Every list and attach request carries that ID again so the final server can reject misdelivery.
+The client verifies that the physical endpoint reports the expected logical `serverId`. Server-wide requests carry that ID, and every Session request carries the full live target `{ serverId, sessionId, attachmentId }`. The combined durable address prevents cross-server or cross-session misrouting; the server-generated attachment ID rejects delayed frames after switching or reattaching.
 
-`attachSession()` currently returns only `{ sessionId }`. Remote Session and Harness methods will be added directly from the new shared interfaces in a later slice. The client does not reconnect or replay requests automatically. After disconnection, call `reconnect()` and explicitly repeat safe control-plane actions.
+Typed server and Session APIs are provided by Chord service bindings owned by the application. `createClientServiceTransport()` adapts a lazily resolved server or Session route to a Chord transport; `request()` and `subscribeService()` remain its low-level primitives. The client uses Chord's service-control parsers and per-subscription state decoder; `knightcode-protocol` only validates the routed envelope and strict-JSON boundary. A service subscription returns a complete provider snapshot; the binding installs it and then calls `start()` to release updates buffered during hydration. `Client` applies ordered out-of-band attachment changes but deliberately does not construct typed service proxies or interpret application contracts.
 
-Server lifecycle control is not part of `KnightClient`. Launchers use the separate `@knightcode/client/control` entry point to request a drain and wait for that server generation to close.
+Application observation APIs such as the coding agent's `Transcript` are ordinary Chord services. The client does not interpret their snapshots or updates.
 
-```ts
-import { requestServerDrain } from "@knightcode/client/control";
+On disconnect or disposal, pending requests reject locally, but accepted work may still complete remotely before the attachment is released. The client clears its live attachment route. It never reconnects or replays requests automatically. After disconnection, call `reconnect()`, attach through the application's management service again, and explicitly repeat only operations known to be safe.
 
-await requestServerDrain({ serverId, transportFactory });
-// Drain was acknowledged. Verifying endpoint release and starting a successor are launcher policy.
-```
-
-`requestServerDrain()` applies a 15-second total timeout across connection, handshake, and drain acknowledgement. Pass `timeoutMs` to override it. A timeout is ambiguous and is never replayed automatically. The transport-neutral helper does not prove process termination or endpoint release; a Unix launcher separately waits for its stable socket path to disappear.
-
-The control API is administrative, not an authorization boundary. Only expose it over a transport that authenticates launchers as administrators. The experimental local launcher relies on a mode-`0600` Unix socket and treats every same-user peer as trusted.
+The experimental local coordinator only provides a stable endpoint and relays traffic. Replaceable server processes own Session and worker lifecycle outside the public client protocol.
 
 Call transport handlers as follows:
 
@@ -46,19 +41,19 @@ Call transport handlers as follows:
 - `handlers.onClose()` for an orderly terminal close;
 - `handlers.onError(error)` for transport failures.
 
-A transport factory creates a fresh authenticated connection for each attempt. Requests are correlated by ID, and server failures are exposed as `KnightServerError`.
+A transport factory creates a fresh authenticated connection for each attempt. Requests are correlated by ID, and server failures are exposed as `ServerError`.
 
 ## Unix-domain sockets
 
 Node.js and Bun consumers can use the separate Unix transport:
 
 ```ts
-import { KnightClient } from "@knightcode/client";
+import { Client } from "@knightcode/client";
 import { createUnixTransportFactory } from "@knightcode/client/unix";
 
-const client = new KnightClient({
-	serverId: "01234567-89ab-4def-8123-456789abcdef",
-	transportFactory: createUnixTransportFactory({ path: "/tmp/pi.sock" }),
+const client = new Client({
+  serverId: "01234567-89ab-4def-8123-456789abcdef",
+  transportFactory: createUnixTransportFactory({ path: "/tmp/knightcode.sock" }),
 });
 await client.connect();
 ```
@@ -68,11 +63,10 @@ Unix discovery scans an explicit physical-route directory, derives each expected
 ```ts
 import { discoverUnixServers } from "@knightcode/client/unix";
 
-const routes = await discoverUnixServers({ directory: "/run/user/1000/pi" });
-// [{ serverId: "...", path: "/run/user/1000/pi/<serverId>.sock" }]
+const routes = await discoverUnixServers({ directory: "/run/user/1000/knightcode" });
+// [{ serverId: "...", path: "/run/user/1000/knightcode/<serverId>.sock" }]
 ```
 
-Malformed entries, non-sockets, stale or unresponsive endpoints, and server-ID mismatches are ignored. Discovery is read-only and probes at most 16 sockets concurrently. Unexpected filesystem and socket errors reject discovery. The caller must choose a short, private directory because Unix socket path limits are substantially lower than normal filesystem path limits.
-Pass `timeoutMs` to override the default probe timeout.
+Malformed entries, non-sockets, stale or unresponsive endpoints, and server-ID mismatches are ignored. Discovery is read-only and probes at most 16 sockets concurrently. Unexpected filesystem and socket errors reject discovery. Pass `timeoutMs` to override the default probe timeout.
 
-`KnightClientOptions.maxFrameLength` bounds protocol payloads. `maxPendingBytes` bounds queued Unix transport output. Configure matching limits on both peers.
+`ClientOptions.maxFrameLength` bounds protocol payloads. `maxPendingBytes` bounds queued Unix transport output. Configure matching limits on both peers.

@@ -1,5 +1,5 @@
 import { isImageLine } from "../terminal-image.ts";
-import type { Component } from "../tui.ts";
+import { type Component, dispatchMouseEvent, type TuiMouseDispatchResult, type TuiMouseEvent } from "../tui.ts";
 import { visibleWidth } from "../utils.ts";
 
 /**
@@ -38,6 +38,22 @@ export class Gutter implements Component {
 
 	invalidate(): void {
 		this.child.invalidate?.();
+	}
+
+	/**
+	 * Forward mouse events to the child in the child's own coordinates.
+	 *
+	 * The gutter shifts every content line right by its prefix, so a click lands
+	 * `gutterWidth` columns further left inside the child. Clicks on the gutter
+	 * itself belong to it, not the child, and are dropped.
+	 */
+	handleMouse(event: TuiMouseEvent): TuiMouseDispatchResult | undefined {
+		if (event.x < this.gutterWidth) return undefined;
+		return dispatchMouseEvent(this.child, {
+			...event,
+			x: event.x - this.gutterWidth,
+			width: Math.max(1, event.width - this.gutterWidth),
+		});
 	}
 
 	render(width: number): string[] {

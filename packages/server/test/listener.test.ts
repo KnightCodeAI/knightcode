@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { ByteConnectionAcceptor } from "../src/connection.ts";
-import type { KnightServerListener } from "../src/listener.ts";
+import type { ServerListener } from "../src/listener.ts";
 import { createTestServer } from "../src/testing/index.ts";
 
-class TestListener implements KnightServerListener {
+class TestListener implements ServerListener {
 	accept?: ByteConnectionAcceptor;
 	startCount = 0;
 	closeCount = 0;
@@ -24,7 +24,7 @@ class TestListener implements KnightServerListener {
 	}
 }
 
-describe("KnightServer listener composition", () => {
+describe("Server listener composition", () => {
 	test("starts and closes every configured listener", async () => {
 		const first = new TestListener();
 		const second = new TestListener();

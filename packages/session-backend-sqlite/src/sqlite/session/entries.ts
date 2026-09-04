@@ -8,7 +8,7 @@ import type {
 	MessageEntry,
 } from "@knightcode/agent";
 import { joinSqlFragments, type SqlQuery, sql } from "../sql.ts";
-import type { SqliteDatabase } from "../types.ts";
+import type { SqliteDatabase, SqliteStatement } from "../types.ts";
 
 export interface EntryRow {
 	id: string;
@@ -66,17 +66,38 @@ function parsePayload<TEntry extends Entry>(row: EntryRow): StoredEntryPayload<T
 	return JSON.parse(row.payload) as StoredEntryPayload<TEntry>;
 }
 
-export function insertEntryRow(db: SqliteDatabase, entry: Entry): void {
-	sql`INSERT INTO entries (id, parent_id, seq, type, custom_type, timestamp, payload)
-		VALUES (
-			${entry.id},
-			${entry.parentId},
-			${entry.seq},
-			${entry.type},
-			${entry.type === "custom" ? entry.customType : null},
-			${entry.timestamp},
-			${JSON.stringify(entryPayload(entry))}
-		)`.run(db);
+const INSERT_ENTRY_SQL = `INSERT INTO entries (session_id, id, parent_id, seq, type, custom_type, timestamp, payload)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+function entryRowParams(sessionId: string, entry: Entry): unknown[] {
+	return [
+		sessionId,
+		entry.id,
+		entry.parentId,
+		entry.seq,
+		entry.type,
+		entry.type === "custom" ? entry.customType : null,
+		entry.timestamp,
+		JSON.stringify(entryPayload(entry)),
+	];
+}
+
+export class EntryRowWriter {
+	private readonly insertStatement: SqliteStatement;
+	private readonly sessionId: string;
+
+	constructor(db: SqliteDatabase, sessionId: string) {
+		this.insertStatement = db.prepare(INSERT_ENTRY_SQL);
+		this.sessionId = sessionId;
+	}
+
+	insert(entry: Entry): void {
+		this.insertStatement.run(...entryRowParams(this.sessionId, entry));
+	}
+}
+
+export function insertEntryRow(db: SqliteDatabase, sessionId: string, entry: Entry): void {
+	db.prepare(INSERT_ENTRY_SQL).run(...entryRowParams(sessionId, entry));
 }
 
 export function decodeEntryRow(row: EntryRow): Entry {
@@ -110,7 +131,7 @@ export function entryStructureFromRow(row: EntryRow): EntryStructure {
 	};
 }
 
-export function readEntryRows(db: SqliteDatabase, ids: readonly string[]): EntryRow[] {
+export function readEntryRows(db: SqliteDatabase, sessionId: string, ids: readonly string[]): EntryRow[] {
 	if (ids.length === 0) return [];
 	const placeholders = joinSqlFragments(
 		ids.map((id) => sql`${id}`),
@@ -118,19 +139,23 @@ export function readEntryRows(db: SqliteDatabase, ids: readonly string[]): Entry
 	);
 	return sql`SELECT id, parent_id, seq, type, custom_type, timestamp, payload
 		FROM entries
-		WHERE id IN (${placeholders})`.all<EntryRow>(db);
+		WHERE session_id = ${sessionId} AND id IN (${placeholders})`.all<EntryRow>(db);
 }
 
-export function scanEntryRows(db: SqliteDatabase, query: EntryScan): EntryRow[] {
-	const filters: SqlQuery[] = [];
+export function readAllEntryRows(db: SqliteDatabase, sessionId: string): EntryRow[] {
+	return sql`SELECT id, parent_id, seq, type, custom_type, timestamp, payload
+		FROM entries WHERE session_id = ${sessionId} ORDER BY seq ASC`.all<EntryRow>(db);
+}
+
+export function scanEntryRows(db: SqliteDatabase, sessionId: string, query: EntryScan): EntryRow[] {
+	const filters: SqlQuery[] = [sql`session_id = ${sessionId}`];
 	if (query.type !== undefined) filters.push(sql`type = ${query.type}`);
 	if (query.customType !== undefined) filters.push(sql`custom_type = ${query.customType}`);
 	if (query.fromSeq !== undefined) filters.push(sql`seq >= ${query.fromSeq}`);
 	if (query.toSeq !== undefined) filters.push(sql`seq <= ${query.toSeq}`);
 
-	const where = filters.length === 0 ? sql`` : sql`WHERE ${joinSqlFragments(filters, " AND ")}`;
 	const order = query.order === "desc" ? sql`ORDER BY seq DESC` : sql`ORDER BY seq ASC`;
 	const limit = query.limit === undefined ? sql`` : sql`LIMIT ${Math.max(0, query.limit)}`;
 	return sql`SELECT id, parent_id, seq, type, custom_type, timestamp, payload
-		FROM entries ${where} ${order} ${limit}`.all<EntryRow>(db);
+		FROM entries WHERE ${joinSqlFragments(filters, " AND ")} ${order} ${limit}`.all<EntryRow>(db);
 }

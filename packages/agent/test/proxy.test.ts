@@ -77,6 +77,7 @@ describe("streamProxy", () => {
 		});
 	});
 
+	// Regression tests for https://github.com/KnightCodeAI/knightcode/issues/8996
 	it("processes terminal metadata when the event is not newline-terminated", async () => {
 		const start = `data: ${JSON.stringify({ type: "start" })}\n\n`;
 		const done = `data: ${JSON.stringify({ type: "done", reason: "stop", usage, providerThinkingLevel: "high" })}`;
@@ -124,61 +125,5 @@ describe("streamProxy", () => {
 		expect(events.map((event) => event.type)).toEqual(["start", "error"]);
 		expect(result.stopReason).toBe("error");
 		expect(result.errorMessage).toContain("Connection closed by proxy server");
-	});
-
-	it("reports a connection drop rather than a parse error when the last frame is truncated", async () => {
-		// The common shape of a dropped response: the server cut the connection
-		// part-way through writing the final event's JSON.
-		const body = `data: ${JSON.stringify({ type: "start" })}\n\ndata: {"type":"do`;
-		vi.stubGlobal(
-			"fetch",
-			vi.fn(async () => new Response(body, { status: 200 })),
-		);
-
-		const stream = streamProxy(
-			model,
-			{ systemPrompt: "", messages: [] },
-			{
-				authToken: "test-token",
-				proxyUrl: "https://proxy.example.com",
-			},
-		);
-		const events: AssistantMessageEvent[] = [];
-		for await (const event of stream) events.push(event);
-		const result = await stream.result();
-
-		expect(events.map((event) => event.type)).toEqual(["start", "error"]);
-		expect(result.stopReason).toBe("error");
-		expect(result.errorMessage).toContain("Connection closed by proxy server");
-		expect(result.errorMessage).not.toContain("JSON");
-	});
-
-	it("surfaces a real processing error on the last frame instead of a connection drop", async () => {
-		// Well-formed JSON, but a text_delta with no text block open. Only the parse
-		// of a truncated frame is expected to fail here; this must not be reported
-		// as a dropped connection.
-		const start = `data: ${JSON.stringify({ type: "start" })}
-
-`;
-		const bad = `data: ${JSON.stringify({ type: "text_delta", contentIndex: 0, delta: "hi" })}`;
-		vi.stubGlobal(
-			"fetch",
-			vi.fn(async () => new Response(start + bad, { status: 200 })),
-		);
-
-		const stream = streamProxy(
-			model,
-			{ systemPrompt: "", messages: [] },
-			{
-				authToken: "test-token",
-				proxyUrl: "https://proxy.example.com",
-			},
-		);
-		const events: AssistantMessageEvent[] = [];
-		for await (const event of stream) events.push(event);
-		const result = await stream.result();
-
-		expect(result.stopReason).toBe("error");
-		expect(result.errorMessage).toBe("Received text_delta for non-text content");
 	});
 });

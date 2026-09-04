@@ -1,13 +1,13 @@
 import { type ChildProcess, fork } from "node:child_process";
 import { once } from "node:events";
-import { lstat, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdtemp, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import type { KnightServer } from "../src/index.ts";
+import type { Server } from "../src/index.ts";
 import { connectUnixTestClient, type ProtocolTestClient, TestServerHost } from "../src/testing/index.ts";
 import { createUnixServer, getUnixSocketPath } from "../src/transports/unix/index.ts";
 
-const servers = new Set<KnightServer>();
+const servers = new Set<Server>();
 const clients = new Set<ProtocolTestClient>();
 const children = new Set<ChildProcess>();
 const tempDirectories = new Set<string>();
@@ -18,7 +18,7 @@ async function makeSocketPath(nested = false): Promise<string> {
 	return nested ? join(directory, "p", "n", "server.sock") : join(directory, "server.sock");
 }
 
-function makeServer(path: string): KnightServer {
+function makeServer(path: string): Server {
 	const server = createUnixServer(new TestServerHost(), { path, serverId: "00000000-0000-4000-8000-000000000001" });
 	servers.add(server);
 	return server;
@@ -108,6 +108,7 @@ describe.skipIf(process.platform === "win32")("Unix listener filesystem lifecycl
 		const stats = await lstat(path);
 		expect(stats.isSocket()).toBe(true);
 		if (process.platform !== "win32") expect(stats.mode & 0o777).toBe(0o600);
+		expect(await readdir(dirname(path))).toEqual(["server.sock"]);
 
 		await server.close();
 		await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });

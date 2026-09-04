@@ -119,6 +119,7 @@ const QWEN38_MODEL_CASES: QwenTokenPlanModelCase[] = (
 ).flatMap((provider) => QWEN38_MODELS.map((modelId) => ({ provider, modelId })));
 
 describe("Qwen Token Plan models", () => {
+	// #9021
 	it("exposes exactly the documented Individual text models", () => {
 		const modelIds = getModels("qwen-token-plan-individual")
 			.map((model) => model.id)

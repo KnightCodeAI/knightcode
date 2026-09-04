@@ -13,6 +13,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@knightcode/chord": "workspace:*",
     "@knightcode/protocol": "workspace:*"
   },
   "scripts": {

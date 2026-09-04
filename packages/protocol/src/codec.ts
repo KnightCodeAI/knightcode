@@ -1,19 +1,14 @@
+import { isJsonValue } from "@knightcode/chord";
 import { Check } from "typebox/value";
 import { decodeCbor, encodeCbor } from "./cbor/index.ts";
-import {
-	assertCompleteFrame,
-	DEFAULT_MAX_FRAME_LENGTH,
-	encodeFrame,
-	FrameDecoder,
-	type FrameDecoderOptions,
-} from "./framing.ts";
+import { DEFAULT_MAX_FRAME_LENGTH, encodeFrame, FrameDecoder, type FrameDecoderOptions } from "./framing.ts";
 import {
 	type ClientMessage,
 	ClientMessageSchema,
 	PROTOCOL_VERSION,
 	type ServerMessage,
 	ServerMessageSchema,
-} from "./schemas.ts";
+} from "./protocol.ts";
 
 export class ProtocolValidationError extends Error {
 	constructor(message: string) {
@@ -22,31 +17,15 @@ export class ProtocolValidationError extends Error {
 	}
 }
 
-function isProtocolValue(value: unknown, optionalProperty = false, ancestors = new Set<object>()): boolean {
-	if (value === undefined) return optionalProperty;
-	if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
-		return true;
-	}
-	if (typeof value !== "object" || ancestors.has(value)) return false;
-	ancestors.add(value);
-	try {
-		if (Array.isArray(value)) return value.every((item) => isProtocolValue(item, false, ancestors));
-		if (Object.getPrototypeOf(value) !== Object.prototype) return false;
-		return Object.values(value).every((item) => isProtocolValue(item, true, ancestors));
-	} finally {
-		ancestors.delete(value);
-	}
-}
-
 export function parseClientMessage(value: unknown): ClientMessage {
-	if (!isProtocolValue(value) || !Check(ClientMessageSchema, value)) {
+	if (!Check(ClientMessageSchema, value) || !isJsonValue(value)) {
 		throw new ProtocolValidationError("Invalid client protocol message");
 	}
 	return value;
 }
 
 export function parseServerMessage(value: unknown): ServerMessage {
-	if (!isProtocolValue(value) || !Check(ServerMessageSchema, value)) {
+	if (!Check(ServerMessageSchema, value) || !isJsonValue(value)) {
 		throw new ProtocolValidationError("Invalid server protocol message");
 	}
 	return value;
@@ -66,9 +45,7 @@ function encodeProtocolMessage<T>(
 	const validated = parse(value);
 	try {
 		const maxFrameLength = options?.maxFrameLength ?? DEFAULT_MAX_FRAME_LENGTH;
-		const frame = encodeFrame(encodeCbor(validated, { maxByteLength: maxFrameLength }));
-		assertCompleteFrame(frame, { maxFrameLength });
-		return frame;
+		return encodeFrame(encodeCbor(validated, { maxByteLength: maxFrameLength }));
 	} catch (error) {
 		if (error instanceof ProtocolValidationError) throw error;
 		throw new ProtocolValidationError(`Unable to encode ${kind} protocol message: ${boundedErrorMessage(error)}`);

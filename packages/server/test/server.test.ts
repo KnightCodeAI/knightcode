@@ -4,14 +4,14 @@ import { join } from "node:path";
 import { ServerMessageDecoder } from "@knightcode/protocol";
 import { afterEach, expect, test } from "vitest";
 import type { ByteConnection } from "../src/connection.ts";
-import { KnightServer } from "../src/index.ts";
-import type { KnightServerListener } from "../src/listener.ts";
+import { Server } from "../src/index.ts";
+import type { ServerListener } from "../src/listener.ts";
 import { TestServerHost } from "../src/testing/index.ts";
 import { createUnixServer } from "../src/transports/unix/index.ts";
 
 const host = new TestServerHost();
 
-let server: KnightServer | undefined;
+let server: Server | undefined;
 let tempDirectory: string | undefined;
 
 async function makeSocketPath(): Promise<string> {
@@ -27,24 +27,9 @@ afterEach(async () => {
 });
 
 test("requires explicit listeners and a canonical UUIDv4 server identity", () => {
-	expect(() => Reflect.construct(KnightServer, [host, {}])).toThrow(/listeners/);
-	expect(() => new KnightServer(host, { listeners: [], serverId: "" })).toThrow(/serverId/);
-	expect(() => new KnightServer(host, { listeners: [], serverId: "invalid-server" })).toThrow(/serverId/);
-});
-
-test("rejects Unix socket paths that cannot fit in sockaddr_un", () => {
-	expect(() =>
-		createUnixServer(host, { path: `/tmp/${"x".repeat(512)}`, serverId: "00000000-0000-4000-8000-000000000001" }),
-	).toThrow(/too long/);
-});
-
-test("rejects an overlong derived private Unix bind path", async () => {
-	const maxLength = process.platform === "linux" ? 107 : 103;
-	const suffixLength = Buffer.byteLength("/tmp//s");
-	const path = `/tmp/${"x".repeat(maxLength - suffixLength)}/s`;
-	server = createUnixServer(host, { path, serverId: "00000000-0000-4000-8000-000000000001" });
-
-	await expect(server.start()).rejects.toThrow(/private Unix bind path.*too long/);
+	expect(() => Reflect.construct(Server, [host, {}])).toThrow(/listeners/);
+	expect(() => new Server(host, { listeners: [], serverId: "" })).toThrow(/serverId/);
+	expect(() => new Server(host, { listeners: [], serverId: "invalid-server" })).toThrow(/serverId/);
 });
 
 // Unix domain sockets are unavailable on Windows (`listen EACCES`).
@@ -80,7 +65,7 @@ test("handshake timeout closes with a final hello_error frame", async () => {
 			resolveClosed?.();
 		}
 	}
-	const core = new KnightServer(host, {
+	const core = new Server(host, {
 		listeners: [],
 		serverId: "00000000-0000-4000-8000-000000000001",
 		maxFrameLength: 1024,
@@ -129,13 +114,13 @@ test("rejects pending-byte limits smaller than one maximum frame", async () => {
 
 test("rejects close and closed when listener shutdown fails", async () => {
 	const failure = new Error("listener close failed");
-	const listener: KnightServerListener = {
+	const listener: ServerListener = {
 		start: async () => {},
 		close: async () => {
 			throw failure;
 		},
 	};
-	const core = new KnightServer(host, {
+	const core = new Server(host, {
 		listeners: [listener],
 		serverId: "00000000-0000-4000-8000-000000000001",
 	});

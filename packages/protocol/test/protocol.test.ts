@@ -3,10 +3,7 @@ import {
 	type ClientHello,
 	type ClientMessage,
 	ClientMessageDecoder,
-	createRpcClient,
-	createRpcDispatcher,
 	decodeCbor,
-	defineRpc,
 	encodeCbor,
 	encodeClientMessage,
 	encodeFrame,
@@ -17,11 +14,9 @@ import {
 	ProtocolValidationError,
 	parseClientMessage,
 	parseServerMessage,
-	ServerControlRpc,
 	type ServerHello,
 	type ServerMessage,
 	ServerMessageDecoder,
-	ServiceRpc,
 } from "../src/index.ts";
 
 const clientHello: ClientHello = { type: "hello", version: PROTOCOL_VERSION };
@@ -31,81 +26,12 @@ const serverHello: ServerHello = {
 	serverId: "00000000-0000-4000-8000-000000000001",
 };
 
-const metadata = {
-	id: "session-1",
-	createdAt: 1,
-	storageVersion: 1,
-	cwd: "/workspace",
-	parentSessionId: "parent-1",
-} as const;
-
-describe("RPC manifest", () => {
-	test("creates typed client methods from the manifest", async () => {
-		const calls: unknown[] = [];
-		const client = createRpcClient(ServiceRpc, async (call) => {
-			calls.push(call);
-			if (call.method === "list") return [metadata];
-			return { sessionId: call.args[0] };
-		});
-
-		await expect(client.list()).resolves.toEqual([metadata]);
-		await expect(client.attach("session-1")).resolves.toEqual({ sessionId: "session-1" });
-		expect(calls).toEqual([
-			{ method: "list", args: [] },
-			{ method: "attach", args: ["session-1"] },
-		]);
-	});
-
-	test("dispatches only methods and values allowed by the manifest", async () => {
-		const dispatch = createRpcDispatcher(ServiceRpc, {
-			list: () => [metadata],
-			attach: (_context, sessionId) => ({ sessionId }),
-		});
-		await expect(dispatch({ method: "list", args: [] }, undefined)).resolves.toEqual([metadata]);
-		await expect(dispatch({ method: "attach", args: ["session-1"] }, undefined)).resolves.toEqual({
-			sessionId: "session-1",
-		});
-		await expect(dispatch({ method: "attach", args: [] } as never, undefined)).rejects.toThrow(/Invalid arguments/);
-	});
-
-	test("rejects invalid results on both client and dispatcher boundaries", async () => {
-		const client = createRpcClient(ServiceRpc, async () => ({ sessionId: 1 }));
-		await expect(client.attach("session-1")).rejects.toThrow(/Invalid result.*attach/);
-
-		const dispatch = createRpcDispatcher(ServiceRpc, {
-			list: () => [{ id: "session-1" }],
-			attach: (_context: undefined, sessionId: string) => ({ sessionId }),
-		} as never);
-		await expect(dispatch({ method: "list", args: [] }, undefined)).rejects.toThrow(/Invalid result.*list/);
-	});
-
-	test("keeps launcher control methods separate from session operations", async () => {
-		const calls: unknown[] = [];
-		const control = createRpcClient(ServerControlRpc, async (call) => {
-			calls.push(call);
-			return {};
-		});
-		const dispatch = createRpcDispatcher(ServerControlRpc, {
-			drain: () => ({}),
-		});
-
-		await expect(control.drain()).resolves.toEqual({});
-		await expect(dispatch({ method: "drain", args: [] }, undefined)).resolves.toEqual({});
-		expect(calls).toEqual([{ method: "drain", args: [] }]);
-		expect("drain" in createRpcClient(ServiceRpc, async () => [])).toBe(false);
-	});
-
-	test("rejects empty manifests instead of creating unusable RPC clients", () => {
-		expect(() => defineRpc({})).toThrow(/at least one method/);
-	});
-});
-
 describe("protocol validation", () => {
-	test("negotiates protocol version 1", () => {
-		expect(PROTOCOL_VERSION).toBe(1);
-		expect(isSupportedProtocolVersion(1)).toBe(true);
-		expect(isSupportedProtocolVersion(2)).toBe(false);
-		expect(isSupportedProtocolVersion(2.5)).toBe(false);
+	test("negotiates protocol version 8", () => {
+		expect(PROTOCOL_VERSION).toBe(8);
+		expect(isSupportedProtocolVersion(8)).toBe(true);
+		expect(isSupportedProtocolVersion(7)).toBe(false);
+		expect(isSupportedProtocolVersion(8.5)).toBe(false);
 	});
 
 	test.each([0, PROTOCOL_VERSION, PROTOCOL_VERSION + 1])(
@@ -132,74 +58,94 @@ describe("protocol validation", () => {
 			parseClientMessage({
 				type: "request",
 				id: "request-1",
-				serverId,
-				call: { method: "list", args: [] },
+				target: { serverId },
+				call: { serviceId: "knightcode.models", member: "list", args: [] },
 			}),
 		).toThrow(ProtocolValidationError);
 	});
 
-	test("validates service and launcher-control RPC calls with logical targets", () => {
-		const list: ClientMessage = {
+	test("keeps routed request and event payloads opaque", () => {
+		const request: ClientMessage = {
 			type: "request",
 			id: "request-1",
-			serverId: "00000000-0000-4000-8000-000000000001",
-			call: { method: "list", args: [] },
+			target: {
+				serverId: "00000000-0000-4000-8000-000000000001",
+				sessionId: "session-1",
+				attachmentId: "attachment-1",
+			},
+			call: {
+				serviceId: "application.custom",
+				instance: { key: "instance-1", generation: 2 },
+				member: "invoke",
+				args: [{ arbitrary: true }, ["opaque"]],
+			},
 		};
-		const attach: ClientMessage = {
+		expect(parseClientMessage(request)).toEqual(request);
+		expect(
+			parseClientMessage({
+				...request,
+				call: { arbitrary: "strict JSON whose service meaning belongs to Chord" },
+			}),
+		).toMatchObject({ call: { arbitrary: expect.any(String) } });
+		expect(
+			parseServerMessage({
+				type: "service_update",
+				subscriptionId: "subscription-1",
+				update: { applicationDefined: true },
+			}),
+		).toMatchObject({ update: { applicationDefined: true } });
+	});
+
+	test("rejects non-JSON opaque payloads", () => {
+		const request = {
 			type: "request",
-			id: "request-2",
-			serverId: "00000000-0000-4000-8000-000000000001",
-			call: { method: "attach", args: ["session-1"] },
+			id: "request-1",
+			target: { serverId: "00000000-0000-4000-8000-000000000001" },
+			call: { serviceId: "application.custom", member: "invoke", args: [] },
 		};
-		const drain: ClientMessage = {
-			type: "request",
-			id: "request-3",
-			serverId: "00000000-0000-4000-8000-000000000001",
-			call: { method: "drain", args: [] },
-		};
-		expect(parseClientMessage(list)).toEqual(list);
-		expect(parseClientMessage(attach)).toEqual(attach);
-		expect(parseClientMessage(drain)).toEqual(drain);
-		expect(() => parseClientMessage({ ...attach, call: { method: "attach", args: [] } })).toThrow(
-			ProtocolValidationError,
-		);
-		expect(() => parseClientMessage({ ...attach, call: { method: "unknown", args: [] } })).toThrow(
-			ProtocolValidationError,
-		);
+		const cyclic: { self?: unknown } = {};
+		cyclic.self = cyclic;
+		for (const [label, value] of [
+			["byte array", new Uint8Array([1])],
+			["non-finite number", Number.NaN],
+			["undefined property", { value: undefined }],
+			["cycle", cyclic],
+		] as const) {
+			expect(() => parseClientMessage({ ...request, call: { ...request.call, args: [value] } }), label).toThrow(
+				ProtocolValidationError,
+			);
+			expect(() => parseServerMessage({ type: "response", id: "request-1", ok: true, result: value }), label).toThrow(
+				ProtocolValidationError,
+			);
+		}
 	});
 
-	test("validates SessionRepo metadata without a presentation projection", () => {
-		const message: ServerMessage = {
-			type: "response",
+	test("validates request cancellation envelopes", () => {
+		const cancel: ClientMessage = {
+			type: "cancel",
 			id: "request-1",
-			ok: true,
-			result: [metadata],
+			target: { serverId: "00000000-0000-4000-8000-000000000001" },
 		};
-		expect(parseServerMessage(message)).toEqual(message);
-		expect(() => parseServerMessage({ ...message, result: [{ id: "session-1", createdAt: 1 }] })).toThrow(
+		expect(parseClientMessage(cancel)).toEqual(cancel);
+		expect(() => parseClientMessage({ ...cancel, id: "" })).toThrow(ProtocolValidationError);
+		expect(() => parseClientMessage({ ...cancel, extra: true })).toThrow(ProtocolValidationError);
+	});
+
+	test("validates attachment route updates", () => {
+		const attached: ServerMessage = {
+			type: "attachment",
+			attachment: {
+				serverId: "00000000-0000-4000-8000-000000000001",
+				sessionId: "session-1",
+				attachmentId: "attachment-1",
+			},
+		};
+		const detached: ServerMessage = { type: "attachment", attachment: null };
+		expect(parseServerMessage(attached)).toEqual(attached);
+		expect(parseServerMessage(detached)).toEqual(detached);
+		expect(() => parseServerMessage({ ...attached, attachment: { sessionId: "session-1" } })).toThrow(
 			ProtocolValidationError,
 		);
-	});
-
-	test("validates attach results", () => {
-		const message: ServerMessage = {
-			type: "response",
-			id: "request-1",
-			ok: true,
-			result: { sessionId: "session-1" },
-		};
-		expect(parseServerMessage(message)).toEqual(message);
-	});
-
-	test("validates drain acknowledgements", () => {
-		const message: ServerMessage = {
-			type: "response",
-			id: "request-1",
-			ok: true,
-			result: {},
-		};
-		expect(parseServerMessage(message)).toEqual(message);
-		expect(() => parseServerMessage({ ...message, result: { sessionIds: [] } })).toThrow(ProtocolValidationError);
 	});
 
 	test.each([
@@ -208,42 +154,42 @@ describe("protocol validation", () => {
 			{
 				type: "request",
 				id: "",
-				serverId: "00000000-0000-4000-8000-000000000001",
-				call: { method: "list", args: [] },
+				target: { serverId: "00000000-0000-4000-8000-000000000001" },
+				call: { serviceId: "knightcode.models", member: "list", args: [] },
 			},
 		],
 		[
-			"empty session id",
+			"extra envelope field",
 			{
 				type: "request",
 				id: "request-1",
-				serverId: "00000000-0000-4000-8000-000000000001",
-				call: { method: "attach", args: [""] },
-			},
-		],
-		[
-			"extra call field",
-			{
-				type: "request",
-				id: "request-1",
-				serverId: "00000000-0000-4000-8000-000000000001",
-				call: { method: "list", args: [], extra: true },
+				target: { serverId: "00000000-0000-4000-8000-000000000001" },
+				call: { serviceId: "knightcode.models", member: "list", args: [] },
+				extra: true,
 			},
 		],
 	] as const)("rejects malformed request boundaries: %s", (_label, message) => {
 		expect(() => parseClientMessage(message)).toThrow(ProtocolValidationError);
 	});
 
+	test("accepts a successful void response without a result field", () => {
+		expect(parseServerMessage({ type: "response", id: "request-1", ok: true })).toEqual({
+			type: "response",
+			id: "request-1",
+			ok: true,
+		});
+	});
+
 	test.each([
 		["invalid server id", { ...serverHello, serverId: "server-1" }],
-		["missing response result", { type: "response", id: "request-1", ok: true }],
 		["extra response field", { type: "response", id: "request-1", ok: true, result: [], extra: true }],
+		["empty error code", { type: "response", id: "request-1", ok: false, error: { code: "", message: "bad" } }],
 	] as const)("rejects malformed server boundaries: %s", (_label, message) => {
 		expect(() => parseServerMessage(message)).toThrow(ProtocolValidationError);
 	});
 
-	test.each(["wrong_server", "session_not_found", "server_draining", "internal_error"] as const)(
-		"accepts the %s error code",
+	test.each(["wrong_server", "cancelled", "service_not_found", "application_error"] as const)(
+		"accepts the opaque %s error code",
 		(code) => {
 			const message: ServerMessage = {
 				type: "response",
@@ -257,7 +203,7 @@ describe("protocol validation", () => {
 
 	test("rejects unknown messages and fields", () => {
 		expect(() => parseServerMessage({ ...serverHello, snapshot: {} })).toThrow(ProtocolValidationError);
-		expect(() => parseServerMessage({ type: "event", event: {} })).toThrow(ProtocolValidationError);
+		expect(() => parseServerMessage({ type: "unknown", event: {} })).toThrow(ProtocolValidationError);
 	});
 
 	test("does not parse JSON strings as messages", () => {
@@ -283,8 +229,8 @@ describe("validated framed protocol APIs", () => {
 		const request: ClientMessage = {
 			type: "request",
 			id: "request-1",
-			serverId: "00000000-0000-4000-8000-000000000001",
-			call: { method: "list", args: [] },
+			target: { serverId: "00000000-0000-4000-8000-000000000001" },
+			call: { serviceId: "knightcode.session-directory", member: "list", args: [] },
 		};
 		const first = encodeClientMessage(clientHello);
 		const second = encodeClientMessage(request);

@@ -23,6 +23,10 @@ export const isBunBinary =
 /** Detect if Bun is the runtime (compiled binary or bun run) */
 export const isBunRuntime = !!process.versions.bun;
 
+/** Detect the esbuild-bundled Node.js distribution. */
+declare const KNIGHTCODE_BUNDLED_NODE: boolean;
+export const isBundledNode = typeof KNIGHTCODE_BUNDLED_NODE !== "undefined" && KNIGHTCODE_BUNDLED_NODE;
+
 // =============================================================================
 // Install Method Detection
 // =============================================================================

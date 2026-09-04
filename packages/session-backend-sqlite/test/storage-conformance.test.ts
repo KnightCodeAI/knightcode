@@ -1,8 +1,14 @@
-import { type ConformanceCase, createStorageConformance, type StorageFixture } from "@knightcode/agent/session/testing";
+import { BACKGROUND_CONTEXT } from "@knightcode/agent";
+import {
+	type ConformanceCase,
+	createStorageConformance,
+	type StorageFixture,
+} from "@knightcode/agent/harness/session/testing";
 import { describe, it } from "vitest";
 import { createNodeSqliteFactory, SQLITE_STORAGE_VERSION, SqliteStorage, sql } from "../src/index.ts";
 import { applyInitialSchema } from "../src/sqlite/migrations.ts";
 
+const SESSION_ID = "session";
 const NOW = 1_700_000_000_000;
 const EMPTY_USAGE = {
 	input: 0,
@@ -13,21 +19,12 @@ const EMPTY_USAGE = {
 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-// Re-enable each case as the work-in-progress backend implements the missing contract behavior.
-const DISABLED_CASES = new Set([
-	"transactions/rolls back every store when a mixed transaction fails",
-	"transactions/enforces one shared entry and usage id namespace",
-	"branch queries/applies stops before filters and cursors before limits",
-	"lifecycle/seals admission, drains admitted commits, and closes idempotently",
-]);
-
 function registerConformance(name: string, cases: readonly ConformanceCase[]): void {
 	describe(name, () => {
 		for (const group of new Set(cases.map((testCase) => testCase.group))) {
 			describe(group, () => {
 				for (const testCase of cases.filter((candidate) => candidate.group === group)) {
-					const register = DISABLED_CASES.has(`${group}/${testCase.name}`) ? it.skip : it;
-					register(testCase.name, () => testCase.run());
+					it(testCase.name, () => testCase.run());
 				}
 			});
 		}
@@ -40,15 +37,17 @@ registerConformance(
 		const db = await createNodeSqliteFactory().open(":memory:");
 		try {
 			await applyInitialSchema(db);
-			sql`INSERT INTO session
-				(created_at, parent_session_id, storage_version, metadata, message_count, usage_payload, next_seq)
-				VALUES (${NOW}, ${null}, ${SQLITE_STORAGE_VERSION}, ${null}, ${0}, ${JSON.stringify(EMPTY_USAGE)}, ${1})`.run(db);
-			const storage = new SqliteStorage(db, { now: () => NOW });
+			sql`INSERT INTO sessions
+				(id, created_at, parent_session_id, storage_version, metadata, message_count, usage_payload, next_seq)
+				VALUES (${SESSION_ID}, ${NOW}, ${null}, ${SQLITE_STORAGE_VERSION}, ${null}, ${0}, ${JSON.stringify(EMPTY_USAGE)}, ${1})`.run(
+				db,
+			);
+			const storage = new SqliteStorage(db, { sessionId: SESSION_ID, now: () => NOW });
 			return {
 				storage,
 				async [Symbol.asyncDispose]() {
 					try {
-						await storage.close();
+						await storage.close(BACKGROUND_CONTEXT);
 					} finally {
 						db.close();
 					}

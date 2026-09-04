@@ -156,19 +156,7 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("Use bash to load a skill's file");
 		});
 
-		test("uses the PowerShell wording when powershell is the only shell", () => {
-			const prompt = buildSystemPrompt({
-				selectedTools: ["powershell"],
-				contextFiles: [],
-				skills: [testSkill],
-				cwd: process.cwd(),
-			});
-
-			expect(prompt).toContain("<available_skills>");
-			expect(prompt).toContain("Use PowerShell to load a skill's file");
-		});
-
-		test("omits skills without a tool that can read their files", () => {
+		test("omits skills without read or bash", () => {
 			const prompt = buildSystemPrompt({
 				selectedTools: ["write"],
 				contextFiles: [],

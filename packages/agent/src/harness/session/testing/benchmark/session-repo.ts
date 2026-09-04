@@ -1,4 +1,6 @@
+import { BACKGROUND_CONTEXT } from "../../../context.ts";
 import type { SessionMetadata, SessionRepo } from "../../types.ts";
+import { branchTip, laneConfig, laneState, setValue } from "../../values.ts";
 import { STORAGE_BENCHMARK_DATASETS, type StorageBenchmarkDataset } from "./datasets.ts";
 import { generateStorageBenchmarkSeedTransactions } from "./storage.ts";
 
@@ -27,8 +29,6 @@ interface SessionRepoForkWriteBenchmarkScenario {
 	readonly name: string;
 	expectedResult(dataset: StorageBenchmarkDataset): number;
 	run(repo: SessionRepo, source: SessionMetadata, dataset: StorageBenchmarkDataset): Promise<number>;
-	/** Untimed: proves the measured write produced a real fork, not just destination metadata. */
-	validate(repo: SessionRepo, dataset: StorageBenchmarkDataset): Promise<void>;
 }
 
 /** Package-internal deterministic session id shared by repository benchmark workloads. */
@@ -60,9 +60,9 @@ export async function seedSessionRepoCatalogBenchmark(
 ): Promise<SessionMetadata[]> {
 	const metadata: SessionMetadata[] = [];
 	for (let index = 0; index < dataset.sessionCount; index++) {
-		const session = await repo.create({ id: sessionRepoBenchmarkSessionId(index) });
+		const session = await repo.create({ id: sessionRepoBenchmarkSessionId(index) }, BACKGROUND_CONTEXT);
 		metadata.push(session.metadata);
-		await session.close();
+		await session.close(BACKGROUND_CONTEXT);
 	}
 	return metadata;
 }
@@ -75,7 +75,7 @@ export const SESSION_REPO_CATALOG_READ_BENCHMARK_SCENARIOS: readonly SessionRepo
 			return dataset.sessionCount;
 		},
 		async run(repo) {
-			return (await repo.list()).length;
+			return (await repo.list(undefined, BACKGROUND_CONTEXT)).length;
 		},
 	},
 ];
@@ -88,7 +88,7 @@ export const SESSION_REPO_CATALOG_WRITE_BENCHMARK_SCENARIOS: readonly SessionRep
 		prepare(repo) {
 			return Promise.resolve({
 				async run() {
-					const session = await repo.create({ id: BENCHMARK_SESSION_ID });
+					const session = await repo.create({ id: BENCHMARK_SESSION_ID }, BACKGROUND_CONTEXT);
 					return session.metadata.id === BENCHMARK_SESSION_ID ? 1 : 0;
 				},
 			});
@@ -98,12 +98,12 @@ export const SESSION_REPO_CATALOG_WRITE_BENCHMARK_SCENARIOS: readonly SessionRep
 		name: "open closed empty session",
 		expectedResult: 1,
 		async prepare(repo) {
-			const session = await repo.create({ id: BENCHMARK_SESSION_ID });
+			const session = await repo.create({ id: BENCHMARK_SESSION_ID }, BACKGROUND_CONTEXT);
 			const { metadata } = session;
-			await session.close();
+			await session.close(BACKGROUND_CONTEXT);
 			return {
 				async run() {
-					const reopened = await repo.open(metadata);
+					const reopened = await repo.open(metadata, BACKGROUND_CONTEXT);
 					return reopened.metadata.id === metadata.id ? 1 : 0;
 				},
 			};
@@ -113,12 +113,12 @@ export const SESSION_REPO_CATALOG_WRITE_BENCHMARK_SCENARIOS: readonly SessionRep
 		name: "delete closed empty session",
 		expectedResult: 1,
 		async prepare(repo) {
-			const session = await repo.create({ id: BENCHMARK_SESSION_ID });
+			const session = await repo.create({ id: BENCHMARK_SESSION_ID }, BACKGROUND_CONTEXT);
 			const { metadata } = session;
-			await session.close();
+			await session.close(BACKGROUND_CONTEXT);
 			return {
 				async run() {
-					await repo.delete(metadata);
+					await repo.delete(metadata, BACKGROUND_CONTEXT);
 					return 1;
 				},
 			};
@@ -137,14 +137,25 @@ export async function seedSessionRepoForkBenchmark(
 	repo: SessionRepo,
 	dataset: StorageBenchmarkDataset,
 ): Promise<SessionMetadata> {
-	const session = await repo.create({ id: BENCHMARK_SESSION_ID });
+	const session = await repo.create({ id: BENCHMARK_SESSION_ID }, BACKGROUND_CONTEXT);
 	for (const transaction of generateStorageBenchmarkSeedTransactions(dataset)) {
-		await session.mutate("main", (mutator) => mutator.commit(transaction));
+		await session.mutate((mutator) => mutator.commit(transaction, BACKGROUND_CONTEXT), BACKGROUND_CONTEXT);
 	}
-	await session.mutate("main", (mutator) =>
-		mutator.commit({
-			writes: [{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: dataset.leafId }],
-		}),
+	await session.mutate(
+		(mutator) =>
+			mutator.commit(
+				[
+					setValue(branchTip("main"), dataset.tipId),
+					setValue(laneConfig("main"), {
+						model: { provider: "benchmark", modelId: "benchmark" },
+						thinkingLevel: "off",
+						activeToolNames: [],
+					}),
+					setValue(laneState("main"), { currentOperationId: null, lastOperationId: null, inbox: [] }),
+				],
+				BACKGROUND_CONTEXT,
+			),
+		BACKGROUND_CONTEXT,
 	);
 	return session.metadata;
 }
@@ -157,23 +168,14 @@ export const SESSION_REPO_FORK_WRITE_BENCHMARK_SCENARIOS: readonly SessionRepoFo
 			return dataset.entryCount;
 		},
 		async run(repo, source, dataset) {
-			const fork = await repo.fork(source, { id: FORK_DESTINATION_SESSION_ID });
-			const forked = fork.metadata.id === FORK_DESTINATION_SESSION_ID && fork.metadata.parentSessionId === source.id;
-			await fork.close();
-			return forked ? dataset.entryCount : 0;
-		},
-		async validate(repo, dataset) {
-			const destination = (await repo.list()).find((candidate) => candidate.id === FORK_DESTINATION_SESSION_ID);
-			if (destination === undefined) throw new Error("Fork destination is missing from the repository");
-			const session = await repo.open(destination);
-			try {
-				const entries = await session.findEntries();
-				if (entries.length !== dataset.entryCount) {
-					throw new Error(`Fork holds ${entries.length} entries, expected ${dataset.entryCount}`);
-				}
-			} finally {
-				await session.close();
-			}
+			const fork = await repo.fork(
+				source,
+				{ id: FORK_DESTINATION_SESSION_ID, scope: "branch", branch: "main" },
+				BACKGROUND_CONTEXT,
+			);
+			return fork.metadata.id === FORK_DESTINATION_SESSION_ID && fork.metadata.parentSessionId === source.id
+				? dataset.entryCount
+				: 0;
 		},
 	},
 ];

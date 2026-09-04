@@ -1,6 +1,8 @@
-import type { AssistantMessage, Usage } from "@knightcode/ai";
+import type { AssistantMessage, AssistantMessageFrame, DeferredHandle, Usage } from "@knightcode/ai";
 import { expectTypeOf, it } from "vitest";
+import * as storedValues from "../../src/harness/session/values.ts";
 import type {
+	AgentHarness,
 	AgentHarnessOptions,
 	AgentHarnessStreamOptions,
 	AgentHarnessTool,
@@ -8,57 +10,64 @@ import type {
 	AgentLane,
 	AgentMessage,
 	AgentTool,
+	Branch,
 	BranchScan,
 	CancelQueuedResult,
-	CheckpointPhase,
-	CompactionState,
+	CheckpointData,
+	Context,
 	Control,
 	CustomEntry,
-	Deferred,
+	DriveOptions,
+	DriveOutcome,
 	DriveResult,
+	Entry,
 	EntryProjector,
-	Generation,
+	EntryWrite,
 	GenerationContext,
 	HarnessEvent,
 	HookHandler,
 	HookMap,
 	HookName,
 	IdGenerator,
+	InboxItem,
 	LaneConfiguration,
 	LaneExecutionInfo,
-	LaneLastResult,
 	LaneSnapshot,
-	NavigationState,
+	LaneSnapshotTool,
 	NewEntry,
 	OperationAdmissionResult,
+	OperationAt,
 	OperationMeta,
 	OperationRequest,
+	OperationResultRecord,
+	OperationScope,
 	OperationState,
-	RegisterSetWrite,
-	RegisterValues,
-	RunPhase,
 	RunResult,
-	RunState,
 	SearchQuery,
 	Session,
 	SessionCreateOptions,
 	SessionMetadata,
+	SessionMutation,
 	SessionMutator,
+	SessionReader,
 	SessionRepo,
 	SessionSearchHit,
 	SessionSearchService,
 	SessionSnapshot,
-	SessionTree,
+	SessionStats,
 	SettledAssistantMessage,
 	Storage,
-	StructuralDecision,
+	StorageBranchScan,
 	SummaryContext,
-	SummaryGeneration,
+	SuspendedRun,
+	TerminalStatus,
 	ToolCall,
-	Transaction,
 	UsageRow,
+	UsageWrite,
+	ValueSetWrite,
 	Write,
 } from "../../src/index.ts";
+import { insertEntry, insertUsage } from "../../src/index.ts";
 
 const configuration = {
 	model: { provider: "provider", modelId: "model" },
@@ -76,42 +85,67 @@ const generationContext = {
 	overflowRecoveryUsed: false,
 } satisfies GenerationContext;
 const summaryContext = {
-	taskId: "task",
 	resultEntryId: "summary",
-	kind: "compaction",
 	configuration,
 	streamOptions: {},
 	retryPolicy,
-	reason: "manual",
 } satisfies SummaryContext;
 const checkpoint = {
-	kind: "checkpoint",
 	continuation: { kind: "need_assistant", overflowRecoveryUsed: false },
 	triggerEntryId: "trigger",
-} satisfies CheckpointPhase;
+} satisfies CheckpointData;
 
 const runningControl = { status: "running" } satisfies Control;
-const generations = [
-	{ status: "ready", context: generationContext, nextAttempt: 1 },
+const toolCalls = [
+	{ status: "planned", sourceIndex: 0, resultEntryId: "result-0" },
+	{ status: "effect_pending", sourceIndex: 1, resultEntryId: "result-1", replay: "safe" },
+	{ status: "outcome_ready", sourceIndex: 2, resultEntryId: "result-2", terminate: true },
+	{ status: "completed", sourceIndex: 3, resultEntryId: "result-3", terminate: false },
+] satisfies ToolCall[];
+
+const runScope = {
+	control: runningControl,
+	settings: {
+		compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 2000 },
+		steeringMode: "all",
+		followUpMode: "one-at-a-time",
+		toolExecution: "parallel",
+	},
+	latestAssistantEntryId: null,
+} satisfies OperationScope;
+
+const runState = { ...runScope, at: "starting" } satisfies OperationState;
+// One value fixture per flat leaf; `satisfies OperationState[]` keeps every discriminant checked.
+const operationStates = [
+	runState,
+	{ ...runScope, at: "checkpoint", ...checkpoint },
+	{ ...runScope, at: "assistant.ready", generationContext, nextAttempt: 1 },
 	{
-		status: "effect_pending",
-		context: generationContext,
+		...runScope,
+		at: "assistant.effect_pending",
+		generationContext,
 		attempt: 1,
 		responseEntryId: "response",
 		usageId: "usage",
 		intendedOutputLimit: 4096,
 		contextWindow: 128000,
 	},
-	{ status: "retry_wait", context: generationContext, nextAttempt: 2, notBefore: 10, errorMessage: "retry" },
-] satisfies Generation[];
-const toolCalls = [
-	{ status: "planned", sourceIndex: 0, resultEntryId: "result-0" },
-	{ status: "effect_pending", sourceIndex: 1, resultEntryId: "result-1", replay: "safe" },
-	{ status: "completed", sourceIndex: 2, resultEntryId: "result-2", terminate: false },
-] satisfies ToolCall[];
-const deferredStates = [
 	{
-		status: "suspended",
+		...runScope,
+		at: "assistant.retry_wait",
+		generationContext,
+		nextAttempt: 2,
+		notBefore: 10,
+		errorMessage: "retry",
+	},
+	{
+		...runScope,
+		at: "tools",
+		batch: { assistantEntryId: "assistant", configuration, turnId: "turn", calls: toolCalls },
+	},
+	{
+		...runScope,
+		at: "deferred.suspended",
 		stepId: "step",
 		sourceEntryId: "source",
 		poll: 0,
@@ -119,7 +153,8 @@ const deferredStates = [
 		streamOptions: {},
 	},
 	{
-		status: "effect_pending",
+		...runScope,
+		at: "deferred.effect_pending",
 		stepId: "step",
 		sourceEntryId: "source",
 		poll: 1,
@@ -128,152 +163,104 @@ const deferredStates = [
 		configuration,
 		streamOptions: {},
 	},
-] satisfies Deferred[];
-const summaryGenerations = [
-	{ status: "ready", context: summaryContext, nextAttempt: 1 },
 	{
-		status: "effect_pending",
-		context: summaryContext,
+		...runScope,
+		at: "summary.deciding",
+		task: { taskId: "task", reason: "threshold", boundary: { kind: "resume_checkpoint", resumeAfter: checkpoint } },
+	},
+	{
+		...runScope,
+		at: "summary.ready",
+		task: { taskId: "task", reason: "manual", customInstructions: "compact", boundary: { kind: "finish" } },
+		summaryContext,
+		nextAttempt: 1,
+	},
+	{
+		...runScope,
+		at: "summary.effect_pending",
+		task: {
+			taskId: "task",
+			boundary: { kind: "commit_navigation", targetId: "target", label: "target" },
+		},
+		summaryContext,
 		attempt: 1,
 		request: { index: 0, usageId: "usage" },
 		usageIds: [],
 	},
-	{ status: "retry_wait", context: summaryContext, nextAttempt: 2, notBefore: 10, errorMessage: "retry" },
-] satisfies SummaryGeneration[];
-const structuralDecisions = [
-	{ status: "deciding", taskId: "task" },
-	{ status: "generating", taskId: "task", generation: summaryGenerations[0] },
-] satisfies StructuralDecision[];
-
-const runPhases = [
-	checkpoint,
-	{ kind: "assistant", generation: generations[0] },
 	{
-		kind: "tools",
-		batch: { assistantEntryId: "assistant", configuration, turnId: "turn", calls: toolCalls },
+		...runScope,
+		at: "summary.retry_wait",
+		task: { taskId: "task", reason: "overflow", boundary: { kind: "resume_checkpoint", resumeAfter: checkpoint } },
+		summaryContext,
+		nextAttempt: 2,
+		notBefore: 10,
+		errorMessage: "retry",
 	},
-	{
-		kind: "compaction",
-		reason: "threshold",
-		structural: structuralDecisions[0],
-		resumeAfter: checkpoint,
-	},
-	{ kind: "deferred", deferred: deferredStates[0] },
-	{
-		kind: "failure_drain",
-		error: { code: "provider", message: "failed" },
-		provenance: { kind: "response", entryId: "response" },
-	},
-] satisfies RunPhase[];
-
-const runState = {
-	kind: "run",
-	control: runningControl,
-	settings: {
-		compaction: { enabled: true, reserveTokens: 1000, keepRecentTokens: 2000 },
-		steeringMode: "all",
-		followUpMode: "one-at-a-time",
-		toolExecution: "parallel",
-	},
-	phase: runPhases[0],
-	inbox: { steer: [], followUp: [], writes: [] },
-	latestAssistantEntryId: null,
-} satisfies RunState;
-const compactionState = {
-	kind: "compaction",
-	control: runningControl,
-	customInstructions: "compact",
-	structural: structuralDecisions[0],
-} satisfies CompactionState;
-const navigationStates = [
-	{
-		kind: "navigation",
-		control: runningControl,
-		targetId: null,
-		summarize: false,
-		phase: { kind: "ready_to_commit" },
-	},
-	{
-		kind: "navigation",
-		control: runningControl,
-		targetId: "target",
-		summarize: true,
-		phase: { kind: "summary", structural: structuralDecisions[0] },
-	},
-] satisfies NavigationState[];
-const operationStates = [runState, compactionState, ...navigationStates] satisfies OperationState[];
+	{ ...runScope, at: "navigation.ready_to_commit", targetId: null },
+] satisfies OperationState[];
 const operations = [
 	{
 		operationId: "run",
 		lane: "main",
-		sourceLeafId: null,
+		sourceTipId: null,
 		startedAt: 1,
-		intent: { kind: "run", promptEntryIds: ["prompt"], resumeData: { extension: null } },
+		intent: { kind: "run", promptEntryIds: ["prompt"] },
 	},
 	{
 		operationId: "compaction",
 		lane: "main",
-		sourceLeafId: "source",
+		sourceTipId: "source",
 		startedAt: 2,
 		intent: { kind: "compaction", customInstructions: "compact" },
 	},
 	{
 		operationId: "navigation",
 		lane: "main",
-		sourceLeafId: "source",
+		sourceTipId: "source",
 		startedAt: 3,
 		intent: { kind: "navigation", targetId: "target", summarize: true, label: "target" },
 	},
 ] satisfies OperationMeta[];
 
-const lastResult = {
+const operationResult = {
 	operationId: "run",
 	kind: "run",
-	leafId: "leaf",
-	finalAssistantEntryId: "assistant",
-	outcome: "completed",
-	runCompletion: "assistant",
-} satisfies LaneLastResult;
-const registerWrites: RegisterSetWrite[] = [
-	{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: "leaf" },
-	{ kind: "register", op: "set", namespace: "lane.config", key: "main", value: configuration },
-	{
-		kind: "register",
-		op: "set",
-		namespace: "lane.state",
-		key: "main",
-		value: { currentOperationId: "run", pendingNextRun: [] },
-	},
-	{ kind: "register", op: "set", namespace: "lane.lastResult", key: "main", value: lastResult },
-	{ kind: "register", op: "set", namespace: "op.meta", key: "run", value: operations[0] },
-	{ kind: "register", op: "set", namespace: "op.state", key: "run", value: runState },
-	{ kind: "register", op: "set", namespace: "op.tool_args", key: "run:step:0", value: { path: "file" } },
-	{
-		kind: "register",
-		op: "set",
-		namespace: "op.preparation",
-		key: "run:task",
-		value: {
-			kind: "compaction",
-			messagesToSummarize: [],
-			turnPrefixMessages: [],
-			retainedTail: [],
-			isSplitTurn: false,
-			tokensBefore: 100,
-			fileOps: { read: [], written: [], edited: [] },
-			settings: { enabled: true, reserveTokens: 1000, keepRecentTokens: 2000 },
-		},
-	},
-	{
-		kind: "register",
-		op: "set",
-		namespace: "pending.entry",
-		key: "pending",
-		value: { type: "custom", customType: "note", payload: { text: "pending" } },
-	},
-	{ kind: "register", op: "set", namespace: "fact.name", key: "", value: "session" },
-	{ kind: "register", op: "set", namespace: "fact.label", key: "entry", value: "label" },
-	{ kind: "register", op: "set", namespace: "fact.custom", key: "state", value: null },
+	status: "completed",
+	fromTipId: null,
+	tipId: "leaf",
+	startedAt: 1,
+	endedAt: 2,
+} satisfies OperationResultRecord;
+const valueWrites: ValueSetWrite[] = [
+	storedValues.setValue(storedValues.branchTip("main"), "leaf"),
+	storedValues.setValue(storedValues.laneConfig("main"), configuration),
+	storedValues.setValue(storedValues.laneState("main"), {
+		currentOperationId: "run",
+		lastOperationId: null,
+		inbox: [],
+	}),
+	storedValues.setValue(storedValues.operationResult("run"), operationResult),
+	storedValues.setValue(storedValues.operationMeta("run"), operations[0]),
+	storedValues.setValue(storedValues.operationState("run"), runState),
+	storedValues.setValue(storedValues.operationToolArgs("run", "step", 0), { path: "file" }),
+	storedValues.setValue(storedValues.operationPreparation("run", "task"), {
+		kind: "compaction",
+		messagesToSummarize: [],
+		turnPrefixMessages: [],
+		retainedTail: [],
+		isSplitTurn: false,
+		tokensBefore: 100,
+		fileOps: { read: [], written: [], edited: [] },
+		settings: { enabled: true, reserveTokens: 1000, keepRecentTokens: 2000 },
+	}),
+	storedValues.setValue(storedValues.pendingEntry("pending"), {
+		type: "custom",
+		customType: "note",
+		payload: { text: "pending" },
+	}),
+	storedValues.setValue(storedValues.sessionName, "session"),
+	storedValues.setValue(storedValues.entryLabel("entry"), "label"),
+	storedValues.setValue(storedValues.value<unknown>("test.value", "state"), null),
 ];
 
 const usage = {
@@ -292,68 +279,71 @@ const usageRow = {
 	adjustment: false,
 	details: { attempt: 1 },
 } satisfies UsageRow;
+const entryWrite = insertEntry({
+	id: "entry",
+	parentId: null,
+	type: "message",
+	message: { role: "user", content: "hello", timestamp: 1 },
+});
+const usageWrite = insertUsage({
+	id: usageRow.id,
+	usage,
+	adjustment: false,
+	entryId: "entry",
+});
 const writes = [
-	{
-		kind: "entry",
-		entry: {
-			id: "entry",
-			parentId: null,
-			type: "message",
-			message: { role: "user", content: "hello", timestamp: 1 },
-		},
-	},
-	{ kind: "usage", row: { id: usageRow.id, usage, adjustment: false, entryId: "entry" } },
-	registerWrites[0]!,
-	{ kind: "register", op: "delete", namespace: "fact.label", key: "entry" },
+	entryWrite,
+	usageWrite,
+	valueWrites[0]!,
+	storedValues.deleteValue(storedValues.entryLabel("entry")),
 ] satisfies Write[];
-const transaction = { writes } satisfies Transaction;
+const transaction = writes satisfies Write[];
 
 it("covers the complete durable storage and Part 3 discriminants", () => {
-	expectTypeOf<keyof RegisterValues>().toEqualTypeOf<
-		| "lane.leaf"
-		| "lane.config"
-		| "lane.state"
-		| "lane.lastResult"
-		| "op.meta"
-		| "op.state"
-		| "op.tool_args"
-		| "op.preparation"
-		| "pending.entry"
-		| "fact.name"
-		| "fact.label"
-		| "fact.custom"
+	expectTypeOf(entryWrite).toEqualTypeOf<EntryWrite>();
+	expectTypeOf(usageWrite).toEqualTypeOf<UsageWrite>();
+	expectTypeOf(storedValues.laneConfig("main")).toEqualTypeOf<storedValues.Value<LaneConfiguration>>();
+	expectTypeOf(storedValues.pendingAssistantFrames("operation", "response")).toEqualTypeOf<
+		storedValues.ValueList<AssistantMessageFrame>
 	>();
 	expectTypeOf<OperationMeta["intent"]["kind"]>().toEqualTypeOf<"run" | "compaction" | "navigation">();
 	expectTypeOf<Control["status"]>().toEqualTypeOf<"running" | "cancel_requested">();
-	expectTypeOf<Generation["status"]>().toEqualTypeOf<"ready" | "effect_pending" | "retry_wait">();
-	expectTypeOf<ToolCall["status"]>().toEqualTypeOf<"planned" | "effect_pending" | "completed">();
-	expectTypeOf<Deferred["status"]>().toEqualTypeOf<"suspended" | "effect_pending">();
-	expectTypeOf<SummaryGeneration["status"]>().toEqualTypeOf<"ready" | "effect_pending" | "retry_wait">();
-	expectTypeOf<StructuralDecision["status"]>().toEqualTypeOf<"deciding" | "generating">();
-	expectTypeOf<RunPhase["kind"]>().toEqualTypeOf<
-		"checkpoint" | "assistant" | "tools" | "compaction" | "deferred" | "failure_drain"
+	expectTypeOf<ToolCall["status"]>().toEqualTypeOf<"planned" | "effect_pending" | "outcome_ready" | "completed">();
+	expectTypeOf<OperationAt>().toEqualTypeOf<
+		| "starting"
+		| "checkpoint"
+		| "assistant.ready"
+		| "assistant.effect_pending"
+		| "assistant.retry_wait"
+		| "tools"
+		| "deferred.suspended"
+		| "deferred.effect_pending"
+		| "summary.deciding"
+		| "summary.ready"
+		| "summary.effect_pending"
+		| "summary.retry_wait"
+		| "summary.deciding"
+		| "summary.ready"
+		| "summary.effect_pending"
+		| "summary.retry_wait"
+		| "navigation.ready_to_commit"
+		| "summary.deciding"
+		| "summary.ready"
+		| "summary.effect_pending"
+		| "summary.retry_wait"
 	>();
-	expectTypeOf<OperationState["kind"]>().toEqualTypeOf<"run" | "compaction" | "navigation">();
-	expectTypeOf<NavigationState["summarize"]>().toEqualTypeOf<boolean>();
+	expectTypeOf<InboxItem["kind"]>().toEqualTypeOf<"steer" | "followUp" | "nextRun" | "write">();
+	expectTypeOf<TerminalStatus>().toEqualTypeOf<"completed" | "declined" | "aborted" | "failed">();
 	expectTypeOf<NewEntry["type"]>().toEqualTypeOf<"message" | "compaction" | "branch_summary" | "custom">();
 	void transaction;
-	void generations;
-	void deferredStates;
-	void summaryGenerations;
 	void operationStates;
 
 	const compileTimeFailures = () => {
 		// @ts-expect-error lane.config requires a complete LaneConfiguration
-		const invalidRegister: RegisterSetWrite = {
-			kind: "register",
-			op: "set",
-			namespace: "lane.config",
-			key: "main",
-			value: "model",
-		};
+		const invalidValue: ValueSetWrite = storedValues.setValue(storedValues.laneConfig("main"), "model");
 		// @ts-expect-error response entries require settled assistant content at runtime, not a pending settlement type
 		const invalidSettled: SettledAssistantMessage = { stopReason: "pending" } as AssistantMessage;
-		void invalidRegister;
+		void invalidValue;
 		void invalidSettled;
 	};
 	expectTypeOf(compileTimeFailures).toBeFunction();
@@ -365,18 +355,32 @@ it("covers storage, session, repository, search, and identity signatures", () =>
 	expectTypeOf<Parameters<Storage["scanBranch"]>[0]["start"]>().toEqualTypeOf<string>();
 	expectTypeOf<BranchScan["start"]>().toEqualTypeOf<string | undefined>();
 	expectTypeOf<Storage["commit"]>().toEqualTypeOf<
-		(transactionToCommit: Transaction) => Promise<{ firstSeq: number; seqs: number[]; timestamp: number }>
+		(
+			transactionToCommit: Write[],
+			context: Context,
+		) => Promise<{ firstSeq: number; seqs: number[]; timestamp: number; stats: SessionStats }>
 	>();
+	expectTypeOf<Session["beginMutation"]>().toEqualTypeOf<(context: Context) => Promise<SessionMutation>>();
+	expectTypeOf<SessionMutation["commit"]>().toEqualTypeOf<SessionMutator["commit"]>();
+	expectTypeOf<SessionMutation["end"]>().toEqualTypeOf<(context: Context) => Promise<void>>();
 	expectTypeOf<Session["mutate"]>().toEqualTypeOf<
-		<T>(lane: string, mutation: (mutator: SessionMutator) => T | Promise<T>) => Promise<T>
+		<T>(mutation: (mutator: SessionMutator, context: Context) => T | Promise<T>, context: Context) => Promise<T>
 	>();
 	expectTypeOf<SessionMutator["commit"]>().toEqualTypeOf<
-		(transactionToCommit: Transaction) => Promise<{ firstSeq: number; seqs: number[]; timestamp: number }>
+		(
+			transactionToCommit: Write[],
+			context: Context,
+		) => Promise<{ firstSeq: number; seqs: number[]; timestamp: number; stats: SessionStats }>
 	>();
-	expectTypeOf<Session["createLane"]>().toEqualTypeOf<
-		(name: string, at: string | null, laneConfiguration: LaneConfiguration) => Promise<SessionTree>
+	expectTypeOf<SessionReader["scanBranch"]>().toEqualTypeOf<
+		(query: StorageBranchScan, context: Context) => Promise<Entry[]>
 	>();
-	expectTypeOf<SessionRepo["create"]>().toEqualTypeOf<(options: SessionCreateOptions) => Promise<Session>>();
+	expectTypeOf<Session["createBranch"]>().toEqualTypeOf<
+		(name: string, at: string | null, context: Context) => Promise<Branch>
+	>();
+	expectTypeOf<SessionRepo["create"]>().toEqualTypeOf<
+		(options: SessionCreateOptions, context: Context) => Promise<Session>
+	>();
 	expectTypeOf<SessionSearchService["searchSessions"]>().toEqualTypeOf<
 		(query: SearchQuery) => Promise<SessionSearchHit[]>
 	>();
@@ -387,14 +391,14 @@ it("covers Part 5 results, events, hooks, snapshots, tools, and stream options",
 	type RunErrorTag = Extract<RunResult, { ok: false }>["error"]["_tag"];
 	type CancelKind = Extract<CancelQueuedResult, { ok: true }>["value"]["kind"];
 	expectTypeOf<RunErrorTag>().toEqualTypeOf<
-		"LaneBusy" | "MissingIdentities" | "InvalidMessage" | "UnknownSkill" | "UnknownTemplate" | "Closed"
+		"LaneBusy" | "InvalidMessage" | "UnknownSkill" | "UnknownTemplate" | "Closed"
 	>();
 	expectTypeOf<CancelKind>().toEqualTypeOf<"cancelled" | "already_consumed" | "not_found">();
 	expectTypeOf<HarnessEvent["type"]>().toEqualTypeOf<
 		| "run_start"
 		| "run_resume"
 		| "run_suspend"
-		| "run_abort"
+		| "operation_abort"
 		| "run_end"
 		| "fault"
 		| "handler_error"
@@ -410,22 +414,19 @@ it("covers Part 5 results, events, hooks, snapshots, tools, and stream options",
 		| "tool_update"
 		| "tool_end"
 		| "entry_added"
-		| "write_pending"
 		| "queue_update"
-		| "fact_update"
+		| "value_update"
 		| "config_update"
 		| "compaction_start"
 		| "compaction_end"
-		| "compaction_suspend"
 		| "navigation_start"
-		| "navigation_suspend"
 		| "navigation_end"
 		| "lane_created"
 		| "usage"
 	>();
 	expectTypeOf<HookName>().toEqualTypeOf<
 		| "before_run"
-		| "before_resume"
+		| "before_drive"
 		| "before_run_end"
 		| "transform_context"
 		| "before_request"
@@ -436,38 +437,87 @@ it("covers Part 5 results, events, hooks, snapshots, tools, and stream options",
 		| "before_compaction"
 		| "before_navigation"
 	>();
-	expectTypeOf<HookMap["before_resume"]["result"]>().toEqualTypeOf<void>();
-	expectTypeOf<HookHandler<"before_resume">>().returns.toEqualTypeOf<void | Promise<void>>();
+	expectTypeOf<HookMap["before_drive"]["result"]>().toEqualTypeOf<void>();
+	expectTypeOf<HookHandler<"before_drive">>().returns.toEqualTypeOf<void | Promise<void>>();
+	expectTypeOf<HookMap["transform_context"]["event"]>().toEqualTypeOf<{
+		messages: AgentMessage[];
+		systemPrompt: string;
+	}>();
 	expectTypeOf<LaneSnapshot["operation"]>().not.toEqualTypeOf<SessionSnapshot>();
-	expectTypeOf<AgentLane["getLastResult"]>().returns.toEqualTypeOf<Promise<LaneLastResult | undefined>>();
+	expectTypeOf<LaneSnapshotTool["status"]>().toEqualTypeOf<"running" | "settled">();
+	expectTypeOf<AgentLane["getResult"]>().returns.toEqualTypeOf<Promise<OperationResultRecord | undefined>>();
+	expectTypeOf<SuspendedRun>().toEqualTypeOf<{
+		operationId: string;
+		status: "suspended";
+		deferred: DeferredHandle;
+	}>();
 	expectTypeOf<AgentLane["accept"]>().returns.toEqualTypeOf<Promise<OperationAdmissionResult>>();
 	expectTypeOf<AgentLane["drive"]>().returns.toEqualTypeOf<Promise<DriveResult>>();
+	expectTypeOf<keyof DriveOptions>().toEqualTypeOf<"operationId" | "waitForRetry" | "pollDeferred">();
+	expectTypeOf<DriveOutcome["kind"]>().toEqualTypeOf<"settled" | "waiting">();
 	expectTypeOf<AgentLane["inspectExecution"]>().returns.toEqualTypeOf<Promise<LaneExecutionInfo>>();
+	expectTypeOf<AgentLane["getTipId"]>().returns.toEqualTypeOf<Promise<string | null>>();
+	expectTypeOf<Extract<keyof AgentLane, "sessionTree">>().toEqualTypeOf<never>();
+	expectTypeOf<Extract<keyof AgentHarness, keyof AgentLane>>().toEqualTypeOf<never>();
+	expectTypeOf<
+		Extract<
+			keyof AgentLane,
+			| "session"
+			| "models"
+			| "hooks"
+			| "activeDrive"
+			| "command"
+			| "settleOperation"
+			| "continueOperation"
+			| "readConfig"
+			| "mismatch"
+		>
+	>().toEqualTypeOf<never>();
+	expectTypeOf<
+		Extract<
+			keyof AgentHarness,
+			| "session"
+			| "models"
+			| "activeDrive"
+			| "command"
+			| "settleOperation"
+			| "continueOperation"
+			| "readConfig"
+			| "mismatch"
+		>
+	>().toEqualTypeOf<never>();
 	expectTypeOf<OperationRequest["kind"]>().toEqualTypeOf<
 		"prompt" | "skill" | "prompt_template" | "compaction" | "navigation"
 	>();
-	expectTypeOf<Parameters<AgentHarnessTool<object>["execute"]>[5]>().toEqualTypeOf<AgentHarnessToolInvocation>();
+	expectTypeOf<Parameters<AgentHarnessTool<object>["execute"]>[4]>().toEqualTypeOf<AgentHarnessToolInvocation>();
+	expectTypeOf<Parameters<AgentHarnessTool<object>["execute"]>[5]>().toEqualTypeOf<Context>();
 	expectTypeOf<AgentTool["replay"]>().toEqualTypeOf<"never" | "safe" | undefined>();
 	expectTypeOf<AgentHarnessStreamOptions["deferred"]>().toEqualTypeOf<
 		boolean | { window?: "15m" | "1h" | "24h" } | undefined
 	>();
 	expectTypeOf<EntryProjector>().toEqualTypeOf<
-		(entry: CustomEntry) => AgentMessage[] | undefined | Promise<AgentMessage[] | undefined>
+		(entry: CustomEntry, context: Context) => AgentMessage[] | undefined | Promise<AgentMessage[] | undefined>
 	>();
 	expectTypeOf<NonNullable<AgentHarnessOptions["entryProjectors"]>>().toEqualTypeOf<Record<string, EntryProjector>>();
 
 	const compileTimeFailures = () => {
 		// @ts-expect-error callers cannot supply the harness-owned abort signal
 		const invalidOptions: AgentHarnessStreamOptions = { signal: new AbortController().signal };
-		const invalidFactEvent: Extract<HarnessEvent, { type: "fact_update" }> = {
-			type: "fact_update",
-			fact: "name",
+		const invalidDriveOptions: DriveOptions = {
+			operationId: "run",
+			// @ts-expect-error drive has no wall-clock deadline
+			deadline: Date.now(),
+		};
+		const invalidValueEvent: Extract<HarnessEvent, { type: "value_update" }> = {
+			type: "value_update",
+			value: "session_name",
 			name: "session",
-			// @ts-expect-error fact events are harness-global and cannot carry a lane
+			// @ts-expect-error value events are harness-global and cannot carry a lane
 			lane: "main",
 		};
 		void invalidOptions;
-		void invalidFactEvent;
+		void invalidDriveOptions;
+		void invalidValueEvent;
 	};
 	expectTypeOf(compileTimeFailures).toBeFunction();
 });

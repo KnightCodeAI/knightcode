@@ -131,15 +131,10 @@ describe("http dispatcher", () => {
 			const originUrl = `http://127.0.0.1:${originAddress.port}/v1/chat/completions`;
 			await expect(undici.fetch(originUrl).then((response) => response.text())).resolves.toBe("origin");
 			await expect(undici.fetch(originUrl).then((response) => response.text())).resolves.toBe("origin");
-			// Every request must reach the proxy as a tunnel, not just one of them: an
-			// absolute-form "GET http://..." line is the regression being guarded
-			// against, and arrayContaining would still pass with one of each. The count
-			// is deliberately not pinned - undici opens a tunnel per request here rather
-			// than reusing one, and that is its business, not this test's.
-			expect(proxyRequestLines.length).toBeGreaterThan(0);
-			for (const line of proxyRequestLines) {
-				expect(line).toMatch(new RegExp(`^CONNECT 127\\.0\\.0\\.1:${originAddress.port} HTTP/1\\.1$`));
-			}
+			expect(proxyRequestLines).not.toHaveLength(0);
+			expect(proxyRequestLines).toEqual(
+				expect.arrayContaining([expect.stringMatching(`^CONNECT 127\\.0\\.0\\.1:${originAddress.port} HTTP/1\\.1$`)]),
+			);
 		} finally {
 			await dispatcher.close();
 			undici.setGlobalDispatcher(originalDispatcher);

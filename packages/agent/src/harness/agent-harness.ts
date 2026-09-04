@@ -1,7 +1,9 @@
+import type { JsonRepresentation } from "@knightcode/chord";
 import type {
 	Api,
 	AssistantMessage,
 	AssistantMessageEvent,
+	AssistantMessageFrame,
 	DeferredHandle,
 	ImageContent,
 	Message,
@@ -11,23 +13,55 @@ import type {
 	ToolResultMessage,
 	Usage,
 } from "@knightcode/ai";
-import type { TelemetryContext } from "@knightcode/telemetry";
 import type { AgentMessage, AgentToolResult, QueueMode, ThinkingLevel } from "../types.ts";
 import type { BranchPreparation, BranchSummaryResult } from "./compaction/branch-summarization.ts";
 import type { CompactionPreparation, CompactionSettings, CompactResult } from "./compaction/compaction.ts";
-import { type Result, TaggedError } from "./result.ts";
-import { createAgentHarness } from "./runtime/agent-harness-runtime.ts";
+import type { Context } from "./context.ts";
 import type {
-	BranchSummaryEntry,
-	CompactionEntry,
+	Closed,
+	InvalidMessage,
+	InvalidNavigation,
+	LaneBusy,
+	NoActiveOperation,
+	NothingToCompact,
+	NothingToResume,
+	OperationMismatch,
+	Result,
+	UnknownSkill,
+	UnknownTarget,
+	UnknownTemplate,
+} from "./result.ts";
+
+export {
+	Closed,
+	HarnessClosed,
+	HarnessFault,
+	InvalidLane,
+	InvalidMessage,
+	InvalidNavigation,
+	LaneBusy,
+	NoActiveOperation,
+	NoActiveRun,
+	NothingToCompact,
+	NothingToResume,
+	OperationMismatch,
+	UnknownSkill,
+	UnknownTarget,
+	UnknownTemplate,
+} from "./result.ts";
+export { SliceNotImplemented } from "./runtime/types.ts";
+
+import { createAgentHarness } from "./runtime/harness.ts";
+import type {
+	BranchScan,
 	Entry,
 	EntryProjector,
-	EntryType,
 	JsonValue,
-	LaneLastResult,
+	LaneConfiguration,
 	OperationError,
+	OperationResultRecord,
 	Session,
-	SessionTree,
+	SessionStats,
 	SettledAssistantMessage,
 	UsageRow,
 } from "./session/types.ts";
@@ -40,133 +74,33 @@ import type {
 	Skill,
 } from "./types.ts";
 
-export class LaneBusy extends TaggedError("LaneBusy")<{
-	lane: string;
+/** Convenience-only suspended run observation, constructed when M8 exposes public drive. */
+export interface SuspendedRun {
 	operationId: string;
-	operationKind: "run" | "compaction" | "navigation";
-	message: string;
-}> {}
-export class OperationMismatch extends TaggedError("OperationMismatch")<{
-	lane: string;
-	expectedOperationId: string;
-	currentOperationId?: string;
-	lastOperationId?: string;
-	message: string;
-}> {}
-export class MissingIdentities extends TaggedError("MissingIdentities")<{
-	lane: string;
-	tools: string[];
-	models: string[];
-	message: string;
-}> {}
-export class NoActiveRun extends TaggedError("NoActiveRun")<{ lane: string; message: string }> {}
-export class NoActiveOperation extends TaggedError("NoActiveOperation")<{ lane: string; message: string }> {}
-export class NothingToResume extends TaggedError("NothingToResume")<{ lane: string; message: string }> {}
-export class NothingToCompact extends TaggedError("NothingToCompact")<{ lane: string; message: string }> {}
-export class InvalidMessage extends TaggedError("InvalidMessage")<{
-	lane: string;
-	reason: string;
-	message: string;
-}> {}
-export class InvalidNavigation extends TaggedError("InvalidNavigation")<{
-	lane: string;
-	reason: string;
-	message: string;
-}> {}
-export class UnknownSkill extends TaggedError("UnknownSkill")<{ name: string; message: string }> {}
-export class UnknownTemplate extends TaggedError("UnknownTemplate")<{ name: string; message: string }> {}
-export class UnknownTarget extends TaggedError("UnknownTarget")<{ targetId: string; message: string }> {}
-export class LaneExists extends TaggedError("LaneExists")<{ lane: string; message: string }> {}
-export class InvalidLane extends TaggedError("InvalidLane")<{
-	lane: string;
-	reason: string;
-	message: string;
-}> {}
-export class Closed extends TaggedError("Closed")<{ message: string }> {}
-
-export class HarnessFault extends Error {
-	readonly cause: unknown;
-
-	constructor(message: string, cause: unknown) {
-		super(message);
-		this.name = "HarnessFault";
-		this.cause = cause;
-	}
+	status: "suspended";
+	deferred: DeferredHandle;
 }
-
-export class HarnessClosed extends Error {
-	constructor() {
-		super("AgentHarness was closed while the operation was active");
-		this.name = "HarnessClosed";
-	}
-}
-
-export type OptionalFinalAssistant =
-	{ finalEntryId: string; finalMessage: AssistantMessage } | { finalEntryId?: never; finalMessage?: never };
-
-export type MissingIdentitySuspension = {
-	kind: "suspended";
-	reason: "missing_identities";
-	missing: { tools: string[]; models: string[] };
-};
-
-export type RunOutcome =
-	| ({ kind: "completed"; leafId: string } & OptionalFinalAssistant)
-	| ({ kind: "aborted"; leafId: string } & OptionalFinalAssistant)
-	| ({ kind: "failed"; leafId: string; error: OperationError } & OptionalFinalAssistant)
-	| {
-			kind: "suspended";
-			reason: "deferred";
-			leafId: string;
-			finalEntryId: string;
-			deferred: DeferredHandle;
-	  }
-	| (MissingIdentitySuspension & { leafId: string });
-
-export type CompactionOutcome =
-	| { kind: "completed"; leafId: string; entry: CompactionEntry }
-	| { kind: "declined" | "aborted"; leafId: string }
-	| { kind: "failed"; leafId: string; error: OperationError }
-	| (MissingIdentitySuspension & { leafId: string });
-
-export type NavigationOutcome =
-	| {
-			kind: "completed";
-			oldLeafId: string | null;
-			newLeafId: string | null;
-			summaryEntry?: BranchSummaryEntry;
-	  }
-	| { kind: "declined" | "aborted"; leafId: string | null }
-	| { kind: "failed"; leafId: string | null; error: OperationError }
-	| (MissingIdentitySuspension & { leafId: string | null });
-
-export type ResumeOutcome =
-	| ({ operation: "run"; runId: string } & RunOutcome)
-	| ({ operation: "compaction"; runId: string } & CompactionOutcome)
-	| ({ operation: "navigation"; runId: string } & NavigationOutcome);
 
 export type RunResult = Result<
-	{ runId: string } & RunOutcome,
-	LaneBusy | MissingIdentities | InvalidMessage | UnknownSkill | UnknownTemplate | Closed
+	OperationResultRecord | SuspendedRun,
+	LaneBusy | InvalidMessage | UnknownSkill | UnknownTemplate | Closed
 >;
 export type CompactionResult = Result<
-	{ runId: string } & CompactionOutcome,
-	LaneBusy | MissingIdentities | NothingToCompact | Closed
+	{ compaction: OperationResultRecord; run?: OperationResultRecord | SuspendedRun },
+	LaneBusy | NothingToCompact | Closed
 >;
 export type NavigationResult = Result<
-	{ runId: string } & NavigationOutcome,
-	LaneBusy | MissingIdentities | InvalidNavigation | UnknownTarget | Closed
+	{ navigation: OperationResultRecord; run?: OperationResultRecord | SuspendedRun },
+	LaneBusy | InvalidNavigation | UnknownTarget | Closed
 >;
-export type ResumeResult = Result<ResumeOutcome, LaneBusy | NothingToResume | MissingIdentities | Closed>;
-export type QueueResult = Result<{ entryId: string }, NoActiveRun | InvalidMessage | Closed>;
-export type NextRunResult = Result<{ entryId: string }, InvalidMessage | Closed>;
+export type ResumeResult = Result<OperationResultRecord | SuspendedRun, NothingToResume | Closed>;
+export type QueueResult = Result<{ entryId: string }, InvalidMessage | Closed>;
 export type CancelQueuedResult = Result<{ kind: "cancelled" | "already_consumed" | "not_found" }, Closed>;
 export type AbortResult = Result<
-	{ runId: string; steer: AgentMessage[]; followUp: AgentMessage[] },
+	{ operationId: string; steer: AgentMessage[]; followUp: AgentMessage[] },
 	NoActiveOperation | Closed
 >;
 export type RecordUsageResult = Result<{ usageId: string }, Closed>;
-export type CreateLaneResult = Result<AgentLane, LaneExists | InvalidLane | UnknownTarget | Closed>;
 
 export interface NavigateOptions {
 	summarize?: boolean;
@@ -190,7 +124,6 @@ export interface OperationAdmission {
 
 export type OperationAdmissionError =
 	| LaneBusy
-	| MissingIdentities
 	| InvalidMessage
 	| UnknownSkill
 	| UnknownTemplate
@@ -202,42 +135,37 @@ export type OperationAdmissionResult = Result<OperationAdmission, OperationAdmis
 
 export interface DriveOptions {
 	operationId: string;
-	deadline?: number;
 	waitForRetry?: boolean;
 	pollDeferred?: boolean;
 }
 
+export interface ModelIdentity {
+	provider: string;
+	modelId: string;
+}
+
+export type OperationStatus = "running" | "open" | "aborting";
+
 export interface CurrentOperationInfo {
 	id: string;
 	kind: "run" | "compaction" | "navigation";
-	status: "running" | "suspended" | "aborting";
 	startedAt: number;
-	suspended?: SuspendedOperation;
+	status: OperationStatus;
+	capturedModel?: ModelIdentity;
 }
 
 export interface LaneExecutionInfo {
 	lane: string;
-	leafId: string | null;
+	tipId: string | null;
+	configuredModel: ModelIdentity;
 	current: CurrentOperationInfo | null;
-	lastResult?: LaneLastResult;
+	lastOperationId: string | null;
 }
 
-export type TerminalOperationOutcome =
-	| ({ operation: "run"; runId: string } & Exclude<RunOutcome, { kind: "suspended" }>)
-	| ({ operation: "compaction"; runId: string } & Exclude<CompactionOutcome, { kind: "suspended" }>)
-	| ({ operation: "navigation"; runId: string } & Exclude<NavigationOutcome, { kind: "suspended" }>);
-
 export type DriveOutcome =
-	| { kind: "settled"; operationId: string; outcome: TerminalOperationOutcome }
+	| { kind: "settled"; outcome: OperationResultRecord }
 	| { kind: "waiting"; operationId: string; reason: "retry"; notBefore: number }
-	| { kind: "waiting"; operationId: string; reason: "deferred"; deferred: DeferredHandle }
-	| {
-			kind: "waiting";
-			operationId: string;
-			reason: "missing_identities";
-			missing: { tools: string[]; models: string[] };
-	  }
-	| { kind: "yielded"; operationId: string };
+	| { kind: "waiting"; operationId: string; reason: "deferred"; deferred: DeferredHandle };
 export type DriveResult = Result<DriveOutcome, OperationMismatch | Closed>;
 
 export type AbortRequestResult = Result<
@@ -250,115 +178,87 @@ export type AbortRequestResult = Result<
 	OperationMismatch | Closed
 >;
 
-export interface ActionInfo {
-	kind: string;
-	description: string;
-	details?: JsonValue;
-}
-
 export interface WatchHandle<T> {
 	snapshot: T;
 	start(listener: EventListener): void;
+	resnapshot(context: Context): Promise<T>;
 	unsubscribe(): void;
 }
 
 export interface LaneInfo {
 	name: string;
-	leafId: string | null;
-	operation: null | {
-		id: string;
-		kind: "run" | "compaction" | "navigation";
-		status: "running" | "suspended" | "aborting";
-	};
+	tipId: string | null;
+	operation: CurrentOperationInfo | null;
 }
 
-export type SuspendedOperation = {
+export type LaneSnapshotTool =
+	| {
+			status: "running";
+			toolCallId: string;
+			toolName: string;
+			args: unknown;
+			result?: AgentToolResult<unknown>;
+	  }
+	| {
+			status: "settled";
+			toolCallId: string;
+			toolName: string;
+			args: unknown;
+			result: AgentToolResult<unknown>;
+			isError: boolean;
+	  };
+
+export interface OpenOperation {
 	lane: string;
 	operationId: string;
 	kind: "run" | "compaction" | "navigation";
 	startedAt: number;
-	prompt?: AgentMessage[];
-	aborting?: { steer: AgentMessage[]; followUp: AgentMessage[] };
-} & (
-	| { reason: "deferred"; deferred: DeferredHandle; missing?: never }
-	| {
-			reason: "missing_identities";
-			missing: { tools: string[]; models: string[] };
-			deferred?: never;
-	  }
-	| {
-			reason: "crash";
-			deferred?: DeferredHandle;
-			missing?: { tools: string[]; models: string[] };
-	  }
-);
-
-export interface QueuedItem {
-	entryId: string;
-	message: AgentMessage;
+	aborting?: true;
 }
+
+export type LaneQueuedItem =
+	| {
+			entryId: string;
+			kind: "steer" | "followUp" | "nextRun" | "write";
+			type: "message";
+			message: AgentMessage;
+	  }
+	| { entryId: string; kind: "write"; type: "custom"; customType: string; data?: JsonValue };
 
 export interface LaneSnapshot {
 	lane: string;
 	transcript: Entry[];
-	leafId: string | null;
+	tipId: string | null;
+	lastResult?: OperationResultRecord;
+	configuration: LaneConfiguration;
+	stats: SessionStats;
 	operation: null | {
 		id: string;
 		kind: "run" | "compaction" | "navigation";
-		status: "running" | "suspended" | "aborting";
 		startedAt: number;
-		suspended?: SuspendedOperation;
-		streamingMessage?: AssistantMessage;
-		runningTools: {
-			toolCallId: string;
-			toolName: string;
-			args: unknown;
-			partialResult?: AgentToolResult<unknown>;
-		}[];
+		fromTipId: string | null;
+		status: OperationStatus;
 		retry?: { attempt: number; maxAttempts: number; nextAttemptAt: number };
+		deferred?: { handle: DeferredHandle; poll: number };
+		streamingMessage?: AssistantMessage;
+		runningTools: LaneSnapshotTool[];
 	};
-	queues: { steer: QueuedItem[]; followUp: QueuedItem[]; nextRun: QueuedItem[] };
-	pendingWrites: {
-		entryId: string;
-		type: EntryType;
-		customType?: string;
-		message?: AgentMessage;
-		data?: JsonValue;
-	}[];
+	queues: LaneQueuedItem[];
 	faulted: boolean;
 }
 
 export interface SessionSnapshot {
-	lanes: (LaneInfo & { suspended?: SuspendedOperation })[];
+	lanes: LaneInfo[];
 	faulted: boolean;
 }
 
 export type HarnessEventPayload =
-	| { type: "run_start"; runId: string }
+	| { type: "run_start"; runId: string; startedAt: number }
 	| { type: "run_resume"; runId: string }
-	| { type: "run_suspend"; runId: string; reason: "deferred"; deferred: DeferredHandle }
-	| {
-			type: "run_suspend";
-			runId: string;
-			reason: "missing_identities";
-			missing: { tools: string[]; models: string[] };
-	  }
-	| {
-			type: "compaction_suspend";
-			runId: string;
-			reason: "missing_identities";
-			missing: { tools: string[]; models: string[] };
-	  }
-	| {
-			type: "navigation_suspend";
-			runId: string;
-			reason: "missing_identities";
-			missing: { tools: string[]; models: string[] };
-	  }
-	| { type: "run_abort"; runId: string; steer: AgentMessage[]; followUp: AgentMessage[] }
-	| ({ type: "run_end"; runId: string; leafId: string | null } & (
-			| ({ outcome: "completed" | "aborted" } & OptionalFinalAssistant)
-			| ({ outcome: "failed"; error: OperationError } & OptionalFinalAssistant)
+	| { type: "run_suspend"; runId: string; reason: "deferred"; deferred: DeferredHandle; poll: number }
+	| { type: "operation_abort"; operationId: string; steer: AgentMessage[]; followUp: AgentMessage[] }
+	| ({ type: "run_end"; runId: string; fromTipId: string | null; tipId: string | null; endedAt: number } & (
+			{ status: "completed" | "aborted"; error?: never } | { status: "failed"; error: OperationError }
 	  ))
 	| { type: "fault"; code: string; message: string }
 	| ({ type: "handler_error"; error: string; stack?: string } & (
@@ -379,6 +279,7 @@ export type HarnessEventPayload =
 			attempt: number;
 			maxAttempts: number;
 			delayMs: number;
+			notBefore: number;
 			errorMessage: string;
 	  }
 	| { type: "retry_start"; runId: string; step: string; attempt: number }
@@ -396,6 +297,7 @@ export type HarnessEventPayload =
 			runId: string;
 			message: AgentMessage;
 			event: AssistantMessageEvent;
+			frame?: AssistantMessageFrame;
 	  }
 	| { type: "message_end"; runId?: string; message: AgentMessage; entryId?: string }
 	| {
@@ -425,12 +327,10 @@ export type HarnessEventPayload =
 			terminate: boolean;
 	  }
 	| { type: "entry_added"; entry: Entry }
-	| { type: "write_pending"; runId: string; entryId: string; entryType: EntryType }
-	| { type: "queue_update"; steer: QueuedItem[]; followUp: QueuedItem[]; nextRun: QueuedItem[] }
-	| ({ type: "fact_update" } & (
-			| { fact: "name"; name: string | undefined }
-			| { fact: "label"; targetId: string; label: string | undefined }
-			| { fact: "custom"; key: string; value: JsonValue | undefined }
+	| { type: "queue_update"; queues: LaneQueuedItem[] }
+	| ({ type: "value_update" } & (
+			| { value: "session_name"; name: string | undefined }
+			| { value: "entry_label"; targetId: string; label: string | undefined }
 	  ))
 	| ({ type: "config_update" } & (
 			| {
@@ -440,40 +340,38 @@ export type HarnessEventPayload =
 			  }
 			| { property: "thinkingLevel"; value: ThinkingLevel; previous: ThinkingLevel }
 			| { property: "activeTools"; value: string[]; previous: string[] }
+			| { property: "tools" | "resources" }
 			| {
-					property:
-						| "tools"
-						| "resources"
-						| "streamOptions"
-						| "retryPolicy"
-						| "compactionSettings"
-						| "steeringMode"
-						| "followUpMode";
+					property: "streamOptions";
+					value: AgentHarnessStreamOptions;
+					previous: AgentHarnessStreamOptions;
 			  }
+			| { property: "retryPolicy"; value: RetryPolicy; previous: RetryPolicy }
+			| { property: "compactionSettings"; value: CompactionSettings; previous: CompactionSettings }
+			| { property: "steeringMode"; value: QueueMode; previous: QueueMode }
+			| { property: "followUpMode"; value: QueueMode; previous: QueueMode }
 	  ))
-	| { type: "compaction_start"; runId: string; reason: "manual" | "threshold" | "overflow" }
-	| ({ type: "compaction_end"; runId: string; reason: "manual" | "threshold" | "overflow" } & (
-			| { outcome: "completed"; entry: CompactionEntry; fromHook: boolean }
-			| { outcome: "declined" | "aborted" }
-			| { outcome: "failed"; error: OperationError }
-	  ))
-	| { type: "navigation_start"; runId: string; targetId: string | null }
-	| ({
-			type: "navigation_end";
+	| {
+			type: "compaction_start";
 			runId: string;
-			oldLeafId: string | null;
-			newLeafId: string | null;
-	  } & (
-			| { outcome: "completed"; summaryEntry?: BranchSummaryEntry }
-			| { outcome: "declined" | "aborted"; summaryEntry?: never; error?: never }
-			| { outcome: "failed"; error: OperationError; summaryEntry?: never }
+			reason: "manual" | "threshold" | "overflow";
+			startedAt: number;
+	  }
+	| ({ type: "compaction_end"; runId: string; reason: "manual" | "threshold" | "overflow"; endedAt: number } & (
+			| { status: "completed"; entryId: string; error?: never }
+			| { status: "declined" | "aborted"; entryId?: never; error?: never }
+			| { status: "failed"; entryId?: never; error: OperationError }
+	  ))
+	| { type: "navigation_start"; runId: string; targetId: string | null; startedAt: number }
+	| ({ type: "navigation_end"; runId: string; fromTipId: string | null; tipId: string | null; endedAt: number } & (
+			{ status: "completed" | "declined" | "aborted"; error?: never } | { status: "failed"; error: OperationError }
 	  ))
 	| { type: "lane_created"; at: string | null }
 	| { type: "usage"; lane: string; row: UsageRow; totals: Usage };
 
 export type SpecialEventPayload = Extract<
 	HarnessEventPayload,
-	{ type: "fault" | "fact_update" | "usage" | "config_update" | "handler_error" }
+	{ type: "fault" | "value_update" | "usage" | "config_update" | "handler_error" }
 >;
 export type LaneEventPayload = Exclude<HarnessEventPayload, SpecialEventPayload>;
 export type ConfigEventPayload = Extract<HarnessEventPayload, { type: "config_update" }>;
@@ -487,7 +385,7 @@ export type HandlerErrorPayload = Extract<HarnessEventPayload, { type: "handler_
 export type HarnessEvent =
 	| (LaneEventPayload & { lane: string; recovery?: true })
 	| (LaneConfigEventPayload & { lane: string; recovery?: true })
-	| (Extract<HarnessEventPayload, { type: "fault" | "fact_update" }> & {
+	| (Extract<HarnessEventPayload, { type: "fault" | "value_update" }> & {
 			lane?: never;
 			recovery?: never;
 	  })
@@ -495,8 +393,25 @@ export type HarnessEvent =
 	| (GlobalConfigEventPayload & { lane?: never; recovery?: never })
 	| (HandlerErrorPayload & ({ lane: string; recovery?: true } | { lane?: never; recovery?: never }));
 
+type LaneWatchSourceEvent =
+	| Exclude<
+			HarnessEvent,
+			| { type: "handler_error" | "turn_start" | "turn_end" | "value_update" | "lane_created" | "message_update" }
+			| ({ type: "config_update" } & { property: string })
+	  >
+	| Extract<HarnessEvent, { type: "config_update"; property: "model" | "thinkingLevel" | "activeTools" }>
+	| Omit<Extract<HarnessEvent, { type: "message_update" }>, "event">;
+
+/** Strict-JSON snapshot representation published to remote transcript consumers. */
+export type LaneTranscriptSnapshot = JsonRepresentation<LaneSnapshot>;
+/** Reducer-relevant strict-JSON Harness events published to remote transcript consumers. */
+export type LaneWatchEvent = JsonRepresentation<LaneWatchSourceEvent>;
+
 export type HarnessEventType = HarnessEvent["type"];
-export type EventListener<TEvent extends HarnessEvent = HarnessEvent> = (event: TEvent) => void | Promise<void>;
+export type EventListener<TEvent extends HarnessEvent = HarnessEvent> = (
+	event: TEvent,
+	context: Context,
+) => void | Promise<void>;
 
 export interface Events {
 	on<TType extends HarnessEventType>(
@@ -507,27 +422,15 @@ export interface Events {
 
 export type Resources = AgentHarnessResources<Skill, PromptTemplate>;
 
-export type BeforeResumePrepared =
-	| { kind: "run"; prompt: AgentMessage[]; systemPromptOverride?: string }
-	| { kind: "compaction"; sourceLeafId: string | null; customInstructions?: string }
-	| {
-			kind: "navigation";
-			sourceLeafId: string | null;
-			targetId: string | null;
-			summarize: boolean;
-			label?: string;
-			customInstructions?: string;
-	  };
-
 type VoidHookResult = ReturnType<() => void>;
 
 export interface HookMap {
 	before_run: {
-		event: { prompt: AgentMessage[]; systemPrompt: string; resources: Resources };
-		result: { messages?: AgentMessage[]; systemPrompt?: string; resumeData?: JsonValue } | undefined;
+		event: { prompt: AgentMessage[]; resources: Resources };
+		result: { messages?: AgentMessage[] } | undefined;
 	};
-	before_resume: {
-		event: BeforeResumePrepared & { resumeData?: JsonValue };
+	before_drive: {
+		event: { operation: "run" | "compaction" | "navigation" };
 		result: VoidHookResult;
 	};
 	before_run_end: {
@@ -535,8 +438,8 @@ export interface HookMap {
 		result: { followUp?: string } | undefined;
 	};
 	transform_context: {
-		event: { messages: AgentMessage[] };
-		result: { messages: AgentMessage[] } | undefined;
+		event: { messages: AgentMessage[]; systemPrompt: string };
+		result: { messages?: AgentMessage[]; systemPrompt?: string } | undefined;
 	};
 	before_request: {
 		event: {
@@ -600,6 +503,7 @@ export type HookInvocation<TName extends HookName> = HookMap[TName]["event"] & {
 };
 export type HookHandler<TName extends HookName> = (
 	event: HookInvocation<TName>,
+	context: Context,
 ) => Promise<HookMap[TName]["result"]> | HookMap[TName]["result"];
 
 export interface Hooks {
@@ -615,8 +519,8 @@ export interface AgentHarnessOptions<TContext extends object | undefined = objec
 	thinkingLevel?: ThinkingLevel;
 	activeToolNames?: string[];
 	tools?: AgentHarnessTool<TContext>[];
-	toolContext?: TContext | (() => TContext | Promise<TContext>);
-	systemPrompt?: string | ((context: TContext) => string | Promise<string>);
+	toolContext?: TContext | ((context: Context) => TContext | Promise<TContext>);
+	systemPrompt?: string | ((toolContext: TContext, context: Context) => string | Promise<string>);
 	resources?: Resources;
 	streamOptions?: AgentHarnessStreamOptions;
 	retry?: RetryPolicy;
@@ -624,77 +528,92 @@ export interface AgentHarnessOptions<TContext extends object | undefined = objec
 	steeringMode?: QueueMode;
 	followUpMode?: QueueMode;
 	toolExecution?: "sequential" | "parallel";
-	drive?: "automatic" | "manual";
-	toProviderMessages?: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
+	toProviderMessages?: (messages: AgentMessage[], context: Context) => Message[] | Promise<Message[]>;
 	entryProjectors?: Record<string, EntryProjector>;
-	telemetryContext?: TelemetryContext;
 }
 
 export interface AgentLane {
 	readonly name: string;
-	getLeafId(): Promise<string | null>;
-	getLastResult(): Promise<LaneLastResult | undefined>;
-	accept(request: OperationRequest): Promise<OperationAdmissionResult>;
-	drive(options: DriveOptions): Promise<DriveResult>;
-	requestAbort(operationId: string): Promise<AbortRequestResult>;
-	inspectExecution(): Promise<LaneExecutionInfo>;
-	prompt(text: string, images?: ImageContent[]): Promise<RunResult>;
-	prompt(message: AgentMessage | AgentMessage[]): Promise<RunResult>;
-	skill(name: string, additionalInstructions?: string): Promise<RunResult>;
-	promptFromTemplate(name: string, args?: string[]): Promise<RunResult>;
-	compact(options?: { customInstructions?: string }): Promise<CompactionResult>;
-	navigateTree(targetId: string | null, options?: NavigateOptions): Promise<NavigationResult>;
-	resume(): Promise<ResumeResult>;
-	abort(): Promise<AbortResult>;
-	steer(message: string | AgentMessage, images?: ImageContent[]): Promise<QueueResult>;
-	followUp(message: string | AgentMessage, images?: ImageContent[]): Promise<QueueResult>;
-	nextRun(message: string | AgentMessage, images?: ImageContent[]): Promise<NextRunResult>;
-	cancelQueued(entryId: string): Promise<CancelQueuedResult>;
-	recordUsage(usage: Usage, options?: { entryId?: string; details?: JsonValue }): Promise<RecordUsageResult>;
-	waitForIdle(): Promise<void>;
-	runWhenIdle(callback: () => void | Promise<void>): Promise<void>;
-	peekAction(): Promise<ActionInfo | undefined>;
-	executeAction(): Promise<ActionInfo | undefined>;
-	runToCompletion(): Promise<void>;
-	getModel(): Promise<Model<Api> | undefined>;
-	setModel(model: Model<Api>): Promise<void>;
-	getThinkingLevel(): Promise<ThinkingLevel>;
-	setThinkingLevel(level: ThinkingLevel): Promise<void>;
-	getActiveTools(): Promise<string[]>;
-	setActiveTools(names: string[]): Promise<void>;
-	readonly session: SessionTree;
-	watch(): Promise<WatchHandle<LaneSnapshot>>;
+	getTipId(context: Context): Promise<string | null>;
+	findEntries(query: BranchScan | undefined, context: Context): Promise<Entry[]>;
+	findEntry(query: BranchScan | undefined, context: Context): Promise<Entry | undefined>;
+	appendMessage(message: AgentMessage, context: Context): Promise<string>;
+	appendCustomEntry(customType: string, data: JsonValue | undefined, context: Context): Promise<string>;
+	getResult(operationId: string, context: Context): Promise<OperationResultRecord | undefined>;
+	accept(request: OperationRequest, context: Context): Promise<OperationAdmissionResult>;
+	drive(options: DriveOptions, context: Context): Promise<DriveResult>;
+	requestAbort(operationId: string, context: Context): Promise<AbortRequestResult>;
+	inspectExecution(context: Context): Promise<LaneExecutionInfo>;
+	prompt(text: string, images: ImageContent[] | undefined, context: Context): Promise<RunResult>;
+	prompt(message: AgentMessage | AgentMessage[], context: Context): Promise<RunResult>;
+	skill(name: string, additionalInstructions: string | undefined, context: Context): Promise<RunResult>;
+	promptFromTemplate(name: string, args: string[] | undefined, context: Context): Promise<RunResult>;
+	compact(options: { customInstructions?: string } | undefined, context: Context): Promise<CompactionResult>;
+	navigateTree(
+		targetId: string | null,
+		options: NavigateOptions | undefined,
+		context: Context,
+	): Promise<NavigationResult>;
+	resume(context: Context): Promise<ResumeResult>;
+	abort(context: Context): Promise<AbortResult>;
+	steer(message: string | AgentMessage, images: ImageContent[] | undefined, context: Context): Promise<QueueResult>;
+	followUp(message: string | AgentMessage, images: ImageContent[] | undefined, context: Context): Promise<QueueResult>;
+	nextRun(message: string | AgentMessage, images: ImageContent[] | undefined, context: Context): Promise<QueueResult>;
+	cancelQueued(entryId: string, context: Context): Promise<CancelQueuedResult>;
+	recordUsage(
+		usage: Usage,
+		options: { entryId?: string; details?: JsonValue } | undefined,
+		context: Context,
+	): Promise<RecordUsageResult>;
+	waitForIdle(context: Context): Promise<void>;
+	runWhenIdle(callback: (context: Context) => void | Promise<void>, context: Context): Promise<void>;
+	getModel(context: Context): Promise<Model<Api> | undefined>;
+	setModel(model: ModelIdentity, context: Context): Promise<void>;
+	getThinkingLevel(context: Context): Promise<ThinkingLevel>;
+	setThinkingLevel(level: ThinkingLevel, context: Context): Promise<void>;
+	getActiveTools(context: Context): Promise<string[]>;
+	setActiveTools(names: string[], context: Context): Promise<void>;
+	watch(context: Context): Promise<WatchHandle<LaneSnapshot>>;
 }
 
-export interface AgentHarness<TContext extends object | undefined = object | undefined> extends AgentLane {
-	lane(name: string): Promise<AgentLane | undefined>;
-	createLane(name: string, at: string | null): Promise<CreateLaneResult>;
-	lanes(): Promise<LaneInfo[]>;
-	getTools(): Promise<AgentHarnessTool<TContext>[]>;
-	setTools(tools: AgentHarnessTool<TContext>[]): Promise<void>;
-	getResources(): Promise<Resources>;
-	setResources(resources: Resources): Promise<void>;
-	getStreamOptions(): Promise<AgentHarnessStreamOptions>;
-	setStreamOptions(options: AgentHarnessStreamOptions): Promise<void>;
-	getRetryPolicy(): Promise<RetryPolicy>;
-	setRetryPolicy(policy: RetryPolicy): Promise<void>;
-	getCompactionSettings(): Promise<CompactionSettings>;
-	setCompactionSettings(settings: CompactionSettings): Promise<void>;
-	getSteeringMode(): Promise<QueueMode>;
-	setSteeringMode(mode: QueueMode): Promise<void>;
-	getFollowUpMode(): Promise<QueueMode>;
-	setFollowUpMode(mode: QueueMode): Promise<void>;
-	watchSession(): Promise<WatchHandle<SessionSnapshot>>;
+export interface AcquireLaneOptions {
+	createAt?: string | null;
+}
+
+export interface AgentHarness<TContext extends object | undefined = object | undefined> {
+	lane(name: string, context: Context): Promise<AgentLane>;
+	lane(name: string, options: AcquireLaneOptions, context: Context): Promise<AgentLane>;
+	lanes(context: Context): Promise<LaneInfo[]>;
+	getName(context: Context): Promise<string | undefined>;
+	setName(name: string | undefined, context: Context): Promise<void>;
+	getLabel(targetId: string, context: Context): Promise<string | undefined>;
+	setLabel(targetId: string, label: string | undefined, context: Context): Promise<void>;
+	getTools(context: Context): Promise<AgentHarnessTool<TContext>[]>;
+	setTools(tools: AgentHarnessTool<TContext>[], context: Context): Promise<void>;
+	getResources(context: Context): Promise<Resources>;
+	setResources(resources: Resources, context: Context): Promise<void>;
+	getStreamOptions(context: Context): Promise<AgentHarnessStreamOptions>;
+	setStreamOptions(options: AgentHarnessStreamOptions, context: Context): Promise<void>;
+	getRetryPolicy(context: Context): Promise<RetryPolicy>;
+	setRetryPolicy(policy: RetryPolicy, context: Context): Promise<void>;
+	getCompactionSettings(context: Context): Promise<CompactionSettings>;
+	setCompactionSettings(settings: CompactionSettings, context: Context): Promise<void>;
+	getSteeringMode(context: Context): Promise<QueueMode>;
+	setSteeringMode(mode: QueueMode, context: Context): Promise<void>;
+	getFollowUpMode(context: Context): Promise<QueueMode>;
+	setFollowUpMode(mode: QueueMode, context: Context): Promise<void>;
+	watchSession(context: Context): Promise<WatchHandle<SessionSnapshot>>;
 	readonly hooks: Hooks;
 	readonly events: Events;
-	close(): Promise<void>;
+	close(context: Context): Promise<void>;
 }
 
 export interface AgentHarnessConstructor {
 	create<TContext extends object | undefined = object | undefined>(
 		options: AgentHarnessOptions<TContext>,
-	): Promise<{ harness: AgentHarness<TContext>; suspended: SuspendedOperation[] }>;
+		context: Context,
+	): Promise<{ harness: AgentHarness<TContext>; open: OpenOperation[] }>;
 }
 
 /** Runtime constructor for attaching the durable harness to one open session. */
-export const AgentHarness: AgentHarnessConstructor = { create: createAgentHarness };
+export const AgentHarness = { create: createAgentHarness } satisfies AgentHarnessConstructor;

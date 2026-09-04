@@ -185,27 +185,16 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 			let buffer = "";
 			let sawTerminalEvent = false;
 
-			// Parsing and handling stay separate so the flush below can guard the parse
-			// alone: only invalid JSON is expected from a truncated frame, while a
-			// failure inside processProxyEvent is a real error the caller must see.
-			const parseLine = (line: string): ProxyAssistantMessageEvent | undefined => {
-				if (!line.startsWith("data: ")) return undefined;
+			const processLine = (line: string): void => {
+				if (!line.startsWith("data: ")) return;
 				const data = line.slice(6).trim();
-				if (!data) return undefined;
-				return JSON.parse(data) as ProxyAssistantMessageEvent;
-			};
-
-			const handleProxyEvent = (proxyEvent: ProxyAssistantMessageEvent): void => {
+				if (!data) return;
+				const proxyEvent = JSON.parse(data) as ProxyAssistantMessageEvent;
 				const event = processProxyEvent(proxyEvent, partial);
 				if (event) {
 					if (event.type === "done" || event.type === "error") sawTerminalEvent = true;
 					stream.push(event);
 				}
-			};
-
-			const processLine = (line: string): void => {
-				const proxyEvent = parseLine(line);
-				if (proxyEvent) handleProxyEvent(proxyEvent);
 			};
 
 			while (true) {
@@ -230,19 +219,10 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 			}
 
 			// The final event may not be newline-terminated; flush the decoder and
-			// process whatever is left in the buffer. A server that drops the
-			// connection mid-frame leaves invalid JSON here, which is the same
-			// dropped-response failure as an empty buffer, so let it fall through to
-			// the terminal-event check rather than reporting a parse error.
+			// process whatever is left in the buffer.
 			buffer += decoder.decode();
 			if (buffer) {
-				let trailing: ProxyAssistantMessageEvent | undefined;
-				try {
-					trailing = parseLine(buffer);
-				} catch {
-					// Partial trailing frame; treated as no terminal event below.
-				}
-				if (trailing) handleProxyEvent(trailing);
+				processLine(buffer);
 			}
 
 			if (!sawTerminalEvent) {
