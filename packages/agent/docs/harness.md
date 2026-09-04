@@ -2813,7 +2813,7 @@ Each slice implements its named behavior end to end and adds focused tests for i
 
 Existing source guidance:
 
-- `packages/agent/src/harness/**` and all of its tests are **deletable outright** in slice 1 — no obligation to adapt anything. Salvaging pieces (the compaction preparation/split-turn algorithms for R8–R9, session/codec fragments) is optional and never required.
+- `packages/agent/src/harness/**` and all of its tests stay in place while the new contracts land beside them, and there is no obligation to adapt them. R8–R9 salvage what they need (the compaction preparation/split-turn algorithms, session/codec fragments); the rest is retired once nothing routes through it.
 - `packages/agent/src/agent-loop.ts`: preserve behavior; R4 extracts its phases.
 - `packages/session-backends/sqlite-node`: S2 may keep the working transaction and lease primitives or start clean.
 - Telemetry contracts (`packages/telemetry`, the agent-owned schemas) remain authoritative.
