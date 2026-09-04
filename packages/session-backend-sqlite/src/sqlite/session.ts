@@ -15,10 +15,8 @@ import type {
 import type { SqliteSessionMetadata } from "./session/session-row.ts";
 
 /**
- * SQLite-specific open-session lifecycle wrapper.
- *
- * TODO: Keep the writer lease claimed for the lifetime of this open session,
- *   renew it while open, and release only the matching fenced lease on close.
+ * SQLite-specific open-session lifecycle wrapper. The repository holds this session's
+ * writer lease while it is open and releases it from `onClose`, after queued writes drain.
  */
 export class SqliteOpenSession implements Session<SqliteSessionMetadata> {
 	readonly metadata: SqliteSessionMetadata;

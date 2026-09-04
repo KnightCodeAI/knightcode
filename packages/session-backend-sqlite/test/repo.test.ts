@@ -69,7 +69,7 @@ describe("SqliteSessionRepo", () => {
 		});
 	});
 
-	it("lists sessions without taking the writer lease", async () => {
+	it("lists sessions without disturbing the open session's writer lease", async () => {
 		await withTempDir(async (directory) => {
 			const repo = new SqliteSessionRepo({
 				directory,
@@ -78,12 +78,38 @@ describe("SqliteSessionRepo", () => {
 			});
 			const session = await repo.create({ id: "session" });
 			const { metadata } = session;
+			const claimed = await withDb(metadata.path, (db) => sql`SELECT owner_id, fence FROM writer_lease`.all(db));
+			expect(claimed).toHaveLength(1);
 
 			await expect(repo.list()).resolves.toMatchObject([{ id: "session", path: metadata.path }]);
 			await withDb(metadata.path, (db) => {
+				expect(sql`SELECT owner_id, fence FROM writer_lease`.all(db)).toEqual(claimed);
+			});
+
+			await session.close();
+			await withDb(metadata.path, (db) => {
 				expect(sql`SELECT owner_id, fence FROM writer_lease`.all(db)).toEqual([]);
 			});
+		});
+	});
+
+	it("rejects a second writer while the session is open and admits one after close", async () => {
+		await withTempDir(async (directory) => {
+			const repo = new SqliteSessionRepo({
+				directory,
+				databaseFactory: createNodeSqliteFactory(),
+				now: () => 1,
+			});
+			const session = await repo.create({ id: "session" });
+			const { metadata } = session;
+			const other = new SqliteSessionRepo({ directory, databaseFactory: createNodeSqliteFactory(), now: () => 1 });
+
+			await expect(other.open(metadata)).rejects.toThrow("already claimed");
+
 			await session.close();
+			const reopened = await other.open(metadata);
+			expect(reopened.metadata.id).toBe("session");
+			await reopened.close();
 		});
 	});
 
