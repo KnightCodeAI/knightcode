@@ -136,10 +136,12 @@ describe("AgentRouter models", () => {
 		expect(model.compat?.supportsDeveloperRole ?? true).toBe(true);
 	});
 
+	// The SDK's beta namespace posts to `/v1/messages?beta=true`; the relay routes on the path,
+	// so the marker rides along on every Anthropic Messages request regardless of provider.
 	it("sends Anthropic-shaped requests to the Messages endpoint", async () => {
 		const request = await captureRequest(getModel("agentrouter", "claude-opus-5"));
 
-		expect(request.url).toBe("https://agentrouter.org/v1/messages");
+		expect(new URL(request.url).pathname).toBe("/v1/messages");
 		expect(request.headers.get("x-api-key")).toBe("test-agentrouter-key");
 		expect(await request.clone().json()).toMatchObject({ model: "claude-opus-5" });
 	});
