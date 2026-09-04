@@ -157,7 +157,7 @@ export type NavigationResult = Result<
 	{ runId: string } & NavigationOutcome,
 	LaneBusy | MissingIdentities | InvalidNavigation | UnknownTarget | Closed
 >;
-export type ResumeResult = Result<ResumeOutcome, NothingToResume | MissingIdentities | Closed>;
+export type ResumeResult = Result<ResumeOutcome, LaneBusy | NothingToResume | MissingIdentities | Closed>;
 export type QueueResult = Result<{ entryId: string }, NoActiveRun | InvalidMessage | Closed>;
 export type NextRunResult = Result<{ entryId: string }, InvalidMessage | Closed>;
 export type CancelQueuedResult = Result<{ kind: "cancelled" | "already_consumed" | "not_found" }, Closed>;

@@ -414,25 +414,26 @@ async function appendPublicEntry<TContext extends object | undefined>(
 			if (leaf === undefined || laneState === undefined) throw new SessionInvariantError(`Unknown lane: ${lane}`);
 			const operationId = laneState.value.currentOperationId;
 			if (operationId === null) {
-				await mutator.commit({
+				const entry: NewEntry =
+					pending.type === "message"
+						? { id, parentId: leaf.value, type: "message", message: pending.payload }
+						: {
+								id,
+								parentId: leaf.value,
+								type: "custom",
+								customType: pending.customType,
+								...(pending.payload === undefined ? {} : { data: pending.payload }),
+							};
+				const result = await mutator.commit({
 					writes: [
-						{
-							kind: "entry",
-							entry:
-								pending.type === "message"
-									? { id, parentId: leaf.value, type: "message", message: pending.payload }
-									: {
-											id,
-											parentId: leaf.value,
-											type: "custom",
-											customType: pending.customType,
-											...(pending.payload === undefined ? {} : { data: pending.payload }),
-										},
-						},
+						{ kind: "entry", entry },
 						{ kind: "register", op: "set", namespace: "lane.leaf", key: lane, value: id },
 					],
 				});
-				return { kind: "done" as const };
+				return {
+					kind: "committed" as const,
+					entry: materializeCommittedEntry(entry, result.seqs[0]!, result.timestamp),
+				};
 			}
 			const [operation, state] = await Promise.all([
 				mutator.getRegister("op.meta", operationId),
@@ -459,9 +460,24 @@ async function appendPublicEntry<TContext extends object | undefined>(
 					},
 				],
 			});
-			return { kind: "done" as const };
+			return { kind: "queued" as const, operationId };
 		});
-		if (disposition.kind === "done") return id;
+		// Both dispositions are durable before their event: a direct append is a placed entry, and
+		// an active run's write waits in the inbox until that run places it.
+		if (disposition.kind === "committed") {
+			await runtime.events.emit({ type: "entry_added", entry: disposition.entry, lane });
+			return id;
+		}
+		if (disposition.kind === "queued") {
+			await runtime.events.emit({
+				type: "write_pending",
+				runId: disposition.operationId,
+				entryId: id,
+				entryType: pending.type === "message" ? "message" : "custom",
+				lane,
+			});
+			return id;
+		}
 		await disposition.completion;
 		runtime.assertOpen();
 	}

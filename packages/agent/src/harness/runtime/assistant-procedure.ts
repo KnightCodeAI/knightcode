@@ -834,7 +834,10 @@ export async function executeAssistantGeneration<TContext extends object | undef
 						telemetryContext: stepSpan,
 						signal: active.effectGate.signal,
 					});
-					const outcome = predictAssistantStepOutcome(settled, ready.nextAttempt, context, model.api);
+					const outcome = predictAssistantStepOutcome(settled, ready.nextAttempt, context, model.api, {
+						contextWindow: model.contextWindow,
+						intendedOutputLimit: model.maxTokens,
+					});
 					stepSpan.setAttributes({ "knightcode.step.outcome": outcome });
 					if (outcome === "retry" || outcome === "failed") stepSpan.setStatus({ status: "error" });
 					return settled;

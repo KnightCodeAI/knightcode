@@ -6,7 +6,14 @@ import { Result } from "../result.ts";
 import { SessionInvariantError } from "../session/session.ts";
 import { executeDrivePass } from "./run-driver.ts";
 import { hydrateTerminalOutcome } from "./transitions.ts";
-import type { ActiveOperation, DeferredValue, DriveArbitration, OperationTaskContext, RuntimeLane } from "./types.ts";
+import type {
+	ActiveOperation,
+	AdmissionReservation,
+	DeferredValue,
+	DriveArbitration,
+	OperationTaskContext,
+	RuntimeLane,
+} from "./types.ts";
 import { RuntimeSliceNotImplemented } from "./types.ts";
 
 export function deferredValue<T>(): DeferredValue<T> {
@@ -35,7 +42,12 @@ export async function driveLane<TContext extends object | undefined>(
 	const closed = runtime.resultClosedError();
 	if (closed !== undefined) return Result.err(closed);
 	const reservation = runtime.admissionReservations.get(lane.name);
-	if (reservation?.operationId === options.operationId) {
+	if (reservation !== undefined && reservation.operationId !== options.operationId) {
+		// A pending acceptance owns the lane until it publishes or releases; installing a task for
+		// another operation here would take the lane out from under it.
+		return Result.err(reservationMismatch(lane.name, options.operationId, reservation));
+	}
+	if (reservation !== undefined) {
 		await reservation.completion;
 		const afterReservation = runtime.resultClosedError();
 		if (afterReservation !== undefined) return Result.err(afterReservation);
@@ -113,18 +125,37 @@ function startDrivePass<TContext extends object | undefined>(
 	})();
 }
 
+/**
+ * Removes the lane's task record. Cleanup is best-effort: an unusable mutation line drops the
+ * record directly instead of throwing, because both drive paths settle their completion after it.
+ */
 async function removeActiveOperation<TContext extends object | undefined>(
 	runtime: OperationTaskContext<TContext>,
 	lane: string,
 	active: ActiveOperation,
 ): Promise<void> {
 	if (runtime.state === "open") {
-		await runtime.sessionStorage.mutate(lane, () => {
-			if (runtime.activeOperations.get(lane) === active) runtime.activeOperations.delete(lane);
-		});
-		return;
+		try {
+			await runtime.sessionStorage.mutate(lane, () => {
+				if (runtime.activeOperations.get(lane) === active) runtime.activeOperations.delete(lane);
+			});
+			return;
+		} catch {}
 	}
 	if (runtime.activeOperations.get(lane) === active) runtime.activeOperations.delete(lane);
+}
+
+function reservationMismatch(
+	lane: string,
+	expectedOperationId: string,
+	reservation: AdmissionReservation,
+): OperationMismatch {
+	return new OperationMismatch({
+		lane,
+		expectedOperationId,
+		currentOperationId: reservation.operationId,
+		message: `Operation ${expectedOperationId} does not own lane ${JSON.stringify(lane)}`,
+	});
 }
 
 function mismatch(lane: string, expectedOperationId: string, restored: RestoredLane): OperationMismatch {

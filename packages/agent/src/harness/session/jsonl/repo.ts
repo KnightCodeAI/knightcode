@@ -247,24 +247,25 @@ export class JsonlSessionRepo implements SessionRepo<
 		);
 	}
 
+	/** Directory encoding is lossy, so identity comes from each candidate header, not the file name. */
 	private async sessionIdExists(cwd: string, id: string): Promise<boolean> {
 		const directory = await this.sessionDirectory(cwd);
-		if (!fileValue(await this.fileSystem.exists(directory), `Failed to check sessions directory ${directory}`)) {
-			return false;
-		}
-		const suffix = `_${encodeURIComponent(id)}.jsonl`;
-		return fileValue(await this.fileSystem.listDir(directory), `Failed to list sessions directory ${directory}`).some(
-			(entry) => entry.kind !== "directory" && entry.name.endsWith(suffix),
-		);
+		return (await this.listDirectory(directory, cwd)).some((candidate) => candidate.id === id);
 	}
 
 	private async createPath(cwd: string, createdAt: number, id: string): Promise<string> {
 		const directory = await this.sessionDirectory(cwd);
 		fileValue(await this.fileSystem.createDir(directory), `Failed to create sessions directory ${directory}`);
-		return fileValue(
+		const path = fileValue(
 			await this.fileSystem.joinPath([directory, sessionFileName(createdAt, id)]),
 			`Failed to resolve path for session ${id}`,
 		);
+		// Two working directories can share this directory, so never write over a file that is
+		// already there, whatever session it holds.
+		if (fileValue(await this.fileSystem.exists(path), `Failed to check session ${path}`)) {
+			throw new Error(`Session file already exists: ${path}`);
+		}
+		return path;
 	}
 
 	private async loadStorage(metadata: JsonlSessionMetadata): Promise<JsonlStorage> {

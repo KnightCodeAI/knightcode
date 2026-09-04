@@ -1,7 +1,7 @@
 import type { Api, AssistantMessage, Models, RetryPolicy, Usage } from "@knightcode/ai";
 import { isContextOverflow, isRecoverableLength, isRetryableAssistantError } from "@knightcode/ai";
 import type { AgentMessage, AgentToolCall } from "../../types.ts";
-import type { DriveOptions, SuspendedOperation, TerminalOperationOutcome } from "../agent-harness.ts";
+import type { DriveOptions, Resources, SuspendedOperation, TerminalOperationOutcome } from "../agent-harness.ts";
 import type { CompactionSettings } from "../compaction/compaction.ts";
 import type { RestoredLane } from "../restore.ts";
 import { SessionInvariantError } from "../session/session.ts";
@@ -12,6 +12,7 @@ import type {
 	SessionMutator,
 	SettledAssistantMessage,
 } from "../session/types.ts";
+import type { AgentHarnessStreamOptions } from "../types.ts";
 import type { AssistantSettlementDecision, RuntimeSettings } from "./types.ts";
 import { RuntimeSliceNotImplemented } from "./types.ts";
 
@@ -34,20 +35,10 @@ export function classifyAssistantSettlement(
 	resultEntryIds: string[],
 ): AssistantSettlementDecision {
 	if (controlStatus === "cancel_requested") {
-		const normalized: SettledAssistantMessage = {
-			...message,
-			stopReason: "aborted",
-			errorMessage: message.errorMessage ?? "Assistant request was cancelled",
-		};
-		return {
-			message: normalized,
-			phase: {
-				kind: "checkpoint",
-				continuation: { kind: "may_finish", includeFinalAssistant: true },
-				triggerEntryId: responseEntryId,
-			},
-			outcome: { kind: "aborted" },
-		};
+		// Cancellation reconciliation is a later slice, and `executeDrivePass` refuses to drive a
+		// cancel-requested operation. Refusing here keeps the transaction from committing a
+		// checkpoint that nothing can advance.
+		throw new RuntimeSliceNotImplemented("assistant settlement(cancel_requested)");
 	}
 	if (message.stopReason === "aborted") {
 		throw new SessionInvariantError("Assistant response is aborted without durable cancellation");
@@ -174,6 +165,7 @@ export function predictAssistantStepOutcome(
 	attempt: number,
 	context: Extract<RunState["phase"], { kind: "assistant" }>["generation"]["context"],
 	requestApi: Api,
+	limits: { contextWindow: number; intendedOutputLimit: number },
 ): "succeeded" | "retry" | "failed" | "aborted" | "deferred" {
 	if (message.stopReason === "deferred") {
 		return normalizeInvalidDeferredResponse(message, context.configuration, requestApi).stopReason === "deferred"
@@ -181,6 +173,10 @@ export function predictAssistantStepOutcome(
 			: "failed";
 	}
 	if (message.stopReason === "aborted") return "aborted";
+	// Settlement refuses overflow until its own slice lands, so the step does not succeed.
+	if (isContextOverflow(message, limits.contextWindow) || isRecoverableLength(message, limits.intendedOutputLimit)) {
+		return "failed";
+	}
 	if (message.stopReason === "error") {
 		return attempt < context.retryPolicy.maxAttempts && isRetryableAssistantError(message) ? "retry" : "failed";
 	}
@@ -254,6 +250,23 @@ export function cloneUsage(usage: Usage): Usage {
 
 export function cloneConfiguration(configuration: LaneConfiguration): LaneConfiguration {
 	return { ...configuration, model: { ...configuration.model }, activeToolNames: [...configuration.activeToolNames] };
+}
+
+/** Copies the caller-owned containers of a stream-option value so neither side can mutate the other's. */
+export function cloneStreamOptions(options: AgentHarnessStreamOptions): AgentHarnessStreamOptions {
+	return {
+		...options,
+		...(options.headers === undefined ? {} : { headers: { ...options.headers } }),
+		...(options.metadata === undefined ? {} : { metadata: { ...options.metadata } }),
+	};
+}
+
+/** Copies the caller-owned resource lists; the described skills and templates stay shared. */
+export function cloneResources(resources: Resources): Resources {
+	return {
+		...(resources.promptTemplates === undefined ? {} : { promptTemplates: [...resources.promptTemplates] }),
+		...(resources.skills === undefined ? {} : { skills: [...resources.skills] }),
+	};
 }
 
 export function validateToolNames(tools: readonly { name: string }[]): void {

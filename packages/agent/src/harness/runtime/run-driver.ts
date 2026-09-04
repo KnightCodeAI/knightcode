@@ -78,8 +78,9 @@ export async function executeDrivePass<TContext extends object | undefined>(
 		((initial.current.state.phase.kind === "assistant" &&
 			initial.current.state.phase.generation.status === "effect_pending") ||
 			initial.current.state.phase.kind === "tools");
-	const recoveryLifecycle =
-		recovery && (!runtime.resumeEventOperationIds.has(active.operationId) || recoveryPreludeRequired);
+	// Only a pass that actually replays a pending effect re-emits lifecycle; a run reopened at an
+	// ordinary state continues live, so its events and telemetry are not recovery.
+	const recoveryLifecycle = recovery && recoveryPreludeRequired;
 	return startHarnessSpan(
 		runtime.telemetryContext,
 		"knightcode.harness.run",

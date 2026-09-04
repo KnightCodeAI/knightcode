@@ -108,18 +108,27 @@ export async function finishRun<TContext extends object | undefined>(
 				current.state.phase.kind === "checkpoint" &&
 				current.state.phase.continuation.kind === "may_finish" &&
 				current.state.phase.continuation.includeFinalAssistant;
+			if (includeFinalAssistant && latestAssistantEntryId === undefined) {
+				throw new SessionInvariantError("Completed assistant run has no final assistant");
+			}
 			const result: LaneLastResult =
 				error === undefined
-					? {
-							operationId: active.operationId,
-							kind: "run",
-							outcome: "completed",
-							leafId: restored.leafId,
-							runCompletion: includeFinalAssistant ? "assistant" : "terminated_tools",
-							...(includeFinalAssistant && latestAssistantEntryId !== undefined
-								? { finalAssistantEntryId: latestAssistantEntryId }
-								: {}),
-						}
+					? includeFinalAssistant
+						? {
+								operationId: active.operationId,
+								kind: "run",
+								outcome: "completed",
+								leafId: restored.leafId,
+								runCompletion: "assistant",
+								finalAssistantEntryId: latestAssistantEntryId!,
+							}
+						: {
+								operationId: active.operationId,
+								kind: "run",
+								outcome: "completed",
+								leafId: restored.leafId,
+								runCompletion: "terminated_tools",
+							}
 					: {
 							operationId: active.operationId,
 							kind: "run",

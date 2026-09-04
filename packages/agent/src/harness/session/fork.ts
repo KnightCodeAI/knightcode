@@ -36,7 +36,10 @@ export function createForkSnapshot(source: ForkSourceSnapshot, options: ForkOpti
 	for (const id of entryIds) entries.set(id, sourceEntries.get(id)!);
 
 	const registers: Register[] = [];
-	let nextSeq = Math.max(0, ...[...entries.values()].map((entry) => entry.seq)) + 1;
+	// Sessions can hold more entries than the argument limit of a spread `Math.max`.
+	let highestSeq = 0;
+	for (const entry of entries.values()) if (entry.seq > highestSeq) highestSeq = entry.seq;
+	let nextSeq = highestSeq + 1;
 	const setRegister = (namespace: RegisterNamespace, key: string, value: Register["value"]): void => {
 		registers.push({ namespace, key, value, seq: nextSeq++ } as Register);
 	};

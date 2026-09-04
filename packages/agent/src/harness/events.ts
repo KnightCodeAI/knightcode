@@ -62,11 +62,24 @@ export class HarnessEventBus implements Events {
 		});
 	}
 
+	/**
+	 * Isolates one listener's copy of an event. Tool arguments and results are `unknown`, so a
+	 * payload can hold values `structuredClone` refuses; a shallow copy still isolates the event
+	 * object itself rather than dropping the event and reporting a misleading handler failure.
+	 */
+	private isolate(event: HarnessEvent): HarnessEvent {
+		try {
+			return structuredClone(event);
+		} catch {
+			return { ...event };
+		}
+	}
+
 	private async deliver(event: HarnessEvent, reportErrors: boolean): Promise<void> {
 		const listeners = [...(this.listeners.get(event.type) ?? []), ...this.watchListeners];
 		for (const listener of listeners) {
 			try {
-				await listener(structuredClone(event));
+				await listener(this.isolate(event));
 			} catch (error) {
 				if (!reportErrors || event.type === "handler_error") continue;
 				const normalized = error instanceof Error ? error : new Error(String(error));

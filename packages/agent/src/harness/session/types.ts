@@ -304,14 +304,21 @@ export type LaneLastResult =
 			operationId: string;
 			kind: "run";
 			leafId: string;
-			finalAssistantEntryId?: string;
 	  } & (
-			| FailedLaneLastResult
-			| AbortedLaneLastResult
+			| ((FailedLaneLastResult | AbortedLaneLastResult) & { finalAssistantEntryId?: string })
+			// A completed assistant run finishes on its final assistant entry; an all-terminating
+			// tool batch finishes on a tool result and has none.
 			| {
 					outcome: "completed";
 					error?: never;
-					runCompletion: "assistant" | "terminated_tools";
+					runCompletion: "assistant";
+					finalAssistantEntryId: string;
+			  }
+			| {
+					outcome: "completed";
+					error?: never;
+					runCompletion: "terminated_tools";
+					finalAssistantEntryId?: never;
 			  }
 	  ))
 	| ({

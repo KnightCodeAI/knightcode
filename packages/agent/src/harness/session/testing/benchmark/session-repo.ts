@@ -27,6 +27,8 @@ interface SessionRepoForkWriteBenchmarkScenario {
 	readonly name: string;
 	expectedResult(dataset: StorageBenchmarkDataset): number;
 	run(repo: SessionRepo, source: SessionMetadata, dataset: StorageBenchmarkDataset): Promise<number>;
+	/** Untimed: proves the measured write produced a real fork, not just destination metadata. */
+	validate(repo: SessionRepo, dataset: StorageBenchmarkDataset): Promise<void>;
 }
 
 /** Package-internal deterministic session id shared by repository benchmark workloads. */
@@ -156,9 +158,22 @@ export const SESSION_REPO_FORK_WRITE_BENCHMARK_SCENARIOS: readonly SessionRepoFo
 		},
 		async run(repo, source, dataset) {
 			const fork = await repo.fork(source, { id: FORK_DESTINATION_SESSION_ID });
-			return fork.metadata.id === FORK_DESTINATION_SESSION_ID && fork.metadata.parentSessionId === source.id
-				? dataset.entryCount
-				: 0;
+			const forked = fork.metadata.id === FORK_DESTINATION_SESSION_ID && fork.metadata.parentSessionId === source.id;
+			await fork.close();
+			return forked ? dataset.entryCount : 0;
+		},
+		async validate(repo, dataset) {
+			const destination = (await repo.list()).find((candidate) => candidate.id === FORK_DESTINATION_SESSION_ID);
+			if (destination === undefined) throw new Error("Fork destination is missing from the repository");
+			const session = await repo.open(destination);
+			try {
+				const entries = await session.findEntries();
+				if (entries.length !== dataset.entryCount) {
+					throw new Error(`Fork holds ${entries.length} entries, expected ${dataset.entryCount}`);
+				}
+			} finally {
+				await session.close();
+			}
 		},
 	},
 ];

@@ -59,4 +59,7 @@ await registerWriteBenchmarks({
 	run(subject, benchmark) {
 		return benchmark.scenario.run(subject.repo, subject.source, benchmark.dataset);
 	},
+	validate(subject, benchmark) {
+		return benchmark.scenario.validate(subject.repo, benchmark.dataset);
+	},
 });

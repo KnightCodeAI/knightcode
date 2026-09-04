@@ -80,6 +80,7 @@ export async function restoreLane(
 				`operation ${operationId} intent ${operation.value.intent.kind} does not match state ${operationState.value.kind}`,
 			);
 		}
+		validateIntentAgainstState(operation.value, operationState.value, lane);
 		if (operation.value.sourceLeafId !== null) expectations.set(operation.value.sourceLeafId, "any");
 		if (operation.value.intent.kind === "run") {
 			for (const id of operation.value.intent.promptEntryIds) expectations.set(id, "message");
@@ -649,6 +650,31 @@ function validatePositiveInteger(value: number, lane: string, field: string): vo
 
 function validateNonNegativeInteger(value: number, lane: string, field: string): void {
 	if (!Number.isSafeInteger(value) || value < 0) invariant(lane, `${field} is invalid`);
+}
+
+/** Rejects an operation whose immutable intent disagrees with the fields its state repeats. */
+function validateIntentAgainstState(operation: OperationMeta, state: OperationState, lane: string): void {
+	const { intent, operationId } = operation;
+	if (intent.kind === "navigation" && state.kind === "navigation") {
+		if (intent.targetId !== state.targetId) {
+			invariant(lane, `operation ${operationId} navigation target does not match op.state`);
+		}
+		if (intent.summarize !== state.summarize) {
+			invariant(lane, `operation ${operationId} navigation summarize does not match op.state`);
+		}
+		if (intent.label !== state.label) {
+			invariant(lane, `operation ${operationId} navigation label does not match op.state`);
+		}
+		if (state.summarize && intent.customInstructions !== state.customInstructions) {
+			invariant(lane, `operation ${operationId} navigation instructions do not match op.state`);
+		}
+		return;
+	}
+	if (intent.kind === "compaction" && state.kind === "compaction") {
+		if (intent.customInstructions !== state.customInstructions) {
+			invariant(lane, `operation ${operationId} compaction instructions do not match op.state`);
+		}
+	}
 }
 
 function invariant(lane: string, message: string): never {

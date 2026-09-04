@@ -62,6 +62,8 @@ import type { AgentHarnessTool, AgentHarnessToolContextSource } from "../types.t
 import { AgentLaneRuntime, createPublicSessionView } from "./lane-runtime.ts";
 import {
 	cloneConfiguration,
+	cloneResources,
+	cloneStreamOptions,
 	missingIdentities,
 	missingToolIdentities,
 	suspensionBase,
@@ -138,10 +140,10 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 		};
 		this.settings = {
 			tools,
-			resources: options.resources ?? {},
-			streamOptions: options.streamOptions ?? {},
-			retryPolicy: options.retry ?? DEFAULT_RETRY_POLICY,
-			compaction: options.compaction ?? DEFAULT_COMPACTION_SETTINGS,
+			resources: cloneResources(options.resources ?? {}),
+			streamOptions: cloneStreamOptions(options.streamOptions ?? {}),
+			retryPolicy: { ...(options.retry ?? DEFAULT_RETRY_POLICY) },
+			compaction: { ...(options.compaction ?? DEFAULT_COMPACTION_SETTINGS) },
 			steeringMode: options.steeringMode ?? "all",
 			followUpMode: options.followUpMode ?? "all",
 			toolExecution: options.toolExecution ?? "parallel",
@@ -252,47 +254,49 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 		});
 	}
 
+	// Global settings change only through a setter, which publishes `config_update`. Getters hand
+	// out copies, and setters store copies, so neither side can reach the live values afterwards.
 	getResources(): Promise<Resources> {
-		return this.readSettings((settings) => settings.resources);
+		return this.readSettings((settings) => cloneResources(settings.resources));
 	}
 
 	setResources(resources: Resources): Promise<void> {
-		return this.writeSettings((settings) => ({ ...settings, resources }), {
+		return this.writeSettings((settings) => ({ ...settings, resources: cloneResources(resources) }), {
 			type: "config_update",
 			property: "resources",
 		});
 	}
 
 	getStreamOptions(): Promise<NonNullable<AgentHarnessOptions<TContext>["streamOptions"]>> {
-		return this.readSettings((settings) => settings.streamOptions);
+		return this.readSettings((settings) => cloneStreamOptions(settings.streamOptions));
 	}
 
 	setStreamOptions(options: NonNullable<AgentHarnessOptions<TContext>["streamOptions"]>): Promise<void> {
-		return this.writeSettings((settings) => ({ ...settings, streamOptions: options }), {
+		return this.writeSettings((settings) => ({ ...settings, streamOptions: cloneStreamOptions(options) }), {
 			type: "config_update",
 			property: "streamOptions",
 		});
 	}
 
 	getRetryPolicy(): Promise<RetryPolicy> {
-		return this.readSettings((settings) => settings.retryPolicy);
+		return this.readSettings((settings) => ({ ...settings.retryPolicy }));
 	}
 
 	setRetryPolicy(policy: RetryPolicy): Promise<void> {
 		validateRetryPolicy(policy);
-		return this.writeSettings((settings) => ({ ...settings, retryPolicy: policy }), {
+		return this.writeSettings((settings) => ({ ...settings, retryPolicy: { ...policy } }), {
 			type: "config_update",
 			property: "retryPolicy",
 		});
 	}
 
 	getCompactionSettings(): Promise<CompactionSettings> {
-		return this.readSettings((settings) => settings.compaction);
+		return this.readSettings((settings) => ({ ...settings.compaction }));
 	}
 
 	setCompactionSettings(compaction: CompactionSettings): Promise<void> {
 		validateCompactionSettings(compaction);
-		return this.writeSettings((settings) => ({ ...settings, compaction }), {
+		return this.writeSettings((settings) => ({ ...settings, compaction: { ...compaction } }), {
 			type: "config_update",
 			property: "compactionSettings",
 		});
@@ -511,7 +515,8 @@ class AgentHarnessRuntime<TContext extends object | undefined> implements AgentH
 		return this.readSettings((settings) => ({
 			...settings,
 			tools: [...settings.tools],
-			streamOptions: { ...settings.streamOptions },
+			resources: cloneResources(settings.resources),
+			streamOptions: cloneStreamOptions(settings.streamOptions),
 			retryPolicy: { ...settings.retryPolicy },
 			compaction: { ...settings.compaction },
 		}));

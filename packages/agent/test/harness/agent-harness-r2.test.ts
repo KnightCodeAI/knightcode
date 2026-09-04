@@ -290,6 +290,10 @@ describe("AgentHarness R2 minimal run", () => {
 			},
 			{ id: "wait" },
 		);
+		const writes: HarnessEvent[] = [];
+		harness.events.on("write_pending", (event) => {
+			writes.push(event);
+		});
 		const acceptance = harness.accept({ kind: "prompt", prompt: "accepted" });
 		await waitForTick();
 		const append = harness.session.appendMessage({ role: "user", content: "later", timestamp: 3 });
@@ -306,6 +310,26 @@ describe("AgentHarness R2 minimal run", () => {
 		expect((await session.getRegister("op.state", accepted.value.operationId))?.value).toMatchObject({
 			inbox: { writes: [appendedId] },
 		});
+		expect(writes).toMatchObject([
+			{
+				type: "write_pending",
+				runId: accepted.value.operationId,
+				entryId: appendedId,
+				entryType: "message",
+				lane: "main",
+			},
+		]);
+	});
+
+	it("publishes a direct idle append as a durable entry event", async () => {
+		const { harness } = await createFixture();
+		const events = captureLifecycle(harness);
+
+		const entryId = await harness.session.appendMessage({ role: "user", content: "direct", timestamp: 3 });
+
+		expect(events).toMatchObject([
+			{ type: "entry_added", lane: "main", entry: { id: entryId, type: "message", seq: expect.any(Number) } },
+		]);
 	});
 
 	it("captures and places pending next-run payloads before the caller prompt", async () => {
