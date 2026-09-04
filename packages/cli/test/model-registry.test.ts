@@ -256,6 +256,49 @@ describe("ModelRegistry", () => {
 			expect(model?.baseUrl).toBe("https://openrouter.ai/api/v1");
 		});
 
+		test("OpenRouter Anthropic ids keep the messages baseUrl when api is omitted", async () => {
+			writeRawModelsJson({
+				openrouter: {
+					models: [
+						{
+							id: "anthropic/claude-sonnet-4",
+							reasoning: true,
+							input: ["text"],
+						},
+					],
+				},
+			});
+
+			const registry = await createModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.getError()).toBeUndefined();
+
+			const model = registry.find("openrouter", "anthropic/claude-sonnet-4");
+			expect(model?.api).toBe("anthropic-messages");
+			expect(model?.baseUrl).toBe("https://openrouter.ai/api");
+		});
+
+		test("OpenRouter Anthropic ids inherit the completions baseUrl when retargeted", async () => {
+			writeRawModelsJson({
+				openrouter: {
+					models: [
+						{
+							id: "anthropic/claude-sonnet-4",
+							api: "openai-completions",
+							reasoning: true,
+							input: ["text"],
+						},
+					],
+				},
+			});
+
+			const registry = await createModelRegistry(authStorage, modelsJsonPath);
+			expect(registry.getError()).toBeUndefined();
+
+			const model = registry.find("openrouter", "anthropic/claude-sonnet-4");
+			expect(model?.api).toBe("openai-completions");
+			expect(model?.baseUrl).toBe("https://openrouter.ai/api/v1");
+		});
+
 		test("non-built-in provider custom models still require baseUrl", async () => {
 			writeRawModelsJson({
 				"my-custom-provider": {

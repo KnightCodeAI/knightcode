@@ -166,12 +166,20 @@ function modelFromJson(
 }
 
 function findModelDefaults(models: readonly Model<Api>[], modelId: string, api?: Api): Model<Api> | undefined {
+	// Defaults are only used for api and baseUrl. When the definition names an api,
+	// skip a same-id match on a different api — OpenRouter's Anthropic ids exist only
+	// under anthropic-messages (`https://openrouter.ai/api`), so an openai-completions
+	// override would otherwise inherit that URL instead of `.../api/v1`.
+	if (api) {
+		return (
+			models.find((model) => model.id === modelId && model.api === api) ??
+			models.find((model) => model.api === api) ??
+			models.find((model) => model.api === "openai-completions") ??
+			models[0]
+		);
+	}
 	return (
-		// A same-id model on another api would hand over that api's baseUrl, which is wrong now
-		// that one provider can serve two apis under overlapping model ids.
-		(api ? models.find((model) => model.id === modelId && model.api === api) : undefined) ??
 		models.find((model) => model.id === modelId) ??
-		(api ? models.find((model) => model.api === api) : undefined) ??
 		models.find((model) => model.api === "openai-completions") ??
 		models[0]
 	);
