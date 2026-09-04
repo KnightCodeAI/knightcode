@@ -34,11 +34,18 @@ export class HostedHarnessManager {
 		this.dispatchRpc = createRpcDispatcher(
 			ServiceRpc,
 			{
-				list: () => this.options.host.sessions.list(),
+				list: async () => (await this.options.host.sessions.list()).map(toWireMetadata),
 				attach: async (connection, sessionId) => {
 					if (this.options.isClosing()) throw new ServerRestartingError();
 					const hosted = await this.acquire(sessionId);
-					if (connection.disconnected || connection.stage !== "ready" || connection.connection.closed) {
+					// A harness can terminate while acquire() unwinds, which drops it from
+					// the map; attaching to it would hand a dead worker back to the client.
+					if (
+						this.hostedSessions.get(hosted.id) !== hosted ||
+						connection.disconnected ||
+						connection.stage !== "ready" ||
+						connection.connection.closed
+					) {
 						throw new ServerRestartingError();
 					}
 					connection.sessionIds.add(hosted.id);
@@ -121,6 +128,23 @@ export class HostedHarnessManager {
 		this.hostedSessions.delete(hosted.id);
 		for (const connection of hosted.connections) connection.sessionIds.delete(hosted.id);
 		hosted.connections.clear();
-		if (error) this.options.reportError(error);
+		if (!error) return;
+		this.options.reportError(error);
+		// Nobody will call close() on a harness that failed on its own, so the
+		// Session it holds open would block every later attach.
+		void hosted.harness.close().catch((closeError: unknown) => this.options.reportError(closeError));
 	}
+}
+
+/** SessionRepo backends return backend-specific fields that the strict wire schema rejects. */
+function toWireMetadata(metadata: SessionMetadata): SessionMetadata {
+	const wire: SessionMetadata = {
+		id: metadata.id,
+		createdAt: metadata.createdAt,
+		storageVersion: metadata.storageVersion,
+	};
+	if (metadata.cwd !== undefined) wire.cwd = metadata.cwd;
+	if (metadata.parentSessionId !== undefined) wire.parentSessionId = metadata.parentSessionId;
+	if (metadata.legacyParentSessionPath !== undefined) wire.legacyParentSessionPath = metadata.legacyParentSessionPath;
+	return wire;
 }

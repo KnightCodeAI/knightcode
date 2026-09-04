@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import type { ByteConnection, ByteConnectionHandler } from "../src/connection.ts";
 import { KnightServer } from "../src/server.ts";
 import { ProtocolTestClient, TestServerHost, type WireChannel } from "../src/testing/index.ts";
+import type { KnightServerHost } from "../src/types.ts";
 
 const servers = new Set<KnightServer>();
 
@@ -78,6 +79,32 @@ describe("list and attach protocol", () => {
 		expect(service.harnesses.size).toBe(0);
 	});
 
+	test("list projects backend metadata onto the wire schema", async () => {
+		const service = new TestServerHost();
+		const metadata = await service.seed("session-1");
+		// JsonlSessionRepo and SqliteSessionRepo both return backend fields the
+		// strict wire schema rejects, so list has to project them away.
+		const host: KnightServerHost = {
+			sessions: {
+				list: async () =>
+					(await service.sessions.list()).map((row) => ({ ...row, path: "/sessions/session-1", modifiedAt: 7 })),
+				open: service.sessions.open,
+			},
+			createHarness: (session) => service.createHarness(session),
+		};
+		const server = new KnightServer(host, { listeners: [], serviceId: "00000000000000000000000000000001" });
+		servers.add(server);
+		const client = connect(server);
+		await client.hello();
+
+		await expect(client.request("00000000000000000000000000000001", { method: "list", args: [] })).resolves.toEqual({
+			type: "response",
+			id: "request-1",
+			ok: true,
+			result: [metadata],
+		});
+	});
+
 	test("attach opens the Session and creates one hosted Harness", async () => {
 		const service = new TestServerHost();
 		await service.seed("session-1");
@@ -149,6 +176,30 @@ describe("list and attach protocol", () => {
 			client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] }),
 		).resolves.toMatchObject({ ok: true, result: { sessionId: "session-1" } });
 		expect(service.harnesses.get("session-1")).toHaveLength(2);
+	});
+
+	test("rejects an attach whose Harness terminates while the attach unwinds", async () => {
+		const service = new TestServerHost();
+		await service.seed("session-1");
+		let closeCount = 0;
+		service.createHarness = async (session) => ({
+			close: async () => {
+				closeCount += 1;
+				await session.close();
+			},
+			terminated: Promise.resolve(new Error("worker crashed")),
+		});
+		const server = createServer(service);
+		const client = connect(server);
+		await client.hello();
+
+		await expect(
+			client.request("00000000000000000000000000000001", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({ ok: false, error: { code: "server_restarting" } });
+		expect(server.hostedSessions).toEqual([]);
+		// A Harness that failed on its own is never close()d by the host, so the
+		// invalidation has to release the Session it still holds open.
+		expect(closeCount).toBe(1);
 	});
 
 	test("connection loss does not close a hosted Harness, but server shutdown does", async () => {
