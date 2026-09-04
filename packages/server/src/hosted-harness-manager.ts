@@ -92,6 +92,16 @@ export class HostedHarnessManager<TMetadata extends SessionMetadata = SessionMet
 	}
 
 	private async acquire(sessionId: string): Promise<HostedSession> {
+		const hosted = await this.openOrJoin(sessionId);
+		// The Harness can terminate while this attachment unwinds; an invalidated entry must not
+		// report success, or the caller would attach to a Session this server no longer hosts.
+		if (this.hostedSessions.get(hosted.id) !== hosted) {
+			throw new SessionNotFoundError(`Session is no longer hosted: ${sessionId}`);
+		}
+		return hosted;
+	}
+
+	private async openOrJoin(sessionId: string): Promise<HostedSession> {
 		const existing = this.hostedSessions.get(sessionId);
 		if (existing) return existing;
 		const opening = this.openingSessions.get(sessionId);
@@ -135,6 +145,12 @@ export class HostedHarnessManager<TMetadata extends SessionMetadata = SessionMet
 	private invalidate(hosted: HostedSession, error: Error | undefined): void {
 		if (this.hostedSessions.get(hosted.id) !== hosted) return;
 		this.hostedSessions.delete(hosted.id);
-		if (error) this.options.reportError(error);
+		if (!error) return;
+		this.options.reportError(error);
+		// An unexpected termination says nothing about the handle's Session, which may still be
+		// held. Close it best-effort so a later attachment can acquire that Session again.
+		void Promise.resolve()
+			.then(() => hosted.harness.close())
+			.catch((closeError: unknown) => this.options.reportError(closeError));
 	}
 }

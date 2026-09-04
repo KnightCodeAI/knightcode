@@ -203,6 +203,30 @@ describe("list and attach protocol", () => {
 		expect(host.harnesses.get("session-1")).toHaveLength(2);
 	});
 
+	test("rejects an attach whose Harness terminated while acquiring and closes that handle", async () => {
+		const seeded = new TestServerHost();
+		await seeded.seed("session-1");
+		let closeCount = 0;
+		const host: KnightServerHost = {
+			sessions: seeded.sessions,
+			createHarness: async () => ({
+				terminated: Promise.resolve(new Error("worker crashed")),
+				close: async () => {
+					closeCount += 1;
+				},
+			}),
+		};
+		const server = new KnightServer(host, { listeners: [], serverId: "00000000-0000-4000-8000-000000000001" });
+		servers.add(server);
+		const client = connect(server);
+		await client.hello();
+
+		await expect(
+			client.request("00000000-0000-4000-8000-000000000001", { method: "attach", args: ["session-1"] }),
+		).resolves.toMatchObject({ ok: false, error: { code: "session_not_found" } });
+		await expect.poll(() => closeCount).toBe(1);
+	});
+
 	test("connection loss does not close a hosted Harness, but server shutdown does", async () => {
 		const host = new TestServerHost();
 		await host.seed("session-1");

@@ -87,7 +87,8 @@ export async function requestServerDrain(options: ServerControlOptions): Promise
 	const timeout = setTimeout(() => {
 		connection.disconnect(new ServerControlTimeoutError(timeoutMs));
 	}, timeoutMs);
-	timeout.unref();
+	// This entry point is transport-agnostic: outside Node, setTimeout returns a plain number.
+	(timeout as { unref?: () => void }).unref?.();
 
 	try {
 		await connection.connect();

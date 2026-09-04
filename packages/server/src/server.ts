@@ -91,7 +91,9 @@ export class KnightServer<TMetadata extends SessionMetadata = SessionMetadata> {
 		} catch (error) {
 			this.closing = true;
 			const cleanupErrors: unknown[] = [];
-			const listenerResults = await Promise.allSettled(started.map((listener) => listener.close()));
+			// The async wrapper turns a listener's synchronous throw into a rejected result, so
+			// cleanup always reaches closeServerState and `closed` always settles.
+			const listenerResults = await Promise.allSettled(started.map(async (listener) => listener.close()));
 			for (const result of listenerResults) {
 				if (result.status === "rejected") cleanupErrors.push(result.reason);
 			}
@@ -160,7 +162,7 @@ export class KnightServer<TMetadata extends SessionMetadata = SessionMetadata> {
 		const starting = this.startPromise;
 		if (starting) await starting.catch(() => {});
 		const errors: unknown[] = [];
-		const listenerResults = await Promise.allSettled(this.listeners.map((listener) => listener.close()));
+		const listenerResults = await Promise.allSettled(this.listeners.map(async (listener) => listener.close()));
 		for (const result of listenerResults) {
 			if (result.status === "rejected") errors.push(result.reason);
 		}
