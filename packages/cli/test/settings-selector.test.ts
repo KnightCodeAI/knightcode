@@ -85,4 +85,32 @@ describe("SettingsSelectorComponent", () => {
 		expect(output).toContain("  ✓ medium");
 		expect(output).toContain("→   high");
 	});
+
+	it("surfaces a per-model override the model no longer supports", async () => {
+		harness = await createHarness({
+			models: [{ id: "plain-model", reasoning: false }],
+		});
+		const model = harness.getModel("plain-model")!;
+		const modelKey = `${model.provider}/${model.id}`;
+		const config = {
+			defaultModel: modelKey,
+			availableDefaultModels: [model],
+			thinkingLevel: "high",
+			// Configured while the model still reported reasoning; it no longer does,
+			// so "medium" is not among the levels the list can offer.
+			modelThinkingLevels: { [modelKey]: "medium" },
+		} as unknown as SettingsConfig;
+		const callbacks = { onCancel: () => {} } as unknown as SettingsCallbacks;
+		const list = new SettingsSelectorComponent(config, callbacks).getSettingsList();
+
+		list.selectItem("model-thinking");
+		list.handleInput("\r");
+		list.handleInput("\r");
+
+		const output = stripAnsi(list.render(120).join("\n"));
+		// The override is named and the cursor sits on the clear item, so Enter clears
+		// it rather than silently overwriting it with the first level in the list.
+		expect(output).toContain("→ ✓ (clear override)");
+		expect(output).toContain('"medium" is no longer supported by this model');
+	});
 });
