@@ -1710,7 +1710,7 @@ const model = ctx.modelRegistry.find("anthropic", "claude-sonnet-4-5");
 if (model) {
   const success = await knightcode.setModel(model);
   if (!success) {
-    ctx.ui.notify("No API key for this model", "error");
+    ctx.ui.notify("Authentication is not configured for this model's provider", "error");
   }
 }
 ```
