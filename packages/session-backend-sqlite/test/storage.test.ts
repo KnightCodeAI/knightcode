@@ -513,6 +513,23 @@ describe("SqliteStorage", () => {
 		});
 	});
 
+	it("bounds a prefix ending in a lone surrogate", async () => {
+		await withStorage(async (storage, db) => {
+			const inside = "pre\uD800inside";
+			const above = "pre\uFFFFoutside";
+			sql`INSERT INTO registers (namespace, key, seq, value) VALUES
+				(${"fact.custom"}, ${inside}, ${1}, ${JSON.stringify(1)}),
+				(${"fact.custom"}, ${above}, ${2}, ${JSON.stringify(2)})`.run(db);
+
+			// SQLite stores a lone surrogate as U+FFFD, so its bound has to be U+FFFE.
+			// Skipping to U+E000 instead puts the bound below the prefix itself, which
+			// scans nothing at all.
+			expect((await storage.listRegisters("fact.custom", "pre\uD800")).map((row) => row.key)).toEqual([
+				"pre\uFFFDinside",
+			]);
+		});
+	});
+
 	it("reads and advances the next commit sequence", async () => {
 		await withStorage(async (_storage, db) => {
 			sql`INSERT INTO session
