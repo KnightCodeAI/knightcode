@@ -5,7 +5,6 @@ const telemetryIndex = fileURLToPath(new URL("../telemetry/src/index.ts", import
 const aiIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
 const agentIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
 const agentNode = fileURLToPath(new URL("../agent/src/node.ts", import.meta.url));
-const agentSessionTesting = fileURLToPath(new URL("../agent/src/harness/session/testing/index.ts", import.meta.url));
 
 export default defineConfig({
 	test: {
@@ -24,7 +23,6 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			{ find: /^@knightcode\/telemetry$/, replacement: telemetryIndex },
-			{ find: /^@knightcode\/agent\/session\/testing$/, replacement: agentSessionTesting },
 			{ find: /^@knightcode\/agent\/node$/, replacement: agentNode },
 			{ find: /^@knightcode\/agent$/, replacement: agentIndex },
 			{ find: /^@knightcode\/ai$/, replacement: aiIndex },

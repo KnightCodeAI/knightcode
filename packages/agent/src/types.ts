@@ -214,7 +214,6 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * If it returns true, the loop emits `agent_end` and exits before polling steering or follow-up queues,
 	 * without starting another LLM call. The current assistant response and any tool executions finish normally.
-	 * This callback sees the completed-turn context and runs before `prepareNextTurn`.
 	 *
 	 * Use this to request a graceful stop after the current turn, e.g. before context gets too full.
 	 *
@@ -399,6 +398,8 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<TDetails>,
 	) => Promise<AgentToolResult<TDetails>>;
+	/** Recovery policy for an effect whose durable intent exists but whose outcome is unknown. */
+	replay?: "never" | "safe";
 	/**
 	 * Per-tool execution mode override.
 	 * - "sequential": this tool must execute one at a time with other tool calls.

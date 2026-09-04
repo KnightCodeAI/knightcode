@@ -301,7 +301,7 @@ No declared span events.
 
 One retry delay
 
-- Parents: `knightcode.harness.step`, `knightcode.harness.run`
+- Parents: `knightcode.harness.run`, `knightcode.harness.compaction`, `knightcode.harness.navigation`, `knightcode.harness.turn`, `knightcode.harness.checkpoint`
 - Default status: `ok`
 - Error when: Sleep work throws
 
@@ -353,20 +353,21 @@ No declared span events.
 
 ### `knightcode.session.write`
 
-One committed session mutation
+One committed session transaction
 
 - Parents: root or any caller span
 - Default status: `ok`
-- Error when: Storage rejects the mutation
+- Error when: Storage rejects the transaction
 
 #### Start attributes
 
 | Name | Type | Required | Values | Notes | Description |
 |---|---|---:|---|---|---|
-| `knightcode.lane.name` | `string` | yes |  | high cardinality | Lane name |
-| `knightcode.operation.id` | `string` | no |  | high cardinality | Durable operation id when accepted |
-| `knightcode.session.mutation` | `string` | yes | entry, record, lane, fact |  | Session mutation kind |
-| `knightcode.session.item_type` | `string` | no |  |  | Entry, record, lane, or fact subtype |
+| `knightcode.session.id` | `string` | yes |  | high cardinality | Session id |
+| `knightcode.lane.name` | `string` | no |  | high cardinality | Lane name when supplied by the caller |
+| `knightcode.operation.id` | `string` | no |  | high cardinality | Durable operation id when supplied by the caller |
+| `knightcode.session.item_count` | `number` | yes |  |  | Number of writes in the transaction |
+| `knightcode.session.item_kinds` | `string[]` | yes | elements: entry, usage, register |  | Distinct write kinds in the transaction |
 
 #### End attributes
 
@@ -374,7 +375,8 @@ All end attributes are optional completion enrichment.
 
 | Name | Type | Values | Notes | Description |
 |---|---|---|---|---|
-| `knightcode.session.seq` | `number` |  |  | Committed session sequence when exposed |
+| `knightcode.session.first_seq` | `number` |  |  | First committed sequence in the transaction |
+| `knightcode.session.last_seq` | `number` |  |  | Last committed sequence in the transaction |
 
 #### Events
 
