@@ -454,6 +454,11 @@ export class SettingsSelectorComponent extends Container {
 		const defaultModelByValue = new Map(config.availableDefaultModels.map((model) => [modelSettingKey(model), model]));
 		const currentDefaultModelKey = defaultModelByValue.has(config.defaultModel) ? config.defaultModel : undefined;
 		const currentModelKey = config.currentModel ? modelSettingKey(config.currentModel) : undefined;
+		const supportedLevelsFor = (modelValue: string): ThinkingLevel[] => {
+			const model = defaultModelByValue.get(modelValue);
+			if (!model) return [];
+			return (model.reasoning ? getSupportedThinkingLevels(model) : ["off"]) as ThinkingLevel[];
+		};
 
 		const items: SettingItem[] = [
 			{
@@ -622,25 +627,36 @@ export class SettingsSelectorComponent extends Container {
 							},
 							description: "Select default thinking level for this model",
 							options: (ctx) => {
-								const model = defaultModelByValue.get(ctx.model);
-								if (!model) return [];
-								const levels = (model.reasoning ? getSupportedThinkingLevels(model) : ["off"]) as ThinkingLevel[];
+								if (!defaultModelByValue.has(ctx.model)) return [];
+								const levels = supportedLevelsFor(ctx.model);
 								const activeLevel = currentModelThinkingLevels[ctx.model];
 								const items: SelectItem[] = levels.map((level) => ({
 									value: level,
 									label: `${level === activeLevel ? "✓ " : "  "}${level}`,
 									description: THINKING_DESCRIPTIONS[level],
 								}));
-								if (currentModelThinkingLevels[ctx.model] !== undefined) {
+								if (activeLevel !== undefined) {
+									// A stored override can name a level the model no longer supports, e.g. it
+									// stopped reporting `reasoning`. Nothing above can be marked in that case,
+									// so say what the stale value is rather than leaving the override invisible.
+									const stale = !levels.includes(activeLevel);
 									items.push({
 										value: CLEAR_OVERRIDE_VALUE,
-										label: "  (clear override)",
-										description: `Revert to global default (${config.thinkingLevel})`,
+										label: `${stale ? "✓ " : "  "}(clear override)`,
+										description: stale
+											? `"${activeLevel}" is no longer supported by this model; revert to global default (${config.thinkingLevel})`
+											: `Revert to global default (${config.thinkingLevel})`,
 									});
 								}
 								return items;
 							},
-							preselect: (ctx) => currentModelThinkingLevels[ctx.model],
+							// Falls back to the clear item for a stale override: landing on the first
+							// level instead would let Enter overwrite an override the user cannot see.
+							preselect: (ctx) => {
+								const activeLevel = currentModelThinkingLevels[ctx.model];
+								if (activeLevel === undefined) return undefined;
+								return supportedLevelsFor(ctx.model).includes(activeLevel) ? activeLevel : CLEAR_OVERRIDE_VALUE;
+							},
 						},
 					];
 
