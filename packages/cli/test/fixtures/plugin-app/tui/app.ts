@@ -82,7 +82,10 @@ export class MinimalCodingAgentTui {
 		for (const [id, handler] of this.actions) {
 			this.editor.onAction(
 				id,
-				() => void Promise.resolve(handler()).catch((error: unknown) => this.showError(error)),
+				() =>
+					void Promise.resolve()
+						.then(() => handler())
+						.catch((error: unknown) => this.showError(error)),
 			);
 		}
 		this.editor.onAction("app.clear", () => this.handleClear());
@@ -170,7 +173,11 @@ export class MinimalCodingAgentTui {
 			this.transcript.addChild(new Spacer(1));
 			this.transcript.addChild(new Text(`${accent("> ")}${value}`, 1, 0));
 		}
-		void Promise.resolve(command.run(args)).catch((error: unknown) => this.showError(error));
+		// Invoke inside the chain: a command that throws before returning its promise would
+		// otherwise escape past the catch.
+		void Promise.resolve()
+			.then(() => command.run(args))
+			.catch((error: unknown) => this.showError(error));
 		this.tui.requestRender();
 	}
 

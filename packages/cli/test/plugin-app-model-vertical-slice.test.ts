@@ -62,6 +62,9 @@ describe("app-as-plugins model service", () => {
 			thinkingLevel: "off",
 		});
 		expect(runtime.driver.use(Settings).get("defaultModel")).toEqual({ provider: "acme", modelId: "fresh" });
+		// Two states repeat by design: `ProviderRegistry.refresh` rebuilds the catalog while the
+		// plugin's status is still "refreshing", and `select` writes the configuration after it is
+		// "done". Both are catalog/configuration writes, not extra refresh transitions.
 		expect(observed).toEqual(["idle", "refreshing", "refreshing", "done", "done"]);
 		expect(runtime.driver.trace).toEqual(["rpc:models.refresh", "rpc:models.select"]);
 		unsubscribe();

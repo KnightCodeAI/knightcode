@@ -18,10 +18,16 @@ async function main(): Promise<void> {
 	const stop = () => app.stop();
 	process.once("SIGINT", stop);
 	process.once("SIGTERM", stop);
-	app.start();
-	await app.done;
-	process.removeListener("SIGINT", stop);
-	process.removeListener("SIGTERM", stop);
+	try {
+		app.start();
+		await app.done;
+	} finally {
+		// start() puts the terminal in raw mode, so a throw after it must still restore the
+		// terminal and drop the signal handlers instead of leaving the process wedged.
+		app.stop();
+		process.removeListener("SIGINT", stop);
+		process.removeListener("SIGTERM", stop);
+	}
 }
 
 main().catch((error: unknown) => {

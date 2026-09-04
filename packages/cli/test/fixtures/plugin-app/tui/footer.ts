@@ -38,6 +38,11 @@ export class PluginFooter implements Component {
 		const left = `updates ${this.updateCount()} · catalogue r${state.catalog.revision}`;
 		const right = truncateToWidth(model, Math.max(0, width - visibleWidth(left) - 2), "");
 		const padding = " ".repeat(Math.max(2, width - visibleWidth(left) - visibleWidth(right)));
-		return [truncateToWidth(dim(displayCwd), width, dim("...")), dim(`${left}${padding}${right}`)];
+		// `left` is never truncated and `padding` has a floor, so a narrow viewport needs the whole
+		// composed line clipped to keep the footer inside the screen.
+		return [
+			truncateToWidth(dim(displayCwd), width, dim("...")),
+			dim(truncateToWidth(`${left}${padding}${right}`, width, "")),
+		];
 	}
 }

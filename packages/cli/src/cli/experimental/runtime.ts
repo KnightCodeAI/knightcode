@@ -10,7 +10,7 @@ import { createUnixTransportFactory, discoverUnixServers, type UnixServerRoute }
 import { isServerId } from "@knightcode/protocol";
 import type { KnightServer, KnightServerHost } from "@knightcode/server";
 import { createUnixServer, getUnixSocketPath } from "@knightcode/server/unix";
-import { getAgentDir } from "../../config.ts";
+import { CONFIG_DIR_NAME, getAgentDir } from "../../config.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import type { ClientCommand } from "./commands/client.ts";
 import { DEMO_SESSION_IDS } from "./demo-sessions.ts";
@@ -41,7 +41,6 @@ export type ExperimentalClientResult =
 export interface StartExperimentalMemoryServerOptions {
 	/** Directory for server-addressed Unix sockets. Defaults to a short, private per-user runtime directory. */
 	readonly directory?: string;
-	readonly path?: string;
 	readonly serverId?: string;
 	/** Durable session directory. Defaults to the experimental directory under the configured agent directory. */
 	readonly sessionDir?: string;
@@ -99,12 +98,11 @@ export async function startExperimentalMemoryServer(
 			};
 		},
 	};
-	let socketPath = options.path;
-	if (socketPath === undefined) {
-		const socketDirectory = options.directory ?? getExperimentalSocketDirectory();
-		await ensurePrivateSocketDirectory(socketDirectory);
-		socketPath = getUnixSocketPath(serverId, socketDirectory);
-	}
+	// Discovery scans a directory for `<serverId>.sock`, so the socket path is always derived from
+	// the identity rather than supplied.
+	const socketDirectory = options.directory ?? getExperimentalSocketDirectory();
+	await ensurePrivateSocketDirectory(socketDirectory);
+	const socketPath = getUnixSocketPath(serverId, socketDirectory);
 	const server = createUnixServer(host, { serverId, path: socketPath, mode: 0o600 });
 	try {
 		await server.start();
@@ -151,7 +149,7 @@ export async function startExperimentalMemoryServer(
 export async function startExperimentalServerGeneration(
 	options: StartExperimentalServerGenerationOptions = {},
 ): Promise<ExperimentalMemoryServer> {
-	const directory = options.directory ?? join(homedir(), ".pi", "server");
+	const directory = options.directory ?? join(homedir(), CONFIG_DIR_NAME, "server");
 	const socketDirectory = options.socketDirectory ?? getExperimentalSocketDirectory();
 	const { serverId, release } = await acquireExperimentalServerProfile(directory);
 	let runtime: ExperimentalMemoryServer;
@@ -160,8 +158,7 @@ export async function startExperimentalServerGeneration(
 		const socketPath = getUnixSocketPath(serverId, socketDirectory);
 		await drainExistingGeneration(serverId, socketPath);
 		runtime = await startExperimentalMemoryServer({
-			directory,
-			path: socketPath,
+			directory: socketDirectory,
 			serverId,
 			sessionDir: options.sessionDir,
 		});

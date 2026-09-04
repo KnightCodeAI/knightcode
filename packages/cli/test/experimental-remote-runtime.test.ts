@@ -11,8 +11,13 @@ import {
 const servers = new Set<ExperimentalMemoryServer>();
 const directories = new Set<string>();
 
+// Unix socket paths are capped at ~103 bytes, and these directories hold `<uuid>.sock` files.
+// `os.tmpdir()` on macOS is a long `/var/folders/...` path that blows that budget, so these
+// suites use the short shared root that the Unix transports themselves target.
+const SOCKET_ROOT = "/tmp";
+
 async function makeServer(): Promise<{ directory: string; runtime: ExperimentalMemoryServer }> {
-	const directory = await mkdtemp(join("/tmp", "pes-"));
+	const directory = await mkdtemp(join(SOCKET_ROOT, "pes-"));
 	directories.add(directory);
 	const runtime = await startExperimentalMemoryServer({ directory });
 	servers.add(runtime);
@@ -29,22 +34,20 @@ afterEach(async () => {
 // The demo runtime binds a Unix domain socket, which is unavailable on Windows
 // (`listen EACCES`), as the server and client Unix suites already account for.
 describe.skipIf(process.platform === "win32")("experimental memory server composition", () => {
-	test("does not change permissions on an explicit socket-path parent", async () => {
-		const directory = await mkdtemp(join("/tmp", "pep-"));
+	test("derives the socket path from the server id and privatizes its directory", async () => {
+		const directory = await mkdtemp(join(SOCKET_ROOT, "pep-"));
 		directories.add(directory);
 		await chmod(directory, 0o750);
 		const serverId = "00000000-0000-4000-8000-000000000001";
-		const runtime = await startExperimentalMemoryServer({
-			path: join(directory, `${serverId}.sock`),
-			serverId,
-		});
+		const runtime = await startExperimentalMemoryServer({ directory, serverId });
 		servers.add(runtime);
 
-		expect((await lstat(directory)).mode & 0o777).toBe(0o750);
+		expect(runtime.socketPath).toBe(join(directory, `${serverId}.sock`));
+		expect((await lstat(directory)).mode & 0o777).toBe(0o700);
 	});
 
 	test("resolves the configured session directory before starting workers", async () => {
-		const directory = await mkdtemp(join("/tmp", "pes-"));
+		const directory = await mkdtemp(join(SOCKET_ROOT, "pes-"));
 		directories.add(directory);
 		const runtime = await startExperimentalMemoryServer({ directory, sessionDir: "relative/sessions" });
 		servers.add(runtime);
@@ -123,7 +126,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 	});
 
 	test("serializes concurrent launchers so only one generation remains active", async () => {
-		const directory = await mkdtemp(join("/tmp", "pel-"));
+		const directory = await mkdtemp(join(SOCKET_ROOT, "pel-"));
 		directories.add(directory);
 		const generations = await Promise.all([
 			startExperimentalServerGeneration({ directory, socketDirectory: directory }),
@@ -148,8 +151,8 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 	});
 
 	test("starts a clean replacement and requires explicit reattachment", async () => {
-		const firstDirectory = await mkdtemp(join("/tmp", "per-"));
-		const otherDirectory = await mkdtemp(join("/tmp", "per-"));
+		const firstDirectory = await mkdtemp(join(SOCKET_ROOT, "per-"));
+		const otherDirectory = await mkdtemp(join(SOCKET_ROOT, "per-"));
 		directories.add(firstDirectory);
 		directories.add(otherDirectory);
 		const first = await startExperimentalServerGeneration({
@@ -196,7 +199,7 @@ describe.skipIf(process.platform === "win32")("experimental memory server compos
 	});
 
 	test("reports missing and ambiguous session selections", async () => {
-		const sharedDirectory = await mkdtemp(join("/tmp", "ped-"));
+		const sharedDirectory = await mkdtemp(join(SOCKET_ROOT, "ped-"));
 		directories.add(sharedDirectory);
 		const firstShared = await startExperimentalMemoryServer({ directory: sharedDirectory });
 		const secondShared = await startExperimentalMemoryServer({ directory: sharedDirectory });

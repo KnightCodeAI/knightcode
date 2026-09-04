@@ -105,7 +105,11 @@ export class SessionClient {
 				{},
 				{
 					get: (_target, property) => {
-						if (typeof property !== "string") return undefined;
+						// Everything unknown becomes an RPC call below, so a service proxy must not answer
+						// for `then` (which would make it a thenable) or for Object.prototype members.
+						if (typeof property !== "string" || property === "then" || property in Object.prototype) {
+							return undefined;
+						}
 						try {
 							return this.store.get(service.id, property);
 						} catch {

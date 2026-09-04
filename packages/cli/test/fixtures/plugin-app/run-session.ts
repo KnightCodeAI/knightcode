@@ -6,6 +6,8 @@ async function main(): Promise<void> {
 	const host = process.argv[2] ?? "127.0.0.1";
 	const port = Number(process.argv[3] ?? "7777");
 	const plugins = createCodingAgentPlugins(async (signal) => {
+		// An abort listener never fires for a signal that is already aborted.
+		if (signal.aborted) throw signal.reason;
 		await new Promise<void>((resolve, reject) => {
 			const timeout = setTimeout(resolve, 750);
 			signal.addEventListener(

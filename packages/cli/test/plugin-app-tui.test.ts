@@ -154,17 +154,20 @@ describe("remote plugin app TUI", () => {
 		await runtime.driver.use(Models).select({ provider: "acme", modelId: "base" });
 		const client = new SessionClient(transport);
 		await client.ready;
-		const models = client.use(Models);
+		try {
+			const models = client.use(Models);
 
-		expect(models.state.value.configuration).toEqual({
-			model: { provider: "acme", modelId: "base" },
-			thinkingLevel: "high",
-		});
-		expect(client.store.updates).toBe(1);
-		const observed: string[] = [];
-		models.state.subscribe((state) => observed.push(state.configuration.model?.modelId ?? "none"));
-		expect(observed).toEqual(["base"]);
-		client.close();
-		runtime.close();
+			expect(models.state.value.configuration).toEqual({
+				model: { provider: "acme", modelId: "base" },
+				thinkingLevel: "high",
+			});
+			expect(client.store.updates).toBe(1);
+			const observed: string[] = [];
+			models.state.subscribe((state) => observed.push(state.configuration.model?.modelId ?? "none"));
+			expect(observed).toEqual(["base"]);
+		} finally {
+			client.close();
+			runtime.close();
+		}
 	});
 });

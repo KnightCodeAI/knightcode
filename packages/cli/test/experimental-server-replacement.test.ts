@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { runExperimentalClient } from "../src/cli/experimental/runtime.ts";
 
 const cliPath = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
@@ -37,7 +37,19 @@ async function startServer(home: string): Promise<RunningCli> {
 	return { child, output: () => output, errors: () => errors };
 }
 
-async function waitForOutput(process: RunningCli, pattern: RegExp, timeoutMs = 10_000): Promise<RegExpMatchArray> {
+// The first `Server:` line only appears after the child cold-boots the whole CLI through tsx,
+// acquires its profile, drains any previous generation, and starts its server. A slow CI machine
+// takes far longer than a local one, so this budget is generous, and the file's own timeout sits
+// above it so a stall reports the child's output instead of a bare test timeout.
+const OUTPUT_TIMEOUT_MS = 30_000;
+const EXIT_TIMEOUT_MS = 10_000;
+vi.setConfig({ testTimeout: 4 * OUTPUT_TIMEOUT_MS });
+
+async function waitForOutput(
+	process: RunningCli,
+	pattern: RegExp,
+	timeoutMs = OUTPUT_TIMEOUT_MS,
+): Promise<RegExpMatchArray> {
 	const existing = process.output().match(pattern);
 	if (existing) return existing;
 	return new Promise((resolve, reject) => {
@@ -68,8 +80,6 @@ async function waitForOutput(process: RunningCli, pattern: RegExp, timeoutMs = 1
 		process.child.once("exit", exited);
 	});
 }
-
-const EXIT_TIMEOUT_MS = 10_000;
 
 // A child that ignores SIGTERM - hung in runtime.close() on a lingering session
 // worker, say - would otherwise leave `once(child, "exit")` pending forever, and an

@@ -11,6 +11,9 @@ class JsonLineSocket<Incoming, Outgoing> {
 	constructor(socket: Socket) {
 		this.socket = socket;
 		socket.setEncoding("utf8");
+		// Both peers reach this constructor, so one handler covers the accepted server sockets and
+		// the client socket: an abrupt disconnect (ECONNRESET/EPIPE) must not throw out of 'error'.
+		socket.on("error", () => socket.destroy());
 		socket.on("data", (chunk: string) => {
 			this.buffer += chunk;
 			for (;;) {
@@ -19,7 +22,14 @@ class JsonLineSocket<Incoming, Outgoing> {
 				const line = this.buffer.slice(0, newline);
 				this.buffer = this.buffer.slice(newline + 1);
 				if (!line) continue;
-				const message = JSON.parse(line) as Incoming;
+				let message: Incoming;
+				try {
+					message = JSON.parse(line) as Incoming;
+				} catch {
+					// A peer that cannot frame JSON cannot be trusted with the rest of the stream.
+					socket.destroy();
+					return;
+				}
 				for (const listener of this.listeners) listener(message);
 			}
 		});
