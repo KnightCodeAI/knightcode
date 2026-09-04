@@ -513,8 +513,11 @@ export class TuiMainScreen extends TuiBase implements TUI {
 
 			output.append("\x1b[2K"); // Clear current line
 			if (!isImage && visibleWidth(line) > width) {
-				// Log all lines to crash file for debugging
-				const crashLogPath = path.join(this.logDirectory ?? os.tmpdir(), "knightcode-tui-crash.log");
+				// Log all lines to crash file for debugging. Shared OS temp uses a
+				// per-process name so concurrent TUI crashes do not clobber each other.
+				const crashLogDir = this.logDirectory ?? os.tmpdir();
+				const crashLogName = this.logDirectory ? "knightcode-tui-crash.log" : `knightcode-tui-crash-${process.pid}.log`;
+				const crashLogPath = path.join(crashLogDir, crashLogName);
 				const crashData = [
 					`Crash at ${new Date().toISOString()}`,
 					`Terminal width: ${width}`,

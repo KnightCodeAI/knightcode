@@ -227,7 +227,7 @@ describe("TUI crash dump without configured log directory", () => {
 		// than sharing the real one with concurrent test runs. os.tmpdir() reads
 		// TMPDIR on POSIX and TEMP/TMP on Windows, so override all three.
 		const crashDir = mkdtempSync(join(tmpdir(), "knightcode-tui-crash-"));
-		const crashLogPath = join(crashDir, "knightcode-tui-crash.log");
+		const crashLogPath = join(crashDir, `knightcode-tui-crash-${process.pid}.log`);
 		const restoreTmpdirEnv = overrideEnv(["TMPDIR", "TEMP", "TMP"], crashDir);
 		try {
 			const terminal = new VirtualTerminal(40, 10);

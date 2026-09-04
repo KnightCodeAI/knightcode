@@ -347,7 +347,7 @@ export abstract class TuiBase extends Container implements TUI {
 	private pendingOsc11BackgroundQueries: PendingOsc11BackgroundQuery[] = [];
 	private terminalColorSchemeListeners = new Set<(scheme: TerminalColorScheme) => void>();
 	private terminalColorSchemeNotificationsEnabled = false;
-	/** Directory for debug/crash logs. When undefined, debug logging is disabled and crash dumps fall back to the OS temp directory. */
+	/** Directory for debug/crash logs. When undefined, debug logging is disabled and crash dumps fall back to a per-process file in the OS temp directory. */
 	protected readonly logDirectory: string | undefined;
 
 	// Overlay stack for modal components rendered on top of base content
