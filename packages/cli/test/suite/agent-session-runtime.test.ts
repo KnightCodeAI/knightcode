@@ -25,6 +25,17 @@ import type {
 type RecordedSessionEvent =
 	SessionBeforeSwitchEvent | SessionBeforeForkEvent | SessionShutdownEvent | SessionStartEvent;
 
+/**
+ * SessionManager derives its directory from the cwd under the real agent dir, not from
+ * the agentDir these tests pass, so session files land outside the temp cwd and have to
+ * be removed explicitly. Without this every run leaves a directory behind, and any
+ * fixture written into one shows up in session listings.
+ */
+function removeSessionDir(sessionManager: { getSessionDir(): string }): void {
+	const dir = sessionManager.getSessionDir();
+	if (dir && existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+}
+
 describe("AgentSessionRuntime characterization", () => {
 	const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -108,9 +119,13 @@ describe("AgentSessionRuntime characterization", () => {
 		});
 		await runtime.session.bindExtensions({});
 
+		const initialSessionManager = runtime.session.sessionManager;
 		cleanups.push(async () => {
+			const finalSessionManager = runtime.session.sessionManager;
 			await runtime.dispose();
 			faux.unregister();
+			removeSessionDir(initialSessionManager);
+			removeSessionDir(finalSessionManager);
 			if (existsSync(tempDir)) {
 				rmSync(tempDir, { recursive: true, force: true });
 			}
@@ -601,7 +616,9 @@ describe("AgentSessionRuntime characterization", () => {
 			sessionManager: SessionManager.create(secondDir),
 		});
 		cleanups.push(async () => {
+			const otherSessionManager = otherRuntime.session.sessionManager;
 			await otherRuntime.dispose();
+			removeSessionDir(otherSessionManager);
 		});
 		await otherRuntime.session.prompt("other");
 		const otherSessionFile = otherRuntime.session.sessionFile!;
@@ -670,7 +687,9 @@ describe("AgentSessionRuntime characterization", () => {
 			sessionManager: SessionManager.create(otherDir),
 		});
 		cleanups.push(async () => {
+			const otherSessionManager = otherRuntime.session.sessionManager;
 			await otherRuntime.dispose();
+			removeSessionDir(otherSessionManager);
 		});
 		await otherRuntime.session.setModel(faux.getModel("faux-2")!);
 		otherRuntime.session.setThinkingLevel("off");
