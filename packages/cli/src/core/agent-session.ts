@@ -305,16 +305,14 @@ const ABORTED = Symbol("aborted");
  * result is simply discarded.
  */
 function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
-	return Promise.race([
-		promise,
-		new Promise<typeof ABORTED>((resolve) => {
-			if (signal.aborted) {
-				resolve(ABORTED);
-			} else {
-				signal.addEventListener("abort", () => resolve(ABORTED), { once: true });
-			}
-		}),
-	]);
+	if (signal.aborted) return Promise.resolve(ABORTED);
+	return new Promise<T | typeof ABORTED>((resolve, reject) => {
+		const onAbort = () => resolve(ABORTED);
+		signal.addEventListener("abort", onAbort, { once: true });
+		// Dropped once the race is decided either way, so winning does not leave the
+		// listener - and the promise and resolve closure it captures - on the signal.
+		promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+	});
 }
 
 function estimateMessagesTokens(messages: AgentMessage[]): number {
