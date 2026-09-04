@@ -183,16 +183,27 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 			let buffer = "";
 			let sawTerminalEvent = false;
 
-			const processLine = (line: string): void => {
-				if (!line.startsWith("data: ")) return;
+			// Parsing and handling stay separate so the flush below can guard the parse
+			// alone: only invalid JSON is expected from a truncated frame, while a
+			// failure inside processProxyEvent is a real error the caller must see.
+			const parseLine = (line: string): ProxyAssistantMessageEvent | undefined => {
+				if (!line.startsWith("data: ")) return undefined;
 				const data = line.slice(6).trim();
-				if (!data) return;
-				const proxyEvent = JSON.parse(data) as ProxyAssistantMessageEvent;
+				if (!data) return undefined;
+				return JSON.parse(data) as ProxyAssistantMessageEvent;
+			};
+
+			const handleProxyEvent = (proxyEvent: ProxyAssistantMessageEvent): void => {
 				const event = processProxyEvent(proxyEvent, partial);
 				if (event) {
 					if (event.type === "done" || event.type === "error") sawTerminalEvent = true;
 					stream.push(event);
 				}
+			};
+
+			const processLine = (line: string): void => {
+				const proxyEvent = parseLine(line);
+				if (proxyEvent) handleProxyEvent(proxyEvent);
 			};
 
 			while (true) {
@@ -223,11 +234,13 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 			// the terminal-event check rather than reporting a parse error.
 			buffer += decoder.decode();
 			if (buffer) {
+				let trailing: ProxyAssistantMessageEvent | undefined;
 				try {
-					processLine(buffer);
+					trailing = parseLine(buffer);
 				} catch {
 					// Partial trailing frame; treated as no terminal event below.
 				}
+				if (trailing) handleProxyEvent(trailing);
 			}
 
 			if (!sawTerminalEvent) {
