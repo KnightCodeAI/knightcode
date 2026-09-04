@@ -258,12 +258,13 @@ async function probeUnixService(route: UnixServiceRoute, timeoutMs: number): Pro
 		]);
 		return route;
 	} catch (error) {
-		// Missing/refused sockets are stale or shutting down. Protocol failures mean
-		// the endpoint is not the advertised Pi service. Both are safe to omit.
+		// Missing/refused sockets are stale or shutting down, and an endpoint that
+		// drops the probe at any point is equally unusable. Protocol failures mean
+		// the endpoint is not the advertised Pi service. All are safe to omit.
 		if (
 			error instanceof UnixDiscoveryTimeoutError ||
 			error instanceof ProtocolValidationError ||
-			(error instanceof KnightDisconnectedError && error.cause === undefined) ||
+			error instanceof KnightDisconnectedError ||
 			(error instanceof KnightServerError && error.code === "version") ||
 			isErrorCode(error, "ENOENT") ||
 			isErrorCode(error, "ECONNREFUSED") ||
