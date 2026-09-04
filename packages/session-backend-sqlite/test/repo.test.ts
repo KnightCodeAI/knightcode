@@ -1,6 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { SqliteDatabase } from "../src/index.ts";
 import { createNodeSqliteFactory, SqliteSessionRepo, sql } from "../src/index.ts";
@@ -8,7 +8,7 @@ import { createNodeSqliteFactory, SqliteSessionRepo, sql } from "../src/index.ts
 type TestMetadata = { id: string; path: string; createdAt: number; storageVersion: number };
 
 async function withTempDir<T>(run: (directory: string) => Promise<T>): Promise<T> {
-	const directory = await mkdtemp(join(tmpdir(), "pi-sqlite-session-"));
+	const directory = await mkdtemp(join(tmpdir(), "knightcode-sqlite-session-"));
 	try {
 		return await run(directory);
 	} finally {
@@ -100,6 +100,31 @@ describe("SqliteSessionRepo", () => {
 				sql`INSERT INTO writer_lease (owner_id, fence, expires_at_ms) VALUES (${"external"}, ${1}, ${1_000})`.run(db);
 			});
 			await expect(repo.open(metadata)).rejects.toThrow("already claimed");
+		});
+	});
+});
+
+describe("SqliteSessionRepo safety", () => {
+	it("leaves an existing session untouched when create is given a duplicate id", async () => {
+		await withTempDir(async (directory) => {
+			const repo = new SqliteSessionRepo({ directory, databaseFactory: createNodeSqliteFactory() });
+			const first = (await repo.create({ id: "duplicate" })) as TestMetadata;
+
+			await expect(repo.create({ id: "duplicate" })).rejects.toThrow();
+
+			await access(first.path);
+			const reopened = (await repo.open(first as never)) as TestMetadata;
+			expect(reopened.id).toBe("duplicate");
+		});
+	});
+
+	it("keeps a traversing id inside the repository directory", async () => {
+		await withTempDir(async (directory) => {
+			const repo = new SqliteSessionRepo({ directory, databaseFactory: createNodeSqliteFactory() });
+			const metadata = (await repo.create({ id: "../escape" })) as TestMetadata;
+
+			expect(resolve(dirname(metadata.path))).toBe(resolve(directory));
+			await access(metadata.path);
 		});
 	});
 });

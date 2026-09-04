@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, rm } from "node:fs/promises";
+import { access, mkdir, open as openFile, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { SessionCreateOptions } from "@knightcode/agent";
 import { uuidv7 } from "@knightcode/ai";
@@ -28,8 +28,16 @@ export interface SqliteSessionRepoOptions {
 	now?: () => number;
 }
 
+const SAFE_SESSION_FILE_ID = /^[A-Za-z0-9._-]+$/;
+
+/** Keeps a session id from escaping the directory or colliding with the filesystem's rules. */
+function sessionFileName(id: string): string {
+	if (SAFE_SESSION_FILE_ID.test(id) && id !== "." && id !== "..") return `${id}${SQLITE_SESSION_EXTENSION}`;
+	return `~${Buffer.from(id, "utf16le").toString("base64url")}${SQLITE_SESSION_EXTENSION}`;
+}
+
 function sessionPath(directory: string, id: string): string {
-	return join(directory, `${id}${SQLITE_SESSION_EXTENSION}`);
+	return join(directory, sessionFileName(id));
 }
 
 function sessionIdFromPath(path: string): string {
@@ -62,8 +70,13 @@ export class SqliteSessionRepo {
 		this.reserveId(id);
 		const path = sessionPath(this.directory, id);
 		let db: SqliteDatabase | undefined;
+		let reservedFile = false;
 		let initialized = false;
 		try {
+			// Exclusive create: a duplicate id fails here rather than opening, and later deleting,
+			// the database that already holds that session.
+			await (await openFile(path, "wx")).close();
+			reservedFile = true;
 			const activeDb = await this.databaseFactory.open(path);
 			db = activeDb;
 			configureConnection(activeDb);
@@ -86,7 +99,7 @@ export class SqliteSessionRepo {
 			initialized = true;
 			return metadata;
 		} catch (error) {
-			if (!initialized) await rm(path, { force: true });
+			if (reservedFile && !initialized) await rm(path, { force: true });
 			throw error;
 		} finally {
 			db?.close();

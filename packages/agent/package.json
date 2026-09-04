@@ -21,6 +21,10 @@
     "yaml": "2.9.0"
   },
   "scripts": {
-    "test": "vitest --run"
+    "bench:session:timing": "vitest bench --run --config vitest.benchmark.config.ts",
+    "bench:session:memory": "tsx --tsconfig benchmark/tsconfig.json benchmark/session/loaded-footprint.ts",
+    "bench:session:allocations": "tsx --tsconfig benchmark/tsconfig.json benchmark/session/allocation-profile.ts",
+    "test": "vitest --run",
+    "test:session:conformance": "vitest --run --config vitest.harness.config.ts test/harness/memory-conformance.test.ts"
   }
 }
