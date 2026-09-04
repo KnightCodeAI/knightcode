@@ -15,7 +15,7 @@ describe.skipIf(process.platform === "win32")("TrustSelectorComponent", () => {
 		setKeybindings(new KeybindingsManager());
 	});
 
-	it("marks the saved trusted decision", () => {
+	it("keeps the saved trusted decision marked while browsing", () => {
 		const selector = new TrustSelectorComponent({
 			cwd: "/project",
 			savedDecision: { path: "/project", decision: true },
@@ -24,12 +24,16 @@ describe.skipIf(process.platform === "win32")("TrustSelectorComponent", () => {
 			onCancel: () => {},
 		});
 
-		const output = stripAnsi(selector.render(120).join("\n"));
-
+		let output = stripAnsi(selector.render(120).join("\n"));
 		expect(output).toContain("Saved decision: trusted (/project)");
 		expect(output).toContain("Current session: trusted");
-		expect(output).toContain("Trust ✓");
-		expect(output).not.toContain("Do not trust ✓");
+		expect(output).toContain("→ ✓ Trust");
+
+		selector.handleInput("\x1b[B");
+		output = stripAnsi(selector.render(120).join("\n"));
+		expect(output).toContain("✓ Trust");
+		expect(output).toContain("→   Trust parent folder (/)");
+		expect(output).not.toContain("✓ Do not trust");
 	});
 
 	it("selects a trust decision", () => {
@@ -73,7 +77,7 @@ describe.skipIf(process.platform === "win32")("TrustSelectorComponent", () => {
 
 		const output = stripAnsi(selector.render(120).join("\n"));
 		expect(output).toContain("Saved decision: trusted (inherited from /parent)");
-		expect(output).toContain("Trust parent folder (/parent) ✓");
+		expect(output).toContain("✓ Trust parent folder (/parent)");
 
 		selector.handleInput("\n");
 

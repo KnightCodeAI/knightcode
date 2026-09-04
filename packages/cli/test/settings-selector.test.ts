@@ -1,5 +1,5 @@
 import { setKeybindings } from "@knightcode/tui";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import {
 	type SettingsCallbacks,
@@ -7,11 +7,19 @@ import {
 	SettingsSelectorComponent,
 } from "../src/modes/interactive/components/settings-selector.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
+import { createHarness, type Harness } from "./suite/harness.ts";
 
 describe("SettingsSelectorComponent", () => {
+	let harness: Harness | undefined;
 	beforeAll(() => {
 		initTheme("dark");
 		setKeybindings(new KeybindingsManager());
+	});
+
+	afterEach(() => {
+		harness?.cleanup();
+		harness = undefined;
 	});
 
 	it("cycles through fullscreen settings", () => {
@@ -47,5 +55,62 @@ describe("SettingsSelectorComponent", () => {
 		expect(onScrollbarChange.mock.calls.flat()).toEqual(["always", "hidden", "auto"]);
 		cycle("Fullscreen copy on select", 2);
 		expect(onCopyOnSelectChange.mock.calls.flat()).toEqual([false, true]);
+	});
+
+	it("keeps the configured per-model thinking level marked while browsing", async () => {
+		harness = await createHarness({
+			models: [{ id: "thinking-model", reasoning: true }],
+		});
+		const model = harness.getModel("thinking-model")!;
+		const modelKey = `${model.provider}/${model.id}`;
+		const config = {
+			defaultModel: modelKey,
+			availableDefaultModels: [model],
+			thinkingLevel: "high",
+			modelThinkingLevels: { [modelKey]: "medium" },
+		} as unknown as SettingsConfig;
+		const callbacks = { onCancel: () => {} } as unknown as SettingsCallbacks;
+		const list = new SettingsSelectorComponent(config, callbacks).getSettingsList();
+
+		list.selectItem("model-thinking");
+		list.handleInput("\r");
+		list.handleInput("\r");
+
+		let output = stripAnsi(list.render(120).join("\n"));
+		expect(output).toContain("→ ✓ medium");
+		expect(output).toContain("    (clear override)");
+
+		list.handleInput("\x1b[B");
+		output = stripAnsi(list.render(120).join("\n"));
+		expect(output).toContain("  ✓ medium");
+		expect(output).toContain("→   high");
+	});
+
+	it("surfaces a per-model override the model no longer supports", async () => {
+		harness = await createHarness({
+			models: [{ id: "plain-model", reasoning: false }],
+		});
+		const model = harness.getModel("plain-model")!;
+		const modelKey = `${model.provider}/${model.id}`;
+		const config = {
+			defaultModel: modelKey,
+			availableDefaultModels: [model],
+			thinkingLevel: "high",
+			// Configured while the model still reported reasoning; it no longer does,
+			// so "medium" is not among the levels the list can offer.
+			modelThinkingLevels: { [modelKey]: "medium" },
+		} as unknown as SettingsConfig;
+		const callbacks = { onCancel: () => {} } as unknown as SettingsCallbacks;
+		const list = new SettingsSelectorComponent(config, callbacks).getSettingsList();
+
+		list.selectItem("model-thinking");
+		list.handleInput("\r");
+		list.handleInput("\r");
+
+		const output = stripAnsi(list.render(120).join("\n"));
+		// The override is named and the cursor sits on the clear item, so Enter clears
+		// it rather than silently overwriting it with the first level in the list.
+		expect(output).toContain("→ ✓ (clear override)");
+		expect(output).toContain('"medium" is no longer supported by this model');
 	});
 });
