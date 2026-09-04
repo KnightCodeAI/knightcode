@@ -1,6 +1,6 @@
 {
   "name": "@knightcodeai/cli",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "KnightCode — a local, BYOK terminal coding agent powered by OpenRouter.",
   "type": "module",
   "repository": {
@@ -38,11 +38,11 @@
     "test": "vitest --run"
   },
   "optionalDependencies": {
-    "@knightcodeai/cli-linux-x64": "0.5.3",
-    "@knightcodeai/cli-linux-arm64": "0.5.3",
-    "@knightcodeai/cli-darwin-x64": "0.5.3",
-    "@knightcodeai/cli-darwin-arm64": "0.5.3",
-    "@knightcodeai/cli-win32-x64": "0.5.3",
+    "@knightcodeai/cli-linux-x64": "0.5.4",
+    "@knightcodeai/cli-linux-arm64": "0.5.4",
+    "@knightcodeai/cli-darwin-x64": "0.5.4",
+    "@knightcodeai/cli-darwin-arm64": "0.5.4",
+    "@knightcodeai/cli-win32-x64": "0.5.4",
     "@mariozechner/clipboard": "0.3.9"
   },
   "devDependencies": {
