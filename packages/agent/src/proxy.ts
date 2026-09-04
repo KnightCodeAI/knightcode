@@ -217,10 +217,17 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 			}
 
 			// The final event may not be newline-terminated; flush the decoder and
-			// process whatever is left in the buffer.
+			// process whatever is left in the buffer. A server that drops the
+			// connection mid-frame leaves invalid JSON here, which is the same
+			// dropped-response failure as an empty buffer, so let it fall through to
+			// the terminal-event check rather than reporting a parse error.
 			buffer += decoder.decode();
 			if (buffer) {
-				processLine(buffer);
+				try {
+					processLine(buffer);
+				} catch {
+					// Partial trailing frame; treated as no terminal event below.
+				}
 			}
 
 			if (!sawTerminalEvent) {

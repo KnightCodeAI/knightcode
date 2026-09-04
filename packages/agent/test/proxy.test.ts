@@ -124,4 +124,31 @@ describe("streamProxy", () => {
 		expect(result.stopReason).toBe("error");
 		expect(result.errorMessage).toContain("Connection closed by proxy server");
 	});
+
+	it("reports a connection drop rather than a parse error when the last frame is truncated", async () => {
+		// The common shape of a dropped response: the server cut the connection
+		// part-way through writing the final event's JSON.
+		const body = `data: ${JSON.stringify({ type: "start" })}\n\ndata: {"type":"do`;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => new Response(body, { status: 200 })),
+		);
+
+		const stream = streamProxy(
+			model,
+			{ systemPrompt: "", messages: [] },
+			{
+				authToken: "test-token",
+				proxyUrl: "https://proxy.example.com",
+			},
+		);
+		const events: AssistantMessageEvent[] = [];
+		for await (const event of stream) events.push(event);
+		const result = await stream.result();
+
+		expect(events.map((event) => event.type)).toEqual(["start", "error"]);
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toContain("Connection closed by proxy server");
+		expect(result.errorMessage).not.toContain("JSON");
+	});
 });
