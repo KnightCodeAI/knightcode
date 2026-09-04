@@ -1,4 +1,5 @@
 import { deepStrictEqual, rejects, strictEqual } from "node:assert/strict";
+import type { AssistantMessage, StopReason } from "@knightcode/ai";
 import type { LaneConfiguration, LaneState, UsageRow } from "../../types.ts";
 import type { SessionRepoConformanceCase, SessionRepoFixture, SessionRepoFixtureFactory } from "../types.ts";
 
@@ -14,6 +15,32 @@ const configuration = {
 	thinkingLevel: "off",
 	activeToolNames: ["read"],
 } satisfies LaneConfiguration;
+
+function assistantMessage(stopReason: StopReason): AssistantMessage {
+	return {
+		role: "assistant",
+		content:
+			stopReason === "toolUse"
+				? [{ type: "toolCall", id: "call", name: "read", arguments: {} }]
+				: [{ type: "text", text: stopReason }],
+		api: "anthropic-messages",
+		provider: "anthropic",
+		model: "claude-sonnet-4-5",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason,
+		...(stopReason === "deferred"
+			? { deferred: { provider: "anthropic", modelId: "claude-sonnet-4-5", api: "anthropic-messages", id: "job" } }
+			: {}),
+		timestamp: 1,
+	};
+}
 
 function usageRow(): Omit<UsageRow, "seq"> {
 	return {
@@ -91,8 +118,11 @@ export function createSessionRepoConformance(
 			);
 			await rejects(repo.open(first.metadata));
 			await first.close();
+			await rejects(first.getName());
 			const reopened = await repo.open(first.metadata);
+			strictEqual(reopened === first, false);
 			strictEqual(await reopened.getName(), "preserved");
+			await rejects(repo.open(first.metadata));
 			await reopened.close();
 		}),
 		createCase(factory, "lifecycle", "deletes closed sessions without affecting other sessions", async ({ repo }) => {
@@ -120,6 +150,48 @@ export function createSessionRepoConformance(
 				if (result.status === "fulfilled") await result.value.close();
 			}
 			await source.close();
+		}),
+
+		createCase(
+			factory,
+			"messages",
+			"rejects pending assistant messages without changing the tree",
+			async ({ repo }) => {
+				const session = await repo.create({ id: "session" });
+
+				await rejects(session.appendMessage(assistantMessage("pending")));
+
+				strictEqual(await session.getLeafId(), null);
+				deepStrictEqual(await session.findEntries(), []);
+				await session.close();
+			},
+		),
+		createCase(factory, "messages", "preserves every settled assistant stop reason", async ({ repo }) => {
+			const session = await repo.create({ id: "session" });
+			const messagesByStopReason = {
+				stop: assistantMessage("stop"),
+				length: assistantMessage("length"),
+				toolUse: assistantMessage("toolUse"),
+				error: assistantMessage("error"),
+				aborted: assistantMessage("aborted"),
+				deferred: assistantMessage("deferred"),
+			} satisfies Record<Exclude<StopReason, "pending">, AssistantMessage>;
+			const messages = Object.values(messagesByStopReason);
+			const ids: string[] = [];
+
+			for (const message of messages) ids.push(await session.appendMessage(message));
+
+			const entries = await session.findEntries({ order: "asc", type: "message" });
+			deepStrictEqual(
+				entries.map((entry) => entry.id),
+				ids,
+			);
+			for (const [index, entry] of entries.entries()) {
+				if (entry.type !== "message") throw new Error("Expected message entry");
+				deepStrictEqual(entry.message, messages[index]);
+			}
+			strictEqual(await session.getLeafId(), ids.at(-1));
+			await session.close();
 		}),
 
 		createCase(factory, "forks", "forks a fresh session before first attachment", async ({ repo }) => {
@@ -154,92 +226,94 @@ export function createSessionRepoConformance(
 			"forks one configured branch with scoped facts and a zero ledger",
 			async ({ repo }) => {
 				const source = await repo.create({ id: "source" });
-				await source.commit({
-					writes: [
-						{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
-						{
-							kind: "entry",
-							entry: {
-								id: CHILD_ID,
-								parentId: ROOT_ID,
-								type: "message",
-								message: { role: "user", content: "child", timestamp: 1 },
+				await source.mutate("main", (mutator) =>
+					mutator.commit({
+						writes: [
+							{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
+							{
+								kind: "entry",
+								entry: {
+									id: CHILD_ID,
+									parentId: ROOT_ID,
+									type: "message",
+									message: { role: "user", content: "child", timestamp: 1 },
+								},
 							},
-						},
-						{
-							kind: "entry",
-							entry: { id: SIBLING_ID, parentId: ROOT_ID, type: "custom", customType: "sibling" },
-						},
-						{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
-						{ kind: "register", op: "set", namespace: "lane.config", key: "main", value: configuration },
-						{
-							kind: "register",
-							op: "set",
-							namespace: "lane.state",
-							key: "main",
-							value: { currentOperationId: OPERATION_ID, pendingNextRun: [PENDING_ID] },
-						},
-						{ kind: "register", op: "set", namespace: "fact.name", key: "", value: "source name" },
-						{ kind: "register", op: "set", namespace: "fact.custom", key: "custom", value: { copied: true } },
-						{ kind: "register", op: "set", namespace: "fact.label", key: ROOT_ID, value: "root label" },
-						{ kind: "register", op: "set", namespace: "fact.label", key: SIBLING_ID, value: "sibling label" },
-						{
-							kind: "register",
-							op: "set",
-							namespace: "pending.entry",
-							key: PENDING_ID,
-							value: { type: "custom", customType: "pending" },
-						},
-						{
-							kind: "register",
-							op: "set",
-							namespace: "op.meta",
-							key: OPERATION_ID,
-							value: {
-								operationId: OPERATION_ID,
-								lane: "main",
-								sourceLeafId: CHILD_ID,
-								startedAt: 1,
-								intent: { kind: "compaction" },
+							{
+								kind: "entry",
+								entry: { id: SIBLING_ID, parentId: ROOT_ID, type: "custom", customType: "sibling" },
 							},
-						},
-						{
-							kind: "register",
-							op: "set",
-							namespace: "op.state",
-							key: OPERATION_ID,
-							value: {
-								kind: "compaction",
-								control: { status: "running" },
-								structural: { taskId: OPERATION_ID, status: "deciding" },
+							{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
+							{ kind: "register", op: "set", namespace: "lane.config", key: "main", value: configuration },
+							{
+								kind: "register",
+								op: "set",
+								namespace: "lane.state",
+								key: "main",
+								value: { currentOperationId: OPERATION_ID, pendingNextRun: [PENDING_ID] },
 							},
-						},
-						{
-							kind: "register",
-							op: "set",
-							namespace: "op.tool_args",
-							key: `${OPERATION_ID}:${ROOT_ID}:0`,
-							value: { argument: true },
-						},
-						{
-							kind: "register",
-							op: "set",
-							namespace: "op.preparation",
-							key: `${OPERATION_ID}:${OPERATION_ID}`,
-							value: {
-								kind: "compaction",
-								messagesToSummarize: [],
-								turnPrefixMessages: [],
-								retainedTail: [],
-								isSplitTurn: false,
-								tokensBefore: 0,
-								fileOps: { read: [], written: [], edited: [] },
-								settings: { enabled: true, reserveTokens: 1, keepRecentTokens: 1 },
+							{ kind: "register", op: "set", namespace: "fact.name", key: "", value: "source name" },
+							{ kind: "register", op: "set", namespace: "fact.custom", key: "custom", value: { copied: true } },
+							{ kind: "register", op: "set", namespace: "fact.label", key: ROOT_ID, value: "root label" },
+							{ kind: "register", op: "set", namespace: "fact.label", key: SIBLING_ID, value: "sibling label" },
+							{
+								kind: "register",
+								op: "set",
+								namespace: "pending.entry",
+								key: PENDING_ID,
+								value: { type: "custom", customType: "pending" },
 							},
-						},
-						{ kind: "usage", row: usageRow() },
-					],
-				});
+							{
+								kind: "register",
+								op: "set",
+								namespace: "op.meta",
+								key: OPERATION_ID,
+								value: {
+									operationId: OPERATION_ID,
+									lane: "main",
+									sourceLeafId: CHILD_ID,
+									startedAt: 1,
+									intent: { kind: "compaction" },
+								},
+							},
+							{
+								kind: "register",
+								op: "set",
+								namespace: "op.state",
+								key: OPERATION_ID,
+								value: {
+									kind: "compaction",
+									control: { status: "running" },
+									structural: { taskId: OPERATION_ID, status: "deciding" },
+								},
+							},
+							{
+								kind: "register",
+								op: "set",
+								namespace: "op.tool_args",
+								key: `${OPERATION_ID}:${ROOT_ID}:0`,
+								value: { argument: true },
+							},
+							{
+								kind: "register",
+								op: "set",
+								namespace: "op.preparation",
+								key: `${OPERATION_ID}:${OPERATION_ID}`,
+								value: {
+									kind: "compaction",
+									messagesToSummarize: [],
+									turnPrefixMessages: [],
+									retainedTail: [],
+									isSplitTurn: false,
+									tokensBefore: 0,
+									fileOps: { read: [], written: [], edited: [] },
+									settings: { enabled: true, reserveTokens: 1, keepRecentTokens: 1 },
+								},
+							},
+							{ kind: "usage", row: usageRow() },
+						],
+					}),
+				);
 
 				const fork = await repo.fork(source.metadata, { id: "fork", entryId: CHILD_ID, position: "at" });
 
@@ -279,16 +353,18 @@ export function createSessionRepoConformance(
 			"supports before placement and rejects unknown fork points atomically",
 			async ({ repo }) => {
 				const source = await repo.create({ id: "source" });
-				await source.commit({
-					writes: [
-						{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
-						{
-							kind: "entry",
-							entry: { id: CHILD_ID, parentId: ROOT_ID, type: "custom", customType: "child" },
-						},
-						{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
-					],
-				});
+				await source.mutate("main", (mutator) =>
+					mutator.commit({
+						writes: [
+							{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
+							{
+								kind: "entry",
+								entry: { id: CHILD_ID, parentId: ROOT_ID, type: "custom", customType: "child" },
+							},
+							{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
+						],
+					}),
+				);
 
 				const before = await repo.fork(source.metadata, { id: "before", entryId: CHILD_ID, position: "before" });
 				strictEqual(await before.getLeafId(), ROOT_ID);
@@ -303,12 +379,14 @@ export function createSessionRepoConformance(
 		),
 		createCase(factory, "forks", "forks a closed source session", async ({ repo }) => {
 			const source = await repo.create({ id: "source" });
-			await source.commit({
-				writes: [
-					{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
-					{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: ROOT_ID },
-				],
-			});
+			await source.mutate("main", (mutator) =>
+				mutator.commit({
+					writes: [
+						{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
+						{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: ROOT_ID },
+					],
+				}),
+			);
 			await source.close();
 
 			const fork = await repo.fork(source.metadata, { id: "fork" });
@@ -318,24 +396,26 @@ export function createSessionRepoConformance(
 
 		createCase(factory, "forks", "forks the whole configured tree with fresh lane state", async ({ repo }) => {
 			const source = await repo.create({ id: "source" });
-			await source.commit({
-				writes: [
-					{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
-					{
-						kind: "entry",
-						entry: { id: CHILD_ID, parentId: ROOT_ID, type: "custom", customType: "child" },
-					},
-					{
-						kind: "entry",
-						entry: { id: SIBLING_ID, parentId: ROOT_ID, type: "custom", customType: "sibling" },
-					},
-					{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
-					{ kind: "register", op: "set", namespace: "lane.config", key: "main", value: configuration },
-					{ kind: "register", op: "set", namespace: "lane.leaf", key: "review", value: SIBLING_ID },
-					{ kind: "register", op: "set", namespace: "lane.config", key: "review", value: configuration },
-					{ kind: "register", op: "set", namespace: "lane.state", key: "review", value: idleLaneState },
-				],
-			});
+			await source.mutate("main", (mutator) =>
+				mutator.commit({
+					writes: [
+						{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "root" } },
+						{
+							kind: "entry",
+							entry: { id: CHILD_ID, parentId: ROOT_ID, type: "custom", customType: "child" },
+						},
+						{
+							kind: "entry",
+							entry: { id: SIBLING_ID, parentId: ROOT_ID, type: "custom", customType: "sibling" },
+						},
+						{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
+						{ kind: "register", op: "set", namespace: "lane.config", key: "main", value: configuration },
+						{ kind: "register", op: "set", namespace: "lane.leaf", key: "review", value: SIBLING_ID },
+						{ kind: "register", op: "set", namespace: "lane.config", key: "review", value: configuration },
+						{ kind: "register", op: "set", namespace: "lane.state", key: "review", value: idleLaneState },
+					],
+				}),
+			);
 
 			const fork = await repo.fork(source.metadata, { id: "fork", scope: "tree" });
 
@@ -351,22 +431,26 @@ export function createSessionRepoConformance(
 		}),
 		createCase(factory, "forks", "captures one coherent boundary between source commits", async ({ repo }) => {
 			const source = await repo.create({ id: "source" });
-			const firstCommit = source.commit({
-				writes: [
-					{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "first" } },
-					{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: ROOT_ID },
-				],
-			});
+			const firstCommit = source.mutate("main", (mutator) =>
+				mutator.commit({
+					writes: [
+						{ kind: "entry", entry: { id: ROOT_ID, parentId: null, type: "custom", customType: "first" } },
+						{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: ROOT_ID },
+					],
+				}),
+			);
 			const fork = repo.fork(source.metadata, { id: "fork" });
-			const secondCommit = source.commit({
-				writes: [
-					{
-						kind: "entry",
-						entry: { id: CHILD_ID, parentId: ROOT_ID, type: "custom", customType: "second" },
-					},
-					{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
-				],
-			});
+			const secondCommit = source.mutate("main", (mutator) =>
+				mutator.commit({
+					writes: [
+						{
+							kind: "entry",
+							entry: { id: CHILD_ID, parentId: ROOT_ID, type: "custom", customType: "second" },
+						},
+						{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: CHILD_ID },
+					],
+				}),
+			);
 
 			const [, forked] = await Promise.all([firstCommit, fork]);
 			await secondCommit;

@@ -1,15 +1,19 @@
 import type { AssistantMessage, Usage } from "@knightcode/ai";
 import { expectTypeOf, it } from "vitest";
 import type {
+	AgentHarnessOptions,
 	AgentHarnessStreamOptions,
 	AgentLane,
+	AgentMessage,
 	AgentTool,
 	BranchScan,
 	CancelQueuedResult,
 	CheckpointPhase,
 	CompactionState,
 	Control,
+	CustomEntry,
 	Deferred,
+	EntryProjector,
 	Generation,
 	GenerationContext,
 	HarnessEvent,
@@ -33,6 +37,7 @@ import type {
 	Session,
 	SessionCreateOptions,
 	SessionMetadata,
+	SessionMutator,
 	SessionRepo,
 	SessionSearchHit,
 	SessionSearchService,
@@ -356,6 +361,12 @@ it("covers storage, session, repository, search, and identity signatures", () =>
 	expectTypeOf<Storage["commit"]>().toEqualTypeOf<
 		(transactionToCommit: Transaction) => Promise<{ firstSeq: number; seqs: number[]; timestamp: number }>
 	>();
+	expectTypeOf<Session["mutate"]>().toEqualTypeOf<
+		<T>(lane: string, mutation: (mutator: SessionMutator) => T | Promise<T>) => Promise<T>
+	>();
+	expectTypeOf<SessionMutator["commit"]>().toEqualTypeOf<
+		(transactionToCommit: Transaction) => Promise<{ firstSeq: number; seqs: number[]; timestamp: number }>
+	>();
 	expectTypeOf<Session["createLane"]>().toEqualTypeOf<
 		(name: string, at: string | null, laneConfiguration: LaneConfiguration) => Promise<SessionTree>
 	>();
@@ -425,7 +436,10 @@ it("covers Part 5 results, events, hooks, snapshots, tools, and stream options",
 	expectTypeOf<AgentHarnessStreamOptions["deferred"]>().toEqualTypeOf<
 		boolean | { window?: "15m" | "1h" | "24h" } | undefined
 	>();
-	expectTypeOf<Extract<SettledAssistantMessage["stopReason"], "pending">>().toEqualTypeOf<never>();
+	expectTypeOf<EntryProjector>().toEqualTypeOf<
+		(entry: CustomEntry) => AgentMessage[] | undefined | Promise<AgentMessage[] | undefined>
+	>();
+	expectTypeOf<NonNullable<AgentHarnessOptions["entryProjectors"]>>().toEqualTypeOf<Record<string, EntryProjector>>();
 
 	const compileTimeFailures = () => {
 		// @ts-expect-error callers cannot supply the harness-owned abort signal

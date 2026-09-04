@@ -38,18 +38,38 @@ describe("MemorySessionRepo metadata", () => {
 		await Promise.all([session.close(), repo.close()]);
 	});
 
+	it("returns a fresh facade after close while retaining one session and storage", async () => {
+		const repo = new MemorySessionRepo({ now: () => NOW });
+		const first = await repo.create({ id: "session" });
+		const firstView = first.view("main");
+		const admittedWrite = first.setName("preserved");
+
+		await expect(repo.open(first.metadata)).rejects.toThrow("already open");
+		await Promise.all([admittedWrite, first.close()]);
+		await expect(first.getName()).rejects.toThrow("Session is closed");
+		await expect(firstView.getName()).rejects.toThrow("Session is closed");
+
+		const second = await repo.open(first.metadata);
+		expect(second).not.toBe(first);
+		expect(await second.getName()).toBe("preserved");
+		await second.close();
+		await repo.close();
+	});
+
 	it("captures fork options before waiting for its snapshot boundary", async () => {
 		const repo = new MemorySessionRepo({ now: () => NOW });
 		const source = await repo.create({ id: "source" });
 		const rootId = "00000000-0000-7000-8000-000000000001";
 		const childId = "00000000-0000-7000-8000-000000000002";
-		const commit = source.commit({
-			writes: [
-				{ kind: "entry", entry: { id: rootId, parentId: null, type: "custom", customType: "root" } },
-				{ kind: "entry", entry: { id: childId, parentId: rootId, type: "custom", customType: "child" } },
-				{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: childId },
-			],
-		});
+		const commit = source.mutate("main", (mutator) =>
+			mutator.commit({
+				writes: [
+					{ kind: "entry", entry: { id: rootId, parentId: null, type: "custom", customType: "root" } },
+					{ kind: "entry", entry: { id: childId, parentId: rootId, type: "custom", customType: "child" } },
+					{ kind: "register", op: "set", namespace: "lane.leaf", key: "main", value: childId },
+				],
+			}),
+		);
 		const options = { id: "fork", entryId: childId, position: "before" as "before" | "at" };
 		const fork = repo.fork(source.metadata, options);
 		options.entryId = rootId;

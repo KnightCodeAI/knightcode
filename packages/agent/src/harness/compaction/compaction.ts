@@ -14,7 +14,7 @@ import {
 } from "@knightcode/ai";
 import type { AgentMessage, ThinkingLevel } from "../../types.ts";
 import { convertToLlm, createBranchSummaryMessage, createCompactionSummaryMessage } from "../messages.ts";
-import { buildSessionContext, isDroppedFromContext } from "../session/context.ts";
+import { buildContextEntries, isContextMessage, sessionEntryToContextMessages } from "../session/context.ts";
 import type { CompactionEntry, Entry } from "../session/types.ts";
 import { CompactionError, err, ok, type Result } from "../types.ts";
 import { addUsage } from "../utils/usage.ts";
@@ -92,7 +92,7 @@ function getMessageFromEntryForCompaction(entry: Entry): AgentMessage | undefine
 	}
 	// Responses that never enter provider context must not enter it via the summary either.
 	const message = getMessageFromEntry(entry);
-	return message && isDroppedFromContext(message) ? undefined : message;
+	return message && !isContextMessage(message) ? undefined : message;
 }
 
 /** Generated compaction data ready to be persisted as a compaction entry. */
@@ -374,7 +374,7 @@ export function findCutPoint(
 		if (entry.type !== "message") continue;
 		const message = entry.message as AgentMessage;
 		// Dropped responses never reach the provider, so they must not spend the retention budget.
-		if (isDroppedFromContext(message)) continue;
+		if (!isContextMessage(message)) continue;
 		accumulatedTokens += estimateTokens(message);
 		if (accumulatedTokens >= keepRecentTokens) {
 			for (let c = 0; c < cutPoints.length; c++) {
@@ -629,7 +629,9 @@ export function prepareCompaction(
 	}
 	const boundaryEnd = compactableEntries.length;
 
-	const tokensBefore = estimateContextTokens(buildSessionContext(pathEntries)).tokens;
+	const tokensBefore = estimateContextTokens(
+		buildContextEntries(pathEntries).flatMap(sessionEntryToContextMessages),
+	).tokens;
 
 	const cutPoint = findCutPoint(compactableEntries, 0, boundaryEnd, settings.keepRecentTokens);
 	const historyEnd = cutPoint.isSplitTurn ? cutPoint.turnStartIndex : cutPoint.firstKeptEntryIndex;
