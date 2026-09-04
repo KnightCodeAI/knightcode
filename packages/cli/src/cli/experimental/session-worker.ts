@@ -1,5 +1,9 @@
-import { type ChildProcess, fork } from "node:child_process";
+import { type ChildProcess, fork, spawn } from "node:child_process";
+import { isBunBinary } from "../../config.ts";
 import type { SessionWorkerCommand, SessionWorkerEvent } from "./session-worker-process.ts";
+
+/** Names the session the worker must host, and marks a re-entered executable as that worker. */
+export const SESSION_WORKER_ENV = "KNIGHTCODE_EXPERIMENTAL_SESSION_WORKER";
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 5_000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000;
@@ -27,11 +31,7 @@ export async function startExperimentalSessionWorker(
 		options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
 		"shutdownTimeoutMs",
 	);
-	const workerUrl = options.workerUrl ?? defaultWorkerUrl();
-	const child = fork(workerUrl, [sessionId], {
-		execArgv: workerExecArgv(workerUrl),
-		stdio: ["ignore", "ignore", "inherit", "ipc"],
-	});
+	const child = spawnWorker(sessionId, options.workerUrl);
 
 	try {
 		const ready = await waitForReady(child, sessionId, startupTimeoutMs);
@@ -48,6 +48,16 @@ function validateTimeout(value: number, name: string): number {
 		throw new TypeError(`Session worker ${name} must be an integer between 1 and ${MAX_TIMER_DELAY_MS}`);
 	}
 	return value;
+}
+
+function spawnWorker(sessionId: string, workerUrl: URL | undefined): ChildProcess {
+	const stdio: ["ignore", "ignore", "inherit", "ipc"] = ["ignore", "ignore", "inherit", "ipc"];
+	const env = { ...process.env, [SESSION_WORKER_ENV]: sessionId };
+	// A compiled binary has no worker module on disk, so it re-enters its own
+	// executable instead, which main() routes back to the worker entry point.
+	if (workerUrl === undefined && isBunBinary) return spawn(process.execPath, [], { env, stdio });
+	const url = workerUrl ?? defaultWorkerUrl();
+	return fork(url, [], { env, execArgv: workerExecArgv(url), stdio });
 }
 
 function workerExecArgv(workerUrl: URL): string[] {

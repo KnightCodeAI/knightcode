@@ -1,8 +1,12 @@
 // Test-only child executable. Keep this independent from the real worker so
 // lifecycle failure paths remain deterministic as production integration evolves.
+// Only the launch contract is shared, because both launch paths carry the
+// session in the environment.
+import { SESSION_WORKER_ENV } from "../../src/cli/experimental/session-worker.ts";
+
 type Command = { type: "shutdown" };
 
-const mode = process.argv[2];
+const mode = process.env[SESSION_WORKER_ENV];
 
 if (mode === "ready") {
 	process.send?.({ type: "ready", sessionId: mode, pid: process.pid });

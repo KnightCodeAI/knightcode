@@ -31,6 +31,7 @@ import { experimentalCli } from "./cli/experimental/cli.ts";
 import type { ClientCommand } from "./cli/experimental/commands/client.ts";
 import type { ServerCommand } from "./cli/experimental/commands/server.ts";
 import { runExperimentalClient, startExperimentalMemoryServer } from "./cli/experimental/runtime.ts";
+import { SESSION_WORKER_ENV } from "./cli/experimental/session-worker.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
@@ -619,6 +620,12 @@ export interface MainOptions {
 }
 
 export async function main(args: string[], options?: MainOptions) {
+	// A compiled binary spawns its session workers as copies of itself, so this
+	// process is one of those workers rather than a CLI invocation.
+	if (process.env[SESSION_WORKER_ENV]) {
+		await import("./cli/experimental/session-worker-process.ts");
+		return;
+	}
 	resetTimings();
 	const extensionFactories = [...builtInExtensions, ...(options?.extensionFactories ?? [])];
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.KNIGHTCODE_OFFLINE);
