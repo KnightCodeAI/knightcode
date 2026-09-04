@@ -25,17 +25,6 @@ import type {
 type RecordedSessionEvent =
 	SessionBeforeSwitchEvent | SessionBeforeForkEvent | SessionShutdownEvent | SessionStartEvent;
 
-/**
- * SessionManager derives its directory from the cwd under the real agent dir, not from
- * the agentDir these tests pass, so session files land outside the temp cwd and have to
- * be removed explicitly. Without this every run leaves a directory behind, and any
- * fixture written into one shows up in session listings.
- */
-function removeSessionDir(sessionManager: { getSessionDir(): string }): void {
-	const dir = sessionManager.getSessionDir();
-	if (dir && existsSync(dir)) rmSync(dir, { recursive: true, force: true });
-}
-
 describe("AgentSessionRuntime characterization", () => {
 	const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -115,17 +104,18 @@ describe("AgentSessionRuntime characterization", () => {
 		const runtime = await createAgentSessionRuntime(createRuntime, {
 			cwd: tempDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(tempDir),
+			// Without an explicit session dir SessionManager falls back to the real
+			// store under ~/.knightcode, so fixtures written here would show up in the
+			// user's session listings and cleanup would have to delete from it. Every
+			// session the runtime derives inherits this dir, so one argument keeps the
+			// whole suite inside tempDir.
+			sessionManager: SessionManager.create(tempDir, join(tempDir, "sessions")),
 		});
 		await runtime.session.bindExtensions({});
 
-		const initialSessionManager = runtime.session.sessionManager;
 		cleanups.push(async () => {
-			const finalSessionManager = runtime.session.sessionManager;
 			await runtime.dispose();
 			faux.unregister();
-			removeSessionDir(initialSessionManager);
-			removeSessionDir(finalSessionManager);
 			if (existsSync(tempDir)) {
 				rmSync(tempDir, { recursive: true, force: true });
 			}
@@ -328,7 +318,8 @@ describe("AgentSessionRuntime characterization", () => {
 		events.length = 0;
 		const otherDir = join(tmpdir(), `knightcode-runtime-other-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(otherDir, { recursive: true });
-		const otherSession = SessionManager.create(otherDir);
+		cleanups.push(() => rmSync(otherDir, { recursive: true, force: true }));
+		const otherSession = SessionManager.create(otherDir, join(otherDir, "sessions"));
 		otherSession.appendMessage({ role: "user", content: [{ type: "text", text: "other" }], timestamp: Date.now() });
 		const otherSessionFile = otherSession.getSessionFile();
 		cancelReason = "resume";
@@ -564,6 +555,10 @@ describe("AgentSessionRuntime characterization", () => {
 		const secondDir = join(tmpdir(), `knightcode-runtime-cwd-b-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(firstDir, { recursive: true });
 		mkdirSync(secondDir, { recursive: true });
+		cleanups.push(() => {
+			rmSync(firstDir, { recursive: true, force: true });
+			rmSync(secondDir, { recursive: true, force: true });
+		});
 		const { runtime, faux, tempDir } = await createRuntimeForTest(() => {}, { cwd: firstDir });
 		const otherAuthStorage = AuthStorage.inMemory();
 		await otherAuthStorage.modify(faux.getModel().provider, async () => ({ type: "api_key", key: "faux-key" }));
@@ -613,12 +608,10 @@ describe("AgentSessionRuntime characterization", () => {
 		const otherRuntime = await createAgentSessionRuntime(createOtherRuntime, {
 			cwd: secondDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(secondDir),
+			sessionManager: SessionManager.create(secondDir, join(secondDir, "sessions")),
 		});
 		cleanups.push(async () => {
-			const otherSessionManager = otherRuntime.session.sessionManager;
 			await otherRuntime.dispose();
-			removeSessionDir(otherSessionManager);
 		});
 		await otherRuntime.session.prompt("other");
 		const otherSessionFile = otherRuntime.session.sessionFile!;
@@ -684,12 +677,10 @@ describe("AgentSessionRuntime characterization", () => {
 		const otherRuntime = await createAgentSessionRuntime(createOtherRuntime, {
 			cwd: otherDir,
 			agentDir: tempDir,
-			sessionManager: SessionManager.create(otherDir),
+			sessionManager: SessionManager.create(otherDir, join(otherDir, "sessions")),
 		});
 		cleanups.push(async () => {
-			const otherSessionManager = otherRuntime.session.sessionManager;
 			await otherRuntime.dispose();
-			removeSessionDir(otherSessionManager);
 		});
 		await otherRuntime.session.setModel(faux.getModel("faux-2")!);
 		otherRuntime.session.setThinkingLevel("off");
