@@ -154,13 +154,24 @@ describe.skipIf(process.platform === "win32")("discoverUnixServices", () => {
 			await startSilentSocket(join(directory, `${serviceId(index)}.sock`), connections);
 		}
 
-		// The probe timeout has to outlast establishing the whole first batch, or a
-		// loaded machine retires probes before the peak is reached. `maximum` is
-		// monotonic, unlike `active`, so polling it cannot observe a shrinking peak.
-		const discovery = discoverUnixServices({ directory, timeoutMs: 500 });
-		await expect.poll(() => connections.maximum).toBe(16);
-		await expect(discovery).resolves.toEqual([]);
+		// Nothing retires on its own under a timeout this long, so the first batch
+		// stays pinned however slowly it is established and the peak is exactly the
+		// concurrency limit.
+		const discovery = discoverUnixServices({ directory, timeoutMs: 30_000 });
+		await expect.poll(() => connections.active).toBe(16);
 		expect(connections.maximum).toBe(16);
+
+		// Release probes as they land rather than waiting the timeout out. Past this
+		// point the peak means nothing: a server-side close lags the client that
+		// caused it, so the next probe connects before this one is counted out.
+		const release = setInterval(() => {
+			for (const socket of rawSockets) socket.destroy();
+		}, 10);
+		try {
+			await expect(discovery).resolves.toEqual([]);
+		} finally {
+			clearInterval(release);
+		}
 		expect(connections.total).toBe(20);
 	});
 
