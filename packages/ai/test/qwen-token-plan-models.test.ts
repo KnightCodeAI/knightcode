@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { getModels, streamSimple } from "../src/compat.ts";
 import { findEnvKeys } from "../src/env-api-keys.ts";
+import { getSupportedThinkingLevels } from "../src/models.ts";
 
 vi.mock("openai", () => {
 	class FakeOpenAI {
@@ -213,6 +214,22 @@ describe("Qwen Token Plan models", () => {
 				xhigh: "xhigh",
 				max: null,
 			});
+		},
+	);
+
+	it.each([...QWEN_REASONING_EFFORT_MODEL_CASES, ...QWEN38_MODEL_CASES])(
+		"keeps thinking-off selectable for $provider/$modelId",
+		({ provider, modelId }) => {
+			const model = getModels(provider).find((candidate) => candidate.id === modelId);
+			expect(model).toBeDefined();
+			if (!model) throw new Error(`Missing model: ${provider}/${modelId}`);
+
+			// These endpoints accept a thinking-disabled request, but the catalog lists
+			// no "none" effort value, which the shared derivation reads as unsupported.
+			// The generator drops that key so "off" stays available - an absent entry
+			// means supported, a null one means it is not.
+			expect(model.thinkingLevelMap).not.toHaveProperty("off");
+			expect(getSupportedThinkingLevels(model)).toContain("off");
 		},
 	);
 
