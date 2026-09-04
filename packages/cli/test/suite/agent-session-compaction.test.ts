@@ -694,6 +694,55 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.session.getLastAssistantText()).toBe("continued");
 	});
 
+	it("cancels automatic compaction when a compaction_start listener aborts the session", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		useSummaryStreamFn(harness, "auto summary that must not land");
+		harness.session.subscribe((event) => {
+			if (event.type === "compaction_start") {
+				void harness.session.abort();
+			}
+		});
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+
+		await expect(sessionInternals._runAutoCompaction("threshold", false)).resolves.toBe(false);
+
+		expect(harness.eventsOfType("compaction_end").at(-1)).toMatchObject({ reason: "threshold", aborted: true });
+		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
+		expect(harness.session.isIdle).toBe(true);
+	});
+
+	it("aborts a compaction whose before-compact hook ignores the abort signal", async () => {
+		let markHookEntered = () => {};
+		const hookEntered = new Promise<void>((resolve) => {
+			markHookEntered = resolve;
+		});
+		// Never resolves and never listens for the signal: abort() must not wait on it.
+		const harness = await createHarness({
+			settings: { compaction: { keepRecentTokens: 1 } },
+			extensionFactories: [
+				(knightcode) => {
+					knightcode.on("session_before_compact", async () => {
+						markHookEntered();
+						return await new Promise<never>(() => {});
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+
+		const compactPromise = harness.session.compact();
+		const compactExpectation = expect(compactPromise).rejects.toThrow("Compaction cancelled");
+		await hookEntered;
+		await harness.session.abort();
+		await compactExpectation;
+
+		expect(harness.session.isCompacting).toBe(false);
+		expect(harness.session.isIdle).toBe(true);
+	});
+
 	it("resumes after threshold compaction when only agent-level queued messages exist", async () => {
 		vi.useFakeTimers();
 		const harness = await createHarness({

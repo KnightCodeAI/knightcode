@@ -292,6 +292,31 @@ interface ToolDefinitionEntry {
 	sourceInfo: SourceInfo;
 }
 
+/** Sentinel returned by {@link raceAbort} when the signal fired before the awaited work settled. */
+const ABORTED = Symbol("aborted");
+
+/**
+ * Await `promise`, but stop waiting once `signal` fires.
+ *
+ * Extension hooks are handed the abort signal and are free to ignore it, while
+ * the session is not idle until the operation they gate settles. Awaiting them
+ * outright would make `abort()` hostage to third-party cooperation: a handler
+ * that never resolves would park it forever. The handler keeps running, its
+ * result is simply discarded.
+ */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
+	return Promise.race([
+		promise,
+		new Promise<typeof ABORTED>((resolve) => {
+			if (signal.aborted) {
+				resolve(ABORTED);
+			} else {
+				signal.addEventListener("abort", () => resolve(ABORTED), { once: true });
+			}
+		}),
+	]);
+}
+
 function estimateMessagesTokens(messages: AgentMessage[]): number {
 	let tokens = 0;
 	for (const message of messages) {
@@ -1970,15 +1995,24 @@ export class AgentSession {
 			let extensionCompaction: CompactionResult | undefined;
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
-				const result = (await this._extensionRunner.emit({
-					type: "session_before_compact",
-					preparation,
-					branchEntries: pathEntries,
-					customInstructions,
-					reason: "manual",
-					willRetry: false,
-					signal: this._compactionAbortController.signal,
-				})) as SessionBeforeCompactResult | undefined;
+				const raced = await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_before_compact",
+						preparation,
+						branchEntries: pathEntries,
+						customInstructions,
+						reason: "manual",
+						willRetry: false,
+						signal: this._compactionAbortController.signal,
+					}),
+					this._compactionAbortController.signal,
+				);
+
+				if (raced === ABORTED) {
+					throw new Error("Compaction cancelled");
+				}
+
+				const result = raced as SessionBeforeCompactResult | undefined;
 
 				if (result?.cancel) {
 					throw new Error("Compaction cancelled");
@@ -2261,24 +2295,31 @@ export class AgentSession {
 				return false;
 			}
 
-			this._emit({ type: "compaction_start", reason });
+			// Installed before the event: a compaction_start listener may call abort(),
+			// and abortCompaction() only reaches an already-created controller.
 			this._autoCompactionAbortController = new AbortController();
+			this._emit({ type: "compaction_start", reason });
 			started = true;
 
 			let extensionCompaction: CompactionResult | undefined;
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
-				const extensionResult = (await this._extensionRunner.emit({
-					type: "session_before_compact",
-					preparation,
-					branchEntries: pathEntries,
-					customInstructions: undefined,
-					reason,
-					willRetry,
-					signal: this._autoCompactionAbortController.signal,
-				})) as SessionBeforeCompactResult | undefined;
+				const raced = await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_before_compact",
+						preparation,
+						branchEntries: pathEntries,
+						customInstructions: undefined,
+						reason,
+						willRetry,
+						signal: this._autoCompactionAbortController.signal,
+					}),
+					this._autoCompactionAbortController.signal,
+				);
 
-				if (extensionResult?.cancel) {
+				const extensionResult = raced === ABORTED ? undefined : (raced as SessionBeforeCompactResult | undefined);
+
+				if (raced === ABORTED || extensionResult?.cancel) {
 					this._emit({
 						type: "compaction_end",
 						reason,
@@ -3163,11 +3204,20 @@ export class AgentSession {
 
 			// Emit session_before_tree event
 			if (this._extensionRunner.hasHandlers("session_before_tree")) {
-				const result = (await this._extensionRunner.emit({
-					type: "session_before_tree",
-					preparation,
-					signal: this._branchSummaryAbortController.signal,
-				})) as SessionBeforeTreeResult | undefined;
+				const raced = await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_before_tree",
+						preparation,
+						signal: this._branchSummaryAbortController.signal,
+					}),
+					this._branchSummaryAbortController.signal,
+				);
+
+				if (raced === ABORTED) {
+					return { cancelled: true, aborted: true };
+				}
+
+				const result = raced as SessionBeforeTreeResult | undefined;
 
 				if (result?.cancel) {
 					return { cancelled: true };
