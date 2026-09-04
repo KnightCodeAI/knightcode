@@ -145,7 +145,14 @@ export async function getLatestVersion(repo: string): Promise<string> {
 		throw unexpectedRedirect();
 	}
 	const tagPrefix = `/${repo}/releases/tag/`;
-	if (redirect.origin !== "https://github.com" || !redirect.pathname.startsWith(tagPrefix)) {
+	// pathname omits the query and fragment, so those are rejected separately -
+	// releases/latest redirects to a bare tag URL and anything else is not it.
+	if (
+		redirect.origin !== "https://github.com" ||
+		redirect.search !== "" ||
+		redirect.hash !== "" ||
+		!redirect.pathname.startsWith(tagPrefix)
+	) {
 		throw unexpectedRedirect();
 	}
 	// Validate the decoded tag, not the encoded pathname: %2F, %3F and %23 decode
