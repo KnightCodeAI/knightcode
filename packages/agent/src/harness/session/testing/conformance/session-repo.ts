@@ -1,7 +1,7 @@
 import { deepStrictEqual, rejects, strictEqual } from "node:assert/strict";
 import type { AssistantMessage, StopReason } from "@knightcode/ai";
-import type { LaneConfiguration, LaneState, UsageRow } from "../../types.ts";
-import type { ConformanceCase, SessionRepoFixture } from "../types.ts";
+import type { LaneConfiguration, LaneState, SessionMetadata, SessionRepo, UsageRow } from "../../types.ts";
+import type { ConformanceCase } from "../types.ts";
 
 const ROOT_ID = "00000000-0000-7000-8000-000000000001";
 const CHILD_ID = "00000000-0000-7000-8000-000000000002";
@@ -57,37 +57,56 @@ function usageRow(): Omit<UsageRow, "seq"> {
 	};
 }
 
-function createCase(
-	factory: () => Promise<SessionRepoFixture>,
+interface RepoCaseContext<TRepo> {
+	repo: TRepo;
+	close?: () => void | Promise<void>;
+}
+
+function prepareRepoCaseFactory<TRepo>(
+	factory: () => Promise<TRepo>,
+	onClose?: () => void | Promise<void>,
+): () => Promise<RepoCaseContext<TRepo>> {
+	return async () => ({ repo: await factory(), ...(onClose === undefined ? {} : { close: onClose }) });
+}
+
+function createCase<TRepo>(
+	factory: () => Promise<RepoCaseContext<TRepo>>,
 	group: string,
 	name: string,
-	test: (fixture: SessionRepoFixture) => Promise<void>,
+	test: (context: { repo: TRepo }) => Promise<void>,
 ): ConformanceCase {
 	return {
 		group,
 		name,
 		async run() {
-			await using fixture = await factory();
-			await test(fixture);
+			const context = await factory();
+			try {
+				await test(context);
+			} finally {
+				await context.close?.();
+			}
 		},
 	};
 }
 
-/** Creates fresh, runner-independent cases for the SessionRepo contract. */
-export function createSessionRepoConformance(factory: () => Promise<SessionRepoFixture>): readonly ConformanceCase[] {
+/** Creates lifecycle cases for repositories that support creation, discovery, open, and deletion. */
+export function createSessionRepoLifecycleConformance<TMetadata extends SessionMetadata>(
+	// Require only the methods this group exercises so partial backends can run it independently.
+	backendFactory: () => Promise<Pick<SessionRepo<TMetadata>, "create" | "open" | "list" | "delete">>,
+	onClose?: () => void | Promise<void>,
+): readonly ConformanceCase[] {
+	const factory = prepareRepoCaseFactory(backendFactory, onClose);
 	return [
 		createCase(
 			factory,
 			"lifecycle",
 			"creates an unconfigured main lane and rejects duplicate ids",
-			async ({ repo, storageVersion }) => {
+			async ({ repo }) => {
 				const session = await repo.create({ id: "session" });
 
-				deepStrictEqual(session.metadata, {
-					id: "session",
-					createdAt: session.metadata.createdAt,
-					storageVersion,
-				});
+				strictEqual(session.metadata.id, "session");
+				strictEqual(Number.isSafeInteger(session.metadata.createdAt), true);
+				strictEqual(session.metadata.storageVersion, 1);
 				strictEqual(await session.getLeafId(), null);
 				deepStrictEqual((await session.getRegister("lane.state", "main"))?.value, {
 					currentOperationId: null,
@@ -114,13 +133,11 @@ export function createSessionRepoConformance(factory: () => Promise<SessionRepoF
 					{ id: "second", parentSessionId: "parent" },
 				],
 			);
-			await rejects(repo.open(first.metadata));
 			await first.close();
 			await rejects(first.getName());
 			const reopened = await repo.open(first.metadata);
 			strictEqual(reopened === first, false);
 			strictEqual(await reopened.getName(), "preserved");
-			await rejects(repo.open(first.metadata));
 			await reopened.close();
 		}),
 		createCase(factory, "lifecycle", "deletes closed sessions without affecting other sessions", async ({ repo }) => {
@@ -136,20 +153,35 @@ export function createSessionRepoConformance(factory: () => Promise<SessionRepoF
 			await rejects(repo.open(removed.metadata));
 			await rejects(repo.delete(removed.metadata));
 		}),
-		createCase(factory, "lifecycle", "reserves destination ids across concurrent publication", async ({ repo }) => {
-			const source = await repo.create({ id: "source" });
-			const results = await Promise.allSettled([
-				repo.create({ id: "destination" }),
-				repo.fork(source.metadata, { id: "destination" }),
-			]);
-			strictEqual(results.filter((result) => result.status === "fulfilled").length, 1);
-			strictEqual(results.filter((result) => result.status === "rejected").length, 1);
-			for (const result of results) {
-				if (result.status === "fulfilled") await result.value.close();
-			}
-			await source.close();
-		}),
+	];
+}
 
+/** Creates exclusive-open cases for repositories that own active session handles. */
+export function createSessionRepoOwnershipConformance<TMetadata extends SessionMetadata>(
+	backendFactory: () => Promise<Pick<SessionRepo<TMetadata>, "create" | "open">>,
+	onClose?: () => void | Promise<void>,
+): readonly ConformanceCase[] {
+	const factory = prepareRepoCaseFactory(backendFactory, onClose);
+	return [
+		createCase(factory, "ownership", "rejects opening an already-open session", async ({ repo }) => {
+			const session = await repo.create({ id: "session" });
+			await rejects(repo.open(session.metadata));
+			await session.close();
+
+			const reopened = await repo.open(session.metadata);
+			await rejects(repo.open(session.metadata));
+			await reopened.close();
+		}),
+	];
+}
+
+/** Creates message cases for repositories that support session creation. */
+export function createSessionRepoMessageConformance<TMetadata extends SessionMetadata>(
+	backendFactory: () => Promise<Pick<SessionRepo<TMetadata>, "create">>,
+	onClose?: () => void | Promise<void>,
+): readonly ConformanceCase[] {
+	const factory = prepareRepoCaseFactory(backendFactory, onClose);
+	return [
 		createCase(
 			factory,
 			"messages",
@@ -191,7 +223,43 @@ export function createSessionRepoConformance(factory: () => Promise<SessionRepoF
 			strictEqual(await session.getLeafId(), ids.at(-1));
 			await session.close();
 		}),
+	];
+}
 
+/** Creates fork cases for repositories that support creation, discovery, and forks. */
+export function createSessionRepoForkConformance<TMetadata extends SessionMetadata>(
+	backendFactory: () => Promise<Pick<SessionRepo<TMetadata>, "create" | "list" | "fork">>,
+	onClose?: () => void | Promise<void>,
+): readonly ConformanceCase[] {
+	const factory = prepareRepoCaseFactory(backendFactory, onClose);
+	return [
+		createCase(
+			factory,
+			"forks",
+			"publishes create when it reserves a shared destination id first",
+			async ({ repo }) => {
+				const source = await repo.create({ id: "source" });
+				const results = await Promise.allSettled([
+					repo.create({ id: "destination" }),
+					repo.fork(source.metadata, { id: "destination" }),
+				]);
+				strictEqual(results[0].status, "fulfilled");
+				strictEqual(results[1].status, "rejected");
+				if (results[0].status === "fulfilled") await results[0].value.close();
+				await source.close();
+			},
+		),
+		createCase(factory, "forks", "publishes fork when it reserves a shared destination id first", async ({ repo }) => {
+			const source = await repo.create({ id: "source" });
+			const results = await Promise.allSettled([
+				repo.fork(source.metadata, { id: "destination" }),
+				repo.create({ id: "destination" }),
+			]);
+			strictEqual(results[0].status, "fulfilled");
+			strictEqual(results[1].status, "rejected");
+			if (results[0].status === "fulfilled") await results[0].value.close();
+			await source.close();
+		}),
 		createCase(factory, "forks", "forks a fresh session before first attachment", async ({ repo }) => {
 			const source = await repo.create({ id: "source" });
 			const fork = await repo.fork(source.metadata, { id: "fork" });
@@ -459,5 +527,18 @@ export function createSessionRepoConformance(factory: () => Promise<SessionRepoF
 			);
 			await Promise.all([source.close(), forked.close()]);
 		}),
+	];
+}
+
+/** Creates every SessionRepo conformance case. */
+export function createSessionRepoConformance<TMetadata extends SessionMetadata>(
+	factory: () => Promise<SessionRepo<TMetadata>>,
+	onClose?: () => void | Promise<void>,
+): readonly ConformanceCase[] {
+	return [
+		...createSessionRepoLifecycleConformance(factory, onClose),
+		...createSessionRepoOwnershipConformance(factory, onClose),
+		...createSessionRepoMessageConformance(factory, onClose),
+		...createSessionRepoForkConformance(factory, onClose),
 	];
 }

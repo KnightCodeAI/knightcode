@@ -1,12 +1,12 @@
 import { describe, it } from "vitest";
-import { MemorySessionRepo } from "../../src/harness/session/index.ts";
-import { MemoryStorage } from "../../src/harness/session/memory.ts";
+import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
+import { JSONL_FORMAT_VERSION, JsonlStorage } from "../../src/harness/session/jsonl/index.ts";
 import {
 	type ConformanceCase,
-	createSessionRepoConformance,
 	createStorageConformance,
 	type StorageFixture,
 } from "../../src/harness/session/testing/index.ts";
+import { createTempDir } from "./session-test-utils.ts";
 
 const NOW = 1_700_000_000_000;
 
@@ -23,24 +23,23 @@ function registerConformance(name: string, cases: readonly ConformanceCase[]): v
 }
 
 registerConformance(
-	"MemoryStorage conformance",
-	createStorageConformance(() => {
-		const storage = new MemoryStorage({ now: () => NOW });
-		return Promise.resolve<StorageFixture>({
+	"JsonlStorage conformance",
+	createStorageConformance(async () => {
+		const fileSystem = new NodeExecutionEnv({ cwd: createTempDir() });
+		const storage = await JsonlStorage.create(
+			{ fileSystem, path: "session.jsonl", now: () => NOW },
+			{
+				v: JSONL_FORMAT_VERSION,
+				kind: "header",
+				id: "session",
+				storageVersion: 1,
+				createdAt: NOW,
+				cwd: "/workspace",
+			},
+		);
+		return {
 			storage,
 			[Symbol.asyncDispose]: () => storage.close(),
-		});
+		} satisfies StorageFixture;
 	}),
-);
-
-let memoryRepo: MemorySessionRepo;
-registerConformance(
-	"MemorySessionRepo conformance",
-	createSessionRepoConformance(
-		() => {
-			memoryRepo = new MemorySessionRepo({ now: () => NOW });
-			return Promise.resolve(memoryRepo);
-		},
-		() => memoryRepo.close(),
-	),
 );
