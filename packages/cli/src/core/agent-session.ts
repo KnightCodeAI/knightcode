@@ -291,6 +291,33 @@ interface ToolDefinitionEntry {
 	sourceInfo: SourceInfo;
 }
 
+/** Sentinel returned by {@link raceAbort} when the signal fired before the awaited work settled. */
+const ABORTED = Symbol("aborted");
+
+/**
+ * Await `promise`, but stop waiting once `signal` fires.
+ *
+ * Extension hooks are handed the abort signal and are free to ignore it, while
+ * the session is not idle until the operation they gate settles. Awaiting them
+ * outright would make `abort()` hostage to third-party cooperation: a handler
+ * that never resolves would park it forever. The handler keeps running, its
+ * result is simply discarded.
+ */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
+	return new Promise<T | typeof ABORTED>((resolve, reject) => {
+		const onAbort = () => resolve(ABORTED);
+		// An already-aborted signal settles immediately but still goes through the
+		// same path: returning early instead would leave `promise` with nothing
+		// attached, and a later rejection from work nobody awaits would surface as an
+		// unhandled rejection. Settling first only makes the handlers below no-ops.
+		if (signal.aborted) onAbort();
+		else signal.addEventListener("abort", onAbort, { once: true });
+		// Dropped once the race is decided either way, so winning does not leave the
+		// listener - and the promise and resolve closure it captures - on the signal.
+		promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+	});
+}
+
 function estimateMessagesTokens(messages: AgentMessage[]): number {
 	let tokens = 0;
 	for (const message of messages) {
@@ -617,7 +644,7 @@ export class AgentSession {
 	}
 
 	private _resolveIdleWaitIfIdle(): void {
-		if (this._isAgentRunActive || !this._resolveIdleWait) {
+		if (!this.isIdle || !this._resolveIdleWait) {
 			return;
 		}
 		const resolve = this._resolveIdleWait;
@@ -919,9 +946,9 @@ export class AgentSession {
 		return this._isAgentRunActive;
 	}
 
-	/** Whether the session has no active agent run, retry, auto-compaction, or queued continuation. */
+	/** Whether the session has no active agent run, compaction, branch summary, retry, or queued continuation. */
 	get isIdle(): boolean {
-		return !this._isAgentRunActive;
+		return !this._isAgentRunActive && !this.isCompacting;
 	}
 
 	/** Current effective system prompt (includes any per-turn extension modifications) */
@@ -1615,6 +1642,8 @@ export class AgentSession {
 	 */
 	async abort(): Promise<void> {
 		this.abortRetry();
+		this.abortCompaction();
+		this.abortBranchSummary();
 		this.agent.abort();
 		await this.waitForIdle();
 	}
@@ -1918,6 +1947,11 @@ export class AgentSession {
 		);
 	}
 
+	private _clearManualCompactionState(): void {
+		this._compactionAbortController = undefined;
+		this._resolveIdleWaitIfIdle();
+	}
+
 	/**
 	 * Manually compact the session context.
 	 *
@@ -1962,15 +1996,24 @@ export class AgentSession {
 			let extensionCompaction: CompactionResult | undefined;
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
-				const result = (await this._extensionRunner.emit({
-					type: "session_before_compact",
-					preparation,
-					branchEntries: pathEntries,
-					customInstructions,
-					reason: "manual",
-					willRetry: false,
-					signal: this._compactionAbortController.signal,
-				})) as SessionBeforeCompactResult | undefined;
+				const raced = await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_before_compact",
+						preparation,
+						branchEntries: pathEntries,
+						customInstructions,
+						reason: "manual",
+						willRetry: false,
+						signal: this._compactionAbortController.signal,
+					}),
+					this._compactionAbortController.signal,
+				);
+
+				if (raced === ABORTED) {
+					throw new Error("Compaction cancelled");
+				}
+
+				const result = raced as SessionBeforeCompactResult | undefined;
 
 				if (result?.cancel) {
 					throw new Error("Compaction cancelled");
@@ -2047,7 +2090,7 @@ export class AgentSession {
 				details,
 			};
 			// compaction_end listeners may submit queued prompts, so expose idle state before notifying them.
-			this._compactionAbortController = undefined;
+			this._clearManualCompactionState();
 			this._emit({
 				type: "compaction_end",
 				reason: "manual",
@@ -2060,7 +2103,7 @@ export class AgentSession {
 			const message = error instanceof Error ? error.message : String(error);
 			const aborted = message === "Compaction cancelled" || (error instanceof Error && error.name === "AbortError");
 			const errorMessage = aborted ? undefined : `Compaction failed: ${message}`;
-			this._compactionAbortController = undefined;
+			this._clearManualCompactionState();
 			this._emit({
 				type: "compaction_end",
 				reason: "manual",
@@ -2078,7 +2121,7 @@ export class AgentSession {
 			});
 			throw error;
 		} finally {
-			this._compactionAbortController = undefined;
+			this._clearManualCompactionState();
 		}
 	}
 
@@ -2253,24 +2296,31 @@ export class AgentSession {
 				return false;
 			}
 
-			this._emit({ type: "compaction_start", reason });
+			// Installed before the event: a compaction_start listener may call abort(),
+			// and abortCompaction() only reaches an already-created controller.
 			this._autoCompactionAbortController = new AbortController();
+			this._emit({ type: "compaction_start", reason });
 			started = true;
 
 			let extensionCompaction: CompactionResult | undefined;
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
-				const extensionResult = (await this._extensionRunner.emit({
-					type: "session_before_compact",
-					preparation,
-					branchEntries: pathEntries,
-					customInstructions: undefined,
-					reason,
-					willRetry,
-					signal: this._autoCompactionAbortController.signal,
-				})) as SessionBeforeCompactResult | undefined;
+				const raced = await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_before_compact",
+						preparation,
+						branchEntries: pathEntries,
+						customInstructions: undefined,
+						reason,
+						willRetry,
+						signal: this._autoCompactionAbortController.signal,
+					}),
+					this._autoCompactionAbortController.signal,
+				);
 
-				if (extensionResult?.cancel) {
+				const extensionResult = raced === ABORTED ? undefined : (raced as SessionBeforeCompactResult | undefined);
+
+				if (raced === ABORTED || extensionResult?.cancel) {
 					this._emit({
 						type: "compaction_end",
 						reason,
@@ -2414,6 +2464,7 @@ export class AgentSession {
 			return false;
 		} finally {
 			this._autoCompactionAbortController = undefined;
+			this._resolveIdleWaitIfIdle();
 		}
 	}
 
@@ -3154,11 +3205,20 @@ export class AgentSession {
 
 			// Emit session_before_tree event
 			if (this._extensionRunner.hasHandlers("session_before_tree")) {
-				const result = (await this._extensionRunner.emit({
-					type: "session_before_tree",
-					preparation,
-					signal: this._branchSummaryAbortController.signal,
-				})) as SessionBeforeTreeResult | undefined;
+				const raced = await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_before_tree",
+						preparation,
+						signal: this._branchSummaryAbortController.signal,
+					}),
+					this._branchSummaryAbortController.signal,
+				);
+
+				if (raced === ABORTED) {
+					return { cancelled: true, aborted: true };
+				}
+
+				const result = raced as SessionBeforeTreeResult | undefined;
 
 				if (result?.cancel) {
 					return { cancelled: true };
@@ -3178,6 +3238,14 @@ export class AgentSession {
 				}
 				if (result?.label !== undefined) {
 					label = result.label;
+				}
+
+				// The hook is handed the branch-summary signal and may be async, so an
+				// abort can land while it is still running. Committing its result then
+				// would mutate the tree after the caller asked to stop; the default
+				// summarizer below reports the same aborted shape.
+				if (this._branchSummaryAbortController.signal.aborted) {
+					return { cancelled: true, aborted: true };
 				}
 			}
 
@@ -3286,6 +3354,7 @@ export class AgentSession {
 			return { editorText, cancelled: false, summaryEntry };
 		} finally {
 			this._branchSummaryAbortController = undefined;
+			this._resolveIdleWaitIfIdle();
 		}
 	}
 
