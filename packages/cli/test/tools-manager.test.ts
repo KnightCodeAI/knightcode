@@ -124,6 +124,24 @@ describe("getLatestVersion", () => {
 		await expect(getLatestVersion("sharkdp/fd")).rejects.toThrow("unexpected redirect");
 	});
 
+	it("rejects a tag whose escapes decode into path separators", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => redirectResponse("https://github.com/sharkdp/fd/releases/tag/v9.9.9%2F..%2Fevil")),
+		);
+
+		await expect(getLatestVersion("sharkdp/fd")).rejects.toThrow("unexpected redirect");
+	});
+
+	it("rejects a tag with a malformed percent escape", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => redirectResponse("https://github.com/sharkdp/fd/releases/tag/v9.9.9%zz")),
+		);
+
+		await expect(getLatestVersion("sharkdp/fd")).rejects.toThrow("unexpected redirect");
+	});
+
 	it("rejects a malformed Location header", async () => {
 		vi.stubGlobal(
 			"fetch",

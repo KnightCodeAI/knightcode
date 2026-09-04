@@ -148,11 +148,20 @@ export async function getLatestVersion(repo: string): Promise<string> {
 	if (redirect.origin !== "https://github.com" || !redirect.pathname.startsWith(tagPrefix)) {
 		throw unexpectedRedirect();
 	}
-	const tag = redirect.pathname.slice(tagPrefix.length);
-	if (!tag || tag.includes("/")) {
+	// Validate the decoded tag, not the encoded pathname: %2F, %3F and %23 decode
+	// back into separators, and the decoded value is what gets interpolated into
+	// the download URL and the asset name. A malformed escape makes
+	// decodeURIComponent throw, which is just another unexpected redirect.
+	let tag: string;
+	try {
+		tag = decodeURIComponent(redirect.pathname.slice(tagPrefix.length));
+	} catch {
 		throw unexpectedRedirect();
 	}
-	return decodeURIComponent(tag).replace(/^v/, "");
+	if (!/^[\w.+-]+$/.test(tag) || tag.includes("..")) {
+		throw unexpectedRedirect();
+	}
+	return tag.replace(/^v/, "");
 }
 
 // Download a file from URL

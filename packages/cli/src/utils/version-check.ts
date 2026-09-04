@@ -11,24 +11,37 @@ export interface LatestPiRelease {
 	note?: string;
 }
 
+/** Depth bound for the cause walk below; also what stops a self-referential chain. */
+const MAX_CAUSE_DEPTH = 5;
+
 /** Include useful errno details hidden behind Node's generic "fetch failed" error. */
 export function formatVersionCheckError(error: unknown): string {
 	const rootMessage = error instanceof Error && error.message ? error.message : String(error);
-	const cause = error instanceof Error ? error.cause : undefined;
-	const causes = cause instanceof AggregateError ? cause.errors : cause === undefined ? [] : [cause];
-	const codes = causes
-		.map((value) =>
-			typeof value === "object" && value !== null && "code" in value && typeof value.code === "string"
-				? value.code
-				: undefined,
-		)
-		.filter((code): code is string => code !== undefined);
 
-	if (codes.length > 0) return `${rootMessage} (${[...new Set(codes)].join(", ")})`;
-	const causeMessage = causes.find(
-		(value): value is Error => value instanceof Error && Boolean(value.message),
-	)?.message;
-	return causeMessage ? `${rootMessage} (cause: ${causeMessage})` : rootMessage;
+	// The actionable detail (DNS, TLS, timeout) sits somewhere below the generic
+	// top-level message: Node nests causes arbitrarily deep and wraps multi-address
+	// attempts in an AggregateError, so walk both branches rather than one level.
+	const codes = new Set<string>();
+	let firstCauseMessage: string | undefined;
+	const visit = (value: unknown, depth: number): void => {
+		if (depth > MAX_CAUSE_DEPTH || !(value instanceof Error)) return;
+		if ("code" in value && typeof value.code === "string") {
+			codes.add(value.code);
+		}
+		if (value.message && firstCauseMessage === undefined) {
+			firstCauseMessage = value.message;
+		}
+		if (value instanceof AggregateError) {
+			for (const entry of value.errors) {
+				visit(entry, depth + 1);
+			}
+		}
+		visit(value.cause, depth + 1);
+	};
+	visit(error instanceof Error ? error.cause : undefined, 1);
+
+	if (codes.size > 0) return `${rootMessage} (${[...codes].join(", ")})`;
+	return firstCauseMessage ? `${rootMessage} (cause: ${firstCauseMessage})` : rootMessage;
 }
 
 export function comparePackageVersions(leftVersion: string, rightVersion: string): number | undefined {
