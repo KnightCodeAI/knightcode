@@ -305,10 +305,14 @@ const ABORTED = Symbol("aborted");
  * result is simply discarded.
  */
 function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
-	if (signal.aborted) return Promise.resolve(ABORTED);
 	return new Promise<T | typeof ABORTED>((resolve, reject) => {
 		const onAbort = () => resolve(ABORTED);
-		signal.addEventListener("abort", onAbort, { once: true });
+		// An already-aborted signal settles immediately but still goes through the
+		// same path: returning early instead would leave `promise` with nothing
+		// attached, and a later rejection from work nobody awaits would surface as an
+		// unhandled rejection. Settling first only makes the handlers below no-ops.
+		if (signal.aborted) onAbort();
+		else signal.addEventListener("abort", onAbort, { once: true });
 		// Dropped once the race is decided either way, so winning does not leave the
 		// listener - and the promise and resolve closure it captures - on the signal.
 		promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
