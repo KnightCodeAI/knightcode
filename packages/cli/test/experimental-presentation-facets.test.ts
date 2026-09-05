@@ -54,7 +54,10 @@ describe.skipIf(process.platform === "win32")("server-selected presentation face
 	});
 
 	test("builds conventional plugin entries into the server-owned plugin cache", async () => {
-		const directory = await mkdtemp("/tmp/knightcode-presentation-package-");
+		// Keep the server socket under the short sun_path limit: the listener binds a
+		// hashed path and links the public one, so an over-long path publishes a
+		// socket nothing can connect to.
+		const directory = await mkdtemp("/tmp/pep-");
 		directories.add(directory);
 		const serverId = randomUUID();
 		const packagePath = join(directory, "knightcode-example-plugin");
