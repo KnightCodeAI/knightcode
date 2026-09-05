@@ -1,5 +1,7 @@
 # @knightcodeai/cli-darwin-arm64
 
+## 0.6.0
+
 ## 0.5.4
 
 ## 0.5.3
