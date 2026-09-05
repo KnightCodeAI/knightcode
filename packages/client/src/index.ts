@@ -1,10 +1,12 @@
-export { KnightClient } from "./client.ts";
-export { KnightClientDisposedError, KnightDisconnectedError, KnightServerError } from "./errors.ts";
+export { Client, createClientServiceTransport } from "./client.ts";
+export { ClientDisposedError, DisconnectedError, ServerError } from "./errors.ts";
 export type { ByteTransport, ByteTransportFactory, ByteTransportHandlers } from "./transport.ts";
 export type {
+	AttachmentChangeListener,
+	ClientOptions,
 	ConnectionState,
 	ConnectionStateChange,
 	ListenerErrorHandler,
-	KnightClientOptions,
+	ServiceSubscription,
 	Unsubscribe,
 } from "./types.ts";

@@ -22,6 +22,7 @@ export default defineConfig({
 		},
 	},
 	resolve: {
+		conditions: ["source"],
 		alias: [
 			{ find: /^@knightcode\/telemetry$/, replacement: telemetrySrcIndex },
 			{ find: /^@knightcode\/agent$/, replacement: agentSrcIndex },
@@ -29,4 +30,5 @@ export default defineConfig({
 			{ find: /^@knightcode\/ai\/compat$/, replacement: aiSrcCompat },
 		],
 	},
+	ssr: { resolve: { conditions: ["source"] } },
 });

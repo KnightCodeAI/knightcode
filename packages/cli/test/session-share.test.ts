@@ -26,7 +26,7 @@ describe("shareSession", () => {
 
 	it("keeps concurrent session exports isolated", async () => {
 		const uploads: string[] = [];
-		childProcessMocks.spawn.mockImplementation((_command: string, args: string[]) => {
+		childProcessMocks.spawn.mockImplementation((_command, args: string[]) => {
 			uploads.push(readFileSync(args.at(-1)!, "utf8"));
 			const child = Object.assign(new EventEmitter(), {
 				stdout: new PassThrough(),

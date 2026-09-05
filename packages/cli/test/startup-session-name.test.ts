@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +7,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../src/config.ts";
 
 const cliPath = resolve(__dirname, "../src/cli.ts");
+// `--import` takes a URL: on Windows a bare "C:\..." path is rejected as an
+// unsupported ESM scheme, so hand Node a file:// href.
+const sourceResolverPath = pathToFileURL(resolve(__dirname, "../src/experimental/source-resolver.ts")).href;
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -65,13 +69,12 @@ function readSessionInfoNames(sessionFile: string): string[] {
 
 async function runCli(args: string[], dirs: CliDirs): Promise<CliResult> {
 	let stderr = "";
-	const child = spawn(process.execPath, [cliPath, ...args], {
+	const child = spawn(process.execPath, ["--import", sourceResolverPath, cliPath, ...args], {
 		cwd: dirs.projectDir,
 		env: {
 			...process.env,
 			[ENV_AGENT_DIR]: dirs.agentDir,
 			KNIGHTCODE_OFFLINE: "1",
-			TSX_TSCONFIG_PATH: resolve(__dirname, "../../../tsconfig.json"),
 		},
 		stdio: ["ignore", "ignore", "pipe"],
 	});

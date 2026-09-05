@@ -8,11 +8,17 @@
   "exports": {
     ".": "./src/index.ts",
     "./node": "./src/node.ts",
+    "./harness/context": "./src/harness/context.ts",
+    "./harness/env/nodejs": "./src/harness/env/nodejs.ts",
+    "./harness/runtime/reducer": "./src/harness/runtime/reducer.ts",
+    "./harness/session": "./src/harness/session/index.ts",
+    "./harness/session/testing": "./src/harness/session/testing/index.ts",
     "./session/testing": "./src/harness/session/testing/index.ts",
     "./package.json": "./package.json",
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@knightcode/chord": "workspace:*",
     "@knightcode/ai": "workspace:*",
     "@knightcode/telemetry": "workspace:*",
     "diff": "8.0.4",

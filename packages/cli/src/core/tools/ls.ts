@@ -1,12 +1,10 @@
 import { readdir as fsReaddir, stat as fsStat } from "node:fs/promises";
 import type { AgentTool } from "@knightcode/agent";
-import { Text } from "@knightcode/tui";
 import nodePath from "path";
 import { type Static, Type } from "typebox";
-import type { Theme } from "../../modes/interactive/theme/theme.ts";
-import type { ExtensionContext, ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
+import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import { pathExists, resolveToCwd } from "./path-utils.ts";
-import { formatToolCall, formatToolSummary, getTextOutput, plural, renderToolPath, str } from "./render-utils.ts";
+import { lsRenderers } from "./renderers/ls.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
 
@@ -53,46 +51,6 @@ const defaultLsOperations: LsOperations = {
 export interface LsToolOptions {
 	/** Custom operations for directory listing. Default: local filesystem */
 	operations?: LsOperations;
-}
-
-function formatLsCall(args: { path?: string; limit?: number } | undefined, theme: Theme, cwd: string): string {
-	const limit = args?.limit;
-	const pathDisplay = renderToolPath(str(args?.path), theme, cwd, { emptyFallback: "." });
-	let callArgs = pathDisplay;
-	if (limit !== undefined) {
-		callArgs += theme.fg("toolOutput", `, limit ${limit}`);
-	}
-	return formatToolCall(theme, "List", callArgs);
-}
-
-function formatLsResult(
-	result: {
-		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-		details?: LsToolDetails;
-	},
-	options: ToolRenderResultOptions,
-	theme: Theme,
-	showImages: boolean,
-): string {
-	const output = getTextOutput(result, showImages).trim();
-	const lines = output ? output.split("\n") : [];
-	let text = "";
-	const pathCount = result.details?.pathCount ?? lines.length;
-	if (!options.expanded) {
-		text = formatToolSummary(theme, `Listed ${plural(pathCount, "path")}`, lines.length > 0);
-	} else if (lines.length > 0) {
-		text = lines.map((line) => theme.fg("toolOutput", line)).join("\n");
-	}
-
-	const entryLimit = result.details?.entryLimitReached;
-	const truncation = result.details?.truncation;
-	if (entryLimit || truncation?.truncated) {
-		const warnings: string[] = [];
-		if (entryLimit) warnings.push(`${entryLimit} entries limit`);
-		if (truncation?.truncated) warnings.push(`${formatSize(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit`);
-		text += `${text ? "\n" : ""}${theme.fg("warning", `[Truncated: ${warnings.join(", ")}]`)}`;
-	}
-	return text;
 }
 
 export function createLsToolDefinition(
@@ -211,16 +169,7 @@ export function createLsToolDefinition(
 				})();
 			});
 		},
-		renderCall(args, theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatLsCall(args, theme, context.cwd));
-			return text;
-		},
-		renderResult(result, options, theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatLsResult(result as any, options, theme, context.showImages));
-			return text;
-		},
+		...lsRenderers,
 	};
 }
 

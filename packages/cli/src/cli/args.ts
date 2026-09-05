@@ -431,6 +431,8 @@ ${chalk.bold("Environment Variables:")}
   ${ENV_AGENT_DIR.padEnd(32)} - Config directory (default: ~/${CONFIG_DIR_NAME}/agent)
   ${ENV_SESSION_DIR.padEnd(32)} - Session storage directory (overridden by --session-dir)
   KNIGHTCODE_PACKAGE_DIR                   - Override package directory (for Nix/Guix store paths)
+  KNIGHTCODE_SERVER_DIR                    - Experimental server profile and socket directory (default: ~/.knightcode/server)
+  KNIGHTCODE_SERVER_ID                     - Logical experimental server ID (overridden by --server-id)
   KNIGHTCODE_OFFLINE                       - Disable startup network operations when set to 1/true/yes
   KNIGHTCODE_TELEMETRY                     - Override install telemetry when set to 1/true/yes or 0/false/no
   KNIGHTCODE_SHARE_VIEWER_URL              - Base URL for /share command (default: https://knightcode.raghavseth.in/session/)

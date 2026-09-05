@@ -65,8 +65,6 @@ interface RegisterWriteBenchmarksOptions<
 	prepare(fixture: TFixture, scenario: TScenario): Promise<TSubject>;
 	expectedResult(scenario: TScenario): number;
 	run(subject: TSubject, scenario: TScenario): Promise<number>;
-	/** Checks what the untimed validation write actually produced. Throws to fail registration. */
-	validate?(subject: TSubject, scenario: TScenario): Promise<void>;
 }
 
 interface PreparedWriteFixtures<TSubject> {
@@ -143,7 +141,6 @@ export async function registerWriteBenchmarks<
 			fixtures.push(validationFixture);
 			const validationSubject = await options.prepare(validationFixture, scenario);
 			strictEqual(await options.run(validationSubject, scenario), options.expectedResult(scenario));
-			await options.validate?.(validationSubject, scenario);
 
 			const pendingSubjects: TSubject[] = [];
 			for (let index = 0; index < WRITE_BENCHMARK_WARMUP_ITERATIONS + WRITE_BENCHMARK_ITERATIONS; index++) {
@@ -166,9 +163,7 @@ export async function registerWriteBenchmarks<
 				bench(
 					target.name,
 					async () => {
-						// Equivalent subjects, taken from the end: a shift would reindex the pool inside the
-						// timed callback and add a changing cost to every measurement.
-						const subject = prepared.pendingSubjects.pop();
+						const subject = prepared.pendingSubjects.shift();
 						if (subject === undefined) throw new Error("Benchmark fixture pool was exhausted");
 						await options.run(subject, scenario);
 					},

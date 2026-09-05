@@ -310,6 +310,7 @@ const RELATION_COMMANDS = new Set([
 	"bowtie",
 	"cong",
 	"dashv",
+	"fullouterjoin",
 	"doteq",
 	"fullouterjoin",
 	"downarrow",

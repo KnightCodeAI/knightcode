@@ -1,26 +1,26 @@
 import type { ProtocolError, ProtocolErrorCode } from "@knightcode/protocol";
 
-export class KnightServerError extends Error {
+export class ServerError extends Error {
 	readonly code: ProtocolErrorCode;
 
 	constructor(error: ProtocolError) {
 		super(error.message);
-		this.name = "KnightServerError";
+		this.name = "ServerError";
 		this.code = error.code;
 	}
 }
 
-export class KnightDisconnectedError extends Error {
-	constructor(message = "Pi client is disconnected", cause?: Error) {
+export class DisconnectedError extends Error {
+	constructor(message = "Client is disconnected", cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
-		this.name = "KnightDisconnectedError";
+		this.name = "DisconnectedError";
 	}
 }
 
-export class KnightClientDisposedError extends Error {
+export class ClientDisposedError extends Error {
 	constructor() {
-		super("Pi client is disposed");
-		this.name = "KnightClientDisposedError";
+		super("Client is disposed");
+		this.name = "ClientDisposedError";
 	}
 }
 
@@ -28,7 +28,7 @@ export function toError(error: unknown): Error {
 	return error instanceof Error ? error : new Error(String(error));
 }
 
-export function toDisconnectedError(error: unknown): KnightDisconnectedError {
+export function toDisconnectedError(error: unknown): DisconnectedError {
 	const cause = toError(error);
-	return cause instanceof KnightDisconnectedError ? cause : new KnightDisconnectedError(cause.message, cause);
+	return cause instanceof DisconnectedError ? cause : new DisconnectedError(cause.message, cause);
 }

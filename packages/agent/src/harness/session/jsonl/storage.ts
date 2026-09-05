@@ -1,29 +1,35 @@
+import type { Usage } from "@knightcode/ai";
+import { uuidv7 } from "@knightcode/ai/utils/uuid";
+import type { Context } from "../../context.ts";
 import type { FileError, FileSystem, Result } from "../../types.ts";
+import { insertUsage } from "../commit.ts";
+import { type ForkDestinationSnapshot, type ForkSourceSnapshot, forkSnapshotWrites } from "../fork.ts";
 import {
 	type CommittedEntryWrite,
-	type CommittedRegisterDeleteWrite,
-	type CommittedRegisterSetWrite,
+	type CommittedListAppendWrite,
+	type CommittedListDeleteWrite,
 	type CommittedUsageWrite,
+	type CommittedValueDeleteWrite,
+	type CommittedValueSetWrite,
 	type CommittedWrite,
-	StorageState,
-	type StorageStateSnapshot,
-} from "../storage-state.ts";
+	InMemoryStorageState,
+} from "../in-memory-storage-state.ts";
 import type {
 	CommitResult,
 	Entry,
 	EntryScan,
 	EntryStructure,
-	Register,
-	RegisterNamespace,
 	SessionStats,
 	Storage,
 	StorageBranchScan,
-	Transaction,
 	UsageRow,
 	UsageScan,
+	Write,
 } from "../types.ts";
-import { parseJsonlStorageHeader } from "./codec.ts";
-import type { JsonlStorageHeader, JsonlStorageOptions } from "./types.ts";
+import type { ListElement, ListReadOptions, StoredValue, Value, ValueList } from "../values.ts";
+import { type LegacyV3SessionHeader, parseJsonlSessionHeader } from "./codec.ts";
+import { normalizeLegacyV3Header, normalizeLegacyV3Records } from "./legacy-v3.ts";
+import { JSONL_STORAGE_VERSION, type JsonlStorageHeader, type JsonlStorageOptions } from "./types.ts";
 
 function fileValue<T>(result: Result<T, FileError>, action: string): T {
 	if (!result.ok) throw new Error(`${action}: ${result.error.message}`, { cause: result.error });
@@ -47,10 +53,14 @@ function parseCommittedWrite(value: unknown): CommittedWrite {
 			return value as unknown as CommittedEntryWrite;
 		case "usage":
 			return value as unknown as CommittedUsageWrite;
-		case "register":
-			if (value.op === "set") return value as unknown as CommittedRegisterSetWrite;
-			if (value.op === "delete") return value as unknown as CommittedRegisterDeleteWrite;
-			throw new Error(`Invalid JSONL register operation: ${String(value.op)}`);
+		case "value":
+			if (value.op === "set") return value as unknown as CommittedValueSetWrite;
+			if (value.op === "delete") return value as unknown as CommittedValueDeleteWrite;
+			throw new Error(`Invalid JSONL value operation: ${String(value.op)}`);
+		case "list":
+			if (value.op === "append") return value as unknown as CommittedListAppendWrite;
+			if (value.op === "delete") return value as unknown as CommittedListDeleteWrite;
+			throw new Error(`Invalid JSONL list operation: ${String(value.op)}`);
 		default:
 			throw new Error(`Invalid JSONL write kind: ${String(value.kind)}`);
 	}
@@ -66,6 +76,14 @@ function parseTransaction(line: string): CommittedWrite[] {
 	return (Array.isArray(value) ? value : [value]).map(parseCommittedWrite);
 }
 
+function serializeTransaction(writes: CommittedWrite[]): string {
+	return JSON.stringify(writes.length === 1 ? writes[0] : writes);
+}
+
+function serializeStorage(header: JsonlStorageHeader, transactions: CommittedWrite[][]): string {
+	return `${[JSON.stringify(header), ...transactions.map(serializeTransaction)].join("\n")}\n`;
+}
+
 function splitCompleteLines(content: string): { lines: string[]; torn: boolean } {
 	if (content.endsWith("\n")) return { lines: content.slice(0, -1).split("\n"), torn: false };
 	const lastNewline = content.lastIndexOf("\n");
@@ -73,95 +91,154 @@ function splitCompleteLines(content: string): { lines: string[]; torn: boolean }
 	return { lines: content.slice(0, lastNewline).split("\n"), torn: true };
 }
 
-type JsonlSnapshotContents = Pick<StorageStateSnapshot, "entries" | "registers">;
-
-function snapshotWrites(snapshot: JsonlSnapshotContents): CommittedWrite[] {
-	const writes: CommittedWrite[] = [];
-	for (const entry of snapshot.entries.values()) writes.push({ kind: "entry", ...entry });
-	for (const register of snapshot.registers) writes.push({ kind: "register", op: "set", ...register });
-	return writes.sort((left, right) => left.seq - right.seq);
-}
-
-async function publishFileAtomically(fileSystem: FileSystem, destinationPath: string, content: string): Promise<void> {
+async function publishFileAtomically(
+	fileSystem: FileSystem,
+	destinationPath: string,
+	content: string,
+	context: Context,
+): Promise<void> {
 	const tempPath = `${destinationPath}.tmp`;
 	try {
-		fileValue(await fileSystem.writeFile(tempPath, content), `Failed to stage JSONL storage ${destinationPath}`);
 		fileValue(
-			await fileSystem.renameFile(tempPath, destinationPath),
+			await fileSystem.writeFile(tempPath, content, context),
+			`Failed to stage JSONL storage ${destinationPath}`,
+		);
+		fileValue(
+			await fileSystem.renameFile(tempPath, destinationPath, context),
 			`Failed to publish JSONL storage ${destinationPath}`,
 		);
 	} catch (error) {
-		await fileSystem.remove(tempPath, { force: true });
+		await fileSystem.remove(tempPath, { force: true }, context);
 		throw error;
 	}
 }
 
-/** Format-4 JSONL storage backed by an injected filesystem capability. */
+type LegacyV3Backing = {
+	kind: "v3";
+	importedUsage: Usage;
+	baselineWrites: readonly CommittedWrite[];
+};
+
+type JsonlBacking = { kind: "v4" } | LegacyV3Backing;
+
+/** JSONL storage backed by an injected filesystem capability. */
 export class JsonlStorage implements Storage {
 	private readonly fileSystem: FileSystem;
 	private readonly path: string;
 	private readonly now: () => number;
 	readonly header: JsonlStorageHeader;
-	private readonly storageState = new StorageState();
+	private backing: JsonlBacking;
+	private readonly storageState = new InMemoryStorageState();
 	private commitQueue: Promise<void> = Promise.resolve();
 	private state: "open" | "closing" | "closed" = "open";
 	private closePromise: Promise<void> | undefined;
 
-	private constructor(options: JsonlStorageOptions, header: JsonlStorageHeader) {
+	private constructor(options: JsonlStorageOptions, header: JsonlStorageHeader, backing: JsonlBacking) {
 		this.fileSystem = options.fileSystem;
 		this.path = options.path;
 		this.now = options.now ?? Date.now;
 		this.header = header;
+		this.backing = backing;
 	}
 
-	static async create(options: JsonlStorageOptions, header: JsonlStorageHeader): Promise<JsonlStorage> {
-		fileValue(
-			await options.fileSystem.writeFile(options.path, `${JSON.stringify(header)}\n`),
-			`Failed to create JSONL storage ${options.path}`,
-		);
-		return new JsonlStorage(options, header);
+	static async create(
+		options: JsonlStorageOptions,
+		header: JsonlStorageHeader,
+		initialWrites: Write[],
+		context: Context,
+	): Promise<JsonlStorage> {
+		const storage = new JsonlStorage(options, header, { kind: "v4" });
+		const prepared = storage.storageState.prepareCommit(initialWrites, storage.now());
+		const transactions = prepared.writes.length === 0 ? [] : [prepared.writes];
+		await publishFileAtomically(options.fileSystem, options.path, serializeStorage(header, transactions), context);
+		storage.storageState.applyValidated(prepared.writes);
+		return storage;
 	}
 
 	/** Atomically create storage from a complete prepared snapshot. */
-	static async createFromSnapshot(
+	static async createFromForkSnapshot(
 		options: JsonlStorageOptions,
 		header: JsonlStorageHeader,
-		snapshot: JsonlSnapshotContents,
+		snapshot: ForkDestinationSnapshot,
+		context: Context,
 	): Promise<JsonlStorage> {
-		const writes = snapshotWrites(snapshot);
-		const content = `${[JSON.stringify(header), ...writes.map((write) => JSON.stringify(write))].join("\n")}\n`;
-		await publishFileAtomically(options.fileSystem, options.path, content);
-		return JsonlStorage.open(options);
+		const writes = forkSnapshotWrites(snapshot);
+		const snapshotHeader = { ...header, nextSeq: snapshot.nextSeq };
+		await publishFileAtomically(
+			options.fileSystem,
+			options.path,
+			serializeStorage(
+				snapshotHeader,
+				writes.map((write) => [write]),
+			),
+			context,
+		);
+		return JsonlStorage.open(options, context);
 	}
 
-	static async open(options: JsonlStorageOptions): Promise<JsonlStorage> {
+	static async open(options: JsonlStorageOptions, context: Context): Promise<JsonlStorage> {
 		const content = fileValue(
-			await options.fileSystem.readTextFile(options.path),
+			await options.fileSystem.readTextFile(options.path, context),
 			`Failed to read JSONL storage ${options.path}`,
 		);
 		const { lines, torn } = splitCompleteLines(content);
 		if (lines[0] === undefined || lines[0] === "") {
 			throw new Error(`Invalid JSONL storage ${options.path}: missing header`);
 		}
-		const header = parseJsonlStorageHeader(lines[0]);
-		const storage = new JsonlStorage(options, header);
+		const parsedHeader = parseJsonlSessionHeader(lines[0]);
+		if (!parsedHeader.ok) {
+			throw new Error(`Invalid JSONL storage ${options.path}: invalid header`, { cause: parsedHeader.error });
+		}
+		if (parsedHeader.value.format === "v3-legacy") {
+			return JsonlStorage.openLegacyV3(options, parsedHeader.value.header, lines.slice(1), context);
+		}
+
+		const header = parsedHeader.value.header;
+		if (header.storageVersion !== JSONL_STORAGE_VERSION) {
+			throw new Error(`Session ${header.id} uses unsupported storage version ${header.storageVersion}`);
+		}
+		const storage = new JsonlStorage(options, header, { kind: "v4" });
 		for (let index = 1; index < lines.length; index++) {
 			const line = lines[index]!;
 			try {
-				const writes = parseTransaction(line);
-				storage.storageState.validateCommitted(writes);
-				storage.storageState.applyValidated(writes);
+				storage.replayCommitted(parseTransaction(line));
 			} catch (error) {
 				throw new Error(`Invalid JSONL storage ${options.path}: line ${index + 1}`, { cause: error });
 			}
 		}
-		if (torn) await publishFileAtomically(options.fileSystem, options.path, `${lines.join("\n")}\n`);
+		if (header.nextSeq !== undefined) storage.storageState.advanceNextSeq(header.nextSeq);
+		if (torn) await publishFileAtomically(options.fileSystem, options.path, `${lines.join("\n")}\n`, context);
 		return storage;
 	}
 
-	async commit(transaction: Transaction): Promise<CommitResult> {
+	private static async openLegacyV3(
+		options: JsonlStorageOptions,
+		header: LegacyV3SessionHeader,
+		recordLines: readonly string[],
+		context: Context,
+	): Promise<JsonlStorage> {
+		const { writes, importedUsage, nextSeq } = normalizeLegacyV3Records(recordLines);
+		const targetHeader = {
+			...(await normalizeLegacyV3Header(options.fileSystem, header, context)),
+			nextSeq,
+		};
+		const storage = new JsonlStorage(options, targetHeader, {
+			kind: "v3",
+			importedUsage,
+			baselineWrites: writes,
+		});
+		storage.replayCommitted(writes);
+		return storage;
+	}
+
+	private replayCommitted(writes: readonly CommittedWrite[]): void {
+		this.storageState.validateCommitted(writes);
+		this.storageState.applyValidated(writes);
+	}
+
+	async commit(writes: Write[], context: Context): Promise<CommitResult> {
 		if (this.state !== "open") throw new Error("JsonlStorage is closed");
-		const result = this.commitQueue.then(() => this.applyCommit(transaction));
+		const result = this.commitQueue.then(() => this.applyCommit(writes, context));
 		this.commitQueue = result.then(
 			() => undefined,
 			() => undefined,
@@ -169,75 +246,118 @@ export class JsonlStorage implements Storage {
 		return result;
 	}
 
-	private async applyCommit(transaction: Transaction): Promise<CommitResult> {
-		const prepared = this.storageState.prepareCommit(transaction, this.now());
-		fileValue(
-			await this.fileSystem.appendFile(
-				this.path,
-				`${JSON.stringify(prepared.writes.length === 1 ? prepared.writes[0] : prepared.writes)}\n`,
-			),
-			`Failed to append JSONL storage ${this.path}`,
-		);
-		this.storageState.applyValidated(prepared.writes);
-		return prepared.result;
+	private async applyCommit(writes: Write[], context: Context): Promise<CommitResult> {
+		if (this.backing.kind === "v3" && writes.length !== 0) {
+			return this.upgradeLegacyV3ToV4(this.backing, writes, context);
+		}
+		const prepared = this.storageState.prepareCommit(writes, this.now());
+		if (prepared.writes.length !== 0) {
+			fileValue(
+				await this.fileSystem.appendFile(this.path, `${serializeTransaction(prepared.writes)}\n`, context),
+				`Failed to append JSONL storage ${this.path}`,
+			);
+		}
+		const stats = this.storageState.applyValidated(prepared.writes);
+		return { ...prepared.result, stats: this.withImportedUsage(stats) };
 	}
 
-	getEntries(ids: string[]): Promise<Map<string, Entry>> {
+	/** Atomically upgrade legacy v3 backing and preserve the first caller write as a v4 transaction. */
+	private async upgradeLegacyV3ToV4(
+		backing: LegacyV3Backing,
+		callerWrites: Write[],
+		context: Context,
+	): Promise<CommitResult> {
+		const timestamp = this.now();
+		const prepared = this.storageState.prepareCommit(
+			[
+				insertUsage({
+					id: uuidv7(timestamp),
+					usage: backing.importedUsage,
+					adjustment: true,
+					details: { source: "v3-import" },
+				}),
+				...callerWrites,
+			],
+			timestamp,
+		);
+
+		const nextSeq = prepared.result.firstSeq + prepared.writes.length;
+		const upgradedHeader = { ...this.header, nextSeq };
+		await publishFileAtomically(
+			this.fileSystem,
+			this.path,
+			serializeStorage(upgradedHeader, [...backing.baselineWrites.map((write) => [write]), prepared.writes]),
+			context,
+		);
+
+		const stats = this.storageState.applyValidated(prepared.writes);
+		this.backing = { kind: "v4" };
+		// The first sequence belongs to the internal usage adjustment; return only caller-write sequences.
+		return {
+			...prepared.result,
+			firstSeq: prepared.result.firstSeq + 1,
+			seqs: prepared.result.seqs.slice(1),
+			stats,
+		};
+	}
+
+	getEntries(ids: string[], _context: Context): Promise<Map<string, Entry>> {
 		if (this.state !== "open") return Promise.reject(new Error("JsonlStorage is closed"));
 		return Promise.resolve(this.storageState.getEntries(ids));
 	}
 
-	getRegister<TNamespace extends RegisterNamespace>(
-		namespace: TNamespace,
-		key: string,
-	): Promise<Register<TNamespace> | undefined> {
+	getValue<T>(address: Value<T>, _context: Context): Promise<StoredValue<T> | undefined> {
 		if (this.state !== "open") return Promise.reject(new Error("JsonlStorage is closed"));
-		return Promise.resolve(this.storageState.getRegister(namespace, key));
+		return Promise.resolve(this.storageState.getValue(address));
 	}
 
-	listRegisters<TNamespace extends RegisterNamespace>(
-		namespace: TNamespace,
-		keyPrefix = "",
-	): Promise<Register<TNamespace>[]> {
+	scanValues<T>(prefix: Value<T>, _context: Context): Promise<StoredValue<T>[]> {
 		if (this.state !== "open") return Promise.reject(new Error("JsonlStorage is closed"));
-		return Promise.resolve(this.storageState.listRegisters(namespace, keyPrefix));
+		return Promise.resolve(this.storageState.scanValues(prefix));
 	}
 
-	async scanBranch(query: StorageBranchScan): Promise<Entry[]> {
+	async readList<T>(
+		address: ValueList<T>,
+		options: ListReadOptions | undefined,
+		_context: Context,
+	): Promise<ListElement<T>[]> {
+		if (this.state !== "open") throw new Error("JsonlStorage is closed");
+		return this.storageState.readList(address, options);
+	}
+
+	async scanBranch(query: StorageBranchScan, _context: Context): Promise<Entry[]> {
 		if (this.state !== "open") throw new Error("JsonlStorage is closed");
 		return this.storageState.scanBranch(query);
 	}
 
-	async scanBranchStructure(query: StorageBranchScan): Promise<EntryStructure[]> {
+	async scanBranchStructure(query: StorageBranchScan, _context: Context): Promise<EntryStructure[]> {
 		if (this.state !== "open") throw new Error("JsonlStorage is closed");
 		return this.storageState.scanBranchStructure(query);
 	}
 
-	scanEntries(query: EntryScan): Promise<Entry[]> {
+	scanEntries(query: EntryScan, _context: Context): Promise<Entry[]> {
 		if (this.state !== "open") return Promise.reject(new Error("JsonlStorage is closed"));
 		return Promise.resolve(this.storageState.scanEntries(query));
 	}
 
-	scanUsage(query: UsageScan): Promise<UsageRow[]> {
+	scanUsage(query: UsageScan, _context: Context): Promise<UsageRow[]> {
 		if (this.state !== "open") return Promise.reject(new Error("JsonlStorage is closed"));
 		return Promise.resolve(this.storageState.scanUsage(query));
 	}
 
-	getStats(): Promise<SessionStats> {
+	getStats(_context: Context): Promise<SessionStats> {
 		if (this.state !== "open") return Promise.reject(new Error("JsonlStorage is closed"));
-		return Promise.resolve(this.storageState.getStats());
+		return Promise.resolve(this.withImportedUsage(this.storageState.getStats()));
 	}
 
-	/** Capture the current entries and registers at one serialized boundary between commits. */
-	snapshot(): Promise<{ entries: Entry[]; registers: Register[] }> {
+	private withImportedUsage(stats: SessionStats): SessionStats {
+		return this.backing.kind === "v4" ? stats : { ...stats, usage: this.backing.importedUsage };
+	}
+
+	/** Capture the state needed to fork at one serialized boundary between commits. */
+	captureForkSource(_context: Context): Promise<ForkSourceSnapshot> {
 		if (this.state !== "open") return Promise.reject(new Error("JsonlStorage is closed"));
-		const result = this.commitQueue.then(() => {
-			const snapshot = this.storageState.snapshot();
-			return {
-				entries: [...snapshot.entries.values()].sort((left, right) => left.seq - right.seq),
-				registers: snapshot.registers,
-			};
-		});
+		const result = this.commitQueue.then(() => this.storageState.snapshotEntriesAndValues());
 		this.commitQueue = result.then(
 			() => undefined,
 			() => undefined,
@@ -245,7 +365,7 @@ export class JsonlStorage implements Storage {
 		return result;
 	}
 
-	close(): Promise<void> {
+	close(_context: Context): Promise<void> {
 		if (this.closePromise !== undefined) return this.closePromise;
 		this.state = "closing";
 		this.closePromise = this.commitQueue.then(() => {

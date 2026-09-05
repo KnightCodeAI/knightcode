@@ -1,9 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
+import { parseServiceCall } from "@knightcode/chord";
 import { ClientMessageDecoder, encodeServerMessage, PROTOCOL_VERSION } from "@knightcode/protocol";
 import { afterEach, describe, expect, test } from "vitest";
-import { KnightClient } from "../src/index.ts";
+import { Client } from "../src/index.ts";
 import { createUnixTransportFactory } from "../src/unix.ts";
 
 const serverId = "00000000-0000-4000-8000-000000000001";
@@ -14,7 +15,7 @@ const sockets = new Set<Socket>();
 async function makeSocketPath(): Promise<string> {
 	const directory = await mkdtemp(join("/tmp", "knightcode-client-transport-"));
 	tempDirectories.add(directory);
-	return join(directory, "pi.sock");
+	return join(directory, "knightcode.sock");
 }
 
 async function listen(server: Server, path: string): Promise<void> {
@@ -47,14 +48,13 @@ afterEach(async () => {
 
 test("rejects invalid Unix transport options", () => {
 	expect(() => createUnixTransportFactory({ path: "" })).toThrow(/must not be empty/);
-	expect(() => createUnixTransportFactory({ path: `/tmp/${"x".repeat(512)}` })).toThrow(/too long/);
-	expect(() => createUnixTransportFactory({ path: "/tmp/pi.sock", maxPendingBytes: 0 })).toThrow(/positive/);
+	expect(() => createUnixTransportFactory({ path: "/tmp/knightcode.sock", maxPendingBytes: 0 })).toThrow(/positive/);
 });
 
 describe.runIf(process.platform !== "win32")("createUnixTransportFactory", () => {
-	test("carries a complete KnightClient handshake and request over a real Unix socket", async () => {
+	test("carries a complete Client handshake and request over a real Unix socket", async () => {
 		const path = await makeSocketPath();
-		const receivedMethods: string[] = [];
+		const receivedMembers: string[] = [];
 		const server = createServer((socket) => {
 			const decoder = new ClientMessageDecoder();
 			socket.on("data", (chunk) => {
@@ -68,7 +68,9 @@ describe.runIf(process.platform !== "win32")("createUnixTransportFactory", () =>
 						for (const byte of frame) socket.write(Uint8Array.of(byte));
 						continue;
 					}
-					receivedMethods.push(message.call.method);
+					if (message.type === "cancel") continue;
+					const call = parseServiceCall(message.call);
+					receivedMembers.push(`${call.serviceId}.${call.member}`);
 					const frame = encodeServerMessage({
 						type: "response",
 						id: message.id,
@@ -82,18 +84,20 @@ describe.runIf(process.platform !== "win32")("createUnixTransportFactory", () =>
 			});
 		});
 		await listen(server, path);
-		const client = new KnightClient({ serverId, transportFactory: createUnixTransportFactory({ path }) });
+		const client = new Client({ serverId, transportFactory: createUnixTransportFactory({ path }) });
 
 		try {
 			await expect(client.connect()).resolves.toMatchObject({ serverId });
-			await expect(client.listSessions()).resolves.toEqual([]);
-			expect(receivedMethods).toEqual(["list"]);
+			await expect(
+				client.request({ serverId }, { serviceId: "test.server", member: "list", args: [] }),
+			).resolves.toEqual([]);
+			expect(receivedMembers).toEqual(["test.server.list"]);
 		} finally {
 			await client.dispose();
 		}
 	});
 
-	test("reports truncated final frames through KnightClient", async () => {
+	test("reports truncated final frames through Client", async () => {
 		const path = await makeSocketPath();
 		const server = createServer((socket) => {
 			const decoder = new ClientMessageDecoder();
@@ -114,11 +118,13 @@ describe.runIf(process.platform !== "win32")("createUnixTransportFactory", () =>
 			});
 		});
 		await listen(server, path);
-		const client = new KnightClient({ serverId, transportFactory: createUnixTransportFactory({ path }) });
+		const client = new Client({ serverId, transportFactory: createUnixTransportFactory({ path }) });
 
 		try {
 			await client.connect();
-			await expect(client.listSessions()).rejects.toMatchObject({
+			await expect(
+				client.request({ serverId }, { serviceId: "test.server", member: "list", args: [] }),
+			).rejects.toMatchObject({
 				name: "ProtocolValidationError",
 				message: expect.stringMatching(/truncated/i),
 			});

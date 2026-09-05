@@ -4,12 +4,13 @@ import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { KnightServer } from "../../server/src/server.ts";
+import { Server as RuntimeServer } from "../../server/src/server.ts";
+import { createTestServerServices } from "../../server/src/testing/host.ts";
 import { createUnixListener } from "../../server/src/transports/unix/listener.ts";
 import { discoverUnixServers } from "../src/unix.ts";
 
 const tempDirectories = new Set<string>();
-const servers = new Set<KnightServer>();
+const servers = new Set<RuntimeServer>();
 const rawServers = new Set<Server>();
 const rawSockets = new Set<Socket>();
 const children = new Set<ChildProcess>();
@@ -28,12 +29,13 @@ async function startServer(
 	directory: string,
 	fileServerId: string,
 	reportedServerId = fileServerId,
-): Promise<KnightServer> {
+): Promise<RuntimeServer> {
 	const path = join(directory, `${fileServerId}.sock`);
-	const server = new KnightServer(
+	const server = new RuntimeServer(
 		{
-			sessions: { list: async () => [] },
-			createHarness: async () => Promise.reject(new Error("unused")),
+			serverServices: createTestServerServices(),
+			resolveSession: async () => Promise.reject(new Error("unused")),
+			openSession: async () => Promise.reject(new Error("unused")),
 		},
 		{ listeners: [createUnixListener({ path })], serverId: reportedServerId },
 	);

@@ -27,11 +27,9 @@ import {
 	validateAuthCommandArgs,
 } from "./cli/auth-command.ts";
 import { resolveCredentialForPrint } from "./cli/credential-print.ts";
-import { experimentalCli } from "./cli/experimental/cli.ts";
+import { cli as experimentalCli } from "./cli/experimental/cli.ts";
 import type { ClientCommand } from "./cli/experimental/commands/client.ts";
 import type { ServerCommand } from "./cli/experimental/commands/server.ts";
-import { runExperimentalClient, startExperimentalServerGeneration } from "./cli/experimental/runtime.ts";
-import { SESSION_WORKER_ENV } from "./cli/experimental/session-worker.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
@@ -67,10 +65,15 @@ import { collectSettingsDiagnostics, deduplicateDiagnostics } from "./core/setti
 import { SettingsManager } from "./core/settings-manager.ts";
 import { printTimings, resetTimings, time } from "./core/timings.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
+import { runClient } from "./experimental/client.ts";
+import { runClientTui } from "./experimental/client-tui.ts";
+import type { RadiusRelayHostStatus } from "./experimental/radius-relay.ts";
+import { startForegroundServer } from "./experimental/server.ts";
 import { builtInExtensions } from "./extensions/index.ts";
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
-import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
+import { initTheme, setThemeJsonValidator, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
+import { validateThemeJson } from "./modes/interactive/theme/theme-json.ts";
 import { cleanupManagedInstall, handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
@@ -581,11 +584,38 @@ async function waitForTermination(serverClosed: Promise<void>): Promise<void> {
 }
 
 async function runExperimentalServerCommand(command: ServerCommand): Promise<void> {
-	if (command.auth !== undefined) throw new Error("Authentication is not supported by the local demo server");
-	if (command.listen !== undefined) throw new Error("The local demo server uses its server-addressed Unix socket");
-	const runtime = await startExperimentalServerGeneration({ sessionDir: command.sessionDir });
+	let previousRelayStatus = "";
+	let relayOutputReady = false;
+	let pendingRelayStatus: RadiusRelayHostStatus | undefined;
+	const reportRelayStatus = (status: RadiusRelayHostStatus): void => {
+		const description =
+			status.status === "connected"
+				? "connected"
+				: status.status === "not_authenticated"
+					? "not connected; local only"
+					: status.status === "retrying"
+						? `reconnecting: ${status.error}`
+						: "connecting";
+		if (description === previousRelayStatus || status.status === "connecting") return;
+		previousRelayStatus = description;
+		console.log(`Radius: ${description}`);
+	};
+	const runtime = await startForegroundServer({
+		serverId: command.serverId,
+		sessionDir: command.sessionDir,
+		provider: command.provider,
+		model: command.model,
+		pluginPackages: command.pluginPackages ?? [],
+		relayAuth: command.auth,
+		onRelayStatus(status) {
+			if (relayOutputReady) reportRelayStatus(status);
+			else pendingRelayStatus = status;
+		},
+	});
 	console.log(`Server: ${runtime.serverId}`);
 	console.log(`Socket: ${runtime.socketPath}`);
+	relayOutputReady = true;
+	if (pendingRelayStatus !== undefined) reportRelayStatus(pendingRelayStatus);
 	try {
 		await waitForTermination(runtime.closed);
 	} finally {
@@ -593,29 +623,44 @@ async function runExperimentalServerCommand(command: ServerCommand): Promise<voi
 	}
 }
 
-async function runExperimentalClientCommand(command: ClientCommand): Promise<void> {
-	const result = await runExperimentalClient(command);
-	if (result.kind === "attached") {
-		console.log(`${result.serverId}	${result.sessionId}	attached`);
+async function runClientCommand(command: ClientCommand): Promise<void> {
+	if (command.prompt === undefined && process.stdin.isTTY === true && process.stdout.isTTY === true) {
+		await runClientTui(command);
 		return;
 	}
-	for (const session of result.sessions) console.log(`${session.serverId}	${session.sessionId}`);
+	let streamedText = false;
+	const result = await runClient(command, {
+		onEvent(event) {
+			if (event.type !== "message_update" || event.frame?.type !== "text_delta") return;
+			streamedText = true;
+			process.stdout.write(event.frame.delta);
+		},
+	});
+	if (result.kind === "attached") {
+		console.log(`${result.serverId}\t${result.sessionId}\tattached`);
+		return;
+	}
+	if (result.kind === "prompted") {
+		if (streamedText) process.stdout.write("\n");
+		else console.log(result.text);
+		return;
+	}
+	for (const session of result.sessions) console.log(`${session.serverId}\t${session.sessionId}`);
 }
 
 async function runExperimentalCommand(args: string[]): Promise<boolean> {
-	if (!areExperimentalFeaturesEnabled()) return false;
+	if (!areExperimentalFeaturesEnabled() || (args[0] !== "server" && args[0] !== "client")) return false;
 	try {
 		const result = await experimentalCli.execute(args, {
-			runKnightcode: () => {},
 			runServer: runExperimentalServerCommand,
-			runClient: runExperimentalClientCommand,
+			runClient: runClientCommand,
 		});
 		if (!result.ok) {
 			for (const error of result.errors) console.error(chalk.red(`Error: ${error}`));
 			process.exitCode = 1;
 			return true;
 		}
-		return result.command.command !== "knightcode";
+		return true;
 	} catch (error) {
 		console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
 		process.exitCode = 1;
@@ -628,12 +673,6 @@ export interface MainOptions {
 }
 
 export async function main(args: string[], options?: MainOptions) {
-	// A compiled binary spawns its session workers as copies of itself, so this
-	// process is one of those workers rather than a CLI invocation.
-	if (process.env[SESSION_WORKER_ENV]) {
-		await import("./cli/experimental/session-worker-process.ts");
-		return;
-	}
 	resetTimings();
 	const extensionFactories = [...builtInExtensions, ...(options?.extensionFactories ?? [])];
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.KNIGHTCODE_OFFLINE);
@@ -647,6 +686,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await runExperimentalCommand(args)) {
+		if (args[0] === "client") process.exit(process.exitCode ?? 0);
 		return;
 	}
 
@@ -960,6 +1000,8 @@ export async function main(args: string[], options?: MainOptions) {
 		stdinContent,
 	);
 	time("prepareInitialMessage");
+	// knightcode reads user-authored themes, so it opts into full validation before any theme loads.
+	setThemeJsonValidator(validateThemeJson);
 	initTheme(settingsManager.getTheme(), appMode === "interactive");
 	time("initTheme");
 

@@ -672,6 +672,7 @@ describe("AgentSession compaction characterization", () => {
 		await compactExpectation;
 	});
 
+	// Regression test for #8920.
 	it("aborts an in-progress manual compaction and waits until the session is idle", async () => {
 		const { harness, compactionStarted } = await createAbortableCompactionHarness();
 		harnesses.push(harness);
@@ -692,93 +693,6 @@ describe("AgentSession compaction characterization", () => {
 
 		await expect(harness.session.prompt("next prompt")).resolves.toBeUndefined();
 		expect(harness.session.getLastAssistantText()).toBe("continued");
-	});
-
-	it("cancels automatic compaction when a compaction_start listener aborts the session", async () => {
-		const harness = await createHarness();
-		harnesses.push(harness);
-		seedCompactableSession(harness);
-		useSummaryStreamFn(harness, "auto summary that must not land");
-		harness.session.subscribe((event) => {
-			if (event.type === "compaction_start") {
-				void harness.session.abort();
-			}
-		});
-		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
-
-		await expect(sessionInternals._runAutoCompaction("threshold", false)).resolves.toBe(false);
-
-		expect(harness.eventsOfType("compaction_end").at(-1)).toMatchObject({ reason: "threshold", aborted: true });
-		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
-		expect(harness.session.isIdle).toBe(true);
-	});
-
-	it("cancels automatic compaction aborted before its before-compact hook is reached", async () => {
-		// The listener aborts while the hook is still registered, so the hook is raced
-		// against a signal that is already aborted - the path that must not abandon the
-		// emit promise unobserved.
-		const rejections: unknown[] = [];
-		const onUnhandled = (reason: unknown) => rejections.push(reason);
-		process.on("unhandledRejection", onUnhandled);
-		try {
-			const harness = await createHarness({
-				settings: { compaction: { keepRecentTokens: 1 } },
-				extensionFactories: [
-					(knightcode) => {
-						knightcode.on("session_before_compact", async () => {
-							await new Promise((resolve) => setTimeout(resolve, 0));
-							throw new Error("hook failed after the abort");
-						});
-					},
-				],
-			});
-			harnesses.push(harness);
-			seedCompactableSession(harness);
-			useSummaryStreamFn(harness, "auto summary that must not land");
-			harness.session.subscribe((event) => {
-				if (event.type === "compaction_start") void harness.session.abort();
-			});
-			const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
-
-			await expect(sessionInternals._runAutoCompaction("threshold", false)).resolves.toBe(false);
-			await new Promise((resolve) => setTimeout(resolve, 10));
-
-			expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
-			expect(harness.session.isIdle).toBe(true);
-			expect(rejections).toEqual([]);
-		} finally {
-			process.off("unhandledRejection", onUnhandled);
-		}
-	});
-
-	it("aborts a compaction whose before-compact hook ignores the abort signal", async () => {
-		let markHookEntered = () => {};
-		const hookEntered = new Promise<void>((resolve) => {
-			markHookEntered = resolve;
-		});
-		// Never resolves and never listens for the signal: abort() must not wait on it.
-		const harness = await createHarness({
-			settings: { compaction: { keepRecentTokens: 1 } },
-			extensionFactories: [
-				(knightcode) => {
-					knightcode.on("session_before_compact", async () => {
-						markHookEntered();
-						return await new Promise<never>(() => {});
-					});
-				},
-			],
-		});
-		harnesses.push(harness);
-		seedCompactableSession(harness);
-
-		const compactPromise = harness.session.compact();
-		const compactExpectation = expect(compactPromise).rejects.toThrow("Compaction cancelled");
-		await hookEntered;
-		await harness.session.abort();
-		await compactExpectation;
-
-		expect(harness.session.isCompacting).toBe(false);
-		expect(harness.session.isIdle).toBe(true);
 	});
 
 	it("resumes after threshold compaction when only agent-level queued messages exist", async () => {

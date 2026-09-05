@@ -1,7 +1,6 @@
 import type {
 	ExactTelemetryAttributes,
 	SchemaTelemetrySpan,
-	TelemetryContext,
 	TelemetrySchemaDefinition,
 	TelemetrySchemaSpanEndAttributes,
 	TelemetrySchemaSpanEventAttributes,
@@ -11,6 +10,7 @@ import type {
 	TelemetrySchemaSpanUnion,
 	TelemetrySpan,
 } from "@knightcode/telemetry";
+import { type Context, getTelemetryContext, withTelemetryContext } from "./context.ts";
 
 export type {
 	AttributeValue,
@@ -136,17 +136,19 @@ export type AiTelemetrySpan<Name extends AiSpanName> = SchemaTelemetrySpan<typeo
 export type AiSpan = TelemetrySchemaSpanUnion<typeof AI_TELEMETRY_SCHEMA>;
 
 export function startAiSpan<Name extends AiSpanName, const Attributes extends AiSpanStartAttributes<Name>, Result>(
-	telemetryContext: TelemetryContext,
 	name: Name,
 	attributes: ExactTelemetryAttributes<AiSpanStartAttributes<Name>, Attributes>,
-	callback: (span: AiTelemetrySpan<Name>) => Result | Promise<Result>,
+	callback: (span: AiTelemetrySpan<Name>, context: Context) => Result | Promise<Result>,
+	context: Context,
 ): Promise<Result> {
-	return telemetryContext.startSpan({ name, attributes }, (span) => callback(span as AiTelemetrySpan<Name>));
+	return getTelemetryContext(context).startSpan({ name, attributes }, (span) =>
+		callback(span as AiTelemetrySpan<Name>, withTelemetryContext(span, context)),
+	);
 }
 
 const HOOK_NAMES = [
 	"before_run",
-	"before_resume",
+	"before_drive",
 	"before_run_end",
 	"transform_context",
 	"before_request",
@@ -162,7 +164,7 @@ const EVENT_TYPES = [
 	"run_start",
 	"run_resume",
 	"run_suspend",
-	"run_abort",
+	"operation_abort",
 	"run_end",
 	"fault",
 	"handler_error",
@@ -178,9 +180,8 @@ const EVENT_TYPES = [
 	"tool_update",
 	"tool_end",
 	"entry_added",
-	"write_pending",
 	"queue_update",
-	"fact_update",
+	"value_update",
 	"config_update",
 	"compaction_start",
 	"compaction_end",
@@ -317,7 +318,7 @@ export const HARNESS_TELEMETRY_SCHEMA = {
 				"knightcode.checkpoint.kind": {
 					type: "string",
 					required: true,
-					values: ["normal", "failure_drain", "abort_reconcile"],
+					values: ["normal", "abort_reconcile"],
 					description: "Checkpoint purpose",
 				},
 			},
@@ -479,7 +480,7 @@ export const HARNESS_TELEMETRY_SCHEMA = {
 				"knightcode.hook.registration_id": {
 					type: "string",
 					required: false,
-					description: "Stable hook registration id",
+					description: "Optional hook registration metadata",
 				},
 			},
 			endAttributes: {
@@ -576,7 +577,7 @@ export const HARNESS_TELEMETRY_SCHEMA = {
 				"knightcode.session.item_kinds": {
 					type: "string[]",
 					required: true,
-					elementValues: ["entry", "usage", "register"],
+					elementValues: ["entry", "usage", "value", "list"],
 					description: "Distinct write kinds in the transaction",
 				},
 			},
@@ -628,12 +629,12 @@ export function startHarnessSpan<
 	const Attributes extends HarnessSpanStartAttributes<Name>,
 	Result,
 >(
-	telemetryContext: TelemetryContext,
 	name: Name,
 	attributes: ExactTelemetryAttributes<HarnessSpanStartAttributes<Name>, Attributes>,
-	callback: (span: HarnessTelemetrySpan<Name>) => Result | Promise<Result>,
+	callback: (span: HarnessTelemetrySpan<Name>, context: Context) => Result | Promise<Result>,
+	context: Context,
 ): Promise<Result> {
-	return telemetryContext.startSpan({ name, attributes }, (span: TelemetrySpan) =>
-		callback(span as HarnessTelemetrySpan<Name>),
+	return getTelemetryContext(context).startSpan({ name, attributes }, (span: TelemetrySpan) =>
+		callback(span as HarnessTelemetrySpan<Name>, withTelemetryContext(span, context)),
 	);
 }

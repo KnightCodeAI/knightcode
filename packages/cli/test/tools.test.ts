@@ -11,8 +11,8 @@ import {
 	createBashToolDefinition,
 	createLocalBashOperations,
 } from "../src/core/tools/bash.ts";
-import { computeEditsDiff } from "../src/core/tools/edit-diff.ts";
 import { createEditToolDefinition } from "../src/core/tools/edit.ts";
+import { computeEditsDiff } from "../src/core/tools/edit-diff.ts";
 import { createFindToolDefinition } from "../src/core/tools/find.ts";
 import { createGrepToolDefinition } from "../src/core/tools/grep.ts";
 import { createLsToolDefinition } from "../src/core/tools/ls.ts";
@@ -911,7 +911,7 @@ describe("tool cwd resolution", () => {
 	let testDir: string;
 
 	beforeEach(() => {
-		testDir = join(tmpdir(), `knightcode-cwd-test-${Date.now()}`);
+		testDir = join(tmpdir(), `coding-agent-cwd-test-${Date.now()}`);
 		mkdirSync(testDir, { recursive: true });
 	});
 
@@ -999,13 +999,13 @@ describe("tool cwd resolution", () => {
 		expect(output).toContain("ctx-cwd-ls.txt");
 	});
 
-	it("bash uses ctx.cwd when provided", async () => {
+	// Skipped on Windows: `pwd` under Git Bash prints a POSIX path while the
+	// fixture directory is a drive-letter path.
+	it.skipIf(process.platform === "win32")("bash uses ctx.cwd when provided", async () => {
 		const tool = createBashToolDefinition("/", { exposeSessionEnvironment: false });
 		const result = await tool.execute("test-bash-ctx-cwd", { command: "pwd" }, undefined, undefined, fakeCtx(testDir));
 		const output = getTextOutput(result);
-		// The shell on Windows reports a POSIX path (/tmp/...) for the same
-		// directory, so compare the leaf name rather than the whole path.
-		expect(output).toContain(basename(testDir));
+		expect(output).toContain(testDir);
 	});
 });
 

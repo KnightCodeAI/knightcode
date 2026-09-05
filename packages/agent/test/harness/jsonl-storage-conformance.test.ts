@@ -1,4 +1,6 @@
+import { resolve } from "node:path";
 import { describe, it } from "vitest";
+import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
 import { JSONL_FORMAT_VERSION, JsonlStorage } from "../../src/harness/session/jsonl/index.ts";
 import {
@@ -7,6 +9,11 @@ import {
 	type StorageFixture,
 } from "../../src/harness/session/testing/index.ts";
 import { createTempDir } from "./session-test-utils.ts";
+
+// Session cwds are resolved rather than written as POSIX literals: absolutePath()
+// makes "/workspace" into "C:\\workspace" on Windows, and the seeded
+// directory name has to match what the repository derives.
+const WORKSPACE = resolve("/workspace");
 
 const NOW = 1_700_000_000_000;
 
@@ -34,12 +41,14 @@ registerConformance(
 				id: "session",
 				storageVersion: 1,
 				createdAt: NOW,
-				cwd: "/workspace",
+				cwd: WORKSPACE,
 			},
+			[],
+			BACKGROUND_CONTEXT,
 		);
 		return {
 			storage,
-			[Symbol.asyncDispose]: () => storage.close(),
+			[Symbol.asyncDispose]: () => storage.close(BACKGROUND_CONTEXT),
 		} satisfies StorageFixture;
 	}),
 );

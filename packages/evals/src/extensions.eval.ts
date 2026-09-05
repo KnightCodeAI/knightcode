@@ -68,7 +68,7 @@ const ExtensionAuthoringJudge = createJudge<KnightCodeHarnessInput, ExtensionAut
 			const legacyScope = imports.find(
 				(specifier) => specifier.startsWith("@mariozechner/") || specifier.startsWith("@earendil-works/"),
 			);
-			if (legacyScope) failures.push(`extension imports a legacy upstream package: ${legacyScope}`);
+			if (legacyScope) failures.push(`extension imports a legacy package scope: ${legacyScope}`);
 			if (imports.some((specifier) => specifier.startsWith("@sinclair/typebox"))) {
 				failures.push('extension imports legacy "@sinclair/typebox" instead of "typebox"');
 			}

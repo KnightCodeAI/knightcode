@@ -1,14 +1,14 @@
 import type { SessionMetadata } from "@knightcode/agent";
-import { KnightServer } from "../../server.ts";
-import type { KnightServerHost } from "../../types.ts";
+import { Server } from "../../server.ts";
+import type { ServerHost } from "../../types.ts";
 import { createUnixListener } from "./listener.ts";
 import type { UnixServerOptions } from "./types.ts";
 
-/** Compose KnightServer with one Unix-domain socket listener. */
+/** Compose Server with one Unix-domain socket listener. */
 export function createUnixServer<TMetadata extends SessionMetadata>(
-	host: KnightServerHost<TMetadata>,
+	host: ServerHost<TMetadata>,
 	options: UnixServerOptions,
-): KnightServer<TMetadata> {
+): Server<TMetadata> {
 	const listener = createUnixListener({
 		path: options.path,
 		mode: options.mode,
@@ -17,10 +17,11 @@ export function createUnixServer<TMetadata extends SessionMetadata>(
 		gracefulCloseTimeoutMs: options.gracefulCloseTimeoutMs,
 		onError: options.onError,
 	});
-	return new KnightServer(host, {
+	return new Server(host, {
 		listeners: [listener],
 		maxFrameLength: options.maxFrameLength,
 		handshakeTimeoutMs: options.handshakeTimeoutMs,
+		onConnectionCountChanged: options.onConnectionCountChanged,
 		serverId: options.serverId,
 		onError: options.onError,
 	});

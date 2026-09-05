@@ -47,13 +47,11 @@ function parseNoProxyEntry(entry: string): { host: string; port: number } | unde
 		if (closingBracket !== -1) {
 			const host = trimmed.slice(1, closingBracket);
 			const rest = trimmed.slice(closingBracket + 1);
-			if (!rest) return { host, port: 0 };
-			// A malformed suffix must not degrade to the unscoped port 0, which would
-			// widen a port-scoped entry into a host-wide bypass. Drop the entry instead.
-			if (!rest.startsWith(":")) return undefined;
-			const portText = rest.slice(1);
-			if (!/^[0-9]+$/.test(portText)) return undefined;
-			return { host, port: Number.parseInt(portText, 10) };
+			if (rest.startsWith(":")) {
+				const port = Number.parseInt(rest.slice(1), 10);
+				return { host, port: Number.isNaN(port) ? 0 : port };
+			}
+			return { host, port: 0 };
 		}
 	}
 
@@ -102,8 +100,7 @@ function shouldProxyHostname(hostname: string, port: number, env?: ProviderEnv):
 		}
 
 		if (!domain) {
-			// A bare "*" is a match-everything entry even when it appears alongside others.
-			return parsed.host !== "*";
+			return true;
 		}
 
 		if (normalizedTargetHost === domain) {

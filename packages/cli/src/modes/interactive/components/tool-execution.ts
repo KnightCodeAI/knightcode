@@ -1,11 +1,40 @@
-import { type Component, Container, getCapabilities, Gutter, Image, Spacer, Text, type TUI } from "@knightcode/tui";
-import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
-import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
+import type { AgentToolResult } from "@knightcode/agent";
+import {
+	type Component,
+	Container,
+	getCapabilities,
+	Gutter,
+	Image,
+	MouseRegion,
+	Spacer,
+	Text,
+	type TUI,
+	type TuiMouseEvent,
+} from "@knightcode/tui";
+import type { ToolDefinition, ToolRenderContext, ToolRenderResultOptions } from "../../../core/extensions/types.ts";
 import { getTextOutput as getRenderedTextOutput, plural } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { BLOCK_INDENT, BULLET, RESULT_GUTTER, RESULT_INDENT } from "../glyphs.ts";
-import { theme } from "../theme/theme.ts";
+import { theme, type Theme } from "../theme/theme.ts";
 import { keyHint } from "./keybinding-hints.ts";
+
+/**
+ * What this component needs from a tool: how to draw it. It neither executes tools nor reads their
+ * parameter schemas, so a definition and a bare renderer pair are equally acceptable.
+ *
+ * The renderer parameters are `any` on purpose: a `ToolDefinition` types them from its schema, and
+ * narrowing them here would make those definitions unassignable.
+ */
+export interface ToolRenderers {
+	renderShell?: "default" | "self";
+	renderCall?: (args: any, theme: Theme, context: ToolRenderContext<any, any>) => Component;
+	renderResult?: (
+		result: AgentToolResult<any>,
+		options: ToolRenderResultOptions,
+		theme: Theme,
+		context: ToolRenderContext<any, any>,
+	) => Component;
+}
 
 const FALLBACK_PREVIEW_LINES = 10;
 const MAX_INLINE_ARGS_LENGTH = 200;
@@ -39,6 +68,7 @@ export class ToolExecutionComponent extends Container {
 	private callGutter: Gutter;
 	private resultGutter: Gutter;
 	private selfRenderContainer: Container;
+	private selfRenderHeight = 0;
 	private callRendererComponent?: Component;
 	private resultRendererComponent?: Component;
 	private rendererState: any = {};
@@ -51,8 +81,7 @@ export class ToolExecutionComponent extends Container {
 	private showImages: boolean;
 	private imageWidthCells: number;
 	private isPartial = true;
-	private toolDefinition?: ToolDefinition<any, any>;
-	private builtInToolDefinition?: ToolDefinition<any, any>;
+	private toolDefinition?: ToolRenderers;
 	private ui: TUI;
 	private cwd: string;
 	private executionStarted = false;
@@ -71,7 +100,7 @@ export class ToolExecutionComponent extends Container {
 		toolCallId: string,
 		args: any,
 		options: ToolExecutionOptions = {},
-		toolDefinition: ToolDefinition<any, any> | undefined,
+		toolDefinition: ToolRenderers | ToolDefinition<any, any, any> | undefined,
 		ui: TUI,
 		cwd: string,
 	) {
@@ -80,7 +109,6 @@ export class ToolExecutionComponent extends Container {
 		this.toolCallId = toolCallId;
 		this.args = args;
 		this.toolDefinition = toolDefinition;
-		this.builtInToolDefinition = createAllToolDefinitions(cwd)[toolName as ToolName];
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;
 		this.ui = ui;
@@ -108,33 +136,15 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private getCallRenderer(): ToolDefinition<any, any>["renderCall"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderCall;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderCall;
-		}
-		return this.toolDefinition.renderCall ?? this.builtInToolDefinition.renderCall;
+		return this.toolDefinition?.renderCall;
 	}
 
 	private getResultRenderer(): ToolDefinition<any, any>["renderResult"] | undefined {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderResult;
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderResult;
-		}
-		return this.toolDefinition.renderResult ?? this.builtInToolDefinition.renderResult;
+		return this.toolDefinition?.renderResult;
 	}
 
 	private getRenderShell(): "default" | "self" {
-		if (!this.builtInToolDefinition) {
-			return this.toolDefinition?.renderShell ?? "default";
-		}
-		if (!this.toolDefinition) {
-			return this.builtInToolDefinition.renderShell ?? "default";
-		}
-		return this.toolDefinition.renderShell ?? this.builtInToolDefinition.renderShell ?? "default";
+		return this.toolDefinition?.renderShell ?? "default";
 	}
 
 	/**
@@ -193,6 +203,14 @@ export class ToolExecutionComponent extends Container {
 			text += `${theme.fg("muted", `\n... (${plural(remaining, "more line")},`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
 		}
 		return new Text(text, 0, 0);
+	}
+
+	private createResultRegion(component: Component): MouseRegion {
+		return new MouseRegion(component, (event) => {
+			if (!this.result || event.type !== "click" || event.button !== "left") return undefined;
+			this.setExpanded(!this.expanded);
+			return { handled: true };
+		});
 	}
 
 	updateArgs(args: any): void {
@@ -283,6 +301,7 @@ export class ToolExecutionComponent extends Container {
 
 		if (this.getRenderShell() === "self") {
 			const contentLines = this.selfRenderContainer.render(width);
+			this.selfRenderHeight = contentLines.length;
 			if (contentLines.length === 0 && this.imageComponents.length === 0) {
 				return [];
 			}
@@ -308,6 +327,16 @@ export class ToolExecutionComponent extends Container {
 		return super.render(width);
 	}
 
+	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
+		if (this.getRenderShell() !== "self") return super.handleMouse(event);
+		if (event.y <= 0 || event.y > this.selfRenderHeight) return undefined;
+		return this.selfRenderContainer.handleMouse({
+			...event,
+			y: event.y - 1,
+			height: this.selfRenderHeight,
+		});
+	}
+
 	private updateDisplay(): void {
 		const selfShell = this.getRenderShell() === "self";
 		let hasContent = false;
@@ -324,17 +353,17 @@ export class ToolExecutionComponent extends Container {
 
 		const callRenderer = this.getCallRenderer();
 		if (!callRenderer) {
-			callTarget.addChild(this.createCallFallback());
+			callTarget.addChild(this.createResultRegion(this.createCallFallback()));
 			hasContent = true;
 		} else {
 			try {
 				const component = callRenderer(this.args, theme, this.getRenderContext(this.callRendererComponent));
 				this.callRendererComponent = component;
-				callTarget.addChild(component);
+				callTarget.addChild(this.createResultRegion(component));
 				hasContent = true;
 			} catch {
 				this.callRendererComponent = undefined;
-				callTarget.addChild(this.createCallFallback());
+				callTarget.addChild(this.createResultRegion(this.createCallFallback()));
 				hasContent = true;
 			}
 		}
@@ -344,7 +373,7 @@ export class ToolExecutionComponent extends Container {
 			if (!resultRenderer) {
 				const component = this.createResultFallback();
 				if (component) {
-					resultTarget.addChild(component);
+					resultTarget.addChild(this.createResultRegion(component));
 					hasContent = true;
 				}
 			} else {
@@ -356,13 +385,13 @@ export class ToolExecutionComponent extends Container {
 						this.getRenderContext(this.resultRendererComponent),
 					);
 					this.resultRendererComponent = component;
-					resultTarget.addChild(component);
+					resultTarget.addChild(this.createResultRegion(component));
 					hasContent = true;
 				} catch {
 					this.resultRendererComponent = undefined;
 					const component = this.createResultFallback();
 					if (component) {
-						resultTarget.addChild(component);
+						resultTarget.addChild(this.createResultRegion(component));
 						hasContent = true;
 					}
 				}

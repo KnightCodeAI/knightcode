@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
 import { resolveToolPath } from "../../src/harness/tools/path-utils.ts";
 import type { ExecutionEnv } from "../../src/harness/types.ts";
 
@@ -23,10 +24,12 @@ describe("resolveToolPath drive mounts", () => {
 		["/usr/local/share", "/usr/local/share"],
 		["/mnt/data/blob", "/mnt/data/blob"],
 	])("rewrites %s to %s on a Windows env", async (input, expected) => {
-		expect(await resolveToolPath(env("C:\\work\\repo"), input)).toBe(expected);
+		expect(await resolveToolPath(env("C:\\work\\repo"), input, BACKGROUND_CONTEXT)).toBe(expected);
 	});
 
 	it("leaves POSIX envs untouched", async () => {
-		expect(await resolveToolPath(env("/home/dev/repo"), "/c/Users/dev/notes.md")).toBe("/c/Users/dev/notes.md");
+		expect(await resolveToolPath(env("/home/dev/repo"), "/c/Users/dev/notes.md", BACKGROUND_CONTEXT)).toBe(
+			"/c/Users/dev/notes.md",
+		);
 	});
 });
