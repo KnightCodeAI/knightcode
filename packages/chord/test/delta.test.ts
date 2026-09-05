@@ -664,9 +664,13 @@ describe("flush-time minimization", () => {
 			t.flush();
 			return performance.now() - started;
 		};
+		// Scheduler and GC noise only ever inflates a sample, so the minimum of a few
+		// runs is the stable estimate. Single samples put the tail past the bound on a
+		// loaded runner even though the pass is comfortably linear.
+		const best = (n: number) => Math.min(...Array.from({ length: 5 }, () => wide(n)));
 		wide(200); // warm
-		const small = Math.max(wide(250), 0.1);
-		const large = wide(2500);
+		const small = Math.max(best(250), 0.1);
+		const large = best(2500);
 		expect(large / small).toBeLessThan(40); // linear would be ~10x
 	});
 
