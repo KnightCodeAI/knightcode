@@ -57,7 +57,7 @@ index 732dc84db..db9eb9a57 100644
 +				if (!wantSpill) return Promise.resolve();
 +				spillChain = spillChain.then(async () => {
 +					if (spillHandle === undefined) {
-+						const created = await this.createTempFile({ prefix: "pi-output-", suffix: ".log" }, context);
++						const created = await this.createTempFile({ prefix: "knightcode-output-", suffix: ".log" }, context);
 +						if (!created.ok) return;
 +						spillHandle = created.value;
 +						capture.setSpillPath(spillHandle);
