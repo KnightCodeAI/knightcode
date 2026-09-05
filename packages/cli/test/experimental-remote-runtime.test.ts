@@ -617,6 +617,9 @@ describe.skipIf(process.platform === "win32")("experimental durable server compo
 		);
 
 		expect(result).toMatchObject({ kind: "prompted", text: "deterministic remote answer" });
+		// The prompt result resolves on the answer, while the run's trailing events are
+		// still in flight over the wire.
+		await vi.waitFor(() => expect(eventTypes).toContain("run_end"));
 		expect(eventTypes).toEqual(
 			expect.arrayContaining(["run_start", "message_start", "message_update", "message_end", "entry_added", "run_end"]),
 		);

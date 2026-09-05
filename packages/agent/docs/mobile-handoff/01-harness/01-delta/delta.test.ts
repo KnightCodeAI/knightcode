@@ -310,10 +310,16 @@ describe("dead-op elimination", () => {
 			t.flush();
 			return performance.now() - started;
 		};
+		// Wall-clock on a shared runner. Noise only inflates a sample, so take the
+		// minimum of a few runs and retry the whole measurement: a quadratic pass is
+		// ~100x on every attempt, while an oversubscribed runner is slow in bursts.
+		// Keep each size in its own block -- alternating them deoptimizes the loop and
+		// skews the ratio far worse than the noise this guards against.
+		const best = (n: number) => Math.min(...Array.from({ length: 5 }, () => wide(n)));
 		wide(200); // warm
-		const small = Math.max(wide(250), 0.1);
-		const large = wide(2500);
-		expect(large / small).toBeLessThan(40); // linear would be ~10x
+		let ratio = Number.POSITIVE_INFINITY;
+		for (let attempt = 0; attempt < 5 && ratio >= 40; attempt++) ratio = best(2500) / Math.max(best(250), 0.1);
+		expect(ratio).toBeLessThan(40); // linear measures ~12x here; quadratic would be ~100x
 	});
 
 	it("collapses a pathological redundant producer", () => {
