@@ -519,6 +519,14 @@ describe("NodeExecutionEnv", () => {
 		expect(result.truncation.totalBytes).toBe(0);
 	});
 
+	// A process killed by a signal reports a null exit code; callers must see a failure.
+	it.skipIf(process.platform === "win32")("maps signal-killed processes to a non-zero exit code", async () => {
+		const root = createTempDir();
+		const env = new NodeExecutionEnv({ cwd: root });
+		const result = getOrThrow(await env.exec("kill -9 $$", undefined, BACKGROUND_CONTEXT));
+		expect(result.exitCode).toBe(128 + 9);
+	});
+
 	it("returns timeout errors for commands exceeding the timeout", async () => {
 		const root = createTempDir();
 		const env = new NodeExecutionEnv({ cwd: root });
