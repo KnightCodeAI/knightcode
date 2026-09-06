@@ -96,3 +96,6 @@ release-assets/
 
 # Local agent/editor config
 .claude/
+
+# Local scratch: shader presets exported from shaders.com
+shaders/
