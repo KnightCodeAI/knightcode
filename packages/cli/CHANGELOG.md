@@ -1,5 +1,43 @@
 # @knightcodeai/cli
 
+## 0.6.1
+
+### Added
+
+- Added GPT-6 Astra support across tool search, additional tools, long-context pricing, xhigh and max thinking levels, and its explicit thinking-level map.
+
+- Added five-times-faster mouse wheel scrolling while holding Alt in fullscreen mode.
+
+### Changed
+
+- Changed the generated image model catalog to the current OpenRouter listing.
+
+- Changed the built-in read, write, edit, and bash tools to request strict JSON-schema sampling by default instead of only under `KNIGHTCODE_EXPERIMENTAL`.
+
+- Changed fullscreen scrollbars to render muted thin tracks with contrasting proportional two-cell-minimum thumbs, reserve an unstyled column in `always` mode, reveal hidden `auto` tracks on pointer entry, expand the same-colored thumb on hover, and support track-click jumping in addition to thumb dragging, with optional `scrollbarTrack` and `scrollbarThumb` theme colors falling back to muted and text.
+
+- Changed fullscreen transcript search to cache unchanged results, index ASCII runs, and highlight only visible matches, so latency no longer grows with transcript size.
+
+- Changed clipboard handling to use small built-in macOS, Windows, and X11 native helpers instead of an external dependency, running native reads on worker threads and making the command-line fallbacks (`pbcopy`, `clip.exe`, `wl-copy`, `xclip`) asynchronous. Incremental X11 transfers, legacy text encodings, and native image formats are preserved.
+
+### Removed
+
+- Removed Grok Build 0.1 from the built-in xAI model catalog.
+
+### Fixed
+
+- Fixed processes killed by a signal reporting success; they now map to a 128 + signal exit code.
+
+- Fixed compiled binaries shipping without the TUI's native helpers, which left clipboard reads on the command-line fallbacks and dropped Shift+Tab on Windows. Each target's prebuilds are now copied next to the executable.
+
+- Fixed `fd` failing to start on musl-based Linux distributions by downloading the statically linked musl builds of both `fd` and `ripgrep`.
+
+- Fixed post-login model selection for Radius, whose per-account catalog is empty until the first authenticated refresh; selection now waits for that refresh, defaults to `balanced`, and falls back to catalog order.
+
+- Fixed the model, scoped-model, and thinking selectors hardcoding Ctrl+S to save; the shortcut is now the `app.models.save` and `app.thinking.save` keybindings and the on-screen hint follows a rebind.
+
+- Fixed mouse hover changing selection and recentering autocomplete and settings lists, causing clicks to target a different item.
+
 ## 0.6.0
 
 ### Added
