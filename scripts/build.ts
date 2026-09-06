@@ -16,7 +16,7 @@ const WORKER_ENTRY = join(ROOT, "packages/cli/src/utils/image-resize-worker.ts")
 // assets and templates *next to the executable*. Without this the binary
 // reports version 0.0.0 and cannot load a theme.
 const CLI = join(ROOT, "packages/cli");
-function copyRuntimeAssets(outDir: string): void {
+function copyRuntimeAssets(outDir: string, target: Target): void {
 	cpSync(join(CLI, "package.json"), join(outDir, "package.json"));
 	for (const f of ["README.md", "CHANGELOG.md"]) {
 		const src = join(CLI, f);
@@ -49,6 +49,17 @@ function copyRuntimeAssets(outDir: string): void {
 
 	const docs = join(CLI, "docs");
 	if (existsSync(docs)) cpSync(docs, join(outDir, "docs"), { recursive: true });
+
+	// native-module-path.ts resolves the TUI's native helpers (clipboard, Windows
+	// VT input, macOS modifier keys) relative to the executable, so ship this
+	// target's prebuilds next to it. Without them the TUI falls back to the
+	// command-line clipboard tools and loses Shift+Tab on Windows.
+	const prebuilds = join(ROOT, "packages/tui/native", target.os, "prebuilds", `${target.os}-${target.arch}`);
+	if (existsSync(prebuilds)) {
+		const nativeOut = join(outDir, "native", target.os, "prebuilds", `${target.os}-${target.arch}`);
+		mkdirSync(nativeOut, { recursive: true });
+		cpSync(prebuilds, nativeOut, { recursive: true });
+	}
 
 	// photon-node reads photon_rs_bg.wasm relative to itself; see utils/photon.ts.
 	for (const base of [join(CLI, "node_modules"), join(ROOT, "node_modules")]) {
@@ -121,7 +132,7 @@ for (const target of targets) {
 		process.exit(1);
 	}
 
-	copyRuntimeAssets(outDir);
+	copyRuntimeAssets(outDir, target);
 
 	// Compiled binaries must be executable on POSIX (npm preserves the mode bit).
 	if (target.os !== "win32") chmodSync(outfile, 0o755);
