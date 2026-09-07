@@ -1,0 +1,69 @@
+import { env } from "cloudflare:test";
+import { beforeEach, describe, expect, it } from "vitest";
+import { upsertAccount } from "../src/accounts.ts";
+import { approveDevice, csrfToken, pollDevice, startDevice } from "../src/device.ts";
+
+const ORIGIN = "https://remote.knightcode.dev";
+
+beforeEach(async () => {
+	await env.DB.exec("DELETE FROM device_codes");
+	await env.DB.exec("DELETE FROM cli_tokens");
+	await env.DB.exec("DELETE FROM accounts");
+});
+
+async function begin(): Promise<{ deviceCode: string; userCode: string }> {
+	const response = await startDevice(env, new Request(`${ORIGIN}/auth/device`, { method: "POST" }));
+	const body = (await response.json()) as { device_code: string; user_code: string };
+	return { deviceCode: body.device_code, userCode: body.user_code };
+}
+
+function poll(deviceCode: string): Promise<Response> {
+	return pollDevice(
+		env,
+		new Request(`${ORIGIN}/auth/device/token`, { method: "POST", body: JSON.stringify({ device_code: deviceCode }) }),
+	);
+}
+
+function approve(userCode: string, csrf: string, accountId: string): Promise<Response> {
+	return approveDevice(
+		env,
+		new Request(`${ORIGIN}/device`, { method: "POST", body: new URLSearchParams({ user_code: userCode, csrf }) }),
+		accountId,
+	);
+}
+
+describe("device flow", () => {
+	it("returns pending until approved, then issues exactly one token", async () => {
+		const account = await upsertAccount(env.DB, "github", "1", "owner", null);
+		const { deviceCode, userCode } = await begin();
+
+		const pending = await poll(deviceCode);
+		expect(((await pending.json()) as { error: string }).error).toBe("authorization_pending");
+
+		const approved = await approve(userCode, await csrfToken(env, account.id), account.id);
+		expect(approved.status).toBe(200);
+
+		const granted = await poll(deviceCode);
+		expect(((await granted.json()) as { token: string }).token).toBeTruthy();
+
+		const replay = await poll(deviceCode);
+		expect(replay.status).toBe(400);
+	});
+
+	it("rejects an unknown device code", async () => {
+		expect((await poll("nope")).status).toBe(400);
+	});
+
+	it("rejects approval carrying a bad csrf token", async () => {
+		const account = await upsertAccount(env.DB, "github", "2", "owner", null);
+		const { userCode } = await begin();
+		expect((await approve(userCode, "forged", account.id)).status).toBe(403);
+	});
+
+	it("rejects a csrf token minted for a different account", async () => {
+		const owner = await upsertAccount(env.DB, "github", "3", "owner", null);
+		const other = await upsertAccount(env.DB, "github", "4", "other", null);
+		const { userCode } = await begin();
+		expect((await approve(userCode, await csrfToken(env, other.id), owner.id)).status).toBe(403);
+	});
+});
