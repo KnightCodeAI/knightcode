@@ -33,7 +33,7 @@ function toBase64Url(bytes: Uint8Array): string {
 		.replaceAll("=", "");
 }
 
-function fromBase64Url(value: string): Uint8Array | undefined {
+function fromBase64Url(value: string): Uint8Array<ArrayBuffer> | undefined {
 	try {
 		const padded = value.replaceAll("-", "+").replaceAll("_", "/");
 		return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));

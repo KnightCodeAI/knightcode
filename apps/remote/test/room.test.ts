@@ -81,7 +81,7 @@ describe("RemoteRoom", () => {
 		await runInDurableObject(stub("room-d"), (instance: RemoteRoom) => {
 			expect(instance.hostCount()).toBe(1);
 		});
-		expect(host.readyState).toBe(WebSocket.READY_STATE_OPEN);
+		expect(host.readyState).toBe(WebSocket.OPEN);
 	});
 
 	it("rejects a viewer frame that is not valid protocol", async () => {

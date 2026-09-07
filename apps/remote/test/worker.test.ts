@@ -1,0 +1,90 @@
+import { env, SELF } from "cloudflare:test";
+import { beforeEach, describe, expect, it } from "vitest";
+import { issueCliToken, issueSessionCookie, upsertAccount } from "../src/accounts.ts";
+
+const MINE = "A".repeat(32);
+const THEIRS = "B".repeat(32);
+
+beforeEach(async () => {
+	await env.DB.exec("DELETE FROM rooms");
+	await env.DB.exec("DELETE FROM cli_tokens");
+	await env.DB.exec("DELETE FROM accounts");
+});
+
+async function room(id: string, accountId: string, name?: string): Promise<void> {
+	await env.DB.prepare(
+		"INSERT INTO rooms (id, account_id, session_name, created_at, last_seen_at, status) VALUES (?, ?, ?, ?, ?, 'live')",
+	)
+		.bind(id, accountId, name ?? null, Date.now(), Date.now())
+		.run();
+}
+
+describe("authorisation boundary", () => {
+	it("redirects an anonymous viewer to login", async () => {
+		const response = await SELF.fetch(`https://remote.knightcode.dev/r/${MINE}`, { redirect: "manual" });
+		expect(response.status).toBe(302);
+		expect(response.headers.get("location")).toContain(`/login?next=%2Fr%2F${MINE}`);
+	});
+
+	it("refuses a viewer whose account does not own the room", async () => {
+		const owner = await upsertAccount(env.DB, "github", "1", "owner", null);
+		const other = await upsertAccount(env.DB, "github", "2", "other", null);
+		await room(MINE, owner.id);
+
+		const cookie = await issueSessionCookie(env.SIGNING_SECRET, other.id);
+		const response = await SELF.fetch(`https://remote.knightcode.dev/r/${MINE}`, {
+			headers: { cookie: cookie.split(";")[0] },
+			redirect: "manual",
+		});
+		expect(response.status).toBe(403);
+	});
+
+	it("refuses a host connection presenting a revoked token", async () => {
+		const account = await upsertAccount(env.DB, "github", "3", "owner", null);
+		const token = await issueCliToken(env.DB, account.id, "laptop");
+		await env.DB.prepare("UPDATE cli_tokens SET revoked_at = ?").bind(Date.now()).run();
+
+		const response = await SELF.fetch(`https://remote.knightcode.dev/host?room=${MINE}`, {
+			headers: { upgrade: "websocket", authorization: `Bearer ${token}` },
+		});
+		expect(response.status).toBe(401);
+	});
+
+	it("lists only the signed-in account's rooms", async () => {
+		const owner = await upsertAccount(env.DB, "github", "4", "owner", null);
+		const other = await upsertAccount(env.DB, "github", "5", "other", null);
+		await room(MINE, owner.id, "my session");
+		await room(THEIRS, other.id, "their session");
+
+		const cookie = await issueSessionCookie(env.SIGNING_SECRET, owner.id);
+		const response = await SELF.fetch("https://remote.knightcode.dev/api/rooms", {
+			headers: { cookie: cookie.split(";")[0] },
+		});
+		const body = (await response.json()) as { rooms: Array<{ id: string }> };
+		expect(body.rooms.map((entry) => entry.id)).toEqual([MINE]);
+	});
+
+	it("refuses a host connection whose room id is not a well-formed room id", async () => {
+		const account = await upsertAccount(env.DB, "github", "6", "owner", null);
+		const token = await issueCliToken(env.DB, account.id, "laptop");
+		const response = await SELF.fetch("https://remote.knightcode.dev/host?room=../../etc", {
+			headers: { upgrade: "websocket", authorization: `Bearer ${token}` },
+		});
+		expect(response.status).toBe(400);
+	});
+
+	it("refuses to stop a room owned by another account", async () => {
+		const owner = await upsertAccount(env.DB, "github", "7", "owner", null);
+		const other = await upsertAccount(env.DB, "github", "8", "other", null);
+		await room(MINE, owner.id);
+		const token = await issueCliToken(env.DB, other.id, "laptop");
+
+		const response = await SELF.fetch(`https://remote.knightcode.dev/host/stop?room=${MINE}`, {
+			method: "POST",
+			headers: { authorization: `Bearer ${token}` },
+		});
+		expect(response.status).toBe(401);
+		const survived = await env.DB.prepare("SELECT id FROM rooms WHERE id = ?").bind(MINE).first();
+		expect(survived).not.toBeNull();
+	});
+});
