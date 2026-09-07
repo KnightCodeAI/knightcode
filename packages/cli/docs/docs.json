@@ -40,6 +40,10 @@
           "path": "sessions.md"
         },
         {
+          "title": "Remote sessions",
+          "path": "remote.md"
+        },
+        {
           "title": "Compaction",
           "path": "compaction.md"
         }
