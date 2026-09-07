@@ -99,3 +99,10 @@ release-assets/
 
 # Local scratch: shader presets exported from shaders.com
 shaders/
+
+# Cloudflare Worker local secrets (apps/remote)
+.dev.vars
+
+# Bundled browser client (apps/remote, built by `bun run build:client`)
+apps/remote/client/app.js
+apps/remote/client/rooms.js
