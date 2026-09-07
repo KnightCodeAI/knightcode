@@ -1,7 +1,7 @@
 {
-	// Worker and test code only. The browser client has its own config: @cloudflare/workers-types
-	// declares HTMLRewriter's `Element`, which shadows the DOM `Element` and breaks every
-	// `append` call in client/. The two global environments cannot share one tsconfig.
+	// Worker and test code only. The React app in web/ has its own config:
+	// @cloudflare/workers-types declares HTMLRewriter's `Element`, which shadows the DOM
+	// `Element` and breaks React's typings. The two global environments cannot share one.
 	"compilerOptions": {
 		"target": "ES2022",
 		"lib": ["ES2022"],

@@ -26,7 +26,16 @@ const ANALYTICS_OPTIONS: Array<{ value: boolean; label: string }> = [
 	{ value: false, label: "Don't share" },
 ];
 
-const SETUP_LOGO_LINES = ["██████", "██  ██", "████  ██", "██    ██"];
+/** The KnightCode knight, rasterised from the mark in packages/ai/src/auth/oauth/oauth-page.ts. */
+const SETUP_LOGO_LINES = [
+	"      ▄███▄▄",
+	"  ▄▄█████████▄▄",
+	"▀███▀▀▀█████████",
+	"    ▄███████████",
+	"   ██████████▀▀",
+	"  ███████████▄▄",
+	"  ▀▀▀▀▀▀▀▀▀▀▀▀▀",
+];
 
 /** First-time setup dialog: theme choice and analytics opt-in. */
 export class FirstTimeSetupComponent extends Container {

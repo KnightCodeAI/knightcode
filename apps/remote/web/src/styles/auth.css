@@ -1,0 +1,192 @@
+/*
+ * The signed-out pages: landing and device approval. Same shape as the provider consent
+ * pages in packages/ai/src/auth/oauth/oauth-page.ts — paired marks, one heading, one lede,
+ * one action — but drawn with the glass.css tokens so both themes come along for free.
+ * One mark, the knight: nothing else on these pages earns a logo.
+ * No .glass here on purpose: nothing scrolls under these, so a blurred surface would have
+ * nothing to blur. Every element selector is scoped to .auth: Vite emits one stylesheet for
+ * the whole app, so a bare `button` rule here would restyle the room composer.
+ */
+
+.auth {
+	max-width: 26rem;
+	margin: 0 auto;
+	padding: 12vh 1.5rem 4rem;
+	text-align: center;
+}
+
+.marks {
+	display: flex;
+	justify-content: center;
+	margin-bottom: 1.75rem;
+}
+
+.mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.mark svg {
+	width: 100%;
+	height: 100%;
+	display: block;
+}
+
+.mark-knight {
+	width: 4.5rem;
+	height: 4.5rem;
+}
+
+.auth h1 {
+	margin: 0 0 0.5rem;
+	font-size: 1.75rem;
+	line-height: 1.15;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+
+.lede {
+	margin: 0;
+	color: var(--text-muted);
+	line-height: 1.7;
+}
+
+.lede.error {
+	color: var(--danger);
+}
+
+.lede strong {
+	color: var(--text);
+	font-weight: 590;
+}
+
+.auth form {
+	margin-top: 1.75rem;
+	text-align: left;
+}
+
+.field-label {
+	display: block;
+	font-size: 0.75rem;
+	font-weight: 500;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	margin-bottom: 0.5rem;
+}
+
+.auth input[name="user_code"] {
+	width: 100%;
+	padding: 0.85rem 1rem;
+	font: inherit;
+	font-family: ui-monospace, Menlo, Consolas, monospace;
+	font-size: 1.4rem;
+	text-align: center;
+	letter-spacing: 0.18em;
+	background: var(--surface-raised);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-card);
+	color: var(--text);
+	transition: border-color 160ms var(--ease-emphasis);
+}
+
+.auth input[name="user_code"]:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+.auth button,
+.auth .button {
+	display: block;
+	width: 100%;
+	margin-top: 0.6rem;
+	padding: 0.85rem 1.25rem;
+	border: 0;
+	border-radius: var(--radius-card);
+	background: var(--accent);
+	color: white;
+	font: inherit;
+	font-weight: 590;
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+	transition:
+		filter 160ms var(--ease-emphasis),
+		transform 160ms var(--ease-emphasis);
+}
+
+.auth button:hover,
+.auth .button:hover {
+	filter: brightness(1.08);
+}
+
+.auth button:active,
+.auth .button:active {
+	transform: scale(0.985);
+}
+
+.auth button:focus-visible,
+.auth .button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 3px;
+}
+
+.scopes-title {
+	margin: 2.25rem 0 0.75rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid var(--border);
+	text-align: left;
+	font-size: 0.8125rem;
+	color: var(--text-muted);
+}
+
+.scopes {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	text-align: left;
+	font-size: 0.875rem;
+	line-height: 1.6;
+}
+
+.scopes li {
+	position: relative;
+	padding-left: 1.35rem;
+	color: var(--text);
+}
+
+.scopes li + li {
+	margin-top: 0.35rem;
+}
+
+/* A check drawn in CSS rather than a glyph, so it lines up with the text at any size. */
+.scopes li::before {
+	content: "";
+	position: absolute;
+	left: 0.3rem;
+	top: 0.42rem;
+	width: 0.32rem;
+	height: 0.6rem;
+	border: solid var(--text-muted);
+	border-width: 0 1.5px 1.5px 0;
+	transform: rotate(42deg);
+}
+
+.note {
+	margin: 1.25rem 0 0;
+	text-align: left;
+	font-size: 0.8125rem;
+	line-height: 1.6;
+	color: var(--text-muted);
+}
+
+.auth code {
+	font-family: ui-monospace, Menlo, Consolas, monospace;
+	/* Command names read as one thing; letting "/remote logout" break in half hides that. */
+	white-space: nowrap;
+	font-size: 0.9em;
+	padding: 0.1em 0.35em;
+	border-radius: 6px;
+	background: var(--surface-raised);
+}

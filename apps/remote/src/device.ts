@@ -5,6 +5,8 @@ const DEVICE_TTL_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_SECONDS = 5;
 /** Excludes vowels and lookalikes so a spoken or mistyped code fails fast. */
 const USER_CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ23456789";
+/** What a code may look like before it is reflected back into a redirect url. */
+const USER_CODE_SHAPE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
 function userCode(): string {
 	const raw = crypto.getRandomValues(new Uint8Array(8));
@@ -43,14 +45,21 @@ export async function csrfToken(env: Env, accountId: string): Promise<string> {
 }
 
 export async function approveDevice(env: Env, request: Request, accountId: string): Promise<Response> {
+	const origin = new URL(request.url).origin;
 	const form = await request.formData();
-	const submitted = String(form.get("csrf") ?? "");
-	if ((await verify(env.SIGNING_SECRET, submitted)) !== `csrf:${accountId}`) {
-		return new Response("Invalid request token", { status: 403 });
-	}
 	const code = String(form.get("user_code") ?? "")
 		.trim()
 		.toUpperCase();
+	const submitted = String(form.get("csrf") ?? "");
+	if ((await verify(env.SIGNING_SECRET, submitted)) !== `csrf:${accountId}`) {
+		// The token is minted per account when the page loads, so it stops matching whenever
+		// the identity behind the tab changes underneath an open form — signing in again in
+		// another tab, or a session that ended while this one sat there. The request is still
+		// refused; it just goes back to the page, which mints a fresh token, instead of
+		// dead-ending on plain text. The code rides along so the retry is one click.
+		const carried = USER_CODE_SHAPE.test(code) ? `&code=${encodeURIComponent(code)}` : "";
+		return new Response(null, { status: 303, headers: { location: `${origin}/device?stale=1${carried}` } });
+	}
 	const result = await env.DB.prepare(
 		"UPDATE device_codes SET account_id = ?, approved_at = ? WHERE user_code = ? AND approved_at IS NULL AND expires_at > ?",
 	)
@@ -58,7 +67,6 @@ export async function approveDevice(env: Env, request: Request, accountId: strin
 		.run();
 	// Redirect rather than render: refreshing a rendered POST would repost the code, and
 	// both outcomes are states of /device itself, so neither dead-ends on plain text.
-	const origin = new URL(request.url).origin;
 	return new Response(null, {
 		status: 303,
 		headers: { location: `${origin}/device?${result.meta.changes ? "approved=1" : "invalid=1"}` },

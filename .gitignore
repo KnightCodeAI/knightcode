@@ -103,9 +103,8 @@ shaders/
 # Cloudflare Worker local secrets (apps/remote)
 .dev.vars
 
-# Bundled browser client (apps/remote, built by `bun run build:client`)
-apps/remote/client/app.js
-apps/remote/client/rooms.js
+# The built browser app (apps/remote/web/dist, from `bun run build`) is covered by the
+# "dist" rule above. wrangler needs it before `deploy`; the Worker test pool does not.
 
 # Wrangler local state (apps/remote)
 .wrangler/

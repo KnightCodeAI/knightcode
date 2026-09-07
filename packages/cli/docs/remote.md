@@ -5,9 +5,13 @@ watch it and reply from another device. The terminal keeps working normally.
 
 ## Getting started
 
-Run `/remote`. The first time, it prints a URL and an eight-character code:
-open the URL on any device, sign in with GitHub, and enter the code. The
-credential is stored in `~/.knightcode/remote-auth.json` and reused afterwards.
+Run `/remote`. The first time, a sign-in screen opens your browser on the
+approval page and shows an eight-character code: sign in with GitHub, check the
+page shows the same code, and approve. Escape cancels. The credential is stored
+in `~/.knightcode/remote-auth.json` and reused afterwards, and the screen also
+prints the URL for a headless box where nothing launched. Once the browser
+approves, the screen confirms it and continues on enter, or by itself a few
+seconds later.
 
 Once signed in, `/remote` prints a link. You do not have to copy it: open
 <https://remote.knightcode.dev> on your phone and the session appears in the

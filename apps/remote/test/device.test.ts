@@ -77,16 +77,30 @@ describe("device flow", () => {
 		expect((await poll("nope")).status).toBe(400);
 	});
 
-	it("rejects approval carrying a bad csrf token", async () => {
+	it("refuses approval carrying a bad csrf token, and sends the page back for a fresh one", async () => {
 		const account = await upsertAccount(env.DB, "github", "2", "owner", null);
 		const { userCode } = await begin();
-		expect((await approve(userCode, "forged", account.id)).status).toBe(403);
+		const response = await approve(userCode, "forged", account.id);
+		expect(response.status).toBe(303);
+		// Back to the form, not a plain-text dead end, and carrying the code so the retry is
+		// one click once the reload has minted a token for the current account.
+		expect(response.headers.get("location")).toBe(`${ORIGIN}/device?stale=1&code=${userCode}`);
+		const row = await env.DB.prepare("SELECT approved_at FROM device_codes WHERE user_code = ?")
+			.bind(userCode)
+			.first<{ approved_at: number | null }>();
+		expect(row?.approved_at).toBeNull();
 	});
 
-	it("rejects a csrf token minted for a different account", async () => {
+	it("refuses a csrf token minted for a different account", async () => {
 		const owner = await upsertAccount(env.DB, "github", "3", "owner", null);
 		const other = await upsertAccount(env.DB, "github", "4", "other", null);
 		const { userCode } = await begin();
-		expect((await approve(userCode, await csrfToken(env, other.id), owner.id)).status).toBe(403);
+		const response = await approve(userCode, await csrfToken(env, other.id), owner.id);
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location")).toContain("stale=1");
+		const row = await env.DB.prepare("SELECT account_id FROM device_codes WHERE user_code = ?")
+			.bind(userCode)
+			.first<{ account_id: string | null }>();
+		expect(row?.account_id).toBeNull();
 	});
 });

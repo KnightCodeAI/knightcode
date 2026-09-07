@@ -33,6 +33,27 @@ describe("authorisation boundary", () => {
 		expect(response.headers.get("location")).toContain(`/login?next=${encodeURIComponent("/device?code=ABCD-1234")}`);
 	});
 
+	it("treats a cookie naming an account that no longer exists as signed out", async () => {
+		// A wiped database leaves valid signatures over ids with no row behind them. Trusting
+		// one made /device write device_codes.account_id against nothing, and D1 answered the
+		// approval with a foreign key error instead of a login.
+		const account = await upsertAccount(env.DB, "github", "9", "gone", null);
+		const cookie = await issueSessionCookie(env.SIGNING_SECRET, account.id);
+		await env.DB.prepare("DELETE FROM accounts WHERE id = ?").bind(account.id).run();
+
+		const page = await SELF.fetch("https://remote.knightcode.dev/device?code=ABCD-1234", {
+			headers: { cookie: cookie.split(";")[0] },
+			redirect: "manual",
+		});
+		expect(page.status).toBe(302);
+		expect(page.headers.get("location")).toContain("/login");
+
+		const rooms = await SELF.fetch("https://remote.knightcode.dev/api/rooms", {
+			headers: { cookie: cookie.split(";")[0] },
+		});
+		expect(rooms.status).toBe(401);
+	});
+
 	it("refuses a viewer whose account does not own the room", async () => {
 		const owner = await upsertAccount(env.DB, "github", "1", "owner", null);
 		const other = await upsertAccount(env.DB, "github", "2", "other", null);

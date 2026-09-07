@@ -17,6 +17,25 @@ function bearer(request: Request): string | undefined {
 	return header?.startsWith("Bearer ") ? header.slice(7) : undefined;
 }
 
+/**
+ * The session cookie is only a signature over an account id, so a valid cookie can still
+ * name a row that is gone — a deleted account, a wiped dev database. Checking the row here,
+ * where the cookie becomes an identity, makes that case behave exactly like signed out for
+ * every route below. Without it /device wrote a device_codes.account_id with no account
+ * behind it and D1 rejected the whole approval with a foreign key error.
+ */
+async function currentAccount(env: Env, request: Request): Promise<string | undefined> {
+	const accountId = await readSessionCookie(env.SIGNING_SECRET, request);
+	if (!accountId) return undefined;
+	const row = await env.DB.prepare("SELECT id FROM accounts WHERE id = ?").bind(accountId).first<{ id: string }>();
+	return row ? accountId : undefined;
+}
+
+/** The one built page. Every app route resolves to it; the app reads the path itself. */
+function appShell(env: Env, url: URL, request: Request): Promise<Response> {
+	return env.ASSETS.fetch(new Request(`${url.origin}/index.html`, request));
+}
+
 function roomStub(env: Env, roomId: string): DurableObjectStub {
 	return env.ROOM.get(env.ROOM.idFromName(roomId));
 }
@@ -79,7 +98,7 @@ export default {
 			return new Response(null, { status: 204 });
 		}
 
-		const accountId = await readSessionCookie(env.SIGNING_SECRET, request);
+		const accountId = await currentAccount(env, request);
 
 		if (path === "/logout") {
 			return new Response(null, { status: 302, headers: { location: "/", "set-cookie": clearSessionCookie() } });
@@ -92,7 +111,7 @@ export default {
 				return Response.redirect(`${url.origin}/login?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
 			}
 			if (request.method === "POST") return approveDevice(env, request, accountId);
-			return env.ASSETS.fetch(new Request(`${url.origin}/device.html`, request));
+			return appShell(env, url, request);
 		}
 		if (path === "/api/csrf") {
 			if (!accountId) return new Response("Unauthorized", { status: 401 });
@@ -121,13 +140,13 @@ export default {
 					headers: { upgrade: "websocket", "x-kc-role": "viewer", "x-kc-account": accountId },
 				});
 			}
-			return env.ASSETS.fetch(new Request(`${url.origin}/room.html`, request));
+			return appShell(env, url, request);
 		}
 
-		if (path === "/") {
-			const page = accountId ? "index.html" : "landing.html";
-			return env.ASSETS.fetch(new Request(`${url.origin}/${page}`, request));
-		}
+		// Signed in or not, "/" is the same shell: the app asks /api/rooms and renders the
+		// session list or the sign-in page from the answer. Every route that actually exposes
+		// data is authorised above, so serving the shell to an anonymous visitor reveals none.
+		if (path === "/") return appShell(env, url, request);
 
 		return env.ASSETS.fetch(request);
 	},

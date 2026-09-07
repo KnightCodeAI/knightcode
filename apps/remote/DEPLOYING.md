@@ -35,12 +35,17 @@ GITHUB_CLIENT_SECRET=<the localhost app's secret>
 
 ```bash
 cd apps/remote
-bun run build:client
+bun run build
 bunx wrangler d1 migrations apply knightcode-remote --local
-bun run dev
+bun run dev:worker
 ```
 
-`bun run dev` passes `--routes "localhost:8787/*"`, and that is load-bearing.
+`bun run build` compiles the React app in `web/` to `web/dist`, which is the
+assets directory wrangler serves. For UI work run `bun run dev` in a second
+terminal instead: Vite serves the app on 5183 with hot reload and proxies
+`/api`, `/login` and the room websocket to the Worker on 8787.
+
+`bun run dev:worker` passes `--routes "localhost:8787/*"`, and that is load-bearing.
 Wrangler derives the URL the Worker *sees* from the first configured route, so
 without the override every request arrives as `remote.knightcode.dev` even
 though it came from `127.0.0.1` — the device flow then prints a production
@@ -128,12 +133,12 @@ settings are deliberately opposite; proxying the apex breaks Vercel's TLS.
 ```bash
 cd apps/remote
 bunx wrangler d1 migrations apply knightcode-remote --remote
-bun run build:client
-bunx wrangler deploy
+bun run deploy
 ```
 
-`build:client` is required: `client/app.js` and `client/rooms.js` are gitignored
-build output, and the assets directory is what gets uploaded.
+`bun run deploy` builds before it uploads, on purpose: `web/dist` is gitignored
+build output and the assets directory is what gets uploaded, so a bare
+`wrangler deploy` can ship a stale app — or none at all on a fresh checkout.
 
 If the deploy reports the route was created but requests 522 or hang, the DNS
 record from step 3 is missing or grey-cloud.
