@@ -72,6 +72,33 @@ describe("device-code login", () => {
 		]);
 	});
 
+	test("survives the relay going away mid-poll", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockResolvedValueOnce(beginResponse())
+				// The shape of a dev-server restart and of a Worker cold start alike.
+				.mockRejectedValueOnce(new TypeError("fetch failed"))
+				// An edge that answers with an HTML error page rather than JSON.
+				.mockResolvedValueOnce(new Response("<html>502</html>", { status: 502 }))
+				.mockResolvedValueOnce(jsonResponse({ token: "granted" })),
+		);
+
+		expect(await login("https://remote.knightcode.dev", () => {}, new AbortController().signal)).toBe("granted");
+	});
+
+	test("still gives up when the relay rejects the code outright", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValueOnce(beginResponse()).mockResolvedValueOnce(jsonResponse({ error: "expired_token" })),
+		);
+
+		await expect(login("https://remote.knightcode.dev", () => {}, new AbortController().signal)).rejects.toThrow(
+			"expired_token",
+		);
+	});
+
 	test("widens the interval on slow_down rather than giving up", async () => {
 		vi.useFakeTimers();
 		const fetchMock = vi

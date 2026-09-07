@@ -91,13 +91,25 @@ export async function login(
 
 	while (Date.now() < deadline) {
 		if (signal.aborted) throw new Error("Login cancelled");
-		const response = await fetch(`${origin}/auth/device/token`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ device_code: start.device_code }),
-			signal,
-		});
-		const body = (await response.json()) as { token?: string; error?: string; interval?: number };
+		// A relay that blinks — a restart, a cold start, a dropped hop, an error page instead
+		// of JSON — must not end the login. The code stays valid until its own deadline, so
+		// an unreachable poll is treated exactly like a pending one; only an explicit
+		// rejection from the relay is terminal.
+		let body: { token?: string; error?: string; interval?: number };
+		let status = 0;
+		try {
+			const response = await fetch(`${origin}/auth/device/token`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ device_code: start.device_code }),
+				signal,
+			});
+			status = response.status;
+			body = (await response.json()) as typeof body;
+		} catch {
+			if (signal.aborted) throw new Error("Login cancelled");
+			body = { error: "authorization_pending" };
+		}
 		if (body.token) return body.token;
 		if (body.error === "slow_down") {
 			intervalMs =
@@ -105,7 +117,7 @@ export async function login(
 					? Math.max(MINIMUM_INTERVAL_MS, body.interval * 1000)
 					: intervalMs + SLOW_DOWN_INCREMENT_MS;
 		} else if (body.error !== "authorization_pending") {
-			throw new Error(body.error ?? `Login failed: ${response.status}`);
+			throw new Error(body.error ?? `Login failed: ${status}`);
 		}
 		await sleep(intervalMs, signal);
 	}
