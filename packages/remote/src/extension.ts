@@ -189,13 +189,19 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 				onStatus: (status) => {
 					const previousViewers = session?.viewers ?? 0;
 					if (session && status.state === "connected") session.viewers = status.viewers;
-					const label =
+					// Green only once the socket is actually up. The viewer count moved out of the
+					// footer: it changes whenever a phone locks its screen, which made a line the
+					// user cannot act on the most animated thing in the terminal. /remote status
+					// still reports it on demand.
+					const [colour, label] =
 						status.state === "connected"
-							? `remote ${status.viewers} viewer${status.viewers === 1 ? "" : "s"}`
-							: status.state === "expired"
-								? "remote link expired"
-								: `remote ${status.state}`;
-					ctx.ui.setStatus(STATUS_KEY, label);
+							? (["success", "remote active"] as const)
+							: status.state === "retrying"
+								? (["warning", "remote reconnecting"] as const)
+								: status.state === "expired"
+									? (["error", "remote link expired"] as const)
+									: (["dim", "remote connecting"] as const);
+					ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg(colour, label));
 					// Only on a rise from nobody watching: otherwise every reconnect and every
 					// viewer-count change would fire another notification.
 					if (status.state === "connected" && status.viewers > 0 && previousViewers === 0) {
