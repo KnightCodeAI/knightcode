@@ -48,6 +48,7 @@
     "@knightcode/ai": "workspace:*",
     "@knightcode/client": "workspace:*",
     "@knightcode/protocol": "workspace:*",
+    "@knightcode/remote": "workspace:*",
     "@knightcode/server": "workspace:*",
     "@knightcode/session-backend-sqlite": "workspace:*",
     "@knightcode/tui": "workspace:*",

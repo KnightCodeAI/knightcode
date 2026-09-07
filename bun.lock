@@ -99,7 +99,7 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "bin": {
         "knightcode": "./bin/knightcode",
       },
@@ -108,6 +108,7 @@
         "@knightcode/ai": "workspace:*",
         "@knightcode/client": "workspace:*",
         "@knightcode/protocol": "workspace:*",
+        "@knightcode/remote": "workspace:*",
         "@knightcode/server": "workspace:*",
         "@knightcode/session-backend-sqlite": "workspace:*",
         "@knightcode/tui": "workspace:*",
@@ -132,32 +133,32 @@
         "yaml": "2.9.0",
       },
       "optionalDependencies": {
-        "@knightcodeai/cli-darwin-arm64": "0.6.0",
-        "@knightcodeai/cli-darwin-x64": "0.6.0",
-        "@knightcodeai/cli-linux-arm64": "0.6.0",
-        "@knightcodeai/cli-linux-x64": "0.6.0",
-        "@knightcodeai/cli-win32-x64": "0.6.0",
+        "@knightcodeai/cli-darwin-arm64": "0.6.1",
+        "@knightcodeai/cli-darwin-x64": "0.6.1",
+        "@knightcodeai/cli-linux-arm64": "0.6.1",
+        "@knightcodeai/cli-linux-x64": "0.6.1",
+        "@knightcodeai/cli-win32-x64": "0.6.1",
       },
     },
     "packages/cli-darwin-arm64": {
       "name": "@knightcodeai/cli-darwin-arm64",
-      "version": "0.6.0",
+      "version": "0.6.1",
     },
     "packages/cli-darwin-x64": {
       "name": "@knightcodeai/cli-darwin-x64",
-      "version": "0.6.0",
+      "version": "0.6.1",
     },
     "packages/cli-linux-arm64": {
       "name": "@knightcodeai/cli-linux-arm64",
-      "version": "0.6.0",
+      "version": "0.6.1",
     },
     "packages/cli-linux-x64": {
       "name": "@knightcodeai/cli-linux-x64",
-      "version": "0.6.0",
+      "version": "0.6.1",
     },
     "packages/cli-win32-x64": {
       "name": "@knightcodeai/cli-win32-x64",
-      "version": "0.6.0",
+      "version": "0.6.1",
     },
     "packages/client": {
       "name": "@knightcode/client",
@@ -183,6 +184,13 @@
         "@knightcode/agent": "workspace:*",
         "@knightcode/chord": "workspace:*",
         "typebox": "1.3.7",
+      },
+    },
+    "packages/remote": {
+      "name": "@knightcode/remote",
+      "version": "0.1.0",
+      "devDependencies": {
+        "undici": "8.9.0",
       },
     },
     "packages/server": {
@@ -553,6 +561,8 @@
     "@knightcode/evals": ["@knightcode/evals@workspace:packages/evals"],
 
     "@knightcode/protocol": ["@knightcode/protocol@workspace:packages/protocol"],
+
+    "@knightcode/remote": ["@knightcode/remote@workspace:packages/remote"],
 
     "@knightcode/server": ["@knightcode/server@workspace:packages/server"],
 
