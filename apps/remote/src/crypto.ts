@@ -20,6 +20,7 @@ export async function sha256Hex(value: string): Promise<string> {
 }
 
 async function key(secret: string): Promise<CryptoKey> {
+	if (!secret) throw new Error("SIGNING_SECRET is not set - see apps/remote/DEPLOYING.md");
 	return crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
 		"sign",
 		"verify",

@@ -36,9 +36,11 @@ GITHUB_CLIENT_SECRET=<the localhost app's secret>
 ```bash
 cd apps/remote
 bun run build
-bunx wrangler d1 migrations apply knightcode-remote --local
 bun run dev:worker
 ```
+
+`bun run dev:worker` applies any unapplied D1 migrations to the local database
+first — without them every `/auth/device` request 500s with `no such table`.
 
 `bun run build` compiles the React app in `web/` to `web/dist`, which is the
 assets directory wrangler serves. For UI work run `bun run dev` in a second
