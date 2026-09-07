@@ -1,7 +1,10 @@
 {
+	// Worker and test code only. The browser client has its own config: @cloudflare/workers-types
+	// declares HTMLRewriter's `Element`, which shadows the DOM `Element` and breaks every
+	// `append` call in client/. The two global environments cannot share one tsconfig.
 	"compilerOptions": {
 		"target": "ES2022",
-		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"lib": ["ES2022"],
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
 		"types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types"],
@@ -11,5 +14,5 @@
 		"allowImportingTsExtensions": true,
 		"verbatimModuleSyntax": true
 	},
-	"include": ["src/**/*.ts", "client/**/*.ts", "test/**/*.ts", "../../packages/remote/src/protocol.ts"]
+	"include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "../../packages/remote/src/protocol.ts"]
 }

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>KnightCode remote</title>
+		<link rel="stylesheet" href="/glass.css" />
+		<link rel="stylesheet" href="/transcript.css" />
+	</head>
+	<body>
+		<header class="glass topbar">
+			<span id="session-name">Session</span>
+			<span id="connection" class="pill">connecting</span>
+		</header>
+		<main id="transcript"></main>
+		<form class="glass composer" id="composer">
+			<textarea id="input" rows="1" placeholder="Reply to this session" autocomplete="off"></textarea>
+			<button type="submit" id="send" aria-label="Send">Send</button>
+			<button type="button" id="stop" aria-label="Stop the current turn" hidden>Stop</button>
+		</form>
+		<script type="module" src="/app.js"></script>
+	</body>
+</html>

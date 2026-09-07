@@ -3,12 +3,17 @@ import {
 	decodeViewerFrame,
 	encodeFrame,
 	MAX_ROOM_BYTES,
-	MAX_VIEWER_BUFFER_BYTES,
 	MAX_VIEWERS,
 } from "../../../packages/remote/src/protocol.ts";
 import type { Env } from "./accounts.ts";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
+// Ceiling: per-viewer send backpressure is not enforced here. The design called for
+// closing a viewer whose outbound buffer passed MAX_VIEWER_BUFFER_BYTES, but the Workers
+// WebSocket API exposes no `bufferedAmount`, so that check could only ever compare
+// undefined and never fire. workerd applies its own limit and tears the socket down,
+// which #send below treats as an ordinary viewer disconnect. Revisit if the runtime
+// ever surfaces buffer depth.
 const SEQ_DIGITS = 14;
 
 /**
@@ -184,15 +189,12 @@ export class RemoteRoom {
 
 	#send(role: "host" | "viewer", payload: string): void {
 		for (const socket of this.#sockets(role)) {
-			// A viewer that cannot keep up is dropped alone; the room and the host are untouched.
-			if (role === "viewer" && socket.bufferedAmount > MAX_VIEWER_BUFFER_BYTES) {
-				socket.close(1013, "Too slow");
-				continue;
-			}
 			try {
 				socket.send(payload);
 			} catch {
-				// The socket is already gone; webSocketClose will reconcile.
+				// A send throws once the peer is gone or workerd has torn the socket down for
+				// outrunning its own send buffer. Either way it affects that viewer alone:
+				// webSocketClose reconciles, and the host and the room carry on.
 			}
 		}
 	}
