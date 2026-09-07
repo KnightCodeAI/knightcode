@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "wrangler dev",
+		"dev": "wrangler dev --routes \"localhost:8787/*\"",
 		"deploy": "wrangler deploy",
 		"typecheck": "tsc --noEmit && tsc --noEmit -p client/tsconfig.json",
 		"build:client": "esbuild client/app.ts client/rooms.ts --bundle --format=esm --outdir=client",

@@ -12,7 +12,10 @@
 	// run_worker_first is load-bearing: without it the assets binding answers matching
 	// paths BEFORE the Worker, so /, /r/<id> and /device would be served straight from
 	// client/ and skip every authorisation check in src/worker.ts.
-	"assets": { "directory": "./client", "binding": "ASSETS", "run_worker_first": true },
+	// html_handling "none" is load-bearing too: the default rewrites /x.html to /x, so
+	// ASSETS.fetch("/index.html") answers 307 -> "/" and the worker's own "/" route loops
+	// forever. Same for /device; /r/<id> would land on /room with no id in the path.
+	"assets": { "directory": "./client", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" },
 	"durable_objects": {
 		"bindings": [{ "name": "ROOM", "class_name": "RemoteRoom" }]
 	},

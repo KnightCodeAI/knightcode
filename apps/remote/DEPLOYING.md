@@ -11,6 +11,74 @@ below needs a browser or a secret value, so it has to be done by hand.
 | D1 | `knightcode-remote` = `89b432a5-032b-42e7-a639-feb2e945da8c` |
 | Staging | `knightcode-remote.raghavseth1428.workers.dev` |
 
+## 0. Running it locally first
+
+Nothing below this section touches the internet. Do it before deploying.
+
+### A third OAuth app, for localhost
+
+GitHub matches callbacks exactly and accepts plain `http` for `localhost`, so
+local needs its own app at <https://github.com/settings/developers>:
+
+- Homepage: `http://localhost:8787`
+- Callback: `http://localhost:8787/auth/callback`
+
+Put its credentials in `apps/remote/.dev.vars` (gitignored, never deployed):
+
+```
+SIGNING_SECRET=<openssl rand -base64 32>
+GITHUB_CLIENT_ID=<the localhost app's id>
+GITHUB_CLIENT_SECRET=<the localhost app's secret>
+```
+
+### Start the relay
+
+```bash
+cd apps/remote
+bun run build:client
+bunx wrangler d1 migrations apply knightcode-remote --local
+bun run dev
+```
+
+`bun run dev` passes `--routes "localhost:8787/*"`, and that is load-bearing.
+Wrangler derives the URL the Worker *sees* from the first configured route, so
+without the override every request arrives as `remote.knightcode.dev` even
+though it came from `127.0.0.1` — the device flow then prints a production
+`verification_uri` and OAuth sends a production `redirect_uri`. Overriding the
+route is dev-only; `wrangler.jsonc` keeps the real one for deploys.
+
+### Drive it
+
+```bash
+# PowerShell, from the repo root, in a second terminal
+$env:KNIGHTCODE_REMOTE_RELAY = "http://localhost:8787"
+bun run start
+```
+
+Then `/remote`. Set the variable per-run rather than in `.env`: left there it
+silently points every future session at a relay that is usually not running.
+
+Use **Chrome or Firefox**. The session cookie is `Secure`, and both treat
+`http://localhost` as a trustworthy origin and store it; Safari does not, so
+sign-in there appears to succeed and then loops back to the landing page.
+
+A phone cannot reach `localhost`. Test the viewer in a second browser profile
+(a second window of the same profile shares the cookie and cannot show the 403
+path), or run `wrangler dev --tunnel` and register that hostname's callback.
+The phone steps in section 5 are worth doing once against the real deploy.
+
+### Local D1
+
+`--local` keeps its own SQLite under `.wrangler/state`, entirely separate from
+the deployed database. To inspect it:
+
+```bash
+bunx wrangler d1 execute knightcode-remote --local --file ./query.sql
+```
+
+`--command` is unreliable through `bunx` on Windows — the quoted argument does
+not survive, and wrangler exits claiming neither flag was given. Use `--file`.
+
 ## 1. GitHub OAuth app
 
 At <https://github.com/settings/developers>, create an OAuth app:
