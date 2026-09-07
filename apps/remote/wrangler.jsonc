@@ -17,6 +17,6 @@
 		"bindings": [{ "name": "ROOM", "class_name": "RemoteRoom" }]
 	},
 	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RemoteRoom"] }],
-	"d1_databases": [{ "binding": "DB", "database_name": "knightcode-remote", "database_id": "REPLACE_AFTER_D1_CREATE" }],
+	"d1_databases": [{ "binding": "DB", "database_name": "knightcode-remote", "database_id": "89b432a5-032b-42e7-a639-feb2e945da8c" }],
 	"observability": { "enabled": true }
 }
