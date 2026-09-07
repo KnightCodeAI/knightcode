@@ -181,7 +181,7 @@ interface Expandable {
 
 interface WorkingStatusEditor extends EditorComponent {
 	readonly embedWorkingStatus: boolean;
-	setWorkingStatusIndicator(indicator: WorkingStatusIndicator | undefined): void;
+	setWorkingStatusIndicator(indicator: StatusIndicator | undefined): void;
 }
 
 function isWorkingStatusEditor(editor: EditorComponent): editor is WorkingStatusEditor {
@@ -2088,7 +2088,7 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private setEditorWorkingStatusIndicator(indicator: WorkingStatusIndicator | undefined): boolean {
+	private setEditorWorkingStatusIndicator(indicator: StatusIndicator | undefined): boolean {
 		this.defaultEditor.setWorkingStatusIndicator(undefined);
 		if (!isWorkingStatusEditor(this.editor)) return false;
 		this.editor.setWorkingStatusIndicator(indicator);
@@ -2101,7 +2101,7 @@ export class InteractiveMode {
 		this.activeWorkingIndicatorEmbedded = false;
 		this.statusContainer.clear();
 		this.setEditorWorkingStatusIndicator(undefined);
-		if (indicator instanceof WorkingStatusIndicator && this.setEditorWorkingStatusIndicator(indicator)) {
+		if (this.setEditorWorkingStatusIndicator(indicator)) {
 			this.activeWorkingIndicatorEmbedded = true;
 			// The indicator rendered its first frame before this flag was set, so repaint
 			// it in the border colour rather than leaving one frame of accent/muted.
@@ -2116,7 +2116,7 @@ export class InteractiveMode {
 			return;
 		}
 		const clearedIndicator = this.activeStatusIndicator;
-		const clearedIndicatorWasEmbedded = clearedIndicator?.kind === "working" && this.activeWorkingIndicatorEmbedded;
+		const clearedIndicatorWasEmbedded = this.activeWorkingIndicatorEmbedded;
 		clearedIndicator?.dispose();
 		this.activeStatusIndicator = undefined;
 		this.activeWorkingIndicatorEmbedded = false;
@@ -2716,7 +2716,7 @@ export class InteractiveMode {
 		}
 
 		this.editorContainer.addChild(this.editor as Component);
-		if (this.activeStatusIndicator instanceof WorkingStatusIndicator) {
+		if (this.activeStatusIndicator) {
 			this.statusContainer.clear();
 			this.activeWorkingIndicatorEmbedded = this.setEditorWorkingStatusIndicator(this.activeStatusIndicator);
 			if (!this.activeWorkingIndicatorEmbedded) {
@@ -4153,9 +4153,7 @@ export class InteractiveMode {
 			const level = this.session.thinkingLevel || "off";
 			this.editor.borderColor = theme.getThinkingBorderColor(level);
 		}
-		if (this.activeStatusIndicator?.kind === "working") {
-			this.activeStatusIndicator.invalidate();
-		}
+		this.activeStatusIndicator?.invalidate();
 		this.ui.requestRender();
 	}
 
