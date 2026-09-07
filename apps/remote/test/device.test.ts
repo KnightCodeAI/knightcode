@@ -47,6 +47,14 @@ describe("device flow", () => {
 		expect(row?.approved_at).toBeNull();
 	});
 
+	it("sends an unusable code back to the form rather than a dead end", async () => {
+		const account = await upsertAccount(env.DB, "github", "1", "owner", null);
+		const response = await approve("ZZZZ-ZZZZ", await csrfToken(env, account.id), account.id);
+
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location")).toBe(`${ORIGIN}/device?invalid=1`);
+	});
+
 	it("returns pending until approved, then issues exactly one token", async () => {
 		const account = await upsertAccount(env.DB, "github", "1", "owner", null);
 		const { deviceCode, userCode } = await begin();
@@ -55,7 +63,8 @@ describe("device flow", () => {
 		expect(((await pending.json()) as { error: string }).error).toBe("authorization_pending");
 
 		const approved = await approve(userCode, await csrfToken(env, account.id), account.id);
-		expect(approved.status).toBe(200);
+		expect(approved.status).toBe(303);
+		expect(approved.headers.get("location")).toBe(`${ORIGIN}/device?approved=1`);
 
 		const granted = await poll(deviceCode);
 		expect(((await granted.json()) as { token: string }).token).toBeTruthy();

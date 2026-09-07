@@ -29,6 +29,19 @@
 				border-radius: var(--radius-card);
 				color: var(--text);
 			}
+			.error {
+				color: var(--danger);
+			}
+			.button {
+				display: inline-block;
+				margin-top: 1.5rem;
+				padding: 0.65rem 1.25rem;
+				border-radius: 999px;
+				background: var(--accent);
+				color: white;
+				font-weight: 590;
+				text-decoration: none;
+			}
 			button {
 				width: 100%;
 				padding: 0.7rem;
@@ -44,24 +57,46 @@
 	</head>
 	<body>
 		<main class="centred">
-			<h1>Approve a terminal</h1>
-			<p class="muted">Enter the code shown in your terminal.</p>
-			<form method="post" action="/device">
-				<input type="hidden" name="csrf" id="csrf" />
-				<input name="user_code" placeholder="XXXX-XXXX" autocomplete="off" autocapitalize="characters" required />
-				<button type="submit">Approve</button>
-			</form>
+			<section id="approve">
+				<h1>Approve a terminal</h1>
+				<p class="muted" id="hint">Enter the code shown in your terminal.</p>
+				<form method="post" action="/device">
+					<input type="hidden" name="csrf" id="csrf" />
+					<input name="user_code" placeholder="XXXX-XXXX" autocomplete="off" autocapitalize="characters" required />
+					<button type="submit">Approve</button>
+				</form>
+			</section>
+			<section id="approved" hidden>
+				<h1>Terminal approved</h1>
+				<p class="muted">You can close this tab — your terminal is signing in now.</p>
+				<a class="button" href="/">See your sessions</a>
+			</section>
 		</main>
 		<script type="module">
-			const response = await fetch("/api/csrf");
-			const { csrf } = await response.json();
-			document.getElementById("csrf").value = csrf;
+			// Both outcomes of the POST land back here as a redirect, so this one page covers
+			// the form, the confirmation and the retry rather than dead-ending on plain text.
+			const params = new URLSearchParams(location.search);
 
-			// Prefilled from verification_uri_complete. Approval still needs the click.
-			const code = new URLSearchParams(location.search).get("code");
-			const field = document.querySelector('input[name="user_code"]');
-			if (code) field.value = code;
-			field.focus();
+			if (params.has("approved")) {
+				document.getElementById("approve").hidden = true;
+				document.getElementById("approved").hidden = false;
+			} else {
+				const response = await fetch("/api/csrf");
+				const { csrf } = await response.json();
+				document.getElementById("csrf").value = csrf;
+
+				if (params.has("invalid")) {
+					const hint = document.getElementById("hint");
+					hint.textContent = "That code has expired or was already used. Check your terminal for a new one.";
+					hint.classList.add("error");
+				}
+
+				// Prefilled from verification_uri_complete. Approval still needs the click.
+				const field = document.querySelector('input[name="user_code"]');
+				const code = params.get("code");
+				if (code) field.value = code;
+				field.focus();
+			}
 		</script>
 	</body>
 </html>

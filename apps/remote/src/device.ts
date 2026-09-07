@@ -56,8 +56,13 @@ export async function approveDevice(env: Env, request: Request, accountId: strin
 	)
 		.bind(accountId, Date.now(), code, Date.now())
 		.run();
-	if (!result.meta.changes) return new Response("That code is not valid any more", { status: 400 });
-	return new Response("Device approved. Return to your terminal.", { headers: { "content-type": "text/plain" } });
+	// Redirect rather than render: refreshing a rendered POST would repost the code, and
+	// both outcomes are states of /device itself, so neither dead-ends on plain text.
+	const origin = new URL(request.url).origin;
+	return new Response(null, {
+		status: 303,
+		headers: { location: `${origin}/device?${result.meta.changes ? "approved=1" : "invalid=1"}` },
+	});
 }
 
 export async function pollDevice(env: Env, request: Request): Promise<Response> {
