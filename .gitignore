@@ -106,3 +106,6 @@ shaders/
 # Bundled browser client (apps/remote, built by `bun run build:client`)
 apps/remote/client/app.js
 apps/remote/client/rooms.js
+
+# Wrangler local state (apps/remote)
+.wrangler/
