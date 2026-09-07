@@ -1,9 +1,29 @@
+import { spawn } from "node:child_process";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@knightcodeai/cli";
 import { deleteToken, login, logout, readToken, relayOrigin, writeToken } from "./auth.ts";
 import { RelayHost } from "./host.ts";
 import { Mirror, type MirrorSource } from "./mirror.ts";
 
 const STATUS_KEY = "remote";
+
+/**
+ * A copy of packages/cli/src/utils/open-browser.ts, not an import: packages/cli already
+ * depends on this package, so importing a runtime value back would close a workspace cycle.
+ * Keep the two in step — in particular never use `cmd /c start` on Windows, which re-parses
+ * &, | and ^ in the URL before `start` sees it.
+ */
+function openBrowser(target: string): void {
+	const [command, args]: [string, string[]] =
+		process.platform === "darwin"
+			? ["open", [target]]
+			: process.platform === "win32"
+				? ["rundll32", ["url.dll,FileProtocolHandler", target]]
+				: ["xdg-open", [target]];
+	// Best effort: the caller always prints the url too, so a missing launcher must not throw.
+	spawn(command, args, { stdio: "ignore", detached: true })
+		.on("error", () => {})
+		.unref();
+}
 const SUBCOMMANDS = ["status", "stop", "logout"] as const;
 
 interface Session {
@@ -138,7 +158,12 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 				try {
 					token = await login(
 						origin,
-						(userCode, uri) => ctx.ui.notify(`Open ${uri} and enter ${userCode}`, "info"),
+						(userCode, uri) => {
+							// The url is printed as well as opened: a headless box, a remote shell or a
+							// browser that simply does not launch all leave the user something to paste.
+							ctx.ui.notify(`Approve ${userCode} at ${uri}`, "info");
+							openBrowser(uri);
+						},
 						new AbortController().signal,
 					);
 					await writeToken(token);

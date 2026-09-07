@@ -41,6 +41,37 @@ describe("device-code login", () => {
 		expect(seen).toEqual(["AAAA-BBBB"]);
 	});
 
+	test("prefers the uri carrying the code, and falls back when the relay omits it", async () => {
+		const uris: string[] = [];
+		const run = async (extra: Record<string, string>): Promise<void> => {
+			vi.stubGlobal(
+				"fetch",
+				vi
+					.fn()
+					.mockResolvedValueOnce(
+						jsonResponse({
+							device_code: "d",
+							user_code: "AAAA-BBBB",
+							verification_uri: "https://remote.knightcode.dev/device",
+							...extra,
+							interval: 0,
+							expires_in: 60,
+						}),
+					)
+					.mockResolvedValueOnce(jsonResponse({ token: "granted" })),
+			);
+			await login("https://remote.knightcode.dev", (_code, uri) => uris.push(uri), new AbortController().signal);
+		};
+
+		await run({ verification_uri_complete: "https://remote.knightcode.dev/device?code=AAAA-BBBB" });
+		await run({});
+
+		expect(uris).toEqual([
+			"https://remote.knightcode.dev/device?code=AAAA-BBBB",
+			"https://remote.knightcode.dev/device",
+		]);
+	});
+
 	test("widens the interval on slow_down rather than giving up", async () => {
 		vi.useFakeTimers();
 		const fetchMock = vi

@@ -86,7 +86,11 @@ export default {
 		}
 
 		if (path === "/device") {
-			if (!accountId) return Response.redirect(`${url.origin}/login?next=%2Fdevice`, 302);
+			// pathname + search, not a literal "/device": signing in is the common first
+			// run, and a bare path would drop the prefilled code on the way through GitHub.
+			if (!accountId) {
+				return Response.redirect(`${url.origin}/login?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
+			}
 			if (request.method === "POST") return approveDevice(env, request, accountId);
 			return env.ASSETS.fetch(new Request(`${url.origin}/device.html`, request));
 		}

@@ -56,6 +56,12 @@
 			const response = await fetch("/api/csrf");
 			const { csrf } = await response.json();
 			document.getElementById("csrf").value = csrf;
+
+			// Prefilled from verification_uri_complete. Approval still needs the click.
+			const code = new URLSearchParams(location.search).get("code");
+			const field = document.querySelector('input[name="user_code"]');
+			if (code) field.value = code;
+			field.focus();
 		</script>
 	</body>
 </html>

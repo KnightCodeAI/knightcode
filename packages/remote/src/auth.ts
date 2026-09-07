@@ -78,10 +78,13 @@ export async function login(
 		device_code: string;
 		user_code: string;
 		verification_uri: string;
+		verification_uri_complete?: string;
 		interval?: number;
 		expires_in?: number;
 	};
-	onCode(start.user_code, start.verification_uri);
+	// The complete form carries the code in the query so the page can prefill it. A relay
+	// that predates it omits the field, so the plain uri stays the fallback.
+	onCode(start.user_code, start.verification_uri_complete ?? start.verification_uri);
 
 	let intervalMs = Math.max(MINIMUM_INTERVAL_MS, (start.interval ?? 5) * 1000);
 	const deadline = Date.now() + (start.expires_in ?? 600) * 1000;

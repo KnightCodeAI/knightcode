@@ -26,6 +26,13 @@ describe("authorisation boundary", () => {
 		expect(response.headers.get("location")).toContain(`/login?next=%2Fr%2F${MINE}`);
 	});
 
+	it("carries the prefilled code through the login redirect", async () => {
+		const response = await SELF.fetch(`https://remote.knightcode.dev/device?code=ABCD-1234`, { redirect: "manual" });
+		expect(response.status).toBe(302);
+		// Losing the query here would send every first-run user to an empty form.
+		expect(response.headers.get("location")).toContain(`/login?next=${encodeURIComponent("/device?code=ABCD-1234")}`);
+	});
+
 	it("refuses a viewer whose account does not own the room", async () => {
 		const owner = await upsertAccount(env.DB, "github", "1", "owner", null);
 		const other = await upsertAccount(env.DB, "github", "2", "other", null);

@@ -33,6 +33,20 @@ function approve(userCode: string, csrf: string, accountId: string): Promise<Res
 }
 
 describe("device flow", () => {
+	it("offers a verification uri carrying the code, without approving on its own", async () => {
+		const response = await startDevice(env, new Request(`${ORIGIN}/auth/device`, { method: "POST" }));
+		const body = (await response.json()) as { user_code: string; verification_uri_complete: string };
+
+		const complete = new URL(body.verification_uri_complete);
+		expect(complete.pathname).toBe("/device");
+		expect(complete.searchParams.get("code")).toBe(body.user_code);
+
+		const row = await env.DB.prepare("SELECT approved_at FROM device_codes WHERE user_code = ?")
+			.bind(body.user_code)
+			.first<{ approved_at: number | null }>();
+		expect(row?.approved_at).toBeNull();
+	});
+
 	it("returns pending until approved, then issues exactly one token", async () => {
 		const account = await upsertAccount(env.DB, "github", "1", "owner", null);
 		const { deviceCode, userCode } = await begin();

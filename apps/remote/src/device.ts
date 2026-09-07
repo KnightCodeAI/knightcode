@@ -25,10 +25,14 @@ export async function startDevice(env: Env, request: Request): Promise<Response>
 	)
 		.bind(await sha256Hex(deviceCode), code, request.headers.get("x-knightcode-label") ?? "cli", now, now + DEVICE_TTL_MS)
 		.run();
+	const origin = new URL(request.url).origin;
 	return json({
 		device_code: deviceCode,
 		user_code: code,
-		verification_uri: `${new URL(request.url).origin}/device`,
+		verification_uri: `${origin}/device`,
+		// RFC 8628 section 3.3.1. The code is prefilled, never auto-approved: a GET that
+		// approved by itself would let any page the user visits authorise a terminal.
+		verification_uri_complete: `${origin}/device?code=${encodeURIComponent(code)}`,
 		interval: POLL_INTERVAL_SECONDS,
 		expires_in: Math.floor(DEVICE_TTL_MS / 1000),
 	});
