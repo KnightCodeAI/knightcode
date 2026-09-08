@@ -13,7 +13,16 @@
 		"skipLibCheck": true,
 		"allowImportingTsExtensions": true,
 		"verbatimModuleSyntax": true,
-		"noUncheckedIndexedAccess": true
+		"noUncheckedIndexedAccess": true,
+		"baseUrl": ".",
+		"paths": { "@/*": ["./src/*"] }
 	},
-	"include": ["src/**/*.ts", "src/**/*.tsx", "../vite.config.ts", "../../../packages/remote/src/protocol.ts"]
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		"test/**/*.ts",
+		"test/**/*.tsx",
+		"../vite.config.ts",
+		"../../../packages/remote/src/protocol.ts"
+	]
 }

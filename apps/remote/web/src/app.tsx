@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchRooms, type Room as RoomRow, Unauthorized } from "./lib/api.ts";
+import { fetchMe, fetchRooms, type Me, type Room as RoomRow, Unauthorized } from "./lib/api.ts";
 import { Device } from "./pages/device.tsx";
 import { Landing } from "./pages/landing.tsx";
 import { Room } from "./pages/room.tsx";
@@ -23,6 +23,7 @@ export function App(): React.JSX.Element {
 
 function Home(): React.JSX.Element {
 	const [rooms, setRooms] = useState<RoomRow[]>();
+	const [me, setMe] = useState<Me>();
 	const [signedOut, setSignedOut] = useState(false);
 	const [error, setError] = useState<string>();
 
@@ -41,8 +42,15 @@ function Home(): React.JSX.Element {
 	}, []);
 
 	useEffect(load, [load]);
+	useEffect(() => {
+		void fetchMe().then(setMe, () => {
+			// The list is the page; the account sheet degrades to a sign-out link.
+		});
+	}, []);
 
 	if (signedOut) return <Landing />;
-	if (rooms === undefined) return <p className="loading">{error ?? "Loading your sessions…"}</p>;
-	return <Sessions rooms={rooms} onReload={load} />;
+	if (rooms === undefined) {
+		return <p className="px-6 pt-[30vh] text-center text-label-2">{error ?? "Loading your sessions…"}</p>;
+	}
+	return <Sessions rooms={rooms} me={me} onReload={load} />;
 }

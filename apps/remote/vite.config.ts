@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -7,6 +8,10 @@ import { defineConfig } from "vite";
 export default defineConfig({
 	root: "web",
 	plugins: [react()],
+	resolve: {
+		// Matches web/tsconfig.json paths; shadcn generates imports against "@/".
+		alias: { "@": fileURLToPath(new URL("./web/src", import.meta.url)) },
+	},
 	build: {
 		outDir: "dist",
 		emptyOutDir: true,
