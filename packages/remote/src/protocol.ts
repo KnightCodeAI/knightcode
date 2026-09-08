@@ -8,6 +8,12 @@ export const TRUNCATION_MARKER = "[knightcode-remote: content truncated]";
 
 export type ToolPhase = "start" | "update" | "end";
 
+/** A slash command the host can dispatch when a viewer sends it as a prompt. */
+export interface RemoteCommand {
+	name: string;
+	description?: string;
+}
+
 export type HostFrame =
 	| {
 			v: 1;
@@ -17,6 +23,7 @@ export type HostFrame =
 			entries: unknown[];
 			sessionName?: string;
 			model?: string;
+			commands?: RemoteCommand[];
 	  }
 	| { v: 1; type: "entries"; entries: unknown[] }
 	| { v: 1; type: "stream"; messageId: string; content: string }
@@ -28,7 +35,11 @@ export type ViewerFrame =
 	{ v: 1; type: "hello"; since?: number } | { v: 1; type: "prompt"; text: string } | { v: 1; type: "abort" };
 
 export type RelayFrame =
-	{ v: 1; type: "resnapshot" } | { v: 1; type: "viewer"; count: number } | { v: 1; type: "error"; message: string };
+	| { v: 1; type: "resnapshot" }
+	| { v: 1; type: "viewer"; count: number }
+	| { v: 1; type: "error"; message: string }
+	/** To viewers: whether a terminal is attached. Sent after replay and on every host change. */
+	| { v: 1; type: "host"; online: boolean };
 
 export type StampedFrame = HostFrame & { seq: number };
 

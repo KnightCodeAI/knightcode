@@ -7,7 +7,10 @@ import {
 } from "../../../packages/remote/src/protocol.ts";
 import type { Env } from "./accounts.ts";
 
-const TTL_MS = 24 * 60 * 60 * 1000;
+// Thirty days rather than the original 24 hours: past sessions are a feature of the web app
+// now, so a room outlives its terminal until the owner deletes it or this expires. Storage
+// per room is still bounded by MAX_ROOM_BYTES through resnapshot.
+const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // Ceiling: per-viewer send backpressure is not enforced here. The design called for
 // closing a viewer whose outbound buffer passed MAX_VIEWER_BUFFER_BYTES, but the Workers
 // WebSocket API exposes no `bufferedAmount`, so that check could only ever compare
@@ -89,6 +92,7 @@ export class RemoteRoom {
 			}
 			await this.#state.storage.setAlarm(Date.now() + TTL_MS);
 			await this.#setStatus("live");
+			this.#send("viewer", encodeFrame({ v: 1, type: "host", online: true }));
 		}
 		this.#broadcastViewerCount();
 		return new Response(null, { status: 101, webSocket: pair[0] });
@@ -109,6 +113,9 @@ export class RemoteRoom {
 			await this.#state.storage.setAlarm(Date.now() + TTL_MS);
 			// Without this the session list shows every abandoned room as live for a full day.
 			await this.#setStatus("offline");
+			// A host that vanished mid-turn would otherwise leave the list spinning for 30 days.
+			await this.#setBusy(false);
+			this.#send("viewer", encodeFrame({ v: 1, type: "host", online: false }));
 		}
 		this.#broadcastViewerCount();
 	}
@@ -132,9 +139,28 @@ export class RemoteRoom {
 			.run();
 	}
 
+	/**
+	 * `busy` is what the session list draws as the spinning ring. Status frames arrive at every
+	 * settle point, which is bursty during a tool-heavy turn, so D1 is written only on a change.
+	 */
+	async #setBusy(busy: boolean): Promise<void> {
+		const previous = (await this.#state.storage.get<boolean>("busy")) ?? false;
+		if (previous === busy) return;
+		await this.#state.storage.put("busy", busy);
+		const meta = await this.#state.storage.get<RoomMeta>("meta");
+		if (!meta) return;
+		await this.#env.DB.prepare("UPDATE rooms SET busy = ?, last_seen_at = ? WHERE id = ?")
+			.bind(busy ? 1 : 0, Date.now(), meta.roomId)
+			.run();
+	}
+
 	async #onHostFrame(raw: string): Promise<void> {
 		const frame = decodeHostFrame(raw);
 		if (!frame) return;
+
+		if (frame.type === "status") {
+			await this.#setBusy(frame.streaming === true);
+		}
 
 		if (frame.type === "stream") {
 			// Never persisted in the log; the latest one is kept in a single slot.
@@ -185,6 +211,8 @@ export class RemoteRoom {
 		}
 		const stream = await this.#state.storage.get<string>("stream");
 		if (stream) socket.send(stream);
+		// Last, so a stale "bye" or "status" in the replayed log never outranks the truth.
+		socket.send(encodeFrame({ v: 1, type: "host", online: this.#sockets("host").length > 0 }));
 	}
 
 	#send(role: "host" | "viewer", payload: string): void {

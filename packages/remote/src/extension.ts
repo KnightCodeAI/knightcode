@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@k
 import { deleteToken, logout, readToken, relayOrigin, writeToken } from "./auth.ts";
 import { RelayHost } from "./host.ts";
 import { Mirror, type MirrorSource } from "./mirror.ts";
+import type { RemoteCommand } from "./protocol.ts";
 import { signIn } from "./signin.ts";
 
 const STATUS_KEY = "remote";
@@ -15,13 +16,26 @@ interface Session {
 	viewers: number;
 }
 
-function sourceFor(ctx: ExtensionContext): MirrorSource {
+/**
+ * Everything getCommands() returns is dispatchable through sendUserMessage with
+ * expandPromptTemplates: extension commands run, skills and prompt templates expand.
+ * Built-in TUI commands (/model, /tree…) are not in that list and cannot be sent as text.
+ * "remote" itself is dropped: stopping the remote from the remote is a footgun.
+ */
+export function remoteCommands(commands: Array<{ name: string; description?: string }>): RemoteCommand[] {
+	return commands
+		.filter((command) => command.name !== "remote")
+		.map((command) => ({ name: command.name, description: command.description }));
+}
+
+function sourceFor(knightcode: ExtensionAPI, ctx: ExtensionContext): MirrorSource {
 	return {
 		cwd: ctx.cwd,
 		model: ctx.model?.id,
 		getEntries: () => ctx.sessionManager.getEntries(),
 		getLeafId: () => ctx.sessionManager.getLeafId(),
 		getSessionName: () => ctx.sessionManager.getSessionName(),
+		getCommands: () => remoteCommands(knightcode.getCommands()),
 	};
 }
 
@@ -50,12 +64,15 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 
 	const publish = (ctx: ExtensionContext): void => {
 		if (!session) return;
-		for (const frame of session.mirror.drain(sourceFor(ctx))) session.host.send(frame);
+		for (const frame of session.mirror.drain(sourceFor(knightcode, ctx))) session.host.send(frame);
 		session.host.send(
 			session.mirror.status(ctx.isIdle(), !ctx.isIdle(), ctx.model?.id, ctx.getContextUsage()?.tokens ?? undefined),
 		);
 	};
 
+	// agent_start is what flips the session to "working" on the web before anything settles;
+	// without it the first status the viewer sees arrives with the first finished message.
+	knightcode.on("agent_start", (_event, ctx) => publish(ctx));
 	knightcode.on("message_end", (_event, ctx) => publish(ctx));
 	knightcode.on("tool_execution_end", (_event, ctx) => publish(ctx));
 	knightcode.on("turn_end", (_event, ctx) => publish(ctx));
@@ -162,7 +179,11 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 				onRoom: () => {},
 				onPrompt: (text) => {
 					// Dropped while stale so a remote message cannot land in a session the viewer never saw.
-					if (session && !session.mirror.isStale()) knightcode.sendUserMessage(text, { deliverAs: "followUp" });
+					// expandPromptTemplates puts the text on the same path as the terminal's own input:
+					// a leading slash dispatches an extension command or expands a skill or template.
+					if (session && !session.mirror.isStale()) {
+						knightcode.sendUserMessage(text, { deliverAs: "followUp", expandPromptTemplates: true });
+					}
 				},
 				onAbort: () => ctx.abort(),
 				onResnapshot: () => mirror.markStale(),

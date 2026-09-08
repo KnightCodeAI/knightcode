@@ -17,6 +17,26 @@ Once signed in, `/remote` prints a link. You do not have to copy it: open
 <https://remote.knightcode.dev> on your phone and the session appears in the
 list.
 
+## The web app
+
+The list shows every session you have published, newest first, with its state:
+**Working** while a turn is running in the terminal, **Connected** while the
+terminal is attached and idle, **Disconnected** once it has gone. Filter it to
+active or past sessions from the menu on the right.
+
+Open a session to read the transcript. Runs of tool calls are folded into one
+line such as _Ran 2 commands, created a file_; tap it to list the calls, and
+tap a call to see what it did — the command and its output, the file and its
+content, the diff an edit made.
+
+The composer sends replies to the terminal. Type `/` to list the slash commands
+the terminal can run from a message: extension commands, skills and prompt
+templates. Built-in commands that open a terminal UI, such as `/model`, are not
+offered.
+
+The menu in the session's top-right corner copies the link or deletes the
+session from the relay.
+
 ## Commands
 
 | Command | Effect |
@@ -31,12 +51,13 @@ modes it reports that and does nothing.
 
 ## What the remote can and cannot do
 
-A viewer can read the transcript, send prompts, and stop the current turn.
-Prompts arrive as ordinary user messages and appear in your terminal.
+A viewer can read the transcript, send prompts, run the slash commands listed
+above, and stop the current turn. Prompts arrive as ordinary user messages and
+appear in your terminal; `/remote` itself is never offered to a viewer.
 
-A viewer cannot end your session, quit KnightCode, switch sessions, change
-model, or run slash commands. Closing the browser tab, losing signal, or losing
-the relay does nothing to the terminal. Your session ends only when you end it.
+A viewer cannot end your session, quit KnightCode, switch sessions, or change
+model. Closing the browser tab, losing signal, or losing the relay does nothing
+to the terminal. Your session ends only when you end it.
 
 If the relay becomes unreachable the command does not fail: it reconnects with
 backoff indefinitely, the footer shows `remote retrying`, and the agent carries
@@ -50,8 +71,9 @@ a command prints them. Nothing is redacted: anything visible in your terminal is
 visible in the room while it lives. Only the account that created a room can
 read it.
 
-A room is deleted 24 hours after the terminal disconnects, or immediately on
-`/remote stop`. Stored history is capped at 8 MB per room; older content is
+A room stays readable as a past session for 30 days after the terminal
+disconnects, and is deleted then, on `/remote stop`, or when you delete it from
+the web app. Stored history is capped at 8 MB per room; older content is
 dropped as the session grows. Images are not mirrored in either direction — an
 image in the transcript appears as a placeholder recording its type and size.
 

@@ -101,6 +101,39 @@ describe("authorisation boundary", () => {
 		expect(response.status).toBe(400);
 	});
 
+	it("lets only the owner delete a room from the web", async () => {
+		const owner = await upsertAccount(env.DB, "github", "12", "owner", null);
+		const other = await upsertAccount(env.DB, "github", "13", "other", null);
+		await room(MINE, owner.id);
+
+		const otherCookie = await issueSessionCookie(env.SIGNING_SECRET, other.id);
+		const forbidden = await SELF.fetch(`https://remote.knightcode.dev/api/rooms/${MINE}`, {
+			method: "DELETE",
+			headers: { cookie: otherCookie.split(";")[0] },
+		});
+		expect(forbidden.status).toBe(403);
+		expect(await env.DB.prepare("SELECT id FROM rooms WHERE id = ?").bind(MINE).first()).not.toBeNull();
+
+		const ownerCookie = await issueSessionCookie(env.SIGNING_SECRET, owner.id);
+		const allowed = await SELF.fetch(`https://remote.knightcode.dev/api/rooms/${MINE}`, {
+			method: "DELETE",
+			headers: { cookie: ownerCookie.split(";")[0] },
+		});
+		expect(allowed.status).toBe(204);
+		expect(await env.DB.prepare("SELECT id FROM rooms WHERE id = ?").bind(MINE).first()).toBeNull();
+	});
+
+	it("describes the signed-in account and nobody else", async () => {
+		expect((await SELF.fetch("https://remote.knightcode.dev/api/me")).status).toBe(401);
+
+		const account = await upsertAccount(env.DB, "github", "14", "octocat", "https://avatars/octocat.png");
+		const cookie = await issueSessionCookie(env.SIGNING_SECRET, account.id);
+		const response = await SELF.fetch("https://remote.knightcode.dev/api/me", {
+			headers: { cookie: cookie.split(";")[0] },
+		});
+		expect(await response.json()).toEqual({ login: "octocat", avatarUrl: "https://avatars/octocat.png" });
+	});
+
 	it("refuses to stop a room owned by another account", async () => {
 		const owner = await upsertAccount(env.DB, "github", "7", "owner", null);
 		const other = await upsertAccount(env.DB, "github", "8", "other", null);

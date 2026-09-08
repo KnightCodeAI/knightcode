@@ -11,6 +11,7 @@ export { RemoteRoom } from "./room.ts";
  */
 const ROOM_ID = /^[0-9A-F]{32}$/;
 const ROOM_PATH = /^\/r\/([0-9A-F]{32})(\/ws)?$/;
+const API_ROOM_PATH = /^\/api\/rooms\/([0-9A-F]{32})$/;
 
 function bearer(request: Request): string | undefined {
 	const header = request.headers.get("authorization");
@@ -118,14 +119,41 @@ export default {
 			return Response.json({ csrf: await csrfToken(env, accountId) });
 		}
 
+		if (path === "/api/me") {
+			if (!accountId) return new Response("Unauthorized", { status: 401 });
+			const row = await env.DB.prepare("SELECT login, avatar_url FROM accounts WHERE id = ?")
+				.bind(accountId)
+				.first<{ login: string; avatar_url: string | null }>();
+			return Response.json({ login: row?.login ?? "", avatarUrl: row?.avatar_url ?? null });
+		}
+
 		if (path === "/api/rooms") {
 			if (!accountId) return new Response("Unauthorized", { status: 401 });
 			const rows = await env.DB.prepare(
-				"SELECT id, session_name, cwd, status, last_seen_at FROM rooms WHERE account_id = ? ORDER BY last_seen_at DESC",
+				"SELECT id, session_name, cwd, status, busy, last_seen_at FROM rooms WHERE account_id = ? ORDER BY last_seen_at DESC",
 			)
 				.bind(accountId)
-				.all<{ id: string; session_name: string | null; cwd: string | null; status: string; last_seen_at: number }>();
+				.all<{
+					id: string;
+					session_name: string | null;
+					cwd: string | null;
+					status: string;
+					busy: number;
+					last_seen_at: number;
+				}>();
 			return Response.json({ rooms: rows.results ?? [] });
+		}
+
+		const apiRoom = API_ROOM_PATH.exec(path);
+		if (apiRoom?.[1] && request.method === "DELETE") {
+			// Same effect as /remote stop, from the web. The cookie is SameSite=Lax, which no
+			// cross-site DELETE can carry, so ownership is the whole check.
+			const roomId = apiRoom[1];
+			if (!accountId) return new Response("Unauthorized", { status: 401 });
+			if (!(await ownsRoom(env, roomId, accountId))) return new Response("Forbidden", { status: 403 });
+			await roomStub(env, roomId).fetch("https://room/delete", { headers: { "x-kc-account": accountId } });
+			await env.DB.prepare("DELETE FROM rooms WHERE id = ?").bind(roomId).run();
+			return new Response(null, { status: 204 });
 		}
 
 		const roomMatch = ROOM_PATH.exec(path);

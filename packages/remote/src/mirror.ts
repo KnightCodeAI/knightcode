@@ -1,5 +1,5 @@
 import { sanitiseEntries } from "./entries.ts";
-import type { HostFrame } from "./protocol.ts";
+import type { HostFrame, RemoteCommand } from "./protocol.ts";
 
 /** The narrow slice of the session the mirror reads. Deliberately excludes any lifetime control. */
 export interface MirrorSource {
@@ -8,6 +8,8 @@ export interface MirrorSource {
 	getEntries(): unknown[];
 	getLeafId(): string | null;
 	getSessionName(): string | undefined;
+	/** Slash commands a viewer may send. Read at snapshot time only; the list rarely changes. */
+	getCommands?(): RemoteCommand[];
 }
 
 export class Mirror {
@@ -43,6 +45,7 @@ export class Mirror {
 					entries: sanitiseEntries(entries),
 					sessionName: source.getSessionName(),
 					model: source.model,
+					commands: source.getCommands?.(),
 				},
 			];
 		}

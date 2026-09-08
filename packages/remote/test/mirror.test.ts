@@ -86,6 +86,12 @@ describe("mirror", () => {
 		expect(JSON.stringify(snapshot)).not.toContain("SECRET");
 	});
 
+	test("carries the source's slash commands in the snapshot", () => {
+		const state = { ...source([entry("a")]), getCommands: () => [{ name: "review", description: "Review" }] };
+		const [snapshot] = new Mirror().drain(state);
+		expect(snapshot).toMatchObject({ type: "snapshot", commands: [{ name: "review", description: "Review" }] });
+	});
+
 	test("builds a stream frame without touching the entry log", () => {
 		const state = source([entry("a")]);
 		const mirror = new Mirror();

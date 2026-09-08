@@ -24,6 +24,8 @@ export default defineConfig({
 		})),
 	],
 	test: {
+		// The browser app's tests live under web/test and run on node via web/vitest.config.ts.
+		include: ["test/**/*.test.ts"],
 		setupFiles: ["./test/apply-migrations.ts"],
 	},
 });

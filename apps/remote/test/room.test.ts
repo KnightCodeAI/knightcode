@@ -73,6 +73,28 @@ describe("RemoteRoom", () => {
 		expect(seen[0]).toBe("snapshot");
 	});
 
+	it("tells a viewer whether a terminal is attached, after replay and on every change", async () => {
+		// A past session: the host that created the room is gone by the time the viewer arrives.
+		const first = await connect("room-j", "host", "acct-1");
+		first.close();
+		await settle();
+
+		const viewer = await connect("room-j", "viewer", "acct-1");
+		const seen: Array<{ type: string; online?: boolean }> = [];
+		viewer.addEventListener("message", (event) => seen.push(JSON.parse(String(event.data))));
+		viewer.send(encodeFrame({ v: 1, type: "hello" }));
+		await settle();
+		expect(seen.at(-1)).toMatchObject({ type: "host", online: false });
+
+		const again = await connect("room-j", "host", "acct-1");
+		await settle();
+		expect(seen.at(-1)).toMatchObject({ type: "host", online: true });
+
+		again.close();
+		await settle();
+		expect(seen.at(-1)).toMatchObject({ type: "host", online: false });
+	});
+
 	it("survives every viewer leaving and keeps the host attached", async () => {
 		const host = await connect("room-d", "host", "acct-1");
 		const viewer = await connect("room-d", "viewer", "acct-1");
@@ -124,6 +146,33 @@ describe("RemoteRoom", () => {
 			status: string;
 		}>();
 		expect(offline?.status).toBe("offline");
+	});
+
+	it("mirrors the working state into D1 and clears it when the host drops mid-turn", async () => {
+		const account = await upsertAccount(env.DB, "github", "11", "owner", null);
+		await env.DB.prepare(
+			"INSERT INTO rooms (id, account_id, created_at, last_seen_at, status) VALUES (?, ?, ?, ?, 'live')",
+		)
+			.bind("room-i", account.id, Date.now(), Date.now())
+			.run();
+		const busyOf = async (): Promise<number | undefined> =>
+			(await env.DB.prepare("SELECT busy FROM rooms WHERE id = ?").bind("room-i").first<{ busy: number }>())?.busy;
+
+		const host = await connect("room-i", "host", account.id);
+		host.send(encodeFrame({ v: 1, type: "status", idle: false, streaming: true }));
+		await settle();
+		expect(await busyOf()).toBe(1);
+
+		host.send(encodeFrame({ v: 1, type: "status", idle: true, streaming: false }));
+		await settle();
+		expect(await busyOf()).toBe(0);
+
+		host.send(encodeFrame({ v: 1, type: "status", idle: false, streaming: true }));
+		await settle();
+		host.close();
+		await settle();
+		// A terminal killed mid-turn must not leave the list spinning until the TTL.
+		expect(await busyOf()).toBe(0);
 	});
 
 	it("deletes the D1 row keyed by the room id, not the durable object id, when the TTL alarm fires", async () => {
