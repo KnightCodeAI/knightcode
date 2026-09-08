@@ -1,33 +1,35 @@
-/**
- * Final action for current state at one address:
- * - copy: emit the current value in the destination;
- * - exclude: omit it from the destination;
- * - reconstruct: do not copy the row because lane handling emits a coherent replacement.
- */
-export type ForkDisposition = "copy" | "exclude" | "reconstruct";
+import type { CommittedListAppendWrite, CommittedValueSetWrite } from "./commit.ts";
 
-/** Decide the final fork action for one current scalar or list address. */
-export function classifyForkAddress(
-	address: { readonly namespace: string; readonly key: string },
-	scope: "branch" | "tree",
+export type ForkCurrentStatePlan =
+	{ scope: "branch"; branch: string; destinationTip: string | null } | { scope: "tree" };
+
+/** Project one current scalar row or surviving list element into destination state. */
+export function projectForkCurrentStateWrite(
+	write: CommittedValueSetWrite | CommittedListAppendWrite,
+	plan: ForkCurrentStatePlan,
 	isEntryCopied: (entryId: string) => boolean,
-): ForkDisposition {
-	switch (address.namespace) {
+): CommittedValueSetWrite | CommittedListAppendWrite | undefined {
+	switch (write.namespace) {
 		case "knightcode.session.name":
-			return "copy";
+			return write;
 		case "knightcode.entry.label":
-			return isEntryCopied(address.key) ? "copy" : "exclude";
+			return isEntryCopied(write.key) ? write : undefined;
 		case "knightcode.branch.tip":
+			if (plan.scope === "tree") return write;
+			return write.key === plan.branch ? { ...write, value: plan.destinationTip } : undefined;
 		case "knightcode.lane.config":
+			return plan.scope === "tree" || write.key === plan.branch ? write : undefined;
 		case "knightcode.lane.state":
-			return "reconstruct";
+			return plan.scope === "tree" || write.key === plan.branch
+				? { ...write, value: { currentOperationId: null, lastOperationId: null, inbox: [] } }
+				: undefined;
 		case "knightcode.result":
-			return "exclude";
+			return undefined;
 	}
-	if (address.namespace.startsWith("knightcode.op.") || address.namespace.startsWith("knightcode.pending."))
-		return "exclude";
-	if (address.namespace === "knightcode" || address.namespace.startsWith("knightcode.")) {
-		throw new Error(`Unknown reserved fork namespace: ${address.namespace}`);
+	if (write.namespace.startsWith("knightcode.op.") || write.namespace.startsWith("knightcode.pending."))
+		return undefined;
+	if (write.namespace === "knightcode" || write.namespace.startsWith("knightcode.")) {
+		throw new Error(`Unknown reserved fork namespace: ${write.namespace}`);
 	}
-	return scope === "tree" ? "copy" : "exclude";
+	return plan.scope === "tree" ? write : undefined;
 }
