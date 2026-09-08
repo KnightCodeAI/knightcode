@@ -16,7 +16,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.2"
   },
   "scripts": {
     "test": "vitest --run"
