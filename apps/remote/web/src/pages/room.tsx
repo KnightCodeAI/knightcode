@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { deleteRoom, shortenPath } from "@/lib/api";
 import { Markdown } from "@/lib/markdown";
 import { useRoomSocket, useVisualViewport } from "@/lib/socket";
-import { groupStats, isRunning, summariseTools } from "@/lib/tools";
+import { groupStats, isRunning, rowLabel } from "@/lib/tools";
 import { type Block, toBlocks, type ToolCallView } from "@/lib/transcript";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ const MAX_DRAFT_HEIGHT_PX = 160;
 function UserBubble({ text }: { text: string }): React.JSX.Element {
 	return (
 		<div className="flex justify-end">
-			<div className="max-w-[88%] rounded-[1.25rem] rounded-br-lg bg-raised px-4 py-2.5 text-[16px] leading-relaxed break-words whitespace-pre-wrap">
+			<div className="max-w-[86%] rounded-[1.25rem] rounded-br-lg bg-raised px-4 py-2.5 text-[16px] leading-relaxed break-words whitespace-pre-wrap">
 				{text}
 			</div>
 		</div>
@@ -51,9 +51,9 @@ function ToolsRow({ calls, onOpen }: { calls: ToolCallView[]; onOpen(): void }):
 		<button
 			type="button"
 			onClick={onOpen}
-			className="-mx-2 flex max-w-full items-center gap-1 rounded-xl px-2 py-1.5 text-left text-[16px] text-label-2 active:bg-raised"
+			className="-mx-2 -my-1 flex max-w-full items-center gap-1 rounded-xl px-2 py-1.5 text-left text-[15px] text-label-2 active:bg-raised"
 		>
-			<span className="truncate">{summariseTools(calls)}</span>
+			<span className="truncate">{rowLabel(calls)}</span>
 			<Stats added={stats.added} removed={stats.removed} className="ml-1" />
 			{running ? (
 				<Loader2 className="ml-0.5 size-4 flex-none animate-spin" aria-hidden="true" />
@@ -129,7 +129,7 @@ function DeleteSheet({
 					<button
 						type="button"
 						onClick={() => onOpenChange(false)}
-						className="rounded-2xl bg-raised px-5 py-3.5 font-medium active:bg-raised-hover"
+						className="rounded-2xl bg-raised px-5 py-3.5 font-medium transition active:scale-[0.985] active:bg-raised-hover"
 					>
 						Cancel
 					</button>
@@ -137,6 +137,11 @@ function DeleteSheet({
 			</SheetContent>
 		</Sheet>
 	);
+}
+
+/** "anthropic/claude-sonnet-5" reads as "claude-sonnet-5" in the bar; the provider is noise on a phone. */
+function shortModel(model: string | undefined): string | undefined {
+	return model?.split("/").at(-1) || undefined;
 }
 
 export function Room({ roomId }: { roomId: string }): React.JSX.Element {
@@ -213,6 +218,16 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 		}
 	};
 
+	// The chip toggles the leading slash. Pointer-down is swallowed so the keyboard stays up.
+	const toggleSlash = (): void => {
+		setDraft((current) => (current.startsWith("/") ? current.replace(/^\/\S*\s?/, "") : `/${current}`));
+		const node = input.current;
+		if (node) {
+			node.focus();
+			requestAnimationFrame(() => resize(node));
+		}
+	};
+
 	const copyLink = (): void => {
 		void navigator.clipboard?.writeText(location.href);
 	};
@@ -221,6 +236,9 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 	const toolRunning = lastBlock?.kind === "tools" && lastBlock.calls.some(isRunning);
 	const showWorking = state.hostOnline && state.streaming && state.liveText === undefined && !toolRunning;
 	const where = shortenPath(state.cwd);
+	const model = shortModel(state.model);
+	const subtitle =
+		state.connection === "reconnecting" ? "Reconnecting…" : [where, model].filter(Boolean).join(" · ") || " ";
 
 	return (
 		<div
@@ -236,9 +254,7 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 				center={
 					<div className="min-w-0">
 						<h1 className="truncate text-[17px] leading-tight font-semibold">{state.sessionName ?? "Session"}</h1>
-						<p className="truncate text-[13px] leading-tight text-label-2">
-							{state.connection === "reconnecting" ? "Reconnecting…" : (where ?? " ")}
-						</p>
+						<p className="truncate text-[13px] leading-tight text-label-2">{subtitle}</p>
 					</div>
 				}
 				right={
@@ -269,11 +285,11 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 				onScroll={onScroll}
 				className="h-full overflow-y-auto overscroll-contain"
 				style={{
-					paddingTop: "calc(var(--topbar) + var(--safe-top) + 1rem)",
-					paddingBottom: `${bottomInset + 16}px`,
+					paddingTop: "calc(var(--topbar) + var(--safe-top) + 1.25rem)",
+					paddingBottom: `${bottomInset + 8}px`,
 				}}
 			>
-				<div className="mx-auto flex max-w-3xl flex-col gap-5 px-4">
+				<div className="mx-auto flex max-w-3xl flex-col gap-6 px-5">
 					{blocks.length === 0 && !state.synced ? (
 						<p className="pt-[30vh] text-center text-label-2">Loading the session…</p>
 					) : null}
@@ -290,7 +306,7 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 
 			<div
 				ref={dock}
-				className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 bg-[linear-gradient(to_top,var(--ground)_35%,transparent)] px-3 pt-8"
+				className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 bg-[linear-gradient(to_top,var(--ground)_40%,transparent)] px-3 pt-10"
 				style={{ paddingBottom: "max(0.75rem, var(--safe-bottom))" }}
 			>
 				{!atBottom ? (
@@ -300,13 +316,13 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 				) : null}
 
 				{state.synced && !state.hostOnline ? (
-					<p className="glass pointer-events-auto w-full max-w-3xl rounded-[1.5rem] px-5 py-4 text-center text-[15px] text-label-2">
+					<p className="glass rise-in pointer-events-auto w-full max-w-3xl rounded-[1.5rem] px-5 py-4 text-center text-[15px] text-label-2">
 						The terminal is offline. The transcript stays readable here.
 					</p>
 				) : (
 					<div className="pointer-events-auto relative w-full max-w-3xl">
 						{suggestions ? (
-							<div className="absolute inset-x-0 bottom-full mb-2">
+							<div className="rise-in absolute inset-x-0 bottom-full mb-2">
 								<CommandList commands={suggestions} onPick={pick} />
 							</div>
 						) : null}
@@ -314,13 +330,13 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 							<button
 								type="button"
 								onClick={dismissNotice}
-								className="mb-2 block w-full rounded-2xl bg-danger/15 px-4 py-2 text-left text-[14px] text-danger"
+								className="rise-in mb-2 block w-full rounded-2xl bg-danger/15 px-4 py-2.5 text-left text-[14px] text-danger"
 							>
 								{state.notice}
 							</button>
 						) : null}
 						<form
-							className="glass flex flex-col gap-1 rounded-[1.5rem] px-2 pt-1 pb-2"
+							className="glass flex flex-col rounded-[1.75rem] px-3 pt-1.5 pb-2.5"
 							onSubmit={(event) => {
 								event.preventDefault();
 								submit();
@@ -334,7 +350,7 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 								autoComplete="off"
 								autoCorrect="on"
 								enterKeyHint="send"
-								className="max-h-40 w-full resize-none bg-transparent px-3 py-2.5 text-[16px] leading-relaxed text-label outline-none placeholder:text-label-3"
+								className="max-h-40 w-full resize-none bg-transparent px-2 py-2.5 text-[17px] leading-relaxed text-label outline-none placeholder:text-label-3"
 								onChange={(event) => {
 									setDraft(event.target.value);
 									resize(event.target);
@@ -346,25 +362,24 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 									}
 								}}
 							/>
-							<div className="flex items-center justify-between">
+							<div className="mt-1 flex items-center justify-between">
 								<button
 									type="button"
-									aria-label="Slash commands"
-									className="flex size-10 items-center justify-center rounded-full font-mono text-[17px] text-label-2 active:bg-raised"
-									onClick={() => {
-										setDraft((current) => (current.startsWith("/") ? current : `/${current}`));
-										input.current?.focus();
-									}}
+									className="chip"
+									aria-pressed={suggestions !== undefined}
+									onPointerDown={(event) => event.preventDefault()}
+									onClick={toggleSlash}
 								>
-									/
+									<span className="font-mono text-[15px]">/</span>
+									Commands
 								</button>
-								<div className="flex items-center gap-1.5">
+								<div className="flex items-center gap-2">
 									{state.streaming ? (
 										<button
 											type="button"
 											aria-label="Stop the current turn"
 											onClick={abort}
-											className="flex size-10 items-center justify-center rounded-full bg-raised text-label active:bg-raised-hover"
+											className="round-button bg-raised text-label active:bg-raised-hover"
 										>
 											<Square className="size-4 fill-current" aria-hidden="true" />
 										</button>
@@ -373,10 +388,7 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 										type="submit"
 										aria-label="Send"
 										disabled={draft.trim().length === 0}
-										className={cn(
-											"flex size-10 items-center justify-center rounded-full bg-tint text-tint-ink transition",
-											"active:scale-95 disabled:opacity-35",
-										)}
+										className={cn("round-button bg-tint text-tint-ink", "disabled:opacity-35")}
 									>
 										<ArrowUp className="size-5" strokeWidth={2.25} aria-hidden="true" />
 									</button>

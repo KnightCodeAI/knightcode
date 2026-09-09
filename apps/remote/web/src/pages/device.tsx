@@ -19,7 +19,7 @@ function Approved(): React.JSX.Element {
 			<Mark />
 			<h1 className="mb-2 text-[1.75rem] leading-tight font-semibold tracking-tight">Terminal approved</h1>
 			<p className="text-label-2 leading-relaxed">
-				You can close this tab — your terminal is signing in now, and it stays signed in until you run{" "}
+				You can close this tab. Your terminal is signing in now, and it stays signed in until you run{" "}
 				<Code>/remote logout</Code> there.
 			</p>
 			<a className={cn(BUTTON, "mt-7")} href="/">
@@ -61,7 +61,7 @@ export function Device(): React.JSX.Element {
 				{invalid ? (
 					"That code has expired or was already used. Check your terminal for a new one."
 				) : stale ? (
-					"Your sign-in changed while this page was open, so that submission was refused. The code is still good — approve it again."
+					"Your sign-in changed while this page was open, so that submission was refused. The code is still good, approve it again."
 				) : (
 					<>
 						A terminal running <strong className="font-semibold text-label">KnightCode</strong> is asking to sign in as

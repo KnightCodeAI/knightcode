@@ -9,9 +9,13 @@ export function CommandList({
 	onPick(name: string): void;
 }): React.JSX.Element {
 	return (
-		<div className="glass max-h-72 overflow-y-auto rounded-[1.25rem] py-1" role="listbox" aria-label="Slash commands">
+		<div
+			className="glass max-h-72 overflow-y-auto overscroll-contain rounded-[1.25rem] p-1.5"
+			role="listbox"
+			aria-label="Slash commands"
+		>
 			{commands.length === 0 ? (
-				<p className="px-4 py-3 text-[15px] text-label-2">No matching commands</p>
+				<p className="px-3 py-3 text-[15px] text-label-2">No matching commands</p>
 			) : (
 				commands.map((command) => (
 					<button
@@ -19,7 +23,7 @@ export function CommandList({
 						type="button"
 						role="option"
 						aria-selected="false"
-						className="flex w-full flex-col items-start gap-0.5 px-4 py-2.5 text-left active:bg-raised-hover"
+						className="flex w-full flex-col items-start gap-0.5 rounded-xl px-3 py-2.5 text-left active:bg-raised-hover"
 						onPointerDown={(event) => event.preventDefault()}
 						onClick={() => onPick(command.name)}
 					>
