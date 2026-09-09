@@ -71,6 +71,22 @@ function copyRuntimeAssets(outDir: string, target: Target): void {
 	}
 }
 
+// Windows names a process by its PE FileDescription and terminals pick up the
+// executable icon, so without these the binary shows up as an unbranded "Bun".
+const ICON = join(ROOT, "apps/web/app/favicon.ico");
+function windowsMetadata(version: string) {
+	const [major = "0", minor = "0", patch = "0"] = version.split("-")[0]!.split(".");
+	return {
+		title: "KnightCode",
+		publisher: "KnightCodeAI",
+		description: "KnightCode",
+		copyright: "Copyright (c) 2026 KnightCodeAI",
+		// PE versions are four numeric parts; drop any prerelease suffix.
+		version: `${major}.${minor}.${patch}.0`,
+		...(existsSync(ICON) ? { icon: ICON } : {}),
+	};
+}
+
 type Target = { os: string; arch: string; bunTarget: Bun.Build.CompileTarget };
 
 const ALL_TARGETS: Target[] = [
@@ -120,7 +136,11 @@ for (const target of targets) {
 	const result = await Bun.build({
 		entrypoints: [ENTRY, WORKER_ENTRY],
 		target: "bun",
-		compile: { target: target.bunTarget, outfile },
+		compile: {
+			target: target.bunTarget,
+			outfile,
+			...(target.os === "win32" ? { windows: windowsMetadata(version) } : {}),
+		},
 		define: {
 			KNIGHTCODE_VERSION: JSON.stringify(version),
 		},
