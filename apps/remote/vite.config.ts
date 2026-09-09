@@ -25,7 +25,9 @@ export default defineConfig({
 			"/login": "http://localhost:8787",
 			"/logout": "http://localhost:8787",
 			"/auth": "http://localhost:8787",
-			"/r": { target: "ws://localhost:8787", ws: true },
+			// Only the socket. Proxying the whole /r/<id> page handed the Worker's built shell
+			// to the dev server, whose asset urls exist only in web/dist, so rooms never opened.
+			"^/r/[0-9A-F]{32}/ws$": { target: "ws://localhost:8787", ws: true },
 		},
 	},
 });
