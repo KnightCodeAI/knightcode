@@ -41,7 +41,7 @@ session from the relay.
 
 | Command | Effect |
 | --- | --- |
-| `/remote` | Publish this session and print its link |
+| `/remote` | Toggle publishing: start and print the link, or pause. Pausing keeps the room readable, and the next `/remote` resumes the same link |
 | `/remote status` | Show the link and how many viewers are connected |
 | `/remote stop` | Stop publishing and delete the room |
 | `/remote logout` | Revoke the stored account credential and delete it locally |

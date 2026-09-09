@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@knightcodeai/cli";
-import { deleteToken, logout, readToken, relayOrigin, writeToken } from "./auth.ts";
-import { RelayHost } from "./host.ts";
+import { logout, readToken, relayOrigin, writeToken } from "./auth.ts";
+import { RelayHost, type RelayHostOptions } from "./host.ts";
 import { Mirror, type MirrorSource } from "./mirror.ts";
 import type { RemoteCommand } from "./protocol.ts";
 import { signIn } from "./signin.ts";
@@ -14,6 +14,11 @@ interface Session {
 	mirror: Mirror;
 	roomId: string;
 	viewers: number;
+}
+
+export interface RemoteExtensionDeps {
+	/** Test seam: stands in for the relay websocket. */
+	socketFactory?: RelayHostOptions["socketFactory"];
 }
 
 /**
@@ -57,8 +62,10 @@ function textOf(message: object): string {
 	return text;
 }
 
-export function remoteExtension(knightcode: ExtensionAPI): void {
+export function remoteExtension(knightcode: ExtensionAPI, deps: RemoteExtensionDeps = {}): void {
 	let session: Session | undefined;
+	// A paused session publishes to this room again, so toggling /remote keeps the link.
+	let lastRoomId: string | undefined;
 
 	const linkFor = (roomId: string): string => `${relayOrigin()}/r/${roomId}`;
 
@@ -77,6 +84,9 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 	knightcode.on("tool_execution_end", (_event, ctx) => publish(ctx));
 	knightcode.on("turn_end", (_event, ctx) => publish(ctx));
 	knightcode.on("agent_end", (_event, ctx) => publish(ctx));
+	// agent_end fires while the run flag is still set, so isIdle() is false there and the
+	// phone kept showing "Working". agent_settled is the first event after it clears.
+	knightcode.on("agent_settled", (_event, ctx) => publish(ctx));
 
 	knightcode.on("message_update", (event, ctx) => {
 		// Token-rate path: never call getEntries() here, and send nothing with no viewers watching.
@@ -101,7 +111,7 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 	});
 
 	knightcode.registerCommand("remote", {
-		description: "Publish this session to a live web link",
+		description: "Toggle publishing this session to a live web link",
 		getArgumentCompletions: (prefix: string) =>
 			SUBCOMMANDS.filter((name) => name.startsWith(prefix.trim())).map((name) => ({ value: name, label: name })),
 		handler: async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
@@ -113,17 +123,19 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 					return;
 				}
 				await session.host.close("Stopped from the terminal");
-				// Closing the socket alone would leave the room readable for its 24 hour TTL.
+				// Closing the socket alone would leave the room readable for its TTL.
 				await session.host.deleteRoom();
 				session = undefined;
+				lastRoomId = undefined;
 				ctx.ui.setStatus(STATUS_KEY, undefined);
-				ctx.ui.notify("Remote stopped", "info");
+				ctx.ui.notify("Remote stopped and the link deleted", "info");
 				return;
 			}
 
 			if (command === "logout") {
 				await session?.host.close("Signed out");
 				session = undefined;
+				lastRoomId = undefined;
 				ctx.ui.setStatus(STATUS_KEY, undefined);
 				await logout(relayOrigin());
 				ctx.ui.notify("Signed out of KnightCode remote", "info");
@@ -137,7 +149,13 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 			}
 
 			if (session) {
-				ctx.ui.notify(linkFor(session.roomId), "info");
+				// Toggle off. The room goes offline but stays readable; the next bare /remote
+				// reconnects to the same link. /remote stop is the one that deletes.
+				await session.host.close("Paused from the terminal");
+				lastRoomId = session.roomId;
+				session = undefined;
+				ctx.ui.setStatus(STATUS_KEY, undefined);
+				ctx.ui.notify("Remote paused. /remote again resumes the same link", "info");
 				return;
 			}
 
@@ -174,9 +192,19 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 			const host = new RelayHost({
 				origin,
 				token,
+				roomId: lastRoomId,
 				cwd: ctx.cwd,
 				sessionName: ctx.sessionManager.getSessionName(),
+				socketFactory: deps.socketFactory,
 				onRoom: () => {},
+				onOpen: () => {
+					// On every open, not just the first: frames sent while the socket was down
+					// were dropped, and the relay replaces its log on the next snapshot anyway.
+					// Publishing before the socket existed is how the phone came to miss the
+					// earlier chat and the command list entirely.
+					mirror.markStale();
+					publish(ctx);
+				},
 				onPrompt: (text) => {
 					// Dropped while stale so a remote message cannot land in a session the viewer never saw.
 					// expandPromptTemplates puts the text on the same path as the terminal's own input:
@@ -217,8 +245,8 @@ export function remoteExtension(knightcode: ExtensionAPI): void {
 			});
 
 			session = { host, mirror, roomId: host.roomId, viewers: 0 };
+			lastRoomId = host.roomId;
 			host.start();
-			publish(ctx);
 			ctx.ui.notify(`Remote session: ${linkFor(host.roomId)}`, "info");
 		},
 	});
