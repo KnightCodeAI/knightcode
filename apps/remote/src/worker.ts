@@ -54,7 +54,8 @@ async function hostConnect(env: Env, request: Request): Promise<Response> {
 	await env.DB.prepare(
 		`INSERT INTO rooms (id, account_id, session_name, cwd, created_at, last_seen_at, status)
 		 VALUES (?, ?, ?, ?, ?, ?, 'live')
-		 ON CONFLICT (id) DO UPDATE SET last_seen_at = excluded.last_seen_at, status = 'live'`,
+		 ON CONFLICT (id) DO UPDATE SET last_seen_at = excluded.last_seen_at, status = 'live',
+		   session_name = excluded.session_name, cwd = excluded.cwd`,
 	)
 		.bind(roomId, accountId, url.searchParams.get("name"), url.searchParams.get("cwd"), now, now)
 		.run();

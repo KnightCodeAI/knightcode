@@ -78,6 +78,26 @@ describe("authorisation boundary", () => {
 		expect(response.status).toBe(401);
 	});
 
+	it("refreshes a room's name and folder when its host reconnects", async () => {
+		// /remote toggled back on after /resume publishes a different session under the same
+		// room id; the list must follow, not keep the first name it ever saw.
+		const account = await upsertAccount(env.DB, "github", "7", "owner", null);
+		const token = await issueCliToken(env.DB, account.id, "laptop");
+		const connect = (name: string, cwd: string): Promise<Response> =>
+			SELF.fetch(`https://remote.knightcode.dev/host?room=${MINE}&name=${name}&cwd=${encodeURIComponent(cwd)}`, {
+				headers: { upgrade: "websocket", authorization: `Bearer ${token}` },
+			});
+		expect((await connect("first", "/one")).status).toBe(101);
+		expect((await connect("second", "/two")).status).toBe(101);
+
+		const cookie = await issueSessionCookie(env.SIGNING_SECRET, account.id);
+		const response = await SELF.fetch("https://remote.knightcode.dev/api/rooms", {
+			headers: { cookie: cookie.split(";")[0] },
+		});
+		const body = (await response.json()) as { rooms: Array<{ session_name: string; cwd: string }> };
+		expect(body.rooms[0]).toMatchObject({ session_name: "second", cwd: "/two" });
+	});
+
 	it("lists only the signed-in account's rooms", async () => {
 		const owner = await upsertAccount(env.DB, "github", "4", "owner", null);
 		const other = await upsertAccount(env.DB, "github", "5", "other", null);
