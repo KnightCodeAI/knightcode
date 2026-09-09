@@ -9,6 +9,9 @@
 	// only, so it cannot create the DNS record a custom domain needs. The record is made
 	// by hand (see DEPLOYING.md); a route only needs workers_routes:write, which the token has.
 	"routes": [{ "pattern": "remote.knightcode.dev/*", "zone_id": "9eb345a5d81de9d3c8e971208b2117bf" }],
+	// The workers.dev hostname doubles as staging and works before the DNS record above
+	// exists. Wrangler turns it off by default once a route is configured.
+	"workers_dev": true,
 	// The React app in web/, built by `bun run build`. run_worker_first is load-bearing:
 	// without it the assets binding answers matching paths BEFORE the Worker, so /, /r/<id>
 	// and /device would be served straight from disk and skip every authorisation check in
