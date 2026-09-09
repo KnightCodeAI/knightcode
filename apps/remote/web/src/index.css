@@ -56,7 +56,9 @@
 	--font-prose: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, "Times New Roman", serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
+	/* Drawer curve for sheets; a hard ease-out for everything that enters or reacts to touch. */
 	--ease-emphasis: cubic-bezier(0.32, 0.72, 0, 1);
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 	--topbar: 3.5rem;
 	--safe-top: env(safe-area-inset-top, 0px);
 	--safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -188,6 +190,7 @@
 	--radius-3xl: calc(var(--radius) + 0.75rem);
 
 	--ease-emphasis: var(--ease-emphasis);
+	--ease-out: var(--ease-out);
 }
 
 @layer base {
@@ -262,8 +265,22 @@
 		var(--glass-shadow),
 		inset 0 1px 0 var(--glass-highlight);
 	transition:
-		transform 160ms var(--ease-emphasis),
-		background 160ms var(--ease-emphasis);
+		transform 160ms var(--ease-out),
+		background 160ms ease;
+}
+
+/* Round solid icon button inside the composer: stop and send. */
+@utility round-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 9999px;
+	transition:
+		transform 160ms var(--ease-out),
+		background 160ms ease,
+		opacity 160ms ease;
 }
 
 @utility prose-chat {
@@ -284,10 +301,14 @@
 	background: var(--raised-hover);
 }
 
+.round-button:active {
+	transform: scale(0.94);
+}
+
 /* Session ring: dashed when idle, a spinning arc when the session is working. */
 .ring {
-	width: 2.5rem;
-	height: 2.5rem;
+	width: 2.25rem;
+	height: 2.25rem;
 	border-radius: 9999px;
 	border: 1.5px dashed var(--label-3);
 	position: relative;
@@ -527,6 +548,93 @@
 
 .no-scrollbar::-webkit-scrollbar {
 	display: none;
+}
+
+/*
+ * Tool sheet timeline. Each row draws the connector below its own icon, so nothing needs a
+ * masking background: the old full-height line was hidden behind icon squares painted in
+ * the page colour, which read as black tiles on the translucent sheet.
+ */
+.timeline-row:not(:last-child)::after {
+	content: "";
+	position: absolute;
+	left: calc(0.75rem - 0.5px);
+	top: calc(50% + 0.95rem);
+	bottom: calc(-50% + 0.95rem);
+	width: 1px;
+	background: var(--hairline);
+}
+
+/* Things that appear anchored to the composer: the slash list, the offline notice. */
+.rise-in {
+	opacity: 1;
+	transform: translateY(0);
+	transition:
+		opacity 150ms var(--ease-out),
+		transform 150ms var(--ease-out);
+
+	@starting-style {
+		opacity: 0;
+		transform: translateY(0.375rem);
+	}
+}
+
+/* Pill-shaped chips in the composer toolbar and the sheet. */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375rem;
+	height: 2.25rem;
+	padding: 0 0.875rem;
+	border-radius: 9999px;
+	background: var(--raised);
+	color: var(--label-2);
+	font-size: 14px;
+	font-weight: 500;
+	transition:
+		background 160ms ease,
+		color 160ms ease,
+		transform 160ms var(--ease-out);
+}
+
+.chip:active {
+	transform: scale(0.96);
+}
+
+.chip[aria-pressed="true"] {
+	background: var(--raised-hover);
+	color: var(--label);
+}
+
+/* Segmented control: the appearance switch in the account sheet. */
+.segmented {
+	display: flex;
+	padding: 3px;
+	border-radius: 9999px;
+	background: var(--sunken);
+}
+
+.segmented > button {
+	flex: 1;
+	height: 2.125rem;
+	border-radius: 9999px;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--label-2);
+	transition:
+		color 160ms ease,
+		background 160ms ease,
+		transform 160ms var(--ease-out);
+}
+
+.segmented > button:active {
+	transform: scale(0.96);
+}
+
+.segmented > button[aria-pressed="true"] {
+	background: var(--raised-hover);
+	color: var(--label);
+	box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
 }
