@@ -14,9 +14,15 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { GlassButton } from "@/components/glass";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { shortenPath } from "@/lib/api";
 import { describeTool, diffStats, groupStats, isRunning, kindOf, outputOf, summariseTools, type ToolKind } from "@/lib/tools";
 import type { ToolCallView } from "@/lib/transcript";
 import { cn } from "@/lib/utils";
+
+/** File tools show the last two path segments in the list; the full path waits in the detail. */
+function isPath(kind: ToolKind): boolean {
+	return kind === "write" || kind === "edit" || kind === "read" || kind === "list";
+}
 
 const ICONS: Record<ToolKind, LucideIcon> = {
 	shell: Terminal,
@@ -211,19 +217,19 @@ function Row({ call, onOpen }: { call: ToolCallView; onOpen(): void }): React.JS
 	const description = describeTool(call);
 	const stats = diffStats(call);
 	return (
-		<li className="relative">
+		<li className="timeline-row relative">
 			<button
 				type="button"
 				onClick={onOpen}
 				className="flex w-full items-center gap-3.5 rounded-xl py-2.5 pr-1 text-left active:bg-raised"
 			>
-				<span className="relative z-10 flex size-6 flex-none items-center justify-center rounded-md bg-ground text-label-2">
+				<span className="flex size-6 flex-none items-center justify-center text-label">
 					{isRunning(call) ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : <ToolIcon kind={description.kind} />}
 				</span>
 				<span className="min-w-0 flex-1 truncate text-[17px]">
 					<span className="text-label">{description.verb}</span>{" "}
 					<span className={cn("text-label-2", description.kind !== "other" && "font-mono text-[15px]")}>
-						{description.subject}
+						{isPath(description.kind) ? (shortenPath(description.subject) ?? description.subject) : description.subject}
 					</span>
 				</span>
 				{call.result?.isError ? <span className="flex-none text-[13px] text-danger">Failed</span> : null}
@@ -277,8 +283,7 @@ export function ToolSheet({ calls, onClose }: { calls?: ToolCallView[]; onClose(
 							<Detail call={selected} />
 						</div>
 					) : (
-						<ol className="relative py-1">
-							<span className="absolute top-6 bottom-6 left-3 w-px bg-hairline" aria-hidden="true" />
+						<ol className="py-1">
 							{calls?.map((call) => (
 								<Row key={call.id} call={call} onOpen={() => setSelectedId(call.id)} />
 							))}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { diffStats, groupStats, summariseTools } from "@/lib/tools";
+import { diffStats, groupStats, rowLabel, summariseTools } from "@/lib/tools";
 import { toBlocks } from "@/lib/transcript";
 
 let counter = 0;
@@ -64,6 +64,22 @@ describe("summaries and diff stats", () => {
 		];
 		expect(summariseTools(calls)).toBe("Ran 2 commands, created a file, searched 2 times");
 		expect(groupStats(calls)).toEqual({ added: 3, removed: 0 });
+	});
+
+	test("a lone call names the thing it touched; a group keeps the summary", () => {
+		expect(rowLabel([{ id: "1", name: "edit", args: { path: "C:\\repo\\src\\room.ts" } }])).toBe("Edited src/room.ts");
+		expect(rowLabel([{ id: "1", name: "read", args: { path: "/repo/a.ts" } }])).toBe("Read repo/a.ts");
+		expect(rowLabel([{ id: "1", name: "bash", args: { command: "git status --short\n  && git log" } }])).toBe(
+			"Ran git status --short && git log",
+		);
+		expect(rowLabel([{ id: "1", name: "bash", args: { command: "x".repeat(300) } }]).length).toBeLessThanOrEqual(90);
+		expect(rowLabel([{ id: "1", name: "web_fetch", args: { url: "https://a.b" } }])).toBe("web_fetch");
+		expect(
+			rowLabel([
+				{ id: "1", name: "bash", args: {} },
+				{ id: "2", name: "read", args: {} },
+			]),
+		).toBe("Ran a command, read a file");
 	});
 
 	test("reads edit stats from the display diff the edit tool returns", () => {

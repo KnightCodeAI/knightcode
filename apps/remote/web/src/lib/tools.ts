@@ -1,3 +1,4 @@
+import { shortenPath } from "./api.ts";
 import type { ToolCallView } from "./transcript.ts";
 
 /** The handful of shapes the app draws distinctly; everything else gets the generic view. */
@@ -130,6 +131,19 @@ export function summariseTools(calls: readonly ToolCallView[]): string {
 	}
 	const text = [...counts].map(([kind, count]) => (count === 1 ? PHRASES[kind].one : PHRASES[kind].many(count))).join(", ");
 	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const ROW_LIMIT = 80;
+
+/** The transcript row: a lone call names what it touched, a group is summarised by kind. */
+export function rowLabel(calls: readonly ToolCallView[]): string {
+	const [call] = calls;
+	if (!call || calls.length > 1) return summariseTools(calls);
+	const { kind, verb, subject } = describeTool(call);
+	if (kind === "other") return verb;
+	const short = kind === "shell" || kind === "search" ? subject : (shortenPath(subject) ?? subject);
+	const label = `${verb} ${short}`;
+	return label.length > ROW_LIMIT ? `${label.slice(0, ROW_LIMIT - 1)}…` : label;
 }
 
 export function isRunning(call: ToolCallView): boolean {
