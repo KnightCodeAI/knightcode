@@ -92,6 +92,26 @@ describe("mirror", () => {
 		expect(snapshot).toMatchObject({ type: "snapshot", commands: [{ name: "review", description: "Review" }] });
 	});
 
+	test("splits a snapshot that would exceed the frame cap into a snapshot plus entries frames", () => {
+		// A long session's snapshot passed the relay's 1 MB frame cap and was silently
+		// rejected, so the phone showed nothing at all. Each frame must stay under the cap.
+		const big = (id: string): unknown => ({
+			...(entry(id) as object),
+			message: { role: "user", content: [{ type: "text", text: "x".repeat(400) }] },
+		});
+		const entries = [big("a"), big("b"), big("c")];
+		const state = source(entries);
+		const mirror = new Mirror(600);
+
+		const frames = mirror.drain(state) as Array<{ type: string; entries: Array<{ id: string }> }>;
+		expect(frames.map((frame) => frame.type)).toEqual(["snapshot", "entries", "entries"]);
+		expect(frames.map((frame) => frame.entries.map((item) => item.id))).toEqual([["a"], ["b"], ["c"]]);
+		for (const frame of frames) expect(JSON.stringify(frame).length).toBeLessThan(1_000);
+
+		// The counter covers everything sent, so the next drain is a no-op.
+		expect(mirror.drain(state)).toEqual([]);
+	});
+
 	test("builds a stream frame without touching the entry log", () => {
 		const state = source([entry("a")]);
 		const mirror = new Mirror();
