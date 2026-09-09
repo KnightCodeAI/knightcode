@@ -1,38 +1,17 @@
 import { describe, expect, test, vi } from "vitest";
-import { RelayHost, type RelayWebSocket } from "../src/host.ts";
+import { RelayHost } from "../src/host.ts";
 import { encodeFrame } from "../src/protocol.ts";
-
-class FakeSocket implements RelayWebSocket {
-	readyState = 1;
-	readonly OPEN = 1;
-	bufferedAmount = 0;
-	sent: string[] = [];
-	#listeners = new Map<string, Array<(event: unknown) => void>>();
-
-	send(data: string): void {
-		this.sent.push(data);
-	}
-	close(): void {
-		this.readyState = 3;
-		this.emit("close", { code: 1000, reason: "" });
-	}
-	addEventListener(type: string, listener: (event: never) => void): void {
-		const existing = this.#listeners.get(type) ?? [];
-		existing.push(listener as (event: unknown) => void);
-		this.#listeners.set(type, existing);
-	}
-	removeEventListener(): void {}
-	emit(type: string, event: unknown): void {
-		for (const listener of this.#listeners.get(type) ?? []) listener(event);
-	}
-}
+import { FakeSocket } from "./fake-socket.ts";
 
 function harness() {
-	const socket = new FakeSocket();
+	// A fresh socket per connect, as undici gives the real host; `socket` is the first one.
+	const sockets: FakeSocket[] = [new FakeSocket()];
+	const socket = sockets[0] as FakeSocket;
 	const prompts: string[] = [];
 	const aborts: number[] = [];
 	const statuses: string[] = [];
 	const rooms: string[] = [];
+	const opens: number[] = [];
 	const host = new RelayHost({
 		origin: "https://remote.knightcode.dev",
 		token: "t",
@@ -42,9 +21,14 @@ function harness() {
 		onResnapshot: () => {},
 		onStatus: (status) => statuses.push(status.state),
 		onRoom: (id) => rooms.push(id),
-		socketFactory: () => socket,
+		onOpen: () => opens.push(1),
+		socketFactory: () => {
+			const next = sockets.length === 1 && socket.readyState === 1 ? socket : new FakeSocket();
+			if (next !== socket) sockets.push(next);
+			return next;
+		},
 	});
-	return { host, socket, prompts, aborts, statuses, rooms };
+	return { host, socket, sockets, prompts, aborts, statuses, rooms, opens };
 }
 
 describe("relay host", () => {
@@ -95,6 +79,26 @@ describe("relay host", () => {
 		socket.emit("message", { data: JSON.stringify({ v: 1, type: "viewer", count: 3 }) });
 		expect(host.viewers).toBe(3);
 		await host.close("done");
+	});
+
+	test("reports each socket open, but not viewer-count updates, so the caller can re-snapshot", async () => {
+		// The first snapshot used to be sent before the socket existed and was dropped on the
+		// floor; the viewer then never saw earlier chat or the command list.
+		vi.useFakeTimers();
+		const { host, socket, sockets, opens } = harness();
+		host.start();
+		expect(opens).toHaveLength(0);
+		socket.emit("open", {});
+		expect(opens).toHaveLength(1);
+		socket.emit("message", { data: JSON.stringify({ v: 1, type: "viewer", count: 2 }) });
+		expect(opens).toHaveLength(1);
+
+		socket.close();
+		await vi.advanceTimersByTimeAsync(1_000);
+		sockets[1]?.emit("open", {});
+		expect(opens).toHaveLength(2);
+		await host.close("done");
+		vi.useRealTimers();
 	});
 
 	test("never exposes a way to end the session", () => {

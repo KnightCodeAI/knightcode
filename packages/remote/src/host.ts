@@ -32,6 +32,8 @@ export interface RelayHostOptions {
 	onResnapshot(): void;
 	onStatus(status: RelayHostStatus): void;
 	onRoom(roomId: string): void;
+	/** Every time the socket opens, first connection and each reconnect alike. */
+	onOpen?(): void;
 	socketFactory?(url: string, token: string): RelayWebSocket;
 }
 
@@ -148,6 +150,7 @@ export class RelayHost {
 			};
 			socket.addEventListener("open", (() => {
 				this.#options.onStatus({ state: "connected", viewers: this.#viewers });
+				this.#options.onOpen?.();
 			}) as (event: never) => void);
 			socket.addEventListener("message", ((event: { data: unknown }) => {
 				this.#onMessage(String(event.data));
