@@ -95,6 +95,23 @@ describe("RemoteRoom", () => {
 		expect(seen.at(-1)).toMatchObject({ type: "host", online: false });
 	});
 
+	it("forgets the streamed draft once a finished frame lands, so a later viewer never sees it", async () => {
+		// The draft slot was kept forever and replayed to every new viewer, so an old
+		// half-message reappeared with a caret under a transcript that had already moved on.
+		const host = await connect("room-k", "host", "acct-1");
+		host.send(encodeFrame({ v: 1, type: "stream", messageId: "m", content: "half a sent" }));
+		host.send(encodeFrame({ v: 1, type: "entries", entries: [{ id: "m" }] }));
+		await settle();
+
+		const viewer = await connect("room-k", "viewer", "acct-1");
+		const seen: string[] = [];
+		viewer.addEventListener("message", (event) => seen.push(JSON.parse(String(event.data)).type));
+		viewer.send(encodeFrame({ v: 1, type: "hello" }));
+		await settle();
+		expect(seen).toContain("entries");
+		expect(seen).not.toContain("stream");
+	});
+
 	it("survives every viewer leaving and keeps the host attached", async () => {
 		const host = await connect("room-d", "host", "acct-1");
 		const viewer = await connect("room-d", "viewer", "acct-1");

@@ -115,6 +115,7 @@ export class RemoteRoom {
 			await this.#setStatus("offline");
 			// A host that vanished mid-turn would otherwise leave the list spinning for 30 days.
 			await this.#setBusy(false);
+			await this.#state.storage.delete("stream");
 			this.#send("viewer", encodeFrame({ v: 1, type: "host", online: false }));
 		}
 		this.#broadcastViewerCount();
@@ -168,6 +169,9 @@ export class RemoteRoom {
 			this.#send("viewer", raw);
 			return;
 		}
+		// Anything else means the draft has settled into the log or the turn moved on. Kept
+		// past this point, the slot replayed a stale half-message to every later viewer.
+		await this.#state.storage.delete("stream");
 
 		const seq = ((await this.#state.storage.get<number>("seq")) ?? 0) + 1;
 		const stamped = JSON.stringify({ ...frame, seq });
