@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@knightcode/agent";
-import type { Transport } from "@knightcode/ai";
+import { DEFAULT_MAX_AGENT_RETRY_DELAY_MS, type Transport } from "@knightcode/ai";
 import type { TuiMode as RendererTuiMode, ScrollViewScrollbar, TerminalCapabilities } from "@knightcode/tui";
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -31,6 +31,7 @@ export interface RetrySettings {
 	enabled?: boolean; // default: true
 	maxRetries?: number; // default: 3
 	baseDelayMs?: number; // default: 2000 (exponential backoff: 2s, 4s, 8s)
+	maxAgentDelayMs?: number; // default: 60000
 	provider?: ProviderRetrySettings;
 }
 
@@ -879,11 +880,12 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getRetrySettings(): { enabled: boolean; maxRetries: number; baseDelayMs: number } {
+	getRetrySettings(): { enabled: boolean; maxRetries: number; baseDelayMs: number; maxAgentDelayMs: number } {
 		return {
 			enabled: this.getRetryEnabled(),
 			maxRetries: this.settings.retry?.maxRetries ?? 3,
 			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
+			maxAgentDelayMs: this.settings.retry?.maxAgentDelayMs ?? DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
 		};
 	}
 
