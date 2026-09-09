@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { type Me, type Room, type SessionState, shortenPath, stateOf } from "@/lib/api";
+import { applyTheme, readTheme, type Theme, THEMES } from "@/lib/theme";
 import { fullTime, shortAge } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +35,7 @@ function SessionRow({ room }: { room: Room }): React.JSX.Element {
 	const where = shortenPath(room.cwd);
 	return (
 		<a
-			className="flex items-center gap-3.5 rounded-[1.25rem] bg-raised px-4 py-3.5 text-label transition active:scale-[0.99] active:bg-raised-hover"
+			className="flex items-center gap-3.5 rounded-[1.25rem] bg-raised px-4 py-3 text-label transition-[transform,background] duration-150 ease-(--ease-out) active:scale-[0.99] active:bg-raised-hover"
 			href={`/r/${room.id}`}
 		>
 			<SessionRing state={state} />
@@ -56,13 +57,38 @@ function SessionRow({ room }: { room: Room }): React.JSX.Element {
 				</span>
 			</span>
 			<time
-				className="flex-none self-start pt-0.5 text-[14px] text-label-2 tabular-nums"
+				className="flex-none self-start pt-0.5 text-[14px] text-label-3 tabular-nums"
 				dateTime={new Date(room.last_seen_at).toISOString()}
 				title={fullTime(room.last_seen_at)}
 			>
 				{shortAge(room.last_seen_at)}
 			</time>
 		</a>
+	);
+}
+
+function ThemeControl(): React.JSX.Element {
+	const [theme, setTheme] = useState<Theme>(readTheme);
+	const choose = (next: Theme): void => {
+		applyTheme(next);
+		setTheme(next);
+	};
+	return (
+		<div>
+			<p className="mb-2 text-[13px] font-medium text-label-2">Appearance</p>
+			<div className="segmented" role="group" aria-label="Appearance">
+				{THEMES.map((option) => (
+					<button
+						key={option.value}
+						type="button"
+						aria-pressed={theme === option.value}
+						onClick={() => choose(option.value)}
+					>
+						{option.label}
+					</button>
+				))}
+			</div>
+		</div>
 	);
 }
 
@@ -75,7 +101,7 @@ function AccountSheet({ me }: { me?: Me }): React.JSX.Element {
 			</GlassButton>
 			<Sheet open={open} onOpenChange={setOpen}>
 				<SheetContent side="left" showCloseButton={false} className="glass-strong w-[82vw] max-w-xs gap-0 border-r-0 p-0 text-label">
-					<div className="flex flex-col gap-5 px-5 pt-[calc(var(--safe-top)+1.5rem)]">
+					<div className="flex flex-col gap-6 px-5 pt-[calc(var(--safe-top)+1.5rem)]">
 						<div className="flex items-center gap-3">
 							{me?.avatarUrl ? (
 								<img src={me.avatarUrl} alt="" className="size-11 rounded-full bg-raised" width="44" height="44" />
@@ -87,15 +113,16 @@ function AccountSheet({ me }: { me?: Me }): React.JSX.Element {
 								<SheetDescription className="text-[13px] text-label-2">GitHub</SheetDescription>
 							</div>
 						</div>
+						<ThemeControl />
 						<p className="text-[14px] leading-relaxed text-label-2">
 							Run <code className="rounded-md bg-raised px-1.5 py-0.5 font-mono text-[12px]">/remote</code> in a terminal
-							and the session appears here.
+							and the session appears here. Run it again to pause.
 						</p>
 					</div>
 					<div className="mt-auto px-5 pb-[calc(var(--safe-bottom)+1.5rem)]">
 						<a
 							href="/logout"
-							className="flex items-center gap-2.5 rounded-2xl bg-raised px-4 py-3 text-[15px] font-medium active:bg-raised-hover"
+							className="flex items-center gap-2.5 rounded-2xl bg-raised px-4 py-3 text-[15px] font-medium transition active:scale-[0.985] active:bg-raised-hover"
 						>
 							<LogOut className="size-4" aria-hidden="true" />
 							Sign out
@@ -111,7 +138,7 @@ function FilterMenu({ value, onChange }: { value: Filter; onChange(next: Filter)
 	const label = FILTERS.find((option) => option.value === value)?.label ?? "All";
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger className="flex h-9 items-center gap-1 rounded-full px-3 text-[15px] text-label-2 active:bg-raised">
+			<DropdownMenuTrigger className="-mr-2 flex h-9 items-center gap-1 rounded-full px-3 text-[15px] text-label-2 active:bg-raised">
 				{label}
 				<ChevronDown className="size-4" aria-hidden="true" />
 			</DropdownMenuTrigger>
@@ -151,14 +178,12 @@ export function Sessions({ rooms, me, onReload }: { rooms: Room[]; me?: Me; onRe
 		<div className="relative min-h-dvh">
 			<TopBar
 				left={<AccountSheet me={me} />}
-				center={<h1 className="truncate text-[19px] font-semibold">Sessions</h1>}
+				center={<h1 className="truncate text-[19px] font-semibold">KnightCode</h1>}
 			/>
 
-			<main className="mx-auto max-w-3xl px-3 pb-16" style={{ paddingTop: "calc(var(--topbar) + var(--safe-top) + 0.75rem)" }}>
-				<div className="mb-2 flex items-center justify-between pl-1">
-					<p className="text-[15px] text-label-2">
-						{rooms.length === 0 ? "No sessions" : `${rooms.length} ${rooms.length === 1 ? "session" : "sessions"}`}
-					</p>
+			<main className="mx-auto max-w-3xl px-4 pb-16" style={{ paddingTop: "calc(var(--topbar) + var(--safe-top) + 1rem)" }}>
+				<div className="mb-3 flex items-center justify-between pl-1">
+					<h2 className="text-[15px] font-medium text-label-2">Sessions</h2>
 					<FilterMenu value={filter} onChange={setFilter} />
 				</div>
 

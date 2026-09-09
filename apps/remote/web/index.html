@@ -17,6 +17,13 @@
 		<title>KnightCode</title>
 		<link rel="icon" href="/knight.svg" />
 		<link rel="apple-touch-icon" href="/knight.svg" />
+		<!-- Before the stylesheet loads, so a remembered theme never flashes the device one. Key shared with src/lib/theme.ts. -->
+		<script>
+			try {
+				var t = localStorage.getItem("kc-theme");
+				if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+			} catch (e) {}
+		</script>
 	</head>
 	<body>
 		<div id="root"></div>
