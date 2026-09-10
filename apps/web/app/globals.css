@@ -175,6 +175,28 @@
   .dark .glass {
     @apply border-white/[0.08] bg-white/[0.04] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)];
   }
+  /* Chrome ignores ::-webkit-scrollbar-* when scrollbar-width/color are set,
+     so the standard props are for engines without the webkit pseudos (Firefox). */
+  @supports not selector(::-webkit-scrollbar) {
+    .scrollbar-hairline {
+      scrollbar-width: thin;
+      scrollbar-color: #3a3a44 transparent;
+    }
+  }
+  .scrollbar-hairline::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .scrollbar-hairline::-webkit-scrollbar-button {
+    display: none;
+  }
+  .scrollbar-hairline::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-hairline::-webkit-scrollbar-thumb {
+    background: #3a3a44;
+    border-radius: 4px;
+  }
   .bg-grid {
     background-image:
       linear-gradient(to right, color-mix(in srgb, var(--border) 60%, transparent) 1px, transparent 1px),
