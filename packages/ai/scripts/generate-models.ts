@@ -750,7 +750,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia,
 		supportsOpenAIGrammarTools: false,
 		...(cacheControlFormat ? { cacheControlFormat } : {}),
-		sendSessionAffinityHeaders: false,
+		sendSessionAffinityHeaders: isOpenRouter,
 		supportsLongCacheRetention: !(
 			isTogether ||
 			isCloudflareWorkersAI ||
