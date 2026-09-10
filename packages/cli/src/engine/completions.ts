@@ -57,7 +57,10 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 				}
 
 				const id = `chatcmpl-${randomUUID()}`;
-				const stream = ctx.models.stream(model, toContext(request, model));
+				const stream = ctx.models.stream(model, toContext(request, model), {
+					maxTokens: request.max_tokens,
+					temperature: request.temperature,
+				});
 
 				if (!request.stream) {
 					let content = "";
@@ -119,6 +122,11 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 				const modelId = typeof body.model === "string" ? body.model : "";
 				const prompt = typeof body.prompt === "string" ? body.prompt : "";
 				const suffix = typeof body.suffix === "string" ? body.suffix : "";
+				// Edit prediction sends a small max_tokens to bound latency. Ignoring
+				// it lets the model run to model.maxTokens — tens of thousands of
+				// tokens on every keystroke.
+				const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : undefined;
+				const temperature = typeof body.temperature === "number" ? body.temperature : undefined;
 				const model = findModel(ctx, modelId);
 				if (!model) {
 					sendJson(res, 404, { error: "unknown_model", model: modelId });
@@ -141,7 +149,7 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 				);
 
 				let text = "";
-				for await (const event of ctx.models.stream(model, context)) {
+				for await (const event of ctx.models.stream(model, context, { maxTokens, temperature })) {
 					if (event.type === "text_delta") text += event.delta;
 					else if (event.type === "error") {
 						sendJson(res, 502, { error: "upstream", message: event.error.errorMessage ?? "stream failed" });

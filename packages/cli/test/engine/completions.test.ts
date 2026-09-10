@@ -135,6 +135,62 @@ describe("completions routes", () => {
 		expect(res.status).toBe(404);
 	});
 
+	test("passes max_tokens and temperature through to the provider", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+		});
+		const handle = fauxProvider({ provider: `faux-options-${counter++}` });
+		let received: { maxTokens?: number; temperature?: number } | undefined;
+		handle.setResponses([
+			(_context, options) => {
+				received = { maxTokens: options?.maxTokens, temperature: options?.temperature };
+				return fauxAssistantMessage([fauxText("ok")]);
+			},
+		]);
+		ctx.models.registerNativeProvider(handle.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				model: handle.getModel().id,
+				messages: [{ role: "user", content: "hi" }],
+				max_tokens: 17,
+				temperature: 0.25,
+			}),
+		});
+		expect(received).toEqual({ maxTokens: 17, temperature: 0.25 });
+	});
+
+	test("bounds a FIM request by its max_tokens", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+		});
+		const handle = fauxProvider({ provider: `faux-fim-options-${counter++}` });
+		let received: number | undefined;
+		handle.setResponses([
+			(_context, options) => {
+				received = options?.maxTokens;
+				return fauxAssistantMessage([fauxText("done")]);
+			},
+		]);
+		ctx.models.registerNativeProvider(handle.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		await fetch(`http://127.0.0.1:${server.port}/v1/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ model: handle.getModel().id, prompt: "a", suffix: "b", max_tokens: 32 }),
+		});
+		// Without this, every Tab keystroke would generate up to model.maxTokens.
+		expect(received).toBe(32);
+	});
+
 	test("no response body carries a stored credential", async () => {
 		const { base, modelId } = await start("safe");
 		const raw = await (
