@@ -764,6 +764,7 @@ interface ProviderModelConfig {
     supportsEagerToolInputStreaming?: boolean;
     supportsLongCacheRetention?: boolean;
     sendSessionAffinityHeaders?: boolean;
+    sessionAffinityFormat?: "openrouter";
     supportsCacheControlOnTools?: boolean;
     forceAdaptiveThinking?: boolean;
     allowEmptySignature?: boolean;
