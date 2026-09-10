@@ -419,7 +419,8 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.session.getLastAssistantText()).toBe("completed response");
 	});
 
-	it("compacts after a tool result before the next assistant request in the same run", async () => {
+	// Model overrides must also apply between assistant turns.
+	it.each([false, true])("compacts after a tool result in the same run (model override: %s)", async (modelOverride) => {
 		const toolResult = `large-tool-result:${"x".repeat(6800)}`;
 		const largeTool: AgentTool = {
 			name: "large_result",
@@ -429,14 +430,25 @@ describe("AgentSession compaction characterization", () => {
 			execute: async () => ({ content: [{ type: "text", text: toolResult }], details: {} }),
 		};
 		const order: string[] = [];
+		const observedSettings: unknown[] = [];
 		const harness = await createHarness({
 			models: [{ id: "faux-1", contextWindow: 2600, maxTokens: 100 }],
-			settings: { compaction: { enabled: true, reserveTokens: 400, keepRecentTokens: 1750 } },
+			settings: {
+				compaction: modelOverride
+					? {
+							enabled: true,
+							reserveTokens: 0,
+							keepRecentTokens: 20000,
+							modelOverrides: { "faux/faux-1": { reserveTokens: 400, keepRecentTokens: 1750 } },
+						}
+					: { enabled: true, reserveTokens: 400, keepRecentTokens: 1750 },
+			},
 			tools: [largeTool],
 			extensionFactories: [
 				(knightcode) => {
 					knightcode.on("session_before_compact", (event) => {
 						order.push("compaction");
+						observedSettings.push(event.preparation.settings);
 						return {
 							compaction: {
 								summary: "compacted history",
@@ -468,6 +480,7 @@ describe("AgentSession compaction characterization", () => {
 		await harness.session.prompt("run the large tool");
 
 		expect(order).toEqual(["compaction", "provider"]);
+		expect(observedSettings).toEqual([{ enabled: true, reserveTokens: 400, keepRecentTokens: 1750 }]);
 		expect(harness.eventsOfType("agent_start")).toHaveLength(agentStartsBefore + 1);
 		expect(harness.eventsOfType("compaction_start").at(-1)).toEqual({
 			type: "compaction_start",
