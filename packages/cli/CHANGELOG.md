@@ -1,5 +1,61 @@
 # @knightcodeai/cli
 
+## 0.6.2
+
+### Added
+
+- Added the Environment Variables reference to the documentation navigation, which previously only reached that page through inline links.
+
+- Added `ctx.modelRegistry.stream()` and `streamSimple()` so extensions can make model calls through configured providers with resolved authentication, including providers registered by extensions.
+
+- Added Ctrl+D as a reliable alternative to Ctrl+S for saving the default model and thinking level. Many terminals (including Windows Terminal) swallow Ctrl+S as XON/XOFF flow control, so the keystroke never reached the app and the default was never saved. Ctrl+S still works where the terminal delivers it.
+
+- Added `compaction.modelOverrides`, per-model `reserveTokens` and `keepRecentTokens` budgets keyed by exact `"provider/modelId"`, so a million-token model can hold a large response reserve without inflating it for every other model. Each field falls back independently to the ordinary setting and then the built-in default, and the resolved values drive manual compaction, threshold checks, overflow recovery, and the `session_before_compact` payload.
+
+### Changed
+
+- Changed the DeepSeek catalog to advertise `deepseek-flash` for DeepSeek V4.1 Flash, which accepts images and reasoning levels, in place of the retired `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` aliases, and refreshed DeepSeek input, output, and cache-read pricing.
+
+- Changed OpenRouter requests to send the `x-session-id` affinity header by default on both Chat Completions and Anthropic-compatible models, so cached prompts keep hitting the same upstream replica; setting `sendSessionAffinityHeaders: false` or disabling prompt caching still opts out.
+
+- Changed the compaction, branch summarization, and retry spinners to render in the editor border alongside the working indicator; custom editors opt in for all four with the same `embedWorkingStatus` flag.
+
+- Changed the runtime dependencies to current releases, including the Anthropic, Bedrock and Google GenAI SDKs, the proxy agents, TypeBox, undici, chalk, marked, ignore, minimatch, semver, esbuild and grok-mermaid. Google's new `TOO_MANY_TOOL_CALLS` finish reason now maps to an error stop reason.
+
+### Removed
+
+- Removed GPT-5.4 and GPT-5.4 mini from the OpenAI Codex catalog after ChatGPT accounts lost access to them; selecting either now fails at model resolution instead of at the first request.
+
+### Fixed
+
+- Fixed agent-level retry backoff doubling without a ceiling, which left the agent asleep for hours after a long provider outage. Assistant and summarization retries now cap each delay at the new `retry.maxAgentDelayMs` setting, defaulting to 60 seconds.
+
+- Fixed OpenAI Codex requests omitting the reasoning effort when thinking is off, so models that need an explicit Off level fell back to the provider default; the model's mapped Off effort is now sent, and models that map Off to `null` still send nothing.
+
+- Fixed GitHub Copilot GPT models other than GPT-5 being routed to the completions endpoint, which Copilot does not serve them from.
+
+- Fixed the event stream draining its buffered events with `Array.shift()`, which made delivery quadratic on long streams; both the event queue and the waiting-consumer queue now use an amortized O(1) FIFO.
+
+- Fixed Fireworks Messages models losing their thinking blocks on replay and collapsing native reasoning effort to a budget-based fallback; the catalog now takes effort levels from provider metadata, allows unsigned thinking, and stops advertising GLM 5.2 and Kimi K3 aliases that map onto the same level.
+
+- Fixed Mistral-hosted GLM-5.2 reasoning requests sending `prompt_mode`, which that model ignores, so thinking never turned on; they now send `reasoning_effort`.
+
+- Fixed Mistral Medium reasoning requests sending the unsupported `prompt_mode` instead of `reasoning_effort` for reasoning-capable `mistral-medium-*` model IDs such as `mistral-medium-latest`.
+
+- Fixed OpenCode and OpenCode Go requests dropping the `x-opencode-session` routing header; every API adapter now maps `sessionId` onto it while leaving an explicit caller override alone.
+
+- Fixed extension tools registered without an object parameter schema being accepted, which broke provider request serialization later; registration now rejects them with an error naming the tool and the extension.
+
+- Fixed steering and follow-up messages bypassing extension `input` handlers, so extensions could neither transform nor intercept a message queued while the agent was already streaming; both paths now run the handlers and carry their real input source.
+
+- Fixed session tree navigation starting while a compaction or another navigation was still running; it now rejects instead of moving the active leaf.
+
+- Fixed a rejected `/tree` navigation replacing the running operation's escape handler and status spinner; the compaction or summarization it collided with now keeps its own UI.
+
+- Fixed the compiled Windows executable inheriting Bun's own PE resources, so `knightcode.exe` shipped with no icon and a `FileDescription` of "Bun" — the string Windows shows as the process name in Task Manager and the taskbar. The win32 build now embeds KnightCode's own title, publisher, copyright, version, and icon.
+
+- Fixed fullscreen mode reserving a blank row for a custom footer that renders nothing.
+
 ## 0.6.1
 
 ### Added
