@@ -82,7 +82,19 @@ export interface LoginRegistry {
 	get(loginId: string): LoginState | undefined;
 	submit(loginId: string, value: string): boolean;
 	cancel(loginId: string): boolean;
+	/** Test seam: how many records are still held. */
+	size(): number;
 }
+
+export interface LoginRegistryOptions {
+	/** A pending login is abandoned after this long and its provider flow aborted. */
+	pendingTtlMs?: number;
+	/** A settled record is readable for this long so the client can observe the outcome. */
+	settledTtlMs?: number;
+}
+
+const DEFAULT_PENDING_TTL_MS = 10 * 60_000;
+const DEFAULT_SETTLED_TTL_MS = 60_000;
 
 interface PendingPrompt {
 	id: string;
@@ -99,6 +111,13 @@ interface LoginRecord {
 	error?: string;
 	pending?: PendingPrompt;
 	controller: AbortController;
+	timer?: ReturnType<typeof setTimeout>;
+	/**
+	 * Why the engine ended this login, recorded before aborting. The provider
+	 * flow then rejects with "This operation was aborted", which is abort
+	 * plumbing rather than a reason the user can act on.
+	 */
+	abandonedReason?: string;
 }
 
 function toSerializablePrompt(prompt: AuthPrompt): SerializablePrompt {
@@ -116,8 +135,27 @@ function toSerializablePrompt(prompt: AuthPrompt): SerializablePrompt {
  * the provider flows take an injected interaction rather than assuming a
  * terminal.
  */
-export function createLoginRegistry(ctx: EngineContext): LoginRegistry {
+export function createLoginRegistry(ctx: EngineContext, options: LoginRegistryOptions = {}): LoginRegistry {
 	const logins = new Map<string, LoginRecord>();
+	const pendingTtlMs = options.pendingTtlMs ?? DEFAULT_PENDING_TTL_MS;
+	const settledTtlMs = options.settledTtlMs ?? DEFAULT_SETTLED_TTL_MS;
+
+	/**
+	 * A settled record is dropped after a grace period so the client can read the
+	 * outcome once. Without this the map grows for the engine's lifetime.
+	 */
+	function scheduleForget(record: LoginRecord): void {
+		clearTimeout(record.timer);
+		record.timer = setTimeout(() => logins.delete(record.loginId), settledTtlMs);
+		record.timer.unref();
+	}
+
+	function settle(record: LoginRecord, status: "complete" | "failed", error?: string): void {
+		record.status = status;
+		record.pending = undefined;
+		record.error = error;
+		scheduleForget(record);
+	}
 
 	return {
 		start(providerId, type) {
@@ -130,6 +168,18 @@ export function createLoginRegistry(ctx: EngineContext): LoginRegistry {
 				controller: new AbortController(),
 			};
 			logins.set(loginId, record);
+
+			// An abandoned OAuth login otherwise keeps its loopback callback
+			// listener open for the engine's lifetime. Aborting the flow is what
+			// closes it; forgetting the record alone would not.
+			record.timer = setTimeout(() => {
+				if (record.status !== "pending") return;
+				record.abandonedReason = "login timed out";
+				record.pending?.reject(new Error(record.abandonedReason));
+				record.controller.abort();
+				settle(record, "failed", record.abandonedReason);
+			}, pendingTtlMs);
+			record.timer.unref();
 
 			const interaction = {
 				signal: record.controller.signal,
@@ -146,15 +196,12 @@ export function createLoginRegistry(ctx: EngineContext): LoginRegistry {
 			void ctx.models
 				.login(providerId, type, interaction)
 				.then(() => {
-					record.status = "complete";
-					record.pending = undefined;
+					settle(record, "complete");
 					ctx.events.publish({ type: "account.changed", providerId, authenticated: true });
 					ctx.events.publish({ type: "models.changed" });
 				})
 				.catch((error: unknown) => {
-					record.status = "failed";
-					record.pending = undefined;
-					record.error = error instanceof Error ? error.message : String(error);
+					settle(record, "failed", record.abandonedReason ?? (error instanceof Error ? error.message : String(error)));
 				});
 
 			return { loginId };
@@ -189,11 +236,14 @@ export function createLoginRegistry(ctx: EngineContext): LoginRegistry {
 		cancel(loginId) {
 			const record = logins.get(loginId);
 			if (!record) return false;
-			record.pending?.reject(new Error("login cancelled"));
-			record.pending = undefined;
+			record.abandonedReason = "login cancelled";
+			record.pending?.reject(new Error(record.abandonedReason));
 			record.controller.abort();
+			settle(record, "failed", record.abandonedReason);
 			return true;
 		},
+
+		size: () => logins.size,
 	};
 }
 

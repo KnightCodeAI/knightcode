@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { accountsRoutes } from "../../src/engine/accounts.ts";
+import { accountsRoutes, createLoginRegistry } from "../../src/engine/accounts.ts";
 import { createEngineContext, type EngineContext } from "../../src/engine/context.ts";
 import { createEventBus, type EngineEvent } from "../../src/engine/events.ts";
 import { createMemoryAccountIndex, createMemorySecretBackend } from "../../src/engine/secrets.ts";
@@ -139,6 +139,46 @@ describe("login routes", () => {
 			body: JSON.stringify({ value: "two" }),
 		});
 		expect(second.status).toBe(409);
+	});
+
+	test("a settled login record is forgotten rather than held forever", async () => {
+		const events = createEventBus();
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+			events,
+		});
+		const registry = createLoginRegistry(ctx, { pendingTtlMs: 60_000, settledTtlMs: 30 });
+		const { loginId } = registry.start("anthropic", "api_key");
+		expect(registry.size()).toBe(1);
+
+		registry.cancel(loginId);
+		const deadline = Date.now() + 2000;
+		while (registry.size() > 0 && Date.now() < deadline) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		expect(registry.size()).toBe(0);
+		expect(registry.get(loginId)).toBeUndefined();
+	});
+
+	test("an abandoned pending login times out and aborts its provider flow", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+			events: createEventBus(),
+		});
+		const registry = createLoginRegistry(ctx, { pendingTtlMs: 30, settledTtlMs: 5000 });
+		const { loginId } = registry.start("anthropic", "api_key");
+
+		const deadline = Date.now() + 2000;
+		while (registry.get(loginId)?.status === "pending" && Date.now() < deadline) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		const state = registry.get(loginId);
+		expect(state?.status).toBe("failed");
+		expect(state?.status === "failed" ? state.error : "").toContain("timed out");
 	});
 
 	test("an abandoned login can be cancelled and stores nothing", async () => {
