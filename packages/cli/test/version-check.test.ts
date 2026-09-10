@@ -48,7 +48,7 @@ describe("version checks", () => {
 
 		await expect(getLatestPiVersion("1.2.3")).resolves.toBe("1.2.4");
 		expect(fetchMock).toHaveBeenCalledWith(
-			"https://knightcode.raghavseth.in/api/latest-version",
+			"https://knightcode.dev/api/latest-version",
 			expect.objectContaining({
 				headers: expect.objectContaining({
 					"User-Agent": expect.stringMatching(/^knightcode\/1\.2\.3 /),

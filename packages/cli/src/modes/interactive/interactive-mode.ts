@@ -1244,7 +1244,7 @@ export class InteractiveMode {
 			return;
 		}
 
-		void fetch(`https://knightcode.raghavseth.in/api/report-install?version=${encodeURIComponent(version)}`, {
+		void fetch(`https://knightcode.dev/api/report-install?version=${encodeURIComponent(version)}`, {
 			headers: {
 				"User-Agent": getKnightcodeUserAgent(version),
 			},
@@ -4268,7 +4268,7 @@ export class InteractiveMode {
 	showNewVersionNotification(release: LatestPiRelease): void {
 		const action = theme.fg("accent", `${APP_NAME} update`);
 		const updateInstruction = theme.fg("muted", `New version ${release.version} is available. Run `) + action;
-		const changelogUrl = "https://knightcode.raghavseth.in/changelog";
+		const changelogUrl = "https://knightcode.dev/changelog";
 		const changelogLink = getCapabilities().hyperlinks
 			? hyperlink(theme.fg("accent", changelogUrl), changelogUrl)
 			: theme.fg("accent", changelogUrl);

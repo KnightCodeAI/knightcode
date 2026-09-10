@@ -43,7 +43,7 @@ function testProvider(localGeneratedAt?: number) {
 				},
 			},
 		}),
-		"https://knightcode.raghavseth.in",
+		"https://knightcode.dev",
 		localGeneratedAt,
 	);
 }

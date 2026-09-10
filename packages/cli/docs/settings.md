@@ -81,7 +81,7 @@ For VS Code, include `--wait` so knightcode resumes after the editor exits:
 
 ### Telemetry and update checks
 
-`enableInstallTelemetry` controls the anonymous install/update ping to `https://knightcode.raghavseth.in/api/report-install` and KnightCode attribution headers for OpenRouter, NVIDIA NIM, and Cloudflare provider requests. Opting out disables both. It does not disable update checks; KnightCode can still fetch `https://knightcode.raghavseth.in/api/latest-version` to look for the latest version.
+`enableInstallTelemetry` controls the anonymous install/update ping to `https://knightcode.dev/api/report-install` and KnightCode attribution headers for OpenRouter, NVIDIA NIM, and Cloudflare provider requests. Opting out disables both. It does not disable update checks; KnightCode can still fetch `https://knightcode.dev/api/latest-version` to look for the latest version.
 
 Set `KNIGHTCODE_SKIP_VERSION_CHECK=1` to disable the KnightCode version update check. Use `--offline` or `KNIGHTCODE_OFFLINE=1` to disable all startup network operations described here, including update checks, package update checks, and install/update telemetry.
 
