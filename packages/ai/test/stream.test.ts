@@ -445,8 +445,8 @@ describe("Generate E2E Tests", () => {
 		});
 	});
 
-	describe.skipIf(!process.env.DEEPSEEK_API_KEY)("DeepSeek Provider (deepseek-v4-flash via OpenAI Completions)", () => {
-		const llm = getModel("deepseek", "deepseek-v4-flash");
+	describe.skipIf(!process.env.DEEPSEEK_API_KEY)("DeepSeek Provider (deepseek-flash via OpenAI Completions)", () => {
+		const llm = getModel("deepseek", "deepseek-flash");
 
 		it("should complete basic text generation", { retry: 3 }, async () => {
 			await basicTextGeneration(llm);
