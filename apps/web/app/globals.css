@@ -68,6 +68,9 @@
 }
 
 :root {
+    /* Site accent. Mirrored as a literal in components/site/shader-canvas.tsx —
+       WebGPU uniforms need a hex, not a CSS var. */
+    --brand: #ff6a00;
     --background: oklch(1 0 0);
     --foreground: oklch(0.148 0.004 228.8);
     --card: oklch(1 0 0);
