@@ -7,6 +7,11 @@
  */
 
 import { join } from "node:path";
+// Static, and first: this registers the OAuth flows and the Bedrock provider
+// module into the compiled binary. Without it those load through dynamic
+// imports that a Bun single-file build never embeds, so every advertised login
+// flow fails at runtime in the shipped binary while working fine from source.
+import "./bun/runtime-setup.ts";
 import { createBunSecretBackend } from "./bun/secrets.ts";
 import { getAgentDir } from "./config.ts";
 import { accountsRoutes } from "./engine/accounts.ts";
