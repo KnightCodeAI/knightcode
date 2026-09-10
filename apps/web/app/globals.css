@@ -50,6 +50,9 @@
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 
+    /* Hard on/off, the way a real terminal cursor blinks. */
+    --animate-blink-cursor: blink-cursor 1.1s steps(1, end) infinite;
+
     /* Fumadocs theme tokens aligned with the marketing site */
     --color-fd-background: var(--background);
     --color-fd-foreground: var(--foreground);
@@ -152,6 +155,17 @@
     scroll-behavior: smooth;
     overflow-x: clip;
     }
+}
+
+@keyframes blink-cursor {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-blink-cursor {
+    animation: none;
+  }
 }
 
 @layer utilities {
