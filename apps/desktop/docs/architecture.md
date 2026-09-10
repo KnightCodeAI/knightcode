@@ -346,6 +346,12 @@ Linux without a running Secret Service falls back to the file backend at
 `0600`, with a visible notice in settings. Silently degrading a secret store is
 not acceptable; refusing to run on a machine without a keyring is not either.
 
+That fallback writes `~/.knightcode/engine-auth.json`, **not** the CLI's
+`auth.json`. Sharing the file would make the engine read and rewrite the CLI's
+credentials, and an IDE sign-out would delete the CLI's login for that provider.
+The import in §6.3 is the only path between the two, and it is one-way and
+explicit.
+
 ### 6.2 The login flow
 
 `packages/ai/src/auth/oauth/anthropic.ts:234` takes an injected

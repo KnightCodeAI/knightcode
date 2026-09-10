@@ -63,7 +63,11 @@ try {
 const ctx = await createEngineContext({
 	backend,
 	indexPath: join(getAgentDir(), "engine-accounts.json"),
-	fallbackAuthPath: join(getAgentDir(), "auth.json"),
+	// The engine owns its credentials. Falling back to the CLI's auth.json would
+	// read and rewrite the CLI's credentials, and an IDE sign-out would delete
+	// the CLI's login for that provider. Importing from the CLI is an explicit,
+	// one-time first-run action, not a shared file.
+	fallbackAuthPath: join(getAgentDir(), "engine-auth.json"),
 	allowModelNetwork: true,
 });
 
