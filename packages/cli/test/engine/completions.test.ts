@@ -191,6 +191,140 @@ describe("completions routes", () => {
 		expect(received).toBe(32);
 	});
 
+	test("refuses an ambiguous bare model id instead of guessing a provider", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+		});
+		// Two providers offering the same model id, as anthropic and agentrouter
+		// both do for claude-opus-5 on a real machine.
+		const first = fauxProvider({ provider: "faux-dup-a", models: [{ id: "shared-model" }] });
+		const second = fauxProvider({ provider: "faux-dup-b", models: [{ id: "shared-model" }] });
+		ctx.models.registerNativeProvider(first.provider);
+		ctx.models.registerNativeProvider(second.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		const res = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ model: "shared-model", messages: [{ role: "user", content: "hi" }] }),
+		});
+		expect(res.status).toBe(409);
+		const body = (await res.json()) as { error: string; candidates: string[] };
+		expect(body.error).toBe("ambiguous_model");
+		expect(body.candidates.sort()).toEqual(["faux-dup-a/shared-model", "faux-dup-b/shared-model"]);
+	});
+
+	test("routes a provider-qualified ref to that exact provider", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+		});
+		const first = fauxProvider({ provider: "faux-pick-a", models: [{ id: "shared-model" }] });
+		const second = fauxProvider({ provider: "faux-pick-b", models: [{ id: "shared-model" }] });
+		let servedBy: string | undefined;
+		second.setResponses([
+			(_context, _options, _state, model) => {
+				servedBy = model.provider;
+				return fauxAssistantMessage([fauxText("from b")]);
+			},
+		]);
+		ctx.models.registerNativeProvider(first.provider);
+		ctx.models.registerNativeProvider(second.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		const res = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				model: "faux-pick-b/shared-model",
+				messages: [{ role: "user", content: "hi" }],
+			}),
+		});
+		expect(res.status).toBe(200);
+		expect(servedBy).toBe("faux-pick-b");
+	});
+
+	test("a streaming provider failure emits an error event, not [DONE]", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+		});
+		const handle = fauxProvider({ provider: `faux-error-${counter++}` });
+		handle.setResponses([
+			() => {
+				throw new Error("provider exploded");
+			},
+		]);
+		ctx.models.registerNativeProvider(handle.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		const res = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({
+				model: handle.getModel().id,
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+		const text = await res.text();
+		// A client that sees [DONE] treats a truncated answer as complete.
+		expect(text).not.toContain("[DONE]");
+		expect(text).toContain("event: error");
+	});
+
+	test("a non-streaming provider failure is a 502", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+		});
+		const handle = fauxProvider({ provider: `faux-error-plain-${counter++}` });
+		handle.setResponses([
+			() => {
+				throw new Error("provider exploded");
+			},
+		]);
+		ctx.models.registerNativeProvider(handle.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		const res = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ model: handle.getModel().id, messages: [{ role: "user", content: "hi" }] }),
+		});
+		expect(res.status).toBe(502);
+	});
+
+	test("passes an abort signal so a disconnect stops inference", async () => {
+		const ctx = await createEngineContext({
+			backend: createMemorySecretBackend(),
+			index: createMemoryAccountIndex(),
+			modelsPath: null,
+		});
+		const handle = fauxProvider({ provider: `faux-signal-${counter++}` });
+		let signal: AbortSignal | undefined;
+		handle.setResponses([
+			(_context, options) => {
+				signal = options?.signal;
+				return fauxAssistantMessage([fauxText("ok")]);
+			},
+		]);
+		ctx.models.registerNativeProvider(handle.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		await fetch(`http://127.0.0.1:${server.port}/v1/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ model: handle.getModel().id, prompt: "a", suffix: "b", max_tokens: 8 }),
+		});
+		expect(signal).toBeInstanceOf(AbortSignal);
+	});
+
 	test("no response body carries a stored credential", async () => {
 		const { base, modelId } = await start("safe");
 		const raw = await (

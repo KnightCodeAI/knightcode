@@ -10,6 +10,12 @@ import type { EngineContext } from "./context.ts";
 import { type EngineRoute, sendJson } from "./server.ts";
 
 export interface EngineModel {
+	/**
+	 * Provider-qualified reference to send back as `model` on a completion
+	 * request. A bare `id` is not unique across providers, so clients should use
+	 * this verbatim rather than assembling one.
+	 */
+	ref: string;
 	id: string;
 	providerId: string;
 	providerName: string;
@@ -31,6 +37,7 @@ export function modelsRoute(ctx: EngineContext): EngineRoute {
 			// absent rather than listed and broken.
 			const available = await ctx.models.getAvailable();
 			const models: EngineModel[] = available.map((model) => ({
+				ref: `${model.provider}/${model.id}`,
 				id: model.id,
 				providerId: model.provider,
 				providerName: ctx.models.getProvider(model.provider)?.name ?? model.provider,

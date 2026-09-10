@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { IncomingMessage } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Api, Model } from "@knightcode/ai";
 import type { EngineContext } from "./context.ts";
 import { OpenAIRequestError, parseChatRequest, toChunk, toContext } from "./openai.ts";
@@ -28,12 +28,70 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 	return JSON.parse(Buffer.concat(chunks).toString("utf-8"));
 }
 
-function findModel(ctx: EngineContext, modelId: string): Model<Api> | undefined {
-	for (const provider of ctx.models.getProviders()) {
-		const model = ctx.models.getModel(provider.id, modelId);
-		if (model) return model;
+export class ModelLookupError extends Error {
+	readonly status: number;
+	readonly code: string;
+	readonly candidates: readonly string[];
+
+	constructor(status: number, code: string, message: string, candidates: readonly string[] = []) {
+		super(message);
+		this.status = status;
+		this.code = code;
+		this.candidates = candidates;
 	}
-	return undefined;
+}
+
+/**
+ * Resolve a model reference to exactly one catalog entry.
+ *
+ * A bare model id is not unique: `claude-opus-5` is offered by both `anthropic`
+ * and `agentrouter` on the same machine, and picking the first match silently
+ * bills the wrong account through the wrong endpoint. `/v1/models` therefore
+ * returns a `ref` of the form `<providerId>/<modelId>` for clients to send
+ * verbatim.
+ *
+ * A bare id still resolves when it is unambiguous, because that is what a
+ * hand-written curl or a generic OpenAI client will send. When it is ambiguous
+ * the engine refuses and names the candidates rather than guessing.
+ */
+function resolveModel(ctx: EngineContext, ref: string): Model<Api> {
+	if (ref.length === 0) throw new ModelLookupError(400, "bad_request", "model is required");
+
+	// Split on the first separator only: OpenRouter ids contain slashes of their
+	// own, e.g. openrouter/anthropic/claude-3-haiku.
+	const separator = ref.indexOf("/");
+	if (separator > 0) {
+		const providerId = ref.slice(0, separator);
+		const modelId = ref.slice(separator + 1);
+		const qualified = ctx.models.getModel(providerId, modelId);
+		if (qualified) return qualified;
+	}
+
+	const matches: Model<Api>[] = [];
+	for (const provider of ctx.models.getProviders()) {
+		const model = ctx.models.getModel(provider.id, ref);
+		if (model) matches.push(model);
+	}
+	if (matches.length === 1) return matches[0];
+	if (matches.length === 0) throw new ModelLookupError(404, "unknown_model", `unknown model: ${ref}`);
+	throw new ModelLookupError(
+		409,
+		"ambiguous_model",
+		`model ${ref} is offered by more than one provider; qualify it as <providerId>/${ref}`,
+		matches.map((model) => `${model.provider}/${model.id}`),
+	);
+}
+
+function sendLookupError(res: ServerResponse, error: unknown): void {
+	if (error instanceof ModelLookupError) {
+		sendJson(res, error.status, {
+			error: error.code,
+			message: error.message,
+			...(error.candidates.length > 0 ? { candidates: error.candidates } : {}),
+		});
+		return;
+	}
+	sendJson(res, 500, { error: "internal", message: error instanceof Error ? error.message : String(error) });
 }
 
 export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
@@ -50,16 +108,24 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 					return;
 				}
 
-				const model = findModel(ctx, request.model);
-				if (!model) {
-					sendJson(res, 404, { error: "unknown_model", model: request.model });
+				let model: Model<Api>;
+				try {
+					model = resolveModel(ctx, request.model);
+				} catch (error) {
+					sendLookupError(res, error);
 					return;
 				}
+
+				// Without a signal the provider request runs to completion even after
+				// the editor gives up, and the user is billed for output nobody reads.
+				const controller = new AbortController();
+				req.on("close", () => controller.abort());
 
 				const id = `chatcmpl-${randomUUID()}`;
 				const stream = ctx.models.stream(model, toContext(request, model), {
 					maxTokens: request.max_tokens,
 					temperature: request.temperature,
+					signal: controller.signal,
 				});
 
 				if (!request.stream) {
@@ -70,10 +136,13 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 						else if (event.type === "done") {
 							finishReason = toChunk(event, id, request.model)?.choices[0].finish_reason ?? "stop";
 						} else if (event.type === "error") {
-							sendJson(res, 502, { error: "upstream", message: event.error.errorMessage ?? "stream failed" });
+							if (!res.writableEnded) {
+								sendJson(res, 502, { error: "upstream", message: event.error.errorMessage ?? "stream failed" });
+							}
 							return;
 						}
 					}
+					if (res.writableEnded) return;
 					sendJson(res, 200, {
 						id,
 						object: "chat.completion",
@@ -90,19 +159,31 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 					connection: "keep-alive",
 					"x-accel-buffering": "no",
 				});
-				// A client that navigates away mid-completion must not leave the
-				// upstream request running.
-				let aborted = false;
-				req.on("close", () => {
-					aborted = true;
-				});
+
+				let failure: string | undefined;
 				for await (const event of stream) {
-					if (aborted) break;
-					if (event.type === "error") break;
+					if (controller.signal.aborted) break;
+					if (event.type === "error") {
+						failure = event.error.errorMessage ?? "stream failed";
+						break;
+					}
 					const chunk = toChunk(event, id, request.model);
 					if (chunk) res.write(`data: ${JSON.stringify(chunk)}\n\n`);
 				}
-				if (!aborted) res.write("data: [DONE]\n\n");
+
+				if (controller.signal.aborted) {
+					res.end();
+					return;
+				}
+				if (failure !== undefined) {
+					// Headers are already sent, so the status cannot say 502. Emit an
+					// error event instead of [DONE]: a client that sees [DONE] treats a
+					// truncated answer as complete and may apply it to the buffer.
+					res.write(`event: error\ndata: ${JSON.stringify({ error: "upstream", message: failure })}\n\n`);
+					res.end();
+					return;
+				}
+				res.write("data: [DONE]\n\n");
 				res.end();
 			},
 		},
@@ -119,7 +200,7 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 					return;
 				}
 
-				const modelId = typeof body.model === "string" ? body.model : "";
+				const ref = typeof body.model === "string" ? body.model : "";
 				const prompt = typeof body.prompt === "string" ? body.prompt : "";
 				const suffix = typeof body.suffix === "string" ? body.suffix : "";
 				// Edit prediction sends a small max_tokens to bound latency. Ignoring
@@ -127,15 +208,23 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 				// tokens on every keystroke.
 				const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : undefined;
 				const temperature = typeof body.temperature === "number" ? body.temperature : undefined;
-				const model = findModel(ctx, modelId);
-				if (!model) {
-					sendJson(res, 404, { error: "unknown_model", model: modelId });
+
+				let model: Model<Api>;
+				try {
+					model = resolveModel(ctx, ref);
+				} catch (error) {
+					sendLookupError(res, error);
 					return;
 				}
 
+				// Tab prediction is superseded on the next keystroke, so an abandoned
+				// request must stop rather than run to completion.
+				const controller = new AbortController();
+				req.on("close", () => controller.abort());
+
 				const context = toContext(
 					{
-						model: modelId,
+						model: ref,
 						messages: [
 							{
 								role: "system",
@@ -149,18 +238,25 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 				);
 
 				let text = "";
-				for await (const event of ctx.models.stream(model, context, { maxTokens, temperature })) {
+				for await (const event of ctx.models.stream(model, context, {
+					maxTokens,
+					temperature,
+					signal: controller.signal,
+				})) {
 					if (event.type === "text_delta") text += event.delta;
 					else if (event.type === "error") {
-						sendJson(res, 502, { error: "upstream", message: event.error.errorMessage ?? "stream failed" });
+						if (!res.writableEnded) {
+							sendJson(res, 502, { error: "upstream", message: event.error.errorMessage ?? "stream failed" });
+						}
 						return;
 					}
 				}
+				if (res.writableEnded || controller.signal.aborted) return;
 				sendJson(res, 200, {
 					id: `cmpl-${randomUUID()}`,
 					object: "text_completion",
 					created: Math.floor(Date.now() / 1000),
-					model: modelId,
+					model: ref,
 					choices: [{ index: 0, text, finish_reason: "stop" }],
 				});
 			},
