@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Geist_Mono, Inter } from "next/font/google"
 
-import { BackgroundWaves } from "@/components/site/background-waves"
+import { BackgroundShader } from "@/components/site/background-shader"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SITE } from "@/lib/site"
 import { cn } from "@/lib/utils"
@@ -94,7 +94,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider defaultTheme="dark">
-          <BackgroundWaves />
+          <BackgroundShader />
           {children}
         </ThemeProvider>
         <Analytics />

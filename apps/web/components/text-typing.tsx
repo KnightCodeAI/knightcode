@@ -219,11 +219,9 @@ export function TypingAnimation({
   return (
     <MotionComponent
       ref={elementRef}
-      className={cn(
-        "leading-20 tracking-[-0.02em]",
-        Component === "span" && "inline-block",
-        className
-      )}
+      // Leading and tracking are inherited from the heading this sits in;
+      // hardcoding them here desynced the animated line from the static one.
+      className={cn(Component === "span" && "inline-block", className)}
       {...props}
     >
       {displayedText}

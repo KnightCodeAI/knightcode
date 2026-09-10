@@ -4,6 +4,9 @@ const withMDX = createMDX();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Quick tunnels (cloudflared) hand out a random *.trycloudflare.com host;
+  // without this the dev server blocks its own HMR assets over that origin.
+  allowedDevOrigins: ["*.trycloudflare.com"],
   images: {
     qualities: [75, 92],
     formats: ["image/avif", "image/webp"],

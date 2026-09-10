@@ -50,6 +50,9 @@
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 
+    /* Hard on/off, the way a real terminal cursor blinks. */
+    --animate-blink-cursor: blink-cursor 1.1s steps(1, end) infinite;
+
     /* Fumadocs theme tokens aligned with the marketing site */
     --color-fd-background: var(--background);
     --color-fd-foreground: var(--foreground);
@@ -68,6 +71,9 @@
 }
 
 :root {
+    /* Site accent. Mirrored as a literal in components/site/shader-canvas.tsx —
+       WebGPU uniforms need a hex, not a CSS var. */
+    --brand: #ff6a00;
     --background: oklch(1 0 0);
     --foreground: oklch(0.148 0.004 228.8);
     --card: oklch(1 0 0);
@@ -151,12 +157,45 @@
     }
 }
 
+@keyframes blink-cursor {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-blink-cursor {
+    animation: none;
+  }
+}
+
 @layer utilities {
   .glass {
     @apply rounded-2xl border border-white/10 bg-white/60 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.45)];
   }
   .dark .glass {
     @apply border-white/[0.08] bg-white/[0.04] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)];
+  }
+  /* Chrome ignores ::-webkit-scrollbar-* when scrollbar-width/color are set,
+     so the standard props are for engines without the webkit pseudos (Firefox). */
+  @supports not selector(::-webkit-scrollbar) {
+    .scrollbar-hairline {
+      scrollbar-width: thin;
+      scrollbar-color: #3a3a44 transparent;
+    }
+  }
+  .scrollbar-hairline::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .scrollbar-hairline::-webkit-scrollbar-button {
+    display: none;
+  }
+  .scrollbar-hairline::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-hairline::-webkit-scrollbar-thumb {
+    background: #3a3a44;
+    border-radius: 4px;
   }
   .bg-grid {
     background-image:
