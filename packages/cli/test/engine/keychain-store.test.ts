@@ -143,6 +143,34 @@ describe("KeychainCredentialStore", () => {
 		expect(await store.list()).toEqual([]);
 	});
 
+	test("concurrent writes for different providers do not lose index entries", async () => {
+		// The credential write is serialized per provider, but the account index
+		// is shared. A slow index makes the read-modify-write overlap the way it
+		// does on a real filesystem.
+		const backend = createMemorySecretBackend();
+		let entries: readonly { providerId: string; type: "api_key" | "oauth" }[] = [];
+		const slowIndex = {
+			async read() {
+				await new Promise((resolve) => setTimeout(resolve, 20));
+				return entries;
+			},
+			async write(next: readonly { providerId: string; type: "api_key" | "oauth" }[]) {
+				await new Promise((resolve) => setTimeout(resolve, 20));
+				entries = [...next];
+			},
+		};
+		const store = new KeychainCredentialStore({ backend, index: slowIndex });
+
+		await Promise.all([
+			store.modify("anthropic", async () => ({ type: "api_key", key: "a" })),
+			store.modify("openai", async () => ({ type: "api_key", key: "b" })),
+			store.modify("xai", async () => ({ type: "api_key", key: "c" })),
+		]);
+
+		const listed = await store.list();
+		expect([...listed].map((entry) => entry.providerId).sort()).toEqual(["anthropic", "openai", "xai"]);
+	});
+
 	test("a corrupt stored value reads as undefined rather than throwing", async () => {
 		const { backend, store } = createStore();
 		await backend.set("provider:anthropic", "not json");

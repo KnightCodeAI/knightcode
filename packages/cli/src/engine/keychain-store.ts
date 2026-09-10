@@ -24,6 +24,7 @@ export class KeychainCredentialStore implements CredentialStore {
 	private readonly backend: SecretBackend;
 	private readonly index: AccountIndex;
 	private readonly operations = new Map<string, Promise<unknown>>();
+	private indexOperation: Promise<unknown> = Promise.resolve();
 
 	constructor(options: KeychainCredentialStoreOptions) {
 		this.backend = options.backend;
@@ -43,6 +44,22 @@ export class KeychainCredentialStore implements CredentialStore {
 		return next;
 	}
 
+	/**
+	 * The per-provider chains run concurrently, but they all read-modify-write
+	 * one shared index. Without a second lock covering just that, two providers
+	 * written at the same time read the same snapshot and the later write drops
+	 * the earlier provider's entry — a credential that exists in the keychain but
+	 * is missing from list() and /v1/accounts.
+	 *
+	 * This lock covers only the index, which is local and fast, so a slow OAuth
+	 * refresh for one provider still does not block a write for another.
+	 */
+	private withIndex<T>(fn: () => Promise<T>): Promise<T> {
+		const next = this.indexOperation.then(fn, fn);
+		this.indexOperation = next.catch(() => undefined);
+		return next;
+	}
+
 	async read(providerId: string): Promise<Credential | undefined> {
 		const raw = await this.backend.get(secretName(providerId));
 		if (raw === null) return undefined;
@@ -54,17 +71,19 @@ export class KeychainCredentialStore implements CredentialStore {
 		}
 	}
 
-	async list(): Promise<readonly CredentialInfo[]> {
-		const entries = await this.index.read();
-		const present: AccountIndexEntry[] = [];
-		for (const entry of entries) {
-			const credential = await this.read(entry.providerId);
-			if (credential) present.push({ providerId: entry.providerId, type: credential.type });
-		}
-		// A crash between the two writes can leave an entry with no secret. Heal
-		// the index rather than reporting an account the user cannot use.
-		if (present.length !== entries.length) await this.index.write(present);
-		return present.map((entry) => ({ providerId: entry.providerId, type: entry.type }));
+	list(): Promise<readonly CredentialInfo[]> {
+		return this.withIndex(async () => {
+			const entries = await this.index.read();
+			const present: AccountIndexEntry[] = [];
+			for (const entry of entries) {
+				const credential = await this.read(entry.providerId);
+				if (credential) present.push({ providerId: entry.providerId, type: credential.type });
+			}
+			// A crash between the two writes can leave an entry with no secret. Heal
+			// the index rather than reporting an account the user cannot use.
+			if (present.length !== entries.length) await this.index.write(present);
+			return present.map((entry) => ({ providerId: entry.providerId, type: entry.type }));
+		});
 	}
 
 	modify(
@@ -77,8 +96,10 @@ export class KeychainCredentialStore implements CredentialStore {
 			const next = await fn(current);
 			if (next === undefined) return current;
 			await this.backend.set(secretName(providerId), JSON.stringify(next));
-			const entries = (await this.index.read()).filter((entry) => entry.providerId !== providerId);
-			await this.index.write([...entries, { providerId, type: next.type }]);
+			await this.withIndex(async () => {
+				const entries = (await this.index.read()).filter((entry) => entry.providerId !== providerId);
+				await this.index.write([...entries, { providerId, type: next.type }]);
+			});
 			return next;
 		});
 	}
@@ -87,8 +108,10 @@ export class KeychainCredentialStore implements CredentialStore {
 		return this.enqueue(providerId, async () => {
 			// Index first: an orphaned secret is invisible, an orphaned index
 			// entry advertises an account that cannot be used.
-			const entries = (await this.index.read()).filter((entry) => entry.providerId !== providerId);
-			await this.index.write(entries);
+			await this.withIndex(async () => {
+				const entries = (await this.index.read()).filter((entry) => entry.providerId !== providerId);
+				await this.index.write(entries);
+			});
 			await this.backend.delete(secretName(providerId));
 		});
 	}
