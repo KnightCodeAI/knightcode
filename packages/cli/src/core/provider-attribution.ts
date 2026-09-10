@@ -43,7 +43,7 @@ function getDefaultAttributionHeaders(
 
 	if (isOpenRouterModel(model)) {
 		return {
-			"HTTP-Referer": "https://knightcode.raghavseth.in",
+			"HTTP-Referer": "https://knightcode.dev",
 			"X-OpenRouter-Title": "KnightCode",
 			"X-OpenRouter-Categories": "cli-agent",
 		};

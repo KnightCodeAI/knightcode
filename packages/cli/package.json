@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/KnightCodeAI/knightcode.git"
   },
-  "homepage": "https://knightcode.raghavseth.in",
+  "homepage": "https://knightcode.dev",
   "license": "MIT",
   "knightcodeConfig": {
     "configDir": ".knightcode"
