@@ -10,6 +10,8 @@ const ROOT = join(import.meta.dir, "..");
 // worker is a second entrypoint because it is spawned as its own module.
 const ENTRY = join(ROOT, "packages/cli/src/bun/cli.ts");
 const WORKER_ENTRY = join(ROOT, "packages/cli/src/utils/image-resize-worker.ts");
+// The IDE's engine: a second binary from the same core, no TUI entry.
+const ENGINE_ENTRY = join(ROOT, "packages/cli/src/engine-entry.ts");
 
 // In a compiled binary `getPackageDir()` is `dirname(process.execPath)` (see
 // packages/cli/src/config.ts), so the runtime looks for package.json, themes,
@@ -156,6 +158,34 @@ for (const target of targets) {
 
 	// Compiled binaries must be executable on POSIX (npm preserves the mode bit).
 	if (target.os !== "win32") chmodSync(outfile, 0o755);
+
+	// The engine is a second front door onto the same core, built from its own
+	// entry so the IDE never starts a CLI and asks it to behave like a server.
+	// It shares this target's runtime assets, already copied above.
+	const engineName = target.os === "win32" ? "knightcode-engine.exe" : "knightcode-engine";
+	const engineOutfile = join(outDir, engineName);
+
+	console.log(`Building ${target.os}-${target.arch} → ${engineOutfile}`);
+	const engineResult = await Bun.build({
+		entrypoints: [ENGINE_ENTRY],
+		target: "bun",
+		compile: {
+			target: target.bunTarget,
+			outfile: engineOutfile,
+			...(target.os === "win32" ? { windows: windowsMetadata(version) } : {}),
+		},
+		define: {
+			KNIGHTCODE_VERSION: JSON.stringify(version),
+		},
+	});
+
+	if (!engineResult.success) {
+		console.error(`Engine build failed for ${target.os}-${target.arch}`);
+		for (const log of engineResult.logs) console.error(log);
+		process.exit(1);
+	}
+
+	if (target.os !== "win32") chmodSync(engineOutfile, 0o755);
 }
 
 console.log("Build complete.");
