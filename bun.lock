@@ -99,11 +99,12 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "bin": {
         "knightcode": "./bin/knightcode",
       },
       "devDependencies": {
+        "@agentclientprotocol/sdk": "1.4.0",
         "@knightcode/agent": "workspace:*",
         "@knightcode/ai": "workspace:*",
         "@knightcode/client": "workspace:*",
@@ -131,34 +132,35 @@
         "typebox": "1.3.27",
         "undici": "8.10.2",
         "yaml": "2.9.0",
+        "zod": "4.4.3",
       },
       "optionalDependencies": {
-        "@knightcodeai/cli-darwin-arm64": "0.6.1",
-        "@knightcodeai/cli-darwin-x64": "0.6.1",
-        "@knightcodeai/cli-linux-arm64": "0.6.1",
-        "@knightcodeai/cli-linux-x64": "0.6.1",
-        "@knightcodeai/cli-win32-x64": "0.6.1",
+        "@knightcodeai/cli-darwin-arm64": "0.6.2",
+        "@knightcodeai/cli-darwin-x64": "0.6.2",
+        "@knightcodeai/cli-linux-arm64": "0.6.2",
+        "@knightcodeai/cli-linux-x64": "0.6.2",
+        "@knightcodeai/cli-win32-x64": "0.6.2",
       },
     },
     "packages/cli-darwin-arm64": {
       "name": "@knightcodeai/cli-darwin-arm64",
-      "version": "0.6.1",
+      "version": "0.6.2",
     },
     "packages/cli-darwin-x64": {
       "name": "@knightcodeai/cli-darwin-x64",
-      "version": "0.6.1",
+      "version": "0.6.2",
     },
     "packages/cli-linux-arm64": {
       "name": "@knightcodeai/cli-linux-arm64",
-      "version": "0.6.1",
+      "version": "0.6.2",
     },
     "packages/cli-linux-x64": {
       "name": "@knightcodeai/cli-linux-x64",
-      "version": "0.6.1",
+      "version": "0.6.2",
     },
     "packages/cli-win32-x64": {
       "name": "@knightcodeai/cli-win32-x64",
-      "version": "0.6.1",
+      "version": "0.6.2",
     },
     "packages/client": {
       "name": "@knightcode/client",
@@ -221,6 +223,8 @@
     },
   },
   "packages": {
+    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@1.4.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-/eufudw+aFY1LKLolT6yFE6UMmYRl7fMJ/DEONSIyR6wI3slHWITBsANRGqXEY8FRzqUxwh7QEaGiZHcJPVThg=="],
+
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.124.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-cN5O8i9UVxHeOQAzj/XjshWXG8KiibJDw9OGpH2Z/eR3n/RBxdoLxDJOcfqAJWvjaMDFfHTBADU04hWRJVkDyA=="],
