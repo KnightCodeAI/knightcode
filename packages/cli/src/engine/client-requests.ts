@@ -32,8 +32,8 @@ export class ClientRequestAborted extends Error {}
 export interface ClientRequests {
 	/** Publish the request and park until it is answered or aborted. */
 	ask(sessionId: string, request: ClientRequest, signal?: AbortSignal): Promise<ClientReply>;
-	/** Deliver an answer. False when nothing is parked under that id. */
-	reply(requestId: string, reply: ClientReply): boolean;
+	/** Deliver an answer. False when nothing of that session's is parked under that id. */
+	reply(sessionId: string, requestId: string, reply: ClientReply): boolean;
 	/** Reject every parked request for a session. */
 	abortAll(sessionId: string, reason: string): void;
 	/** Test seam: how many requests are parked. */
@@ -75,9 +75,11 @@ export function createClientRequests(events: EventBus): ClientRequests {
 				events.publish({ type: "session.request", sessionId, requestId, request });
 			});
 		},
-		reply(requestId, reply) {
-			const entry = take(requestId);
-			if (!entry) return false;
+		reply(sessionId, requestId, reply) {
+			// The id alone is not enough: the answer must come from the session that asked.
+			const entry = parked.get(requestId);
+			if (!entry || entry.sessionId !== sessionId) return false;
+			take(requestId);
 			entry.resolve(reply);
 			return true;
 		},

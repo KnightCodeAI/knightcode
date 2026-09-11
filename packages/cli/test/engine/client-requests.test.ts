@@ -21,22 +21,25 @@ describe("client requests", () => {
 		expect(event.request).toEqual({ kind: "fs.read", path: "/a.txt" });
 		expect(requests.size()).toBe(1);
 
-		expect(requests.reply(event.requestId, { kind: "fs.read", content: "hello" })).toBe(true);
+		expect(requests.reply("s1", event.requestId, { kind: "fs.read", content: "hello" })).toBe(true);
 		await expect(pending).resolves.toEqual({ kind: "fs.read", content: "hello" });
 		expect(requests.size()).toBe(0);
 	});
 
-	test("refuses a reply to an unknown or already answered request", async () => {
+	test("refuses a reply to an unknown, foreign or already answered request", async () => {
 		const bus = createEventBus();
 		const seen: EngineEvent[] = [];
 		bus.subscribe((event) => seen.push(event));
 		const requests = createClientRequests(bus);
-		expect(requests.reply("nope", { kind: "fs.write" })).toBe(false);
+		expect(requests.reply("s1", "nope", { kind: "fs.write" })).toBe(false);
 
 		const pending = requests.ask("s1", { kind: "fs.write", path: "/a.txt", content: "x" });
 		const [event] = published(seen);
-		expect(requests.reply(event.requestId, { kind: "fs.write" })).toBe(true);
-		expect(requests.reply(event.requestId, { kind: "fs.write" })).toBe(false);
+		// Another session cannot answer it, and a refused reply leaves it parked.
+		expect(requests.reply("s2", event.requestId, { kind: "fs.write" })).toBe(false);
+		expect(requests.size()).toBe(1);
+		expect(requests.reply("s1", event.requestId, { kind: "fs.write" })).toBe(true);
+		expect(requests.reply("s1", event.requestId, { kind: "fs.write" })).toBe(false);
 		await pending;
 	});
 

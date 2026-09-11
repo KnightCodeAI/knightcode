@@ -85,7 +85,7 @@ describe("permission extension", () => {
 		expect(session!.isStreaming).toBe(true);
 		expect(existsSync(join(cwd, "a.txt"))).toBe(false);
 
-		expect(requests.reply(request.requestId, { kind: "permission", outcome: "reject_once" })).toBe(true);
+		expect(requests.reply("s1", request.requestId, { kind: "permission", outcome: "reject_once" })).toBe(true);
 		await turn;
 		expect(existsSync(join(cwd, "a.txt"))).toBe(false);
 		expect(toolResult()?.isError).toBe(true);
@@ -102,7 +102,7 @@ describe("permission extension", () => {
 		]);
 		const turn = session!.prompt("write two files", { source: "rpc" });
 		await until(() => permissions.length === 1);
-		requests.reply(permissions[0].requestId, { kind: "permission", outcome: "allow_always" });
+		requests.reply("s1", permissions[0].requestId, { kind: "permission", outcome: "allow_always" });
 		await turn;
 		expect(permissions.length).toBe(1);
 		expect(existsSync(join(cwd, "a.txt"))).toBe(true);

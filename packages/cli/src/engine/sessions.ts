@@ -362,7 +362,7 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 
 		reply(id, requestId, reply) {
 			get(id);
-			return requests.reply(requestId, reply);
+			return requests.reply(id, requestId, reply);
 		},
 
 		close,

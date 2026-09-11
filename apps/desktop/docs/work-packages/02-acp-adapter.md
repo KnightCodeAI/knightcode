@@ -490,7 +490,7 @@ before continuing.
   - `export type ClientRequest = { kind: "permission"; toolCallId: string; toolName: string; input: unknown } | { kind: "fs.read"; toolCallId?: string; path: string } | { kind: "fs.write"; toolCallId?: string; path: string; content: string }`
   - `export type ClientReply = { kind: "permission"; outcome: PermissionOutcome } | { kind: "fs.read"; content: string } | { kind: "fs.write" } | { kind: "error"; code: "not_found" | "failed"; message: string }`
   - `export class ClientRequestAborted extends Error {}`
-  - `export interface ClientRequests { ask(sessionId: string, request: ClientRequest, signal?: AbortSignal): Promise<ClientReply>; reply(requestId: string, reply: ClientReply): boolean; abortAll(sessionId: string, reason: string): void; size(): number }`
+  - `export interface ClientRequests { ask(sessionId: string, request: ClientRequest, signal?: AbortSignal): Promise<ClientReply>; reply(sessionId: string, requestId: string, reply: ClientReply): boolean; abortAll(sessionId: string, reason: string): void; size(): number }`
   - `export function createClientRequests(events: EventBus): ClientRequests`
 
 - [x] **Step 1: Write the failing test**
