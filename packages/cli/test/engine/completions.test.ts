@@ -269,6 +269,10 @@ describe("completions routes", () => {
 		// A client that sees [DONE] treats a truncated answer as complete.
 		expect(text).not.toContain("[DONE]");
 		expect(text).toContain("event: error");
+		const frame = text.split("\n").find((line) => line.startsWith("data:"))!;
+		expect(JSON.parse(frame.slice("data:".length)) as unknown).toMatchObject({
+			error: { type: "upstream", message: expect.any(String) },
+		});
 	});
 
 	test("a non-streaming provider failure is a 502", async () => {

@@ -37,6 +37,16 @@ if (!token || token.length < MINIMUM_TOKEN_LENGTH) {
 	process.exit(2);
 }
 
+// A restart pins the port the previous process reported, so the adapter
+// processes the IDE's panel already holds find the new engine where they
+// left the old one. Absent or 0 is an ephemeral port, as before.
+const pinned = process.env.KNIGHTCODE_ENGINE_PORT;
+const port = pinned === undefined || pinned === "" ? 0 : Number(pinned);
+if (!Number.isInteger(port) || port < 0 || port > 65535) {
+	console.error("KNIGHTCODE_ENGINE_PORT must be an integer between 1 and 65535");
+	process.exit(2);
+}
+
 bypassProxyForLoopback();
 
 // No credential path is passed, so this is the CLI's own auth.json and its
@@ -44,7 +54,7 @@ bypassProxyForLoopback();
 const ctx = await createEngineContext({ allowModelNetwork: true });
 const sessions = createSessionRegistry(ctx);
 
-const server = await startEngineServer({ token, routes: engineRoutes(ctx, sessions) });
+const server = await startEngineServer({ token, port, routes: engineRoutes(ctx, sessions) });
 
 process.stdout.write(`${JSON.stringify({ type: "listening", port: server.port })}\n`);
 
@@ -59,3 +69,10 @@ const shutdown = () => {
 };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+// The IDE holds the other end of stdin. When that end closes — a quit, a
+// crash, a deliberate stop — the engine must not outlive it, on any platform:
+// a GUI process on Windows can send no signal, and gpui gives quit handlers
+// 200 ms. This is what the ACP adapter already does with its own stdin.
+process.stdin.once("end", shutdown);
+process.stdin.once("error", shutdown);
+process.stdin.resume();
