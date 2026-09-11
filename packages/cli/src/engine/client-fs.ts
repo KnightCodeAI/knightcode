@@ -14,6 +14,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { constants } from "node:fs";
+import { dirname } from "node:path";
 import {
 	access as fsAccess,
 	mkdir as fsMkdir,
@@ -73,8 +74,19 @@ export function createClientFileOperations(
 		return unexpected(reply);
 	}
 
+	/**
+	 * The only path to local disk. It makes the parent directories itself, so
+	 * the write tool's `mkdir` step below is a no-op: when the client owns
+	 * writes, nothing may land on the engine host before the client has
+	 * answered, a directory included.
+	 */
+	async function writeToDisk(absolutePath: string, content: string): Promise<void> {
+		await fsMkdir(dirname(absolutePath), { recursive: true });
+		await fsWriteFile(absolutePath, content, "utf-8");
+	}
+
 	async function writeFile(absolutePath: string, content: string): Promise<void> {
-		if (!capabilities.writeTextFile) return fsWriteFile(absolutePath, content, "utf-8");
+		if (!capabilities.writeTextFile) return writeToDisk(absolutePath, content);
 		const scope = currentToolCall.getStore();
 		const reply = await requests.ask(
 			sessionId,
@@ -82,7 +94,7 @@ export function createClientFileOperations(
 			scope?.signal,
 		);
 		if (reply.kind === "fs.write") return;
-		if (reply.kind === "error" && reply.code === "not_found") return fsWriteFile(absolutePath, content, "utf-8");
+		if (reply.kind === "error" && reply.code === "not_found") return writeToDisk(absolutePath, content);
 		return unexpected(reply);
 	}
 
@@ -99,7 +111,7 @@ export function createClientFileOperations(
 		},
 		write: {
 			writeFile,
-			mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
+			mkdir: async () => {},
 		},
 	};
 }

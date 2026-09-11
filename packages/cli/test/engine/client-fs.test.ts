@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -63,8 +63,10 @@ describe("client file operations", () => {
 		const file = join(dir, "outside.txt");
 		writeFileSync(file, "on disk");
 		expect((await ops.edit.readFile(file)).toString("utf-8")).toBe("on disk");
-		await ops.write.writeFile(file, "rewritten");
-		expect(readFileSync(file, "utf-8")).toBe("rewritten");
+		// The fallback makes the directories the tool no longer makes.
+		const nested = join(dir, "new", "outside.txt");
+		await ops.write.writeFile(nested, "rewritten");
+		expect(readFileSync(nested, "utf-8")).toBe("rewritten");
 	});
 
 	test("a failed client read is the tool's error, not a silent disk read", async () => {
@@ -75,14 +77,19 @@ describe("client file operations", () => {
 		await expect(ops.read.readFile(file)).rejects.toThrow("editor said no");
 	});
 
-	test("writes through the client and leaves disk alone", async () => {
+	test("writes through the client and leaves disk alone, parent directories included", async () => {
 		const requests = scriptedRequests(() => ({ kind: "fs.write" }));
-		const ops = createClientFileOperations("s1", requests, both);
+		const [, , write] = createClientFileTools(dir, "s1", requests, both, { autoResizeImages: false });
 		const file = join(dir, "a.txt");
 		writeFileSync(file, "before");
-		await ops.write.writeFile(file, "after");
+		await run(write, "tc-a", { path: "a.txt", content: "after" });
+		await run(write, "tc-b", { path: "new/dir/b.txt", content: "nested" });
 		expect(readFileSync(file, "utf-8")).toBe("before");
-		expect(requests.asked).toEqual([{ kind: "fs.write", toolCallId: undefined, path: file, content: "after" }]);
+		expect(existsSync(join(dir, "new"))).toBe(false);
+		expect(requests.asked).toEqual([
+			{ kind: "fs.write", toolCallId: "tc-a", path: file, content: "after" },
+			{ kind: "fs.write", toolCallId: "tc-b", path: join(dir, "new", "dir", "b.txt"), content: "nested" },
+		]);
 	});
 
 	test("uses disk when the client lacks the capability", async () => {
