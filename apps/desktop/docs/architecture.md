@@ -235,10 +235,11 @@ Self::NativeAgent => Rc::new(agent::NativeAgentServer::new(fs, thread_store)),
 
 `KnightCodeAgentServer` replaces it. It implements
 `agent_servers::AgentServer`, and its `connect` spawns
-`knightcode-engine acp --connect <url> --token <token>` and hands the resulting
-stdio pair to the existing `AcpConnection`. `NativeAgentServer` is 102 lines and
-returns `Rc<dyn acp_thread::AgentConnection>`; ours is that shape plus spawn
-arguments.
+`knightcode-engine acp --connect <url>`, with the launch token in
+`KNIGHTCODE_ENGINE_TOKEN` in its environment rather than on argv, and hands
+the resulting stdio pair to the existing `AcpConnection`. `NativeAgentServer`
+is 102 lines and returns `Rc<dyn acp_thread::AgentConnection>`; ours is that
+shape plus spawn arguments.
 
 Three sites downcast to the concrete native type and must be retargeted:
 
@@ -330,7 +331,8 @@ changes and model-catalog refreshes. The session and agent-manager events are
 carried on the same stream when they arrive; adding them requires no change to
 the front door, which is the reason the bus exists in v1 at all.
 
-`/v1/sessions` is deliberately absent from v1. Sessions are reached through ACP.
+`/v1/sessions` serves the ACP adapter and the agent manager; the IDE's panel
+reaches sessions through ACP.
 
 ---
 
@@ -618,7 +620,7 @@ Do not add:
 - a Rust port of any part of `packages/ai` or `packages/agent`, including
   "just the streaming parser";
 - a Rust client for `packages/chord` or `packages/protocol`;
-- `/v1/sessions`, a session browser, or agent-manager UI in v1;
+- a session browser or agent-manager UI in v1;
 - a codebase embedding index;
 - browser control;
 - changes to the CLI's system prompt or tool definitions to suit the IDE. The
