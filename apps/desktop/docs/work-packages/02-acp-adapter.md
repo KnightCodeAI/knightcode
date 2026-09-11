@@ -1,6 +1,6 @@
 # WP02 — ACP adapter
 
-Status: Tasks 1–10 implemented and green on Windows (2026-09-11); Task 11 (stock Zed) pending; commits not yet run
+Status: implemented and validated against stock Zed (2026-09-11)
 Date: 2026-09-11
 Revision: 2 — three throwaway probes recorded; SDK composition verified
 
@@ -4577,7 +4577,7 @@ A client we did not write cannot hide our bugs. Three scenarios, each
 exercising a path no test above can: Zed's real buffers, its real
 permission UI, and its real cancel.
 
-- [ ] **Step 1: Register the adapter**
+- [x] **Step 1: Register the adapter**
 
 In Zed's `settings.json` (`crates/settings_content/src/agent.rs` 739–760
 is the schema). Use the absolute path of this checkout and forward slashes
@@ -4602,7 +4602,7 @@ with two or three small files and a git repository, open the agent panel,
 pick KnightCode. Zed's agent log (`dev: open acp logs`) shows every message
 on the wire and the adapter's stderr.
 
-- [ ] **Step 2: Multi-file edit with diff review**
+- [x] **Step 2: Multi-file edit with diff review**
 
 Prompt: "Rename the function `greet` to `welcome` across the project and
 update its callers." Expect, in order: a permission card per file with a
@@ -4613,7 +4613,7 @@ buffer reverts it. If Zed shows the edit but no review hunks, the write
 went to disk: check that the session was created with both fs capabilities
 (`session.created` in the adapter's stderr is a good place to log them).
 
-- [ ] **Step 3: Permission prompt on a shell command**
+- [x] **Step 3: Permission prompt on a shell command**
 
 Prompt: "Run the test suite." Expect a permission card titled with the
 command, an embedded terminal on Allow that fills as the command runs, and
@@ -4621,7 +4621,7 @@ the exit code reflected in the card's status. Then "Always allow" once and
 confirm the next shell command in the same thread runs without asking, and
 that a new thread asks again.
 
-- [ ] **Step 4: Mid-turn cancel**
+- [x] **Step 4: Mid-turn cancel**
 
 Prompt something long ("Explain every file in this project in detail") and
 press stop while text is streaming. Expect the turn to end within a second
@@ -4629,7 +4629,7 @@ with no error banner, the partial text to stay, and the next prompt in the
 same thread to work. Then cancel while a permission card is showing and
 confirm the card resolves as cancelled and the turn ends.
 
-- [ ] **Step 5: Record**
+- [x] **Step 5: Record**
 
 Append to the Validation section below: Zed version, OS, date, and one line
 per scenario with what was observed. A scenario that needed a fix gets the
@@ -4821,7 +4821,25 @@ rg -n "\-\-token" packages/cli/src/engine
 
 Expected: no matches.
 
-Stock Zed record (Task 11): to be appended.
+Stock Zed record (Task 11): Zed 1.19.2 stable, Windows 11 Home 10.0.26200,
+2026-09-11, the adapter registered as a custom `agent_servers` entry running
+`bun run packages/cli/src/engine/acp/entry.ts`, the project open at this
+checkout with two throwaway files under `scratch-acp/`.
+
+- Multi-file edit: "Rename the function greet to welcome" produced one
+  permission card per file with the actual diff; after Allow the edits
+  landed in the buffers under per-hunk review, and a rejected hunk reverted
+  in the buffer. Saved by Zed, not the engine.
+- Shell command: a card titled with the command, an embedded terminal that
+  filled as the command ran, the exit status on the card. "Always allow"
+  suppressed the prompt for the rest of that thread; a new thread asked
+  again.
+- Mid-turn cancel: Stop while streaming ended the turn with no error
+  banner, the partial text stayed, and the next prompt worked. Stop while a
+  permission card was showing resolved the card as cancelled and ended the
+  turn.
+
+No fix was needed; no scenario produced a commit.
 
 ---
 
