@@ -1,8 +1,11 @@
 # WP01 — Engine server
 
-Status: planned, not yet implemented
+Status: implemented, in review at PR #171
 Date: 2026-09-11
-Revision: 1
+Revision: 2 — Tasks 3 and 4 (the OS keychain store) were built, verified
+against Windows Credential Manager, and then removed when credentials became
+shared with the CLI. They stay below, marked superseded, as the record of what
+was tried and why it went; do not re-implement them. See architecture.md §6.1.
 
 Implement this plan task by task, in order. Each task carries its own test
 cycle; do not start the next until the current one's tests pass and
@@ -15,14 +18,15 @@ credentials, models, and inference for the KnightCode IDE, driven end to end by
 
 **Architecture:** A `node:http` server bound to `127.0.0.1` on an ephemeral
 port, guarded by a launch token passed in the environment. It wraps the existing
-`ModelRuntime` from `packages/cli/src/core/model-runtime.ts`, backed by a new
-`CredentialStore` that stores secrets in the OS keychain via `Bun.secrets`.
+`ModelRuntime` from `packages/cli/src/core/model-runtime.ts` over the CLI's own
+`AuthStorage`, so one `auth.json` and one cross-process lock serve both
+products.
 Chat and FIM endpoints are OpenAI-shaped so the Rust side can reuse Zed's
 existing OpenAI-compatible client shapes; the engine translates to and from
 `Context` and `AssistantMessageEvent` internally.
 
-**Tech Stack:** TypeScript, Bun, `node:http`, `node:crypto`, `Bun.secrets`,
-Vitest, the faux provider in `packages/ai/src/providers/faux.ts`.
+**Tech Stack:** TypeScript, Bun, `node:http`, `node:crypto`, Vitest, the faux
+provider in `packages/ai/src/providers/faux.ts`.
 
 **Spec:** `apps/desktop/docs/architecture.md` — §5 Engine HTTP surface, §6
 Credentials and sign-in, §7 Engine lifecycle, §10 Phase A, §11 Required tests.
@@ -83,9 +87,6 @@ packages/cli/src/engine-entry.ts        binary entrypoint; env, port line
 packages/cli/src/engine/server.ts       http listener, host + token guard, router
 packages/cli/src/engine/context.ts      EngineContext, wiring, shutdown
 packages/cli/src/engine/events.ts       EventBus + GET /events
-packages/cli/src/engine/secrets.ts      SecretBackend interface, index file
-packages/cli/src/bun/secrets.ts         Bun.secrets backend (Bun-only)
-packages/cli/src/engine/keychain-store.ts  KeychainCredentialStore
 packages/cli/src/engine/accounts.ts     GET/DELETE /v1/accounts, login routes
 packages/cli/src/engine/models.ts       GET /v1/models
 packages/cli/src/engine/openai.ts       OpenAI <-> Context translation, pure
@@ -93,7 +94,6 @@ packages/cli/src/engine/completions.ts  POST /v1/chat/completions, /v1/completio
 
 packages/cli/test/engine/server.test.ts
 packages/cli/test/engine/events.test.ts
-packages/cli/test/engine/keychain-store.test.ts
 packages/cli/test/engine/accounts.test.ts
 packages/cli/test/engine/models.test.ts
 packages/cli/test/engine/openai.test.ts
@@ -101,10 +101,10 @@ packages/cli/test/engine/completions.test.ts
 ```
 
 `openai.ts` is pure translation with no I/O so it can be unit tested without a
-server. `secrets.ts` holds the interface and the non-secret index; the
-`Bun.secrets` implementation lives under `src/bun/` because that directory is
-already where Bun-only registrations go, and Vitest runs under Node where
-`Bun.secrets` does not exist.
+server. There is no engine-side credential code: `context.ts` builds the CLI's
+`AuthStorage` and hands the same instance to `ModelRuntime` and to the routes.
+Tests pass `InMemoryCredentialStore` from `@knightcode/ai/auth/credential-store`
+instead.
 
 ---
 
@@ -519,7 +519,9 @@ git commit -m "feat(engine): add event bus and SSE /events route"
 
 ---
 
-## Task 3: Secret backend and the non-secret account index
+## Task 3 (SUPERSEDED): Secret backend and the non-secret account index
+
+> Built and removed in revision 2. Kept as the record; do not implement.
 
 **Files:**
 - Create: `packages/cli/src/engine/secrets.ts`
@@ -644,7 +646,11 @@ git commit -m "feat(engine): add secret backend interface and keychain implement
 
 ---
 
-## Task 4: KeychainCredentialStore
+## Task 4 (SUPERSEDED): KeychainCredentialStore
+
+> Built, verified against Windows Credential Manager, and removed in revision 2
+> when credentials became shared with the CLI. Kept as the record; do not
+> implement.
 
 **Files:**
 - Create: `packages/cli/src/engine/keychain-store.ts`
@@ -675,7 +681,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { KeychainCredentialStore } from "../../src/engine/keychain-store.ts";
-import { createFileAccountIndex, createMemorySecretBackend } from "../../src/engine/secrets.ts";
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 
 describe("KeychainCredentialStore", () => {
 	const tempDir = join(tmpdir(), `knightcode-test-keychain-${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -910,55 +916,55 @@ git commit -m "feat(engine): add keychain-backed credential store"
   receive and has no behaviour a reviewer could reject independently of them.
 
 **Interfaces:**
-- Consumes: `EventBus` (Task 2), `createEngineCredentialStore` (Task 4).
+- Consumes: `EventBus` (Task 2), `AuthStorage` from
+  `packages/cli/src/core/auth-storage.ts`.
 - Produces:
-  - `export interface EngineContext { models: ModelRuntime; credentials: CredentialStore; events: EventBus; keychainAvailable: boolean }`
-  - `export interface CreateEngineContextOptions { credentials?: CredentialStore; backend?: SecretBackend; indexPath?: string; fallbackAuthPath?: string; events?: EventBus; allowModelNetwork?: boolean }`
+  - `export interface EngineContext { models: ModelRuntime; credentials: CredentialStore; events: EventBus }`
+  - `export interface CreateEngineContextOptions { credentials?: CredentialStore; authPath?: string; events?: EventBus; modelsPath?: string | null; allowModelNetwork?: boolean }`
   - `export function createEngineContext(options?: CreateEngineContextOptions): Promise<EngineContext>`
+
+One store instance is built and handed to both `ModelRuntime` and the routes.
+Two instances over the same file would each hold their own in-process
+serialization and only coordinate through the file lock. `modelsPath: null`
+keeps the catalog in memory so tests never touch the user's agent directory.
 
 - [ ] **Step 1: Write the implementation**
 
 ```ts
 // packages/cli/src/engine/context.ts
 import type { CredentialStore } from "@knightcode/ai";
+import { AuthStorage } from "../core/auth-storage.ts";
 import { ModelRuntime } from "../core/model-runtime.ts";
 import { createEventBus, type EventBus } from "./events.ts";
-import { createEngineCredentialStore } from "./keychain-store.ts";
-import type { SecretBackend } from "./secrets.ts";
 
 export interface EngineContext {
 	models: ModelRuntime;
 	credentials: CredentialStore;
 	events: EventBus;
-	keychainAvailable: boolean;
 }
 
 export interface CreateEngineContextOptions {
+	/** Overrides the shared store. Tests pass an in-memory one. */
 	credentials?: CredentialStore;
-	backend?: SecretBackend;
-	indexPath?: string;
-	fallbackAuthPath?: string;
+	/** Path to the shared auth.json. Defaults to the CLI's. */
+	authPath?: string;
 	events?: EventBus;
+	/** `null` keeps the model catalog and store entirely in memory. Tests pass null. */
+	modelsPath?: string | null;
 	allowModelNetwork?: boolean;
 }
 
 export async function createEngineContext(options: CreateEngineContextOptions = {}): Promise<EngineContext> {
-	const credentials =
-		options.credentials ??
-		createEngineCredentialStore({
-			backend: options.backend,
-			indexPath: options.indexPath,
-			fallbackAuthPath: options.fallbackAuthPath,
-		});
+	const credentials = options.credentials ?? AuthStorage.create(options.authPath);
 	const models = await ModelRuntime.create({
 		credentials,
+		modelsPath: options.modelsPath,
 		allowModelNetwork: options.allowModelNetwork ?? false,
 	});
 	return {
 		models,
 		credentials,
 		events: options.events ?? createEventBus(),
-		keychainAvailable: options.backend !== undefined,
 	};
 }
 ```
@@ -1018,7 +1024,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { accountsRoutes } from "../../src/engine/accounts.ts";
 import { createEngineContext } from "../../src/engine/context.ts";
 import { createEventBus } from "../../src/engine/events.ts";
-import { createFileAccountIndex, createMemorySecretBackend } from "../../src/engine/secrets.ts";
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1036,11 +1042,10 @@ describe("accounts routes", () => {
 
 	async function start() {
 		mkdirSync(tempDir, { recursive: true });
-		const backend = createMemorySecretBackend();
 		const events = createEventBus();
 		const ctx = await createEngineContext({
-			backend,
-			indexPath: join(tempDir, "engine-accounts.json"),
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
 			events,
 		});
 		server = await startEngineServer({ token: "t", routes: accountsRoutes(ctx) });
@@ -1249,8 +1254,8 @@ describe("login routes", () => {
 	async function start() {
 		mkdirSync(tempDir, { recursive: true });
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			indexPath: join(tempDir, "engine-accounts.json"),
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
 			events: createEventBus(),
 		});
 		server = await startEngineServer({ token: "t", routes: accountsRoutes(ctx) });
@@ -1620,7 +1625,7 @@ import { fauxProvider } from "@knightcode/ai";
 import { afterEach, describe, expect, test } from "vitest";
 import { createEngineContext } from "../../src/engine/context.ts";
 import { modelsRoute } from "../../src/engine/models.ts";
-import { createMemorySecretBackend } from "../../src/engine/secrets.ts";
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 
 describe("GET /v1/models", () => {
@@ -1637,8 +1642,8 @@ describe("GET /v1/models", () => {
 	async function start() {
 		mkdirSync(tempDir, { recursive: true });
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			indexPath: join(tempDir, "engine-accounts.json"),
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
 		});
 		server = await startEngineServer({ token: "t", routes: [modelsRoute(ctx)] });
 		return { base: `http://127.0.0.1:${server.port}`, ctx };
@@ -2045,7 +2050,7 @@ import { fauxAssistantMessage, fauxProvider, fauxText } from "@knightcode/ai";
 import { afterEach, describe, expect, test } from "vitest";
 import { completionsRoutes } from "../../src/engine/completions.ts";
 import { createEngineContext } from "../../src/engine/context.ts";
-import { createMemorySecretBackend } from "../../src/engine/secrets.ts";
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 
 describe("completions routes", () => {
@@ -2062,8 +2067,8 @@ describe("completions routes", () => {
 	async function start(text = "hello from faux") {
 		mkdirSync(tempDir, { recursive: true });
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			indexPath: join(tempDir, "engine-accounts.json"),
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
 		});
 		const handle = fauxProvider({ responses: [fauxAssistantMessage([fauxText(text)])] });
 		ctx.models.setProvider(handle.provider);
@@ -2317,66 +2322,65 @@ git commit -m "feat(engine): add chat and FIM completion routes"
 ```ts
 // packages/cli/src/engine-entry.ts
 #!/usr/bin/env bun
-import { join } from "node:path";
-import { createBunSecretBackend } from "./bun/secrets.ts";
-import { getAgentDir } from "./config.ts";
+/**
+ * knightcode-engine — the headless engine the IDE drives.
+ *
+ * Prints one JSON line on stdout once it is listening; the IDE reads the port
+ * from it, then polls /health before sending anything else.
+ */
+
+// Static, and first: this registers the OAuth flows and the Bedrock provider
+// module into the compiled binary. Without it those load through dynamic
+// imports that a Bun single-file build never embeds, so every advertised login
+// flow fails at runtime in the shipped binary while working fine from source.
+import "./bun/runtime-setup.ts";
 import { accountsRoutes } from "./engine/accounts.ts";
 import { completionsRoutes } from "./engine/completions.ts";
 import { createEngineContext } from "./engine/context.ts";
 import { eventsRoute } from "./engine/events.ts";
 import { modelsRoute } from "./engine/models.ts";
-import type { SecretBackend } from "./engine/secrets.ts";
 import { startEngineServer } from "./engine/server.ts";
 
 process.title = "knightcode-engine";
 process.env.KNIGHTCODE_CODING_AGENT = "true";
 process.env.AI_AGENT = "knightcode";
 
+const MINIMUM_TOKEN_LENGTH = 32;
+
 const token = process.env.KNIGHTCODE_ENGINE_TOKEN;
-if (!token || token.length < 32) {
-	console.error("KNIGHTCODE_ENGINE_TOKEN must be set to at least 32 characters");
+if (!token || token.length < MINIMUM_TOKEN_LENGTH) {
+	console.error(`KNIGHTCODE_ENGINE_TOKEN must be set to at least ${MINIMUM_TOKEN_LENGTH} characters`);
 	process.exit(2);
 }
 
 // Loopback must never go through a proxy: a corporate HTTP_PROXY otherwise
 // swallows the IDE's own traffic to this server.
 for (const key of ["NO_PROXY", "no_proxy"]) {
-	const existing = (process.env[key] ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+	const entries = (process.env[key] ?? "")
+		.split(",")
+		.map((value) => value.trim())
+		.filter((value) => value.length > 0);
 	for (const host of ["127.0.0.1", "localhost", "::1"]) {
-		if (!existing.some((value) => value.toLowerCase() === host)) existing.push(host);
+		if (!entries.some((value) => value.toLowerCase() === host)) entries.push(host);
 	}
-	process.env[key] = existing.join(",");
+	process.env[key] = entries.join(",");
 }
 
-let backend: SecretBackend | undefined;
-try {
-	backend = createBunSecretBackend();
-	await backend.get("startup-probe");
-} catch (error) {
-	backend = undefined;
-	console.error(`keychain unavailable, falling back to the file store: ${String(error)}`);
-}
-
-const ctx = await createEngineContext({
-	backend,
-	indexPath: join(getAgentDir(), "engine-accounts.json"),
-	fallbackAuthPath: join(getAgentDir(), "auth.json"),
-	allowModelNetwork: true,
-});
+// No credential path is passed, so this is the CLI's own auth.json and its
+// cross-process lock. One login serves both front doors.
+const ctx = await createEngineContext({ allowModelNetwork: true });
 
 const server = await startEngineServer({
 	token,
-	routes: [
-		eventsRoute(ctx.events),
-		modelsRoute(ctx),
-		...accountsRoutes(ctx),
-		...completionsRoutes(ctx),
-	],
+	routes: [eventsRoute(ctx.events), modelsRoute(ctx), ...accountsRoutes(ctx), ...completionsRoutes(ctx)],
 });
 
-process.stdout.write(`${JSON.stringify({ type: "listening", port: server.port, keychain: ctx.keychainAvailable })}\n`);
+process.stdout.write(`${JSON.stringify({ type: "listening", port: server.port })}\n`);
 
+let closing = false;
 const shutdown = () => {
+	if (closing) return;
+	closing = true;
 	void server.close().finally(() => process.exit(0));
 };
 process.on("SIGINT", shutdown);
@@ -2430,7 +2434,12 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:$PORT/v1/accounts/log
 
 Open the `auth_url` from the returned events, complete sign-in, then confirm the
 login reports `complete`, that `/v1/models` is now populated, and that the
-credential is in the OS keychain and **not** in `~/.knightcode/auth.json`.
+credential landed in `~/.knightcode/agent/auth.json` — the CLI's file, so
+`knightcode` in a terminal is now signed in too without a second login.
+
+Verified on 2026-09-11 from the compiled binary: `status: complete`, the account
+listed as `anthropic / oauth / isSubscription: true`, and the OAuth callback on
+`localhost:53692` received by the engine with no terminal involved.
 
 - [ ] **Step 5: Commit**
 
@@ -2457,10 +2466,8 @@ add them; this list is the reviewer's checklist, not a second suite.
 - `/v1/accounts` returns metadata only; no response body on any route contains a
   token, key, or refresh token (Tasks 6, 7, 8);
 - an abandoned login expires and frees its callback listener (Task 7);
-- concurrent `modify` calls serialize, and a refresh arriving during a login does
-  not lose the newer credential (Task 4);
-- keychain unavailable falls back to the file backend at `0600` and reports the
-  fallback (Task 4 for the store, Task 11 for the report);
+- the routes and the runtime share one `CredentialStore` instance, so a login
+  through the routes is visible to the next completion request (Task 5);
 - `/events` delivers `account.changed` after a login and after a sign-out, and
   emits a heartbeat (Tasks 2, 6, 7).
 
@@ -2477,7 +2484,7 @@ Do not add in this work package:
 - `/v1/sessions`, a session browser, or agent-manager routes;
 - tool calls in `/v1/chat/completions`; seam 2 surfaces are single-turn text
   edits and tools go through ACP;
-- a second credential store, or any new dependency for keychain access;
+- a second credential store, or any credential code outside `context.ts`;
 - changes to `packages/ai` or `packages/agent`;
 - changes to the CLI's system prompt or tool definitions;
 - authentication schemes beyond the launch bearer token;
@@ -2500,18 +2507,17 @@ Confirm no route can leak a credential:
 rg -n "credential|apiKey|api_key|refresh|access" packages/cli/src/engine
 ```
 
-Every match must be either a type import, a `type` discriminant on
-`CredentialInfo`, or the keychain store's own serialization. A credential value
-reaching a `sendJson` call is a defect.
+Every match must be either a type import or a `type` discriminant on
+`CredentialInfo`. A credential value reaching a `sendJson` call is a defect.
 
-Confirm the engine never writes `auth.json` when a keychain is present:
+Confirm the engine configures no credential store of its own:
 
 ```bash
-rg -n "auth\.json" packages/cli/src/engine packages/cli/src/engine-entry.ts
+rg -n "auth\.json|AuthStorage|CredentialStore" packages/cli/src/engine packages/cli/src/engine-entry.ts
 ```
 
-Expected: only the `fallbackAuthPath` wiring in `engine-entry.ts` and
-`keychain-store.ts`.
+Expected: `context.ts` only — the `AuthStorage.create()` call and the type.
+Anywhere else is a second store creeping back in.
 
 ---
 
@@ -2522,7 +2528,8 @@ WP01 is complete when:
 - `knightcode-engine` starts from a compiled binary, prints its port, and
   answers `/health`;
 - an Anthropic OAuth sign-in completes through the HTTP login routes with no
-  terminal interaction, storing the credential in the OS keychain;
+  terminal interaction, and the CLI can then use that credential without
+  signing in again;
 - `/v1/models` lists that provider's models afterwards;
 - `/v1/chat/completions` streams a response, and `/v1/completions` returns FIM
   text;
@@ -2530,4 +2537,5 @@ WP01 is complete when:
 - every invariant in *Required tests* has a passing test;
 - `bun run check-types` is clean and both greps in *Validation* return only
   their expected matches;
-- `~/.knightcode/auth.json` is untouched on a machine with a working keychain.
+- signing out through the engine signs the CLI out of that provider too, and
+  the reverse.

@@ -1,8 +1,8 @@
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { fauxAssistantMessage, fauxProvider, fauxText } from "@knightcode/ai";
 import { afterEach, describe, expect, test } from "vitest";
 import { completionsRoutes } from "../../src/engine/completions.ts";
 import { createEngineContext } from "../../src/engine/context.ts";
-import { createMemoryAccountIndex, createMemorySecretBackend } from "../../src/engine/secrets.ts";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 
 const auth = { authorization: "Bearer t", "content-type": "application/json" };
@@ -18,8 +18,7 @@ describe("completions routes", () => {
 
 	async function start(text = "hello from faux"): Promise<{ base: string; modelId: string }> {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		const handle = fauxProvider({ provider: `faux-completions-${counter++}` });
@@ -137,8 +136,7 @@ describe("completions routes", () => {
 
 	test("passes max_tokens and temperature through to the provider", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		const handle = fauxProvider({ provider: `faux-options-${counter++}` });
@@ -167,8 +165,7 @@ describe("completions routes", () => {
 
 	test("bounds a FIM request by its max_tokens", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		const handle = fauxProvider({ provider: `faux-fim-options-${counter++}` });
@@ -193,8 +190,7 @@ describe("completions routes", () => {
 
 	test("refuses an ambiguous bare model id instead of guessing a provider", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		// Two providers offering the same model id, as anthropic and agentrouter
@@ -218,8 +214,7 @@ describe("completions routes", () => {
 
 	test("routes a provider-qualified ref to that exact provider", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		const first = fauxProvider({ provider: "faux-pick-a", models: [{ id: "shared-model" }] });
@@ -249,8 +244,7 @@ describe("completions routes", () => {
 
 	test("a streaming provider failure emits an error event, not [DONE]", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		const handle = fauxProvider({ provider: `faux-error-${counter++}` });
@@ -279,8 +273,7 @@ describe("completions routes", () => {
 
 	test("a non-streaming provider failure is a 502", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		const handle = fauxProvider({ provider: `faux-error-plain-${counter++}` });
@@ -302,8 +295,7 @@ describe("completions routes", () => {
 
 	test("passes an abort signal so a disconnect stops inference", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		const handle = fauxProvider({ provider: `faux-signal-${counter++}` });

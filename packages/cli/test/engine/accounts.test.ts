@@ -1,8 +1,8 @@
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { afterEach, describe, expect, test } from "vitest";
 import { accountsRoutes } from "../../src/engine/accounts.ts";
 import { createEngineContext, type EngineContext } from "../../src/engine/context.ts";
 import { createEventBus, type EngineEvent } from "../../src/engine/events.ts";
-import { createMemoryAccountIndex, createMemorySecretBackend } from "../../src/engine/secrets.ts";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 
 const auth = { authorization: "Bearer t" };
@@ -20,8 +20,7 @@ describe("accounts routes", () => {
 		const seen: EngineEvent[] = [];
 		events.subscribe((event) => seen.push(event));
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 			events,
 		});

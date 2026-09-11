@@ -6,20 +6,16 @@
  * from it, then polls /health before sending anything else.
  */
 
-import { join } from "node:path";
 // Static, and first: this registers the OAuth flows and the Bedrock provider
 // module into the compiled binary. Without it those load through dynamic
 // imports that a Bun single-file build never embeds, so every advertised login
 // flow fails at runtime in the shipped binary while working fine from source.
 import "./bun/runtime-setup.ts";
-import { createBunSecretBackend } from "./bun/secrets.ts";
-import { getAgentDir } from "./config.ts";
 import { accountsRoutes } from "./engine/accounts.ts";
 import { completionsRoutes } from "./engine/completions.ts";
 import { createEngineContext } from "./engine/context.ts";
 import { eventsRoute } from "./engine/events.ts";
 import { modelsRoute } from "./engine/models.ts";
-import type { SecretBackend } from "./engine/secrets.ts";
 import { startEngineServer } from "./engine/server.ts";
 
 process.title = "knightcode-engine";
@@ -47,36 +43,16 @@ for (const key of ["NO_PROXY", "no_proxy"]) {
 	process.env[key] = entries.join(",");
 }
 
-let backend: SecretBackend | undefined;
-let keychainError: string | undefined;
-try {
-	const candidate = createBunSecretBackend();
-	// Probe rather than trust: a machine with no Secret Service constructs fine
-	// and fails on first use.
-	await candidate.get("startup-probe");
-	backend = candidate;
-} catch (error) {
-	keychainError = error instanceof Error ? error.message : String(error);
-	console.error(`keychain unavailable, falling back to the file store: ${keychainError}`);
-}
-
-const ctx = await createEngineContext({
-	backend,
-	indexPath: join(getAgentDir(), "engine-accounts.json"),
-	// The engine owns its credentials. Falling back to the CLI's auth.json would
-	// read and rewrite the CLI's credentials, and an IDE sign-out would delete
-	// the CLI's login for that provider. Importing from the CLI is an explicit,
-	// one-time first-run action, not a shared file.
-	fallbackAuthPath: join(getAgentDir(), "engine-auth.json"),
-	allowModelNetwork: true,
-});
+// No credential path is passed, so this is the CLI's own auth.json and its
+// cross-process lock. One login serves both front doors.
+const ctx = await createEngineContext({ allowModelNetwork: true });
 
 const server = await startEngineServer({
 	token,
 	routes: [eventsRoute(ctx.events), modelsRoute(ctx), ...accountsRoutes(ctx), ...completionsRoutes(ctx)],
 });
 
-process.stdout.write(`${JSON.stringify({ type: "listening", port: server.port, keychain: ctx.keychainAvailable })}\n`);
+process.stdout.write(`${JSON.stringify({ type: "listening", port: server.port })}\n`);
 
 let closing = false;
 const shutdown = () => {

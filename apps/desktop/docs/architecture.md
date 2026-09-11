@@ -1,8 +1,9 @@
 # KnightCode IDE — architecture
 
-Status: proposed design, not yet implemented
+Status: Phase A implemented; Phases B–E not yet started
 Date: 2026-09-11
-Revision: 1
+Revision: 2 — credentials shared with the CLI rather than held in the OS
+keychain; see §2 and §6.1 for why
 
 A desktop IDE built on a fork of Zed, with KnightCode as its only agent, its
 only inference path, and its only login. The IDE is Rust. The AI stack stays in
@@ -20,8 +21,8 @@ In this repository:
 1. `AGENTS.md` — the 1,100-token floor and the layout table.
 2. `packages/ai/src/auth/types.ts` — `CredentialStore`, `Credential`,
    `ProviderAuthInteraction`.
-3. `packages/cli/src/core/auth-storage.ts` — the file-backed credential store
-   the engine replaces.
+3. `packages/cli/src/core/auth-storage.ts` — the credential store the engine
+   shares with the CLI, and its cross-process lock.
 4. `packages/ai/src/auth/oauth/anthropic.ts` — the shape every OAuth provider
    follows.
 5. `packages/cli/src/core/agent-session-runtime.ts` and
@@ -115,14 +116,17 @@ puppeteered and the engine is not a wrapper. The rejected alternative — adding
 `--mode ide` to the existing binary — keeps the front door shaped by terminal
 concerns and makes every IDE-facing API change a change to the CLI's contract.
 
-**Credentials belong to the IDE, in the OS keychain.** `CredentialStore`
-(`packages/ai/src/auth/types.ts:65`) is already an interface with `read`,
-`list`, and a serialized `write`. `FileAuthStorageBackend` writing
-`~/.knightcode/auth.json` at mode `0600` is one implementation; the engine ships
-a second backed by Keychain, Windows Credential Manager, and Secret Service. The
-rejected alternative — reading the CLI's `auth.json` — makes the IDE depend on a
-separate product being installed and configured, which is the plugin failure
-mode in §1.1.
+**The IDE and the CLI share one login.** Both use the CLI's `AuthStorage`
+(`packages/cli/src/core/auth-storage.ts`) over `~/.knightcode/agent/auth.json`,
+at mode `0600`, under its `proper-lockfile` cross-process lock. A user with both
+products signs in once. The engine passes no credential store at all:
+`ModelRuntime.create()` already defaults to that one. The rejected alternative —
+a separate store per product, bridged by an import — cannot be made correct,
+because Anthropic rotates refresh tokens and two copies of a credential means
+one of them is dead after the first refresh; see §6.1. The store is a file
+rather than the OS keychain because the CLI's store is, and sharing requires
+one store; moving both onto the keychain later is a single swap plus a
+migration.
 
 **Seam 1 speaks ACP over stdio.** `AcpConnection`
 (`crates/agent_servers/src/acp.rs:1624`) already implements `AgentConnection`
@@ -312,7 +316,7 @@ subscription.
 | `GET` | `/v1/accounts` | credential metadata, never secrets |
 | `POST` | `/v1/accounts/login` | begins a provider login |
 | `GET` | `/v1/accounts/login/{id}` | login progress |
-| `DELETE` | `/v1/accounts/{providerId}` | sign out, clears the keychain entry |
+| `DELETE` | `/v1/accounts/{providerId}` | sign out; shared, so the CLI is signed out too |
 | `GET` | `/events` | SSE bus |
 
 `/v1/models` returns the union across authenticated providers, carrying the
@@ -334,23 +338,37 @@ the front door, which is the reason the bus exists in v1 at all.
 
 ### 6.1 Storage
 
-A `KeychainCredentialStore` implements `CredentialStore`
-(`packages/ai/src/auth/types.ts:65`) against the platform secret store: Keychain
-Services on macOS, Windows Credential Manager via `wincred`, Secret Service on
-Linux. It preserves the interface's contract exactly, including serialized
-writes — `write` takes the current credential because refresh-during-login is a
-real race, and the file backend's cross-process lock has a platform equivalent
-that must be used, not skipped.
+**The IDE and the CLI share one credential store.** Both read and write
+`~/.knightcode/agent/auth.json` through the same `AuthStorage`
+(`packages/cli/src/core/auth-storage.ts`), at mode `0600`, with the
+`proper-lockfile` cross-process lock it already holds. One machine, one account,
+two front doors: signing in once works everywhere, in either order.
 
-Linux without a running Secret Service falls back to the file backend at
-`0600`, with a visible notice in settings. Silently degrading a secret store is
-not acceptable; refusing to run on a machine without a keyring is not either.
+The engine passes no credential path, so it inherits that store from
+`ModelRuntime.create()` rather than configuring its own. There is no engine-side
+credential code at all — that is the point.
 
-That fallback writes `~/.knightcode/engine-auth.json`, **not** the CLI's
-`auth.json`. Sharing the file would make the engine read and rewrite the CLI's
-credentials, and an IDE sign-out would delete the CLI's login for that provider.
-The import in §6.3 is the only path between the two, and it is one-way and
-explicit.
+**Sharing must be one store, not two kept in step.** Anthropic rotates refresh
+tokens: `refreshAnthropicToken` returns a *new* `refresh` value
+(`packages/ai/src/auth/oauth/anthropic.ts:349`). If the CLI and the engine each
+held a copy of one credential, whichever refreshed second would be holding a
+token the provider had already invalidated, and that side would be silently
+signed out. A copy-on-first-use bridge, a read-only fallback, and a
+periodic sync all fail for the same reason. Exactly one file owns the
+credential, and both processes coordinate on it through the lock.
+
+**The consequences are symmetric, and intended.** Signing out in the IDE signs
+you out of the CLI for that provider, and the reverse. A credential refreshed
+by one is immediately current for the other. Both must be able to read the
+schema the other writes, so the engine and the CLI ship from the same source
+tree and version together.
+
+A dedicated OS keychain store was implemented and then removed. It is a better
+place for a secret than a file, but it cannot be the *shared* place without also
+moving the CLI onto it, which changes behaviour for every existing CLI user and
+needs a migration. Moving both onto the keychain later is the natural upgrade;
+it is one swap of the store passed to `ModelRuntime.create()`, plus a migration,
+and nothing in the engine's routes would change.
 
 ### 6.2 The login flow
 
@@ -364,8 +382,8 @@ engine  starts the provider's OAuth flow, opens a loopback callback
         listener, returns {loginId, authorizeUrl}
 IDE     opens authorizeUrl in the system browser, shows a waiting sheet
 user    signs in, provider redirects to the engine's callback
-engine  exchanges the code, writes the credential to the keychain,
-        emits account.changed on /events
+engine  exchanges the code, writes the credential to the shared
+        auth.json under its lock, emits account.changed on /events
 IDE     sheet closes, model picker repopulates
 ```
 
@@ -377,12 +395,13 @@ Copilot, OpenAI Codex, Kimi, OpenRouter, Radius, xAI — plus API keys for the
 remaining providers. First run offers, in order: Continue with Claude, Continue
 with ChatGPT, Continue with Copilot, Use an API key.
 
-### 6.3 Importing from the CLI
+### 6.3 Existing CLI users
 
-If `~/.knightcode/auth.json` exists, first run offers to import it into the
-keychain. This is a convenience and never a prerequisite. The IDE does not read
-that file at any other time, does not write it, and works identically on a
-machine where the CLI has never been installed.
+Nothing to import. A machine where the CLI is already signed in is already
+signed in to the IDE, because it is the same file. First run detects stored
+credentials through `GET /v1/accounts` and skips the sign-in screen. A machine
+where the CLI has never been installed works identically; the engine creates
+the file on first sign-in exactly as the CLI would have.
 
 ---
 
@@ -468,7 +487,9 @@ packages/cli/
     completions.ts             /v1/chat/completions, /v1/completions
     accounts.ts                /v1/accounts/*, login orchestration
     events.ts                  /events SSE bus
-    keychain.ts                CredentialStore over the platform secret store
+    context.ts                 shared store + ModelRuntime wiring
+    models.ts                  /v1/models
+    openai.ts                  OpenAI <-> Context translation, pure
     acp/                       ACP adapter; a client of the above
 ```
 
@@ -494,13 +515,16 @@ build the engine; the API is.
 
 ### Phase A — engine server
 
-`packages/cli/src/engine-entry.ts`, `engine/server.ts`, `engine/keychain.ts`,
-`engine/accounts.ts`, `engine/completions.ts`, `engine/events.ts`.
-`scripts/build.ts` second target.
+`packages/cli/src/engine-entry.ts`, `engine/server.ts`, `engine/context.ts`,
+`engine/accounts.ts`, `engine/models.ts`, `engine/openai.ts`,
+`engine/completions.ts`, `engine/events.ts`. `scripts/build.ts` second target.
 
 Exit condition: `knightcode-engine` starts, prints a port, answers `/health`,
-signs in to Anthropic via loopback OAuth storing to the keychain, lists models,
-and streams a chat completion. Driven entirely by `curl`, no IDE.
+signs in to Anthropic via loopback OAuth into the shared `auth.json`, lists
+models, and streams a chat completion. Driven entirely by `curl`, no IDE.
+
+**Done.** Verified from a compiled binary, including a real Anthropic OAuth
+sign-in; see `work-packages/01-engine-server.md`.
 
 ### Phase B — ACP adapter
 
@@ -555,10 +579,9 @@ Engine, in `packages/cli/test/engine/`, Vitest, against the faux provider in
 - `/v1/accounts` returns metadata only; no response body on any route contains a
   token, key, or refresh token;
 - a login that is abandoned expires and frees its callback listener;
-- concurrent `write` calls to the keychain store serialize, and a refresh
-  arriving during a login does not lose the newer credential;
-- keychain unavailable on Linux falls back to the file backend at `0600` and
-  reports the fallback;
+- the engine and the CLI open the same `auth.json` under the same lock, so a
+  credential written by one is read by the other and a refresh in one process
+  cannot clobber a refresh in the other;
 - `/events` delivers `account.changed` after a login and after a sign-out, and
   emits a heartbeat.
 
@@ -588,7 +611,7 @@ Fork, in the IDE repository, using Zed's `gpui` test harness:
 Do not add:
 
 - a second credential store, a credential cache in Rust, or any Rust code that
-  reads `~/.knightcode/auth.json` outside the one-time import;
+  reads `auth.json`; the engine is the only reader on the IDE side;
 - a Rust port of any part of `packages/ai` or `packages/agent`, including
   "just the streaming parser";
 - a Rust client for `packages/chord` or `packages/protocol`;
@@ -619,7 +642,7 @@ The fork builds and tests in its own repository with `cargo build` and
 Before shipping a build, confirm no credential reaches the Rust side:
 
 ```bash
-rg -n "api_key|API_KEY|Bearer |auth\.json|keychain|credential" \
+rg -n "api_key|API_KEY|Bearer |auth\.json|credential" \
   crates/knightcode_agent crates/knightcode_models crates/knightcode_engine
 ```
 
@@ -652,8 +675,8 @@ better model can be swapped in without a code change.
 
 **One engine, one machine.** Two IDE windows share one engine. Two *installs*
 running simultaneously, or an IDE and a CLI-launched engine, will each hold
-their own process and their own port. They share the keychain, so credentials
-stay consistent; sessions do not.
+their own process and their own port. They share `auth.json` under its lock,
+so credentials stay consistent; sessions do not.
 
 ---
 
@@ -667,8 +690,8 @@ v1 is complete when:
   generation, and Tab prediction are all served by that one login;
 - no surface in the IDE can reach a provider dialog, an API key field belonging
   to Zed, or a zed.dev account;
-- credentials exist only in the OS keychain, and the validation grep in §13
-  finds only the launch token in the fork;
+- credentials exist only in the shared `auth.json`, and the validation grep in
+  §13 finds only the launch token in the fork;
 - agent edits arrive in unsaved buffers with per-hunk accept and reject;
 - the engine survives a provider outage, a proxy environment, and a corporate
   TLS interception without the IDE showing a generic error;

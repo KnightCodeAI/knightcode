@@ -1,8 +1,8 @@
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { afterEach, describe, expect, test } from "vitest";
 import { accountsRoutes, createLoginRegistry } from "../../src/engine/accounts.ts";
 import { createEngineContext, type EngineContext } from "../../src/engine/context.ts";
 import { createEventBus, type EngineEvent } from "../../src/engine/events.ts";
-import { createMemoryAccountIndex, createMemorySecretBackend } from "../../src/engine/secrets.ts";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 
 const auth = { authorization: "Bearer t", "content-type": "application/json" };
@@ -28,8 +28,7 @@ describe("login routes", () => {
 		const seen: EngineEvent[] = [];
 		events.subscribe((event) => seen.push(event));
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 			events,
 		});
@@ -144,8 +143,7 @@ describe("login routes", () => {
 	test("a settled login record is forgotten rather than held forever", async () => {
 		const events = createEventBus();
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 			events,
 		});
@@ -164,8 +162,7 @@ describe("login routes", () => {
 
 	test("an abandoned pending login times out and aborts its provider flow", async () => {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 			events: createEventBus(),
 		});

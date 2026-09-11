@@ -235,7 +235,7 @@ export function createLoginRegistry(ctx: EngineContext, options: LoginRegistryOp
 
 		cancel(loginId) {
 			const record = logins.get(loginId);
-			if (!record) return false;
+			if (!record || record.status !== "pending") return false;
 			record.abandonedReason = "login cancelled";
 			record.pending?.reject(new Error(record.abandonedReason));
 			record.controller.abort();

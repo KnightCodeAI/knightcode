@@ -1,8 +1,8 @@
+import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { fauxProvider, type Provider } from "@knightcode/ai";
 import { afterEach, describe, expect, test } from "vitest";
 import { createEngineContext, type EngineContext } from "../../src/engine/context.ts";
 import { modelsRoute } from "../../src/engine/models.ts";
-import { createMemoryAccountIndex, createMemorySecretBackend } from "../../src/engine/secrets.ts";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 
 const auth = { authorization: "Bearer t" };
@@ -30,8 +30,7 @@ describe("GET /v1/models", () => {
 
 	async function start(): Promise<{ base: string; ctx: EngineContext }> {
 		const ctx = await createEngineContext({
-			backend: createMemorySecretBackend(),
-			index: createMemoryAccountIndex(),
+			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 		});
 		server = await startEngineServer({ token: "t", routes: [modelsRoute(ctx)] });

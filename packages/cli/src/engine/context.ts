@@ -1,31 +1,33 @@
 /**
  * Shared state every engine route receives.
  *
- * The engine owns credentials and inference; it holds no editor state. Routes
- * read this and nothing else, so a route can be tested by constructing a
- * context with an in-memory secret backend and no filesystem paths.
+ * The engine owns inference; it holds no editor state. Credentials are shared
+ * with the CLI: both read and write `auth.json` through the same `AuthStorage`,
+ * which holds a cross-process lock. That is deliberate — one machine, one
+ * account, two front doors — and `ModelRuntime` already defaults to that store,
+ * so the engine passes nothing and inherits both the file and the lock.
+ *
+ * Sharing has to be exactly one store rather than two kept in step: Anthropic
+ * rotates refresh tokens on every refresh, so two copies of one credential mean
+ * whichever process refreshes second is holding a dead token.
  */
 
 import type { CredentialStore } from "@knightcode/ai";
+import { AuthStorage } from "../core/auth-storage.ts";
 import { ModelRuntime } from "../core/model-runtime.ts";
 import { createEventBus, type EventBus } from "./events.ts";
-import { createEngineCredentialStore } from "./keychain-store.ts";
-import type { AccountIndex, SecretBackend } from "./secrets.ts";
 
 export interface EngineContext {
 	models: ModelRuntime;
 	credentials: CredentialStore;
 	events: EventBus;
-	/** False when no OS keychain was available and the file store is in use. */
-	keychainAvailable: boolean;
 }
 
 export interface CreateEngineContextOptions {
+	/** Overrides the shared store. Tests pass an in-memory one. */
 	credentials?: CredentialStore;
-	backend?: SecretBackend;
-	index?: AccountIndex;
-	indexPath?: string;
-	fallbackAuthPath?: string;
+	/** Path to the shared auth.json. Defaults to the CLI's. */
+	authPath?: string;
 	events?: EventBus;
 	/** `null` keeps the model catalog and store entirely in memory. Tests pass null. */
 	modelsPath?: string | null;
@@ -33,14 +35,10 @@ export interface CreateEngineContextOptions {
 }
 
 export async function createEngineContext(options: CreateEngineContextOptions = {}): Promise<EngineContext> {
-	const credentials =
-		options.credentials ??
-		createEngineCredentialStore({
-			backend: options.backend,
-			index: options.index,
-			indexPath: options.indexPath,
-			fallbackAuthPath: options.fallbackAuthPath,
-		});
+	// One instance, shared by the runtime and the account routes. Two instances
+	// over the same file would each hold their own in-process serialization and
+	// only coordinate through the file lock.
+	const credentials = options.credentials ?? AuthStorage.create(options.authPath);
 	const models = await ModelRuntime.create({
 		credentials,
 		modelsPath: options.modelsPath,
@@ -50,6 +48,5 @@ export async function createEngineContext(options: CreateEngineContextOptions = 
 		models,
 		credentials,
 		events: options.events ?? createEventBus(),
-		keychainAvailable: options.backend !== undefined,
 	};
 }
