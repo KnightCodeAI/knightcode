@@ -2399,7 +2399,9 @@ and inside the per-target loop, after the CLI build, add a second `Bun.build`
 call with `entrypoints: [ENGINE_ENTRY]` and
 `outfile: join(outDir, target.os === "win32" ? "knightcode-engine.exe" : "knightcode-engine")`,
 mirroring the existing `compile` options including the Windows metadata branch
-and the non-Windows `chmodSync(outfile, 0o755)`.
+and the non-Windows `chmodSync(outfile, 0o755)`. Gate it behind an `--engine`
+flag and add `build:engine` to the root `package.json`: the publish workflow
+runs the default build, and the engine must not land in the npm packages.
 
 - [ ] **Step 3: Verify by hand**
 

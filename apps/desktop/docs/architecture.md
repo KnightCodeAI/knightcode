@@ -500,7 +500,10 @@ them to a shared package is a larger refactor with no benefit to this work, and
 would touch the merge-sensitive core.
 
 `scripts/build.ts` gains a second entrypoint and a second output name per
-target, alongside the existing five.
+target, alongside the existing five, behind an explicit `--engine` flag
+(`bun run build:engine`). The publish workflow does not pass it: the engine
+ships inside the IDE installer, not inside the npm platform packages, where it
+would add ~115 MB to every CLI install for nothing to run it.
 
 **On binary size.** The compiled CLI is 127,741,952 bytes. The engine is the
 same size class and will not be meaningfully smaller: most of it is the Bun
