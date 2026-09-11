@@ -54,7 +54,7 @@ export class ModelLookupError extends Error {
  * hand-written curl or a generic OpenAI client will send. When it is ambiguous
  * the engine refuses and names the candidates rather than guessing.
  */
-function resolveModel(ctx: EngineContext, ref: string): Model<Api> {
+export function resolveModel(ctx: EngineContext, ref: string): Model<Api> {
 	if (ref.length === 0) throw new ModelLookupError(400, "bad_request", "model is required");
 
 	// Split on the first separator only: OpenRouter ids contain slashes of their
@@ -82,7 +82,7 @@ function resolveModel(ctx: EngineContext, ref: string): Model<Api> {
 	);
 }
 
-function sendLookupError(res: ServerResponse, error: unknown): void {
+export function sendLookupError(res: ServerResponse, error: unknown): void {
 	if (error instanceof ModelLookupError) {
 		sendJson(res, error.status, {
 			error: error.code,
