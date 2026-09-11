@@ -73,16 +73,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Finder (MacOS) folder config
 .DS_Store
 
-#shenanigans
-Shenanigans.md
-
-/claude-code/
-
 # Compiled platform binaries (built by CI / scripts/build.ts, never committed)
 packages/cli-*/bin/
 
-# Vendored reference trees kept on disk for porting work only (upstream knightcode source,
-# the pre-port Claude Code tree, scratch experiments). Never committed.
 shenanigans/
 
 # Python (bench adapter)
@@ -96,6 +89,5 @@ release-assets/
 
 # Local agent/editor config
 .claude/
-
-# Local scratch: shader presets exported from shaders.com
-shaders/
+.agents/
+skills-lock.json
