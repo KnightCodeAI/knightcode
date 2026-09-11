@@ -1,7 +1,7 @@
 # WP03 — the fork (Phase C)
 
-Status: Tasks 0–7 implemented and committed; the running-IDE walk of the
-model-calling surfaces is the owner's (see Validation); fork push pending
+Status: Tasks 0–7 implemented, committed and pushed; the running-IDE walk
+of the model-calling surfaces is the owner's (see Validation)
 Date: 2026-09-12
 Revision: 2 — implementation notes and validation results recorded
 
@@ -4999,10 +4999,9 @@ be filled as tasks land; every departure gets one bullet.
 - Task 7: the first-open branch writes `FIRST_OPEN` itself with
   `db::write_and_log`, the way the onboarding did, so the branch is not
   taken twice; `show_onboarding_view` is no longer imported.
-- Task 7: the fork's `main` is committed but not pushed; the push was
-  refused by the session's permission policy. The submodule pointer below
-  names a commit that exists only locally until `git -C apps/desktop/ide
-  push origin main` is run.
+- Task 7: the fork's `main` (`a5736b7a06`) is pushed to
+  `KnightCodeAI/knightcode-ide`; the submodule pointer resolves against
+  it.
 - Upstream line count: `git diff --stat knightcode-base` outside
   `crates/knightcode_*` is 348 lines across 19 files, of which 136 are the
   deleted provider registrations in `language_models.rs` and 55 the
