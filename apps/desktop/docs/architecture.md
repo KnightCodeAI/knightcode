@@ -464,6 +464,7 @@ design is optimised for merge surface.
 | `assets/settings/default.json` | agent and prediction defaults |
 | `assets/icons/`, `crates/zed/resources/` | product identity |
 | `crates/settings_content/src/settings_content.rs` | one section |
+| `crates/settings/src/vscode_import.rs` | one field |
 | `crates/edit_prediction/src/edit_prediction.rs` | two arms |
 | `crates/edit_prediction_ui/src/edit_prediction_button.rs` | one arm |
 | `crates/language/src/language_settings.rs` | one arm |
