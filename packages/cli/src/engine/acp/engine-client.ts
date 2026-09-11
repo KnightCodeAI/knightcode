@@ -42,7 +42,10 @@ export interface UpdateSessionBody {
 }
 
 export interface EventHandlers {
+	/** The stream is up: every event the engine publishes from now on will arrive. */
+	onConnect?(): void;
 	onEvent(event: EngineEvent): Promise<void>;
+	/** The stream is down, or an attempt to open it failed; a retry follows. */
 	onDisconnect?(): void;
 }
 
@@ -141,6 +144,8 @@ export function createEngineClient(options: EngineClientOptions): EngineClient {
 				try {
 					const res = await fetch(`${options.baseUrl}/events`, { headers, signal });
 					if (!res.ok || !res.body) throw new EngineRequestError(res.status, "events", "event stream refused");
+					// The route subscribes to the bus before it sends its headers.
+					handlers.onConnect?.();
 					await consume(res.body, handlers.onEvent);
 				} catch {
 					// A refused or dropped stream is retried below; an abort ends the loop.

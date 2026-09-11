@@ -64,6 +64,13 @@ const RESOURCE_NOT_FOUND = -32002;
 
 const readKey = (toolCallId: string, path: string): string => `${toolCallId}\u0000${path}`;
 
+/** A settlement nobody need be awaiting: a rejection with no listener is not an unhandled one. */
+function streamOutcome(): PromiseWithResolvers<void> {
+	const outcome = Promise.withResolvers<void>();
+	outcome.promise.catch(() => undefined);
+	return outcome;
+}
+
 function toOutcome(response: RequestPermissionResponse): PermissionOutcome {
 	const { outcome } = response;
 	if (outcome.outcome !== "selected") return "cancelled";
@@ -208,6 +215,17 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 	const canRead = (): boolean => capabilities.fs?.readTextFile === true;
 	const canWrite = (): boolean => capabilities.fs?.writeTextFile === true;
 
+	// The event stream's next outcome: resolved once it is up, rejected when an
+	// attempt to open it fails. A turn must not start before it is up, because
+	// the bus does not replay and the turn's end travels on it.
+	let stream = streamOutcome();
+
+	function streamDown(reason: string): void {
+		stream.reject(new Error(reason));
+		stream = streamOutcome();
+		failTurns(reason);
+	}
+
 	function requireClient(): AgentContext {
 		if (!client) throw RequestError.internalError({ details: "no client connection" });
 		return client;
@@ -347,7 +365,11 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 		.onConnect((connection) => {
 			client = connection.client;
 			void engine.events(
-				{ onEvent: handleEvent, onDisconnect: () => failTurns("engine event stream disconnected") },
+				{
+					onConnect: () => stream.resolve(),
+					onEvent: handleEvent,
+					onDisconnect: () => streamDown("engine event stream disconnected"),
+				},
 				connection.signal,
 			);
 			void connection.closed.then(closeAll);
@@ -384,6 +406,9 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 		})
 		.onRequest("session/prompt", async ({ params }) => {
 			const session = requireSession(params.sessionId);
+			await stream.promise.catch((error: Error) => {
+				throw RequestError.internalError({ details: error.message });
+			});
 			session.state.cancelling = false;
 			// Parked before the call: the turn can end on the event stream before the
 			// prompt's own HTTP response arrives.

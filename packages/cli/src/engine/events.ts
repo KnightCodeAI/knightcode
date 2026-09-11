@@ -91,6 +91,13 @@ export function eventsRoute(bus: EventBus, heartbeatMs = 15_000): EngineRoute {
 		method: "GET",
 		path: "/events",
 		handle: (req, res) => {
+			// Subscribed before the first byte goes out: a client that has the
+			// response headers is guaranteed every event published after them.
+			// The bus does not replay, so this is what lets a client start a turn
+			// as soon as its stream is up.
+			const unsubscribe = bus.subscribe((event) => {
+				res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+			});
 			res.writeHead(200, {
 				"content-type": "text/event-stream",
 				"cache-control": "no-cache, no-transform",
@@ -102,9 +109,6 @@ export function eventsRoute(bus: EventBus, heartbeatMs = 15_000): EngineRoute {
 			});
 			res.write(": connected\n\n");
 
-			const unsubscribe = bus.subscribe((event) => {
-				res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-			});
 			const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), heartbeatMs);
 			heartbeat.unref();
 

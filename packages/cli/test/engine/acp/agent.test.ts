@@ -19,7 +19,7 @@ import { createEngineClient } from "../../../src/engine/acp/engine-client.ts";
 import { createEngineContext } from "../../../src/engine/context.ts";
 import { createEventBus, eventsRoute } from "../../../src/engine/events.ts";
 import { modelsRoute } from "../../../src/engine/models.ts";
-import { type EngineServer, startEngineServer } from "../../../src/engine/server.ts";
+import { type EngineRoute, type EngineServer, startEngineServer } from "../../../src/engine/server.ts";
 import { sessionRoutes } from "../../../src/engine/session-routes.ts";
 import { createSessionRegistry, type SessionRegistry } from "../../../src/engine/sessions.ts";
 
@@ -74,13 +74,15 @@ describe("ACP agent", () => {
 		for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 	});
 
-	async function start(options: { tokensPerSecond?: number; reasoning?: boolean } = {}): Promise<{
+	async function start(options: { tokensPerSecond?: number; reasoning?: boolean; holdEvents?: boolean } = {}): Promise<{
 		cwd: string;
 		faux: FauxProviderHandle;
 		buffers: Map<string, string>;
 		permissions: RequestPermissionRequest[];
 		session: ActiveSession;
 		decide(decision: Decision): void;
+		/** With `holdEvents`: let the engine answer `/events` — with the stream, or with a 503. */
+		releaseEvents(ok?: boolean): void;
 	}> {
 		const cwd = mkdtempSync(join(tmpdir(), "knightcode-test-acp-"));
 		const agentDir = mkdtempSync(join(tmpdir(), "knightcode-test-acp-agent-"));
@@ -94,9 +96,20 @@ describe("ACP agent", () => {
 		});
 		ctx.models.registerNativeProvider(faux.provider);
 		registry = createSessionRegistry(ctx, { agentDir, sessionDir: null, defaultModel: faux.getModel() });
+		// An engine whose event stream is not up yet: the route hangs until released.
+		const stream = eventsRoute(events, 50);
+		const held = Promise.withResolvers<void>();
+		const holdable: EngineRoute = {
+			...stream,
+			handle: (req, res, url) =>
+				void held.promise.then(
+					() => stream.handle(req, res, url),
+					() => res.writeHead(503).end(),
+				),
+		};
 		server = await startEngineServer({
 			token: "t",
-			routes: [eventsRoute(events, 50), modelsRoute(ctx), ...sessionRoutes(ctx, registry)],
+			routes: [options.holdEvents ? holdable : stream, modelsRoute(ctx), ...sessionRoutes(ctx, registry)],
 		});
 		const engine = createEngineClient({ baseUrl: `http://127.0.0.1:${server.port}`, token: "t", reconnectDelayMs: 10 });
 
@@ -133,6 +146,7 @@ describe("ACP agent", () => {
 			decide: (next) => {
 				decision = next;
 			},
+			releaseEvents: (ok = true) => (ok ? held.resolve() : held.reject(new Error("refused"))),
 		};
 	}
 
@@ -210,6 +224,29 @@ describe("ACP agent", () => {
 		expect(buffers.get(path)).toBe("hello there\n");
 		expect(readFileSync(path, "utf-8")).toBe("hello world\n");
 		expect(updates.at(-1)).toMatchObject({ sessionUpdate: "usage_update", size: faux.getModel().contextWindow });
+	});
+
+	test("a prompt waits for the event stream, whose events the engine does not replay", async () => {
+		const { faux, session, releaseEvents } = await start({ holdEvents: true });
+		faux.setResponses([fauxAssistantMessage([fauxText("Hi.")])]);
+
+		const done = session.prompt("hello");
+		// Nothing has reached the model: a turn ended now would end unheard.
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(faux.getPendingResponseCount()).toBe(1);
+
+		releaseEvents();
+		const { updates, stopReason } = await collect(session);
+		await done;
+		expect(stopReason).toBe("end_turn");
+		expect(textOf(updates, "agent_message_chunk")).toBe("Hi.");
+	});
+
+	test("a prompt fails, rather than waits forever, when the event stream cannot be opened", async () => {
+		const { session, releaseEvents } = await start({ holdEvents: true });
+		const done = session.prompt("hello");
+		releaseEvents(false);
+		await expect(done).rejects.toMatchObject({ data: { details: "engine event stream disconnected" } });
 	});
 
 	test("a rejected permission leaves the buffer alone and the call rejected", async () => {
