@@ -1,9 +1,11 @@
 # KnightCode IDE — architecture
 
-Status: Phases A and B implemented; Phase C in progress
-Date: 2026-09-11
-Revision: 2 — credentials shared with the CLI rather than held in the OS
-keychain; see §2 and §6.1 for why
+Status: Phases A to C implemented; Phase D implemented, its clean-machine run
+outstanding
+Date: 2026-09-13
+Revision: 3 — packaging lives in the fork and v1 installers ship unsigned; see
+§9, §10 and §14. Revision 2 shared credentials with the CLI rather than holding
+them in the OS keychain; see §2 and §6.1 for why
 
 A desktop IDE built on a fork of Zed, with KnightCode as its only agent, its
 only inference path, and its only login. The IDE is Rust. The AI stack stays in
@@ -454,8 +456,8 @@ design is optimised for merge surface.
 | `crates/knightcode_models/` | new crate, seam 2 |
 | `crates/knightcode_engine/` | new crate, process lifecycle and HTTP client |
 | `crates/agent_ui/src/agent_ui.rs` | one match arm |
-| `crates/agent_ui/src/agent_panel.rs` | unspent |
-| `crates/agent_ui/src/conversation_view.rs` | unspent |
+| `crates/agent_ui/src/agent_panel.rs` | one string, the new-thread menu entry |
+| `crates/agent_ui/src/conversation_view.rs` | one string, the composer placeholder |
 | `crates/agent_ui/src/mention_set.rs` | unspent |
 | `crates/language_models/src/language_models.rs` | provider registration body |
 | `crates/settings_content/src/language.rs` | one enum variant |
@@ -481,6 +483,10 @@ Nothing in `editor`, `project`, `workspace`, `terminal`, `git`, `vim`, or
 `gpui`. `collab`, `cloud_llm_client`, `zeta_prompt`, and `language_models`'
 sixteen provider modules are left compiled and unreferenced.
 
+Phase D adds identity strings, icons, the installer script and the three bundle
+scripts. The fork's `README.md` lists every upstream file changed, and is the
+table to check a merge against.
+
 The IDE ships as `GPL-3.0-or-later`, as any Zed fork must. The engine remains
 MIT and is a separate program, the same posture Zed already holds toward Claude
 Code.
@@ -494,8 +500,7 @@ apps/desktop/
   docs/architecture.md         this document
   docs/engine-api.md           the HTTP surface, normative
   ide/                         submodule: KnightCodeAI/knightcode-ide
-  packaging/                   installers, signing, notarisation
-  scripts/                     bundle the engine into the app payload
+  scripts/generate-icons.py    the brand asset -> every icon the bundles use
 
 packages/cli/
   src/engine-entry.ts          new: knightcode-engine entrypoint; the port
@@ -510,6 +515,13 @@ packages/cli/
     openai.ts                  OpenAI <-> Context translation, pure
     acp/                       ACP adapter; a client of the above
 ```
+
+Packaging lives in the fork. Zed's three bundle scripts in its `script/`
+directory already build a Windows installer, a macOS `.dmg` and a Linux tarball,
+and only that tree can build the IDE; each takes the engine from
+`KNIGHTCODE_ENGINE_DIR`, the directory `bun run build:engine` writes. This
+repository keeps `apps/desktop/scripts/` for the one packaging step that needs
+the brand source: generating the icons.
 
 The engine lives in `packages/cli` because the built-in tools
 (`packages/cli/src/core/tools/`: bash, edit, find, grep, ls, powershell, read,
@@ -571,8 +583,10 @@ reachable from any surface.
 
 ### Phase D — packaging
 
-Windows first, per the primary development platform: MSI or NSIS, engine binary
-in the payload, Authenticode signing. Then macOS notarised `.dmg`, then Linux.
+Windows first, per the primary development platform: an Inno Setup installer,
+the pipeline the fork inherits from Zed, with the engine and its runtime assets
+in the payload. Then a macOS `.dmg` and a Linux tarball. v1 ships unsigned: there
+is no Authenticode certificate and no Apple Developer account; see §14.
 
 Exit condition: a clean machine with no Bun, no Node, no npm, and no CLI
 installs the IDE, signs in, and completes an agent turn.
@@ -698,6 +712,26 @@ better model can be swapped in without a code change.
 running simultaneously, or an IDE and a CLI-launched engine, will each hold
 their own process and their own port. They share `auth.json` under its lock,
 so credentials stay consistent; sessions do not.
+
+**Unsigned installers.** v1 has no Authenticode certificate and no Apple
+Developer ID. Windows SmartScreen warns before the installer runs ("More info",
+then "Run anyway"), and Smart App Control, where it is on, blocks it outright.
+macOS Gatekeeper refuses the `.dmg` on any Mac that did not build it. SignPath
+Foundation's free signing for open-source projects is the likely first step on
+Windows; it signs as "SignPath Foundation", not as KnightCodeAI.
+
+**No updates.** The update endpoint the fork inherits is Zed's, so no channel
+polls it; a new version arrives as a new installer. A release feed is its own
+phase.
+
+**The Windows 11 context menu.** "Open with KnightCode" sits under "Show more
+options". The Windows 11 shell extension Zed ships is an appx that claims Zed
+Industries' package identity and needs a trusted signature, so it is not built.
+
+**macOS and Linux bundles are unverified.** `script/bundle-mac` and
+`script/bundle-linux` are written and reviewed but have not been run. Inside the
+`.app` the executable is still `Contents/MacOS/zed`, and neither bundle ships
+`remote_server`, so SSH remoting has no server to install.
 
 ---
 

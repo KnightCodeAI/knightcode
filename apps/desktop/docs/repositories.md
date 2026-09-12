@@ -1,6 +1,6 @@
 # The two repositories
 
-Date: 2026-09-12
+Date: 2026-09-13
 
 The desktop IDE is built from two repositories that ship as one product.
 This document is the map: what lives in each, why they are separate, how
@@ -19,7 +19,7 @@ do in the situations where the split bites.
 | Language | TypeScript, built with Bun | Rust |
 | Licence | MIT | GPL-3.0-or-later (Zed's) |
 | Upstream | none | `zed-industries/zed`, remote `upstream` |
-| Visibility | private | private |
+| Visibility | public | public |
 | Linked as | the parent | a submodule at `apps/desktop/ide` |
 
 ### Why they are separate
@@ -163,7 +163,7 @@ Git links the source. At runtime the link is a **binary path**, a
      1. knightcode.engine_path (setting)        KNIGHTCODE_ENGINE_TOKEN=<48 hex>
      2. KNIGHTCODE_ENGINE_PATH (env)            KNIGHTCODE_ENGINE_PORT=<on restart>
      3. next to the IDE executable              stdin piped, stdout piped
-                                                      │
+     4. in engine/ next to it (installers)            │
    readiness, three phases                            │ {"type":"listening","port":N}
      1. the port line       ◄─────────────────────────┘
      2. GET /health until 200
@@ -283,7 +283,8 @@ wrapper after every merge.
 | Anything the user sees in the editor window | the fork |
 | The wire contract between them | both, engine first |
 | The plan, the architecture, this file | this one, `apps/desktop/docs/` |
-| Icons, installer, bundle identifiers (Phase D) | the fork |
+| Installers, bundle identifiers, icon files (Phase D) | the fork: `script/bundle-*`, `crates/zed/resources/` |
+| Generating the icons from the brand asset | this one, `apps/desktop/scripts/generate-icons.py` |
 
 ---
 
@@ -317,8 +318,17 @@ answer.
 
 **The engine binary is not in either repository.** It is a build artefact.
 A fork checkout alone cannot start the IDE's engine; either build it here or
-point `KNIGHTCODE_ENGINE_PATH` at one. Phase D puts it in the installer's
-payload, next to the IDE executable, which is the third lookup.
+point `KNIGHTCODE_ENGINE_PATH` at one. The installers put it, with the runtime
+assets it reads from beside itself, in `engine/` next to the IDE executable,
+which is the fourth lookup. The bundle scripts take that directory from
+`KNIGHTCODE_ENGINE_DIR`.
+
+**A cold Rust build can take other programs down with it.** At the default job
+count, one per logical CPU, a cold `cargo build -p zed` on a 16-thread,
+32 GB machine failed with ten `rustc` processes and a running Zed all exiting
+`0xc0000409` in the same second, which is how a Rust process aborts on a failed
+allocation. Build with `CARGO_BUILD_JOBS=4`, and with
+`CARGO_PROFILE_DEV_DEBUG=0` when no debugger is needed.
 
 ---
 
@@ -329,4 +339,4 @@ payload, next to the IDE executable, which is the third lookup.
 | Fork base | `a57ba9b17c433ea1ebfdec8f649f4fa5a402d03b`, upstream `main`, 2026-09-10, tagged `knightcode-base` |
 | Nearest upstream tags | `v1.19.2` (stable), `v1.20.0-pre` |
 | Rust toolchain | 1.97.1, pinned by the fork's `rust-toolchain.toml` |
-| Phase | C implemented; D (packaging) and E (first-run) open |
+| Phase | C implemented; D (packaging) implemented, its clean-machine run open; E (first-run) open |
