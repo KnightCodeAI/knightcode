@@ -24,6 +24,30 @@ describe("settings diagnostics", () => {
 		}
 	});
 
+	/**
+	 * A reload re-reads the file, so the parse error it reported before is
+	 * history. Keeping it would warn about a file that is now fine, forever,
+	 * and would stack a fresh copy onto every reload of one that is not.
+	 */
+	it("drops a load error once the file it came from is repaired", async () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "knightcode-settings-reload-"));
+		const agentDir = join(tempDir, "agent");
+		const settingsPath = join(agentDir, "settings.json");
+		mkdirSync(agentDir);
+		writeFileSync(settingsPath, "{");
+
+		try {
+			const manager = SettingsManager.create(tempDir, agentDir);
+			writeFileSync(settingsPath, JSON.stringify({ defaultModel: "repaired" }));
+			await manager.reload();
+
+			expect(collectSettingsDiagnostics(manager)).toEqual([]);
+			expect(manager.getDefaultModel()).toBe("repaired");
+		} finally {
+			rmSync(tempDir, { recursive: true, force: true });
+		}
+	});
+
 	it("falls back to the settings scope for storage without file paths", () => {
 		const storage: SettingsStorage = {
 			withLock(scope, fn) {

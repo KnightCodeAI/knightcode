@@ -533,6 +533,13 @@ export class SettingsManager {
 
 	async reload(): Promise<void> {
 		await this.writeQueue;
+		// Both scopes are about to be read again, so whatever they reported last
+		// time is no longer the truth: a file since repaired would otherwise keep
+		// surfacing its old parse error, and a caller that reloads repeatedly
+		// would stack up one entry per attempt. Queued writes failed for their
+		// own reasons and nobody has seen those yet, so they stay.
+		const supersededLoadErrors = new Set([this.globalSettingsLoadError, this.projectSettingsLoadError]);
+		this.errors = this.errors.filter((entry) => !supersededLoadErrors.has(entry.error));
 		const globalLoad = SettingsManager.tryLoadFromStorage(this.storage, "global");
 		if (!globalLoad.error) {
 			this.globalSettings = globalLoad.settings;

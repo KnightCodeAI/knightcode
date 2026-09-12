@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { createEngineContext, type EngineContext } from "../../src/engine/context.ts";
 import { modelsRoute } from "../../src/engine/models.ts";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
-import { SettingsManager, type Settings } from "../../src/core/settings-manager.ts";
+import { InMemorySettingsStorage, SettingsManager, type Settings } from "../../src/core/settings-manager.ts";
 
 const auth = { authorization: "Bearer t" };
 
@@ -31,11 +31,14 @@ describe("GET /v1/models", () => {
 		server = undefined;
 	});
 
-	async function start(settings?: Partial<Settings>): Promise<{ base: string; ctx: EngineContext }> {
+	async function start(
+		settings?: Partial<Settings>,
+		manager?: SettingsManager,
+	): Promise<{ base: string; ctx: EngineContext }> {
 		const ctx = await createEngineContext({
 			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
-			settings: settings === undefined ? undefined : SettingsManager.inMemory(settings),
+			settings: manager ?? (settings === undefined ? undefined : SettingsManager.inMemory(settings)),
 		});
 		server = await startEngineServer({ token: "t", routes: [modelsRoute(ctx)] });
 		return { base: `http://127.0.0.1:${server.port}`, ctx };
@@ -112,6 +115,31 @@ describe("GET /v1/models", () => {
 
 		// What the CLI writes when someone picks a model.
 		ctx.settings.setDefaultModelAndProvider(mine!.providerId, mine!.id);
+
+		const after = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
+		expect(after.default).toBe(mine!.ref);
+	});
+
+	/**
+	 * The CLI and the engine are separate processes over one settings file, so
+	 * the engine cannot answer from the snapshot it read at startup: whoever is
+	 * in the CLI may have moved to another model since.
+	 */
+	test("reports a default the CLI set after the engine started", async () => {
+		const storage = new InMemorySettingsStorage();
+		const { base, ctx } = await start(undefined, SettingsManager.fromStorage(storage));
+		ctx.models.registerNativeProvider(gatedFauxProvider("faux-late-default"));
+		await ctx.credentials.modify("faux-late-default", async () => ({ type: "api_key", key: "stored-key" }));
+
+		const before = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
+		expect(before.default).toBeNull();
+		const mine = before.models.find((model) => model.providerId === "faux-late-default");
+		expect(mine).toBeDefined();
+
+		// A concurrently running CLI: its own manager over the same file.
+		const cli = SettingsManager.fromStorage(storage);
+		cli.setDefaultModelAndProvider(mine!.providerId, mine!.id);
+		await cli.flush();
 
 		const after = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
 		expect(after.default).toBe(mine!.ref);
