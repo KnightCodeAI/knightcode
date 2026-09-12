@@ -48,6 +48,28 @@ describe("settings diagnostics", () => {
 		}
 	});
 
+	/**
+	 * Untrusting the project stops reading its file, so its parse error no
+	 * longer describes anything loaded — it must not survive to a later reload.
+	 */
+	it("drops a project load error once the project is no longer trusted", async () => {
+		const tempDir = mkdtempSync(join(tmpdir(), "knightcode-settings-untrust-"));
+		const agentDir = join(tempDir, "agent");
+		mkdirSync(agentDir);
+		mkdirSync(join(tempDir, ".knightcode"));
+		writeFileSync(join(tempDir, ".knightcode", "settings.json"), "{");
+
+		try {
+			const manager = SettingsManager.create(tempDir, agentDir);
+			manager.setProjectTrusted(false);
+			await manager.reload();
+
+			expect(collectSettingsDiagnostics(manager)).toEqual([]);
+		} finally {
+			rmSync(tempDir, { recursive: true, force: true });
+		}
+	});
+
 	it("falls back to the settings scope for storage without file paths", () => {
 		const storage: SettingsStorage = {
 			withLock(scope, fn) {
