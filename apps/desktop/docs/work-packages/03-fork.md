@@ -5002,6 +5002,24 @@ be filled as tasks land; every departure gets one bullet.
 - Task 7: the fork's `main` (`a5736b7a06`) is pushed to
   `KnightCodeAI/knightcode-ide`; the submodule pointer resolves against
   it.
+- Found by the running-IDE walk, after Task 7, both fixed in the fork:
+  - A login could not finish while its prompt was on screen. An OAuth flow
+    offers the manual-code paste box *while* its loopback callback is still
+    in flight, so `Login::advance` returning on the first pending prompt
+    ended a login the engine was about to complete: the panel cancelled it,
+    the settings view parked. `advance` now hands each prompt to a callback
+    that decides whether to keep polling; the panel waits through a
+    manual-code prompt and refuses any other kind, and the settings view
+    shows every prompt while polling continues. Commit `58ae406957`.
+  - `State::default_model` returned `models.first()`. The engine sorts the
+    catalog by provider and lists every provider whose credential resolves,
+    ambient keys included, so the default was an accident of ordering — on
+    the owner's machine, a provider never signed in to, whose budget pool
+    was exhausted, which made every Tab prediction fail with a 402 while
+    five signed-in accounts sat unused. It now prefers a model whose
+    provider appears in the engine's accounts list. This also governed the
+    registry's fallback for inline assist, terminal assist and commit
+    messages. Commit `caa7aa1e37`.
 - Upstream line count: `git diff --stat knightcode-base` outside
   `crates/knightcode_*` is 348 lines across 19 files, of which 136 are the
   deleted provider registrations in `language_models.rs` and 55 the
