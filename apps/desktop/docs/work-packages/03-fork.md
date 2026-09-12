@@ -640,6 +640,9 @@ packages/cli/src/engine/server.ts             `port` option (modify)
 packages/cli/src/engine/completions.ts        SSE error frame shape (modify)
 packages/cli/test/engine/engine-entry.test.ts port line, pinned port, exit on stdin end (new)
 packages/cli/test/engine/completions.test.ts  the frame is an object (modify)
+packages/cli/src/engine/context.ts            the CLI's settings, for the chosen model (modify, after Task 7)
+packages/cli/src/engine/models.ts             `default` ref on the catalog (modify, after Task 7)
+packages/cli/test/engine/models.test.ts       the default follows the user (modify, after Task 7)
 .gitmodules, apps/desktop/ide                 the submodule (new)
 apps/desktop/docs/architecture.md             §1.10 amendments (modify)
 ```
@@ -5011,15 +5014,22 @@ be filled as tasks land; every departure gets one bullet.
     that decides whether to keep polling; the panel waits through a
     manual-code prompt and refuses any other kind, and the settings view
     shows every prompt while polling continues. Commit `58ae406957`.
-  - `State::default_model` returned `models.first()`. The engine sorts the
-    catalog by provider and lists every provider whose credential resolves,
-    ambient keys included, so the default was an accident of ordering — on
-    the owner's machine, a provider never signed in to, whose budget pool
-    was exhausted, which made every Tab prediction fail with a 402 while
-    five signed-in accounts sat unused. It now prefers a model whose
-    provider appears in the engine's accounts list. This also governed the
-    registry's fallback for inline assist, terminal assist and commit
-    messages. Commit `caa7aa1e37`.
+  - `State::default_model` was wrong three times before it was right, and
+    the same question each time: who chooses which of someone's accounts
+    gets spent? It began as `models.first()` — the engine sorts the catalog
+    by provider and lists every provider whose credential resolves, so on
+    the owner's machine the default was a provider they had never picked,
+    whose budget pool was exhausted, and every Tab prediction failed 402
+    while five signed-in accounts sat unused. The first fix preferred a
+    provider with an account (`caa7aa1e37`), which changed nothing there
+    because that provider had one. The second preferred a subscription over
+    an API key — still the IDE guessing, and a rule reverse-engineered from
+    one machine. The answer was that the question is not the IDE's: the CLI
+    already records the choice, so `/v1/models` now reports it as a ref and
+    the IDE uses that or nothing, `None` included. Commits `7c7a39c63`
+    (engine) and `6ff448240a` (fork). This is the one engine change outside
+    Task 0's three files; it adds the CLI's settings manager to
+    `EngineContext`, global scope only.
 - Upstream line count: `git diff --stat knightcode-base` outside
   `crates/knightcode_*` is 348 lines across 19 files, of which 136 are the
   deleted provider registrations in `language_models.rs` and 55 the
