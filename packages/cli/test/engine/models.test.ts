@@ -4,11 +4,13 @@ import { afterEach, describe, expect, test } from "vitest";
 import { createEngineContext, type EngineContext } from "../../src/engine/context.ts";
 import { modelsRoute } from "../../src/engine/models.ts";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
+import { SettingsManager, type Settings } from "../../src/core/settings-manager.ts";
 
 const auth = { authorization: "Bearer t" };
 
 interface ModelsBody {
 	models: {
+		ref: string;
 		id: string;
 		providerId: string;
 		providerName: string;
@@ -18,6 +20,7 @@ interface ModelsBody {
 		reasoning: boolean;
 		input: string[];
 	}[];
+	default: string | null;
 }
 
 describe("GET /v1/models", () => {
@@ -28,10 +31,11 @@ describe("GET /v1/models", () => {
 		server = undefined;
 	});
 
-	async function start(): Promise<{ base: string; ctx: EngineContext }> {
+	async function start(settings?: Partial<Settings>): Promise<{ base: string; ctx: EngineContext }> {
 		const ctx = await createEngineContext({
 			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
+			settings: settings === undefined ? undefined : SettingsManager.inMemory(settings),
 		});
 		server = await startEngineServer({ token: "t", routes: [modelsRoute(ctx)] });
 		return { base: `http://127.0.0.1:${server.port}`, ctx };
@@ -89,6 +93,45 @@ describe("GET /v1/models", () => {
 		expect(typeof model!.maxTokens).toBe("number");
 		expect(typeof model!.reasoning).toBe("boolean");
 		expect(Array.isArray(model!.input)).toBe(true);
+	});
+
+	/**
+	 * The IDE has no business choosing which of someone's accounts gets spent.
+	 * The CLI already records what they picked, so the catalog reports it and
+	 * the IDE uses that or nothing.
+	 */
+	test("reports the default the user set, as a provider-qualified ref", async () => {
+		const { base, ctx } = await start({});
+		ctx.models.registerNativeProvider(gatedFauxProvider("faux-default"));
+		await ctx.credentials.modify("faux-default", async () => ({ type: "api_key", key: "stored-key" }));
+
+		const before = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
+		expect(before.default).toBeNull();
+		const mine = before.models.find((model) => model.providerId === "faux-default");
+		expect(mine).toBeDefined();
+
+		// What the CLI writes when someone picks a model.
+		ctx.settings.setDefaultModelAndProvider(mine!.providerId, mine!.id);
+
+		const after = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
+		expect(after.default).toBe(mine!.ref);
+	});
+
+	test("reports no default when the user has set none", async () => {
+		const { base } = await start({});
+		const body = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
+		expect(body.default).toBeNull();
+	});
+
+	/**
+	 * A default naming a provider that is signed out would send the IDE to a
+	 * model it cannot use; absent is the honest answer.
+	 */
+	test("reports no default when the model the user set is unavailable", async () => {
+		const { base } = await start({ defaultProvider: "faux-signed-out", defaultModel: "faux" });
+		const body = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
+		expect(body.models.filter((model) => model.providerId === "faux-signed-out")).toEqual([]);
+		expect(body.default).toBeNull();
 	});
 
 	test("never returns a credential", async () => {
