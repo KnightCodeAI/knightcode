@@ -48,7 +48,19 @@ export function modelsRoute(ctx: EngineContext): EngineRoute {
 				input: model.input,
 				cost: model.cost,
 			}));
-			sendJson(res, 200, { models });
+			// Settings are a file the CLI writes too, so the snapshot the engine
+			// took at startup goes stale the moment someone picks a different
+			// model over there. Re-read instead of naming a model they left.
+			await ctx.settings.reload();
+			// The model the user picked, as a ref, and only when it is one of
+			// the models above. A client that has to choose a default on its
+			// own ends up choosing by catalog order, which is alphabetical by
+			// provider and says nothing about what anyone wanted.
+			const provider = ctx.settings.getDefaultProvider();
+			const id = ctx.settings.getDefaultModel();
+			const chosen = provider && id ? `${provider}/${id}` : undefined;
+			const defaultRef = models.some((model) => model.ref === chosen) ? chosen : null;
+			sendJson(res, 200, { models, default: defaultRef ?? null });
 		},
 	};
 }

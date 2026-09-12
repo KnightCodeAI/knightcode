@@ -30,6 +30,8 @@ export interface StartEngineServerOptions {
 	token: string;
 	routes: readonly EngineRoute[];
 	host?: string;
+	/** `0` or absent: ephemeral. A pinned port that cannot be bound rejects. */
+	port?: number;
 }
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
@@ -119,7 +121,7 @@ export function startEngineServer(options: StartEngineServerOptions): Promise<En
 	return new Promise((resolve, reject) => {
 		const onError = (error: Error) => reject(error);
 		server.once("error", onError);
-		server.listen(0, host, () => {
+		server.listen(options.port ?? 0, host, () => {
 			server.off("error", onError);
 			const address = server.address() as AddressInfo;
 			resolve({

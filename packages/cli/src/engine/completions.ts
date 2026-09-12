@@ -179,7 +179,10 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 					// Headers are already sent, so the status cannot say 502. Emit an
 					// error event instead of [DONE]: a client that sees [DONE] treats a
 					// truncated answer as complete and may apply it to the buffer.
-					res.write(`event: error\ndata: ${JSON.stringify({ error: "upstream", message: failure })}\n\n`);
+					// The frame is OpenAI's envelope — an `error` object with `message` —
+					// because Zed's stream parser rejects a string `error` and would
+					// report its own deserialisation failure instead of the upstream message.
+					res.write(`event: error\ndata: ${JSON.stringify({ error: { type: "upstream", message: failure } })}\n\n`);
 					res.end();
 					return;
 				}

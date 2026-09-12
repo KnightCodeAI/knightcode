@@ -1,6 +1,6 @@
 # KnightCode IDE — architecture
 
-Status: Phase A implemented; Phases B–E not yet started
+Status: Phases A and B implemented; Phase C in progress
 Date: 2026-09-11
 Revision: 2 — credentials shared with the CLI rather than held in the OS
 keychain; see §2 and §6.1 for why
@@ -234,14 +234,15 @@ Self::NativeAgent => Rc::new(agent::NativeAgentServer::new(fs, thread_store)),
 ```
 
 `KnightCodeAgentServer` replaces it. It implements
-`agent_servers::AgentServer`, and its `connect` spawns
-`knightcode-engine acp --connect <url>`, with the launch token in
-`KNIGHTCODE_ENGINE_TOKEN` in its environment rather than on argv, and hands
-the resulting stdio pair to the existing `AcpConnection`. `NativeAgentServer`
+`agent_servers::AgentServer`, and its `connect` builds an
+`AgentServerCommand` for `knightcode-engine acp --connect <url>` with the
+token in the command's environment and passes it to
+`AcpConnection::stdio`. `NativeAgentServer`
 is 102 lines and returns `Rc<dyn acp_thread::AgentConnection>`; ours is that
 shape plus spawn arguments.
 
-Three sites downcast to the concrete native type and must be retargeted:
+Three sites downcast to the concrete native type and are left in place; see
+WP03 §1.4:
 
 | Site | Purpose |
 | --- | --- |
@@ -421,7 +422,8 @@ until it answers, racing that loop against process exit. A process that started
 is not a server that is listening. Start-stall timeout 60 s; on expiry, kill and
 surface the engine's stderr, never a generic failure.
 
-**Shutdown.** Graceful stop, then kill after 6 s.
+**Shutdown.** Closing the engine's stdin, then kill after 6 s; at quit,
+stdin only. A restart reuses the token and the port.
 
 **Environment.** `NO_PROXY` and `no_proxy` must contain `127.0.0.1`,
 `localhost`, and `::1` before spawning, or a corporate `HTTP_PROXY` swallows the
@@ -452,15 +454,28 @@ design is optimised for merge surface.
 | `crates/knightcode_models/` | new crate, seam 2 |
 | `crates/knightcode_engine/` | new crate, process lifecycle and HTTP client |
 | `crates/agent_ui/src/agent_ui.rs` | one match arm |
-| `crates/agent_ui/src/agent_panel.rs` | one downcast |
-| `crates/agent_ui/src/conversation_view.rs` | one downcast |
-| `crates/agent_ui/src/mention_set.rs` | one construction |
+| `crates/agent_ui/src/agent_panel.rs` | unspent |
+| `crates/agent_ui/src/conversation_view.rs` | unspent |
+| `crates/agent_ui/src/mention_set.rs` | unspent |
 | `crates/language_models/src/language_models.rs` | provider registration body |
 | `crates/settings_content/src/language.rs` | one enum variant |
 | `crates/zed/src/zed/edit_prediction_registry.rs` | one enum variant, one arm |
 | `crates/zed/src/main.rs` | branding, defaults, engine startup |
 | `assets/settings/default.json` | agent and prediction defaults |
 | `assets/icons/`, `crates/zed/resources/` | product identity |
+| `crates/settings_content/src/settings_content.rs` | one section |
+| `crates/settings/src/vscode_import.rs` | one field |
+| `crates/edit_prediction/src/edit_prediction.rs` | two arms |
+| `crates/edit_prediction_ui/src/edit_prediction_button.rs` | one arm |
+| `crates/language/src/language_settings.rs` | one arm |
+| `crates/agent/src/agent.rs` | one string |
+| `crates/release_channel/src/lib.rs` | four strings |
+| root `Cargo.toml` | three members, three workspace dependencies |
+| `Cargo.lock` | lockfile |
+| `crates/agent_ui/Cargo.toml` | one dependency |
+| `crates/language_models/Cargo.toml` | one dependency |
+| `crates/edit_prediction_ui/Cargo.toml` | one dependency |
+| `crates/zed/Cargo.toml` | two dependencies |
 
 Nothing in `editor`, `project`, `workspace`, `terminal`, `git`, `vim`, or
 `gpui`. `collab`, `cloud_llm_client`, `zeta_prompt`, and `language_models`'
@@ -483,7 +498,8 @@ apps/desktop/
   scripts/                     bundle the engine into the app payload
 
 packages/cli/
-  src/engine-entry.ts          new: knightcode-engine entrypoint
+  src/engine-entry.ts          new: knightcode-engine entrypoint; the port
+                               line and the stdin-EOF shutdown
   src/engine/
     server.ts                  HTTP routing and the launch-token guard
     completions.ts             /v1/chat/completions, /v1/completions
