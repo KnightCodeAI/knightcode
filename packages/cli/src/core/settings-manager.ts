@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@knightcode/agent";
-import type { Transport } from "@knightcode/ai";
+import { DEFAULT_MAX_AGENT_RETRY_DELAY_MS, type Model, type Transport } from "@knightcode/ai";
 import type { TuiMode as RendererTuiMode, ScrollViewScrollbar, TerminalCapabilities } from "@knightcode/tui";
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -10,10 +10,21 @@ import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { stripBom } from "../utils/text.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
 
+export interface CompactionModelOverride {
+	reserveTokens?: number;
+	keepRecentTokens?: number;
+}
+
+const DEFAULT_COMPACTION_TOKEN_SETTINGS: Required<CompactionModelOverride> = {
+	reserveTokens: 16384,
+	keepRecentTokens: 20000,
+};
+
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
 	reserveTokens?: number; // default: 16384
 	keepRecentTokens?: number; // default: 20000
+	modelOverrides?: Record<string, CompactionModelOverride>; // exact "provider/modelId" keys
 }
 
 export interface BranchSummarySettings {
@@ -31,6 +42,7 @@ export interface RetrySettings {
 	enabled?: boolean; // default: true
 	maxRetries?: number; // default: 3
 	baseDelayMs?: number; // default: 2000 (exponential backoff: 2s, 4s, 8s)
+	maxAgentDelayMs?: number; // default: 60000
 	provider?: ProviderRetrySettings;
 }
 
@@ -416,7 +428,9 @@ export class SettingsManager {
 		try {
 			return { settings: SettingsManager.loadFromStorage(storage, scope, projectTrusted), error: null };
 		} catch (error) {
-			return { settings: {}, error: error as Error };
+			// setLoadError finds the queued diagnostic by this exact object, so it
+			// has to be the one toSettingsError keeps rather than a fresh wrapper.
+			return { settings: {}, error: error instanceof Error ? error : new Error(String(error)) };
 		}
 	}
 
@@ -505,17 +519,14 @@ export class SettingsManager {
 
 		if (!trusted) {
 			this.projectSettings = {};
-			this.projectSettingsLoadError = null;
+			this.setLoadError("project", null);
 			this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
 			return;
 		}
 
 		const projectLoad = SettingsManager.tryLoadFromStorage(this.storage, "project", trusted);
 		this.projectSettings = projectLoad.settings;
-		this.projectSettingsLoadError = projectLoad.error;
-		if (projectLoad.error) {
-			this.recordError("project", projectLoad.error);
-		}
+		this.setLoadError("project", projectLoad.error);
 		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
 	}
 
@@ -524,11 +535,8 @@ export class SettingsManager {
 		const globalLoad = SettingsManager.tryLoadFromStorage(this.storage, "global");
 		if (!globalLoad.error) {
 			this.globalSettings = globalLoad.settings;
-			this.globalSettingsLoadError = null;
-		} else {
-			this.globalSettingsLoadError = globalLoad.error;
-			this.recordError("global", globalLoad.error);
 		}
+		this.setLoadError("global", globalLoad.error);
 
 		this.modifiedFields.clear();
 		this.modifiedNestedFields.clear();
@@ -538,11 +546,8 @@ export class SettingsManager {
 		const projectLoad = SettingsManager.tryLoadFromStorage(this.storage, "project", this.projectTrusted);
 		if (!projectLoad.error) {
 			this.projectSettings = projectLoad.settings;
-			this.projectSettingsLoadError = null;
-		} else {
-			this.projectSettingsLoadError = projectLoad.error;
-			this.recordError("project", projectLoad.error);
 		}
+		this.setLoadError("project", projectLoad.error);
 
 		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
 	}
@@ -582,6 +587,29 @@ export class SettingsManager {
 
 	private recordError(scope: SettingsScope, error: unknown): void {
 		this.errors.push(toSettingsError(scope, error, this.settingsPaths[scope]));
+	}
+
+	/**
+	 * The only way a scope's load error changes after construction, so the
+	 * diagnostic queued for it can never outlive it. Whatever replaces the error
+	 * — a re-read, or the scope no longer being read at all — makes that
+	 * diagnostic untrue: a repaired or untrusted file would keep warning, and a
+	 * caller that reloads repeatedly would stack one entry per attempt. Queued
+	 * write failures are separate entries nobody has seen yet, so they stay.
+	 */
+	private setLoadError(scope: SettingsScope, error: Error | null): void {
+		const superseded = scope === "global" ? this.globalSettingsLoadError : this.projectSettingsLoadError;
+		if (superseded) {
+			this.errors = this.errors.filter((entry) => entry.error !== superseded);
+		}
+		if (scope === "global") {
+			this.globalSettingsLoadError = error;
+		} else {
+			this.projectSettingsLoadError = error;
+		}
+		if (error) {
+			this.recordError(scope, error);
+		}
 	}
 
 	private clearModifiedScope(scope: SettingsScope): void {
@@ -839,19 +867,52 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getCompactionReserveTokens(): number {
-		return this.settings.compaction?.reserveTokens ?? 16384;
+	private getCompactionTokenSetting(
+		field: keyof CompactionModelOverride,
+		model?: Pick<Model<string>, "provider" | "id">,
+	): number {
+		const compaction = this.settings.compaction;
+		const ordinary = compaction?.[field];
+		if (ordinary !== undefined && (typeof ordinary !== "number" || !Number.isSafeInteger(ordinary) || ordinary < 0)) {
+			throw new Error(
+				`Invalid compaction.${field} setting: ${String(ordinary)}. Expected a non-negative safe integer.`,
+			);
+		}
+
+		const modelKey = model ? `${model.provider}/${model.id}` : undefined;
+		const entry = modelKey !== undefined ? compaction?.modelOverrides?.[modelKey] : undefined;
+		if (entry !== undefined && !isMergeableObject(entry)) {
+			throw new Error(
+				`Invalid compaction.modelOverrides["${modelKey}"] setting: ${String(entry)}. Expected an object.`,
+			);
+		}
+		const override = entry?.[field];
+		if (override !== undefined && (typeof override !== "number" || !Number.isSafeInteger(override) || override < 0)) {
+			throw new Error(
+				`Invalid compaction.modelOverrides["${modelKey}"].${field} setting: ${String(override)}. Expected a non-negative safe integer.`,
+			);
+		}
+		return override ?? ordinary ?? DEFAULT_COMPACTION_TOKEN_SETTINGS[field];
 	}
 
-	getCompactionKeepRecentTokens(): number {
-		return this.settings.compaction?.keepRecentTokens ?? 20000;
+	getCompactionReserveTokens(model?: Pick<Model<string>, "provider" | "id">): number {
+		return this.getCompactionTokenSetting("reserveTokens", model);
 	}
 
-	getCompactionSettings(): { enabled: boolean; reserveTokens: number; keepRecentTokens: number } {
+	getCompactionKeepRecentTokens(model?: Pick<Model<string>, "provider" | "id">): number {
+		return this.getCompactionTokenSetting("keepRecentTokens", model);
+	}
+
+	/** Resolve each token setting through model override, ordinary setting, then built-in default. */
+	getCompactionSettings(model?: Pick<Model<string>, "provider" | "id">): {
+		enabled: boolean;
+		reserveTokens: number;
+		keepRecentTokens: number;
+	} {
 		return {
 			enabled: this.getCompactionEnabled(),
-			reserveTokens: this.getCompactionReserveTokens(),
-			keepRecentTokens: this.getCompactionKeepRecentTokens(),
+			reserveTokens: this.getCompactionReserveTokens(model),
+			keepRecentTokens: this.getCompactionKeepRecentTokens(model),
 		};
 	}
 
@@ -879,11 +940,12 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getRetrySettings(): { enabled: boolean; maxRetries: number; baseDelayMs: number } {
+	getRetrySettings(): { enabled: boolean; maxRetries: number; baseDelayMs: number; maxAgentDelayMs: number } {
 		return {
 			enabled: this.getRetryEnabled(),
 			maxRetries: this.settings.retry?.maxRetries ?? 3,
 			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
+			maxAgentDelayMs: this.settings.retry?.maxAgentDelayMs ?? DEFAULT_MAX_AGENT_RETRY_DELAY_MS,
 		};
 	}
 

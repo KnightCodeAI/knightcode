@@ -13,7 +13,7 @@ import {
 import { getModelSearchText } from "../model-search.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
-import { keyDisplayText } from "./keybinding-hints.ts";
+import { keyDisplayText, keyDisplayTextPrimary } from "./keybinding-hints.ts";
 
 // EnabledIds: null = all enabled (no filter), string[] = explicit ordered list
 type EnabledIds = string[] | null;
@@ -205,7 +205,9 @@ export class ScopedModelsSelectorComponent extends Container implements Focusabl
 			`${keyDisplayText("app.models.clearAll")} clear`,
 			`${keyDisplayText("app.models.toggleProvider")} provider`,
 			`${keyDisplayText("app.models.reorderUp")}/${keyDisplayText("app.models.reorderDown")} reorder`,
-			`${keyDisplayText("app.models.save")} save`,
+			// Primary key only: the full Ctrl+S/Ctrl+D set is spelled out in the
+			// header above; the dense footer bar has no room for both.
+			`${keyDisplayTextPrimary("app.models.save")} save`,
 			countText,
 		];
 		return this.isDirty

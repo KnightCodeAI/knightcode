@@ -86,6 +86,10 @@
       "title": "Reference",
       "items": [
         {
+          "title": "Environment Variables",
+          "path": "environment-variables.md"
+        },
+        {
           "title": "Session Format",
           "path": "session-format.md"
         }

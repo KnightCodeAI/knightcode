@@ -435,7 +435,7 @@ ${chalk.bold("Environment Variables:")}
   KNIGHTCODE_SERVER_ID                     - Logical experimental server ID (overridden by --server-id)
   KNIGHTCODE_OFFLINE                       - Disable startup network operations when set to 1/true/yes
   KNIGHTCODE_TELEMETRY                     - Override install telemetry when set to 1/true/yes or 0/false/no
-  KNIGHTCODE_SHARE_VIEWER_URL              - Base URL for /share command (default: https://knightcode.raghavseth.in/session/)
+  KNIGHTCODE_SHARE_VIEWER_URL              - Base URL for /share command (default: https://knightcode.dev/session/)
 
 ${chalk.bold("Built-in Tool Names:")}
   read       - Read file contents

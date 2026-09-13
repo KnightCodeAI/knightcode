@@ -1,22 +1,19 @@
 "use client"
 
-import { useState } from "react"
 import {
   ArrowRight01Icon,
   CommandLineIcon,
-  Copy01Icon,
   CpuIcon,
   GithubIcon,
   ShieldUserIcon,
-  Tick01Icon,
 } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
-import { INSTALL_COMMAND, RUN_COMMAND, SITE, FALLBACK_VERSION } from "@/lib/site"
+import { RUN_COMMAND, SITE, FALLBACK_VERSION } from "@/lib/site"
+import { CommandBlock, InstallCommand } from "./install-command"
 import { Section, SectionEyebrow, SectionHeading } from "./section"
-import { cn } from "@/lib/utils"
 
 const setupNotes = [
   {
@@ -37,24 +34,6 @@ const setupNotes = [
 ]
 
 export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
-  const [copiedInstall, setCopiedInstall] = useState(false)
-  const [copiedRun, setCopiedRun] = useState(false)
-
-  const handleCopy = async (text: string, type: "install" | "run") => {
-    try {
-      await navigator.clipboard.writeText(text)
-      if (type === "install") {
-        setCopiedInstall(true)
-        setTimeout(() => setCopiedInstall(false), 2000)
-      } else {
-        setCopiedRun(true)
-        setTimeout(() => setCopiedRun(false), 2000)
-      }
-    } catch (err) {
-      console.error("Failed to copy text", err)
-    }
-  }
-
   return (
     <Section id="download" className="overflow-hidden border-t border-border/40">
       {/* Background visual accents */}
@@ -65,7 +44,7 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
       
       <div className="relative grid gap-12 lg:grid-cols-12 lg:gap-16 items-start">
         {/* Left Column: Title & Interactive Quick Start Card */}
-        <div className="lg:col-span-6 flex flex-col gap-6">
+        <div className="lg:col-span-6 flex min-w-0 flex-col gap-6">
           <div>
             <SectionEyebrow>06 - Install - Alpha v{version}</SectionEyebrow>
             <SectionHeading className="mt-2.5">
@@ -76,7 +55,7 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-border/60 bg-card/30 p-6 backdrop-blur-md shadow-sm">
+          <div className="rounded-2xl border border-border/60 bg-card/30 p-4 backdrop-blur-md shadow-sm sm:p-6">
             <div className="font-mono text-[10px] tracking-[0.2em] text-muted-foreground/85 uppercase">
               Quick Start
             </div>
@@ -85,42 +64,18 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
               <div className="text-sm font-medium text-foreground/90">
                 Install globally:
               </div>
-              <div className="group/code relative mt-2.5 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 font-mono text-sm shadow-sm transition-all hover:border-zinc-700">
-                <code className="text-emerald-400 select-all font-medium">{INSTALL_COMMAND}</code>
-                <button
-                  onClick={() => handleCopy(INSTALL_COMMAND, "install")}
-                  className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:bg-zinc-800 hover:border-zinc-700 hover:text-zinc-100 active:scale-95 shadow-sm"
-                  title="Copy install command"
-                >
-                  <HugeiconsIcon
-                    icon={copiedInstall ? Tick01Icon : Copy01Icon}
-                    className={cn("size-4 transition-all duration-200", copiedInstall ? "text-zinc-100 scale-110" : "text-zinc-400")}
-                    strokeWidth={2}
-                  />
-                </button>
-              </div>
+              <InstallCommand className="mt-2.5" />
             </div>
 
             <div className="mt-5">
               <div className="text-sm font-medium text-foreground/90">
                 Then launch it from any repository:
               </div>
-              <div className="group/code relative mt-2.5 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 font-mono text-sm shadow-sm transition-all hover:border-zinc-700">
-                <code className="text-emerald-400 select-all font-medium">{RUN_COMMAND}</code>
-                <button
-                  onClick={() => handleCopy(RUN_COMMAND, "run")}
-                  className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:bg-zinc-800 hover:border-zinc-700 hover:text-zinc-100 active:scale-95 shadow-sm"
-                  title="Copy run command"
-                >
-                  <HugeiconsIcon
-                    icon={copiedRun ? Tick01Icon : Copy01Icon}
-                    className={cn("size-4 transition-all duration-200", copiedRun ? "text-zinc-100 scale-110" : "text-zinc-400")}
-                    strokeWidth={2}
-                  />
-                </button>
-              </div>
+              <CommandBlock
+                command={RUN_COMMAND}
+                className="mt-2.5 rounded-2xl border border-border/60 bg-card/40 shadow-sm backdrop-blur-md"
+              />
             </div>
-
 
             <div className="mt-6 pt-5 border-t border-border/40">
               <Link
@@ -141,7 +96,7 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
         </div>
 
         {/* Right Column: Key Concepts Stack & GitHub Link */}
-        <div className="lg:col-span-6 flex flex-col gap-6 lg:mt-2">
+        <div className="lg:col-span-6 flex min-w-0 flex-col gap-6 lg:mt-2">
           <div className="space-y-6">
             {setupNotes.map((item) => (
               <div

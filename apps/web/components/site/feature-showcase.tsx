@@ -45,7 +45,7 @@ export function FeatureShowcase({
   return (
     <section
       id={id}
-      className="relative w-full px-4 py-24 sm:px-6 sm:py-32 lg:py-40"
+      className="relative w-full px-4 py-16 sm:px-6 sm:py-32 lg:py-40"
     >
       <div
         className={cn(

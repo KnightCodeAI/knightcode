@@ -2,7 +2,7 @@ import { compare, valid } from "semver";
 import { fetchWithRetry } from "./management-http.ts";
 import { getKnightcodeUserAgent } from "./user-agent.ts";
 
-const LATEST_VERSION_URL = "https://knightcode.raghavseth.in/api/latest-version";
+const LATEST_VERSION_URL = "https://knightcode.dev/api/latest-version";
 const DEFAULT_VERSION_CHECK_TIMEOUT_MS = 10000;
 
 export interface LatestPiRelease {

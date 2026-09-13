@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation"
 import type { Metadata } from "next"
 import defaultMdxComponents from "fumadocs-ui/mdx"
 import { PageActions } from "@/components/docs/page-actions"
+import { SITE } from "@/lib/site"
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>
@@ -31,9 +32,9 @@ export default async function Page(props: {
   const slugPath = slugs.join("/")
   const gitUrl = `https://github.com/KnightCodeAI/knightcode/blob/main/apps/web/content/docs/${page.path}`
   const rawMarkdownUrl = `/docs/${slugPath ? slugPath + ".md" : "index.md"}`
-  const sciraUrl = `https://scira.app/?q=https://knightcode.raghavseth.in/docs/${slugPath ? slugPath + ".md" : "index.md"}`
-  const chatgptUrl = `https://chatgpt.com/?q=Read+this+page:+https://knightcode.raghavseth.in/docs/${slugPath ? slugPath + ".md" : "index.md"}`
-  const claudeUrl = `https://claude.ai/new?q=https://knightcode.raghavseth.in/docs/${slugPath ? slugPath + ".md" : "index.md"}`
+  const sciraUrl = `https://scira.app/?q=${SITE.url}/docs/${slugPath ? slugPath + ".md" : "index.md"}`
+  const chatgptUrl = `https://chatgpt.com/?q=Read+this+page:+${SITE.url}/docs/${slugPath ? slugPath + ".md" : "index.md"}`
+  const claudeUrl = `https://claude.ai/new?q=${SITE.url}/docs/${slugPath ? slugPath + ".md" : "index.md"}`
   const cursorUrl = "https://cursor.com"
 
   return (

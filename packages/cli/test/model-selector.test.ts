@@ -79,6 +79,31 @@ describe("model selector", () => {
 		expect(saveDefault).toHaveBeenCalledWith(currentModel);
 	});
 
+	it("saves as default on the terminal-safe Ctrl+D binding", async () => {
+		// Ctrl+S (byte 0x13 / XOFF) is swallowed by terminal flow control in
+		// Windows Terminal and others, so it never reaches the app. Ctrl+D is the
+		// reliably-delivered fallback for "set as default".
+		setKeybindings(new KeybindingsManager());
+		harness = await createHarness();
+		const currentModel = harness.getModel()!;
+		const saveDefault = vi.fn();
+		const selector = new ModelSelectorComponent(
+			createFakeTui(),
+			currentModel,
+			harness.session.modelRuntime,
+			[],
+			() => {},
+			() => {},
+			undefined,
+			saveDefault,
+		);
+
+		expect(stripAnsi(selector.render(120).join("\n"))).toContain("Ctrl+D");
+		selector.handleInput("\x04"); // ctrl+d
+		expect(saveDefault).toHaveBeenCalledWith(currentModel);
+		selector.dispose();
+	});
+
 	it("lists every catalog that failed to refresh", async () => {
 		harness = await createHarness();
 		vi.spyOn(harness.session.modelRuntime, "refresh").mockResolvedValue({

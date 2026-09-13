@@ -134,7 +134,7 @@ Paths are relative to the package root. Arrays support glob patterns and `!exclu
 
 ### Gallery Metadata
 
-The [package gallery](https://knightcode.raghavseth.in/packages) displays packages tagged with `knightcode-package`. Add `video` or `image` fields to show a preview:
+The [package gallery](https://knightcode.dev/packages) displays packages tagged with `knightcode-package`. Add `video` or `image` fields to show a preview:
 
 ```json
 {

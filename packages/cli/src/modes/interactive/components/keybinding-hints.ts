@@ -39,6 +39,15 @@ export function keyDisplayText(keybinding: Keybinding): string {
 	return formatKeys(getKeybindings().getKeys(keybinding), { capitalize: true });
 }
 
+/**
+ * Display text for a binding's first (primary) key only. Use in dense hint bars
+ * where a binding with several keys (e.g. Ctrl+S/Ctrl+D) would overflow the row.
+ */
+export function keyDisplayTextPrimary(keybinding: Keybinding): string {
+	const keys = getKeybindings().getKeys(keybinding);
+	return keys.length ? formatKeyText(keys[0]!, { capitalize: true }) : "";
+}
+
 export function keyHint(keybinding: Keybinding, description: string): string {
 	return theme.fg("dim", keyText(keybinding)) + theme.fg("muted", ` ${description}`);
 }

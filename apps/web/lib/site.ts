@@ -12,8 +12,8 @@ export const RUN_COMMAND = "knightcode"
 
 export const SITE = {
   name: "KnightCode",
-  domain: "knightcode.raghavseth.in",
-  url: "https://knightcode.raghavseth.in",
+  domain: "knightcode.dev",
+  url: "https://knightcode.dev",
   tagline: "Agentic coding in your terminal",
   description:
     "KnightCode is an alpha-stage terminal AI coding app for developers. Install it from npm, bring your own model key, and keep agentic coding workflows close to your repo.",

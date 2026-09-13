@@ -102,7 +102,10 @@ export const KEYBINDINGS = {
 		description: "Cycle thinking level",
 	},
 	"app.thinking.save": {
-		defaultKeys: "ctrl+s",
+		// Ctrl+S (0x13 / XOFF) is eaten by terminal flow control in Windows
+		// Terminal and others before it reaches the app, so keep Ctrl+D as a
+		// reliably-delivered fallback for "set as default".
+		defaultKeys: ["ctrl+s", "ctrl+d"],
 		description: "Save thinking level",
 	},
 	"app.model.cycleForward": {
@@ -184,7 +187,10 @@ export const KEYBINDINGS = {
 		description: "Delete session when query is empty",
 	},
 	"app.models.save": {
-		defaultKeys: "ctrl+s",
+		// Ctrl+S (0x13 / XOFF) is eaten by terminal flow control in Windows
+		// Terminal and others before it reaches the app, so keep Ctrl+D as a
+		// reliably-delivered fallback for "set as default" / "save to settings".
+		defaultKeys: ["ctrl+s", "ctrl+d"],
 		description: "Save model selection",
 	},
 	"app.models.enableAll": {

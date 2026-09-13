@@ -14,6 +14,14 @@ KnightCode auto-detects OSC 8 hyperlinks, inline image protocols, and truecolor.
 
 Settings take precedence over environment variables; unset or `auto` preserves detection. Only force capabilities supported by the complete terminal path, since unsupported escape sequences can corrupt rendering.
 
+## Text Selection and Copy
+
+Which side owns a mouse drag depends on the [TUI mode](usage.md#other-options).
+
+In `fullscreen` mode, knightcode enables mouse reporting and owns text selection itself. Dragging with the primary button selects, and the selection is copied to the clipboard on release. Set `fullscreenCopyOnSelect` to `false` to keep the selection highlighted and copy it with `Ctrl+X` instead. To reach the terminal's own selection while knightcode captures the mouse, hold the terminal's bypass modifier — usually `Shift`, `Option` in iTerm2, and `Shift+Command`/`Shift+Ctrl` in Ghostty.
+
+In `regular` mode, knightcode never enables mouse reporting, so a drag is the terminal emulator's own selection and knightcode is not involved in copying it. Use the terminal's copy shortcut — `Ctrl+Shift+C` on most Linux and Windows terminals, `Command+C` on macOS — or enable the terminal's copy-on-select option. Dragging alone does not reach the clipboard in terminals where that option is off by default, which includes Windows Terminal (`copyOnSelect` defaults to `false`) and Apple Terminal, which has no such option. Switch to `fullscreen` if you want drag-to-copy without depending on the terminal.
+
 ## Kitty
 
 Works out of the box.

@@ -42,7 +42,7 @@ and coordinate disclosure as appropriate.
 
 Security issues in the distributed npm packages (`@knightcodeai/cli` and its
 platform packages), the command-line tool, and repository code are in scope, as
-is the model catalog distribution at `knightcode.raghavseth.in`.
+is the model catalog distribution at `knightcode.dev`.
 
 ## Out Of Scope
 

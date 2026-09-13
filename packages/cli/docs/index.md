@@ -15,7 +15,7 @@ npm install -g --ignore-scripts @knightcodeai/cli
 On Linux or macOS, you can also use the installer:
 
 ```bash
-curl -fsSL https://knightcode.raghavseth.in/install.sh | sh
+curl -fsSL https://knightcode.dev/install.sh | sh
 ```
 
 To uninstall knightcode itself, use npm for curl and npm installs:

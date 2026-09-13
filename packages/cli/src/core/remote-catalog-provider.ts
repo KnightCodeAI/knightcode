@@ -3,7 +3,7 @@ import { VERSION } from "../config.ts";
 import { fetchWithRetry } from "../utils/management-http.ts";
 import { getKnightcodeUserAgent } from "../utils/user-agent.ts";
 
-const DEFAULT_CATALOG_BASE_URL = "https://knightcode.raghavseth.in";
+const DEFAULT_CATALOG_BASE_URL = "https://knightcode.dev";
 const REMOTE_CATALOG_ATTEMPT_TIMEOUT_MS = 4_000;
 export const REMOTE_CATALOG_REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000;
 

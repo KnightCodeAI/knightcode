@@ -39,8 +39,8 @@ export async function SiteFooter() {
   const version = await getLatestVersion()
   return (
     <footer className="relative border-t border-border/50 bg-muted/20">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-        <div>
+      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-4 py-16 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+        <div className="col-span-2 md:col-span-1">
           <Link href="/" className="inline-flex items-center gap-2.5">
             <Image
               src="/knightcode_icon_256.png"
