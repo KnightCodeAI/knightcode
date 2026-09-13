@@ -1,7 +1,7 @@
 # WP05 — Releases and updates
 
-Status: implemented 2026-09-13. Open: the first tagged release run on the
-five CI runners, and the update walked on macOS and Linux.
+Status: implemented 2026-09-13, and a signed update verified end to end on
+Windows. Open: the update walked on macOS and Linux.
 
 **Goal:** an installed KnightCode IDE updates itself. Nobody downloads an
 installer twice.
@@ -183,7 +183,8 @@ The first release run, `v0.1.1-rc.1`, was the first run of `bundle-mac` and
   the `.dmg` as the `KnightCode` volume the updater mounts. Ad hoc signing
   with non-code files under `Contents/MacOS/engine`, a risk WP04 raised, did
   not fail.
-- **Linux aarch64** failed to link, and the run was not published.
+- **Linux aarch64** failed to link, and the run was not published. On
+  `ubuntu-24.04-arm` in `v0.1.1-rc.2` it bundled.
 
 Two defects that only these runs could find, both fixed:
 
@@ -194,11 +195,31 @@ Two defects that only these runs could find, both fixed:
 - **arm64 Linux did not link on Ubuntu 22.04.** Section 3 has the cause. The
   job now runs on `ubuntu-24.04-arm`.
 
-Still to run on Windows: a signed 0.1.1 from a release run, installed over
-0.1.0 by the updater and the helper, with the engine replaced.
+A signed update, end to end, on this machine:
+
+1. `v0.1.1-rc.2` (release run 34754033337) built all five installers and
+   published them with their `.sig` files. The publish job's key check
+   passed, so the secret signs for the key the IDE holds.
+2. The installed `0.1.0+stable.39cf229f36` was launched against a local feed
+   naming that release's `KnightCode-x86_64.exe` and its signature. Within
+   90 s it downloaded the installer from GitHub, verified it, and ran it in
+   update mode. `install\` then held `KnightCode.exe`, `bin\`, `engine\`,
+   `conpty.dll` and the OpenConsole builds, and `updates\versions.txt` was
+   written.
+3. Quitting ran `tools\auto_update_helper.exe`. Its log:
+   - moves `KnightCode.exe`, both launchers and the whole `engine\`
+     directory to `old\`;
+   - moves the new ones in;
+   - removes `updates\`, `install\` and `old\`;
+   - ends with "Update completed successfully".
+
+   Restart Manager reported `RmShutdown failed: WIN32_ERROR(350)`. The helper
+   treats that as a warning, and every move still succeeded.
+4. `KnightCode.exe` then read `0.1.1+stable.2.10afc043b4`. Relaunched, it
+   started `engine\knightcode-engine.exe`, both the engine and its ACP
+   adapter, and quitting ended all three processes.
 
 Owed:
 
-- The first tag run on all five runners. Its logs are the first evidence
-  that `bundle-mac` and `bundle-linux` run.
-- The update walked on a Mac and a Linux machine.
+- The update walked on a Mac and a Linux machine. CI builds and signs both
+  (`v0.1.1-rc.2`), but neither has been installed or updated on one.
