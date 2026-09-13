@@ -11,7 +11,7 @@ import type { ClientFileCapabilities } from "../client-fs.ts";
 import type { ClientReply } from "../client-requests.ts";
 import type { EngineEvent } from "../events.ts";
 import type { EngineModel } from "../models.ts";
-import type { PromptInput, SessionSummary } from "../sessions.ts";
+import type { PromptInput, SessionMessages, SessionPage, SessionSummary } from "../sessions.ts";
 
 export class EngineRequestError extends Error {
 	readonly status: number;
@@ -41,6 +41,16 @@ export interface UpdateSessionBody {
 	thinkingLevel?: string;
 }
 
+export interface OpenSessionBody {
+	cwd: string;
+	capabilities?: Partial<ClientFileCapabilities>;
+}
+
+export interface OpenedSession {
+	session: SessionSummary;
+	messages: SessionMessages;
+}
+
 export interface EventHandlers {
 	/** The stream is up: every event the engine publishes from now on will arrive. */
 	onConnect?(): void;
@@ -58,6 +68,11 @@ export interface EngineClient {
 	cancel(id: string): Promise<void>;
 	reply(id: string, requestId: string, reply: ClientReply): Promise<void>;
 	closeSession(id: string): Promise<void>;
+	/** A saved session made live again, with the messages it holds. */
+	openSession(id: string, body: OpenSessionBody): Promise<OpenedSession>;
+	listSessions(query: { cwd?: string; cursor?: string }): Promise<SessionPage>;
+	/** Deletes a saved session's transcript, closing the session first when it is live. */
+	deleteSession(id: string): Promise<void>;
 	/** Consume /events until `signal` aborts, reconnecting after a drop. Events are handled one at a time, in order. */
 	events(handlers: EventHandlers, signal: AbortSignal): Promise<void>;
 }
@@ -138,6 +153,17 @@ export function createEngineClient(options: EngineClientOptions): EngineClient {
 		},
 		closeSession: async (id) => {
 			await call("DELETE", session(id));
+		},
+		openSession: (id, body) => call("POST", `${session(id)}/open`, body) as Promise<OpenedSession>,
+		listSessions: (query) => {
+			const search = new URLSearchParams();
+			if (query.cwd !== undefined) search.set("cwd", query.cwd);
+			if (query.cursor !== undefined) search.set("cursor", query.cursor);
+			const suffix = search.toString();
+			return call("GET", suffix ? `/v1/sessions?${suffix}` : "/v1/sessions") as Promise<SessionPage>;
+		},
+		deleteSession: async (id) => {
+			await call("POST", `${session(id)}/delete`);
 		},
 		async events(handlers, signal) {
 			while (!signal.aborted) {
