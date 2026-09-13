@@ -44,6 +44,19 @@ export interface BashResult {
 // ============================================================================
 
 /**
+ * Resolves once everything written to the stream has been flushed and the file
+ * closed. The result hands `fullOutputPath` to readers straight away, so a
+ * stream merely ended can still be empty on disk.
+ */
+function closeStream(stream: WriteStream | undefined): Promise<void> {
+	if (!stream) return Promise.resolve();
+	return new Promise((resolve, reject) => {
+		stream.once("error", reject);
+		stream.end(() => resolve());
+	});
+}
+
+/**
  * Execute a bash command using custom BashOperations.
  * Used for remote execution (SSH, containers, etc.).
  */
@@ -115,9 +128,7 @@ export async function executeBashWithOperations(
 		if (truncationResult.truncated) {
 			ensureTempFile();
 		}
-		if (tempFileStream) {
-			tempFileStream.end();
-		}
+		await closeStream(tempFileStream);
 		const cancelled = options?.signal?.aborted ?? false;
 
 		return {
@@ -135,9 +146,7 @@ export async function executeBashWithOperations(
 			if (truncationResult.truncated) {
 				ensureTempFile();
 			}
-			if (tempFileStream) {
-				tempFileStream.end();
-			}
+			await closeStream(tempFileStream);
 			return {
 				output: truncationResult.truncated ? truncationResult.content : fullOutput,
 				exitCode: undefined,
@@ -147,9 +156,8 @@ export async function executeBashWithOperations(
 			};
 		}
 
-		if (tempFileStream) {
-			tempFileStream.end();
-		}
+		// The command's own failure is the error to report, not a failure closing its log.
+		await closeStream(tempFileStream).catch(() => undefined);
 
 		throw err;
 	}
