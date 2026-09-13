@@ -93,8 +93,11 @@ command palette.
 1. **`version`** checks that the tag matches `version` in
    `crates/zed/Cargo.toml`. A suffixed tag (`v0.2.0-rc.1`) is a prerelease.
 2. **`bundle`** runs once per target, on `windows-2022`, `macos-15` (both
-   macOS targets; x86_64 cross-compiles) and `ubuntu-22.04` plus
-   `ubuntu-22.04-arm`. Each job:
+   macOS targets; x86_64 cross-compiles), `ubuntu-22.04` and
+   `ubuntu-24.04-arm`. Arm64 Linux needs 24.04: the prebuilt libwebrtc calls
+   `__arm_tpidr2_save`, which only GCC 14's `libgcc_s` exports. The first run
+   on 22.04 failed to link, so the arm64 build needs a 2024-or-newer
+   distribution. Each job:
    - checks out this repository at `KNIGHTCODE_REF`;
    - builds the engine with `bun run scripts/build.ts --engine
      --target=<target>`;
