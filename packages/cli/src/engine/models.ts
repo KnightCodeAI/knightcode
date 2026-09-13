@@ -27,7 +27,23 @@ export interface EngineModel {
 	cost: ModelCost;
 }
 
-export function modelsRoute(ctx: EngineContext): EngineRoute {
+/**
+ * A fast model per provider, for Tab, and for commit messages and thread
+ * titles when nothing else is set. Each answered a Tab request in about a
+ * second with the prompt in completions.ts (2026-09-13); grok-4.6, which
+ * reasons on every request, took seven. A provider missing here has no fast
+ * model, and the IDE uses the user's own.
+ */
+export const FAST_MODEL_PER_PROVIDER: Readonly<Record<string, string>> = {
+	anthropic: "claude-haiku-4-5",
+	openrouter: "qwen/qwen3-coder-flash",
+	xai: "grok-4.3",
+};
+
+export function modelsRoute(
+	ctx: EngineContext,
+	fastModels: Readonly<Record<string, string>> = FAST_MODEL_PER_PROVIDER,
+): EngineRoute {
 	return {
 		method: "GET",
 		path: "/v1/models",
@@ -60,7 +76,11 @@ export function modelsRoute(ctx: EngineContext): EngineRoute {
 			const id = ctx.settings.getDefaultModel();
 			const chosen = provider && id ? `${provider}/${id}` : undefined;
 			const defaultRef = models.some((model) => model.ref === chosen) ? chosen : null;
-			sendJson(res, 200, { models, default: defaultRef ?? null });
+			// Only ever from the provider already chosen, so no other account is spent.
+			const fastId = provider ? fastModels[provider] : undefined;
+			const fastRef = fastId ? `${provider}/${fastId}` : undefined;
+			const fast = models.some((model) => model.ref === fastRef) ? fastRef : null;
+			sendJson(res, 200, { models, default: defaultRef ?? null, fast: fast ?? null });
 		},
 	};
 }

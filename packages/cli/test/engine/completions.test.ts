@@ -188,6 +188,62 @@ describe("completions routes", () => {
 		expect(received).toBe(32);
 	});
 
+	/**
+	 * Given PREFIX and SUFFIX as separate sections, chat models repeated the
+	 * suffix back or wrapped the answer in a fence. Given the code with the
+	 * cursor marked in place, grok-4.3, Haiku 4.5 and qwen3-coder-flash
+	 * answered with the insertion alone.
+	 */
+	test("/v1/completions shows the model the code with the cursor marked in place", async () => {
+		const ctx = await createEngineContext({
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
+		});
+		const handle = fauxProvider({ provider: `faux-cursor-${counter++}` });
+		let seen = "";
+		handle.setResponses([
+			(context) => {
+				seen = JSON.stringify(context.messages);
+				return fauxAssistantMessage([fauxText("a + b;")]);
+			},
+		]);
+		ctx.models.registerNativeProvider(handle.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		await fetch(`http://127.0.0.1:${server.port}/v1/completions`, {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ model: handle.getModel().id, prompt: "return ", suffix: "\n}", max_tokens: 32 }),
+		});
+		expect(seen).toContain(JSON.stringify("return <CURSOR>\n}").slice(1, -1));
+	});
+
+	test("/v1/completions returns the code inside a fence the model added", async () => {
+		const ctx = await createEngineContext({
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
+		});
+		const handle = fauxProvider({ provider: `faux-fence-${counter++}` });
+		// A fence with a language, and a lone closing fence: both came from real models.
+		handle.setResponses([
+			fauxAssistantMessage([fauxText("```ts\nreturn a + b;\n```")]),
+			fauxAssistantMessage([fauxText("null\n```")]),
+		]);
+		ctx.models.registerNativeProvider(handle.provider);
+		server = await startEngineServer({ token: "t", routes: completionsRoutes(ctx) });
+
+		const complete = async () => {
+			const res = await fetch(`http://127.0.0.1:${server!.port}/v1/completions`, {
+				method: "POST",
+				headers: auth,
+				body: JSON.stringify({ model: handle.getModel().id, prompt: "x", suffix: "y", max_tokens: 32 }),
+			});
+			return ((await res.json()) as { choices: { text: string }[] }).choices[0].text;
+		};
+		expect(await complete()).toBe("return a + b;");
+		expect(await complete()).toBe("null");
+	});
+
 	test("refuses an ambiguous bare model id instead of guessing a provider", async () => {
 		const ctx = await createEngineContext({
 			credentials: new InMemoryCredentialStore(),
