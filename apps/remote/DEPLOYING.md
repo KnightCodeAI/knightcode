@@ -130,13 +130,19 @@ Confirm the result has `"proxied": true`. The apex and `www` records stay
 **DNS-only (grey cloud)** for Vercel — `remote` is the only orange one. The two
 settings are deliberately opposite; proxying the apex breaks Vercel's TLS.
 
+The record exists (created 2026-09-14); redo this only if it is deleted.
+
 ## 4. Migrate and deploy
 
-```bash
-cd apps/remote
-bunx wrangler d1 migrations apply knightcode-remote --remote
-bun run deploy
-```
+Deploys run from GitHub, not from a laptop. `.github/workflows/deploy-remote.yml`
+applies pending D1 migrations and runs `bun run deploy` on every push to `main`
+that changes what ships: `apps/remote` minus its tests and docs, or the wire
+protocol in `packages/remote/src/protocol.ts`. To redeploy without a change,
+run the workflow from the Actions tab.
+
+It needs one repository secret, `CLOUDFLARE_API_TOKEN`: a token made from the
+"Edit Cloudflare Workers" template with **D1: Edit** added, scoped to this
+account and the `knightcode.dev` zone.
 
 `bun run deploy` builds before it uploads, on purpose: `web/dist` is gitignored
 build output and the assets directory is what gets uploaded, so a bare
