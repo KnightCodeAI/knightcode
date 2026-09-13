@@ -444,6 +444,20 @@ describe("ACP agent", () => {
 		expect(registry!.size()).toBe(1);
 	});
 
+	test("a delete the engine refuses leaves the session live and usable", async () => {
+		// In memory: there is no transcript to delete, so the engine refuses.
+		const { faux, session } = await start();
+		await expect(connection!.agent.request("session/delete", { sessionId: session.sessionId })).rejects.toBeDefined();
+		expect(registry!.size()).toBe(1);
+
+		faux.setResponses([fauxAssistantMessage([fauxText("still here")])]);
+		const done = session.prompt("hello");
+		const { updates, stopReason } = await collect(session);
+		await done;
+		expect(stopReason).toBe("end_turn");
+		expect(textOf(updates, "agent_message_chunk")).toBe("still here");
+	});
+
 	test("a new session tells the editor which slash commands it offers, after answering", async () => {
 		const { cwd, engine } = await start({
 			prompts: { review: "---\ndescription: Review the change\n---\nReview $@\n" },

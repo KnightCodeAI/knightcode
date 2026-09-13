@@ -349,7 +349,10 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 		const root = join(agentDir, "sessions");
 		const projects = await readdir(root, { withFileTypes: true }).catch(() => []);
 		const all = await Promise.all(
-			projects.filter((entry) => entry.isDirectory()).map((entry) => SessionManager.listAll(join(root, entry.name))),
+			// Linked project directories count, as they do in SessionManager.listAll.
+			projects
+				.filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+				.map((entry) => SessionManager.listAll(join(root, entry.name))),
 		);
 		return all.flat().sort((a, b) => b.modified.getTime() - a.modified.getTime());
 	}
@@ -413,8 +416,9 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 			if (pending) return summarize(await pending);
 			const opened = (async () => {
 				const cwd = await directory(request.cwd);
-				const saved = (await savedSessions(cwd)).find((info) => info.id === request.id);
-				const path = saved?.path ?? paths.get(request.id);
+				// Only this project's transcripts: a session opened under another project's
+				// cwd would run with that project's tools, extensions and filesystem root.
+				const path = (await savedSessions(cwd)).find((info) => info.id === request.id)?.path;
 				if (!path) throw new SessionError("not_found", `no saved session: ${request.id}`);
 				return start(cwd, SessionManager.open(path, undefined, cwd), request);
 			})();
@@ -453,10 +457,13 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 		},
 
 		async delete(id) {
+			// An open in flight would otherwise go live after the transcript is gone.
+			await opening.get(id)?.catch(() => undefined);
 			const file =
 				entries.get(id)?.file ?? paths.get(id) ?? (await savedSessions()).find((info) => info.id === id)?.path;
-			await close(id);
+			// Nothing to delete leaves a live session alone.
 			if (!file) return false;
+			await close(id);
 			paths.delete(id);
 			await unlink(file).catch((error: NodeJS.ErrnoException) => {
 				// Already gone is what the caller asked for.

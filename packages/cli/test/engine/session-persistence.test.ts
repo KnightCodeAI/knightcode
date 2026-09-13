@@ -1,6 +1,15 @@
 import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { fauxAssistantMessage, fauxProvider, fauxText } from "@knightcode/ai";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	renameSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -69,7 +78,7 @@ describe("saved sessions", () => {
 			await created.prompt(id, { text });
 			await until(() => ends.length > before);
 		};
-		return { cwd, registry: created, turn, started };
+		return { cwd, agentDir, registry: created, turn, started };
 	}
 
 	test("a closed session reopens from its transcript and carries on", async () => {
@@ -107,6 +116,50 @@ describe("saved sessions", () => {
 		// Two sessions started on one transcript would be two writers; exactly one more started.
 		expect(started).toEqual([id, id]);
 		expect(registry.size()).toBe(1);
+	});
+
+	test("a session opens only for its own project, even once a listing across projects has seen it", async () => {
+		const { cwd, registry, turn } = await start();
+		const other = mkdtempSync(join(tmpdir(), "knightcode-test-saved-other-"));
+		dirs.push(other);
+		const { id } = await registry.create({ cwd });
+		await turn(id, "hi", "hello");
+		await registry.close(id);
+
+		expect((await registry.list({})).sessions.map((listing) => listing.id)).toContain(id);
+		await expect(registry.open({ id, cwd: other })).rejects.toMatchObject({ code: "not_found" });
+		expect(registry.size()).toBe(0);
+	});
+
+	test("a delete while the session is being opened waits for the open, then removes both", async () => {
+		const { cwd, registry, turn } = await start();
+		const { id } = await registry.create({ cwd });
+		await turn(id, "hi", "hello");
+		await registry.close(id);
+
+		const opening = registry.open({ id, cwd });
+		const deleted = await registry.delete(id);
+		await opening.catch(() => undefined);
+		expect(deleted).toBe(true);
+		expect(registry.summary(id)).toBeUndefined();
+		expect((await registry.list({ cwd })).sessions).toEqual([]);
+	});
+
+	test("a listing across projects includes a project whose session directory is a link", async () => {
+		const { cwd, agentDir, registry, turn } = await start();
+		const { id } = await registry.create({ cwd });
+		await turn(id, "hi", "hello");
+		await registry.close(id);
+
+		// Move the project's session directory elsewhere and link it back in.
+		const sessionsRoot = join(agentDir, "sessions");
+		const [project] = readdirSync(sessionsRoot);
+		const elsewhere = mkdtempSync(join(tmpdir(), "knightcode-test-saved-linked-"));
+		dirs.push(elsewhere);
+		renameSync(join(sessionsRoot, project), join(elsewhere, project));
+		symlinkSync(join(elsewhere, project), join(sessionsRoot, project), "junction");
+
+		expect((await registry.list({})).sessions.map((listing) => listing.id)).toEqual([id]);
 	});
 
 	test("an id with no transcript is not found", async () => {

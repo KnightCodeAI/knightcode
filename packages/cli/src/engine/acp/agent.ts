@@ -486,12 +486,13 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 			};
 		})
 		.onRequest("session/delete", async ({ params }) => {
+			await withEngine(() => engine.deleteSession(params.sessionId));
+			// Forgotten only once the engine has deleted it: a refused delete leaves the session usable.
 			const session = sessions.get(params.sessionId);
 			if (session) {
 				sessions.delete(params.sessionId);
 				settleTurn(session, { type: "session.turn_end", sessionId: params.sessionId, stopReason: "cancelled" });
 			}
-			await withEngine(() => engine.deleteSession(params.sessionId));
 			return {};
 		})
 		.onRequest("session/prompt", async ({ params }) => {
