@@ -91,7 +91,10 @@ describe("device-code login", () => {
 	test("still gives up when the relay rejects the code outright", async () => {
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockResolvedValueOnce(beginResponse()).mockResolvedValueOnce(jsonResponse({ error: "expired_token" })),
+			vi
+				.fn()
+				.mockResolvedValueOnce(beginResponse())
+				.mockResolvedValueOnce(jsonResponse({ error: "expired_token" })),
 		);
 
 		await expect(login("https://remote.knightcode.dev", () => {}, new AbortController().signal)).rejects.toThrow(
