@@ -15,6 +15,23 @@ import { type EngineRoute, sendJson } from "./server.ts";
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
+/**
+ * Tab's prompt: the code with the cursor marked in place. Given PREFIX and
+ * SUFFIX sections instead, chat models repeated the suffix back.
+ */
+const FILL_PROMPT = [
+	"You are a code completion engine inside an editor.",
+	"The user's code is shown with <CURSOR> marking where the text cursor is.",
+	"Reply with only the text to insert at <CURSOR>: usually the rest of the current line or statement.",
+	"Never repeat text that already comes before or after <CURSOR>.",
+	"No code fences, no explanations. If nothing belongs there, reply with nothing.",
+].join("\n");
+
+/** Models fence code anyway, sometimes with only the closing fence; the buffer wants the code. */
+function unfence(text: string): string {
+	return text.replace(/^```[^\n]*\n/, "").replace(/\n?```\s*$/, "");
+}
+
 async function readJson(req: IncomingMessage): Promise<unknown> {
 	const chunks: Buffer[] = [];
 	let size = 0;
@@ -229,12 +246,8 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 					{
 						model: ref,
 						messages: [
-							{
-								role: "system",
-								content:
-									"Complete the code between PREFIX and SUFFIX. Reply with the completion text only, no fences, no commentary.",
-							},
-							{ role: "user", content: `PREFIX:\n${prompt}\nSUFFIX:\n${suffix}` },
+							{ role: "system", content: FILL_PROMPT },
+							{ role: "user", content: `${prompt}<CURSOR>${suffix}` },
 						],
 					},
 					model,
@@ -260,7 +273,7 @@ export function completionsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 					object: "text_completion",
 					created: Math.floor(Date.now() / 1000),
 					model: ref,
-					choices: [{ index: 0, text, finish_reason: "stop" }],
+					choices: [{ index: 0, text: unfence(text), finish_reason: "stop" }],
 				});
 			},
 		},
