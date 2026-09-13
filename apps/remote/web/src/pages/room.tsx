@@ -12,13 +12,27 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { deleteRoom, shortenPath } from "@/lib/api";
 import { Markdown } from "@/lib/markdown";
-import { useRoomSocket, useVisualViewport } from "@/lib/socket";
+import { useKeyboardFrame, useRoomSocket } from "@/lib/socket";
 import { groupStats, isRunning, rowLabel } from "@/lib/tools";
 import { type Block, toBlocks, type ToolCallView } from "@/lib/transcript";
-import { cn } from "@/lib/utils";
 
 const NEAR_BOTTOM_PX = 96;
 const MAX_DRAFT_HEIGHT_PX = 160;
+
+/**
+ * Focusing the composer low on the page makes iOS Safari pan the whole page up to clear the
+ * keyboard, and it reports the pan only once it has finished, so the frame is drawn in the wrong
+ * place for half a second. Safari measures the field inside focus(); lifting it far above the page
+ * for that call leaves nothing to reveal (react-aria's usePreventScroll does the same). The
+ * transform is cleared before the next paint, so it never shows.
+ */
+function focusWithoutPan(node: HTMLTextAreaElement): void {
+	node.style.transform = "translateY(-2000px)";
+	node.focus({ preventScroll: true });
+	requestAnimationFrame(() => {
+		node.style.transform = "";
+	});
+}
 
 function UserBubble({ text }: { text: string }): React.JSX.Element {
 	return (
@@ -30,12 +44,19 @@ function UserBubble({ text }: { text: string }): React.JSX.Element {
 	);
 }
 
-function Thinking({ text }: { text: string }): React.JSX.Element {
+/** Live, it stays open and shimmers in place of "Working…"; it folds shut once the reply starts. */
+function Thinking({ text, live = false }: { text: string; live?: boolean }): React.JSX.Element {
 	return (
-		<details className="group mb-2">
+		<details className="group mb-2" open={live}>
 			<summary className="cursor-pointer list-none text-[14px] text-label-3 select-none">
-				<span className="group-open:hidden">Thought about it</span>
-				<span className="hidden group-open:inline">Thinking</span>
+				{live ? (
+					<span className="shimmer font-medium">Thinking…</span>
+				) : (
+					<>
+						<span className="group-open:hidden">Thought about it</span>
+						<span className="hidden group-open:inline">Thinking</span>
+					</>
+				)}
 			</summary>
 			<p className="mt-1.5 border-l-2 border-hairline pl-3 text-[14px] leading-relaxed whitespace-pre-wrap text-label-2">
 				{text}
@@ -146,7 +167,6 @@ function shortModel(model: string | undefined): string | undefined {
 
 export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 	const { state, send, abort, dismissNotice } = useRoomSocket(roomId);
-	useVisualViewport();
 
 	const blocks = useMemo(() => toBlocks(state.entries), [state.entries]);
 	const [draft, setDraft] = useState("");
@@ -158,13 +178,17 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 	const scroller = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLTextAreaElement>(null);
 	const dock = useRef<HTMLDivElement>(null);
+	const frame = useRef<HTMLDivElement>(null);
+	const keyboard = useKeyboardFrame(frame);
 
-	// The transcript's bottom padding follows the composer's real height, keyboard or not.
+	// The transcript's bottom padding follows the composer's real height, keyboard or not. Border box,
+	// not contentRect: the dock's safe-area padding has to count or the last line ends under the composer.
 	useLayoutEffect(() => {
 		const node = dock.current;
 		if (!node) return;
 		const observer = new ResizeObserver(([entry]) => {
-			if (entry) setBottomInset(entry.contentRect.height);
+			const box = entry?.borderBoxSize[0];
+			if (box) setBottomInset(box.blockSize);
 		});
 		observer.observe(node);
 		return () => observer.disconnect();
@@ -174,7 +198,7 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 	useEffect(() => {
 		const node = scroller.current;
 		if (node && atBottom) node.scrollTop = node.scrollHeight;
-	}, [blocks, state.liveText, state.streaming, atBottom, bottomInset]);
+	}, [blocks, state.liveText, state.liveThinking, state.streaming, atBottom, bottomInset, keyboard.inset]);
 
 	const onScroll = (): void => {
 		const node = scroller.current;
@@ -213,7 +237,7 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 		setDraft(`/${name} `);
 		const node = input.current;
 		if (node) {
-			node.focus();
+			focusWithoutPan(node);
 			requestAnimationFrame(() => resize(node));
 		}
 	};
@@ -223,7 +247,7 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 		setDraft((current) => (current.startsWith("/") ? current.replace(/^\/\S*\s?/, "") : `/${current}`));
 		const node = input.current;
 		if (node) {
-			node.focus();
+			focusWithoutPan(node);
 			requestAnimationFrame(() => resize(node));
 		}
 	};
@@ -234,17 +258,23 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 
 	const lastBlock = blocks.at(-1);
 	const toolRunning = lastBlock?.kind === "tools" && lastBlock.calls.some(isRunning);
-	const showWorking = state.hostOnline && state.streaming && state.liveText === undefined && !toolRunning;
+	const showWorking =
+		state.hostOnline &&
+		state.streaming &&
+		state.liveText === undefined &&
+		state.liveThinking === undefined &&
+		!toolRunning;
 	const where = shortenPath(state.cwd);
 	const model = shortModel(state.model);
 	const subtitle =
 		state.connection === "reconnecting" ? "Reconnecting…" : [where, model].filter(Boolean).join(" · ") || " ";
+	// How far the dock rises to sit on the keyboard. The keyboard covers the home indicator, so the
+	// dock's safe-area padding is given back as it rises; the transition runs about as long as iOS's.
+	const lift =
+		keyboard.inset > 0 ? `calc(${keyboard.inset}px + 0.5rem - max(0.75rem, var(--safe-bottom)))` : "0px";
 
 	return (
-		<div
-			className="fixed inset-x-0 overflow-hidden bg-ground"
-			style={{ top: "var(--viewport-top, 0px)", height: "var(--viewport-height)" }}
-		>
+		<div ref={frame} className="fixed inset-x-0 h-dvh overflow-hidden bg-ground" style={{ top: keyboard.top }}>
 			<TopBar
 				left={
 					<GlassLink href="/" aria-label="Back to sessions">
@@ -286,7 +316,8 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 				className="h-full overflow-y-auto overscroll-contain"
 				style={{
 					paddingTop: "calc(var(--topbar) + var(--safe-top) + 1.25rem)",
-					paddingBottom: `${bottomInset + 8}px`,
+					// Clears the 1.5rem fade above the composer, so the last line at rest is never dimmed.
+					paddingBottom: `calc(${bottomInset}px + 1.5rem + ${lift})`,
 				}}
 			>
 				<div className="mx-auto flex max-w-3xl flex-col gap-6 px-5">
@@ -299,104 +330,137 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 					{blocks.map((block) => (
 						<Entry key={block.id} block={block} onOpenTools={setOpenCalls} />
 					))}
-					{state.liveText !== undefined ? <Markdown text={state.liveText} className="prose-chat caret" /> : null}
+					{state.liveText !== undefined || state.liveThinking !== undefined ? (
+						<div>
+							{state.liveThinking ? (
+								<Thinking text={state.liveThinking} live={state.liveText === undefined} />
+							) : null}
+							{state.liveText !== undefined ? <Markdown text={state.liveText} className="prose-chat" /> : null}
+						</div>
+					) : null}
 					{showWorking ? <p className="shimmer text-[15px] font-medium">Working…</p> : null}
 				</div>
 			</div>
 
 			<div
 				ref={dock}
-				className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-3 bg-[linear-gradient(to_top,var(--ground)_40%,transparent)] px-3 pt-10"
-				style={{ paddingBottom: "max(0.75rem, var(--safe-bottom))" }}
+				className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 transition-transform duration-500 ease-(--ease-emphasis)"
+				style={{
+					paddingBottom: "max(0.75rem, var(--safe-bottom))",
+					transform: keyboard.inset > 0 ? `translateY(calc(-1 * ${lift}))` : undefined,
+				}}
 			>
-				{!atBottom ? (
-					<GlassButton aria-label="Jump to the latest" className="pointer-events-auto size-11" onClick={jumpToBottom}>
-						<ArrowDown className="size-5" aria-hidden="true" />
-					</GlassButton>
-				) : null}
+				{/* Solid ground behind the composer so text never ghosts through the glass, dissolving over 1.5rem above it.
+				    It runs on below the dock so the transcript does not show through a translucent keyboard either. */}
+				<div
+					aria-hidden="true"
+					className="absolute inset-x-0 -top-6 -bottom-[100vh] bg-[linear-gradient(to_bottom,transparent,var(--ground)_1.5rem)]"
+				/>
 
-				{state.synced && !state.hostOnline ? (
-					<p className="glass rise-in pointer-events-auto w-full max-w-3xl rounded-[1.5rem] px-5 py-4 text-center text-[15px] text-label-2">
-						The terminal is offline. The transcript stays readable here.
-					</p>
-				) : (
-					<div className="pointer-events-auto relative w-full max-w-3xl">
-						{suggestions ? (
-							<div className="rise-in absolute inset-x-0 bottom-full mb-2">
-								<CommandList commands={suggestions} onPick={pick} />
-							</div>
-						) : null}
-						{state.notice ? (
-							<button
-								type="button"
-								onClick={dismissNotice}
-								className="rise-in mb-2 block w-full rounded-2xl bg-danger/15 px-4 py-2.5 text-left text-[14px] text-danger"
+				<div className="relative mx-auto w-full max-w-3xl">
+					{/* Out of flow, so showing it never changes the measured height and the transcript does not jump mid-scroll. */}
+					{!atBottom ? (
+						<div className="absolute inset-x-0 bottom-full mb-3 flex justify-center">
+							<GlassButton
+								aria-label="Jump to the latest"
+								className="pointer-events-auto size-11"
+								onClick={jumpToBottom}
 							>
-								{state.notice}
-							</button>
-						) : null}
-						<form
-							className="glass flex flex-col rounded-[1.75rem] px-3 pt-1.5 pb-2.5"
-							onSubmit={(event) => {
-								event.preventDefault();
-								submit();
-							}}
-						>
-							<textarea
-								ref={input}
-								rows={1}
-								value={draft}
-								placeholder="Reply…"
-								autoComplete="off"
-								autoCorrect="on"
-								enterKeyHint="send"
-								className="max-h-40 w-full resize-none bg-transparent px-2 py-2.5 text-[17px] leading-relaxed text-label outline-none placeholder:text-label-3"
-								onChange={(event) => {
-									setDraft(event.target.value);
-									resize(event.target);
-								}}
-								onKeyDown={(event) => {
-									if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-										event.preventDefault();
-										submit();
-									}
-								}}
-							/>
-							<div className="mt-1 flex items-center justify-between">
+								<ArrowDown className="size-5" aria-hidden="true" />
+							</GlassButton>
+						</div>
+					) : null}
+
+					{state.synced && !state.hostOnline ? (
+						<p className="glass rise-in pointer-events-auto w-full rounded-[1.5rem] px-5 py-4 text-center text-[15px] text-label-2">
+							The terminal is offline. The transcript stays readable here.
+						</p>
+					) : (
+						<div className="pointer-events-auto relative w-full">
+							{suggestions ? (
+								<div className="rise-in absolute inset-x-0 bottom-full mb-2">
+									<CommandList commands={suggestions} onPick={pick} />
+								</div>
+							) : null}
+							{state.notice ? (
 								<button
 									type="button"
-									className="chip"
-									aria-pressed={suggestions !== undefined}
-									onPointerDown={(event) => event.preventDefault()}
-									onClick={toggleSlash}
+									onClick={dismissNotice}
+									className="rise-in mb-2 block w-full rounded-2xl bg-danger/15 px-4 py-2.5 text-left text-[14px] text-danger"
 								>
-									<span className="font-mono text-[15px]">/</span>
-									Commands
+									{state.notice}
 								</button>
-								<div className="flex items-center gap-2">
-									{state.streaming ? (
-										<button
-											type="button"
-											aria-label="Stop the current turn"
-											onClick={abort}
-											className="round-button bg-raised text-label active:bg-raised-hover"
-										>
-											<Square className="size-4 fill-current" aria-hidden="true" />
-										</button>
-									) : null}
+							) : null}
+							<form
+								className="glass flex flex-col rounded-[1.75rem] px-3 pt-1.5 pb-2.5"
+								onSubmit={(event) => {
+									event.preventDefault();
+									submit();
+								}}
+							>
+								<textarea
+									ref={input}
+									rows={1}
+									value={draft}
+									placeholder="Reply…"
+									autoComplete="off"
+									autoCorrect="on"
+									enterKeyHint="send"
+									className="max-h-40 w-full resize-none bg-transparent px-2 py-2.5 text-[17px] leading-relaxed text-label outline-none placeholder:text-label-3"
+									onTouchEnd={(event) => {
+										// A tap that opens the keyboard focuses through focusWithoutPan. Skipped mid-drag (the
+										// event is no longer cancelable) and once focused, where a tap only moves the caret.
+										if (!event.cancelable || event.currentTarget === document.activeElement) return;
+										event.preventDefault();
+										focusWithoutPan(event.currentTarget);
+									}}
+									onChange={(event) => {
+										setDraft(event.target.value);
+										resize(event.target);
+									}}
+									onKeyDown={(event) => {
+										if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+											event.preventDefault();
+											submit();
+										}
+									}}
+								/>
+								<div className="mt-1 flex items-center justify-between">
 									<button
-										type="submit"
-										aria-label="Send"
-										disabled={draft.trim().length === 0}
-										className={cn("round-button bg-tint text-tint-ink", "disabled:opacity-35")}
+										type="button"
+										className="chip"
+										aria-pressed={suggestions !== undefined}
+										onPointerDown={(event) => event.preventDefault()}
+										onClick={toggleSlash}
 									>
-										<ArrowUp className="size-5" strokeWidth={2.25} aria-hidden="true" />
+										<span className="font-mono text-[15px]">/</span>
+										Commands
 									</button>
+									<div className="flex items-center gap-2">
+										{state.streaming ? (
+											<button
+												type="button"
+												aria-label="Stop the current turn"
+												onClick={abort}
+												className="round-button bg-raised text-label active:bg-raised-hover"
+											>
+												<Square className="size-4 fill-current" aria-hidden="true" />
+											</button>
+										) : null}
+										<button
+											type="submit"
+											aria-label="Send"
+											disabled={draft.trim().length === 0}
+											className="round-button bg-tint text-tint-ink disabled:bg-raised disabled:text-label-3"
+										>
+											<ArrowUp className="size-5" strokeWidth={2.25} aria-hidden="true" />
+										</button>
+									</div>
 								</div>
-							</div>
-						</form>
-					</div>
-				)}
+							</form>
+						</div>
+					)}
+				</div>
 			</div>
 
 			<ToolSheet calls={openCalls} onClose={() => setOpenCalls(undefined)} />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
 	encodeFrame,
 	type RelayFrame,
@@ -12,6 +12,8 @@ export interface RoomState {
 	entries: unknown[];
 	/** The in-flight assistant message, cumulative. Cleared when its finished entry lands. */
 	liveText?: string;
+	/** The in-flight message's reasoning, cumulative. Cleared together with liveText. */
+	liveThinking?: string;
 	sessionName?: string;
 	cwd?: string;
 	model?: string;
@@ -51,6 +53,7 @@ function reduce(state: RoomState, action: Action): RoomState {
 				...state,
 				entries: [...frame.entries],
 				liveText: undefined,
+				liveThinking: undefined,
 				sessionName: frame.sessionName ?? state.sessionName,
 				cwd: frame.cwd,
 				model: frame.model ?? state.model,
@@ -58,13 +61,19 @@ function reduce(state: RoomState, action: Action): RoomState {
 			};
 		case "entries":
 			// The streamed draft is replaced by the finished entries it was previewing.
-			return { ...state, entries: [...state.entries, ...frame.entries], liveText: undefined };
+			return {
+				...state,
+				entries: [...state.entries, ...frame.entries],
+				liveText: undefined,
+				liveThinking: undefined,
+			};
 		case "stream":
-			return { ...state, liveText: frame.content };
+			// A message still reasoning streams thinking with empty content; either stays unset until it has text.
+			return { ...state, liveText: frame.content || undefined, liveThinking: frame.thinking?.trim() || undefined };
 		case "status":
 			return { ...state, streaming: frame.streaming, model: frame.model ?? state.model };
 		case "bye":
-			return { ...state, hostOnline: false, streaming: false, liveText: undefined };
+			return { ...state, hostOnline: false, streaming: false, liveText: undefined, liveThinking: undefined };
 		case "host":
 			return {
 				...state,
@@ -72,6 +81,7 @@ function reduce(state: RoomState, action: Action): RoomState {
 				synced: true,
 				streaming: frame.online ? state.streaming : false,
 				liveText: frame.online ? state.liveText : undefined,
+				liveThinking: frame.online ? state.liveThinking : undefined,
 			};
 		case "error":
 			return { ...state, notice: frame.message };
@@ -153,19 +163,30 @@ export function useRoomSocket(roomId: string): RoomSocket {
 	return { state, send, abort, dismissNotice };
 }
 
+export interface KeyboardFrame {
+	/** How much of the frame the keyboard covers, in CSS pixels; 0 while it is down. */
+	inset: number;
+	/** How far Safari has panned the page. Stays 0 when the composer focuses without a pan. */
+	top: number;
+}
+
 /**
- * iOS Safari does not resize the layout viewport for the keyboard, so a bottom-fixed composer
- * ends up under it. Tracking the visual viewport and sizing the app frame from it keeps every
- * fixed element inside the part of the page the user can actually see.
+ * iOS Safari keeps the layout viewport full height when the keyboard opens, so bottom-anchored
+ * chrome ends up under it. The frame keeps its height and reports what the visual viewport lost,
+ * which the composer rises by as a transform, so it travels with the keyboard. Android resizes
+ * the layout viewport itself (interactive-widget=resizes-content): the frame shrinks, inset stays 0.
  */
-export function useVisualViewport(): void {
+export function useKeyboardFrame(frame: RefObject<HTMLElement | null>): KeyboardFrame {
+	const [state, setState] = useState<KeyboardFrame>({ inset: 0, top: 0 });
 	useEffect(() => {
 		const viewport = window.visualViewport;
-		if (!viewport) return;
-		const root = document.documentElement.style;
+		const node = frame.current;
+		if (!viewport || !node) return;
 		const apply = (): void => {
-			root.setProperty("--viewport-height", `${viewport.height}px`);
-			root.setProperty("--viewport-top", `${viewport.offsetTop}px`);
+			const lost = node.clientHeight - viewport.height * viewport.scale;
+			const inset = lost > 1 ? Math.round(lost) : 0;
+			const top = Math.round(viewport.offsetTop);
+			setState((current) => (current.inset === inset && current.top === top ? current : { inset, top }));
 		};
 		apply();
 		viewport.addEventListener("resize", apply);
@@ -173,8 +194,7 @@ export function useVisualViewport(): void {
 		return () => {
 			viewport.removeEventListener("resize", apply);
 			viewport.removeEventListener("scroll", apply);
-			root.removeProperty("--viewport-height");
-			root.removeProperty("--viewport-top");
 		};
-	}, []);
+	}, [frame]);
+	return state;
 }

@@ -76,8 +76,8 @@ function harness() {
 		},
 	});
 
-	const emit = async (event: string): Promise<void> => {
-		for (const handler of handlers.get(event) ?? []) await handler({ type: event }, ctx);
+	const emit = async (event: string, payload: Record<string, unknown> = {}): Promise<void> => {
+		for (const handler of handlers.get(event) ?? []) await handler({ type: event, ...payload }, ctx);
 	};
 	const run = (args = ""): Promise<void> => {
 		if (!command) throw new Error("remote command was not registered");
@@ -147,5 +147,38 @@ describe("remote extension", () => {
 
 		const statusFrames = sockets[0]?.frames().filter((frame) => frame.type === "status") ?? [];
 		expect(statusFrames.at(-1)).toMatchObject({ streaming: false });
+	});
+
+	test("publishes the message that just ended, which the CLI appends only after message_end handlers return", async () => {
+		const { run, emit, sockets, entries } = harness();
+		await run();
+		sockets[0]?.emit("open", {});
+
+		// The CLI's order: every handler runs, then the entry is appended.
+		await emit("message_end");
+		entries.push({ type: "message", id: "e2", message: { role: "user", content: [{ type: "text", text: "x=2" }] } });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const published = sockets[0]?.frames().filter((frame) => frame.type === "entries") ?? [];
+		expect(published.flatMap((frame) => frame.entries as Array<{ id: string }>).map((entry) => entry.id)).toEqual([
+			"e2",
+		]);
+	});
+
+	test("streams thinking before the reply has any text", async () => {
+		const { run, emit, sockets } = harness();
+		await run();
+		const socket = sockets[0];
+		if (!socket) throw new Error("no socket was opened");
+		socket.emit("open", {});
+		socket.emit("message", { data: JSON.stringify({ v: 1, type: "viewer", count: 1 }) });
+
+		await emit("message_update", {
+			message: { role: "assistant", content: [{ type: "thinking", thinking: "weighing it" }] },
+		});
+
+		expect(socket.frames().filter((frame) => frame.type === "stream")).toEqual([
+			expect.objectContaining({ content: "", thinking: "weighing it" }),
+		]);
 	});
 });

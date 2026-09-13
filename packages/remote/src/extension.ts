@@ -48,14 +48,15 @@ function sourceFor(knightcode: ExtensionAPI, ctx: ExtensionContext): MirrorSourc
  * Assistant content is a block union, and AgentMessage also covers message kinds with no
  * `content` at all (BashExecutionMessage), so the property is read defensively.
  */
-function textOf(message: object): string {
+function blocksOf(message: object, type: "text" | "thinking"): string {
 	const content = (message as { content?: unknown }).content;
-	if (typeof content === "string") return content;
+	if (typeof content === "string") return type === "text" ? content : "";
 	if (!Array.isArray(content)) return "";
 	let text = "";
 	for (const block of content) {
-		if (typeof block === "object" && block !== null && (block as { type?: unknown }).type === "text") {
-			const value = (block as { text?: unknown }).text;
+		if (typeof block === "object" && block !== null && (block as { type?: unknown }).type === type) {
+			// Text blocks carry `text` and thinking blocks carry `thinking`: the field is named after the type.
+			const value = (block as Record<string, unknown>)[type];
 			if (typeof value === "string") text += value;
 		}
 	}
@@ -80,7 +81,12 @@ export function remoteExtension(knightcode: ExtensionAPI, deps: RemoteExtensionD
 	// agent_start is what flips the session to "working" on the web before anything settles;
 	// without it the first status the viewer sees arrives with the first finished message.
 	knightcode.on("agent_start", (_event, ctx) => publish(ctx));
-	knightcode.on("message_end", (_event, ctx) => publish(ctx));
+	// The CLI appends a message to the session only after every message_end handler has returned,
+	// so draining inline missed the very message that ended: a prompt sent from the phone showed up
+	// only once the reply to it finished. The next macrotask runs after that append.
+	knightcode.on("message_end", (_event, ctx) => {
+		setTimeout(() => publish(ctx), 0);
+	});
 	knightcode.on("tool_execution_end", (_event, ctx) => publish(ctx));
 	knightcode.on("turn_end", (_event, ctx) => publish(ctx));
 	knightcode.on("agent_end", (_event, ctx) => publish(ctx));
@@ -91,9 +97,12 @@ export function remoteExtension(knightcode: ExtensionAPI, deps: RemoteExtensionD
 	knightcode.on("message_update", (event, ctx) => {
 		// Token-rate path: never call getEntries() here, and send nothing with no viewers watching.
 		if (!session || session.viewers === 0) return;
-		const text = textOf(event.message);
-		if (text.length === 0) return;
-		session.host.send(session.mirror.stream(String(ctx.sessionManager.getLeafId() ?? "live"), text));
+		const text = blocksOf(event.message, "text");
+		const thinking = blocksOf(event.message, "thinking");
+		if (text.length === 0 && thinking.length === 0) return;
+		session.host.send(
+			session.mirror.stream(String(ctx.sessionManager.getLeafId() ?? "live"), text, thinking || undefined),
+		);
 	});
 
 	// Written out rather than looped: `on` is an overload set, and a union-typed event

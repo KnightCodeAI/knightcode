@@ -26,7 +26,7 @@ export type HostFrame =
 			commands?: RemoteCommand[];
 	  }
 	| { v: 1; type: "entries"; entries: unknown[] }
-	| { v: 1; type: "stream"; messageId: string; content: string }
+	| { v: 1; type: "stream"; messageId: string; content: string; thinking?: string }
 	| { v: 1; type: "tool"; toolCallId: string; toolName: string; phase: ToolPhase; payload: unknown }
 	| { v: 1; type: "status"; idle: boolean; streaming: boolean; model?: string; contextTokens?: number }
 	| { v: 1; type: "bye"; reason: string };

@@ -91,8 +91,8 @@ export class Mirror {
 		}));
 	}
 
-	stream(messageId: string, content: string): HostFrame {
-		return { v: 1, type: "stream", messageId, content };
+	stream(messageId: string, content: string, thinking?: string): HostFrame {
+		return { v: 1, type: "stream", messageId, content, thinking };
 	}
 
 	/** Snapshot of liveness for the browser's composer and stop button. Cheap; reads no entries. */

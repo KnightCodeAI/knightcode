@@ -62,7 +62,6 @@
 	--topbar: 3.5rem;
 	--safe-top: env(safe-area-inset-top, 0px);
 	--safe-bottom: env(safe-area-inset-bottom, 0px);
-	--viewport-height: 100dvh;
 
 	/* shadcn tokens, mapped onto the ones above so registry components pick the palette up. */
 	--radius: 1rem;
@@ -280,7 +279,7 @@
 	transition:
 		transform 160ms var(--ease-out),
 		background 160ms ease,
-		opacity 160ms ease;
+		color 160ms ease;
 }
 
 @utility prose-chat {
@@ -290,60 +289,58 @@
 	overflow-wrap: anywhere;
 }
 
-/* The transcript column gets the full viewport and scrolls under both bars. */
-@utility fill-viewport {
-	height: var(--viewport-height);
-}
-
 @layer components {
 .glass-button:active {
 	transform: scale(0.94);
 	background: var(--raised-hover);
 }
 
-.round-button:active {
+.round-button:active:not(:disabled) {
 	transform: scale(0.94);
 }
 
-/* Session ring: dashed when idle, a spinning arc when the session is working. */
-.ring {
-	width: 2.25rem;
-	height: 2.25rem;
-	border-radius: 9999px;
-	border: 1.5px dashed var(--label-3);
+/*
+ * Session mark: a circle inset in a sunken tile, dashed when idle and a spinning arc when the
+ * session is working. Not named "ring": Tailwind's ring and ring-<color> utilities match that
+ * name and drew a solid circle over the dashes.
+ */
+.session-mark {
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: 0.625rem;
+	background: var(--sunken);
 	position: relative;
 	flex: none;
 }
 
-.ring-live::after {
+.session-mark::before {
 	content: "";
 	position: absolute;
-	top: -0.1rem;
-	right: -0.1rem;
-	width: 0.55rem;
-	height: 0.55rem;
+	inset: 0.625rem;
+	border-radius: 9999px;
+	border: 1.5px dashed var(--label-3);
+}
+
+.session-mark-live::after {
+	content: "";
+	position: absolute;
+	top: -0.1875rem;
+	right: -0.1875rem;
+	width: 0.625rem;
+	height: 0.625rem;
 	border-radius: 9999px;
 	background: var(--live);
 	box-shadow: 0 0 0 2px var(--ground);
 }
 
-.ring-working {
+.session-mark-working::before {
 	border-style: solid;
-	border-color: var(--label-3);
-}
-
-.ring-working::before {
-	content: "";
-	position: absolute;
-	inset: -1.5px;
-	border-radius: 9999px;
-	border: 1.5px solid transparent;
 	border-top-color: var(--live);
 	border-right-color: var(--live);
 	animation: ring-spin 900ms linear infinite;
 }
 
-.ring-offline {
+.session-mark-offline::before {
 	opacity: 0.55;
 }
 
@@ -369,23 +366,6 @@
 	}
 	to {
 		background-position: -200% 0;
-	}
-}
-
-.caret > :last-child::after {
-	content: "";
-	display: inline-block;
-	width: 0.45rem;
-	height: 1em;
-	margin-left: 0.15rem;
-	background: var(--label-2);
-	vertical-align: text-bottom;
-	animation: blink 1s steps(2, start) infinite;
-}
-
-@keyframes blink {
-	to {
-		visibility: hidden;
 	}
 }
 
