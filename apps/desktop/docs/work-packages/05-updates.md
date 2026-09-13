@@ -167,6 +167,24 @@ A refused update, on this machine:
    refused download stays in `updates\` until the next check recreates that
    directory.
 
+The first release run, `v0.1.1-rc.1`, was the first run of `bundle-mac` and
+`bundle-linux`:
+
+- **Linux x86_64** bundled in 45 minutes. The tarball holds:
+  - `knightcode.app/libexec/zed-editor`;
+  - `libexec/engine/knightcode-engine` and its runtime assets;
+  - `bin/knightcode-ide`;
+  - `share/applications/dev.knightcode.KnightCode.desktop` and the icons.
+
+  That is the layout `install_release_linux` expects.
+- **macOS aarch64** bundled in 89 minutes. It staged the engine, signed the
+  app ad hoc ("signed app bundle with Mach-O thin (arm64)
+  [dev.knightcode.KnightCode]"), printed the Gatekeeper warning, and packed
+  the `.dmg` as the `KnightCode` volume the updater mounts. Ad hoc signing
+  with non-code files under `Contents/MacOS/engine`, a risk WP04 raised, did
+  not fail.
+- **Linux aarch64** failed to link, and the run was not published.
+
 Two defects that only these runs could find, both fixed:
 
 - **Windows never checked for updates.** `bundle-windows.ps1` never set
