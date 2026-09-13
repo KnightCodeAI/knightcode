@@ -720,9 +720,13 @@ macOS Gatekeeper refuses the `.dmg` on any Mac that did not build it. SignPath
 Foundation's free signing for open-source projects is the likely first step on
 Windows; it signs as "SignPath Foundation", not as KnightCodeAI.
 
-**No updates.** The update endpoint the fork inherits is Zed's, so no channel
-polls it; a new version arrives as a new installer. A release feed is its own
-phase.
+**Updates trust one signing key.** A version tag in the IDE repository builds
+all five installers in CI and publishes them as a GitHub Release, and
+`knightcode.dev/api/ide` serves the newest one to installed IDEs, which check
+hourly. The installers are unsigned and the Windows one runs silently, so the
+IDE installs a download only if the release key signed its digest. Losing
+that key strands every install on its version. Anyone who obtains it can ship
+code to every install. See `work-packages/05-updates.md`.
 
 **The Windows 11 context menu.** "Open with KnightCode" sits under "Show more
 options". The Windows 11 shell extension Zed ships is an appx that claims Zed
