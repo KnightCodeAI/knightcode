@@ -1,9 +1,8 @@
 import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { fauxProvider, type Provider } from "@knightcode/ai";
-import { getBuiltinModels } from "@knightcode/ai/providers/all";
 import { afterEach, describe, expect, test } from "vitest";
 import { createEngineContext, type EngineContext } from "../../src/engine/context.ts";
-import { FAST_MODEL_PER_PROVIDER, modelsRoute } from "../../src/engine/models.ts";
+import { modelsRoute } from "../../src/engine/models.ts";
 import { type EngineServer, startEngineServer } from "../../src/engine/server.ts";
 import { InMemorySettingsStorage, SettingsManager, type Settings } from "../../src/core/settings-manager.ts";
 
@@ -22,7 +21,6 @@ interface ModelsBody {
 		input: string[];
 	}[];
 	default: string | null;
-	fast: string | null;
 }
 
 describe("GET /v1/models", () => {
@@ -36,14 +34,13 @@ describe("GET /v1/models", () => {
 	async function start(
 		settings?: Partial<Settings>,
 		manager?: SettingsManager,
-		fastModels?: Readonly<Record<string, string>>,
 	): Promise<{ base: string; ctx: EngineContext }> {
 		const ctx = await createEngineContext({
 			credentials: new InMemoryCredentialStore(),
 			modelsPath: null,
 			settings: manager ?? (settings === undefined ? undefined : SettingsManager.inMemory(settings)),
 		});
-		server = await startEngineServer({ token: "t", routes: [modelsRoute(ctx, fastModels)] });
+		server = await startEngineServer({ token: "t", routes: [modelsRoute(ctx)] });
 		return { base: `http://127.0.0.1:${server.port}`, ctx };
 	}
 
@@ -54,11 +51,8 @@ describe("GET /v1/models", () => {
 	 * ANTHROPIC_API_KEY set legitimately has models available with nothing
 	 * stored, so every assertion here is scoped to this provider id.
 	 */
-	function gatedFauxProvider(id: string, models?: string[]): Provider {
-		const handle = fauxProvider({
-			provider: id,
-			...(models ? { models: models.map((model) => ({ id: model })) } : {}),
-		});
+	function gatedFauxProvider(id: string): Provider {
+		const handle = fauxProvider({ provider: id });
 		return {
 			...handle.provider,
 			auth: {
@@ -166,62 +160,6 @@ describe("GET /v1/models", () => {
 		const body = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
 		expect(body.models.filter((model) => model.providerId === "faux-signed-out")).toEqual([]);
 		expect(body.default).toBeNull();
-	});
-
-	/**
-	 * Tab needs an answer in about a second, and a chat model can take ten:
-	 * grok-4.6 reasons on every request, whatever effort it is asked for. The
-	 * fast model comes from the provider the user already chose, so choosing
-	 * it spends no account they did not pick.
-	 */
-	test("reports the fast model of the provider the user chose", async () => {
-		const { base, ctx } = await start({}, undefined, { "faux-fast": "quick" });
-		ctx.models.registerNativeProvider(gatedFauxProvider("faux-fast", ["big", "quick"]));
-		await ctx.credentials.modify("faux-fast", async () => ({ type: "api_key", key: "stored-key" }));
-		ctx.settings.setDefaultModelAndProvider("faux-fast", "big");
-
-		const body = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
-		expect(body.default).toBe("faux-fast/big");
-		expect(body.fast).toBe("faux-fast/quick");
-	});
-
-	test("reports no fast model for a provider that has none", async () => {
-		const { base, ctx } = await start({}, undefined, {});
-		ctx.models.registerNativeProvider(gatedFauxProvider("faux-no-fast", ["big"]));
-		await ctx.credentials.modify("faux-no-fast", async () => ({ type: "api_key", key: "stored-key" }));
-		ctx.settings.setDefaultModelAndProvider("faux-no-fast", "big");
-
-		const body = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
-		expect(body.default).toBe("faux-no-fast/big");
-		expect(body.fast).toBeNull();
-	});
-
-	test("reports no fast model when the user has chosen no provider", async () => {
-		const { base, ctx } = await start({}, undefined, { "faux-unchosen": "quick" });
-		ctx.models.registerNativeProvider(gatedFauxProvider("faux-unchosen", ["big", "quick"]));
-		await ctx.credentials.modify("faux-unchosen", async () => ({ type: "api_key", key: "stored-key" }));
-
-		const body = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
-		expect(body.fast).toBeNull();
-	});
-
-	test("reports no fast model the catalog cannot serve", async () => {
-		const { base, ctx } = await start({}, undefined, { "faux-gone-fast": "gone" });
-		ctx.models.registerNativeProvider(gatedFauxProvider("faux-gone-fast", ["big"]));
-		await ctx.credentials.modify("faux-gone-fast", async () => ({ type: "api_key", key: "stored-key" }));
-		ctx.settings.setDefaultModelAndProvider("faux-gone-fast", "big");
-
-		const body = (await (await fetch(`${base}/v1/models`, { headers: auth })).json()) as ModelsBody;
-		expect(body.fast).toBeNull();
-	});
-
-	test("every built-in fast model is in its provider's catalog", () => {
-		for (const [provider, id] of Object.entries(FAST_MODEL_PER_PROVIDER)) {
-			expect(
-				getBuiltinModels(provider as Parameters<typeof getBuiltinModels>[0]).some((model) => model.id === id),
-				`${provider}/${id}`,
-			).toBe(true);
-		}
 	});
 
 	test("never returns a credential", async () => {

@@ -326,15 +326,6 @@ provider id, context window, capability flags, and cost metadata the model
 picker needs. It is the only place the IDE learns what a model can do; the IDE
 hardcodes no model list.
 
-Beside the list it names two models by ref. `default` is the model the user
-chose in the CLI. `fast` is a quicker model from that same provider, from the
-engine's `FAST_MODEL_PER_PROVIDER`, or `null` when the provider has none.
-Either is `null` when the catalog cannot serve it. The IDE's provider reports
-`fast` as its `default_fast_model`, so Tab uses it first, and so do commit
-messages and thread titles when no model is set for them. A reasoning model
-such as grok-4.6 took seven seconds per Tab request; each fast model took about
-one.
-
 `/events` is one SSE stream of every engine event, with a heartbeat comment
 every 15 seconds and `X-Accel-Buffering: no`. v1 subscribes for account state
 changes and model-catalog refreshes. The session and agent-manager events are
