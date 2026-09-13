@@ -139,14 +139,45 @@ Zed's own workflows stay in the tree and skip. They are gated to
 
 ## 5. Validation
 
-Windows, this machine:
+### Results, 2026-09-13
 
-- `cargo test -p auto_update -p auto_update_helper -p release_channel`
-- `cargo build -p zed`
-- `bun test lib/ide-release.test.ts` in `apps/web`
-- An update end to end: install a bundled 0.1.0, serve a signed 0.1.1 from
-  a local feed through `KNIGHTCODE_UPDATE_URL`, quit, and confirm that
-  0.1.1 and its engine are installed. A tampered signature must be refused.
+Automated:
+
+- `cargo test -p auto_update -p auto_update_helper -p release_channel`: 17,
+  4 and 1 passed. `test_verify_release` accepts an OpenSSL-made signature
+  and a ring-made one, and refuses a signature over other contents, a changed
+  file, and a non-base64 string. `test_auto_update_downloads` now serves a
+  signed release.
+- `cargo build -p zed`: exit 0. The only warning is upstream's LNK4217.
+- `bun test lib/ide-release.test.ts` in `apps/web`: 6 passed. Prettier is
+  clean on the three new files.
+- Pull-request checks on the fork, run 34751000626: Windows, macOS and Linux
+  each passed their tests and `cargo build -p zed`.
+
+A refused update, on this machine:
+
+1. A bundled 0.1.0 (`0.1.0+stable.39cf229f36`) was installed silently. The
+   install holds `tools\auto_update_helper.exe`, `engine\` and `bin\`.
+2. It was launched with `KNIGHTCODE_UPDATE_URL` pointing at a local feed that
+   offered 0.1.1 with an all-zero signature.
+3. Within 3 s it asked the feed, downloaded the installer and logged:
+   `Refusing to install the update at …\updates\Zed.exe: the release was
+   not signed by the release signing key`.
+4. Nothing was staged: no `updates\versions.txt` and no `install\`. The
+   refused download stays in `updates\` until the next check recreates that
+   directory.
+
+Two defects that only these runs could find, both fixed:
+
+- **Windows never checked for updates.** `bundle-windows.ps1` never set
+  `ZED_BUNDLE`; upstream's does not either. The first local install made no
+  request at all. The script now sets it, as `bundle-mac` and
+  `bundle-linux` do.
+- **arm64 Linux did not link on Ubuntu 22.04.** Section 3 has the cause. The
+  job now runs on `ubuntu-24.04-arm`.
+
+Still to run on Windows: a signed 0.1.1 from a release run, installed over
+0.1.0 by the updater and the helper, with the engine replaced.
 
 Owed:
 
