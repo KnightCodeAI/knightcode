@@ -4733,9 +4733,21 @@ Do not add in this work package:
   `packages/agent`; the operations seams and `customTools` are enough;
 - `session/load`, `session/list`, `session/resume` or `session/fork`;
   transcripts persist to the CLI's session directory already, and replaying
-  one as ACP updates is its own work package;
+  one as ACP updates is its own work package. *Since added, 2026-09-13:*
+  load, resume, list and delete, over the engine's
+  `POST /v1/sessions/:id/open`, `GET /v1/sessions` and
+  `POST /v1/sessions/:id/delete`. Zed reopened every thread at start and
+  failed with "Loading or resuming sessions is not supported by this agent".
+  A prompt or config change to a session the engine no longer holds, as
+  after an engine restart, reopens it once and retries. `session/fork` came
+  with them, over `POST /v1/sessions/:id/fork`, which copies the transcript into a
+  new session in the same project with `SessionManager.forkFrom`. The Zed this
+  IDE is built on never sends `session/fork`, so the fork's agent panel gains a
+  Fork Thread action that does;
 - `available_commands_update`; slash commands typed into Zed reach
-  `session.prompt`, which already expands them;
+  `session.prompt`, which already expands them. *Since added, 2026-09-13:*
+  every new, loaded or resumed session sends its extension commands, prompt
+  templates and skills once the request is answered, so `/` lists them;
 - plans: no built-in tool produces one (`packages/cli/src/core/tools/` has
   eight tools and none is a task list), and OpenCode's adapter emits no
   `plan` update either; wire a `session.plan` event when something publishes

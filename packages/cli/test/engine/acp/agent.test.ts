@@ -5,17 +5,18 @@ import {
 	PROTOCOL_VERSION,
 	RequestError,
 	type RequestPermissionRequest,
+	type SessionNotification,
 	type SessionUpdate,
 	type StopReason,
 } from "@agentclientprotocol/sdk";
 import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { fauxAssistantMessage, fauxProvider, type FauxProviderHandle, fauxText, fauxToolCall } from "@knightcode/ai";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { createAcpAgent } from "../../../src/engine/acp/agent.ts";
-import { createEngineClient } from "../../../src/engine/acp/engine-client.ts";
+import { createEngineClient, type EngineClient } from "../../../src/engine/acp/engine-client.ts";
 import { createEngineContext } from "../../../src/engine/context.ts";
 import { createEventBus, eventsRoute } from "../../../src/engine/events.ts";
 import { modelsRoute } from "../../../src/engine/models.ts";
@@ -74,9 +75,19 @@ describe("ACP agent", () => {
 		for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 	});
 
-	async function start(options: { tokensPerSecond?: number; reasoning?: boolean; holdEvents?: boolean } = {}): Promise<{
+	async function start(
+		options: {
+			tokensPerSecond?: number;
+			reasoning?: boolean;
+			holdEvents?: boolean;
+			/** Keep transcripts on disk, under the temporary agent directory. */
+			persist?: boolean;
+			prompts?: Record<string, string>;
+		} = {},
+	): Promise<{
 		cwd: string;
 		faux: FauxProviderHandle;
+		engine: EngineClient;
 		buffers: Map<string, string>;
 		permissions: RequestPermissionRequest[];
 		session: ActiveSession;
@@ -95,7 +106,15 @@ describe("ACP agent", () => {
 			...(options.reasoning ? { models: [{ id: "faux-thinker", reasoning: true }] } : {}),
 		});
 		ctx.models.registerNativeProvider(faux.provider);
-		registry = createSessionRegistry(ctx, { agentDir, sessionDir: null, defaultModel: faux.getModel() });
+		for (const [promptName, body] of Object.entries(options.prompts ?? {})) {
+			mkdirSync(join(agentDir, "prompts"), { recursive: true });
+			writeFileSync(join(agentDir, "prompts", `${promptName}.md`), body);
+		}
+		registry = createSessionRegistry(ctx, {
+			agentDir,
+			sessionDir: options.persist ? undefined : null,
+			defaultModel: faux.getModel(),
+		});
 		// An engine whose event stream is not up yet: the route hangs until released.
 		const stream = eventsRoute(events, 50);
 		const held = Promise.withResolvers<void>();
@@ -140,6 +159,7 @@ describe("ACP agent", () => {
 		return {
 			cwd,
 			faux,
+			engine,
 			buffers,
 			permissions,
 			session,
@@ -156,6 +176,8 @@ describe("ACP agent", () => {
 		expect(init.protocolVersion).toBe(1);
 		expect(init.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
 		expect(init.agentCapabilities?.sessionCapabilities?.close).toBeDefined();
+		expect(init.agentCapabilities?.loadSession).toBe(true);
+		expect(init.agentCapabilities?.sessionCapabilities).toMatchObject({ resume: {}, list: {}, delete: {} });
 		expect(init.agentInfo?.name).toBe("knightcode-test");
 
 		const options = session.newSessionResponse.configOptions ?? [];
@@ -330,5 +352,150 @@ describe("ACP agent", () => {
 		connection!.close();
 		connection = undefined;
 		await until(() => registry!.size() === 0);
+	});
+
+	/** The editor after a restart: a new connection to the same engine that records every update. */
+	async function reconnect(engine: EngineClient): Promise<SessionNotification[]> {
+		const notifications: SessionNotification[] = [];
+		const editor = client({ name: "test-editor-restarted" }).onNotification("session/update", ({ params }) => {
+			notifications.push(params);
+		});
+		connection = editor.connect(createAcpAgent(engine, { name: "knightcode-test", version: "0.0.0" }));
+		await connection.agent.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
+		return notifications;
+	}
+
+	/** Run one turn to its end and close the editor, as quitting the IDE does. */
+	async function talkThenQuit(session: ActiveSession, text: string): Promise<void> {
+		const done = session.prompt(text);
+		await collect(session);
+		await done;
+		connection!.close();
+		await until(() => registry!.size() === 0);
+	}
+
+	test("a session loaded by a restarted editor replays its history and carries on", async () => {
+		const { cwd, faux, engine, session } = await start({ persist: true });
+		const sessionId = session.sessionId;
+		faux.setResponses([fauxAssistantMessage([fauxText("Hi there.")])]);
+		await talkThenQuit(session, "hello");
+
+		const notifications = await reconnect(engine);
+		await connection!.agent.request("session/load", { sessionId, cwd, mcpServers: [] });
+		expect(notifications.every((notification) => notification.sessionId === sessionId)).toBe(true);
+		const replay = notifications
+			.map((notification) => notification.update)
+			.filter((update) => update.sessionUpdate !== "available_commands_update");
+		expect(replay.map((update) => update.sessionUpdate)).toEqual(["user_message_chunk", "agent_message_chunk"]);
+		expect(replay[0]).toMatchObject({ content: { type: "text", text: "hello" } });
+		expect(replay[1]).toMatchObject({ content: { type: "text", text: "Hi there." } });
+
+		const before = notifications.length;
+		faux.setResponses([fauxAssistantMessage([fauxText("Still here.")])]);
+		const answer = await connection!.agent.request("session/prompt", {
+			sessionId,
+			prompt: [{ type: "text", text: "again" }],
+		});
+		expect(answer.stopReason).toBe("end_turn");
+		const turn = notifications.slice(before).map((notification) => notification.update);
+		expect(textOf(turn, "agent_message_chunk")).toBe("Still here.");
+	});
+
+	test("resume reopens without a replay, and list and delete manage saved sessions", async () => {
+		const { cwd, faux, engine, session } = await start({ persist: true });
+		const sessionId = session.sessionId;
+		faux.setResponses([fauxAssistantMessage([fauxText("One.")])]);
+		await talkThenQuit(session, "first message");
+
+		const notifications = await reconnect(engine);
+		const listed = await connection!.agent.request("session/list", { cwd });
+		expect(listed.sessions).toEqual([expect.objectContaining({ sessionId, title: "first message" })]);
+
+		await connection!.agent.request("session/resume", { sessionId, cwd });
+		// Only the command list: a resume replays nothing.
+		expect(
+			notifications.filter((notification) => notification.update.sessionUpdate !== "available_commands_update"),
+		).toEqual([]);
+		expect(registry!.size()).toBe(1);
+
+		await connection!.agent.request("session/delete", { sessionId });
+		expect(registry!.size()).toBe(0);
+		expect((await connection!.agent.request("session/list", { cwd })).sessions).toEqual([]);
+		await expect(connection!.agent.request("session/load", { sessionId, cwd, mcpServers: [] })).rejects.toBeDefined();
+	});
+
+	test("a prompt to a session the engine lost reopens it from its transcript and goes through", async () => {
+		const { faux, session } = await start({ persist: true });
+		faux.setResponses([fauxAssistantMessage([fauxText("First.")])]);
+		const first = session.prompt("one");
+		await collect(session);
+		await first;
+
+		// As after an engine restart: the live session is gone, the transcript is not.
+		await registry!.close(session.sessionId);
+		expect(registry!.size()).toBe(0);
+
+		faux.setResponses([fauxAssistantMessage([fauxText("Second.")])]);
+		const second = session.prompt("two");
+		const { updates, stopReason } = await collect(session);
+		await second;
+		expect(stopReason).toBe("end_turn");
+		expect(textOf(updates, "agent_message_chunk")).toBe("Second.");
+		expect(registry!.size()).toBe(1);
+	});
+
+	test("a delete the engine refuses leaves the session live and usable", async () => {
+		// In memory: there is no transcript to delete, so the engine refuses.
+		const { faux, session } = await start();
+		await expect(connection!.agent.request("session/delete", { sessionId: session.sessionId })).rejects.toBeDefined();
+		expect(registry!.size()).toBe(1);
+
+		faux.setResponses([fauxAssistantMessage([fauxText("still here")])]);
+		const done = session.prompt("hello");
+		const { updates, stopReason } = await collect(session);
+		await done;
+		expect(stopReason).toBe("end_turn");
+		expect(textOf(updates, "agent_message_chunk")).toBe("still here");
+	});
+
+	test("a new session tells the editor which slash commands it offers, after answering", async () => {
+		const { cwd, engine } = await start({
+			prompts: { review: "---\ndescription: Review the change\n---\nReview $@\n" },
+		});
+		connection!.close();
+		const notifications = await reconnect(engine);
+		const { sessionId } = await connection!.agent.request("session/new", { cwd, mcpServers: [] });
+		await until(() =>
+			notifications.some((notification) => notification.update.sessionUpdate === "available_commands_update"),
+		);
+		const [announced] = notifications.filter(
+			(notification) => notification.update.sessionUpdate === "available_commands_update",
+		);
+		expect(announced.sessionId).toBe(sessionId);
+		expect(announced.update).toMatchObject({
+			availableCommands: expect.arrayContaining([
+				expect.objectContaining({ name: "review", description: "Review the change", input: { hint: "arguments" } }),
+			]),
+		});
+	});
+
+	test("fork makes a new session with the same history, which a load replays", async () => {
+		const { cwd, faux, engine, session } = await start({ persist: true });
+		faux.setResponses([fauxAssistantMessage([fauxText("Forkable.")])]);
+		await talkThenQuit(session, "keep this");
+
+		const notifications = await reconnect(engine);
+		const init = await connection!.agent.request("initialize", { protocolVersion: PROTOCOL_VERSION });
+		expect(init.agentCapabilities?.sessionCapabilities?.fork).toBeDefined();
+		const forked = await connection!.agent.request("session/fork", { sessionId: session.sessionId, cwd });
+		expect(forked.sessionId).not.toBe(session.sessionId);
+
+		await connection!.agent.request("session/load", { sessionId: forked.sessionId, cwd, mcpServers: [] });
+		const replay = notifications
+			.filter((notification) => notification.sessionId === forked.sessionId)
+			.map((notification) => notification.update)
+			.filter((update) => update.sessionUpdate !== "available_commands_update");
+		expect(replay.map((update) => update.sessionUpdate)).toEqual(["user_message_chunk", "agent_message_chunk"]);
+		expect(replay[0]).toMatchObject({ content: { type: "text", text: "keep this" } });
 	});
 });

@@ -1,7 +1,8 @@
 /**
  * Session routes.
  *
- * A session is created, prompted, cancelled, reconfigured and closed here.
+ * A session is created, prompted, cancelled, reconfigured and closed here,
+ * and a saved one is listed, reopened from its transcript, or deleted.
  * The turn itself is not a response: `prompt` answers 202 once preflight has
  * passed and the outcome arrives on /events as `session.turn_end`. Questions
  * the engine has for the client arrive there too, as `session.request`, and
@@ -120,6 +121,19 @@ function parseReply(body: Record<string, unknown>): ClientReply {
 export function sessionRoutes(ctx: EngineContext, sessions: SessionRegistry): readonly EngineRoute[] {
 	return [
 		{
+			method: "GET",
+			path: "/v1/sessions",
+			handle: async (_req, res, url) => {
+				try {
+					const cwd = url.searchParams.get("cwd") ?? undefined;
+					const cursor = url.searchParams.get("cursor") ?? undefined;
+					sendJson(res, 200, await sessions.list({ cwd, cursor }));
+				} catch (error) {
+					sendError(res, error);
+				}
+			},
+		},
+		{
 			method: "POST",
 			path: "/v1/sessions",
 			handle: async (req, res) => {
@@ -193,6 +207,37 @@ export function sessionRoutes(ctx: EngineContext, sessions: SessionRegistry): re
 						if (text.length === 0 && !images?.length) throw new SessionError("bad_request", "prompt is empty");
 						await sessions.prompt(id, { text, images });
 						sendJson(res, 202, { accepted: true });
+						return;
+					}
+					if (action === "open" && requestId === undefined) {
+						const body = await readJsonBody(req);
+						if (typeof body.cwd !== "string" || body.cwd.length === 0) {
+							throw new SessionError("bad_request", "cwd is required");
+						}
+						const session = await sessions.open({
+							id,
+							cwd: body.cwd,
+							capabilities: parseCapabilities(body.capabilities),
+						});
+						sendJson(res, 200, { session, messages: sessions.messages(id) });
+						return;
+					}
+					if (action === "fork" && requestId === undefined) {
+						const body = await readJsonBody(req);
+						if (typeof body.cwd !== "string" || body.cwd.length === 0) {
+							throw new SessionError("bad_request", "cwd is required");
+						}
+						const session = await sessions.fork({
+							id,
+							cwd: body.cwd,
+							capabilities: parseCapabilities(body.capabilities),
+						});
+						sendJson(res, 201, session);
+						return;
+					}
+					if (action === "delete" && requestId === undefined) {
+						if (!(await sessions.delete(id))) throw new SessionError("not_found", `no saved session: ${id}`);
+						sendNoContent(res);
 						return;
 					}
 					if (action === "cancel" && requestId === undefined) {

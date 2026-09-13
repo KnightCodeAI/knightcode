@@ -36,7 +36,7 @@ import type { SessionSummary } from "../sessions.ts";
 import { toPromptInput } from "./content.ts";
 import { type EngineClient, EngineRequestError } from "./engine-client.ts";
 import { toolKind, toolLocations, toolTitle } from "./tools.ts";
-import { createSessionState, type SessionState, toSessionUpdates } from "./updates.ts";
+import { createSessionState, historyUpdates, type SessionState, toSessionUpdates } from "./updates.ts";
 
 export interface AcpAgentOptions {
 	name?: string;
@@ -214,6 +214,7 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 
 	const canRead = (): boolean => capabilities.fs?.readTextFile === true;
 	const canWrite = (): boolean => capabilities.fs?.writeTextFile === true;
+	const fileCapabilities = () => ({ readTextFile: canRead(), writeTextFile: canWrite() });
 
 	// The event stream's next outcome: resolved once it is up, rejected when an
 	// attempt to open it fails. A turn must not start before it is up, because
@@ -243,6 +244,56 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 
 	async function configOptions(summary: SessionSummary): Promise<SessionConfigOption[]> {
 		return toConfigOptions(summary, await engine.models());
+	}
+
+	/** The adapter's record of a session the engine has live; a reload keeps the record it had. */
+	function track(summary: SessionSummary): AdapterSession {
+		const known = sessions.get(summary.id);
+		if (known) {
+			known.summary = summary;
+			return known;
+		}
+		const session: AdapterSession = { summary, state: createSessionState(summary.cwd), reads: new Map() };
+		sessions.set(summary.id, session);
+		return session;
+	}
+
+	/**
+	 * What `/` offers in the editor. Sent once the request has been answered:
+	 * Zed files updates only under a session it has registered, which for
+	 * `session/new` happens when the response arrives.
+	 */
+	function announceCommands(summary: SessionSummary): void {
+		if (summary.commands.length === 0) return;
+		setImmediate(() => {
+			notify(summary.id, {
+				sessionUpdate: "available_commands_update",
+				availableCommands: summary.commands.map((command) => ({
+					name: command.name,
+					description: command.description,
+					input: { hint: "arguments" },
+				})),
+			}).catch(() => undefined);
+		});
+	}
+
+	/**
+	 * The engine forgets its live sessions when it restarts, so a session the
+	 * editor still shows answers 404. Its transcript survives: reopen it once
+	 * and try again.
+	 */
+	async function reopening<T>(session: AdapterSession, operation: () => Promise<T>): Promise<T> {
+		try {
+			return await operation();
+		} catch (error) {
+			if (!(error instanceof EngineRequestError && error.status === 404)) throw error;
+			const opened = await engine.openSession(session.summary.id, {
+				cwd: session.state.cwd,
+				capabilities: fileCapabilities(),
+			});
+			session.summary = opened.session;
+			return operation();
+		}
 	}
 
 	function settleTurn(session: AdapterSession, end: TurnEnd): void {
@@ -379,9 +430,9 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 			return {
 				protocolVersion: PROTOCOL_VERSION,
 				agentCapabilities: {
-					loadSession: false,
+					loadSession: true,
 					promptCapabilities: { image: true, embeddedContext: true },
-					sessionCapabilities: { close: {} },
+					sessionCapabilities: { close: {}, resume: {}, list: {}, delete: {}, fork: {} },
 				},
 				authMethods: [
 					{
@@ -396,13 +447,61 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 		.onRequest("authenticate", () => ({}))
 		.onRequest("session/new", async ({ params }) => {
 			const summary = await withEngine(() =>
-				engine.createSession({
-					cwd: params.cwd,
-					capabilities: { readTextFile: canRead(), writeTextFile: canWrite() },
-				}),
+				engine.createSession({ cwd: params.cwd, capabilities: fileCapabilities() }),
 			);
-			sessions.set(summary.id, { summary, state: createSessionState(summary.cwd), reads: new Map() });
+			track(summary);
+			announceCommands(summary);
 			return { sessionId: summary.id, configOptions: await configOptions(summary) };
+		})
+		.onRequest("session/load", async ({ params }) => {
+			const { session: summary, messages } = await withEngine(() =>
+				engine.openSession(params.sessionId, { cwd: params.cwd, capabilities: fileCapabilities() }),
+			);
+			track(summary);
+			// Zed registers the thread before it asks, so the history lands in it.
+			for (const update of historyUpdates(messages, summary.cwd)) await notify(summary.id, update);
+			announceCommands(summary);
+			return { configOptions: await configOptions(summary) };
+		})
+		.onRequest("session/resume", async ({ params }) => {
+			const { session: summary } = await withEngine(() =>
+				engine.openSession(params.sessionId, { cwd: params.cwd, capabilities: fileCapabilities() }),
+			);
+			track(summary);
+			announceCommands(summary);
+			return { configOptions: await configOptions(summary) };
+		})
+		.onRequest("session/fork", async ({ params }) => {
+			const summary = await withEngine(() =>
+				engine.forkSession(params.sessionId, { cwd: params.cwd, capabilities: fileCapabilities() }),
+			);
+			track(summary);
+			announceCommands(summary);
+			return { sessionId: summary.id, configOptions: await configOptions(summary) };
+		})
+		.onRequest("session/list", async ({ params }) => {
+			const page = await withEngine(() =>
+				engine.listSessions({ cwd: params.cwd ?? undefined, cursor: params.cursor ?? undefined }),
+			);
+			return {
+				sessions: page.sessions.map((listing) => ({
+					sessionId: listing.id,
+					cwd: listing.cwd,
+					title: listing.title,
+					updatedAt: listing.updatedAt,
+				})),
+				...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+			};
+		})
+		.onRequest("session/delete", async ({ params }) => {
+			await withEngine(() => engine.deleteSession(params.sessionId));
+			// Forgotten only once the engine has deleted it: a refused delete leaves the session usable.
+			const session = sessions.get(params.sessionId);
+			if (session) {
+				sessions.delete(params.sessionId);
+				settleTurn(session, { type: "session.turn_end", sessionId: params.sessionId, stopReason: "cancelled" });
+			}
+			return {};
 		})
 		.onRequest("session/prompt", async ({ params }) => {
 			const session = requireSession(params.sessionId);
@@ -416,7 +515,9 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 				session.turn = { resolve, reject };
 			});
 			try {
-				await withEngine(() => engine.prompt(session.summary.id, toPromptInput(params.prompt)));
+				await withEngine(() =>
+					reopening(session, () => engine.prompt(session.summary.id, toPromptInput(params.prompt))),
+				);
 			} catch (error) {
 				session.turn = undefined;
 				throw error;
@@ -460,7 +561,9 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 						? { thinkingLevel: params.value }
 						: undefined;
 			if (!patch) throw RequestError.invalidParams({ configId: params.configId }, "unknown config option");
-			session.summary = await withEngine(() => engine.updateSession(session.summary.id, patch));
+			session.summary = await withEngine(() =>
+				reopening(session, () => engine.updateSession(session.summary.id, patch)),
+			);
 			return { configOptions: await configOptions(session.summary) };
 		});
 }

@@ -10,6 +10,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { Message } from "@knightcode/ai";
 import type { SessionEvent, ToolContent } from "../events.ts";
 import { toolKind, toolLocations, toolResultContent, toolTitle } from "./tools.ts";
 
@@ -179,4 +180,81 @@ export function toSessionUpdates(event: SessionEvent, state: SessionState): Sess
 		default:
 			return [];
 	}
+}
+
+function isRole<R extends Message["role"]>(message: unknown, role: R): message is Extract<Message, { role: R }> {
+	return typeof message === "object" && message !== null && (message as { role?: unknown }).role === role;
+}
+
+/**
+ * A saved transcript as the updates that would have drawn it, for
+ * `session/load`: the user's messages, the assistant's text and thinking, and
+ * each tool call as a finished card carrying its output. A shell call's output
+ * is text, since its terminal cannot be replayed. Anything else in the
+ * transcript, such as an extension's custom entries, is not shown.
+ */
+export function historyUpdates(messages: readonly unknown[], cwd: string): SessionUpdate[] {
+	const results = new Map<string, Extract<Message, { role: "toolResult" }>>();
+	for (const message of messages) {
+		if (isRole(message, "toolResult")) results.set(message.toolCallId, message);
+	}
+	const updates: SessionUpdate[] = [];
+	for (const message of messages) {
+		if (isRole(message, "user")) {
+			const messageId = randomUUID();
+			const blocks =
+				typeof message.content === "string" ? [{ type: "text" as const, text: message.content }] : message.content;
+			for (const block of blocks) {
+				if (block.type === "text" && block.text.length > 0) {
+					updates.push({ sessionUpdate: "user_message_chunk", messageId, content: { type: "text", text: block.text } });
+				} else if (block.type === "image") {
+					updates.push({
+						sessionUpdate: "user_message_chunk",
+						messageId,
+						content: { type: "image", data: block.data, mimeType: block.mimeType },
+					});
+				}
+			}
+		} else if (isRole(message, "assistant")) {
+			const messageId = randomUUID();
+			for (const block of message.content) {
+				if (block.type === "text" && block.text.length > 0) {
+					updates.push({
+						sessionUpdate: "agent_message_chunk",
+						messageId,
+						content: { type: "text", text: block.text },
+					});
+				} else if (block.type === "thinking" && block.thinking.length > 0 && !block.redacted) {
+					updates.push({
+						sessionUpdate: "agent_thought_chunk",
+						messageId,
+						content: { type: "text", text: block.thinking },
+					});
+				} else if (block.type === "toolCall") {
+					const result = results.get(block.id);
+					updates.push({
+						sessionUpdate: "tool_call",
+						toolCallId: block.id,
+						title: toolTitle(block.name, block.arguments, cwd),
+						kind: toolKind(block.name),
+						// A call with no result was interrupted before it finished.
+						status: result && !result.isError ? "completed" : "failed",
+						locations: toolLocations(block.name, block.arguments, cwd),
+						rawInput: block.arguments,
+						...(result
+							? {
+									content: toolResultContent(result.content),
+									rawOutput: {
+										content: textOf(result.content),
+										...(result.details !== undefined ? { details: result.details } : {}),
+									},
+								}
+							: {}),
+						_meta: { [TOOL_NAME_META_KEY]: block.name },
+					});
+				}
+			}
+		}
+	}
+	return updates;
 }
