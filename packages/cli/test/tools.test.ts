@@ -768,11 +768,8 @@ describe("Coding Agent Tools", () => {
 			expect(result.truncated).toBe(true);
 			expect(fullOutputPath).toBeDefined();
 
-			for (let i = 0; i < 20 && (!fullOutputPath || !existsSync(fullOutputPath)); i++) {
-				await new Promise((resolve) => setTimeout(resolve, 10));
-			}
-
-			expect(fullOutputPath).toBeDefined();
+			// No waiting: the path is handed to the model as the full output, so the
+			// file must be complete by the time executeBash resolves.
 			expect(existsSync(fullOutputPath!)).toBe(true);
 			const fullOutput = readFileSync(fullOutputPath!, "utf-8");
 			expect(fullOutput).toContain("1\n2\n3");
