@@ -432,7 +432,7 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 				agentCapabilities: {
 					loadSession: true,
 					promptCapabilities: { image: true, embeddedContext: true },
-					sessionCapabilities: { close: {}, resume: {}, list: {}, delete: {} },
+					sessionCapabilities: { close: {}, resume: {}, list: {}, delete: {}, fork: {} },
 				},
 				authMethods: [
 					{
@@ -470,6 +470,14 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 			track(summary);
 			announceCommands(summary);
 			return { configOptions: await configOptions(summary) };
+		})
+		.onRequest("session/fork", async ({ params }) => {
+			const summary = await withEngine(() =>
+				engine.forkSession(params.sessionId, { cwd: params.cwd, capabilities: fileCapabilities() }),
+			);
+			track(summary);
+			announceCommands(summary);
+			return { sessionId: summary.id, configOptions: await configOptions(summary) };
 		})
 		.onRequest("session/list", async ({ params }) => {
 			const page = await withEngine(() =>

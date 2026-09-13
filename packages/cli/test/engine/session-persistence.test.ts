@@ -162,6 +162,28 @@ describe("saved sessions", () => {
 		expect((await registry.list({})).sessions.map((listing) => listing.id)).toEqual([id]);
 	});
 
+	test("a fork is a new session with a copy of the transcript, and each carries on on its own", async () => {
+		const { cwd, registry, turn } = await start();
+		const { id } = await registry.create({ cwd });
+		await turn(id, "the plan is A", "Plan A noted.");
+
+		const fork = await registry.fork({ id, cwd });
+		expect(fork.id).not.toBe(id);
+		expect(transcript(registry.messages(fork.id))).toEqual(["user: the plan is A", "assistant: Plan A noted."]);
+
+		await turn(fork.id, "switch to plan B", "Plan B.");
+		expect(transcript(registry.messages(fork.id))).toHaveLength(4);
+		expect(transcript(registry.messages(id))).toHaveLength(2);
+		expect((await registry.list({ cwd })).sessions.map((listing) => listing.id).sort()).toEqual([id, fork.id].sort());
+
+		const other = mkdtempSync(join(tmpdir(), "knightcode-test-saved-other-"));
+		dirs.push(other);
+		await expect(registry.fork({ id, cwd: other })).rejects.toMatchObject({ code: "not_found" });
+		// A session with no reply yet has no transcript to copy.
+		const fresh = await registry.create({ cwd });
+		await expect(registry.fork({ id: fresh.id, cwd })).rejects.toMatchObject({ code: "not_found" });
+	});
+
 	test("an id with no transcript is not found", async () => {
 		const { cwd, registry } = await start();
 		await expect(registry.open({ id: "no-such-session", cwd })).rejects.toMatchObject({ code: "not_found" });

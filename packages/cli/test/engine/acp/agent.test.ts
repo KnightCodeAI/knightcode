@@ -478,4 +478,24 @@ describe("ACP agent", () => {
 			]),
 		});
 	});
+
+	test("fork makes a new session with the same history, which a load replays", async () => {
+		const { cwd, faux, engine, session } = await start({ persist: true });
+		faux.setResponses([fauxAssistantMessage([fauxText("Forkable.")])]);
+		await talkThenQuit(session, "keep this");
+
+		const notifications = await reconnect(engine);
+		const init = await connection!.agent.request("initialize", { protocolVersion: PROTOCOL_VERSION });
+		expect(init.agentCapabilities?.sessionCapabilities?.fork).toBeDefined();
+		const forked = await connection!.agent.request("session/fork", { sessionId: session.sessionId, cwd });
+		expect(forked.sessionId).not.toBe(session.sessionId);
+
+		await connection!.agent.request("session/load", { sessionId: forked.sessionId, cwd, mcpServers: [] });
+		const replay = notifications
+			.filter((notification) => notification.sessionId === forked.sessionId)
+			.map((notification) => notification.update)
+			.filter((update) => update.sessionUpdate !== "available_commands_update");
+		expect(replay.map((update) => update.sessionUpdate)).toEqual(["user_message_chunk", "agent_message_chunk"]);
+		expect(replay[0]).toMatchObject({ content: { type: "text", text: "keep this" } });
+	});
 });

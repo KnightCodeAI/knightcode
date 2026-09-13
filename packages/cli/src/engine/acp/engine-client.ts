@@ -70,6 +70,8 @@ export interface EngineClient {
 	closeSession(id: string): Promise<void>;
 	/** A saved session made live again, with the messages it holds. */
 	openSession(id: string, body: OpenSessionBody): Promise<OpenedSession>;
+	/** A new session holding a copy of this one's transcript. */
+	forkSession(id: string, body: OpenSessionBody): Promise<SessionSummary>;
 	listSessions(query: { cwd?: string; cursor?: string }): Promise<SessionPage>;
 	/** Deletes a saved session's transcript, closing the session first when it is live. */
 	deleteSession(id: string): Promise<void>;
@@ -155,6 +157,7 @@ export function createEngineClient(options: EngineClientOptions): EngineClient {
 			await call("DELETE", session(id));
 		},
 		openSession: (id, body) => call("POST", `${session(id)}/open`, body) as Promise<OpenedSession>,
+		forkSession: (id, body) => call("POST", `${session(id)}/fork`, body) as Promise<SessionSummary>,
 		listSessions: (query) => {
 			const search = new URLSearchParams();
 			if (query.cwd !== undefined) search.set("cwd", query.cwd);

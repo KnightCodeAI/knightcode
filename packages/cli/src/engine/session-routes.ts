@@ -222,6 +222,19 @@ export function sessionRoutes(ctx: EngineContext, sessions: SessionRegistry): re
 						sendJson(res, 200, { session, messages: sessions.messages(id) });
 						return;
 					}
+					if (action === "fork" && requestId === undefined) {
+						const body = await readJsonBody(req);
+						if (typeof body.cwd !== "string" || body.cwd.length === 0) {
+							throw new SessionError("bad_request", "cwd is required");
+						}
+						const session = await sessions.fork({
+							id,
+							cwd: body.cwd,
+							capabilities: parseCapabilities(body.capabilities),
+						});
+						sendJson(res, 201, session);
+						return;
+					}
 					if (action === "delete" && requestId === undefined) {
 						if (!(await sessions.delete(id))) throw new SessionError("not_found", `no saved session: ${id}`);
 						sendNoContent(res);

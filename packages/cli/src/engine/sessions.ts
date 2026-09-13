@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { ThinkingLevel } from "@knightcode/agent";
@@ -106,6 +107,8 @@ export interface SessionRegistry {
 	create(options: CreateSessionOptions): Promise<SessionSummary>;
 	/** A saved session made live again, or the live one when it already is: one transcript never has two writers. */
 	open(options: OpenSessionOptions): Promise<SessionSummary>;
+	/** A new live session holding a copy of a session's transcript, within that session's own project. */
+	fork(options: OpenSessionOptions): Promise<SessionSummary>;
 	summary(id: string): SessionSummary | undefined;
 	messages(id: string): SessionMessages;
 	/** Saved sessions that have messages, newest first, for `cwd` or for every project. */
@@ -428,6 +431,21 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 			} finally {
 				opening.delete(request.id);
 			}
+		},
+
+		async fork(request) {
+			const cwd = await directory(request.cwd);
+			// The same rule as open: a transcript is forked only within its own project.
+			const live = entries.get(request.id);
+			const source =
+				live !== undefined
+					? live.cwd === cwd
+						? live.file
+						: undefined
+					: (await savedSessions(cwd)).find((info) => info.id === request.id)?.path;
+			// A live session writes its transcript with its first reply; before that there is nothing to copy.
+			if (!source || !existsSync(source)) throw new SessionError("not_found", `nothing to fork: ${request.id}`);
+			return summarize(await start(cwd, SessionManager.forkFrom(source, cwd, dirFor(cwd)), request));
 		},
 
 		summary(id) {
