@@ -4,6 +4,11 @@ export const MAX_PROMPT_BYTES = 131_072;
 export const MAX_ROOM_BYTES = 8_388_608;
 export const MAX_VIEWER_BUFFER_BYTES = 4_194_304;
 export const MAX_VIEWERS = 8;
+/**
+ * The relay closes a host socket with this code when it refuses the token. A refused upgrade
+ * reaches a websocket client only as a bare network error, indistinguishable from an outage.
+ */
+export const CLOSE_UNAUTHORIZED = 4001;
 export const TRUNCATION_MARKER = "[knightcode-remote: content truncated]";
 
 export type ToolPhase = "start" | "update" | "end";

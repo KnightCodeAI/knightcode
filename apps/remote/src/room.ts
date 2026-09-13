@@ -2,6 +2,7 @@ import {
 	decodeHostFrame,
 	decodeViewerFrame,
 	encodeFrame,
+	frameByteLength,
 	MAX_ROOM_BYTES,
 	MAX_VIEWERS,
 } from "../../../packages/remote/src/protocol.ts";
@@ -183,7 +184,7 @@ export class RemoteRoom {
 			await this.#state.storage.put("bytes", 0);
 		}
 
-		const bytes = ((await this.#state.storage.get<number>("bytes")) ?? 0) + stamped.length;
+		const bytes = ((await this.#state.storage.get<number>("bytes")) ?? 0) + frameByteLength(stamped);
 		await this.#state.storage.put({ [frameKey(seq)]: stamped, seq, bytes });
 		this.#send("viewer", stamped);
 

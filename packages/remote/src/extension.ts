@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@knightcodeai/cli";
-import { logout, readToken, relayOrigin, writeToken } from "./auth.ts";
+import { deleteToken, logout, readToken, relayOrigin, writeToken } from "./auth.ts";
 import { RelayHost, type RelayHostOptions } from "./host.ts";
 import { Mirror, type MirrorSource } from "./mirror.ts";
 import type { RemoteCommand } from "./protocol.ts";
@@ -237,7 +237,7 @@ export function remoteExtension(knightcode: ExtensionAPI, deps: RemoteExtensionD
 							: status.state === "retrying"
 								? (["warning", "remote reconnecting"] as const)
 								: status.state === "expired"
-									? (["error", "remote link expired"] as const)
+									? (["error", "remote sign-in expired"] as const)
 									: (["dim", "remote connecting"] as const);
 					ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg(colour, label));
 					// Only on a rise from nobody watching: otherwise every reconnect and every
@@ -245,10 +245,14 @@ export function remoteExtension(knightcode: ExtensionAPI, deps: RemoteExtensionD
 					if (status.state === "connected" && status.viewers > 0 && previousViewers === 0) {
 						ctx.ui.notify("A viewer connected to your remote session", "info");
 					}
-					// A revoked token or a deleted room is not recoverable by retrying; the
-					// user has to run /remote again. The session itself is untouched.
+					// A token the relay refuses is not recoverable by retrying. Forgetting it is what
+					// makes the next /remote sign in instead of reusing it, and the room goes too: it
+					// may belong to the account that token was for. The session itself is untouched.
 					if (status.state === "expired") {
 						session = undefined;
+						lastRoomId = undefined;
+						void deleteToken();
+						ctx.ui.notify("Remote sign-in is no longer valid. Run /remote to sign in again", "error");
 					}
 				},
 			});

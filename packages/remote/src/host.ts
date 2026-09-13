@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "undici";
-import { decodeViewerFrame, encodeFrame, type HostFrame, type RelayFrame } from "./protocol.ts";
+import { CLOSE_UNAUTHORIZED, decodeViewerFrame, encodeFrame, type HostFrame, type RelayFrame } from "./protocol.ts";
 
 const RETRY_INITIAL_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
@@ -42,9 +42,10 @@ function defaultSocketFactory(url: string, token: string): RelayWebSocket {
 }
 
 /**
- * Maintains the outbound connection to the relay. There is no terminal failure state and no
- * attempt ceiling: losing the relay degrades /remote to a status line and never touches the
- * local session. See "Lifetime and ownership" in the spec.
+ * Maintains the outbound connection to the relay. There is no attempt ceiling: losing the
+ * relay degrades /remote to a status line and never touches the local session. The one
+ * terminal state is "expired", when the relay refuses the token itself. See "Lifetime and
+ * ownership" in the spec.
  */
 export class RelayHost {
 	readonly #options: RelayHostOptions;
@@ -156,6 +157,11 @@ export class RelayHost {
 				this.#onMessage(String(event.data));
 			}) as unknown as (event: never) => void);
 			socket.addEventListener("close", ((event: { code: number; reason: string }) => {
+				if (event.code === CLOSE_UNAUTHORIZED && !this.#closed) {
+					// A revoked or unknown token: the same token can never get back in.
+					this.#closed = true;
+					this.#options.onStatus({ state: "expired" });
+				}
 				if (this.#closed) finish();
 				else finish(new Error(`Relay closed (${event.code}${event.reason ? `: ${event.reason}` : ""})`));
 			}) as unknown as (event: never) => void);

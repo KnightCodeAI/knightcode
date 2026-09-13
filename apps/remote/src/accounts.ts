@@ -51,14 +51,17 @@ export function clearSessionCookie(): string {
 	return `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 }
 
-export async function readSessionCookie(secret: string, request: Request): Promise<string | undefined> {
-	const header = request.headers.get("cookie");
-	if (!header) return undefined;
-	for (const part of header.split(";")) {
-		const [name, ...rest] = part.trim().split("=");
-		if (name === SESSION_COOKIE) return verify(secret, rest.join("="));
+export function readCookie(request: Request, name: string): string | undefined {
+	for (const part of request.headers.get("cookie")?.split(";") ?? []) {
+		const [key, ...rest] = part.trim().split("=");
+		if (key === name) return rest.join("=");
 	}
 	return undefined;
+}
+
+export async function readSessionCookie(secret: string, request: Request): Promise<string | undefined> {
+	const signed = readCookie(request, SESSION_COOKIE);
+	return signed === undefined ? undefined : verify(secret, signed);
 }
 
 export async function issueCliToken(db: D1Database, accountId: string, label: string): Promise<string> {

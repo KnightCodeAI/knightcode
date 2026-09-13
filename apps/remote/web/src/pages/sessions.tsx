@@ -120,13 +120,15 @@ function AccountSheet({ me }: { me?: Me }): React.JSX.Element {
 						</p>
 					</div>
 					<div className="mt-auto px-5 pb-[calc(var(--safe-bottom)+1.5rem)]">
-						<a
-							href="/logout"
-							className="flex items-center gap-2.5 rounded-2xl bg-raised px-4 py-3 text-[15px] font-medium transition active:scale-[0.985] active:bg-raised-hover"
-						>
-							<LogOut className="size-4" aria-hidden="true" />
-							Sign out
-						</a>
+						<form method="post" action="/logout">
+							<button
+								type="submit"
+								className="flex w-full items-center gap-2.5 rounded-2xl bg-raised px-4 py-3 text-[15px] font-medium transition active:scale-[0.985] active:bg-raised-hover"
+							>
+								<LogOut className="size-4" aria-hidden="true" />
+								Sign out
+							</button>
+						</form>
 					</div>
 				</SheetContent>
 			</Sheet>

@@ -112,6 +112,15 @@ describe("mirror", () => {
 		expect(mirror.drain(state)).toEqual([]);
 	});
 
+	test("keeps only the newest entries that fit the snapshot budget", () => {
+		// A transcript past the relay's room limit made every snapshot trip another resnapshot
+		// request, re-uploading all of it at each settle point. The oldest entries fall off.
+		const entries = ["a", "b", "c", "d"].map(entry);
+		const size = JSON.stringify(entries[0]).length;
+		const frames = new Mirror(10_000, size * 2).drain(source(entries)) as Array<{ entries: Array<{ id: string }> }>;
+		expect(frames.flatMap((frame) => frame.entries.map((item) => item.id))).toEqual(["c", "d"]);
+	});
+
 	test("builds a stream frame without touching the entry log", () => {
 		const state = source([entry("a")]);
 		const mirror = new Mirror();

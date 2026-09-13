@@ -1,3 +1,4 @@
+import { CLOSE_UNAUTHORIZED } from "../../../packages/remote/src/protocol.ts";
 import { accountForCliToken, clearSessionCookie, type Env, readSessionCookie, revokeCliToken } from "./accounts.ts";
 import { approveDevice, csrfToken, pollDevice, startDevice } from "./device.ts";
 import { completeLogin, startLogin } from "./oauth.ts";
@@ -41,6 +42,21 @@ function roomStub(env: Env, roomId: string): DurableObjectStub {
 	return env.ROOM.get(env.ROOM.idFromName(roomId));
 }
 
+/**
+ * A plain 401 on the upgrade reached the CLI as a bare websocket error, so a revoked token
+ * looked like an outage and was retried forever. A socket closed with CLOSE_UNAUTHORIZED is
+ * the one refusal a websocket client can read.
+ */
+function refuseHost(request: Request): Response {
+	if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+		return new Response("Unauthorized", { status: 401 });
+	}
+	const pair = new WebSocketPair();
+	pair[1].accept();
+	pair[1].close(CLOSE_UNAUTHORIZED, "Unauthorized");
+	return new Response(null, { status: 101, webSocket: pair[0] });
+}
+
 async function hostConnect(env: Env, request: Request): Promise<Response> {
 	const url = new URL(request.url);
 	const roomId = url.searchParams.get("room") ?? "";
@@ -48,17 +64,21 @@ async function hostConnect(env: Env, request: Request): Promise<Response> {
 
 	const token = bearer(request);
 	const accountId = token ? await accountForCliToken(env.DB, token) : undefined;
-	if (!accountId) return new Response("Unauthorized", { status: 401 });
+	if (!accountId) return refuseHost(request);
 
 	const now = Date.now();
-	await env.DB.prepare(
+	// The WHERE turns the conflict branch into a no-op for a room another account owns, so a
+	// token that knows someone else's room id cannot rewrite that row before the room refuses it.
+	const upsert = await env.DB.prepare(
 		`INSERT INTO rooms (id, account_id, session_name, cwd, created_at, last_seen_at, status)
 		 VALUES (?, ?, ?, ?, ?, ?, 'live')
 		 ON CONFLICT (id) DO UPDATE SET last_seen_at = excluded.last_seen_at, status = 'live',
-		   session_name = excluded.session_name, cwd = excluded.cwd`,
+		   session_name = excluded.session_name, cwd = excluded.cwd
+		 WHERE rooms.account_id = excluded.account_id`,
 	)
 		.bind(roomId, accountId, url.searchParams.get("name"), url.searchParams.get("cwd"), now, now)
 		.run();
+	if (!upsert.meta.changes) return new Response("Forbidden", { status: 403 });
 
 	return roomStub(env, roomId).fetch("https://room/ws", {
 		headers: { upgrade: "websocket", "x-kc-role": "host", "x-kc-account": accountId, "x-kc-room": roomId },
@@ -90,7 +110,7 @@ export default {
 			return new Response(null, { status: 204 });
 		}
 		if (path === "/login") return startLogin(env, url);
-		if (path === "/auth/callback") return completeLogin(env, url);
+		if (path === "/auth/callback") return completeLogin(env, request);
 		if (path === "/auth/device" && request.method === "POST") return startDevice(env, request);
 		if (path === "/auth/device/token" && request.method === "POST") return pollDevice(env, request);
 		if (path === "/auth/revoke" && request.method === "POST") {
@@ -102,8 +122,14 @@ export default {
 
 		const accountId = await currentAccount(env, request);
 
-		if (path === "/logout") {
-			return new Response(null, { status: 302, headers: { location: "/", "set-cookie": clearSessionCookie() } });
+		if (path === "/logout" && request.method === "POST") {
+			// A GET signed out whoever a prefetch or link preview touched. A POST alone is not
+			// enough either: a cross-site form still gets the clearing Set-Cookie applied. The
+			// SameSite=Lax cookie never rides a cross-site POST, so only a request carrying it
+			// may clear it.
+			const headers: Record<string, string> = { location: "/" };
+			if (accountId) headers["set-cookie"] = clearSessionCookie();
+			return new Response(null, { status: 303, headers });
 		}
 
 		if (path === "/device") {

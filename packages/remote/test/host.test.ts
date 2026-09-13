@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { RelayHost } from "../src/host.ts";
-import { encodeFrame } from "../src/protocol.ts";
+import { CLOSE_UNAUTHORIZED, encodeFrame } from "../src/protocol.ts";
 import { FakeSocket } from "./fake-socket.ts";
 
 function harness() {
@@ -97,6 +97,20 @@ describe("relay host", () => {
 		await vi.advanceTimersByTimeAsync(1_000);
 		sockets[1]?.emit("open", {});
 		expect(opens).toHaveLength(2);
+		await host.close("done");
+		vi.useRealTimers();
+	});
+
+	test("stops retrying and reports expired once the relay refuses the token", async () => {
+		// The relay's refusal used to look exactly like an outage, so a revoked token
+		// reconnected forever and nothing told the user to sign in again.
+		vi.useFakeTimers();
+		const { host, socket, statuses } = harness();
+		host.start();
+		socket.emit("open", {});
+		socket.emit("close", { code: CLOSE_UNAUTHORIZED, reason: "Unauthorized" });
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(statuses).toEqual(["connecting", "connected", "expired"]);
 		await host.close("done");
 		vi.useRealTimers();
 	});

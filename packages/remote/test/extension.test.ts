@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import type { ExtensionAPI, ExtensionCommandContext } from "@knightcodeai/cli";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { ENV_CONFIG_DIR, ENV_RELAY } from "../src/auth.ts";
+import { ENV_CONFIG_DIR, ENV_RELAY, readToken } from "../src/auth.ts";
 import { remoteCommands, remoteExtension } from "../src/extension.ts";
+import { CLOSE_UNAUTHORIZED } from "../src/protocol.ts";
 import { FakeSocket } from "./fake-socket.ts";
 
 describe("remote commands", () => {
@@ -163,6 +164,15 @@ describe("remote extension", () => {
 		expect(published.flatMap((frame) => frame.entries as Array<{ id: string }>).map((entry) => entry.id)).toEqual([
 			"e2",
 		]);
+	});
+
+	test("forgets a token the relay refuses, so the next /remote signs in again", async () => {
+		const { run, sockets, statuses } = harness();
+		await run();
+		sockets[0]?.emit("open", {});
+		sockets[0]?.emit("close", { code: CLOSE_UNAUTHORIZED, reason: "Unauthorized" });
+		await vi.waitFor(async () => expect(await readToken()).toBeUndefined());
+		expect(statuses.at(-1)).toBe("remote sign-in expired");
 	});
 
 	test("streams thinking before the reply has any text", async () => {

@@ -1,5 +1,5 @@
 import { sanitiseEntries } from "./entries.ts";
-import { frameByteLength, type HostFrame, MAX_FRAME_BYTES, type RemoteCommand } from "./protocol.ts";
+import { frameByteLength, type HostFrame, MAX_FRAME_BYTES, MAX_ROOM_BYTES, type RemoteCommand } from "./protocol.ts";
 
 /** The narrow slice of the session the mirror reads. Deliberately excludes any lifetime control. */
 export interface MirrorSource {
@@ -19,6 +19,14 @@ export interface MirrorSource {
  */
 export const CHUNK_BYTES = MAX_FRAME_BYTES / 2;
 
+/**
+ * A snapshot carries only the newest entries that fit in half the relay's room limit. The
+ * relay asks for a fresh snapshot once a room passes MAX_ROOM_BYTES, so a snapshot already
+ * past that limit tripped the request again at once and re-uploaded the whole transcript at
+ * every settle point. The other half is the room's headroom before the next one.
+ */
+export const SNAPSHOT_BYTES = MAX_ROOM_BYTES / 2;
+
 function chunk(entries: unknown[], cap: number): unknown[][] {
 	const chunks: unknown[][] = [];
 	let current: unknown[] = [];
@@ -37,13 +45,27 @@ function chunk(entries: unknown[], cap: number): unknown[][] {
 	return chunks;
 }
 
+function newest(entries: unknown[], budget: number): unknown[] {
+	let start = entries.length;
+	let bytes = 0;
+	while (start > 0) {
+		const size = frameByteLength(JSON.stringify(entries[start - 1]) ?? "");
+		if (bytes + size > budget) break;
+		bytes += size;
+		start -= 1;
+	}
+	return entries.slice(start);
+}
+
 export class Mirror {
 	#lastCount = 0;
 	#stale = true;
 	readonly #chunkBytes: number;
+	readonly #snapshotBytes: number;
 
-	constructor(chunkBytes = CHUNK_BYTES) {
+	constructor(chunkBytes = CHUNK_BYTES, snapshotBytes = SNAPSHOT_BYTES) {
 		this.#chunkBytes = chunkBytes;
+		this.#snapshotBytes = snapshotBytes;
 	}
 
 	isStale(): boolean {
@@ -66,7 +88,8 @@ export class Mirror {
 		if (this.#stale || entries.length < this.#lastCount) {
 			this.#stale = false;
 			this.#lastCount = entries.length;
-			const [first = [], ...rest] = chunk(sanitiseEntries(entries), this.#chunkBytes);
+			const kept = newest(sanitiseEntries(entries), this.#snapshotBytes);
+			const [first = [], ...rest] = chunk(kept, this.#chunkBytes);
 			return [
 				{
 					v: 1,
