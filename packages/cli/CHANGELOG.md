@@ -1,5 +1,38 @@
 # @knightcodeai/cli
 
+## 0.7.0
+
+### Added
+
+- Added a `knightcode-engine` binary: a headless local server that owns inference for the desktop IDE, with OpenAI-shaped chat and fill-in-the-middle endpoints. It shares the CLI's `auth.json`, so signing in to either product signs in to both.
+
+- Added reopening saved sessions to `knightcode-engine`, so the desktop IDE restores its threads after a restart instead of failing with "Loading or resuming sessions is not supported by this agent".
+
+  Its ACP agent now:
+
+  - loads a session, replaying its history;
+  - resumes, lists, deletes and forks saved sessions;
+  - lists extension commands, prompt templates and skills under `/`;
+  - after an engine restart, reopens a session it no longer holds and retries the prompt.
+
+- Added native deferred tool loading for Fireworks models on the Messages API. Name the loader tool `ToolSearch` or `tool_search` so Fireworks keeps the deferred schemas out of the cached tool prefix.
+
+- Added a /remote command that publishes the running session to the web for the signed-in account, with a phone-first app at remote.knightcode.dev that lists live and past sessions, opens every tool call, and runs slash commands in the terminal.
+
+### Fixed
+
+- Fixed the full-output file of a truncated `!` bash command sometimes being empty when read straight away: the command now finishes writing that file before its result, and the file's path, are returned.
+
+- Fixed the desktop IDE's open threads offering stale model choices after signing in or out: `knightcode-engine` now refreshes them when an account or the model catalog changes.
+
+- Fixed API keys in a project's `.env` showing up in the desktop IDE as signed-in providers that signing out could not remove: `knightcode-engine` no longer reads a `.env` or `bunfig.toml` from the directory the IDE was launched in.
+
+- Fixed `/` listing no commands in a new, loaded, resumed or forked thread in the desktop IDE: `knightcode-engine` sent the list before the IDE had registered the session, and the IDE dropped it.
+
+- Fixed errors from OpenAI-compatible providers on the Responses API always being labelled as OpenAI errors: the message now names the provider that actually failed.
+
+- Fixed Tab predictions in the desktop IDE repeating the code after the cursor: `knightcode-engine`'s `/v1/completions` now shows the model your code with the cursor marked in place, and strips code fences from the answer.
+
 ## 0.6.2
 
 ### Added
