@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import { contentText } from "@knightcode/ai";
 import {
@@ -62,6 +62,71 @@ export function excludeDocumentation(defaultPrompt: string): string {
 	const cwdStart = defaultPrompt.lastIndexOf("\nCurrent working directory: ");
 	if (cwdStart === -1) throw new Error("Default KnightCode system prompt has no working-directory section.");
 	return defaultPrompt.slice(0, documentationStart) + defaultPrompt.slice(cwdStart);
+}
+
+const repositoryRoot = resolve(import.meta.dirname, "../../..");
+const SANDBOX_GUARD_EXTENSION = "eval-sandbox-guard";
+const SYSTEM_PROMPT_TRANSFORM_EXTENSION = "eval-system-prompt-transform";
+
+export type EvalSandbox = {
+	/** Temporary directory holding the eval's workspace and home; the only place file tools may write. */
+	root: string;
+	cwd: string;
+	home: string;
+	/** Paths a shell command may not name, such as the repository and the real user's configuration. */
+	protectedPaths: readonly string[];
+};
+
+// One lower-case, forward-slash spelling, with Git Bash's `/c/...` turned back into `c:/...`.
+function comparablePath(value: string): string {
+	return value
+		.replaceAll("\\", "/")
+		.replace(/(^|[\s'"=(])\/([a-z])\//gi, "$1$2:/")
+		.toLowerCase();
+}
+
+/**
+ * Explains why a tool call would leave the eval sandbox, or returns undefined when it may run. The eval workspace is
+ * a temporary directory, not a sandbox: an agent without documentation went looking for model definitions, found the
+ * repository through the environment, and edited it. `write` and `edit` may only touch files under the eval root, and
+ * shell commands may not name a protected path.
+ * ponytail: shell commands are matched by text, so a relative `cd ../..` walk is not caught; a real sandbox is the upgrade.
+ */
+export function describeEvalEscape(
+	call: { toolName: string; input: unknown },
+	sandbox: EvalSandbox,
+): string | undefined {
+	const input = (call.input ?? {}) as { path?: unknown; command?: unknown };
+	if (call.toolName === "write" || call.toolName === "edit") {
+		const path = String(input.path ?? "").replace(/^@/, "");
+		const expanded = path === "~" || /^~[/\\]/.test(path) ? join(sandbox.home, path.slice(1)) : path;
+		const target = resolve(sandbox.cwd, expanded);
+		const fromRoot = relative(sandbox.root, target);
+		if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) {
+			return `Blocked by the eval sandbox: ${call.toolName} may only change files under ${sandbox.root}, not ${target}.`;
+		}
+		return undefined;
+	}
+	if (call.toolName === "bash" || call.toolName === "powershell") {
+		const command = comparablePath(String(input.command ?? ""));
+		const named = sandbox.protectedPaths.find((path) => command.includes(comparablePath(path)));
+		if (named) return `Blocked by the eval sandbox: shell commands may not reference ${named}.`;
+	}
+	return undefined;
+}
+
+/** A hidden extension that refuses every tool call {@link describeEvalEscape} rejects, telling the model why. */
+export function createEvalSandboxGuard(sandbox: EvalSandbox): InlineExtension {
+	return {
+		name: SANDBOX_GUARD_EXTENSION,
+		hidden: true,
+		factory: (knightcode) => {
+			knightcode.on("tool_call", (event) => {
+				const reason = describeEvalEscape(event, sandbox);
+				return reason ? { block: true, reason } : undefined;
+			});
+		},
+	};
 }
 
 export function resolveModelSelection(
@@ -146,10 +211,16 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 	const agentDir = join(isolatedHome, CONFIG_DIR_NAME, "agent");
 	const transformSystemPrompt = options.transformSystemPrompt;
 	let evaluatedSystemPrompt: string | undefined;
-	const extensionFactories: InlineExtension[] = [];
+	const sandbox: EvalSandbox = {
+		root,
+		cwd,
+		home: isolatedHome,
+		protectedPaths: [repositoryRoot, join(homedir(), CONFIG_DIR_NAME)],
+	};
+	const extensionFactories: InlineExtension[] = [createEvalSandboxGuard(sandbox)];
 	if (transformSystemPrompt) {
 		extensionFactories.push({
-			name: "eval-system-prompt-transform",
+			name: SYSTEM_PROMPT_TRANSFORM_EXTENSION,
 			hidden: true,
 			factory: (knightcode) => {
 				knightcode.on("before_agent_start", (event) => {
@@ -182,7 +253,7 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 			settingsManager: SettingsManager.inMemory({
 				shellCommandPrefix: `export HOME=${JSON.stringify(isolatedHome)}; unset KNIGHTCODE_CODING_AGENT_DIR KNIGHTCODE_EVAL_ARTIFACT_DIR KNIGHTCODE_MODEL KNIGHTCODE_PROVIDER KNIGHTCODE_REASONING_LEVEL KNIGHTCODE_SESSION_FILE KNIGHTCODE_SESSION_ID;`,
 			}),
-			...(extensionFactories.length > 0 ? { resourceLoaderOptions: { extensionFactories } } : {}),
+			resourceLoaderOptions: { extensionFactories },
 		});
 		signal?.throwIfAborted();
 		sessionManager = SessionManager.create(cwd, join(root, "sessions"));
@@ -209,7 +280,10 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 			signal?.throwIfAborted();
 			const unexpectedExtensionPaths = evalSession.extensionRunner
 				.getExtensionPaths()
-				.filter((path) => path !== "<inline:eval-system-prompt-transform>");
+				.filter(
+					(path) =>
+						path !== `<inline:${SANDBOX_GUARD_EXTENSION}>` && path !== `<inline:${SYSTEM_PROMPT_TRANSFORM_EXTENSION}>`,
+				);
 			if (unexpectedExtensionPaths.length !== 0) {
 				throw new Error("Expected an isolated eval session to start without extensions.");
 			}
