@@ -34,13 +34,13 @@ async function until(predicate: () => boolean, ms = 3000): Promise<void> {
 	}
 }
 
-/** Read updates until the turn stops. */
+/** Read updates until the turn stops. The command list arrives once per session, not as part of a turn. */
 async function collect(session: ActiveSession): Promise<{ updates: SessionUpdate[]; stopReason: StopReason }> {
 	const updates: SessionUpdate[] = [];
 	for (;;) {
 		const message = await session.nextUpdate();
 		if (message.kind === "stop") return { updates, stopReason: message.stopReason };
-		updates.push(message.update);
+		if (message.update.sessionUpdate !== "available_commands_update") updates.push(message.update);
 	}
 }
 
@@ -88,6 +88,7 @@ describe("ACP agent", () => {
 		cwd: string;
 		faux: FauxProviderHandle;
 		engine: EngineClient;
+		events: ReturnType<typeof createEventBus>;
 		buffers: Map<string, string>;
 		permissions: RequestPermissionRequest[];
 		session: ActiveSession;
@@ -160,6 +161,7 @@ describe("ACP agent", () => {
 			cwd,
 			faux,
 			engine,
+			events,
 			buffers,
 			permissions,
 			session,
@@ -365,6 +367,31 @@ describe("ACP agent", () => {
 		return notifications;
 	}
 
+	/**
+	 * Open a session and check its command list arrives the way Zed needs it:
+	 * none before the answer, because Zed files updates only under a session it
+	 * has registered and registers a new or forked one when the answer arrives,
+	 * then exactly one.
+	 */
+	async function announcedOnceAfterAnswer<T>(
+		notifications: SessionNotification[],
+		cwd: string,
+		open: () => Promise<T>,
+	): Promise<{ response: T; announced: SessionNotification }> {
+		const start = notifications.length;
+		const lists = (end?: number) =>
+			notifications
+				.slice(start, end)
+				.filter((notification) => notification.update.sessionUpdate === "available_commands_update");
+		const { response, answeredAt } = await open().then((response) => ({ response, answeredAt: notifications.length }));
+		expect(lists(answeredAt)).toEqual([]);
+		await until(() => lists().length > 0);
+		// A second list would be written before this round trip is answered.
+		await connection!.agent.request("session/list", { cwd });
+		expect(lists()).toHaveLength(1);
+		return { response, announced: lists()[0] };
+	}
+
 	/** Run one turn to its end and close the editor, as quitting the IDE does. */
 	async function talkThenQuit(session: ActiveSession, text: string): Promise<void> {
 		const done = session.prompt(text);
@@ -464,17 +491,68 @@ describe("ACP agent", () => {
 		});
 		connection!.close();
 		const notifications = await reconnect(engine);
-		const { sessionId } = await connection!.agent.request("session/new", { cwd, mcpServers: [] });
-		await until(() =>
-			notifications.some((notification) => notification.update.sessionUpdate === "available_commands_update"),
+		const { response, announced } = await announcedOnceAfterAnswer(notifications, cwd, () =>
+			connection!.agent.request("session/new", { cwd, mcpServers: [] }),
 		);
-		const [announced] = notifications.filter(
-			(notification) => notification.update.sessionUpdate === "available_commands_update",
-		);
-		expect(announced.sessionId).toBe(sessionId);
+		expect(announced.sessionId).toBe(response.sessionId);
 		expect(announced.update).toMatchObject({
 			availableCommands: expect.arrayContaining([
 				expect.objectContaining({ name: "review", description: "Review the change", input: { hint: "arguments" } }),
+			]),
+		});
+	});
+
+	test("a loaded, resumed or forked session announces its commands once, after answering", async () => {
+		const { cwd, faux, engine, session } = await start({
+			persist: true,
+			prompts: { review: "---\ndescription: Review the change\n---\nReview $@\n" },
+		});
+		const { sessionId } = session;
+		faux.setResponses([fauxAssistantMessage([fauxText("Noted.")])]);
+		await talkThenQuit(session, "remember this");
+
+		const notifications = await reconnect(engine);
+		const loaded = await announcedOnceAfterAnswer(notifications, cwd, () =>
+			connection!.agent.request("session/load", { sessionId, cwd, mcpServers: [] }),
+		);
+		expect(loaded.announced.sessionId).toBe(sessionId);
+		const resumed = await announcedOnceAfterAnswer(notifications, cwd, () =>
+			connection!.agent.request("session/resume", { sessionId, cwd }),
+		);
+		expect(resumed.announced.sessionId).toBe(sessionId);
+		const forked = await announcedOnceAfterAnswer(notifications, cwd, () =>
+			connection!.agent.request("session/fork", { sessionId, cwd }),
+		);
+		expect(forked.announced.sessionId).toBe(forked.response.sessionId);
+	});
+
+	test("a sign-in refreshes the model choices of every open session once, though it publishes two events", async () => {
+		const { cwd, engine, events } = await start();
+		connection!.close();
+		// The events route is the bus's only subscriber, so these counts say when the adapter's stream is down and up.
+		await until(() => events.subscriberCount() === 0);
+		let reads = 0;
+		const notifications = await reconnect({ ...engine, models: () => engine.models().finally(() => reads++) });
+		const { sessionId } = await connection!.agent.request("session/new", { cwd, mcpServers: [] });
+		await until(() => events.subscriberCount() === 1);
+
+		const readsBefore = reads;
+		// Back to back, as a completed sign-in publishes them.
+		events.publish({ type: "account.changed", providerId: "openai-codex", authenticated: true });
+		events.publish({ type: "models.changed" });
+		// Each event reads the catalog; only the newer read may reach the editor.
+		await until(() => reads === readsBefore + 2);
+		await connection!.agent.request("session/list", { cwd });
+		const updates = notifications.filter(
+			(notification) => notification.update.sessionUpdate === "config_option_update",
+		);
+		expect(updates).toHaveLength(1);
+		const [update] = updates;
+		expect(update.sessionId).toBe(sessionId);
+		expect(update.update).toMatchObject({
+			configOptions: expect.arrayContaining([
+				expect.objectContaining({ id: "model" }),
+				expect.objectContaining({ id: "thinking" }),
 			]),
 		});
 	});

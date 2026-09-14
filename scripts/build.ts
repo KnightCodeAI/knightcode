@@ -179,6 +179,13 @@ for (const target of targets) {
 		compile: {
 			target: target.bunTarget,
 			outfile: engineOutfile,
+			// The IDE starts the engine in whatever directory the IDE was launched
+			// from. A .env or bunfig.toml there would be read at startup, and a .env's
+			// API keys would show up as signed-in providers that signing out cannot
+			// remove. The engine takes credentials from auth.json and the environment
+			// the IDE hands it, never from files beside the user's working directory.
+			autoloadDotenv: false,
+			autoloadBunfig: false,
 			...(target.os === "win32" ? { windows: windowsMetadata(version) } : {}),
 		},
 		define: {
