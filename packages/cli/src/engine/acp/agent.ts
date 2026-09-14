@@ -387,10 +387,20 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 		}
 	}
 
-	/** Every open session's model choices, after a sign-in, a sign-out or a catalog change. */
+	/** Bumped by each refresh, so an older one can tell a newer one has taken over. */
+	let refreshes = 0;
+
+	/**
+	 * Every open session's model choices, after a sign-in, a sign-out or a catalog
+	 * change. A sign-in publishes `account.changed` and `models.changed` back to
+	 * back: the first refresh stops once the second has begun, so the editor is
+	 * told once, and only the newest choices.
+	 */
 	async function refreshConfigOptions(): Promise<void> {
+		const refresh = ++refreshes;
 		const models = await engine.models();
 		for (const session of sessions.values()) {
+			if (refresh !== refreshes) return;
 			await notify(session.summary.id, {
 				sessionUpdate: "config_option_update",
 				configOptions: toConfigOptions(session.summary, models),
@@ -400,8 +410,9 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 
 	async function handleEvent(event: EngineEvent): Promise<void> {
 		if (event.type === "account.changed" || event.type === "models.changed") {
-			// A failed refresh leaves the old choices showing; it must not stop the stream.
-			await refreshConfigOptions().catch((error: unknown) => {
+			// Not awaited: sessions' events keep flowing while the catalog is read, and
+			// the next event of a pair can take over. A failed refresh leaves the old choices showing.
+			void refreshConfigOptions().catch((error: unknown) => {
 				console.error("[acp] refreshing model choices failed:", error);
 			});
 			return;
