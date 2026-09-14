@@ -6,9 +6,11 @@ import { performance } from "node:perf_hooks";
 import { contentText } from "@knightcode/ai";
 import {
 	type AgentSession,
+	CONFIG_DIR_NAME,
 	type CreateAgentSessionOptions,
 	createAgentSessionFromServices,
 	createAgentSessionServices,
+	type InlineExtension,
 	ModelRuntime,
 	SessionManager,
 	SettingsManager,
@@ -42,8 +44,25 @@ type KnightCodeHarnessOptions = {
 };
 
 type KnightCodeHarnessWithOutput<TOutput extends JsonValue> = KnightCodeHarnessOptions & {
-	output: (args: { response: string; session: AgentSession }) => TOutput | Promise<TOutput>;
+	output: (args: {
+		response: string;
+		session: AgentSession;
+		systemPrompt: string;
+		agentDir: string;
+	}) => TOutput | Promise<TOutput>;
 };
+
+// Comparative evals intentionally remove the documentation block using stable prompt markers instead of changing
+// KnightCode's production prompt builder. The isolated eval prompt has no project context or skills between these
+// markers. If that setup changes, this transform must be updated so baseline and candidate still differ only by
+// documentation.
+export function excludeDocumentation(defaultPrompt: string): string {
+	const documentationStart = defaultPrompt.indexOf("\nKnightCode documentation (read only");
+	if (documentationStart === -1) throw new Error("Default KnightCode system prompt has no documentation section.");
+	const cwdStart = defaultPrompt.lastIndexOf("\nCurrent working directory: ");
+	if (cwdStart === -1) throw new Error("Default KnightCode system prompt has no working-directory section.");
+	return defaultPrompt.slice(0, documentationStart) + defaultPrompt.slice(cwdStart);
+}
 
 export function resolveModelSelection(
 	explicitModel: KnightCodeModelSelection | undefined,
@@ -123,21 +142,47 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 
 	const root = await mkdtemp(join(tmpdir(), "knightcode-eval-"));
 	const cwd = join(root, "workspace");
-	const agentDir = join(root, "agent");
-	let transformedSystemPrompt: string | undefined;
+	const isolatedHome = join(root, "home");
+	const agentDir = join(isolatedHome, CONFIG_DIR_NAME, "agent");
+	const transformSystemPrompt = options.transformSystemPrompt;
+	let evaluatedSystemPrompt: string | undefined;
+	const extensionFactories: InlineExtension[] = [];
+	if (transformSystemPrompt) {
+		extensionFactories.push({
+			name: "eval-system-prompt-transform",
+			hidden: true,
+			factory: (knightcode) => {
+				knightcode.on("before_agent_start", (event) => {
+					evaluatedSystemPrompt = transformSystemPrompt(event.systemPrompt);
+					return { systemPrompt: evaluatedSystemPrompt };
+				});
+			},
+		});
+	}
 	let sessionManager: SessionManager | undefined;
 	let session: AgentSession | undefined;
 	let outcome: { success: true; result: SimpleHarnessResult<string | TOutput> } | { success: false; error: unknown };
+	// File tools expand `~` with os.homedir(), which reads HOME (USERPROFILE on Windows) from this process, so the
+	// exported HOME in bash commands alone still lets `write ~/.knightcode/agent/models.json` reach the real user's
+	// configuration. The eval model runtime above has already resolved its credentials from the real home.
+	// ponytail: process-wide override, safe only because eval files and tests run one at a time.
+	const isolatedEnvironment: Record<string, string> = {
+		HOME: isolatedHome,
+		USERPROFILE: isolatedHome,
+		KNIGHTCODE_CODING_AGENT_DIR: agentDir,
+	};
+	const previousEnvironment = Object.keys(isolatedEnvironment).map((key) => [key, process.env[key]] as const);
+	Object.assign(process.env, isolatedEnvironment);
 	try {
-		await Promise.all([mkdir(cwd), mkdir(agentDir)]);
+		await Promise.all([mkdir(cwd), mkdir(agentDir, { recursive: true })]);
 		const services = await createAgentSessionServices({
 			cwd,
 			agentDir,
 			modelRuntime,
-			settingsManager: SettingsManager.inMemory(),
-			...(options.transformSystemPrompt
-				? { resourceLoaderOptions: { systemPromptOverride: () => transformedSystemPrompt } }
-				: {}),
+			settingsManager: SettingsManager.inMemory({
+				shellCommandPrefix: `export HOME=${JSON.stringify(isolatedHome)}; unset KNIGHTCODE_CODING_AGENT_DIR KNIGHTCODE_EVAL_ARTIFACT_DIR KNIGHTCODE_MODEL KNIGHTCODE_PROVIDER KNIGHTCODE_REASONING_LEVEL KNIGHTCODE_SESSION_FILE KNIGHTCODE_SESSION_ID;`,
+			}),
+			...(extensionFactories.length > 0 ? { resourceLoaderOptions: { extensionFactories } } : {}),
 		});
 		signal?.throwIfAborted();
 		sessionManager = SessionManager.create(cwd, join(root, "sessions"));
@@ -155,11 +200,6 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		).session;
 
 		const evalSession = session;
-		if (options.transformSystemPrompt) {
-			transformedSystemPrompt = options.transformSystemPrompt(evalSession.systemPrompt);
-			if (!transformedSystemPrompt.trim()) throw new Error("Transformed eval system prompt must not be empty.");
-			await evalSession.reload();
-		}
 		let abortPromise: Promise<void> | undefined;
 		const abort = () => {
 			abortPromise ??= evalSession.abort();
@@ -167,7 +207,10 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		signal?.addEventListener("abort", abort, { once: true });
 		try {
 			signal?.throwIfAborted();
-			if (evalSession.extensionRunner.getExtensionPaths().length !== 0) {
+			const unexpectedExtensionPaths = evalSession.extensionRunner
+				.getExtensionPaths()
+				.filter((path) => path !== "<inline:eval-system-prompt-transform>");
+			if (unexpectedExtensionPaths.length !== 0) {
 				throw new Error("Expected an isolated eval session to start without extensions.");
 			}
 			const steps = typeof input === "string" ? [{ type: "prompt" as const, content: input }] : input;
@@ -175,12 +218,23 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 			for (const step of steps) {
 				if (step.type === "prompt") {
 					response = await promptAgent(evalSession, step.content, signal);
+					if (transformSystemPrompt && !evaluatedSystemPrompt?.trim()) {
+						throw new Error("System-prompt transform did not produce a non-empty prompt.");
+					}
 				} else {
 					await evalSession.reload();
 				}
 			}
 			if (response === undefined) throw new Error("KnightCode eval input must include at least one prompt step.");
-			const output = "output" in options ? await options.output({ response, session: evalSession }) : response;
+			const output =
+				"output" in options
+					? await options.output({
+							response,
+							session: evalSession,
+							systemPrompt: evaluatedSystemPrompt ?? evalSession.systemPrompt,
+							agentDir,
+						})
+					: response;
 			const stats = evalSession.getSessionStats();
 			const hasPricing = [model.cost, ...(model.cost.tiers ?? [])].some(
 				({ input, output, cacheRead, cacheWrite }) => input > 0 || output > 0 || cacheRead > 0 || cacheWrite > 0,
@@ -211,6 +265,11 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		}
 	} catch (error) {
 		outcome = { success: false, error };
+	} finally {
+		for (const [key, value] of previousEnvironment) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
 	}
 
 	const cleanupErrors: unknown[] = [];
