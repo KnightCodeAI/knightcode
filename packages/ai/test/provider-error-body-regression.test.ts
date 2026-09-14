@@ -171,6 +171,15 @@ describe("provider error body passthrough (per-tier regression)", () => {
 		expect(output.errorMessage).toContain("blocked by gateway WAF");
 	});
 
+	it("openai-responses names the OpenAI-compatible provider that failed", async () => {
+		const output = await drainResult(
+			streamOpenAIResponses({ ...responsesModel, provider: "openrouter" }, context, { apiKey: "test" }),
+		);
+
+		expect(output.errorMessage).toContain("openrouter API error (403)");
+		expect(output.errorMessage).not.toContain("OpenAI API error");
+	});
+
 	it("bedrock (body-blind) surfaces the gateway body instead of Unknown: UnknownError", async () => {
 		bedrockMock.sendError = Object.assign(new Error("UnknownError"), {
 			name: "UnknownError",
