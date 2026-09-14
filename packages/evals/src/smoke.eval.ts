@@ -4,8 +4,8 @@ import { createKnightCodeHarness } from "./knightcode-harness.ts";
 
 const knightCodeHarness = createKnightCodeHarness({ noTools: "all" });
 
-describeEval("KnightCode smoke", { harness: knightCodeHarness }, (it) => {
-	it("runs a basic prompt end to end", async ({ run }) => {
+describeEval("Answer a basic prompt", { harness: knightCodeHarness }, (it) => {
+	it("returns the expected answer", async ({ run }) => {
 		const result = await run("What's the capital of France? Respond with only the city name.");
 
 		expect(result.output.trim()).toBe("Paris");
