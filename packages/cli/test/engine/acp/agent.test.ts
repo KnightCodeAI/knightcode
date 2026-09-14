@@ -34,13 +34,13 @@ async function until(predicate: () => boolean, ms = 3000): Promise<void> {
 	}
 }
 
-/** Read updates until the turn stops. */
+/** Read updates until the turn stops. The command list arrives once per session, not as part of a turn. */
 async function collect(session: ActiveSession): Promise<{ updates: SessionUpdate[]; stopReason: StopReason }> {
 	const updates: SessionUpdate[] = [];
 	for (;;) {
 		const message = await session.nextUpdate();
 		if (message.kind === "stop") return { updates, stopReason: message.stopReason };
-		updates.push(message.update);
+		if (message.update.sessionUpdate !== "available_commands_update") updates.push(message.update);
 	}
 }
 
@@ -88,6 +88,7 @@ describe("ACP agent", () => {
 		cwd: string;
 		faux: FauxProviderHandle;
 		engine: EngineClient;
+		events: ReturnType<typeof createEventBus>;
 		buffers: Map<string, string>;
 		permissions: RequestPermissionRequest[];
 		session: ActiveSession;
@@ -160,6 +161,7 @@ describe("ACP agent", () => {
 			cwd,
 			faux,
 			engine,
+			events,
 			buffers,
 			permissions,
 			session,
@@ -464,10 +466,19 @@ describe("ACP agent", () => {
 		});
 		connection!.close();
 		const notifications = await reconnect(engine);
-		const { sessionId } = await connection!.agent.request("session/new", { cwd, mcpServers: [] });
+		const { sessionId, seenBeforeAnswer } = await connection!.agent
+			.request("session/new", { cwd, mcpServers: [] })
+			.then((response) => ({ sessionId: response.sessionId, seenBeforeAnswer: notifications.length }));
 		await until(() =>
 			notifications.some((notification) => notification.update.sessionUpdate === "available_commands_update"),
 		);
+		// Zed files an update only under a session it has registered, which happens
+		// when this response arrives: a command list sent before it is thrown away.
+		expect(
+			notifications
+				.slice(0, seenBeforeAnswer)
+				.some((notification) => notification.update.sessionUpdate === "available_commands_update"),
+		).toBe(false);
 		const [announced] = notifications.filter(
 			(notification) => notification.update.sessionUpdate === "available_commands_update",
 		);
@@ -475,6 +486,30 @@ describe("ACP agent", () => {
 		expect(announced.update).toMatchObject({
 			availableCommands: expect.arrayContaining([
 				expect.objectContaining({ name: "review", description: "Review the change", input: { hint: "arguments" } }),
+			]),
+		});
+	});
+
+	test("a sign-in or sign-out refreshes the model choices of every open session", async () => {
+		const { cwd, engine, events } = await start();
+		connection!.close();
+		const notifications = await reconnect(engine);
+		const { sessionId } = await connection!.agent.request("session/new", { cwd, mcpServers: [] });
+		const refreshed = () =>
+			notifications.some((notification) => notification.update.sessionUpdate === "config_option_update");
+		// The bus does not replay, so publish until the adapter's event stream has it.
+		await until(() => {
+			if (!refreshed()) events.publish({ type: "account.changed", providerId: "openai-codex", authenticated: false });
+			return refreshed();
+		});
+		const [update] = notifications.filter(
+			(notification) => notification.update.sessionUpdate === "config_option_update",
+		);
+		expect(update.sessionId).toBe(sessionId);
+		expect(update.update).toMatchObject({
+			configOptions: expect.arrayContaining([
+				expect.objectContaining({ id: "model" }),
+				expect.objectContaining({ id: "thinking" }),
 			]),
 		});
 	});

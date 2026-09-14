@@ -259,9 +259,10 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 	}
 
 	/**
-	 * What `/` offers in the editor. Sent once the request has been answered:
-	 * Zed files updates only under a session it has registered, which for
-	 * `session/new` happens when the response arrives.
+	 * What `/` offers in the editor. Zed files updates only under a session it
+	 * has registered, which for `session/new` happens when the response arrives,
+	 * so call this after the handler's last await: the SDK queues the response
+	 * as the handler returns, ahead of this update.
 	 */
 	function announceCommands(summary: SessionSummary): void {
 		if (summary.commands.length === 0) return;
@@ -386,7 +387,25 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 		}
 	}
 
+	/** Every open session's model choices, after a sign-in, a sign-out or a catalog change. */
+	async function refreshConfigOptions(): Promise<void> {
+		const models = await engine.models();
+		for (const session of sessions.values()) {
+			await notify(session.summary.id, {
+				sessionUpdate: "config_option_update",
+				configOptions: toConfigOptions(session.summary, models),
+			});
+		}
+	}
+
 	async function handleEvent(event: EngineEvent): Promise<void> {
+		if (event.type === "account.changed" || event.type === "models.changed") {
+			// A failed refresh leaves the old choices showing; it must not stop the stream.
+			await refreshConfigOptions().catch((error: unknown) => {
+				console.error("[acp] refreshing model choices failed:", error);
+			});
+			return;
+		}
 		if (!("sessionId" in event)) return;
 		const session = sessions.get(event.sessionId);
 		if (!session) return;
@@ -450,8 +469,9 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 				engine.createSession({ cwd: params.cwd, capabilities: fileCapabilities() }),
 			);
 			track(summary);
+			const options = await configOptions(summary);
 			announceCommands(summary);
-			return { sessionId: summary.id, configOptions: await configOptions(summary) };
+			return { sessionId: summary.id, configOptions: options };
 		})
 		.onRequest("session/load", async ({ params }) => {
 			const { session: summary, messages } = await withEngine(() =>
@@ -460,24 +480,27 @@ export function createAcpAgent(engine: EngineClient, options: AcpAgentOptions = 
 			track(summary);
 			// Zed registers the thread before it asks, so the history lands in it.
 			for (const update of historyUpdates(messages, summary.cwd)) await notify(summary.id, update);
+			const options = await configOptions(summary);
 			announceCommands(summary);
-			return { configOptions: await configOptions(summary) };
+			return { configOptions: options };
 		})
 		.onRequest("session/resume", async ({ params }) => {
 			const { session: summary } = await withEngine(() =>
 				engine.openSession(params.sessionId, { cwd: params.cwd, capabilities: fileCapabilities() }),
 			);
 			track(summary);
+			const options = await configOptions(summary);
 			announceCommands(summary);
-			return { configOptions: await configOptions(summary) };
+			return { configOptions: options };
 		})
 		.onRequest("session/fork", async ({ params }) => {
 			const summary = await withEngine(() =>
 				engine.forkSession(params.sessionId, { cwd: params.cwd, capabilities: fileCapabilities() }),
 			);
 			track(summary);
+			const options = await configOptions(summary);
 			announceCommands(summary);
-			return { sessionId: summary.id, configOptions: await configOptions(summary) };
+			return { sessionId: summary.id, configOptions: options };
 		})
 		.onRequest("session/list", async ({ params }) => {
 			const page = await withEngine(() =>
