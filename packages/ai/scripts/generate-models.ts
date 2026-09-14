@@ -1583,6 +1583,8 @@ function processFireworksModels(provider: ModelsDevProvider | undefined): Model<
 	if (!provider?.models) return [];
 
 	const anthropicCompat: AnthropicMessagesCompat = {
+		// Arbitrary loader names work, but Fireworks only defers the prefix for ToolSearch/tool_search.
+		supportsToolReferences: true,
 		allowEmptySignature: true,
 		sendSessionAffinityHeaders: true,
 		supportsEagerToolInputStreaming: false,

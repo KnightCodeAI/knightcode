@@ -19,6 +19,16 @@ afterEach(() => {
 });
 
 describe("Fireworks models", () => {
+	it("enables native tool references only on Messages models", () => {
+		for (const model of getModels("fireworks")) {
+			if (model.api === "anthropic-messages") {
+				expect(model.compat).toMatchObject({ supportsToolReferences: true });
+			} else {
+				expect(model.compat).not.toHaveProperty("supportsToolReferences");
+			}
+		}
+	});
+
 	it("registers the default Kimi K2.6 model via Anthropic-compatible Messages API", () => {
 		const model = getModel("fireworks", "accounts/fireworks/models/kimi-k2p6");
 
@@ -219,6 +229,7 @@ describe("Fireworks models", () => {
 		expect(model.compat?.supportsCacheControlOnTools).toBe(false);
 		expect(model.compat?.supportsLongCacheRetention).toBe(false);
 		expect(model.compat?.allowEmptySignature).toBe(true);
+		expect(model.compat?.supportsToolReferences).toBe(true);
 	});
 });
 
@@ -236,6 +247,7 @@ const tool: Tool = {
 };
 
 const FIREWORKS_ANTHROPIC_COMPAT = {
+	supportsToolReferences: true,
 	allowEmptySignature: true,
 	sendSessionAffinityHeaders: true,
 	supportsEagerToolInputStreaming: false,
