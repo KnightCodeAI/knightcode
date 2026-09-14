@@ -1,0 +1,632 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Liquid glass, following shenanigans/chatgpt-web:
+ *  - a surface that is mostly opaque (88%) so text on it stays legible,
+ *  - blur(24px) saturate(1.1): the saturate bump is what keeps colour bleeding through
+ *    instead of going grey,
+ *  - a 1px border plus a 1px inner top highlight, which is what reads as glass rather
+ *    than frosted plastic,
+ *  - a soft drop shadow.
+ * Glass is chrome only: bars, round icon buttons, the composer, sheets, popovers. Never on
+ * message content or session cards. Only the two bars and the composer are permanently
+ * blurred; sheets and popovers blur while open. Do not add a permanent third surface —
+ * backdrop-filter compounds badly against a scrolling list on phones.
+ *
+ * Dark is the default and lives on bare :root. Light comes from the system preference or an
+ * explicit data-theme, written so both directions win.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+	color-scheme: dark;
+
+	--ground: #0c0c0d;
+	--layer-1: #161617;
+	--layer-2: #1f1f21;
+	--raised: rgba(255, 255, 255, 0.06);
+	--raised-hover: rgba(255, 255, 255, 0.09);
+	--sunken: rgba(0, 0, 0, 0.3);
+	--hairline: rgba(255, 255, 255, 0.09);
+
+	--label: #ededed;
+	--label-2: rgba(237, 237, 237, 0.62);
+	--label-3: rgba(237, 237, 237, 0.4);
+
+	--accent: #ff7a1a;
+	--accent-ink: #ffffff;
+	--live: #3ecf6b;
+	--danger: #ff6b6b;
+	--added: #4ade80;
+	--removed: #f87171;
+	--added-bg: rgba(74, 222, 128, 0.12);
+	--removed-bg: rgba(248, 113, 113, 0.12);
+
+	--glass-surface: color-mix(in srgb, var(--layer-1) 88%, transparent);
+	--glass-surface-strong: color-mix(in srgb, var(--layer-1) 96%, transparent);
+	--glass-border: rgba(255, 255, 255, 0.11);
+	--glass-highlight: rgba(255, 255, 255, 0.09);
+	--glass-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.35);
+	--glass-blur: blur(24px) saturate(1.1);
+
+	--font-sans:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", sans-serif;
+	--font-prose: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, "Times New Roman", serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+	/* Drawer curve for sheets; a hard ease-out for everything that enters or reacts to touch. */
+	--ease-emphasis: cubic-bezier(0.32, 0.72, 0, 1);
+	--ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+	--topbar: 3.5rem;
+	--safe-top: env(safe-area-inset-top, 0px);
+	--safe-bottom: env(safe-area-inset-bottom, 0px);
+
+	/* shadcn tokens, mapped onto the ones above so registry components pick the palette up. */
+	--radius: 1rem;
+	--background: var(--ground);
+	--foreground: var(--label);
+	--card: var(--layer-1);
+	--card-foreground: var(--label);
+	--popover: var(--layer-1);
+	--popover-foreground: var(--label);
+	--primary: var(--label);
+	--primary-foreground: var(--ground);
+	--secondary: var(--raised);
+	--secondary-foreground: var(--label);
+	--muted: var(--raised);
+	--muted-foreground: var(--label-2);
+	--accent-shad: var(--raised-hover);
+	--destructive: var(--danger);
+	--border: var(--hairline);
+	--input: var(--hairline);
+	--ring: var(--accent);
+}
+
+@media (prefers-color-scheme: light) {
+	:root:not([data-theme="dark"]) {
+		color-scheme: light;
+		--ground: #f4f4f5;
+		--layer-1: #ffffff;
+		--layer-2: #f7f7f8;
+		--raised: rgba(0, 0, 0, 0.045);
+		--raised-hover: rgba(0, 0, 0, 0.07);
+		--sunken: rgba(0, 0, 0, 0.05);
+		--hairline: rgba(0, 0, 0, 0.09);
+		--label: #141416;
+		--label-2: rgba(20, 20, 22, 0.62);
+		--label-3: rgba(20, 20, 22, 0.42);
+		--accent: #d24d07;
+		--live: #22a352;
+		--danger: #d64545;
+		--added: #16a34a;
+		--removed: #dc2626;
+		--added-bg: rgba(22, 163, 74, 0.1);
+		--removed-bg: rgba(220, 38, 38, 0.1);
+		--glass-surface: color-mix(in srgb, var(--layer-1) 82%, transparent);
+		--glass-surface-strong: color-mix(in srgb, var(--layer-1) 94%, transparent);
+		--glass-border: rgba(0, 0, 0, 0.08);
+		--glass-highlight: rgba(255, 255, 255, 0.9);
+		--glass-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.12);
+	}
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+	--ground: #f4f4f5;
+	--layer-1: #ffffff;
+	--layer-2: #f7f7f8;
+	--raised: rgba(0, 0, 0, 0.045);
+	--raised-hover: rgba(0, 0, 0, 0.07);
+	--sunken: rgba(0, 0, 0, 0.05);
+	--hairline: rgba(0, 0, 0, 0.09);
+	--label: #141416;
+	--label-2: rgba(20, 20, 22, 0.62);
+	--label-3: rgba(20, 20, 22, 0.42);
+	--accent: #d24d07;
+	--live: #22a352;
+	--danger: #d64545;
+	--added: #16a34a;
+	--removed: #dc2626;
+	--added-bg: rgba(22, 163, 74, 0.1);
+	--removed-bg: rgba(220, 38, 38, 0.1);
+	--glass-surface: color-mix(in srgb, var(--layer-1) 82%, transparent);
+	--glass-surface-strong: color-mix(in srgb, var(--layer-1) 94%, transparent);
+	--glass-border: rgba(0, 0, 0, 0.08);
+	--glass-highlight: rgba(255, 255, 255, 0.9);
+	--glass-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.12);
+}
+
+@theme inline {
+	--font-sans: var(--font-sans);
+	--font-prose: var(--font-prose);
+	--font-mono: var(--font-mono);
+
+	--color-ground: var(--ground);
+	--color-layer-1: var(--layer-1);
+	--color-layer-2: var(--layer-2);
+	--color-raised: var(--raised);
+	--color-raised-hover: var(--raised-hover);
+	--color-sunken: var(--sunken);
+	--color-hairline: var(--hairline);
+	--color-label: var(--label);
+	--color-label-2: var(--label-2);
+	--color-label-3: var(--label-3);
+	--color-live: var(--live);
+	--color-danger: var(--danger);
+	--color-added: var(--added);
+	--color-removed: var(--removed);
+	--color-added-bg: var(--added-bg);
+	--color-removed-bg: var(--removed-bg);
+	--color-tint: var(--accent);
+	--color-tint-ink: var(--accent-ink);
+
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent-shad);
+	--color-accent-foreground: var(--label);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	--radius-sm: calc(var(--radius) - 0.5rem);
+	--radius-md: calc(var(--radius) - 0.25rem);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 0.25rem);
+	--radius-2xl: calc(var(--radius) + 0.5rem);
+	--radius-3xl: calc(var(--radius) + 0.75rem);
+
+	--ease-emphasis: var(--ease-emphasis);
+	--ease-out: var(--ease-out);
+}
+
+@layer base {
+	* {
+		border-color: var(--hairline);
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	html {
+		background: var(--ground);
+		/* iOS: never zoom the page when a 16px input takes focus. Inputs stay >= 16px below. */
+		-webkit-text-size-adjust: 100%;
+	}
+
+	body {
+		margin: 0;
+		background: var(--ground);
+		color: var(--label);
+		font-family: var(--font-sans);
+		font-size: 15px;
+		line-height: 1.55;
+		-webkit-font-smoothing: antialiased;
+		text-rendering: optimizeLegibility;
+	}
+
+	button,
+	[role="button"] {
+		touch-action: manipulation;
+		cursor: pointer;
+	}
+
+	textarea,
+	input {
+		font: inherit;
+	}
+}
+
+@utility glass {
+	background: var(--glass-surface);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	border: 1px solid var(--glass-border);
+	box-shadow:
+		var(--glass-shadow),
+		inset 0 1px 0 var(--glass-highlight);
+}
+
+@utility glass-strong {
+	background: var(--glass-surface-strong);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	border: 1px solid var(--glass-border);
+	box-shadow:
+		var(--glass-shadow),
+		inset 0 1px 0 var(--glass-highlight);
+}
+
+/* Round glass icon button: the back / menu / more buttons in the bars. */
+@utility glass-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: 9999px;
+	color: var(--label);
+	background: var(--glass-surface);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	border: 1px solid var(--glass-border);
+	box-shadow:
+		var(--glass-shadow),
+		inset 0 1px 0 var(--glass-highlight);
+	transition:
+		transform 160ms var(--ease-out),
+		background 160ms ease;
+}
+
+/* Round solid icon button inside the composer: stop and send. */
+@utility round-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 9999px;
+	transition:
+		transform 160ms var(--ease-out),
+		background 160ms ease,
+		color 160ms ease;
+}
+
+@utility prose-chat {
+	font-family: var(--font-prose);
+	font-size: 1.0625rem;
+	line-height: 1.55;
+	overflow-wrap: anywhere;
+}
+
+@layer components {
+.glass-button:active {
+	transform: scale(0.94);
+	background: var(--raised-hover);
+}
+
+.round-button:active:not(:disabled) {
+	transform: scale(0.94);
+}
+
+/*
+ * Session mark: a circle inset in a sunken tile, dashed when idle and a spinning arc when the
+ * session is working. Not named "ring": Tailwind's ring and ring-<color> utilities match that
+ * name and drew a solid circle over the dashes.
+ */
+.session-mark {
+	width: 2.75rem;
+	height: 2.75rem;
+	border-radius: 0.625rem;
+	background: var(--sunken);
+	position: relative;
+	flex: none;
+}
+
+.session-mark::before {
+	content: "";
+	position: absolute;
+	inset: 0.625rem;
+	border-radius: 9999px;
+	border: 1.5px dashed var(--label-3);
+}
+
+.session-mark-live::after {
+	content: "";
+	position: absolute;
+	top: -0.1875rem;
+	right: -0.1875rem;
+	width: 0.625rem;
+	height: 0.625rem;
+	border-radius: 9999px;
+	background: var(--live);
+	box-shadow: 0 0 0 2px var(--ground);
+}
+
+.session-mark-working::before {
+	border-style: solid;
+	border-top-color: var(--live);
+	border-right-color: var(--live);
+	animation: ring-spin 900ms linear infinite;
+}
+
+.session-mark-offline::before {
+	opacity: 0.55;
+}
+
+@keyframes ring-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Working indicator under the last block while the model is thinking. */
+.shimmer {
+	background: linear-gradient(90deg, var(--label-3) 0%, var(--label) 50%, var(--label-3) 100%);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+/* Rendered markdown inside assistant messages. */
+.md > :first-child {
+	margin-top: 0;
+}
+
+.md > :last-child {
+	margin-bottom: 0;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md table {
+	margin: 0 0 0.9em;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+	font-family: var(--font-sans);
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	margin: 1.2em 0 0.5em;
+	line-height: 1.3;
+}
+
+.md h1 {
+	font-size: 1.25rem;
+}
+
+.md h2 {
+	font-size: 1.125rem;
+}
+
+.md h3,
+.md h4 {
+	font-size: 1rem;
+}
+
+/* Preflight strips list markers; the transcript wants them back. */
+.md ul {
+	list-style: disc;
+	padding-left: 1.4em;
+}
+
+.md ol {
+	list-style: decimal;
+	padding-left: 1.4em;
+}
+
+.md li + li {
+	margin-top: 0.25em;
+}
+
+.md code {
+	font-family: var(--font-mono);
+	font-size: 0.85em;
+	background: var(--raised);
+	border-radius: 0.375rem;
+	padding: 0.1em 0.35em;
+}
+
+.md pre {
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	background: var(--sunken);
+	border: 1px solid var(--hairline);
+	border-radius: 0.875rem;
+	padding: 0.75rem 0.9rem;
+	overflow-x: auto;
+	margin: 0 0 0.9em;
+}
+
+.md pre code {
+	background: none;
+	padding: 0;
+	font-size: inherit;
+}
+
+.md blockquote {
+	border-left: 2px solid var(--hairline);
+	padding-left: 0.9em;
+	color: var(--label-2);
+}
+
+.md a {
+	color: var(--tint, var(--accent));
+	text-decoration: underline;
+	text-underline-offset: 0.15em;
+}
+
+.md hr {
+	border: 0;
+	border-top: 1px solid var(--hairline);
+	margin: 1.2em 0;
+}
+
+.md table {
+	border-collapse: collapse;
+	font-family: var(--font-sans);
+	font-size: 0.875rem;
+}
+
+.md th,
+.md td {
+	border: 1px solid var(--hairline);
+	padding: 0.35em 0.6em;
+	text-align: left;
+}
+
+.md .table-wrap {
+	overflow-x: auto;
+	margin: 0 0 0.9em;
+}
+
+/* Tool output blocks. */
+.mono-block {
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	background: var(--sunken);
+	border: 1px solid var(--hairline);
+	border-radius: 0.875rem;
+	padding: 0.75rem 0.9rem;
+	overflow-x: auto;
+	white-space: pre;
+	margin: 0;
+}
+
+.diff-line {
+	display: block;
+	white-space: pre;
+	padding: 0 0.9rem;
+}
+
+.diff-add {
+	color: var(--added);
+	background: var(--added-bg);
+}
+
+.diff-del {
+	color: var(--removed);
+	background: var(--removed-bg);
+}
+
+.diff-skip {
+	color: var(--label-3);
+}
+
+/* Hide the scrollbar on horizontally scrolling chips without losing scroll. */
+.no-scrollbar {
+	scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+	display: none;
+}
+
+/*
+ * Tool sheet timeline. Each row draws the connector below its own icon, so nothing needs a
+ * masking background: the old full-height line was hidden behind icon squares painted in
+ * the page colour, which read as black tiles on the translucent sheet.
+ */
+.timeline-row:not(:last-child)::after {
+	content: "";
+	position: absolute;
+	left: calc(0.75rem - 0.5px);
+	top: calc(50% + 0.95rem);
+	bottom: calc(-50% + 0.95rem);
+	width: 1px;
+	background: var(--hairline);
+}
+
+/* Things that appear anchored to the composer: the slash list, the offline notice. */
+.rise-in {
+	opacity: 1;
+	transform: translateY(0);
+	transition:
+		opacity 150ms var(--ease-out),
+		transform 150ms var(--ease-out);
+
+	@starting-style {
+		opacity: 0;
+		transform: translateY(0.375rem);
+	}
+}
+
+/* Pill-shaped chips in the composer toolbar and the sheet. */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375rem;
+	height: 2.25rem;
+	padding: 0 0.875rem;
+	border-radius: 9999px;
+	background: var(--raised);
+	color: var(--label-2);
+	font-size: 14px;
+	font-weight: 500;
+	transition:
+		background 160ms ease,
+		color 160ms ease,
+		transform 160ms var(--ease-out);
+}
+
+.chip:active {
+	transform: scale(0.96);
+}
+
+.chip[aria-pressed="true"] {
+	background: var(--raised-hover);
+	color: var(--label);
+}
+
+/* Segmented control: the appearance switch in the account sheet. */
+.segmented {
+	display: flex;
+	padding: 3px;
+	border-radius: 9999px;
+	background: var(--sunken);
+}
+
+.segmented > button {
+	flex: 1;
+	height: 2.125rem;
+	border-radius: 9999px;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--label-2);
+	transition:
+		color 160ms ease,
+		background 160ms ease,
+		transform 160ms var(--ease-out);
+}
+
+.segmented > button:active {
+	transform: scale(0.96);
+}
+
+.segmented > button[aria-pressed="true"] {
+	background: var(--raised-hover);
+	color: var(--label);
+	box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+}
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+@custom-variant data-open (&[data-state="open"]);
+@custom-variant data-closed (&[data-state="closed"]);

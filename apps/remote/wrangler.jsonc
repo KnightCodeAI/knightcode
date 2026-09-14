@@ -1,0 +1,28 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "knightcode-remote",
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-08-22",
+	"compatibility_flags": ["nodejs_compat"],
+	"account_id": "43557fce17fd00ec09461c12c39dc41a",
+	// A zone route, NOT "custom_domain": true. Wrangler's OAuth token carries zone:read
+	// only, so it cannot create the DNS record a custom domain needs. The record is made
+	// by hand (see DEPLOYING.md); a route only needs workers_routes:write, which the token has.
+	"routes": [{ "pattern": "remote.knightcode.dev/*", "zone_id": "9eb345a5d81de9d3c8e971208b2117bf" }],
+	// The workers.dev hostname doubles as staging and works before the DNS record above
+	// exists. Wrangler turns it off by default once a route is configured.
+	"workers_dev": true,
+	// The React app in web/, built by `bun run build`. run_worker_first is load-bearing:
+	// without it the assets binding answers matching paths BEFORE the Worker, so /, /r/<id>
+	// and /device would be served straight from disk and skip every authorisation check in
+	// src/worker.ts. html_handling "none" is load-bearing too: the default rewrites
+	// /index.html to /, so ASSETS.fetch("/index.html") answers 307 -> "/" and the worker's
+	// own "/" route loops forever.
+	"assets": { "directory": "./web/dist", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" },
+	"durable_objects": {
+		"bindings": [{ "name": "ROOM", "class_name": "RemoteRoom" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RemoteRoom"] }],
+	"d1_databases": [{ "binding": "DB", "database_name": "knightcode-remote", "database_id": "89b432a5-032b-42e7-a639-feb2e945da8c" }],
+	"observability": { "enabled": true }
+}

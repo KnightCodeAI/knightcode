@@ -91,3 +91,12 @@ release-assets/
 .claude/
 .agents/
 skills-lock.json
+
+# Cloudflare Worker local secrets (apps/remote)
+.dev.vars
+
+# The built browser app (apps/remote/web/dist, from `bun run build`) is covered by the
+# "dist" rule above. wrangler needs it before `deploy`; the Worker test pool does not.
+
+# Wrangler local state (apps/remote)
+.wrangler/

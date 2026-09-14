@@ -1,0 +1,28 @@
+{
+	// Browser app only. DOM globals, no workers-types: @cloudflare/workers-types declares its
+	// own `Element`, which shadows the DOM one and breaks React's typings.
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"types": ["vite/client"],
+		"jsx": "react-jsx",
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"allowImportingTsExtensions": true,
+		"verbatimModuleSyntax": true,
+		"noUncheckedIndexedAccess": true,
+		"baseUrl": ".",
+		"paths": { "@/*": ["./src/*"] }
+	},
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		"test/**/*.ts",
+		"test/**/*.tsx",
+		"../vite.config.ts",
+		"../../../packages/remote/src/protocol.ts"
+	]
+}

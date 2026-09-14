@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<!-- interactive-widget: Android Chrome resizes the layout viewport for the keyboard, so
+		     100dvh already excludes it. iOS ignores this and is handled with visualViewport. -->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+		/>
+		<meta name="theme-color" content="#0c0c0d" media="(prefers-color-scheme: dark)" />
+		<meta name="theme-color" content="#f4f4f5" media="(prefers-color-scheme: light)" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="KnightCode" />
+		<title>KnightCode</title>
+		<link rel="icon" href="/knight.svg" />
+		<link rel="apple-touch-icon" href="/knight.svg" />
+		<!-- Before the stylesheet loads, so a remembered theme never flashes the device one. Key shared with src/lib/theme.ts. -->
+		<script>
+			try {
+				var t = localStorage.getItem("kc-theme");
+				if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+			} catch (e) {}
+		</script>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>

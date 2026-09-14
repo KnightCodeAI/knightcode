@@ -27,6 +27,8 @@
       "@knightcode/chord/*": ["./packages/chord/src/*.ts", "./packages/chord/src/*"],
       "@knightcode/protocol": ["./packages/protocol/src/index.ts"],
       "@knightcode/protocol/*": ["./packages/protocol/src/*"],
+      "@knightcode/remote": ["./packages/remote/src/index.ts"],
+      "@knightcode/remote/*": ["./packages/remote/src/*"],
       "@knightcode/client": ["./packages/client/src/index.ts"],
       "@knightcode/client/control": ["./packages/client/src/control.ts"],
       "@knightcode/client/unix": ["./packages/client/src/unix.ts"],
