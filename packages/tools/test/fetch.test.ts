@@ -288,12 +288,14 @@ describe("grepLines", () => {
 		expect(grepLines(["(a)\\1", "aa"], "(a)\\1").matches).toBe(1);
 	});
 
-	test("a catastrophic pattern over a long near-match finishes in linear time", () => {
-		const long = Array.from({ length: 200 }, () => `${"a".repeat(5000)}!`);
+	test("a catastrophic pattern over a near-match finishes in linear time", () => {
+		// 64 characters: ~3 ms on RE2, ~10^9 s on a backtracking engine (V8 needs seconds at 26
+		// and doubles per character), so the bound can stay generous for a loaded CI runner.
+		const near = Array.from({ length: 200 }, () => `${"a".repeat(64)}!`);
 		const started = performance.now();
-		expect(grepLines(long, "^(a+)+$").matches).toBe(0);
-		expect(grepLines(long, "(a|a)+$").matches).toBe(0);
-		expect(performance.now() - started).toBeLessThan(2000);
+		expect(grepLines(near, "^(a+)+$").matches).toBe(0);
+		expect(grepLines(near, "(a|a)+$").matches).toBe(0);
+		expect(performance.now() - started).toBeLessThan(1000);
 	});
 
 	test("caps at 100 matches and says so", () => {
