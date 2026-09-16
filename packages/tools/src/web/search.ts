@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@knightcodeai/cli";
 import { type Static, Type } from "typebox";
+import { readPersisted, type ToolSettings } from "../state.ts";
 import { combineSignals, decodeBody, discard, readBody, USER_AGENT } from "./fetch.ts";
 import { decodeEntities, isHtmlContentType, stripTags } from "./html.ts";
 import { websearchRenderers } from "./render.ts";
@@ -15,7 +16,23 @@ export type SearchProvider = "brave" | "duckduckgo";
 export interface SearchOptions {
 	signal?: AbortSignal;
 	fetch?: typeof fetch;
-	env?: NodeJS.ProcessEnv;
+	/** Defaults to DuckDuckGo; Brave needs `apiKey`. */
+	provider?: SearchProvider;
+	apiKey?: string;
+}
+
+const KEYED_HINT = "pick Brave in /tools websearch for a keyed provider.";
+
+/** The provider is what the user picked in /tools websearch; a key alone never switches to Brave. */
+export function resolveSearchOptions(
+	settings: ToolSettings,
+	env: NodeJS.ProcessEnv,
+): Required<Pick<SearchOptions, "provider">> & Pick<SearchOptions, "apiKey"> {
+	const stored = settings.braveApiKey;
+	return {
+		provider: settings.provider === "brave" ? "brave" : "duckduckgo",
+		apiKey: typeof stored === "string" && stored !== "" ? stored : env.BRAVE_API_KEY,
+	};
 }
 
 const SNIPPET_MAX = 200;
@@ -98,33 +115,32 @@ export async function search(
 	options: SearchOptions = {},
 ): Promise<{ provider: SearchProvider; results: SearchResult[] }> {
 	const doFetch = options.fetch ?? fetch;
-	const env = options.env ?? process.env;
 	const wanted = Math.min(MAX_COUNT, Math.max(1, Math.floor(count)));
-	const signal = combineSignals(options.signal, TIMEOUT_MS);
 
-	const key = env.BRAVE_API_KEY;
-	if (key) {
+	if (options.provider === "brave") {
+		const key = options.apiKey;
+		if (!key) throw new Error("Brave Search needs an API key; set one in /tools websearch");
 		const response = await doFetch(`${BRAVE_ENDPOINT}?q=${encodeURIComponent(query)}&count=${wanted}`, {
-			signal,
+			signal: combineSignals(options.signal, TIMEOUT_MS),
 			headers: { "X-Subscription-Token": key, Accept: "application/json" },
 		});
 		const json = await readProvider(
 			response,
 			"Brave Search",
 			(type) => /[/+]json\b/i.test(type),
-			"check BRAVE_API_KEY",
+			"check the key in /tools websearch",
 		);
 		return { provider: "brave", results: parseBrave(JSON.parse(json)).slice(0, wanted) };
 	}
 
 	const response = await doFetch(`${DDG_ENDPOINT}?q=${encodeURIComponent(query)}`, {
-		signal,
+		signal: combineSignals(options.signal, TIMEOUT_MS),
 		headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
 	});
-	const html = await readProvider(response, "DuckDuckGo", isHtmlContentType, "set BRAVE_API_KEY for a keyed provider.");
+	const html = await readProvider(response, "DuckDuckGo", isHtmlContentType, KEYED_HINT);
 	const results = parseDuckDuckGo(html).slice(0, wanted);
 	if (results.length === 0 && isDuckDuckGoChallenge(html)) {
-		throw new Error("DuckDuckGo rate-limited this request; set BRAVE_API_KEY for a keyed provider.");
+		throw new Error(`DuckDuckGo rate-limited this request; ${KEYED_HINT}`);
 	}
 	return { provider: "duckduckgo", results };
 }
@@ -156,7 +172,10 @@ export const websearchTool: ToolDefinition<typeof websearchSchema, WebsearchDeta
 	promptSnippet: "Search the web for titles, URLs and snippets; fetch a result with webfetch",
 	parameters: websearchSchema,
 	async execute(_toolCallId, params, signal) {
-		const { provider, results } = await search(params.query, params.count ?? DEFAULT_COUNT, { signal });
+		const { provider, results } = await search(params.query, params.count ?? DEFAULT_COUNT, {
+			signal,
+			...resolveSearchOptions(readPersisted().websearch ?? {}, process.env),
+		});
 		return {
 			content: [{ type: "text", text: formatResults(params.query, provider, results) }],
 			details: { query: params.query, provider, results },

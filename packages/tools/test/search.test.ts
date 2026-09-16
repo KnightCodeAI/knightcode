@@ -7,6 +7,7 @@ import {
 	isDuckDuckGoChallenge,
 	parseBrave,
 	parseDuckDuckGo,
+	resolveSearchOptions,
 	search,
 	websearchTool,
 } from "../src/web/search.ts";
@@ -86,34 +87,42 @@ describe("clipSnippet", () => {
 });
 
 describe("search", () => {
-	test("uses Brave when BRAVE_API_KEY is set, sending the token and clamping count", async () => {
+	test("uses Brave when selected, sending the token and clamping count", async () => {
 		const { fetchImpl, calls } = fakeFetch(JSON.stringify(brave), { contentType: "application/json" });
-		const out = await search("bun docs", 50, { fetch: fetchImpl, env: { BRAVE_API_KEY: "k" } });
+		const out = await search("bun docs", 50, { fetch: fetchImpl, provider: "brave", apiKey: "k" });
 		expect(out.provider).toBe("brave");
 		expect(out.results).toHaveLength(2);
 		expect(calls[0].url).toBe("https://api.search.brave.com/res/v1/web/search?q=bun%20docs&count=10");
 		expect(new Headers(calls[0].init?.headers).get("x-subscription-token")).toBe("k");
 	});
 
-	test("Brave errors name the status and the env var, and release the body", async () => {
+	test("Brave without a key is refused before any request", async () => {
+		const { fetchImpl, calls } = fakeFetch("");
+		await expect(search("q", 5, { fetch: fetchImpl, provider: "brave" })).rejects.toThrow(
+			"Brave Search needs an API key; set one in /tools websearch",
+		);
+		expect(calls).toEqual([]);
+	});
+
+	test("Brave errors name the status and where the key lives, and release the body", async () => {
 		const { fetchImpl, responses } = fakeFetch("nope", { status: 401, contentType: "application/json" });
-		await expect(search("q", 5, { fetch: fetchImpl, env: { BRAVE_API_KEY: "bad" } })).rejects.toThrow(
-			"Brave Search returned HTTP 401; check BRAVE_API_KEY",
+		await expect(search("q", 5, { fetch: fetchImpl, provider: "brave", apiKey: "bad" })).rejects.toThrow(
+			"Brave Search returned HTTP 401; check the key in /tools websearch",
 		);
 		expect(responses[0].bodyUsed).toBe(true);
 	});
 
 	test("DuckDuckGo errors point at the keyed provider, and release the body", async () => {
 		const { fetchImpl, responses } = fakeFetch("busy", { status: 503 });
-		await expect(search("q", 5, { fetch: fetchImpl, env: {} })).rejects.toThrow(
-			"DuckDuckGo returned HTTP 503; set BRAVE_API_KEY for a keyed provider.",
+		await expect(search("q", 5, { fetch: fetchImpl })).rejects.toThrow(
+			"DuckDuckGo returned HTTP 503; pick Brave in /tools websearch for a keyed provider.",
 		);
 		expect(responses[0].bodyUsed).toBe(true);
 	});
 
-	test("falls back to DuckDuckGo with the browser User-Agent and honours count", async () => {
+	test("DuckDuckGo is the default, with the browser User-Agent, and honours count", async () => {
 		const { fetchImpl, calls } = fakeFetch(ddg);
-		const out = await search("bun docs", 2, { fetch: fetchImpl, env: {} });
+		const out = await search("bun docs", 2, { fetch: fetchImpl });
 		expect(out.provider).toBe("duckduckgo");
 		expect(out.results.map((r) => r.url)).toEqual(["https://bun.sh/docs", "https://github.com/oven-sh/bun"]);
 		expect(calls[0].url).toBe("https://html.duckduckgo.com/html/?q=bun%20docs");
@@ -122,39 +131,64 @@ describe("search", () => {
 
 	test("a DuckDuckGo challenge page becomes a clear error", async () => {
 		const { fetchImpl } = fakeFetch(challenge);
-		await expect(search("q", 5, { fetch: fetchImpl, env: {} })).rejects.toThrow(
-			"DuckDuckGo rate-limited this request; set BRAVE_API_KEY for a keyed provider.",
+		await expect(search("q", 5, { fetch: fetchImpl })).rejects.toThrow(
+			"DuckDuckGo rate-limited this request; pick Brave in /tools websearch for a keyed provider.",
 		);
 	});
 
 	test("an empty organic page is simply no results", async () => {
 		const { fetchImpl } = fakeFetch("<html><body><div id='links'></div></body></html>");
-		expect((await search("q", 5, { fetch: fetchImpl, env: {} })).results).toEqual([]);
+		expect((await search("q", 5, { fetch: fetchImpl })).results).toEqual([]);
 	});
 
 	test("count below 1 becomes 1", async () => {
 		const { fetchImpl } = fakeFetch(ddg);
-		expect((await search("q", 0, { fetch: fetchImpl, env: {} })).results).toHaveLength(1);
+		expect((await search("q", 0, { fetch: fetchImpl })).results).toHaveLength(1);
 	});
 
 	test("refuses a provider body over 1 MB instead of buffering it", async () => {
 		const { fetchImpl } = fakeFetch(`<html>${"x".repeat(1024 * 1024 + 1)}</html>`);
-		await expect(search("q", 5, { fetch: fetchImpl, env: {} })).rejects.toThrow(/Response too large/);
+		await expect(search("q", 5, { fetch: fetchImpl })).rejects.toThrow(/Response too large/);
 		const brave = fakeFetch(`{"pad":"${"x".repeat(1024 * 1024 + 1)}"}`, { contentType: "application/json" });
-		await expect(search("q", 5, { fetch: brave.fetchImpl, env: { BRAVE_API_KEY: "k" } })).rejects.toThrow(
+		await expect(search("q", 5, { fetch: brave.fetchImpl, provider: "brave", apiKey: "k" })).rejects.toThrow(
 			/Response too large/,
 		);
 	});
 
 	test("refuses the wrong content type before parsing", async () => {
 		const { fetchImpl } = fakeFetch("<html></html>", { contentType: "text/html" });
-		await expect(search("q", 5, { fetch: fetchImpl, env: { BRAVE_API_KEY: "k" } })).rejects.toThrow(
+		await expect(search("q", 5, { fetch: fetchImpl, provider: "brave", apiKey: "k" })).rejects.toThrow(
 			"Brave Search returned text/html instead of a result page",
 		);
 		const ddgJson = fakeFetch("{}", { contentType: "application/json" });
-		await expect(search("q", 5, { fetch: ddgJson.fetchImpl, env: {} })).rejects.toThrow(
+		await expect(search("q", 5, { fetch: ddgJson.fetchImpl })).rejects.toThrow(
 			"DuckDuckGo returned application/json instead of a result page",
 		);
+	});
+});
+
+describe("resolveSearchOptions", () => {
+	test("defaults to DuckDuckGo with no settings and no key", () => {
+		expect(resolveSearchOptions({}, {})).toEqual({ provider: "duckduckgo", apiKey: undefined });
+	});
+
+	test("a key alone does not pick Brave; the provider is what the user chose", () => {
+		expect(resolveSearchOptions({}, { BRAVE_API_KEY: "env" })).toEqual({ provider: "duckduckgo", apiKey: "env" });
+		expect(resolveSearchOptions({ provider: "brave" }, { BRAVE_API_KEY: "env" })).toEqual({
+			provider: "brave",
+			apiKey: "env",
+		});
+	});
+
+	test("the stored key wins over the environment", () => {
+		expect(resolveSearchOptions({ provider: "brave", braveApiKey: "stored" }, { BRAVE_API_KEY: "env" })).toEqual({
+			provider: "brave",
+			apiKey: "stored",
+		});
+	});
+
+	test("an unknown provider value falls back to DuckDuckGo", () => {
+		expect(resolveSearchOptions({ provider: "bing" }, {}).provider).toBe("duckduckgo");
 	});
 });
 
