@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import {
+	copyFileSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -9,6 +10,7 @@ import {
 	realpathSync,
 	renameSync,
 	rmSync,
+	utimesSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -198,6 +200,24 @@ describe("--session-id", () => {
 		);
 
 		expect(reopened.getSessionFile()).toBe(renamedPath);
+	});
+
+	it("reopens the most recent file when an imported copy shares the ID", () => {
+		const tempRoot = createTempDir();
+		const projectDir = join(tempRoot, "project");
+		const sessionDir = join(tempRoot, "sessions");
+		mkdirSync(projectDir, { recursive: true });
+		const original = SessionManager.create(projectDir, sessionDir, { id: "shared-id" });
+		persistSession(original, "the original transcript");
+		const originalPath = original.getSessionFile()!;
+		// /import copies a transcript under a free file name but keeps its header ID, so two files
+		// in one directory can answer to the same ID. The copy is written last, as an import is.
+		const importedPath = join(sessionDir, "imported-copy.jsonl");
+		copyFileSync(originalPath, importedPath);
+		const past = new Date(Date.now() - 60_000);
+		utimesSync(originalPath, past, past);
+
+		expect(SessionManager.findById(projectDir, "shared-id", sessionDir)).toBe(importedPath);
 	});
 
 	it("filters exact IDs by cwd in a custom session directory", () => {
