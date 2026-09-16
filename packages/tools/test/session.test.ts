@@ -3,11 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getModel } from "@knightcode/ai/compat";
 import type { ExtensionFactory } from "@knightcodeai/cli";
+import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
 import { DefaultResourceLoader } from "@knightcodeai/cli/core/resource-loader";
 import { createAgentSession } from "@knightcodeai/cli/core/sdk";
 import { SessionManager } from "@knightcodeai/cli/core/session-manager";
 import { SettingsManager } from "@knightcodeai/cli/core/settings-manager";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import toolsExtension from "../src/index.ts";
+import { writePersisted } from "../src/state.ts";
 import { probeExtension, seenAtSessionStart } from "./probe-extension.ts";
 
 /**
@@ -52,5 +55,27 @@ describe("engine ordering", () => {
 		expect(session.agent.state.tools.map((t) => t.name)).toContain("probe");
 		expect(seenAtSessionStart).toHaveLength(1);
 		expect(seenAtSessionStart[0]).toContain("probe");
+	});
+
+	test("the real extension registers both tools active by default", async () => {
+		const session = await bootSession([toolsExtension], tempDir, agentDir);
+		await session.bindExtensions({});
+		const names = session.agent.state.tools.map((t) => t.name);
+		expect(names).toContain("webfetch");
+		expect(names).toContain("websearch");
+	});
+
+	test("a persisted off in tools.json removes the tool at session start", async () => {
+		process.env[ENV_AGENT_DIR] = agentDir;
+		try {
+			writePersisted({ websearch: false }, join(agentDir, "tools.json"));
+			const session = await bootSession([toolsExtension], tempDir, agentDir);
+			await session.bindExtensions({});
+			const names = session.agent.state.tools.map((t) => t.name);
+			expect(names).toContain("webfetch");
+			expect(names).not.toContain("websearch");
+		} finally {
+			delete process.env[ENV_AGENT_DIR];
+		}
 	});
 });
