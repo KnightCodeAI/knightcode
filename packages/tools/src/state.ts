@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@knightcodeai/cli";
 import { getAgentDir } from "@knightcodeai/cli/config";
+import lockfile from "proper-lockfile";
 
 export type ToolMode = "off" | "session" | "always";
 export const TOOL_MODES: ToolMode[] = ["off", "session", "always"];
@@ -36,7 +37,8 @@ export function readPersisted(file = stateFile()): PersistedState {
 
 export function writePersisted(state: PersistedState, file = stateFile()): void {
 	mkdirSync(dirname(file), { recursive: true });
-	const tmp = `${file}.tmp`;
+	// Per-process temp name: two KnightCodes writing at once must not rename each other's file away.
+	const tmp = `${file}.${process.pid}.tmp`;
 	writeFileSync(tmp, `${JSON.stringify(state, null, "\t")}\n`, "utf8");
 	renameSync(tmp, file);
 }
@@ -53,15 +55,28 @@ export function resolveEnabled(
 	return overrides.get(name) ?? persisted[name] ?? defaultEnabled;
 }
 
-export function setMode(name: string, mode: ToolMode, file = stateFile()): void {
+export async function setMode(name: string, mode: ToolMode, file = stateFile()): Promise<void> {
 	if (mode === "session") {
 		sessionOverrides.set(name, true);
 		return;
 	}
 	sessionOverrides.delete(name);
-	const persisted = readPersisted(file);
-	persisted[name] = mode === "always";
-	writePersisted(persisted, file);
+	mkdirSync(dirname(file), { recursive: true });
+	// The read-modify-write runs under the same kind of lock as settings.json, so two KnightCode
+	// processes running /tools serialize instead of one overwriting the other's change. The lock
+	// is on the directory so it works before the file exists.
+	const release = await lockfile.lock(dirname(file), {
+		lockfilePath: `${file}.lock`,
+		realpath: false,
+		retries: { retries: 10, minTimeout: 20 },
+	});
+	try {
+		const persisted = readPersisted(file);
+		persisted[name] = mode === "always";
+		writePersisted(persisted, file);
+	} finally {
+		await release();
+	}
 }
 
 export function describeMode(entry: ToolEntry, persisted: PersistedState = readPersisted()): string {

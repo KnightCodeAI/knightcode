@@ -28,15 +28,24 @@ function service(): TurndownService {
 
 /**
  * Returns the part of the page worth converting: the longest <main> or <article>, else <body>,
- * else the input. ponytail: a regex pick, not a readability port — good enough for docs and
+ * else the input. A tag scan with a nesting stack, so an <article> inside an <article> closes
+ * the inner one, not the outer. ponytail: not a readability port — good enough for docs and
  * articles, and it needs no DOM library in the binary.
  */
 export function pickMainContent(html: string): string {
 	let best: string | undefined;
-	for (const re of [/<main\b[^>]*>([\s\S]*?)<\/main>/gi, /<article\b[^>]*>([\s\S]*?)<\/article>/gi]) {
-		for (const match of html.matchAll(re)) {
-			if (best === undefined || match[1].length > best.length) best = match[1];
+	const open: Array<{ tag: string; start: number }> = [];
+	for (const match of html.matchAll(/<(\/?)(main|article)\b[^>]*>/gi)) {
+		const tag = match[2].toLowerCase();
+		if (!match[1]) {
+			open.push({ tag, start: match.index + match[0].length });
+			continue;
 		}
+		const depth = open.findLastIndex((entry) => entry.tag === tag);
+		if (depth === -1) continue;
+		const inner = html.slice(open[depth].start, match.index);
+		open.length = depth;
+		if (best === undefined || inner.length > best.length) best = inner;
 	}
 	if (best !== undefined) return best;
 	const body = /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(html);
@@ -69,7 +78,8 @@ export function decodeEntities(text: string): string {
 				return " ";
 		}
 		const code = lower.startsWith("#x") ? Number.parseInt(lower.slice(2), 16) : Number.parseInt(lower.slice(1), 10);
-		return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+		// fromCodePoint throws past U+10FFFF; leave such an entity as written, like an unknown name.
+		return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
 	});
 }
 

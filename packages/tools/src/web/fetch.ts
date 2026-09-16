@@ -1,7 +1,8 @@
 import type { ToolDefinition } from "@knightcodeai/cli";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "@knightcodeai/cli/core/tools/truncate";
+import { RE2JS } from "re2js";
 import { type Static, Type } from "typebox";
-import { assertPublicUrl, type GuardOptions } from "./guard.ts";
+import { assertPublicUrl, type GuardOptions, type PublicUrl } from "./guard.ts";
 import { extractTitle, htmlToMarkdown, isHtmlContentType, isTextContentType, pickMainContent } from "./html.ts";
 import { webfetchRenderers } from "./render.ts";
 
@@ -46,7 +47,7 @@ export function combineSignals(signal: AbortSignal | undefined, timeoutMs: numbe
 	return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-async function readBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+export async function readBody(response: Response, maxBytes: number): Promise<Uint8Array> {
 	const reader = response.body?.getReader();
 	if (!reader) return new Uint8Array();
 	const chunks: Uint8Array[] = [];
@@ -70,7 +71,7 @@ async function readBody(response: Response, maxBytes: number): Promise<Uint8Arra
 	return out;
 }
 
-function decodeBody(raw: Uint8Array, contentType: string): string {
+export function decodeBody(raw: Uint8Array, contentType: string): string {
 	const charset = /charset=["']?([\w-]+)/i.exec(contentType)?.[1];
 	try {
 		return new TextDecoder(charset ?? "utf-8").decode(raw);
@@ -80,24 +81,26 @@ function decodeBody(raw: Uint8Array, contentType: string): string {
 }
 
 async function follow(
-	start: URL,
+	start: PublicUrl,
 	options: FetchOptions,
 	signal: AbortSignal,
 ): Promise<{ url: URL; response: Response }> {
 	const doFetch = options.fetch ?? fetch;
-	let url = start;
+	let target = start;
 	for (let hop = 0; ; hop++) {
-		const response = await doFetch(url, {
+		// The connection goes to the checked address; Bun takes the TLS server name and the
+		// certificate identity from Host, so the request still verifies as target.url.hostname.
+		const response = await doFetch(target.connect, {
 			redirect: "manual",
 			signal,
-			headers: { "User-Agent": USER_AGENT, Accept: ACCEPT },
+			headers: { "User-Agent": USER_AGENT, Accept: ACCEPT, Host: target.url.host },
 		});
 		const location = response.headers.get("location");
-		if (!REDIRECT_STATUSES.has(response.status) || !location) return { url, response };
+		if (!REDIRECT_STATUSES.has(response.status) || !location) return { url: target.url, response };
 		await response.body?.cancel();
 		if (hop === MAX_REDIRECTS)
-			throw new Error(`Too many redirects (more than ${MAX_REDIRECTS}) fetching ${start.href}`);
-		url = await assertPublicUrl(new URL(location, url).href, options);
+			throw new Error(`Too many redirects (more than ${MAX_REDIRECTS}) fetching ${start.url.href}`);
+		target = await assertPublicUrl(new URL(location, target.url).href, options);
 	}
 }
 
@@ -150,7 +153,7 @@ export const webfetchSchema = Type.Object({
 	grep: Type.Optional(
 		Type.String({
 			description:
-				"Return only lines matching this case-insensitive regex, with 2 lines of context; ignores offset/limit",
+				"Return only lines matching this case-insensitive regex (RE2 syntax: no lookaround or backreferences), with 2 lines of context; ignores offset/limit",
 		}),
 	),
 });
@@ -169,19 +172,17 @@ export interface WebfetchDetails {
 	matches?: number;
 }
 
-function escapeRegex(text: string): string {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 export function grepLines(lines: string[], pattern: string): { text: string; matches: number; shown: number } {
-	let re: RegExp;
+	// RE2 runs in linear time, so a model-written pattern cannot stall the process the way a
+	// backtracking regex can; what it does not accept (lookaround, backreferences) is a literal.
+	let re: RE2JS;
 	try {
-		re = new RegExp(pattern, "i");
+		re = RE2JS.compile(pattern, RE2JS.CASE_INSENSITIVE);
 	} catch {
-		re = new RegExp(escapeRegex(pattern), "i");
+		re = RE2JS.compile(RE2JS.quote(pattern), RE2JS.CASE_INSENSITIVE);
 	}
 	const hits: number[] = [];
-	for (let i = 0; i < lines.length; i++) if (re.test(lines[i])) hits.push(i);
+	for (let i = 0; i < lines.length; i++) if (re.matcher(lines[i]).find()) hits.push(i);
 	if (hits.length === 0) {
 		return {
 			text: `No lines match /${pattern}/ (${lines.length} lines). Try a broader pattern or read with offset/limit.`,

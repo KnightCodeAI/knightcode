@@ -48,7 +48,7 @@ export async function toolsCommand(
 		if (mode === undefined) return;
 	}
 
-	setMode(entry.tool.name, mode);
+	await setMode(entry.tool.name, mode);
 	applyActiveTools(pi, entries);
 	ctx.ui.notify(`${entry.tool.name}: ${describeMode(entry)}`, "info");
 }

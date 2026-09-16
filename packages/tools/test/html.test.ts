@@ -39,6 +39,15 @@ describe("pickMainContent", () => {
 	test("takes the longest of several candidates", () => {
 		expect(pickMainContent("<article>short</article><main>much longer content</main>")).toBe("much longer content");
 	});
+
+	test("a nested <article> closes the inner one, so the outer keeps its tail", () => {
+		const nested = "<article><h1>Outer</h1><article><p>inner</p></article><p>after the inner one</p></article>";
+		expect(pickMainContent(nested)).toBe("<h1>Outer</h1><article><p>inner</p></article><p>after the inner one</p>");
+	});
+
+	test("a stray closing tag is ignored", () => {
+		expect(pickMainContent("<body></article><main>x</main></body>")).toBe("x");
+	});
 });
 
 describe("htmlToMarkdown", () => {
@@ -81,6 +90,10 @@ describe("extractTitle / stripTags / decodeEntities", () => {
 
 	test("decodeEntities leaves unknown entities alone", () => {
 		expect(decodeEntities("a &zzz; b &lt;")).toBe("a &zzz; b <");
+	});
+
+	test("decodeEntities leaves a code point past U+10FFFF as written instead of throwing", () => {
+		expect(decodeEntities("x &#x110000; &#99999999999; &#x1F600;")).toBe("x &#x110000; &#99999999999; 😀");
 	});
 });
 

@@ -47,7 +47,18 @@ export function isBlockedHostname(hostname: string): boolean {
 	return isIP(literal) !== 0 && isPrivateAddress(literal);
 }
 
-export async function assertPublicUrl(raw: string, options: GuardOptions = {}): Promise<URL> {
+export interface PublicUrl {
+	/** As requested: names the page and resolves relative redirects. */
+	url: URL;
+	/**
+	 * Where the connection goes: `url` with the hostname swapped for the address that passed the
+	 * check, so the fetch cannot resolve the name a second time (rebinding, mixed answers). The
+	 * same object as `url` for IP literals and allowHosts.
+	 */
+	connect: URL;
+}
+
+export async function assertPublicUrl(raw: string, options: GuardOptions = {}): Promise<PublicUrl> {
 	if (raw.length > MAX_URL_LENGTH) throw new Error(`Blocked: URL longer than ${MAX_URL_LENGTH} characters`);
 	let url: URL;
 	try {
@@ -59,18 +70,18 @@ export async function assertPublicUrl(raw: string, options: GuardOptions = {}): 
 		throw new Error(`Blocked: only http and https URLs are fetched (got ${url.protocol})`);
 	}
 	if (url.username || url.password) throw new Error("Blocked: URLs with credentials are not fetched");
-	if (options.allowHosts?.includes(url.hostname)) return url;
+	if (options.allowHosts?.includes(url.hostname)) return { url, connect: url };
 	if (isBlockedHostname(url.hostname)) throw new Error(`Blocked: ${url.hostname} is a private or local host`);
-	if (isIP(stripBrackets(url.hostname)) === 0) {
-		const lookup = options.lookup ?? ((hostname: string) => dns.lookup(hostname));
-		let address: string;
-		try {
-			({ address } = await lookup(url.hostname));
-		} catch {
-			throw new Error(`Blocked: could not resolve ${url.hostname}`);
-		}
-		// ponytail: one lookup here, then fetch resolves again; a rebinding between the two is accepted.
-		if (isPrivateAddress(address)) throw new Error(`Blocked: ${url.hostname} resolves to a private address`);
+	if (isIP(stripBrackets(url.hostname)) !== 0) return { url, connect: url };
+	const lookup = options.lookup ?? ((hostname: string) => dns.lookup(hostname));
+	let address: string;
+	try {
+		({ address } = await lookup(url.hostname));
+	} catch {
+		throw new Error(`Blocked: could not resolve ${url.hostname}`);
 	}
-	return url;
+	if (isPrivateAddress(address)) throw new Error(`Blocked: ${url.hostname} resolves to a private address`);
+	const connect = new URL(url);
+	connect.hostname = isIP(address) === 6 ? `[${address}]` : address;
+	return { url, connect };
 }

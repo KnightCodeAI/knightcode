@@ -166,6 +166,23 @@ describe("fetchPage", () => {
 		await expect(fetchPage("http://127.0.0.1:1/x")).rejects.toThrow(/^Blocked:/);
 		expect(server.hits()).toBe(before);
 	});
+
+	test("connects to the checked address and keeps the name in Host, on every redirect hop", async () => {
+		const calls: Array<{ url: string; host: string | null }> = [];
+		const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+			calls.push({ url: String(input), host: new Headers(init?.headers).get("host") });
+			return calls.length === 1
+				? new Response(null, { status: 302, headers: { location: "https://other.example/next" } })
+				: new Response("done", { status: 200, headers: { "content-type": "text/plain" } });
+		}) as typeof fetch;
+		const lookup = async (hostname: string) => ({ address: hostname === "example.com" ? "93.184.216.34" : "1.2.3.4" });
+		const page = await fetchPage("https://example.com:8443/docs", { fetch: fetchImpl, lookup });
+		expect(calls).toEqual([
+			{ url: "https://93.184.216.34:8443/docs", host: "example.com:8443" },
+			{ url: "https://1.2.3.4/next", host: "other.example" },
+		]);
+		expect(page.finalUrl).toBe("https://other.example/next");
+	});
 });
 
 describe("formatPage", () => {
@@ -264,6 +281,19 @@ describe("grepLines", () => {
 
 	test("is case-insensitive and treats an invalid regex as a literal", () => {
 		expect(grepLines(["Foo(", "bar"], "foo(").matches).toBe(1);
+	});
+
+	test("treats syntax RE2 lacks (lookaround, backreferences) as a literal", () => {
+		expect(grepLines(["foo(?=bar)", "foobar"], "foo(?=bar)").matches).toBe(1);
+		expect(grepLines(["(a)\\1", "aa"], "(a)\\1").matches).toBe(1);
+	});
+
+	test("a catastrophic pattern over a long near-match finishes in linear time", () => {
+		const long = Array.from({ length: 200 }, () => `${"a".repeat(5000)}!`);
+		const started = performance.now();
+		expect(grepLines(long, "^(a+)+$").matches).toBe(0);
+		expect(grepLines(long, "(a|a)+$").matches).toBe(0);
+		expect(performance.now() - started).toBeLessThan(2000);
 	});
 
 	test("caps at 100 matches and says so", () => {

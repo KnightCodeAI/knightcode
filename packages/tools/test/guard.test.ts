@@ -79,13 +79,27 @@ describe("assertPublicUrl", () => {
 		await expect(assertPublicUrl("https://nope.example/", { lookup })).rejects.toThrow(/could not resolve/);
 	});
 
-	test("returns the parsed URL for a public host", async () => {
-		const url = await assertPublicUrl("https://example.com/docs?x=1", { lookup: publicLookup });
-		expect(url.href).toBe("https://example.com/docs?x=1");
+	test("returns the parsed URL for a public host, pinned to the checked address", async () => {
+		const { url, connect } = await assertPublicUrl("https://example.com:8443/docs?x=1", { lookup: publicLookup });
+		expect(url.href).toBe("https://example.com:8443/docs?x=1");
+		expect(connect.href).toBe("https://93.184.216.34:8443/docs?x=1");
+	});
+
+	test("brackets a pinned IPv6 address", async () => {
+		const lookup = async () => ({ address: "2606:4700::1111" });
+		const { connect } = await assertPublicUrl("https://example.com/", { lookup });
+		expect(connect.href).toBe("https://[2606:4700::1111]/");
+	});
+
+	test("IP literals and allowHosts connect as written", async () => {
+		const literal = await assertPublicUrl("http://93.184.216.34/x");
+		expect(literal.connect).toBe(literal.url);
+		const allowed = await assertPublicUrl("http://127.0.0.1:9/", { allowHosts: ["127.0.0.1"] });
+		expect(allowed.connect).toBe(allowed.url);
 	});
 
 	test("allowHosts exempts exactly those hosts and nothing else", async () => {
-		const url = await assertPublicUrl("http://127.0.0.1:9/", { allowHosts: ["127.0.0.1"] });
+		const { url } = await assertPublicUrl("http://127.0.0.1:9/", { allowHosts: ["127.0.0.1"] });
 		expect(url.port).toBe("9");
 		await expect(assertPublicUrl("http://10.0.0.1/", { allowHosts: ["127.0.0.1"] })).rejects.toThrow(/^Blocked:/);
 		await expect(assertPublicUrl("ftp://127.0.0.1/", { allowHosts: ["127.0.0.1"] })).rejects.toThrow(/^Blocked:/);

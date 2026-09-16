@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
 	applyActiveTools,
@@ -75,7 +75,7 @@ describe("persisted file", () => {
 		writePersisted({ alpha: false }, file);
 		expect(readPersisted(file)).toEqual({ alpha: false });
 		expect(readFileSync(file, "utf8").endsWith("\n")).toBe(true);
-		expect(() => readFileSync(`${file}.tmp`)).toThrow();
+		expect(readdirSync(dirname(file))).toEqual(["tools.json"]);
 	});
 });
 
@@ -90,30 +90,36 @@ describe("setMode", () => {
 		resetSessionOverrides();
 	});
 
-	test("off persists false and clears a session override", () => {
-		setMode("alpha", "session", file);
-		setMode("alpha", "off", file);
+	test("off persists false and clears a session override", async () => {
+		await setMode("alpha", "session", file);
+		await setMode("alpha", "off", file);
 		expect(readPersisted(file)).toEqual({ alpha: false });
 		expect(resolveEnabled("alpha", true, readPersisted(file))).toBe(false);
 	});
 
-	test("session enables now without touching the file", () => {
-		setMode("alpha", "session", file);
+	test("session enables now without touching the file", async () => {
+		await setMode("alpha", "session", file);
 		expect(readPersisted(file)).toEqual({});
 		expect(resolveEnabled("alpha", false, {})).toBe(true);
 	});
 
-	test("always persists true and clears a session override", () => {
-		setMode("beta", "session", file);
-		setMode("beta", "always", file);
+	test("always persists true and clears a session override", async () => {
+		await setMode("beta", "session", file);
+		await setMode("beta", "always", file);
 		expect(readPersisted(file)).toEqual({ beta: true });
 		expect(describeMode(entries[1], readPersisted(file))).toBe("on (default)");
 	});
 
-	test("describeMode reports each state", () => {
+	test("concurrent writers serialize: both changes land and no lock or temp file remains", async () => {
+		await Promise.all([setMode("alpha", "off", file), setMode("beta", "always", file)]);
+		expect(readPersisted(file)).toEqual({ alpha: false, beta: true });
+		expect(readdirSync(dirname(file))).toEqual(["tools.json"]);
+	});
+
+	test("describeMode reports each state", async () => {
 		expect(describeMode(entries[0], {})).toBe("on (default)");
 		expect(describeMode(entries[1], {})).toBe("off");
-		setMode("beta", "session", file);
+		await setMode("beta", "session", file);
 		expect(describeMode(entries[1], {})).toBe("on (this session)");
 	});
 });
