@@ -1,6 +1,6 @@
 # WP01 — `@knightcode/tools`: web fetch, web search, `/tools`
 
-Status: approved 2026-09-15; implementation plan in `01-web-tools-plan.md`
+Status: implemented 2026-09-16; live check recorded in PR #185
 Date: 2026-09-15
 Revision: 2 — review pass: truncation simplified to one byte ceiling, `grep`
 precedence over `offset`/`limit` stated, `--exclude-tools` safety verified in
