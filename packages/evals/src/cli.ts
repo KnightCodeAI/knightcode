@@ -3,7 +3,7 @@ import { globSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createEvalRunContext, discoverCases, packageRelativePath, requireEvalAuthFile, runTask } from "./runner.ts";
+import { createEvalRunContext, discoverCases, packageRelativePath, runTask } from "./runner.ts";
 import { createTaskPlan, type DiscoveredEvalCase, DOCUMENTATION_VARIANTS, parseDiscoveredCases } from "./plan.ts";
 import {
 	type EvalObservation,
@@ -119,7 +119,6 @@ for (const file of files) {
 }
 
 const artifactDirectory = resolve(packageRoot, ".eval", artifactRunId());
-requireEvalAuthFile(selectedModel.provider);
 await mkdir(artifactDirectory, { recursive: true, mode: 0o700 });
 const context = createEvalRunContext(
 	artifactDirectory,

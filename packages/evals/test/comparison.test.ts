@@ -99,6 +99,22 @@ describe("summarizeEvalObservations", () => {
 		expect(report.operationalTotals[0].totalTokens).toEqual({ availableRuns: 2, total: 300 });
 	});
 
+	it("blocks a pair whose arms ran the same system prompt", () => {
+		const control = { ...scored("without_docs", 1, 0), systemPromptSha256: "same-prompt" };
+		const treatment = { ...scored("with_docs", 1, 1), systemPromptSha256: "same-prompt" };
+		const report = summarizeEvalObservations("digest", expectedFor([1]), [control, treatment]);
+		expect(report.blockedPairs[0].reasons).toEqual(["both variants ran the same system prompt"]);
+		expect(report.comparisons[0]).toEqual(expect.objectContaining({ eligiblePairs: 0, lift: null }));
+	});
+
+	it("keeps a pair whose arms ran different system prompts", () => {
+		const control = { ...scored("without_docs", 1, 0), systemPromptSha256: "without" };
+		const treatment = { ...scored("with_docs", 1, 1), systemPromptSha256: "with" };
+		const report = summarizeEvalObservations("digest", expectedFor([1]), [control, treatment]);
+		expect(report.blockedPairs).toEqual([]);
+		expect(report.comparisons[0]).toEqual(expect.objectContaining({ eligiblePairs: 1, lift: 1 }));
+	});
+
 	it("blocks duplicate observations and keeps missing metrics distinct from zero", () => {
 		const withoutTokens = scored("without_docs", 1, 1);
 		delete withoutTokens.totalTokens;

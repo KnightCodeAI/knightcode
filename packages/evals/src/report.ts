@@ -6,7 +6,7 @@ import type { ReportCase } from "@vitest-evals/core";
 import { readReportWorkspace, readVitestJsonReportFile } from "@vitest-evals/core/node";
 import type { DocumentationVariant, EvalTask } from "./plan.ts";
 
-export const KNIGHTCODE_SESSION_SNAPSHOT_ARTIFACT = "piSessionJsonl";
+export const KNIGHTCODE_SESSION_SNAPSHOT_ARTIFACT = "knightcodeSessionJsonl";
 
 export type EvalRunIdentity = {
 	evalSet: string;
@@ -30,8 +30,10 @@ type EvalMetrics = {
 };
 
 export type EvalObservation = EvalRunIdentity &
-	EvalMetrics &
-	({ outcome: "scored"; score: number } | { outcome: "unscored" | "skipped" | "pending" | "errored" });
+	EvalMetrics & {
+		/** Digest of the system prompt the arm actually ran with, so a pair can be shown to differ. */
+		systemPromptSha256?: string;
+	} & ({ outcome: "scored"; score: number } | { outcome: "unscored" | "skipped" | "pending" | "errored" });
 
 export type PairedMetricSummary = {
 	eligiblePairs: number;
@@ -105,7 +107,7 @@ export function classifyCaseStatus(status: ReportCase["status"]): "errored" | "s
 	return undefined;
 }
 
-function taskIdentity(task: EvalTask): EvalRunIdentity {
+function taskIdentity(task: EvalTask): EvalRunIdentity & { systemPromptSha256?: string } {
 	return {
 		evalSet: task.evalSet,
 		caseId: task.caseId,
@@ -160,6 +162,8 @@ export async function readTaskObservation(
 	await persistSession(caseResult, task, artifactDirectory);
 	const actualModel = run.usage.provider && run.usage.model ? `${run.usage.provider}/${run.usage.model}` : undefined;
 	if (actualModel !== task.model) return { ...identity, outcome: "errored" };
+	const promptDigest = run.session.metadata?.systemPromptSha256;
+	if (typeof promptDigest === "string") identity.systemPromptSha256 = promptDigest;
 	let metrics: EvalMetrics = {};
 	try {
 		metrics = {
@@ -258,6 +262,13 @@ function resolvePair(group: PairGroup): { pair?: Pair; blocked?: BlockedPair } {
 		if (expected === 1 && observed.length === 1 && observed[0].outcome !== "scored") {
 			reasons.push(`${variant}: ${observed[0].outcome}`);
 		}
+	}
+	// The variants differ only by the documentation section of the system prompt, so two arms that
+	// ran the identical prompt measure nothing. Their scores must not reach the headline lift.
+	const control = group.observations.get(CONTROL)?.[0]?.systemPromptSha256;
+	const treatment = group.observations.get(TREATMENT)?.[0]?.systemPromptSha256;
+	if (control !== undefined && control === treatment) {
+		reasons.push("both variants ran the same system prompt");
 	}
 	if (reasons.length > 0) {
 		return {

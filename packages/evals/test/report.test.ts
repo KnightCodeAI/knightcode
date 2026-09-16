@@ -79,7 +79,10 @@ function scoredMeta(overrides?: {
 			name: "without_docs",
 			run: {
 				output: { ok: true },
-				session: { events: [{ type: "message", role: "user", content: "prompt" }] },
+				session: {
+					events: [{ type: "message", role: "user", content: "prompt" }],
+					metadata: { systemPromptSha256: "prompt-digest" },
+				},
 				usage: {
 					provider: "fixture",
 					model: overrides?.model ?? "model",
@@ -136,6 +139,7 @@ describe("readTaskObservation", () => {
 			variant: task.variant,
 			model: task.model,
 			runNumber: task.runNumber,
+			systemPromptSha256: "prompt-digest",
 			outcome: "scored",
 			score: 0.5,
 			inputTokens: 10,

@@ -1,8 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DocumentationVariant, EvalTask } from "./plan.ts";
@@ -26,31 +25,6 @@ export function createEvalRunContext(
 	runsPerVariant: number,
 ): EvalRunContext {
 	return { artifactDirectory, provider, model, runsPerVariant };
-}
-
-export function requireEvalAuthFile(provider: string): string {
-	const agentDir = process.env.KNIGHTCODE_CODING_AGENT_DIR
-		? resolve(process.env.KNIGHTCODE_CODING_AGENT_DIR)
-		: join(homedir(), ".knightcode", "agent");
-	const path = join(agentDir, "auth.json");
-	if (!existsSync(path) || !statSync(path).isFile()) {
-		throw new Error(`Eval authentication file does not exist: ${path}`);
-	}
-	let credentials: unknown;
-	try {
-		credentials = JSON.parse(readFileSync(path, "utf8"));
-	} catch (error) {
-		throw new Error(`Eval authentication file is invalid: ${path}`, { cause: error });
-	}
-	if (
-		typeof credentials !== "object" ||
-		credentials === null ||
-		Array.isArray(credentials) ||
-		!Object.hasOwn(credentials, provider)
-	) {
-		throw new Error(`Eval authentication file has no credential for provider ${provider}.`);
-	}
-	return path;
 }
 
 function runVitest(
