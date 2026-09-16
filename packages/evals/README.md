@@ -1,199 +1,118 @@
 # KnightCode evals
 
-KnightCode evals are behavioral, model-backed checks for KnightCode workflows. They adapt a real `AgentSession` to `vitest-evals`, run
-it in isolated temporary project and agent directories, and attach native KnightCode session artifacts.
-Use them to measure end-to-end behavior and compare prompts, tools, skills, models, or other harness configurations.
+Behavioral evals for KnightCode's coding agent, built with `vitest-evals`.
 
-## Running evals
+## File conventions
 
-Run from the repository root with a default provider and model:
+Eval definitions are flat under `evals/`:
 
-```bash
-bun run eval --provider openrouter --model anthropic/claude-haiku-4.5
-```
+- `*.docs.eval.ts` is a documentation-lift eval. `eval:docs` runs each case twice, once `without_docs` and once `with_docs`, and reports the lift between the two.
+- Other `*.eval.ts` files are host evals. `eval:host` runs them with Vitest. They are ordinary vitest-evals suites, not paired comparisons.
 
-The equivalent environment variables are:
+Runner code lives in `src/`:
+
+- `cli.ts` orchestrates a comparison
+- `runner.ts` discovers cases and runs one arm
+- `plan.ts` expands cases into `(case, variant, run)` tasks
+- `report.ts` reads Vitest JSON, pairs arms, and computes lift
+- `harness.ts` is the vitest-evals adapter
+
+## Run evals
+
+Host evals and documentation-lift evals both need `KNIGHTCODE_PROVIDER` and `KNIGHTCODE_MODEL`.
 
 ```bash
 KNIGHTCODE_PROVIDER=openrouter KNIGHTCODE_MODEL=anthropic/claude-haiku-4.5 bun run eval
 ```
 
-CLI values take precedence and become defaults for harnesses that do not select a model explicitly. Provider and model must be supplied together. The runner also allows no default when every executed harness configures its own model.
-Authentication comes from KnightCode's normal `ModelRuntime`. The runner also loads the repository's `.env`, so a key
-kept there (`OPENROUTER_API_KEY`, ...) is picked up without exporting it.
+That runs the host evals, then the documentation comparison. Extra flags after `--` go to `eval:docs` only.
 
-Additional arguments are forwarded to Vitest:
+Authentication comes from KnightCode's normal `ModelRuntime`. The runner also loads the repository's `.env`, so a key kept there (`OPENROUTER_API_KEY`, ...) is picked up without exporting it.
 
-```bash
-bun run eval src/extensions.eval.ts
-bun run eval -t "creates and uses the extension"
-bun run eval src/docs.eval.ts -t "session-format\.md"
-```
-
-Run all comparative customization evals five times in one invocation:
+Host evals only:
 
 ```bash
-bun run eval \
-  src/extensions.eval.ts src/models.eval.ts src/providers.eval.ts \
-  --provider openrouter --model anthropic/claude-haiku-4.5 \
-  --repetitions 5
+KNIGHTCODE_PROVIDER=openrouter KNIGHTCODE_MODEL=anthropic/claude-haiku-4.5 \
+  bun run --filter '@knightcode/evals' eval:host -- evals/documentation-audit.eval.ts
 ```
 
-`--repetitions` applies to suites declared with `evalHarnessTable(...)`. An explicit `repetitions` value in a suite
-overrides the command-line default. `KNIGHTCODE_EVAL_REPETITIONS=5` is equivalent to the command-line option. Use one
-repetition while developing an eval and five when reporting lift.
+## Run documentation comparisons
 
-## Reports and artifacts
-
-Each invocation prints a compound `Eval Comparisons` report after the Vitest results. When several comparative files run
-in the same invocation, this report contains one section for every eval set. For example, with illustrative values:
-
-```text
-Eval Comparisons
-  Add model to existing provider
-     Baseline  system-prompt-without-docs
-    Candidate  default-system-prompt (5/5 pairs)
-    Pass rate  +60.0 pp (candidate 80.0%, baseline 20.0%)
-       Tokens  +1200.0 (candidate 24000.0, baseline 22800.0)
-      Latency  -850.0ms (candidate 14000.0ms, baseline 14850.0ms)
-    Est. cost  +$0.0100 (candidate $0.1200, baseline $0.1100)
-
-  Add OpenAI-compatible provider
-    ...
-
-  Add custom streaming provider
-    ...
+```bash
+bun run --filter '@knightcode/evals' eval:docs -- \
+  --provider openrouter \
+  --model anthropic/claude-haiku-4.5
 ```
 
-The runner prints the ignored `.eval/` artifact directory at startup. It contains:
+`KNIGHTCODE_PROVIDER` and `KNIGHTCODE_MODEL` provide the same defaults. Both values are required.
 
-- `report.txt`: the terminal comparison report without color codes.
-- `report.json`: the same aggregate comparison data as structured JSON.
-- `runs.jsonl`: one record for every completed harness run.
-- `sessions/`: native KnightCode session JSONL attachments.
-- `sources/`: source attachments recorded by individual evals.
+The default is one run per variant. Increase it explicitly when measuring stability:
 
-The report covers comparative suites using `evalHarnessTable(...)`. Ordinary evals still appear in the Vitest summary and
-in `runs.jsonl`, but not in the baseline-versus-candidate comparison report. Artifacts may contain prompts, responses,
-source code, and tool output.
+```bash
+bun run --filter '@knightcode/evals' eval:docs -- \
+  evals/extensions.docs.eval.ts \
+  --runs-per-variant 5
+```
 
-## Writing evals
+`KNIGHTCODE_EVAL_RUNS_PER_VARIANT=5` is equivalent. Vitest filters are applied during discovery:
 
-Follow [`vitest-evals`](https://github.com/getsentry/vitest-evals) for general suite, judge, assertion, and normalized
-trace guidance. KnightCode-specific evals use `createKnightCodeHarness(...)` from `src/knightcode-harness.ts`, with one harness bound
-to each `describeEval(...)` suite:
+```bash
+bun run --filter '@knightcode/evals' eval:docs -- -t "adds the model"
+```
+
+The runner:
+
+1. Discovers the selected cases in both variants and requires identical cohorts.
+2. Plans every `(case, variant, model, runNumber)` arm before execution.
+3. Runs each arm in its own Vitest process. A failed or missing arm is recorded and the planned cohort continues.
+4. Reads native Vitest JSON through `@vitest-evals/core/node` when a report exists.
+5. Pairs exact arms and writes the comparison report. Blocked pairs withhold headline lift; the process exits nonzero.
+
+Run order alternates by run number to reduce order bias.
+
+## Documentation variants
+
+`without_docs` removes the KnightCode documentation-routing section from the default system prompt, so the agent is never told where the documentation lives. `with_docs` uses the unchanged default prompt.
+
+Every run gets a fresh home, agent directory, workspace and session directory, and the process environment is redirected at them for the duration. Documentation evals allow only `read`, `write`, `edit`, `grep`, `find` and `ls`; they expose neither shell nor web-search tools.
+
+A hidden guard extension blocks tool calls that would leave the eval directory: `write` and `edit` may only touch files under the run's temporary root, and shell commands may not name the repository or the real user's configuration directory. The workspace is a temporary directory, not a sandbox — an agent that cannot find the documentation goes looking, and without the guard it finds this repository.
+
+## Results
+
+Each invocation creates an ignored `.eval/<timestamp>_<id>/` directory containing:
+
+- `protocol.json`: model, cases, tasks, and protocol digest.
+- `expected-runs.json`: the complete planned cohort.
+- `observations.jsonl`: normalized outcomes and telemetry.
+- `tasks/*/vitest.json`: native JSON for each arm.
+- `<variant>/sessions/*/session.jsonl`: native KnightCode sessions.
+- `report.json` and `report.txt`: paired comparisons.
+
+A pair contributes to pass-rate lift only when both arms produce exactly one score. Missing, duplicate, skipped, pending, unscored, or errored arms block the pair. If any pair in an eval set is blocked, headline pass rates are withheld. Missing telemetry remains unavailable rather than being treated as zero.
+
+The report flags no lift, negative deltas, saturated controls or treatments, and observed flakiness. One run per variant cannot establish stability.
+
+Artifacts may contain prompts, responses, generated code, and tool output.
+
+## Write an eval
+
+Use one ordinary `describeEval(...)` suite and one explicit `run(...)` call per case:
 
 ```ts
-import { expect } from "vitest";
-import { describeEval } from "vitest-evals";
-import { createKnightCodeHarness } from "./knightcode-harness.ts";
+import { describeEval, StructuredOutputJudge } from "vitest-evals";
+import { createDocumentationEvalHarness } from "../src/harness.ts";
 
-const harness = createKnightCodeHarness({ noTools: "all" });
+const harness = createDocumentationEvalHarness();
+const judge = StructuredOutputJudge({ expected: { ok: true }, match: "strict", allowExtras: false });
 
-describeEval("KnightCode smoke", { harness }, (it) => {
-	it("answers a factual question", async ({ run }) => {
-		const result = await run("What is the capital of France? Reply with only the city name.");
-		expect(result.output).toBe("Paris");
-	});
+describeEval("Target workflow", { harness, judges: [judge], judgeThreshold: null }, (it) => {
+  it("completes the task", async ({ run }) => {
+    await run("Complete the target task.");
+  });
 });
 ```
 
-### Configuring the KnightCode harness
+The outer runner owns variants, repetitions, isolation, identity, persistence, and reporting. Eval files should contain only scenario setup, the model task, and deterministic grading.
 
-`createKnightCodeHarness(...)` accepts:
-
-- `name`: stable harness identity used by reports and comparisons.
-- `model`: optional `{ provider, id }` selection. It overrides the runner's default model.
-- `noTools`: KnightCode's tool-disable configuration.
-- `tools`: optional allowlist of tool names available to the evaluated agent.
-- `customTools`: custom tool definitions to register for the evaluated agent.
-- `transformSystemPrompt`: transforms the complete default prompt before the eval starts.
-- `output`: transforms the final response and `AgentSession` into a JSON-safe domain result.
-
-An explicitly selected model makes model-comparison harnesses independent of the runner default:
-
-```ts
-const harness = createKnightCodeHarness({
-	name: "claude-opus-4-6",
-	model: { provider: "anthropic", id: "claude-opus-4-6" },
-});
-```
-
-A run accepts either one prompt or a sequence of prompt and reload steps. Reload steps are useful when the preceding
-prompt creates or changes KnightCode resources:
-
-```ts
-const result = await run([
-	{ type: "prompt", content: "Create a KnightCode extension." },
-	{ type: "reload" },
-	{ type: "prompt", content: "Use the extension." },
-]);
-```
-
-### Transforming harness output
-
-Use `output` to expose scenario-specific, JSON-safe behavior without adding that behavior to the generic KnightCode adapter:
-
-```ts
-const harness = createKnightCodeHarness({
-	output: ({ response, session }) => ({
-		response,
-		activeTools: session.getActiveToolNames(),
-		extensionErrors: session.resourceLoader.getExtensions().errors,
-	}),
-});
-```
-
-Assert application behavior on `result.output`. Assert model and tool traces on `result.session`, using
-`vitest-evals` helpers such as `toolCalls(...)`.
-
-### Writing comparative eval sets
-
-Use `evalHarnessTable(...)` with Vitest's native `describe.for(...)` to run the same inputs against multiple harnesses.
-Harnesses may differ by prompt, tools, skills, model, or any other KnightCode configuration:
-
-```ts
-import { describe } from "vitest";
-import { createJudge, describeEval } from "vitest-evals";
-import { evalHarnessTable } from "./vitest-evals/harness-table.ts";
-
-const TargetTaskJudge = createJudge<string, string>("TargetTaskJudge", ({ output }) => ({
-	score: output === "expected result" ? 1 : 0,
-}));
-
-const harnessTable = evalHarnessTable(
-	"target skill effectiveness",
-	{
-		baseline: withoutTargetSkillHarness,
-		candidate: withTargetSkillHarness,
-		repetitions: 6,
-	},
-);
-
-describe.for(harnessTable)("$name repetition $repetition", ({ harness }) => {
-	describeEval("target skill effectiveness", { harness, judges: [TargetTaskJudge], judgeThreshold: null }, (it) => {
-		it("completes the target task", async ({ run }) => {
-			await run("Complete the target task.");
-		});
-	});
-});
-```
-
-Comparative suites should record correctness with deterministic or model-backed judges and set `judgeThreshold: null`.
-This keeps a low score as an observation instead of making the Vitest invocation fail. Use hard assertions only for
-suite invariants and infrastructure contracts. `expect.soft(...)` still fails the test and is not a scoring mechanism.
-
-The KnightCode harness snapshots native session JSONL before deleting its temporary workspace. An eval-only `afterEach` hook
-registers that snapshot against the explicit Vitest test task before reporters run.
-
-Harness names must be stable and unique within an eval set. The grouping key combines repetition with a non-empty string
-`input.id` when available, otherwise with a SHA-256 hash of strict canonical JSON input. Use `candidate` for one treatment
-or `candidates` for multiple treatments. Each candidate is compared only with the declared baseline. For each matched
-input and repetition, the reporter computes pass-rate lift from each run's recorded average judge score, treating a score
-of at least `1` as passing. Lift is the candidate pass rate minus the baseline pass rate, in percentage points. Missing
-judge scores are reported as incomplete observations. Tokens, latency, and estimated cost remain separate
-candidate-minus-baseline paired deltas; missing telemetry remains unavailable. If execution-order randomization becomes
-necessary, use Vitest's built-in sequence shuffling.
-
-See the [`skill-eval-harness`](https://github.com/adewale/skill-eval-harness/) guidance for comparative-eval methodology,
-repetition strategy, trustworthy judges, and telemetry interpretation.
+Use `judgeThreshold: null` for comparative scoring. A low score is data, not an infrastructure failure. Reserve Vitest assertions for broken suite invariants.

@@ -11,7 +11,7 @@ import {
 	SessionManager,
 } from "@knightcodeai/cli";
 import { afterEach, describe, expect, it } from "vitest";
-import { createEvalSandboxGuard, describeEvalEscape, type EvalSandbox } from "../src/knightcode-harness.ts";
+import { createEvalSandboxGuard, describeEvalEscape, type EvalSandbox } from "../src/harness.ts";
 
 const sandbox: EvalSandbox = {
 	root: resolve("/eval/run"),

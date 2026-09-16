@@ -126,7 +126,7 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.6.2",
+      "version": "0.7.0",
       "bin": {
         "knightcode": "./bin/knightcode",
       },
@@ -164,32 +164,32 @@
         "zod": "4.4.3",
       },
       "optionalDependencies": {
-        "@knightcodeai/cli-darwin-arm64": "0.6.2",
-        "@knightcodeai/cli-darwin-x64": "0.6.2",
-        "@knightcodeai/cli-linux-arm64": "0.6.2",
-        "@knightcodeai/cli-linux-x64": "0.6.2",
-        "@knightcodeai/cli-win32-x64": "0.6.2",
+        "@knightcodeai/cli-darwin-arm64": "0.7.0",
+        "@knightcodeai/cli-darwin-x64": "0.7.0",
+        "@knightcodeai/cli-linux-arm64": "0.7.0",
+        "@knightcodeai/cli-linux-x64": "0.7.0",
+        "@knightcodeai/cli-win32-x64": "0.7.0",
       },
     },
     "packages/cli-darwin-arm64": {
       "name": "@knightcodeai/cli-darwin-arm64",
-      "version": "0.6.2",
+      "version": "0.7.0",
     },
     "packages/cli-darwin-x64": {
       "name": "@knightcodeai/cli-darwin-x64",
-      "version": "0.6.2",
+      "version": "0.7.0",
     },
     "packages/cli-linux-arm64": {
       "name": "@knightcodeai/cli-linux-arm64",
-      "version": "0.6.2",
+      "version": "0.7.0",
     },
     "packages/cli-linux-x64": {
       "name": "@knightcodeai/cli-linux-x64",
-      "version": "0.6.2",
+      "version": "0.7.0",
     },
     "packages/cli-win32-x64": {
       "name": "@knightcodeai/cli-win32-x64",
-      "version": "0.6.2",
+      "version": "0.7.0",
     },
     "packages/client": {
       "name": "@knightcode/client",
@@ -205,6 +205,7 @@
       "devDependencies": {
         "@knightcode/ai": "workspace:*",
         "@knightcodeai/cli": "workspace:*",
+        "@vitest-evals/core": "0.15.0",
         "vitest-evals": "0.15.0",
       },
     },
