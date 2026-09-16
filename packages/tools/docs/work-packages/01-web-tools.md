@@ -61,9 +61,9 @@ section.
 | Truncation | Engine's `truncateHead`; `limit` default 400 lines, clamped 1-2000; byte ceiling is the engine's `DEFAULT_MAX_BYTES` (50 KB) | Lines are the knob the model reasons about; a round trip re-sends the whole conversation, so too small a cap costs more than it saves |
 | Targeted reads | `offset`/`limit` (same names as `read`) and `grep` | Most doc lookups become one call |
 | Cache | In-memory, keyed by requested URL, 15 min, 50 entries | Paging and grep re-calls never refetch |
-| Search backend | `BRAVE_API_KEY` → Brave Search API; else DuckDuckGo HTML | Works with no setup; reliable when keyed. Not Exa (returns page text, undocumented free endpoint) |
+| Search backend | Provider picked in `/tools websearch`: DuckDuckGo HTML (default) or Brave Search API with a key stored there (`BRAVE_API_KEY` as fallback) | Works with no setup; reliable when keyed; the user never edits a file or env var. Not Exa (returns page text, undocumented free endpoint) |
 | Search output | Title, URL, ≤200-char snippet; default 5, max 10 | Snippets-only; `webfetch` reads the one that matters |
-| Toggle state | `<agentDir>/tools.json` (`getAgentDir()`, i.e. `~/.knightcode/agent/tools.json`), only explicitly-set values | Extension API has no settings access; same precedent as `remote-auth.json` |
+| Toggle and per-tool settings | `<agentDir>/tools.json` (`getAgentDir()`, i.e. `~/.knightcode/agent/tools.json`), only explicitly-set values, written owner-only | Extension API has no settings access; same precedent as `remote-auth.json`. One file, one lock; the Brave key lives with the provider choice rather than in `auth.json`, which is model-provider state (`/logout`, availability) |
 | Defaults | Both tools off | Web access is opt-in: `/tools <name> on` for a session, `always` to persist; nothing leaves the machine until the user says so |
 | Summarisation, `read`-URL merging, PDF, `llms.txt` probing, provider-native search | Not built | See Exclusions |
 
@@ -124,23 +124,30 @@ export const TOOLS: RegisteredToolEntry[] = [
 
 - `type ToolMode = "off" | "session" | "always"`.
 - Persisted file: `join(getAgentDir(), "tools.json")`, shape
-  `Record<string, boolean>`; missing file or unparsable JSON reads as `{}`.
-  Written atomically (write `tools.json.<pid>.tmp`, rename) under a
+  `Record<string, ToolSettings>` with `ToolSettings = Record<string, string | boolean>`
+  where `enabled` is the toggle and every other key belongs to the tool
+  (websearch: `provider`, `braveApiKey`); a bare boolean value is read as
+  `{ enabled }`. Missing file or unparsable JSON reads as `{}`. Written
+  atomically (write `tools.json.<pid>.tmp`, rename, mode 0600) under a
   `proper-lockfile` lock on `tools.json.lock`, so two KnightCode processes
   running `/tools` serialize instead of one overwriting the other.
 - Session overrides: module-level `Map<string, boolean>`; lives until the
   process exits, so it survives `/new`, `/resume`, `/fork`.
 - `resolveEnabled(name, defaultEnabled, persisted, session): boolean` →
-  `session.get(name) ?? persisted[name] ?? defaultEnabled`. Pure.
-- `setMode(name, mode)` (async — it waits for the lock):
-  - `off` → `session.delete(name)`; `persisted[name] = false`; save.
+  `session.get(name) ?? persisted[name]?.enabled ?? defaultEnabled`. Pure.
+- `updateSettings(name, patch)` (async — it waits for the lock): merges
+  `patch` into the tool's settings; an `undefined` value deletes that key
+  and a tool with nothing left is dropped from the file.
+- `setMode(name, mode)`:
+  - `off` → `session.delete(name)`; `updateSettings(name, { enabled: false })`.
   - `session` → `session.set(name, true)`; persisted untouched.
-  - `always` → `session.delete(name)`; `persisted[name] = true`; save.
+  - `always` → `session.delete(name)`; `updateSettings(name, { enabled: true })`.
 - `applyActiveTools(pi)`: `const active = new Set(pi.getActiveTools())`; for
   each `TOOLS` entry add or delete by `resolveEnabled`; if changed,
   `pi.setActiveTools([...active])`. Idempotent.
-- `describeMode(name)` → `"on (default)" | "on (this session)" | "off"` for
-  the picker labels.
+- `currentMode(entry)` → the `ToolMode` the UI shows (session override,
+  else file, else default); `describeMode(entry)` → `"on (default)" |
+  "on (this session)" | "off"` for the picker labels.
 
 ### `index.ts` (extension factory)
 
@@ -161,15 +168,46 @@ excluded on the command line stays excluded regardless of `tools.json`.
 ### `command.ts` — `/tools`
 
 - `/tools` → `ctx.ui.select("Tools", labels)` where each label is
-  `"<name> — <describeMode>"`; then
-  `ctx.ui.select("<name>", ["Disabled", "Enabled for this session", "Enabled by default"])`;
-  cancel at either step does nothing. Then `setMode`, `applyActiveTools(pi)`,
-  `ctx.ui.notify("<name>: <describeMode>", "info")`.
+  `"<name> — <describeMode>"`; then, in the TUI, the tool's settings panel
+  (below); elsewhere
+  `ctx.ui.select("<name>", ["Disabled", "Enabled for this session", "Enabled by default"])`,
+  then `setMode`, `applyActiveTools(pi)`,
+  `ctx.ui.notify("<name>: <describeMode>", "info")`. Cancel at any step
+  does nothing.
 - `/tools <name>` → skips the first select.
 - `/tools <name> off|on|always` → no UI (`on` = this session).
 - Unknown name or mode → `ctx.ui.notify` listing valid names and modes,
   `"error"`.
 - `getArgumentCompletions` returns tool names, then modes.
+
+### `settings.ts` — the per-tool panel
+
+`toolSettingsPanel(entry, entries, pi, theme, done)` is shown through
+`ctx.ui.custom`: a `SettingsList` (the `/settings` component) framed like
+the built-in dialogs, with a **Status** row every tool has (Enter cycles
+Disabled / Enabled for this session / Enabled by default → `setMode` +
+`applyActiveTools`) followed by the rows the registry entry's optional
+`settings(current, theme)` returns. A row's `id` is the key it stores;
+`onChange` writes it with `updateSettings` (empty string deletes) and
+refreshes every row's display value, so a key shows masked (`maskKey`:
+`••••` + last four) rather than as typed. `TextSubmenu` is the one-field
+submenu behind a text setting: Enter saves, empty clears, Esc keeps.
+
+`web/search-settings.ts` contributes websearch's rows:
+
+- **Provider** — `SelectSubmenu` with `duckduckgo` (no key, may
+  rate-limit) and `brave` (needs a key). Choosing `brave` with no key stored
+  closes with `navigateTo: "braveApiKey"`, so the key prompt opens at once.
+- **Brave API key** — `TextSubmenu`; the row reads `not set` or the masked
+  tail. The description points at https://brave.com/search/api/.
+
+```
+ websearch
+
+ ❯ Status          Enabled by default
+   Provider        brave
+   Brave API key   ••••3f2a
+```
 
 ### `web/guard.ts`
 
@@ -262,21 +300,27 @@ excluded on the command line stays excluded regardless of `tools.json`.
 
 ### `web/search.ts`
 
-`search(query, count): Promise<{ provider: "brave" | "duckduckgo"; results: SearchResult[] }>`
+`search(query, count, { provider?, apiKey? }): Promise<{ provider: "brave" | "duckduckgo"; results: SearchResult[] }>`
 where `SearchResult = { title, url, snippet }`, snippet clipped to 200 chars.
+The tool's `execute` fills the options with
+`resolveSearchOptions(readPersisted().websearch, process.env)`: the provider
+is whatever the user picked in `/tools websearch` (default DuckDuckGo — a
+key alone never switches to Brave), and the key is the stored one, else
+`BRAVE_API_KEY`.
 
-- Brave (when `process.env.BRAVE_API_KEY` is set):
+- Brave (`provider: "brave"`; no key → error
+  `Brave Search needs an API key; set one in /tools websearch` before any request):
   `GET https://api.search.brave.com/res/v1/web/search?q=<q>&count=<n>`,
   headers `X-Subscription-Token`, `Accept: application/json`; map
   `web.results[]` `{ title, url, description }`. Non-2xx → error naming the
-  status and the env var.
+  status and `/tools websearch`.
 - DuckDuckGo otherwise: `GET https://html.duckduckgo.com/html/?q=<q>` with
   `USER_AGENT`; `parseDuckDuckGo(html)` pulls `class="result__a"` anchors
   (title text, `uddg=` param of the href, `decodeURIComponent`) and the
   following `class="result__snippet"` element's text; inner tags (`<b>`
   highlights) stripped and entities decoded in both. Zero results with the
   anomaly/challenge page present →
-  error `DuckDuckGo rate-limited this request; set BRAVE_API_KEY for a keyed provider.`
+  error `DuckDuckGo rate-limited this request; pick Brave in /tools websearch for a keyed provider.`
 - 15 s timeout combined with the tool's signal. Both bodies are read through
   `readBody` with a 1 MB ceiling after a content-type check (Brave must be
   JSON, DuckDuckGo HTML), so a provider cannot make the CLI buffer or parse
