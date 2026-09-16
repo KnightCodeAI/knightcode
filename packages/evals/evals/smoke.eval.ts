@@ -1,17 +1,18 @@
 import { expect } from "vitest";
 import { describeEval } from "vitest-evals";
-import { createKnightCodeHarness } from "./knightcode-harness.ts";
+import { createKnightCodeHarness } from "../src/harness.ts";
 
-const knightCodeHarness = createKnightCodeHarness({ noTools: "all" });
+const harness = createKnightCodeHarness({ noTools: "all" });
 
-describeEval("Answer a basic prompt", { harness: knightCodeHarness }, (it) => {
+describeEval("Answer a basic prompt", { harness }, (it) => {
 	it("returns the expected answer", async ({ run }) => {
 		const result = await run("What's the capital of France? Respond with only the city name.");
-
 		expect(result.output.trim()).toBe("Paris");
 		expect(result.errors).toEqual([]);
-		expect(result.usage.provider).toBe(process.env.KNIGHTCODE_PROVIDER);
-		expect(result.usage.model).toBe(process.env.KNIGHTCODE_MODEL);
+		expect(result.usage).toMatchObject({
+			provider: process.env.KNIGHTCODE_PROVIDER,
+			model: process.env.KNIGHTCODE_MODEL,
+		});
 		expect(result.usage.totalTokens).toBeGreaterThan(0);
 	});
 });

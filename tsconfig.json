@@ -43,6 +43,6 @@
       "typebox": ["./node_modules/typebox"]
     }
   },
-  "include": ["packages/*/src/**/*", "packages/*/test/**/*"],
+  "include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/evals/evals/**/*"],
   "exclude": ["**/dist/**", "**/node_modules/**"]
 }

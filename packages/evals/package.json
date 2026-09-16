@@ -4,12 +4,15 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"eval": "node scripts/run-evals.mjs",
+		"eval": "bun run eval:host && bun run eval:docs --",
+		"eval:host": "vitest run --config vitest.evals.config.ts --project host",
+		"eval:docs": "node --experimental-strip-types src/cli.ts",
 		"test": "vitest run --config vitest.test.config.ts"
 	},
 	"devDependencies": {
 		"@knightcode/ai": "workspace:*",
 		"@knightcodeai/cli": "workspace:*",
+		"@vitest-evals/core": "0.15.0",
 		"vitest-evals": "0.15.0"
 	}
 }
