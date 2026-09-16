@@ -2,10 +2,11 @@ import { Text } from "@knightcode/tui";
 import type { Theme, ToolDefinition } from "@knightcodeai/cli";
 import { formatToolCall, formatToolSummary, getTextOutput } from "@knightcodeai/cli/core/tools/render-utils";
 import { formatSize } from "@knightcodeai/cli/core/tools/truncate";
-import type { WebfetchDetails, WebfetchParams } from "./fetch.ts";
-import type { WebsearchDetails, WebsearchParams } from "./search.ts";
+import type { TSchema } from "typebox";
+import type { WebfetchDetails, WebfetchParams, webfetchSchema } from "./fetch.ts";
+import type { WebsearchDetails, WebsearchParams, websearchSchema } from "./search.ts";
 
-type Renderers = Pick<ToolDefinition<any, any>, "renderCall" | "renderResult">;
+type Renderers<S extends TSchema, D> = Pick<ToolDefinition<S, D>, "renderCall" | "renderResult">;
 interface RenderableResult<D> {
 	content: Array<{ type: string; text?: string }>;
 	details?: D;
@@ -63,28 +64,28 @@ function textComponent(context: { lastComponent?: unknown }): Text {
 	return (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 }
 
-export const webfetchRenderers: Renderers = {
+export const webfetchRenderers: Renderers<typeof webfetchSchema, WebfetchDetails> = {
 	renderCall(args, theme, context) {
 		const text = textComponent(context);
-		text.setText(webfetchCallText(args as Partial<WebfetchParams> | undefined, theme));
+		text.setText(webfetchCallText(args, theme));
 		return text;
 	},
 	renderResult(result, options, theme, context) {
 		const text = textComponent(context);
-		text.setText(webfetchResultText(result as RenderableResult<WebfetchDetails>, options.expanded, theme));
+		text.setText(webfetchResultText(result, options.expanded, theme));
 		return text;
 	},
 };
 
-export const websearchRenderers: Renderers = {
+export const websearchRenderers: Renderers<typeof websearchSchema, WebsearchDetails> = {
 	renderCall(args, theme, context) {
 		const text = textComponent(context);
-		text.setText(websearchCallText(args as Partial<WebsearchParams> | undefined, theme));
+		text.setText(websearchCallText(args, theme));
 		return text;
 	},
 	renderResult(result, options, theme, context) {
 		const text = textComponent(context);
-		text.setText(websearchResultText(result as RenderableResult<WebsearchDetails>, options.expanded, theme));
+		text.setText(websearchResultText(result, options.expanded, theme));
 		return text;
 	},
 };
