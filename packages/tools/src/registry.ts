@@ -13,6 +13,6 @@ export interface RegisteredToolEntry {
 
 /** Every KnightCode-native tool. A new tool is one file under src/ and one line here. */
 export const TOOLS: RegisteredToolEntry[] = [
-	{ tool: webfetchTool, defaultEnabled: true },
-	{ tool: websearchTool, defaultEnabled: true },
+	{ tool: webfetchTool, defaultEnabled: false },
+	{ tool: websearchTool, defaultEnabled: false },
 ];

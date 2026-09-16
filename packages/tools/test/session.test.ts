@@ -57,18 +57,24 @@ describe("engine ordering", () => {
 		expect(seenAtSessionStart[0]).toContain("probe");
 	});
 
-	test("the real extension registers both tools active by default", async () => {
-		const session = await bootSession([toolsExtension], tempDir, agentDir);
-		await session.bindExtensions({});
-		const names = session.agent.state.tools.map((t) => t.name);
-		expect(names).toContain("webfetch");
-		expect(names).toContain("websearch");
-	});
-
-	test("a persisted off in tools.json removes the tool at session start", async () => {
+	test("the real extension registers both tools but leaves them off by default", async () => {
 		process.env[ENV_AGENT_DIR] = agentDir;
 		try {
-			writePersisted({ websearch: false }, join(agentDir, "tools.json"));
+			const session = await bootSession([toolsExtension], tempDir, agentDir);
+			await session.bindExtensions({});
+			const names = session.agent.state.tools.map((t) => t.name);
+			expect(names).not.toContain("webfetch");
+			expect(names).not.toContain("websearch");
+			expect(session.getAllTools().map((t) => t.name)).toEqual(expect.arrayContaining(["webfetch", "websearch"]));
+		} finally {
+			delete process.env[ENV_AGENT_DIR];
+		}
+	});
+
+	test("a persisted on in tools.json adds the tool at session start", async () => {
+		process.env[ENV_AGENT_DIR] = agentDir;
+		try {
+			writePersisted({ webfetch: true }, join(agentDir, "tools.json"));
 			const session = await bootSession([toolsExtension], tempDir, agentDir);
 			await session.bindExtensions({});
 			const names = session.agent.state.tools.map((t) => t.name);

@@ -75,8 +75,8 @@ describe("factory", () => {
 		expect(command()).toBeDefined();
 	});
 
-	test("session_start removes a persisted-off tool and leaves the rest", () => {
-		writePersisted({ websearch: false }, stateFile());
+	test("session_start drops the tools that are off by default and keeps one persisted on", () => {
+		writePersisted({ webfetch: true }, stateFile());
 		const { pi, handlers, active } = fakePi(["read", "webfetch", "websearch"]);
 		toolsExtension(pi);
 		for (const handler of handlers.get("session_start") ?? []) handler();
@@ -84,48 +84,48 @@ describe("factory", () => {
 	});
 
 	test("session_start re-adds a tool enabled for the session", async () => {
-		writePersisted({ websearch: false }, stateFile());
-		const { pi, handlers, active } = fakePi(["read", "webfetch"]);
+		const { pi, handlers, active } = fakePi(["read"]);
 		toolsExtension(pi);
 		await toolsCommand("websearch on", fakeCtx([]).ctx, pi);
-		expect(active).toEqual(["read", "webfetch", "websearch"]);
+		expect(active).toEqual(["read", "websearch"]);
 		// A new session starts from the engine's default set; the override must be re-applied.
-		active.splice(0, active.length, "read", "webfetch");
+		active.splice(0, active.length, "read");
 		for (const handler of handlers.get("session_start") ?? []) handler();
-		expect(active).toEqual(["read", "webfetch", "websearch"]);
+		expect(active).toEqual(["read", "websearch"]);
 	});
 });
 
 describe("/tools", () => {
 	test("argument fast path sets each mode and notifies", async () => {
-		const { pi, active } = fakePi(["webfetch", "websearch"]);
+		const { pi, active } = fakePi(["read"]);
 		const { ctx, notices } = fakeCtx([]);
-		await toolsCommand("websearch off", ctx, pi);
-		expect(active).toEqual(["webfetch"]);
-		expect(readPersisted()).toEqual({ websearch: false });
-		expect(notices.at(-1)).toEqual({ message: "websearch: off", type: "info" });
-
 		await toolsCommand("websearch on", ctx, pi);
-		expect(active).toEqual(["webfetch", "websearch"]);
-		expect(readPersisted()).toEqual({ websearch: false });
-		expect(notices.at(-1)?.message).toBe("websearch: on (this session)");
+		expect(active).toEqual(["read", "websearch"]);
+		expect(readPersisted()).toEqual({});
+		expect(notices.at(-1)).toEqual({ message: "websearch: on (this session)", type: "info" });
 
 		await toolsCommand("websearch always", ctx, pi);
+		expect(active).toEqual(["read", "websearch"]);
 		expect(readPersisted()).toEqual({ websearch: true });
 		expect(notices.at(-1)?.message).toBe("websearch: on (default)");
+
+		await toolsCommand("websearch off", ctx, pi);
+		expect(active).toEqual(["read"]);
+		expect(readPersisted()).toEqual({ websearch: false });
+		expect(notices.at(-1)?.message).toBe("websearch: off");
 	});
 
 	test("interactive path asks for the tool, then the mode", async () => {
-		const { pi, active } = fakePi(["webfetch", "websearch"]);
-		const { ctx, prompts, notices } = fakeCtx(["webfetch — on (default)", "Disabled"]);
+		const { pi, active } = fakePi(["read"]);
+		const { ctx, prompts, notices } = fakeCtx(["webfetch — off", "Enabled for this session"]);
 		await toolsCommand("", ctx, pi);
-		expect(prompts[0]).toEqual({ title: "Tools", options: ["webfetch — on (default)", "websearch — on (default)"] });
+		expect(prompts[0]).toEqual({ title: "Tools", options: ["webfetch — off", "websearch — off"] });
 		expect(prompts[1]).toEqual({
 			title: "webfetch",
 			options: ["Disabled", "Enabled for this session", "Enabled by default"],
 		});
-		expect(active).toEqual(["websearch"]);
-		expect(notices.at(-1)?.message).toBe("webfetch: off");
+		expect(active).toEqual(["read", "webfetch"]);
+		expect(notices.at(-1)?.message).toBe("webfetch: on (this session)");
 	});
 
 	test("naming the tool skips the first prompt", async () => {
@@ -140,7 +140,7 @@ describe("/tools", () => {
 		const { pi, active } = fakePi(["webfetch", "websearch"]);
 		const { ctx, notices } = fakeCtx([undefined]);
 		await toolsCommand("", ctx, pi);
-		const second = fakeCtx(["webfetch — on (default)", undefined]);
+		const second = fakeCtx(["webfetch — off", undefined]);
 		await toolsCommand("", second.ctx, pi);
 		expect(active).toEqual(["webfetch", "websearch"]);
 		expect(readPersisted()).toEqual({});

@@ -64,7 +64,7 @@ section.
 | Search backend | `BRAVE_API_KEY` → Brave Search API; else DuckDuckGo HTML | Works with no setup; reliable when keyed. Not Exa (returns page text, undocumented free endpoint) |
 | Search output | Title, URL, ≤200-char snippet; default 5, max 10 | Snippets-only; `webfetch` reads the one that matters |
 | Toggle state | `<agentDir>/tools.json` (`getAgentDir()`, i.e. `~/.knightcode/agent/tools.json`), only explicitly-set values | Extension API has no settings access; same precedent as `remote-auth.json` |
-| Defaults | Both tools enabled | Every comparable harness ships them on; the toggle exists to turn them off |
+| Defaults | Both tools off | Web access is opt-in: `/tools <name> on` for a session, `always` to persist; nothing leaves the machine until the user says so |
 | Summarisation, `read`-URL merging, PDF, `llms.txt` probing, provider-native search | Not built | See Exclusions |
 
 ## Package layout
@@ -115,8 +115,8 @@ export interface RegisteredToolEntry {
 	defaultEnabled: boolean;
 }
 export const TOOLS: RegisteredToolEntry[] = [
-	{ tool: webfetchTool, defaultEnabled: true },
-	{ tool: websearchTool, defaultEnabled: true },
+	{ tool: webfetchTool, defaultEnabled: false },
+	{ tool: websearchTool, defaultEnabled: false },
 ];
 ```
 
