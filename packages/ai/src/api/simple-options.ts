@@ -1,11 +1,11 @@
 import type {
 	Api,
-	Context,
 	Model,
 	SimpleStreamOptions,
 	StreamOptions,
 	ThinkingBudgets,
 	ThinkingLevel,
+	TranscriptContext,
 } from "../types.ts";
 import { estimateContextTokens } from "../utils/estimate.ts";
 
@@ -26,7 +26,7 @@ const MIN_MAX_TOKENS = 1;
  */
 const ESTIMATE_UNDERCOUNT_MARGIN = 1.5;
 
-export function clampMaxTokensToContext(model: Model<Api>, context: Context, maxTokens: number): number {
+export function clampMaxTokensToContext(model: Model<Api>, context: TranscriptContext, maxTokens: number): number {
 	if (model.contextWindow <= 0) return Math.max(MIN_MAX_TOKENS, maxTokens);
 	// usageTokens is provider-reported and exact; only trailingTokens is a chars/4 guess.
 	const estimate = estimateContextTokens(context);
@@ -37,7 +37,7 @@ export function clampMaxTokensToContext(model: Model<Api>, context: Context, max
 
 export function buildBaseOptions(
 	model: Model<Api>,
-	context: Context,
+	context: TranscriptContext,
 	options?: SimpleStreamOptions,
 	apiKey?: string,
 ): StreamOptions {

@@ -1,5 +1,5 @@
 import type { AgentTool, ThinkingLevel } from "@knightcode/agent";
-import { fauxAssistantMessage, fauxToolCall, type Model, type Usage } from "@knightcode/ai";
+import { fauxAssistantMessage, fauxToolCall, getCurrentSystemPrompt, type Model, type Usage } from "@knightcode/ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BuildSystemPromptOptions, ExtensionAPI } from "../../src/index.ts";
@@ -472,7 +472,7 @@ describe("AgentSession model and extension characterization", () => {
 		let sawInjectedUserMessage = false;
 		harness.setResponses([
 			(context) => {
-				providerSystemPrompt = context.systemPrompt ?? "";
+				providerSystemPrompt = getCurrentSystemPrompt(context.messages);
 				sawInjectedUserMessage = context.messages.some(
 					(message) =>
 						message.role === "user" &&

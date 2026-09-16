@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildBaseOptions } from "../src/api/simple-options.ts";
 import type { AssistantMessage, Context, Model, Usage } from "../src/types.ts";
 import { estimateContextTokens } from "../src/utils/estimate.ts";
+import { normalizeContext } from "../src/utils/transcript.ts";
 
 function createUsage(totalTokens: number): Usage {
 	return {
@@ -42,14 +43,14 @@ const model: Model<"openai-responses"> = {
 
 describe("context token estimation", () => {
 	it("ignores stale assistant usage after a newer message is inserted before it", () => {
-		const context: Context = {
+		const context = normalizeContext({
 			systemPrompt: "system",
 			messages: [
 				{ role: "user", content: "summary", timestamp: 200 },
 				createAssistant(100, 9_500),
 				{ role: "user", content: "x".repeat(4_000), timestamp: 300 },
 			],
-		};
+		});
 
 		expect(estimateContextTokens(context)).toEqual({
 			tokens: 1_005,
@@ -62,7 +63,7 @@ describe("context token estimation", () => {
 	});
 
 	it("uses assistant usage again after a response to the inserted context", () => {
-		const context: Context = {
+		const context = normalizeContext({
 			messages: [
 				{ role: "user", content: "summary", timestamp: 200 },
 				createAssistant(100, 9_500),
@@ -70,7 +71,7 @@ describe("context token estimation", () => {
 				createAssistant(400, 2_000),
 				{ role: "user", content: "tail", timestamp: 500 },
 			],
-		};
+		});
 
 		expect(estimateContextTokens(context)).toEqual({
 			tokens: 2_001,
@@ -88,8 +89,8 @@ describe("context token estimation", () => {
 		const context: Context = {
 			messages: [{ role: "user", content: "x".repeat(59_256 * 4), timestamp: 1 }],
 		};
-		const actualPromptTokens = Math.ceil(estimateContextTokens(context).tokens * 1.12);
-		const maxTokens = buildBaseOptions(bigModel, context).maxTokens!;
+		const actualPromptTokens = Math.ceil(estimateContextTokens(normalizeContext(context)).tokens * 1.12);
+		const maxTokens = buildBaseOptions(bigModel, normalizeContext(context)).maxTokens!;
 
 		expect(actualPromptTokens + maxTokens).toBeLessThanOrEqual(bigModel.contextWindow);
 	});
@@ -100,6 +101,6 @@ describe("context token estimation", () => {
 		};
 
 		// 10_000 - 5_000 (exact usage) - ceil(0 * 1.5) - 4_096
-		expect(buildBaseOptions(model, context).maxTokens).toBe(904);
+		expect(buildBaseOptions(model, normalizeContext(context)).maxTokens).toBe(904);
 	});
 });

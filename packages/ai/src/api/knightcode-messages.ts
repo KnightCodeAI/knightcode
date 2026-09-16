@@ -13,7 +13,6 @@ import type {
 	AssistantMessage,
 	AssistantMessageEvent,
 	CacheRetention,
-	Context,
 	Model,
 	ProviderEnv,
 	SimpleStreamOptions,
@@ -21,6 +20,7 @@ import type {
 	StreamOptions,
 	ThinkingLevel,
 	ToolCall,
+	TranscriptContext,
 } from "../types.ts";
 import { appendAssistantMessageDiagnostic, createAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
@@ -360,7 +360,7 @@ function resolveCacheRetention(cacheRetention?: CacheRetention, env?: ProviderEn
 
 export const stream: StreamFunction<"knightcode-messages", KnightCodeMessagesOptions> = (
 	model: Model<"knightcode-messages">,
-	context: Context,
+	context: TranscriptContext,
 	options?: KnightCodeMessagesOptions,
 ): AssistantMessageEventStream => {
 	const eventStream = new AssistantMessageEventStream();
@@ -436,7 +436,7 @@ export const stream: StreamFunction<"knightcode-messages", KnightCodeMessagesOpt
 
 export const streamSimple: StreamFunction<"knightcode-messages", SimpleStreamOptions> = (
 	model: Model<"knightcode-messages">,
-	context: Context,
+	context: TranscriptContext,
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
 	const extra = options as KnightCodeMessagesOptions | undefined;
