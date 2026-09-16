@@ -1,6 +1,17 @@
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	renameSync,
+	rmSync,
+	utimesSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -148,6 +159,79 @@ describe("--session-id", () => {
 		);
 		expect(reopened.getSessionFile()).toBe(created.getSessionFile());
 		expect(consoleError).not.toHaveBeenCalled();
+	});
+
+	it("looks up exact IDs without building full session listings", async () => {
+		const tempRoot = createTempDir();
+		const projectDir = join(tempRoot, "project");
+		const sessionDir = join(tempRoot, "sessions");
+		mkdirSync(projectDir, { recursive: true });
+		const unrelated = SessionManager.create(projectDir, sessionDir, { id: "unrelated-id" });
+		persistSession(unrelated, "large transcript contents must not be loaded");
+		const list = vi.spyOn(SessionManager, "list").mockRejectedValue(new Error("unexpected full listing"));
+		vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const created = await createSessionManager(
+			args({ sessionId: "fresh-id" }),
+			projectDir,
+			sessionDir,
+			SettingsManager.inMemory(),
+		);
+
+		expect(created.getSessionId()).toBe("fresh-id");
+		expect(list).not.toHaveBeenCalled();
+	});
+
+	it("reopens an exact ID from a renamed session file", async () => {
+		const tempRoot = createTempDir();
+		const projectDir = join(tempRoot, "project");
+		const sessionDir = join(tempRoot, "sessions");
+		mkdirSync(projectDir, { recursive: true });
+		const original = SessionManager.create(projectDir, sessionDir, { id: "renamed-id" });
+		persistSession(original, "persist me");
+		const renamedPath = join(sessionDir, "imported-session.jsonl");
+		renameSync(original.getSessionFile()!, renamedPath);
+
+		const reopened = await createSessionManager(
+			args({ sessionId: "renamed-id" }),
+			projectDir,
+			sessionDir,
+			SettingsManager.inMemory(),
+		);
+
+		expect(reopened.getSessionFile()).toBe(renamedPath);
+	});
+
+	it("reopens the most recent file when an imported copy shares the ID", () => {
+		const tempRoot = createTempDir();
+		const projectDir = join(tempRoot, "project");
+		const sessionDir = join(tempRoot, "sessions");
+		mkdirSync(projectDir, { recursive: true });
+		const original = SessionManager.create(projectDir, sessionDir, { id: "shared-id" });
+		persistSession(original, "the original transcript");
+		const originalPath = original.getSessionFile()!;
+		// /import copies a transcript under a free file name but keeps its header ID, so two files
+		// in one directory can answer to the same ID. The copy is written last, as an import is.
+		const importedPath = join(sessionDir, "imported-copy.jsonl");
+		copyFileSync(originalPath, importedPath);
+		const past = new Date(Date.now() - 60_000);
+		utimesSync(originalPath, past, past);
+
+		expect(SessionManager.findById(projectDir, "shared-id", sessionDir)).toBe(importedPath);
+	});
+
+	it("filters exact IDs by cwd in a custom session directory", () => {
+		const tempRoot = createTempDir();
+		const projectA = join(tempRoot, "project-a");
+		const projectB = join(tempRoot, "project-b");
+		const sessionDir = join(tempRoot, "sessions");
+		mkdirSync(projectA, { recursive: true });
+		mkdirSync(projectB, { recursive: true });
+		const foreign = SessionManager.create(projectB, sessionDir, { id: "foreign-id" });
+		persistSession(foreign, "foreign session");
+
+		expect(SessionManager.findById(projectA, "foreign-id", sessionDir)).toBeUndefined();
+		expect(SessionManager.findById(projectB, "foreign-id", sessionDir)).toBe(foreign.getSessionFile());
 	});
 
 	it("rejects an existing fork target in process", async () => {

@@ -1659,6 +1659,37 @@ export class SessionManager {
 	}
 
 	/**
+	 * Find an exact session ID without loading transcript bodies.
+	 * @param cwd Working directory (used to compute default session directory)
+	 * @param id Exact session ID
+	 * @param sessionDir Optional session directory. If omitted, uses default (~/.knightcode/agent/sessions/<encoded-cwd>/).
+	 */
+	static findById(cwd: string, id: string, sessionDir?: string): string | undefined {
+		const dir = sessionDir ? normalizePath(sessionDir) : getDefaultSessionDir(cwd);
+		const filterCwd = sessionDir !== undefined && dir !== getDefaultSessionDirPath(cwd);
+		const resolvedCwd = resolvePath(cwd);
+
+		// An imported transcript keeps its header ID under a new file name, so an ID can match more
+		// than one file. list() hands back the most recently active session; take the newest match
+		// here too, by file time, which tracks activity without reading the transcript bodies.
+		let newest: { path: string; modified: number } | undefined;
+		try {
+			for (const file of readdirSync(dir)) {
+				if (!file.endsWith(".jsonl")) continue;
+				const path = join(dir, file);
+				const header = readSessionHeaderForDiscovery(path);
+				if (header?.id !== id) continue;
+				if (filterCwd && !sessionCwdMatches(getSessionHeaderCwd(header), resolvedCwd)) continue;
+				const modified = statSync(path).mtimeMs;
+				if (!newest || modified > newest.modified) newest = { path, modified };
+			}
+		} catch {
+			// Exact session discovery is best-effort, matching list().
+		}
+		return newest?.path;
+	}
+
+	/**
 	 * List all sessions for a directory.
 	 * @param cwd Working directory (used to compute default session directory)
 	 * @param sessionDir Optional session directory. If omitted, uses default (~/.knightcode/agent/sessions/<encoded-cwd>/).
