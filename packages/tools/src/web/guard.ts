@@ -1,5 +1,5 @@
 import { promises as dns } from "node:dns";
-import { isIP } from "node:net";
+import { BlockList, isIP } from "node:net";
 
 const MAX_URL_LENGTH = 2000;
 
@@ -10,28 +10,24 @@ export interface GuardOptions {
 	lookup?: (hostname: string) => Promise<{ address: string }>;
 }
 
-function isPrivateV4(ip: string): boolean {
-	const [a, b] = ip.split(".").map(Number);
-	return (
-		a === 0 ||
-		a === 10 ||
-		a === 127 ||
-		(a === 100 && b >= 64 && b <= 127) ||
-		(a === 169 && b === 254) ||
-		(a === 172 && b >= 16 && b <= 31) ||
-		(a === 192 && b === 168)
-	);
-}
+// net.BlockList parses each literal itself, so an IPv4-mapped IPv6 address written in hex
+// ([::ffff:7f00:1]) or an uncompressed ::1 is checked against the same ranges as its plain spelling.
+const PRIVATE = new BlockList();
+PRIVATE.addSubnet("0.0.0.0", 8, "ipv4");
+PRIVATE.addSubnet("10.0.0.0", 8, "ipv4");
+PRIVATE.addSubnet("100.64.0.0", 10, "ipv4");
+PRIVATE.addSubnet("127.0.0.0", 8, "ipv4");
+PRIVATE.addSubnet("169.254.0.0", 16, "ipv4");
+PRIVATE.addSubnet("172.16.0.0", 12, "ipv4");
+PRIVATE.addSubnet("192.168.0.0", 16, "ipv4");
+PRIVATE.addAddress("::", "ipv6");
+PRIVATE.addAddress("::1", "ipv6");
+PRIVATE.addSubnet("fc00::", 7, "ipv6");
+PRIVATE.addSubnet("fe80::", 10, "ipv6");
 
 export function isPrivateAddress(ip: string): boolean {
 	const family = isIP(ip);
-	if (family === 4) return isPrivateV4(ip);
-	if (family !== 6) return false;
-	const lower = ip.toLowerCase();
-	if (lower === "::1" || lower === "::") return true;
-	const mapped = /^(?:0*:)*ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-	if (mapped) return isPrivateV4(mapped[1]);
-	return lower.startsWith("fc") || lower.startsWith("fd") || /^fe[89ab]/.test(lower);
+	return family !== 0 && PRIVATE.check(ip, family === 4 ? "ipv4" : "ipv6");
 }
 
 function stripBrackets(hostname: string): string {

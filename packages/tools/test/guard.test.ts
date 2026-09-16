@@ -21,6 +21,12 @@ describe("isPrivateAddress", () => {
 		["fd12::1", true],
 		["fe80::1", true],
 		["::ffff:10.0.0.1", true],
+		["::ffff:7f00:1", true],
+		["::FFFF:A9FE:A9FE", true],
+		["0:0:0:0:0:0:0:1", true],
+		["0:0:0:0:0:ffff:c0a8:101", true],
+		["::ffff:8.8.8.8", false],
+		["::ffff:808:808", false],
 		["2606:4700::1111", false],
 	])("%s → %s", (ip, expected) => {
 		expect(isPrivateAddress(ip)).toBe(expected);
@@ -63,11 +69,16 @@ describe("assertPublicUrl", () => {
 		};
 		await expect(assertPublicUrl("http://127.0.0.1:8080/", { lookup })).rejects.toThrow(/private or local host/);
 		await expect(assertPublicUrl("http://[::1]/", { lookup })).rejects.toThrow(/private or local host/);
+		await expect(assertPublicUrl("http://[::ffff:7f00:1]/", { lookup })).rejects.toThrow(/private or local host/);
 		await expect(assertPublicUrl("http://localhost/", { lookup })).rejects.toThrow(/private or local host/);
 	});
 
 	test("rejects a public name that resolves to a private address", async () => {
 		await expect(assertPublicUrl("https://example.com/", { lookup: privateLookup })).rejects.toThrow(
+			/resolves to a private address/,
+		);
+		const mappedLookup = async () => ({ address: "::ffff:7f00:1" });
+		await expect(assertPublicUrl("https://example.com/", { lookup: mappedLookup })).rejects.toThrow(
 			/resolves to a private address/,
 		);
 	});
