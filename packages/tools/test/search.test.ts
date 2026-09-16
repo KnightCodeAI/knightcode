@@ -18,14 +18,17 @@ const brave = JSON.parse(fixture("brave.json")) as unknown;
 
 function fakeFetch(body: string, init: ResponseInit & { contentType?: string } = {}) {
 	const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+	const responses: Response[] = [];
 	const fetchImpl = (async (input: string | URL | Request, reqInit?: RequestInit) => {
 		calls.push({ url: String(input), init: reqInit });
-		return new Response(body, {
+		const response = new Response(body, {
 			status: init.status ?? 200,
 			headers: { "content-type": init.contentType ?? "text/html" },
 		});
+		responses.push(response);
+		return response;
 	}) as typeof fetch;
-	return { fetchImpl, calls };
+	return { fetchImpl, calls, responses };
 }
 
 describe("parseDuckDuckGo", () => {
@@ -92,11 +95,20 @@ describe("search", () => {
 		expect(new Headers(calls[0].init?.headers).get("x-subscription-token")).toBe("k");
 	});
 
-	test("Brave errors name the status and the env var", async () => {
-		const { fetchImpl } = fakeFetch("nope", { status: 401, contentType: "application/json" });
+	test("Brave errors name the status and the env var, and release the body", async () => {
+		const { fetchImpl, responses } = fakeFetch("nope", { status: 401, contentType: "application/json" });
 		await expect(search("q", 5, { fetch: fetchImpl, env: { BRAVE_API_KEY: "bad" } })).rejects.toThrow(
 			"Brave Search returned HTTP 401; check BRAVE_API_KEY",
 		);
+		expect(responses[0].bodyUsed).toBe(true);
+	});
+
+	test("DuckDuckGo errors point at the keyed provider, and release the body", async () => {
+		const { fetchImpl, responses } = fakeFetch("busy", { status: 503 });
+		await expect(search("q", 5, { fetch: fetchImpl, env: {} })).rejects.toThrow(
+			"DuckDuckGo returned HTTP 503; set BRAVE_API_KEY for a keyed provider.",
+		);
+		expect(responses[0].bodyUsed).toBe(true);
 	});
 
 	test("falls back to DuckDuckGo with the browser User-Agent and honours count", async () => {

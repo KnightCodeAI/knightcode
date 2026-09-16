@@ -1,6 +1,6 @@
 import type { ToolDefinition } from "@knightcodeai/cli";
 import { type Static, Type } from "typebox";
-import { combineSignals, decodeBody, readBody, USER_AGENT } from "./fetch.ts";
+import { combineSignals, decodeBody, discard, readBody, USER_AGENT } from "./fetch.ts";
 import { decodeEntities, isHtmlContentType, stripTags } from "./html.ts";
 import { websearchRenderers } from "./render.ts";
 
@@ -27,12 +27,21 @@ const MAX_BYTES = 1024 * 1024;
 const BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 const DDG_ENDPOINT = "https://html.duckduckgo.com/html/";
 
-/** Reads a provider response through the same byte ceiling as webfetch, refusing the wrong content type first. */
-async function readProvider(response: Response, provider: string, accepts: (contentType: string) => boolean) {
+/**
+ * Reads a provider response through the same byte ceiling as webfetch. An error status or the
+ * wrong content type is refused before the body is read; `hint` tells the user what to change.
+ */
+async function readProvider(
+	response: Response,
+	provider: string,
+	accepts: (contentType: string) => boolean,
+	hint: string,
+) {
+	if (!response.ok) await discard(response, `${provider} returned HTTP ${response.status}; ${hint}`);
 	const contentType = response.headers.get("content-type") ?? "";
 	if (!accepts(contentType)) {
-		await response.body?.cancel();
-		throw new Error(
+		await discard(
+			response,
 			`${provider} returned ${contentType.split(";")[0].trim() || "no content type"} instead of a result page`,
 		);
 	}
@@ -99,8 +108,12 @@ export async function search(
 			signal,
 			headers: { "X-Subscription-Token": key, Accept: "application/json" },
 		});
-		if (!response.ok) throw new Error(`Brave Search returned HTTP ${response.status}; check BRAVE_API_KEY`);
-		const json = await readProvider(response, "Brave Search", (type) => /[/+]json\b/i.test(type));
+		const json = await readProvider(
+			response,
+			"Brave Search",
+			(type) => /[/+]json\b/i.test(type),
+			"check BRAVE_API_KEY",
+		);
 		return { provider: "brave", results: parseBrave(JSON.parse(json)).slice(0, wanted) };
 	}
 
@@ -108,10 +121,7 @@ export async function search(
 		signal,
 		headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
 	});
-	if (!response.ok) {
-		throw new Error(`DuckDuckGo returned HTTP ${response.status}; set BRAVE_API_KEY for a keyed provider.`);
-	}
-	const html = await readProvider(response, "DuckDuckGo", isHtmlContentType);
+	const html = await readProvider(response, "DuckDuckGo", isHtmlContentType, "set BRAVE_API_KEY for a keyed provider.");
 	const results = parseDuckDuckGo(html).slice(0, wanted);
 	if (results.length === 0 && isDuckDuckGoChallenge(html)) {
 		throw new Error("DuckDuckGo rate-limited this request; set BRAVE_API_KEY for a keyed provider.");

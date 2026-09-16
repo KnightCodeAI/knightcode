@@ -47,6 +47,12 @@ export function combineSignals(signal: AbortSignal | undefined, timeoutMs: numbe
 	return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
+/** Throws `message` after releasing a response we will not read, so its connection goes back to the pool. */
+export async function discard(response: Response, message: string): Promise<never> {
+	await response.body?.cancel();
+	throw new Error(message);
+}
+
 export async function readBody(response: Response, maxBytes: number): Promise<Uint8Array> {
 	const reader = response.body?.getReader();
 	if (!reader) return new Uint8Array();
@@ -111,13 +117,12 @@ export async function fetchPage(rawUrl: string, options: FetchOptions = {}): Pro
 
 	const start = await assertPublicUrl(rawUrl, options);
 	const { url, response } = await follow(start, options, combineSignals(options.signal, TIMEOUT_MS));
-	if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText} for ${url.href}`);
+	if (!response.ok) await discard(response, `HTTP ${response.status} ${response.statusText} for ${url.href}`);
 
 	const contentType = response.headers.get("content-type") ?? "application/octet-stream";
 	const declared = Number(response.headers.get("content-length"));
 	if (declared > MAX_BYTES) {
-		await response.body?.cancel();
-		throw new Error(`Response too large (${formatSize(declared)}; limit ${formatSize(MAX_BYTES)})`);
+		await discard(response, `Response too large (${formatSize(declared)}; limit ${formatSize(MAX_BYTES)})`);
 	}
 	const raw = await readBody(response, MAX_BYTES);
 	if (!isTextContentType(contentType)) {
