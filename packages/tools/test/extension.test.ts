@@ -76,7 +76,7 @@ describe("factory", () => {
 	});
 
 	test("session_start drops the tools that are off by default and keeps one persisted on", () => {
-		writePersisted({ webfetch: true }, stateFile());
+		writePersisted({ webfetch: { enabled: true } }, stateFile());
 		const { pi, handlers, active } = fakePi(["read", "webfetch", "websearch"]);
 		toolsExtension(pi);
 		for (const handler of handlers.get("session_start") ?? []) handler();
@@ -106,12 +106,12 @@ describe("/tools", () => {
 
 		await toolsCommand("websearch always", ctx, pi);
 		expect(active).toEqual(["read", "websearch"]);
-		expect(readPersisted()).toEqual({ websearch: true });
+		expect(readPersisted()).toEqual({ websearch: { enabled: true } });
 		expect(notices.at(-1)?.message).toBe("websearch: on (default)");
 
 		await toolsCommand("websearch off", ctx, pi);
 		expect(active).toEqual(["read"]);
-		expect(readPersisted()).toEqual({ websearch: false });
+		expect(readPersisted()).toEqual({ websearch: { enabled: false } });
 		expect(notices.at(-1)?.message).toBe("websearch: off");
 	});
 
@@ -133,7 +133,7 @@ describe("/tools", () => {
 		const { ctx, prompts } = fakeCtx(["Enabled by default"]);
 		await toolsCommand("webfetch", ctx, pi);
 		expect(prompts.map((p) => p.title)).toEqual(["webfetch"]);
-		expect(readPersisted()).toEqual({ webfetch: true });
+		expect(readPersisted()).toEqual({ webfetch: { enabled: true } });
 	});
 
 	test("cancelling either prompt changes nothing", async () => {

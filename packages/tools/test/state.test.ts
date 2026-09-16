@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -9,6 +9,7 @@ import {
 	resetSessionOverrides,
 	resolveEnabled,
 	setMode,
+	updateSettings,
 	writePersisted,
 } from "../src/state.ts";
 
@@ -37,11 +38,15 @@ describe("resolveEnabled", () => {
 	});
 
 	test("persisted value beats the default", () => {
-		expect(resolveEnabled("alpha", true, { alpha: false }, new Map())).toBe(false);
+		expect(resolveEnabled("alpha", true, { alpha: { enabled: false } }, new Map())).toBe(false);
+	});
+
+	test("settings without an enabled flag leave the default alone", () => {
+		expect(resolveEnabled("alpha", true, { alpha: { provider: "brave" } }, new Map())).toBe(true);
 	});
 
 	test("session override beats persisted", () => {
-		expect(resolveEnabled("alpha", true, { alpha: false }, new Map([["alpha", true]]))).toBe(true);
+		expect(resolveEnabled("alpha", true, { alpha: { enabled: false } }, new Map([["alpha", true]]))).toBe(true);
 	});
 });
 
@@ -64,18 +69,29 @@ describe("persisted file", () => {
 		expect(readPersisted(file)).toEqual({});
 	});
 
-	test("non-boolean values are dropped", () => {
+	test("a bare boolean is an enabled flag; other settings keep strings and booleans and drop the rest", () => {
 		const file = join(dir, "tools.json");
-		writeFileSync(file, JSON.stringify({ alpha: false, beta: "yes", gamma: 1 }), "utf8");
-		expect(readPersisted(file)).toEqual({ alpha: false });
+		writeFileSync(
+			file,
+			JSON.stringify({
+				alpha: false,
+				beta: { enabled: "yes", provider: "brave", count: 1, nested: {} },
+				gamma: "yes",
+				delta: 1,
+			}),
+			"utf8",
+		);
+		expect(readPersisted(file)).toEqual({ alpha: { enabled: false }, beta: { provider: "brave" } });
 	});
 
-	test("round-trips through a nested directory and leaves no temp file", () => {
+	test("round-trips through a nested directory, owner-only, and leaves no temp file", () => {
 		const file = join(dir, "nested", "tools.json");
-		writePersisted({ alpha: false }, file);
-		expect(readPersisted(file)).toEqual({ alpha: false });
+		writePersisted({ alpha: { enabled: false, provider: "brave" } }, file);
+		expect(readPersisted(file)).toEqual({ alpha: { enabled: false, provider: "brave" } });
 		expect(readFileSync(file, "utf8").endsWith("\n")).toBe(true);
 		expect(readdirSync(dirname(file))).toEqual(["tools.json"]);
+		// The file can hold an API key; Windows has no POSIX mode bits to check.
+		if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
 	});
 });
 
@@ -93,7 +109,7 @@ describe("setMode", () => {
 	test("off persists false and clears a session override", async () => {
 		await setMode("alpha", "session", file);
 		await setMode("alpha", "off", file);
-		expect(readPersisted(file)).toEqual({ alpha: false });
+		expect(readPersisted(file)).toEqual({ alpha: { enabled: false } });
 		expect(resolveEnabled("alpha", true, readPersisted(file))).toBe(false);
 	});
 
@@ -106,14 +122,24 @@ describe("setMode", () => {
 	test("always persists true and clears a session override", async () => {
 		await setMode("beta", "session", file);
 		await setMode("beta", "always", file);
-		expect(readPersisted(file)).toEqual({ beta: true });
+		expect(readPersisted(file)).toEqual({ beta: { enabled: true } });
 		expect(describeMode(entries[1], readPersisted(file))).toBe("on (default)");
 	});
 
 	test("concurrent writers serialize: both changes land and no lock or temp file remains", async () => {
-		await Promise.all([setMode("alpha", "off", file), setMode("beta", "always", file)]);
-		expect(readPersisted(file)).toEqual({ alpha: false, beta: true });
+		await Promise.all([
+			setMode("alpha", "off", file),
+			setMode("beta", "always", file),
+			updateSettings("beta", { provider: "brave" }, file),
+		]);
+		expect(readPersisted(file)).toEqual({ alpha: { enabled: false }, beta: { enabled: true, provider: "brave" } });
 		expect(readdirSync(dirname(file))).toEqual(["tools.json"]);
+	});
+
+	test("setMode keeps a tool's other settings", async () => {
+		await updateSettings("beta", { provider: "brave", braveApiKey: "k" }, file);
+		await setMode("beta", "off", file);
+		expect(readPersisted(file)).toEqual({ beta: { enabled: false, provider: "brave", braveApiKey: "k" } });
 	});
 
 	test("describeMode reports each state", async () => {
@@ -121,6 +147,28 @@ describe("setMode", () => {
 		expect(describeMode(entries[1], {})).toBe("off");
 		await setMode("beta", "session", file);
 		expect(describeMode(entries[1], {})).toBe("on (this session)");
+	});
+});
+
+describe("updateSettings", () => {
+	let file: string;
+	beforeEach(() => {
+		file = join(mkdtempSync(join(tmpdir(), "kc-tools-settings-")), "tools.json");
+	});
+	afterEach(() => {
+		rmSync(join(file, ".."), { recursive: true, force: true });
+	});
+
+	test("merges keys, and undefined deletes one", async () => {
+		await updateSettings("beta", { provider: "brave", braveApiKey: "k" }, file);
+		await updateSettings("beta", { braveApiKey: undefined }, file);
+		expect(readPersisted(file)).toEqual({ beta: { provider: "brave" } });
+	});
+
+	test("removes the tool entry once nothing is left", async () => {
+		await updateSettings("beta", { provider: "brave" }, file);
+		await updateSettings("beta", { provider: undefined }, file);
+		expect(readPersisted(file)).toEqual({});
 	});
 });
 
@@ -141,7 +189,7 @@ describe("applyActiveTools", () => {
 
 	test("honours persisted false over the default", () => {
 		const pi = fakePi(["alpha"]);
-		applyActiveTools(pi, entries, { alpha: false });
+		applyActiveTools(pi, entries, { alpha: { enabled: false } });
 		expect(pi.active).toEqual([]);
 	});
 });

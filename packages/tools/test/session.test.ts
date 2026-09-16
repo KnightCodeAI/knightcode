@@ -74,7 +74,7 @@ describe("engine ordering", () => {
 	test("a persisted on in tools.json adds the tool at session start", async () => {
 		process.env[ENV_AGENT_DIR] = agentDir;
 		try {
-			writePersisted({ webfetch: true }, join(agentDir, "tools.json"));
+			writePersisted({ webfetch: { enabled: true } }, join(agentDir, "tools.json"));
 			const session = await bootSession([toolsExtension], tempDir, agentDir);
 			await session.bindExtensions({});
 			const names = session.agent.state.tools.map((t) => t.name);
