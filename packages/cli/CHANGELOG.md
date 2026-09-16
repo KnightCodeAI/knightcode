@@ -1,5 +1,35 @@
 # @knightcodeai/cli
 
+## 0.8.0
+
+### Added
+
+- Added `allowedFallbackModels` to Anthropic model overrides in `models.json`, so you can choose which models the server may fall back to — or set an empty array to turn server-side fallback off.
+
+- Added webfetch and websearch tools — a page as pageable, greppable markdown, and results from DuckDuckGo or Brave Search — off until enabled with the new `/tools` command, which turns each built-in tool off, on for the session, or on by default, and for websearch also picks the provider and stores the Brave API key.
+
+### Changed
+
+- Changed the system prompt and tool set to live in the transcript instead of being rewritten behind it. A session records when its instructions changed or tools became available, resuming or moving between branches restores that state, and providers that support it keep their cached prompt prefix across the change. Extensions can replace individual prompt sections through `systemPromptOptions.sections`, and the deferred-tool loading path is replaced by mid-conversation tool additions on the models that accept them.
+
+- Changed a failed copy to say why: instead of a bare "Copy failed" flash, the message now names the missing clipboard backend — `wl-clipboard`, `xclip`/`xsel` or the Termux API package — and stays on screen for five seconds.
+
+### Fixed
+
+- Fixed a `user_bash` handler that throws or returns a malformed result silently falling back to the local shell — the command is now reported as failed instead of running somewhere the extension meant to prevent. A handler must return `undefined`, exactly one of `{ operations }` or `{ result }`, and nothing else.
+
+- Fixed Baseten requests to carry session-affinity headers so a conversation keeps hitting the same replica and benefits from automatic prompt caching.
+
+- Fixed Bedrock cost reporting to bill one-hour cache writes at their higher rate instead of charging every cache write at the five-minute rate.
+
+- Fixed a local copy reporting success when no clipboard backend actually took the text: the terminal-escape fallback now only counts in a remote session, where it is the terminal that owns the clipboard.
+
+- Fixed the package's public types so extension authors can import the event and result types their hooks receive, such as `ModelSelectEvent`, `ThinkingLevelSelectEvent` and the `*Result` types, instead of redeclaring them.
+
+- Fixed the thinking levels offered for Gemini models: they now follow the reasoning efforts each model actually advertises instead of a version-number guess, so newer Flash and Pro models expose their real low/medium/high range.
+
+- Fixed resuming a session by its exact ID reading every transcript in the session directory first, which made startup slow in directories with long histories.
+
 ## 0.7.0
 
 ### Added
