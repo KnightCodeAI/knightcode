@@ -1,7 +1,8 @@
 # Pico5 implementation handoff
 
 `packages/agent/docs/pico-v5.md` is normative. Implement this list in order.
-After every package: run its tests, run `npm run check`, and stop for user review.
+After every package: run that package's tests (`cd packages/agent && bun run test`),
+run `bun run check-types` from the repo root, and stop for user review.
 Do not redesign later packages while implementing the current one.
 
 Pico3 is reference material only. Preserve useful behavior, not its capability
@@ -289,6 +290,6 @@ settled during open.
 
 Compile-test every §2.2 signature and every usage sequence shown in slides
 20–26. The erased registry test must include a concrete task with narrowed
-input, multiple checkpoint phases, and custom hooks. Run all package-specific
-tests and the repository check. Verify a local
-coding-agent turn and a reopened interrupted turn, then stop for final review.
+input, multiple checkpoint phases, and custom hooks. Run every affected package's
+tests and `bun run check-types`. Verify a local coding-agent turn and a reopened
+interrupted turn, then stop for final review.
