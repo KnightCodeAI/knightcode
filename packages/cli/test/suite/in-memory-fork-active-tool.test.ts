@@ -89,8 +89,13 @@ describe("in-memory fork during an active tool turn", () => {
 		await runtime.session.bindExtensions({});
 
 		expect(forkResult).toEqual({ cancelled: false, selectedText: "first prompt" });
-		expect(runtime.session.messages).toEqual([]);
-		expect(runtime.session.sessionManager.getEntries().filter((entry) => entry.type === "message")).toEqual([]);
+		expect(runtime.session.messages.map((message) => message.role)).toEqual(["system"]);
+		expect(
+			runtime.session.sessionManager
+				.getEntries()
+				.filter((entry) => entry.type === "message")
+				.map((entry) => entry.message.role),
+		).toEqual(["system"]);
 
 		let capturedRoles: string[] = [];
 		harness.setResponses([
@@ -101,7 +106,7 @@ describe("in-memory fork during an active tool turn", () => {
 		]);
 		await runtime.session.prompt("next prompt");
 
-		expect(capturedRoles).toEqual(["user"]);
+		expect(capturedRoles).toEqual(["system", "system", "user"]);
 	});
 
 	it("keeps a branched replacement session to the branch path", async () => {
@@ -125,7 +130,7 @@ describe("in-memory fork during an active tool turn", () => {
 		await runtime.session.bindExtensions({});
 
 		expect(forkResult).toEqual({ cancelled: false });
-		expect(runtime.session.messages.map((message) => message.role)).toEqual(["user"]);
+		expect(runtime.session.messages.map((message) => message.role)).toEqual(["system", "user"]);
 		expect(runtime.session.messages.some((message) => message.role === "toolResult")).toBe(false);
 
 		let capturedRoles: string[] = [];
@@ -137,6 +142,8 @@ describe("in-memory fork during an active tool turn", () => {
 		]);
 		await runtime.session.prompt("next prompt");
 
-		expect(capturedRoles).toEqual(["user", "user"]);
+		// The branch carries its own system message, and rebinding the replacement session records a
+		// second one before the new turn rather than rewriting the first.
+		expect(capturedRoles).toEqual(["system", "user", "system", "user"]);
 	});
 });
