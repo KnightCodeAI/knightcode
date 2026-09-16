@@ -72,14 +72,29 @@ export function resolveEnabled(
 	return overrides.get(name) ?? (typeof enabled === "boolean" ? enabled : defaultEnabled);
 }
 
+// Writes from this process queue behind each other, so two quick /tools changes land in the order
+// they were made. The file lock below only serializes against other KnightCode processes; its retry
+// backoff could let a later write from this one win.
+let writeQueue: Promise<void> = Promise.resolve();
+
 /**
  * Merges `patch` into a tool's settings under the file lock; an undefined value deletes that key,
  * and a tool with nothing left is dropped from the file.
  */
-export async function updateSettings(
+export function updateSettings(
 	name: string,
 	patch: Record<string, string | boolean | undefined>,
 	file = stateFile(),
+): Promise<void> {
+	const write = writeQueue.then(() => updateLocked(name, patch, file));
+	writeQueue = write.catch(() => {});
+	return write;
+}
+
+async function updateLocked(
+	name: string,
+	patch: Record<string, string | boolean | undefined>,
+	file: string,
 ): Promise<void> {
 	mkdirSync(dirname(file), { recursive: true });
 	// The read-modify-write runs under the same kind of lock as settings.json, so two KnightCode

@@ -34,10 +34,11 @@ export async function toolsCommand(
 
 	let mode: ToolMode | undefined = rawMode === undefined ? undefined : ARG_MODES[rawMode];
 	if (mode === undefined && ctx.mode === "tui") {
-		// The panel persists every change as it is made; there is nothing left to apply or announce.
+		// The panel persists every change as it is made and closes once the last write has landed;
+		// there is nothing left to apply or announce.
 		const picked = entry;
 		await ctx.ui.custom((_tui, theme, _keybindings, done) =>
-			toolSettingsPanel(picked, entries, pi, theme, () => done(undefined)),
+			toolSettingsPanel(picked, entries, pi, theme, ctx.ui, () => done(undefined)),
 		);
 		return;
 	}

@@ -137,7 +137,10 @@ export const TOOLS: RegisteredToolEntry[] = [
   `session.get(name) ?? persisted[name]?.enabled ?? defaultEnabled`. Pure.
 - `updateSettings(name, patch)` (async — it waits for the lock): merges
   `patch` into the tool's settings; an `undefined` value deletes that key
-  and a tool with nothing left is dropped from the file.
+  and a tool with nothing left is dropped from the file. Calls from one
+  process queue behind each other, so they land in call order; the file
+  lock only serializes against other processes, and its retry backoff
+  could otherwise let a later write win.
 - `setMode(name, mode)`:
   - `off` → `session.delete(name)`; `updateSettings(name, { enabled: false })`.
   - `session` → `session.set(name, true)`; persisted untouched.
@@ -182,7 +185,7 @@ excluded on the command line stays excluded regardless of `tools.json`.
 
 ### `settings.ts` — the per-tool panel
 
-`toolSettingsPanel(entry, entries, pi, theme, done)` is shown through
+`toolSettingsPanel(entry, entries, pi, theme, ui, done)` is shown through
 `ctx.ui.custom`: a `SettingsList` (the `/settings` component) framed like
 the built-in dialogs, with a **Status** row every tool has (Enter cycles
 Disabled / Enabled for this session / Enabled by default → `setMode` +
@@ -190,8 +193,12 @@ Disabled / Enabled for this session / Enabled by default → `setMode` +
 `settings(current, theme)` returns. A row's `id` is the key it stores;
 `onChange` writes it with `updateSettings` (empty string deletes) and
 refreshes every row's display value, so a key shows masked (`maskKey`:
-`••••` + last four) rather than as typed. `TextSubmenu` is the one-field
-submenu behind a text setting: Enter saves, empty clears, Esc keeps.
+`••••` + last four) rather than as typed. Every write goes through the
+panel's `save`: a failure is reported with `ui.notify(…, "error")` and does
+not stop later writes, and Esc calls `done` only once every write has
+settled, so `/tools` returns with the file in its final state.
+`TextSubmenu` is the one-field submenu behind a text setting: Enter saves,
+empty clears, Esc keeps.
 
 `web/search-settings.ts` contributes websearch's rows:
 

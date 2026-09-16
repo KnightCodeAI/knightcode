@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
@@ -32,12 +32,18 @@ function plain(lines: string[]): string {
 
 function openPanel(entry = websearch, active = ["read"]) {
 	const pi = fakePi(active);
+	const notices: Array<{ message: string; type?: string }> = [];
+	const ui = {
+		notify: (message: string, type?: string) => {
+			notices.push({ message, type });
+		},
+	};
 	let closed = 0;
-	const panel = toolSettingsPanel(entry, TOOLS, pi, theme, () => closed++);
+	const panel = toolSettingsPanel(entry, TOOLS, pi, theme, ui, () => closed++);
 	const type = (...keys: string[]) => {
 		for (const key of keys) panel.handleInput(key);
 	};
-	return { pi, panel, type, text: () => plain(panel.render(80)), closed: () => closed };
+	return { pi, panel, type, text: () => plain(panel.render(80)), closed: () => closed, notices };
 }
 
 let dir: string;
@@ -128,9 +134,35 @@ describe("toolSettingsPanel", () => {
 		expect(text()).toContain("not set");
 	});
 
-	test("Esc on the main list closes the panel", () => {
+	test("Esc on the main list closes the panel", async () => {
 		const { type, closed } = openPanel();
 		type(ESC);
-		expect(closed()).toBe(1);
+		await vi.waitFor(() => expect(closed()).toBe(1));
+	});
+
+	test("closing waits for the writes made in the panel to land", async () => {
+		const { pi, type, closed, notices } = openPanel();
+		type(ENTER, ENTER, ENTER, ENTER, ESC);
+		await vi.waitFor(() => expect(closed()).toBe(1));
+		// Four Enters cycle session, always, off, session: the file holds the last write, the
+		// session override the last mode, and the active set follows the last one applied.
+		expect(readPersisted().websearch?.enabled).toBe(false);
+		expect(pi.active).toEqual(["read", "websearch"]);
+		expect(notices).toEqual([]);
+	});
+
+	test("a write that fails is reported and does not stop later ones", async () => {
+		// The agent dir sits under a file, so the directory cannot be created and every write fails.
+		writeFileSync(join(dir, "blocker"), "");
+		process.env[ENV_AGENT_DIR] = join(dir, "blocker", "agent");
+		const { type, text, closed, notices } = openPanel();
+		type(ENTER, ENTER);
+		expect(text()).toContain("Enabled by default");
+		await vi.waitFor(() => expect(notices).toHaveLength(1));
+		expect(notices[0].type).toBe("error");
+		expect(notices[0].message).toContain(`websearch: could not save ${join(dir, "blocker", "agent", "tools.json")}`);
+		type(ENTER, ESC);
+		await vi.waitFor(() => expect(closed()).toBe(1));
+		expect(notices).toHaveLength(2);
 	});
 });

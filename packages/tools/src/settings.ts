@@ -1,11 +1,18 @@
 import { Container, Input, type SettingItem, SettingsList, Spacer, Text } from "@knightcode/tui";
-import { DynamicBorder, type ExtensionAPI, getSettingsListTheme, type Theme } from "@knightcodeai/cli";
+import {
+	DynamicBorder,
+	type ExtensionAPI,
+	type ExtensionUIContext,
+	getSettingsListTheme,
+	type Theme,
+} from "@knightcodeai/cli";
 import type { RegisteredToolEntry } from "./registry.ts";
 import {
 	applyActiveTools,
 	currentMode,
 	readPersisted,
 	setMode,
+	stateFile,
 	TOOL_MODES,
 	type ToolMode,
 	type ToolSettings,
@@ -52,26 +59,43 @@ export class TextSubmenu extends Container {
 
 class Panel extends Container {
 	private list: SettingsList;
+	private report: (error: unknown) => void;
+	// Every write the panel has started, in order; closing waits for the last one.
+	private pending: Promise<void> = Promise.resolve();
 
-	constructor(list: SettingsList) {
+	constructor(list: SettingsList, report: (error: unknown) => void) {
 		super();
 		this.list = list;
+		this.report = report;
 	}
 
 	handleInput(data: string): void {
 		this.list.handleInput(data);
 	}
+
+	/** Tracks a write; a failure is reported and does not stop later writes. */
+	save(write: Promise<void>): void {
+		const settled = write.catch(this.report);
+		this.pending = this.pending.then(() => settled);
+	}
+
+	/** Resolves once every write the panel started has settled. */
+	flush(): Promise<void> {
+		return this.pending;
+	}
 }
 
 /**
  * The per-tool panel behind /tools: a Status row every tool has, plus whatever rows the registry
- * entry contributes. Rows are keyed by the setting they store; a change is persisted at once.
+ * entry contributes. Rows are keyed by the setting they store; a change is persisted at once, and a
+ * write that fails is reported through `ui.notify`. `done` runs once every write has settled.
  */
 export function toolSettingsPanel(
 	entry: RegisteredToolEntry,
 	entries: RegisteredToolEntry[],
 	pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools">,
 	theme: Theme,
+	ui: Pick<ExtensionUIContext, "notify">,
 	done: () => void,
 ): Panel {
 	const name = entry.tool.name;
@@ -94,19 +118,26 @@ export function toolSettingsPanel(
 		(id, value) => {
 			if (id === "mode") {
 				const mode = TOOL_MODES.find((m) => MODE_LABELS[m] === value) ?? "off";
-				void setMode(name, mode).then(() => applyActiveTools(pi, entries));
+				panel.save(
+					setMode(name, mode).then(() => {
+						applyActiveTools(pi, entries);
+					}),
+				);
 				return;
 			}
 			if (value === "") delete current[id];
 			else current[id] = value;
-			void updateSettings(name, { [id]: value === "" ? undefined : value });
+			panel.save(updateSettings(name, { [id]: value === "" ? undefined : value }));
 			// The row shows the setting's display form (a masked key), not what the submenu returned.
 			for (const item of entry.settings?.(current, theme) ?? []) list.updateValue(item.id, item.currentValue);
 		},
-		done,
+		() => void panel.flush().then(done),
 	);
 
-	const panel = new Panel(list);
+	const panel = new Panel(list, (error) => {
+		const message = error instanceof Error ? error.message : String(error);
+		ui.notify(`${name}: could not save ${stateFile()}: ${message}`, "error");
+	});
 	panel.addChild(new DynamicBorder());
 	panel.addChild(new Spacer(1));
 	panel.addChild(new Text(theme.bold(theme.fg("accent", name)), 1, 0));

@@ -170,6 +170,18 @@ describe("updateSettings", () => {
 		await updateSettings("beta", { provider: undefined }, file);
 		expect(readPersisted(file)).toEqual({});
 	});
+
+	test("writes from one process land in call order, and a failure does not block the next", async () => {
+		const first = updateSettings("beta", { provider: "duckduckgo" }, file);
+		const second = updateSettings("beta", { provider: "brave" }, file);
+		// A write that cannot start: the target's parent is a file.
+		writeFileSync(join(dirname(file), "blocker"), "");
+		const failed = updateSettings("beta", { provider: "x" }, join(dirname(file), "blocker", "tools.json"));
+		const third = updateSettings("beta", { provider: "duckduckgo" }, file);
+		await Promise.all([first, second, third]);
+		await expect(failed).rejects.toThrow();
+		expect(readPersisted(file)).toEqual({ beta: { provider: "duckduckgo" } });
+	});
 });
 
 describe("applyActiveTools", () => {
