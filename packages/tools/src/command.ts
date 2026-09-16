@@ -1,12 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@knightcodeai/cli";
 import { type RegisteredToolEntry, TOOLS } from "./registry.ts";
+import { MODE_LABELS, toolSettingsPanel } from "./settings.ts";
 import { applyActiveTools, describeMode, readPersisted, setMode, TOOL_MODES, type ToolMode } from "./state.ts";
-
-export const MODE_LABELS: Record<ToolMode, string> = {
-	off: "Disabled",
-	session: "Enabled for this session",
-	always: "Enabled by default",
-};
 
 /** Command-line spellings: `on` means this session; `always` persists. */
 export const ARG_MODES: Record<string, ToolMode> = { off: "off", on: "session", always: "always" };
@@ -38,6 +33,14 @@ export async function toolsCommand(
 	}
 
 	let mode: ToolMode | undefined = rawMode === undefined ? undefined : ARG_MODES[rawMode];
+	if (mode === undefined && ctx.mode === "tui") {
+		// The panel persists every change as it is made; there is nothing left to apply or announce.
+		const picked = entry;
+		await ctx.ui.custom((_tui, theme, _keybindings, done) =>
+			toolSettingsPanel(picked, entries, pi, theme, () => done(undefined)),
+		);
+		return;
+	}
 	if (mode === undefined) {
 		const picked = await ctx.ui.select(
 			entry.tool.name,

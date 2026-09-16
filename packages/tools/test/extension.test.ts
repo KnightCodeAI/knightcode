@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@knightcodeai/cli";
 import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { initTheme, theme } from "@knightcodeai/cli/modes/interactive/theme/theme";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { toolsCommand, toolsCompletions } from "../src/command.ts";
 import toolsExtension from "../src/index.ts";
 import { TOOLS } from "../src/registry.ts";
@@ -37,10 +38,14 @@ function fakePi(active: string[]) {
 	return { pi, registered, handlers, command: () => command!, active };
 }
 
-function fakeCtx(answers: Array<string | undefined>) {
+type Panel = { render(width: number): string[] };
+
+function fakeCtx(answers: Array<string | undefined>, mode?: "tui") {
 	const notices: Array<{ message: string; type?: string }> = [];
 	const prompts: Array<{ title: string; options: string[] }> = [];
+	const panels: Panel[] = [];
 	const ctx = {
+		mode,
 		ui: {
 			select: async (title: string, options: string[]) => {
 				prompts.push({ title, options });
@@ -49,12 +54,22 @@ function fakeCtx(answers: Array<string | undefined>) {
 			notify: (message: string, type?: string) => {
 				notices.push({ message, type });
 			},
+			// Mounts the component like interactive mode does, then closes it as Esc would.
+			custom: async (factory: (tui: unknown, theme: unknown, kb: unknown, done: () => void) => Panel) => {
+				let close = () => {};
+				panels.push(await factory({}, theme, {}, () => close()));
+				await new Promise<void>((resolve) => {
+					close = resolve;
+					close();
+				});
+			},
 		},
 	} as unknown as ExtensionCommandContext;
-	return { ctx, notices, prompts };
+	return { ctx, notices, prompts, panels };
 }
 
 let dir: string;
+beforeAll(() => initTheme("dark"));
 beforeEach(() => {
 	dir = mkdtempSync(join(tmpdir(), "kc-tools-ext-"));
 	process.env[ENV_AGENT_DIR] = dir;
@@ -115,7 +130,27 @@ describe("/tools", () => {
 		expect(notices.at(-1)?.message).toBe("websearch: off");
 	});
 
-	test("interactive path asks for the tool, then the mode", async () => {
+	test("in the TUI, picking a tool opens its settings panel instead of the mode list", async () => {
+		const { pi } = fakePi(["read"]);
+		const { ctx, prompts, panels, notices } = fakeCtx(["websearch — off"], "tui");
+		await toolsCommand("", ctx, pi);
+		expect(prompts.map((p) => p.title)).toEqual(["Tools"]);
+		expect(panels).toHaveLength(1);
+		const text = panels[0].render(80).join("\n");
+		expect(text).toContain("websearch");
+		expect(text).toContain("Brave API key");
+		expect(notices).toEqual([]);
+	});
+
+	test("in the TUI, an explicit mode argument still skips the panel", async () => {
+		const { pi, active } = fakePi(["read"]);
+		const { ctx, panels } = fakeCtx([], "tui");
+		await toolsCommand("webfetch on", ctx, pi);
+		expect(panels).toEqual([]);
+		expect(active).toEqual(["read", "webfetch"]);
+	});
+
+	test("outside the TUI, picking a tool asks for the mode", async () => {
 		const { pi, active } = fakePi(["read"]);
 		const { ctx, prompts, notices } = fakeCtx(["webfetch — off", "Enabled for this session"]);
 		await toolsCommand("", ctx, pi);
