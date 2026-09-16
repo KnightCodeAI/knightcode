@@ -42,6 +42,7 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/thinking` | Switch thinking level; Ctrl+S or Ctrl+D in the picker saves the startup default |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
 | `/settings` | Theme, message delivery, transport, and other preferences |
+| [`/tools`](#web-tools) | Turn `webfetch` and `websearch` off, on for this session, or on by default; pick the search provider and store its key |
 | `/resume` | Pick from previous sessions |
 | `/new` | Start a new session |
 | `/name <name>` | Set session display name |
@@ -59,6 +60,37 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/hotkeys` | Show all keyboard shortcuts |
 | `/changelog` | Display version history |
 | `/quit` | Quit knightcode |
+
+## Web Tools
+
+Two tools give the agent read access to the web. Both ship disabled; turn them on with `/tools`.
+
+| Tool | What it does |
+|------|--------------|
+| `webfetch` | Fetches a URL and returns the page as markdown, 400 lines at a time. The agent pages with `offset`/`limit` like `read`, or passes `grep` to get only matching lines. Responses are cached for 15 minutes, capped at 5 MB, and time out after 30 seconds. Private, loopback, and link-local addresses are refused. |
+| `websearch` | Searches the web and returns up to 10 results (default 5) as title, URL, and snippet. DuckDuckGo needs no key but may rate-limit; Brave Search needs an API key. |
+
+`/tools` lists each tool with its current state; pick one to open its settings panel. **Status** cycles through three states:
+
+| State | Effect |
+|-------|--------|
+| Disabled | The tool is not offered to the model |
+| Enabled for this session | On until knightcode exits, including across `/new`, `/resume`, and `/fork`; nothing is written to disk |
+| Enabled by default | On in every session |
+
+The `websearch` panel adds two rows: **Provider** (`duckduckgo` or `brave`) and **Brave API key**. Choosing Brave without a stored key opens the key prompt at once. Get a key at https://brave.com/search/api/; the free plan is enough. The key is also read from `BRAVE_API_KEY` when none is stored, but the provider only switches to Brave when you pick it. Keys show masked in the panel.
+
+The same changes work without the panel:
+
+```bash
+/tools websearch on        # this session
+/tools webfetch always     # every session
+/tools webfetch off
+```
+
+Settings are stored in `~/.knightcode/agent/tools.json`, owner-readable only because it can hold the Brave key. `--tools` and `--exclude-tools` still apply: a tool excluded on the command line stays off whatever `/tools` says.
+
+Fetched pages and search results are marked as untrusted in the tool output so the model treats instructions inside them as data, but treat the tools like any other network access: a fetched page can still influence what the agent does next.
 
 ## Message Queue
 
@@ -212,7 +244,7 @@ cat README.md | knightcode -p "Summarize this text"
 | `--no-builtin-tools`, `-nbt` | Disable built-in tools but keep extension/custom tools enabled |
 | `--no-tools`, `-nt` | Disable all tools |
 
-Built-in tools: `read`, `bash`, `powershell` (Windows), `edit`, `write`, `grep`, `find`, `ls`.
+Built-in tools: `read`, `bash`, `powershell` (Windows), `edit`, `write`, `grep`, `find`, `ls`. The [web tools](#web-tools) `webfetch` and `websearch` are off until enabled with `/tools`.
 
 ### Resource Options
 

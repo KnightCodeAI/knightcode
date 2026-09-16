@@ -1,0 +1,18 @@
+{
+	"query": { "original": "bun docs" },
+	"web": {
+		"results": [
+			{
+				"title": "Bun — Docs",
+				"url": "https://bun.sh/docs",
+				"description": "Bun is a fast <strong>JavaScript</strong> runtime &amp; toolkit."
+			},
+			{
+				"title": "GitHub - oven-sh/bun",
+				"url": "https://github.com/oven-sh/bun",
+				"description": "Incredibly fast JavaScript runtime."
+			},
+			{ "title": "broken", "url": 42 }
+		]
+	}
+}

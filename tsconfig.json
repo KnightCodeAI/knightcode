@@ -29,6 +29,8 @@
       "@knightcode/protocol/*": ["./packages/protocol/src/*"],
       "@knightcode/remote": ["./packages/remote/src/index.ts"],
       "@knightcode/remote/*": ["./packages/remote/src/*"],
+      "@knightcode/tools": ["./packages/tools/src/index.ts"],
+      "@knightcode/tools/*": ["./packages/tools/src/*"],
       "@knightcode/client": ["./packages/client/src/index.ts"],
       "@knightcode/client/control": ["./packages/client/src/control.ts"],
       "@knightcode/client/unix": ["./packages/client/src/unix.ts"],

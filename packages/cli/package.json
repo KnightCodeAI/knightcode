@@ -50,6 +50,7 @@
     "@knightcode/client": "workspace:*",
     "@knightcode/protocol": "workspace:*",
     "@knightcode/remote": "workspace:*",
+    "@knightcode/tools": "workspace:*",
     "@knightcode/server": "workspace:*",
     "@knightcode/session-backend-sqlite": "workspace:*",
     "@knightcode/tui": "workspace:*",
