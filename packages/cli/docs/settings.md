@@ -279,6 +279,8 @@ On Windows, select `powershell` instead of `bash`, or include both:
 
 An empty array starts with no built-in tools while preserving extension and SDK custom tools. `--tools` replaces this behavior with a strict allowlist for all tools, `--no-tools` disables all tools, and `--no-builtin-tools` disables the built-in defaults. `--exclude-tools` filters the resulting list. A project `defaultTools` array replaces the global array.
 
+The [web tools](usage.md#web-tools) `webfetch` and `websearch` are not part of `defaultTools`. `/tools` turns them on and stores their settings, including the search provider and Brave key, in `~/.knightcode/agent/tools.json`.
+
 ### Sessions
 
 | Setting | Type | Default | Description |

@@ -93,6 +93,7 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_IMAGE_PROTOCOL` | Override inline image detection with `kitty`, `iterm2`, `none`, or `auto` |
 | `KNIGHTCODE_TRUE_COLOR` | Override truecolor detection with `1`, `0`, or `auto` |
 | `KNIGHTCODE_TUI_ESC_TIMEOUT` | How long to wait after a lone ESC before treating it as Escape, in milliseconds; defaults to `100` over SSH and `10` otherwise. Increase if Alt-key input is misread as Escape |
+| `BRAVE_API_KEY` | Brave Search key for `websearch` when none is stored with `/tools`; see [Web tools](usage.md#web-tools) |
 | `VISUAL`, `EDITOR` | External editor fallback when `externalEditor` is unset |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
 
