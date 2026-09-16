@@ -2,6 +2,7 @@ import type { ToolDefinition } from "@knightcodeai/cli";
 import { type Static, Type } from "typebox";
 import { combineSignals, USER_AGENT } from "./fetch.ts";
 import { decodeEntities, stripTags } from "./html.ts";
+import { websearchRenderers } from "./render.ts";
 
 export interface SearchResult {
 	title: string;
@@ -136,4 +137,5 @@ export const websearchTool: ToolDefinition<typeof websearchSchema, WebsearchDeta
 			details: { query: params.query, provider, results },
 		};
 	},
+	...websearchRenderers,
 };

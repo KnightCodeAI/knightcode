@@ -3,6 +3,7 @@ import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "@knightcodeai/cli/c
 import { type Static, Type } from "typebox";
 import { assertPublicUrl, type GuardOptions } from "./guard.ts";
 import { extractTitle, htmlToMarkdown, isHtmlContentType, isTextContentType, pickMainContent } from "./html.ts";
+import { webfetchRenderers } from "./render.ts";
 
 export const USER_AGENT =
 	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -257,4 +258,5 @@ export const webfetchTool: ToolDefinition<typeof webfetchSchema, WebfetchDetails
 		const { text, details } = formatPage(page, params);
 		return { content: [{ type: "text", text }], details };
 	},
+	...webfetchRenderers,
 };
