@@ -7,11 +7,11 @@ import {
 	decoder,
 	encoder,
 	isBase,
-	UnsafePathError,
 	type JsonValue,
 	type Op,
 	overlap,
 	track,
+	UnsafePathError,
 	type WireOp,
 } from "../src/delta/index.ts";
 
