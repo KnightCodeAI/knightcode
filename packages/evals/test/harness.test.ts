@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import type { Message } from "@knightcode/ai";
 import { getDocsPath, getExamplesPath, getReadmePath } from "@knightcodeai/cli";
 import { describe, expect, it, vi } from "vitest";
 import { buildSystemPrompt } from "../../cli/src/core/system-prompt.ts";
@@ -9,6 +10,7 @@ import {
 	excludeDocumentation,
 	resolveDocumentationVariant,
 	resolveModelSelection,
+	verifySystemPrompt,
 } from "../src/harness.ts";
 
 describe("resolveModelSelection", () => {
@@ -89,6 +91,20 @@ describe("documentation variant", () => {
 		expect(stripped).not.toContain(getReadmePath());
 		expect(stripped).not.toContain(getDocsPath());
 		expect(stripped).not.toContain(getExamplesPath());
+	});
+
+	it("verifies the replayed prompt that was sent before a later reload", () => {
+		const prompt = buildSystemPrompt({
+			cwd: "/workspace",
+			selectedTools: [...DOCUMENTATION_EVAL_TOOLS],
+		});
+		const stripped = excludeDocumentation(prompt);
+		const messages: Message[] = [
+			{ role: "system", content: stripped, replace: true, timestamp: 0 },
+			{ role: "user", content: [{ type: "text", text: "Configure KnightCode" }], timestamp: 1 },
+		];
+
+		expect(verifySystemPrompt(messages, { name: "without_docs", expectedDocumentation: false })).toBe(stripped);
 	});
 
 	it("fails closed when prompt markers are missing", () => {

@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 import { contentText, InMemoryCredentialStore } from "@knightcode/ai";
+import { getCurrentSystemPrompt } from "@knightcode/ai/utils/transcript";
 import {
 	type AgentSession,
 	CONFIG_DIR_NAME,
@@ -19,17 +20,26 @@ import {
 	SettingsManager,
 } from "@knightcodeai/cli";
 import {
+	attachHarnessRunToError,
 	createHarness,
 	type Harness,
 	type HarnessContext,
 	type JsonValue,
+	normalizeHarnessRun,
 	normalizeRecord,
 	type SimpleHarnessResult,
 	type TranscriptEvent,
 	toJsonValue,
+	type UsageSummary,
 } from "vitest-evals/harness";
 import type { DocumentationVariant } from "./plan.ts";
 import { KNIGHTCODE_SESSION_SNAPSHOT_ARTIFACT } from "./report.ts";
+
+type PiRunDiagnostics = {
+	events: TranscriptEvent[];
+	metadata: Record<string, unknown>;
+	usage: UsageSummary;
+};
 
 export type KnightCodeHarnessInput = string | Array<{ type: "prompt"; content: string } | { type: "reload" }>;
 
@@ -222,8 +232,12 @@ async function promptAgent(session: AgentSession, input: string, signal: AbortSi
 	return output ?? "";
 }
 
-function verifySystemPrompt(systemPrompt: string, options: KnightCodeHarnessOptions): void {
-	if (options.expectedDocumentation === undefined) return;
+export function verifySystemPrompt(
+	messages: AgentSession["messages"],
+	options: Pick<KnightCodeHarnessOptions, "name" | "expectedDocumentation">,
+): string {
+	const systemPrompt = getCurrentSystemPrompt(messages);
+	if (options.expectedDocumentation === undefined) return systemPrompt;
 	if (!systemPrompt.includes("\n<rules>\n")) {
 		throw new Error(`KnightCode system prompt lost its rules in the ${options.name} eval variant.`);
 	}
@@ -231,6 +245,7 @@ function verifySystemPrompt(systemPrompt: string, options: KnightCodeHarnessOpti
 	if (hasDocumentation !== options.expectedDocumentation) {
 		throw new Error(`KnightCode system prompt does not match the ${options.name} eval variant.`);
 	}
+	return systemPrompt;
 }
 
 async function runKnightCodeHarness<TOutput extends JsonValue>(
@@ -268,6 +283,7 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 	let sessionManager: SessionManager | undefined;
 	let session: AgentSession | undefined;
 	let result: SimpleHarnessResult<string | TOutput> | undefined;
+	let runDiagnostics: PiRunDiagnostics | undefined;
 	let runError: unknown;
 	const cleanupErrors: unknown[] = [];
 	const restoreEnvironment = applyIsolatedEnvironment(isolatedHome, agentDir);
@@ -320,7 +336,6 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		}
 
 		let response: string | undefined;
-		let systemPrompt: string | undefined;
 		const steps = typeof input === "string" ? [{ type: "prompt" as const, content: input }] : input;
 		let abortPromise: Promise<void> | undefined;
 		const abort = () => {
@@ -334,24 +349,21 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 					continue;
 				}
 				response = await promptAgent(session, step.content, signal);
-				systemPrompt = session.systemPrompt;
 			}
 		} finally {
 			signal?.removeEventListener("abort", abort);
 			if (abortPromise) await abortPromise;
 		}
-		if (response === undefined || systemPrompt === undefined) {
+		if (response === undefined) {
 			throw new Error("KnightCode eval input must include at least one prompt step.");
 		}
-		verifySystemPrompt(systemPrompt, options);
-		const output = "output" in options ? await options.output({ response, session, systemPrompt, agentDir }) : response;
+		const systemPrompt = getCurrentSystemPrompt(session.messages);
 		const stats = session.getSessionStats();
 		const hasPricing = [model.cost, ...(model.cost.tiers ?? [])].some(
 			({ input: inputCost, output: outputCost, cacheRead, cacheWrite }) =>
 				inputCost > 0 || outputCost > 0 || cacheRead > 0 || cacheWrite > 0,
 		);
-		result = {
-			output,
+		runDiagnostics = {
 			events: toTranscriptEvents(session.messages),
 			metadata: { systemPromptSha256: createHash("sha256").update(systemPrompt).digest("hex") },
 			usage: {
@@ -368,6 +380,9 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 				},
 			},
 		};
+		verifySystemPrompt(session.messages, options);
+		const output = "output" in options ? await options.output({ response, session, systemPrompt, agentDir }) : response;
+		result = { output, ...runDiagnostics };
 	} catch (error) {
 		runError = error;
 	} finally {
@@ -396,12 +411,25 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		restoreEnvironment();
 	}
 
-	if (runError !== undefined) {
-		if (cleanupErrors.length === 0) throw runError;
-		throw new AggregateError([runError, ...cleanupErrors], "Agent run failed and cleanup also failed.");
+	let failure = runError;
+	if (runError !== undefined && cleanupErrors.length > 0) {
+		failure = new AggregateError([runError, ...cleanupErrors], "Agent run failed and cleanup also failed.");
+	} else if (cleanupErrors.length === 1) {
+		failure = cleanupErrors[0];
+	} else if (cleanupErrors.length > 1) {
+		failure = new AggregateError(cleanupErrors, "Agent cleanup failed.");
 	}
-	if (cleanupErrors.length === 1) throw cleanupErrors[0];
-	if (cleanupErrors.length > 1) throw new AggregateError(cleanupErrors, "Agent cleanup failed.");
+	if (failure !== undefined) {
+		if (runDiagnostics) {
+			const partialRun = normalizeHarnessRun(input, {
+				...runDiagnostics,
+				errors: [failure],
+				timings: { totalMs: performance.now() - startedAt },
+			});
+			throw attachHarnessRunToError(failure, partialRun);
+		}
+		throw failure;
+	}
 	if (!result) throw new Error("KnightCode eval completed without a result.");
 	return { ...result, timings: { totalMs: performance.now() - startedAt } };
 }
