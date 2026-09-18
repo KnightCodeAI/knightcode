@@ -24,8 +24,8 @@ const TIMEOUT_MS = 5000;
 
 /**
  * Fire-and-forget: callers `void` this and the engine's readiness never waits
- * on it. Rejections are swallowed — an analytics request is not a failure mode
- * the engine has an answer for.
+ * on it. Failures are swallowed — an analytics request is not a failure mode
+ * the engine has an answer for beyond trying again next start.
  */
 export async function reportIdeInstall(ctx: Pick<EngineContext, "settings">): Promise<void> {
 	const version = process.env.KNIGHTCODE_IDE_VERSION;
@@ -41,12 +41,14 @@ export async function reportIdeInstall(ctx: Pick<EngineContext, "settings">): Pr
 	// Once per IDE version, not once per start: the engine restarts, which is
 	// why `KNIGHTCODE_ENGINE_PORT` pinning exists at all.
 	if (ctx.settings.getLastIdeVersion() === version) return;
-	ctx.settings.setLastIdeVersion(version);
 
-	await fetch(`${REPORT_URL}?version=${encodeURIComponent(version)}`, {
+	const delivered = await fetch(`${REPORT_URL}?version=${encodeURIComponent(version)}`, {
 		headers: { "User-Agent": getProductUserAgent("knightcode-ide", version) },
 		signal: AbortSignal.timeout(TIMEOUT_MS),
 	})
-		.then(() => undefined)
-		.catch(() => undefined);
+		.then((res) => res.ok)
+		.catch(() => false);
+	// Marked only once the route took it, so an offline first start or a
+	// timeout retries on the next start instead of losing the install.
+	if (delivered) ctx.settings.setLastIdeVersion(version);
 }

@@ -87,6 +87,24 @@ describe("reportIdeInstall", () => {
 		expect(calls).toHaveLength(2);
 	});
 
+	test("retries a version whose report did not arrive", async () => {
+		process.env.KNIGHTCODE_IDE_VERSION = "1.0.0 (stable)";
+		const context = ctx();
+		const fetchMock = vi.mocked(fetch);
+
+		fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+		await reportIdeInstall(context);
+		expect(context.settings.getLastIdeVersion()).toBeUndefined();
+
+		fetchMock.mockResolvedValueOnce(new Response(null, { status: 503 }));
+		await reportIdeInstall(context);
+		expect(context.settings.getLastIdeVersion()).toBeUndefined();
+
+		await reportIdeInstall(context);
+		expect(calls).toHaveLength(1);
+		expect(context.settings.getLastIdeVersion()).toBe("1.0.0 (stable)");
+	});
+
 	test("leaves the CLI's changelog marker alone", async () => {
 		process.env.KNIGHTCODE_IDE_VERSION = "1.0.0 (stable)";
 		const context = ctx({ lastChangelogVersion: "0.4.2" });

@@ -537,7 +537,9 @@ is telling the engine what version it is.
 - [x] Fire once per IDE version, not once per start. The engine restarts —
       `KNIGHTCODE_ENGINE_PORT` pinning exists because it does — so store
       the last reported version under a new `lastIdeVersion` key in
-      `SettingsManager` and compare. Do not reuse `lastChangelogVersion`;
+      `SettingsManager` and compare. Store it only once the route has
+      answered 2xx, so a start with no network retries next time instead of
+      losing the install. Do not reuse `lastChangelogVersion`;
       that drives the CLI's changelog display and must not be moved by the
       IDE.
 - [x] Call it from `engine-entry.ts` after the port line is written, as
