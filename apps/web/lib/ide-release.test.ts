@@ -95,34 +95,43 @@ describe("guessPlatform", () => {
   }
 
   it("offers Windows the x64 build whatever the chip", () => {
-    expect(guessPlatform({ userAgent: UA.windows })).toBe("windows-x86_64")
-    expect(guessPlatform({ userAgent: UA.windows, architecture: "arm" })).toBe(
-      "windows-x86_64"
-    )
+    expect(guessPlatform({ userAgent: UA.windows })).toEqual(["windows-x86_64"])
+    expect(
+      guessPlatform({ userAgent: UA.windows, architecture: "arm" })
+    ).toEqual(["windows-x86_64"])
   })
 
-  it("assumes Apple silicon for a Mac until the browser names the chip", () => {
-    expect(guessPlatform({ userAgent: UA.safariMac })).toBe("macos-aarch64")
+  it("offers both Mac builds until the browser names the chip", () => {
+    // An Intel Mac and an Apple silicon Mac send this same user agent.
+    expect(guessPlatform({ userAgent: UA.safariMac })).toEqual([
+      "macos-aarch64",
+      "macos-x86_64",
+    ])
     expect(
       guessPlatform({ userAgent: UA.safariMac, architecture: "x86" })
-    ).toBe("macos-x86_64")
+    ).toEqual(["macos-x86_64"])
+    expect(
+      guessPlatform({ userAgent: UA.safariMac, architecture: "arm" })
+    ).toEqual(["macos-aarch64"])
   })
 
   it("prefers the Client Hint over Chrome's frozen Linux x86_64", () => {
-    expect(guessPlatform({ userAgent: UA.chromeLinux })).toBe("linux-x86_64")
+    expect(guessPlatform({ userAgent: UA.chromeLinux })).toEqual([
+      "linux-x86_64",
+    ])
     expect(
       guessPlatform({ userAgent: UA.chromeLinux, architecture: "arm" })
-    ).toBe("linux-aarch64")
-    expect(guessPlatform({ userAgent: UA.firefoxLinuxArm })).toBe(
-      "linux-aarch64"
-    )
+    ).toEqual(["linux-aarch64"])
+    expect(guessPlatform({ userAgent: UA.firefoxLinuxArm })).toEqual([
+      "linux-aarch64",
+    ])
   })
 
   it("offers nothing to a phone or tablet", () => {
-    expect(guessPlatform({ userAgent: UA.iphone })).toBeNull()
-    expect(guessPlatform({ userAgent: UA.android })).toBeNull()
+    expect(guessPlatform({ userAgent: UA.iphone })).toEqual([])
+    expect(guessPlatform({ userAgent: UA.android })).toEqual([])
     // iPadOS Safari reports itself as a Mac.
-    expect(guessPlatform({ userAgent: UA.safariMac, mobile: true })).toBeNull()
-    expect(guessPlatform({ userAgent: "" })).toBeNull()
+    expect(guessPlatform({ userAgent: UA.safariMac, mobile: true })).toEqual([])
+    expect(guessPlatform({ userAgent: "" })).toEqual([])
   })
 })

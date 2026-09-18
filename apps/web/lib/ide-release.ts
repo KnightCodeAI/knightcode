@@ -71,10 +71,13 @@ export const PLATFORMS = [
 
 export type Platform = (typeof PLATFORMS)[number]
 
-// The build to put first for a visitor, from what their browser says about
-// itself, or null for a phone or tablet. `architecture` is the Client Hint
-// ("arm" or "x86"), which only Chromium sends. Without it the chip is a guess:
-// Safari and Firefox call every Mac Intel, and Chrome calls every Linux x86_64.
+// The builds to put first for a visitor, from what their browser says about
+// itself; none for a phone or tablet. `architecture` is the Client Hint
+// ("arm" or "x86"), which only Chromium sends, and only to the browser, not
+// with the first request. Without it a Mac's chip is unknowable: every Mac
+// browser says "Intel Mac OS X", Apple silicon included, so both Mac builds
+// come first rather than one that half of them cannot run. Chrome calls every
+// Linux x86_64, which is the likelier of the two.
 export function guessPlatform({
   userAgent,
   architecture,
@@ -83,9 +86,9 @@ export function guessPlatform({
   userAgent: string
   architecture?: string
   mobile?: boolean
-}): Platform["key"] | null {
+}): Platform["key"][] {
   const ua = userAgent.toLowerCase()
-  if (mobile || /android|iphone|ipad|ipod|mobile/.test(ua)) return null
+  if (mobile || /android|iphone|ipad|ipod|mobile/.test(ua)) return []
   const hinted =
     architecture === "arm"
       ? "aarch64"
@@ -93,13 +96,14 @@ export function guessPlatform({
         ? "x86_64"
         : null
   // Only an x64 build exists; Windows on ARM runs it under emulation.
-  if (ua.includes("windows")) return "windows-x86_64"
-  // Every Mac sold since 2023 is Apple silicon.
+  if (ua.includes("windows")) return ["windows-x86_64"]
   if (ua.includes("macintosh") || ua.includes("mac os x"))
-    return `macos-${hinted ?? "aarch64"}`
+    return hinted ? [`macos-${hinted}`] : ["macos-aarch64", "macos-x86_64"]
   if (ua.includes("linux") || ua.includes("x11"))
-    return `linux-${hinted ?? (/aarch64|arm64/.test(ua) ? "aarch64" : "x86_64")}`
-  return null
+    return [
+      `linux-${hinted ?? (/aarch64|arm64/.test(ua) ? "aarch64" : "x86_64")}`,
+    ]
+  return []
 }
 
 // Every platform's installer in one published release, with the ones that

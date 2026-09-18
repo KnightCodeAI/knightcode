@@ -26,11 +26,11 @@ type HintedNavigator = Navigator & {
 const press =
   "transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97]"
 
-// The server already guessed from the User-Agent header, so the right build
-// is in the first paint. The browser can only add the CPU, and only Chromium
-// tells it, so this swaps the build at most once, for an Intel Mac or an ARM
-// Linux machine.
-function usePlatformGuess(initial: PlatformKey | null) {
+// The server already guessed from the User-Agent header, so the right builds
+// are in the first paint. The browser can only add the CPU, and only Chromium
+// tells it, so this narrows the guess at most once: a Mac to its one build, or
+// Linux to ARM.
+function usePlatformGuess(initial: PlatformKey[]) {
   const [guess, setGuess] = React.useState(initial)
   React.useEffect(() => {
     const nav = navigator as HintedNavigator
@@ -60,50 +60,69 @@ export function IdeDownloads({
   initialGuess,
 }: {
   downloads: Download[]
-  initialGuess: PlatformKey | null
+  initialGuess: PlatformKey[]
 }) {
   const guess = usePlatformGuess(initialGuess)
-  const featured = downloads.find((d) => d.platform.key === guess)
-  const rest = downloads.filter((d) => d !== featured)
+  const featured = downloads.filter((d) => guess.includes(d.platform.key))
+  const rest = downloads.filter((d) => !featured.includes(d))
+  // Only a Mac whose chip the browser would not name gets two.
+  const choosing = featured.length > 1
 
   return (
     <div className="flex flex-col gap-12">
-      {featured ? (
+      {featured.length > 0 ? (
         <div
           // Remount on a swap so the corrected build fades in rather than
           // its label changing under the reader.
-          key={featured.platform.key}
+          key={guess.join()}
           className={cn(
-            "flex flex-col items-center gap-3 text-center",
-            guess !== initialGuess &&
+            "flex flex-col items-center gap-4 text-center",
+            guess.join() !== initialGuess.join() &&
               "animate-in duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] fade-in-0"
           )}
         >
-          <Button asChild size="lg" className={cn("h-11 px-6", press)}>
-            <a href={featured.files.url}>
-              <HugeiconsIcon
-                icon={Download01Icon}
-                className="size-4"
-                strokeWidth={2}
-              />
-              Download for {featured.platform.os}
-            </a>
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            v{featured.files.version} for {featured.platform.arch} ·{" "}
-            <a
-              href={featured.files.signatureUrl}
-              className="underline decoration-muted-foreground/40 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground"
-            >
-              Signature
-            </a>
-          </p>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-4">
+            {featured.map(({ platform, files }) => (
+              <div
+                key={platform.key}
+                className="flex flex-col items-center gap-3"
+              >
+                <Button asChild size="lg" className={cn("h-11 px-6", press)}>
+                  <a href={files.url}>
+                    <HugeiconsIcon
+                      icon={Download01Icon}
+                      className="size-4"
+                      strokeWidth={2}
+                    />
+                    Download for {choosing ? platform.arch : platform.os}
+                  </a>
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  v{files.version} for{" "}
+                  {choosing ? `${platform.os} ${platform.arch}` : platform.arch}{" "}
+                  ·{" "}
+                  <a
+                    href={files.signatureUrl}
+                    className="underline decoration-muted-foreground/40 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground"
+                  >
+                    Signature
+                  </a>
+                </p>
+              </div>
+            ))}
+          </div>
+          {choosing ? (
+            <p className="max-w-md text-sm text-muted-foreground">
+              Not sure which? Apple menu → About This Mac lists a Chip for Apple
+              silicon, or a Processor for Intel.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
       <div>
         <h2 className="text-sm font-medium text-muted-foreground">
-          {featured ? "Other platforms" : "All platforms"}
+          {featured.length > 0 ? "Other platforms" : "All platforms"}
         </h2>
         <ul className="mt-3 divide-y divide-border/50 border-y border-border/50">
           {rest.map(({ platform, files }) => (
