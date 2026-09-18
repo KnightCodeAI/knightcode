@@ -658,7 +658,47 @@ Do not add:
 - deletion of `collab`, `cloud_llm_client`, `zeta_prompt`, or Zed's provider
   modules;
 - new hard-coded model lists in Rust;
-- telemetry from the IDE that the CLI does not already send.
+- telemetry from the IDE beyond the closed list in §12.1. Zed's own
+  `telemetry::event!` pipeline stays dead and is never repointed at our sink:
+  it is fed by hundreds of upstream call sites, it is keyed by an installation
+  id, and every upstream merge would add to it unreviewed.
+
+### 12.1 The telemetry allowlist
+
+Amended 2026-09-17, on the owner's decision. The original rule was "nothing the
+CLI does not already send", which counted installs and left us unable to tell a
+successful launch from a launch where most people never got past sign-in.
+
+The IDE may send these events and no others. Adding one is an amendment to this
+section, not an implementation detail.
+
+| Event | When | Properties |
+| --- | --- | --- |
+| `ide_install` | first start of a version | version, channel, os, arch |
+| `ide_first_run` | first run ends | outcome (`completed`/`abandoned`), last step reached |
+| `ide_engine_failed` | engine never reached ready | reason category only |
+| `ide_first_turn` | first successful agent turn of a version | provider id |
+| `ide_seam_first_use` | first use of a seam, per version | seam name |
+
+Binding on all of them:
+
+- **No content, ever.** No file path, project or worktree name, buffer text,
+  prompt, completion, file name, extension id, keystroke, or error message. A
+  failure reports a fixed category from a closed enum, never a formatted
+  string, because a formatted string carries a home directory and a username.
+- **No identity, ever.** No account, email, token, model id, machine id, or
+  installation id. The sink derives a `distinct_id` by hashing the connecting
+  address with the user agent, server-side, and stores neither input.
+- **One switch.** `enableInstallTelemetry` in the shared settings governs every
+  event, for both front doors. `KNIGHTCODE_TELEMETRY` overrides it and
+  `KNIGHTCODE_OFFLINE` suppresses it, exactly as for the CLI.
+- **Nothing before consent.** First run asks on its first step and the answer is
+  recorded before any event may be sent. Abandoning first run on that first
+  step is therefore unmeasurable, and that is the correct trade.
+- **No write key in a client.** Every event goes to knightcode.dev, which holds
+  the sink's key. The IDE and the engine never hold one.
+- **One file.** The whole list lives in a single module in each half, so a
+  reviewer can read everything the product reports in one screen.
 
 ---
 
@@ -678,7 +718,8 @@ Before shipping a build, confirm no credential reaches the Rust side:
 
 ```bash
 rg -n "api_key|API_KEY|Bearer |auth\.json|credential" \
-  crates/knightcode_agent crates/knightcode_models crates/knightcode_engine
+  crates/knightcode_agent crates/knightcode_models crates/knightcode_engine \
+  crates/knightcode_onboarding
 ```
 
 Expected matches are the launch token only. Any provider key, refresh token, or
@@ -690,7 +731,36 @@ Confirm no provider dialog is reachable:
 rg -n "register_provider" crates/language_models/src/language_models.rs
 ```
 
-Expected: one call, `KnightCodeLanguageModelProvider`.
+Expected: one call, `KnightCodeLanguageModelProvider`. This was three until
+WP06 Task 2: `register_compatible_providers` registered one provider per
+`language_models.openai_compatible` and `anthropic_compatible` entry, each
+holding an API key in the OS keychain, and the AI settings page drew an **Add
+Provider** button that created them. Both are gone, and
+`language_models::tests::test_only_knightcode_is_registered_whatever_the_settings_say`
+holds the line.
+
+Confirm nothing user-visible says Zed by accident:
+
+```bash
+bash script/check-branding.sh
+```
+
+Expected: every hit allowlisted in `script/branding-allowlist.txt`, each with a
+reason someone else can check. The job runs on every pull request in the fork,
+so an upstream merge that adds a new user-visible Zed string fails rather than
+ships.
+
+Confirm no shipped install reports usage anywhere:
+
+```bash
+rg -n "build_zed_api_url|build_zed_cloud_url" crates/ --include=*.rs
+```
+
+Expected: the extension registry (`crates/extension_host`, kept on purpose) and
+the cloud API client (`crates/cloud_api_client`, reached only through a
+collaboration sign-in that no KnightCode surface offers). The usage pipeline no
+longer appears: `crates/client/src/telemetry.rs` posts to
+`KNIGHTCODE_TELEMETRY_ENDPOINT`, which no bundle sets.
 
 ---
 
