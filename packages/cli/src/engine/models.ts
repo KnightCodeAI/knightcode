@@ -5,11 +5,14 @@
  * IDE hardcodes no model list, so every field the picker renders is here.
  */
 
-import type { IncomingMessage } from "node:http";
 import type { ModelCost } from "@knightcode/ai";
 import { isInstallTelemetryEnabled } from "../core/telemetry.ts";
 import type { EngineContext } from "./context.ts";
+import { readJsonBody } from "./http.ts";
 import { type EngineRoute, sendJson } from "./server.ts";
+
+/** Both bodies here are a few bytes of JSON. */
+const MAX_BODY_BYTES = 64 * 1024;
 
 export interface EngineModel {
 	/**
@@ -80,7 +83,7 @@ export function setDefaultModelRoute(ctx: EngineContext): EngineRoute {
 		method: "PUT",
 		path: "/v1/models/default",
 		handle: async (req, res) => {
-			const body = await readJsonBody(req);
+			const body = await readJsonBody(req, MAX_BODY_BYTES);
 			const ref = typeof body.ref === "string" ? body.ref : undefined;
 			if (!ref) {
 				sendJson(res, 400, { error: "ref is required" });
@@ -142,7 +145,7 @@ export function telemetrySettingsRoutes(ctx: EngineContext): readonly EngineRout
 			method: "PUT",
 			path: "/v1/settings/telemetry",
 			handle: async (req, res) => {
-				const body = await readJsonBody(req);
+				const body = await readJsonBody(req, MAX_BODY_BYTES);
 				if (typeof body.enabled !== "boolean") {
 					sendJson(res, 400, { error: "enabled must be a boolean" });
 					return;
@@ -161,18 +164,4 @@ export function telemetrySettingsRoutes(ctx: EngineContext): readonly EngineRout
 			},
 		},
 	];
-}
-
-async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
-	const chunks: Buffer[] = [];
-	let size = 0;
-	for await (const chunk of req) {
-		const buffer = chunk as Buffer;
-		size += buffer.length;
-		if (size > 64 * 1024) throw new Error("body too large");
-		chunks.push(buffer);
-	}
-	if (chunks.length === 0) return {};
-	const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
-	return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
 }

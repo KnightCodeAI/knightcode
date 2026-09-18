@@ -68,6 +68,12 @@ describe("login routes", () => {
 		expect((await beginLogin(base, "not-a-provider", "oauth")).status).toBe(404);
 	});
 
+	test("rejects a body that is not JSON with a 400, not a 500", async () => {
+		const { base } = await start();
+		const res = await fetch(`${base}/v1/accounts/login`, { method: "POST", headers: auth, body: "{not json" });
+		expect(res.status).toBe(400);
+	});
+
 	test("rejects an unrecognised login type", async () => {
 		const { base } = await start();
 		expect((await beginLogin(base, "anthropic", "not-a-type")).status).toBe(400);

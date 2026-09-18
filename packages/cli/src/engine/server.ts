@@ -12,6 +12,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { BodyError } from "./http.ts";
 
 export interface EngineRoute {
 	method: string;
@@ -114,6 +115,9 @@ export function startEngineServer(options: StartEngineServerOptions): Promise<En
 	const server: Server = createServer((req, res) => {
 		dispatch(req, res).catch((error: unknown) => {
 			if (res.headersSent) res.end();
+			// A malformed or oversized body is the client's fault on every route.
+			else if (error instanceof BodyError)
+				sendJson(res, error.status, { error: "bad_request", message: error.message });
 			else sendJson(res, 500, { error: "internal", message: error instanceof Error ? error.message : String(error) });
 		});
 	});

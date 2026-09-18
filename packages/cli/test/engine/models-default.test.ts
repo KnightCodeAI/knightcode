@@ -95,6 +95,14 @@ describe("PUT /v1/models/default", () => {
 		expect((await put(base, {})).status).toBe(400);
 	});
 
+	test("a body that is not JSON is a 400, and an oversized one a 413", async () => {
+		const { base } = await withOneModel();
+		const raw = (body: string) =>
+			fetch(`${base}/v1/models/default`, { method: "PUT", headers: auth, body }).then((res) => res.status);
+		expect(await raw("{not json")).toBe(400);
+		expect(await raw(JSON.stringify({ ref: "x".repeat(64 * 1024) }))).toBe(413);
+	});
+
 	test("splits on the first slash only, since model ids contain slashes", async () => {
 		const { base, ctx } = await start({});
 		// A router-style id: the model id itself contains a slash.
@@ -217,6 +225,13 @@ describe("/v1/settings/telemetry", () => {
 		delete process.env.KNIGHTCODE_TELEMETRY;
 		const { base } = await start();
 		expect((await write(base, "yes")).status).toBe(400);
+	});
+
+	test("a body that is not JSON is a 400, not a 500", async () => {
+		delete process.env.KNIGHTCODE_TELEMETRY;
+		const { base } = await start();
+		const res = await fetch(`${base}/v1/settings/telemetry`, { method: "PUT", headers: auth, body: "{not json" });
+		expect(res.status).toBe(400);
 	});
 
 	test("rejects a missing bearer token before routing", async () => {
