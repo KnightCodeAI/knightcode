@@ -7,9 +7,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { IncomingMessage } from "node:http";
 import type { AuthEvent, AuthPrompt, AuthType } from "@knightcode/ai";
 import type { EngineContext } from "./context.ts";
+import { readJsonBody } from "./http.ts";
 import { type EngineRoute, sendJson } from "./server.ts";
 
 export interface AccountSummary {
@@ -247,19 +247,8 @@ export function createLoginRegistry(ctx: EngineContext, options: LoginRegistryOp
 	};
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
-	const chunks: Buffer[] = [];
-	let size = 0;
-	for await (const chunk of req) {
-		const buffer = chunk as Buffer;
-		size += buffer.length;
-		if (size > 64 * 1024) throw new Error("body too large");
-		chunks.push(buffer);
-	}
-	if (chunks.length === 0) return {};
-	const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
-	return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-}
+/** A login body is a provider id, or one pasted key or code. */
+const MAX_BODY_BYTES = 64 * 1024;
 
 export function accountsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 	const registry = createLoginRegistry(ctx);
@@ -286,7 +275,7 @@ export function accountsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 			method: "POST",
 			path: "/v1/accounts/login",
 			handle: async (req, res) => {
-				const body = await readJsonBody(req);
+				const body = await readJsonBody(req, MAX_BODY_BYTES);
 				const providerId = typeof body.providerId === "string" ? body.providerId : "";
 				const provider = ctx.models.getProvider(providerId);
 				if (!provider) {
@@ -344,7 +333,7 @@ export function accountsRoutes(ctx: EngineContext): readonly EngineRoute[] {
 					sendJson(res, 404, { error: "not_found" });
 					return;
 				}
-				const body = await readJsonBody(req);
+				const body = await readJsonBody(req, MAX_BODY_BYTES);
 				const value = typeof body.value === "string" ? body.value : "";
 				if (!registry.submit(rest.slice(0, -"/submit".length), value)) {
 					sendJson(res, 409, { error: "no_pending_prompt" });

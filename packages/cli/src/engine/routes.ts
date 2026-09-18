@@ -2,7 +2,7 @@ import { accountsRoutes } from "./accounts.ts";
 import { completionsRoutes } from "./completions.ts";
 import type { EngineContext } from "./context.ts";
 import { eventsRoute } from "./events.ts";
-import { modelsRoute } from "./models.ts";
+import { modelsRoute, setDefaultModelRoute, telemetrySettingsRoutes } from "./models.ts";
 import type { EngineRoute } from "./server.ts";
 import { sessionRoutes } from "./session-routes.ts";
 import type { SessionRegistry } from "./sessions.ts";
@@ -16,6 +16,8 @@ export function engineRoutes(ctx: EngineContext, sessions: SessionRegistry): rea
 	return [
 		eventsRoute(ctx.events),
 		modelsRoute(ctx),
+		setDefaultModelRoute(ctx),
+		...telemetrySettingsRoutes(ctx),
 		...accountsRoutes(ctx),
 		...completionsRoutes(ctx),
 		...sessionRoutes(ctx, sessions),

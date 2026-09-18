@@ -1,0 +1,102 @@
+---
+title: Where things live
+description: The engine process, the two settings that move it, where credentials are stored, and what to do when it will not start.
+icon: Cpu
+---
+
+The IDE is two processes. The editor owns every pixel and keystroke. The
+**engine** — `knightcode-engine`, the same engine the CLI uses — owns every
+provider request, every credential, the agent loop, tools, skills and session
+persistence.
+
+The editor holds no API key, runs no OAuth exchange, and stores no credential.
+That is not a slogan: a check in the fork's test suite greps the KnightCode
+crates for anything credential-shaped and fails on a match.
+
+## The three seams
+
+| Surface | How it reaches the engine |
+| --- | --- |
+| Agent panel | ACP over stdio |
+| Cmd+K in a buffer, Cmd+K in the terminal, commit messages, thread titles | HTTP chat completions on loopback |
+| Tab / next-edit prediction | HTTP fill-in-the-middle on loopback |
+
+All three are served by the one login and the one model choice.
+
+## Where the engine binary is
+
+Beside the editor, in `engine/`:
+
+```text
+KnightCode/
+  engine/knightcode-engine[.exe]
+```
+
+The IDE starts it at launch, restarts it with backoff if it exits, and stops it
+when you quit. It listens on loopback on an ephemeral port, and every route
+requires a launch token the IDE generates per run — any process on your machine
+can reach a loopback port, and the token is what stops one spending your
+subscription.
+
+Two settings move it, both under `knightcode` in your settings file:
+
+```json
+{
+  "knightcode": {
+    "engine_path": "/absolute/path/to/knightcode-engine",
+    "engine_url": "http://127.0.0.1:9000"
+  }
+}
+```
+
+`engine_path` points at a different binary — useful when you are building the
+engine from source. `engine_url` attaches to an engine you started yourself
+instead of spawning one; the IDE then does not own its lifetime.
+
+## Where credentials are
+
+In `auth.json`, in your KnightCode configuration directory, written and read by
+the engine. The CLI uses the same file and the same cross-process lock. That is
+deliberate: Anthropic rotates refresh tokens on every refresh, so two copies of
+one credential means whichever process refreshes second is holding a dead
+token.
+
+Nothing in the editor reads that file.
+
+## Where the model choice is
+
+In the same settings file the CLI writes, as `defaultProvider` and
+`defaultModel`. The IDE records your choice through the engine and then reads
+it back; it never invents one. Change it in **Settings → AI**, or in the CLI,
+and both front doors follow.
+
+Tab prediction has its own model, because a fast fill-in-the-middle model is
+rarely the one you want for a conversation:
+
+```json
+{
+  "knightcode": {
+    "edit_prediction_model": "provider/model-id"
+  }
+}
+```
+
+Leave it unset and Tab uses the model you chose.
+
+## When it will not start
+
+The IDE says so rather than failing silently. The status bar and the agent
+panel both carry the reason, and it is one of:
+
+- **The binary was not found.** Either the install is incomplete or
+  `knightcode.engine_path` points somewhere that does not exist. The message
+  names the path it tried.
+- **It exited before it was ready.** The message carries its exit status and
+  the last lines it wrote to stderr.
+- **It did not become ready in time.** Something is holding it up; the stderr
+  tail is in the message.
+- **It rejected the launch token.** The binary is not the one this IDE expects
+  — usually a hand-set `engine_path` pointing at an older build.
+
+Set `KNIGHTCODE_ENGINE_PATH` in the environment to override the setting for one
+run without editing the settings file.

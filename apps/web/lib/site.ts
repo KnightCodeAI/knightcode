@@ -30,6 +30,7 @@ export const SITE = {
 
 export const NAV_LINKS = [
   { href: "/#features", label: "Features" },
+  { href: "/ide", label: "IDE" },
   { href: "/about", label: "About" },
   { href: "/changelog", label: "Changelog" },
   { href: "/#faq", label: "FAQ" },
@@ -38,6 +39,7 @@ export const NAV_LINKS = [
 
 export const PRODUCT_LINKS = [
   { label: "Install", href: "/#download" },
+  { label: "Desktop IDE", href: "/ide" },
   { label: "Features", href: "/#features" },
   { label: "Changelog", href: "/changelog" },
   { label: "About", href: "/about" },

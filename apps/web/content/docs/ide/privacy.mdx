@@ -1,0 +1,86 @@
+---
+title: What the IDE sends
+description: The one anonymous ping, the four launch signals, and everything that is not sent.
+icon: ShieldUser
+---
+
+## The short version
+
+One anonymous ping when KnightCode is installed or updated, plus four events
+that say whether setup worked. Nothing else. You are asked about it on first
+run and can turn it off there or in **Settings → AI** at any time.
+
+There is no KnightCode account, so there is nothing for us to attach anything
+to.
+
+## The install ping
+
+Sent once per version, not once per launch. It carries:
+
+| Property | Example |
+| --- | --- |
+| `product` | `knightcode-ide` |
+| `version` | `1.0.0+stable` |
+| `os`, `arch` | `windows`, `x86_64` |
+| `runtime` | `bun/1.3.3` |
+| `country`, `region`, `city` | derived from the connecting address |
+
+The identifier on the event is a truncated SHA-256 of the connecting address
+and the user agent, computed when the request arrives and thrown away. The
+address itself is never stored. Repeat pings from one machine collapse into one
+person without a machine identifier ever existing.
+
+The write key for the analytics project is not in the binary — it is held by
+the route on `knightcode.dev` that the ping goes to. A key compiled into a
+public GPL repository would be a published key.
+
+## The four launch signals
+
+Each carries one fixed word from a closed list, and nothing else:
+
+| Event | When | What it says |
+| --- | --- | --- |
+| `ide_first_run` | first run ends, either way | completed or abandoned, and at which step |
+| `ide_engine_failed` | the engine never started | which category of failure |
+| `ide_first_turn` | first successful agent turn of a version | which provider served it |
+| `ide_seam_first_use` | first use of each AI surface, per version | which surface |
+
+They exist to answer one question on launch day: did people who installed it
+get past setup. `ide_seam_first_use` fires once per surface per version, not
+per use — that is the difference between a launch signal and usage tracking.
+
+A machine that has never answered the first-run question sends none of them.
+
+## What is never sent
+
+Your source code. Your prompts. Model responses. File names, paths, project
+names. Your username. Any error message. Any model id. Any identifier that
+persists across versions.
+
+The failure categories are mapped from a closed enum rather than formatted from
+an error, precisely because every error message in that code path carries a
+path, and on Windows a path carries your username. There is a test that
+constructs every failure with a username in it and asserts the username does
+not reach the payload.
+
+## The upstream editor's own reporting
+
+The editor KnightCode is built on has its own usage pipeline, feeding hundreds
+of event call sites. **It is not connected to anything.** No KnightCode build
+compiles in an endpoint for it, so those events are written to a local log file
+and dropped. `telemetry.metrics` and `telemetry.diagnostics` both default to
+`false`, and turning either on changes nothing, because there is nowhere for
+them to go.
+
+Crash reports are the same: no minidump endpoint is compiled in, so none is
+uploaded.
+
+## Extensions
+
+Opening the Extensions page, searching it, or installing an extension sends a
+request to `api.zed.dev`, run by Zed Industries, Inc. That is the only
+third-party service an install contacts, it happens only after you open that
+page, and the page says so above the search box.
+
+Nothing is fetched from that registry on startup: a fresh install has no
+extensions, so there is nothing to check for updates to.

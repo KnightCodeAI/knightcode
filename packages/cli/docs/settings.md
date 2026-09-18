@@ -27,8 +27,8 @@ Use `/trust` in interactive mode to save a project trust decision for future ses
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `defaultProvider` | string | - | Startup provider (e.g., `"anthropic"`, `"openai"`; saved with Ctrl+S in `/model`, or edited manually) |
-| `defaultModel` | string | - | Startup model ID (saved with Ctrl+S in `/model`, or edited manually) |
+| `defaultProvider` | string | - | Startup provider (e.g., `"anthropic"`, `"openai"`; saved with Ctrl+S in `/model`, by the IDE's model picker, or edited manually) |
+| `defaultModel` | string | - | Startup model ID (saved with Ctrl+S in `/model`, by the IDE's model picker, or edited manually) |
 | `defaultThinkingLevel` | string | - | Startup thinking level (saved with Ctrl+S in `/thinking`, or edited manually): `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` |
 | `modelThinkingLevels` | object | - | Per-model startup thinking levels keyed by `"provider/modelId"`; configure from `/settings` → Default thinking level per model or edit manually |
 | `hideThinkingBlock` | boolean | `false` | Hide thinking blocks in output |
@@ -82,6 +82,8 @@ For VS Code, include `--wait` so knightcode resumes after the editor exits:
 ### Telemetry and update checks
 
 `enableInstallTelemetry` controls the anonymous install/update ping to `https://knightcode.dev/api/report-install` and KnightCode attribution headers for OpenRouter, NVIDIA NIM, and Cloudflare provider requests. Opting out disables both. It does not disable update checks; KnightCode can still fetch `https://knightcode.dev/api/latest-version` to look for the latest version.
+
+The KnightCode IDE shares this setting rather than keeping its own. Its first run and its settings write `enableInstallTelemetry` here, except while `KNIGHTCODE_TELEMETRY` is set, because the variable outranks the setting. The engine the IDE starts sends the same ping once per IDE version, with a `knightcode-ide` user agent, and records the version it was delivered for as `lastIdeVersion`. A ping that fails is retried on the next start.
 
 Set `KNIGHTCODE_SKIP_VERSION_CHECK=1` to disable the KnightCode version update check. Use `--offline` or `KNIGHTCODE_OFFLINE=1` to disable all startup network operations described here, including update checks, package update checks, and install/update telemetry.
 

@@ -14,6 +14,7 @@ import "./bun/runtime-setup.ts";
 import { runAcp } from "./engine/acp/run.ts";
 import { createEngineContext } from "./engine/context.ts";
 import { bypassProxyForLoopback } from "./engine/proxy.ts";
+import { reportIdeInstall } from "./engine/install-report.ts";
 import { engineRoutes } from "./engine/routes.ts";
 import { startEngineServer } from "./engine/server.ts";
 import { createSessionRegistry } from "./engine/sessions.ts";
@@ -57,6 +58,11 @@ const sessions = createSessionRegistry(ctx);
 const server = await startEngineServer({ token, port, routes: engineRoutes(ctx, sessions) });
 
 process.stdout.write(`${JSON.stringify({ type: "listening", port: server.port })}\n`);
+
+// After the port line, never before it: the IDE is waiting on that line and
+// an analytics request must not sit in front of it. A no-op unless the IDE
+// set KNIGHTCODE_IDE_VERSION, so a CLI user reports nothing new.
+void reportIdeInstall(ctx);
 
 let closing = false;
 const shutdown = () => {

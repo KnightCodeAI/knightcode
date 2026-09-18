@@ -1,0 +1,47 @@
+---
+title: Updates
+description: How the IDE updates itself, what it verifies, and how to turn it off.
+icon: Refresh
+---
+
+The IDE checks `knightcode.dev` for a newer release once an hour and on every
+launch, downloads it in the background, and installs it when you next restart.
+There is no separate updater to run.
+
+## What it verifies
+
+Every release publishes a detached signature beside each installer, made with a
+key that exists in exactly two places: a GitHub Actions secret, and the owner's
+password vault. The IDE holds the matching public key, compiled in, and
+**refuses to install anything whose signature does not verify against it**.
+
+That is the check that matters, and it is the reason an unsigned installer is
+tolerable: the download you took by hand is unverified, but every update after
+it is not.
+
+## Turning it off
+
+```json
+{
+  "auto_update": false
+}
+```
+
+With it off, nothing is downloaded and nothing is checked. The
+[download page](/ide) always serves the newest release.
+
+## Where a downloaded update goes
+
+- **Windows**: a helper replaces the installed files on the next launch, then
+  removes itself.
+- **macOS**: the new `.app` replaces the installed one in place.
+- **Linux**: the extracted tree is rsynced over the installed one, which is
+  usually `~/.local/knightcode.app`.
+
+On every platform the engine in `engine/` is replaced along with the editor, so
+the two never disagree about the protocol between them.
+
+## Release notes
+
+Each release's notes are on its GitHub release page, which the update
+notification links to.

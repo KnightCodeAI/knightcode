@@ -105,6 +105,7 @@ export type PackageSource =
 
 export interface Settings {
 	lastChangelogVersion?: string;
+	lastIdeVersion?: string; // last IDE version the install ping was sent for; separate from lastChangelogVersion, which drives the CLI's changelog
 	defaultProvider?: string;
 	defaultModel?: string;
 	defaultThinkingLevel?: ThinkingLevel;
@@ -734,6 +735,16 @@ export class SettingsManager {
 	setLastChangelogVersion(version: string): void {
 		this.globalSettings.lastChangelogVersion = version;
 		this.markModified("lastChangelogVersion");
+		this.save();
+	}
+
+	getLastIdeVersion(): string | undefined {
+		return this.settings.lastIdeVersion;
+	}
+
+	setLastIdeVersion(version: string): void {
+		this.globalSettings.lastIdeVersion = version;
+		this.markModified("lastIdeVersion");
 		this.save();
 	}
 
