@@ -1,0 +1,48 @@
+---
+title: Filing a bug
+description: What to include, where the logs are, and which repository to file in.
+icon: Bug
+---
+
+File IDE bugs at
+[KnightCodeAI/knightcode-ide](https://github.com/KnightCodeAI/knightcode-ide/issues).
+
+CLI bugs, and anything about the agent's behaviour, tools or prompts, belong in
+[KnightCodeAI/knightcode](https://github.com/KnightCodeAI/knightcode/issues) —
+that is where the engine lives, and the IDE only drives it.
+
+If you are not sure which, file it in the IDE repository; it is easier to move
+than to guess.
+
+## What to include
+
+- The version, from **Help → About** (the copy button there puts the version
+  and commit on your clipboard).
+- Your operating system and its version.
+- Which surface: the agent panel, Cmd+K in a buffer, Cmd+K in the terminal, a
+  commit message, or Tab.
+- What the status bar or the panel said, if anything did.
+
+## Logs
+
+**Help → View Telemetry** does not open the log. The log is:
+
+- **Windows**: `%LOCALAPPDATA%\KnightCode\logs\KnightCode.log`
+- **macOS**: `~/Library/Logs/KnightCode/KnightCode.log`
+- **Linux**: `~/.local/share/knightcode/logs/KnightCode.log`
+
+The engine's own output is interleaved into it. Please read what you paste: a
+log carries file paths, and a path carries your username.
+
+For more detail on one area, start the IDE with `RUST_LOG` set — for example
+`RUST_LOG=knightcode_engine=trace`.
+
+## Things that are not bugs
+
+- **SmartScreen or Gatekeeper refusing the first launch.** The installers are
+  not code-signed. [Install](/docs/ide) says what to click.
+- **Three of the five AI surfaces doing nothing on a fresh install.** They need
+  a recorded model choice. **Settings → AI → KnightCode**, pick one.
+- **A model you expected missing from the picker.** The picker shows what your
+  signed-in account can actually reach. If it is not there, the engine did not
+  get it from the provider.

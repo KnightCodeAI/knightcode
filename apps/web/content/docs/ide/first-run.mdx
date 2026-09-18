@@ -1,0 +1,76 @@
+---
+title: First run
+description: What the four first-run steps ask, why the model choice is not optional, and what to do when a step will not let you past.
+icon: Rocket
+---
+
+The first time KnightCode starts it opens a four-step screen instead of an
+empty buffer. It takes about a minute and you never touch a terminal.
+
+## 1. Welcome
+
+Pick a theme (light, dark or system) and a keymap (KnightCode, VS Code,
+JetBrains or Sublime Text). Both write to your settings file and both are
+changeable later in Settings.
+
+This step also carries one switch, on by default:
+
+> **Send an anonymous ping when KnightCode is installed or updated**
+>
+> Sends the version, your operating system and architecture, and an approximate
+> location derived from the connecting address. No account, no file, no project
+> name, and no identifier that follows you between versions.
+
+That is the whole of it. Turning it off here turns it off for the CLI too —
+there is one setting, not two — and you can change it later in Settings → AI.
+See [Privacy](/docs/ide/privacy) for what is and is not sent.
+
+## 2. Sign in
+
+The buttons are whatever the engine reports it can sign in to: Claude,
+ChatGPT, Copilot, then anything else, then an API key. There is no table of
+providers inside the editor, so this list follows the engine rather than a
+release.
+
+**This step is skipped entirely if you are already signed in** — including from
+the CLI, on the same machine. Both read the same `auth.json`, so one login
+really is one login.
+
+KnightCode holds no API key of its own. The credential is written by the
+engine, to your KnightCode configuration directory, and nothing in the editor
+ever reads it.
+
+### It will not let me past
+
+Continue stays disabled until an account exists. If the buttons are missing
+entirely, the engine is not running — see
+[When the engine will not start](/docs/ide/engine#when-it-will-not-start).
+
+## 3. Pick a model
+
+Every model your account can reach, grouped by provider. Pick one.
+
+**This step is not skippable when nothing is recorded, and that is deliberate.**
+Three of the five AI surfaces — Cmd+K in a buffer, Cmd+K in the terminal, and
+commit-message generation — have no model to send to until you have chosen one,
+and they fail silently rather than guessing. KnightCode never picks a model on
+your behalf: it is your account and your money.
+
+If a choice is already recorded — because you picked one in the CLI — this step
+is skipped and shows what you chose.
+
+You can change it any time in **Settings → AI**. The agent panel also has its
+own per-session picker, which overrides this choice for that session only.
+
+## 4. Open something
+
+**Open a folder…**, **Clone a repository…**, or **Skip for now**. Whichever you
+choose, first run is done and does not come back.
+
+To see it again: **Help → Welcome to KnightCode**.
+
+## After it
+
+Everything first run set is in Settings. The sign-in and the model picker are
+the same two components, under **Settings → AI → KnightCode**, so nothing you
+saw during setup is hidden afterwards.

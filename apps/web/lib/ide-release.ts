@@ -23,6 +23,96 @@ export function installerName(
   return INSTALLERS[`${os}-${arch}`] ?? null
 }
 
+// The five targets the release workflow builds, in the order the download page
+// lists them. `label` is what a person reading the page recognises; `warning`
+// is the one they will actually hit, because none of these is signed.
+export const PLATFORMS = [
+  {
+    key: "windows-x86_64",
+    os: "Windows",
+    arch: "Intel / AMD 64-bit",
+    file: INSTALLERS["windows-x86_64"],
+    instructions:
+      "Run the installer. Windows SmartScreen will say “Windows protected your PC”, because the installer is not signed with a Microsoft-recognised certificate. Choose More info, then Run anyway.",
+  },
+  {
+    key: "macos-aarch64",
+    os: "macOS",
+    arch: "Apple silicon",
+    file: INSTALLERS["macos-aarch64"],
+    instructions:
+      "Open the .dmg and drag KnightCode to Applications. The first launch is refused: the app is not notarised. Open System Settings → Privacy & Security, find the blocked-app notice, and choose Open Anyway. Or run xattr -dr com.apple.quarantine /Applications/KnightCode.app once.",
+  },
+  {
+    key: "macos-x86_64",
+    os: "macOS",
+    arch: "Intel",
+    file: INSTALLERS["macos-x86_64"],
+    instructions:
+      "Open the .dmg and drag KnightCode to Applications. The first launch is refused: the app is not notarised. Open System Settings → Privacy & Security, find the blocked-app notice, and choose Open Anyway. Or run xattr -dr com.apple.quarantine /Applications/KnightCode.app once.",
+  },
+  {
+    key: "linux-x86_64",
+    os: "Linux",
+    arch: "Intel / AMD 64-bit",
+    file: INSTALLERS["linux-x86_64"],
+    instructions:
+      "Extract the archive and run ./knightcode.app/bin/knightcode-ide, or install it for your user with ./knightcode.app/bin/knightcode-ide --install. No signature check is involved; verify the download against the .sig file if you want one.",
+  },
+  {
+    key: "linux-aarch64",
+    os: "Linux",
+    arch: "ARM 64-bit",
+    file: INSTALLERS["linux-aarch64"],
+    instructions:
+      "Extract the archive and run ./knightcode.app/bin/knightcode-ide, or install it for your user with ./knightcode.app/bin/knightcode-ide --install. No signature check is involved; verify the download against the .sig file if you want one.",
+  },
+] as const
+
+export type Platform = (typeof PLATFORMS)[number]
+
+// The build to put first for a visitor, from what their browser says about
+// itself, or null for a phone or tablet. `architecture` is the Client Hint
+// ("arm" or "x86"), which only Chromium sends. Without it the chip is a guess:
+// Safari and Firefox call every Mac Intel, and Chrome calls every Linux x86_64.
+export function guessPlatform({
+  userAgent,
+  architecture,
+  mobile = false,
+}: {
+  userAgent: string
+  architecture?: string
+  mobile?: boolean
+}): Platform["key"] | null {
+  const ua = userAgent.toLowerCase()
+  if (mobile || /android|iphone|ipad|ipod|mobile/.test(ua)) return null
+  const hinted =
+    architecture === "arm"
+      ? "aarch64"
+      : architecture === "x86"
+        ? "x86_64"
+        : null
+  // Only an x64 build exists; Windows on ARM runs it under emulation.
+  if (ua.includes("windows")) return "windows-x86_64"
+  // Every Mac sold since 2023 is Apple silicon.
+  if (ua.includes("macintosh") || ua.includes("mac os x"))
+    return `macos-${hinted ?? "aarch64"}`
+  if (ua.includes("linux") || ua.includes("x11"))
+    return `linux-${hinted ?? (/aarch64|arm64/.test(ua) ? "aarch64" : "x86_64")}`
+  return null
+}
+
+// Every platform's installer in one published release, with the ones that
+// release does not carry left out rather than linked to a 404.
+export function installersFor(
+  release: GithubRelease
+): { platform: Platform; files: ReleaseFiles }[] {
+  return PLATFORMS.flatMap((platform) => {
+    const files = pickInstaller(release, platform.file)
+    return files ? [{ platform, files }] : []
+  })
+}
+
 export type GithubRelease = {
   tag_name: string
   draft: boolean

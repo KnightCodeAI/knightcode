@@ -1,0 +1,91 @@
+---
+title: Install the IDE
+description: Install the KnightCode desktop IDE on Windows, macOS or Linux, and get past the warnings an unsigned build produces.
+icon: Monitor
+---
+
+The KnightCode IDE is a desktop editor with KnightCode as its only agent, its
+only inference path and its only login. One sign-in serves the agent panel,
+Cmd+K in a buffer, Cmd+K in the terminal, commit-message generation and Tab
+prediction.
+
+It is a separate download from the CLI, and a peer of it rather than a
+replacement: both read the same credentials and the same model choice, so a
+machine signed in to one is signed in to the other.
+
+## Download
+
+Installers for every platform are on the [download page](/ide).
+
+| Platform | File |
+| --- | --- |
+| Windows, Intel/AMD 64-bit | `KnightCode-x86_64.exe` |
+| macOS, Apple silicon | `KnightCode-aarch64.dmg` |
+| macOS, Intel | `KnightCode-x86_64.dmg` |
+| Linux, Intel/AMD 64-bit | `knightcode-linux-x86_64.tar.gz` |
+| Linux, ARM 64-bit | `knightcode-linux-aarch64.tar.gz` |
+
+## The warnings you will see
+
+None of these builds is code-signed. Both Windows and macOS refuse an unsigned
+application on first launch, in language that reads like a malware warning. It
+is not one — it is what "no certificate" looks like — but you should know what
+you are agreeing to, so here is exactly what happens.
+
+### Windows
+
+Running the installer shows **"Windows protected your PC"** from SmartScreen,
+with only a **Don't run** button visible. Choose **More info**, then **Run
+anyway**.
+
+The installer writes to `%LOCALAPPDATA%\KnightCode` by default and puts
+`knightcode-ide` on your `PATH`.
+
+### macOS
+
+Opening the `.dmg` works; launching the app does not. macOS says KnightCode
+**"cannot be opened because Apple cannot check it for malicious software"**,
+because the build is not notarised.
+
+Open **System Settings → Privacy & Security**, scroll to the blocked-app
+notice, and choose **Open Anyway**. Or, once, from a terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/KnightCode.app
+```
+
+If you launched it from the `.dmg` rather than from Applications, KnightCode
+offers to move itself to Applications first. Let it; updates install into the
+installed location.
+
+### Linux
+
+No signature check is involved. Extract the archive and run the launcher:
+
+```bash
+tar -xzf knightcode-linux-x86_64.tar.gz
+./knightcode.app/bin/knightcode-ide --install   # desktop entry and PATH
+./knightcode.app/bin/knightcode-ide             # or just run it
+```
+
+Every release also publishes a `.sig` file beside each installer, made with the
+same key the updater verifies against. Verifying it by hand is optional; the
+updater does it for you on every update.
+
+## What gets installed
+
+```text
+KnightCode/            the editor
+  bin/knightcode-ide   the launcher that goes on your PATH
+  engine/              knightcode-engine and its runtime assets
+```
+
+The engine is a separate process the IDE starts, watches and stops with it. It
+owns every provider request and every credential; the editor holds no API key
+and runs no OAuth exchange. See [Where things live](/docs/ide/engine).
+
+## Next
+
+- [First run](/docs/ide/first-run) — signing in and picking a model
+- [Updates](/docs/ide/updates)
+- [Filing a bug](/docs/ide/support)
