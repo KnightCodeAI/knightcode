@@ -233,10 +233,9 @@ async function promptAgent(session: AgentSession, input: string, signal: AbortSi
 }
 
 export function verifySystemPrompt(
-	messages: AgentSession["messages"],
+	systemPrompt: string,
 	options: Pick<KnightCodeHarnessOptions, "name" | "expectedDocumentation">,
 ): string {
-	const systemPrompt = getCurrentSystemPrompt(messages);
 	if (options.expectedDocumentation === undefined) return systemPrompt;
 	if (!systemPrompt.includes("\n<rules>\n")) {
 		throw new Error(`KnightCode system prompt lost its rules in the ${options.name} eval variant.`);
@@ -269,13 +268,17 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		protectedPaths: [repositoryRoot, join(homedir(), CONFIG_DIR_NAME)],
 	};
 	const extensionFactories: InlineExtension[] = [createEvalSandboxGuard(sandbox)];
+	let forcedSystemPrompt: string | undefined;
 	if (options.transformSystemPrompt) {
 		const transform = options.transformSystemPrompt;
 		extensionFactories.push({
 			name: SYSTEM_PROMPT_TRANSFORM_EXTENSION,
 			hidden: true,
 			factory: (knightcode) => {
-				knightcode.on("before_agent_start", ({ systemPrompt }) => ({ systemPrompt: transform(systemPrompt) }));
+				knightcode.on("before_agent_start", ({ systemPrompt }) => {
+					forcedSystemPrompt = transform(systemPrompt);
+					return { systemPrompt: forcedSystemPrompt };
+				});
 			},
 		});
 	}
@@ -357,7 +360,9 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		if (response === undefined) {
 			throw new Error("KnightCode eval input must include at least one prompt step.");
 		}
-		const systemPrompt = getCurrentSystemPrompt(session.messages);
+		// A forced prompt is not recorded in the transcript, so use the one the transform
+		// extension sent; otherwise the replayed transcript prompt is what the provider received.
+		const systemPrompt = forcedSystemPrompt ?? getCurrentSystemPrompt(session.messages);
 		const stats = session.getSessionStats();
 		const hasPricing = [model.cost, ...(model.cost.tiers ?? [])].some(
 			({ input: inputCost, output: outputCost, cacheRead, cacheWrite }) =>
@@ -380,7 +385,7 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 				},
 			},
 		};
-		verifySystemPrompt(session.messages, options);
+		verifySystemPrompt(systemPrompt, options);
 		const output = "output" in options ? await options.output({ response, session, systemPrompt, agentDir }) : response;
 		result = { output, ...runDiagnostics };
 	} catch (error) {
