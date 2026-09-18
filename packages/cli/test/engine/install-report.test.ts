@@ -75,9 +75,7 @@ describe("reportIdeInstall", () => {
 
 		await reportIdeInstall(context);
 		expect(calls).toHaveLength(1);
-		expect(calls[0]).toBe(
-			"https://knightcode.dev/api/report-install?version=1.0.0%20(stable)",
-		);
+		expect(calls[0]).toBe("https://knightcode.dev/api/report-install?version=1.0.0%20(stable)");
 		expect(context.settings.getLastIdeVersion()).toBe("1.0.0 (stable)");
 
 		// The engine restarts; the same version must not ping again.
