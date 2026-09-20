@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
-import { contentText, InMemoryCredentialStore } from "@knightcode/ai";
+import { type Api, contentText, InMemoryCredentialStore, type Model } from "@knightcode/ai";
+import { getCurrentSystemPrompt } from "@knightcode/ai/utils/transcript";
 import {
 	type AgentSession,
 	CONFIG_DIR_NAME,
@@ -19,17 +20,26 @@ import {
 	SettingsManager,
 } from "@knightcodeai/cli";
 import {
+	attachHarnessRunToError,
 	createHarness,
 	type Harness,
 	type HarnessContext,
 	type JsonValue,
+	normalizeHarnessRun,
 	normalizeRecord,
 	type SimpleHarnessResult,
 	type TranscriptEvent,
 	toJsonValue,
+	type UsageSummary,
 } from "vitest-evals/harness";
 import type { DocumentationVariant } from "./plan.ts";
 import { KNIGHTCODE_SESSION_SNAPSHOT_ARTIFACT } from "./report.ts";
+
+type RunDiagnostics = {
+	events: TranscriptEvent[];
+	metadata: Record<string, unknown>;
+	usage: UsageSummary;
+};
 
 export type KnightCodeHarnessInput = string | Array<{ type: "prompt"; content: string } | { type: "reload" }>;
 
@@ -222,8 +232,11 @@ async function promptAgent(session: AgentSession, input: string, signal: AbortSi
 	return output ?? "";
 }
 
-function verifySystemPrompt(systemPrompt: string, options: KnightCodeHarnessOptions): void {
-	if (options.expectedDocumentation === undefined) return;
+export function verifySystemPrompt(
+	systemPrompt: string,
+	options: Pick<KnightCodeHarnessOptions, "name" | "expectedDocumentation">,
+): string {
+	if (options.expectedDocumentation === undefined) return systemPrompt;
 	if (!systemPrompt.includes("\n<rules>\n")) {
 		throw new Error(`KnightCode system prompt lost its rules in the ${options.name} eval variant.`);
 	}
@@ -231,6 +244,32 @@ function verifySystemPrompt(systemPrompt: string, options: KnightCodeHarnessOpti
 	if (hasDocumentation !== options.expectedDocumentation) {
 		throw new Error(`KnightCode system prompt does not match the ${options.name} eval variant.`);
 	}
+	return systemPrompt;
+}
+
+function readRunDiagnostics(session: AgentSession, model: Model<Api>, systemPrompt: string): RunDiagnostics {
+	const stats = session.getSessionStats();
+	const hasPricing = [model.cost, ...(model.cost.tiers ?? [])].some(
+		({ input: inputCost, output: outputCost, cacheRead, cacheWrite }) =>
+			inputCost > 0 || outputCost > 0 || cacheRead > 0 || cacheWrite > 0,
+	);
+	return {
+		events: toTranscriptEvents(session.messages),
+		metadata: { systemPromptSha256: createHash("sha256").update(systemPrompt).digest("hex") },
+		usage: {
+			provider: model.provider,
+			model: model.id,
+			inputTokens: stats.tokens.input,
+			outputTokens: stats.tokens.output,
+			totalTokens: stats.tokens.total,
+			toolCalls: stats.toolCalls,
+			metadata: {
+				cacheReadTokens: stats.tokens.cacheRead,
+				cacheWriteTokens: stats.tokens.cacheWrite,
+				...(hasPricing ? { estimatedCostUsd: stats.cost } : {}),
+			},
+		},
+	};
 }
 
 async function runKnightCodeHarness<TOutput extends JsonValue>(
@@ -254,13 +293,17 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		protectedPaths: [repositoryRoot, join(homedir(), CONFIG_DIR_NAME)],
 	};
 	const extensionFactories: InlineExtension[] = [createEvalSandboxGuard(sandbox)];
+	let forcedSystemPrompt: string | undefined;
 	if (options.transformSystemPrompt) {
 		const transform = options.transformSystemPrompt;
 		extensionFactories.push({
 			name: SYSTEM_PROMPT_TRANSFORM_EXTENSION,
 			hidden: true,
 			factory: (knightcode) => {
-				knightcode.on("before_agent_start", ({ systemPrompt }) => ({ systemPrompt: transform(systemPrompt) }));
+				knightcode.on("before_agent_start", ({ systemPrompt }) => {
+					forcedSystemPrompt = transform(systemPrompt);
+					return { systemPrompt: forcedSystemPrompt };
+				});
 			},
 		});
 	}
@@ -268,6 +311,7 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 	let sessionManager: SessionManager | undefined;
 	let session: AgentSession | undefined;
 	let result: SimpleHarnessResult<string | TOutput> | undefined;
+	let runDiagnostics: RunDiagnostics | undefined;
 	let runError: unknown;
 	const cleanupErrors: unknown[] = [];
 	const restoreEnvironment = applyIsolatedEnvironment(isolatedHome, agentDir);
@@ -320,13 +364,15 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		}
 
 		let response: string | undefined;
-		let systemPrompt: string | undefined;
 		const steps = typeof input === "string" ? [{ type: "prompt" as const, content: input }] : input;
 		let abortPromise: Promise<void> | undefined;
 		const abort = () => {
 			abortPromise ??= session!.abort();
 		};
 		signal?.addEventListener("abort", abort, { once: true });
+		// A forced prompt is not recorded in the transcript, so use the one the transform
+		// extension sent; otherwise the replayed transcript prompt is what the provider received.
+		const readSystemPrompt = () => forcedSystemPrompt ?? getCurrentSystemPrompt(session!.messages);
 		try {
 			for (const step of steps) {
 				if (step.type === "reload") {
@@ -334,40 +380,21 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 					continue;
 				}
 				response = await promptAgent(session, step.content, signal);
-				systemPrompt = session.systemPrompt;
 			}
 		} finally {
 			signal?.removeEventListener("abort", abort);
 			if (abortPromise) await abortPromise;
+			// Captured however the steps ended: a provider failure or an unexpected stop reason
+			// throws out of promptAgent after the session has already recorded its usage.
+			runDiagnostics = readRunDiagnostics(session, model, readSystemPrompt());
 		}
-		if (response === undefined || systemPrompt === undefined) {
+		if (response === undefined) {
 			throw new Error("KnightCode eval input must include at least one prompt step.");
 		}
+		const systemPrompt = readSystemPrompt();
 		verifySystemPrompt(systemPrompt, options);
 		const output = "output" in options ? await options.output({ response, session, systemPrompt, agentDir }) : response;
-		const stats = session.getSessionStats();
-		const hasPricing = [model.cost, ...(model.cost.tiers ?? [])].some(
-			({ input: inputCost, output: outputCost, cacheRead, cacheWrite }) =>
-				inputCost > 0 || outputCost > 0 || cacheRead > 0 || cacheWrite > 0,
-		);
-		result = {
-			output,
-			events: toTranscriptEvents(session.messages),
-			metadata: { systemPromptSha256: createHash("sha256").update(systemPrompt).digest("hex") },
-			usage: {
-				provider: model.provider,
-				model: model.id,
-				inputTokens: stats.tokens.input,
-				outputTokens: stats.tokens.output,
-				totalTokens: stats.tokens.total,
-				toolCalls: stats.toolCalls,
-				metadata: {
-					cacheReadTokens: stats.tokens.cacheRead,
-					cacheWriteTokens: stats.tokens.cacheWrite,
-					...(hasPricing ? { estimatedCostUsd: stats.cost } : {}),
-				},
-			},
-		};
+		result = { output, ...runDiagnostics };
 	} catch (error) {
 		runError = error;
 	} finally {
@@ -396,12 +423,25 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		restoreEnvironment();
 	}
 
-	if (runError !== undefined) {
-		if (cleanupErrors.length === 0) throw runError;
-		throw new AggregateError([runError, ...cleanupErrors], "Agent run failed and cleanup also failed.");
+	let failure = runError;
+	if (runError !== undefined && cleanupErrors.length > 0) {
+		failure = new AggregateError([runError, ...cleanupErrors], "Agent run failed and cleanup also failed.");
+	} else if (cleanupErrors.length === 1) {
+		failure = cleanupErrors[0];
+	} else if (cleanupErrors.length > 1) {
+		failure = new AggregateError(cleanupErrors, "Agent cleanup failed.");
 	}
-	if (cleanupErrors.length === 1) throw cleanupErrors[0];
-	if (cleanupErrors.length > 1) throw new AggregateError(cleanupErrors, "Agent cleanup failed.");
+	if (failure !== undefined) {
+		if (runDiagnostics) {
+			const partialRun = normalizeHarnessRun(input, {
+				...runDiagnostics,
+				errors: [failure],
+				timings: { totalMs: performance.now() - startedAt },
+			});
+			throw attachHarnessRunToError(failure, partialRun);
+		}
+		throw failure;
+	}
 	if (!result) throw new Error("KnightCode eval completed without a result.");
 	return { ...result, timings: { totalMs: performance.now() - startedAt } };
 }
