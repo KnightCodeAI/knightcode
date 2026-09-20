@@ -24,10 +24,17 @@ function cwdKey(cwd: string): string {
 	return createHash("sha256").update(cwd).digest("hex").slice(0, 24);
 }
 
-/** Select a new session, or the newest session for this cwd, without opening any JSONL logs. */
-export async function selectSession(cwdInput: string, continueSession: boolean): Promise<MicroSessionLocation> {
+/**
+ * Select a new session, or the newest session for this cwd, without opening any JSONL logs.
+ * `sessionsDir` overrides where sessions live; it defaults to the agent directory.
+ */
+export async function selectSession(
+	cwdInput: string,
+	continueSession: boolean,
+	sessionsDir?: string,
+): Promise<MicroSessionLocation> {
 	const cwd = await realpath(resolve(cwdInput));
-	const root = join(getAgentDir(), "experimental", "micro-sessions", cwdKey(cwd));
+	const root = join(sessionsDir ?? join(getAgentDir(), "experimental", "micro-sessions"), cwdKey(cwd));
 	await mkdir(root, { recursive: true });
 
 	let path: string;
