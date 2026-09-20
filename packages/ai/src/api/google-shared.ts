@@ -2,11 +2,18 @@
  * Shared utilities for Google Generative AI and Google Vertex providers.
  */
 
-import { type Content, FinishReason, FunctionCallingConfigMode, type Part } from "@google/genai";
+import {
+	type Content,
+	FinishReason,
+	FunctionCallingConfigMode,
+	ThinkingLevel as GoogleSdkThinkingLevel,
+	type Part,
+	type ThinkingConfig,
+} from "@google/genai";
+import { clampThinkingLevel } from "../models.ts";
 import type {
 	ImageContent,
 	Model,
-	ModelThinkingLevel,
 	StopReason,
 	StreamOptions,
 	TextContent,
@@ -29,13 +36,21 @@ type GoogleApiType = "google-generative-ai" | "google-vertex";
 export type GoogleApiThinkingLevel = "THINKING_LEVEL_UNSPECIFIED" | "MINIMAL" | "LOW" | "MEDIUM" | "HIGH";
 export type ResolvedGoogleThinkingLevel = Exclude<ThinkingLevel, "xhigh" | "max">;
 
+const GEMINI_3_PRO_PATTERN = /gemini-3(?:\.\d+)?-pro/;
+
+const GOOGLE_SDK_THINKING_LEVEL_MAP: Record<GoogleApiThinkingLevel, GoogleSdkThinkingLevel> = {
+	THINKING_LEVEL_UNSPECIFIED: GoogleSdkThinkingLevel.THINKING_LEVEL_UNSPECIFIED,
+	MINIMAL: GoogleSdkThinkingLevel.MINIMAL,
+	LOW: GoogleSdkThinkingLevel.LOW,
+	MEDIUM: GoogleSdkThinkingLevel.MEDIUM,
+	HIGH: GoogleSdkThinkingLevel.HIGH,
+};
+
 /** Resolve a supported KnightCode level or model-specific Google mapping to a standard Google level. */
 export function resolveGoogleThinkingLevel<T extends GoogleApiType>(
 	model: Model<T>,
-	level: ModelThinkingLevel,
+	level: ThinkingLevel,
 ): ResolvedGoogleThinkingLevel {
-	if (level === "off") return "high";
-
 	const mapped = model.thinkingLevelMap?.[level];
 	const resolvedLevel = typeof mapped === "string" ? mapped.toLowerCase() : level;
 	switch (resolvedLevel) {
@@ -49,6 +64,55 @@ export function resolveGoogleThinkingLevel<T extends GoogleApiType>(
 				`Unsupported Google thinking level mapping for ${model.provider}/${model.id}: ${level} -> ${String(mapped)}`,
 			);
 	}
+}
+
+/**
+ * Whether this model uses Gemini's discrete `thinkingLevel` control instead of
+ * the token-based `thinkingBudget` control. Supported levels come from the
+ * model's `thinkingLevelMap`; this only selects the Google wire format.
+ */
+export function usesGoogleThinkingLevel<T extends GoogleApiType>(model: Model<T>): boolean {
+	const id = model.id.toLowerCase();
+	return (
+		// Match Gemini 3 Pro/Flash IDs with or without a minor version, such as
+		// gemini-3-flash-preview, gemini-3.1-pro-preview, and gemini-3.8-flash.
+		GEMINI_3_PRO_PATTERN.test(id) ||
+		/gemini-3(?:\.\d+)?-flash/.test(id) ||
+		id === "gemini-flash-latest" ||
+		id === "gemini-flash-lite-latest" ||
+		// Match both hosted Gemma 4 naming forms: gemma-4-* and gemma4-*.
+		/gemma-?4/.test(id)
+	);
+}
+
+export function toGoogleThinkingLevel(level: ResolvedGoogleThinkingLevel): GoogleApiThinkingLevel {
+	switch (level) {
+		case "minimal":
+			return "MINIMAL";
+		case "low":
+			return "LOW";
+		case "medium":
+			return "MEDIUM";
+		case "high":
+			return "HIGH";
+	}
+}
+
+export function toGoogleSdkThinkingLevel(level: GoogleApiThinkingLevel): GoogleSdkThinkingLevel {
+	return GOOGLE_SDK_THINKING_LEVEL_MAP[level];
+}
+
+export function getDisabledGoogleThinkingConfig<T extends GoogleApiType>(model: Model<T>): ThinkingConfig {
+	if (!usesGoogleThinkingLevel(model)) return { thinkingBudget: 0 };
+
+	// A model on the discrete control cannot turn thinking off, so send the lowest level
+	// it advertises. A model whose map does not rule "off" out (a custom entry without a
+	// thinkingLevelMap) gets the family minimum: Gemini 3 Pro starts at LOW, the rest at MINIMAL.
+	const clamped = clampThinkingLevel(model, "off");
+	const fallback = clamped !== "off" ? clamped : GEMINI_3_PRO_PATTERN.test(model.id.toLowerCase()) ? "low" : "minimal";
+	const resolvedLevel = resolveGoogleThinkingLevel(model, fallback);
+	const apiLevel = toGoogleThinkingLevel(resolvedLevel);
+	return { thinkingLevel: toGoogleSdkThinkingLevel(apiLevel) };
 }
 
 /**
