@@ -28,6 +28,7 @@ For the JSONL file format and SessionManager API, see [Session Format](session-f
 | `/name <name>` | Set the current session display name |
 | `/session` | Show session info |
 | `/tree` | Navigate the current session tree |
+| `/undo` | Go back to an earlier user message, optionally restoring files |
 | `/fork` | Create a new session from a previous user message |
 | `/clone` | Duplicate the current active branch into a new session |
 | `/compact [prompt]` | Summarize older context; see [Compaction](compaction.md) |
@@ -116,6 +117,40 @@ Selecting an assistant, tool, compaction, or other non-user entry:
 3. Lets you continue from that point.
 
 Selecting the root user message resets the leaf to an empty conversation and places the original prompt in the editor.
+
+## Undoing with `/undo`
+
+`/undo` is the quick form of `/tree` for the common case: pick a user message on the current
+branch and go back to it. It lists only user messages, newest at the bottom, with the time
+and how many files an undo to that point would restore. Enter goes back; the turns after the
+chosen message are left as an abandoned branch (still reachable through `/tree`) and the
+message text returns to the editor for editing and resubmitting.
+
+### File Restore
+
+Before `edit` or `write` changes a file, KnightCode copies the original into
+`~/.knightcode/agent/file-history/<session id>/`, once per file per user turn. When you go
+back past a turn that changed files, through `/undo`, `/tree`, or double-Escape, you are asked:
+
+- **Conversation only**: files stay as they are.
+- **Conversation and N files**: every file the abandoned turns touched is put back to its
+  content from before those turns; files they created are deleted.
+
+Escape at that prompt cancels the navigation entirely.
+
+Limits:
+
+- Changes made by shell commands (`bash`, `powershell`) are not tracked. The prompt says so
+  when a shell command ran in the abandoned turns.
+- Edits made by subagents or outside KnightCode are not tracked either; a tracked file is
+  restored to its backup regardless of who changed it afterwards.
+- If you go back without restoring files and later go back further, only the edits on the
+  branch you are on are restored.
+- Jumping sideways to another branch with `/tree` restores to the fork point; edits on the
+  target branch are not re-applied.
+
+Backups older than 30 days are removed at startup. Set `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS=1`
+to turn file tracking off; `/undo` then rewinds the conversation only.
 
 ## `/tree`, `/fork`, and `/clone`
 

@@ -151,7 +151,7 @@ See [`prepareCompaction()`](https://github.com/KnightCodeAI/knightcode/blob/main
 
 ### When It Triggers
 
-When you use `/tree` to navigate to a different branch, KnightCode offers to summarize the work you're leaving. This injects context from the left branch into the new branch.
+When you use `/tree` to navigate to a different branch, KnightCode offers to summarize the work you're leaving. `/undo` never summarizes; it only rewinds. This injects context from the left branch into the new branch.
 
 ### How It Works
 

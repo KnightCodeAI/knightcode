@@ -142,7 +142,7 @@ knightcode --name "my task"    # Set session display name at startup
 knightcode --session <path|id> # Open a specific session
 ```
 
-Inside knightcode, use `/resume`, `/new`, `/tree`, `/fork`, and `/clone` to manage sessions.
+Inside knightcode, use `/resume`, `/new`, `/undo`, `/tree`, `/fork`, and `/clone` to manage sessions.
 
 ### Non-interactive mode
 
