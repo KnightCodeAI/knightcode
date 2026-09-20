@@ -48,15 +48,15 @@ export async function readToolBatchSource<TContext extends object | undefined>(
 
 type PlacementItem = {
 	call: Extract<ToolCall, { status: "outcome_ready" }>;
-	message: ToolResultMessage<unknown>;
+	message: ToolResultMessage;
 };
 
 type PlacementRead = {
 	items: PlacementItem[];
-	turnResults?: ToolResultMessage<unknown>[];
+	turnResults?: ToolResultMessage[];
 };
 
-function isToolResultMessage(value: unknown): value is ToolResultMessage<unknown> {
+function isToolResultMessage(value: unknown): value is ToolResultMessage {
 	return typeof value === "object" && value !== null && "role" in value && value.role === "toolResult";
 }
 
@@ -105,7 +105,7 @@ async function readPlacement<TContext extends object | undefined>(
 			items.push({ call, message: stored.value.payload });
 		}
 
-		let turnResults: ToolResultMessage<unknown>[] | undefined;
+		let turnResults: ToolResultMessage[] | undefined;
 		if (first === current.calls.length) {
 			const placedIds = current.calls.filter((call) => call.status === "completed").map((call) => call.resultEntryId);
 			const placed = await reader.getEntries(placedIds, drive.context);
