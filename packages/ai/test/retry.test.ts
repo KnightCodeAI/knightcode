@@ -76,6 +76,15 @@ describe("provider retry classification", () => {
 		).toBe(true);
 	});
 
+	it("does not read a status code out of other digits", () => {
+		for (const errorMessage of [
+			"400 Bad Request: this model's maximum prompt is 15200 tokens",
+			"401 Unauthorized (request id req_5203abc)",
+		]) {
+			expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(false);
+		}
+	});
+
 	it("keeps provider limit errors non-retryable", () => {
 		expect(
 			isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage: "429 quota exceeded" })),
