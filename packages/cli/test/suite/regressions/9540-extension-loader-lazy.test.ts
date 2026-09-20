@@ -34,7 +34,8 @@ interface JitiOptionsProbe {
 }
 
 describe("extension loader lazy imports", () => {
-	// Regression test for #9540.
+	// Both were top-level imports of loader.ts, so every start loaded them whether or not
+	// an extension was ever imported.
 	it("defers ordinary jiti and its virtual modules until importing an extension", async () => {
 		expect(state.jitiModuleLoads).toBe(0);
 		expect(state.jitiStaticModuleLoads).toBe(0);

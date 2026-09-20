@@ -47,7 +47,8 @@ afterAll(() => {
 });
 
 describe("Node SEA extension loading", () => {
-	// Regression test for #8237 and #9540.
+	// A Node SEA build pulled both in at startup, so a binary with no extensions installed
+	// still paid for the transform and every bundled module.
 	it("loads jiti and bundled virtual modules only when importing an extension", async () => {
 		expect(state.jitiModuleLoads).toBe(0);
 		expect(state.virtualModulesLoads).toBe(0);

@@ -43,7 +43,7 @@ describe("automatic compaction cancellation regressions", () => {
 		while (harnesses.length > 0) harnesses.pop()?.cleanup();
 	});
 
-	// Regression test for #9340.
+	// An abort during the run still let the post-run check start a compaction.
 	it("does not start post-run auto-compaction after abort", async () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1", contextWindow: 200, maxTokens: 50 }],
@@ -74,7 +74,7 @@ describe("automatic compaction cancellation regressions", () => {
 		expect(harness.eventsOfType("compaction_start")).toHaveLength(0);
 	});
 
-	// Regression test for #9777.
+	// The abort signal never reached the auth call, so cancelling left it running.
 	it("cancels summarization authentication", async () => {
 		const harness = await createHarness({ settings: { compaction: { keepRecentTokens: 1 } } });
 		harnesses.push(harness);
@@ -107,7 +107,8 @@ describe("automatic compaction cancellation regressions", () => {
 		expect(harness.eventsOfType("compaction_end").at(-1)?.aborted).toBe(true);
 	});
 
-	// Regression test for #9777.
+	// A listener that aborted inside compaction_start ran before the controller existed,
+	// so the abort reached nothing.
 	it("cancels synchronously from compaction_start", async () => {
 		const harness = await createHarness({ settings: { compaction: { keepRecentTokens: 1 } } });
 		harnesses.push(harness);
@@ -122,7 +123,8 @@ describe("automatic compaction cancellation regressions", () => {
 		expect(harness.eventsOfType("compaction_end").at(-1)?.aborted).toBe(true);
 	});
 
-	// Regression test for #9777.
+	// Cancellation used to be inferred from the error message, so an unrelated AbortError
+	// was reported as a cancellation rather than a failure.
 	it.each([
 		["matching error text", () => new Error("Compaction cancelled")],
 		["an unrelated AbortError", () => Object.assign(new Error("auth failed"), { name: "AbortError" })],

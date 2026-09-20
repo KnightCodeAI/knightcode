@@ -73,7 +73,8 @@ describe("AgentSession retry and event characterization", () => {
 		expect(harness.faux.state.callCount).toBe(3);
 	});
 
-	// Regression test for #9340.
+	// An abort arriving between a failed attempt and its retry left the session believing
+	// a retry was still pending, so it never settled.
 	it("finalizes retry state when abort is requested after a retry attempt fails", async () => {
 		const harness = await createHarness({ settings: { retry: { enabled: true, maxRetries: 3, baseDelayMs: 0 } } });
 		harnesses.push(harness);
