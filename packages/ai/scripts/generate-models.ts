@@ -685,6 +685,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 	const isCloudflareAiGateway = provider === "cloudflare-ai-gateway" || baseUrl.includes("gateway.ai.cloudflare.com");
 	const isNvidia = provider === "nvidia" || baseUrl.includes("integrate.api.nvidia.com");
 	const isAntLing = provider === "ant-ling" || baseUrl.includes("api.ant-ling.com");
+	const isCerebras = provider === "cerebras" || baseUrl.includes("cerebras.ai");
 	const isTogetherReasoningOnly = isTogether && TOGETHER_REASONING_ONLY_MODELS.has(model.id);
 	// AgentRouter relays DeepSeek in its native shape rather than normalizing it: verified
 	// 2026-09-01, deepseek-v4-flash there rejects the `developer` role with a 400. Its GLM
@@ -696,8 +697,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 
 	const isNonStandard =
 		isNvidia ||
-		provider === "cerebras" ||
-		baseUrl.includes("cerebras.ai") ||
+		isCerebras ||
 		provider === "xai" ||
 		baseUrl.includes("api.x.ai") ||
 		isTogether ||
@@ -754,7 +754,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 		chatTemplateKwargs: {},
 		chatTemplateArgs: {},
 		zaiToolStream: false,
-		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia,
+		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia && !isCerebras,
 		supportsOpenAIGrammarTools: false,
 		supportsMidConvoSystemMessages: false,
 		supportsMidConvoToolAdditions: false,
