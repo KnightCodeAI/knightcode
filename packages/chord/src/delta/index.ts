@@ -1007,22 +1007,39 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 						}
 						collapsePending();
 						renumber(key, before, target.length, spliceAt, spliceRemove, spliceInsert);
-						// an inserted value may already live elsewhere: record the new position.
-						// Only the inserted range is examined; scanning the array would make
-						// every structural mutation O(n).
-						for (let i = insertAt; insertCount > 0 && i < insertAt + insertCount; i++) {
+						// An inserted value may already be tracked, here or elsewhere: record the
+						// position it now occupies. push/unshift/splice examine only the inserted
+						// range, because scanning the array would make every structural mutation
+						// O(n); the whole-array mutators permute in place, so they examine it all.
+						const permuted = key === "fill" || key === "copyWithin";
+						const from = permuted ? 0 : insertAt;
+						const until = permuted ? target.length : insertAt + insertCount;
+						for (let i = from; (permuted || insertCount > 0) && i < until; i++) {
 							const item = (target as unknown[])[i];
 							if (!isObj(item)) continue;
 							const known = wrappers.get(item as object);
 							if (known === undefined || known.target === object) continue;
 							let seen = false;
 							for (const c of known.cells) if (!c.dead && c.parent === primary() && c.seg === i) seen = true;
-							if (!seen && [...known.cells].some((c) => !c.dead)) {
-								const aliasCell: Cell = { parent: primary(), seg: i, dead: false };
-								known.cells.add(aliasCell);
-								// renumbering runs over childCells, so the alias must be there too
-								childCells.add({ target: item as object, cell: aliasCell });
-								aliased = true;
+							if (!seen) {
+								const live = [...known.cells].filter((c) => !c.dead);
+								// A reinserted element is back in the document, so a proxy held for it must
+								// record again. Its cell is the one the proxy closed over, so revive that cell
+								// rather than adding a parallel one it would never consult.
+								const revived = live.length === 0 ? [...known.cells][0] : undefined;
+								const cellHere: Cell = revived ?? { parent: primary(), seg: i, dead: false };
+								if (revived !== undefined) {
+									revived.dead = false;
+									revived.parent = primary();
+									revived.seg = i;
+									revived.at = undefined;
+									revived.cached = undefined;
+								} else {
+									known.cells.add(cellHere);
+									aliased = true;
+								}
+								// renumbering runs over childCells, so the position must be there too
+								childCells.add({ target: item as object, cell: cellHere });
 							}
 						}
 						return key === "sort" || key === "reverse" || key === "fill" || key === "copyWithin" ? proxy : result;

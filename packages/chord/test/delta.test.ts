@@ -1303,8 +1303,11 @@ describe("property: random round-trip", () => {
 });
 
 describe("references held across structural mutation", () => {
-	const roundTrip = (initial: JsonValue, mutate: (state: any) => void): { live: JsonValue; replica: JsonValue } => {
-		const t = track(structuredClone(initial) as object);
+	const roundTrip = <T extends object>(
+		initial: T,
+		mutate: (state: T) => void,
+	): { live: JsonValue; replica: JsonValue } => {
+		const t = track(structuredClone(initial));
 		t.flush();
 		mutate(t.state);
 		const replica = apply(structuredClone(initial), t.flush());
@@ -1313,7 +1316,8 @@ describe("references held across structural mutation", () => {
 	const xs = () => ({ xs: [{ k: "v0" }, { k: "v1" }, { k: "v2" }, { k: "v3" }, { k: "v4" }] });
 
 	// A wrapper must not address its old index after the array is renumbered.
-	const mutators: Array<[string, (a: any[]) => void]> = [
+	type Row = { k: string };
+	const mutators: Array<[string, (a: Row[]) => void]> = [
 		["push", (a) => a.push({ k: "n" })],
 		["pop", (a) => a.pop()],
 		["shift", (a) => a.shift()],
@@ -1388,16 +1392,19 @@ describe("references held across structural mutation", () => {
 });
 
 describe("one object at several positions", () => {
-	const roundTrip = (initial: JsonValue, mutate: (state: any) => void) => {
-		const t = track(structuredClone(initial) as object);
+	const roundTrip = <T extends object>(initial: T, mutate: (state: T) => void) => {
+		const t = track(structuredClone(initial));
 		t.flush();
 		mutate(t.state);
 		const replica = apply(structuredClone(initial), t.flush());
 		return { live: JSON.parse(JSON.stringify(t.state)) as JsonValue, replica: replica as JsonValue };
 	};
+	/** One row can sit in `xs` and in `a` at the same time; that is what these cases exercise. */
+	type Row = { k: string };
+	type Doc = { xs: Row[]; a: Row | null };
 
 	it("emits an op per position when a tracked value is assigned elsewhere", () => {
-		const { live, replica } = roundTrip({ xs: [{ k: "v0" }, { k: "v1" }], a: null }, (s) => {
+		const { live, replica } = roundTrip<Doc>({ xs: [{ k: "v0" }, { k: "v1" }], a: null }, (s) => {
 			const held = s.xs[1];
 			s.a = held;
 			held.k = "EDITED";
@@ -1415,7 +1422,7 @@ describe("one object at several positions", () => {
 	});
 
 	it("keeps the surviving position when one is removed", () => {
-		const { live, replica } = roundTrip({ xs: [{ k: "v0" }, { k: "v1" }], a: null }, (s) => {
+		const { live, replica } = roundTrip<Doc>({ xs: [{ k: "v0" }, { k: "v1" }], a: null }, (s) => {
 			const held = s.xs[1];
 			s.a = held;
 			s.xs.splice(1, 1);
@@ -1425,8 +1432,8 @@ describe("one object at several positions", () => {
 	});
 
 	it("gives one proxy per object, so identity survives tracking", () => {
-		const raw: any = { xs: [{ k: "v0" }], a: null };
-		raw.a = raw.xs[0];
+		const raw: Doc = { xs: [{ k: "v0" }], a: null };
+		raw.a = raw.xs[0]!;
 		const t = track(raw);
 		t.flush();
 		expect(t.state.a).toBe(t.state.xs[0]);
@@ -1512,6 +1519,32 @@ describe("positions after replacement and permutation", () => {
 		replica = sync(t, replica);
 		expect(replica).toEqual(t.target);
 		expect(t.target).toEqual({ list: [{ v: 0 }, { v: 5 }, { v: 5 }] });
+	});
+
+	it("tracks a position fill() creates for an element already in the array", () => {
+		const t = track({ list: [{ v: 1 }, { v: 2 }, { v: 3 }] });
+		let replica = sync(t, null);
+		const held = t.state.list[0]!;
+		t.state.list.fill(held, 1, 2);
+		replica = sync(t, replica);
+		held.v = 9;
+		replica = sync(t, replica);
+		expect(replica).toEqual(t.target);
+		expect(t.target).toEqual({ list: [{ v: 9 }, { v: 9 }, { v: 3 }] });
+	});
+
+	it("records again through a proxy whose element is reinserted", () => {
+		const t = track({ list: [{ v: 1 }] as { v: number }[] });
+		let replica = sync(t, null);
+		const held = t.state.list[0]!;
+		t.state.list.shift();
+		replica = sync(t, replica);
+		t.state.list.push(held);
+		replica = sync(t, replica);
+		held.v = 7;
+		replica = sync(t, replica);
+		expect(replica).toEqual(t.target);
+		expect(t.target).toEqual({ list: [{ v: 7 }] });
 	});
 
 	it("does not duplicate a position when an element is re-read after a shift", () => {
