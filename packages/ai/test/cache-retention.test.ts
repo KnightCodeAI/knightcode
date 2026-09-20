@@ -243,6 +243,13 @@ describe("Cache Retention (KNIGHTCODE_CACHE_RETENTION)", () => {
 	});
 
 	describe("OpenAI Responses Provider", () => {
+		it.each(["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra"] as const)(
+			"does not enable cache warming from the documented TTL alone for %s",
+			(modelId) => {
+				expect(getModel("openai", modelId).promptCache).toBeUndefined();
+			},
+		);
+
 		it.skipIf(!process.env.OPENAI_API_KEY)(
 			"should not set prompt_cache_retention when KNIGHTCODE_CACHE_RETENTION is not set",
 			async () => {
