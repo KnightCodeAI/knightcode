@@ -50,6 +50,7 @@ function generateFireworksModels(
 			`  if (url === "https://openrouter.ai/api/v1/models" || url === "https://ai-gateway.vercel.sh/v1/models") return Response.json({ data: [] });\n` +
 			`  if (url === "https://agentrouter.org/api/status") return Response.json({ data: { quota_per_unit: 500000 } });\n` +
 			`  if (url === "https://agentrouter.org/api/pricing") return Response.json({ group_ratio: { default: 1 }, data: [{ model_name: "glm-5.3", quota_type: 0, model_ratio: 1, completion_ratio: 1 }] });\n` +
+			`  if (url === "https://radius.pi.dev/v1/config") return Response.json({ baseUrl: "https://radius.pi.dev", models: [{ id: "test", name: "Test", reasoning: false, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 4096, maxTokens: 4096 }] });\n` +
 			`  throw new Error(\`Unexpected fetch: \${url}\`);\n` +
 			`};\n`,
 	);
