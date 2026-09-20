@@ -160,6 +160,15 @@ describe("Google thinking level maps", () => {
 		expect(payload.config?.thinkingConfig).toEqual({ includeThoughts: true, thinkingLevel: "MEDIUM" });
 	});
 
+	// A custom entry without a level map still cannot disable thinking on the discrete control.
+	it.each(googleAdapters)("falls back to the family minimum for a mapless model on $name", async ({ capture }) => {
+		expect((await capture("gemini-3.1-pro-preview", {})).config?.thinkingConfig).toEqual({ thinkingLevel: "LOW" });
+		expect((await capture("gemini-3-flash-preview", {})).config?.thinkingConfig).toEqual({
+			thinkingLevel: "MINIMAL",
+		});
+		expect((await capture("gemma-4-27b-it", {})).config?.thinkingConfig).toEqual({ thinkingLevel: "MINIMAL" });
+	});
+
 	it.each(googleAdapters)("disables Gemini 2.5 thinking when reasoning is omitted on $name", async ({ capture }) => {
 		const payload = await capture("gemini-2.5-flash", {});
 
