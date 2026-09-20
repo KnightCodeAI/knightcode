@@ -1,5 +1,61 @@
 # @knightcodeai/cli
 
+## 0.9.0
+
+### Added
+
+- Added unsubscribe to extension events: `knightcode.on(event, handler)` now returns a function that removes that one registration, so an extension can listen once or stop listening without reloading. Removing a handler never affects a dispatch already in progress.
+
+- Added what the desktop IDE's first run needs to `knightcode-engine`:
+
+  - `PUT /v1/models/default` records the model you pick in the IDE as your default, the same setting `/model` writes in the CLI, so both use one choice.
+  - `GET` and `PUT /v1/settings/telemetry` read and change the install-telemetry setting the CLI already has, so the IDE asks once and both follow the answer. The switch refuses to move while `KNIGHTCODE_TELEMETRY` is set in the environment.
+  - When the IDE starts the engine, it sends the same anonymous install ping as the CLI, once per IDE version, and not at all if you turned install telemetry off.
+
+- Added `/undo`: pick an earlier user message and go back to it, with the option to restore every file the abandoned turns edited. Files are backed up before each `edit` and `write`, so the restore needs no git; `/tree` and double-Escape offer the same restore. `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS=1` turns the backups off.
+
+- Added click-to-expand for compaction, branch-summary and skill entries in the transcript. A left click toggles them the same way the expand shortcut does.
+
+- Added a `terminal` option to `InteractiveMode`, so an embedder or test can drive the interactive UI against its own terminal implementation instead of the process's.
+
+### Changed
+
+- Changed long shell command timings to read as minutes and hours (`26m 32s`, `2h 3m 4s`) instead of a raw seconds count; anything under a minute still shows tenths of a second.
+
+- Changed the copy shortcut's description in the hotkeys list and keybinding settings to say what it does: it copies the current selection, or the last assistant message when nothing is selected.
+
+- Changed the transcript types so tool-call arguments and tool-result `details` are declared as JSON values instead of `any`. A tool that puts a `Date`, a function or `undefined` into `details` is now a type error rather than something that silently fails to round-trip through the session file.
+
+- Changed the Kimi For Coding catalog to read from the provider's current listing, which reports the 1M-token context window and low / high / max thinking levels for `kimi-for-coding`.
+
+### Fixed
+
+- Fixed thinking blocks being dropped on the next turn when an Anthropic-compatible endpoint reports a different model name than the one requested. The requested model stays on the message, and the reported one is kept separately for cost attribution.
+
+- Fixed the "Anthropic dropped thinking" notice repeating on every turn and flooding the transcript with per-block reasons. It now shows a short count, only when a response drops more blocks than the previous one, and not again when a session is reloaded; the details stay in the session file.
+
+- Fixed a shell command killed by a signal (an OOM kill, `kill -9`, a `SIGTERM`) being reported to the model as a success. It now fails with the conventional exit code (137 for `SIGKILL`, 143 for `SIGTERM`) and keeps the output it produced before dying.
+
+- Fixed a bare `400` or `413` with no body from any provider being treated as a context overflow and triggering compaction. Only Cerebras reports overflow that way, so the rule now applies to Cerebras alone.
+
+- Fixed automatic compaction doing nothing when the newest tool result alone exceeds the retained-token budget. The cut now falls back to the assistant message that made the tool call, so older history is summarized before the next request instead of the session overflowing.
+
+- Fixed DeepSeek V4.1 Flash offering the wrong thinking levels on OpenRouter and OpenCode Go. Both now expose the low / high / max efforts the model actually accepts, and OpenCode Go lists it under its current ID, `deepseek-v4.1-flash`.
+
+- Fixed `knightcode-engine` answering a login request whose body is not JSON, or is too large, with a 500 instead of a 400 or 413.
+
+- Fixed a `before_agent_start` handler that returns `systemPrompt` (or sets `forceSystemPrompt`) not actually replacing the prompt on models that accept mid-conversation system messages: they kept the original prompt at the head and received the forced text as a later update. The forced prompt is now sent as the leading system prompt for the run, and the session transcript keeps recording the structured sections instead of the forced text.
+
+- Fixed fuzzy search in the model, session and file pickers lagging on long lists; matching now skips ahead with a native substring search and returns the same results in the same order.
+
+- Fixed Gemini requests asking for thinking levels a model does not support. Turning thinking off, or picking a level the model lacks, now falls back to the lowest level that model advertises instead of a hard-coded Gemini 3 Pro / Flash guess.
+
+- Fixed llama.cpp models whose chat template supports thinking (Qwen-style `enable_thinking`) always running as non-reasoning models. Loaded models are now checked through the server's `/props`, and those templates get an on/off thinking toggle.
+
+- Fixed two transient provider failures ending the turn instead of retrying: Cloudflare `520` responses and Azure's "currently experiencing high demand" peak-load rejections are now retried like other overload errors.
+
+- Fixed Vercel AI Gateway conversations losing their thinking on the next turn. The gateway returns thinking without a signature for models it translates, and those blocks are now replayed instead of being stripped.
+
 ## 0.8.0
 
 ### Added
