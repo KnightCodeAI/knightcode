@@ -162,7 +162,7 @@ transcript, and ownership traversal.
 
 ## 14. Context derivation and system messages
 
-Implement model-context reduction, PR #9548 positional `SystemMessage` replay,
+Implement model-context reduction, positional transcript `SystemMessage` replay,
 tool-result ordering, and missing post-fork tool results. Replay `content`,
 ordered named `sections` with `null` removal, then tool removals/additions.
 
@@ -231,7 +231,7 @@ terminal details, or bounded document state.
 ## 20. Registries, hooks, and sections
 
 Implement task/tool/entry/section registries, Session and owned-subtree hooks,
-positional PR #9548 section/tool updates, complete baselines after a head cut,
+positional transcript section/tool updates, complete baselines after a head cut,
 and preparation revision checks. Do not add a Session-kernel semantic event
 journal or plugin-state router; package 25 adds the thin product notification
 adapter from specification §9.4.

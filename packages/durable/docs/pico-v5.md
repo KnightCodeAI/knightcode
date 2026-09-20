@@ -1373,7 +1373,7 @@ function defineSystemSection<T extends JsonValue>(definition: {
 }): SystemSection<T>;
 ```
 
-Pico stores prompt and tool changes directly as PR #9548 `SystemMessage` values
+Pico stores prompt and tool changes directly as transcript `SystemMessage` values
 at their transcript positions:
 
 ```ts
@@ -1420,7 +1420,7 @@ removes every effective section with `null`, and the second re-adds every desire
 section in desired order. This makes order-only changes and deletion/re-addition
 between requests replay exactly; merely restating equal values is insufficient.
 
-A PR #9548 `SystemMessage` is always a patch, not a reset: it cannot remove
+A transcript `SystemMessage` is always a patch, not a reset: it cannot remove
 previous `content` or restore section order merely by restating current values.
 Therefore, when a head removes the previous request-visible baseline, the new
 `knightcode.system` entry adds `ContextEdit` omissions for every earlier `knightcode.system`
