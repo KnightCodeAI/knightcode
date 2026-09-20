@@ -129,6 +129,25 @@ describe("FileHistory", () => {
 		expect(abandoned.files.size).toBe(0);
 	});
 
+	test("the recorded path keeps its original casing", () => {
+		const file = join(work, "Foo.txt");
+		writeFileSync(file, "x");
+		const history = FileHistory.forSession("s1");
+		history.record("u1", file);
+		expect([...history.abandoned(["u1"]).files.keys()]).toEqual([file]);
+	});
+
+	test("forget drops a record so a later restore leaves the file alone", () => {
+		const file = join(work, "new.txt");
+		const history = FileHistory.forSession("s1");
+		history.record("u1", file);
+		history.forget("u1", file);
+		writeFileSync(file, "made by someone else");
+
+		history.restore(history.abandoned(["u1"]).files);
+		expect(readFileSync(file, "utf8")).toBe("made by someone else");
+	});
+
 	test("prune removes session dirs older than the given age", () => {
 		const file = join(work, "a.txt");
 		writeFileSync(file, "x");

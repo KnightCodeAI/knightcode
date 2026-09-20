@@ -231,6 +231,50 @@ describe("file checkpoints", () => {
 		expect(prompts).toHaveLength(0);
 	});
 
+	test("a failed write leaves no created-file record behind", async () => {
+		const entries = [user("u1", null, "write a"), assistant("a1", "u1")];
+		const { fire } = fakePi();
+		const { ctx, prompts } = fakeCtx({ cwd, entries, answers: ["Conversation and 1 file"] });
+
+		await fire(
+			"tool_execution_start",
+			{ toolCallId: "t1", toolName: "write", args: { path: "a.txt", content: "x" } },
+			ctx,
+		);
+		await fire("tool_execution_end", { toolCallId: "t1", toolName: "write", result: {}, isError: true }, ctx);
+		writeFileSync(join(cwd, "a.txt"), "made by a shell command");
+
+		await fire("session_before_tree", { preparation: preparation(entries, "u1") }, ctx);
+		await fire("session_tree", { newLeafId: null, oldLeafId: "a1" }, ctx);
+		expect(prompts).toHaveLength(0);
+		expect(readFileSync(join(cwd, "a.txt"), "utf8")).toBe("made by a shell command");
+	});
+
+	test("a range whose backups all failed still warns", async () => {
+		const entries = [user("u1", null, "edit a"), assistant("a1", "u1")];
+		const { fire } = fakePi();
+		const { ctx, prompts, notices } = fakeCtx({ cwd, entries });
+
+		// A directory cannot be copied, so the backup fails.
+		await fire("tool_execution_start", { toolCallId: "t1", toolName: "edit", args: { path: "." } }, ctx);
+		expect(await fire("session_before_tree", { preparation: preparation(entries, "u1") }, ctx)).toBeUndefined();
+		await fire("session_tree", { newLeafId: null, oldLeafId: "a1" }, ctx);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(prompts).toHaveLength(0);
+		expect(notices[0]).toEqual({ message: expect.stringContaining("backup"), type: "warning" });
+	});
+
+	test("a false-looking kill switch value keeps backups on", async () => {
+		process.env.KNIGHTCODE_DISABLE_FILE_CHECKPOINTS = "0";
+		writeFileSync(join(cwd, "a.txt"), "original");
+		const entries = [user("u1", null, "edit a"), assistant("a1", "u1")];
+		const { fire } = fakePi();
+		const { ctx, prompts } = fakeCtx({ cwd, entries, answers: ["Conversation only"] });
+		await fire("tool_execution_start", { toolName: "edit", args: { path: "a.txt" } }, ctx);
+		await fire("session_before_tree", { preparation: preparation(entries, "u1") }, ctx);
+		expect(prompts).toHaveLength(1);
+	});
+
 	test("the kill switch disables backups", async () => {
 		process.env.KNIGHTCODE_DISABLE_FILE_CHECKPOINTS = "1";
 		writeFileSync(join(cwd, "a.txt"), "original");

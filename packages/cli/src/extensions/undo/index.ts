@@ -20,7 +20,8 @@ function isUserMessage(entry: SessionEntry | undefined): entry is SessionMessage
 }
 
 function checkpointsDisabled(): boolean {
-	return Boolean(process.env.KNIGHTCODE_DISABLE_FILE_CHECKPOINTS);
+	const value = process.env.KNIGHTCODE_DISABLE_FILE_CHECKPOINTS?.toLowerCase();
+	return value === "1" || value === "true" || value === "yes";
 }
 
 /**
@@ -41,6 +42,8 @@ export default function undoExtension(pi: ExtensionAPI): void {
 	};
 	// Decision taken in session_before_tree, applied in session_tree once the leaf has moved.
 	let pending: { files?: Map<string, string | null>; notice?: string } | undefined;
+	// Records made by tool calls still running, so a failed call can take its record back.
+	const recordedBy = new Map<string, { entryId: string; path: string }>();
 
 	pi.on("tool_execution_start", (event, ctx) => {
 		if (checkpointsDisabled()) return;
@@ -55,7 +58,18 @@ export default function undoExtension(pi: ExtensionAPI): void {
 		// Raw model arguments, not yet validated: a bad call is rejected later by the tool.
 		const path: unknown = event.args?.path;
 		if (typeof path !== "string") return;
-		historyFor(ctx).record(current.id, resolveToCwd(path, ctx.cwd));
+		const absPath = resolveToCwd(path, ctx.cwd);
+		if (historyFor(ctx).record(current.id, absPath)) {
+			recordedBy.set(event.toolCallId, { entryId: current.id, path: absPath });
+		}
+	});
+
+	pi.on("tool_execution_end", (event, ctx) => {
+		const made = recordedBy.get(event.toolCallId);
+		recordedBy.delete(event.toolCallId);
+		// A failed write created nothing, so a "did not exist" record would wrongly delete a
+		// file that something else creates later.
+		if (made && event.isError) historyFor(ctx).forget(made.entryId, made.path);
 	});
 
 	pi.on("session_before_tree", async (event, ctx): Promise<SessionBeforeTreeResult | undefined> => {
@@ -70,9 +84,10 @@ export default function undoExtension(pi: ExtensionAPI): void {
 		if (isUserMessage(target) || target?.type === "custom_message") ids.unshift(target.id);
 		const abandoned = store.abandoned(ids);
 		if (abandoned.files.size === 0) {
-			if (abandoned.shellRan) {
-				pending = { notice: "Shell commands ran after this point; their file changes are not tracked." };
-			}
+			const notices = [];
+			if (abandoned.failed) notices.push("Some file backups failed, so nothing was restored.");
+			if (abandoned.shellRan) notices.push("Shell commands ran after this point; their file changes are not tracked.");
+			if (notices.length > 0) pending = { notice: notices.join(" ") };
 			return;
 		}
 

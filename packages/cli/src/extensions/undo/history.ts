@@ -14,8 +14,8 @@ import {
 import { dirname, join } from "node:path";
 import { getAgentDir } from "../../config.ts";
 
-/** One user turn: the pre-edit copy of every file the turn touched (`null` = did not exist yet). */
-type Checkpoint = { files: Record<string, string | null>; shellRan?: true; failed?: true };
+/** One user turn: the pre-edit copy of every file the turn touched (`backup: null` = did not exist yet). */
+type Checkpoint = { files: Record<string, { path: string; backup: string | null }>; shellRan?: true; failed?: true };
 type Index = { version: 1; checkpoints: Record<string, Checkpoint> };
 
 export type Abandoned = { files: Map<string, string | null>; shellRan: boolean; failed: boolean };
@@ -27,7 +27,8 @@ function historyRoot(): string {
 	return join(getAgentDir(), "file-history");
 }
 
-// Windows paths are case-insensitive, so the same file must not get two keys.
+// Windows paths are case-insensitive, so the same file must not get two keys. The key is
+// only for lookup; the original spelling is what gets read and written.
 function pathKey(absPath: string): string {
 	return process.platform === "win32" ? absPath.toLowerCase() : absPath;
 }
@@ -78,23 +79,41 @@ export class FileHistory {
 		return (index.checkpoints[entryId] ??= { files: {} });
 	}
 
-	/** Back up `absPath` before its first write in this checkpoint; later calls are no-ops. */
-	record(entryId: string, absPath: string): void {
+	/**
+	 * Back up `absPath` before its first write in this checkpoint. Returns true when this call
+	 * made the record, false when the file was already recorded or the copy failed.
+	 */
+	record(entryId: string, absPath: string): boolean {
 		const key = pathKey(absPath);
 		const checkpoint = this.checkpoint(entryId);
-		if (key in checkpoint.files) return;
-		if (!existsSync(key)) {
-			checkpoint.files[key] = null;
+		if (key in checkpoint.files) return false;
+		let recorded = true;
+		if (!existsSync(absPath)) {
+			checkpoint.files[key] = { path: absPath, backup: null };
 		} else {
 			const name = `${createHash("sha256").update(key).digest("hex").slice(0, 16)}@${entryId}`;
 			try {
 				mkdirSync(this.dir, { recursive: true });
-				copyFileSync(key, join(this.dir, name));
-				checkpoint.files[key] = name;
+				copyFileSync(absPath, join(this.dir, name));
+				checkpoint.files[key] = { path: absPath, backup: name };
 			} catch {
 				checkpoint.failed = true;
+				recorded = false;
 			}
 		}
+		this.save();
+		return recorded;
+	}
+
+	/**
+	 * Drop a "did not exist" record, for a tool call that failed without creating the file.
+	 * A real backup is never dropped: restoring it is at worst a no-op.
+	 */
+	forget(entryId: string, absPath: string): void {
+		const checkpoint = this.load().checkpoints[entryId];
+		const key = pathKey(absPath);
+		if (checkpoint?.files[key]?.backup !== null) return;
+		delete checkpoint.files[key];
 		this.save();
 	}
 
@@ -107,11 +126,14 @@ export class FileHistory {
 	abandoned(entryIds: string[]): Abandoned {
 		const index = this.load();
 		const result: Abandoned = { files: new Map(), shellRan: false, failed: false };
+		const seen = new Set<string>();
 		for (const id of entryIds) {
 			const checkpoint = index.checkpoints[id];
 			if (!checkpoint) continue;
-			for (const [file, backup] of Object.entries(checkpoint.files)) {
-				if (!result.files.has(file)) result.files.set(file, backup);
+			for (const [key, { path, backup }] of Object.entries(checkpoint.files)) {
+				if (seen.has(key)) continue;
+				seen.add(key);
+				result.files.set(path, backup);
 			}
 			result.shellRan ||= checkpoint.shellRan === true;
 			result.failed ||= checkpoint.failed === true;
