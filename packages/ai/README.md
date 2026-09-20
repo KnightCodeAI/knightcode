@@ -308,7 +308,7 @@ For tooling that wants the generated built-in catalog with full literal typing (
 import { getBuiltinModel, getBuiltinModels, getBuiltinProviders } from '@knightcode/ai/providers/all';
 
 const model = getBuiltinModel('openai', 'gpt-4o-mini'); // typed Model<'openai-responses'>
-const radius = getBuiltinModel('radius', 'balanced');     // typed Model<'pi-messages'>
+const radius = getBuiltinModel('radius', 'balanced');     // typed Model<'knightcode-messages'>
 const providers = getBuiltinProviders();
 const anthropic = getBuiltinModels('anthropic');
 ```
