@@ -141,6 +141,47 @@ describe("llama.cpp extension", () => {
 		]);
 	});
 
+	it("keeps refreshing the catalog when one model's props lookup fails", async () => {
+		const { url } = await listen((request, response) => {
+			if (request.url === "/models") {
+				json(response, {
+					data: [
+						{ id: "healthy", status: { value: "loaded" }, meta: { n_ctx: 8192 } },
+						{ id: "broken", status: { value: "loaded" }, meta: { n_ctx: 8192 } },
+					],
+				});
+				return;
+			}
+			const requestUrl = new URL(request.url ?? "", "http://localhost");
+			if (requestUrl.pathname === "/props") {
+				if (requestUrl.searchParams.get("model") === "broken") {
+					response.writeHead(500).end("template unavailable");
+					return;
+				}
+				json(response, { chat_template: "{% if enable_thinking %}think{% endif %}" });
+				return;
+			}
+			response.writeHead(404).end();
+		});
+
+		const controller = createLlamaProvider();
+		await controller.provider.refreshModels?.({
+			credential: { type: "api_key", key: "local", env: { LLAMA_BASE_URL: url } },
+			stored: undefined,
+			publish: async (publication) => {
+				publication.update?.();
+				return true;
+			},
+			allowNetwork: true,
+			signal: new AbortController().signal,
+		});
+
+		expect(controller.provider.getModels().map((model) => [model.id, model.reasoning])).toEqual([
+			["healthy", true],
+			["broken", false],
+		]);
+	});
+
 	it("persists and restores selectable models for cache-only startup refreshes", async () => {
 		let cachedEntry: ModelsStoreEntry | undefined;
 		const { url } = await listen((request, response) => {

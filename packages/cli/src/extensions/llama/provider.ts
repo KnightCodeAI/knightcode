@@ -181,7 +181,12 @@ export function createLlamaProvider(): LlamaProviderController {
 						// would need to be loaded, while querying sleeping models may wake them. Those models remain
 						// unclassified until they are loaded or woken and a later catalog refresh discovers them.
 						if (model.status.value !== "loaded") return toPiModel(model, serverUrl);
-						const props = await client.props({ model: model.id, signal: context.signal });
+						// A props lookup that fails classifies only this model as non-reasoning; the rest of
+						// the catalog still refreshes. An abort is not a lookup failure and ends the refresh.
+						const props = await client.props({ model: model.id, signal: context.signal }).catch((error) => {
+							if (context.signal.aborted) throw error;
+							return undefined;
+						});
 						return toPiModel(model, serverUrl, props);
 					}),
 			);
