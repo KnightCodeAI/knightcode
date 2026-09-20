@@ -4,9 +4,13 @@ export interface Env {
 	DB: D1Database;
 	ROOM: DurableObjectNamespace;
 	ASSETS: Fetcher;
+	BUGS: R2Bucket;
+	BUG_RATE_LIMIT: { limit(options: { key: string }): Promise<{ success: boolean }> };
 	SIGNING_SECRET: string;
 	GITHUB_CLIENT_ID: string;
 	GITHUB_CLIENT_SECRET: string;
+	/** Comma-separated GitHub logins allowed to read bug reports; see docs/bug-report-intake.md. */
+	ADMIN_LOGINS?: string;
 }
 
 export interface Account {

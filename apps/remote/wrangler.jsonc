@@ -24,5 +24,12 @@
 	},
 	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RemoteRoom"] }],
 	"d1_databases": [{ "binding": "DB", "database_name": "knightcode-remote", "database_id": "89b432a5-032b-42e7-a639-feb2e945da8c" }],
+	// Bug report bundles uploaded by `/bug`. The bucket is private: every read goes through
+	// /api/bugs/<id>/<file>, so knowing an object key is not enough to read one.
+	"r2_buckets": [{ "binding": "BUGS", "bucket_name": "knightcode-bug-reports" }],
+	// `simple.period` accepts only 10 or 60 (see node_modules/wrangler/config-schema.json),
+	// so a longer window cannot be expressed here. Three per minute per IP is the closest
+	// useful shape: a person filing a bug sends one, and a flood is capped at 3 x 10 MB.
+	"ratelimits": [{ "name": "BUG_RATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 3, "period": 60 } }],
 	"observability": { "enabled": true }
 }

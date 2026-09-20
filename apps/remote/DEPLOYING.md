@@ -9,6 +9,7 @@ below needs a browser or a secret value, so it has to be done by hand.
 | Zone | `knightcode.dev` = `9eb345a5d81de9d3c8e971208b2117bf` |
 | Hostname | `remote.knightcode.dev` |
 | D1 | `knightcode-remote` = `89b432a5-032b-42e7-a639-feb2e945da8c` |
+| R2 | `knightcode-bug-reports` (bug report bundles) |
 | Staging | `knightcode-remote.raghavseth1428.workers.dev` |
 
 ## 0. Running it locally first
@@ -104,7 +105,30 @@ openssl rand -base64 32          # paste this as SIGNING_SECRET
 bunx wrangler secret put SIGNING_SECRET
 bunx wrangler secret put GITHUB_CLIENT_ID
 bunx wrangler secret put GITHUB_CLIENT_SECRET
+
+# Comma-separated GitHub logins allowed to read /bugs. Anyone else, signed in or
+# not, gets a 404 there. Filing a report needs no account at all.
+bunx wrangler secret put ADMIN_LOGINS
 ```
+
+## 2a. The bug report bucket
+
+`/bug` uploads land in a private R2 bucket. It has to exist before the first
+deploy, because a Worker whose binding names a missing bucket fails to upload.
+
+```bash
+bunx wrangler r2 bucket create knightcode-bug-reports
+bunx wrangler r2 bucket lifecycle add knightcode-bug-reports expire-90d bug-reports/   --expire-days 90
+bunx wrangler r2 bucket lifecycle list knightcode-bug-reports   # confirm both rules
+```
+
+`name` and `prefix` are positionals on `lifecycle add`, not flags. The rule
+deletes bundles after 90 days; the D1 rows stay, so `/bugs` keeps listing a
+report whose files have expired and answers 404 for its downloads.
+
+The bucket exists (created 2026-09-20) with the rule applied; redo this only on
+a fresh account. Never make it public — every read goes through
+`/api/bugs/<id>/<file>` so the allowlist check cannot be walked around.
 
 ## 3. DNS for `remote`
 
@@ -142,7 +166,9 @@ run the workflow from the Actions tab.
 
 It needs one repository secret, `CLOUDFLARE_API_TOKEN`: a token made from the
 "Edit Cloudflare Workers" template with **D1: Edit** added, scoped to this
-account and the `knightcode.dev` zone.
+account and the `knightcode.dev` zone. The template already carries **Workers R2
+Storage: Edit**, which the bug report bucket binding needs; if the deploy fails
+with a permissions error naming R2, the token predates that and needs remaking.
 
 `bun run deploy` builds before it uploads, on purpose: `web/dist` is gitignored
 build output and the assets directory is what gets uploaded, so a bare
