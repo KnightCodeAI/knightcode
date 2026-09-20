@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
-import { contentText, InMemoryCredentialStore } from "@knightcode/ai";
+import { type Api, contentText, InMemoryCredentialStore, type Model } from "@knightcode/ai";
 import { getCurrentSystemPrompt } from "@knightcode/ai/utils/transcript";
 import {
 	type AgentSession,
@@ -35,7 +35,7 @@ import {
 import type { DocumentationVariant } from "./plan.ts";
 import { KNIGHTCODE_SESSION_SNAPSHOT_ARTIFACT } from "./report.ts";
 
-type PiRunDiagnostics = {
+type RunDiagnostics = {
 	events: TranscriptEvent[];
 	metadata: Record<string, unknown>;
 	usage: UsageSummary;
@@ -247,6 +247,31 @@ export function verifySystemPrompt(
 	return systemPrompt;
 }
 
+function readRunDiagnostics(session: AgentSession, model: Model<Api>, systemPrompt: string): RunDiagnostics {
+	const stats = session.getSessionStats();
+	const hasPricing = [model.cost, ...(model.cost.tiers ?? [])].some(
+		({ input: inputCost, output: outputCost, cacheRead, cacheWrite }) =>
+			inputCost > 0 || outputCost > 0 || cacheRead > 0 || cacheWrite > 0,
+	);
+	return {
+		events: toTranscriptEvents(session.messages),
+		metadata: { systemPromptSha256: createHash("sha256").update(systemPrompt).digest("hex") },
+		usage: {
+			provider: model.provider,
+			model: model.id,
+			inputTokens: stats.tokens.input,
+			outputTokens: stats.tokens.output,
+			totalTokens: stats.tokens.total,
+			toolCalls: stats.toolCalls,
+			metadata: {
+				cacheReadTokens: stats.tokens.cacheRead,
+				cacheWriteTokens: stats.tokens.cacheWrite,
+				...(hasPricing ? { estimatedCostUsd: stats.cost } : {}),
+			},
+		},
+	};
+}
+
 async function runKnightCodeHarness<TOutput extends JsonValue>(
 	input: KnightCodeHarnessInput,
 	signal: AbortSignal | undefined,
@@ -286,7 +311,7 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 	let sessionManager: SessionManager | undefined;
 	let session: AgentSession | undefined;
 	let result: SimpleHarnessResult<string | TOutput> | undefined;
-	let runDiagnostics: PiRunDiagnostics | undefined;
+	let runDiagnostics: RunDiagnostics | undefined;
 	let runError: unknown;
 	const cleanupErrors: unknown[] = [];
 	const restoreEnvironment = applyIsolatedEnvironment(isolatedHome, agentDir);
@@ -345,6 +370,9 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 			abortPromise ??= session!.abort();
 		};
 		signal?.addEventListener("abort", abort, { once: true });
+		// A forced prompt is not recorded in the transcript, so use the one the transform
+		// extension sent; otherwise the replayed transcript prompt is what the provider received.
+		const readSystemPrompt = () => forcedSystemPrompt ?? getCurrentSystemPrompt(session!.messages);
 		try {
 			for (const step of steps) {
 				if (step.type === "reload") {
@@ -356,35 +384,14 @@ async function runKnightCodeHarness<TOutput extends JsonValue>(
 		} finally {
 			signal?.removeEventListener("abort", abort);
 			if (abortPromise) await abortPromise;
+			// Captured however the steps ended: a provider failure or an unexpected stop reason
+			// throws out of promptAgent after the session has already recorded its usage.
+			runDiagnostics = readRunDiagnostics(session, model, readSystemPrompt());
 		}
 		if (response === undefined) {
 			throw new Error("KnightCode eval input must include at least one prompt step.");
 		}
-		// A forced prompt is not recorded in the transcript, so use the one the transform
-		// extension sent; otherwise the replayed transcript prompt is what the provider received.
-		const systemPrompt = forcedSystemPrompt ?? getCurrentSystemPrompt(session.messages);
-		const stats = session.getSessionStats();
-		const hasPricing = [model.cost, ...(model.cost.tiers ?? [])].some(
-			({ input: inputCost, output: outputCost, cacheRead, cacheWrite }) =>
-				inputCost > 0 || outputCost > 0 || cacheRead > 0 || cacheWrite > 0,
-		);
-		runDiagnostics = {
-			events: toTranscriptEvents(session.messages),
-			metadata: { systemPromptSha256: createHash("sha256").update(systemPrompt).digest("hex") },
-			usage: {
-				provider: model.provider,
-				model: model.id,
-				inputTokens: stats.tokens.input,
-				outputTokens: stats.tokens.output,
-				totalTokens: stats.tokens.total,
-				toolCalls: stats.toolCalls,
-				metadata: {
-					cacheReadTokens: stats.tokens.cacheRead,
-					cacheWriteTokens: stats.tokens.cacheWrite,
-					...(hasPricing ? { estimatedCostUsd: stats.cost } : {}),
-				},
-			},
-		};
+		const systemPrompt = readSystemPrompt();
 		verifySystemPrompt(systemPrompt, options);
 		const output = "output" in options ? await options.output({ response, session, systemPrompt, agentDir }) : response;
 		result = { output, ...runDiagnostics };
