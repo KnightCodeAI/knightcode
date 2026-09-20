@@ -186,7 +186,7 @@ async function findBashOnPath(): Promise<string | null> {
 	return firstMatch && (await pathExists(firstMatch)) ? firstMatch : null;
 }
 
-interface ShellConfig {
+export interface ShellConfig {
 	shell: string;
 	args: string[];
 	commandTransport?: "argv" | "stdin";
@@ -201,7 +201,12 @@ function getBashShellConfig(shell: string): ShellConfig {
 	return isLegacyWslBashPath(shell) ? { shell, args: ["-s"], commandTransport: "stdin" } : { shell, args: ["-c"] };
 }
 
-async function getShellConfig(customShellPath?: string): Promise<Result<ShellConfig, ExecutionError>> {
+/**
+ * Locate a POSIX shell for running a command line: an explicit path, Git Bash or any
+ * bash on PATH under Windows, then /bin/bash or sh. Exported so other spawners in this
+ * package run commands the same way rather than hard-coding `bash`.
+ */
+export async function getShellConfig(customShellPath?: string): Promise<Result<ShellConfig, ExecutionError>> {
 	if (customShellPath) {
 		if (await pathExists(customShellPath)) {
 			return ok(getBashShellConfig(customShellPath));

@@ -1,4 +1,4 @@
-import { type ToolResultMessage, validateToolArguments } from "@knightcode/ai";
+import { findNonJson, type ToolResultMessage, validateToolArguments } from "@knightcode/ai";
 import type { AgentToolCall, AgentToolResult } from "../../types.ts";
 import { type Context, withAbortSignal } from "../context.ts";
 import type { JsonValue } from "../session/types.ts";
@@ -145,6 +145,7 @@ export function executeToolCall<TContext extends object | undefined>(
 				invocation,
 				admittedContext,
 			);
+			assertJsonDetails(call.toolCall.name, result.details);
 			return { result, isError: false };
 		} catch (error) {
 			return {
@@ -155,6 +156,19 @@ export function executeToolCall<TContext extends object | undefined>(
 			acceptingUpdates = false;
 		}
 	});
+}
+
+/**
+ * Details ride the transcript as JSON, so a value JSON cannot carry (a Date, a function,
+ * an undefined array element) would be silently altered on the way to the session file.
+ * An untyped tool gets the same answer the types give a typed one: an error.
+ */
+export function assertJsonDetails(toolName: string, details: unknown): void {
+	if (details === undefined) return;
+	const offending = findNonJson(details);
+	if (offending !== undefined) {
+		throw new Error(`Tool "${toolName}" returned details that are not JSON: ${offending}`);
+	}
 }
 
 /** Apply an after-tool patch field by field. */
@@ -181,10 +195,7 @@ export function finalizeToolCall<TContext extends object | undefined>(
 }
 
 /** Reconstruct the canonical tool result represented by a staged transcript message. */
-export function toolResultFromMessage(
-	message: ToolResultMessage<unknown>,
-	terminate: boolean,
-): AgentToolResult<unknown> {
+export function toolResultFromMessage(message: ToolResultMessage, terminate: boolean): AgentToolResult {
 	return {
 		content: message.content,
 		details: message.details,
@@ -200,7 +211,7 @@ export function createToolResultMessage(call: FinalizedToolCall): ToolResultMess
 		toolCallId: call.toolCall.id,
 		toolName: call.toolCall.name,
 		content: call.result.content ?? [],
-		...(call.result.details === undefined ? {} : { details: call.result.details }),
+		...(call.result.details === undefined ? {} : { details: call.result.details as JsonValue }),
 		...(call.result.usage === undefined ? {} : { usage: call.result.usage }),
 		isError: call.isError,
 		timestamp: Date.now(),

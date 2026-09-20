@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./node": "./src/node.ts",
     "./harness/context": "./src/harness/context.ts",
+    "./experimental/pico3": "./src/harness/pico3/index.ts",
     "./harness/env/nodejs": "./src/harness/env/nodejs.ts",
     "./harness/runtime/reducer": "./src/harness/runtime/reducer.ts",
     "./harness/session": "./src/harness/session/index.ts",

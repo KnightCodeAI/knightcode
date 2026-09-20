@@ -16,6 +16,7 @@ import {
 	validateToolArguments,
 } from "@knightcode/ai";
 import { getDefaultStreamFn } from "./stream-fn.ts";
+import { assertJsonDetails } from "./harness/execution/tools.ts";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -755,6 +756,7 @@ async function executePreparedToolCall(
 				);
 			},
 		);
+		assertJsonDetails(prepared.toolCall.name, result.details);
 		acceptingUpdates = false;
 		await Promise.all(updateEvents);
 		return { result, isError: false };

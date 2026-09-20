@@ -1,3 +1,4 @@
+import type { JsonObject } from "@knightcode/ai";
 import { Type } from "typebox";
 import { describe, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT } from "../../src/harness/context.ts";
@@ -14,7 +15,7 @@ import type { AgentToolCall, AgentToolResult } from "../../src/types.ts";
 
 const parameters = Type.Object({ value: Type.String() });
 
-function call(arguments_: Record<string, unknown> = { value: "input" }): AgentToolCall {
+function call(arguments_: JsonObject = { value: "input" }): AgentToolCall {
 	return { type: "toolCall", id: "call-1", name: "echo", arguments: arguments_ };
 }
 
@@ -229,6 +230,42 @@ describe("tool execution primitives", () => {
 			isError: false,
 		});
 		expect(message.timestamp).toBeGreaterThanOrEqual(before);
+	});
+
+	it("preserves unusual JSON object keys in tool-result details", () => {
+		const cleared = clearPrepared(prepareToolCall(call(), [tool()]));
+		const details = JSON.parse('{"__proto__":{"preserved":true}}') as Record<string, unknown>;
+		const finalized = finalizeToolCall(cleared, { result: { content: [], details }, isError: false }, undefined);
+
+		const message = createToolResultMessage(finalized);
+		expect(Object.hasOwn(message.details as object, "__proto__")).toBe(true);
+		expect(message.details).toEqual(details);
+	});
+
+	it("turns details JSON cannot carry into an error result", async () => {
+		const cases: Array<[string, unknown]> = [
+			["details.when", { when: new Date(0) }],
+			["details.render", { render: () => "" }],
+			["details.items[1]", { items: ["a", undefined] }],
+			["details.ratio", { ratio: Number.NaN }],
+			["details.nested.map", { nested: { map: new Map() } }],
+		];
+		for (const [expectedPath, details] of cases) {
+			const execute = vi.fn(async () => ({ content: [], details }));
+			const cleared = clearPrepared(prepareToolCall(call(), [tool({ execute: execute as never })]));
+			const result = await executeToolCall(cleared, effectGate(), () => {}, undefined, invocation, BACKGROUND_CONTEXT);
+			expect(result.isError).toBe(true);
+			expect(text(result.result)).toBe(`Tool "echo" returned details that are not JSON: ${expectedPath}`);
+		}
+	});
+
+	it("accepts details JSON can carry, including optional undefined properties", async () => {
+		const details = { path: "a.ts", summary: undefined, items: [1, "two", null, { deep: true }] };
+		const execute = vi.fn(async () => ({ content: [], details }));
+		const cleared = clearPrepared(prepareToolCall(call(), [tool({ execute: execute as never })]));
+		const result = await executeToolCall(cleared, effectGate(), () => {}, undefined, invocation, BACKGROUND_CONTEXT);
+		expect(result.isError).toBe(false);
+		expect(result.result.details).toBe(details);
 	});
 
 	it("normalizes missing content from untyped tools", () => {

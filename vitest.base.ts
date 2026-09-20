@@ -9,6 +9,7 @@ export const workspaceSourcePaths = {
 	aiOAuth: fileURLToPath(new URL("./packages/ai/src/oauth.ts", import.meta.url)),
 	aiProviders: fileURLToPath(new URL("./packages/ai/src/providers", import.meta.url)),
 	aiSrc: fileURLToPath(new URL("./packages/ai/src", import.meta.url)),
+	durableIndex: fileURLToPath(new URL("./packages/durable/src/index.ts", import.meta.url)),
 	agentIndex: fileURLToPath(new URL("./packages/agent/src/index.ts", import.meta.url)),
 	chordIndex: fileURLToPath(new URL("./packages/chord/src/index.ts", import.meta.url)),
 	chordContext: fileURLToPath(new URL("./packages/chord/src/context/index.ts", import.meta.url)),
@@ -41,6 +42,7 @@ export default defineConfig({
 				find: /^@knightcode\/ai\/((?:utils|api|auth)\/.+)$/,
 				replacement: `${workspaceSourcePaths.aiSrc}/$1.ts`,
 			},
+			{ find: /^@knightcode\/durable$/, replacement: workspaceSourcePaths.durableIndex },
 			{ find: /^@knightcode\/agent$/, replacement: workspaceSourcePaths.agentIndex },
 			{
 				find: /^@knightcode\/agent\/harness\/session$/,
@@ -49,6 +51,10 @@ export default defineConfig({
 			{
 				find: /^@knightcode\/agent\/harness\/session\/testing$/,
 				replacement: fileURLToPath(new URL("./packages/agent/src/harness/session/testing/index.ts", import.meta.url)),
+			},
+			{
+				find: /^@knightcode\/agent\/experimental\/pico3$/,
+				replacement: fileURLToPath(new URL("./packages/agent/src/harness/pico3/index.ts", import.meta.url)),
 			},
 			{ find: /^@knightcode\/chord$/, replacement: workspaceSourcePaths.chordIndex },
 			{ find: /^@knightcode\/chord\/context$/, replacement: workspaceSourcePaths.chordContext },

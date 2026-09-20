@@ -199,6 +199,14 @@
         "@knightcode/protocol": "workspace:*",
       },
     },
+    "packages/durable": {
+      "name": "@knightcode/durable",
+      "version": "0.1.0",
+      "dependencies": {
+        "@knightcode/ai": "workspace:*",
+        "@knightcode/chord": "workspace:*",
+      },
+    },
     "packages/evals": {
       "name": "@knightcode/evals",
       "version": "0.1.0",
@@ -626,6 +634,8 @@
     "@knightcode/chord": ["@knightcode/chord@workspace:packages/chord"],
 
     "@knightcode/client": ["@knightcode/client@workspace:packages/client"],
+
+    "@knightcode/durable": ["@knightcode/durable@workspace:packages/durable"],
 
     "@knightcode/evals": ["@knightcode/evals@workspace:packages/evals"],
 

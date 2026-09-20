@@ -19,6 +19,7 @@ is no build step for development.
 | `packages/cli-{linux,darwin,win32}-*` | Published platform packages; hold a compiled binary in `bin/`, no source |
 | `packages/ai` | Multi-provider LLM layer: providers, API adapters, OAuth, model catalog |
 | `packages/agent` | Agent loop, harness, compaction, session state, built-in tools |
+| `packages/durable` | Durable conversation, task and document runtime (Pico): record contracts and storage |
 | `packages/tui` | Terminal UI library with differential rendering |
 | `packages/protocol` · `client` · `server` | RPC protocol and transports |
 | `packages/session-backend-sqlite` · `telemetry` · `evals` | Session storage, telemetry contracts, eval harness |

@@ -26,6 +26,7 @@ tokens, measured.
 | `packages/cli` | The `knightcode` binary — CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills |
 | `packages/ai` | Multi-provider LLM layer: ~39 providers, 20 API adapters, OAuth, model catalog |
 | `packages/agent` | Agent loop, harness, compaction, session state, built-in tools |
+| `packages/durable` | Durable conversation, task and document runtime (Pico) |
 | `packages/tui` | Terminal UI library with differential rendering |
 | `packages/telemetry` | Vendor-neutral telemetry contracts |
 | `packages/protocol` · `client` · `server` | RPC protocol and transports |
