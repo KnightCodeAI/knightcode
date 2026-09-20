@@ -1192,7 +1192,9 @@ describe("codec: path interning and arity omission", () => {
 });
 
 describe("property: operation-log tracking", () => {
-	it("converges across mixed nested writes, replacements, and array mutations", () => {
+	// 100 rounds of 60 mutations each: well under a second alone, but CI runs every
+	// package's suite at once and has pushed it past the default 5 s budget.
+	it("converges across mixed nested writes, replacements, and array mutations", { timeout: 30_000 }, () => {
 		type State = { rows: { text: string; count: number }[]; meta: { revision: number } };
 		let seed = 0x5eed1234;
 		const next = (): number => {
