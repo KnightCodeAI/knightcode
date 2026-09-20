@@ -404,7 +404,9 @@ export async function openMicro(options: OpenMicroOptions = {}): Promise<OpenMic
 	} catch (error) {
 		await storage?.close(BACKGROUND_CONTEXT).catch(() => {});
 		await executionEnv?.cleanup(BACKGROUND_CONTEXT).catch(() => {});
-		await location.release().catch(() => {});
+		// A session this launch created and never wrote to is removed, so --continue keeps
+		// selecting the user's last real session.
+		await location.discard().catch(() => {});
 		throw error;
 	}
 }
