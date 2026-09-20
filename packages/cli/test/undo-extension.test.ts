@@ -250,6 +250,23 @@ describe("file checkpoints", () => {
 		expect(readFileSync(join(cwd, "a.txt"), "utf8")).toBe("made by a shell command");
 	});
 
+	test("a shared new-file record survives while another call can still create the file", async () => {
+		const entries = [user("u1", null, "write a"), assistant("a1", "u1")];
+		const { fire } = fakePi();
+		const { ctx } = fakeCtx({ cwd, entries, answers: ["Conversation and 1 file"] });
+		const args = { path: "a.txt", content: "x" };
+
+		await fire("tool_execution_start", { toolCallId: "t1", toolName: "write", args }, ctx);
+		await fire("tool_execution_start", { toolCallId: "t2", toolName: "write", args }, ctx);
+		await fire("tool_execution_end", { toolCallId: "t1", toolName: "write", result: {}, isError: true }, ctx);
+		writeFileSync(join(cwd, "a.txt"), "x");
+		await fire("tool_execution_end", { toolCallId: "t2", toolName: "write", result: {}, isError: false }, ctx);
+
+		await fire("session_before_tree", { preparation: preparation(entries, "u1") }, ctx);
+		await fire("session_tree", { newLeafId: null, oldLeafId: "a1" }, ctx);
+		expect(existsSync(join(cwd, "a.txt"))).toBe(false);
+	});
+
 	test("a range whose backups all failed still warns", async () => {
 		const entries = [user("u1", null, "edit a"), assistant("a1", "u1")];
 		const { fire } = fakePi();

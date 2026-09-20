@@ -14,8 +14,10 @@ import {
 import { dirname, join } from "node:path";
 import { getAgentDir } from "../../config.ts";
 
-/** One user turn: the pre-edit copy of every file the turn touched (`backup: null` = did not exist yet). */
-type Checkpoint = { files: Record<string, { path: string; backup: string | null }>; shellRan?: true; failed?: true };
+/** The pre-edit copy of one file; `backup: null` means the file did not exist yet. */
+export type FileRecord = { path: string; backup: string | null };
+/** One user turn: a record for every file the turn touched. */
+type Checkpoint = { files: Record<string, FileRecord>; shellRan?: true; failed?: true };
 type Index = { version: 1; checkpoints: Record<string, Checkpoint> };
 
 export type Abandoned = { files: Map<string, string | null>; shellRan: boolean; failed: boolean };
@@ -80,29 +82,30 @@ export class FileHistory {
 	}
 
 	/**
-	 * Back up `absPath` before its first write in this checkpoint. Returns true when this call
-	 * made the record, false when the file was already recorded or the copy failed.
+	 * Back up `absPath` before its first write in this checkpoint and return the record, which
+	 * may have been made by an earlier call. Undefined means the copy failed.
 	 */
-	record(entryId: string, absPath: string): boolean {
+	record(entryId: string, absPath: string): FileRecord | undefined {
 		const key = pathKey(absPath);
 		const checkpoint = this.checkpoint(entryId);
-		if (key in checkpoint.files) return false;
-		let recorded = true;
+		const known = checkpoint.files[key];
+		if (known) return known;
+		let made: FileRecord | undefined;
 		if (!existsSync(absPath)) {
-			checkpoint.files[key] = { path: absPath, backup: null };
+			made = { path: absPath, backup: null };
 		} else {
 			const name = `${createHash("sha256").update(key).digest("hex").slice(0, 16)}@${entryId}`;
 			try {
 				mkdirSync(this.dir, { recursive: true });
 				copyFileSync(absPath, join(this.dir, name));
-				checkpoint.files[key] = { path: absPath, backup: name };
+				made = { path: absPath, backup: name };
 			} catch {
 				checkpoint.failed = true;
-				recorded = false;
 			}
 		}
+		if (made) checkpoint.files[key] = made;
 		this.save();
-		return recorded;
+		return made;
 	}
 
 	/**
