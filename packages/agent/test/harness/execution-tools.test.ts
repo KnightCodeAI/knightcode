@@ -242,6 +242,32 @@ describe("tool execution primitives", () => {
 		expect(message.details).toEqual(details);
 	});
 
+	it("turns details JSON cannot carry into an error result", async () => {
+		const cases: Array<[string, unknown]> = [
+			["details.when", { when: new Date(0) }],
+			["details.render", { render: () => "" }],
+			["details.items[1]", { items: ["a", undefined] }],
+			["details.ratio", { ratio: Number.NaN }],
+			["details.nested.map", { nested: { map: new Map() } }],
+		];
+		for (const [expectedPath, details] of cases) {
+			const execute = vi.fn(async () => ({ content: [], details }));
+			const cleared = clearPrepared(prepareToolCall(call(), [tool({ execute: execute as never })]));
+			const result = await executeToolCall(cleared, effectGate(), () => {}, undefined, invocation, BACKGROUND_CONTEXT);
+			expect(result.isError).toBe(true);
+			expect(text(result.result)).toBe(`Tool "echo" returned details that are not JSON: ${expectedPath}`);
+		}
+	});
+
+	it("accepts details JSON can carry, including optional undefined properties", async () => {
+		const details = { path: "a.ts", summary: undefined, items: [1, "two", null, { deep: true }] };
+		const execute = vi.fn(async () => ({ content: [], details }));
+		const cleared = clearPrepared(prepareToolCall(call(), [tool({ execute: execute as never })]));
+		const result = await executeToolCall(cleared, effectGate(), () => {}, undefined, invocation, BACKGROUND_CONTEXT);
+		expect(result.isError).toBe(false);
+		expect(result.result.details).toBe(details);
+	});
+
 	it("normalizes missing content from untyped tools", () => {
 		const cleared = clearPrepared(prepareToolCall(call(), [tool()]));
 		const finalized = finalizeToolCall(
