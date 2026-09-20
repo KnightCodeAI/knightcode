@@ -126,7 +126,7 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "bin": {
         "knightcode": "./bin/knightcode",
       },
@@ -173,23 +173,23 @@
     },
     "packages/cli-darwin-arm64": {
       "name": "@knightcodeai/cli-darwin-arm64",
-      "version": "0.7.0",
+      "version": "0.8.0",
     },
     "packages/cli-darwin-x64": {
       "name": "@knightcodeai/cli-darwin-x64",
-      "version": "0.7.0",
+      "version": "0.8.0",
     },
     "packages/cli-linux-arm64": {
       "name": "@knightcodeai/cli-linux-arm64",
-      "version": "0.7.0",
+      "version": "0.8.0",
     },
     "packages/cli-linux-x64": {
       "name": "@knightcodeai/cli-linux-x64",
-      "version": "0.7.0",
+      "version": "0.8.0",
     },
     "packages/cli-win32-x64": {
       "name": "@knightcodeai/cli-win32-x64",
-      "version": "0.7.0",
+      "version": "0.8.0",
     },
     "packages/client": {
       "name": "@knightcode/client",
@@ -197,6 +197,14 @@
       "dependencies": {
         "@knightcode/chord": "workspace:*",
         "@knightcode/protocol": "workspace:*",
+      },
+    },
+    "packages/durable": {
+      "name": "@knightcode/durable",
+      "version": "0.1.0",
+      "dependencies": {
+        "@knightcode/ai": "workspace:*",
+        "@knightcode/chord": "workspace:*",
       },
     },
     "packages/evals": {
@@ -251,7 +259,7 @@
     },
     "packages/tools": {
       "name": "@knightcode/tools",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@knightcode/tui": "workspace:*",
         "@knightcodeai/cli": "workspace:*",
@@ -625,6 +633,8 @@
     "@knightcode/chord": ["@knightcode/chord@workspace:packages/chord"],
 
     "@knightcode/client": ["@knightcode/client@workspace:packages/client"],
+
+    "@knightcode/durable": ["@knightcode/durable@workspace:packages/durable"],
 
     "@knightcode/evals": ["@knightcode/evals@workspace:packages/evals"],
 
