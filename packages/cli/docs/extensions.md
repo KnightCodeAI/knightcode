@@ -333,7 +333,7 @@ user sends another prompt ◄─────────────────
   ├─► session_compact (success)
   └─► session_compact_failed (failure or abort)
 
-/tree navigation
+/tree, /undo, or double-Escape navigation
   ├─► session_before_tree (can cancel or customize)
   └─► session_tree
 
@@ -492,7 +492,7 @@ knightcode.on("session_compact_failed", async (event, ctx) => {
 
 #### session_before_tree / session_tree
 
-Fired on `/tree` navigation. See [Sessions](sessions.md) for tree navigation concepts.
+Fired on `/tree`, `/undo`, and double-Escape navigation. See [Sessions](sessions.md) for tree navigation concepts.
 
 ```typescript
 knightcode.on("session_before_tree", async (event, ctx) => {

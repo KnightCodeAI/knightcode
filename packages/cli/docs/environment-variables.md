@@ -84,6 +84,7 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_SERVER_DIR` | Override the experimental server profile and socket directory; default is `~/.knightcode/server` |
 | `KNIGHTCODE_SERVER_ID` | Select the logical experimental server ID when `--server-id` is omitted |
 | `KNIGHTCODE_OFFLINE` | Disable startup network operations, including update checks, package updates, and install/update telemetry |
+| `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS` | Set to `1` to stop backing up files before edits; `/undo` then rewinds the conversation only. See [Sessions](sessions.md#file-restore) |
 | `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable the `knightcode.dev` latest-version request |
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
