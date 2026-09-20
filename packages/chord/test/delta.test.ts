@@ -1441,3 +1441,88 @@ describe("one object at several positions", () => {
 		}).toThrow(UnsafePathError);
 	});
 });
+
+describe("positions after replacement and permutation", () => {
+	function sync<T extends object>(tracker: ReturnType<typeof track<T>>, replica: JsonValue): JsonValue {
+		let next = replica;
+		for (const op of tracker.flush()) next = apply(next, [op]) as JsonValue;
+		return next;
+	}
+
+	it("records nothing through a proxy whose property was replaced", () => {
+		const t = track({ a: { x: 1 } });
+		let replica = sync(t, null);
+		const held = t.state.a;
+		t.state.a = { x: 2 };
+		replica = sync(t, replica);
+		held.x = 99;
+		expect(t.flush()).toEqual([]);
+		expect(replica).toEqual({ a: { x: 2 } });
+		expect(t.target).toEqual({ a: { x: 2 } });
+	});
+
+	it("records nothing through a proxy whose property was deleted", () => {
+		const t = track<{ a?: { x: number } }>({ a: { x: 1 } });
+		let replica = sync(t, null);
+		const held = t.state.a!;
+		delete t.state.a;
+		replica = sync(t, replica);
+		held.x = 99;
+		expect(t.flush()).toEqual([]);
+		expect(replica).toEqual({});
+	});
+
+	it("renumbers an alias that was pushed into an array", () => {
+		const t = track({ item: { v: 1 }, list: [] as { v: number }[] });
+		let replica = sync(t, null);
+		t.state.list.push(t.state.item);
+		replica = sync(t, replica);
+		t.state.list.unshift({ v: 0 });
+		replica = sync(t, replica);
+		t.state.item.v = 2;
+		replica = sync(t, replica);
+		expect(replica).toEqual(t.target);
+		expect(t.target).toEqual({ item: { v: 2 }, list: [{ v: 0 }, { v: 2 }] });
+	});
+
+	it("renumbers an alias that was assigned at an index", () => {
+		const t = track({ item: { v: 1 }, list: [{ v: 0 }] as { v: number }[] });
+		let replica = sync(t, null);
+		t.state.list[1] = t.state.item;
+		replica = sync(t, replica);
+		t.state.list.shift();
+		replica = sync(t, replica);
+		t.state.item.v = 2;
+		replica = sync(t, replica);
+		expect(replica).toEqual(t.target);
+		expect(t.target).toEqual({ item: { v: 2 }, list: [{ v: 2 }] });
+	});
+
+	it("keeps every position of a repeated element across reverse", () => {
+		const shared = { v: 1 };
+		const t = track({ list: [shared, shared, { v: 0 }] });
+		let replica = sync(t, null);
+		void t.state.list[0];
+		void t.state.list[1];
+		t.state.list.reverse();
+		replica = sync(t, replica);
+		t.state.list[1]!.v = 5;
+		replica = sync(t, replica);
+		expect(replica).toEqual(t.target);
+		expect(t.target).toEqual({ list: [{ v: 0 }, { v: 5 }, { v: 5 }] });
+	});
+
+	it("does not duplicate a position when an element is re-read after a shift", () => {
+		const t = track({ item: { s: "a" }, list: [{ s: "x" }] as { s: string }[] });
+		let replica = sync(t, null);
+		t.state.list.push(t.state.item);
+		replica = sync(t, replica);
+		t.state.list.shift();
+		replica = sync(t, replica);
+		// the cache was cleared by the shift; this read must reuse the existing position
+		t.state.list[0]!.s += "b";
+		replica = sync(t, replica);
+		expect(replica).toEqual(t.target);
+		expect(t.target).toEqual({ item: { s: "ab" }, list: [{ s: "ab" }] });
+	});
+});

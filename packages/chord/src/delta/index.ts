@@ -804,6 +804,13 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 		return out as Path;
 	};
 
+	const liveCellAt = (target: object, parent: Cell, segment: Seg): Cell | undefined => {
+		const known = wrappers.get(target);
+		if (known === undefined) return undefined;
+		for (const c of known.cells) if (!c.dead && c.parent === parent && c.seg === segment) return c;
+		return undefined;
+	};
+
 	const wrap = <V extends object>(object: V, cell: Cell, blockedSegment?: Seg): V => {
 		// A wrapper is shared across the positions an object occupies, but only when
 		// the access is equally (un)blocked: the reserved-key guard is a property of
@@ -811,6 +818,11 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 		const existing = wrappers.get(object);
 		if (existing !== undefined && existing.blocked === blockedSegment) {
 			existing.cells.add(cell);
+			// A second live position, whether the document started that way or a
+			// reference was assigned elsewhere, means every write emits once per position.
+			let live = 0;
+			for (const c of existing.cells) if (!isDetached(c)) live++;
+			if (live > 1) aliased = true;
 			return existing.proxy as V;
 		}
 		// otherwise fall through and build a separate wrapper for this blocked view;
@@ -878,12 +890,26 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 			} else {
 				// sort/reverse/fill/copyWithin permute rather than shift: locate each
 				// held child by identity. Held children are few and these are rare.
+				// One object can sit at several indices, so each of its cells takes a
+				// distinct position; cells left over after the positions run out are dead.
+				const positions = new Map<unknown, number[]>();
+				(object as unknown as unknown[]).forEach((item, at) => {
+					if (!isObj(item)) return;
+					const list = positions.get(item);
+					if (list === undefined) positions.set(item, [at]);
+					else list.push(at);
+				});
+				const taken = new Map<unknown, number>();
 				for (const entry of [...childCells]) {
-					const at = (object as unknown as unknown[]).indexOf(entry.target);
-					if (at < 0) {
+					const list = positions.get(entry.target);
+					const used = taken.get(entry.target) ?? 0;
+					if (list === undefined || used >= list.length) {
 						entry.cell.dead = true;
 						childCells.delete(entry);
-					} else entry.cell.seg = at;
+					} else {
+						entry.cell.seg = list[used]!;
+						taken.set(entry.target, used + 1);
+					}
 				}
 				childProxies.clear();
 				return;
@@ -898,6 +924,20 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 				} else if (at >= index + remove) entry.cell.seg = at + delta;
 			}
 			childProxies.clear(); // the cache is keyed by index; rebuild it lazily
+		};
+
+		// The value that sat at a key is replaced or deleted: its position here is gone,
+		// so a proxy still held for it records nothing from now on. Other positions of
+		// the same object, if it is aliased, are untouched.
+		const detachChild = (key: string | symbol, segment: Seg): void => {
+			const cached = childProxies.get(key);
+			if (cached !== undefined) cached.cell.dead = true;
+			childProxies.delete(key);
+			for (const entry of [...childCells]) {
+				if (entry.cell.seg !== segment || entry.cell.dead) continue;
+				entry.cell.dead = true;
+				childCells.delete(entry);
+			}
 		};
 
 		const proxy = new Proxy(object, {
@@ -978,7 +1018,10 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 							let seen = false;
 							for (const c of known.cells) if (!c.dead && c.parent === primary() && c.seg === i) seen = true;
 							if (!seen && [...known.cells].some((c) => !c.dead)) {
-								known.cells.add({ parent: primary(), seg: i, dead: false });
+								const aliasCell: Cell = { parent: primary(), seg: i, dead: false };
+								known.cells.add(aliasCell);
+								// renumbering runs over childCells, so the alias must be there too
+								childCells.add({ target: item as object, cell: aliasCell });
 								aliased = true;
 							}
 						}
@@ -999,10 +1042,14 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 					segment = rawSegment;
 					childBlocked = rawSegment;
 				} else segment = guard(rawSegment);
-				const childCell: Cell = { parent: cell, seg: segment, dead: false };
+				// A re-read after a renumber cleared the cache must find the position it
+				// already has, or the object would gain a duplicate cell at the same path.
+				const childCell = liveCellAt(value, cell, segment) ?? { parent: cell, seg: segment, dead: false };
 				const child = wrap(value, childCell, childBlocked);
 				childProxies.set(key, { target: value, proxy: child, cell: childCell });
-				if (Array.isArray(target)) childCells.add({ target: value, cell: childCell });
+				if (Array.isArray(target) && ![...childCells].some((entry) => entry.cell === childCell)) {
+					childCells.add({ target: value, cell: childCell });
+				}
 				return child;
 			},
 
@@ -1010,16 +1057,6 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 				if (blockedSegment !== undefined) throw new UnsafePathError(blockedSegment);
 				// detached means the object has no live position left in the document
 				if (aliased ? liveCells().length === 0 : isDetached(cell)) return Reflect.set(target, key, value);
-				// the assigned value may already live elsewhere in the document; the
-				// destination becomes another position of the same object, so later
-				// writes through it emit an op for both
-				if (isObj(value)) {
-					const known = wrappers.get(value as object);
-					if (known !== undefined) {
-						known.cells.add({ parent: primary(), seg: guard(norm(target, key)), dead: false });
-						aliased = true;
-					}
-				}
 				if (Array.isArray(target) && key === "length") {
 					const before = target.length;
 					const next = Number(value);
@@ -1057,7 +1094,7 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 						throw new TypeError("undefined would create a sparse array; use splice instead");
 					}
 					if (Object.hasOwn(target, key)) emit(["d", at]);
-					childProxies.delete(key);
+					detachChild(key, segment);
 					const deleted = Reflect.deleteProperty(target, key);
 					if (deleted) collapsePending();
 					return deleted;
@@ -1083,7 +1120,18 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 				} else {
 					emit(["s", at, cloneJson(value as JsonValue)]);
 				}
-				childProxies.delete(key);
+				detachChild(key, segment);
+				// the assigned value may already live elsewhere in the document; the
+				// destination becomes another position of the same object, so later
+				// writes through it emit an op for both. Registered after the previous
+				// occupant is detached, so the new position is not swept away with it.
+				const known = wrappers.get(value as object);
+				if (known !== undefined) {
+					const aliasCell: Cell = { parent: primary(), seg: segment, dead: false };
+					known.cells.add(aliasCell);
+					if (Array.isArray(target)) childCells.add({ target: known.target, cell: aliasCell });
+					aliased = true;
+				}
 				const updated = Reflect.set(target, key, value);
 				if (updated) collapsePending();
 				return updated;
@@ -1098,7 +1146,7 @@ export function track<T extends object>(root: T, options: TrackerOptions = {}): 
 					throw new TypeError("delete would create a sparse array; use splice instead");
 				}
 				if (Object.hasOwn(target, key)) emit(["d", [...pathNow(), segment] as unknown as NonEmptyPath]);
-				childProxies.delete(key);
+				detachChild(key, segment);
 				const deleted = Reflect.deleteProperty(target, key);
 				if (deleted) collapsePending();
 				return deleted;
