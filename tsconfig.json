@@ -17,6 +17,7 @@
       "@knightcode/agent/session/testing": ["./packages/agent/src/harness/session/testing/index.ts"],
       "@knightcode/agent/harness/session": ["./packages/agent/src/harness/session/index.ts"],
       "@knightcode/agent/harness/session/testing": ["./packages/agent/src/harness/session/testing/index.ts"],
+      "@knightcode/agent/experimental/pico3": ["./packages/agent/src/harness/pico3/index.ts"],
       "@knightcode/agent/node": ["./packages/agent/src/node.ts"],
       "@knightcode/agent/*": ["./packages/agent/src/*"],
       "@knightcode/session-backend-sqlite": ["./packages/session-backend-sqlite/src/index.ts"],
