@@ -3666,7 +3666,14 @@ export class AgentSession {
 		if (!model) {
 			throw new Error("No model selected");
 		}
-		const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(model);
+		// The signal has to reach the auth resolve too: a pending OAuth refresh would otherwise
+		// hold the loader open after the user cancelled, until it finished on its own.
+		const {
+			model: requestModel,
+			apiKey,
+			headers,
+			env,
+		} = await this._getSummarizationRequestAuth(model, options.signal);
 		return generateBugReportSummary({
 			messages: this.messages,
 			hint: options.hint,

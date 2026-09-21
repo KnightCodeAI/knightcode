@@ -47,13 +47,23 @@ export function redactUrl(value: string): string {
 	}
 }
 
+// `redactUrl` only sees a string that is entirely a URL, which is how settings values look.
+// An error message is prose with a URL somewhere inside it, so every embedded URL is found
+// first and redacted on its own. Stops at whitespace and the quote characters that normally
+// terminate a URL in a message.
+const EMBEDDED_URL = /[a-z][a-z0-9+.-]*:\/\/[^\s<>"'`]+/gi;
+
+export function redactText(value: string): string {
+	return value.replace(EMBEDDED_URL, (match) => redactUrl(match));
+}
+
 /** Copy a JSON value while removing values that may contain credentials. */
 export function redactJsonValue(value: unknown): unknown {
 	if (value === undefined) return undefined;
 	return JSON.parse(
 		JSON.stringify(value, (key, child: unknown) => {
 			if (child !== null && child !== undefined && isSensitiveKey(key)) return REDACTED;
-			return typeof child === "string" ? redactUrl(child) : child;
+			return typeof child === "string" ? redactText(child) : child;
 		}),
 	);
 }
@@ -212,13 +222,24 @@ export function collectBugReportDiagnostics(
 			diagnostics,
 		});
 	}
-	return {
+	// Redacted like the metadata is, and for the same reason: a provider error, a diagnostic
+	// detail or a crash stack can quote the request that failed, and that request can carry a
+	// key in its URL or an Authorization header. The report promises no credentials leave the
+	// machine, so the promise has to cover everything the bundle contains, not only settings.
+	return redactJsonValue({
 		schemaVersion: BUG_REPORT_SCHEMA_VERSION,
 		sessionId: sessionManager.getSessionId(),
 		entryCount: entries.length,
 		assistantMessageCount,
 		assistant,
 		crashes: crashes.map(({ notified: _notified, ...record }) => record),
+	}) as {
+		schemaVersion: number;
+		sessionId: string;
+		entryCount: number;
+		assistantMessageCount: number;
+		assistant: typeof assistant;
+		crashes: Array<Omit<CrashRecord, "notified">>;
 	};
 }
 

@@ -38,8 +38,12 @@ export function readCrashLog(path = crashLogPath()): CrashRecord[] {
 }
 
 function writeCrashLog(records: readonly CrashRecord[], path: string): void {
-	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, `${JSON.stringify(records, null, 2)}\n`);
+	// Owner-only, like auth-storage.ts: a crash record carries stack traces, the working
+	// directory and session paths. Under the usual 022 umask the defaults would be 0755/0644,
+	// readable by every other local user. Passing the mode on write also resets a file that
+	// an earlier version created permissively.
+	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+	writeFileSync(path, `${JSON.stringify(records, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
 }
 
 /** Best-effort persistence for callers that are already crashing. */
