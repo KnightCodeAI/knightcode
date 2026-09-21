@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@knightcodeai/cli";
@@ -6,6 +6,7 @@ import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
 	NOTES_MAX_BYTES,
+	openScratchpad,
 	registerScratchpad,
 	restoredNotes,
 	scratchpadDir,
@@ -14,7 +15,7 @@ import {
 import { resetSessionOverrides, setMode } from "../src/state.ts";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
-type Sent = { customType: string; content: unknown; display?: boolean };
+type Sent = { customType: string; content: unknown; display?: boolean; options?: { triggerTurn?: boolean } };
 
 // A stand-in for ExtensionAPI that records handlers and sent messages.
 function fakePi() {
@@ -24,8 +25,8 @@ function fakePi() {
 		on: (event: string, handler: Handler) => {
 			handlers.set(event, handler);
 		},
-		sendMessage: (message: Sent) => {
-			sent.push(message);
+		sendMessage: (message: Sent, options?: Sent["options"]) => {
+			sent.push({ ...message, options });
 		},
 	} as unknown as ExtensionAPI;
 	return { pi, handlers, sent };
@@ -90,6 +91,33 @@ describe("restoredNotes", () => {
 		expect(Buffer.byteLength(text, "utf8")).toBeLessThan(NOTES_MAX_BYTES + 512);
 		expect(text).toContain("truncated; read");
 	});
+
+	test("restores the head of a first line longer than the cap", () => {
+		// The leading "x" puts the byte cap in the middle of a two-byte "é".
+		writeFileSync(join(base, "notes.md"), `x${"é".repeat(NOTES_MAX_BYTES)}\n- next step\n`);
+		const text = restoredNotes(base) ?? "";
+		expect(text).toContain("é".repeat(100));
+		expect(text).not.toContain("�");
+		expect(Buffer.byteLength(text, "utf8")).toBeLessThan(NOTES_MAX_BYTES + 512);
+		expect(text).toContain("truncated; read");
+	});
+});
+
+describe("openScratchpad", () => {
+	test("creates the session directory", () => {
+		const dir = openScratchpad("s1", base);
+		expect(dir).toBe(scratchpadDir("s1", base));
+		expect(existsSync(dir)).toBe(true);
+	});
+
+	// Windows has no uid, and its temp dir is per-user.
+	test.skipIf(!process.getuid)("refuses a parent directory other users can write to", () => {
+		const owner = join(base, `knightcode-${process.getuid?.()}`);
+		mkdirSync(owner);
+		chmodSync(owner, 0o777);
+		expect(() => openScratchpad("s1", base)).toThrow("not a private directory owned by you");
+		expect(existsSync(scratchpadDir("s1", base))).toBe(false);
+	});
 });
 
 describe("registerScratchpad", () => {
@@ -126,6 +154,21 @@ describe("registerScratchpad", () => {
 		expect(sent).toHaveLength(1);
 		expect(sent[0]).toMatchObject({ customType: "scratchpad-notes", display: false });
 		expect(String(sent[0].content)).toContain("mint.ts:42 mints the token");
+	});
+
+	test("steers the notes only when a response follows the compaction", async () => {
+		await setMode("scratchpad", "session");
+		const dir = scratchpadDir("s1", base);
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "notes.md"), "- mint.ts:42 mints the token\n");
+		const { pi, handlers, sent } = fakePi();
+		registerScratchpad(pi, base);
+		await handlers.get("agent_start")?.({}, ctx("s1"));
+		await handlers.get("session_compact")?.({ willRetry: false }, ctx("s1"));
+		await handlers.get("agent_end")?.({}, ctx("s1"));
+		await handlers.get("session_compact")?.({ willRetry: true }, ctx("s1"));
+		await handlers.get("session_compact")?.({ willRetry: false }, ctx("s1"));
+		expect(sent.map((message) => message.options)).toEqual([undefined, undefined, { triggerTurn: false }]);
 	});
 
 	test("after compaction with no notes, sends nothing", async () => {

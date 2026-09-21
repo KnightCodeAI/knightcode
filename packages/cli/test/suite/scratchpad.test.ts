@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, getCurrentSystemPrompt } from "@knightcode/ai";
@@ -7,7 +7,7 @@ import { scratchpadDir } from "@knightcode/tools/scratchpad";
 import { resetSessionOverrides, setMode } from "@knightcode/tools/state";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.ts";
-import { createHarness, getMessageText, type Harness } from "./harness.ts";
+import { createHarness, getMessageText, type Harness, type HarnessOptions } from "./harness.ts";
 
 describe("scratchpad", () => {
 	const harnesses: Harness[] = [];
@@ -20,7 +20,10 @@ describe("scratchpad", () => {
 		while (cleanupDirs.length > 0) rmSync(cleanupDirs.pop() ?? "", { recursive: true, force: true });
 	});
 
-	async function start(enabled: boolean): Promise<{ harness: Harness; dir: string }> {
+	async function start(
+		enabled: boolean,
+		options: Pick<HarnessOptions, "models" | "settings"> = {},
+	): Promise<{ harness: Harness; dir: string }> {
 		// tools.json is read from the agent dir; point it at an empty temp dir so the user's own is never read.
 		const agentDir = mkdtempSync(join(tmpdir(), "kc-scratchpad-agent-"));
 		cleanupDirs.push(agentDir);
@@ -28,6 +31,7 @@ describe("scratchpad", () => {
 		if (enabled) await setMode("scratchpad", "session");
 		const harness = await createHarness({
 			settings: { compaction: { keepRecentTokens: 1 } },
+			...options,
 			extensionFactories: [
 				toolsExtension,
 				// Compacts without a summary model call.
@@ -71,6 +75,24 @@ describe("scratchpad", () => {
 		);
 		expect(restored).toHaveLength(1);
 		expect(getMessageText(restored[0])).toContain("mint.ts:42 mints the token");
+	});
+
+	it("restores notes.md after end-of-run compaction without starting another turn", async () => {
+		// A one-token window makes the completed response overflow, so the session compacts after the run.
+		const { harness, dir } = await start(true, {
+			models: [{ id: "faux-1", contextWindow: 1, maxTokens: 100 }],
+			settings: { compaction: { enabled: true, keepRecentTokens: 1, reserveTokens: 0 } },
+		});
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "notes.md"), "- mint.ts:42 mints the token\n");
+		harness.setResponses([fauxAssistantMessage("done"), fauxAssistantMessage("unrequested")]);
+		await harness.session.prompt("hi");
+		expect(harness.eventsOfType("compaction_end").at(-1)).toMatchObject({ reason: "overflow", aborted: false });
+		expect(harness.faux.state.callCount).toBe(1);
+		const restored = harness.session.messages.filter(
+			(message) => message.role === "custom" && message.customType === "scratchpad-notes",
+		);
+		expect(restored).toHaveLength(1);
 	});
 
 	it("does nothing while disabled", async () => {

@@ -100,7 +100,7 @@ Fetched pages and search results are marked as untrusted in the tool output so t
 
 The agent keeps its working notes there in `notes.md`: task list, decisions, `file:line` facts, next steps. After each compaction the first 8 KB of `notes.md` is put back into the context once, so those notes outlive the summary. Open the file to see what the agent is tracking.
 
-The scratchpad is off by default. When on, it adds about 60 tokens to the system prompt, which is cached; the notes cost tokens only after a compaction. It is not a tool, so `--tools` and `--exclude-tools` do not affect it. `/fork` starts a new, empty directory, and the operating system clears old ones with the rest of its temp files.
+The scratchpad is off by default. When on, it adds about 60 tokens to the system prompt, which is cached; the notes cost tokens only after a compaction. It is not a tool, so `--tools` and `--exclude-tools` do not affect it. `/fork` starts a new, empty directory, and the operating system clears old ones with the rest of its temp files. If `<tmp>/knightcode-<uid>` already exists but is not a private directory you own, as when another user on a shared machine created it first, the scratchpad stays off and KnightCode reports why.
 
 ## Message Queue
 

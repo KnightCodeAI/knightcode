@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@knightcodeai/cli";
@@ -17,12 +17,36 @@ export const scratchpadEntry: RegisteredToolEntry = {
 };
 
 /**
- * The session's scratchpad under the OS temp dir. The uid keeps users sharing a POSIX /tmp from
- * colliding on the parent directory; the Windows temp dir is already per-user.
+ * The uid keeps users sharing a POSIX /tmp from colliding on this directory; the Windows temp dir
+ * is already per-user.
  */
+function ownerDir(base: string): string {
+	return join(base, process.getuid ? `knightcode-${process.getuid()}` : "knightcode");
+}
+
+/** The session's scratchpad under the OS temp dir. */
 export function scratchpadDir(sessionId: string, base = tmpdir()): string {
-	const owner = process.getuid ? `knightcode-${process.getuid()}` : "knightcode";
-	return join(base, owner, SCRATCHPAD, sessionId);
+	return join(ownerDir(base), SCRATCHPAD, sessionId);
+}
+
+/**
+ * Creates the session's scratchpad and returns it. Another user on a shared POSIX /tmp can create
+ * the parent first, and notes.md goes back into the model's context, so a parent that is not a
+ * private directory of this user is refused.
+ */
+export function openScratchpad(sessionId: string, base = tmpdir()): string {
+	const uid = process.getuid?.();
+	if (uid !== undefined) {
+		const owner = ownerDir(base);
+		mkdirSync(owner, { recursive: true, mode: 0o700 });
+		const stat = lstatSync(owner);
+		if (!stat.isDirectory() || stat.uid !== uid || (stat.mode & 0o077) !== 0) {
+			throw new Error(`Scratchpad off: ${owner} is not a private directory owned by you`);
+		}
+	}
+	const dir = scratchpadDir(sessionId, base);
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
+	return dir;
 }
 
 /** Fixed for the session, so it rides in the cached first system message and is never re-sent. */
@@ -47,8 +71,13 @@ export function restoredNotes(dir: string): string | undefined {
 	if (text.trim() === "") return undefined;
 	const shown = path.replace(/\\/g, "/");
 	const cut = truncateHead(text, { maxBytes: NOTES_MAX_BYTES });
+	// truncateHead keeps whole lines only, so a first line over the cap would restore nothing. Cut it
+	// by bytes instead; a streaming decode drops a character split at the cut.
+	const content = cut.firstLineExceedsLimit
+		? new TextDecoder().decode(Buffer.from(text).subarray(0, NOTES_MAX_BYTES), { stream: true })
+		: cut.content;
 	const rest = cut.truncated ? `\n\n[truncated; read ${shown} for the rest]` : "";
-	return `Your scratchpad notes (${shown}), restored after compaction:\n\n${cut.content}${rest}`;
+	return `Your scratchpad notes (${shown}), restored after compaction:\n\n${content}${rest}`;
 }
 
 /**
@@ -58,17 +87,27 @@ export function restoredNotes(dir: string): string | undefined {
  */
 export function registerScratchpad(pi: ExtensionAPI, base = tmpdir()): void {
 	const enabled = () => resolveEnabled(SCRATCHPAD, scratchpadEntry.defaultEnabled, readPersisted());
+	// True from agent_start to agent_end. A compaction inside the loop is followed by a response.
+	let looping = false;
+	pi.on("agent_start", () => {
+		looping = true;
+	});
+	pi.on("agent_end", () => {
+		looping = false;
+	});
 	pi.on("before_agent_start", (event, ctx) => {
 		if (!enabled()) return;
-		const dir = scratchpadDir(ctx.sessionManager.getSessionId(), base);
-		mkdirSync(dir, { recursive: true, mode: 0o700 });
+		const dir = openScratchpad(ctx.sessionManager.getSessionId(), base);
 		event.systemPromptOptions.sections[SCRATCHPAD] = scratchpadSection(dir);
 	});
-	pi.on("session_compact", (_event, ctx) => {
+	pi.on("session_compact", (event, ctx) => {
 		if (!enabled()) return;
-		const notes = restoredNotes(scratchpadDir(ctx.sessionManager.getSessionId(), base));
-		// Idle, this is appended at once. Mid-run it is steered, and the agent loop picks steering up
-		// after compaction and before the next response.
-		if (notes) pi.sendMessage({ customType: "scratchpad-notes", content: notes, display: false });
+		const notes = restoredNotes(openScratchpad(ctx.sessionManager.getSessionId(), base));
+		if (!notes) return;
+		const message = { customType: "scratchpad-notes", content: notes, display: false };
+		// Inside the loop, or before an overflow retry, steer so the next response sees the notes.
+		// Otherwise nothing follows, and a steered message would start a turn nobody asked for, so the
+		// notes are appended without one: at once when idle, or when the run settles.
+		pi.sendMessage(message, looping || event.willRetry ? undefined : { triggerTurn: false });
 	});
 }
