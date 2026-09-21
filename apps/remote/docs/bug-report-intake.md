@@ -43,8 +43,7 @@ In:
   size, shape and rate limits.
 - Each uploaded file stored as its own R2 object; one D1 row per report.
 - `/bugs` in the existing web app, behind the existing sign-in plus an admin
-  allowlist: newest-first list, `report.json` and `summary.md` rendered
-  inline, per-file download.
+  allowlist: newest-first list with a download link per stored file.
 - `/bug`'s **Upload Report** wired to that endpoint, with **Export as Zip**
   unchanged and still the fallback when an upload fails.
 
@@ -144,8 +143,10 @@ not fill left null. Losing a report because its metadata was odd is worse than
 a sparse row.
 
 Retention: an R2 lifecycle rule deletes objects 90 days after upload. Rows are
-kept — they are a few hundred bytes — and the page marks a report whose
-objects are gone as expired rather than hiding it.
+kept — they are a few hundred bytes — so an expired report still appears in the
+list and its downloads answer 404. The list does not label it as expired: that
+would cost an R2 `head` per row on every page load, and the row's age already
+says it.
 
 ## 5. Rate limiting
 
@@ -181,10 +182,13 @@ primary-and-verified check for one string comparison. Switching later is that
 scope, that call, and this constant.
 
 The list shows, per report: relative age, description (or "no description"),
-version, platform, size, and badges for transcript, summary and crash count.
-Opening one renders `report.json` as a definition list and `summary.md` as
-markdown through the app's existing renderer, with download links for every
-file including `session.jsonl`.
+version, platform, size, and badges for transcript, summary and crash count,
+with a download link per stored file including `session.jsonl`.
+
+Not in v1, deliberately: rendering `report.json` or `summary.md` inline. Both
+are one click away already, and fetching them per row to display them would
+turn a list of 200 reports into 400 R2 reads. Add it behind a per-report
+expansion if reading reports in the browser proves worth the round trip.
 
 ## 7. CLI changes
 
@@ -239,7 +243,10 @@ the existing Worker tests are:
   null columns.
 - `GET /api/bugs` and `GET /api/bugs/:id/:file` are 404 signed out, 404 for a
   signed-in login absent from `ADMIN_LOGINS`, and 200 for one present.
-- A report whose objects are gone lists as expired and 404s on download.
+- A report whose objects are gone still lists, and its downloads 404.
+- A body that exceeds the cap fails while streaming, before `formData()` parses
+  it, however small its `Content-Length` claims to be.
+- A failure after the first object is written leaves nothing in the bucket.
 
 `packages/cli/test/bug-report.test.ts`:
 

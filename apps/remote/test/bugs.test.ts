@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { issueSessionCookie, upsertAccount } from "../src/accounts.ts";
+import { uploadBugReport } from "../src/bugs.ts";
 
 const UA = { "user-agent": "knightcode/1.2.3" };
 
@@ -161,6 +162,24 @@ describe("refusals", () => {
 		expect(rows?.n).toBe(3);
 	});
 
+	// Content-Length is attacker-controlled. Understating it must not buy a caller the right
+	// to have an arbitrarily large body parsed and buffered before the size is noticed.
+	it("refuses an oversized body that understates its Content-Length", async () => {
+		const huge = "x".repeat(11 * 1024 * 1024);
+		const body = new FormData();
+		body.append("report.json", new File([JSON.stringify(REPORT)], "report.json"));
+		body.append("diagnostics.json", new File(["{}"], "diagnostics.json"));
+		body.append("summary.md", new File([huge], "summary.md"));
+		const response = await SELF.fetch("https://remote.knightcode.dev/v1/bug-reports", {
+			method: "POST",
+			headers: { ...UA, "cf-connecting-ip": "198.51.100.20", "content-length": "10" },
+			body,
+		});
+		expect(response.status).toBe(413);
+		expect(await response.json()).toMatchObject({ ok: false, error: "too_large" });
+		expect((await env.BUGS.list()).objects).toHaveLength(0);
+	});
+
 	// A different address is a different bucket, so one noisy reporter cannot lock out
 	// everyone else.
 	it("does not let one address exhaust another's allowance", async () => {
@@ -230,5 +249,30 @@ describe("reading reports", () => {
 		expect((await get(`/api/bugs/${id}/report.json`, cookie)).status).toBe(404);
 		const body = (await (await get("/api/bugs", cookie)).json()) as { reports: unknown[] };
 		expect(body.reports).toHaveLength(1);
+	});
+});
+
+const JSON_LINE = '{"a":1}\n';
+const SUMMARY = "# x\n";
+
+describe("partial write cleanup", () => {
+	// An orphaned object is unreachable, because every read goes through the row - but it
+	// would still hold a transcript in the bucket for 90 days with nothing recording it.
+	it("removes uploaded files when the row cannot be written", async () => {
+		const broken = {
+			...env,
+			DB: {
+				prepare() {
+					throw new Error("D1 unavailable");
+				},
+			},
+		};
+		const request = new Request("https://remote.knightcode.dev/v1/bug-reports", {
+			method: "POST",
+			headers: { ...UA, "cf-connecting-ip": "198.51.100.30" },
+			body: bundle({ "session.jsonl": JSON_LINE, "summary.md": SUMMARY }),
+		});
+		await expect(uploadBugReport(broken as never, request)).rejects.toThrow("D1 unavailable");
+		expect((await env.BUGS.list()).objects).toHaveLength(0);
 	});
 });
