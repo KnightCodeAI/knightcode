@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchMe, fetchRooms, type Me, type Room as RoomRow, Unauthorized } from "./lib/api.ts";
+import { Bugs } from "./pages/bugs.tsx";
 import { Device } from "./pages/device.tsx";
 import { Landing } from "./pages/landing.tsx";
 import { Room } from "./pages/room.tsx";
@@ -18,6 +19,9 @@ export function App(): React.JSX.Element {
 	const room = ROOM_PATH.exec(path);
 	if (room?.[1]) return <Room roomId={room[1]} />;
 	if (path === "/device") return <Device />;
+	// The Worker serves this shell only to an address in ADMIN_EMAILS, so reaching it is
+	// already the authorisation; the page just loads.
+	if (path === "/bugs") return <Bugs />;
 	return <Home />;
 }
 
