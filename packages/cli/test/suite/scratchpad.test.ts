@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, getCurrentSystemPrompt } from "@knightcode/ai";
 import toolsExtension from "@knightcode/tools";
-import { scratchpadDir } from "@knightcode/tools/scratchpad";
+import { openScratchpad, scratchpadDir } from "@knightcode/tools/scratchpad";
 import { resetSessionOverrides, setMode } from "@knightcode/tools/state";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.ts";
@@ -83,7 +83,7 @@ describe("scratchpad", () => {
 			models: [{ id: "faux-1", contextWindow: 1, maxTokens: 100 }],
 			settings: { compaction: { enabled: true, keepRecentTokens: 1, reserveTokens: 0 } },
 		});
-		mkdirSync(dir, { recursive: true });
+		openScratchpad(harness.sessionManager.getSessionId());
 		writeFileSync(join(dir, "notes.md"), "- mint.ts:42 mints the token\n");
 		harness.setResponses([fauxAssistantMessage("done"), fauxAssistantMessage("unrequested")]);
 		await harness.session.prompt("hi");

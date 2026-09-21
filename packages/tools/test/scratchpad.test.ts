@@ -145,8 +145,7 @@ describe("registerScratchpad", () => {
 
 	test("after compaction, sends notes.md back once as a hidden message", async () => {
 		await setMode("scratchpad", "session");
-		const dir = scratchpadDir("s1", base);
-		mkdirSync(dir, { recursive: true });
+		const dir = openScratchpad("s1", base);
 		writeFileSync(join(dir, "notes.md"), "- mint.ts:42 mints the token\n");
 		const { pi, handlers, sent } = fakePi();
 		registerScratchpad(pi, base);
@@ -158,8 +157,7 @@ describe("registerScratchpad", () => {
 
 	test("steers the notes only when a response follows the compaction", async () => {
 		await setMode("scratchpad", "session");
-		const dir = scratchpadDir("s1", base);
-		mkdirSync(dir, { recursive: true });
+		const dir = openScratchpad("s1", base);
 		writeFileSync(join(dir, "notes.md"), "- mint.ts:42 mints the token\n");
 		const { pi, handlers, sent } = fakePi();
 		registerScratchpad(pi, base);
