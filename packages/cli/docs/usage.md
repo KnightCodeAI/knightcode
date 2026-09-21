@@ -42,7 +42,7 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/thinking` | Switch thinking level; Ctrl+S or Ctrl+D in the picker saves the startup default |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
 | `/settings` | Theme, message delivery, transport, and other preferences |
-| [`/tools`](#web-tools) | Turn `webfetch` and `websearch` off, on for this session, or on by default; pick the search provider and store its key |
+| [`/tools`](#web-tools) | Turn `webfetch`, `websearch` and the [scratchpad](#scratchpad) off, on for this session, or on by default; pick the search provider and store its key |
 | `/resume` | Pick from previous sessions |
 | `/new` | Start a new session |
 | `/name <name>` | Set session display name |
@@ -93,6 +93,14 @@ The same changes work without the panel:
 Settings are stored in `~/.knightcode/agent/tools.json`, owner-readable only because it can hold the Brave key. `--tools` and `--exclude-tools` still apply: a tool excluded on the command line stays off whatever `/tools` says.
 
 Fetched pages and search results are marked as untrusted in the tool output so the model treats instructions inside them as data, but treat the tools like any other network access: a fetched page can still influence what the agent does next.
+
+## Scratchpad
+
+`/tools scratchpad on` gives each session a private working directory under the system temp directory (`<tmp>/knightcode-<uid>/scratchpad/<session-id>`, or `<tmp>\knightcode\scratchpad\<session-id>` on Windows). The system prompt names it and asks the agent to put throwaway scripts and intermediate output there instead of in your project.
+
+The agent keeps its working notes there in `notes.md`: task list, decisions, `file:line` facts, next steps. After each compaction the first 8 KB of `notes.md` is put back into the context once, so those notes outlive the summary. Open the file to see what the agent is tracking.
+
+The scratchpad is off by default. When on, it adds about 60 tokens to the system prompt, which is cached; the notes cost tokens only after a compaction. It is not a tool, so `--tools` and `--exclude-tools` do not affect it. `/fork` starts a new, empty directory, and the operating system clears old ones with the rest of its temp files.
 
 ## Message Queue
 
