@@ -9,8 +9,14 @@ import { websearchTool } from "./web/search.ts";
 // exported, and renderCall's parameter type makes a ToolDefinition<TSchema> list unassignable.
 export type AnyToolDefinition = ToolDefinition<any, any>;
 
+/** A /tools entry with no engine tool of its own; the extension reads its enabled state itself. */
+export interface FeatureTool {
+	name: string;
+	feature: true;
+}
+
 export interface RegisteredToolEntry {
-	tool: AnyToolDefinition;
+	tool: AnyToolDefinition | FeatureTool;
 	defaultEnabled: boolean;
 	/** Extra /tools rows; each row's id is the key it stores in the tool's settings. */
 	settings?: (current: ToolSettings, theme: Theme) => SettingItem[];

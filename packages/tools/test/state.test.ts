@@ -204,4 +204,11 @@ describe("applyActiveTools", () => {
 		applyActiveTools(pi, entries, { alpha: { enabled: false } });
 		expect(pi.active).toEqual([]);
 	});
+
+	test("skips feature entries, which have no engine tool", () => {
+		const pi = fakePi(["read"]);
+		const withFeature = [...entries, { tool: { name: "gamma", feature: true as const }, defaultEnabled: true }];
+		expect(applyActiveTools(pi, withFeature, {})).toBe(true);
+		expect(pi.active).toEqual(["read", "alpha"]);
+	});
 });
