@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@knightcodeai/cli";
 import { toolsCommand, toolsCompletions } from "./command.ts";
 import { TOOLS } from "./registry.ts";
 import { applyActiveTools } from "./state.ts";
+import { registerScratchpad } from "./scratchpad.ts";
 
 /**
  * KnightCode-native tools as a hidden built-in extension: every registry tool is registered here
@@ -18,4 +19,5 @@ export default function toolsExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", () => {
 		applyActiveTools(pi, TOOLS);
 	});
+	registerScratchpad(pi);
 }
