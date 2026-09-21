@@ -58,3 +58,39 @@ export function shortenPath(cwd: string | null | undefined): string | undefined 
 	const parts = cwd.split(/[\\/]+/).filter(Boolean);
 	return parts.slice(-2).join("/") || undefined;
 }
+
+export interface BugReport {
+	id: string;
+	created_at: number;
+	client_id: string | null;
+	version: string | null;
+	platform: string | null;
+	arch: string | null;
+	runtime: string | null;
+	description: string | null;
+	has_session: number;
+	has_summary: number;
+	crash_count: number;
+	size_bytes: number;
+}
+
+/**
+ * Maintainer-only, and the Worker answers 404 rather than 401 for everyone else, so this
+ * throws a plain Error on refusal. There is no signed-out state to render: a visitor who
+ * cannot read reports should not learn the page exists.
+ */
+export async function fetchBugReports(signal?: AbortSignal): Promise<BugReport[]> {
+	const body = await json<{ reports?: BugReport[] }>("/api/bugs", { signal });
+	return body.reports ?? [];
+}
+
+export function bugReportFileUrl(id: string, file: string): string {
+	return `/api/bugs/${id}/${file}`;
+}
+
+/** Bundles run from a few KB to the 10 MB cap, so both units earn their place. */
+export function formatSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}

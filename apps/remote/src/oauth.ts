@@ -27,12 +27,37 @@ export function startLogin(env: Env, url: URL): Response {
 	const authorize = new URL("https://github.com/login/oauth/authorize");
 	authorize.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
 	authorize.searchParams.set("redirect_uri", `${url.origin}/auth/callback`);
-	authorize.searchParams.set("scope", "read:user");
+	// `user:email` is needed because the bug report allowlist matches a verified address;
+	// `read:user` alone returns the login and a possibly unverified public profile email.
+	authorize.searchParams.set("scope", "read:user user:email");
 	authorize.searchParams.set("state", `${nonce}${next}`);
 	return new Response(null, {
 		status: 302,
 		headers: { location: authorize.toString(), "set-cookie": stateCookie(nonce, STATE_MAX_AGE_SECONDS) },
 	});
+}
+
+/**
+ * The address the bug report allowlist is matched against, so `verified` is the whole point:
+ * anyone can add someone else's address to their own GitHub account, but GitHub will not let a
+ * second account verify an address that is already verified elsewhere. An unverified or
+ * non-primary address is treated as no address at all, which denies access rather than
+ * granting it to the wrong person.
+ */
+async function verifiedPrimaryEmail(accessToken: string): Promise<string | null> {
+	const response = await fetch("https://api.github.com/user/emails", {
+		headers: {
+			authorization: `Bearer ${accessToken}`,
+			accept: "application/vnd.github+json",
+			"user-agent": "knightcode-remote",
+		},
+	});
+	// Not fatal: sign-in still works, the account simply has no address and so no admin access.
+	if (!response.ok) return null;
+	const addresses = (await response.json()) as Array<{ email?: string; primary?: boolean; verified?: boolean }>;
+	if (!Array.isArray(addresses)) return null;
+	const primary = addresses.find((entry) => entry.primary === true && entry.verified === true);
+	return typeof primary?.email === "string" ? primary.email.toLowerCase() : null;
 }
 
 export async function completeLogin(env: Env, request: Request): Promise<Response> {
@@ -68,7 +93,14 @@ export async function completeLogin(env: Env, request: Request): Promise<Respons
 	if (!userResponse.ok) return new Response("Could not read the GitHub profile", { status: 401 });
 	const profile = (await userResponse.json()) as { id: number; login: string; avatar_url?: string };
 
-	const account = await upsertAccount(env.DB, "github", String(profile.id), profile.login, profile.avatar_url ?? null);
+	const account = await upsertAccount(
+		env.DB,
+		"github",
+		String(profile.id),
+		profile.login,
+		profile.avatar_url ?? null,
+		await verifiedPrimaryEmail(token.access_token),
+	);
 	const headers = new Headers({ location: safeNext(state.slice(nonce.length)) });
 	headers.append("set-cookie", await issueSessionCookie(env.SIGNING_SECRET, account.id));
 	headers.append("set-cookie", stateCookie("", 0));

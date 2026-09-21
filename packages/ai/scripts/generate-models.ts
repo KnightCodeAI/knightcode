@@ -30,6 +30,11 @@ import {
 	validateGeneratedModelData,
 	validateModelDataDirectory,
 } from "./model-data.ts";
+import {
+	DEFAULT_RADIUS_GATEWAY,
+	getRadiusModelsFromConfig,
+	loadRadiusGatewayConfig,
+} from "../src/providers/radius-config.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -681,6 +686,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 	const isCloudflareAiGateway = provider === "cloudflare-ai-gateway" || baseUrl.includes("gateway.ai.cloudflare.com");
 	const isNvidia = provider === "nvidia" || baseUrl.includes("integrate.api.nvidia.com");
 	const isAntLing = provider === "ant-ling" || baseUrl.includes("api.ant-ling.com");
+	const isCerebras = provider === "cerebras" || baseUrl.includes("cerebras.ai");
 	const isTogetherReasoningOnly = isTogether && TOGETHER_REASONING_ONLY_MODELS.has(model.id);
 	// AgentRouter relays DeepSeek in its native shape rather than normalizing it: verified
 	// 2026-09-01, deepseek-v4-flash there rejects the `developer` role with a 400. Its GLM
@@ -692,8 +698,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 
 	const isNonStandard =
 		isNvidia ||
-		provider === "cerebras" ||
-		baseUrl.includes("cerebras.ai") ||
+		isCerebras ||
 		provider === "xai" ||
 		baseUrl.includes("api.x.ai") ||
 		isTogether ||
@@ -750,7 +755,7 @@ function detectOpenAICompletionsCompat(model: Model<"openai-completions">): Open
 		chatTemplateKwargs: {},
 		chatTemplateArgs: {},
 		zaiToolStream: false,
-		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia,
+		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isNvidia && !isCerebras,
 		supportsOpenAIGrammarTools: false,
 		supportsMidConvoSystemMessages: false,
 		supportsMidConvoToolAdditions: false,
@@ -1288,6 +1293,21 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 		return models;
 	} catch (error) {
 		console.error("Failed to fetch OpenRouter models:", error);
+		if (generatorOptions.strict) throw error;
+		return [];
+	}
+}
+
+async function fetchRadiusModels(): Promise<Model<"knightcode-messages">[]> {
+	try {
+		console.log("Fetching models from Radius API...");
+		const config = await loadRadiusGatewayConfig(DEFAULT_RADIUS_GATEWAY);
+		const models = getRadiusModelsFromConfig("radius", config);
+		if (models.length === 0) throw new Error("Radius API returned no models");
+		console.log(`Fetched ${models.length} models from Radius`);
+		return models;
+	} catch (error) {
+		console.error("Failed to fetch Radius models:", error);
 		if (generatorOptions.strict) throw error;
 		return [];
 	}
@@ -2148,6 +2168,33 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 			}
 		}
 
+		// Process Meta models
+		if (data.meta?.models) {
+			for (const [modelId, model] of Object.entries(data.meta.models)) {
+				const m = model as ModelsDevModel;
+				if (m.tool_call !== true) continue;
+
+				models.push({
+					id: modelId,
+					name: m.name || modelId,
+					api: "openai-responses",
+					provider: "meta",
+					baseUrl: "https://api.meta.ai/v1",
+					reasoning: m.reasoning === true,
+					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					cost: {
+						input: m.cost?.input || 0,
+						output: m.cost?.output || 0,
+						cacheRead: m.cost?.cache_read || 0,
+						cacheWrite: m.cost?.cache_write || 0,
+					},
+					contextWindow: m.limit?.context || 4096,
+					maxTokens: m.limit?.output || 4096,
+				});
+				recordModelsDevReasoningOptions("meta", modelId, m);
+			}
+		}
+
 		models.push(...processZaiModels(data));
 
 		// Process Mistral models
@@ -2731,18 +2778,26 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 }
 
 async function generateModels() {
-	// Fetch models from both sources
-	// models.dev: Anthropic, Google, OpenAI, Groq, Cerebras
-	// OpenRouter: xAI and other providers (excluding Anthropic, Google, OpenAI)
+	// Fetch models from all upstream catalogs.
+	// models.dev: Anthropic, Google, OpenAI, Groq, Cerebras, and others
+	// OpenRouter: its tool-capable routed catalog
 	// AI Gateway: OpenAI-compatible catalog with tool-capable models
 	// AgentRouter: its own rate table, with models.dev for capabilities only
+	// Radius: its unauthenticated public catalog; authenticated clients overlay it at runtime
 	const modelsDevModels = await loadModelsDevData();
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
 	const agentRouterModels = await fetchAgentRouterModels();
+	const radiusModels = await fetchRadiusModels();
 
-	// Combine models (models.dev has priority)
-	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...agentRouterModels].filter(
+	// Combine models (models.dev has priority where sources overlap).
+	const allModels = [
+		...modelsDevModels,
+		...openRouterModels,
+		...aiGatewayModels,
+		...agentRouterModels,
+		...radiusModels,
+	].filter(
 		(model) =>
 			!(model.provider === "xai" && XAI_BUILTIN_EXCLUDED_MODEL_IDS.has(model.id)) &&
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark"),

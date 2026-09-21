@@ -1,5 +1,6 @@
 import { CLOSE_UNAUTHORIZED } from "../../../packages/remote/src/protocol.ts";
 import { accountForCliToken, clearSessionCookie, type Env, readSessionCookie, revokeCliToken } from "./accounts.ts";
+import { adminEmail, getBugReportFile, listBugReports, uploadBugReport } from "./bugs.ts";
 import { approveDevice, csrfToken, pollDevice, startDevice } from "./device.ts";
 import { completeLogin, startLogin } from "./oauth.ts";
 
@@ -13,6 +14,7 @@ export { RemoteRoom } from "./room.ts";
 const ROOM_ID = /^[0-9A-F]{32}$/;
 const ROOM_PATH = /^\/r\/([0-9A-F]{32})(\/ws)?$/;
 const API_ROOM_PATH = /^\/api\/rooms\/([0-9A-F]{32})$/;
+const API_BUG_FILE_PATH = /^\/api\/bugs\/([0-9A-Z]{26})\/([a-z.]+)$/;
 
 function bearer(request: Request): string | undefined {
 	const header = request.headers.get("authorization");
@@ -97,6 +99,11 @@ export default {
 		const url = new URL(request.url);
 		const path = url.pathname;
 
+		// Anonymous on purpose, and so placed above every account lookup: requiring a sign-in
+		// at the moment someone has hit a bug is where bug reports go to die. What keeps it
+		// safe is the limits inside, not an identity.
+		if (path === "/v1/bug-reports" && request.method === "POST") return uploadBugReport(env, request);
+
 		if (path === "/host") return hostConnect(env, request);
 		if (path === "/host/stop" && request.method === "POST") {
 			const token = bearer(request);
@@ -169,6 +176,16 @@ export default {
 					last_seen_at: number;
 				}>();
 			return Response.json({ rooms: rows.results ?? [] });
+		}
+
+		// 404 rather than 401/403 everywhere below: a maintainer-only surface should not
+		// confirm to a signed-in stranger that it is there.
+		if (path === "/bugs" || path === "/api/bugs" || API_BUG_FILE_PATH.test(path)) {
+			if (!(await adminEmail(env, accountId))) return new Response("Not found", { status: 404 });
+			if (path === "/bugs") return appShell(env, url, request);
+			if (path === "/api/bugs") return listBugReports(env);
+			const [, id, file] = API_BUG_FILE_PATH.exec(path) ?? [];
+			if (id && file) return getBugReportFile(env, id, file);
 		}
 
 		const apiRoom = API_ROOM_PATH.exec(path);
