@@ -174,12 +174,19 @@ rows, `GET /api/bugs/:id/:file` streams one object out of R2. Both are
 refused with 404 — not 403 — for anyone who is not an admin, so the route does
 not confirm it exists.
 
-Admin is a `ADMIN_LOGINS` secret, a comma-separated list of GitHub logins,
-compared against the login on the signed-in account. Logins, not emails,
-because the existing OAuth asks for `read:user` and already stores the login;
-emails would need the `user:email` scope, a second API call and a
-primary-and-verified check for one string comparison. Switching later is that
-scope, that call, and this constant.
+Admin is an `ADMIN_EMAILS` secret, a comma-separated list of addresses compared
+against the address on the signed-in account, trimmed and case-folded on both
+sides because the secret is hand-edited.
+
+Emails rather than GitHub logins, which costs the `user:email` scope and one
+extra API call at sign-in, and gains an identity that survives a username
+change. What makes it safe is `verified`: anyone can add someone else's address
+to their own GitHub account, but GitHub will not let a second account verify an
+address already verified elsewhere. So only a `primary` **and** `verified`
+address is stored, migration `0005` holds it on `accounts`, and an account with
+no stored address is never an admin — an account that signed in before the
+column existed has none until it signs in again, which denies access rather
+than granting it.
 
 The list shows, per report: relative age, description (or "no description"),
 version, platform, size, and badges for transcript, summary and crash count,
@@ -242,7 +249,8 @@ the existing Worker tests are:
 - A `report.json` that parses but has no recognisable fields is stored, with
   null columns.
 - `GET /api/bugs` and `GET /api/bugs/:id/:file` are 404 signed out, 404 for a
-  signed-in login absent from `ADMIN_LOGINS`, and 200 for one present.
+  signed-in account whose address is absent from `ADMIN_EMAILS`, and 200 for one
+  present. Also 404 for an account with no stored address at all.
 - A report whose objects are gone still lists, and its downloads 404.
 - A body that exceeds the cap fails while streaming, before `formData()` parses
   it, however small its `Content-Length` claims to be.
@@ -293,7 +301,7 @@ From `apps/remote`, so wrangler reads the Worker name from `wrangler.jsonc`.
 wrangler r2 bucket create knightcode-bug-reports
 wrangler r2 bucket lifecycle add knightcode-bug-reports expire-90d bug-reports/ \
   --expire-days 90
-wrangler secret put ADMIN_LOGINS
+wrangler secret put ADMIN_EMAILS
 ```
 
 Then apply migration 0004 to the remote D1 before `wrangler deploy`.

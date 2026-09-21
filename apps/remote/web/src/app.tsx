@@ -19,7 +19,7 @@ export function App(): React.JSX.Element {
 	const room = ROOM_PATH.exec(path);
 	if (room?.[1]) return <Room roomId={room[1]} />;
 	if (path === "/device") return <Device />;
-	// The Worker serves this shell only to a login in ADMIN_LOGINS, so reaching it is
+	// The Worker serves this shell only to an address in ADMIN_EMAILS, so reaching it is
 	// already the authorisation; the page just loads.
 	if (path === "/bugs") return <Bugs />;
 	return <Home />;

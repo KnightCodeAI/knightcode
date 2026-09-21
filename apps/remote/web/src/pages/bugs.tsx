@@ -84,7 +84,7 @@ function ReportRow({ report }: { report: BugReport }): React.JSX.Element {
 }
 
 /**
- * Reports are uploaded anonymously by `/bug` and read only by a login in ADMIN_LOGINS.
+ * Reports are uploaded anonymously by `/bug` and read only by an address in ADMIN_EMAILS.
  * The Worker answers 404 to everyone else, including signed-in accounts, so a failure here
  * is a real failure rather than a sign-in prompt.
  */

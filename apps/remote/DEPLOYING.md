@@ -106,9 +106,11 @@ bunx wrangler secret put SIGNING_SECRET
 bunx wrangler secret put GITHUB_CLIENT_ID
 bunx wrangler secret put GITHUB_CLIENT_SECRET
 
-# Comma-separated GitHub logins allowed to read /bugs. Anyone else, signed in or
-# not, gets a 404 there. Filing a report needs no account at all.
-bunx wrangler secret put ADMIN_LOGINS
+# Comma-separated email addresses allowed to read /bugs. Anyone else, signed in
+# or not, gets a 404 there. Filing a report needs no account at all. Matched
+# against the verified primary address GitHub reports at sign-in, so an account
+# with no verified address never qualifies.
+bunx wrangler secret put ADMIN_EMAILS
 ```
 
 ## 2a. The bug report bucket

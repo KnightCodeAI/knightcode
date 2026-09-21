@@ -9,14 +9,16 @@ export interface Env {
 	SIGNING_SECRET: string;
 	GITHUB_CLIENT_ID: string;
 	GITHUB_CLIENT_SECRET: string;
-	/** Comma-separated GitHub logins allowed to read bug reports; see docs/bug-report-intake.md. */
-	ADMIN_LOGINS?: string;
+	/** Comma-separated email addresses allowed to read bug reports; see docs/bug-report-intake.md. */
+	ADMIN_EMAILS?: string;
 }
 
 export interface Account {
 	id: string;
 	login: string;
 	avatarUrl: string | null;
+	/** Verified primary address, or null when the provider gave none. Drives the bug report allowlist. */
+	email: string | null;
 }
 
 const SESSION_COOKIE = "kc_session";
@@ -28,22 +30,23 @@ export async function upsertAccount(
 	providerUserId: string,
 	login: string,
 	avatarUrl: string | null,
+	email: string | null = null,
 ): Promise<Account> {
 	await db
 		.prepare(
-			`INSERT INTO accounts (id, provider, provider_user_id, login, avatar_url, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?)
+			`INSERT INTO accounts (id, provider, provider_user_id, login, avatar_url, created_at, email)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT (provider, provider_user_id)
-			 DO UPDATE SET login = excluded.login, avatar_url = excluded.avatar_url`,
+			 DO UPDATE SET login = excluded.login, avatar_url = excluded.avatar_url, email = excluded.email`,
 		)
-		.bind(randomId(16), provider, providerUserId, login, avatarUrl, Date.now())
+		.bind(randomId(16), provider, providerUserId, login, avatarUrl, Date.now(), email)
 		.run();
 	const row = await db
-		.prepare("SELECT id, login, avatar_url FROM accounts WHERE provider = ? AND provider_user_id = ?")
+		.prepare("SELECT id, login, avatar_url, email FROM accounts WHERE provider = ? AND provider_user_id = ?")
 		.bind(provider, providerUserId)
-		.first<{ id: string; login: string; avatar_url: string | null }>();
+		.first<{ id: string; login: string; avatar_url: string | null; email: string | null }>();
 	if (!row) throw new Error("Account upsert did not persist");
-	return { id: row.id, login: row.login, avatarUrl: row.avatar_url };
+	return { id: row.id, login: row.login, avatarUrl: row.avatar_url, email: row.email };
 }
 
 export async function issueSessionCookie(secret: string, accountId: string): Promise<string> {

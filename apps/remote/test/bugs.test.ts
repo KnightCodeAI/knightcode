@@ -48,8 +48,12 @@ function post(body: FormData, headers: Record<string, string> = UA, ip?: string)
 	});
 }
 
-async function signedIn(login: string): Promise<string> {
-	const account = await upsertAccount(env.DB, "github", `id-${login}`, login, null);
+/**
+ * `email` is what the allowlist matches, and it is null for an account that signed in before
+ * the address was stored — which must not be an admin.
+ */
+async function signedIn(login: string, email: string | null = null): Promise<string> {
+	const account = await upsertAccount(env.DB, "github", `id-${login}`, login, null, email);
 	return await issueSessionCookie(env.SIGNING_SECRET, account.id);
 }
 
@@ -210,14 +214,29 @@ describe("reading reports", () => {
 
 	// 404, not 403: a maintainer-only surface should not confirm it exists.
 	it("hides them from a signed-in account that is not an admin", async () => {
-		const cookie = await signedIn("someone-else");
+		const cookie = await signedIn("someone-else", "someone-else@example.com");
 		expect((await get("/api/bugs", cookie)).status).toBe(404);
 		expect((await get("/bugs", cookie)).status).toBe(404);
 	});
 
+	// The address is only stored when GitHub says it is the account's verified primary one,
+	// so a row without one has never proved ownership of any address. It must not match the
+	// allowlist, even if the allowlist happens to contain that person's address.
+	it("refuses an account that has no stored email", async () => {
+		const cookie = await signedIn("no-email", null);
+		expect((await get("/api/bugs", cookie)).status).toBe(404);
+		expect((await get("/bugs", cookie)).status).toBe(404);
+	});
+
+	// The secret is hand-edited, so spacing and casing are part of its contract.
+	it("matches an allowlisted address regardless of case", async () => {
+		const cookie = await signedIn("second", "another-maintainer@example.com");
+		expect((await get("/api/bugs", cookie)).status).toBe(200);
+	});
+
 	it("lists reports for an allowlisted login", async () => {
 		const id = await uploaded();
-		const cookie = await signedIn("maintainer");
+		const cookie = await signedIn("maintainer", "maintainer@example.com");
 		const response = await get("/api/bugs", cookie);
 		expect(response.status).toBe(200);
 		const body = (await response.json()) as { reports: Array<{ id: string; description: string }> };
@@ -227,7 +246,7 @@ describe("reading reports", () => {
 
 	it("serves a stored file to an admin and refuses everyone else", async () => {
 		const id = await uploaded();
-		const cookie = await signedIn("maintainer");
+		const cookie = await signedIn("maintainer", "maintainer@example.com");
 		const response = await get(`/api/bugs/${id}/summary.md`, cookie);
 		expect(response.status).toBe(200);
 		expect(await response.text()).toBe("# what happened\n");
@@ -236,7 +255,7 @@ describe("reading reports", () => {
 
 	it("refuses a file the bundle never contains", async () => {
 		const id = await uploaded();
-		const cookie = await signedIn("maintainer");
+		const cookie = await signedIn("maintainer", "maintainer@example.com");
 		expect((await get(`/api/bugs/${id}/wrangler.jsonc`, cookie)).status).toBe(404);
 	});
 
@@ -244,7 +263,7 @@ describe("reading reports", () => {
 	// showing that the report existed while its files answer 404.
 	it("404s a file whose object has expired, with the row still listed", async () => {
 		const id = await uploaded();
-		const cookie = await signedIn("maintainer");
+		const cookie = await signedIn("maintainer", "maintainer@example.com");
 		for (const object of (await env.BUGS.list()).objects) await env.BUGS.delete(object.key);
 		expect((await get(`/api/bugs/${id}/report.json`, cookie)).status).toBe(404);
 		const body = (await (await get("/api/bugs", cookie)).json()) as { reports: unknown[] };

@@ -1,6 +1,6 @@
 import { CLOSE_UNAUTHORIZED } from "../../../packages/remote/src/protocol.ts";
 import { accountForCliToken, clearSessionCookie, type Env, readSessionCookie, revokeCliToken } from "./accounts.ts";
-import { adminLogin, getBugReportFile, listBugReports, uploadBugReport } from "./bugs.ts";
+import { adminEmail, getBugReportFile, listBugReports, uploadBugReport } from "./bugs.ts";
 import { approveDevice, csrfToken, pollDevice, startDevice } from "./device.ts";
 import { completeLogin, startLogin } from "./oauth.ts";
 
@@ -181,7 +181,7 @@ export default {
 		// 404 rather than 401/403 everywhere below: a maintainer-only surface should not
 		// confirm to a signed-in stranger that it is there.
 		if (path === "/bugs" || path === "/api/bugs" || API_BUG_FILE_PATH.test(path)) {
-			if (!(await adminLogin(env, accountId))) return new Response("Not found", { status: 404 });
+			if (!(await adminEmail(env, accountId))) return new Response("Not found", { status: 404 });
 			if (path === "/bugs") return appShell(env, url, request);
 			if (path === "/api/bugs") return listBugReports(env);
 			const [, id, file] = API_BUG_FILE_PATH.exec(path) ?? [];

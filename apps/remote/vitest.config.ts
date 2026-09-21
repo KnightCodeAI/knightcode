@@ -20,7 +20,7 @@ export default defineConfig({
 					GITHUB_CLIENT_SECRET: "test-client-secret",
 					// Deliberately two entries with odd spacing and casing: the allowlist is a
 					// hand-edited secret, so trimming and case folding are part of its contract.
-					ADMIN_LOGINS: "maintainer, Another-Maintainer",
+					ADMIN_EMAILS: "maintainer@example.com, Another-Maintainer@Example.com",
 					TEST_MIGRATIONS: await readD1Migrations(fileURLToPath(new URL("./migrations", import.meta.url))),
 				},
 			},

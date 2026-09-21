@@ -224,19 +224,26 @@ function insertBugReport(
  * filing needs no account at all. The allowlist is a secret rather than a table so that
  * granting access is a deploy-time act, not something any signed-in visitor can reach.
  */
-export function isAdmin(env: Env, login: string | undefined): boolean {
-	if (!login) return false;
-	return (env.ADMIN_LOGINS ?? "")
+export function isAdmin(env: Env, email: string | null | undefined): boolean {
+	if (!email) return false;
+	return (env.ADMIN_EMAILS ?? "")
 		.split(",")
 		.map((entry) => entry.trim().toLowerCase())
 		.filter(Boolean)
-		.includes(login.toLowerCase());
+		.includes(email.toLowerCase());
 }
 
-export async function adminLogin(env: Env, accountId: string | undefined): Promise<string | undefined> {
+/**
+ * The address comes from the account row, which only ever holds a verified primary address
+ * (see `verifiedPrimaryEmail` in oauth.ts). An account that signed in before the email column
+ * existed has none, so it is not an admin until it signs in again — closed, not open.
+ */
+export async function adminEmail(env: Env, accountId: string | undefined): Promise<string | undefined> {
 	if (!accountId) return undefined;
-	const row = await env.DB.prepare("SELECT login FROM accounts WHERE id = ?").bind(accountId).first<{ login: string }>();
-	return isAdmin(env, row?.login) ? row?.login : undefined;
+	const row = await env.DB.prepare("SELECT email FROM accounts WHERE id = ?")
+		.bind(accountId)
+		.first<{ email: string | null }>();
+	return isAdmin(env, row?.email) ? (row?.email ?? undefined) : undefined;
 }
 
 export async function listBugReports(env: Env): Promise<Response> {
