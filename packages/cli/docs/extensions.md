@@ -738,6 +738,25 @@ knightcode.on("after_provider_response", (event, ctx) => {
 
 Header availability depends on provider and transport. Providers that abstract HTTP responses may not expose headers.
 
+#### cache_warming_decision
+
+Fired before each prompt-cache refresh with KnightCode's decision filled in. The event carries only KnightCode's cost estimates; use `ctx.model`, `ctx.isIdle()`, and `ctx.getContextUsage()` for everything else.
+
+```typescript
+knightcode.on("cache_warming_decision", (event, ctx) => {
+  // event.warmCost: price of this refresh
+  // event.missCost: extra price of the next request if the entry is lost
+  // event.continuationProbability: KnightCode's estimate that a request arrives in time
+  // event.action: "warm" | "stop", KnightCode's decision
+
+  if (ctx.model?.provider === "my-provider") {
+    return { action: "stop" };
+  }
+});
+```
+
+Return `{ action: "warm" }` or `{ action: "stop" }` to override; the last handler that returns an action wins. `"stop"` ends warming until the next real request.
+
 ### Model Events
 
 #### model_select

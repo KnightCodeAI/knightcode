@@ -9,13 +9,28 @@ const state = vi.hoisted(() => {
 	});
 	return {
 		originalGetBuiltinModule,
+		jitiModuleLoads: 0,
+		virtualModulesLoads: 0,
 		createJiti: vi.fn((_id: unknown, _options: unknown) => ({
 			import: vi.fn(async () => () => {}),
 		})),
 	};
 });
 
-vi.mock("jiti/static", () => ({ createJiti: state.createJiti }));
+vi.mock("jiti/static", () => {
+	state.jitiModuleLoads++;
+	return { createJiti: state.createJiti };
+});
+
+vi.mock("../../../src/core/extensions/virtual-modules.ts", () => {
+	state.virtualModulesLoads++;
+	return {
+		VIRTUAL_MODULES: {
+			typebox: {},
+			"@knightcodeai/cli": {},
+		},
+	};
+});
 
 import { loadExtensions } from "../../../src/core/extensions/loader.ts";
 
@@ -32,10 +47,17 @@ afterAll(() => {
 });
 
 describe("Node SEA extension loading", () => {
-	it("uses bundled virtual modules instead of filesystem aliases", async () => {
+	// A Node SEA build pulled both in at startup, so a binary with no extensions installed
+	// still paid for the transform and every bundled module.
+	it("loads jiti and bundled virtual modules only when importing an extension", async () => {
+		expect(state.jitiModuleLoads).toBe(0);
+		expect(state.virtualModulesLoads).toBe(0);
+
 		const result = await loadExtensions(["/extension.ts"], "/");
 
 		expect(result.errors).toEqual([]);
+		expect(state.jitiModuleLoads).toBe(1);
+		expect(state.virtualModulesLoads).toBe(1);
 		expect(result.extensions).toHaveLength(1);
 		expect(state.createJiti).toHaveBeenCalledOnce();
 

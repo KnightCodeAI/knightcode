@@ -228,6 +228,25 @@ describe("InteractiveMode compaction events", () => {
 		expect(fakeThis.ui.requestRender).toHaveBeenCalledTimes(2);
 	});
 
+	// The UI used to abort the agent directly, which left the session's own retry and
+	// compaction state untouched, so a cancelled turn kept retrying.
+	test("routes interactive response aborts through AgentSession", () => {
+		const abort = vi.fn(async () => {});
+		const ui = {
+			clearAllQueues: () => ({ steering: [], followUp: [] }),
+			updatePendingMessagesDisplay: vi.fn(),
+			session: { abort },
+		};
+		const restoreQueuedMessagesToEditor = Reflect.get(InteractiveMode.prototype, "restoreQueuedMessagesToEditor") as (
+			this: typeof ui,
+			options?: { abort?: boolean },
+		) => number;
+
+		restoreQueuedMessagesToEditor.call(ui, { abort: true });
+
+		expect(abort).toHaveBeenCalledOnce();
+	});
+
 	test("preserves steering behavior when flushing into an active agent run", async () => {
 		const fakeThis = {
 			compactionQueuedMessages: [{ text: "change direction", mode: "steer" as const }],
