@@ -254,12 +254,14 @@ test("remote service endpoints publish and clean up provider subscriptions", asy
 		endpoint.invoke(createServiceSubscribeCall("subscription-1", Counter.id, "singleton"), publish, BACKGROUND_CONTEXT),
 	).resolves.toMatchObject({ serviceId: Counter.id, mode: "singleton" });
 
-	state.state.value = 1;
-	state.publish(BACKGROUND_CONTEXT);
+	state.change(BACKGROUND_CONTEXT, (draft) => {
+		draft.value = 1;
+	});
 	expect(updates).toEqual([{ type: "state", member: "state", sequence: 1, ops: [["s", ["value"], 1]] }]);
 	endpoint.dispose();
-	state.state.value = 2;
-	state.publish(BACKGROUND_CONTEXT);
+	state.change(BACKGROUND_CONTEXT, (draft) => {
+		draft.value = 2;
+	});
 	expect(updates).toHaveLength(1);
 	provider.dispose();
 });
