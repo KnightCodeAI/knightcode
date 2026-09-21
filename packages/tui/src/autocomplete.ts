@@ -332,8 +332,15 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 					};
 				});
 
+				// A `skill:` command is scored on the part after the prefix, so `/idea` reaches
+				// `skill:research-idea` rather than losing to characters the namespace contributed.
+				// A query that is itself the start of `skill:` is asking for the namespace though:
+				// scoring `skill` against a bare `deep-research` matches nothing, which made every
+				// skill vanish from `/sk` onwards. Those queries keep the full name.
+				const namespace = "skill:";
+				const wantsNamespace = namespace.startsWith(prefix.toLowerCase()) || prefix.startsWith(namespace);
 				const filtered = fuzzyFilter(commandItems, prefix, (item) =>
-					!prefix.startsWith("skill:") && item.name.startsWith("skill:") ? item.name.slice("skill:".length) : item.name,
+					!wantsNamespace && item.name.startsWith(namespace) ? item.name.slice(namespace.length) : item.name,
 				).map((item) => ({
 					value: item.name,
 					label: item.label,

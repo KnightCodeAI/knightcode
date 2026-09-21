@@ -31,6 +31,15 @@ describe("CombinedAutocompleteProvider slash-command filter", () => {
 		assert.ok(items.includes("model"));
 	});
 
+	// Scoring `skill` against a bare `deep-research` matches nothing, so stripping the
+	// namespace for a query that IS the namespace emptied the list from `/sk` onwards.
+	for (const query of ["s", "sk", "skil", "skill"]) {
+		it(`still lists every skill for query "${query}"`, async () => {
+			const items = await suggestionsFor(query);
+			assert.deepEqual(items.toSorted(), ["skill:deep-research", "skill:research-idea", "skill:to-sidecar"]);
+		});
+	}
+
 	it("keeps explicit skill: queries working", async () => {
 		const items = await suggestionsFor("skill:side");
 		assert.ok(items.includes("skill:to-sidecar"));
