@@ -594,7 +594,7 @@ describe("Cache Retention (KNIGHTCODE_CACHE_RETENTION)", () => {
 					// Expected to fail
 				}
 
-				expect(model.compat?.supportsStrictMode).toBe(false);
+				expect(model.compat?.supportsStrictMode).toBeUndefined();
 				expect(capturedPayload).toBeDefined();
 				const tools = capturedPayload?.tools as any[] | undefined;
 				expect(tools).toBeDefined();

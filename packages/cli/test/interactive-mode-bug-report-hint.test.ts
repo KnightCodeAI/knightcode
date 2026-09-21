@@ -1,6 +1,6 @@
 import { type AssistantMessage, fauxAssistantMessage } from "@knightcode/ai";
 import { describe, expect, test, vi } from "vitest";
-import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
+import { formatCrashExtensionHint, InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 
 type BugReportHintContext = {
 	suggestBugReport(): void;
@@ -16,6 +16,13 @@ function errorMessage(errorMessage: string): AssistantMessage {
 }
 
 describe("InteractiveMode bug report hints", () => {
+	test("identifies extensions with frames in a crash stack", () => {
+		expect(formatCrashExtensionHint(["npm:knightcode-observational-memory"])).toBe(
+			"A stack frame came from loaded extension `npm:knightcode-observational-memory`, which may be involved. Try disabling it with `knightcode config`, or run `knightcode -ne` to confirm.",
+		);
+		expect(formatCrashExtensionHint(undefined)).toBeUndefined();
+	});
+
 	test("does not suggest reports for retryable provider failures", () => {
 		const context = { suggestBugReport: vi.fn() };
 		const failures = [

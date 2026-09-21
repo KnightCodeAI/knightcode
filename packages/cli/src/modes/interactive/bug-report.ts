@@ -51,6 +51,10 @@ export async function reportBug(context: BugReportContext, initialHint?: string)
 		context.showStatus("Bug report cancelled");
 		return;
 	}
+	if (options.delivery === "upload" && process.env.KNIGHTCODE_OFFLINE) {
+		context.showError("Uploading bug reports requires online mode. Use Export as Zip instead.");
+		return;
+	}
 
 	let summary: string | undefined;
 	if (options.includeSummary) {
