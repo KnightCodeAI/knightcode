@@ -37,6 +37,10 @@ jobs:
     outputs:
       hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
       needsPublish: ${{ steps.release.outputs.needsPublish }}
+    # The Version PR commit must not run the developer pre-commit hook: its
+    # lockfile guard would refuse a bun.lock that `bun install` re-resolved here.
+    env:
+      HUSKY: 0
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:

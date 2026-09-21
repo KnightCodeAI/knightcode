@@ -12,6 +12,7 @@
         "@types/node": "22.19.19",
         "@vitest/coverage-v8": "4.1.9",
         "@xterm/headless": "5.5.0",
+        "husky": "9.1.7",
         "prettier": "^3.8.3",
         "tsx": "4.22.1",
         "typescript": "5.9.3",
@@ -126,7 +127,7 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.8.0",
+      "version": "0.9.1",
       "bin": {
         "knightcode": "./bin/knightcode",
       },
@@ -173,23 +174,23 @@
     },
     "packages/cli-darwin-arm64": {
       "name": "@knightcodeai/cli-darwin-arm64",
-      "version": "0.8.0",
+      "version": "0.9.1",
     },
     "packages/cli-darwin-x64": {
       "name": "@knightcodeai/cli-darwin-x64",
-      "version": "0.8.0",
+      "version": "0.9.1",
     },
     "packages/cli-linux-arm64": {
       "name": "@knightcodeai/cli-linux-arm64",
-      "version": "0.8.0",
+      "version": "0.9.1",
     },
     "packages/cli-linux-x64": {
       "name": "@knightcodeai/cli-linux-x64",
-      "version": "0.8.0",
+      "version": "0.9.1",
     },
     "packages/cli-win32-x64": {
       "name": "@knightcodeai/cli-win32-x64",
-      "version": "0.8.0",
+      "version": "0.9.1",
     },
     "packages/client": {
       "name": "@knightcode/client",
@@ -260,7 +261,7 @@
     },
     "packages/tools": {
       "name": "@knightcode/tools",
-      "version": "0.1.1",
+      "version": "0.1.3",
       "dependencies": {
         "@knightcode/tui": "workspace:*",
         "@knightcodeai/cli": "workspace:*",
@@ -1702,6 +1703,8 @@
     "human-id": ["human-id@4.2.1", "", { "bin": { "human-id": "dist/cli.js" } }, "sha512-zPGsiS+dWoTZtZ4AtpA9Y+BdSFSNWvnouNlWNoUFyAM6xHOHmdCvqO3k8AIbdamCOv4gUFUVNPf6rJFfc4UiJw=="],
 
     "human-signals": ["human-signals@8.0.1", "", {}, "sha512-eKCa6bwnJhvxj14kZk5NCPc6Hb6BdsU9DZcOnmQKSnO1VKrfV0zCvtttPZUsBvjmNDn8rpcJfpwSYnHBjc95MQ=="],
+
+    "husky": ["husky@9.1.7", "", { "bin": { "husky": "bin.js" } }, "sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA=="],
 
     "iconv-lite": ["iconv-lite@0.7.3", "", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3.0.0" } }, "sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ=="],
 
