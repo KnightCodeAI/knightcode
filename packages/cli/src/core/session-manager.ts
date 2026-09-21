@@ -995,6 +995,9 @@ export class SessionManager {
 		const header = entries.find((e) => e.type === "session") as SessionHeader | undefined;
 
 		if (header) {
+			// Extensions build paths from the session id (scratchpad, undo history), so an id read from
+			// a file must pass the same check as one given with --session-id.
+			assertValidSessionId(header.id);
 			this.fileEntries = entries;
 			this.sessionId = header.id;
 

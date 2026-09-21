@@ -37,6 +37,24 @@ describe("SessionManager.newSession with custom id", () => {
 		}
 	});
 
+	it("rejects an invalid session id read from a session file", () => {
+		// Extensions join the id into paths, so a crafted header must not reach them.
+		const tempDir = mkdtempSync(join(tmpdir(), "knightcode-session-manager-"));
+		const sessionPath = join(tempDir, "crafted.jsonl");
+		const header = {
+			type: "session",
+			version: 3,
+			id: "../../escape",
+			timestamp: new Date().toISOString(),
+			cwd: tempDir,
+		};
+		writeFileSync(sessionPath, `${JSON.stringify(header)}\n`);
+
+		expect(() => SessionManager.open(sessionPath, tempDir)).toThrow(
+			"Session id must be non-empty, contain only alphanumeric characters",
+		);
+	});
+
 	it("generates a UUIDv7 id when no id is provided", () => {
 		const session = SessionManager.inMemory();
 		session.newSession();

@@ -85,8 +85,8 @@ describe("factory", () => {
 	test("registers every registry tool and the tools command", () => {
 		const { pi, registered, command } = fakePi([]);
 		toolsExtension(pi);
-		expect(registered).toEqual(TOOLS.map((e) => e.tool.name));
 		expect(registered).toEqual(["webfetch", "websearch"]);
+		expect(TOOLS.map((e) => e.tool.name)).toEqual(["webfetch", "websearch", "scratchpad"]);
 		expect(command()).toBeDefined();
 	});
 
@@ -154,7 +154,10 @@ describe("/tools", () => {
 		const { pi, active } = fakePi(["read"]);
 		const { ctx, prompts, notices } = fakeCtx(["webfetch — off", "Enabled for this session"]);
 		await toolsCommand("", ctx, pi);
-		expect(prompts[0]).toEqual({ title: "Tools", options: ["webfetch — off", "websearch — off"] });
+		expect(prompts[0]).toEqual({
+			title: "Tools",
+			options: ["webfetch — off", "websearch — off", "scratchpad — off"],
+		});
 		expect(prompts[1]).toEqual({
 			title: "webfetch",
 			options: ["Disabled", "Enabled for this session", "Enabled by default"],
@@ -188,7 +191,9 @@ describe("/tools", () => {
 		for (const args of ["nope", "webfetch maybe", "webfetch on extra"]) {
 			const { ctx, notices } = fakeCtx([]);
 			await toolsCommand(args, ctx, pi);
-			expect(notices).toEqual([{ message: "Usage: /tools [webfetch|websearch] [off|on|always]", type: "error" }]);
+			expect(notices).toEqual([
+				{ message: "Usage: /tools [webfetch|websearch|scratchpad] [off|on|always]", type: "error" },
+			]);
 		}
 	});
 
@@ -196,6 +201,7 @@ describe("/tools", () => {
 		expect(toolsCompletions("")).toEqual([
 			{ value: "webfetch", label: "webfetch" },
 			{ value: "websearch", label: "websearch" },
+			{ value: "scratchpad", label: "scratchpad" },
 		]);
 		expect(toolsCompletions("webs")).toEqual([{ value: "websearch", label: "websearch" }]);
 		expect(toolsCompletions("websearch ")).toEqual([
@@ -204,5 +210,13 @@ describe("/tools", () => {
 			{ value: "websearch always", label: "always" },
 		]);
 		expect(toolsCompletions("websearch al")).toEqual([{ value: "websearch always", label: "always" }]);
+	});
+
+	test("a feature entry toggles without touching the active tool set", async () => {
+		const { pi, active } = fakePi(["read"]);
+		const { ctx, notices } = fakeCtx([]);
+		await toolsCommand("scratchpad on", ctx, pi);
+		expect(active).toEqual(["read"]);
+		expect(notices.at(-1)).toEqual({ message: "scratchpad: on (this session)", type: "info" });
 	});
 });

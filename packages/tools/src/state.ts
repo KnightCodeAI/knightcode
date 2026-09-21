@@ -14,7 +14,7 @@ export type ToolSettings = Record<string, string | boolean>;
 export type PersistedState = Record<string, ToolSettings>;
 
 export interface ToolEntry {
-	tool: { name: string };
+	tool: { name: string; feature?: true };
 	defaultEnabled: boolean;
 }
 
@@ -152,6 +152,7 @@ export function applyActiveTools(
 	const active = new Set(pi.getActiveTools());
 	let changed = false;
 	for (const entry of entries) {
+		if (entry.tool.feature) continue;
 		const name = entry.tool.name;
 		const enabled = resolveEnabled(name, entry.defaultEnabled, persisted);
 		if (enabled && !active.has(name)) {
