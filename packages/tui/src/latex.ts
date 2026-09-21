@@ -1496,6 +1496,15 @@ export function renderLatex(source: string, options: RenderLatexOptions = {}): s
 		return rendered.replaceAll(PROTECTED_SPACE, " ");
 	}
 	const lines = renderLayout(rendered, layoutNodes).lines;
+	// A marker that survived resolution means a node embedded another node's placeholder where
+	// the enclosing branch does not resolve one: `renderMatrix` stores its cells verbatim, and
+	// `renderCases` returns a marker for any multi-row body regardless of nesting. Emitting it
+	// would put private-use codepoints on the terminal. Returning undefined is the existing
+	// "cannot render this" path, and the caller falls back to showing the source. A net, not a
+	// substitute for resolving markers where they legitimately nest.
+	if (lines.some((line) => line.includes(LAYOUT_MARKER_START) || line.includes(LAYOUT_MARKER_END))) {
+		return undefined;
+	}
 	const indentation = Math.min(
 		...lines.filter((line) => line.trim()).map((line) => line.length - line.trimStart().length),
 	);
