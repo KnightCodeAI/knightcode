@@ -75,7 +75,9 @@ const mutate = (document: MutableDocument, choice: number, value: number): void 
 	}
 };
 
-it("converges across randomized transactional revisions", () => {
+// 100 seeds of 100 transactions each: under a second alone, but CI runs every
+// package's suite at once and has pushed it past the default 5 s budget.
+it("converges across randomized transactional revisions", { timeout: 30_000 }, () => {
 	for (let seed = 1; seed <= 100; seed++) {
 		const rng = random(seed);
 		const initial: Document = {
