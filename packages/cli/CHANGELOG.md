@@ -1,5 +1,43 @@
 # @knightcodeai/cli
 
+## 0.9.1
+
+### Added
+
+- Added the shipped Radius model catalog, so Radius models are listed in `/model` before the first gateway refresh and while offline; the fetched gateway catalog still overrides it.
+
+- Added the Meta provider: `/login meta` signs in with a Muse subscription through Meta's device authorization flow and mints a Model API key that is refreshed automatically, and `META_API_KEY` works as an ordinary API key.
+
+- Added prompt cache warming, which keeps a provider's prompt cache alive between turns where the model's cache lifetime is known, with `/settings` controls and a footer indicator. Extensions can observe or override each refresh.
+
+- Added `/bug`, which collects a redacted report — version, runtime, model and provider configuration, extensions, settings and this session's error diagnostics, never API keys — and either uploads it to the KnightCode maintainers or writes it as a zip you can attach to an issue yourself. Including the transcript is optional, and declining it offers a model-written summary instead. Crashes are recorded and attached to the next report.
+
+### Changed
+
+- Changed extension loading to pull in its transform dependencies only when an extension actually needs transforming, which shortens startup for everyone who has no extensions installed.
+
+- Changed the session picker to load progressively, so it opens immediately on a large session directory instead of waiting for every file to be read.
+
+### Fixed
+
+- Fixed sessions on z.ai stopping instead of compacting when the provider answers a too-long prompt with its `1261` error body rather than the usual wording.
+
+- Fixed Cerebras requests failing with a 400 when extensions declare both strict and non-strict tools; strict tool schemas are no longer sent to Cerebras.
+
+- Fixed compaction cancellation: aborting during auto-compaction could leave the turn retrying, run an extension handler after the abort, or report a cancelled compaction as a failure.
+
+- Fixed clipboard copying in headless and remote sessions by restoring the OSC 52 fallback when no native clipboard is reachable, including under WSL.
+
+- Fixed the terminal waiting on a remote prompt event that was never awaited, which could drop a prompt sent from the phone.
+
+- Fixed display-math rendering of stacked sub/superscripts, the `\bf`-style font switches, and `cases` alignment and brace placement.
+
+- Fixed slash-command ranking so a `skill:` command is matched on its bare name, putting `/idea` on `skill:research-idea` rather than `skill:deep-research`.
+
+- Fixed fullscreen images disappearing in WezTerm, which erased a Kitty image when a later row on top of it was cleared.
+
+- Fixed file-path autocomplete after CJK punctuation: a path typed after a full-width comma or colon now completes, and a completed path containing one is quoted.
+
 ## 0.9.0
 
 ### Added
