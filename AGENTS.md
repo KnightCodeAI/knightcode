@@ -98,6 +98,7 @@ User-facing notes belong in `packages/cli/docs/providers.md`, or
 - Install with `bun install`; CI-style with `bun install --frozen-lockfile`.
 - `bunfig.toml` pins `linker = "hoisted"` on purpose: the isolated layout gives `packages/ai` and `packages/cli` separate copies of a dependency, which breaks `vi.mock()` across package boundaries. Do not change it.
 - New deps with lifecycle scripts require review; never add one silently.
+- Pre-commit blocks `bun.lock` commits that change external packages unless `KNIGHTCODE_ALLOW_LOCKFILE_CHANGE=1`. Don't bypass unless the user wants the lockfile change committed.
 
 ## Git
 
