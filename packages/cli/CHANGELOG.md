@@ -1,5 +1,55 @@
 # @knightcodeai/cli
 
+## 0.9.2
+
+### Added
+
+- Added Claude Opus 5.5 to the Anthropic catalog: 1M context, image input, xhigh and max effort levels, and the mid-conversation effort and system-message support the newer Opus models use.
+
+- Added Grok 4.7 to the xAI catalog and made it the default xAI model. xAI models now carry their long-context pricing tier, so requests above 200k input tokens are costed at the higher rate.
+
+- Added the `context_with_system` extension event. It runs after the `context` handlers on the full transcript, system messages included, and its result is sent as returned.
+
+- Added per-model image resize profiles through `inputLimits.images.resize` in `models.json` and `modelOverrides`. File attachments, `read` and tool-result images are resized once for the selected model before they enter history; built-in vision models carry the previous 2000x2000, 4.5 MiB default explicitly.
+
+- Added a crash hint naming loaded extensions whose files appear in the crash stack trace, with the commands to disable them.
+
+- Added append-only context edits and actionable turn boundaries for extensions. A `context_edit` entry omits or replaces an earlier message in future model requests without changing raw history, usage or exports, and `turn_end` plus the new `agent_before_settle` event can append entries and ask for one more provider request. See `docs/extensions.md` and `docs/session-format.md`.
+
+- Added a session scratchpad, off by default: `/tools scratchpad on` gives the agent a private per-session temp directory for throwaway files and restores its `notes.md` there after each compaction.
+
+### Changed
+
+- Changed the session file to be the source of model context. SDK code that assigned `session.agent.state.messages` to restore history no longer affects the next request: restore with `SessionManager.inMemory(cwd, { id }, entries)` or move with `session.navigateTree()`. Extensions that switch exhaustively must handle the `context_edit` entry and the `agent_before_settle` event, `turn_end` events now carry the persisted entry ids, and runs started from an `agent_settled` handler wait until every settled handler has finished.
+
+### Removed
+
+- Removed the `shouldStopAfterTurn` agent option. Return `{ action: "end" }` from `finishTurn` instead, and return nothing for error and aborted responses to keep the old normal-response-only behaviour.
+
+### Fixed
+
+- Fixed a missing or invalid `--mode` value being silently ignored; KnightCode now reports the valid values and exits with a nonzero status.
+
+- Fixed split-turn compaction summaries being refused by Claude Fable 5.1. The summarization request now separates the conversation from the instructions and asks for a continuation checkpoint instead of a prefix summary.
+
+- Fixed image-only prompts being rejected by some OpenAI-compatible providers, which refused the empty text part sent alongside the image.
+
+- Fixed text files that begin with `GIF` being treated as images and left out of `read` and `@file` input. Detection now requires the full GIF87a or GIF89a signature.
+
+- Fixed `/bug` uploading a report in offline mode. Uploads are refused with a pointer to Export as Zip, which still works offline.
+
+- Fixed prompt templates with invalid YAML frontmatter being dropped silently. They are now reported as resource warnings, and valid templates beside them still load.
+
+- Fixed the jump-to-latest label in fullscreen mode shifting sideways when the scrollbar auto-hides.
+
+- Fixed abandoned attempts staying in the model's context after an error retry or a length/overflow recovery. The retried request now omits them; the raw transcript, exports and usage totals still show them.
+
+- Fixed `context` extension handlers that filter or slice messages dropping the system prompt and tool declarations, which after extension-driven compaction left requests without built-in tools. Handlers no longer see system messages, and KnightCode restores the prompt and tools after they run.
+
+- Fixed custom OpenAI-compatible endpoints receiving strict tool schemas they may reject. Built-in models that support strict tools keep them, and a custom model can opt back in with `compat.supportsStrictMode: true`.
+
+- Fixed session files with an invalid session id in their header opening normally. Extensions build directory paths from that id, so such a file is now refused with the same error as an invalid `--session-id`.
+
 ## 0.9.1
 
 ### Added
