@@ -24,7 +24,7 @@ Use the [example extension](../examples/extensions/gondolin) when you want `knig
 Setup:
 
 ```bash
-cp -R packages/coding-agent/examples/extensions/gondolin ~/.knightcode/agent/extensions/gondolin
+cp -R packages/cli/examples/extensions/gondolin ~/.knightcode/agent/extensions/gondolin
 cd ~/.knightcode/agent/extensions/gondolin
 npm install --ignore-scripts
 ```

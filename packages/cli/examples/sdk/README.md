@@ -25,7 +25,7 @@ The runtime example shows how to build a recreate function that closes over proc
 ## Running
 
 ```bash
-cd packages/coding-agent
+cd packages/cli
 npx tsx examples/sdk/01-minimal.ts
 ```
 

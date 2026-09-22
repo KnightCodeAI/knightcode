@@ -9,7 +9,7 @@ Outputs all session events as JSON lines to stdout. Useful for integrating knigh
 ## Event Types
 
 Wire events use `JsonAgentSessionEvent`. It matches
-[`AgentSessionEvent`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/agent-session.ts)
+[`AgentSessionEvent`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/agent-session.ts)
 except that streaming message updates omit cumulative snapshots:
 
 ```typescript
@@ -58,7 +58,7 @@ Base messages from [`packages/ai/src/types.ts`](https://github.com/KnightCodeAI/
 - `AssistantMessage` (line 140)
 - `ToolResultMessage` (line 152)
 
-Extended messages from [`packages/coding-agent/src/core/messages.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/messages.ts#L29):
+Extended messages from [`packages/cli/src/core/messages.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/messages.ts#L29):
 - `BashExecutionMessage` (line 29)
 - `CustomMessage` (line 46)
 - `BranchSummaryMessage` (line 55)
