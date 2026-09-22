@@ -23,6 +23,28 @@ describe("getSupportedThinkingLevels", () => {
 		expect(getSupportedThinkingLevels(model!)).toContain("max");
 	});
 
+	it("includes Claude Opus 5.5 with its always-on effort levels and official pricing", () => {
+		const model = getModel("anthropic", "claude-opus-5-5");
+		expect(model).toMatchObject({
+			cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
+			contextWindow: 1_000_000,
+			maxTokens: 128_000,
+			compat: {
+				forceAdaptiveThinking: true,
+				supportsMidConvoEffort: true,
+				supportsMidConvoSystemMessages: true,
+				supportsMidConvoToolChanges: true,
+			},
+		});
+		// The catalog entry comes from the published metadata, which gives Opus 5.5 and Opus 5 the
+		// same effort options, so the two expose the same levels.
+		const opus5 = getModel("anthropic", "claude-opus-5");
+		expect(getSupportedThinkingLevels(model)).toEqual(getSupportedThinkingLevels(opus5));
+		expect(getSupportedThinkingLevels(model)).toEqual(
+			expect.arrayContaining(["low", "medium", "high", "xhigh", "max"]),
+		);
+	});
+
 	it("includes max but not xhigh for Anthropic Sonnet 4.6 on anthropic-messages API", () => {
 		const model = getModel("anthropic", "claude-sonnet-4-6");
 		expect(model).toBeDefined();
