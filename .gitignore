@@ -28,9 +28,12 @@ build
 dist
 packages/database/generated/
 
-# Provider model catalog: generated from the live catalog sources, never committed.
+# Provider model catalog: generated from the live catalog sources.
 # Hydrate a checkout with `bun run hydrate:model-data`.
-packages/ai/src/providers/data/
+# AgentRouter is the exception: its API answers a WAF interstitial to datacenter IPs, so a
+# runner cannot fetch it, and the generator falls back to this committed file.
+packages/ai/src/providers/data/*
+!packages/ai/src/providers/data/agentrouter.json
 
 
 # Debug
