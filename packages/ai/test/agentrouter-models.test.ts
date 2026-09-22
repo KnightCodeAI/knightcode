@@ -4,7 +4,7 @@ import { findEnvKeys, getEnvApiKey } from "../src/env-api-keys.ts";
 import type { Api, FetchFunction, Model } from "../src/types.ts";
 
 const ANTHROPIC_MODEL_IDS = ["claude-opus-4-8", "claude-opus-5"] as const;
-const OPENAI_MODEL_IDS = ["deepseek-v4-flash", "glm-5.3", "gpt-5.6-sol"] as const;
+const OPENAI_MODEL_IDS = ["deepseek-v4-flash", "gpt-6-astra"] as const;
 const ALL_MODEL_IDS = [...ANTHROPIC_MODEL_IDS, ...OPENAI_MODEL_IDS] as const;
 
 // Pinned deliberately: AgentRouter publishes no cache ratios, so these are chosen
@@ -127,10 +127,10 @@ describe("AgentRouter models", () => {
 		});
 	});
 
-	// Its GLM and GPT relays do normalize to standard OpenAI shape — both verified live —
-	// so they must not inherit z.ai's or OpenAI-direct's quirks.
-	it("leaves GLM 5.3 on the standard OpenAI wire format", () => {
-		const model = getModel("agentrouter", "glm-5.3");
+	// Its GPT relay does normalize to standard OpenAI shape, so it must not inherit
+	// OpenAI-direct's quirks.
+	it("leaves the GPT relay on the standard OpenAI wire format", () => {
+		const model = getModel("agentrouter", "gpt-6-astra");
 
 		expect(model.compat?.thinkingFormat ?? "openai").toBe("openai");
 		expect(model.compat?.supportsDeveloperRole ?? true).toBe(true);
@@ -147,11 +147,11 @@ describe("AgentRouter models", () => {
 	});
 
 	it("sends OpenAI-shaped requests to the completions endpoint", async () => {
-		const request = await captureRequest(getModel("agentrouter", "gpt-5.6-sol"));
+		const request = await captureRequest(getModel("agentrouter", "gpt-6-astra"));
 
 		expect(request.url).toBe("https://agentrouter.org/v1/chat/completions");
 		expect(request.headers.get("authorization")).toBe("Bearer test-agentrouter-key");
-		expect(await request.clone().json()).toMatchObject({ model: "gpt-5.6-sol" });
+		expect(await request.clone().json()).toMatchObject({ model: "gpt-6-astra" });
 	});
 
 	it("resolves AGENTROUTER_API_KEY from the environment", () => {

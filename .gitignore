@@ -28,6 +28,10 @@ build
 dist
 packages/database/generated/
 
+# Provider model catalog: generated from the live catalog sources, never committed.
+# Hydrate a checkout with `bun run hydrate:model-data`.
+packages/ai/src/providers/data/
+
 
 # Debug
 npm-debug.log*

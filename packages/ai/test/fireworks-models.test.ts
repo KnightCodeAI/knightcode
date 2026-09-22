@@ -38,9 +38,9 @@ describe("Fireworks models", () => {
 		});
 	});
 
-	// Fireworks renamed its router tier from "-turbo" (Anthropic Messages) to
-	// "-fast" (OpenAI Completions); this asserts the router shape as the current
-	// catalog actually registers it rather than a marketing name that churns.
+	// Router tiers churn: Fireworks has moved them between its Anthropic Messages and
+	// OpenAI Completions endpoints and currently serves both. This asserts the shape the
+	// catalog registers for whichever endpoint a router lands on, not a marketing name.
 	it("registers Fireworks router models", () => {
 		const routers = getModels("fireworks").filter((candidate) =>
 			candidate.id.startsWith("accounts/fireworks/routers/"),
@@ -48,8 +48,12 @@ describe("Fireworks models", () => {
 
 		expect(routers.length).toBeGreaterThan(0);
 		for (const router of routers) {
-			expect(router.api).toBe("openai-completions");
-			expect(router.baseUrl).toBe("https://api.fireworks.ai/inference/v1");
+			expect(["openai-completions", "anthropic-messages"]).toContain(router.api);
+			expect(router.baseUrl).toBe(
+				router.api === "openai-completions"
+					? "https://api.fireworks.ai/inference/v1"
+					: "https://api.fireworks.ai/inference",
+			);
 			expect(router.input).toContain("text");
 		}
 	});

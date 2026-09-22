@@ -55,11 +55,12 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	"xiaomi-token-plan-cn": "mimo-v2.5-pro",
 	"xiaomi-token-plan-ams": "mimo-v2.5-pro",
 	"xiaomi-token-plan-sgp": "mimo-v2.5-pro",
-	// AgentRouter funds its channels from per-model budget pools. The Opus and GPT-5.6 pools
+	// AgentRouter funds its channels from per-model budget pools. The Opus and GPT pools
 	// were drained as of 2026-09-01 (402 "Budget pool quota has been exhausted", reproducible
 	// outside KnightCode and under every other client), so a stronger default would name a
-	// model that always fails. glm-5.3 is the best model whose pool has headroom.
-	agentrouter: "glm-5.3",
+	// model that always fails. It also stopped publishing glm-5.3, which held this slot;
+	// deepseek-v4-flash is what remains with headroom.
+	agentrouter: "deepseek-v4-flash",
 };
 
 export interface ScopedModel {
