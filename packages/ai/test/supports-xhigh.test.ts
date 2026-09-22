@@ -36,13 +36,7 @@ describe("getSupportedThinkingLevels", () => {
 				supportsMidConvoToolChanges: true,
 			},
 		});
-		// The catalog entry comes from the published metadata, which gives Opus 5.5 and Opus 5 the
-		// same effort options, so the two expose the same levels.
-		const opus5 = getModel("anthropic", "claude-opus-5");
-		expect(getSupportedThinkingLevels(model)).toEqual(getSupportedThinkingLevels(opus5));
-		expect(getSupportedThinkingLevels(model)).toEqual(
-			expect.arrayContaining(["low", "medium", "high", "xhigh", "max"]),
-		);
+		expect(getSupportedThinkingLevels(model)).toEqual(["low", "medium", "high", "xhigh", "max"]);
 	});
 
 	it("includes max but not xhigh for Anthropic Sonnet 4.6 on anthropic-messages API", () => {
