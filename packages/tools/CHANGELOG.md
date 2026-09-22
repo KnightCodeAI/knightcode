@@ -1,5 +1,31 @@
 # @knightcode/tools
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [b9e98cb]
+- Updated dependencies [fe03ec9]
+- Updated dependencies [3d62638]
+- Updated dependencies [b8bfe13]
+- Updated dependencies [b72d3f3]
+- Updated dependencies [a508e8f]
+- Updated dependencies [5a53d78]
+- Updated dependencies [739b51e]
+- Updated dependencies [1bdc7d7]
+- Updated dependencies [e4095db]
+- Updated dependencies [e4095db]
+- Updated dependencies [e4095db]
+- Updated dependencies [82a3feb]
+- Updated dependencies [82a3feb]
+- Updated dependencies [9fc1502]
+- Updated dependencies [a21b96a]
+- Updated dependencies [da5cd9a]
+- Updated dependencies [e4095db]
+- Updated dependencies [da2a412]
+- Updated dependencies [788e4a2]
+  - @knightcodeai/cli@0.9.2
+
 ## 0.1.3
 
 ### Patch Changes
