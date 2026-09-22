@@ -89,7 +89,8 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
 | `KNIGHTCODE_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
-| `KNIGHTCODE_RADIUS_GATEWAY` | Override the Radius gateway origin used by `/bug` uploads and Radius relay connections |
+| `KNIGHTCODE_BUG_ENDPOINT` | Override the origin `/bug` uploads go to; default is `https://remote.knightcode.dev` |
+| `KNIGHTCODE_RADIUS_GATEWAY` | Override the Radius gateway origin used by Radius relay connections |
 | `KNIGHTCODE_HARDWARE_CURSOR` | Set to `1` to show the hardware cursor; see [Terminal setup](terminal-setup.md) |
 | `KNIGHTCODE_HYPERLINKS` | Override OSC 8 hyperlink detection with `1`, `0`, or `auto` |
 | `KNIGHTCODE_IMAGE_PROTOCOL` | Override inline image detection with `kitty`, `iterm2`, `none`, or `auto` |
