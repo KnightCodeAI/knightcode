@@ -44,6 +44,11 @@ jobs:
       - name: Check types
         run: bun run check-types
 
+      # Bundles durable's public entry points for the browser and fails if the
+      # Node SQLite adapter (or any Node built-in) leaks into them.
+      - name: Check browser-safe exports
+        run: bun run check:browser-smoke
+
       # Self-checks the release-time regrouping, which is otherwise exercised
       # only during a release, then checks the category verb on every pending
       # changeset — the release log's warning would come far too late.
