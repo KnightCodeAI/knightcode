@@ -1,6 +1,16 @@
 # Examples
 
-Example code for @knightcodeai/cli SDK and extensions.
+Example code for the @knightcodeai/cli SDK, process integration, and extensions.
+
+## CLI integration
+
+[`rpc-client.ts`](rpc-client.ts) uses the typed `RpcClient` to run KnightCode in a child process, stream events, and wait for the run to settle.
+
+Build the CLI package before running it from a repository checkout:
+
+```bash
+npx tsx examples/rpc-client.ts "Explain this repository"
+```
 
 ## Directories
 
@@ -23,6 +33,7 @@ An experimental plugin package that KnightCode automatically builds into separat
 
 ## Documentation
 
-- [SDK Reference](sdk/README.md)
+- [SDK Examples](sdk/README.md)
+- [CLI Integration](../docs/cli-integration.md)
 - [Extensions Documentation](../docs/extensions.md)
 - [Skills Documentation](../docs/skills.md)

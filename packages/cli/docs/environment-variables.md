@@ -6,7 +6,7 @@ KnightCode uses environment variables in three ways:
 - KnightCode sets process markers so child processes can identify KnightCode as the launching agent.
 - Commands run by the LLM-callable shell tools receive `KNIGHTCODE_*` variables describing the current session.
 
-Provider API-key variables are documented separately in [Providers](providers.md#environment-variables-or-auth-file).
+Provider API-key variables are documented separately in [Provider Authentication](providers.md#use-an-api-key-from-the-environment).
 
 ## Process Marker
 
@@ -83,13 +83,14 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_PACKAGE_DIR` | Override the package directory, useful for Nix/Guix store paths |
 | `KNIGHTCODE_SERVER_DIR` | Override the experimental server profile and socket directory; default is `~/.knightcode/server` |
 | `KNIGHTCODE_SERVER_ID` | Select the logical experimental server ID when `--server-id` is omitted |
-| `KNIGHTCODE_OFFLINE` | Disable startup network operations, including update checks, package updates, and install/update telemetry |
+| `KNIGHTCODE_OFFLINE` | Disable automatic network activity, including model catalog refreshes |
 | `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS` | Set to `1`, `true`, or `yes` to stop backing up files before edits; `/undo` then rewinds the conversation only. See [Sessions](sessions.md#file-restore) |
 | `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable the `knightcode.dev` latest-version request |
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
 | `KNIGHTCODE_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
-| `KNIGHTCODE_RADIUS_GATEWAY` | Override the Radius gateway origin used by `/bug` uploads and Radius relay connections |
+| `KNIGHTCODE_BUG_ENDPOINT` | Override the origin `/bug` uploads go to; default is `https://remote.knightcode.dev` |
+| `KNIGHTCODE_RADIUS_GATEWAY` | Override the Radius gateway origin used by Radius relay connections |
 | `KNIGHTCODE_HARDWARE_CURSOR` | Set to `1` to show the hardware cursor; see [Terminal setup](terminal-setup.md) |
 | `KNIGHTCODE_HYPERLINKS` | Override OSC 8 hyperlink detection with `1`, `0`, or `auto` |
 | `KNIGHTCODE_IMAGE_PROTOCOL` | Override inline image detection with `kitty`, `iterm2`, `none`, or `auto` |
@@ -99,4 +100,4 @@ These variables are read by KnightCode itself:
 | `VISUAL`, `EDITOR` | External editor fallback when `externalEditor` is unset |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
 
-Provider credentials such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and cloud-provider configuration are listed in [Providers](providers.md#environment-variables-or-auth-file).
+Provider credentials such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and cloud-provider configuration are listed in [Provider Authentication](providers.md#use-an-api-key-from-the-environment).

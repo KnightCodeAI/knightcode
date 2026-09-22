@@ -1,13 +1,13 @@
-# Compaction & Branch Summarization
+# Compaction Reference
 
-LLMs have limited context windows. When conversations grow too long, KnightCode uses compaction to summarize older content while preserving recent work. This page covers both auto-compaction and branch summarization.
+This reference describes automatic compaction, branch summarization, persisted entries, and extension hooks. For the user workflow, see [Sessions and Context](sessions.md#manage-conversation-context).
 
 **Source files** ([knightcode](https://github.com/KnightCodeAI/knightcode)):
-- [`packages/coding-agent/src/core/compaction/compaction.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/compaction.ts) - Auto-compaction logic
-- [`packages/coding-agent/src/core/compaction/branch-summarization.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/branch-summarization.ts) - Branch summarization
-- [`packages/coding-agent/src/core/compaction/utils.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/utils.ts) - Shared utilities (file tracking, serialization)
-- [`packages/coding-agent/src/core/session-manager.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/session-manager.ts) - Entry types (`CompactionEntry`, `BranchSummaryEntry`)
-- [`packages/coding-agent/src/core/extensions/types.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/extensions/types.ts) - Extension event types
+- [`packages/cli/src/core/compaction/compaction.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/compaction.ts) - Auto-compaction logic
+- [`packages/cli/src/core/compaction/branch-summarization.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/branch-summarization.ts) - Branch summarization
+- [`packages/cli/src/core/compaction/utils.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/utils.ts) - Shared utilities (file tracking, serialization)
+- [`packages/cli/src/core/session-manager.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/session-manager.ts) - Entry types (`CompactionEntry`, `BranchSummaryEntry`)
+- [`packages/cli/src/core/extensions/types.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/extensions/types.ts) - Extension event types
 
 For TypeScript definitions in your project, inspect `node_modules/@knightcodeai/cli/dist/`.
 
@@ -20,7 +20,7 @@ KnightCode has two summarization mechanisms:
 | Compaction | Context exceeds threshold, or `/compact` | Summarize old messages to free up context |
 | Branch summarization | `/tree` navigation | Preserve context when switching branches |
 
-Both use the same structured summary format and track file operations cumulatively. Compaction and branch-summary requests use fresh routing session IDs and, where supported by the provider, disable prompt-cache writes because these one-off prompts are unlikely to be reused.
+Both use closely related structured formats and track file operations cumulatively. Summarization requests disable prompt-cache writes because these one-off prompts are unlikely to be reused.
 
 ## Compaction
 
@@ -97,14 +97,14 @@ persist final assistant response
 
 If recovery compaction fails or is cancelled, KnightCode keeps the omission edits, appends no compaction, and schedules no internal retry. Existing queued work remains governed by ordinary steering and follow-up rules. `agent_before_settle` sees the repaired projection after recovery processing. Raw transcript history, exports, billing totals, and history-search extensions can still inspect the omitted attempt.
 
-### Split Turns
+### Split user-message spans
 
-A "turn" starts with a user message and includes all assistant responses and tool calls until the next user message. Normally, compaction cuts at turn boundaries.
+A user-message span starts with a user message and includes all turns until the next user message. Normally, compaction cuts at user-message boundaries.
 
-When a single turn exceeds `keepRecentTokens`, the cut point lands mid-turn at an assistant message. This is a "split turn":
+When one user-message span exceeds `keepRecentTokens`, the cut point lands within that span at an assistant message. This is a split user-message span:
 
 ```
-Split turn (one huge turn exceeds budget):
+Split user-message span (one span exceeds budget):
 
   entry:  0     1     2      3     4      5      6     7      8
         ┌─────┬─────┬─────┬──────┬─────┬──────┬──────┬─────┬──────┐
@@ -117,13 +117,13 @@ Split turn (one huge turn exceeds budget):
                                                       └── kept (7-8)
 
   isSplitTurn = true
-  messagesToSummarize = []  (no complete turns before)
+  messagesToSummarize = []  (no earlier user-message spans)
   turnPrefixMessages = [usr, ass, tool, ass, tool, tool]
 ```
 
-For split turns, KnightCode generates two summaries and merges them:
+For split user-message spans, KnightCode generates two summaries and merges them:
 1. **History summary**: Previous context (if any)
-2. **Turn prefix summary**: The early part of the split turn
+2. **User-message-span prefix summary**: The early part of the split user-message span
 
 ### Cut Point Rules
 
@@ -139,14 +139,14 @@ Preparation advances the kept boundary into a context-invisible suffix only when
 
 ### CompactionEntry Structure
 
-Defined in [`session-manager.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/session-manager.ts):
+Defined in [`session-manager.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/session-manager.ts):
 
 ```typescript
 interface CompactionEntry<T = unknown> {
   type: "compaction";
   id: string;
-  parentId: string;
-  timestamp: number;
+  parentId: string | null;
+  timestamp: string;
   summary: string;
   firstKeptEntryId: string;
   tokensBefore: number;
@@ -164,7 +164,7 @@ interface CompactionDetails {
 
 Extensions can store any JSON-serializable data in `details`. The default compaction tracks file operations, but custom extension implementations can use their own structure. Generated and extension-provided summaries store their LLM `usage` when available so session totals include summarization work.
 
-See [`prepareCompaction()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/compaction.ts) and [`compact()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/compaction.ts) for the implementation. For direct programmatic summarization, `generateSummary()` returns the summary text and `generateSummaryWithUsage()` returns `{ text, usage }`.
+See [`prepareCompaction()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/compaction.ts) and [`compact()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/compaction.ts) for the implementation. For direct programmatic summarization, `generateSummary()` returns the summary text and `generateSummaryWithUsage()` returns `{ text, usage }`.
 
 ## Branch Summarization
 
@@ -199,22 +199,20 @@ After navigation with summary:
 
 ### Cumulative File Tracking
 
-Both compaction and branch summarization track files cumulatively. When generating a summary, knightcode extracts file operations from:
-- Tool calls in the messages being summarized
-- Previous compaction or branch summary `details` (if any)
+Default compaction and branch summarization track files cumulatively. Both extract file operations from tool calls in the messages being summarized. Compaction also carries file lists from the previous KnightCode-generated compaction. Branch summarization carries file lists from KnightCode-generated branch summaries in the entries it summarizes.
 
-This means file tracking accumulates across multiple compactions or nested branch summaries, preserving the full history of read and modified files.
+File tracking therefore accumulates across default compactions and nested default branch summaries. KnightCode does not automatically carry file lists from extension-generated summaries whose `fromHook` field is `true`; extensions manage their own `details` format.
 
 ### BranchSummaryEntry Structure
 
-Defined in [`session-manager.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/session-manager.ts):
+Defined in [`session-manager.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/session-manager.ts):
 
 ```typescript
 interface BranchSummaryEntry<T = unknown> {
   type: "branch_summary";
   id: string;
-  parentId: string;
-  timestamp: number;
+  parentId: string | null;
+  timestamp: string;
   summary: string;
   fromId: string;      // Entry we navigated from
   usage?: Usage;       // LLM usage that generated the summary
@@ -231,11 +229,13 @@ interface BranchSummaryDetails {
 
 Same as compaction, extensions can store custom data in `details`.
 
-See [`collectEntriesForBranchSummary()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/branch-summarization.ts), [`prepareBranchEntries()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/branch-summarization.ts), and [`generateBranchSummary()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/branch-summarization.ts) for the implementation.
+See [`collectEntriesForBranchSummary()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/branch-summarization.ts), [`prepareBranchEntries()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/branch-summarization.ts), and [`generateBranchSummary()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/branch-summarization.ts) for the implementation.
 
 ## Summary Format
 
-Both compaction and branch summarization use the same structured format:
+Both formats include Goal, Constraints & Preferences, Progress, Key Decisions, and Next Steps. Compaction summaries also include Critical Context. Branch summaries stop after Next Steps. KnightCode appends file lists to either format when relevant.
+
+Compaction summaries use this format:
 
 ```markdown
 ## Goal
@@ -275,7 +275,7 @@ path/to/changed.ts
 
 ### Message Serialization
 
-Before summarization, messages are serialized to text via [`serializeConversation()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/compaction/utils.ts):
+Before summarization, messages are serialized to text via [`serializeConversation()`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/compaction/utils.ts):
 
 ```
 [User]: What they said
@@ -291,7 +291,7 @@ Tool results are truncated to 2000 characters during serialization. Content beyo
 
 ## Custom Summarization via Extensions
 
-Extensions can intercept and customize both compaction and branch summarization. See [`extensions/types.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/coding-agent/src/core/extensions/types.ts) for event type definitions.
+Extensions can intercept and customize both compaction and branch summarization. See [`extensions/types.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/extensions/types.ts) for event type definitions.
 
 ### session_before_compact
 
@@ -302,7 +302,7 @@ knightcode.on("session_before_compact", async (event, ctx) => {
   const { preparation, branchEntries, customInstructions, reason, willRetry, signal } = event;
 
   // preparation.messagesToSummarize - messages to summarize
-  // preparation.turnPrefixMessages - split turn prefix (if isSplitTurn)
+  // preparation.turnPrefixMessages - user-message-span prefix (if isSplitTurn)
   // preparation.previousSummary - previous compaction summary
   // preparation.fileOps - extracted file operations
   // preparation.tokensBefore - context tokens before compaction
@@ -376,7 +376,7 @@ knightcode.on("session_compact_failed", async (event, ctx) => {
   const { reason, errorMessage, aborted, willRetry, fromExtension } = event;
   // reason - "manual" (/compact), "threshold", or "overflow"
   // errorMessage - present for non-abort failures
-  // aborted - true for cancelled/aborted compactions
+  // aborted - true for canceled/aborted compactions
   // willRetry - whether the aborted turn would have retried after compaction
   // fromExtension - whether extension-provided compaction content was being used
 });
@@ -460,4 +460,4 @@ Keys are exact, case-sensitive `provider/modelId` values, including any slashes 
 
 These resolved values are used for manual compaction, all automatic threshold checks, overflow recovery, and extension-visible `preparation.settings`. Model switches affect subsequent checks and compactions without changing ordinary settings. Compaction already in progress uses the model and settings captured for that operation. Branch summarization settings are unaffected.
 
-Overrides work in both global and project settings. The files merge recursively before lookup, so a global model-specific value beats a project-wide fallback; a project must override that model entry to change it. See [settings.md](settings.md#per-model-compaction-overrides) for details.
+Overrides work in both global and project settings. The files merge recursively before lookup, so a global model-specific value beats a project-wide fallback; a project must override that model entry to change it. See [Settings](settings.md#per-model-compaction-overrides) for details.

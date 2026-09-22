@@ -1,228 +1,127 @@
-> knightcode can help you create knightcode packages. Ask it to bundle your extensions, skills, prompt templates, or themes.
-
 # KnightCode Packages
 
-KnightCode packages bundle extensions, skills, prompt templates, and themes so you can share them through npm or git. A package can declare resources in `package.json` under the `knightcode` key, or use conventional directories.
+KnightCode packages install and distribute extensions, skills, prompt templates, and themes as one unit. Use a package when a customization should be shared through npm or git, or when several resources belong together.
 
-## Table of Contents
+A package is an ordinary directory or npm package. It can expose conventional resource directories, declare explicit paths under the `knightcode` key in `package.json`, and carry its own runtime dependencies.
 
-- [Install and Manage](#install-and-manage)
-- [Package Sources](#package-sources)
-- [Creating a KnightCode Package](#creating-a-knightcode-package)
-- [Package Structure](#package-structure)
-- [Dependencies](#dependencies)
-- [Package Filtering](#package-filtering)
-- [Enable and Disable Resources](#enable-and-disable-resources)
-- [Scope and Deduplication](#scope-and-deduplication)
+## Install and manage packages
 
-## Install and Manage
-
-> **Security:** KnightCode packages run with full system access. Extensions execute arbitrary code, and skills can instruct the model to perform any action including running executables. Review source code before installing third-party packages.
+Install from npm, git, or a local path:
 
 ```bash
-knightcode install npm:@foo/bar@1.0.0
-knightcode install git:github.com/user/repo@v1
-knightcode install https://github.com/user/repo  # raw URLs work too
-knightcode install /absolute/path/to/package
-knightcode install ./relative/path/to/package
-
-knightcode remove npm:@foo/bar
-knightcode list                     # show installed packages from settings
-knightcode update                   # update knightcode only
-knightcode update --all             # update knightcode, update packages, and reconcile pinned git refs
-knightcode update --extensions      # update packages and reconcile pinned git refs only
-knightcode update --models          # refresh model catalogs only
-knightcode update --self            # update knightcode only
-knightcode update --self --force    # reinstall knightcode even if current
-knightcode update npm:@foo/bar      # update one package
-knightcode update --extension npm:@foo/bar
+knightcode install npm:@example/knightcode-tools@1.0.0
+knightcode install git:github.com/example/knightcode-tools@v1
+knightcode install ./local-package
 ```
 
-These commands manage knightcode packages and `knightcode update` can update the knightcode CLI installation. For experimental installer-managed installations, `knightcode update` installs the exact checked version into a staged, lockfile-backed release and activates it only after verification, leaving the current release intact if the update fails. Managed installations do not support `--force`; rerun the installer to repair one. To uninstall knightcode itself, see [Quickstart](quickstart.md#uninstall).
+`knightcode list` shows configured packages. Use `knightcode remove <source>` to remove one and `knightcode update --extensions` to reconcile package installations. See [Command Line](cli.md#package-commands) for every package command and option.
 
-By default, `install` and `remove` write to user settings (`~/.knightcode/agent/settings.json`). Use `-l` to write to project settings (`.knightcode/settings.json`) instead. Project settings can be shared with your team, and knightcode installs any missing packages automatically on startup after the project is trusted.
+Personal installs are written to `~/.knightcode/agent/settings.json`. Add `--local` or `-l` to write the package declaration to `.knightcode/settings.json`. KnightCode reads declarations from that file only after project trust is granted.
 
-To try a package without installing it, use `--extension` or `-e`. This installs to a temporary directory for the current run only:
+Project packages are installed and loaded only after project trust is resolved. Packages can execute extension code and can include skills that instruct the model to run programs. Review third-party package source before installing it. Review project package declarations before granting project trust.
+
+Use `--extension` or `-e` to try a package for one invocation without adding it to settings:
 
 ```bash
-knightcode -e npm:@foo/bar
-knightcode -e git:github.com/user/repo
+knightcode -e npm:@example/knightcode-tools
 ```
 
-## Package Sources
+## Choose a source
 
-KnightCode accepts three source types in settings and `knightcode install`.
+| Source | Example | Behavior |
+|---|---|---|
+| npm | `npm:@example/knightcode-tools@1.0.0` | Installed under the KnightCode npm directory |
+| git | `git:github.com/example/knightcode-tools@v1` | Cloned and reconciled to the selected ref |
+| URL | `https://github.com/example/knightcode-tools` | Treated as a git source |
+| Local | `./knightcode-tools` | Loaded from the resolved path without copying |
 
-### npm
+Versioned npm specifications are pinned. Git tags and commits are also pinned; package updates reconcile the checkout but do not move a configured ref.
 
+Relative local paths resolve from the settings file that contains them. A file path loads one extension. A directory follows normal package discovery rules.
+
+## Create a package
+
+The simplest package uses conventional directories:
+
+```text
+my-knightcode-package/
+├── package.json
+├── extensions/
+├── skills/
+├── prompts/
+└── themes/
 ```
-npm:@scope/pkg@1.2.3
-npm:pkg
-```
 
-- Versioned specs are pinned and skipped by package updates (`knightcode update --extensions`, `knightcode update --all`).
-- User installs go under `~/.knightcode/agent/npm/`.
-- Project installs go under `.knightcode/npm/`.
-- Set `npmCommand` in `settings.json` to pin npm package lookup and install operations to a specific wrapper command such as `mise` or `asdf`.
+Without a `knightcode` manifest, KnightCode discovers TypeScript and JavaScript extensions, skill directories, Markdown prompts, and JSON themes from those directories.
 
-Example:
+Use an explicit manifest when resources live elsewhere or need filtering:
 
 ```json
 {
-  "npmCommand": ["mise", "exec", "node@20", "--", "npm"]
-}
-```
-
-### git
-
-```
-git:github.com/user/repo@v1
-git:git@github.com:user/repo@v1
-https://github.com/user/repo@v1
-ssh://git@github.com/user/repo@v1
-```
-
-- Without `git:` prefix, only protocol URLs are accepted (`https://`, `http://`, `ssh://`, `git://`).
-- With `git:` prefix, shorthand formats are accepted, including `github.com/user/repo` and `git@github.com:user/repo`.
-- HTTPS and SSH URLs are both supported.
-- SSH URLs use your configured SSH keys automatically (respects `~/.ssh/config`).
-- For non-interactive runs (for example CI), you can set `GIT_TERMINAL_PROMPT=0` to disable credential prompts and set `GIT_SSH_COMMAND` (for example `ssh -o BatchMode=yes -o ConnectTimeout=5`) to fail fast.
-- Refs are pinned tags or commits. `knightcode update --extensions` and `knightcode update --all` do not move them to newer refs, but they do reconcile an existing clone to the configured ref.
-- Use `knightcode install git:host/user/repo@new-ref` to update settings and move an existing package to a new pinned ref.
-- Cloned to `~/.knightcode/agent/git/<host>/<path>` (global) or `.knightcode/git/<host>/<path>` (project).
-- When reconciliation changes the checkout, knightcode resets and cleans the clone, then runs `npm install` if `package.json` exists.
-
-**SSH examples:**
-```bash
-# git@host:path shorthand (requires git: prefix)
-knightcode install git:git@github.com:user/repo
-
-# ssh:// protocol format
-knightcode install ssh://git@github.com/user/repo
-
-# With version ref
-knightcode install git:git@github.com:user/repo@v1.0.0
-```
-
-### Local Paths
-
-```
-/absolute/path/to/package
-./relative/path/to/package
-```
-
-Local paths point to files or directories on disk and are added to settings without copying. Relative paths are resolved against the settings file they appear in. If the path is a file, it loads as a single extension. If it is a directory, knightcode loads resources using package rules.
-
-## Creating a KnightCode Package
-
-Add a `knightcode` manifest to `package.json` or use conventional directories. Include the `knightcode-package` keyword for discoverability.
-
-```json
-{
-  "name": "my-package",
+  "name": "my-knightcode-package",
   "keywords": ["knightcode-package"],
   "knightcode": {
-    "extensions": ["./extensions"],
-    "skills": ["./skills"],
-    "prompts": ["./prompts"],
-    "themes": ["./themes"]
+    "extensions": ["./src/extension.ts"],
+    "skills": ["./resources/skills"],
+    "prompts": ["./resources/prompts/*.md"],
+    "themes": ["./resources/themes/*.json"]
   }
 }
 ```
 
-Paths are relative to the package root. Arrays support glob patterns and `!exclusions`. Positive manifest globs discover visible paths in lexical order. List dot-prefixed paths directly. If a glob would need to continue through a symlink, list the symlinked resource root directly.
+Paths are relative to the package root. Arrays accept glob patterns and exclusions. List dot-prefixed or symlinked resource roots directly when traversal through a glob would not discover them.
 
-### Gallery Metadata
+The `knightcode-package` keyword makes an npm package eligible for discovery in the [KnightCode package gallery](https://knightcode.dev/packages). Optional `knightcode.image` and `knightcode.video` fields add gallery previews.
 
-The [package gallery](https://knightcode.dev/packages) displays packages tagged with `knightcode-package`. Add `video` or `image` fields to show a preview:
+## Declare dependencies
 
-```json
-{
-  "name": "my-package",
-  "keywords": ["knightcode-package"],
-  "knightcode": {
-    "extensions": ["./extensions"],
-    "video": "https://example.com/demo.mp4",
-    "image": "https://example.com/screenshot.png"
-  }
-}
-```
+Put runtime packages imported by extensions in `dependencies`. KnightCode installs package dependencies when it installs an npm or git source.
 
-- **video**: MP4 only. On desktop, autoplays on hover. Clicking opens a fullscreen player.
-- **image**: PNG, JPEG, GIF, or WebP. Displayed as a static preview.
+KnightCode supplies these packages to extensions and skills:
 
-If both are set, video takes precedence.
+- `@knightcode/ai`
+- `@knightcode/agent`
+- `@knightcodeai/cli`
+- `@knightcode/tui`
+- `typebox`
 
-## Package Structure
+Declare imported KnightCode packages in `peerDependencies` with a `"*"` range and do not bundle them. Other KnightCode packages used as dependencies must be included in the published tarball and referenced through their `node_modules` resource paths.
 
-### Convention Directories
+Installed packages load with separate module roots. Do not rely on two packages sharing one dependency instance or one package resolving another package’s undeclared dependency.
 
-If no `knightcode` manifest is present, knightcode auto-discovers resources from these directories:
+## Select package resources
 
-- `extensions/` loads `.ts` and `.js` files
-- `skills/` recursively finds `SKILL.md` folders and loads top-level `.md` files as skills
-- `prompts/` loads `.md` files
-- `themes/` loads `.json` files
-
-## Dependencies
-
-Third party runtime dependencies belong in `dependencies` in `package.json`. Dependencies that do not register extensions, skills, prompt templates, or themes also belong in `dependencies`. When knightcode installs a package from npm or git, it runs `npm install`, so those dependencies are installed automatically.
-
-KnightCode bundles core packages for extensions and skills. If you import any of these, list them in `peerDependencies` with a `"*"` range and do not bundle them: `@knightcode/ai`, `@knightcode/agent`, `@knightcodeai/cli`, `@knightcode/tui`, `typebox`.
-
-Other knightcode packages must be bundled in your tarball. Add them to `dependencies` and `bundledDependencies`, then reference their resources through `node_modules/` paths. KnightCode loads packages with separate module roots, so separate installs do not collide or share modules.
-
-Example:
-
-```json
-{
-  "dependencies": {
-    "shitty-extensions": "^1.0.1"
-  },
-  "bundledDependencies": ["shitty-extensions"],
-  "knightcode": {
-    "extensions": ["extensions", "node_modules/shitty-extensions/extensions"],
-    "skills": ["skills", "node_modules/shitty-extensions/skills"]
-  }
-}
-```
-
-## Package Filtering
-
-Filter what a package loads using the object form in settings:
+The object form in settings narrows which resources load from a package:
 
 ```json
 {
   "packages": [
-    "npm:simple-pkg",
     {
-      "source": "npm:my-package",
+      "source": "npm:@example/knightcode-tools",
       "extensions": ["extensions/*.ts", "!extensions/legacy.ts"],
       "skills": [],
-      "prompts": ["prompts/review.md"],
-      "themes": ["+themes/legacy.json"]
+      "prompts": ["prompts/review.md"]
     }
   ]
 }
 ```
 
-`+path` and `-path` are exact paths relative to the package root.
+For each resource type:
 
-- Omit a key to load all of that type.
+- Omit the property to load everything allowed by the package.
 - Use `[]` to load none of that type.
-- `!pattern` excludes matches.
-- `+path` force-includes an exact path.
-- `-path` force-excludes an exact path.
-- Filters layer on top of the manifest. They narrow down what is already allowed.
+- Use `!pattern` to exclude glob matches.
+- Use `+path` to include one exact allowed path.
+- Use `-path` to exclude one exact path.
 
-## Enable and Disable Resources
+Filters narrow the package manifest. They do not expose resources that the package itself did not declare.
 
-Use `knightcode config` to enable or disable extensions, skills, prompt templates, and themes from installed packages and local directories. `knightcode config` starts in global settings (`~/.knightcode/agent/settings.json`); press Tab to switch between global and project-local modes. Use `knightcode config -l` to start in project overrides (`.knightcode/settings.json`) with inherited global resources dimmed.
+Run `knightcode config` to enable or disable discovered resources. It starts with personal configuration; press Tab to switch scope, or run `knightcode config --local` to start with project overrides.
 
-## Scope and Deduplication
+## Understand scope and identity
 
-Packages can appear in both global and project settings. If the same package appears in both, the project entry wins unless the project entry has `autoload: false`, in which case it is applied as a delta over the global entry. Identity is determined by:
+The same package can appear in personal and project settings. A project entry normally replaces the personal entry. With `autoload: false`, the project entry instead acts as a filtering delta over the personal package.
 
-- npm: package name
-- git: repository URL without ref
-- local: resolved absolute path
+KnightCode identifies npm packages by package name, git packages by repository URL without the ref, and local packages by resolved absolute path. This prevents the same package from loading twice through equivalent declarations.
+
+Use [Extensions](extensions.md), [Skills](skills.md), [Prompt Templates](prompt-templates.md), and [Themes](themes.md) to design each resource before packaging it.

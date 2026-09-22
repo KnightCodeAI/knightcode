@@ -2,6 +2,15 @@
 
 Facet setup generates each host's RPC service catalogue from its provided non-local tokens. Remote service sources obtain those catalogues and bind only services required by consuming facets; there is no handwritten built-in service inventory. With no selected Session, its deferred source admits unresolved requirements as unavailable and keeps their handles disconnected. Attachment validates them against the worker's generated catalogue, which is cached for later detached generations. Keyed services hydrate as an empty directory until their owning feature spawns an instance.
 
+Run the source-only server and client from the repository root:
+
+```bash
+KNIGHTCODE_EXPERIMENTAL=1 bun run start server
+KNIGHTCODE_EXPERIMENTAL=1 bun run start client
+```
+
+`KNIGHTCODE_SERVER_DIR` overrides the server profile and socket directory, which defaults to `~/.knightcode/server`. `KNIGHTCODE_SERVER_ID` selects the logical server ID when `--server-id` is omitted. The server, client, and experimental package subpaths are excluded from npm packages and standalone binaries.
+
 | Scope | Service | Current slice | Continuation point |
 |---|---|---|---|
 | server | `SessionDirectory` | replicated state implemented | add authenticated per-client projection when identity lands |
