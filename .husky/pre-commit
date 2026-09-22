@@ -14,7 +14,10 @@ fi
 
 # Restage files that were previously staged and may have been modified by formatting
 for file in $STAGED_FILES; do
-  if [ -f "$file" ]; then
+  # Skip ignored paths: staging the deletion of a generated file (the provider
+  # catalog under packages/ai/src/providers/data/) leaves it on disk, and git
+  # refuses to add it back.
+  if [ -f "$file" ] && ! git check-ignore -q "$file"; then
     git add "$file"
   fi
 done

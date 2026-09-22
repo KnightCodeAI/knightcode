@@ -124,6 +124,9 @@ jobs:
 
       - run: bun install
 
+      - name: Hydrate model data
+        run: bun run hydrate:model-data
+
       - name: Build ${{ matrix.target }}
         env:
           TARGET: ${{ matrix.target }}
@@ -195,6 +198,9 @@ jobs:
           sudo ln -s "$(which fdfind)" /usr/local/bin/fd
 
       - run: bun install
+
+      - name: Hydrate model data
+        run: bun run hydrate:model-data
 
       - name: Check types
         run: bun run check-types

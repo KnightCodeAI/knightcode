@@ -60,6 +60,7 @@ change flags, settings, keybindings, providers, or the session format.
 - Do not preserve backward compatibility unless the user asks for it.
 - Never hardcode key checks (e.g. `matchesKey(keyData, "ctrl+x")`). Add the binding to `KEYBINDINGS` in `packages/cli/src/core/keybindings.ts` or `TUI_KEYBINDINGS` in `packages/tui/src/keybindings.ts` so it stays configurable.
 - Never edit `packages/ai/src/models.generated.ts` or `image-models.generated.ts` directly; change `packages/ai/scripts/generate-models.ts` (or `generate-image-models.ts`) and regenerate with `bun run generate:models`. Including the resulting generated diff is always OK, even when regeneration pulls in unrelated upstream model metadata.
+- `packages/ai/src/providers/data/` is generated from the live catalog sources and is not committed, except `agentrouter.json`: AgentRouter answers a WAF interstitial to datacenter IPs, so no runner can fetch it and the generator falls back to that committed file. A fresh checkout has no catalog otherwise, so nothing type-checks, tests or builds until you run `bun run hydrate:model-data`. Because the generated types pin what tests may name, a provider dropping a model turns the type check red; fix the test rather than the catalog.
 - Code must work on Windows as well as POSIX. Path joins, spawned shells, and line endings are the usual breakages; `.gitattributes` normalizes to LF except for `.bat`/`.cmd`/`.ps1`.
 
 ## Commands
@@ -82,10 +83,11 @@ Run from the repo root unless stated otherwise.
 ## Adding a Provider
 
 `packages/ai/src/providers/` holds one `<name>.ts` per provider, a
-`<name>.models.ts` catalog module, and a `data/<name>.json` metadata file.
+`<name>.models.ts` catalog module, and a generated `data/<name>.json` metadata file, which
+is hydrated locally rather than committed.
 
 1. Add the provider module and register it in `providers/all.ts`.
-2. Regenerate the catalog with `bun run generate:models` (or `bun run hydrate:model-data` for metadata only). Verify with `bun run check:model-data`.
+2. Regenerate the catalog with `bun run generate:models` (or `bun run hydrate:model-data` for metadata only, which is also how a fresh checkout gets one). Verify with `bun run check:model-data`.
 3. Add tests under `packages/ai/test/` named `<provider>-*.test.ts`. Required at minimum: request construction (headers, base URL, auth), streaming/SSE parsing, and model catalog presence. Follow the closest existing provider's tests.
 4. Anything needing a live key goes in a `*-e2e.test.ts` gated on that key's env var.
 

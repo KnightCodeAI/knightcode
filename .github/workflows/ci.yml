@@ -38,6 +38,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The provider catalog is generated from the live catalog sources rather than
+      # committed, so nothing type-checks, tests or builds until it is hydrated.
+      - name: Hydrate model data
+        run: bun run hydrate:model-data
+
       - name: Check formatting
         run: bun run format:check
 

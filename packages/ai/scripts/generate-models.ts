@@ -2837,9 +2837,26 @@ async function generateModels() {
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark"),
 	);
 
-	// Add Claude Opus 5.5 until models.dev includes it.
+	// Claude Opus 5.5 offers low through max effort and no minimal.
 	// https://platform.claude.com/docs/en/models/opus-5-5/overview
-	if (!allModels.some((model) => model.provider === "anthropic" && model.id === "claude-opus-5-5")) {
+	// The levels are pinned here rather than taken from the catalog source, because an
+	// Anthropic model's level map is built before `forceAdaptiveThinking` is set, so
+	// `applyModelsDevReasoningOptionMetadata` skips the model and its published effort list
+	// never reaches the map.
+	const CLAUDE_OPUS_5_5_THINKING_LEVEL_MAP = {
+		off: null,
+		minimal: null,
+		low: "low",
+		medium: "medium",
+		high: "high",
+		xhigh: "xhigh",
+		max: "max",
+	} satisfies NonNullable<Model<Api>["thinkingLevelMap"]>;
+	const claudeOpus55 = allModels.find((model) => model.provider === "anthropic" && model.id === "claude-opus-5-5");
+	if (claudeOpus55) {
+		mergeThinkingLevelMap(claudeOpus55, CLAUDE_OPUS_5_5_THINKING_LEVEL_MAP);
+	} else {
+		// Carry the model while the catalog source omits it.
 		allModels.push({
 			id: "claude-opus-5-5",
 			name: "Claude Opus 5.5",
@@ -2847,15 +2864,7 @@ async function generateModels() {
 			provider: "anthropic",
 			baseUrl: "https://api.anthropic.com",
 			reasoning: true,
-			thinkingLevelMap: {
-				off: null,
-				minimal: null,
-				low: "low",
-				medium: "medium",
-				high: "high",
-				xhigh: "xhigh",
-				max: "max",
-			},
+			thinkingLevelMap: CLAUDE_OPUS_5_5_THINKING_LEVEL_MAP,
 			input: ["text", "image"],
 			cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
 			contextWindow: 1000000,
