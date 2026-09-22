@@ -28,7 +28,7 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	"google-vertex": "gemini-3.1-pro-preview",
 	"github-copilot": "gpt-5.4",
 	"vercel-ai-gateway": "zai/glm-5.1",
-	xai: "grok-4.6",
+	xai: "grok-4.7",
 	groq: "openai/gpt-oss-120b",
 	cerebras: "gpt-oss-120b",
 	zai: "glm-5.3",
