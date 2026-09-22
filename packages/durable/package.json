@@ -8,6 +8,9 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./storage/memory": "./src/storage/memory.ts",
+    "./storage/sqlite": "./src/storage/sqlite/index.ts",
+    "./storage/sqlite/node": "./src/storage/sqlite/node.ts",
     "./package.json": "./package.json",
     "./*": "./src/*.ts"
   },
@@ -16,6 +19,8 @@
     "@knightcode/chord": "workspace:*"
   },
   "scripts": {
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "bench:storage": "vitest bench --config vitest.benchmark.config.ts",
+    "bench:storage:memory": "node --conditions=source --experimental-strip-types test/storage-memory.ts"
   }
 }
