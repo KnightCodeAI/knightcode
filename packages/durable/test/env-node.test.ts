@@ -166,7 +166,7 @@ describe("NodeExecutionEnv filesystem", () => {
 	it("expands home-relative paths and file URLs", async () => {
 		const root = createTempDir();
 		const env = new NodeExecutionEnv({ cwd: root });
-		expect(getOrThrow(await env.absolutePath("~/pi-node-env-test", BACKGROUND_CONTEXT))).toBe(
+		expect(getOrThrow(await env.absolutePath("~/knightcode-node-env-test", BACKGROUND_CONTEXT))).toBe(
 			join(homedir(), "knightcode-node-env-test"),
 		);
 		const filePath = join(root, "file with spaces.txt");
