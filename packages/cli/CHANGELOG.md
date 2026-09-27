@@ -1,5 +1,61 @@
 # @knightcodeai/cli
 
+## 0.10.0
+
+### Added
+
+- Added a classifier gate to `/tools` that asks a classifier model such as Jev whether each shell or file-editing call is risky and asks for confirmation before running it, and exposed `classify()` to extensions through the model registry.
+
+- Added image and classifier models to the shared model catalog, including the Jev classifier through OpenRouter and Cloudflare Workers AI, so they are listed, authenticated and refreshed like chat models.
+
+- Added a `system` theme that follows the terminal's light or dark appearance and switches when it changes. Themes can now use OKLab/OKHSL color values and text styles, and the built-in dark and light themes were redrawn with them.
+
+- Added GPT-6 Sol and GPT-6 Luna, and the new GitHub Copilot models.
+
+- Added a toggle to HTML exports that shows or hides hidden messages.
+
+- Added provider stream events for extensions: a handler receives every raw provider chunk, including metadata the normalized events drop.
+
+- Added the prompt's disposition to RPC `prompt` and `follow_up` responses, so a client can tell whether the prompt started a run, was queued, or was consumed by an extension.
+
+### Changed
+
+- Changed the Fireworks default model to Kimi K3; Kimi K2.6 is no longer served.
+
+- Changed the startup header to drop the themes section; themes stay available from `/settings`.
+
+- Changed the build to TypeScript 7 with an ES2024 target.
+
+### Fixed
+
+- Fixed path autocomplete after an opening parenthesis or backtick, and skill autocomplete while typing the `skill:` prefix.
+
+- Fixed Claude Opus 5.5 on GitHub Copilot offering effort levels the endpoint rejects.
+
+- Fixed custom themes rendering with 256 colors on truecolor terminals.
+
+- Fixed an extension loaded through two paths starting two runtimes.
+
+- Fixed pricing for OpenAI Fast mode, which is now billed like the priority service tier, and for Vercel AI Gateway 1-hour cache writes.
+
+- Fixed Kitty images being stretched; the placement size is now chosen by the smallest aspect distortion.
+
+- Fixed Mistral GLM responses splitting thinking and opening empty blocks on empty content deltas.
+
+- Fixed the terminal cursor staying hidden when an overlay closes after the UI stopped.
+
+- Fixed pinned temporary git extensions reusing the cache folder of a different ref.
+
+- Fixed read calls with a null offset or limit showing a line range instead of a full-file read.
+
+- Fixed `RpcClient` skipping the next listener when one unsubscribes while an event is dispatched.
+
+- Fixed model `samplingParams` being ignored by direct `stream()` and `complete()` calls.
+
+- Fixed new sessions not being written to disk until the first assistant reply; the session file is now saved at the first user message.
+
+- Fixed X11 clipboard text being read as an image when no image type was advertised.
+
 ## 0.9.3
 
 ### Changed
