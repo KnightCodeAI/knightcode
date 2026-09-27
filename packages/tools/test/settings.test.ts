@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ModelRegistry } from "@knightcodeai/cli";
 import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
 import { initTheme, theme } from "@knightcodeai/cli/modes/interactive/theme/theme";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -14,6 +15,10 @@ const ESC = "\x1b";
 
 const websearch = TOOLS.find((e) => e.tool.name === "websearch")!;
 const webfetch = TOOLS.find((e) => e.tool.name === "webfetch")!;
+const classifierGate = TOOLS.find((e) => e.tool.name === "classifier-gate")!;
+const models = {
+	getAvailableClassifiers: () => [{ provider: "openrouter", id: "typesafe/jev-1.13", name: "TypeSafe: Jev 1.13" }],
+} as unknown as ModelRegistry;
 
 function fakePi(active: string[]) {
 	return {
@@ -39,7 +44,7 @@ function openPanel(entry = websearch, active = ["read"]) {
 		},
 	};
 	let closed = 0;
-	const panel = toolSettingsPanel(entry, TOOLS, pi, theme, ui, () => closed++);
+	const panel = toolSettingsPanel(entry, TOOLS, pi, theme, ui, models, () => closed++);
 	const type = (...keys: string[]) => {
 		for (const key of keys) panel.handleInput(key);
 	};
@@ -83,6 +88,13 @@ describe("toolSettingsPanel", () => {
 		expect(text()).toContain("Brave API key");
 		expect(text()).toContain("••••3f2a");
 		expect(text()).not.toContain("BSA-abcdef");
+	});
+
+	test("classifier-gate lists the registry's classifier models in its Model row", () => {
+		const { type, text } = openPanel(classifierGate);
+		expect(text()).toContain("not set");
+		type(DOWN, ENTER);
+		expect(text()).toContain("openrouter/typesafe/jev-1.13");
 	});
 
 	test("Enter on Status cycles the mode and applies it to the active tools", async () => {

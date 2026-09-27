@@ -1,9 +1,10 @@
 import type { SettingItem } from "@knightcode/tui";
-import type { Theme, ToolDefinition } from "@knightcodeai/cli";
+import type { ModelRegistry, Theme, ToolDefinition } from "@knightcodeai/cli";
 import type { ToolSettings } from "./state.ts";
 import { webfetchTool } from "./web/fetch.ts";
 import { websearchSettings } from "./web/search-settings.ts";
 import { websearchTool } from "./web/search.ts";
+import { classifierGateEntry } from "./classifier-gate.ts";
 import { scratchpadEntry } from "./scratchpad.ts";
 
 // Same alias the engine uses for heterogeneous tool lists (core/tools/index.ts `ToolDef`); it is not
@@ -20,7 +21,7 @@ export interface RegisteredToolEntry {
 	tool: AnyToolDefinition | FeatureTool;
 	defaultEnabled: boolean;
 	/** Extra /tools rows; each row's id is the key it stores in the tool's settings. */
-	settings?: (current: ToolSettings, theme: Theme) => SettingItem[];
+	settings?: (current: ToolSettings, theme: Theme, models: ModelRegistry) => SettingItem[];
 }
 
 /** Every KnightCode-native tool. A new tool is one file under src/ and one line here. */
@@ -28,4 +29,5 @@ export const TOOLS: RegisteredToolEntry[] = [
 	{ tool: webfetchTool, defaultEnabled: false },
 	{ tool: websearchTool, defaultEnabled: false, settings: websearchSettings },
 	scratchpadEntry,
+	classifierGateEntry,
 ];

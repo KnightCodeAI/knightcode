@@ -157,6 +157,7 @@ KnightCode records the initial prompt and tool set in the transcript's first sys
 
 `ExtensionContext` provides the working directory, mode, UI, session manager, model runtime, abort signal, context usage, and controls for compaction and shutdown.
 Use `ctx.modelRegistry.streamSimple()` for provider-neutral nested model calls.
+Use `ctx.modelRegistry.getAvailableClassifiers()` and `ctx.modelRegistry.classify()` to ask a classifier model structured questions, as the built-in [classifier gate](usage.md#classifier-gate) does.
 
 Command handlers receive `ExtensionCommandContext`, which adds operations for waiting until idle, reloading, tree navigation, and session replacement.
 These operations are command-only because calling them from lifecycle handlers can deadlock the runtime.

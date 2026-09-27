@@ -49,7 +49,7 @@ Type `/` to search the available commands. The commands you will use most often 
 - `/thinking` selects how much reasoning the current model uses. Press `Shift+Tab` to cycle through supported levels.
 - `/login` and `/logout` manage provider access.
 - `/settings` changes common preferences.
-- `/tools` turns the [web tools](#web-tools) and the [scratchpad](#scratchpad) off, on for this session, or on by default.
+- `/tools` turns the [web tools](#web-tools), the [scratchpad](#scratchpad), and the [classifier gate](#classifier-gate) off, on for this session, or on by default.
 
 Prompt templates, skills, and extensions can add more commands to the same menu. See [Choose a Model](models.md), [Configuration](configuration.md), or the complete [Slash Commands reference](slash-commands.md).
 
@@ -115,6 +115,14 @@ Fetched pages and search results are marked as untrusted in the tool output so t
 The agent keeps its working notes there in `notes.md`: task list, decisions, `file:line` facts, next steps. After each compaction the first 8 KB of `notes.md` is put back into the context once, so those notes outlive the summary. Open the file to see what the agent is tracking.
 
 The scratchpad is off by default. When on, it adds about 60 tokens to the system prompt, which is cached; the notes cost tokens only after a compaction. It is not a tool, so `--tools` and `--exclude-tools` do not affect it. `/fork` starts a new, empty directory, and the operating system clears old ones with the rest of its temp files. If `<tmp>/knightcode-<uid>` already exists but is not a private directory you own, as when another user on a shared machine created it first, the scratchpad stays off and KnightCode reports why.
+
+## Classifier gate
+
+`/tools classifier-gate` asks a classifier model whether each `bash`, `powershell`, `write`, or `edit` call could cause harm that is hard to undo: deleting data beyond the task, exposing secrets, changing system configuration, or publishing to a remote service. A call rated risky (probability 0.5 or higher) asks for confirmation; in print and JSON modes it is blocked.
+
+Pick the model in the panel's **Model** row. It lists classifier models from providers you are logged in to, such as TypeSafe Jev through OpenRouter. The gate fails closed: a call runs without asking only when the classifier scores the whole call below 0.5. With no model set, when the classifier errors or returns no answer, or when the call's input is over 4,000 characters (as a large `write` often is), the call asks for confirmation or is blocked. Interrupting the turn closes the confirmation.
+
+The gate is off by default. Each gated call is one classifier request, billed by its provider, and adds its latency before the tool runs.
 
 ## Copy, export, or share results
 

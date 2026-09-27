@@ -86,7 +86,7 @@ describe("factory", () => {
 		const { pi, registered, command } = fakePi([]);
 		toolsExtension(pi);
 		expect(registered).toEqual(["webfetch", "websearch"]);
-		expect(TOOLS.map((e) => e.tool.name)).toEqual(["webfetch", "websearch", "scratchpad"]);
+		expect(TOOLS.map((e) => e.tool.name)).toEqual(["webfetch", "websearch", "scratchpad", "classifier-gate"]);
 		expect(command()).toBeDefined();
 	});
 
@@ -156,7 +156,7 @@ describe("/tools", () => {
 		await toolsCommand("", ctx, pi);
 		expect(prompts[0]).toEqual({
 			title: "Tools",
-			options: ["webfetch — off", "websearch — off", "scratchpad — off"],
+			options: ["webfetch — off", "websearch — off", "scratchpad — off", "classifier-gate — off"],
 		});
 		expect(prompts[1]).toEqual({
 			title: "webfetch",
@@ -192,7 +192,7 @@ describe("/tools", () => {
 			const { ctx, notices } = fakeCtx([]);
 			await toolsCommand(args, ctx, pi);
 			expect(notices).toEqual([
-				{ message: "Usage: /tools [webfetch|websearch|scratchpad] [off|on|always]", type: "error" },
+				{ message: "Usage: /tools [webfetch|websearch|scratchpad|classifier-gate] [off|on|always]", type: "error" },
 			]);
 		}
 	});
@@ -202,6 +202,7 @@ describe("/tools", () => {
 			{ value: "webfetch", label: "webfetch" },
 			{ value: "websearch", label: "websearch" },
 			{ value: "scratchpad", label: "scratchpad" },
+			{ value: "classifier-gate", label: "classifier-gate" },
 		]);
 		expect(toolsCompletions("webs")).toEqual([{ value: "websearch", label: "websearch" }]);
 		expect(toolsCompletions("websearch ")).toEqual([

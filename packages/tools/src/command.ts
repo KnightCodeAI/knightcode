@@ -38,7 +38,7 @@ export async function toolsCommand(
 		// there is nothing left to apply or announce.
 		const picked = entry;
 		await ctx.ui.custom((_tui, theme, _keybindings, done) =>
-			toolSettingsPanel(picked, entries, pi, theme, ctx.ui, () => done(undefined)),
+			toolSettingsPanel(picked, entries, pi, theme, ctx.ui, ctx.modelRegistry, () => done(undefined)),
 		);
 		return;
 	}

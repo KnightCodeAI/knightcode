@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@knightcodeai/cli";
+import { registerClassifierGate } from "./classifier-gate.ts";
 import { toolsCommand, toolsCompletions } from "./command.ts";
 import { TOOLS } from "./registry.ts";
 import { applyActiveTools } from "./state.ts";
@@ -20,4 +21,5 @@ export default function toolsExtension(pi: ExtensionAPI): void {
 		applyActiveTools(pi, TOOLS);
 	});
 	registerScratchpad(pi);
+	registerClassifierGate(pi);
 }

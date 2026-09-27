@@ -14,7 +14,7 @@ Extensions, prompt templates, and skills can add commands. The command menu in K
 | `/scoped-models` | Configure the models used by interactive cycling |
 | `/login [provider]` | Add provider authentication |
 | `/logout` | Remove provider authentication |
-| `/tools` | Turn `webfetch`, `websearch`, and the [scratchpad](usage.md#scratchpad) off, on for this session, or on by default; pick the search provider and store its key |
+| `/tools` | Turn `webfetch`, `websearch`, the [scratchpad](usage.md#scratchpad), and the [classifier gate](usage.md#classifier-gate) off, on for this session, or on by default; pick the search provider, its key, and the gate's model |
 | `/llama` | Manage models on the configured llama.cpp router |
 
 ## Sessions and context

@@ -14,7 +14,7 @@ The agent directory is shown as `<agent-dir>` below. Set its location with the `
 | `<agent-dir>/keybindings.json` | Custom terminal UI and application [keybindings](keybindings.md). |
 | `<agent-dir>/models.json` | [Compatible endpoints, models, and model overrides](models.md#configure-a-compatible-endpoint). |
 | `<agent-dir>/auth.json` | Saved API keys and OAuth credentials. |
-| `<agent-dir>/tools.json` | [Web tool](usage.md#web-tools) and scratchpad settings written by `/tools`, including the Brave Search key. |
+| `<agent-dir>/tools.json` | [Web tool](usage.md#web-tools), scratchpad, and classifier gate settings written by `/tools`, including the Brave Search key. |
 | `<agent-dir>/AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, or `CLAUDE.MD` | User instructions applied across working directories. |
 | `<agent-dir>/SYSTEM.md` | Replaces KnightCode’s default system prompt. |
 | `<agent-dir>/APPEND_SYSTEM.md` | Adds instructions to KnightCode’s system prompt. |
