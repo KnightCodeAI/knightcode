@@ -95,7 +95,7 @@ describe("toolSettingsPanel", () => {
 		await vi.waitFor(() => expect(readPersisted().websearch?.enabled).toBe(true));
 		type(ENTER);
 		await vi.waitFor(() => expect(readPersisted().websearch?.enabled).toBe(false));
-		expect(pi.active).toEqual(["read"]);
+		await vi.waitFor(() => expect(pi.active).toEqual(["read"]));
 	});
 
 	test("picking Brave with no key stored persists the provider and opens the key prompt", async () => {

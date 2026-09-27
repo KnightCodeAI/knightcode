@@ -1,10 +1,18 @@
 import type { JsonValue } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import type { DocumentCreate, Id, Seq, Storage, StorageWrite, TaskRecord } from "../src/types.ts";
-import { ROOT_CONVERSATION_ID } from "../src/types.ts";
-
-export const STORAGE_BENCHMARK_BACKENDS = ["memory", "sqlite"] as const;
-export type StorageBenchmarkBackend = (typeof STORAGE_BENCHMARK_BACKENDS)[number];
+import type {
+	ConversationId,
+	DocumentCreate,
+	DocumentId,
+	EntryId,
+	Seq,
+	Storage,
+	StorageWrite,
+	SubmissionId,
+	TaskId,
+	TaskRecord,
+} from "../types.ts";
+import { ROOT_CONVERSATION_ID } from "../types.ts";
 
 export type StorageBenchmarkScale = {
 	readonly name: string;
@@ -46,19 +54,19 @@ export function storageBenchmarkPrimaryRecordCount(scale: StorageBenchmarkScale)
 type StoredTask = TaskRecord<JsonValue, JsonValue, JsonValue>;
 
 export type StorageBenchmarkDataset = {
-	readonly firstEntryId: Id;
+	readonly firstEntryId: EntryId;
 	readonly filteredTaskCount: number;
-	readonly exactDocumentId: Id;
+	readonly exactDocumentId: DocumentId;
 	readonly exactDocumentKey: string;
-	readonly replayDocumentIds: Readonly<Record<(typeof REPLAY_TAILS)[number], Id>>;
-	readonly historicalDocumentId: Id;
+	readonly replayDocumentIds: Readonly<Record<(typeof REPLAY_TAILS)[number], DocumentId>>;
+	readonly historicalDocumentId: DocumentId;
 	readonly ancientAt: Seq;
 	readonly recentAt: Seq;
-	readonly deepestConversationId: Id;
-	readonly ancestorHeadEntryId: Id;
+	readonly deepestConversationId: ConversationId;
+	readonly ancestorHeadEntryId: EntryId;
 };
 
-function task(id: Id, index: number): StoredTask {
+function task(id: TaskId<JsonValue>, index: number): StoredTask {
 	const statuses = ["pending", "running", "terminal"] as const;
 	const status = statuses[index % statuses.length];
 	const common = {
@@ -84,11 +92,11 @@ export async function seedStorageBenchmark(
 ): Promise<StorageBenchmarkDataset> {
 	await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], BACKGROUND_CONTEXT);
 
-	let firstEntryId = 0;
+	let firstEntryId: EntryId | undefined;
 	for (let start = 0; start < scale.entryCount; start += BATCH_SIZE) {
 		const writes: StorageWrite[] = [];
 		for (let index = start; index < Math.min(start + BATCH_SIZE, scale.entryCount); index++) {
-			const id = await storage.mintId();
+			const id = await storage.mintId<EntryId>();
 			if (index === 0) firstEntryId = id;
 			writes.push({
 				type: "entry",
@@ -107,16 +115,16 @@ export async function seedStorageBenchmark(
 	for (let start = 0; start < scale.taskCount; start += BATCH_SIZE) {
 		const writes: StorageWrite[] = [];
 		for (let index = start; index < Math.min(start + BATCH_SIZE, scale.taskCount); index++) {
-			writes.push({ type: "task", value: task(await storage.mintId(), index) });
+			writes.push({ type: "task", value: task(await storage.mintId<TaskId<JsonValue>>(), index) });
 		}
 		await storage.commit(writes, BACKGROUND_CONTEXT);
 	}
 
-	let exactDocumentId = 0;
+	let exactDocumentId: DocumentId | undefined;
 	for (let start = 0; start < scale.documentCount; start += BATCH_SIZE) {
 		const writes: StorageWrite[] = [];
 		for (let index = start; index < Math.min(start + BATCH_SIZE, scale.documentCount); index++) {
-			const id = await storage.mintId();
+			const id = await storage.mintId<DocumentId>();
 			exactDocumentId = id;
 			writes.push({
 				type: "document.create",
@@ -129,7 +137,7 @@ export async function seedStorageBenchmark(
 
 	const replayEntries = await Promise.all(
 		REPLAY_TAILS.map(async (tail) => {
-			const id = await storage.mintId();
+			const id = await storage.mintId<DocumentId>();
 			return { tail, id };
 		}),
 	);
@@ -161,7 +169,7 @@ export async function seedStorageBenchmark(
 		);
 	}
 
-	const historicalDocumentId = await storage.mintId();
+	const historicalDocumentId = await storage.mintId<DocumentId>();
 	const historicalRecord = {
 		id: historicalDocumentId,
 		kind: "benchmark.history",
@@ -179,7 +187,7 @@ export async function seedStorageBenchmark(
 		],
 		BACKGROUND_CONTEXT,
 	);
-	let ancientAt = 0;
+	let ancientAt: Seq | undefined;
 	for (let count = 1; count <= HISTORY_SEGMENT_LENGTH; count++) {
 		ancientAt = await storage.commit(
 			[
@@ -202,6 +210,7 @@ export async function seedStorageBenchmark(
 		],
 		BACKGROUND_CONTEXT,
 	);
+	if (ancientAt === undefined) throw new Error("Benchmark history seed produced no commits");
 	let recentAt = ancientAt;
 	for (let count = HISTORY_SEGMENT_LENGTH + 1; count <= HISTORY_SEGMENT_LENGTH * 2; count++) {
 		recentAt = await storage.commit(
@@ -216,11 +225,12 @@ export async function seedStorageBenchmark(
 		);
 	}
 
+	if (firstEntryId === undefined) throw new Error("Benchmark scale must create entries");
 	let parentConversationId = ROOT_CONVERSATION_ID;
 	let parentAt = firstEntryId;
 	let deepestConversationId = ROOT_CONVERSATION_ID;
 	for (let depth = 0; depth < FORK_DEPTH; depth++) {
-		const conversationId = await storage.mintId();
+		const conversationId = await storage.mintId<ConversationId>();
 		await storage.commit(
 			[
 				{
@@ -230,7 +240,7 @@ export async function seedStorageBenchmark(
 			],
 			BACKGROUND_CONTEXT,
 		);
-		const ids = await Promise.all(Array.from({ length: ENTRIES_PER_FORK }, () => storage.mintId()));
+		const ids = await Promise.all(Array.from({ length: ENTRIES_PER_FORK }, () => storage.mintId<EntryId>()));
 		await storage.commit(
 			ids.map((id, index) => ({
 				type: "entry" as const,
@@ -248,6 +258,7 @@ export async function seedStorageBenchmark(
 		deepestConversationId = conversationId;
 	}
 
+	if (exactDocumentId === undefined) throw new Error("Benchmark scale must create documents");
 	return {
 		firstEntryId,
 		filteredTaskCount: Math.min(50, Math.ceil(scale.taskCount / 60)),
@@ -255,7 +266,7 @@ export async function seedStorageBenchmark(
 		exactDocumentKey: `key-${scale.documentCount - 1}`,
 		replayDocumentIds: Object.fromEntries(replayEntries.map(({ tail, id }) => [tail, id])) as Record<
 			(typeof REPLAY_TAILS)[number],
-			Id
+			DocumentId
 		>,
 		historicalDocumentId,
 		ancientAt,
@@ -282,7 +293,7 @@ export const STORAGE_READ_BENCHMARKS: readonly StorageReadBenchmark[] = [
 	{
 		name: "entry page scan (100)",
 		async run(storage) {
-			return (await storage.scanEntries({ conversationId: ROOT_CONVERSATION_ID }, undefined, 100, BACKGROUND_CONTEXT))
+			return (await storage.scanEntries({ conversationId: ROOT_CONVERSATION_ID }, 100, undefined, BACKGROUND_CONTEXT))
 				.items.length;
 		},
 		expected: () => 100,
@@ -293,8 +304,8 @@ export const STORAGE_READ_BENCHMARKS: readonly StorageReadBenchmark[] = [
 			return (
 				await storage.scanTasks(
 					{ kind: "benchmark.filtered", status: "pending", background: true },
-					undefined,
 					50,
+					undefined,
 					BACKGROUND_CONTEXT,
 				)
 			).items.length;
@@ -347,7 +358,7 @@ export const STORAGE_READ_BENCHMARKS: readonly StorageReadBenchmark[] = [
 		name: "fork-depth history scan (100)",
 		async run(storage, dataset) {
 			return (
-				await storage.scanEntries({ conversationId: dataset.deepestConversationId }, undefined, 100, BACKGROUND_CONTEXT)
+				await storage.scanEntries({ conversationId: dataset.deepestConversationId }, 100, undefined, BACKGROUND_CONTEXT)
 			).items.length;
 		},
 		expected: () => 100,
@@ -369,12 +380,31 @@ export type StorageWriteBenchmark = {
 	run(storage: Storage): Promise<number>;
 };
 
+/** Seed the common state expected by every write benchmark sample. */
+export async function seedStorageWriteBenchmark(storage: Storage): Promise<void> {
+	await storage.commit([{ type: "conversation", value: { id: ROOT_CONVERSATION_ID } }], BACKGROUND_CONTEXT);
+	await storage.commit(
+		await Promise.all(
+			Array.from({ length: 100 }, async (_, index) => ({
+				type: "entry" as const,
+				value: {
+					id: await storage.mintId<EntryId>(),
+					conversationId: ROOT_CONVERSATION_ID,
+					kind: "benchmark.baseline",
+					data: { index },
+				},
+			})),
+		),
+		BACKGROUND_CONTEXT,
+	);
+}
+
 export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 	{
 		name: "commit one entry",
 		expected: 1,
 		async run(storage) {
-			const id = await storage.mintId();
+			const id = await storage.mintId<EntryId>();
 			await storage.commit(
 				[
 					{
@@ -400,7 +430,7 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 				Array.from({ length: 100 }, async (_, index): Promise<StorageWrite> => ({
 					type: "entry",
 					value: {
-						id: await storage.mintId(),
+						id: await storage.mintId<EntryId>(),
 						conversationId: ROOT_CONVERSATION_ID,
 						kind: "benchmark.write",
 						data: { index, text: "x".repeat(128) },
@@ -415,10 +445,10 @@ export const STORAGE_WRITE_BENCHMARKS: readonly StorageWriteBenchmark[] = [
 		name: "commit mixed entry/task/submission/document",
 		expected: 4,
 		async run(storage) {
-			const entryId = await storage.mintId();
-			const taskId = await storage.mintId();
-			const submissionId = await storage.mintId();
-			const documentId = await storage.mintId();
+			const entryId = await storage.mintId<EntryId>();
+			const taskId = await storage.mintId<TaskId<JsonValue>>();
+			const submissionId = await storage.mintId<SubmissionId>();
+			const documentId = await storage.mintId<DocumentId>();
 			const writes: readonly StorageWrite[] = [
 				{
 					type: "entry",

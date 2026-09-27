@@ -43,6 +43,10 @@ export default defineConfig({
 				replacement: `${workspaceSourcePaths.aiSrc}/$1.ts`,
 			},
 			{ find: /^@knightcode\/durable$/, replacement: workspaceSourcePaths.durableIndex },
+			{
+				find: /^@knightcode\/durable\/testing$/,
+				replacement: fileURLToPath(new URL("./packages/durable/src/testing/index.ts", import.meta.url)),
+			},
 			{ find: /^@knightcode\/agent$/, replacement: workspaceSourcePaths.agentIndex },
 			{
 				find: /^@knightcode\/agent\/harness\/session$/,
