@@ -120,9 +120,9 @@ The scratchpad is off by default. When on, it adds about 60 tokens to the system
 
 `/tools classifier-gate` asks a classifier model whether each `bash`, `powershell`, `write`, or `edit` call could cause harm that is hard to undo: deleting data beyond the task, exposing secrets, changing system configuration, or publishing to a remote service. A call rated risky (probability 0.5 or higher) asks for confirmation; in print and JSON modes it is blocked.
 
-Pick the model in the panel's **Model** row. It lists classifier models from providers you are logged in to, such as TypeSafe Jev through OpenRouter. The gate fails closed: with no model set, or when the classifier errors, every gated call asks for confirmation or is blocked.
+Pick the model in the panel's **Model** row. It lists classifier models from providers you are logged in to, such as TypeSafe Jev through OpenRouter. The gate fails closed: a call runs without asking only when the classifier scores the whole call below 0.5. With no model set, when the classifier errors or returns no answer, or when the call's input is over 4,000 characters (as a large `write` often is), the call asks for confirmation or is blocked. Interrupting the turn closes the confirmation.
 
-The gate is off by default. Each gated call is one classifier request, billed by its provider, and adds its latency before the tool runs. At most 4,000 characters of the call's input are sent.
+The gate is off by default. Each gated call is one classifier request, billed by its provider, and adds its latency before the tool runs.
 
 ## Copy, export, or share results
 

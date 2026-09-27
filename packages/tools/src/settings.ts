@@ -4,6 +4,7 @@ import {
 	type ExtensionAPI,
 	type ExtensionUIContext,
 	getSettingsListTheme,
+	type ModelRegistry,
 	type Theme,
 } from "@knightcodeai/cli";
 import type { RegisteredToolEntry } from "./registry.ts";
@@ -96,6 +97,7 @@ export function toolSettingsPanel(
 	pi: Pick<ExtensionAPI, "getActiveTools" | "setActiveTools">,
 	theme: Theme,
 	ui: Pick<ExtensionUIContext, "notify">,
+	models: ModelRegistry,
 	done: () => void,
 ): Panel {
 	const name = entry.tool.name;
@@ -108,7 +110,7 @@ export function toolSettingsPanel(
 			currentValue: MODE_LABELS[currentMode(entry)],
 			values: TOOL_MODES.map((mode) => MODE_LABELS[mode]),
 		},
-		...(entry.settings?.(current, theme) ?? []),
+		...(entry.settings?.(current, theme, models) ?? []),
 	];
 
 	const list = new SettingsList(
@@ -129,7 +131,7 @@ export function toolSettingsPanel(
 			else current[id] = value;
 			panel.save(updateSettings(name, { [id]: value === "" ? undefined : value }));
 			// The row shows the setting's display form (a masked key), not what the submenu returned.
-			for (const item of entry.settings?.(current, theme) ?? []) list.updateValue(item.id, item.currentValue);
+			for (const item of entry.settings?.(current, theme, models) ?? []) list.updateValue(item.id, item.currentValue);
 		},
 		() => void panel.flush().then(done),
 	);

@@ -10,7 +10,7 @@ import toolsExtension from "../src/index.ts";
 import { TOOLS } from "../src/registry.ts";
 import { readPersisted, resetSessionOverrides, stateFile, writePersisted } from "../src/state.ts";
 
-type Handler = (event?: unknown, ctx?: unknown) => unknown;
+type Handler = () => unknown;
 type Command = {
 	handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 	getArgumentCompletions?: (p: string) => unknown;
@@ -94,7 +94,7 @@ describe("factory", () => {
 		writePersisted({ webfetch: { enabled: true } }, stateFile());
 		const { pi, handlers, active } = fakePi(["read", "webfetch", "websearch"]);
 		toolsExtension(pi);
-		for (const handler of handlers.get("session_start") ?? []) handler(undefined, { modelRegistry: undefined });
+		for (const handler of handlers.get("session_start") ?? []) handler();
 		expect(active).toEqual(["read", "webfetch"]);
 	});
 
@@ -105,7 +105,7 @@ describe("factory", () => {
 		expect(active).toEqual(["read", "websearch"]);
 		// A new session starts from the engine's default set; the override must be re-applied.
 		active.splice(0, active.length, "read");
-		for (const handler of handlers.get("session_start") ?? []) handler(undefined, { modelRegistry: undefined });
+		for (const handler of handlers.get("session_start") ?? []) handler();
 		expect(active).toEqual(["read", "websearch"]);
 	});
 });

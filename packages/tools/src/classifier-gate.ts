@@ -1,5 +1,5 @@
 import type { SettingItem } from "@knightcode/tui";
-import type { ExtensionAPI, ExtensionContext, ModelRegistry } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext, ModelRegistry, Theme } from "@knightcodeai/cli";
 import { SelectSubmenu } from "@knightcodeai/cli/modes/interactive/components/settings-submenu";
 import type { RegisteredToolEntry } from "./registry.ts";
 import { readPersisted, resolveEnabled, type ToolSettings } from "./state.ts";
@@ -7,12 +7,9 @@ import { readPersisted, resolveEnabled, type ToolSettings } from "./state.ts";
 export const CLASSIFIER_GATE = "classifier-gate";
 const GATED_TOOLS = new Set(["bash", "powershell", "write", "edit"]);
 const RISK_THRESHOLD = 0.5;
-// ponytail: fixed truncation keeps large writes inside the classifier's context window.
+// A call is classified whole or not at all: a scored prefix would let an unseen tail run.
+// ponytail: fixed cap; size it from the model's context window if long calls confirm too often.
 const MAX_INPUT_CHARS = 4000;
-
-// The /tools panel builds its rows synchronously and without a context, so the gate keeps the
-// registry from the last session_start.
-let registry: ModelRegistry | undefined;
 
 /** `provider/model`; provider IDs never contain a slash, model IDs may. */
 function splitModelRef(ref: string): { provider: string; model: string } | undefined {
@@ -21,7 +18,7 @@ function splitModelRef(ref: string): { provider: string; model: string } | undef
 }
 
 /** The /tools classifier-gate row: which classifier model screens tool calls. */
-function classifierGateSettings(current: ToolSettings): SettingItem[] {
+function classifierGateSettings(current: ToolSettings, _theme: Theme, models: ModelRegistry): SettingItem[] {
 	const model = typeof current.model === "string" ? current.model : "";
 	return [
 		{
@@ -33,7 +30,7 @@ function classifierGateSettings(current: ToolSettings): SettingItem[] {
 				new SelectSubmenu(
 					"Classifier model",
 					"",
-					(registry?.getAvailableClassifiers() ?? []).map((m) => ({
+					models.getAvailableClassifiers().map((m) => ({
 						value: `${m.provider}/${m.id}`,
 						label: `${m.provider}/${m.id}`,
 						description: m.name,
@@ -56,18 +53,20 @@ type GateResult = { block: true; reason: string } | undefined;
 
 async function confirmOrBlock(ctx: ExtensionContext, toolName: string, reason: string): Promise<GateResult> {
 	if (!ctx.hasUI) return { block: true, reason: `${reason} (no UI for confirmation)` };
-	const allowed = await ctx.ui.confirm(`Classifier gate: ${toolName}`, `${reason}\n\nAllow this call?`);
+	// The loop awaits this handler before it checks for abort, so the dialog must close on abort.
+	const allowed = await ctx.ui.confirm(`Classifier gate: ${toolName}`, `${reason}\n\nAllow this call?`, {
+		signal: ctx.signal,
+	});
+	if (ctx.signal?.aborted) return { block: true, reason: "Aborted" };
 	return allowed ? undefined : { block: true, reason: "Blocked by user" };
 }
 
 /**
- * Screens shell and file-mutating tool calls with the classifier chosen in /tools. A risky call
- * needs confirmation, and is blocked without a UI. A missing or failing classifier fails closed.
+ * Screens shell and file-mutating tool calls with the classifier chosen in /tools. Only a bool
+ * answer below the threshold for the whole call allows it; anything else needs confirmation, and
+ * is blocked without a UI.
  */
 export function registerClassifierGate(pi: ExtensionAPI): void {
-	pi.on("session_start", (_event, ctx) => {
-		registry = ctx.modelRegistry;
-	});
 	pi.on("tool_call", async (event, ctx) => {
 		if (!GATED_TOOLS.has(event.toolName)) return undefined;
 		const persisted = readPersisted();
@@ -81,14 +80,19 @@ export function registerClassifierGate(pi: ExtensionAPI): void {
 			return confirmOrBlock(ctx, event.toolName, `${why} Choose one in /tools ${CLASSIFIER_GATE}.`);
 		}
 
+		const input = JSON.stringify(event.input);
+		if (input.length > MAX_INPUT_CHARS) {
+			return confirmOrBlock(
+				ctx,
+				event.toolName,
+				`Call is too large to classify (${input.length} > ${MAX_INPUT_CHARS} characters).`,
+			);
+		}
+
 		const result = await ctx.modelRegistry.classify(
 			model,
 			{
-				state: {
-					tool: event.toolName,
-					input: JSON.stringify(event.input).slice(0, MAX_INPUT_CHARS),
-					cwd: ctx.cwd,
-				},
+				state: { tool: event.toolName, input, cwd: ctx.cwd },
 				questions: {
 					risky: {
 						type: "bool",
@@ -109,11 +113,11 @@ export function registerClassifierGate(pi: ExtensionAPI): void {
 			return confirmOrBlock(ctx, event.toolName, `Classifier failed: ${result.errorMessage ?? "unknown error"}.`);
 		}
 		const answer = result.answers.risky;
-		if (answer?.type !== "bool" || answer.probability < RISK_THRESHOLD) return undefined;
-		return confirmOrBlock(
-			ctx,
-			event.toolName,
-			`Classifier rates this call risky (p=${answer.probability.toFixed(2)}).`,
-		);
+		if (answer?.type === "bool" && answer.probability < RISK_THRESHOLD) return undefined;
+		const why =
+			answer?.type === "bool"
+				? `Classifier rates this call risky (p=${answer.probability.toFixed(2)}).`
+				: "Classifier returned no risk answer.";
+		return confirmOrBlock(ctx, event.toolName, why);
 	});
 }
