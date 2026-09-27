@@ -1,11 +1,10 @@
 {
 	"extends": "../../../tsconfig.base.json",
 	"compilerOptions": {
-		"baseUrl": "../../..",
 		"noEmit": true,
 		"paths": {
-			"@knightcode/ai": ["packages/ai/src/index.ts"],
-			"@knightcode/ai/*": ["packages/ai/src/*"]
+			"@knightcode/ai": ["../../ai/src/index.ts"],
+			"@knightcode/ai/*": ["../../ai/src/*"]
 		}
 	},
 	"include": ["./**/*.ts", "../src/**/*.ts"]

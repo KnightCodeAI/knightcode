@@ -8,7 +8,7 @@ an RPC-shaped presentation actually needs from it.
 node packages/cli/src/experimental/mini/main.ts [--continue]
 
 # while the harness is changing under us, run from source instead of built dist:
-./node_modules/.bin/tsx --tsconfig tsconfig.json packages/cli/src/experimental/mini/main.ts
+node --import ./packages/cli/src/experimental/source-resolver.ts packages/cli/src/experimental/mini/main.ts
 ```
 
 `--continue` attaches to the newest session for the current directory. Starting `mini` twice attaches

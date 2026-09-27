@@ -5,7 +5,6 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "paths": {
-      "*": ["./*"],
       "@knightcode/telemetry": ["./packages/telemetry/src/index.ts"],
       "@knightcode/telemetry/testing": ["./packages/telemetry/src/testing/index.ts"],
       "@knightcode/ai": ["./packages/ai/src/index.ts"],
@@ -46,6 +45,6 @@
       "typebox": ["./node_modules/typebox"]
     }
   },
-  "include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/evals/evals/**/*"],
+  "include": ["scripts/model-catalog-protocol.ts", "scripts/model-catalog-protocol.test.ts", "packages/*/src/**/*", "packages/*/test/**/*", "packages/evals/evals/**/*"],
   "exclude": ["**/dist/**", "**/node_modules/**"]
 }

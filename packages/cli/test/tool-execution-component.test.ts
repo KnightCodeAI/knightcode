@@ -378,6 +378,22 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered.match(/README\.md/g)?.length ?? 0).toBe(1);
 	});
 
+	// Strict tool schemas make models send null for omitted optional fields.
+	test("renders read calls with null offset and limit as full-file reads", () => {
+		const component = new ToolExecutionComponent(
+			"read",
+			"tool-read-null-range",
+			{ path: "src/example.ts", offset: null, limit: null },
+			{},
+			createReadToolDefinition(process.cwd()),
+			createFakeTui(),
+			process.cwd(),
+		);
+		const rendered = stripAnsi(component.render(120).join("\n"));
+		expect(rendered).toContain("Read(src/example.ts)");
+		expect(rendered).not.toContain("src/example.ts:");
+	});
+
 	test("inherits missing built-in result renderer slot from the built-in tool", () => {
 		const overrideDefinition: ToolDefinition = {
 			...createBaseToolDefinition("read"),

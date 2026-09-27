@@ -10,8 +10,8 @@ import { isValidThinkingLevel } from "../cli/args.ts";
 import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
 
-/** Default model IDs for each known provider */
-export const defaultModelPerProvider: Record<KnownProvider, string> = {
+/** Default chat model IDs for providers with built-in chat models. */
+export const defaultModelPerProvider: Partial<Record<KnownProvider, string>> = {
 	// OpenRouter first: KnightCode is BYOK-over-OpenRouter, and this order is the
 	// fallback priority in findInitialModel step 4.
 	openrouter: "moonshotai/kimi-k2.6",
@@ -39,7 +39,7 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	moonshotai: "kimi-k2.6",
 	"moonshotai-cn": "kimi-k2.6",
 	huggingface: "moonshotai/Kimi-K2.6",
-	fireworks: "accounts/fireworks/models/kimi-k2p6",
+	fireworks: "accounts/fireworks/models/kimi-k3",
 	together: "moonshotai/Kimi-K2.6",
 	baseten: "zai-org/GLM-5.2",
 	opencode: "kimi-k2.6",

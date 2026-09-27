@@ -69,6 +69,42 @@ describe("extensions discovery", () => {
 		expect(result.extensions).toHaveLength(1);
 	});
 
+	it("does not infer package ownership from ancestor manifests", async () => {
+		// A host package installed next to the project must not make the project's manifest
+		// look like the extension's owner.
+		const dependencyDir = path.join(tempDir, "node_modules", "@knightcodeai", "cli");
+		fs.mkdirSync(dependencyDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(tempDir, "package.json"),
+			JSON.stringify({
+				name: "application",
+				type: "module",
+				dependencies: { "@knightcodeai/cli": "1.0.0" },
+			}),
+		);
+		fs.writeFileSync(
+			path.join(dependencyDir, "package.json"),
+			JSON.stringify({ name: "@knightcodeai/cli", type: "module", exports: "./index.js" }),
+		);
+		fs.writeFileSync(path.join(dependencyDir, "index.js"), "export const physicalDependency = true;");
+		fs.writeFileSync(
+			path.join(extensionsDir, "compiled-esm-extension.js"),
+			`
+				import { physicalDependency } from "@knightcodeai/cli";
+				export default function(knightcode) {
+					if (physicalDependency) knightcode.registerCommand("physical-dependency", { handler: async () => {} });
+				}
+			`,
+		);
+
+		const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+
+		expect(result.errors).toEqual([]);
+		expect(result.extensions).toHaveLength(1);
+		expect(result.extensions[0].commands.has("physical-dependency")).toBe(true);
+		expect(result.warnings).toEqual([]);
+	});
+
 	it("keeps the type-only @knightcode/ai OAuth compatibility barrel resolvable", async () => {
 		fs.writeFileSync(
 			path.join(extensionsDir, "oauth-import.ts"),

@@ -9,7 +9,7 @@ Example code for the @knightcodeai/cli SDK, process integration, and extensions.
 Build the CLI package before running it from a repository checkout:
 
 ```bash
-npx tsx examples/rpc-client.ts "Explain this repository"
+node examples/rpc-client.ts "Explain this repository"
 ```
 
 ## Directories
