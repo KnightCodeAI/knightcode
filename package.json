@@ -18,7 +18,7 @@
     "eval": "bun run --filter '@knightcode/evals' eval --",
     "link:cli": "bun run build:cli && cd packages/cli && bun link",
     "test": "bun run --filter '*' test",
-    "generate:models": "bun run --filter '@knightcode/ai' generate-models && bun run --filter '@knightcode/ai' generate-image-models",
+    "generate:models": "bun run --filter '@knightcode/ai' generate-models",
     "hydrate:model-data": "bun run --filter '@knightcode/ai' hydrate-model-data",
     "check:model-data": "bun run --filter '@knightcode/ai' check:model-data",
     "generate:model-catalog": "bun run --filter '@knightcode/ai' generate-model-catalog",
@@ -36,8 +36,7 @@
     "esbuild": "0.28.2",
     "husky": "9.1.7",
     "prettier": "^3.8.3",
-    "tsx": "4.22.1",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vitest": "4.1.9"
   },
   "engines": {

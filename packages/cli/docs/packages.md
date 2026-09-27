@@ -85,7 +85,9 @@ KnightCode supplies these packages to extensions and skills:
 - `@knightcode/tui`
 - `typebox`
 
-Declare imported KnightCode packages in `peerDependencies` with a `"*"` range and do not bundle them. Other KnightCode packages used as dependencies must be included in the published tarball and referenced through their `node_modules` resource paths.
+Declare the host-provided packages listed above in `peerDependencies` with a `"*"` range and do not bundle them. KnightCode suppresses automatic peer installation for managed npm packages and git packages installed with npm, pnpm, or Bun. Local packages are not installed or modified, so their dependency tree remains the package author's responsibility.
+
+Do not list host-provided packages in `dependencies`. A physical copy can bypass KnightCode's extension module mapping in compiled ESM and create duplicate classes, registries, and initialization work. KnightCode reports an extension warning when it detects this manifest configuration. Other KnightCode packages used as dependencies must be included in the published tarball and referenced through their `node_modules` resource paths.
 
 Installed packages load with separate module roots. Do not rely on two packages sharing one dependency instance or one package resolving another package’s undeclared dependency.
 

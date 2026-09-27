@@ -29,8 +29,8 @@
   },
   "scripts": {
     "bench:session:timing": "vitest bench --run --config vitest.benchmark.config.ts",
-    "bench:session:memory": "tsx --tsconfig benchmark/tsconfig.json benchmark/session/loaded-footprint.ts",
-    "bench:session:allocations": "tsx --tsconfig benchmark/tsconfig.json benchmark/session/allocation-profile.ts",
+    "bench:session:memory": "node --import ../cli/src/experimental/source-resolver.ts benchmark/session/loaded-footprint.ts",
+    "bench:session:allocations": "node --import ../cli/src/experimental/source-resolver.ts benchmark/session/allocation-profile.ts",
     "test": "vitest --run",
     "test:session:conformance": "vitest --run --config vitest.harness.config.ts test/harness/memory-conformance.test.ts"
   }

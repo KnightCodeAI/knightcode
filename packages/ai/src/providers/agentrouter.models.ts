@@ -2,7 +2,13 @@
 // Do not edit manually - run 'npm run generate-models' to update
 
 import values from "./data/agentrouter.json" with { type: "json" };
-import { flattenModelCatalog, type ModelCatalog } from "../model-catalog.ts";
+import { flattenChatModelCatalog, flattenClassifierModelCatalog, flattenImageModelCatalog, type ChatModelCatalog, type ClassifierModelCatalog, type ImageModelCatalog } from "../model-catalog.ts";
 
-export const AGENTROUTER_MODELS: ModelCatalog<typeof values, "agentrouter"> =
-	flattenModelCatalog("agentrouter", values);
+export const AGENTROUTER_MODELS: ChatModelCatalog<typeof values, "agentrouter"> =
+	flattenChatModelCatalog("agentrouter", values);
+
+export const AGENTROUTER_IMAGE_MODELS: ImageModelCatalog<typeof values, "agentrouter"> =
+	flattenImageModelCatalog("agentrouter", values);
+
+export const AGENTROUTER_CLASSIFIER_MODELS: ClassifierModelCatalog<typeof values, "agentrouter"> =
+	flattenClassifierModelCatalog("agentrouter", values);
