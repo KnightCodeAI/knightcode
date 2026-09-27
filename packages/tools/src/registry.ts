@@ -4,6 +4,7 @@ import type { ToolSettings } from "./state.ts";
 import { webfetchTool } from "./web/fetch.ts";
 import { websearchSettings } from "./web/search-settings.ts";
 import { websearchTool } from "./web/search.ts";
+import { classifierGateEntry } from "./classifier-gate.ts";
 import { scratchpadEntry } from "./scratchpad.ts";
 
 // Same alias the engine uses for heterogeneous tool lists (core/tools/index.ts `ToolDef`); it is not
@@ -28,4 +29,5 @@ export const TOOLS: RegisteredToolEntry[] = [
 	{ tool: webfetchTool, defaultEnabled: false },
 	{ tool: websearchTool, defaultEnabled: false, settings: websearchSettings },
 	scratchpadEntry,
+	classifierGateEntry,
 ];

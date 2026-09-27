@@ -3,9 +3,14 @@ import type {
 	AssistantMessage,
 	AssistantMessageEventStream,
 	AuthResult,
+	ClassifierApi,
+	ClassifierContext,
+	ClassifierModel,
+	ClassifierResult,
 	Context,
 	Model,
 	ModelsApiStreamOptions,
+	ModelsClassifierOptions,
 	ModelsRefreshOptions,
 	ModelsRefreshResult,
 	ModelsSimpleStreamOptions,
@@ -119,6 +124,24 @@ export class ModelRegistry {
 		options?: ModelsApiStreamOptions<TApi>,
 	): Promise<AssistantMessage> {
 		return this.runtime.complete(model, context, options);
+	}
+
+	/** Classifier models whose provider has configured auth. */
+	getAvailableClassifiers(): ClassifierModel<ClassifierApi>[] {
+		return this.runtime.getModelsOfType("classifier").filter((model) => this.runtime.hasConfiguredAuth(model.provider));
+	}
+
+	findClassifier(provider: string, modelId: string): ClassifierModel<ClassifierApi> | undefined {
+		return this.runtime.getModelOfType("classifier", provider, modelId);
+	}
+
+	/** Classify with request-time authentication. Errors resolve with `stopReason: "error"`. */
+	classify(
+		model: ClassifierModel<ClassifierApi>,
+		context: ClassifierContext,
+		options?: ModelsClassifierOptions,
+	): Promise<ClassifierResult> {
+		return this.runtime.classify(model, context, options);
 	}
 
 	getProviderDisplayName(provider: string): string {
