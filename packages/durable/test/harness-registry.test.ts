@@ -1,6 +1,6 @@
 import type { JsonValue } from "@knightcode/chord";
 import { Type } from "@knightcode/ai";
-import { type AnyTask, createRegistry, type ToolRegistration } from "@knightcode/durable";
+import { createRegistry, defineTask, type ToolRegistration } from "@knightcode/durable";
 import { describe, expect, it } from "vitest";
 
 type AppTool = ToolRegistration & { readonly snippet?: string };
@@ -17,16 +17,14 @@ function tool(name: string, extra: Partial<AppTool> = {}): AppTool {
 
 function task(name: string) {
 	const hooks: { beforeRun(): void } = { beforeRun: () => {} };
-	return {
-		definition: {
-			name,
-			version: 1,
-			initial: (_input: undefined) => ({ phase: "run" as const }),
-			phases: {},
-			abort: () => {},
-			hooks,
-		},
-	} satisfies AnyTask;
+	return defineTask<undefined, { phase: "run" }, null, { beforeRun(): void }>({
+		name,
+		version: 1,
+		initial: () => ({ phase: "run" }),
+		phases: { run: async () => {} },
+		abort: async () => {},
+		hooks,
+	});
 }
 
 function names(tools: readonly { readonly name: string }[]): string[] {
