@@ -12,7 +12,11 @@ import {
 	type TuiMouseEvent,
 } from "@knightcode/tui";
 import type { ToolDefinition, ToolRenderContext, ToolRenderResultOptions } from "../../../core/extensions/types.ts";
-import { getTextOutput as getRenderedTextOutput, plural } from "../../../core/tools/render-utils.ts";
+import {
+	formatToolCallWithArgs,
+	getTextOutput as getRenderedTextOutput,
+	plural,
+} from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { BLOCK_INDENT, BULLET, RESULT_GUTTER, RESULT_INDENT } from "../glyphs.ts";
 import { theme, type Theme } from "../theme/theme.ts";
@@ -37,29 +41,10 @@ export interface ToolRenderers {
 }
 
 const FALLBACK_PREVIEW_LINES = 10;
-const MAX_INLINE_ARGS_LENGTH = 200;
 
 export interface ToolExecutionOptions {
 	showImages?: boolean;
 	imageWidthCells?: number;
-}
-
-/** Single-line, parenthesised argument summary for tools with no custom renderer. */
-function formatInlineArgs(args: unknown): string {
-	if (args === undefined || args === null) return "";
-	if (typeof args === "object" && Object.keys(args as object).length === 0) return "";
-	let text: string;
-	try {
-		text = JSON.stringify(args) ?? "";
-	} catch {
-		return "";
-	}
-	if (!text) return "";
-	text = text.replace(/\s+/g, " ");
-	if (text.length > MAX_INLINE_ARGS_LENGTH) {
-		text = `${text.slice(0, MAX_INLINE_ARGS_LENGTH - 1)}…`;
-	}
-	return text;
 }
 
 export class ToolExecutionComponent extends Container {
@@ -184,9 +169,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private createCallFallback(): Component {
-		const inlineArgs = formatInlineArgs(this.args);
-		const title = theme.fg("toolTitle", theme.bold(this.toolName));
-		return new Text(inlineArgs ? `${title}(${theme.fg("muted", inlineArgs)})` : title, 0, 0);
+		return new Text(formatToolCallWithArgs(this.toolName, this.args, theme, this.expanded), 0, 0);
 	}
 
 	private createResultFallback(): Component | undefined {
