@@ -10,7 +10,7 @@ import { getLatestVersion } from "@/lib/version"
 
 export const metadata: Metadata = {
   title: "Security",
-  description: `How to report security issues in ${SITE.name}, what is in scope, and how the alpha handles risk.`,
+  description: `How to report security issues in ${SITE.name}, and what is in scope.`,
   alternates: { canonical: `${SITE.url}/security` },
 }
 
@@ -26,7 +26,7 @@ export default async function SecurityPage() {
           <>
             <span>Latest - v{version}</span>
             <span className="size-1 rounded-full bg-muted-foreground/40" />
-            <span>Alpha support - latest release</span>
+            <span>Latest release</span>
           </>
         }
       />
@@ -56,19 +56,18 @@ export default async function SecurityPage() {
 
         <h2>Supported versions</h2>
         <p>
-          Until <code>1.0.0</code>, only the latest published alpha is expected
-          to receive security fixes.
+          Security fixes go to the latest published release.
         </p>
 
         <h2>What is in scope</h2>
         <ul>
           <li>
-            The CLI in <code>packages/cli</code>, especially tool execution,
-            onboarding, credentials, model calls, terminal rendering, and agent
-            permissions.
-          </li>
-          <li>
-            Shared tool schemas and model metadata in <code>packages/shared</code>.
+            The CLI in <code>packages/cli</code>, and the packages it runs on:{" "}
+            <code>ai</code>, <code>agent</code>, <code>tui</code>,{" "}
+            <code>durable</code>, <code>protocol</code>, <code>client</code>,{" "}
+            <code>server</code>, <code>tools</code>, and{" "}
+            <code>session-backend-sqlite</code>. That includes tool execution,
+            credentials, model calls, and terminal rendering.
           </li>
           <li>Website code that could expose users or misrepresent downloads.</li>
           <li>npm package publishing or release integrity for KnightCode.</li>
@@ -81,28 +80,29 @@ export default async function SecurityPage() {
             mitigation.
           </li>
           <li>
-            Provider-side behavior from OpenRouter, search APIs, or other
-            services you configure.
+            Provider-side behavior from the model, search, or hosting service
+            you configure.
           </li>
           <li>
-            Anything requiring an already-compromised local machine or a user
-            intentionally approving a destructive command.
+            Anything that requires an already-compromised local machine.
           </li>
         </ul>
 
         <h2>How KnightCode reduces risk</h2>
         <ul>
           <li>
-            <strong>Explicit tool flow.</strong> File edits, shell commands, web
-            fetches, and subagent work are visible in the terminal session.
+            <strong>Visible tool calls.</strong> Reads, edits, searches, and
+            commands show up in the transcript as they run.
           </li>
           <li>
-            <strong>Approval and allow rules.</strong> Repeated command patterns
-            can be controlled instead of silently executed.
+            <strong>Project trust.</strong> A folder&apos;s settings, skills,
+            and extensions load only after a trust decision. Trust does not
+            sandbox tool calls.
           </li>
           <li>
-            <strong>Local project state.</strong> Task files and rules live near
-            the repository, making them inspectable.
+            <strong>Optional classifier gate.</strong> When enabled, it can hold
+            a risky shell command or edit for confirmation, or block it in
+            print and JSON modes.
           </li>
           <li>
             <strong>BYOK model access.</strong> KnightCode does not run a hosted
@@ -113,16 +113,16 @@ export default async function SecurityPage() {
         <h2>What we cannot promise</h2>
         <ul>
           <li>
-            KnightCode can run powerful local actions when you approve them. Use
-            source control and review the work.
+            KnightCode can read, change, and execute files with your
+            operating-system permissions, and it does not ask before every tool
+            call. Use source control and read the transcript.
           </li>
           <li>
             Providers see whatever context you send them. Review their retention
             and training policies.
           </li>
           <li>
-            Alpha releases may change quickly. Keep the CLI updated and report
-            suspicious behavior.
+            Keep the CLI updated and report suspicious behavior.
           </li>
         </ul>
       </Prose>

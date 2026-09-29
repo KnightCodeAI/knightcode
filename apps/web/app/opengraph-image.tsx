@@ -80,9 +80,9 @@ export default function OG() {
         >
           <span>npm install</span>
           <span style={{ color: "#475569" }}>-</span>
-          <span>OpenTUI powered CLI</span>
+          <span>Terminal coding agent</span>
           <span style={{ color: "#475569" }}>-</span>
-          <span>BYOK - Alpha - Open source</span>
+          <span>BYOK - MIT</span>
         </div>
       </div>
 

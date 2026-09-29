@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE.url}/terms` },
 }
 
-const updated = "May 2026"
+const updated = "September 2026"
 
 export default function TermsPage() {
   return (
@@ -18,33 +18,33 @@ export default function TermsPage() {
       <PageHero
         eyebrow="Terms"
         title="Terms of Use"
-        lead="Plain-language terms for installing and using KnightCode. The source is governed by Apache-2.0; your model/provider usage is governed by the providers you configure."
+        lead="Plain-language terms for installing and using KnightCode. The source is MIT-licensed. Your model and provider usage is governed by the providers you configure."
         meta={<span>Last updated - {updated}</span>}
       />
 
       <Prose>
         <h2>The short version</h2>
         <ul>
-          <li>KnightCode is alpha software, open source, and provided as-is.</li>
+          <li>KnightCode is open source and provided as-is.</li>
           <li>You are responsible for what you ask the agent to do.</li>
           <li>
             Provider keys, model requests, search requests, and related costs
             are handled through the services you choose.
           </li>
           <li>
-            No warranty, no liability beyond what the Apache-2.0 license allows.
+            No warranty. The MIT license limits liability as far as the law allows.
           </li>
         </ul>
 
         <h2>1. The software</h2>
         <p>
-          The KnightCode source code is licensed under{" "}
+          The KnightCode source code is licensed under the{" "}
           <Link
-            href="https://www.apache.org/licenses/LICENSE-2.0"
+            href="https://opensource.org/licenses/MIT"
             target="_blank"
             rel="noreferrer"
           >
-            Apache License 2.0
+            MIT License
           </Link>
           . The license text in the{" "}
           <Link
@@ -60,9 +60,10 @@ export default function TermsPage() {
 
         <h2>2. Installing KnightCode</h2>
         <p>
-          The intended alpha install path is <code>{INSTALL_COMMAND}</code>.
-          Package availability, versioning, and installation behavior may change
-          before a stable release.
+          The install command is <code>{INSTALL_COMMAND}</code>. It needs
+          Node.js 22 or newer. <code>--ignore-scripts</code> is safe for a
+          normal install: the package ships its platform binary and does not
+          need a dependency lifecycle script.
         </p>
 
         <h2>3. Your use of KnightCode</h2>
@@ -89,11 +90,13 @@ export default function TermsPage() {
           promises on their behalf.
         </p>
 
-        <h2>5. Alpha status</h2>
+        <h2>5. What the agent can do</h2>
         <p>
-          KnightCode is early software. Features may change, break, or disappear
-          before <code>1.0.0</code>. Use it with source control and review agent
-          actions before approval.
+          Tools run with the permissions of the process that started KnightCode.
+          KnightCode does not ask before every tool call. Use source control,
+          read the transcript, and isolate untrusted or unattended work.
+          Releases can change behavior. Read the changelog for the version you
+          install.
         </p>
 
         <h2>6. No warranty</h2>
@@ -108,16 +111,16 @@ export default function TermsPage() {
           To the maximum extent permitted by law, in no event will KnightCode or
           its maintainers be liable for any indirect, incidental, special,
           consequential, or punitive damages arising out of your use of
-          KnightCode. The Apache-2.0 license&apos;s limitation of liability
-          applies in full.
+          KnightCode. The MIT license&apos;s limitation of liability applies
+          to the software.
         </p>
 
         <h2>8. Trademarks</h2>
         <p>
           &ldquo;KnightCode&rdquo; and the KnightCode logo are unregistered trademarks of
-          the project maintainers. The Apache-2.0 license does not grant
-          trademark rights; if you fork the project, use a different name and
-          logo.
+          the project maintainers. The MIT license covers the code. It does
+          not grant rights in the KnightCode name or logo. If you fork the
+          project, use a different name and logo.
         </p>
 
         <h2>9. Changes</h2>
