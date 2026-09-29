@@ -5,7 +5,7 @@ import { type Component, Container, getKeybindings, Loader, Spacer, Text, type T
 import { login } from "./auth.ts";
 
 /**
- * The KnightCode knight, rasterised from the mark in packages/ai/src/auth/oauth/oauth-page.ts
+ * The KnightCode knight, rasterised from the mark in packages/ai/src/utils/oauth-page.ts
  * (even-odd fill, half blocks for the vertical halves). Duplicated in first-time-setup.ts:
  * packages/cli already depends on this package, so importing a runtime value back would
  * close a workspace cycle. Same reason for the rule, the key hint and openBrowser below.

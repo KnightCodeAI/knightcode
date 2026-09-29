@@ -114,7 +114,26 @@ Classifier models do not chat. They answer typed questions about JSON state: pic
 
 Chat models on a [llama.cpp router](llama-cpp.md#classification) are also listed as classifier models.
 
-Classifier models do not appear in `/model`. The [classifier gate](usage.md#classifier-gate) uses one to screen risky tool calls. Extensions call them through `ctx.modelRegistry.classify()`. [Virtual models](virtual-models.md#route-requests) can use them to route requests; see the `jev-router.ts` example.
+Classifier models do not appear in `/model`. The [classifier gate](usage.md#classifier-gate) uses one to screen risky tool calls. The model reaches them through the [`codemode`](cli.md#enable-codemode) tool, which is off unless an MCP server turned it on. Enable it with `"defaultTools": ["+codemode"]` in [settings](settings.md#tools). Scripts then list classifier models with `models.getAvailableOfType("classifier")` and call `models.classify(model, { state, questions })`:
+
+```js
+const jev = await models.getModelOfType("classifier", "typesafe", "jev-latest");
+const result = await models.classify(jev, {
+  state: { message: "The change works, thanks." },
+  questions: {
+    approved: {
+      type: "bool",
+      instructions: "Does the user approve of the result?",
+      criteria: { true: "Approval", false: "No approval" },
+    },
+  },
+});
+return result.answers;
+```
+
+When the service reports token counts, as all System One services do, `result.usage` carries them with their cost. KnightCode adds the usage of a script's classifier calls to the `codemode` tool result, so it counts toward the session cost in the footer and `/session`. The cost uses the model's catalog price; models without one, such as TypeSafe's direct `jev-latest`, report tokens at no cost.
+
+Extensions call classifiers through `ctx.modelRegistry.classify()`, without codemode. [Virtual models](virtual-models.md#route-requests) can use them to route requests; see the `jev-router.ts` example.
 
 ## Add a custom provider
 

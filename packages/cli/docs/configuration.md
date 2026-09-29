@@ -12,6 +12,7 @@ The agent directory is shown as `<agent-dir>` below. Set its location with the `
 |---|---|
 | `<agent-dir>/settings.json` | User-level [settings](settings.md), including preferences, defaults, resource paths, and KnightCode package declarations. |
 | `<agent-dir>/keybindings.json` | Custom terminal UI and application [keybindings](keybindings.md). |
+| `<agent-dir>/mcp.json` | [MCP servers](mcp.md) available in every project. |
 | `<agent-dir>/models.json` | [Compatible endpoints, models, and model overrides](models.md#configure-a-compatible-endpoint). |
 | `<agent-dir>/auth.json` | Saved API keys and OAuth credentials. |
 | `<agent-dir>/tools.json` | [Web tool](usage.md#web-tools), scratchpad, and classifier gate settings written by `/tools`, including the Brave Search key. |
@@ -28,6 +29,7 @@ The agent directory is shown as `<agent-dir>` below. Set its location with the `
 | Path | Responsibility |
 |---|---|
 | `.knightcode/settings.json` | Project-level [settings](settings.md), resource paths, and KnightCode package declarations. |
+| `.knightcode/mcp.json` | Project [MCP servers](mcp.md). |
 | `.knightcode/SYSTEM.md` | Replaces the system prompt for the project. |
 | `.knightcode/APPEND_SYSTEM.md` | Adds project-specific instructions to the system prompt. |
 | `.knightcode/extensions/` | Project extensions. |
