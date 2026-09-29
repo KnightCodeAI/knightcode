@@ -6,9 +6,9 @@ import { Section } from "./section"
 
 const stats = [
   { value: "npm", label: "Install path" },
-  { value: "BYOK", label: "Model access" },
-  { value: "Alpha", label: "Product stage" },
-  { value: "Apache-2.0", label: "Open source" },
+  { value: "BYOK", label: "Your provider" },
+  { value: "~1,100", label: "Token floor" },
+  { value: "MIT", label: "Open source" },
 ]
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const

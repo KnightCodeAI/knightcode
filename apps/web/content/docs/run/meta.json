@@ -1,0 +1,18 @@
+{
+  "title": "Run KnightCode",
+  "pages": [
+    "usage",
+    "models",
+    "sessions",
+    "remote",
+    "security",
+    "containerization",
+    "llama-cpp",
+    "terminal-setup",
+    "shell-aliases",
+    "tmux",
+    "windows",
+    "termux"
+  ],
+  "icon": "Terminal"
+}

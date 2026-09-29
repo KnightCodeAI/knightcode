@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE.url}/privacy` },
 }
 
-const updated = "May 2026"
+const updated = "September 2026"
 
 export default function PrivacyPage() {
   return (
@@ -32,28 +32,27 @@ export default function PrivacyPage() {
             provider/model route you choose.
           </li>
           <li>
-            Local settings, credentials, tasks, and logs may be stored on your
-            machine for the CLI to work.
+            Credentials, sessions, settings, skills, and prompts are stored on
+            your machine.
           </li>
         </ul>
 
         <h2>What KnightCode stores locally</h2>
         <ul>
           <li>
-            <strong>Credentials and onboarding choices</strong>, including your
-            OpenRouter key and optional search-provider configuration.
+            <strong>Credentials</strong> in{" "}
+            <code>~/.knightcode/agent/auth.json</code>, or in environment
+            variables you set yourself. <code>tools.json</code> can also hold a
+            Brave Search key when you turn web search on.
           </li>
           <li>
-            <strong>Project task state</strong> in <code>.knightcode</code>{" "}
-            files when durable tasks are used.
+            <strong>Sessions</strong> as JSONL files, including messages, tool
+            calls, and compaction summaries.
           </li>
           <li>
-            <strong>Rules, skills, memories, and settings</strong> that you add
-            for project or global context.
-          </li>
-          <li>
-            <strong>Session output and logs</strong> needed for debugging or
-            resuming work, depending on the command and feature in use.
+            <strong>Settings, skills, prompts, and themes</strong> under{" "}
+            <code>~/.knightcode</code> and, after you trust a folder, under its{" "}
+            <code>.knightcode</code> directory.
           </li>
         </ul>
 
@@ -63,16 +62,41 @@ export default function PrivacyPage() {
         </p>
         <ul>
           <li>
-            <strong>Model requests</strong> go through the provider route you
-            configure. In the current alpha, that path is OpenRouter-first.
+            <strong>Model requests</strong> go to the provider you selected.
+            That can be OpenRouter, a direct provider such as Anthropic or
+            OpenAI, a cloud account, or a server on your machine.
           </li>
           <li>
-            <strong>Search requests</strong> may go to the search provider you
-            configure, such as Brave or Tavily.
+            <strong>Web search</strong>, when you enable <code>websearch</code>{" "}
+            with <code>/tools</code>, goes to DuckDuckGo or Brave Search.
           </li>
           <li>
-            <strong>Web fetch requests</strong> are made when you ask the agent
-            to fetch a URL.
+            <strong>Web fetch</strong>, when you enable <code>webfetch</code>,
+            requests the URL the agent is fetching.
+          </li>
+          <li>
+            <strong>Model catalog</strong> refreshes come from{" "}
+            <code>knightcode.dev</code>. <code>--offline</code> or{" "}
+            <code>KNIGHTCODE_OFFLINE=1</code> turns them off.
+          </li>
+          <li>
+            <strong>Install and update ping.</strong> The first launch of a new
+            version sends one anonymous request to <code>knightcode.dev</code>{" "}
+            with the KnightCode version and a user agent that names your
+            operating system, runtime, and CPU architecture. The site adds a
+            coarse location (country, region, city) from the request and an
+            anonymous ID made from a one-way hash of your IP address and user
+            agent. It does not store the address. The desktop IDE sends the
+            same ping once per IDE version, plus a few launch signals such as
+            first run and engine failure. The ping is on by default. Turn it off
+            with <code>enableInstallTelemetry: false</code> or{" "}
+            <code>KNIGHTCODE_TELEMETRY=0</code>. The same setting controls the
+            identifying headers KnightCode adds to requests for OpenRouter,
+            NVIDIA NIM, and Cloudflare models.
+          </li>
+          <li>
+            <strong>Bug reports</strong> are uploaded to KnightCode only when
+            you run <code>/bug</code>.
           </li>
         </ul>
         <p>

@@ -15,11 +15,15 @@ export const metadata: Metadata = {
 }
 
 const stack = [
-  { label: "Bun", note: "CLI runtime and package scripts" },
-  { label: "React + OpenTUI", note: "Terminal interface" },
-  { label: "AI SDK", note: "Streaming model calls" },
-  { label: "OpenRouter", note: "Current BYOK model route" },
-  { label: "Shared tool schemas", note: "Agent permissions and actions" },
+  { label: "Node.js 22", note: "Published npm install" },
+  { label: "@knightcode/tui", note: "Terminal UI" },
+  { label: "@knightcode/ai", note: "Providers, auth, streaming" },
+  { label: "@knightcode/agent", note: "Loop, tools, compaction, sessions" },
+  { label: "@knightcode/durable", note: "Pico record storage" },
+  { label: "protocol / client / server", note: "RPC" },
+  { label: "session-backend-sqlite", note: "SQLite session backend" },
+  { label: "@knightcode/tools", note: "Optional tools and the classifier gate" },
+  { label: "@knightcode/remote", note: "Remote sessions" },
 ]
 
 export default async function AboutPage() {
@@ -29,12 +33,12 @@ export default async function AboutPage() {
       <PageHero
         eyebrow="About"
         title="About KnightCode"
-        lead="An alpha-stage terminal coding app built with Bun, React, and OpenTUI. Install it from npm, bring your own model key, and run it inside the repo you are working on."
+        lead="A local, bring-your-own-key terminal coding agent. Install it from npm, run it in a repository, and connect a provider you already have."
         meta={
           <>
             <span>v{version}</span>
             <span className="size-1 rounded-full bg-muted-foreground/40" />
-            <span>Apache-2.0</span>
+            <span>MIT</span>
           </>
         }
       />
@@ -42,16 +46,19 @@ export default async function AboutPage() {
       <Prose>
         <h2>What it is</h2>
         <p>
-          KnightCode is a terminal-first AI coding app for developers who want
-          agentic workflows without moving into a hosted web interface. It runs
-          as a CLI, renders an interactive terminal UI, and gives the agent
-          access to repo-aware tools such as file reads, edits, search, shell
-          commands, todos, tasks, and subagents.
+          KnightCode is a terminal coding agent. The <code>knightcode</code>{" "}
+          command runs an interactive session, and the same agent is available
+          in print, JSON, and RPC modes and through <code>createAgentSession()</code>.
+          It starts with the read, bash, edit, and write tools; grep, find, and ls
+          are built in and off until you enable them. Tools run with the
+          permissions of the KnightCode process.
         </p>
         <p>
-          The current alpha is BYOK-first. Onboarding is built around your own
-          OpenRouter key and model choice, so KnightCode does not bundle model
-          usage or require a KnightCode account.
+          You bring the provider account. <code>/login</code> stores a
+          credential, or you set an API key in the environment. OpenRouter is
+          one of the built-in providers, next to direct adapters for Anthropic,
+          OpenAI, Google, xAI, Groq, GitHub Copilot, Amazon Bedrock, and others.
+          There is no KnightCode account and no bundled model subscription.
         </p>
 
         <h2>Who builds it</h2>
@@ -60,10 +67,9 @@ export default async function AboutPage() {
           <Link href={SITE.me} target="_blank" rel="noreferrer">
             Raghav
           </Link>
-          . KnightCode started as a side project because I wanted a
-          free to use coding agent that felt native to the terminal instead
-          of pasted beside it. It&apos;s still early, but the direction is clear:
-          repo context, explicit tool use, and practical workflows.
+          . I built it because I wanted a coding agent that runs in the
+          terminal, talks to the provider I already pay, and does not spend
+          tens of thousands of tokens on its own instructions before I type.
         </p>
         <p>
           Contributions, bug reports, and feature requests are welcome on{" "}
@@ -75,10 +81,20 @@ export default async function AboutPage() {
 
         <h2>How it&apos;s built</h2>
         <p>
-          Bun runs the CLI package and scripts. React drives the terminal
-          interface through OpenTUI. The shared package defines model metadata
-          and agent tools, while the CLI handles onboarding, streaming model
-          calls, permissions, task state, and terminal interaction.
+          The published command is <code>@knightcodeai/cli</code>. It depends on
+          the other packages in this repository. <code>@knightcode/ai</code>{" "}
+          is the provider layer: catalogs, API adapters, OAuth, and streaming.
+          <code>@knightcode/agent</code> is the loop, the harness, compaction,
+          session state, and the built-in tools. <code>@knightcode/tui</code>{" "}
+          draws the terminal. <code>@knightcode/durable</code> is the Pico
+          record runtime, with memory, JSONL, and SQLite storage. RPC is split
+          across <code>protocol</code>, <code>client</code>, and{" "}
+          <code>server</code>. SQLite session storage lives in its own package
+          so the agent core does not require it. <code>@knightcode/tools</code>{" "}
+          is the built-in extension for optional tools, the scratchpad, and the
+          classifier gate. <code>@knightcode/remote</code> is remote sessions.
+          Bun runs the repo from source.
+          The website is a separate Next.js app.
         </p>
       </Prose>
 
@@ -118,20 +134,21 @@ export default async function AboutPage() {
             through your own key.
           </li>
           <li>
-            It isn&apos;t a replacement for your core shell. KnightCode is an
-            additive coding workflow that can run commands with your approval.
+            It isn&apos;t a sandbox. Tools use the operating-system permissions
+            of the process that started KnightCode. Project trust only decides
+            whether a folder&apos;s settings, skills, and extensions load.
           </li>
         </ul>
 
         <h2>License</h2>
         <p>
-          Apache-2.0. Use it, fork it, ship it. The full license is in the{" "}
+          MIT. The license text, including third-party notices, is in the{" "}
           <Link
             href={`${SITE.github}/blob/main/LICENSE`}
             target="_blank"
             rel="noreferrer"
           >
-            repo
+            repository
           </Link>
           .
         </p>

@@ -45,7 +45,7 @@ export function FeatureShowcase({
   return (
     <section
       id={id}
-      className="relative w-full px-4 py-16 sm:px-6 sm:py-32 lg:py-40"
+      className="relative w-full px-4 py-10 sm:px-6 sm:py-14 lg:py-16"
     >
       <div
         className={cn(
@@ -58,7 +58,7 @@ export function FeatureShowcase({
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.5 }}
-          className="lg:col-span-8 lg:col-start-3"
+          className="lg:col-span-5"
         >
           <div className="flex items-center gap-3 font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
             <span className="text-foreground/55">{index}</span>
@@ -90,12 +90,12 @@ export function FeatureShowcase({
           </ul>
         </motion.div>
 
-        {/* <motion.div
+        <motion.div
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.15 }}
           transition={{ duration: 0.6, delay: 0.05 }}
-          className="lg:col-span-8"
+          className="lg:col-span-7"
         >
           <ScreenshotFrame
             src={image.src}
@@ -105,7 +105,7 @@ export function FeatureShowcase({
             caption={image.caption}
             priority={priority}
           />
-        </motion.div> */}
+        </motion.div>
       </div>
     </section>
   )

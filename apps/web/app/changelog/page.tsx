@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Changelog",
-  description: `Curated alpha release notes for ${SITE.name}.`,
+  description: `Release notes for ${SITE.name}.`,
   alternates: { canonical: `${SITE.url}/changelog` },
 }
 
@@ -103,7 +103,7 @@ export default async function ChangelogPage() {
           <>
             <span>Latest - v{version}</span>
             <span className="size-1 rounded-full bg-muted-foreground/40" />
-            <span>Apache-2.0</span>
+            <span>MIT</span>
           </>
         }
       />

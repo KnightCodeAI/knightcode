@@ -19,7 +19,7 @@ import { SITE } from "@/lib/site"
 export const metadata: Metadata = {
   title: "Download the KnightCode IDE",
   description:
-    "Installers for the KnightCode desktop IDE on Windows, macOS and Linux, with what each platform will warn you about and what to click.",
+    "Unsigned installers for the KnightCode desktop IDE. A clean-machine install has not been run.",
   alternates: { canonical: `${SITE.url}/ide` },
 }
 
@@ -70,7 +70,7 @@ export default async function IdePage() {
       <PageHero
         eyebrow="Desktop"
         title="KnightCode IDE"
-        lead="A desktop editor with KnightCode as its only agent, its only inference path and its only login. The same sign-in serves the agent panel, inline assist, commit messages and Tab."
+        lead="A desktop editor on a fork of Zed. KnightCode is its agent and its inference path. The v1 installers are unsigned, and a clean-machine install has not been run."
         meta={
           <>
             <span>{version ? `v${version}` : "Not yet released"}</span>
@@ -92,13 +92,12 @@ export default async function IdePage() {
                 These installers are not code-signed.
               </p>
               <p className="mt-1">
-                Windows SmartScreen and macOS Gatekeeper will both refuse the
-                first launch and say so in language that reads like a malware
-                warning. That is what an unsigned build looks like, not a
-                verdict on the file. The first-launch steps below say exactly
-                what you will see and what to click. Signing certificates cost
-                money we have not spent yet; when that changes, these warnings
-                go away.
+                Windows SmartScreen and macOS Gatekeeper warn on an unsigned
+                build. That is what a missing certificate looks like. A
+                clean-machine install — a machine with no Node, Bun, npm, or
+                CLI — has not been run, and the macOS and Linux bundle scripts
+                have not been run. The steps below are what an unsigned build
+                is expected to do.
               </p>
             </div>
           </div>
@@ -145,36 +144,35 @@ export default async function IdePage() {
           </p>
         ))}
 
-        <h2>After it starts</h2>
+        <h2>Intended first run</h2>
         <p>
-          First run walks you through it: pick a theme and a keymap, sign in to
-          the account you already have — Claude, ChatGPT, Copilot, or an API key
-          — pick the model KnightCode should use, and open a folder. Nothing
-          asks for a KnightCode account, because there is not one.
-        </p>
-        <p>
-          If you already use the KnightCode CLI on the same machine, first run
-          skips the sign-in step: both read the same <code>auth.json</code>, so
-          you are already signed in.
+          The design walks you through a theme, a keymap, a provider sign-in,
+          a model, and a folder. There is no KnightCode account. The IDE and
+          the CLI are designed to read the same <code>auth.json</code>, so a
+          machine already signed in to the CLI skips that step. This path is
+          the packaging exit condition, and it has not been run on a clean
+          machine.
         </p>
 
         <h2>Updates</h2>
         <p>
-          The IDE checks for a new version hourly and installs it in the
-          background, verifying a signature made with a key held only by the
-          release workflow. Turn it off with{" "}
+          The updater is designed to check hourly and to install a download
+          only when the release key signed its digest. The installers
+          themselves are unsigned. Turn the check off with{" "}
           <code>&quot;auto_update&quot;: false</code> in settings.
         </p>
 
-        <h2>What it sends</h2>
+        <h2>What it may send</h2>
         <p>
-          One anonymous ping when it is installed or updated: version, operating
-          system, architecture, and an approximate location from the connecting
-          address. No account, no file, no project name, no identifier that
-          follows you between versions. First run asks, and you can turn it off
-          there or in Settings &rarr; AI at any time. Nothing else leaves the
-          machine except your prompts, which go from your machine straight to
-          the provider you signed in to.
+          If you allow it on first run, the IDE may send a fixed set of install
+          and launch events: version, channel, operating system, architecture,
+          an approximate location (country, region, city) added by the site,
+          whether setup finished, whether the engine became ready, and which
+          surface you used first. Those events do not include file names,
+          prompts, account details, model ids, or a machine id.{" "}
+          <code>enableInstallTelemetry</code> turns the set off. Prompts you
+          send still go to the provider you signed in to. Details are in the{" "}
+          <Link href="/docs/ide">IDE docs</Link>.
         </p>
 
         <h2>Built on Zed</h2>
@@ -188,11 +186,9 @@ export default async function IdePage() {
             Zed
           </Link>
           , licensed GPL-3.0-or-later. KnightCode is not affiliated with or
-          endorsed by Zed Industries, Inc. The editor reference — keybindings,
-          settings, language support — is theirs and is linked from the Help
-          menu. Extensions come from the Zed extension registry, which is the
-          only third-party service an install contacts, and only once you open
-          the Extensions page.
+          endorsed by Zed Industries, Inc. Keybindings, settings, and language
+          support follow the editor. Extensions come from the Zed extension
+          registry when you open the Extensions page.
         </p>
 
         <p>

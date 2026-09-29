@@ -1,0 +1,11 @@
+{
+  "title": "Customize KnightCode",
+  "pages": [
+    "configuration",
+    "prompt-templates",
+    "skills",
+    "themes",
+    "packages"
+  ],
+  "icon": "PaintBrush"
+}

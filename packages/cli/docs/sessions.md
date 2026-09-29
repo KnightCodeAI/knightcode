@@ -30,6 +30,8 @@ KnightCode stores entries as a tree, so returning to an earlier point does not e
 
 In `/tree`, select a user message to put its text back in the editor. Edit and submit it to create another branch. Selecting an assistant response or another entry continues after that entry with an empty editor.
 
+<p align="center"><img src="images/tree-view.png" alt="The /tree view showing a session with two branches, user messages, assistant replies, and tool calls" width="750"></p>
+
 Selecting a point while the model is responding cancels that response. Navigation cannot proceed while compaction or another tree navigation is still running; wait for it to finish and retry.
 
 When you leave a branch, KnightCode can summarize it and attach that summary to the branch you enter. This preserves relevant work from the abandoned path without including every message from it.

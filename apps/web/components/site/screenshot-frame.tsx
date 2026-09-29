@@ -66,7 +66,7 @@ export function ScreenshotFrame({
           height={height}
           priority={priority}
           quality={92}
-          sizes="(min-width: 1280px) 1100px, (min-width: 1024px) 900px, 100vw"
+          sizes="(min-width: 1280px) 750px, (min-width: 1024px) 58vw, 100vw"
           className="h-auto w-full select-none"
         />
       </div>

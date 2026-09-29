@@ -7,7 +7,7 @@ import cliPackage from "../../../packages/cli/package.json"
 export const VERSION = cliPackage.version
 export const FALLBACK_VERSION = VERSION
 export const NPM_PACKAGE = "@knightcodeai/cli"
-export const INSTALL_COMMAND = `npm i -g ${NPM_PACKAGE}`
+export const INSTALL_COMMAND = `npm install -g --ignore-scripts ${NPM_PACKAGE}`
 export const RUN_COMMAND = "knightcode"
 
 export const SITE = {
@@ -16,7 +16,7 @@ export const SITE = {
   url: "https://knightcode.dev",
   tagline: "Agentic coding in your terminal",
   description:
-    "KnightCode is an alpha-stage terminal AI coding app for developers. Install it from npm, bring your own model key, and keep agentic coding workflows close to your repo.",
+    "KnightCode is a local, bring-your-own-key terminal coding agent. Install it from npm, connect a provider you already have, and run it in your repository.",
   github: "https://github.com/KnightCodeAI/knightcode",
   githubReleases: "https://github.com/KnightCodeAI/knightcode/releases",
   issues: "https://github.com/KnightCodeAI/knightcode/issues",

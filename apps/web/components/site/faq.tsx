@@ -9,31 +9,31 @@ import { Section, SectionEyebrow, SectionHeading, SectionLead } from "./section"
 const faqs = [
   {
     q: "Is KnightCode free?",
-    a: "Yes. KnightCode is open source and free to use during alpha. You bring your own model key, so model/provider usage is paid directly through the provider you configure.",
+    a: "The CLI is MIT-licensed and free to install. Model use is billed by the provider you connect. KnightCode does not sell a subscription or take a cut of that bill.",
   },
   {
     q: "Do I need an account or sign-up?",
-    a: "No KnightCode account is required. Install the CLI, run it in a repository, and complete the terminal onboarding with your own API key.",
+    a: "No KnightCode account. Install the CLI, run it in a folder, and sign in with /login or set a provider API key in the environment.",
   },
   {
-    q: "Which models are supported right now?",
-    a: "The current CLI is OpenRouter-first, so you can choose from the models exposed through that route once your key is configured. More provider wiring can be added as the alpha matures.",
+    q: "Which models are supported?",
+    a: "Built-in providers include OpenRouter, Anthropic, OpenAI, Google, xAI, Groq, GitHub Copilot, Amazon Bedrock, and others, plus local servers such as llama.cpp, Ollama, and any OpenAI-compatible endpoint. /model lists the models your credentials can reach.",
   },
   {
     q: "What does BYOK mean here?",
-    a: "Bring your own key means KnightCode does not bundle model usage. You configure your provider credentials locally, and requests go through the provider path you choose.",
+    a: "Bring your own key. Credentials stay on your machine, in auth.json or in an environment variable, and each request goes to the provider you selected.",
   },
   {
     q: "Is my code sent anywhere?",
-    a: "Your prompts, code snippets, and tool context are sent only as needed for the model requests you initiate. KnightCode does not add a hosted account layer around that workflow.",
+    a: "A turn sends the prompt, the relevant tool context, and the model's reply to the provider you chose. KnightCode does not host an account or a model proxy in front of that.",
   },
   {
     q: "Which OSes are supported?",
-    a: "The npm CLI is intended to run anywhere the required runtime works, including macOS, Linux, and Windows.",
+    a: "macOS, Linux, and Windows. The npm install needs Node.js 22 or newer and pulls the matching platform binary.",
   },
   {
     q: "Where do I report bugs or request features?",
-    a: "Open an issue on GitHub at github.com/KnightCodeAI/knightcode - we read everything.",
+    a: "Open an issue on GitHub at github.com/KnightCodeAI/knightcode.",
   },
 ]
 

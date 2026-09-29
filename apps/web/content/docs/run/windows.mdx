@@ -1,0 +1,70 @@
+---
+title: "Run KnightCode on Windows"
+description: "Run KnightCode either as a native Windows process or inside Windows Subsystem for Linux (WSL). Native Windows uses Git Bash by default for Bash commands and can optionally..."
+---
+
+{/* Generated from packages/cli/docs/windows.md by apps/web/scripts/sync-cli-docs.mjs. Do not edit. */}
+
+Run KnightCode either as a native Windows process or inside Windows Subsystem for Linux (WSL). Native Windows uses Git Bash by default for Bash commands and can optionally expose PowerShell to the model. KnightCode inside WSL uses the Linux environment and its Bash installation.
+
+Follow the main [Quickstart](/docs/quickstart) to install and authenticate KnightCode. Use this page to choose and configure its command environment.
+
+## Choose native Windows or WSL
+
+| Environment | Command environment | Use it when |
+|---|---|---|
+| Native Windows with Git Bash | Git Bash for the built-in `bash` tool and `!` commands | Your files and development tools primarily live on Windows |
+| Native Windows with the `powershell` tool | PowerShell for model tool calls; Bash remains available for `!` commands | The task depends on PowerShell modules or Windows-native commands |
+| WSL | Linux Bash and tools inside the selected WSL distribution | Your files and toolchain already live in Linux or WSL |
+
+## Use Git Bash on native Windows
+
+For most native Windows users, installing [Git for Windows](https://git-scm.com/download/win) is sufficient.
+
+KnightCode resolves Bash in this order:
+
+1. `shellPath` from `~/.knightcode/agent/settings.json`
+2. Git Bash under `Program Files` or `Program Files (x86)`
+3. `bash.exe` on `PATH`, including Cygwin, MSYS2, or legacy WSL Bash
+
+Start KnightCode and enter this command to verify the shell:
+
+```text
+!printf 'Bash is working\n'
+```
+
+If KnightCode cannot find Bash, it reports the locations it checked. Install Git for Windows, put another Bash executable on `PATH`, or configure `shellPath`.
+
+## Let the model use PowerShell
+
+The optional `powershell` tool runs commands through `pwsh.exe` when available, then falls back to Windows PowerShell. It starts PowerShell with `-NoProfile -NonInteractive -ExecutionPolicy Bypass`. Administrator-enforced execution policies can still take precedence.
+
+To replace the model-facing `bash` tool with `powershell`, add this to `~/.knightcode/agent/settings.json`:
+
+```json
+{
+  "defaultTools": ["read", "powershell", "edit", "write"]
+}
+```
+
+Restart KnightCode, then ask it to run a harmless PowerShell command. The `!` and `!!` editor commands continue to use Bash. The `powershell` tool is available only when KnightCode runs as a native Windows process.
+
+See [Settings](/docs/reference/settings#tools) for other tool combinations.
+
+## Use a custom Bash executable
+
+Set `shellPath` when Bash is installed somewhere KnightCode does not discover automatically:
+
+```json
+{
+  "shellPath": "C:\\cygwin64\\bin\\bash.exe"
+}
+```
+
+JSON uses backslashes for escape sequences. When you write a Windows path with backslashes, write each backslash twice, as shown above.
+
+See [Configure shell commands](/docs/run/shell-aliases) for command prefixes, aliases, and the complete shell-resolution behavior.
+
+## Configure Windows Terminal
+
+Windows Terminal reserves or rewrites some modified keys. See [Windows Terminal](/docs/run/terminal-setup#windows-terminal) to configure `Shift+Enter` and `Alt+Enter`, and [Keybindings](/docs/reference/keybindings) for KnightCode's Windows and WSL shortcut defaults.

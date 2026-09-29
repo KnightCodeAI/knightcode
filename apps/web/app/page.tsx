@@ -22,7 +22,6 @@ import {
   GitBranchIcon,
   Image01Icon,
   Layout02Icon,
-  Mic01Icon,
   Notebook01Icon,
   PaintBrush02Icon,
   RecordIcon,
@@ -41,13 +40,13 @@ export default async function HomePage() {
     softwareVersion: version,
     downloadUrl: SITE.npm,
     url: SITE.url,
-    license: "https://opensource.org/licenses/Apache-2.0",
+    license: "https://opensource.org/licenses/MIT",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     author: { "@type": "Organization", name: SITE.name, url: SITE.github },
     /* video: {
       "@type": "VideoObject",
       name: `${SITE.name} - demo`,
-      description: `Quick walkthrough of ${SITE.name}: terminal UI, repo-aware agents, approvals, and developer workflows.`,
+      description: `Quick walkthrough of ${SITE.name}: terminal UI, provider sign-in, and repo tools.`,
       thumbnailUrl: `https://i.ytimg.com/vi/${SITE.demoVideoId}/maxresdefault.jpg`,
       uploadDate: "2026-05-16",
       contentUrl: SITE.demoVideoUrl,
@@ -67,32 +66,32 @@ export default async function HomePage() {
           <FeatureShowcase
             id="terminal"
             index="01"
-            eyebrow="Terminal App"
-            title="A coding agent that lives where you already work."
-            description="KnightCode runs as an interactive OpenTUI and React app in your terminal. Start sessions from a repository, keep project context nearby, and drive the agent without switching into a hosted web app."
+            eyebrow="Terminal"
+            title="A coding agent that runs in your terminal."
+            description="KnightCode's interface is its own terminal UI. Start it in a folder and that folder supplies files, instructions, and saved sessions. The same agent also runs in print, JSON, and RPC modes, and inside another program through the TypeScript SDK."
             bullets={[
               {
                 icon: CommandLineIcon,
-                label: "Keyboard-driven React/OpenTUI terminal interface",
+                label: "Interactive terminal UI, plus print, JSON, and RPC",
               },
               {
                 icon: Layout02Icon,
-                label: "Session views built around local workspace context",
+                label: "Transcript, editor, and a footer for folder, model, and context",
               },
               {
                 icon: CodeFolderIcon,
-                label: "Themeable ANSI colors and responsive terminal layout",
+                label: "Works in the folder you opened, on macOS, Linux, and Windows",
               },
               {
                 icon: Search01Icon,
-                label: "Direct integration with local shells and repo tools",
+                label: "Node.js 22 or newer for the npm install",
               },
             ]}
             image={{
-              src: "/terminal.webp",
-              alt: "KnightCode terminal interface showing agent output and file structure",
-              width: 2560,
-              height: 1600,
+              src: "/screens/terminal.webp",
+              alt: "KnightCode terminal UI after a prompt: read and bash tool calls, then the model's answer",
+              width: 1876,
+              height: 1761,
               caption: "knightcode - terminal workspace",
             }}
             priority
@@ -101,27 +100,27 @@ export default async function HomePage() {
           <FeatureShowcase
             id="editor"
             index="02"
-            eyebrow="Tool Approval"
-            title="Review the work instead of trusting a black box."
-            description="Agent actions are shown in the terminal flow. Inspect proposed file changes, shell commands, and task progress before letting KnightCode move forward."
+            eyebrow="Tools"
+            title="You see each tool call. They run with your permissions."
+            description="KnightCode shows every file read, search, command, and edit in the transcript. It does not ask before every tool call. It starts with read, bash, edit, and write. grep, find, and ls are built in and off until you enable them. Every tool uses the permissions of the KnightCode process."
             bullets={[
-              { icon: CodeIcon, label: "Inline views for agent file operations and diffs" },
+              { icon: CodeIcon, label: "read, bash, edit, and write by default. grep, find, and ls on request" },
               {
                 icon: CommandIcon,
-                label: "Confirm or reject tool use as the agent works",
+                label: "Project trust loads settings, skills, and extensions. It does not sandbox tools",
               },
               {
                 icon: PaintBrush02Icon,
-                label: "Keep edits and commands explicit in the session",
+                label: "An optional classifier gate can hold a risky shell command or edit",
               },
-              { icon: EnergyIcon, label: "Fast terminal UI designed for keyboard use" },
+              { icon: EnergyIcon, label: "Sandbox untrusted work. The agent is not a sandbox" },
             ]}
             image={{
-              src: "/editor.webp",
-              alt: "KnightCode approval flow highlighting proposed agent code edits",
-              width: 2560,
-              height: 1600,
-              caption: "knightcode - approval flow",
+              src: "/screens/tools.webp",
+              alt: "KnightCode transcript showing a read, an edit with a red and green diff, and a git diff",
+              width: 1876,
+              height: 1674,
+              caption: "knightcode - tool calls",
             }}
             reverse
           />
@@ -129,100 +128,96 @@ export default async function HomePage() {
           <FeatureShowcase
             id="source-control"
             index="03"
-            eyebrow="Repo Workflows"
-            title="Let the agent read, search, edit, and run checks in context."
-            description="KnightCode is built around real repositories, not isolated prompts. It can inspect files, search code, run commands, and use durable task state while you keep control of the terminal session."
+            eyebrow="Sessions"
+            title="Sessions are a tree you can branch, fork, and compact."
+            description="A session is a JSONL file. Each entry points at its parent, so you can continue from an earlier message and keep the other branch. Compaction summarizes older turns for the next model request and leaves the original entries in the file."
             bullets={[
               {
                 icon: GitBranchIcon,
-                label: "Repo-aware tools for search, edits, and shell commands",
+                label: "Resume a folder's latest session, or branch from an earlier entry",
               },
               {
                 icon: CommandIcon,
-                label: "Approval-based command execution through local shells",
+                label: "Fork and clone copy history into a new session file",
               },
               {
                 icon: Layout02Icon,
-                label: "Review and security-oriented prompts through agent workflows",
+                label: "The same session mechanism backs every mode",
               },
               {
                 icon: Search01Icon,
-                label: "Use git status, diffs, logs, and checks from the session",
+                label: "Git status, diffs, logs, and checks run through bash",
               },
             ]}
             image={{
-              src: "/source-control.webp",
-              alt: "KnightCode workflow showing repository commands and agent output",
-              width: 2560,
-              height: 1600,
-              caption: "knightcode - repo workflow",
+              src: "/screens/sessions.webp",
+              alt: "KnightCode session tree with two branches that fork after the first reply",
+              width: 1876,
+              height: 1369,
+              caption: "knightcode - session tree",
             }}
           />
 
           <FeatureShowcase
             id="agents"
             index="04"
-            eyebrow="Agent Suite"
-            title="Subagents, checklists, and durable tasks for larger work."
-            description="For more than one-shot edits, KnightCode supports agent delegation, in-session todos, and persistent task files under .knightcode so longer work can stay organized."
+            eyebrow="Providers"
+            title="Bring the provider account you already have."
+            description="Sign in with /login or set an API key. Built-in providers include OpenRouter, Anthropic, OpenAI, Google, xAI, Groq, GitHub Copilot, and Amazon Bedrock, plus llama.cpp and other OpenAI-compatible servers. Requests go to the provider you selected."
             bullets={[
               {
                 icon: RecordIcon,
-                label: "Ephemeral checklists and durable task tracking",
+                label: "API keys, OAuth subscriptions, and ambient cloud credentials",
               },
               {
                 icon: Notebook01Icon,
-                label: "Project rules, memories, and local context files",
+                label: "/model picks a model. /thinking sets the reasoning level",
               },
               {
                 icon: CodeFolderIcon,
-                label: "Composable workflow snippets and skill support",
+                label: "Local GGUF files through llama.cpp, or a compatible endpoint in models.json",
               },
-              { icon: CpuIcon, label: "OpenRouter key onboarding with model selection" },
-              {
-                icon: Mic01Icon,
-                label: "Diagnostic doctor audits to verify environment",
-              },
+              { icon: CpuIcon, label: "OpenRouter is one route, alongside direct providers" },
             ]}
             image={{
-              src: "/ai_workflow.webp",
-              alt: "KnightCode agent suite managing tasks and running diagnostics",
-              width: 2560,
-              height: 1600,
-              caption: "knightcode - agent tasks",
+              src: "/screens/providers.webp",
+              alt: "KnightCode provider picker opened with /login",
+              width: 1876,
+              height: 1152,
+              caption: "knightcode - /login",
             }}
           />
 
           <FeatureShowcase
             id="control"
             index="05"
-            eyebrow="Customization & Control"
-            title="Stay in control of context, cost, and behavior."
-            description="Pick models, tune reasoning behavior, configure guardrails, and compact long conversations so the agent stays useful across extended sessions."
+            eyebrow="Extensions"
+            title="Skills, extensions, and packages sit next to the repo."
+            description="Extensions are TypeScript modules loaded into the KnightCode process. They can add tools, commands, providers, and UI. Skills are instructions loaded when the model needs them. Packages install those resources from npm or git. Subagents ship as an example extension."
             bullets={[
               {
                 icon: BrowserIcon,
-                label: "Compact conversation history for longer sessions",
+                label: "Project resources under .knightcode load after you trust the folder",
               },
               {
                 icon: Layout02Icon,
-                label: "Control reasoning behavior from the terminal UI",
+                label: "Prompt templates, themes, and skills",
               },
               {
                 icon: CheckListIcon,
-                label: "Tool-use hooks for project-specific guardrails",
+                label: "npm and git packages, tried once with -e or saved in settings",
               },
               {
                 icon: EnergyIcon,
-                label: "Allow rules for repeated trusted command patterns",
+                label: "The measured system-prompt floor is about 1,100 tokens",
               },
             ]}
             image={{
-              src: "/web_preview.webp",
-              alt: "KnightCode configuration showing model and session controls",
-              width: 2560,
-              height: 1600,
-              caption: "knightcode - context and config",
+              src: "/screens/extensions.webp",
+              alt: "KnightCode startup listing project skills, prompts, and an extension, with the extension command run",
+              width: 1876,
+              height: 1195,
+              caption: "knightcode - project resources",
             }}
             reverse
           />
@@ -231,32 +226,32 @@ export default async function HomePage() {
             id="themes"
             index="06"
             eyebrow="Themes"
-            title="A terminal interface you can live in."
-            description="Tune the interface for long sessions with bundled themes, terminal-friendly palettes, and keyboard-first dialogs."
+            title="The terminal's colors, or a palette of your own."
+            description="The default theme is system. It builds KnightCode's colors from the terminal's foreground, background, and ANSI colors. dark and light are bundled. A JSON file can add another palette."
             bullets={[
               {
                 icon: PaintBrush02Icon,
-                label: "Bundled themes including nord, tokyo-night, and catppuccin",
+                label: "system, dark, and light",
               },
               {
                 icon: Image01Icon,
-                label: "Custom theme presets and JSON settings",
+                label: "One theme, or a light/dark pair that follows the terminal",
               },
               {
                 icon: CodeIcon,
-                label: "Flexible sizing and scroll settings for terminal windows",
+                label: "Custom themes from JSON, including themes shipped in a package",
               },
               {
                 icon: CommandIcon,
-                label: "Keyboard-based theme selector dialog",
+                label: "Change the theme from /settings",
               },
             ]}
             image={{
-              src: "/themes.webp",
-              alt: "KnightCode theme selector menu inside terminal",
-              width: 2560,
-              height: 1600,
-              caption: "knightcode - terminal themes",
+              src: "/screens/themes.webp",
+              alt: "KnightCode theme picker listing system, automatic, dark, and light",
+              width: 1876,
+              height: 1282,
+              caption: "knightcode - /settings theme",
             }}
           />
         </div>
