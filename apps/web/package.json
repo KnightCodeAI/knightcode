@@ -4,8 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "prebuild": "node scripts/generate-changelog-fallback.mjs",
+    "dev": "node scripts/sync-cli-docs.mjs && next dev --turbopack",
+    "prebuild": "node scripts/generate-changelog-fallback.mjs && node scripts/sync-cli-docs.mjs",
+    "sync:docs": "node scripts/sync-cli-docs.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

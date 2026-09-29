@@ -1,9 +1,19 @@
 {
   "title": "Reference",
-  "icon": "Notebook",
   "pages": [
-    "shortcuts",
+    "cli",
+    "slash-commands",
     "settings",
-    "data"
-  ]
+    "environment-variables",
+    "keybindings",
+    "providers",
+    "session-format",
+    "compaction",
+    "json",
+    "rpc",
+    "rpc-commands",
+    "rpc-extension-ui",
+    "message-types"
+  ],
+  "icon": "BookOpen"
 }

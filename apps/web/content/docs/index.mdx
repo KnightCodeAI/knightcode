@@ -1,24 +1,44 @@
 ---
-title: Welcome
-description: KnightCode is a local-first, interactive AI coding assistant built for your terminal.
-icon: BookOpen
+title: "KnightCode"
+description: "KnightCode is an extensible AI agent that works from your terminal. Give it a goal and a working folder, and it can inspect files, run commands, edit content, and work through..."
 ---
 
-KnightCode is an open-source terminal TUI (Terminal User Interface) built on **OpenTUI** and **React 19**. It runs entirely in your terminal, providing a rich, keyboard-driven environment where you can work with AI agents side-by-side with your repository context.
+{/* Generated from packages/cli/docs/index.md by apps/web/scripts/sync-cli-docs.mjs. Do not edit. */}
 
-No account or telemetry is required. KnightCode is BYOK (Bring Your Own Key), routing all your queries securely through OpenRouter to access standard, frontier, or free models.
+KnightCode is an extensible AI agent that works from your terminal. Give it a goal and a working folder, and it can inspect files, run commands, edit content, and work through multi-step tasks.
 
-## What's Inside
+Use KnightCode for software development, research notes, writing projects, data files, or hobby work. You can use KnightCode as is, prompt it to adapt itself to your workflow, or build other applications powered by KnightCode using the SDK.
 
-- **Keyboard-First TUI**: Run sessions directly from a repository in your terminal. Work in an interactive interface without switching to a web browser.
-- **Interactive Chat**: A scrollable message area displaying agent reasoning, streaming responses, and formatted output.
-- **Task & Todo System**: Ephemeral in-session checklists plus a durable, multi-session task ledger (`.knightcode/tasks.json` in your project) track progress and keep long-running agent workflows organized.
-- **Verification & Approvals**: Inspect proposed file diffs and command runs. Confirm or deny actions before the agent executes them.
-- **Project Memory**: Automatic recall and extraction of project preferences to a local per-project memory store, plus project-specific `KNIGHTCODE.md` guidelines.
-- **Custom Themes**: Switch the TUI between six bundled themes — Dark, Light, Dark/Light Daltonized (color-blind friendly), and Dark/Light ANSI.
+## Start using KnightCode
 
-## Where to Start
+New to KnightCode? Follow the [Quickstart](/docs/quickstart) to install KnightCode, connect a model, and complete your first task.
 
-1. [Install KnightCode](/docs/getting-started) and run the onboarding setup to configure your provider keys.
-2. Take a tour of [TUI Workspace layout](/docs/getting-started/workspace).
-3. Review available [Slash Commands](/docs/features/command-menu) to control the application.
+If KnightCode is already installed, choose what you want to do:
+
+- [Use KnightCode interactively](/docs/run/usage) to add files, run commands, direct ongoing work, and export results.
+- [Choose a model](/docs/run/models) or connect a subscription, API key, local model, or compatible endpoint.
+- [Continue or branch a session](/docs/run/sessions) to resume work or explore another approach without losing history.
+- [Configure KnightCode](/docs/customize/configuration) for your preferences, working folders, instructions, and reusable resources.
+- [Understand how KnightCode works](/docs/how-knightcode-works), including tools, context, sessions, and the agent loop.
+
+## Customize KnightCode
+
+KnightCode can reuse prompts, load specialized instructions, add executable integrations, change its terminal interface, connect model services, and distribute these resources as packages.
+Use the [Quickstart customization chooser](/docs/quickstart#choose-how-to-customize-knightcode) to select the smallest mechanism that meets your need.
+
+## Automate or embed KnightCode
+
+- Use [print mode](/docs/reference/cli#invocation-and-output) for one-off and scripted tasks.
+- Use [JSON event stream mode](/docs/reference/json) to consume structured events from one run.
+- Use [RPC mode](/docs/reference/rpc) to control a separate KnightCode process.
+- Use the [TypeScript SDK](/docs/build/sdk) to run KnightCode inside an application.
+
+## Find reference and setup information
+
+Use the reference pages to look up [CLI options](/docs/reference/cli), [settings](/docs/reference/settings), [provider authentication](/docs/reference/providers), [keybindings](/docs/reference/keybindings), and [environment variables](/docs/reference/environment-variables).
+
+For platform-specific help, see [Terminal Setup](/docs/run/terminal-setup), [Windows](/docs/run/windows), [tmux](/docs/run/tmux), [Termux on Android](/docs/run/termux), or [Containerization](/docs/run/containerization).
+
+## Work safely
+
+KnightCode's tools and extensions run with the permissions of the KnightCode process. Project trust controls which project resources KnightCode loads, but it does not sandbox tool calls. Review [Security](/docs/run/security) before using untrusted files, repositories, extensions, or unattended automation.
