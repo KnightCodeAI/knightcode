@@ -1,5 +1,43 @@
 # @knightcodeai/cli
 
+## 0.11.1
+
+### Added
+
+- Added the `codemode` tool, which runs JavaScript in a sandbox whose only capability is calling tools, including MCP tools that are not declared to the model.
+
+- Added the `tool_search` tool so the model can find tools that are not declared yet and declare the matches on its next call.
+
+- Added Sign in with ChatGPT for the OpenAI provider. Provider sign-in flows share one local callback server, and the browser page still shows the KnightCode knight.
+
+- Added MCP servers, configured in `mcp.json` and managed with `knightcode mcp` and `/mcp`, including OAuth sign-in for HTTP servers.
+
+- Added GPT-6.1 Sol (`gpt-6.1-sol`) for OpenAI, Azure OpenAI Responses, and OpenAI Codex, and made it the OpenAI Codex default model.
+
+- Added Jev classifier models on Vercel AI Gateway (`typesafe-ai/jev`) and OpenCode (`jev-1.13` and `jev-1.13-free`).
+
+- Added the `fullscreenWheelScrollLines` setting so fullscreen mode can scroll one line per wheel event, a fixed number of lines, or speed up fast spins. Alt+wheel moves five times as far.
+
+### Changed
+
+- Changed `defaultTools` so a list of `+name` and `-name` entries adds or removes tools instead of replacing the whole selection.
+
+- Changed built-in extensions so `knightcode config` lists them as `builtin:<name>` and settings can disable one with `-builtin:<name>`.
+
+- Changed tool calls that have no custom renderer to show their arguments, collapsed on one line until the call is expanded.
+
+- Changed session cost to include token usage from codemode classifier calls and from tools those scripts call.
+
+- Changed bash results returned to scripts so they keep up to 1 MiB of output, with the full output in `full_output_path` when that is still not enough.
+
+- Changed System One classifier results to include token usage and its catalog cost when the service reports token counts.
+
+- Changed fullscreen redraws to keep parsed markdown and unpadded child lines across frames, and shell output now drops only control characters and interlinear annotations instead of every format character.
+
+### Fixed
+
+- Fixed llama.cpp context windows so a reload keeps the last known size when the server has not reported one, and a configured `--ctx-size` is used before the training context.
+
 ## 0.11.0
 
 ### Added
