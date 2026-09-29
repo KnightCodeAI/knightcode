@@ -27,7 +27,7 @@ const ANALYTICS_OPTIONS: Array<{ value: boolean; label: string }> = [
 	{ value: false, label: "Don't share" },
 ];
 
-/** The KnightCode knight, rasterised from the mark in packages/ai/src/auth/oauth/oauth-page.ts. */
+/** The KnightCode knight, rasterised from the mark in packages/ai/src/utils/oauth-page.ts. */
 const SETUP_LOGO_LINES = [
 	"      ▄███▄▄",
 	"  ▄▄█████████▄▄",

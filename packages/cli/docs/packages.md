@@ -118,7 +118,7 @@ For each resource type:
 
 Filters narrow the package manifest. They do not expose resources that the package itself did not declare.
 
-Run `knightcode config` to enable or disable discovered resources. It starts with personal configuration; press Tab to switch scope, or run `knightcode config --local` to start with project overrides.
+Run `knightcode config` to enable or disable discovered resources and knightcode's built-in extensions. It starts with personal configuration; press Tab to switch scope, or run `knightcode config --local` to start with project overrides.
 
 ## Understand scope and identity
 

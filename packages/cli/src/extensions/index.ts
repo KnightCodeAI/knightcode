@@ -1,16 +1,24 @@
 import remoteExtension from "@knightcode/remote";
 import toolsExtension from "@knightcode/tools";
 import type { InlineExtension } from "../core/extensions/types.ts";
+import codemodeExtension from "./codemode/index.ts";
 import llamaExtension from "./llama/index.ts";
+import mcpExtension from "./mcp/index.ts";
+import toolSearchExtension from "./tool-search/index.ts";
 import undoExtension from "./undo/index.ts";
 
 export const builtInExtensions: InlineExtension[] = [
-	{ name: "llama.cpp", factory: llamaExtension, hidden: true },
-	// Hidden: /undo is a built-in command; file checkpoints ride on the extension hooks so core stays untouched.
-	{ name: "undo", factory: undoExtension, hidden: true },
-	// Hidden like llama.cpp: /remote is a built-in command, and listing it under
-	// "Extensions" at startup advertises an implementation detail as an add-on.
-	{ name: "remote", factory: remoteExtension, hidden: true },
-	// Hidden for the same reason: webfetch, websearch and /tools are built-ins.
-	{ name: "tools", factory: toolsExtension, hidden: true },
+	{ name: "llama.cpp", factory: llamaExtension, builtin: true },
+	// Replaceable: an extension that registers `codemode`, `tool_search`, or `/mcp` (such as a third-party
+	// MCP extension) takes over instead of running alongside the built-in one.
+	{ name: "codemode", factory: codemodeExtension, replaceable: true, builtin: true },
+	{ name: "tool-search", factory: toolSearchExtension, replaceable: true, builtin: true },
+	{ name: "mcp", factory: mcpExtension, replaceable: true, builtin: true },
+	// /undo is a built-in command; file checkpoints ride on the extension hooks so core stays untouched.
+	{ name: "undo", factory: undoExtension, builtin: true },
+	// /remote is a built-in command. Listing it under "Extensions" at startup would advertise an
+	// implementation detail as an add-on.
+	{ name: "remote", factory: remoteExtension, builtin: true },
+	// webfetch, websearch and /tools are built-ins.
+	{ name: "tools", factory: toolsExtension, builtin: true },
 ];

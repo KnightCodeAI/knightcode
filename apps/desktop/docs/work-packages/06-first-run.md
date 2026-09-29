@@ -1229,7 +1229,7 @@ Four outbound call sites the plan's audit did not name, three of them fixed.
 - **The mark was redrawn after a first look (owner, 2026-09-18).** The first
   `knightcode-mark.svg` was drawn by hand and did not read as a knight. It is
   now the website's knight, from the trace in
-  `packages/ai/src/auth/oauth/oauth-page.ts` that the CLI's terminal logo also
+  `packages/ai/src/utils/oauth-page.ts` that the CLI's terminal logo also
   comes from, and first run's header shows the full-colour logo rather than a
   mask.
 - **The default layout is Zed's editor preset (owner, 2026-09-18).** File tree,

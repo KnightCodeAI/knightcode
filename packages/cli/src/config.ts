@@ -1,4 +1,5 @@
 import { accessSync, constants, existsSync, readFileSync, realpathSync } from "fs";
+import { createRequire } from "module";
 import { homedir } from "os";
 import { basename, dirname, join, resolve, sep, win32 } from "path";
 import { fileURLToPath } from "url";
@@ -509,6 +510,30 @@ export function getInteractiveAssetsDir(): string {
 /** Get path to a bundled interactive asset */
 export function getBundledInteractiveAssetPath(name: string): string {
 	return join(getInteractiveAssetsDir(), name);
+}
+
+let embeddedQuickJSWasmPath: string | undefined;
+
+/** Called by the Bun entry with the path of the QuickJS wasm file embedded in the compiled executable. */
+export function setEmbeddedQuickJSWasmPath(path: string): void {
+	embeddedQuickJSWasmPath = path;
+}
+
+/** Get path to `quickjs-wasi/quickjs.wasm`, the VM that runs codemode scripts. */
+export function getQuickJSWasmPath(): string {
+	return embeddedQuickJSWasmPath ?? createRequire(import.meta.url).resolve("quickjs-wasi/quickjs.wasm");
+}
+
+/**
+ * Get the codemode worker entry (`src/extensions/codemode/worker.ts`), or undefined to use the
+ * worker that ships inside `@knightcode/codemode`.
+ * Compiled Bun binaries resolve extra entrypoints by string path, the same way the image resize
+ * worker does. `scripts/build.ts` passes this file as an entrypoint so the binary embeds it.
+ */
+export function getCodemodeWorkerUrl(): URL | string | undefined {
+	if (isBunBinary) return "./src/extensions/codemode/worker.ts";
+	if (isBundledNode) return new URL("./codemode-worker.js", import.meta.url);
+	return undefined;
 }
 
 // =============================================================================

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import type { ExtensionContext } from "../../src/core/extensions/types.ts";
+import type { ExtensionToolContext } from "../../src/core/extensions/types.ts";
 import type { ToolDef } from "../../src/core/tools/index.ts";
 import { createClientFileOperations, createClientFileTools } from "../../src/engine/client-fs.ts";
 import type { ClientReply, ClientRequest, ClientRequests } from "../../src/engine/client-requests.ts";
@@ -26,7 +26,7 @@ function scriptedRequests(
 
 /** The definition's execute takes the loop's five arguments; the tests need only the first two. */
 function run(tool: ToolDef, toolCallId: string, params: unknown): Promise<unknown> {
-	return tool.execute(toolCallId, params, undefined, undefined, {} as ExtensionContext);
+	return tool.execute(toolCallId, params, undefined, undefined, {} as ExtensionToolContext);
 }
 
 // The shortest header the image detector accepts (`utils/mime.ts` matches "GIF" alone).

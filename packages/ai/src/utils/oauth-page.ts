@@ -35,7 +35,7 @@ function escapeHtml(value: string): string {
 }
 
 function renderPage(options: {
-	brand: OAuthBrand;
+	brand?: OAuthBrand;
 	title: string;
 	heading: string;
 	message: string;
@@ -45,8 +45,18 @@ function renderPage(options: {
 	const heading = escapeHtml(options.heading);
 	const message = escapeHtml(options.message);
 	const details = options.details ? escapeHtml(options.details) : undefined;
-	const brandMark = BRAND_MARKS[options.brand];
-	const brandLabel = escapeHtml(BRAND_LABELS[options.brand]);
+	const brandMark = options.brand ? BRAND_MARKS[options.brand] : undefined;
+	const brandLabel = options.brand ? escapeHtml(BRAND_LABELS[options.brand]) : undefined;
+	const knight = `<span class="mark mark-knight" role="img" aria-label="KnightCode">${LOGO_SVG}</span>`;
+	const marks = brandMark
+		? `<div class="marks">
+      <span class="mark mark-brand" role="img" aria-label="${brandLabel}">${brandMark}</span>
+      <span class="rule"></span>
+      ${knight}
+    </div>`
+		: `<div class="marks">
+      ${knight}
+    </div>`;
 
 	return `<!doctype html>
 <html lang="en">
@@ -135,11 +145,7 @@ function renderPage(options: {
 </head>
 <body>
   <main>
-    <div class="marks">
-      <span class="mark mark-brand" role="img" aria-label="${brandLabel}">${brandMark}</span>
-      <span class="rule"></span>
-      <span class="mark mark-knight" role="img" aria-label="KnightCode">${LOGO_SVG}</span>
-    </div>
+    ${marks}
     <h1>${heading}</h1>
     <p>${message}</p>
     ${details ? `<div class="details">${details}</div>` : ""}
@@ -148,7 +154,7 @@ function renderPage(options: {
 </html>`;
 }
 
-export function oauthSuccessHtml(brand: OAuthBrand, message: string): string {
+export function oauthSuccessHtml(message: string, brand?: OAuthBrand): string {
 	return renderPage({
 		brand,
 		title: "Authentication successful",
@@ -157,7 +163,7 @@ export function oauthSuccessHtml(brand: OAuthBrand, message: string): string {
 	});
 }
 
-export function oauthErrorHtml(brand: OAuthBrand, message: string, details?: string): string {
+export function oauthErrorHtml(message: string, details?: string, brand?: OAuthBrand): string {
 	return renderPage({
 		brand,
 		title: "Authentication failed",

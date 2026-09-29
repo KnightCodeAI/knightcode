@@ -10,6 +10,8 @@ const ROOT = join(import.meta.dir, "..");
 // worker is a second entrypoint because it is spawned as its own module.
 const ENTRY = join(ROOT, "packages/cli/src/bun/cli.ts");
 const WORKER_ENTRY = join(ROOT, "packages/cli/src/utils/image-resize-worker.ts");
+// Codemode starts a worker by path. Bun only embeds workers that are entrypoints.
+const CODEMODE_WORKER_ENTRY = join(ROOT, "packages/cli/src/extensions/codemode/worker.ts");
 // The IDE's engine: a second binary from the same core, no TUI entry.
 const ENGINE_ENTRY = join(ROOT, "packages/cli/src/engine-entry.ts");
 
@@ -141,7 +143,7 @@ for (const target of targets) {
 
 	console.log(`Building ${target.os}-${target.arch} → ${outfile}`);
 	const result = await Bun.build({
-		entrypoints: [ENTRY, WORKER_ENTRY],
+		entrypoints: [ENTRY, WORKER_ENTRY, CODEMODE_WORKER_ENTRY],
 		target: "bun",
 		compile: {
 			target: target.bunTarget,
@@ -174,7 +176,7 @@ for (const target of targets) {
 
 	console.log(`Building ${target.os}-${target.arch} → ${engineOutfile}`);
 	const engineResult = await Bun.build({
-		entrypoints: [ENGINE_ENTRY],
+		entrypoints: [ENGINE_ENTRY, CODEMODE_WORKER_ENTRY],
 		target: "bun",
 		compile: {
 			target: target.bunTarget,
