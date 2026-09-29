@@ -80,6 +80,7 @@ Automatic retries, recovery, compaction, or queued work can continue afterward.
 | Persist non-context session data | `knightcode.appendEntry()` |
 | Change active tools, model, or thinking level | Session control methods on `knightcode` |
 | Add a model provider | `knightcode.registerProvider()` |
+| Route each request to a model | [`knightcode.registerVirtualModel()`](virtual-models.md) |
 | Add terminal rendering | Renderer registration and `ctx.ui` |
 | Communicate with another extension | `knightcode.events` |
 
