@@ -1,5 +1,29 @@
 # @knightcodeai/cli
 
+## 0.11.0
+
+### Added
+
+- Added virtual models: an extension can register a selectable model, with `registerVirtualModel`, that routes each request to a physical model and thinking level. Virtual models appear in `/model`, `--model` and scoped models, the footer shows the routed model, and assistant messages record the thinking level the agent loop requested. See `docs/virtual-models.md`.
+
+- Added Claude Sonnet 5.5, with managed effort levels, mid-conversation system messages and tool changes, and no temperature control.
+
+- Added a classifier for every connected llama.cpp chat model, so choice, bool, and score questions are answered from next-token label probabilities, with an optional temperature that softens the distribution.
+
+### Fixed
+
+- Fixed OpenCode and OpenCode Go Qwen 3.8 Flash rejecting thinking blocks that have an empty signature.
+
+- Fixed Mistral reasoning requests using a hardcoded model list. A model with a thinking-level map now sends `reasoning_effort` for the requested level, including max on GLM 5.2, and sends the model's off value when thinking is off. GLM 5.3 no longer uses `prompt_mode`.
+
+- Fixed the OpenCode Go default model pointing at Kimi K2.6; it now defaults to Kimi K3.
+
+- Fixed pasting files copied in the macOS Finder inserting their icon instead of their paths. Copied files now paste as their original paths, and a failed clipboard paste shows an error instead of failing silently.
+
+- Fixed OpenAI Responses streams running tool calls that never finished. A server that omits `output_index`, such as llama.cpp, could turn two parallel calls into three with cut-off or mixed-up arguments; the stream now fails instead of running them.
+
+- Fixed the Together default model pointing at Kimi K2.6, which Together no longer lists; it now defaults to Kimi K3.
+
 ## 0.10.0
 
 ### Added
