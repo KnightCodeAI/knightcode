@@ -57,7 +57,7 @@ export async function SiteFooter() {
             {SITE.tagline}
           </p>
           <p className="mt-6 font-mono text-xs text-muted-foreground/70">
-            v{version} - Alpha
+            v{version}
           </p>
         </div>
 

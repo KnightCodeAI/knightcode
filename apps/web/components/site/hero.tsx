@@ -21,9 +21,9 @@ const LiveTerminal = dynamic(
 
 const PHRASES = [
   "inside your terminal.",
-  "with your model key.",
+  "with your own key.",
   "close to your repo.",
-  "under your control.",
+  "on your machine.",
 ]
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const
@@ -67,7 +67,7 @@ export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
               className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/60 px-3 py-1 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase backdrop-blur-md transition-[color,border-color,transform] duration-200 ease-out hover:border-foreground/25 hover:text-foreground active:scale-[0.98]"
             >
               <span className="size-1.5 rounded-full bg-(--brand)" />
-              <span>Alpha v{version}</span>
+              <span>v{version}</span>
               <HugeiconsIcon
                 icon={ArrowRight01Icon}
                 className="size-3 transition-transform duration-200 ease-out group-hover:translate-x-0.5"
@@ -81,7 +81,7 @@ export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
             className="mt-8 text-[clamp(1.75rem,9.2vw,2.5rem)] leading-[1.08] font-semibold tracking-[-0.04em] sm:text-5xl md:text-6xl lg:text-[2.6rem] xl:text-5xl"
           >
             {/* The visible headline cycles; the accessible name must not. */}
-            <span className="sr-only">Agentic coding, under your control.</span>
+            <span className="sr-only">Agentic coding, on your machine.</span>
             <span aria-hidden>
               <span className="block text-foreground/55">Agentic coding,</span>
               {/* One line, always. The phrases differ in length, so without
@@ -95,7 +95,7 @@ export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
                   adding a longer phrase. */}
               <span className="block whitespace-nowrap">
                 {reduceMotion ? (
-                  "under your control."
+                  "on your machine."
                 ) : (
                   <TypingAnimation
                     words={PHRASES}
@@ -115,8 +115,9 @@ export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
             variants={item}
             className="mt-6 max-w-xl text-base text-foreground/70 sm:text-lg"
           >
-            An early, npm-installed coding agent for your terminal. Repo-aware
-            tools, approvals before anything runs, and your own model key.
+            A local coding agent for your terminal. It reads, searches, edits,
+            and runs commands in the folder you opened, through the provider
+            account you choose.
           </motion.p>
 
           <motion.div variants={item} className="mt-10 w-full">

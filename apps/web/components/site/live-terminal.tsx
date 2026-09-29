@@ -91,6 +91,10 @@ const SLASH_COMMANDS: Array<{ name: string; description: string }> = [
     description: "Import and resume a session from a JSONL file",
   },
   { name: "share", description: "Share session as a secret GitHub gist" },
+  {
+    name: "bug",
+    description: "<description> — Report a bug to the KnightCode developers",
+  },
   { name: "copy", description: "Copy last agent message to clipboard" },
   { name: "name", description: "Set session display name" },
   { name: "session", description: "Show session info and stats" },

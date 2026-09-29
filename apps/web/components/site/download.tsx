@@ -19,17 +19,17 @@ const setupNotes = [
   {
     icon: CommandLineIcon,
     title: "Install from npm",
-    desc: "A single global install exposes the knightcode command on macOS, Linux, and Windows.",
+    desc: "Node.js 22 or newer. One global install exposes knightcode on macOS, Linux, and Windows. Lifecycle scripts are not required.",
   },
   {
     icon: CpuIcon,
-    title: "Bring your own model key",
-    desc: "Current onboarding is BYOK-first, with OpenRouter-backed model routing in the CLI.",
+    title: "Sign in to a provider",
+    desc: "Run /login, or set an API key in the environment. OpenRouter, Anthropic, OpenAI, Google, xAI, and local servers are all built in.",
   },
   {
     icon: ShieldUserIcon,
-    title: "Approve tool use",
-    desc: "Agent file edits, shell commands, and subagent work stay visible in the terminal flow.",
+    title: "Watch the transcript",
+    desc: "File reads, searches, edits, and commands show up as they run. They use your operating-system permissions.",
   },
 ]
 
@@ -46,12 +46,12 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
         {/* Left Column: Title & Interactive Quick Start Card */}
         <div className="lg:col-span-6 flex min-w-0 flex-col gap-6">
           <div>
-            <SectionEyebrow>06 - Install - Alpha v{version}</SectionEyebrow>
+            <SectionEyebrow>08 - Install - v{version}</SectionEyebrow>
             <SectionHeading className="mt-2.5">
               Install the CLI. Open your repo. Start a session.
             </SectionHeading>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-[17px]">
-              KnightCode is npm-first. No account is required: install the command, connect your model key during onboarding, and run the agent close to your local workspace.
+              KnightCode is installed from npm. There is no KnightCode account: install the command, sign in to a provider, and run it in the folder you want to work on.
             </p>
           </div>
 
@@ -129,7 +129,7 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
                   Follow development
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                  Releases are still alpha. Use GitHub for issues, source, and implementation details.
+                  Issues, source, and release notes are on GitHub.
                 </p>
               </div>
               <Button asChild size="sm" variant="outline" className="rounded-full shrink-0 cursor-pointer">

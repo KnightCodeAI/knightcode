@@ -20,62 +20,62 @@ const items = [
   {
     icon: Layout02Icon,
     title: "Interactive TUI",
-    desc: "Run the coding assistant directly inside your terminal with React/OpenTUI screens and keyboard navigation.",
+    desc: "The terminal UI is @knightcode/tui. The same agent also runs in print, JSON, and RPC modes.",
   },
   {
     icon: CpuIcon,
-    title: "BYOK Model Routing",
-    desc: "Use your own model key during onboarding and keep provider costs tied to the account you already control.",
+    title: "Many providers",
+    desc: "API keys, OAuth, and local endpoints. OpenRouter is one provider, alongside Anthropic, OpenAI, Google, xAI, and others.",
   },
   {
     icon: AiIdeaIcon,
-    title: "Agentic Workflows",
-    desc: "Multi-step agents can read files, edit code, search codebases, and run shell commands with approval.",
+    title: "Built-in tools",
+    desc: "read, bash, edit, and write by default. grep, find, and ls on request. They run with the permissions of the KnightCode process.",
   },
   {
     icon: Notebook01Icon,
-    title: "Project Context",
-    desc: "Keep rules, skills, memories, and task state close to the repository instead of isolated in a hosted chat.",
+    title: "Project context",
+    desc: "Skills, prompts, themes, and settings live under .knightcode and load after you trust the folder.",
   },
   {
     icon: CheckListIcon,
-    title: "Durable Task Suite",
-    desc: "Track longer work through in-session todos and persistent .knightcode task files.",
+    title: "Session tree",
+    desc: "Sessions are JSONL. Branch from an earlier message, or fork and clone history into a new file.",
   },
   {
     icon: PaintBrush02Icon,
-    title: "TUI Customization",
-    desc: "Adjust theme palettes (nord, tokyo-night, catppuccin, rose-pine) and export settings as JSON presets.",
+    title: "Themes",
+    desc: "system follows your terminal colors. dark and light are bundled, and a JSON file can add another palette.",
   },
   {
     icon: CodeFolderIcon,
-    title: "Lifecycle Hooks",
-    desc: "Configure tool-use hooks to audit, block, or shape agent actions around your project rules.",
+    title: "Extensions",
+    desc: "TypeScript modules can add tools, commands, providers, and UI. Packages install them from npm or git.",
   },
   {
     icon: Search01Icon,
-    title: "Git-aware Sessions",
-    desc: "Ask the agent to inspect status, diffs, logs, and checks through the same shell tools you use manually.",
+    title: "Shell and git",
+    desc: "bash is the shell tool. Status, diffs, logs, and checks run as commands you can read in the transcript.",
   },
   {
     icon: ShieldUserIcon,
-    title: "Diagnostics Suite",
-    desc: "Built-in /doctor command to audit your auth status, local server connection, and git repository setup.",
+    title: "Project trust",
+    desc: "Trust decides whether a folder's settings, skills, and extensions load. It does not sandbox tool calls.",
   },
   {
     icon: RecordIcon,
-    title: "Visible Tool Calls",
-    desc: "Review proposed edits, command output, and permission prompts as the agent works.",
+    title: "Visible tool calls",
+    desc: "Each read, search, edit, and command is shown as it runs. KnightCode does not ask before every tool call.",
   },
   {
     icon: EnergyIcon,
-    title: "Context Compaction",
-    desc: "Summarize long chat logs to keep extended coding sessions inside the model context window.",
+    title: "Compaction",
+    desc: "A summary entry replaces older turns in the next model request. The original entries stay in the session.",
   },
   {
     icon: CommandIcon,
-    title: "CLI Control",
-    desc: "Control reasoning levels (/reasoning) and configure execution guardrails with allowed commands (/allow).",
+    title: "Session controls",
+    desc: "/model, /thinking, /login, and /tools cover the model, reasoning level, credentials, and optional tools.",
   },
 ]
 
@@ -83,7 +83,7 @@ export function FeatureGrid() {
   return (
     <Section id="more">
       <div className="mx-auto max-w-3xl">
-        <SectionEyebrow>05 - Toolkit</SectionEyebrow>
+        <SectionEyebrow>07 - Toolkit</SectionEyebrow>
         <SectionHeading>Practical pieces for real repo work.</SectionHeading>
       </div>
 

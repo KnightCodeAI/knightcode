@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils"
 // The CLI ships platform binaries as optionalDependencies, so every major
 // package manager installs it the same way.
 const MANAGERS = [
-  { id: "npm", command: `npm install -g ${NPM_PACKAGE}` },
-  { id: "pnpm", command: `pnpm add -g ${NPM_PACKAGE}` },
-  { id: "bun", command: `bun install -g ${NPM_PACKAGE}` },
-  { id: "yarn", command: `yarn global add ${NPM_PACKAGE}` },
-  { id: "npx", command: `npx ${NPM_PACKAGE}` },
+  { id: "npm", command: `npm install -g --ignore-scripts ${NPM_PACKAGE}` },
+  { id: "pnpm", command: `pnpm add -g --ignore-scripts ${NPM_PACKAGE}` },
+  { id: "bun", command: `bun install -g --ignore-scripts ${NPM_PACKAGE}` },
+  { id: "yarn", command: `yarn global add --ignore-scripts ${NPM_PACKAGE}` },
+  { id: "npx", command: `npx --ignore-scripts ${NPM_PACKAGE}` },
 ] as const
 
 type ManagerId = (typeof MANAGERS)[number]["id"]
@@ -41,15 +41,17 @@ export function CommandBlock({
 
   return (
     <div className={cn("flex items-center gap-3 px-4 py-3", className)}>
-      <span
-        aria-hidden
-        className="font-mono text-xs select-none text-(--brand) sm:text-sm"
-      >
-        $
-      </span>
-      <code className="min-w-0 flex-1 overflow-x-auto font-mono text-xs whitespace-nowrap text-foreground/90 select-all sm:text-sm">
-        {command}
-      </code>
+      {/* One line, sized to fit: the longest command is 52ch including the
+          prompt, and a Geist Mono ch is 0.6em, so 100cqi / 31.2 fills the row.
+          Below the 11px floor (narrow phones) it scrolls by swipe instead. */}
+      <p className="@container min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <span className="font-mono text-[length:clamp(11px,3.1cqi,14px)] whitespace-nowrap">
+          <span aria-hidden className="select-none text-(--brand)">
+            $
+          </span>{" "}
+          <code className="text-foreground/90 select-all">{command}</code>
+        </span>
+      </p>
       <button
         onClick={copy}
         aria-label={copied ? "Copied" : `Copy: ${command}`}
