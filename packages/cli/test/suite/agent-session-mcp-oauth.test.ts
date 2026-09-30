@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
 import type { ToolResultMessage } from "@knightcode/ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
+import { APP_NAME } from "../../src/config.ts";
 import { InMemoryAuthStorageBackend } from "../../src/core/auth-storage.ts";
 import { runMcpCommand } from "../../src/extensions/mcp/cli.ts";
 import type { McpOAuthConfig, McpServerEntry } from "../../src/extensions/mcp/config.ts";
@@ -146,6 +147,17 @@ describe("AgentSession MCP OAuth", () => {
 		expect(opened[0].searchParams.get("redirect_uri")).toBe(callbackUrl);
 		expect(opened[0].searchParams.get("scope")).toBe("issues:read");
 		expect(getMessageText(await callWhoami(harness))).toBe("token access-1");
+	});
+
+	it("registers with the configured client name", async () => {
+		const { harness, server, notifications } = await setup("follow", { clientName: "Claude Code" });
+		await harness.session.prompt("/mcp login issues");
+		expect(notifications.at(-1)).toBe('Signed in to MCP server "issues" (1 tools).');
+		expect(server.registrations.map((metadata) => metadata.client_name)).toEqual(["Claude Code"]);
+
+		const fallback = await setup("follow");
+		await fallback.harness.session.prompt("/mcp login issues");
+		expect(fallback.server.registrations.map((metadata) => metadata.client_name)).toEqual([APP_NAME]);
 	});
 
 	it("adds the listening port to a callback URL without one", async () => {

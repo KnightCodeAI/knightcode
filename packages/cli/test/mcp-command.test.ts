@@ -113,6 +113,8 @@ describe("knightcode mcp", () => {
 				"X-Team=core",
 				"--exposure",
 				"direct",
+				"--description",
+				"Product docs",
 			],
 			{ fixture: servers.fixture },
 		);
@@ -125,18 +127,28 @@ describe("knightcode mcp", () => {
 					url: "https://example.com/mcp",
 					headers: { "X-Team": "core", Authorization: "Bearer ${DOCS_TOKEN}" },
 					exposure: "direct",
+					description: "Product docs",
 				},
 			},
 		});
 
 		const oauth = await run(
-			["add", "sentry", "--url", "https://mcp.sentry.dev/mcp", "--oauth-client-id", "sentry-app"],
+			[
+				"add",
+				"sentry",
+				"--url",
+				"https://mcp.sentry.dev/mcp",
+				"--oauth-client-id",
+				"sentry-app",
+				"--oauth-client-name",
+				"Claude Code",
+			],
 			undefined,
 			agentDir,
 		);
 		expect(oauth.output).toContain("If it requires sign-in: knightcode mcp login sentry");
 		expect(readConfig(join(agentDir, "mcp.json")).mcpServers).toMatchObject({
-			sentry: { url: "https://mcp.sentry.dev/mcp", oauth: { clientId: "sentry-app" } },
+			sentry: { url: "https://mcp.sentry.dev/mcp", oauth: { clientId: "sentry-app", clientName: "Claude Code" } },
 		});
 	});
 
