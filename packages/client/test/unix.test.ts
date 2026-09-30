@@ -155,7 +155,10 @@ describe.skipIf(process.platform === "win32")("discoverUnixServers", () => {
 			await startSilentSocket(join(directory, `${serverId(index)}.sock`), connections);
 		}
 
-		const discovery = discoverUnixServers({ directory, timeoutMs: 100 });
+		// The server counts a probe as closed only when it processes the close event, which can lag the
+		// client's own close. Once probes start timing out, the next ones connect before those closes are
+		// seen and the count overshoots 16. The timeout must outlast a slow runner's first poll.
+		const discovery = discoverUnixServers({ directory, timeoutMs: 1000 });
 		await expect.poll(() => connections.active).toBe(16);
 		expect(connections.maximum).toBe(16);
 		await expect(discovery).resolves.toEqual([]);
