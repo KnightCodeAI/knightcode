@@ -22,3 +22,8 @@ export const SystemEntry = defineEntry("knightcode.system");
  * the structured diagnostics, possibly none. Written by tool tasks, and by generation for calls it did not offer.
  */
 export const ToolResultEntry = defineEntry<{ diagnostics: ToolDiagnostic[] }>("knightcode.tool-result");
+/**
+ * Start of a new context: always `head: "self"`, with `model` absent for a plain reset or `[UserMessage]` carrying the
+ * handoff text. Written by `Conversation.reset()` and the post-tools `handoff` control.
+ */
+export const ResetEntry = defineEntry("knightcode.reset");

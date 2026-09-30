@@ -76,9 +76,11 @@ describe("Harness root and conversations", () => {
 		});
 		expect(root.id).toBe(ROOT_CONVERSATION_ID);
 		expect(storage.commits).toHaveLength(1);
-		// Conversation, knightcode.live, configuration, and the init note.
+		// Conversation, knightcode.live, knightcode.inbox, knightcode.usage, configuration, and the init note.
 		expect(storage.commits[0]!.map((write) => write.type)).toEqual([
 			"conversation",
+			"document.create",
+			"document.create",
 			"document.create",
 			"document.create",
 			"document.create",
