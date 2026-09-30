@@ -22,6 +22,7 @@ Built on [`@knightcode/ai`](../ai/README.md) for model access and `@knightcode/c
 - [Hooks](#hooks)
 - [More Conversations and Forks](#more-conversations-and-forks)
 - [Abort and Subagents](#abort-and-subagents)
+- [Child Tasks](#child-tasks)
 - [Your Own State](#your-own-state)
 - [Usage and Cost](#usage-and-cost)
 - [Storage](#storage)
@@ -78,7 +79,7 @@ Every async call takes a Chord `Context`, which carries cancellation. `BACKGROUN
 - **Entry**: one immutable transcript record, such as a user message (`knightcode.user`), a model response (`knightcode.assistant`), a tool result (`knightcode.tool-result`), a system prompt change (`knightcode.system`), a reset (`knightcode.reset`), or your own kind. The model sees the entries from the newest reset onward.
 - **Commit**: an atomic write. `conversation.commit((tx) => ...)` can append entries, edit documents, and create tasks together; either all of it is stored or none of it.
 - **Document**: typed JSON state stored next to the transcript and changed in commits. Built-in ones hold each conversation's settings (`knightcode.conversation.config`), the running generation and tools (`knightcode.live`), queued submissions (`knightcode.inbox`), and spend (`knightcode.usage`).
-- **Task**: a durable state machine that saves a checkpoint at every step, so a restarted process continues from the last one. The Harness runs answers as built-in tasks: `knightcode.generation` calls the model, `knightcode.tool` runs one tool call, and `knightcode.post-tools` continues once a round's tools are done.
+- **Task**: a durable state machine that saves a checkpoint at every step, so a restarted process continues from the last one. Every task has an owner: its conversation, or another task. The Harness runs answers as built-in tasks: `knightcode.generation` calls the model and owns the `knightcode.tool` tasks of its tool calls, waits for them, and hands the run to the next generation.
 - **Submission**: something you hand to a conversation, either user input or an entry to write, which you can wait for.
 - **Turn and run**: a turn is one model response and its tool calls; a run is the turns from an input to its final answer. A conversation is busy while a run is going.
 - **Registry**: your tools, system prompt sections, hooks, and tasks. It can change while the Harness runs; new work uses the new state.
@@ -88,8 +89,7 @@ One answered input, as entries and tasks:
 ```text
 submit(input) → knightcode.user
   knightcode.generation → knightcode.system (only if the prompt or tools changed), knightcode.assistant (tool calls)
-  knightcode.tool × n   → knightcode.tool-result × n
-  knightcode.post-tools
+    knightcode.tool × n → knightcode.tool-result × n   (owned by the generation, which waits for them)
   knightcode.generation → knightcode.assistant (answer) → submission done
 ```
 
@@ -267,9 +267,8 @@ registry.hooks.add(GenerationTask, {
 });
 ```
 
-- **Generation:** `beforeRequest` (replace the messages of one request), `afterResponse`, and `onYield` (continue the run with another user message).
+- **Generation:** `beforeRequest` (replace the messages of one request), `afterResponse`, `onYield` (continue the run with another user message), and `afterTools` (runs once a round's tools are done).
 - **Tools:** `beforeTool` (block or rewrite arguments) and `afterTool` (replace the result).
-- **Post-tools:** `afterTools` (runs once a round's tools are done).
 
 Pass `{ scope: { conversationId } }` to limit a hook to one conversation.
 
@@ -315,12 +314,39 @@ Owned work belongs to its owner:
 
 - Aborting the call aborts the child. So does the call failing: `execute()` throwing, or a crash that interrupts a call that is not replay-safe.
 - The parent is idle only once the child is.
-- A task created with `{ background: true }` is a boundary: work it owns survives the parent's abort and does not keep the parent busy.
+- A task created with `{ background: true }` is a boundary: work it owns survives the parent's abort and does not keep the parent busy. `root.abort(context, { background: true })` aborts it too.
 
 The examples show both patterns as product code:
 
 - [`22-subagent-foreground.ts`](test/examples/22-subagent-foreground.ts): the tool above, returning the child's answer. The UI finds the child through the call's `details` and prints the child's events indented under the call.
-- [`23-subagent-background.ts`](test/examples/23-subagent-background.ts): the call returns at once. One commit creates a background supervisor task, the child it owns, and an entry in the parent's `app.subagents` document. The supervisor submits with a stable request ID, so a restart never submits twice. The UI lists subagents from that document and shows which ones are working.
+- [`23-subagent-background.ts`](test/examples/23-subagent-background.ts): persistent subagents behind one `subagent` tool that spawns, messages (steer or follow-up), waits for, stops, and lists them. Each child is owned by a background anchor task, so the parent's Esc and idle waits never reach it. Each message is delivered by a background reporter task that posts the answer back to the parent as a follow-up input once it arrives; request IDs keep a restart from sending a message or a report twice.
+
+## Child Tasks
+
+A task can own child tasks, created with `ownership: { kind: "task", taskId }`, and wait for them by committing a `waiting` state:
+
+```typescript
+pay: async (task, runtime, context) => {
+	await runtime.commit(async (tx) => {
+		const payments = [];
+		for (const card of task.input.cards) {
+			payments.push(await tx.createTask(Payment, { card }, { ownership: { kind: "task", taskId: task.id } }));
+		}
+		// Resume in `decide` once every payment is done; the first failure aborts the rest.
+		return { status: "waiting", checkpoint: { phase: "decide", payments }, on: payments, policy: "failFast" };
+	}, context);
+},
+decide: async (task, runtime, context) => {
+	const outcomes = await runtime.outcomes(task.state.checkpoint.payments, context);
+	// ...commit the checkout's own outcome
+},
+```
+
+- **Waiting:** the task runs no code while it waits. With `allSettled` it resumes once every task in `on` is done; with `failFast` the first failed child also aborts the others. `on` may name other tasks too, with `allSettled`.
+- **Finishing:** a task that finishes while work it owns is still running is `completing`: its outcome is decided, but it becomes terminal, and `waitForTask()` returns, only once that work is done. A failed or aborted outcome aborts that work first.
+- **Aborting:** abort runs bottom-up. Aborting a task aborts the work it owns first, and its own abort handler starts only once that work is done, so each task undoes its own effects.
+
+[`24-child-tasks.ts`](test/examples/24-child-tasks.ts) runs a checkout with four payments: a declined card, a cancelled checkout, and a restart while the payments run.
 
 ## Your Own State
 
@@ -400,7 +426,8 @@ node --conditions=source --experimental-strip-types test/examples/14-chat.ts
 | [20-inbox](test/examples/20-inbox.ts) | Steers, follow-ups, writes, and withdrawal while busy |
 | [21-late-join](test/examples/21-late-join.ts) | Attaching a view and an event stream mid-run |
 | [22-subagent-foreground](test/examples/22-subagent-foreground.ts) | A replay-safe subagent tool whose child the call owns, with the child's events under the call |
-| [23-subagent-background](test/examples/23-subagent-background.ts) | A background subagent: supervisor task, name registry, and restart-safe submission |
+| [23-subagent-background](test/examples/23-subagent-background.ts) | Persistent subagents: spawn, steer, stop, list, answers reported back, restart-safe |
+| [24-child-tasks](test/examples/24-child-tasks.ts) | A checkout that owns and waits for four payments: failFast, abort, restart |
 | [00](test/examples/00-conversation.ts)–[13](test/examples/13-recovery.ts) | The layers underneath: sessions, documents, forks, watches, tasks, recovery |
 
 Examples that call OpenAI need `OPENAI_API_KEY`; most use the faux provider otherwise.
