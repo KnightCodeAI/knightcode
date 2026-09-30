@@ -2,7 +2,7 @@
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/12-tasks.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import { createModels } from "@knightcode/ai";
+import { createModels } from "@knightcode/ai/models";
 import { createRegistry, defineTask, Harness, MemoryStorage } from "../../src/index.ts";
 
 const context = BACKGROUND_CONTEXT;

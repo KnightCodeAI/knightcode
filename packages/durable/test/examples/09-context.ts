@@ -2,13 +2,8 @@
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/09-context.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import {
-	type AssistantMessage,
-	createModels,
-	type Message,
-	type StopReason,
-	type ToolResultMessage,
-} from "@knightcode/ai";
+import type { AssistantMessage, Message, StopReason, ToolResultMessage } from "@knightcode/ai";
+import { createModels } from "@knightcode/ai/models";
 import { createRegistry, Harness, MemoryStorage } from "../../src/index.ts";
 
 const context = BACKGROUND_CONTEXT;

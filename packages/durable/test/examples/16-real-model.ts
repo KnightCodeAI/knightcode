@@ -2,7 +2,7 @@
 // Run from packages/durable (needs OPENAI_API_KEY):
 //   node --conditions=source --experimental-strip-types test/examples/16-real-model.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import { createModels } from "@knightcode/ai";
+import { createModels } from "@knightcode/ai/models";
 import { openaiProvider } from "@knightcode/ai/providers/openai";
 import { AssistantEntry, createRegistry, Harness, LiveDoc, MemoryStorage } from "../../src/index.ts";
 
