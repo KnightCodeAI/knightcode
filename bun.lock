@@ -216,6 +216,8 @@
       "dependencies": {
         "@knightcode/ai": "workspace:*",
         "@knightcode/chord": "workspace:*",
+        "diff": "8.0.4",
+        "typebox": "1.3.27",
       },
     },
     "packages/evals": {
