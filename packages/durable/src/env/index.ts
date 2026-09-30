@@ -1,5 +1,4 @@
 import type { Context } from "@knightcode/chord";
-import type { TruncationResult } from "./utils/truncate.ts";
 
 /** Result of a fallible operation. Expected failures are returned instead of thrown. */
 export type Result<TValue, TError> = { ok: true; value: TValue } | { ok: false; error: TError };
@@ -60,6 +59,8 @@ export type ExecutionErrorCode =
 
 export class ExecutionError extends Error {
 	public code: ExecutionErrorCode;
+	/** Spill file of a command that timed out or was aborted after its output crossed the spill thresholds. */
+	public spillPath?: string;
 
 	constructor(code: ExecutionErrorCode, message: string, cause?: Error) {
 		super(message, cause === undefined ? undefined : { cause });
@@ -128,39 +129,17 @@ export interface FileSystem {
 	cleanup(context: Context): Promise<void>;
 }
 
-export type ShellOutputRetention = "head" | "tail";
-
-export interface ShellOutputLimits {
-	maxBytes: number;
-	maxLines: number;
-	retain?: ShellOutputRetention;
+/** Spill the complete output to a temporary file once it exceeds either threshold. */
+export interface ShellSpillOptions {
+	afterBytes: number;
+	/** Complete or partial lines. */
+	afterLines: number;
 }
 
-export interface ShellOutputCaptureOptions {
-	limits: ShellOutputLimits;
-	spill?: boolean;
-}
-
-export type ShellOutputTruncation = Omit<TruncationResult, "content">;
-
-export interface ShellOutputMetadata {
-	truncation: ShellOutputTruncation;
-	spillPath?: string;
-	lastLineBytes?: number;
-}
-
-export interface ShellOutputView extends ShellOutputMetadata {
-	text: string;
-}
-
-export type ShellOutputUpdate =
-	| { kind: "replace"; output: ShellOutputView }
-	| { kind: "append"; text: string; metadata: ShellOutputMetadata }
-	| { kind: "slide"; drop: number; text: string; metadata: ShellOutputMetadata }
-	| { kind: "metadata"; metadata: ShellOutputMetadata };
-
-export interface ShellExecResult extends ShellOutputMetadata {
+export interface ShellExecResult {
 	exitCode: number;
+	/** Temporary file holding the complete raw output, when the spill thresholds were exceeded. */
+	spillPath?: string;
 }
 
 export interface ShellExecOptions {
@@ -168,8 +147,9 @@ export interface ShellExecOptions {
 	env?: Record<string, string>;
 	inheritEnv?: boolean;
 	timeout?: number;
-	capture?: ShellOutputCaptureOptions;
-	onUpdate?: (update: ShellOutputUpdate, context: Context) => void;
+	/** Every decoded chunk of combined stdout and stderr as it arrives: raw, unbounded, and unthrottled. */
+	onOutput?: (text: string, context: Context) => void;
+	spill?: ShellSpillOptions;
 }
 
 export interface Shell {
