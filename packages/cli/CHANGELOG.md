@@ -1,5 +1,29 @@
 # @knightcodeai/cli
 
+## 0.11.2
+
+### Added
+
+- Added an `oauth.clientName` setting for MCP servers (`knightcode mcp add --oauth-client-name`) to change the client name sent during OAuth client registration, for servers such as Figma that only accept known clients.
+
+- Added a `description` field for MCP servers (`knightcode mcp add --description`), shown next to the server in the `codemode` and `tool_search` descriptions, and a `describeNamespace(name)` codemode helper that returns a namespace's instructions and tool names.
+
+### Changed
+
+- Changed the `codemode` description to list MCP servers instead of their tools, so it no longer changes when a server's tool list changes. Scripts find tools with `searchTools()` and read server instructions with `describeNamespace()`; `codemode-deferred` is now an alias for `codemode`, and `direct` exposure keeps tools visible to the model.
+
+### Fixed
+
+- Fixed codemode `image()` accepting malformed base64 data or unsupported image types, which stored an invalid image block that made every later provider request fail with HTTP 400. It now throws a `TypeError` unless the data is valid base64 of a PNG, JPEG, GIF, or WebP image, takes the MIME type from the image signature, and strips line breaks from wrapped base64.
+
+- Fixed codemode failing to start its script worker from the standalone Windows executable.
+
+- Fixed the `/mcp` sign-in URL not being clickable when it wraps across lines. It is now a terminal hyperlink with a `Cmd/Ctrl+click to open` line, like `/login`.
+
+- Fixed new sessions intermittently ignoring the saved default model, or warning that no models are available, when it belongs to an extension-registered native provider with a stored credential.
+
+- Fixed context overflow errors from the Z.AI China endpoint ("Prompt exceeds max length") not being recognised, so compaction and retry now trigger for them as they do for the global endpoint.
+
 ## 0.11.1
 
 ### Added
