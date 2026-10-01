@@ -3528,8 +3528,12 @@ export class AgentSession {
 				}
 			}
 		} else if (options?.includeAllExtensionTools) {
+			// On reload, tools that were already activated on registration keep their state, so ones
+			// disabled during the session stay disabled. Only new or newly declarable tools activate.
 			for (const tool of wrappedExtensionTools) {
-				if (this._isActivatedOnRegistration(tool.name)) nextActiveToolNames.push(tool.name);
+				if (!previousActivatedOnRegistration.has(tool.name) && this._isActivatedOnRegistration(tool.name)) {
+					nextActiveToolNames.push(tool.name);
+				}
 			}
 		} else if (!options?.activeToolNames) {
 			for (const toolName of this._toolRegistry.keys()) {

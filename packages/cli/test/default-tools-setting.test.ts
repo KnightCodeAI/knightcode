@@ -211,6 +211,26 @@ describe("defaultTools setting", () => {
 			session.dispose();
 		});
 
+		it("keeps extension tools disabled during the session off", async () => {
+			const session = await createSession(["read"], {}, [
+				(knightcode) => {
+					knightcode.registerTool({
+						name: "active_tool",
+						label: "Active Tool",
+						description: "Extension tool registered active",
+						parameters: Type.Object({}),
+						execute: async () => ({ content: [{ type: "text", text: "ok" }], details: {} }),
+					});
+				},
+			]);
+			expect(session.getActiveToolNames().sort()).toEqual(["active_tool", "read"]);
+			session.setActiveToolsByName(["read"]);
+
+			await session.reload();
+			expect(session.getActiveToolNames()).toEqual(["read"]);
+			session.dispose();
+		});
+
 		it("keeps explicit tool options on reload", async () => {
 			const allowlisted = await createFileSession({ tools: ["read"] });
 			writeSettings({ defaultTools: ["+grep"] });

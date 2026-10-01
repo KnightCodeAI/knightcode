@@ -95,7 +95,24 @@ describe("getBranchSelection", () => {
 			sessionManager.appendModelChange(small.provider, small.id);
 		}, runtime);
 		expect(selection).toEqual({ provider: "faux", modelId: "small" });
-		expect(lookups).toEqual([]);
+		expect(lookups).toEqual(["faux/small"]);
+	});
+
+	it("skips a trailing model_change to a model that is no longer registered", async () => {
+		const { runtime } = await createRuntime();
+		const large = runtime.getModel("faux", "large")!;
+		const removed = select((sessionManager) => {
+			sessionManager.appendModelChange(large.provider, large.id);
+			sessionManager.appendMessage(assistantFrom(large, "ok"));
+			// The extension that registered the virtual model was removed before the session resumed.
+			sessionManager.appendModelChange("gone", "router");
+		}, runtime);
+		expect(removed.selection).toEqual({ provider: "faux", modelId: "large" });
+		expect(removed.lookups).toEqual(["gone/router", "faux/large"]);
+
+		// With nothing earlier, the unavailable change is returned for the caller to report.
+		const only = select((sessionManager) => sessionManager.appendModelChange("gone", "router"), runtime);
+		expect(only.selection).toEqual({ provider: "gone", modelId: "router" });
 	});
 
 	it("uses the latest physical response without a model_change", async () => {

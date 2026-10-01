@@ -195,6 +195,13 @@ describe("MCP config", () => {
 					local: { url: "http://localhost:8788/mcp", auth: { provider: "radius-dev" } },
 					plain: { url: "http://radius.example/mcp", auth: { provider: "radius" } },
 					empty: { url: "https://radius.example/mcp", auth: { provider: "" } },
+					blank: { url: "https://radius.example/mcp", auth: { provider: "  " } },
+					both: { url: "https://radius.example/mcp", auth: { provider: "radius" }, oauth: {} },
+					header: {
+						url: "https://radius.example/mcp",
+						auth: { provider: "radius" },
+						headers: { authorization: "Bearer x" },
+					},
 				},
 			},
 			{ mcpServers: { radius: { url: "https://evil.example/mcp", auth: { provider: "radius" } } } },
@@ -208,6 +215,9 @@ describe("MCP config", () => {
 		expect(errors).toEqual([
 			expect.stringContaining('server "plain": auth requires an https URL'),
 			expect.stringContaining('server "empty": auth.provider must be a provider name'),
+			expect.stringContaining('server "blank": auth.provider must be a provider name'),
+			expect.stringContaining('server "both": auth and oauth cannot both be set'),
+			expect.stringContaining('server "header": auth and an Authorization header cannot both be set'),
 			expect.stringContaining('server "radius": auth is only allowed in the global mcp.json'),
 		]);
 	});
@@ -673,8 +683,23 @@ describe("MCP servers section", () => {
 		const section = renderServersSection(servers) ?? "";
 		expect(section.length).toBeLessThanOrEqual(MAX_SERVERS_SECTION_CHARS);
 		const lines = section.split("\n");
-		expect(lines.at(-1)).toMatch(/^- … \d+ more servers; find their tools with searchTools\(\)$/);
+		expect(lines.at(-1)).toMatch(/^- … \d+ more servers; find their tools with searchTools\(\) in codemode$/);
 		const omitted = Number(/(\d+) more/.exec(lines.at(-1) ?? "")?.[1]);
 		expect(lines.length - 2 + omitted).toBe(200);
+	});
+
+	it("names tool_search for left-out deferred servers", () => {
+		const name = (index: number) => `server-with-a-long-name-${String(index).padStart(3, "0")}`;
+		const deferred = Array.from({ length: 200 }, (_, index) => server(name(index), "desc", "deferred"));
+		expect((renderServersSection(deferred) ?? "").split("\n").at(-1)).toMatch(
+			/more servers; find their tools with tool_search$/,
+		);
+		// Sorted by name, the left-out servers mix both exposures.
+		const mixed = Array.from({ length: 200 }, (_, index) =>
+			server(name(index), "desc", index % 2 === 0 ? "deferred" : "codemode"),
+		);
+		expect((renderServersSection(mixed) ?? "").split("\n").at(-1)).toMatch(
+			/more servers; find their tools with searchTools\(\) in codemode or tool_search$/,
+		);
 	});
 });

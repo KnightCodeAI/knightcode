@@ -58,7 +58,7 @@ Both server types support:
 - `timeout`: per-request timeout in seconds (default 60). Progress notifications reset it.
 - `enabled: false`: keep the entry without connecting to it.
 - `exposure` and `toolExposure`: control how tools reach the model (see [Control tool exposure](#control-tool-exposure)).
-- `description`: what the server offers, in a sentence. It lists the server in the system prompt (see [Control tool exposure](#control-tool-exposure)), tool search ranks the server's tools by it, and codemode's `describeNamespace()` returns it. Without it, the first line of the server instructions is used once the server connects.
+- `description`: what the server offers, in a sentence. For servers with `codemode` or `deferred` tools, it describes the server in the system prompt's server list (see [Control tool exposure](#control-tool-exposure)), tool search ranks the server's tools by it, and codemode's `describeNamespace()` returns it. Without it, the first line of the server instructions is used once the server connects.
 
 Keep personal servers and servers with credentials in the user-level file. Use the project file only for servers the project requires, and only in trusted projects.
 

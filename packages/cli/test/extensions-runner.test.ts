@@ -879,6 +879,20 @@ describe("ExtensionRunner", () => {
 		});
 	});
 
+	it("rejects command names containing whitespace", async () => {
+		await expect(
+			loadExtensionFromFactory(
+				(knightcode) => {
+					knightcode.registerCommand("bad name", { handler: async () => {} });
+				},
+				tempDir,
+				createEventBus(),
+				createExtensionRuntime(),
+				"<inline:commands>",
+			),
+		).rejects.toThrow('Command "/bad name" registered by extension "<inline:commands>" must not contain whitespace.');
+	});
+
 	describe("boundary chaining", () => {
 		it("chains shared draft proposals and preserves omitted result fields", async () => {
 			const runtime = createExtensionRuntime();

@@ -321,13 +321,12 @@ export async function executeCodemode(
 
 /**
  * Whether `query` names the namespace: its name, its script identifier (`mcp__dev-radius` is
- * `mcp__dev_radius`), or the part after its last `__` in either form (`dev-radius`, `dev_radius`).
+ * `mcp__dev_radius`), or an MCP server name in either form (`dev-radius`, `dev_radius`). Only the
+ * `mcp__` prefix may be left out, so `docs` names `mcp__docs` but not `mcp__foo__docs`.
  */
 function isNamespaceName(namespace: string, query: string): boolean {
 	const id = toCodemodeIdentifier(namespace);
-	const queryId = toCodemodeIdentifier(query);
-	const suffix = (name: string) => (name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : undefined);
-	return namespace === query || id === queryId || suffix(namespace) === query || suffix(id) === queryId;
+	return namespace === query || id === toCodemodeIdentifier(query) || id === toCodemodeIdentifier(`mcp__${query}`);
 }
 
 /**

@@ -106,4 +106,20 @@ describe("codemode renderer", () => {
 		expect(lines[5]).toMatch(/^\.\.\. \(15 more lines,/);
 		expect(lines[6]).toBe("Full output: /tmp/out.txt");
 	});
+
+	it("keeps the hidden-line count when the expand hint does not fit", () => {
+		const text = render(
+			{
+				content: [
+					{ type: "text", text: "Script completed\nWall time 0.1 seconds\nOutput:\n" },
+					{ type: "text", text: "x".repeat(400) },
+				],
+				details: { calls: [] },
+			},
+			false,
+			false,
+			20,
+		);
+		expect(text.split("\n")[5]).toBe("... (15 more lines)");
+	});
 });

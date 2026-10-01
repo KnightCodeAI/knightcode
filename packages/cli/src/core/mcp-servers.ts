@@ -101,7 +101,8 @@ export interface McpHttpServerConfig extends McpServerConfigBase {
 	oauth?: McpOAuthConfig;
 	/**
 	 * Send the token of a KnightCode provider (`/login <provider>`) instead of using OAuth. Not allowed in project
-	 * `mcp.json` files, and requires https except on loopback hosts, since it sends the credential to `url`.
+	 * `mcp.json` files, and requires https except on loopback hosts, since it sends the credential to `url`. Cannot be
+	 * combined with `oauth` or an `Authorization` header.
 	 */
 	auth?: { provider: string };
 }
@@ -236,8 +237,15 @@ export function validateMcpServerConfig(name: string, raw: unknown): McpServerCo
 		const oauthError = validateOAuth(value.oauth);
 		if (oauthError) return `server "${name}": ${oauthError}`;
 		if (value.auth !== undefined) {
-			if (!isRecord(value.auth) || typeof value.auth.provider !== "string" || !value.auth.provider) {
+			if (!isRecord(value.auth) || typeof value.auth.provider !== "string" || !value.auth.provider.trim()) {
 				return `server "${name}": auth.provider must be a provider name`;
+			}
+			if (value.oauth !== undefined) return `server "${name}": auth and oauth cannot both be set`;
+			if (
+				isStringRecord(value.headers) &&
+				Object.keys(value.headers).some((header) => header.toLowerCase() === "authorization")
+			) {
+				return `server "${name}": auth and an Authorization header cannot both be set`;
 			}
 			const url = new URL(value.url);
 			if (url.protocol !== "https:" && !LOOPBACK_HOSTS.includes(url.hostname)) {

@@ -28,8 +28,7 @@ import type { TSchema } from "typebox";
 import type { ToolAnnotations, ToolDefinition, ToolExposure, ToolNamespace } from "../../core/extensions/types.ts";
 import { formatToolCallWithArgs, getTextOutput, replaceTabs } from "../../core/tools/render-utils.ts";
 import { formatSize, truncateMiddle } from "../../core/tools/truncate.ts";
-import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
-import { VisualLinePreview } from "../../modes/interactive/components/visual-truncate.ts";
+import { CollapsedToolOutput } from "../../modes/interactive/components/visual-truncate.ts";
 import type { McpExposure } from "./config.ts";
 
 /**
@@ -296,16 +295,13 @@ export function createMcpToolDefinition(options: {
 			} else {
 				// Limit wrapped lines, not logical ones: MCP results are often one long JSON line.
 				component.addChild(
-					new VisualLinePreview({
+					new CollapsedToolOutput({
+						theme,
 						text: styled,
 						maxVisualLines: OUTPUT_PREVIEW_LINES,
-						keep: "start",
-						formatHint: (hidden) =>
-							`${theme.fg("muted", `... (${hidden} more lines,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`,
+						fullOutputPath: result.details?.fullOutputPath,
 					}),
 				);
-				const fullOutputPath = result.details?.fullOutputPath;
-				if (fullOutputPath) component.addChild(new Text(theme.fg("muted", `Full output: ${fullOutputPath}`), 0, 0));
 			}
 			return component;
 		},

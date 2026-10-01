@@ -90,7 +90,10 @@ describe("MCP OAuth refresh", () => {
 });
 
 describe("MCP OAuth sign-in", () => {
-	async function signIn(options: { iss?: string }, settings: (serverUrl: string) => McpOAuthSettings = () => ({})) {
+	async function signIn(
+		options: { iss?: string },
+		settings: (serverUrl: string) => McpOAuthSettings = () => ({}),
+	): Promise<{ error: unknown; log: string[] }> {
 		const server = await startOAuthMcpServer(options);
 		try {
 			await signInMcpServer({
@@ -103,18 +106,25 @@ describe("MCP OAuth sign-in", () => {
 						new Promise((resolve) => signal.addEventListener("abort", () => resolve(undefined), { once: true })),
 				},
 			});
+			return { error: undefined, log: server.log };
+		} catch (error) {
+			return { error, log: server.log };
 		} finally {
 			await server.close();
 		}
 	}
 
-	it("rejects an authorization response from another issuer", async () => {
-		await expect(signIn({ iss: "https://attacker.example" })).rejects.toBeInstanceOf(OAuthIssuerMismatchError);
+	it("rejects an authorization response from another issuer without exchanging its code", async () => {
+		const { error, log } = await signIn({ iss: "https://attacker.example" });
+		expect(error).toBeInstanceOf(OAuthIssuerMismatchError);
+		expect(log).not.toContain("token code");
 	});
 
 	// #10172
 	it("uses the configured authorization server metadata URL", async () => {
 		const settings = (serverUrl: string) => ({ authServerMetadataUrl: new URL("/missing", serverUrl) });
-		await expect(signIn({}, settings)).rejects.toThrow("HTTP 404 loading authorization server metadata");
+		const { error } = await signIn({}, settings);
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toContain("HTTP 404 loading authorization server metadata");
 	});
 });

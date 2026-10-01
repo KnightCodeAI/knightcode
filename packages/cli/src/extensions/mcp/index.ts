@@ -185,16 +185,23 @@ export function renderServersSection(servers: readonly McpServerListing[]): stri
 		.filter((server) => isEnabled(server) && hasIndirectTools(server.entry))
 		.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
 	if (listed.length === 0) return undefined;
-	const heads = listed.map((server) => {
-		const exposures = configuredExposures(server.entry);
-		const reach = exposures.has("codemode") ? "codemode" : "tool_search";
-		return `- ${mcpNamespace(server.entry.name)} (${reach})`;
-	});
-	const omitted = (count: number) =>
-		count > 0 ? [`- … ${count} more server${count === 1 ? "" : "s"}; find their tools with searchTools()`] : [];
+	const reaches = listed.map((server) =>
+		configuredExposures(server.entry).has("codemode") ? "codemode" : "tool_search",
+	);
+	const heads = listed.map((server, index) => `- ${mcpNamespace(server.entry.name)} (${reaches[index]})`);
+	// Names the discovery tools of the left-out servers: searchTools() reaches only codemode servers.
+	const omitted = (kept: number) => {
+		const count = listed.length - kept;
+		if (count === 0) return [];
+		const left = new Set(reaches.slice(kept));
+		const finders = [
+			...(left.has("codemode") ? ["searchTools() in codemode"] : []),
+			...(left.has("tool_search") ? ["tool_search"] : []),
+		].join(" or ");
+		return [`- … ${count} more server${count === 1 ? "" : "s"}; find their tools with ${finders}`];
+	};
 	// Characters of the intro, the first `kept` server lines without descriptions, and the omission line.
-	const size = (kept: number) =>
-		[SERVERS_SECTION_INTRO, ...heads.slice(0, kept), ...omitted(listed.length - kept)].join("\n").length;
+	const size = (kept: number) => [SERVERS_SECTION_INTRO, ...heads.slice(0, kept), ...omitted(kept)].join("\n").length;
 	let kept = listed.length;
 	while (kept > 0 && size(kept) > MAX_SERVERS_SECTION_CHARS) kept--;
 	// Each description also takes a ": " separator.
@@ -206,7 +213,7 @@ export function renderServersSection(servers: readonly McpServerListing[]): stri
 		const summary = perServer > 0 ? truncate(serverSummary(server), perServer) : "";
 		return summary ? `${heads[index]}: ${summary}` : heads[index];
 	});
-	return [SERVERS_SECTION_INTRO, ...lines, ...omitted(listed.length - kept)].join("\n");
+	return [SERVERS_SECTION_INTRO, ...lines, ...omitted(kept)].join("\n");
 }
 
 /**

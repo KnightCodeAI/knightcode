@@ -122,17 +122,24 @@ export function findLatestResponse(messages: readonly AgentMessage[]): Assistant
  * `model_change`, because responses name the physical models it routed to. Otherwise the latest
  * physical response wins, as in sessions without virtual models. A virtual model that is no longer
  * registered does not hold, so the selection falls back to the physical model that answered last.
+ * Neither does a trailing `model_change` to a model that is no longer registered; it is returned
+ * only when nothing earlier is, so the caller can report it.
  *
- * Only the last `model_change` can hold, so this looks up at most one model in the catalog.
+ * Model changes after the latest physical response are looked up in the catalog until one is
+ * registered; then at most one more lookup decides between that response and its model change.
  */
 export function getBranchSelection(
 	branch: readonly SessionEntry[],
 	getModel: (provider: string, modelId: string) => Model<Api> | undefined,
 ): { provider: string; modelId: string } | undefined {
+	let unavailable: { provider: string; modelId: string } | undefined;
 	for (let i = branch.length - 1; i >= 0; i--) {
 		const entry = branch[i];
 		if (entry.type === "model_change") {
-			return { provider: entry.provider, modelId: entry.modelId };
+			const change = { provider: entry.provider, modelId: entry.modelId };
+			if (getModel(change.provider, change.modelId)) return change;
+			unavailable ??= change;
+			continue;
 		}
 		if (entry.type === "message" && entry.message.role === "assistant" && !isVirtualModel(entry.message)) {
 			const response = { provider: entry.message.provider, modelId: entry.message.model };
@@ -141,7 +148,7 @@ export function getBranchSelection(
 			return change && model && isVirtualModel(model) ? change : response;
 		}
 	}
-	return undefined;
+	return unavailable;
 }
 
 function findLastModelChange(

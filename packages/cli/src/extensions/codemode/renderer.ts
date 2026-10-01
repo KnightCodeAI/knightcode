@@ -11,7 +11,11 @@ import { Container, Spacer, Text } from "@knightcode/tui";
 import type { ToolDefinition } from "../../core/extensions/types.ts";
 import { getTextOutput, replaceTabs, str } from "../../core/tools/render-utils.ts";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
-import { VisualLinePreview } from "../../modes/interactive/components/visual-truncate.ts";
+import {
+	CollapsedToolOutput,
+	expandHint,
+	VisualLinePreview,
+} from "../../modes/interactive/components/visual-truncate.ts";
 import { highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
 import type { CodemodeNestedCall, CodemodeToolDetails } from "./tool.ts";
 
@@ -20,10 +24,6 @@ const CALL_PREVIEW_COUNT = 8;
 const OUTPUT_PREVIEW_LINES = 5;
 const COLLAPSED_ARGS_CHARS = 80;
 const SCRIPT_HEADER = /^Script (completed|failed)\nWall time [\d.]+ seconds\nOutput:\n$/;
-
-function expandHint(theme: Theme, hidden: number, noun: string): string {
-	return `${theme.fg("muted", `... (${hidden} more ${noun},`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
-}
 
 function formatDuration(ms: number | undefined): string {
 	if (ms === undefined) return "";
@@ -86,7 +86,7 @@ export const codemodeRenderers: Pick<
 							text: highlighted,
 							maxVisualLines: CODE_PREVIEW_LINES,
 							keep: "start",
-							formatHint: (hidden) => expandHint(theme, hidden, "lines"),
+							formatHint: (hidden, compact) => expandHint(theme, hidden, "lines", compact),
 						}),
 			);
 		}
@@ -133,16 +133,13 @@ export const codemodeRenderers: Pick<
 			} else {
 				// Limit wrapped lines, not logical ones: script output is often one long JSON line.
 				component.addChild(
-					new VisualLinePreview({
+					new CollapsedToolOutput({
+						theme,
 						text: styled,
 						maxVisualLines: OUTPUT_PREVIEW_LINES,
-						keep: "start",
-						formatHint: (hidden) => expandHint(theme, hidden, "lines"),
+						fullOutputPath: result.details?.fullOutputPath,
 					}),
 				);
-				// The collapsed preview hides the truncation notice at the end, so name the file here.
-				const fullOutputPath = result.details?.fullOutputPath;
-				if (fullOutputPath) component.addChild(new Text(theme.fg("muted", `Full output: ${fullOutputPath}`), 0, 0));
 			}
 		}
 		return component;

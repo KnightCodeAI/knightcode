@@ -3,7 +3,9 @@
  * Used by tool renderers and bash-execution.ts for consistent behavior.
  */
 
-import { type Component, Text, truncateToWidth } from "@knightcode/tui";
+import { type Component, Container, Text, truncateToWidth, visibleWidth } from "@knightcode/tui";
+import type { Theme } from "../theme/theme.ts";
+import { keyHint } from "./keybinding-hints.ts";
 
 export interface VisualTruncateResult {
 	/** The visual lines to display */
@@ -57,8 +59,17 @@ export interface VisualLinePreviewOptions {
 	maxVisualLines: number;
 	/** Which visual lines to keep. The hint goes before kept end lines and after kept start lines. */
 	keep: "start" | "end";
-	/** Styled hint line for the given number of hidden visual lines. */
-	formatHint: (hidden: number) => string;
+	/**
+	 * Styled hint line for the given number of hidden visual lines. `compact` asks for a shorter hint
+	 * when the full one does not fit the width, so the count is not clipped away.
+	 */
+	formatHint: (hidden: number, compact: boolean) => string;
+}
+
+/** `... (N more lines, <key> to expand)`, or `... (N more lines)` when compact. */
+export function expandHint(theme: Theme, hidden: number, noun: string, compact = false): string {
+	if (compact) return theme.fg("muted", `... (${hidden} more ${noun})`);
+	return `${theme.fg("muted", `... (${hidden} more ${noun},`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
 }
 
 /**
@@ -81,7 +92,12 @@ export class VisualLinePreview implements Component {
 			const preview = truncateToVisualLines(text, maxVisualLines, width, 0, keep);
 			const lines = preview.visualLines;
 			if (preview.skippedCount > 0) {
-				const hint = truncateToWidth(formatHint(preview.skippedCount), width, "...");
+				const full = formatHint(preview.skippedCount, false);
+				const hint = truncateToWidth(
+					visibleWidth(full) <= width ? full : formatHint(preview.skippedCount, true),
+					width,
+					"...",
+				);
 				this.cachedLines = keep === "start" ? [...lines, hint] : [hint, ...lines];
 			} else {
 				this.cachedLines = lines;
@@ -94,5 +110,25 @@ export class VisualLinePreview implements Component {
 	invalidate(): void {
 		this.cachedWidth = undefined;
 		this.cachedLines = undefined;
+	}
+}
+
+/**
+ * Collapsed tool result: the first visual lines of the styled output with an expand hint, and the
+ * path of the full output when it was saved, since the preview hides the truncation notice.
+ */
+export class CollapsedToolOutput extends Container {
+	constructor(options: { theme: Theme; text: string; maxVisualLines: number; fullOutputPath?: string }) {
+		super();
+		const { theme, text, maxVisualLines, fullOutputPath } = options;
+		this.addChild(
+			new VisualLinePreview({
+				text,
+				maxVisualLines,
+				keep: "start",
+				formatHint: (hidden, compact) => expandHint(theme, hidden, "lines", compact),
+			}),
+		);
+		if (fullOutputPath) this.addChild(new Text(theme.fg("muted", `Full output: ${fullOutputPath}`), 0, 0));
 	}
 }

@@ -324,7 +324,8 @@ function responseFromRedirectUrl(input: string, state: string): AuthorizationRes
 	if (url.searchParams.get("state") !== state) throw new Error("The redirect URL belongs to a different sign-in");
 	const code = url.searchParams.get("code");
 	if (!code) throw new Error("The redirect URL does not contain an authorization code");
-	return { code, iss: url.searchParams.get("iss") ?? undefined };
+	// An empty `iss` is treated as absent, as the browser callback does.
+	return { code, iss: url.searchParams.get("iss") || undefined };
 }
 
 /** Wait for the browser callback or a pasted redirect URL, whichever comes first. */

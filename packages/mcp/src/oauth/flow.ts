@@ -98,6 +98,10 @@ function secureEndpoint(value: string | URL): URL {
 	return url;
 }
 
+function sameUrl(a: string, b: string): boolean {
+	return a === b || (URL.canParse(a) && URL.canParse(b) && new URL(a).href === new URL(b).href);
+}
+
 function selectClientAuthMethod(information: OAuthClientInformationMixed, supported: string[]): ClientAuthMethod {
 	const hinted = "token_endpoint_auth_method" in information ? information.token_endpoint_auth_method : undefined;
 	if (
@@ -321,8 +325,14 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 	if (options.authorizationCode) {
 		// RFC 9207: never send a code from another authorization server to this one.
 		const iss = options.iss;
-		if (metadata && (iss !== undefined || metadata.authorization_response_iss_parameter_supported)) {
-			if (iss !== metadata.issuer) throw new OAuthIssuerMismatchError(metadata.issuer, iss);
+		if (metadata) {
+			if ((iss !== undefined || metadata.authorization_response_iss_parameter_supported) && iss !== metadata.issuer) {
+				throw new OAuthIssuerMismatchError(metadata.issuer, iss);
+			}
+		} else if (iss !== undefined && !sameUrl(iss, discovered.authorizationServerUrl)) {
+			// Without metadata the expected issuer is the discovered server URL, which may be our own
+			// origin-root fallback, so a trailing-slash-only difference is not a mismatch.
+			throw new OAuthIssuerMismatchError(discovered.authorizationServerUrl, iss);
 		}
 		const tokens = await exchangeAuthorizationCode(discovered.authorizationServerUrl, {
 			...tokenOptions,

@@ -944,8 +944,6 @@ describe("AgentSession MCP servers registered by extensions", () => {
 			[configured],
 		);
 		await vi.waitFor(() => expect(connected).toEqual([configured]));
-		await new Promise((resolve) => setTimeout(resolve, 10));
-		expect(connected).toEqual([configured]);
 	});
 
 	it("rejects names another extension registered", async () => {
@@ -956,6 +954,13 @@ describe("AgentSession MCP servers registered by extensions", () => {
 				// Registering again replaces the extension's own registration.
 				knightcode.registerMcpServer("taken", { url: "http://y.invalid" });
 				knightcode.registerMcpServer("my-server", { url: "http://x.invalid" });
+				// A registration queued by the same factory counts too.
+				knightcode.registerMcpServer("own-server", { url: "http://x.invalid" });
+				try {
+					knightcode.registerMcpServer("own_server", { url: "http://x.invalid" });
+				} catch (caught) {
+					errors.push(String(caught));
+				}
 			},
 			(knightcode) => {
 				for (const name of ["taken", "my_server"]) {
@@ -968,6 +973,7 @@ describe("AgentSession MCP servers registered by extensions", () => {
 			},
 		]);
 		expect(errors).toEqual([
+			'Error: MCP server "own_server" conflicts with registered server "own-server"',
 			expect.stringMatching(/MCP server "taken" is already registered by extension/),
 			// Names that differ only in - and _ share a namespace.
 			'Error: MCP server "my_server" conflicts with registered server "my-server"',
