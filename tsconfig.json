@@ -19,7 +19,7 @@
       "@knightcode/mcp/testing": ["./packages/mcp/src/testing/index.ts"],
       "@knightcode/durable": ["./packages/durable/src/index.ts"],
       "@knightcode/durable/testing": ["./packages/durable/src/testing/index.ts"],
-      "@knightcode/durable/*": ["./packages/durable/src/*"],
+      "@knightcode/durable/*": ["./packages/durable/src/*.ts", "./packages/durable/src/*/index.ts", "./packages/durable/src/*"],
       "@knightcode/agent": ["./packages/agent/src/index.ts"],
       "@knightcode/agent/session/testing": ["./packages/agent/src/harness/session/testing/index.ts"],
       "@knightcode/agent/harness/session": ["./packages/agent/src/harness/session/index.ts"],
