@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { readdirSync } from "node:fs";
-import { parse } from "node:path";
+import { join, parse } from "node:path";
 import { describe, it } from "node:test";
 import { CombinedAutocompleteProvider } from "../src/autocomplete.ts";
 
@@ -96,7 +96,17 @@ describe("CombinedAutocompleteProvider slash-command filter", () => {
 
 	it("keeps path completion for indented absolute paths", async () => {
 		const root = parse(process.cwd()).root;
-		const dirName = readdirSync(root, { withFileTypes: true }).find((entry) => entry.isDirectory())?.name;
+		// Root entries come back in filesystem order; skip empty or unreadable ones (e.g. lost+found on Linux).
+		const hasEntries = (name: string) => {
+			try {
+				return readdirSync(join(root, name)).length > 0;
+			} catch {
+				return false;
+			}
+		};
+		const dirName = readdirSync(root, { withFileTypes: true }).find(
+			(entry) => entry.isDirectory() && hasEntries(entry.name),
+		)?.name;
 		assert.ok(dirName);
 		const provider = new CombinedAutocompleteProvider([{ name: "model" }], process.cwd());
 		const line = `  /${dirName}/`;
