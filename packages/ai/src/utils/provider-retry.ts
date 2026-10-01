@@ -52,7 +52,7 @@ function getRetryDelayMs(error: ProviderError, retryIndex: number, maxRetryDelay
 	const retryAfterMs = error.headers?.get("retry-after-ms");
 	if (retryAfterMs) {
 		const value = Number.parseFloat(retryAfterMs);
-		if (!Number.isNaN(value)) return validateServerRetryDelayMs(value, maxRetryDelayMs, error.message);
+		if (Number.isFinite(value)) return validateServerRetryDelayMs(value, maxRetryDelayMs, error.message);
 	}
 
 	const retryAfter = error.headers?.get("retry-after");
@@ -60,7 +60,7 @@ function getRetryDelayMs(error: ProviderError, retryIndex: number, maxRetryDelay
 		const seconds = Number.parseFloat(retryAfter);
 		const delayMs = Number.isNaN(seconds) ? Date.parse(retryAfter) - Date.now() : seconds * 1000;
 		// An unparseable HTTP-date leaves NaN, which would sleep for zero. Fall through to the backoff.
-		if (!Number.isNaN(delayMs)) return validateServerRetryDelayMs(delayMs, maxRetryDelayMs, error.message);
+		if (Number.isFinite(delayMs)) return validateServerRetryDelayMs(delayMs, maxRetryDelayMs, error.message);
 	}
 
 	const exponentialDelay = Math.min(0.5 * 2 ** retryIndex, 8) * 1000;
