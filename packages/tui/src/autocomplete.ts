@@ -336,9 +336,10 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		}
 
 		const commandText = textBeforeCursor.trimStart();
-		if (!options.force && commandText.startsWith("/")) {
-			const spaceIndex = commandText.indexOf(" ");
-
+		const spaceIndex = commandText.indexOf(" ");
+		// A "/" inside the first token (e.g. "  /tmp/fo") is an absolute path, not a command name.
+		const firstToken = spaceIndex === -1 ? commandText : commandText.slice(0, spaceIndex);
+		if (!options.force && commandText.startsWith("/") && !firstToken.includes("/", 1)) {
 			if (spaceIndex === -1) {
 				const prefix = commandText.slice(1);
 				const commandItems = this.commands.map((cmd) => {

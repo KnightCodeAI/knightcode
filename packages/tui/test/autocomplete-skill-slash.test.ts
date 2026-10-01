@@ -1,4 +1,6 @@
 import assert from "node:assert";
+import { readdirSync } from "node:fs";
+import { parse } from "node:path";
 import { describe, it } from "node:test";
 import { CombinedAutocompleteProvider } from "../src/autocomplete.ts";
 
@@ -90,6 +92,19 @@ describe("CombinedAutocompleteProvider slash-command filter", () => {
 		assert.equal(result.prefix, "son");
 		const applied = provider.applyCompletion([line], 0, line.length, result.items[0]!, result.prefix);
 		assert.equal(applied.lines[0], "  /model sonnet");
+	});
+
+	it("keeps path completion for indented absolute paths", async () => {
+		const root = parse(process.cwd()).root;
+		const dirName = readdirSync(root, { withFileTypes: true }).find((entry) => entry.isDirectory())?.name;
+		assert.ok(dirName);
+		const provider = new CombinedAutocompleteProvider([{ name: "model" }], process.cwd());
+		const line = `  /${dirName}/`;
+		const result = await provider.getSuggestions([line], 0, line.length, {
+			signal: new AbortController().signal,
+		});
+		assert.ok(result);
+		assert.equal(result.prefix, `/${dirName}/`);
 	});
 
 	it("keeps explicit skill: queries working", async () => {
