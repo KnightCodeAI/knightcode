@@ -117,4 +117,16 @@ describe("Anthropic strict tool schemas", () => {
 		);
 		expect(supportedTool.strict).toBe(true);
 	});
+
+	it("ignores unsupported keywords whose value is undefined", async () => {
+		const tool = await captureFirstTool(
+			createStrictTool(
+				Type.Object({
+					expression: Type.String({ format: undefined }),
+					tags: Type.Array(Type.String(), { minItems: undefined }),
+				}),
+			),
+		);
+		expect(tool.strict).toBe(true);
+	});
 });

@@ -41,6 +41,7 @@ function createFetch(requests: RecordedRequest[]): typeof globalThis.fetch {
 				headers: { "content-type": "application/json" },
 			});
 		}
+		if (path !== "/v1/messages") throw new Error(`Unexpected request to ${path}`);
 		return sseResponse();
 	};
 }
@@ -101,6 +102,18 @@ describe("Anthropic workload identity federation with the SDK", () => {
 		for (const request of messageRequests) {
 			expect(request.authorization).toBe("Bearer federated-token");
 		}
+	});
+
+	it("keeps the token of each federation config when requests alternate", async () => {
+		const requests: RecordedRequest[] = [];
+		const fetch = createFetch(requests);
+		const otherEnv = { ...federationEnv, ANTHROPIC_FEDERATION_RULE_ID: "fdrl_other" };
+
+		for (const env of [federationEnv, otherEnv, federationEnv, otherEnv]) {
+			await streamAnthropic(anthropicModel, context, { env, fetch }).result();
+		}
+
+		expect(requests.filter((request) => request.path === "/v1/oauth/token")).toHaveLength(2);
 	});
 
 	it("does not run the SDK credential chain for header-owned auth", async () => {

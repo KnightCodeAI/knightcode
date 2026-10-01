@@ -61,7 +61,8 @@ function makeJsonSchemaNodeStrict(schema: unknown, isUnsupportedKeyword?: Unsupp
 	}
 	if (isUnsupportedKeyword) {
 		for (const [key, value] of Object.entries(schema)) {
-			if (isUnsupportedKeyword(key, value)) {
+			// JSON serialization drops undefined values, so they never reach the provider.
+			if (value !== undefined && isUnsupportedKeyword(key, value)) {
 				throw new UnsupportedStrictJsonSchemaError(`${key}: ${JSON.stringify(value)} is unsupported`);
 			}
 		}

@@ -275,6 +275,7 @@ export const anthropicOAuth: OAuthAuth = {
 		const method = await interaction.prompt({
 			type: "select",
 			message: "Select Anthropic login method:",
+			signal: interaction.signal,
 			options: [
 				{ id: ANTHROPIC_BROWSER_LOGIN_METHOD, label: "Browser login (default)" },
 				{ id: ANTHROPIC_COPY_CODE_LOGIN_METHOD, label: "Copy code login (headless)" },

@@ -379,10 +379,11 @@ function getAnthropicFederation(
 
 /**
  * The SDK caches the federated access token per client, but KnightCode creates a client
- * per request. Keep one client for the current federation config and fetch, and
- * clone it per request with `withOptions()`, which shares the token cache.
+ * per request. Keep one client per federation config and fetch, and clone it per
+ * request with `withOptions()`, which shares the token cache.
  */
-let federationClient: { key: string; fetch: typeof globalThis.fetch | undefined; client: Anthropic } | undefined;
+const defaultFetchKey = {};
+const federationClients = new WeakMap<object, Map<string, Anthropic>>();
 
 interface ServerSentEvent {
 	event: string | null;
@@ -1063,9 +1064,16 @@ function createClient(
 		optionsHeaders,
 	);
 	if (federation) {
+		const fetchKey = fetch ?? defaultFetchKey;
+		let clients = federationClients.get(fetchKey);
+		if (!clients) {
+			clients = new Map();
+			federationClients.set(fetchKey, clients);
+		}
 		const key = JSON.stringify([model.baseUrl, federation]);
-		if (federationClient?.key !== key || federationClient.fetch !== fetch) {
-			const client = new KnightCodeAnthropic({
+		let client = clients.get(key);
+		if (!client) {
+			client = new KnightCodeAnthropic({
 				apiKey: null,
 				authToken: null,
 				config: federation,
@@ -1073,9 +1081,9 @@ function createClient(
 				dangerouslyAllowBrowser: true,
 				fetch,
 			});
-			federationClient = { key, fetch, client };
+			clients.set(key, client);
 		}
-		return { client: federationClient.client.withOptions({ defaultHeaders }), isOAuthToken: false };
+		return { client: client.withOptions({ defaultHeaders }), isOAuthToken: false };
 	}
 
 	const client = new KnightCodeAnthropic({
