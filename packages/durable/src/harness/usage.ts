@@ -3,7 +3,10 @@ import type { Usage } from "@knightcode/ai";
 import { defineDoc } from "../documents.ts";
 import type { ConversationId, Tx } from "../types.ts";
 
-/** Ledger of one conversation's own spend: its entries, and compaction summarization attempts, which have none. */
+/**
+ * Ledger of one conversation's own spend: its entries, and its compaction summarization attempts, which write no
+ * assistant entry but are counted here.
+ */
 export type UsageState = {
 	/** Assistant entries and summarization attempts, keyed `provider/modelId`. */
 	models: Record<string, JsonRepresentation<Usage>>;

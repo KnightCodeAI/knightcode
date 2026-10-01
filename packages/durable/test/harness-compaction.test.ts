@@ -965,6 +965,29 @@ describe("background threshold compaction", () => {
 		await chat.harness.close(context);
 	});
 
+	it("does not start again on a retry while the finished one's summary waits in the inbox", async () => {
+		const chat = await open({ contextWindow: 2000 });
+		await history(chat);
+		chat.setup.settings.compaction = BACKGROUND;
+		chat.faux.summaries.push(summary());
+		// A second compaction would stay live here, waiting for this summary.
+		chat.faux.summaries.push(gated(deferred(), summary("SECOND")));
+		// The request fails retryably only after the compaction has queued its summary.
+		chat.faux.agent.push(async () => {
+			const [task] = await compactionTasks(chat);
+			const outcome = await result(chat, task!.id as TaskId<CompactionResult>);
+			expect(outcome.status === "completed" && outcome.result.submissionId).toBeDefined();
+			return failure("overloaded");
+		});
+		chat.faux.agent.push(answer(text("a4", 100)));
+		const input = await chat.root.submit({ type: "input", content: text("u4", 100) }, context);
+		expect((await input.wait(context)).status).toBe("done");
+		expect(chat.faux.summaryRequests).toHaveLength(1);
+		expect(await compactionTasks(chat)).toEqual([]);
+		expect((await kinds(chat.root)).filter((kind) => kind === "knightcode.compaction")).toHaveLength(1);
+		await chat.harness.close(context);
+	});
+
 	it("stops through abortTask() and Conversation.abort() with background", async () => {
 		for (const stop of ["task", "conversation"] as const) {
 			const chat = await open({ contextWindow: 2000 });

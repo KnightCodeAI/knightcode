@@ -232,7 +232,7 @@ describe("tool round", () => {
 	});
 
 	it("runs a round in parallel by default and sequentially when configured or required by a tool", async () => {
-		const trace = async (setup: ChatSetup, prepare?: (root: Conversation) => Promise<void>): Promise<string[]> => {
+		const trace = async (setup: ChatSetup): Promise<string[]> => {
 			const events: string[] = [];
 			const slow =
 				(name: string): Execute =>
@@ -244,9 +244,7 @@ describe("tool round", () => {
 				};
 			if (setup.registry.snapshot().extension("tool:a") === undefined) addTool(setup.registry, tool("a", slow("a")));
 			if (setup.registry.snapshot().extension("tool:b") === undefined) addTool(setup.registry, tool("b", slow("b")));
-			const result = await run(setup, [calls(["a", {}, "c1"], ["b", {}, "c2"]), DONE], (_harness, root) =>
-				prepare === undefined ? Promise.resolve() : prepare(root),
-			);
+			const result = await run(setup, [calls(["a", {}, "c1"], ["b", {}, "c2"]), DONE]);
 			await result.harness.close(context);
 			return events;
 		};

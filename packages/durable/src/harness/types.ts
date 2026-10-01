@@ -211,7 +211,7 @@ export type ToolRegistration<
 	 * pure and must not mutate `args`: it runs again when a call is retried before its intent is recorded. Its result is
 	 * still validated against `parameters`.
 	 */
-	prepareArguments?(args: unknown): Static<TParameters>;
+	prepareArguments?(args: unknown): unknown;
 	readonly outputLimits?: {
 		readonly maxBytes?: number;
 		readonly maxLines?: number;

@@ -12,7 +12,7 @@ import type {
 import { isContextOverflow } from "@knightcode/ai/utils/overflow";
 import { isRetryableAssistantError, retryDelayMs } from "@knightcode/ai/utils/retry";
 import { getCurrentTools } from "@knightcode/ai/utils/transcript";
-import { AssistantEntry, ResetEntry, SystemEntry, UserEntry } from "../entries.ts";
+import { AssistantEntry, CompactionEntry, ResetEntry, SystemEntry, UserEntry } from "../entries.ts";
 import type { ExecutionEnv } from "../env/index.ts";
 import { defineTask } from "../tasks.ts";
 import type {
@@ -27,7 +27,7 @@ import type {
 } from "../types.ts";
 import { addTools } from "./agent.ts";
 import { createCompaction, estimateContext, selectCut } from "./compaction.ts";
-import { applyBoundary, prepareBoundary } from "./inbox.ts";
+import { applyBoundary, InboxDoc, prepareBoundary } from "./inbox.ts";
 import { assignJson } from "./json.ts";
 import { endRun, LiveDoc, type LiveState, type ToolSlot } from "./live.ts";
 import { planSystemEntries, renderSections, replaySections } from "./prompt.ts";
@@ -166,8 +166,15 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 				let cutoff = (await tx.scanEntries({ conversationId }, 1)).items[0]?.id;
 				for (const entry of entries) cutoff = (await tx.appendEntry(SystemEntry, conversationId, entry)).id;
 				if (cutoff === undefined) throw new Error(`Conversation ${conversationId} has no entries to send`);
-				// Checked in this commit, so a compaction admitted during preparation counts.
-				if (threshold === "background" && (await tx.doc(LiveDoc, conversationId)).compactions === undefined) {
+				// Checked in this commit, so a compaction admitted during preparation counts. A finished one's summary may
+				// still wait in the inbox: a retry comes back here without passing a boundary.
+				if (
+					threshold === "background" &&
+					(await tx.doc(LiveDoc, conversationId)).compactions === undefined &&
+					!(await tx.doc(InboxDoc, conversationId)).items.some(
+						(item) => item.mode === "write" && item.entry.kind === CompactionEntry.kind,
+					)
+				) {
 					await createCompaction(tx, conversationId, { reason: "threshold" });
 				}
 				const request = {

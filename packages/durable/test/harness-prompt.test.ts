@@ -99,7 +99,13 @@ describe("system prompt preparation", () => {
 		const agent = resolveAgent(undefined, registry.snapshot(), resolveSettings(undefined), (error) => {
 			throw error;
 		});
-		const desired = await renderSections(agent.sections, input, shown, (error) => reports.push(error), context);
+		const desired = await renderSections(
+			agent.sections,
+			{ ...input, agent },
+			shown,
+			(error) => reports.push(error),
+			context,
+		);
 		expect([...desired]).toEqual([
 			["preamble", "You are helpful."],
 			["cwd", "<cwd>\n/repo (git)\n</cwd>"],

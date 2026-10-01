@@ -334,7 +334,7 @@ describe("Chord usage guide", () => {
 			setup(env) {
 				env.observe(DiffReviews, async (review, callContext) => {
 					const { key } = await review.identity(callContext);
-					review.state.subscribe((value) => void seen.push({ key, comments: value?.comments.length ?? -1 }));
+					env.own(review.state.subscribe((value) => void seen.push({ key, comments: value?.comments.length ?? -1 })));
 					await review.addComment({ id: "c1", line: 1, text: "why?" }, callContext);
 				});
 			},

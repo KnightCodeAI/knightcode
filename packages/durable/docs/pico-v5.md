@@ -2692,7 +2692,7 @@ type ToolRegistration<TParameters extends TSchema = TSchema, TDetails extends Js
   readonly replay?: "safe" | "unsafe";
   readonly executionMode?: ToolExecutionMode;
   /** Pure repair of commonly malformed arguments; runs before validation, which still checks its result. */
-  prepareArguments?(args: unknown): Static<TParameters>;
+  prepareArguments?(args: unknown): unknown;
   readonly outputLimits?: {
     readonly maxBytes?: number;
     readonly maxLines?: number;

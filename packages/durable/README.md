@@ -197,7 +197,7 @@ await root.configure(
 		model: { provider: "openai", modelId: "gpt-6-sol" },
 		thinkingLevel: "high",
 		extensions: { remove: [Coding] }, // edits the host default; an array selects exactly these, in order
-		tools: [readTool, bashTool], // an array offers exactly these; { remove: [...] } drops some
+		tools: [createReadTool(), createBashTool()], // stored by name; an array offers exactly these, { remove: [...] } drops some
 		instructions: "Only read; never edit files.",
 		cwd: "/work/repo",
 	},

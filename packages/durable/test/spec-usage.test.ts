@@ -227,8 +227,14 @@ function examples() {
 		name: "app.follow",
 		version: 1,
 		initial: () => ({ phase: "follow" }),
-		phases: { follow: async () => {} },
-		abort: async () => {},
+		phases: {
+			follow: async (_task, runtime, context) => {
+				await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: null } }), context);
+			},
+		},
+		abort: async (_task, runtime, context) => {
+			await runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted", reason: "user" } }), context);
+		},
 	});
 
 	// ─── Sequences ───────────────────────────────────────────────────────────────

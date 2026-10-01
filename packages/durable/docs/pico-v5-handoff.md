@@ -895,11 +895,16 @@ interrupted turn. Run all package tests and the repository check, finish with a
 local coding-agent turn and a reopened interrupted turn through the public
 Harness, then stop for final review.
 
-Done. The spec wording is settled as proposed (§2.2 close and progress calls,
-§5.1, §7.5, §9.1, §12). Close ends states and watches at the seal; a new Harness
-may open the Storage once the old `close()` resolved. The lifecycle tests are in
-`harness-lifecycle.test.ts`, the Chord guide runs as `chord-guide.test.ts`, and
-the spec's usage examples compile in `spec-usage.test.ts`.
+Done. Every bug above is fixed: `runtime.now()` and `runtime.report()` throw
+once the invocation ends, a migration-only adoption publishes, a failed
+`Harness.open` closes without the caller's signal and rethrows the open error,
+and `ConversationWatch`, the `subscribeCommits` TODO, and the `resume()` comment
+are settled. The spec wording is settled as proposed (§2.2 close and progress
+calls, §5.1, §7.5, §9.1, §12). Close ends states and watches at the seal; a new
+Harness may open the Storage once the old `close()` resolved. The tests listed
+above are in `harness-lifecycle.test.ts`, the Chord guide runs as
+`chord-guide.test.ts`, and the spec's usage examples compile in
+`spec-usage.test.ts`.
 
 ## 23. Task graph view
 

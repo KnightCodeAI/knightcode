@@ -167,74 +167,77 @@ describe("task graph view", () => {
 
 	it("builds from committed tasks, shows surviving tasks as pending after reopen, and marks aborts", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "knightcode-durable-graph-"));
-		const path = join(directory, "session.sqlite");
-		const gate = deferred();
-		const Work = defineTask<null, { phase: "work" }, null>({
-			name: "test.graph-work",
-			version: 1,
-			initial: () => ({ phase: "work" }),
-			phases: {
-				work: async (_task, runtime, ctx) => {
-					await Promise.race([gate.promise, aborted(runtime.signal)]);
-					await runtime.commit(() => completed(null), ctx);
+		try {
+			const path = join(directory, "session.sqlite");
+			const gate = deferred();
+			const Work = defineTask<null, { phase: "work" }, null>({
+				name: "test.graph-work",
+				version: 1,
+				initial: () => ({ phase: "work" }),
+				phases: {
+					work: async (_task, runtime, ctx) => {
+						await Promise.race([gate.promise, aborted(runtime.signal)]);
+						await runtime.commit(() => completed(null), ctx);
+					},
 				},
-			},
-			abort: async (_task, runtime, ctx) => {
-				await runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted", reason: "test" } }), ctx);
-			},
-		});
-		const first = await openTasks(await openNodeSqliteStorage(path), [Work]);
-		const firstRoot = await first.harness.root(context);
-		const [foreground, background, owned] = await firstRoot.commit(async (tx) => {
-			const foreground = await tx.createTask(Work, null, { ownership: { kind: "conversation" } });
-			const background = await tx.createTask(Work, null, { ownership: { kind: "conversation" }, background: true });
-			const owned = await tx.createConversation({ ownership: { kind: "task", taskId: foreground } });
-			return [foreground, background, owned.id] as const;
-		}, context);
-		first.harness.resume();
-		await eventually(async () =>
-			(await first.harness.inspect(context)).tasks.every((task) => task.state.kind === "running"),
-		);
-		const running = await first.harness.taskGraph(context);
-		expect(statuses(running.value)).toEqual({
-			[`test.graph-work#${foreground}`]: "running",
-			[`test.graph-work#${background}`]: "running",
-		});
-		await first.harness.close(context);
+				abort: async (_task, runtime, ctx) => {
+					await runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted", reason: "test" } }), ctx);
+				},
+			});
+			const first = await openTasks(await openNodeSqliteStorage(path), [Work]);
+			const firstRoot = await first.harness.root(context);
+			const [foreground, background, owned] = await firstRoot.commit(async (tx) => {
+				const foreground = await tx.createTask(Work, null, { ownership: { kind: "conversation" } });
+				const background = await tx.createTask(Work, null, { ownership: { kind: "conversation" }, background: true });
+				const owned = await tx.createConversation({ ownership: { kind: "task", taskId: foreground } });
+				return [foreground, background, owned.id] as const;
+			}, context);
+			first.harness.resume();
+			await eventually(async () =>
+				(await first.harness.inspect(context)).tasks.every((task) => task.state.kind === "running"),
+			);
+			const running = await first.harness.taskGraph(context);
+			expect(statuses(running.value)).toEqual({
+				[`test.graph-work#${foreground}`]: "running",
+				[`test.graph-work#${background}`]: "running",
+			});
+			await first.harness.close(context);
 
-		// Acquired after reopen: built from the committed records and owner edges; open reconciled running to pending.
-		const { harness } = await openTasks(await openNodeSqliteStorage(path), [Work]);
-		const watch = await harness.watchTaskGraph(context);
-		expect(statuses(watch.value)).toEqual({
-			[`test.graph-work#${foreground}`]: "pending",
-			[`test.graph-work#${background}`]: "pending",
-		});
-		expect(watch.value.tasks[String(foreground)]!.conversations).toEqual([owned as ConversationId]);
-		expect(watch.value.tasks[String(background)]!.background).toBe(true);
+			// Acquired after reopen: built from the committed records and owner edges; open reconciled running to pending.
+			const { harness } = await openTasks(await openNodeSqliteStorage(path), [Work]);
+			const watch = await harness.watchTaskGraph(context);
+			expect(statuses(watch.value)).toEqual({
+				[`test.graph-work#${foreground}`]: "pending",
+				[`test.graph-work#${background}`]: "pending",
+			});
+			expect(watch.value.tasks[String(foreground)]!.conversations).toEqual([owned as ConversationId]);
+			expect(watch.value.tasks[String(background)]!.background).toBe(true);
 
-		// Exact frames: replaying their operations from the acquisition revision gives each delivered value.
-		let replica: JsonValue = watch.value as unknown as JsonValue;
-		const frames: (readonly Op[])[] = [];
-		watch.start(async (value, ops) => {
-			replica = applyImmutable(replica, ops);
-			expect(replica).toEqual(value);
-			frames.push(ops);
-		});
-		harness.resume();
-		await eventually(() => watch.value.tasks[String(background)]?.state.status === "running");
-		expect(await harness.abortTask(background, context)).toBe("marked");
-		await harness.waitForTask(background, context);
-		await flush();
-		expect(frames).toContainEqual([
-			["s", ["tasks", String(background)], expect.objectContaining({ abortRequested: true })],
-		]);
-		expect(frames.at(-1)).toEqual([["d", ["tasks", String(background)]]]);
-		expect(Object.keys((replica as unknown as TaskGraph).tasks)).toEqual([String(foreground)]);
-		await watch.stop();
-		gate.resolve();
-		await harness.waitForTask(foreground, context);
-		await harness.close(context);
-		await rm(directory, { recursive: true, force: true });
+			// Exact frames: replaying their operations from the acquisition revision gives each delivered value.
+			let replica: JsonValue = watch.value as unknown as JsonValue;
+			const frames: (readonly Op[])[] = [];
+			watch.start(async (value, ops) => {
+				replica = applyImmutable(replica, ops);
+				expect(replica).toEqual(value);
+				frames.push(ops);
+			});
+			harness.resume();
+			await eventually(() => watch.value.tasks[String(background)]?.state.status === "running");
+			expect(await harness.abortTask(background, context)).toBe("marked");
+			await harness.waitForTask(background, context);
+			await flush();
+			expect(frames).toContainEqual([
+				["s", ["tasks", String(background)], expect.objectContaining({ abortRequested: true })],
+			]);
+			expect(frames.at(-1)).toEqual([["d", ["tasks", String(background)]]]);
+			expect(Object.keys((replica as unknown as TaskGraph).tasks)).toEqual([String(foreground)]);
+			await watch.stop();
+			gate.resolve();
+			await harness.waitForTask(foreground, context);
+			await harness.close(context);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
 	});
 
 	it("lists owned conversations in ID order whatever order one commit creates them in", async () => {
