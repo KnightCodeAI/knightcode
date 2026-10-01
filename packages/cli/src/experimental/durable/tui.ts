@@ -286,6 +286,11 @@ class DurableTui {
 			if (slot.status === "pending") continue;
 			const component = this.#tool(slot.name, slot.callId);
 			component.setArgsComplete();
+			// A faulted or orphaned call ends without a result entry; the model sees a synthesized one.
+			if (slot.status === "done" && slot.entry === undefined) {
+				const text = "No result: the tool call failed or was abandoned.";
+				component.updateResult({ content: [{ type: "text", text }], isError: true }, false);
+			}
 			if (slot.status !== "running") continue;
 			component.markExecutionStarted();
 			const child = (slot.details as { conversationId?: number } | undefined)?.conversationId;

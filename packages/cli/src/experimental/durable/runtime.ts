@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import type { AttachedReplicatedState } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { clampThinkingLevel, getSupportedThinkingLevels, type ModelThinkingLevel } from "@knightcode/ai";
@@ -302,28 +303,31 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 				command(async () => {
 					const id = await current.compact(instructions, context);
 					// Report the outcome once it is known; the status line shows the compaction meanwhile.
-					void opened.waitForTask(id, context).then(async (receipt) => {
-						const outcome = receipt.state.outcome;
-						if (outcome.status === "completed") {
-							const { entryId, submissionId } = outcome.result;
-							// A summary written while busy is a submission: placed now, queued, or dropped as stale.
-							const status =
-								submissionId === undefined
-									? undefined
-									: (await (await opened.submission(submissionId, context))?.status(context))?.status;
-							notice(
-								"info",
-								entryId !== undefined || status === "done"
-									? "Compacted."
-									: status === "queued"
-										? "Compaction summary queued; it is placed at the next turn boundary."
-										: status === "unanswered"
-											? "Compaction summary dropped: the context changed under it."
-											: "Nothing to compact: the context fits in the recent window that is kept verbatim.",
-							);
-						} else if (outcome.status === "aborted") notice("info", "Compaction aborted.");
-						else notice("error", `Compaction ${outcome.status}: ${outcome.error?.message ?? outcome.reason ?? ""}`);
-					}, fail);
+					void opened
+						.waitForTask(id, context)
+						.then(async (receipt) => {
+							const outcome = receipt.state.outcome;
+							if (outcome.status === "completed") {
+								const { entryId, submissionId } = outcome.result;
+								// A summary written while busy is a submission: placed now, queued, or dropped as stale.
+								const status =
+									submissionId === undefined
+										? undefined
+										: (await (await opened.submission(submissionId, context))?.status(context))?.status;
+								notice(
+									"info",
+									entryId !== undefined || status === "done"
+										? "Compacted."
+										: status === "queued"
+											? "Compaction summary queued; it is placed at the next turn boundary."
+											: status === "unanswered"
+												? "Compaction summary dropped: the context changed under it."
+												: "Nothing to compact: the context fits in the recent window that is kept verbatim.",
+								);
+							} else if (outcome.status === "aborted") notice("info", "Compaction aborted.");
+							else notice("error", `Compaction ${outcome.status}: ${outcome.error?.message ?? outcome.reason ?? ""}`);
+						})
+						.catch(fail);
 				}),
 			// Not queued: it waits until the conversation is idle.
 			abort: () => current.abort(context).catch(fail),
@@ -407,6 +411,8 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 	} catch (error) {
 		await harness?.close(context).catch(() => {});
 		await location.release().catch(() => {});
+		// A session that never opened holds nothing to continue.
+		if (location.created) await rm(location.directory, { recursive: true, force: true }).catch(() => {});
 		throw error;
 	}
 }

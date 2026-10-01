@@ -52,7 +52,7 @@ credentials are shared.
 | `main.ts` | arguments, open, run, close |
 | `sessions.ts` | session directories and the lock |
 | `runtime.ts` | Harness, registry, settings, environments; the plain `DurableView` and `DurableController` |
-| `prompt.ts` | knightcode's system prompt sections (tools, rules, docs, AGENTS.md, skills, cwd) as one extension |
+| `prompt.ts` | knightcode's system prompt sections (SYSTEM.md, tools, rules, docs, APPEND_SYSTEM.md, AGENTS.md, skills, cwd) as one extension |
 | `subagent.ts` | the foreground subagent tool |
 | `tui.ts` | rendering with knightcode's interactive components |
 

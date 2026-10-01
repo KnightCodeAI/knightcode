@@ -1,6 +1,6 @@
 import { defineExtension, type PromptInput, section } from "@knightcode/durable";
 import { getAgentDir } from "../../config.ts";
-import { loadProjectContextFiles } from "../../core/resource-loader.ts";
+import { loadProjectContextFiles, loadPromptFiles } from "../../core/resource-loader.ts";
 import type { SettingsManager } from "../../core/settings-manager.ts";
 import { loadSkills, type Skill } from "../../core/skills.ts";
 import { buildSystemPromptSections } from "../../core/system-prompt.ts";
@@ -17,21 +17,32 @@ const CONTRIBUTIONS = {
 };
 
 /** KnightCode's section order; `buildSystemPromptSections()` omits the ones without content. */
-const KEYS = ["preamble", "tools", "rules", "docs", "project_context", "skills", "cwd"] as const;
+const KEYS = ["preamble", "tools", "rules", "docs", "addendum", "project_context", "skills", "cwd"] as const;
+
+interface Resources {
+	contextFiles: { path: string; content: string }[];
+	skills: Skill[];
+	customPrompt?: string;
+	appendSystemPrompt: string;
+}
 
 /**
  * KnightCode's system prompt as one extension: the sections of `buildSystemPromptSections()` for the request's tools and the
- * conversation's directory. Context files and skills load once per directory, like KnightCode at startup.
+ * conversation's directory. Context files, skills, and `SYSTEM.md`/`APPEND_SYSTEM.md` load once per directory, like
+ * KnightCode at startup.
  */
 export function createKnightPrompt(settings: SettingsManager, fallbackCwd: string) {
-	const resources = new Map<string, { contextFiles: { path: string; content: string }[]; skills: Skill[] }>();
+	const resources = new Map<string, Resources>();
 	const load = (cwd: string) => {
 		let found = resources.get(cwd);
 		if (found === undefined) {
 			const agentDir = getAgentDir();
+			const prompts = loadPromptFiles({ cwd, agentDir, projectTrusted: settings.isProjectTrusted() });
 			found = {
 				contextFiles: loadProjectContextFiles({ cwd, agentDir }),
 				skills: loadSkills({ cwd, agentDir, skillPaths: settings.getSkillPaths(), includeDefaults: true }).skills,
+				...(prompts.systemPrompt === undefined ? {} : { customPrompt: prompts.systemPrompt }),
+				appendSystemPrompt: prompts.appendSystemPrompt.join("\n\n"),
 			};
 			resources.set(cwd, found);
 		}

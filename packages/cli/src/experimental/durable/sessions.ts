@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readdir, realpath } from "node:fs/promises";
+import { access, mkdir, readdir, realpath } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import lockfile from "proper-lockfile";
 import { getAgentDir } from "../../config.ts";
@@ -29,12 +29,25 @@ export async function selectSession(cwdInput: string, continueSession: boolean):
 	let created = false;
 	if (continueSession) {
 		const entries = await readdir(root, { withFileTypes: true });
-		const newest = entries
+		const names = entries
 			.filter((entry) => entry.isDirectory() && /^\d{13}-[0-9a-f-]{36}$/u.test(entry.name))
 			.map((entry) => entry.name)
 			.sort()
-			.at(-1);
-		if (!newest) throw new Error(`No durable session exists for ${cwd}`);
+			.reverse();
+		// A start that failed before SQLite opened leaves a directory without a database; it is no session.
+		let newest: string | undefined;
+		for (const name of names) {
+			if (
+				await access(join(root, name, "session.sqlite")).then(
+					() => true,
+					() => false,
+				)
+			) {
+				newest = name;
+				break;
+			}
+		}
+		if (newest === undefined) throw new Error(`No durable session exists for ${cwd}`);
 		directory = join(root, newest);
 	} else {
 		directory = join(root, `${String(Date.now()).padStart(13, "0")}-${randomUUID()}`);
@@ -50,6 +63,7 @@ export async function selectSession(cwdInput: string, continueSession: boolean):
 			retries: { retries: 12, minTimeout: 1000, maxTimeout: 1000 },
 		});
 	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ELOCKED") throw error;
 		throw new Error(`Session is already open in another process: ${directory}`, { cause: error });
 	}
 	return { id: basename(directory), directory, database: join(directory, "session.sqlite"), cwd, created, release };

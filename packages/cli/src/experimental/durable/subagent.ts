@@ -1,8 +1,8 @@
 import type { Context } from "@knightcode/chord";
 import { type AssistantMessage, Type } from "@knightcode/ai";
 import {
+	AgentDoc,
 	AssistantEntry,
-	configure,
 	defineExtension,
 	defineTool,
 	type EntryId,
@@ -37,7 +37,16 @@ export const Subagent: Extension = defineExtension({
 					if (existing !== undefined) return existing.id;
 					// Starts as a copy of this conversation's agent; without this extension it cannot delegate further.
 					const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
-					await configure(tx, created.id, { extensions: { remove: [Subagent] } });
+					// Edit the copied selection rather than replace it, so a restricted parent stays restricted.
+					const agent = await tx.doc(AgentDoc, created.id);
+					const selected = agent.extensions;
+					const name = Subagent.name;
+					agent.extensions = Array.isArray(selected)
+						? selected.filter((extension) => extension !== name)
+						: {
+								...(selected?.add === undefined ? {} : { add: selected.add.filter((extension) => extension !== name) }),
+								remove: [...(selected?.remove ?? []), name],
+							};
 					return created.id;
 				}, context);
 				await api.details({ conversationId: child }, context);
