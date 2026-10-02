@@ -58,18 +58,6 @@ export default defineConfig({
 				replacement: fileURLToPath(new URL("./packages/durable/src/testing/index.ts", import.meta.url)),
 			},
 			{ find: /^@knightcode\/agent$/, replacement: workspaceSourcePaths.agentIndex },
-			{
-				find: /^@knightcode\/agent\/harness\/session$/,
-				replacement: fileURLToPath(new URL("./packages/agent/src/harness/session/index.ts", import.meta.url)),
-			},
-			{
-				find: /^@knightcode\/agent\/harness\/session\/testing$/,
-				replacement: fileURLToPath(new URL("./packages/agent/src/harness/session/testing/index.ts", import.meta.url)),
-			},
-			{
-				find: /^@knightcode\/agent\/experimental\/pico3$/,
-				replacement: fileURLToPath(new URL("./packages/agent/src/harness/pico3/index.ts", import.meta.url)),
-			},
 			{ find: /^@knightcode\/chord$/, replacement: workspaceSourcePaths.chordIndex },
 			{ find: /^@knightcode\/chord\/context$/, replacement: workspaceSourcePaths.chordContext },
 			{ find: /^@knightcode\/chord\/delta$/, replacement: workspaceSourcePaths.chordDelta },

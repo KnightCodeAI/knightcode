@@ -18,11 +18,11 @@ is no build step for development.
 | `packages/cli` | `@knightcodeai/cli` — the `knightcode` binary: CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills. The only published package with source |
 | `packages/cli-{linux,darwin,win32}-*` | Published platform packages; hold a compiled binary in `bin/`, no source |
 | `packages/ai` | Multi-provider LLM layer: providers, API adapters, OAuth, model catalog |
-| `packages/agent` | Agent loop, harness, compaction, session state, built-in tools |
+| `packages/agent` | Agent loop, proxy stream, and their types |
 | `packages/durable` | Durable conversation, task and document runtime (Pico): record contracts and storage |
 | `packages/tui` | Terminal UI library with differential rendering |
 | `packages/protocol` · `client` · `server` | RPC protocol and transports |
-| `packages/session-backend-sqlite` · `telemetry` · `evals` | Session storage, telemetry contracts, eval harness |
+| `packages/telemetry` · `evals` | Telemetry contracts, eval harness |
 | `apps/web` | The website. Separate toolchain; not covered by the root type check |
 
 Everything except `packages/cli*` is private and consumed through the workspace.
@@ -70,7 +70,7 @@ Run from the repo root unless stated otherwise.
 - After code changes (not docs): `bun run check-types` (full output, no tail). Fix every error before committing. It does not run tests.
 - Never run `bun run build:cli` or the full `bun run test` unless the user asks.
 - Tests are per-package. Run the specific test you touched from the package root:
-  - Vitest packages (`ai`, `agent`, `cli`, `client`, `server`, `protocol`, `session-backend-sqlite`, `evals`): `bun x vitest --run test/specific.test.ts`
+  - Vitest packages (`ai`, `agent`, `cli`, `client`, `server`, `protocol`, `evals`): `bun x vitest --run test/specific.test.ts`
   - `packages/tui` (`node:test`): `node --test test/specific.test.ts`
 - Whole-package runs work (`cd packages/cli && bun run test`), but on Windows full-suite runs flake on tests that spawn shells. Re-run a failure in isolation before treating it as a regression.
 - Some `packages/ai` tests hit real provider endpoints. They self-skip when the credential is absent (`describe.skipIf(!oauthToken)`, `it.skipIf(!process.env.X_API_KEY)`) — but a populated root `.env` activates them, so a full `packages/ai` run spends real tokens and can fail on provider rate limits (HTTP 429) rather than on your change. They are not confined to `*-e2e.test.ts`; `stream.test.ts`, `tokens.test.ts` and others carry live suites too. Check the failure message before treating one as a regression, and never add a live-endpoint test without that guard.

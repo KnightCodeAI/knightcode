@@ -1,4 +1,4 @@
-// Ported from packages/agent/test/harness/tools.test.ts and adapted to ToolRegistration: tools take the environment
+// Coding tools under ToolRegistration: tools take the environment
 // from `api.env`, stream through `api.output()`, and report notices as diagnostics instead of content text.
 import { mkdirSync, rmSync } from "node:fs";
 import { symlink } from "node:fs/promises";

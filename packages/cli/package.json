@@ -54,7 +54,6 @@
     "@knightcode/remote": "workspace:*",
     "@knightcode/tools": "workspace:*",
     "@knightcode/server": "workspace:*",
-    "@knightcode/session-backend-sqlite": "workspace:*",
     "@knightcode/tui": "workspace:*",
     "@silvia-odwyer/photon-node": "0.3.4",
     "@types/cross-spawn": "6.0.6",
