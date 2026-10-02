@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OAuthIssuerMismatchError } from "@knightcode/mcp/oauth";
+import { type OAuthChallenge, OAuthIssuerMismatchError } from "@knightcode/mcp/oauth";
 import { afterEach, describe, expect, it } from "vitest";
 import { InMemoryAuthStorageBackend } from "../src/core/auth-storage.ts";
 import {
@@ -27,7 +27,7 @@ describe("MCP OAuth refresh", () => {
 		// Stores sharing the credential file and lock directory stand in for separate KnightCode processes.
 		const backend = new InMemoryAuthStorageBackend();
 		const process = () => {
-			const store = new McpOAuthCredentialStore(backend, lockDir).forServer(server.url);
+			const store = new McpOAuthCredentialStore(backend, lockDir).forServer("test", server.url);
 			const provider = createMcpAuthProvider({
 				serverUrl: server.url,
 				store,
@@ -98,7 +98,7 @@ describe("MCP OAuth sign-in", () => {
 		try {
 			await signInMcpServer({
 				serverUrl: server.url,
-				store: new McpOAuthCredentialStore(new InMemoryAuthStorageBackend()).forServer(server.url),
+				store: new McpOAuthCredentialStore(new InMemoryAuthStorageBackend()).forServer("test", server.url),
 				settings: settings(server.url),
 				prompt: {
 					showAuthorizationUrl: (url) => void fetch(url),
@@ -118,6 +118,40 @@ describe("MCP OAuth sign-in", () => {
 		const { error, log } = await signIn({ iss: "https://attacker.example" });
 		expect(error).toBeInstanceOf(OAuthIssuerMismatchError);
 		expect(log).not.toContain("token code");
+	});
+
+	it("keeps the granted scope when the server asks for more", async () => {
+		const server = await startOAuthMcpServer();
+		try {
+			const store = new McpOAuthCredentialStore(new InMemoryAuthStorageBackend()).forServer("test", server.url);
+			const opened: URL[] = [];
+			const signInWith = (challenge: OAuthChallenge) =>
+				signInMcpServer({
+					serverUrl: server.url,
+					store,
+					settings: {},
+					challenge,
+					prompt: {
+						showAuthorizationUrl: (url) => {
+							opened.push(url);
+							void fetch(url);
+						},
+						promptForRedirectUrl: (signal) =>
+							new Promise((resolve) => signal.addEventListener("abort", () => resolve(undefined), { once: true })),
+					},
+				});
+
+			await signInWith({ scope: "issues:read" });
+			// The token response names no scope, so the grant has the requested one.
+			expect((await store.load())?.tokens?.scope).toBe("issues:read");
+			// The step-up challenge lists only the missing scope. Requesting just that would lose
+			// issues:read, so the next request would ask for sign-in again.
+			await signInWith({ error: "insufficient_scope", scope: "issues:write" });
+			expect(opened.map((url) => url.searchParams.get("scope"))).toEqual(["issues:read", "issues:read issues:write"]);
+			expect((await store.load())?.tokens?.scope).toBe("issues:read issues:write");
+		} finally {
+			await server.close();
+		}
 	});
 
 	// #10172

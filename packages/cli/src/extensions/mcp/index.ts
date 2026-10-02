@@ -155,8 +155,13 @@ const MAX_SERVER_DESCRIPTION_CHARS = 250;
  */
 export const MAX_SERVERS_SECTION_CHARS = 4096;
 
-const SERVERS_SECTION_INTRO =
-	"MCP servers whose tools are not declared to you. Call the tools of `codemode` servers from codemode scripts: find them with `searchTools(query, { namespace })` and read a server's instructions and tool names with `describeNamespace(name)`. Load the tools of `tool_search` servers with `tool_search`.";
+/** The section's first line. It explains only the ways of reaching tools that the listed servers use. */
+function serversSectionIntro(reaches: ReadonlySet<string>): string {
+	let intro = "MCP servers whose tools are not declared to you.";
+	if (reaches.has("codemode")) intro += " Call the tools of `codemode` servers from codemode scripts.";
+	if (reaches.has("tool_search")) intro += " Load the tools of `tool_search` servers with `tool_search`.";
+	return intro;
+}
 
 function truncate(text: string, max: number): string {
 	if (text.length <= max) return text;
@@ -188,6 +193,7 @@ export function renderServersSection(servers: readonly McpServerListing[]): stri
 	const reaches = listed.map((server) =>
 		configuredExposures(server.entry).has("codemode") ? "codemode" : "tool_search",
 	);
+	const intro = serversSectionIntro(new Set(reaches));
 	const heads = listed.map((server, index) => `- ${mcpNamespace(server.entry.name)} (${reaches[index]})`);
 	// Names the discovery tools of the left-out servers: searchTools() reaches only codemode servers.
 	const omitted = (kept: number) => {
@@ -201,7 +207,7 @@ export function renderServersSection(servers: readonly McpServerListing[]): stri
 		return [`- … ${count} more server${count === 1 ? "" : "s"}; find their tools with ${finders}`];
 	};
 	// Characters of the intro, the first `kept` server lines without descriptions, and the omission line.
-	const size = (kept: number) => [SERVERS_SECTION_INTRO, ...heads.slice(0, kept), ...omitted(kept)].join("\n").length;
+	const size = (kept: number) => [intro, ...heads.slice(0, kept), ...omitted(kept)].join("\n").length;
 	let kept = listed.length;
 	while (kept > 0 && size(kept) > MAX_SERVERS_SECTION_CHARS) kept--;
 	// Each description also takes a ": " separator.
@@ -213,7 +219,7 @@ export function renderServersSection(servers: readonly McpServerListing[]): stri
 		const summary = perServer > 0 ? truncate(serverSummary(server), perServer) : "";
 		return summary ? `${heads[index]}: ${summary}` : heads[index];
 	});
-	return [SERVERS_SECTION_INTRO, ...lines, ...omitted(kept)].join("\n");
+	return [intro, ...lines, ...omitted(kept)].join("\n");
 }
 
 /**
@@ -493,7 +499,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		const tokensAtSignIn = new Map<McpServerConnection, string>();
 		const storedTokens = (connection: McpServerConnection): string => {
 			const url = connection.oauthUrl;
-			return url && credentials ? JSON.stringify(credentials.tokens(url) ?? null) : "null";
+			return url && credentials ? JSON.stringify(credentials.tokens(connection.name, url) ?? null) : "null";
 		};
 		const onConnectionChange = (connection: McpServerConnection) => {
 			if (connection.state !== "needs-auth") tokensAtSignIn.delete(connection);
@@ -600,7 +606,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			try {
 				await runtime.signInMcpServer({
 					serverUrl: url,
-					store: getCredentials(runtime).forServer(url),
+					store: getCredentials(runtime).forServer(server.entry.name, url),
 					settings: connection.oauthSettings(),
 					challenge: connection.challenge,
 					prompt,
@@ -623,7 +629,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			const connection = server.connection;
 			const url = connection?.oauthUrl;
 			if (!connection || !url) return false;
-			const removed = getCredentials(await loadMcpRuntime()).remove(url);
+			const removed = getCredentials(await loadMcpRuntime()).remove(server.entry.name, url);
 			await connection.signOut();
 			return removed;
 		};
