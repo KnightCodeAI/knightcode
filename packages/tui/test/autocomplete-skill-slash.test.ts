@@ -1,4 +1,6 @@
 import assert from "node:assert";
+import { readdirSync } from "node:fs";
+import { join, parse } from "node:path";
 import { describe, it } from "node:test";
 import { CombinedAutocompleteProvider } from "../src/autocomplete.ts";
 
@@ -46,6 +48,74 @@ describe("CombinedAutocompleteProvider slash-command filter", () => {
 			);
 		});
 	}
+
+	it("completes commands after leading whitespace and preserves it", async () => {
+		const provider = new CombinedAutocompleteProvider([{ name: "model" }], process.cwd());
+		for (const [line, expected] of [
+			[" /", " /model "],
+			["  /mod", "  /model "],
+			["\t/mod", "\t/model "],
+		] as const) {
+			const result = await provider.getSuggestions([line], 0, line.length, {
+				signal: new AbortController().signal,
+			});
+			assert.ok(result);
+			assert.equal(result.prefix, line.trimStart());
+			assert.deepStrictEqual(
+				result.items.map((item) => item.value),
+				["model"],
+			);
+			const applied = provider.applyCompletion([line], 0, line.length, result.items[0]!, result.prefix);
+			assert.equal(applied.lines[0], expected);
+			assert.equal(applied.cursorCol, expected.length);
+		}
+	});
+
+	it("completes command arguments after leading whitespace", async () => {
+		const provider = new CombinedAutocompleteProvider(
+			[
+				{
+					name: "model",
+					getArgumentCompletions: (prefix: string) => {
+						assert.equal(prefix, "son");
+						return [{ value: "sonnet", label: "sonnet" }];
+					},
+				},
+			],
+			process.cwd(),
+		);
+		const line = "  /model son";
+		const result = await provider.getSuggestions([line], 0, line.length, {
+			signal: new AbortController().signal,
+		});
+		assert.ok(result);
+		assert.equal(result.prefix, "son");
+		const applied = provider.applyCompletion([line], 0, line.length, result.items[0]!, result.prefix);
+		assert.equal(applied.lines[0], "  /model sonnet");
+	});
+
+	it("keeps path completion for indented absolute paths", async () => {
+		const root = parse(process.cwd()).root;
+		// Root entries come back in filesystem order; skip empty or unreadable ones (e.g. lost+found on Linux).
+		const hasEntries = (name: string) => {
+			try {
+				return readdirSync(join(root, name)).length > 0;
+			} catch {
+				return false;
+			}
+		};
+		const dirName = readdirSync(root, { withFileTypes: true }).find(
+			(entry) => entry.isDirectory() && hasEntries(entry.name),
+		)?.name;
+		assert.ok(dirName);
+		const provider = new CombinedAutocompleteProvider([{ name: "model" }], process.cwd());
+		const line = `  /${dirName}/`;
+		const result = await provider.getSuggestions([line], 0, line.length, {
+			signal: new AbortController().signal,
+		});
+		assert.ok(result);
+		assert.equal(result.prefix, `/${dirName}/`);
+	});
 
 	it("keeps explicit skill: queries working", async () => {
 		const items = await suggestionsFor("skill:side");
