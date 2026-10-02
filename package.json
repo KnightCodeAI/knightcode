@@ -18,6 +18,7 @@
     "eval": "bun run --filter '@knightcode/evals' eval --",
     "link:cli": "bun run build:cli && cd packages/cli && bun link",
     "test": "bun run --filter '*' test",
+    "test:mcp-conformance": "bun packages/cli/test/mcp-conformance/run.ts",
     "generate:models": "bun run --filter '@knightcode/ai' generate-models",
     "hydrate:model-data": "bun run --filter '@knightcode/ai' hydrate-model-data",
     "check:model-data": "bun run --filter '@knightcode/ai' check:model-data",
