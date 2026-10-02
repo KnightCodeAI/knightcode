@@ -299,57 +299,6 @@
 	transform: scale(0.94);
 }
 
-/*
- * Session mark: a circle inset in a sunken tile, dashed when idle and a spinning arc when the
- * session is working. Not named "ring": Tailwind's ring and ring-<color> utilities match that
- * name and drew a solid circle over the dashes.
- */
-.session-mark {
-	width: 2.75rem;
-	height: 2.75rem;
-	border-radius: 0.625rem;
-	background: var(--sunken);
-	position: relative;
-	flex: none;
-}
-
-.session-mark::before {
-	content: "";
-	position: absolute;
-	inset: 0.625rem;
-	border-radius: 9999px;
-	border: 1.5px dashed var(--label-3);
-}
-
-.session-mark-live::after {
-	content: "";
-	position: absolute;
-	top: -0.1875rem;
-	right: -0.1875rem;
-	width: 0.625rem;
-	height: 0.625rem;
-	border-radius: 9999px;
-	background: var(--live);
-	box-shadow: 0 0 0 2px var(--ground);
-}
-
-.session-mark-working::before {
-	border-style: solid;
-	border-top-color: var(--live);
-	border-right-color: var(--live);
-	animation: ring-spin 900ms linear infinite;
-}
-
-.session-mark-offline::before {
-	opacity: 0.55;
-}
-
-@keyframes ring-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
 /* Working indicator under the last block while the model is thinking. */
 .shimmer {
 	background: linear-gradient(90deg, var(--label-3) 0%, var(--label) 50%, var(--label-3) 100%);

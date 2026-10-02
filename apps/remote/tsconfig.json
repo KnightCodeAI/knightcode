@@ -15,7 +15,6 @@
 		"verbatimModuleSyntax": true,
 		// For the shadcn CLI only: it resolves "@/" through this file when run from apps/remote.
 		// The worker itself never imports "@/".
-		"baseUrl": ".",
 		"paths": { "@/*": ["./web/src/*"] }
 	},
 	"include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "../../packages/remote/src/protocol.ts"]

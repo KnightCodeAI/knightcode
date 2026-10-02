@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+
 export type Theme = "system" | "light" | "dark";
 
 export const THEMES: ReadonlyArray<{ value: Theme; label: string }> = [
@@ -36,4 +38,29 @@ export function applyTheme(theme: Theme): void {
 		const own = meta.media.includes("dark") ? "dark" : "light";
 		meta.content = GROUND[theme === "system" ? own : theme];
 	}
+}
+
+const PREFERS_LIGHT = "(prefers-color-scheme: light)";
+
+/** The theme on screen: the explicit choice on <html>, else the OS preference (dark by default, as in index.css). */
+function resolvedTheme(): "light" | "dark" {
+	const chosen = document.documentElement.dataset.theme;
+	if (chosen === "light" || chosen === "dark") return chosen;
+	return matchMedia(PREFERS_LIGHT).matches ? "light" : "dark";
+}
+
+function subscribeTheme(onChange: () => void): () => void {
+	const media = matchMedia(PREFERS_LIGHT);
+	const observer = new MutationObserver(onChange);
+	observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+	media.addEventListener("change", onChange);
+	return () => {
+		observer.disconnect();
+		media.removeEventListener("change", onChange);
+	};
+}
+
+/** For canvas drawing that cannot follow the CSS theme variables on its own. */
+export function useResolvedTheme(): "light" | "dark" {
+	return useSyncExternalStore(subscribeTheme, resolvedTheme);
 }

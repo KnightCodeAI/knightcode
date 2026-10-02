@@ -23,6 +23,7 @@
       "name": "knightcode-remote",
       "version": "0.0.1",
       "dependencies": {
+        "bot-avatars": "0.2.2",
         "class-variance-authority": "0.7.1",
         "clsx": "2.1.1",
         "lucide-react": "1.37.0",
@@ -122,7 +123,7 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.11.0",
+      "version": "0.11.3",
       "bin": {
         "knightcode": "./bin/knightcode",
       },
@@ -171,23 +172,23 @@
     },
     "packages/cli-darwin-arm64": {
       "name": "@knightcodeai/cli-darwin-arm64",
-      "version": "0.11.0",
+      "version": "0.11.3",
     },
     "packages/cli-darwin-x64": {
       "name": "@knightcodeai/cli-darwin-x64",
-      "version": "0.11.0",
+      "version": "0.11.3",
     },
     "packages/cli-linux-arm64": {
       "name": "@knightcodeai/cli-linux-arm64",
-      "version": "0.11.0",
+      "version": "0.11.3",
     },
     "packages/cli-linux-x64": {
       "name": "@knightcodeai/cli-linux-x64",
-      "version": "0.11.0",
+      "version": "0.11.3",
     },
     "packages/cli-win32-x64": {
       "name": "@knightcodeai/cli-win32-x64",
-      "version": "0.11.0",
+      "version": "0.11.3",
     },
     "packages/client": {
       "name": "@knightcode/client",
@@ -268,7 +269,7 @@
     },
     "packages/tools": {
       "name": "@knightcode/tools",
-      "version": "0.1.7",
+      "version": "0.1.10",
       "dependencies": {
         "@knightcode/tui": "workspace:*",
         "@knightcodeai/cli": "workspace:*",
@@ -1294,6 +1295,8 @@
     "blake3-wasm": ["blake3-wasm@2.1.5", "", {}, "sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g=="],
 
     "body-parser": ["body-parser@2.3.0", "", { "dependencies": { "bytes": "^3.1.2", "content-type": "^2.0.0", "debug": "^4.4.3", "http-errors": "^2.0.1", "iconv-lite": "^0.7.2", "on-finished": "^2.4.1", "qs": "^6.15.2", "raw-body": "^3.0.2", "type-is": "^2.1.0" } }, "sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw=="],
+
+    "bot-avatars": ["bot-avatars@0.2.2", "", { "peerDependencies": { "react": ">=18.0.0" } }, "sha512-EszpDsXfbO7SD3Jv/g8/7mt3I4EpN4WuDy6Uk3reuzIgU+dl4iKtk+fuIzGgfXjOraF1jQqUjaDOdcql1khXHQ=="],
 
     "bowser": ["bowser@2.14.1", "", {}, "sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg=="],
 
