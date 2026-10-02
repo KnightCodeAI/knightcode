@@ -657,7 +657,6 @@
 
     "@knightcode/server": ["@knightcode/server@workspace:packages/server"],
 
-
     "@knightcode/telemetry": ["@knightcode/telemetry@workspace:packages/telemetry"],
 
     "@knightcode/tools": ["@knightcode/tools@workspace:packages/tools"],

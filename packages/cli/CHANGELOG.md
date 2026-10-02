@@ -1,5 +1,77 @@
 # @knightcodeai/cli
 
+## 0.11.3
+
+### Added
+
+- Added Anthropic workload identity federation from the Anthropic SDK environment variables `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` and `ANTHROPIC_IDENTITY_TOKEN_FILE`, plus the optional `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID`. API keys and `ANTHROPIC_AUTH_TOKEN` take precedence.
+
+- Added a copy-code login method to Anthropic sign-in for machines where the browser runs elsewhere and the localhost callback cannot load. `/login` now asks for browser or copy-code login, and copy-code login asks you to paste the code Anthropic shows.
+
+- Added `quietStartup: "header"`, which keeps the startup header with version and key hints but hides the model scope line and loaded-resource listing.
+
+- Added Radius to `/login`: "Sign in with Radius" is the last top-level option, with its status, and after signing in `/login` offers to add the Radius MCP server to the global `mcp.json` with `"auth": { "provider": "radius" }`. Cancelling a login returns to the menu it was started from, only subscription-backed providers are labeled "subscription" (other OAuth sign-ins say "account"), and providers without credentials say "not configured".
+
+- Added `models.generateImages()` to codemode scripts. It runs image models such as OpenRouter's with the session's credentials and returns image blocks that `image()` attaches to the result; usage counts toward the session cost. Extensions can call `ctx.modelRegistry.generateImages()`.
+
+- Added `"auth": { "provider": "<provider>" }` for HTTP MCP servers to send a provider's current `/login` token as the bearer token instead of using MCP OAuth. The token is read on every request, so provider refreshes apply. It is only allowed in the global `mcp.json` and from extensions, and requires https except on loopback hosts.
+
+- Added an `oauth.authServerMetadataUrl` setting for MCP servers that advertise a wrong OAuth authorization server or none. KnightCode uses the configured metadata document instead of discovery.
+
+### Changed
+
+- Changed the default TUI mode to fullscreen. Set `tuiMode` to `"regular"` or pass `--tui-mode regular` to keep the terminal's normal scrollback.
+
+- Changed codemode to cost far fewer prompt tokens and to say how to recover from errors. The `codemode` description lists the script globals in one line each and points to the new Codemode docs page; reading a tool or `models` member that does not exist names the close matches, so scripts that probed with `typeof tools.name` must use `"name" in tools`.
+
+- Changed `/arminsayshi` to play a 3D version in fullscreen mode, with one cube per pixel of Armin.
+
+- Changed MCP OAuth credential storage to key credentials by server name and URL, so MCP servers with the same URL can sign in with different accounts. Credentials stored by URL alone move to the first server that uses them.
+
+- Changed `/reload` to enable tools newly added to the `defaultTools` setting. Tools removed from it stay enabled, tools turned off during the session stay off unless newly added, and `--tools`, `--no-tools` and `--no-builtin-tools` still override the setting.
+
+- Changed MCP servers without `direct` tools to connect in the background instead of blocking the first prompt. They are listed in a short `mcp_servers` system prompt section, and are waited for when a codemode script names them, a script searches tools, or `tool_search` runs. The `codemode` and `tool_search` descriptions no longer change when servers connect.
+
+### Fixed
+
+- Fixed provider retries aborting or firing immediately when a `Retry-After` or `retry-after-ms` value is too large to represent, such as `1e999`. They now use exponential backoff, as they do for an unparseable date.
+
+- Fixed Anthropic requests failing when a tool schema uses keywords Anthropic strict tool use rejects, such as `minimum` and `maximum`. Such tools are now sent non-strict.
+
+- Fixed MCP servers that ask for more scope (`insufficient_scope`) requesting sign-in over and over. The new sign-in requested only the missing scopes, so the new token lost access the previous one had; it now keeps the granted scopes.
+
+- Fixed memory retained per rendered message in the transcript: user messages keep one copy of each rendered line instead of two, and markdown, text and box components flatten their cached lines. A long assistant message keeps about a fifth of the heap it kept before.
+
+- Fixed deferred MCP tools that `tool_search` loaded being dropped on resume and `/reload` even when their server reconnected before the next prompt, because the session restored its tools before the MCP servers reconnected.
+
+- Fixed the system theme making pastel palettes such as Catppuccin Frappe much more vivid; palette colors now keep their chroma.
+
+- Fixed `--provider` without `--model` being silently ignored and running the default model from another provider; it now fails with an error.
+
+- Fixed prompt submission slowing down with session length, because resolving the session's model selection looked up the model catalog once per assistant message, and model lookups slowing down for providers with a refreshed remote catalog.
+
+- Fixed MCP OAuth sign-in failing with `Invalid scope` when the token response contains `"scope": ""`, and similar failures for other empty or `null` optional OAuth fields, including `expires_in: null` marking the token as already expired.
+
+- Fixed codemode scripts calling the wrong MCP tool when two tool names differ only in `-` and `_`, such as `read-file` and `read_file`. MCP tool and namespace names now replace `-` with `_` (`mcp__my-server__x` is now `mcp__my_server__x`), colliding tools of a server all get a hash suffix, and server names that differ only in `-` and `_` are rejected.
+
+- Fixed collapsed `codemode` and MCP tool results filling the screen when the output is one long line, such as minified JSON. The preview is now limited to wrapped lines instead of logical lines.
+
+- Fixed `codemode.mode: "only"` listing `read`, `bash`, `edit` and `write` in the system prompt's tool list although requests only declare `codemode`.
+
+- Fixed extension commands registered without a string name or a handler crashing KnightCode when typing `/`. The extension now fails to load with an error instead.
+
+- Fixed switching to another OpenAI Responses model after a codemode call failing with an invalid item id. A replayed grammar tool call now drops any id that does not match its item type, since `custom_tool_call` ids must start with `ctc_` and `function_call` ids with `fc_`.
+
+- Fixed Together's DeepSeek V4 Pro losing its high reasoning-effort level after Together renamed the model to `deepseek-ai/DeepSeek-V4-Pro-0813`.
+
+- Fixed color bleeding past mouse selections and search highlights in fullscreen mode when a styled token ends at the highlight boundary.
+
+- Fixed slash command completion not working after leading whitespace in the editor. Typing `  /mod` now completes to ` /model` and keeps the whitespace.
+
+### Security
+
+- Security: MCP OAuth sign-in now rejects an authorization response whose `iss` parameter names another authorization server before exchanging the code (RFC 9207).
+
 ## 0.11.2
 
 ### Added
