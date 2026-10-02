@@ -16,6 +16,7 @@ import {
 	McpOAuthAuthorizationRequiredError,
 	OAuthError,
 	OAuthInsecureEndpointError,
+	OAuthIssuerMismatchError,
 	OAuthRegistrationError,
 } from "./errors.ts";
 import {
@@ -58,8 +59,15 @@ export interface OAuthClientProvider {
 export interface OAuthFlowOptions {
 	serverUrl: string | URL;
 	authorizationCode?: string;
+	/** `iss` parameter of the authorization response that delivered `authorizationCode` (RFC 9207). */
+	iss?: string;
 	scope?: string;
 	resourceMetadataUrl?: URL;
+	/**
+	 * Authorization server metadata document to use instead of discovery, for servers that advertise a
+	 * wrong authorization server or none. It is trusted as configured. Must use https, except on loopback.
+	 */
+	authorizationServerMetadataUrl?: URL;
 	fetch?: McpFetch;
 	skipIssuerValidation?: boolean;
 	/**
@@ -88,6 +96,10 @@ function secureEndpoint(value: string | URL): URL {
 	const url = new URL(value);
 	if (url.protocol !== "https:" && !loopback(url.hostname)) throw new OAuthInsecureEndpointError(url.href);
 	return url;
+}
+
+function sameUrl(a: string, b: string): boolean {
+	return a === b || (URL.canParse(a) && URL.canParse(b) && new URL(a).href === new URL(b).href);
 }
 
 function selectClientAuthMethod(information: OAuthClientInformationMixed, supported: string[]): ClientAuthMethod {
@@ -253,7 +265,9 @@ export async function refreshAuthorization(
 }
 
 async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions): Promise<OAuthFlowResult> {
-	const cached = await provider.discoveryState?.();
+	const metadataUrl = options.authorizationServerMetadataUrl && secureEndpoint(options.authorizationServerMetadataUrl);
+	// With a configured metadata URL, discovery is not cached, so changing the URL applies at once.
+	const cached = metadataUrl ? undefined : await provider.discoveryState?.();
 	const discovered = cached?.authorizationServerUrl
 		? {
 				authorizationServerUrl: cached.authorizationServerUrl,
@@ -267,17 +281,21 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 			}
 		: await discoverOAuthServerInfo(options.serverUrl, {
 				resourceMetadataUrl: options.resourceMetadataUrl,
+				authorizationServerMetadataUrl: metadataUrl,
 				fetch: options.fetch,
 				skipIssuerValidation: options.skipIssuerValidation,
 			});
-	await provider.saveDiscoveryState?.({
-		...discovered,
-		...(options.resourceMetadataUrl ? { resourceMetadataUrl: options.resourceMetadataUrl.href } : {}),
-	});
+	if (!metadataUrl) {
+		await provider.saveDiscoveryState?.({
+			...discovered,
+			...(options.resourceMetadataUrl ? { resourceMetadataUrl: options.resourceMetadataUrl.href } : {}),
+		});
+	}
 	const metadata = discovered.authorizationServerMetadata;
 	const resource = selectResource(options.serverUrl, discovered.resourceMetadata);
+	// `||`, not `??`: an empty scope (for example from `scopes_supported: []`) falls through to the next source.
 	const scope =
-		options.scope ?? discovered.resourceMetadata?.scopes_supported?.join(" ") ?? provider.clientMetadata.scope;
+		options.scope || discovered.resourceMetadata?.scopes_supported?.join(" ") || provider.clientMetadata.scope;
 	let client = await provider.clientInformation();
 	if (!client) {
 		if (options.authorizationCode) throw new Error("OAuth client information is missing during code exchange");
@@ -305,6 +323,17 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 		fetch: options.fetch,
 	};
 	if (options.authorizationCode) {
+		// RFC 9207: never send a code from another authorization server to this one.
+		const iss = options.iss;
+		if (metadata) {
+			if ((iss !== undefined || metadata.authorization_response_iss_parameter_supported) && iss !== metadata.issuer) {
+				throw new OAuthIssuerMismatchError(metadata.issuer, iss);
+			}
+		} else if (iss !== undefined && !sameUrl(iss, discovered.authorizationServerUrl)) {
+			// Without metadata the expected issuer is the discovered server URL, which may be our own
+			// origin-root fallback, so a trailing-slash-only difference is not a mismatch.
+			throw new OAuthIssuerMismatchError(discovered.authorizationServerUrl, iss);
+		}
 		const tokens = await exchangeAuthorizationCode(discovered.authorizationServerUrl, {
 			...tokenOptions,
 			code: options.authorizationCode,

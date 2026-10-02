@@ -15,7 +15,7 @@ import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
 import { execCommand } from "../exec.ts";
-import { type McpServerConfig, McpServerRegistry, validateMcpServerConfig } from "../mcp-servers.ts";
+import { type McpServerConfig, McpServerRegistry, mcpNamespace, validateMcpServerConfig } from "../mcp-servers.ts";
 import { readKnightcodeManifest } from "../manifest.ts";
 import { createSyntheticSourceInfo, getSyntheticPathSource, isSyntheticPath } from "../source-info.ts";
 import { time } from "../timings.ts";
@@ -237,6 +237,8 @@ function createExtensionAPI(
 ): { api: ExtensionAPI; commit: () => void; discard: () => void } {
 	const pendingFlagValues = new Map<string, boolean | string>();
 	const pendingRuntimeChanges: Array<() => void> = [];
+	/** MCP servers this extension registered (true) or unregistered (false) while loading, not yet committed. */
+	const pendingMcpServers = new Map<string, boolean>();
 	const loadingUnsubscribers: Array<() => void> = [];
 	let state: "loading" | "active" | "failed" = "loading";
 	const assertActive = () => {
@@ -252,6 +254,7 @@ function createExtensionAPI(
 	const clearPending = () => {
 		pendingFlagValues.clear();
 		pendingRuntimeChanges.length = 0;
+		pendingMcpServers.clear();
 		loadingUnsubscribers.length = 0;
 	};
 
@@ -290,6 +293,18 @@ function createExtensionAPI(
 
 		registerCommand(name: string, options: Omit<RegisteredCommand, "name" | "sourceInfo">): void {
 			assertActive();
+			if (typeof name !== "string" || name.length === 0) {
+				throw new Error(
+					`Command registered by extension "${extension.path}" must have a non-empty string name. Use knightcode.registerCommand("name", { description, handler }).`,
+				);
+			}
+			// The command parser looks up only the text before the first space.
+			if (/\s/.test(name)) {
+				throw new Error(`Command "/${name}" registered by extension "${extension.path}" must not contain whitespace.`);
+			}
+			if (typeof options?.handler !== "function") {
+				throw new Error(`Command "/${name}" registered by extension "${extension.path}" must define handler().`);
+			}
 			extension.commands.set(name, {
 				name,
 				sourceInfo: extension.sourceInfo,
@@ -450,12 +465,27 @@ function createExtensionAPI(
 			if (owner !== undefined && owner !== extension.path) {
 				throw new Error(`MCP server "${name}" is already registered by extension "${owner}"`);
 			}
+			// Names that differ only in `-` and `_` would share a namespace. Registrations queued while
+			// loading count too, or one factory could commit two colliding servers.
+			const names = new Set(runtime.mcpServers.list().map((server) => server.name));
+			for (const [pending, registered] of pendingMcpServers) {
+				if (registered) names.add(pending);
+				else names.delete(pending);
+			}
+			const clash = [...names].find((other) => other !== name && mcpNamespace(other) === mcpNamespace(name));
+			if (clash) throw new Error(`MCP server "${name}" conflicts with registered server "${clash}"`);
 			const server = { name, config: structuredClone(validated), extensionPath: extension.path };
+			if (state === "loading") pendingMcpServers.set(name, true);
 			applyRuntimeChange(() => runtime.mcpServers.register(server));
 		},
 
 		unregisterMcpServer(name: string) {
 			assertActive();
+			if (state === "loading") {
+				// Only this extension's own committed server is removed by the queued unregister.
+				if (runtime.mcpServers.get(name)?.extensionPath === extension.path) pendingMcpServers.set(name, false);
+				else pendingMcpServers.delete(name);
+			}
 			applyRuntimeChange(() => runtime.mcpServers.unregister(name, extension.path));
 		},
 

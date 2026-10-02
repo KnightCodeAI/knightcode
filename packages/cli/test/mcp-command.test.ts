@@ -1,6 +1,9 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { LATEST_PROTOCOL_VERSION } from "@knightcode/mcp";
 import { afterEach, describe, expect, it } from "vitest";
 import { runMcpCommand } from "../src/extensions/mcp/cli.ts";
 
@@ -13,7 +16,12 @@ describe("knightcode mcp", () => {
 		while (dirs.length > 0) rmSync(dirs.pop() ?? "", { recursive: true, force: true });
 	});
 
-	async function run(args: string[], servers: Record<string, unknown> | undefined, dir?: string) {
+	async function run(
+		args: string[],
+		servers: Record<string, unknown> | undefined,
+		dir?: string,
+		providerToken?: (provider: string) => Promise<string | undefined>,
+	) {
 		const agentDir = dir ?? mkdtempSync(join(tmpdir(), "knightcode-mcp-command-"));
 		if (!dir) dirs.push(agentDir);
 		if (servers) writeFileSync(join(agentDir, "mcp.json"), JSON.stringify({ mcpServers: servers }));
@@ -21,6 +29,7 @@ describe("knightcode mcp", () => {
 		const exitCode = await runMcpCommand(args, {
 			cwd: agentDir,
 			agentDir,
+			providerToken,
 			log: (line) => output.push(line),
 			error: (line) => output.push(line),
 		});
@@ -65,6 +74,57 @@ describe("knightcode mcp", () => {
 			{ name: "fixture", state: "connected", tools: ["echo"] },
 			{ name: "parked", state: "disabled", tools: [] },
 		]);
+	});
+
+	it("authenticates provider-auth servers with the provider token", async () => {
+		const server = createServer(async (request, response) => {
+			if (request.method !== "POST") {
+				response.writeHead(request.method === "GET" ? 405 : 200).end();
+				return;
+			}
+			if (request.headers.authorization !== "Bearer provider-token") {
+				response.writeHead(401, { "www-authenticate": "Bearer" }).end();
+				return;
+			}
+			const chunks: Buffer[] = [];
+			for await (const chunk of request) chunks.push(Buffer.from(chunk));
+			const message = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { id?: number; method: string };
+			if (message.id === undefined) {
+				response.writeHead(202).end();
+				return;
+			}
+			const result =
+				message.method === "initialize"
+					? {
+							protocolVersion: LATEST_PROTOCOL_VERSION,
+							capabilities: { tools: {} },
+							serverInfo: { name: "p", version: "1" },
+						}
+					: { tools: [{ name: "whoami", inputSchema: { type: "object" } }] };
+			response.writeHead(200, { "content-type": "application/json" });
+			response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+		});
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		try {
+			const { port } = server.address() as AddressInfo;
+			const config = { radius: { url: `http://127.0.0.1:${port}/mcp`, auth: { provider: "radius" } } };
+			const tokens: string[] = [];
+			const signedIn = await run(["list"], config, undefined, async (provider) => {
+				tokens.push(provider);
+				return "provider-token";
+			});
+			expect(signedIn.output).toContain("radius: connected, 1 tool (codemode, global)");
+			expect(signedIn.exitCode).toBe(0);
+			expect(tokens).toContain("radius");
+
+			// Without a provider login, the command points at /login, since `mcp login` handles only OAuth.
+			const signedOut = await run(["list"], config, undefined, async () => undefined);
+			expect(signedOut.exitCode).toBe(1);
+			expect(signedOut.output).toContain("radius: needs sign-in");
+			expect(signedOut.output).toContain("sign in with: /login radius in a knightcode session");
+		} finally {
+			await new Promise((resolve) => server.close(resolve));
+		}
 	});
 
 	it("rejects unknown servers and servers without OAuth for login and logout", async () => {

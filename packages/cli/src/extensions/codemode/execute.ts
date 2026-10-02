@@ -320,6 +320,16 @@ export async function executeCodemode(
 }
 
 /**
+ * Whether `query` names the namespace: its name, its script identifier (`mcp__dev-radius` is
+ * `mcp__dev_radius`), or an MCP server name in either form (`dev-radius`, `dev_radius`). Only the
+ * `mcp__` prefix may be left out, so `docs` names `mcp__docs` but not `mcp__foo__docs`.
+ */
+function isNamespaceName(namespace: string, query: string): boolean {
+	const id = toCodemodeIdentifier(namespace);
+	return namespace === query || id === toCodemodeIdentifier(query) || id === toCodemodeIdentifier(`mcp__${query}`);
+}
+
+/**
  * `searchTools()`, `describeTool()`, and `describeNamespace()`: ranked search and lookup over the
  * script's nested tools and their namespaces.
  */
@@ -347,7 +357,7 @@ function createDiscoveryGlobals(
 				}
 				const documents = tools.flatMap((tool) => {
 					const toolNamespace = options.getToolNamespace?.(tool.name);
-					if (namespace && toolNamespace?.name !== namespace) return [];
+					if (namespace && (!toolNamespace || !isNamespaceName(toolNamespace.name, namespace))) return [];
 					return [createToolSearchDocument(tool, toolNamespace)];
 				});
 				return ranker.rank(query, documents, limit).map((match) => entry(match.name));
@@ -375,13 +385,13 @@ function createDiscoveryGlobals(
 				const names: string[] = [];
 				for (const tool of tools) {
 					const toolNamespace = options.getToolNamespace?.(tool.name);
-					if (toolNamespace?.name !== name) continue;
+					if (!toolNamespace || !isNamespaceName(toolNamespace.name, name)) continue;
 					namespace ??= toolNamespace;
 					names.push(toCodemodeIdentifier(tool.name));
 				}
 				if (!namespace) return undefined;
 				return {
-					name,
+					name: namespace.name,
 					...(namespace.description ? { description: namespace.description } : {}),
 					...(namespace.instructions ? { instructions: namespace.instructions } : {}),
 					tools: names,
