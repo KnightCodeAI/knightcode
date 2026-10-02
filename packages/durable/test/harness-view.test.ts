@@ -1,8 +1,8 @@
 import { applyImmutable, type Op } from "@knightcode/chord/delta";
 import { type AssistantMessage, type FauxResponseStep, fauxAssistantMessage, fauxText } from "@knightcode/ai";
 import {
+	AgentDoc,
 	type Conversation,
-	ConversationConfig,
 	type ConversationView,
 	defineDoc,
 	type Harness,
@@ -18,7 +18,7 @@ import { aborted, deferred } from "./task-support.ts";
 
 type Frame = { value: ConversationView; ops: readonly Op[] };
 
-const MOUNTED = ["knightcode.conversation.config", "knightcode.inbox", "knightcode.live", "knightcode.usage"];
+const MOUNTED = ["knightcode.agent", "knightcode.inbox", "knightcode.live", "knightcode.usage"];
 
 /** Start a watch of `conversation` that records its acquisition revision and every delivered frame. */
 async function record(conversation: Conversation) {
@@ -42,7 +42,7 @@ async function fresh(conversation: Conversation): Promise<ConversationView> {
 /** The view as committed state defines it, read without any mount: the active entries and the built-in documents. */
 async function committed(harness: Harness, conversation: Conversation, record: ConversationView["conversation"]) {
 	const docs: Record<string, unknown> = {};
-	for (const token of [ConversationConfig, LiveDoc, InboxDoc, UsageDoc] as const) {
+	for (const token of [AgentDoc, LiveDoc, InboxDoc, UsageDoc] as const) {
 		const value = await harness.snapshot(token as typeof LiveDoc, conversation.id, context);
 		if (value !== undefined) docs[token.definition.kind] = value;
 	}
@@ -143,11 +143,11 @@ describe("conversation view", () => {
 		const other = await harness.createConversation({ ownership: { kind: "ownerless" } }, context);
 		const { initial, frames, stop } = await record(root);
 		await other.commit((tx) => tx.appendEntry(other.id, { kind: "note" }), context);
-		await root.setThinkingLevel("high", context);
+		await root.configure({ thinkingLevel: "high" }, context);
 		await root.commit((tx) => tx.appendEntry(root.id, { kind: "note" }), context);
 		await drained();
 		expect(frames).toHaveLength(2);
-		expect(frames[0]!.ops).toEqual([["s", ["docs", "knightcode.conversation.config", "thinkingLevel"], "high"]]);
+		expect(frames[0]!.ops).toEqual([["s", ["docs", "knightcode.agent", "thinkingLevel"], "high"]]);
 		expect(frames[0]!.value.entries).toBe(initial.entries);
 		expect(frames[0]!.value.docs["knightcode.live"]).toBe(initial.docs["knightcode.live"]);
 		expect(frames[1]!.value.docs).toBe(frames[0]!.value.docs);

@@ -265,6 +265,27 @@ export function loadProjectContextFiles(options: {
 	return contextFiles;
 }
 
+interface PromptFileOptions {
+	cwd: string;
+	agentDir: string;
+	projectTrusted: boolean;
+}
+
+/** The project's `name` file when the project is trusted, else the global one. */
+function discoverPromptFile(options: PromptFileOptions, name: "SYSTEM.md" | "APPEND_SYSTEM.md"): string | undefined {
+	const projectPath = join(options.cwd, CONFIG_DIR_NAME, name);
+	if (options.projectTrusted && existsSync(projectPath)) return projectPath;
+	const globalPath = join(options.agentDir, name);
+	return existsSync(globalPath) ? globalPath : undefined;
+}
+
+/** `SYSTEM.md` and `APPEND_SYSTEM.md` as discovered without CLI flags or overrides. */
+export function loadPromptFiles(options: PromptFileOptions): { systemPrompt?: string; appendSystemPrompt: string[] } {
+	const system = resolvePromptInput(discoverPromptFile(options, "SYSTEM.md"), "system prompt");
+	const append = resolvePromptInput(discoverPromptFile(options, "APPEND_SYSTEM.md"), "append system prompt");
+	return { ...(system === undefined ? {} : { systemPrompt: system }), appendSystemPrompt: append ? [append] : [] };
+}
+
 export interface DefaultResourceLoaderOptions {
 	cwd: string;
 	agentDir: string;
@@ -1195,31 +1216,15 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}
 
 	private discoverSystemPromptFile(): string | undefined {
-		const projectPath = join(this.cwd, CONFIG_DIR_NAME, "SYSTEM.md");
-		if (this.settingsManager.isProjectTrusted() && existsSync(projectPath)) {
-			return projectPath;
-		}
-
-		const globalPath = join(this.agentDir, "SYSTEM.md");
-		if (existsSync(globalPath)) {
-			return globalPath;
-		}
-
-		return undefined;
+		return discoverPromptFile(this.promptFileOptions(), "SYSTEM.md");
 	}
 
 	private discoverAppendSystemPromptFile(): string | undefined {
-		const projectPath = join(this.cwd, CONFIG_DIR_NAME, "APPEND_SYSTEM.md");
-		if (this.settingsManager.isProjectTrusted() && existsSync(projectPath)) {
-			return projectPath;
-		}
+		return discoverPromptFile(this.promptFileOptions(), "APPEND_SYSTEM.md");
+	}
 
-		const globalPath = join(this.agentDir, "APPEND_SYSTEM.md");
-		if (existsSync(globalPath)) {
-			return globalPath;
-		}
-
-		return undefined;
+	private promptFileOptions(): PromptFileOptions {
+		return { cwd: this.cwd, agentDir: this.agentDir, projectTrusted: this.settingsManager.isProjectTrusted() };
 	}
 
 	private isUnderPath(target: string, root: string): boolean {
