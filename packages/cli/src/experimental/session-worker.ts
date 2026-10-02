@@ -13,7 +13,7 @@ import {
 } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT, TODO_CONTEXT, withCancel } from "@knightcode/chord/context";
 import { Harness, ROOT_CONVERSATION_ID, type TaskGraph } from "@knightcode/durable";
-import { openNodeSqliteStorage } from "@knightcode/durable/storage/sqlite/node";
+import { openSqliteStorage } from "./sqlite-storage.ts";
 import lockfile from "proper-lockfile";
 import Type, { type Static } from "typebox";
 import { Check } from "typebox/value";
@@ -781,7 +781,7 @@ async function createCodingAgentHarness(
 	let harness: Harness | undefined;
 	try {
 		harness = await Harness.open(
-			await openNodeSqliteStorage(databasePath),
+			await openSqliteStorage(databasePath),
 			{
 				models: modelRuntime,
 				registry: createCodingRegistry(settingsManager, cwd),

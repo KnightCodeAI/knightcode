@@ -14,7 +14,7 @@ import {
 	type Submission,
 	type TaskGraph,
 } from "@knightcode/durable";
-import { openNodeSqliteStorage } from "@knightcode/durable/storage/sqlite/node";
+import { openSqliteStorage } from "../sqlite-storage.ts";
 import { ModelRuntime } from "../../core/model-runtime.ts";
 import { SettingsManager } from "../../core/settings-manager.ts";
 import {
@@ -133,7 +133,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 		const pendingReports: unknown[] = [];
 		let report: (error: unknown) => void = (error) => pendingReports.push(error);
 		harness = await Harness.open(
-			await openNodeSqliteStorage(location.database),
+			await openSqliteStorage(location.database),
 			{
 				models: modelRuntime,
 				registry,
