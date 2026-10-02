@@ -29,6 +29,23 @@ describe("provider request retries", () => {
 		expect(request).toHaveBeenCalledTimes(2);
 	});
 
+	it.each([
+		["retry-after", "1e999"],
+		["retry-after-ms", "Infinity"],
+	])("uses exponential backoff when %s is not finite", async (header, value) => {
+		vi.useFakeTimers();
+		const request = vi
+			.fn<() => Promise<string>>()
+			.mockRejectedValueOnce(providerError(429, { [header]: value }))
+			.mockResolvedValue("ok");
+
+		const result = retryProviderRequest(request, { maxRetries: 1, maxRetryDelayMs: 1000 });
+		await vi.advanceTimersByTimeAsync(500);
+
+		await expect(result).resolves.toBe("ok");
+		expect(request).toHaveBeenCalledTimes(2);
+	});
+
 	it("does not retry errors the provider marks as non-retryable", async () => {
 		const error = providerError(429, { "x-should-retry": "false" });
 		const request = vi.fn<() => Promise<string>>().mockRejectedValue(error);
