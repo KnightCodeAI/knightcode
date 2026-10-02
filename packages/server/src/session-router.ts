@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { JsonValue, ServiceCall, ServiceProviderUpdate } from "@knightcode/chord";
-import { BACKGROUND_CONTEXT, type Context, type SessionMetadata } from "@knightcode/agent";
+import type { Context, JsonValue, ServiceCall, ServiceProviderUpdate } from "@knightcode/chord";
+import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import type { RpcTarget, SessionTarget } from "@knightcode/protocol";
 import { ServerDrainingError, SessionNotAttachedError } from "./errors.ts";
-import type { RoutedSessionAttachment, RoutedSessionHandle, ServerHost } from "./types.ts";
+import type { RoutedSessionAttachment, RoutedSessionHandle, ServerHost, SessionMetadata } from "./types.ts";
 
 class SessionCleanupError extends AggregateError {}
 

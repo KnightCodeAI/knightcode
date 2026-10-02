@@ -8,23 +8,23 @@ import {
 	type ConversationId,
 	type ConversationView,
 	type Cursor,
-	createRegistry,
 	type EntryRecord,
 	Harness,
-	type HarnessSettings,
 	type ModelRef,
 	ROOT_CONVERSATION_ID,
 	type Submission,
 	type TaskGraph,
 } from "@knightcode/durable";
-import { NodeExecutionEnv } from "@knightcode/durable/env/node";
 import { openNodeSqliteStorage } from "@knightcode/durable/storage/sqlite/node";
-import { CodingTools } from "@knightcode/durable/tools";
-import { applyHttpProxySettings, configureHttpDispatcher } from "../../core/http-dispatcher.ts";
-import { findInitialModel } from "../../core/model-resolver.ts";
 import { ModelRuntime } from "../../core/model-runtime.ts";
 import { SettingsManager } from "../../core/settings-manager.ts";
-import { createKnightPrompt } from "./prompt.ts";
+import {
+	configureHarnessHttp,
+	createCodingRegistry,
+	createHarnessSettings,
+	ExecutionEnvs,
+	findInitialAgentModel,
+} from "./harness-setup.ts";
 import { selectSession } from "./sessions.ts";
 import { Subagent } from "./subagent.ts";
 
@@ -124,41 +124,14 @@ function titleOf(entry: EntryRecord | undefined): { title?: string } {
 
 export async function openDurable(options: OpenDurableOptions = {}): Promise<OpenDurableResult> {
 	const location = await selectSession(options.cwd ?? process.cwd(), options.continueSession ?? false);
-	const envs = new Map<string, NodeExecutionEnv>();
+	const envs = new ExecutionEnvs(location.cwd);
 	let harness: Harness | undefined;
 	try {
 		const modelRuntime = await ModelRuntime.create();
 		const settingsManager = SettingsManager.create(location.cwd);
-		// KnightCode's HTTP setup: proxy, idle timeouts, and one undici for fetch. Without it, some provider streams break off.
-		applyHttpProxySettings(settingsManager.getGlobalSettings().httpProxy);
-		configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
-		// Read at every use from KnightCode's settings as loaded at startup.
-		const settings: HarnessSettings = {
-			get stream() {
-				const provider = settingsManager.getProviderRetrySettings();
-				const idle = settingsManager.getHttpIdleTimeoutMs();
-				return {
-					timeoutMs: provider.timeoutMs ?? (idle === 0 ? 2147483647 : idle),
-					maxRetryDelayMs: provider.maxRetryDelayMs,
-					...(provider.maxRetries === undefined ? {} : { maxRetries: provider.maxRetries }),
-				};
-			},
-			get compaction() {
-				return settingsManager.getCompactionSettings();
-			},
-			get retry() {
-				return settingsManager.getRetrySettings();
-			},
-			get steeringMode() {
-				return settingsManager.getSteeringMode();
-			},
-			get followUpMode() {
-				return settingsManager.getFollowUpMode();
-			},
-		};
-		const registry = createRegistry();
-		registry.install(CodingTools);
-		registry.install(createKnightPrompt(settingsManager, location.cwd));
+		configureHarnessHttp(settingsManager);
+		const settings = createHarnessSettings(settingsManager);
+		const registry = createCodingRegistry(settingsManager, location.cwd);
 		registry.install(Subagent);
 
 		const pendingReports: unknown[] = [];
@@ -169,38 +142,17 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 				models: modelRuntime,
 				registry,
 				settings,
-				// One environment per directory, shared by every conversation in it.
-				env: ({ cwd = location.cwd }) => {
-					let env = envs.get(cwd);
-					if (env === undefined) {
-						env = new NodeExecutionEnv({ cwd });
-						envs.set(cwd, env);
-					}
-					return env;
-				},
+				env: envs.env,
 				onReport: (error) => report(error),
 			},
 			context,
 		);
-		const initial = location.created
-			? await findInitialModel({
-					scopedModels: [],
-					isContinuing: false,
-					defaultProvider: settingsManager.getDefaultProvider(),
-					defaultModelId: settingsManager.getDefaultModel(),
-					defaultThinkingLevel: settingsManager.getDefaultThinkingLevel(),
-					modelRuntime,
-				})
-			: undefined;
+		const initial = location.created ? await findInitialAgentModel(settingsManager, modelRuntime) : undefined;
 		const root = await harness.root(context, {
 			agent: {
 				cwd: location.cwd,
-				...(initial?.model === undefined
-					? {}
-					: {
-							model: { provider: initial.model.provider, modelId: initial.model.id },
-							thinkingLevel: initial.thinkingLevel,
-						}),
+				...(initial?.model === undefined ? {} : { model: initial.model }),
+				...(initial?.thinkingLevel === undefined ? {} : { thinkingLevel: initial.thinkingLevel }),
 			},
 		});
 		const label = (id: ConversationId): string => (id === root.id ? "main" : `subagent ${id}`);
@@ -377,6 +329,8 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 			notice("warning", `Saved model is unavailable: ${saved.provider}/${saved.modelId}`);
 		}
 		if (initial?.fallbackMessage !== undefined) notice("info", initial.fallbackMessage);
+		// The task panel starts open; /tasks hides it.
+		await controller.toggleTasks();
 		// Recovered work from an interrupted turn continues now.
 		harness.resume();
 
@@ -400,7 +354,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 					try {
 						// Close writes no outcome: a running turn resumes with --continue.
 						await opened.close(context);
-						for (const env of envs.values()) await env.cleanup(context);
+						await envs.cleanup(context);
 					} finally {
 						await location.release();
 					}
