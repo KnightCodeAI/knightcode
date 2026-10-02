@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import type { StatementSync } from "node:sqlite";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "./database.ts";
 import { SqliteStorage } from "./storage.ts";
 
@@ -17,6 +17,23 @@ const DEFAULT_WAL_AUTO_CHECKPOINT_PAGES = 1_000;
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 
 type TransactionScope = { active: boolean };
+
+/** A prepared statement of a synchronous SQLite driver, as this adapter uses it. */
+export interface SyncSqliteStatement {
+	run(...params: SqliteValue[]): unknown;
+	get(...params: SqliteValue[]): unknown;
+	all(...params: SqliteValue[]): unknown[];
+}
+
+/**
+ * A synchronous SQLite connection, as this adapter uses it. `node:sqlite`'s `DatabaseSync` is one; the Bun
+ * adapter wraps `bun:sqlite` into one.
+ */
+export interface SyncSqliteConnection {
+	exec(sql: string): void;
+	prepare(sql: string): SyncSqliteStatement;
+	close(): void;
+}
 
 const ignore = (): void => {};
 
@@ -74,10 +91,10 @@ class SerialOperationQueue {
  * database and its transaction handles share them across transactions.
  */
 abstract class NodeSqliteExecutor implements SqliteExecutor {
-	protected readonly database: DatabaseSync;
-	protected readonly statements: Map<string, StatementSync>;
+	protected readonly database: SyncSqliteConnection;
+	protected readonly statements: Map<string, SyncSqliteStatement>;
 
-	constructor(database: DatabaseSync, statements: Map<string, StatementSync>) {
+	constructor(database: SyncSqliteConnection, statements: Map<string, SyncSqliteStatement>) {
 		this.database = database;
 		this.statements = statements;
 	}
@@ -104,7 +121,7 @@ abstract class NodeSqliteExecutor implements SqliteExecutor {
 
 	protected abstract runOperation<T>(operation: () => T): Promise<T>;
 
-	private statement(sql: string): StatementSync {
+	private statement(sql: string): SyncSqliteStatement {
 		let statement = this.statements.get(sql);
 		if (statement === undefined) {
 			statement = this.database.prepare(sql);
@@ -117,7 +134,7 @@ abstract class NodeSqliteExecutor implements SqliteExecutor {
 class NodeSqliteTransaction extends NodeSqliteExecutor {
 	private readonly scope: TransactionScope;
 
-	constructor(database: DatabaseSync, statements: Map<string, StatementSync>, scope: TransactionScope) {
+	constructor(database: SyncSqliteConnection, statements: Map<string, SyncSqliteStatement>, scope: TransactionScope) {
 		super(database, statements);
 		this.scope = scope;
 	}
@@ -128,12 +145,15 @@ class NodeSqliteTransaction extends NodeSqliteExecutor {
 	}
 }
 
-/** `SqliteDatabase` adapter backed by Node's built-in `node:sqlite`. */
+/**
+ * `SqliteDatabase` adapter over a synchronous SQLite connection: Node's built-in `node:sqlite`, or `bun:sqlite`
+ * through the Bun adapter.
+ */
 export class NodeSqliteDatabase extends NodeSqliteExecutor implements SqliteDatabase {
 	private readonly access = new SerialOperationQueue();
 	private closed = false;
 
-	constructor(database: DatabaseSync) {
+	constructor(database: SyncSqliteConnection) {
 		super(database, new Map());
 	}
 
@@ -176,16 +196,16 @@ export class NodeSqliteDatabase extends NodeSqliteExecutor implements SqliteData
 	}
 }
 
-/** Open and configure a Node-backed SQLite database facade. */
-export async function openNodeSqliteDatabase(
-	path: string,
+/**
+ * Configure a freshly opened connection for durable storage: WAL journaling, NORMAL sync and the WAL
+ * auto-checkpoint threshold. Closes the connection when configuration fails.
+ */
+export async function configureSqliteDatabase(
+	connection: SyncSqliteConnection,
 	options: NodeSqliteStorageOptions = {},
 ): Promise<NodeSqliteDatabase> {
 	const checkpointPages = options.walAutoCheckpointPages ?? DEFAULT_WAL_AUTO_CHECKPOINT_PAGES;
-	const timeout = options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
-	if (path !== ":memory:") await mkdir(dirname(path), { recursive: true });
-	const database = new DatabaseSync(path, { timeout });
-	const adapter = new NodeSqliteDatabase(database);
+	const adapter = new NodeSqliteDatabase(connection);
 	try {
 		await adapter.exec("PRAGMA journal_mode = WAL");
 		await adapter.exec("PRAGMA synchronous = NORMAL");
@@ -199,6 +219,30 @@ export async function openNodeSqliteDatabase(
 		}
 		throw error;
 	}
+}
+
+/** Create the parent directory of a database file; `:memory:` has none. */
+export async function prepareSqlitePath(path: string): Promise<void> {
+	if (path !== ":memory:") await mkdir(dirname(path), { recursive: true });
+}
+
+/** Default time SQLite waits for a competing file lock, in milliseconds. */
+export function sqliteBusyTimeoutMs(options: NodeSqliteStorageOptions): number {
+	return options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
+}
+
+/** Open and configure a Node-backed SQLite database facade. */
+export async function openNodeSqliteDatabase(
+	path: string,
+	options: NodeSqliteStorageOptions = {},
+): Promise<NodeSqliteDatabase> {
+	await prepareSqlitePath(path);
+	// Loaded on use rather than imported: Bun has no `node:sqlite`, and a static import would fail any Bun
+	// process that merely loads this module, including a compiled binary that bundles it.
+	const { DatabaseSync: Database } = createRequire(import.meta.url)("node:sqlite") as {
+		DatabaseSync: typeof DatabaseSync;
+	};
+	return configureSqliteDatabase(new Database(path, { timeout: sqliteBusyTimeoutMs(options) }), options);
 }
 
 /** Open or create file-backed durable storage using Node's built-in SQLite. */

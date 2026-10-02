@@ -46,6 +46,7 @@ try {
 		"packages/durable/src/env/node.ts",
 		"packages/durable/src/storage/jsonl/node.ts",
 		"packages/durable/src/storage/sqlite/node.ts",
+		"packages/durable/src/storage/sqlite/bun.ts",
 	]) {
 		const nodeAdapter = findInput(durableInputs, forbiddenInput);
 		if (nodeAdapter) throw new Error(`Durable browser bundle unexpectedly includes ${nodeAdapter}`);

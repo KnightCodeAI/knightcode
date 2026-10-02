@@ -6,6 +6,7 @@
 import {
 	type AssistantMessage,
 	EventStream,
+	findNonJson,
 	getCurrentTools,
 	getToolStateChanges,
 	normalizeContext,
@@ -16,7 +17,6 @@ import {
 	validateToolArguments,
 } from "@knightcode/ai";
 import { getDefaultStreamFn } from "./stream-fn.ts";
-import { assertJsonDetails } from "./harness/execution/tools.ts";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -937,4 +937,17 @@ function createToolResultMessage(finalized: FinalizedToolCallOutcome): ToolResul
 async function emitToolResultMessage(toolResultMessage: ToolResultMessage, emit: AgentEventSink): Promise<void> {
 	await emit({ type: "message_start", message: toolResultMessage });
 	await emit({ type: "message_end", message: toolResultMessage });
+}
+
+/**
+ * Details ride the transcript as JSON, so a value JSON cannot carry (a Date, a function,
+ * an undefined array element) would be silently altered on the way to the session file.
+ * An untyped tool gets the same answer the types give a typed one: an error.
+ */
+function assertJsonDetails(toolName: string, details: unknown): void {
+	if (details === undefined) return;
+	const offending = findNonJson(details);
+	if (offending !== undefined) {
+		throw new Error(`Tool "${toolName}" returned details that are not JSON: ${offending}`);
+	}
 }

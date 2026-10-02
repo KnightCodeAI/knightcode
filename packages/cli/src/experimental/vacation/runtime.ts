@@ -1,4 +1,3 @@
-import { rm } from "node:fs/promises";
 import type { AttachedReplicatedState } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { clampThinkingLevel, getSupportedThinkingLevels, type ModelThinkingLevel } from "@knightcode/ai";
@@ -20,13 +19,12 @@ import { ModelRuntime } from "../../core/model-runtime.ts";
 import { SettingsManager } from "../../core/settings-manager.ts";
 import {
 	configureHarnessHttp,
-	createCodingRegistry,
 	createHarnessSettings,
-	ExecutionEnvs,
+	createVacationRegistry,
 	findInitialAgentModel,
 } from "./harness-setup.ts";
 import { selectSession } from "./sessions.ts";
-import { Subagent } from "./subagent.ts";
+import { Vacation } from "./vacation.ts";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -124,15 +122,13 @@ function titleOf(entry: EntryRecord | undefined): { title?: string } {
 
 export async function openDurable(options: OpenDurableOptions = {}): Promise<OpenDurableResult> {
 	const location = await selectSession(options.cwd ?? process.cwd(), options.continueSession ?? false);
-	const envs = new ExecutionEnvs(location.cwd);
 	let harness: Harness | undefined;
 	try {
 		const modelRuntime = await ModelRuntime.create();
 		const settingsManager = SettingsManager.create(location.cwd);
 		configureHarnessHttp(settingsManager);
 		const settings = createHarnessSettings(settingsManager);
-		const registry = createCodingRegistry(settingsManager, location.cwd);
-		registry.install(Subagent);
+		const registry = createVacationRegistry();
 
 		const pendingReports: unknown[] = [];
 		let report: (error: unknown) => void = (error) => pendingReports.push(error);
@@ -142,7 +138,6 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 				models: modelRuntime,
 				registry,
 				settings,
-				env: envs.env,
 				onReport: (error) => report(error),
 			},
 			context,
@@ -150,7 +145,8 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 		const initial = location.created ? await findInitialAgentModel(settingsManager, modelRuntime) : undefined;
 		const root = await harness.root(context, {
 			agent: {
-				cwd: location.cwd,
+				// Only the vacation planner; the research subagent selects search itself.
+				extensions: [Vacation],
 				...(initial?.model === undefined ? {} : { model: initial.model }),
 				...(initial?.thinkingLevel === undefined ? {} : { thinkingLevel: initial.thinkingLevel }),
 			},
@@ -255,31 +251,28 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 				command(async () => {
 					const id = await current.compact(instructions, context);
 					// Report the outcome once it is known; the status line shows the compaction meanwhile.
-					void opened
-						.waitForTask(id, context)
-						.then(async (receipt) => {
-							const outcome = receipt.state.outcome;
-							if (outcome.status === "completed") {
-								const { entryId, submissionId } = outcome.result;
-								// A summary written while busy is a submission: placed now, queued, or dropped as stale.
-								const status =
-									submissionId === undefined
-										? undefined
-										: (await (await opened.submission(submissionId, context))?.status(context))?.status;
-								notice(
-									"info",
-									entryId !== undefined || status === "done"
-										? "Compacted."
-										: status === "queued"
-											? "Compaction summary queued; it is placed at the next turn boundary."
-											: status === "unanswered"
-												? "Compaction summary dropped: the context changed under it."
-												: "Nothing to compact: the context fits in the recent window that is kept verbatim.",
-								);
-							} else if (outcome.status === "aborted") notice("info", "Compaction aborted.");
-							else notice("error", `Compaction ${outcome.status}: ${outcome.error?.message ?? outcome.reason ?? ""}`);
-						})
-						.catch(fail);
+					void opened.waitForTask(id, context).then(async (receipt) => {
+						const outcome = receipt.state.outcome;
+						if (outcome.status === "completed") {
+							const { entryId, submissionId } = outcome.result;
+							// A summary written while busy is a submission: placed now, queued, or dropped as stale.
+							const status =
+								submissionId === undefined
+									? undefined
+									: (await (await opened.submission(submissionId, context))?.status(context))?.status;
+							notice(
+								"info",
+								entryId !== undefined || status === "done"
+									? "Compacted."
+									: status === "queued"
+										? "Compaction summary queued; it is placed at the next turn boundary."
+										: status === "unanswered"
+											? "Compaction summary dropped: the context changed under it."
+											: "Nothing to compact: the context fits in the recent window that is kept verbatim.",
+							);
+						} else if (outcome.status === "aborted") notice("info", "Compaction aborted.");
+						else notice("error", `Compaction ${outcome.status}: ${outcome.error?.message ?? outcome.reason ?? ""}`);
+					}, fail);
 				}),
 			// Not queued: it waits until the conversation is idle.
 			abort: () => current.abort(context).catch(fail),
@@ -354,7 +347,6 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 					try {
 						// Close writes no outcome: a running turn resumes with --continue.
 						await opened.close(context);
-						await envs.cleanup(context);
 					} finally {
 						await location.release();
 					}
@@ -365,8 +357,6 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 	} catch (error) {
 		await harness?.close(context).catch(() => {});
 		await location.release().catch(() => {});
-		// A session that never opened holds nothing to continue.
-		if (location.created) await rm(location.directory, { recursive: true, force: true }).catch(() => {});
 		throw error;
 	}
 }

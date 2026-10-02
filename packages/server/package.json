@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@knightcode/chord": "workspace:*",
-    "@knightcode/agent": "workspace:*",
     "@knightcode/protocol": "workspace:*"
   },
   "scripts": {

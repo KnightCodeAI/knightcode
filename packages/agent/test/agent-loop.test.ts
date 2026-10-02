@@ -2164,6 +2164,26 @@ describe("runToolCall", () => {
 		expect(hookCalls).toEqual(["before a", "after a", "before c", "before e", "after e"]);
 	});
 
+	it("fails a call whose details JSON cannot carry, naming the offending path", async () => {
+		const dated: AgentTool = {
+			name: "dated",
+			label: "Dated",
+			description: "Returns details with a Date",
+			parameters: Type.Object({}),
+			async execute() {
+				return { content: [{ type: "text", text: "ok" }], details: { at: [1, new Date(0)] } };
+			},
+		};
+		expect(
+			await runToolCall(call("a", "dated", {}), { tools: [dated], assistantMessage, context: { messages: [] } }),
+		).toMatchObject({
+			result: {
+				content: [{ type: "text", text: 'Tool "dated" returned details that are not JSON: details.at[1]' }],
+			},
+			isError: true,
+		});
+	});
+
 	it("lets afterToolCall replace structured content and drops it when only content is replaced", async () => {
 		const redacted = [{ type: "text" as const, text: "redacted" }];
 		const results = [

@@ -16,6 +16,7 @@
     "./storage/jsonl/node": "./src/storage/jsonl/node.ts",
     "./storage/sqlite": "./src/storage/sqlite/index.ts",
     "./storage/sqlite/node": "./src/storage/sqlite/node.ts",
+    "./storage/sqlite/bun": "./src/storage/sqlite/bun.ts",
     "./testing": "./src/testing/index.ts",
     "./package.json": "./package.json",
     "./*": "./src/*.ts"
