@@ -25,7 +25,13 @@ import {
 } from "@knightcode/mcp";
 import { Container, Spacer, Text } from "@knightcode/tui";
 import type { TSchema } from "typebox";
-import type { ToolAnnotations, ToolDefinition, ToolExposure, ToolNamespace } from "../../core/extensions/types.ts";
+import type {
+	ToolAnnotations,
+	ToolDefinition,
+	ToolExposure,
+	ToolNamespace,
+	ToolRenderers,
+} from "../../core/extensions/types.ts";
 import { formatToolCallWithArgs, getTextOutput, replaceTabs } from "../../core/tools/render-utils.ts";
 import { formatSize, truncateMiddle } from "../../core/tools/truncate.ts";
 import { CollapsedToolOutput } from "../../modes/interactive/components/visual-truncate.ts";
@@ -274,6 +280,26 @@ export function createMcpToolDefinition(options: {
 		exposure: toToolExposure(options.exposure),
 		namespace: options.namespace,
 		...(annotations ? { annotations } : {}),
+		...createMcpToolRenderers(label),
+		async execute(_toolCallId, params, signal, onUpdate) {
+			const client = await options.getClient();
+			const result = await client.callTool(tool.name, (params ?? {}) as Record<string, unknown>, {
+				signal,
+				timeoutMs: options.timeoutMs,
+				onProgress: (progress) => {
+					const total = progress.total === undefined ? "" : `/${progress.total}`;
+					const text = progress.message ?? `Progress ${progress.progress}${total}`;
+					onUpdate?.({ content: [{ type: "text", text }], details: { server, tool: tool.name } });
+				},
+			});
+			return convertMcpResult(server, tool.name, result, { readableResources: options.readableResources?.() });
+		},
+	};
+}
+
+/** Renderers of calls to an MCP tool, labeled `server/tool`, also used before the tool is registered. */
+export function createMcpToolRenderers(label: string): ToolRenderers {
+	return {
 		renderCall(args, theme, context) {
 			const component = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 			component.setText(formatToolCallWithArgs(label, args, theme, context.expanded));
@@ -304,19 +330,6 @@ export function createMcpToolDefinition(options: {
 				);
 			}
 			return component;
-		},
-		async execute(_toolCallId, params, signal, onUpdate) {
-			const client = await options.getClient();
-			const result = await client.callTool(tool.name, (params ?? {}) as Record<string, unknown>, {
-				signal,
-				timeoutMs: options.timeoutMs,
-				onProgress: (progress) => {
-					const total = progress.total === undefined ? "" : `/${progress.total}`;
-					const text = progress.message ?? `Progress ${progress.progress}${total}`;
-					onUpdate?.({ content: [{ type: "text", text }], details: { server, tool: tool.name } });
-				},
-			});
-			return convertMcpResult(server, tool.name, result, { readableResources: options.readableResources?.() });
 		},
 	};
 }

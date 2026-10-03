@@ -95,6 +95,8 @@ interface ServerReport {
 	name: string;
 	scope: string;
 	source: string;
+	/** Project `mcp.json` that overrides `enabled`, `exposure`, or `toolExposure` of this global server. */
+	override?: string;
 	enabled: boolean;
 	exposure: string;
 	transport: string;
@@ -476,6 +478,7 @@ async function list(
 				name: entry.name,
 				scope: entry.scope ?? "global",
 				source: entry.source,
+				...(entry.override ? { override: entry.override } : {}),
 				enabled: entry.config.enabled !== false,
 				exposure: entry.config.exposure ?? "codemode",
 				transport: describeTransport(entry),
@@ -529,6 +532,7 @@ async function list(
 					: report.state;
 		log(`${report.name}: ${state} (${report.exposure}, ${report.scope})`);
 		log(`  ${report.transport}`);
+		if (report.override) log(`  project override: ${report.override}`);
 		if (report.state === "needs-auth") {
 			const provider = authProviders.get(report.name);
 			log(
