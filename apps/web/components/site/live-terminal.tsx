@@ -301,14 +301,13 @@ function FrameRule({
     <div
       className="flex whitespace-pre select-none"
       style={{ color }}
-      aria-hidden={!children}
     >
-      <span>{left}</span>
+      <span aria-hidden>{left}</span>
       <span className="min-w-0 flex-1 overflow-hidden">
         {children}
-        {"─".repeat(400)}
+        <span aria-hidden>{"─".repeat(400)}</span>
       </span>
-      <span>{right}</span>
+      <span aria-hidden>{right}</span>
     </div>
   )
 }

@@ -531,7 +531,11 @@ describe("InteractiveMode.showLoadedResources", () => {
 		appendSystemPromptSources?: Array<{ path: string }>;
 		extensions?: ExtensionFixture[];
 		skills?: Array<{ filePath: string; name: string }>;
-		skillDiagnostics?: Array<{ type: "warning" | "error" | "collision"; message: string }>;
+		skillDiagnostics?: Array<{
+			type: "warning" | "error" | "collision";
+			message: string;
+			collision?: { resourceType: "skill"; name: string; winnerPath: string; loserPath: string };
+		}>;
 		useRealScopeGroups?: boolean;
 	}) {
 		const fakeThis: any = {
@@ -1306,5 +1310,27 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const output = renderAll(fakeThis.loadedResourcesContainer);
 		expect(output).toContain("1 skill warning");
 		expect(output).not.toContain("skills      ");
+	});
+
+	test("counts every collision loser as a skipped duplicate", () => {
+		const collision = (loserPath: string) => ({
+			type: "collision" as const,
+			message: 'name "commit" collision',
+			collision: { resourceType: "skill" as const, name: "commit", winnerPath: "/a/SKILL.md", loserPath },
+		});
+		const fakeThis = createShowLoadedResourcesThis({
+			quietStartup: true,
+			skills: [{ filePath: "/a/SKILL.md", name: "commit" }],
+			skillDiagnostics: [collision("/b/SKILL.md"), collision("/c/SKILL.md")],
+		});
+
+		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
+			force: false,
+			showDiagnosticsWhenQuiet: true,
+		});
+
+		const output = renderAll(fakeThis.loadedResourcesContainer);
+		expect(output).toContain("2 duplicate skills skipped");
+		expect(output).not.toContain("warning");
 	});
 });

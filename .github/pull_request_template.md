@@ -16,8 +16,10 @@ Then the code path underneath. Explain why, not only what.
 Performance claims need numbers: before, after, and the command that produced them.
 -->
 
-Approved in: #
-Fixes #
+<!--
+Approved in: #<issue or discussion where a maintainer said lgtm>
+Fixes #<issue this closes; one "Fixes #N" per issue>
+-->
 
 ## How to check it
 
@@ -70,4 +72,4 @@ Agents: do not claim manual testing that was not done.
 -->
 
 - [ ] I searched open PRs and this is not a duplicate.
-- [ ] I have read this code, I have run this code, and I take responsibility for it.
+- [ ] I have read this code and take responsibility for it. Anything I ran is listed under Testing.

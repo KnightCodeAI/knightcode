@@ -1790,14 +1790,12 @@ export class InteractiveMode {
 		const addDiagnosticsRow = (kind: string, diagnostics: readonly ResourceDiagnostic[]): void => {
 			if (diagnostics.length === 0) return;
 			const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-			const duplicates = new Set(
-				diagnostics.flatMap((d) => (d.type === "collision" && d.collision ? [d.collision.name] : [])),
-			);
+			// Each collision diagnostic names one loser, so it counts one skipped resource.
+			const duplicates = diagnostics.filter((d) => d.type === "collision" && d.collision).length;
 			const errors = diagnostics.filter((d) => d.type === "error").length;
-			const warnings =
-				diagnostics.length - errors - diagnostics.filter((d) => d.type === "collision" && d.collision).length;
+			const warnings = diagnostics.length - errors - duplicates;
 			const parts: string[] = [];
-			if (duplicates.size > 0) parts.push(`${plural(duplicates.size, `duplicate ${kind}`)} skipped`);
+			if (duplicates > 0) parts.push(`${plural(duplicates, `duplicate ${kind}`)} skipped`);
 			if (errors > 0) parts.push(plural(errors, `${kind} error`));
 			if (warnings > 0) parts.push(plural(warnings, `${kind} warning`));
 			const summary = () =>

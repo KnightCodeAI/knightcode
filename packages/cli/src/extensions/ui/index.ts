@@ -290,6 +290,7 @@ export default function uiExtension(knightcode: ExtensionAPI): void {
 
 	knightcode.on("model_select", () => {
 		answeredBy = undefined;
+		tokensPerSecond = undefined;
 	});
 	knightcode.on("session_tree", (_event, ctx) => refreshCost(ctx));
 	knightcode.on("session_compact", (_event, ctx) => refreshCost(ctx));
