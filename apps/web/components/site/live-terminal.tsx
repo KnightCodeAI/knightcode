@@ -22,10 +22,10 @@ const C = {
   pageBg: "#16130f",
   text: "#e7e2db",
   muted: "#9c958d",
-  dim: "#78716a",
+  dim: "#7b756e",
   accent: "#ff8a3d",
   success: "#8fb573",
-  error: "#e8644d",
+  error: "#ea6f59",
   warning: "#e9c46a",
   border: "#4a443e",
   borderMuted: "#36312c",
@@ -33,22 +33,20 @@ const C = {
   toolTitle: "#e7e2db",
   toolOutput: "#9c958d",
   bashMode: "#8fb573",
-  customLabel: "#ff8a3d",
-  customMsgBg: "#2a221b",
-  customMsgText: "#9c958d",
   mdHeading: "#ffb870",
   mdCode: "#ffb870",
   mdListBullet: "#ff8a3d",
   diffAdded: "#8fb573",
-  diffRemoved: "#e8644d",
-  diffContext: "#78716a",
+  diffRemoved: "#ea6f59",
+  diffContext: "#9c958d",
   thinkingMedium: "#c2824a",
-  synComment: "#78716a",
+  synComment: "#7b756e",
   synKeyword: "#ff8a3d",
   synFunction: "#ffb870",
   synString: "#8fb573",
   synNumber: "#f2a65a",
   synType: "#e9c46a",
+  synVariable: "#d9c2a8",
 } as const
 
 /* Glyph vocabulary: packages/cli/src/modes/interactive/glyphs.ts (non-darwin set). */
@@ -133,7 +131,7 @@ const SLASH_COMMANDS: Array<{ name: string; description: string }> = [
     description:
       "Reload keybindings, extensions, skills, prompts, themes, and context files",
   },
-  { name: "quit", description: "Quit KnightCode" },
+  { name: "quit", description: "Quit knightcode" },
 ]
 
 /** What `@` completes against. A plausible slice of this repo. */
@@ -189,6 +187,8 @@ type Row = {
 
 const s = (t: string, c?: string, b?: boolean): Span => ({ t, c, b })
 const blank = (): Span[] => [s("")]
+/** Markdown's 1-column pad: a gutter, so wrapped prose stays indented. */
+const PAD: Span[] = [s(" ")]
 
 /** keyHint(): the key dim, the description muted. Joined with a non-breaking
  *  space so a wrap lands between hints, never inside one. */
@@ -273,7 +273,7 @@ const RowView = memo(function RowView({ row }: { row: Row }) {
 
 /**
  * While the agent runs, CustomEditor draws the status into the top border
- * itself: `╭── <spinner> Working (escape to interrupt) ───╮`.
+ * itself, in the border colour: `╭── <spinner> Working ───╮`.
  */
 function WorkingStatus({ static: frozen }: { static: boolean }) {
   const [frame, setFrame] = useState(0)
@@ -282,7 +282,7 @@ function WorkingStatus({ static: frozen }: { static: boolean }) {
     const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER.length), 80)
     return () => clearInterval(id)
   }, [frozen])
-  return <>{`── ${SPINNER[frame]} Working (escape to interrupt) `}</>
+  return <>{`── ${SPINNER[frame]} Working `}</>
 }
 
 /** One edge of the editor frame: corner, a rule clipped by the panel, corner. */
@@ -298,10 +298,7 @@ function FrameRule({
   children?: React.ReactNode
 }) {
   return (
-    <div
-      className="flex whitespace-pre select-none"
-      style={{ color }}
-    >
+    <div className="flex whitespace-pre select-none" style={{ color }}>
       <span aria-hidden>{left}</span>
       <span className="min-w-0 flex-1 overflow-hidden">
         {children}
@@ -354,6 +351,76 @@ function summary(text: string, expandable = true): Span[] {
 
 const path = (p: string): Span => s(p, C.accent)
 
+/** Write's collapsed preview: the first 10 highlighted lines (tabs as three
+ *  spaces), then the remainder count. renderers/write.ts. */
+const kw = (t: string) => s(t, C.synKeyword)
+const str = (t: string) => s(t, C.synString)
+const fn = (t: string) => s(t, C.synFunction)
+const WRITE_PREVIEW: Span[][] = [
+  [
+    kw("import"),
+    s(" { describe, expect, it, vi } "),
+    kw("from"),
+    s(" "),
+    str('"vitest"'),
+    s(";"),
+  ],
+  [
+    kw("import"),
+    s(" { AgentSession, MAX_WAIT } "),
+    kw("from"),
+    s(" "),
+    str('"./agent-session.ts"'),
+    s(";"),
+  ],
+  blank(),
+  [s("describe("), str('"retry backoff"'), s(", "), fn("() =>"), s(" {")],
+  [
+    s("   it("),
+    str('"never waits longer than MAX_WAIT"'),
+    s(", "),
+    kw("async"),
+    s(" () => {"),
+  ],
+  [
+    s("      "),
+    kw("const"),
+    s(" sleep = vi.fn("),
+    kw("async"),
+    s(" () => {});"),
+  ],
+  [
+    s("      "),
+    kw("const"),
+    s(" session = "),
+    kw("new"),
+    s(" AgentSession({ sleep });"),
+  ],
+  [
+    s("      "),
+    kw("await"),
+    s(" session.retry("),
+    s("12", C.synNumber),
+    s(");"),
+  ],
+  [
+    s("      expect("),
+    s("Math", C.synType),
+    s(".max(...sleep.mock.calls.map("),
+    fn("("),
+    s("[ms]", C.synVariable),
+    fn(") =>"),
+    s(" ms))).toBe(MAX_WAIT);"),
+  ],
+  [s("   });")],
+  [
+    s("... (24 more lines, 34 total,", C.muted),
+    s(" "),
+    ...hint("ctrl+o", "to expand"),
+    s(")", C.muted),
+  ],
+]
+
 /* ---------------------------------------------------------------------------
  * The panel
  * ------------------------------------------------------------------------- */
@@ -394,13 +461,13 @@ const TRAFFIC_LIGHTS: ReadonlyArray<{
 /** Footer numbers before and after the scripted turn. */
 const BEFORE_TURN = {
   context: "0%/200k",
-  cost: "$0.00",
+  cost: "$0.000",
   speed: "— tok/s",
   files: 0,
 }
 const AFTER_TURN = {
   context: "8%/200k",
-  cost: "$0.04",
+  cost: "$0.041",
   speed: "62 tok/s",
   files: 2,
 }
@@ -493,13 +560,17 @@ export function LiveTerminal({
       setCursor(0)
     }
 
-    /** Tool call, a beat of latency, then its result rows. */
+    /** Tool call, a beat of latency, then its result rows. `preview` hangs
+     *  under the call itself, as Write's file preview does. */
     const tool = async (
       call: { gutter: Span[]; spans: Span[] },
       latency: number,
-      result: Span[][]
+      result: Span[][],
+      preview: Span[][] = []
     ) => {
       const id = push({}, call)
+      if (preview.length)
+        push({}, ...preview.map((spans) => ({ gutter: [s("  ")], spans })))
       await wait(latency)
       patch(id, { gutter: [s(`${BULLET} `, C.success)] })
       result.forEach((line, i) =>
@@ -513,16 +584,16 @@ export function LiveTerminal({
 
     /** Assistant prose, streamed a word at a time. Padded 1, no gutter. */
     const say = async (text: string, color = C.text) => {
-      const id = push({}, { spans: [s(" ")] })
+      const id = push({}, { gutter: PAD, spans: blank() })
       if (reduceRef.current) {
-        patch(id, { spans: [s(` ${text}`, color)] })
+        patch(id, { spans: [s(text, color)] })
         await wait(0)
         return
       }
       let acc = ""
       for (const word of text.split(" ")) {
         acc = acc ? `${acc} ${word}` : word
-        patch(id, { spans: [s(` ${acc}`, color)] })
+        patch(id, { spans: [s(acc, color)] })
         await wait(38)
       }
     }
@@ -578,7 +649,7 @@ export function LiveTerminal({
       clearInput()
       push(
         { spans: blank(), bg: C.userMsgBg },
-        { spans: [s(` ${prompt}`, C.text)], bg: C.userMsgBg },
+        { gutter: PAD, spans: [s(prompt, C.text)], bg: C.userMsgBg },
         { spans: blank(), bg: C.userMsgBg }
       )
       setWorking(true)
@@ -631,12 +702,34 @@ export function LiveTerminal({
             "Updated packages/cli/src/core/agent-session.ts with 3 additions and 1 removal",
             false
           ),
-          [s("1458   const delay = base * 2 ** attempt;", C.diffContext)],
-          [s("-1459  await sleep(delay);", C.diffRemoved)],
-          [s("+1459  // cap it: an outage must not stall us", C.diffAdded)],
-          [s("+1460  await sleep(Math.min(delay, MAX_WAIT));", C.diffAdded)],
-          [s('+1461  this.emit("retry", attempt);', C.diffAdded)],
-          [s("1462   }", C.diffContext)],
+          ...[
+            "      ...",
+            " 1455    async retryAfterError(attempt: number): Promise<boolean> {",
+            " 1456       const base = this.settings.retryBaseMs;",
+            " 1457       if (attempt >= this.settings.maxRetries) return false;",
+            " 1458       const delay = base * 2 ** attempt;",
+          ].map((line) => [s(line, C.diffContext)]),
+          [s("-1459       await sleep(delay);", C.diffRemoved)],
+          [
+            s(
+              "+1459       // cap it: an outage must not stall us",
+              C.diffAdded
+            ),
+          ],
+          [
+            s(
+              "+1460       await sleep(Math.min(delay, MAX_WAIT));",
+              C.diffAdded
+            ),
+          ],
+          [s('+1461       this.emit("retry", attempt);', C.diffAdded)],
+          ...[
+            " 1460       return true;",
+            " 1461    }",
+            " 1462 ",
+            " 1463    get retryCount(): number {",
+            "      ...",
+          ].map((line) => [s(line, C.diffContext)]),
         ]
       )
 
@@ -648,7 +741,8 @@ export function LiveTerminal({
             "Wrote 34 lines to packages/cli/src/core/retry-cap.test.ts",
             false
           ),
-        ]
+        ],
+        WRITE_PREVIEW
       )
 
       await tool(
@@ -670,24 +764,23 @@ export function LiveTerminal({
       push(
         {},
         {
+          gutter: PAD,
           spans: [
-            s(" • ", C.mdListBullet),
+            s("- ", C.mdListBullet),
             s("agent-session.ts", C.mdCode),
             s(" — clamp the delay, emit ", C.text),
             s("retry", C.mdCode),
           ],
         }
       )
-      push(
-        {
-          spans: [
-            s(" • ", C.mdListBullet),
-            s("retry-cap.test.ts", C.mdCode),
-            s(" — covers the cap and the event", C.text),
-          ],
-        },
-        {}
-      )
+      push({
+        gutter: PAD,
+        spans: [
+          s("- ", C.mdListBullet),
+          s("retry-cap.test.ts", C.mdCode),
+          s(" — covers the cap and the event", C.text),
+        ],
+      })
       setWorking(false)
       setStats(AFTER_TURN)
       await wait(1200)
@@ -713,7 +806,6 @@ export function LiveTerminal({
           gutter: [s(RESULT_INDENT, C.dim)],
           spans: [s("No type errors.", C.muted)],
         },
-        { gutter: [s(RESULT_INDENT, C.dim)], spans: [s("Took 4.1s", C.muted)] },
         {}
       )
     }
@@ -768,11 +860,12 @@ export function LiveTerminal({
     const at = before.lastIndexOf("@")
     if (at !== -1 && !/[\s]/.test(before.slice(at + 1))) {
       const query = before.slice(at + 1).toLowerCase()
+      // Fuzzy `@` search labels each match by its name, with the path beside it.
       const items = FILES.filter((p) => p.toLowerCase().includes(query)).map(
         (p) => ({
           value: p,
-          label: p,
-          description: undefined as string | undefined,
+          label: p.slice(p.lastIndexOf("/") + 1),
+          description: p as string | undefined,
         })
       )
       return items.length
@@ -788,15 +881,14 @@ export function LiveTerminal({
       ? Math.min(menuPick.index, menu.items.length - 1)
       : 0
 
-  // SelectList sizes the primary column from the widest label, clamped
-  // to [minPrimaryColumnWidth, maxPrimaryColumnWidth] plus a one-cell gap.
-  const primaryColumnWidth =
-    menu?.kind === "slash"
-      ? Math.min(
-          33,
-          Math.max(13, ...menu.items.map((item) => item.label.length + 1))
-        )
-      : 0
+  // SelectList sizes the primary column from the widest label plus a two-cell
+  // gap, clamped to the editor's [12, 32].
+  const primaryColumnWidth = menu
+    ? Math.min(
+        32,
+        Math.max(12, ...menu.items.map((item) => item.label.length + 2))
+      )
+    : 0
 
   // SelectList keeps the selection centred in the visible window.
   const windowStart = menu
@@ -852,34 +944,25 @@ export function LiveTerminal({
       return
     }
 
-    if (text.startsWith("/")) {
-      const name = text.slice(1).split(" ")[0]
-      const command = SLASH_COMMANDS.find((c) => c.name === name)
-      // Custom messages render in their own tinted block, like /session does.
+    // Built-in commands open UI the demo does not have; say so the way
+    // showStatus() does. An unknown `/word` is an ordinary prompt, as in the TUI.
+    const name = text.startsWith("/") ? text.slice(1).split(" ")[0] : undefined
+    if (SLASH_COMMANDS.some((c) => c.name === name)) {
       push(
         {},
-        { spans: blank(), bg: C.customMsgBg },
-        command
-          ? {
-              bg: C.customMsgBg,
-              spans: [
-                s(` [/${command.name}] `, C.customLabel, true),
-                s(command.description, C.customMsgText),
-              ],
-            }
-          : {
-              bg: C.customMsgBg,
-              spans: [s(` Unknown command: /${name}`, C.error)],
-            },
-        { spans: blank(), bg: C.customMsgBg },
-        {}
+        {
+          gutter: PAD,
+          spans: [
+            s(`/${name} needs the real thing: install KnightCode.`, C.dim),
+          ],
+        }
       )
       return
     }
 
     push(
       { spans: blank(), bg: C.userMsgBg },
-      { spans: [s(` ${text}`, C.text)], bg: C.userMsgBg },
+      { gutter: PAD, spans: [s(text, C.text)], bg: C.userMsgBg },
       { spans: blank(), bg: C.userMsgBg }
     )
     void runReply(text)
@@ -898,9 +981,10 @@ export function LiveTerminal({
     push(
       {},
       {
+        gutter: PAD,
         spans: [
           s(
-            ` Looking at "${truncate(prompt, 48)}" — reading the repo first.`,
+            `Looking at "${truncate(prompt, 48)}" — reading the repo first.`,
             C.text
           ),
         ],
@@ -923,9 +1007,10 @@ export function LiveTerminal({
       { gutter: [s(RESULT_GUTTER, C.dim)], spans: summary("Found 6 matches") },
       {},
       {
+        gutter: PAD,
         spans: [
           s(
-            " This panel is a demo of the TUI — install it to run the real thing.",
+            "This panel is a demo of the TUI — install it to run the real thing.",
             C.text
           ),
         ],
@@ -1078,7 +1163,7 @@ export function LiveTerminal({
 
           {/* Autocomplete, drawn under the editor exactly like SelectList */}
           {menu && (
-            <div className="px-1">
+            <div className="pl-[2ch]">
               {menu.items
                 .slice(windowStart, windowStart + AUTOCOMPLETE_MAX_VISIBLE)
                 .map((item, i) => {
@@ -1090,7 +1175,10 @@ export function LiveTerminal({
                       className="truncate whitespace-pre"
                       style={{ color: isSelected ? C.accent : C.text }}
                     >
-                      {isSelected ? "→ " : "  "}
+                      {/* One cell, as in a terminal grid: the font's arrow is wider than 1ch. */}
+                      <span className="inline-block w-[2ch] overflow-hidden align-top">
+                        {isSelected ? "→" : ""}
+                      </span>
                       {label}
                       {item.description && (
                         <span
