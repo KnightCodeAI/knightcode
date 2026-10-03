@@ -42,7 +42,13 @@ export { CancellableLoader } from "./components/cancellable-loader.ts";
 export { Editor, type EditorOptions, type EditorTheme } from "./components/editor.ts";
 export { Gutter } from "./components/gutter.ts";
 export { HStack } from "./components/h-stack.ts";
-export { Image, type ImageOptions, type ImageTheme } from "./components/image.ts";
+export {
+	Image,
+	type ImageOptions,
+	type ImageTheme,
+	type ImageTranscoder,
+	setImageTranscoder,
+} from "./components/image.ts";
 export { Input } from "./components/input.ts";
 export { Loader, type LoaderIndicatorOptions } from "./components/loader.ts";
 export { type DefaultTextStyle, Markdown, type MarkdownOptions, type MarkdownTheme } from "./components/markdown.ts";
