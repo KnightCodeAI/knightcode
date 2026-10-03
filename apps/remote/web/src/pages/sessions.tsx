@@ -1,7 +1,7 @@
 import { ChevronDown, Laptop, LogOut, Menu, Unplug } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { GlassButton, TopBar } from "@/components/glass";
-import { SessionRing } from "@/components/ring";
+import { SessionBot } from "@/components/bot";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -38,7 +38,7 @@ function SessionRow({ room }: { room: Room }): React.JSX.Element {
 			className="flex items-center gap-3.5 rounded-[1.25rem] bg-raised px-4 py-3 text-label transition-[transform,background] duration-150 ease-(--ease-out) active:scale-[0.99] active:bg-raised-hover"
 			href={`/r/${room.id}`}
 		>
-			<SessionRing state={state} />
+			<SessionBot id={room.id} state={state} />
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<span className="truncate text-[17px] leading-snug font-medium">{room.session_name ?? "Untitled session"}</span>
 				<span className="flex items-center gap-1.5 truncate text-[14px] text-label-2">

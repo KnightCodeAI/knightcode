@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Link2, Loader2, MoreHori
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CommandList } from "@/components/command-list";
 import { GlassButton, GlassLink, TopBar } from "@/components/glass";
+import { SessionBot } from "@/components/bot";
 import { Stats, ToolSheet } from "@/components/tool-sheet";
 import {
 	DropdownMenu,
@@ -338,7 +339,12 @@ export function Room({ roomId }: { roomId: string }): React.JSX.Element {
 							{state.liveText !== undefined ? <Markdown text={state.liveText} className="prose-chat" /> : null}
 						</div>
 					) : null}
-					{showWorking ? <p className="shimmer text-[15px] font-medium">Working…</p> : null}
+					{showWorking ? (
+						<div className="flex items-center gap-2">
+							<SessionBot id={roomId} state="working" size={28} />
+							<p className="shimmer text-[15px] font-medium">Working…</p>
+						</div>
+					) : null}
 				</div>
 			</div>
 
