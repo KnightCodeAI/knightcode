@@ -906,6 +906,25 @@
         return out;
       }
 
+      /** `Loaded · 42 lines`: a summary verb followed by the body's line count. */
+      function countedSummary(verb, body) {
+        const count = body.trimEnd().split('\n').length;
+        return `${verb} · ${count} ${count === 1 ? 'line' : 'lines'}`;
+      }
+
+      /**
+       * A transcript event that is not a tool call but reads as one, matching the TUI: a `Name arg` header,
+       * a one-line summary, and the markdown body when expanded. Click toggles it.
+       */
+      function renderCallBlock(kind, name, arg, summary, bodyHtml, domId, prefixHtml = '') {
+        const idAttr = domId ? ` id="${domId}"` : '';
+        return `<div class="tool-execution success collapsible-call ${kind}"${idAttr} onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">${prefixHtml}
+          <div class="tool-header"><span class="tool-name">${escapeHtml(name)}</span> <span class="tool-path">${escapeHtml(arg)}</span></div>
+          <div class="call-output"><div class="call-summary">${escapeHtml(summary)}<span class="call-expand-hint"> (click to expand)</span></div>
+          <div class="call-body markdown-content">${bodyHtml}</div></div>
+        </div>`;
+      }
+
       function renderToolCall(call) {
         const result = findToolResult(call.id);
         const isError = result?.isError || false;
@@ -1214,11 +1233,7 @@
               let html = `<div class="skill-user-entry" id="${entryDomId}">${copyBtnHtml}${tsHtml}`;
 
               // Skill invocation (collapsed by default, click to expand)
-              html += `<div class="skill-invocation" onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">
-                <div class="skill-invocation-label">[skill] ${escapeHtml(skillBlock.name)}</div>
-                <div class="skill-invocation-collapsed">${escapeHtml(skillBlock.name)} (click to expand)</div>
-                <div class="skill-invocation-content markdown-content">${safeMarkedParse(skillBlock.content)}</div>
-              </div>`;
+              html += renderCallBlock('skill-invocation', 'Skill', skillBlock.name, countedSummary('Loaded', skillBlock.content), safeMarkedParse(skillBlock.content));
 
               // User message (separate block if present)
               if (hasUserContent) {
@@ -1313,25 +1328,18 @@
         }
 
         if (entry.type === 'compaction') {
-          return `<div class="compaction" id="${entryDomId}" onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">
-            <div class="compaction-label">[compaction]</div>
-            <div class="compaction-collapsed">Compacted from ${entry.tokensBefore.toLocaleString()} tokens</div>
-            <div class="compaction-content"><strong>Compacted from ${entry.tokensBefore.toLocaleString()} tokens</strong>\n\n${escapeHtml(entry.summary)}</div>
-          </div>`;
+          return renderCallBlock('compaction', 'Compact', `${entry.tokensBefore.toLocaleString()} tokens`, countedSummary('Summarized', entry.summary), safeMarkedParse(entry.summary), entryDomId);
         }
 
         if (entry.type === 'branch_summary') {
-          return `<div class="branch-summary" id="${entryDomId}">${tsHtml}
-            <div class="branch-summary-header">Branch Summary</div>
-            <div class="markdown-content">${safeMarkedParse(entry.summary)}</div>
-          </div>`;
+          return renderCallBlock('branch-summary', 'Branch', 'summary', countedSummary('Summarized', entry.summary), safeMarkedParse(entry.summary), entryDomId, tsHtml);
         }
 
         if (entry.type === 'custom_message') {
           const hidden = entry.display === false;
-          return `<div class="hook-message${hidden ? ' hook-message-hidden' : ''}" id="${entryDomId}">${tsHtml}
-            <div class="hook-type">[${escapeHtml(entry.customType)}]${hidden ? ' · Hidden in terminal' : ''}</div>
-            <div class="markdown-content">${safeMarkedParse(typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content))}</div>
+          return `<div class="tool-execution success hook-message${hidden ? ' hook-message-hidden' : ''}" id="${entryDomId}">${tsHtml}
+            <div class="tool-header"><span class="tool-name">${escapeHtml(entry.customType)}</span>${hidden ? ' <span class="line-count">· Hidden in terminal</span>' : ''}</div>
+            <div class="call-output markdown-content">${safeMarkedParse(typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content))}</div>
           </div>`;
         }
 
@@ -1848,10 +1856,7 @@
         document.querySelectorAll('.tool-output.expandable').forEach(el => {
           el.classList.toggle('expanded', toolOutputsExpanded);
         });
-        document.querySelectorAll('.compaction').forEach(el => {
-          el.classList.toggle('expanded', toolOutputsExpanded);
-        });
-        document.querySelectorAll('.skill-invocation').forEach(el => {
+        document.querySelectorAll('.collapsible-call').forEach(el => {
           el.classList.toggle('expanded', toolOutputsExpanded);
         });
       }

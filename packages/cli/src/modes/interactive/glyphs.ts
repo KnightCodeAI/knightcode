@@ -17,6 +17,12 @@ export const RESULT_MARKER = "⎿";
 /** Spinner / thinking marker. */
 export const ASTERISK = "✻";
 
+/**
+ * Update-available marker. A star reads as "something new" without the scroll/token meaning `↑` already
+ * carries here; `✦` rather than the `✨` emoji, which is two cells wide and ignores theme colors.
+ */
+export const UPDATE_MARKER = "✦";
+
 /** User prompt marker. */
 export const USER_MARKER = ">";
 

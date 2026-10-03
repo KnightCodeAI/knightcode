@@ -1,6 +1,6 @@
 # Customize KnightCode with themes
 
-Themes control the colors KnightCode uses in interactive mode and HTML exports. KnightCode includes the `system`, `dark`, and `light` themes. You can select one theme, follow your terminal's light or dark appearance, or create your own palette.
+Themes control the colors KnightCode uses in interactive mode and HTML exports. KnightCode includes the `system` theme and the `dark` and `light` themes, warm grays with an orange accent. You can select one theme, follow your terminal's light or dark appearance, or create your own palette.
 
 ## Use your terminal's colors
 

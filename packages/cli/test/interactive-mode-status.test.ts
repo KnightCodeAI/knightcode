@@ -726,7 +726,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
-		expect(output).toContain("[Skills]");
+		expect(output).toContain("skills");
 		expect(output).toContain("commit");
 		expect(output).not.toContain("resource-list");
 	});
@@ -743,7 +743,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
-		expect(output).toContain("[Skills]");
+		expect(output).toContain("skills");
 		expect(output).toContain("resource-list");
 		expect(output).not.toContain("commit");
 	});
@@ -761,7 +761,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
-		expect(output).toContain("[Skills]");
+		expect(output).toContain("skills");
 		expect(output).toContain("resource-list");
 		expect(output).not.toContain("commit");
 	});
@@ -777,7 +777,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
-		expect(output).toContain("[Extensions]");
+		expect(output).toContain("extensions");
 		expect(output).toContain("answer.ts, btw.ts");
 		expect(output).not.toContain("extensions/answer.ts");
 	});
@@ -794,8 +794,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  @scope/knightcode-scoped, answer.ts, cli-extension.ts, HazAT/knightcode-interactive-subagents, HazAT/knightcode-interactive-subagents:subagents, knightcode-markdown-preview, local-index, user-index"`);
+			"extensions  @scope/knightcode-scoped, answer.ts, cli-extension.ts, HazAT/knightcode-interactive-subagents, HazAT/knightcode-interactive-subagents:subagents, knightcode-markdown-preview, local-index, user-index
+			   for details"
+		`);
 	});
 
 	test("adds more parent folders until local extension labels are unique", () => {
@@ -840,8 +841,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  alpha/one, beta/one, gamma/one"`);
+			"extensions  alpha/one, beta/one, gamma/one
+			   for details"
+		`);
 	});
 
 	test("strips index.ts from local extension label, showing parent dir", () => {
@@ -868,8 +870,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode"`);
+			"extensions  plan-mode
+			   for details"
+		`);
 	});
 
 	test("strips index.js from local extension label, showing parent dir", () => {
@@ -896,8 +899,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode"`);
+			"extensions  plan-mode
+			   for details"
+		`);
 	});
 
 	test("mixed single-file and subdirectory index.ts extensions strip index.ts", () => {
@@ -933,8 +937,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  plan-mode, webfetch.ts"`);
+			"extensions  plan-mode, webfetch.ts
+			   for details"
+		`);
 	});
 
 	test("multiple index.ts with unique parent dirs need no disambiguation", () => {
@@ -970,8 +975,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  bar, foo"`);
+			"extensions  bar, foo
+			   for details"
+		`);
 	});
 
 	test("multiple index.ts with same parent dir name disambiguated with grandparent", () => {
@@ -1007,8 +1013,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  alpha/tools, beta/tools"`);
+			"extensions  alpha/tools, beta/tools
+			   for details"
+		`);
 	});
 
 	test("non-index file in subdirectory stays as filename", () => {
@@ -1035,8 +1042,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  main.ts"`);
+			"extensions  main.ts
+			   for details"
+		`);
 	});
 
 	test("package extensions still strip index.ts correctly (regression guard)", () => {
@@ -1066,8 +1074,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  knightcode-markdown-preview"`);
+			"extensions  knightcode-markdown-preview
+			   for details"
+		`);
 	});
 
 	test("labels npm sibling extensions relative to the declaring package", () => {
@@ -1103,8 +1112,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  primary-package, primary-package:../sibling-package"`);
+			"extensions  primary-package, primary-package:../sibling-package
+			   for details"
+		`);
 	});
 
 	test("labels Windows npm sibling extensions relative to the declaring package", () => {
@@ -1143,8 +1153,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  primary-package, primary-package:../sibling-package"`);
+			"extensions  primary-package, primary-package:../sibling-package
+			   for details"
+		`);
 	});
 
 	test("captures mixed extension layouts in expanded output", () => {
@@ -1160,21 +1171,22 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		expect(normalizeRenderedOutput(fakeThis.loadedResourcesContainer)).toMatchInlineSnapshot(`
-"[Extensions]
-  project
-    /tmp/project/.knightcode/extensions/answer.ts
-    /tmp/project/.knightcode/extensions/local-index
-    git:github.com/HazAT/knightcode-interactive-subagents
-      extensions
-      extensions/subagents
-    npm:@scope/knightcode-scoped
-      extensions
-    npm:knightcode-markdown-preview
-      extensions
-  user
-    /tmp/agent/extensions/user-index
-  path
-    /tmp/temp/cli-extension.ts"`);
+			"extensions
+			    project
+			      /tmp/project/.knightcode/extensions/answer.ts
+			      /tmp/project/.knightcode/extensions/local-index
+			      git:github.com/HazAT/knightcode-interactive-subagents
+			        extensions
+			        extensions/subagents
+			      npm:@scope/knightcode-scoped
+			        extensions
+			      npm:knightcode-markdown-preview
+			        extensions
+			    user
+			      /tmp/agent/extensions/user-index
+			    path
+			      /tmp/temp/cli-extension.ts"
+		`);
 	});
 
 	test("shows context paths relative to cwd while preserving full external paths", () => {
@@ -1194,7 +1206,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
-		expect(output).toContain("[Context]");
+		expect(output).toContain("context");
 		expect(output).toContain("~/.knightcode/agent/AGENTS.md, AGENTS.md");
 		expect(output).not.toContain(`${cwd.replace(/\\/g, "/")}/AGENTS.md`);
 	});
@@ -1214,7 +1226,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
-		expect(output).toContain("[Context]");
+		expect(output).toContain("context");
 		expect(output).toContain(".knightcode/SYSTEM.md, .knightcode/APPEND_SYSTEM.md, AGENTS.md");
 	});
 
@@ -1236,7 +1248,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
-		expect(output).toContain("[Context]");
+		expect(output).toContain("context");
 		expect(output).toContain("~/.knightcode/agent/AGENTS.md");
 		expect(output).toContain("~/Development/knightcode/AGENTS.md");
 		expect(output).not.toContain("~/.knightcode/agent/AGENTS.md, AGENTS.md");
@@ -1292,7 +1304,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 		});
 
 		const output = renderAll(fakeThis.loadedResourcesContainer);
-		expect(output).toContain("[Skill conflicts]");
-		expect(output).not.toContain("[Skills]");
+		expect(output).toContain("1 skill warning");
+		expect(output).not.toContain("skills      ");
 	});
 });

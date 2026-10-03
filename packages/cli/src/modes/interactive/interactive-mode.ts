@@ -119,7 +119,13 @@ import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../../core/trust-manager.ts";
 import { getUsageCostBreakdown } from "../../core/usage-totals.ts";
 import { addMcpServerConfig, loadMcpConfig } from "../../extensions/mcp/config.ts";
-import { getChangelogPath, getNewEntries, normalizeChangelogLinks, parseChangelog } from "../../utils/changelog.ts";
+import {
+	getChangelogHighlights,
+	getChangelogPath,
+	getNewEntries,
+	normalizeChangelogLinks,
+	parseChangelog,
+} from "../../utils/changelog.ts";
 import { copyToClipboard, readClipboardFilePaths, readClipboardText } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
 import { parseGitUrl } from "../../utils/git.ts";
@@ -191,9 +197,9 @@ import {
 	setRegisteredThemes,
 	stopThemeWatcher,
 	Theme,
-	type ThemeColor,
 	theme,
 } from "./theme/theme.ts";
+import { UPDATE_MARKER } from "./glyphs.ts";
 import { InteractiveThemeController } from "./theme/theme-controller.ts";
 import { createInteractiveTui, createInteractiveTuiReference } from "./tui-renderer.ts";
 
@@ -271,6 +277,9 @@ function isCompactionCostNotice(item: RenderSessionItem): item is CompactionCost
 function isUsageSessionEntry(item: RenderSessionItem): item is Extract<SessionEntry, { type: "usage" }> {
 	return "type" in item && item.type === "usage";
 }
+
+/** How many changes the post-update notice lists before pointing to `/changelog`. */
+const MAX_CHANGELOG_HIGHLIGHTS = 3;
 
 const DEAD_TERMINAL_ERROR_CODES = new Set(["EIO", "EPIPE", "ENOTCONN"]);
 
@@ -469,7 +478,7 @@ export class InteractiveMode {
 
 	private lastSigintTime = 0;
 	private lastEscapeTime = 0;
-	private changelogMarkdown: string | undefined = undefined;
+	private changelogHighlights: string[] | undefined = undefined;
 	private startupNoticesShown = false;
 	private anthropicSubscriptionWarningShown = false;
 
@@ -818,28 +827,38 @@ export class InteractiveMode {
 		}
 		this.startupNoticesShown = true;
 
-		if (!this.changelogMarkdown) {
+		const highlights = this.changelogHighlights;
+		if (!highlights) {
 			return;
 		}
 
 		if (this.chatContainer.children.length > 0) {
 			this.chatContainer.addChild(new Spacer(1));
 		}
-		this.chatContainer.addChild(new DynamicBorder());
+		const pad = this.outputPad;
+		const version = this.version;
 		if (this.settingsManager.getCollapseChangelog()) {
-			const versionMatch = this.changelogMarkdown.match(/##\s+\[?(\d+\.\d+\.\d+)\]?/);
-			const latestVersion = versionMatch ? versionMatch[1] : this.version;
-			const condensedText = `Updated to v${latestVersion}. Use ${theme.bold("/changelog")} to view full changelog.`;
-			this.chatContainer.addChild(new Text(condensedText, 1, 0));
-		} else {
-			this.chatContainer.addChild(new ThemedText(() => theme.bold(theme.fg("accent", "What's New")), 1, 0));
-			this.chatContainer.addChild(new Spacer(1));
 			this.chatContainer.addChild(
-				new Markdown(this.changelogMarkdown.trim(), 1, 0, this.getMarkdownThemeWithSettings()),
+				new ThemedText(() => `Updated to v${version}. Use ${theme.bold("/changelog")} for what's new.`, pad, 0),
 			);
-			this.chatContainer.addChild(new Spacer(1));
+			return;
 		}
-		this.chatContainer.addChild(new DynamicBorder());
+
+		// A few one-line highlights, not the full notes: those can run to hundreds of lines and push the
+		// rest of the startup screen away. `/changelog` has the full text.
+		const shown = highlights.slice(0, MAX_CHANGELOG_HIGHLIGHTS);
+		const more = highlights.length - shown.length;
+		this.chatContainer.addChild(
+			new ThemedText(() => theme.bold(theme.fg("accent", `What's new in v${version}`)), pad, 0),
+		);
+		for (const highlight of shown) this.chatContainer.addChild(new TruncatedText(`  • ${highlight}`, pad, 0));
+		this.chatContainer.addChild(
+			new ThemedText(
+				() => theme.fg("dim", more > 0 ? `  +${more} more · /changelog` : "  /changelog for the full notes"),
+				pad,
+				0,
+			),
+		);
 	}
 
 	private mountInteractiveTui(tui: TuiMainScreen | TuiAltScreen, components: readonly Component[]): void {
@@ -918,7 +937,7 @@ export class InteractiveMode {
 		this.registerSignalHandlers();
 
 		// Load changelog (only show new entries, skip for resumed sessions)
-		this.changelogMarkdown = this.getChangelogForDisplay();
+		this.changelogHighlights = this.getChangelogForDisplay();
 
 		if (this.session.scopedModels.length > 0 && this.shouldShowStartupDetails()) {
 			const modelList = this.session.scopedModels
@@ -1288,10 +1307,10 @@ export class InteractiveMode {
 	}
 
 	/**
-	 * Get changelog entries to display on startup.
-	 * Only shows new entries since last seen version, skips for resumed sessions.
+	 * Get the changelog highlights to display on startup.
+	 * Only covers new entries since last seen version, skips for resumed sessions.
 	 */
-	private getChangelogForDisplay(): string | undefined {
+	private getChangelogForDisplay(): string[] | undefined {
 		// Skip changelog for resumed/continued sessions (already have messages)
 		if (this.session.state.messages.length > 0) {
 			return undefined;
@@ -1312,7 +1331,7 @@ export class InteractiveMode {
 		if (newEntries.length > 0) {
 			this.settingsManager.setLastChangelogVersion(VERSION);
 			this.reportInstallTelemetry(VERSION);
-			return newEntries.map((e) => normalizeChangelogLinks(e.content, e)).join("\n\n");
+			return getChangelogHighlights(newEntries);
 		}
 
 		return undefined;
@@ -1745,30 +1764,48 @@ export class InteractiveMode {
 			return;
 		}
 
-		const sectionHeader = (name: string, color: ThemeColor = "mdHeading") => theme.fg(color, `[${name}]`);
-		const formatCompactList = (items: string[], options?: { sort?: boolean }): string => {
+		// One aligned row per resource kind and one line per diagnostic kind; the full lists and paths sit behind
+		// the expand key. Bodies are built on demand so the listing follows theme changes.
+		type ListingRow = { collapsed: () => string; expanded: () => string };
+		const rows: ListingRow[] = [];
+		const indent = (text: string) =>
+			text
+				.split("\n")
+				.map((line) => `  ${line}`)
+				.join("\n");
+		const addRow = (label: string, collapsedValue: () => string, expandedBody: () => string): void => {
+			rows.push({
+				collapsed: () => `  ${theme.fg("dim", label.padEnd(12))}${theme.fg("muted", collapsedValue())}`,
+				expanded: () => `  ${theme.fg("dim", label)}\n${indent(expandedBody())}`,
+			});
+		};
+		// Short lists read inline; long ones collapse to a count.
+		const compactList = (items: string[], noun: string, options?: { sort?: boolean }): string => {
 			const labels = items.map((item) => item.trim()).filter((item) => item.length > 0);
 			if (options?.sort !== false) {
 				labels.sort((a, b) => a.localeCompare(b));
 			}
-			return theme.fg("dim", `  ${labels.join(", ")}`);
+			return labels.length > 8 ? `${labels.length} ${noun}` : labels.join(", ");
 		};
-		// Bodies are built on demand so the listing follows theme changes.
-		const addLoadedSection = (
-			name: string,
-			collapsedBody: () => string,
-			expandedBody = collapsedBody,
-			color: ThemeColor = "mdHeading",
-		): void => {
-			const section = new ExpandableText(
-				() => `${sectionHeader(name, color)}\n${collapsedBody()}`,
-				() => `${sectionHeader(name, color)}\n${expandedBody()}`,
-				this.getStartupExpansionState(),
-				0,
-				0,
+		const addDiagnosticsRow = (kind: string, diagnostics: readonly ResourceDiagnostic[]): void => {
+			if (diagnostics.length === 0) return;
+			const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+			const duplicates = new Set(
+				diagnostics.flatMap((d) => (d.type === "collision" && d.collision ? [d.collision.name] : [])),
 			);
-			this.loadedResourcesContainer.addChild(section);
-			this.loadedResourcesContainer.addChild(new Spacer(1));
+			const errors = diagnostics.filter((d) => d.type === "error").length;
+			const warnings =
+				diagnostics.length - errors - diagnostics.filter((d) => d.type === "collision" && d.collision).length;
+			const parts: string[] = [];
+			if (duplicates.size > 0) parts.push(`${plural(duplicates.size, `duplicate ${kind}`)} skipped`);
+			if (errors > 0) parts.push(plural(errors, `${kind} error`));
+			if (warnings > 0) parts.push(plural(warnings, `${kind} warning`));
+			const summary = () =>
+				`  ${theme.fg(errors > 0 ? "error" : "warning", "⚠")} ${theme.fg("muted", parts.join(" · "))}`;
+			rows.push({
+				collapsed: summary,
+				expanded: () => `${summary()}\n${indent(this.formatDiagnostics(diagnostics, sourceInfos))}`,
+			});
 		};
 
 		const skillsResult = this.session.resourceLoader.getSkills();
@@ -1813,15 +1850,16 @@ export class InteractiveMode {
 				...this.session.resourceLoader.getAgentsFiles().agentsFiles,
 			];
 			if (contextFiles.length > 0) {
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-				const contextList = () =>
-					contextFiles.map((f) => theme.fg("dim", `  ${this.formatDisplayPath(f.path)}`)).join("\n");
-				const contextCompactList = () =>
-					formatCompactList(
-						contextFiles.map((contextFile) => this.formatContextPath(contextFile.path)),
-						{ sort: false },
-					);
-				addLoadedSection("Context", contextCompactList, contextList);
+				addRow(
+					"context",
+					() =>
+						compactList(
+							contextFiles.map((contextFile) => this.formatContextPath(contextFile.path)),
+							"files",
+							{ sort: false },
+						),
+					() => contextFiles.map((f) => theme.fg("dim", `  ${this.formatDisplayPath(f.path)}`)).join("\n"),
+				);
 			}
 
 			const skills = skillsResult.skills;
@@ -1829,13 +1867,19 @@ export class InteractiveMode {
 				const groups = this.buildScopeGroups(
 					skills.map((skill) => ({ path: skill.filePath, sourceInfo: skill.sourceInfo })),
 				);
-				const skillList = () =>
-					this.formatScopeGroups(groups, {
-						formatPath: (item) => this.formatDisplayPath(item.path),
-						formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
-					});
-				const skillCompactList = () => formatCompactList(skills.map((skill) => skill.name));
-				addLoadedSection("Skills", skillCompactList, skillList);
+				addRow(
+					"skills",
+					() =>
+						compactList(
+							skills.map((skill) => skill.name),
+							"loaded",
+						),
+					() =>
+						this.formatScopeGroups(groups, {
+							formatPath: (item) => this.formatDisplayPath(item.path),
+							formatPackagePath: (item) => this.getShortPath(item.path, item.sourceInfo),
+						}),
+				);
 			}
 
 			const templates = this.session.promptTemplates;
@@ -1844,52 +1888,46 @@ export class InteractiveMode {
 					templates.map((template) => ({ path: template.filePath, sourceInfo: template.sourceInfo })),
 				);
 				const templateByPath = new Map(templates.map((t) => [t.filePath, t]));
-				const templateList = () =>
-					this.formatScopeGroups(groups, {
-						formatPath: (item) => {
-							const template = templateByPath.get(item.path);
-							return template ? `/${template.name}` : this.formatDisplayPath(item.path);
-						},
-						formatPackagePath: (item) => {
-							const template = templateByPath.get(item.path);
-							return template ? `/${template.name}` : this.formatDisplayPath(item.path);
-						},
-					});
-				const promptCompactList = () => formatCompactList(templates.map((template) => `/${template.name}`));
-				addLoadedSection("Prompts", promptCompactList, templateList);
+				addRow(
+					"prompts",
+					() =>
+						compactList(
+							templates.map((template) => `/${template.name}`),
+							"loaded",
+						),
+					() =>
+						this.formatScopeGroups(groups, {
+							formatPath: (item) => {
+								const template = templateByPath.get(item.path);
+								return template ? `/${template.name}` : this.formatDisplayPath(item.path);
+							},
+							formatPackagePath: (item) => {
+								const template = templateByPath.get(item.path);
+								return template ? `/${template.name}` : this.formatDisplayPath(item.path);
+							},
+						}),
+				);
 			}
 
 			if (extensions.length > 0) {
 				const groups = this.buildScopeGroups(extensions);
-				const extList = () =>
-					this.formatScopeGroups(groups, {
-						formatPath: (item) => this.formatExtensionDisplayPath(item.path),
-						formatPackagePath: (item) => this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
-					});
 				const extensionLabels = this.getCompactExtensionLabels(extensions);
-				const extensionCompactList = () => formatCompactList(extensionLabels);
-				addLoadedSection("Extensions", extensionCompactList, extList, "mdHeading");
+				addRow(
+					"extensions",
+					() => compactList(extensionLabels, "loaded"),
+					() =>
+						this.formatScopeGroups(groups, {
+							formatPath: (item) => this.formatExtensionDisplayPath(item.path),
+							formatPackagePath: (item) =>
+								this.formatExtensionDisplayPath(this.getShortPath(item.path, item.sourceInfo)),
+						}),
+				);
 			}
 		}
 
 		if (showDiagnostics) {
-			const skillDiagnostics = skillsResult.diagnostics;
-			if (skillDiagnostics.length > 0) {
-				const warningLines = () => this.formatDiagnostics(skillDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new ThemedText(() => `${theme.fg("warning", "[Skill conflicts]")}\n${warningLines()}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const promptDiagnostics = promptsResult.diagnostics;
-			if (promptDiagnostics.length > 0) {
-				const warningLines = () => this.formatDiagnostics(promptDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new ThemedText(() => `${theme.fg("warning", "[Prompt conflicts]")}\n${warningLines()}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
+			addDiagnosticsRow("skill", skillsResult.diagnostics);
+			addDiagnosticsRow("prompt", promptsResult.diagnostics);
 
 			const extensionDiagnostics: ResourceDiagnostic[] = [];
 			const extensionsResult = this.session.resourceLoader.getExtensions();
@@ -1899,31 +1937,26 @@ export class InteractiveMode {
 			for (const warning of extensionsResult.warnings ?? []) {
 				extensionDiagnostics.push({ type: "warning", message: warning.warning, path: warning.path });
 			}
-
-			const commandDiagnostics = this.session.extensionRunner.getCommandDiagnostics();
-			extensionDiagnostics.push(...commandDiagnostics);
+			extensionDiagnostics.push(...this.session.extensionRunner.getCommandDiagnostics());
 			extensionDiagnostics.push(...this.getBuiltInCommandConflictDiagnostics(this.session.extensionRunner));
+			extensionDiagnostics.push(...this.session.extensionRunner.getShortcutDiagnostics());
+			addDiagnosticsRow("extension", extensionDiagnostics);
 
-			const shortcutDiagnostics = this.session.extensionRunner.getShortcutDiagnostics();
-			extensionDiagnostics.push(...shortcutDiagnostics);
-
-			if (extensionDiagnostics.length > 0) {
-				const warningLines = () => this.formatDiagnostics(extensionDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new ThemedText(() => `${theme.fg("warning", "[Extension issues]")}\n${warningLines()}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
-
-			const themeDiagnostics = themesResult.diagnostics;
-			if (themeDiagnostics.length > 0) {
-				const warningLines = () => this.formatDiagnostics(themeDiagnostics, sourceInfos);
-				this.loadedResourcesContainer.addChild(
-					new ThemedText(() => `${theme.fg("warning", "[Theme conflicts]")}\n${warningLines()}`, 0, 0),
-				);
-				this.loadedResourcesContainer.addChild(new Spacer(1));
-			}
+			addDiagnosticsRow("theme", themesResult.diagnostics);
 		}
+
+		if (rows.length === 0) return;
+		const expandHint = () => `  ${theme.fg("dim", `${keyText("app.tools.expand")} for details`)}`;
+		this.loadedResourcesContainer.addChild(
+			new ExpandableText(
+				() => [...rows.map((row) => row.collapsed()), expandHint()].join("\n"),
+				() => rows.map((row) => row.expanded()).join("\n"),
+				this.getStartupExpansionState(),
+				0,
+				0,
+			),
+		);
+		this.loadedResourcesContainer.addChild(new Spacer(1));
 	}
 
 	/**
@@ -4505,52 +4538,36 @@ export class InteractiveMode {
 	}
 
 	showNewVersionNotification(release: LatestPiRelease): void {
-		const updateInstruction = () =>
-			theme.fg("muted", `New version ${release.version} is available. Run `) + theme.fg("accent", `${APP_NAME} update`);
+		// One quiet line, like the startup listing: what, how to get it, where to read about it.
 		const changelogUrl = "https://knightcode.dev/changelog";
-		const changelogLine = () => {
-			const changelogLink = getCapabilities().hyperlinks
-				? hyperlink(theme.fg("accent", changelogUrl), changelogUrl)
-				: theme.fg("accent", changelogUrl);
-			return theme.fg("muted", "Changelog: ") + changelogLink;
+		const line = () => {
+			const changelog = getCapabilities().hyperlinks
+				? hyperlink(theme.fg("muted", "changelog"), changelogUrl)
+				: theme.fg("muted", changelogUrl);
+			const separator = theme.fg("dim", " · ");
+			return `${theme.fg("accent", UPDATE_MARKER)} ${theme.fg("text", `${release.version} available`)}${separator}${theme.fg("accent", `${APP_NAME} update`)}${separator}${changelog}`;
 		};
 		const note = release.note?.trim();
 
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
-		this.chatContainer.addChild(
-			new ThemedText(() => `${theme.bold(theme.fg("warning", "Update Available"))}\n${updateInstruction()}`, 1, 0),
-		);
+		this.chatContainer.addChild(new ThemedText(line, 2, 0));
 		if (note) {
-			this.chatContainer.addChild(new Spacer(1));
 			this.chatContainer.addChild(
-				new Markdown(note, 1, 0, this.getMarkdownThemeWithSettings(), {
+				new Markdown(note, 4, 0, this.getMarkdownThemeWithSettings(), {
 					color: (text) => theme.fg("muted", text),
 				}),
 			);
-			this.chatContainer.addChild(new Spacer(1));
 		}
-		this.chatContainer.addChild(new ThemedText(changelogLine, 1, 0));
-		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
 		this.ui.requestRender();
 	}
 
 	showPackageUpdateNotification(packages: string[]): void {
-		const updateInstruction = () =>
-			theme.fg("muted", "Package updates are available. Run ") + theme.fg("accent", `${APP_NAME} update --extensions`);
-		const packageLines = packages.map((pkg) => `- ${pkg}`).join("\n");
+		const separator = () => theme.fg("dim", " · ");
+		const line = () =>
+			`${theme.fg("accent", UPDATE_MARKER)} ${theme.fg("text", "updates for ")}${theme.fg("muted", packages.join(", "))}${separator()}${theme.fg("accent", `${APP_NAME} update --extensions`)}`;
 
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
-		this.chatContainer.addChild(
-			new ThemedText(
-				() =>
-					`${theme.bold(theme.fg("warning", "Package Updates Available"))}\n${updateInstruction()}\n${theme.fg("muted", "Packages:")}\n${packageLines}`,
-				1,
-				0,
-			),
-		);
-		this.chatContainer.addChild(new DynamicBorder((text) => theme.fg("warning", text)));
+		this.chatContainer.addChild(new ThemedText(line, 2, 0));
 		this.ui.requestRender();
 	}
 
@@ -6645,9 +6662,11 @@ export class InteractiveMode {
 
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new DynamicBorder());
-		this.chatContainer.addChild(new ThemedText(() => theme.bold(theme.fg("accent", "What's New")), 1, 0));
+		this.chatContainer.addChild(new ThemedText(() => theme.bold(theme.fg("accent", "What's New")), this.outputPad, 0));
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(new Markdown(changelogMarkdown, 1, 1, this.getMarkdownThemeWithSettings()));
+		this.chatContainer.addChild(
+			new Markdown(changelogMarkdown, this.outputPad, 1, this.getMarkdownThemeWithSettings()),
+		);
 		this.chatContainer.addChild(new DynamicBorder());
 		this.ui.requestRender();
 	}

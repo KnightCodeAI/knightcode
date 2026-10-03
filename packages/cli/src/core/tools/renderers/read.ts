@@ -94,18 +94,10 @@ function formatCompactReadCall(
 	args: ReadRenderArgs | undefined,
 	theme: Theme,
 ): string {
-	if (classification.kind === "skill") {
-		return (
-			theme.fg("customMessageLabel", `\x1b[1m[skill]\x1b[22m `) +
-			theme.fg("customMessageText", classification.label) +
-			formatReadLineRange(args, theme)
-		);
-	}
-
-	// The expand hint rides on the result summary line, not here.
+	// The expand hint rides on the result summary line, not here. A skill reads as the skill being used.
 	return formatToolCall(
 		theme,
-		`Read ${classification.kind}`,
+		classification.kind === "skill" ? "Skill" : `Read ${classification.kind}`,
 		theme.fg("accent", classification.label) + formatReadLineRange(args, theme),
 	);
 }
@@ -115,7 +107,7 @@ function formatReadResult(
 	options: ToolRenderResultOptions,
 	theme: Theme,
 	showImages: boolean,
-	_cwd: string,
+	cwd: string,
 	isError: boolean,
 ): string {
 	const rawPath = str(args?.file_path ?? args?.path);
@@ -128,7 +120,8 @@ function formatReadResult(
 		// Prefer the recorded count: `output` carries the tool's `[Showing lines ...]` notices as rows.
 		const lineCount = result.details?.lineCount ?? trimTrailingEmptyLines(output.split("\n")).length;
 		const truncated = result.details?.truncation?.truncated ? " (truncated)" : "";
-		return formatToolSummary(theme, `Read ${plural(lineCount, "line")}${truncated}`, lineCount > 0);
+		const verb = getCompactReadClassification(args, cwd)?.kind === "skill" ? "Loaded ·" : "Read";
+		return formatToolSummary(theme, `${verb} ${plural(lineCount, "line")}${truncated}`, lineCount > 0);
 	}
 
 	const lang = !isError && rawPath ? getLanguageFromPath(rawPath) : undefined;

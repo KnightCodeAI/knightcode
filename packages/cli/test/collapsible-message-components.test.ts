@@ -1,4 +1,4 @@
-import type { Box, TuiMouseEvent } from "@knightcode/tui";
+import type { Component, TuiMouseEvent } from "@knightcode/tui";
 import { beforeAll, describe, expect, test } from "vitest";
 import { BranchSummaryMessageComponent } from "../src/modes/interactive/components/branch-summary-message.ts";
 import { CompactionSummaryMessageComponent } from "../src/modes/interactive/components/compaction-summary-message.ts";
@@ -8,11 +8,11 @@ import { stripAnsi } from "../src/utils/ansi.ts";
 
 const WIDTH = 80;
 
-function renderText(component: Box): string {
+function renderText(component: Component): string {
 	return stripAnsi(component.render(WIDTH).join("\n"));
 }
 
-function clickRow(component: Box, marker: string): void {
+function clickRow(component: Component, marker: string): void {
 	const lines = component.render(WIDTH);
 	const row = lines.findIndex((line) => stripAnsi(line).includes(marker));
 	expect(row).toBeGreaterThanOrEqual(0);
@@ -30,7 +30,7 @@ function clickRow(component: Box, marker: string): void {
 		ctrl: false,
 		clickCount: 1,
 	};
-	expect(component.handleMouse(event)?.handled).toBe(true);
+	expect(component.handleMouse?.(event)?.handled).toBe(true);
 }
 
 describe("collapsible message components", () => {
@@ -45,9 +45,9 @@ describe("collapsible message components", () => {
 		});
 
 		expect(renderText(component)).not.toContain("compaction details");
-		clickRow(component, "[compaction]");
+		clickRow(component, "Compact(");
 		expect(renderText(component)).toContain("compaction details");
-		clickRow(component, "[compaction]");
+		clickRow(component, "Compact(");
 		expect(renderText(component)).not.toContain("compaction details");
 	});
 
@@ -60,9 +60,9 @@ describe("collapsible message components", () => {
 		});
 
 		expect(renderText(component)).not.toContain("branch details");
-		clickRow(component, "[branch]");
+		clickRow(component, "Branch(");
 		expect(renderText(component)).toContain("branch details");
-		clickRow(component, "[branch]");
+		clickRow(component, "Branch(");
 		expect(renderText(component)).not.toContain("branch details");
 	});
 
@@ -75,9 +75,9 @@ describe("collapsible message components", () => {
 		});
 
 		expect(renderText(component)).not.toContain("skill details");
-		clickRow(component, "[skill]");
+		clickRow(component, "Skill(");
 		expect(renderText(component)).toContain("skill details");
-		clickRow(component, "[skill]");
+		clickRow(component, "Skill(");
 		expect(renderText(component)).not.toContain("skill details");
 	});
 });
