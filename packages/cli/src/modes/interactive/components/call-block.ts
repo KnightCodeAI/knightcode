@@ -13,7 +13,8 @@ export function callBlock(call: string, result: Component, bullet: "success" | "
 
 /** `Loaded · 42 lines`: a summary verb followed by the body's line count. */
 export function countedSummary(verb: string, body: string): string {
-	return `${verb} · ${plural(body.trimEnd().split("\n").length, "line")}`;
+	const text = body.trimEnd();
+	return `${verb} · ${plural(text ? text.split("\n").length : 0, "line")}`;
 }
 
 /**

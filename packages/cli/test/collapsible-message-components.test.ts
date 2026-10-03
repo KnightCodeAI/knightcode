@@ -1,6 +1,7 @@
 import type { Component, TuiMouseEvent } from "@knightcode/tui";
 import { beforeAll, describe, expect, test } from "vitest";
 import { BranchSummaryMessageComponent } from "../src/modes/interactive/components/branch-summary-message.ts";
+import { countedSummary } from "../src/modes/interactive/components/call-block.ts";
 import { CompactionSummaryMessageComponent } from "../src/modes/interactive/components/compaction-summary-message.ts";
 import { SkillInvocationMessageComponent } from "../src/modes/interactive/components/skill-invocation-message.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -79,5 +80,10 @@ describe("collapsible message components", () => {
 		expect(renderText(component)).toContain("skill details");
 		clickRow(component, "Skill(");
 		expect(renderText(component)).not.toContain("skill details");
+	});
+
+	test("counts an empty body as zero lines", () => {
+		expect(countedSummary("Summarized", "")).toBe("Summarized · 0 lines");
+		expect(countedSummary("Summarized", "a\nb\n")).toBe("Summarized · 2 lines");
 	});
 });

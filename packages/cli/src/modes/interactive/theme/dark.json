@@ -5,11 +5,11 @@
 	"vars": {
 		"text": "#e7e2db",
 		"muted": "#9c958d",
-		"dim": "#78716a",
+		"dim": "#7b756e",
 		"orange": "#ff8a3d",
 		"amber": "#ffb870",
 		"green": "#8fb573",
-		"red": "#e8644d",
+		"red": "#ea6f59",
 		"yellow": "#e9c46a",
 		"line": "#4a443e",
 		"lineQuiet": "#36312c",

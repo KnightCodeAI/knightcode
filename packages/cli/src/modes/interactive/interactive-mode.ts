@@ -828,7 +828,7 @@ export class InteractiveMode {
 		this.startupNoticesShown = true;
 
 		const highlights = this.changelogHighlights;
-		if (!highlights) {
+		if (!highlights?.length) {
 			return;
 		}
 
@@ -1951,7 +1951,8 @@ export class InteractiveMode {
 			new ExpandableText(
 				() => [...rows.map((row) => row.collapsed()), expandHint()].join("\n"),
 				() => rows.map((row) => row.expanded()).join("\n"),
-				this.getStartupExpansionState(),
+				// Diagnostics alone (quiet startup) start open: a warning hidden behind a key is easy to miss.
+				this.getStartupExpansionState() || !showListing,
 				0,
 				0,
 			),

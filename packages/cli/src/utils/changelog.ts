@@ -204,9 +204,11 @@ export function getChangelogHighlights(entries: ChangelogEntry[]): string[] {
 				line
 					.slice(2)
 					.replace(/!?\[([^\]\n]+)\]\([^)\n]*\)/g, "$1")
-					.replace(/\*\*|__|`/g, "")
+					// Unwrap code spans as-is so `mcp__server__tool` keeps its underscores.
+					.replace(/`([^`]*)`|\*\*|__/g, (_match, code: string | undefined) => code ?? "")
 					.trim(),
-			),
+			)
+			.filter((highlight) => highlight.length > 0),
 	);
 }
 

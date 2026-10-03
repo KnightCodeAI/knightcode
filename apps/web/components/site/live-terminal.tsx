@@ -313,6 +313,24 @@ function FrameRule({
   )
 }
 
+/**
+ * A side edge of the editor frame: one `│` per text row, as tall as the editor. The glyphs are absolutely
+ * positioned so the rail never sets the row height; a wrapped prompt grows the editor and reveals more of them.
+ */
+function Rail({ color }: { color: string }) {
+  return (
+    <span
+      className="relative w-[1ch] shrink-0 overflow-hidden select-none"
+      style={{ color }}
+      aria-hidden
+    >
+      <span className="absolute inset-x-0 top-0 whitespace-pre">
+        {"│\n".repeat(60)}
+      </span>
+    </span>
+  )
+}
+
 /* ---------------------------------------------------------------------------
  * Transcript content
  * ------------------------------------------------------------------------- */
@@ -1050,15 +1068,11 @@ export function LiveTerminal({
           </FrameRule>
 
           <div className="flex">
-            <span className="select-none" style={{ color: borderColor }}>
-              │
-            </span>
+            <Rail color={borderColor} />
             <div className="min-w-0 flex-1 px-[1ch] break-words whitespace-pre-wrap">
               <Spans spans={editorSpans} />
             </div>
-            <span className="select-none" style={{ color: borderColor }}>
-              │
-            </span>
+            <Rail color={borderColor} />
           </div>
 
           <FrameRule left="╰" right="╯" color={borderColor} />

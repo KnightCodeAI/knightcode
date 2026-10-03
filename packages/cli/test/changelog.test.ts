@@ -67,4 +67,9 @@ describe("getChangelogHighlights", () => {
 			"Changed the footer.",
 		]);
 	});
+
+	test("keeps underscores inside code spans and drops empty bullets", () => {
+		const content = "- Fixed __bold__ `mcp__my-server__x` calls.\n- \n- `` ";
+		expect(getChangelogHighlights([{ ...entry, content }])).toEqual(["Fixed bold mcp__my-server__x calls."]);
+	});
 });

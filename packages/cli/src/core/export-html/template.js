@@ -908,7 +908,8 @@
 
       /** `Loaded · 42 lines`: a summary verb followed by the body's line count. */
       function countedSummary(verb, body) {
-        const count = body.trimEnd().split('\n').length;
+        const text = body.trimEnd();
+        const count = text ? text.split('\n').length : 0;
         return `${verb} · ${count} ${count === 1 ? 'line' : 'lines'}`;
       }
 

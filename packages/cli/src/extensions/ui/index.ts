@@ -240,7 +240,7 @@ export default function uiExtension(knightcode: ExtensionAPI): void {
 						.sort(([a], [b]) => a.localeCompare(b))
 						.map(([, text]) => ` ${theme.fg("muted", "·")} ${oneLine(text)}`)
 						.join("");
-					const stats = `${context}${theme.fg("muted", ` · $${cost.toFixed(2)} · ${speed}`)}${statuses}`;
+					const stats = `${context}${theme.fg("muted", ` · $${cost.toFixed(3)} · ${speed}`)}${statuses}`;
 
 					const branch = footerData.getGitBranch();
 					const gitParts: string[] = [];
@@ -286,7 +286,6 @@ export default function uiExtension(knightcode: ExtensionAPI): void {
 			}
 		}
 		streamStart = undefined;
-		refreshCost(ctx);
 	});
 
 	knightcode.on("model_select", () => {
@@ -294,7 +293,12 @@ export default function uiExtension(knightcode: ExtensionAPI): void {
 	});
 	knightcode.on("session_tree", (_event, ctx) => refreshCost(ctx));
 	knightcode.on("session_compact", (_event, ctx) => refreshCost(ctx));
-	knightcode.on("agent_end", (_event, ctx) => void refreshChangedFiles(ctx.cwd));
+	// A message is persisted only after its message_end handlers run, so totals are read once each turn ends.
+	knightcode.on("turn_end", (_event, ctx) => refreshCost(ctx));
+	knightcode.on("agent_end", (_event, ctx) => {
+		refreshCost(ctx);
+		void refreshChangedFiles(ctx.cwd);
+	});
 
 	knightcode.on("session_shutdown", (_event, ctx) => {
 		requestRender = undefined;

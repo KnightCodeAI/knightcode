@@ -35,7 +35,7 @@ A behavior change needs a test for the new behavior.
 For a GitHub issue, put the issue number in a comment next to that test.
 If there is no test, say why.
 
-Then the command and the result: `bun run check-types`, plus that test.
+Then the command and the result: `bun run check-types`, `bun run test`, plus that test.
 Example: cd packages/cli && bun x vitest --run test/foo.test.ts
 Do not paste pass counts for suites CI runs. Say what you did not check.
 -->
