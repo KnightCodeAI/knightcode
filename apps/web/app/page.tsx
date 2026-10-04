@@ -9,6 +9,12 @@ import { Hero } from "@/components/site/hero"
 import { Stats } from "@/components/site/stats"
 import { SITE } from "@/lib/site"
 import { getLatestVersion } from "@/lib/version"
+import terminalScreen from "@/public/screens/terminal.webp"
+import toolsScreen from "@/public/screens/tools.webp"
+import sessionsScreen from "@/public/screens/sessions.webp"
+import providersScreen from "@/public/screens/providers.webp"
+import extensionsScreen from "@/public/screens/extensions.webp"
+import themesScreen from "@/public/screens/themes.webp"
 
 import {
   BrowserIcon,
@@ -88,10 +94,8 @@ export default async function HomePage() {
               },
             ]}
             image={{
-              src: "/screens/terminal.webp",
+              src: terminalScreen,
               alt: "KnightCode terminal UI after a prompt: read and bash tool calls, then the model's answer",
-              width: 1876,
-              height: 1761,
               caption: "knightcode - terminal workspace",
             }}
             priority
@@ -116,10 +120,8 @@ export default async function HomePage() {
               { icon: EnergyIcon, label: "Sandbox untrusted work. The agent is not a sandbox" },
             ]}
             image={{
-              src: "/screens/tools.webp",
+              src: toolsScreen,
               alt: "KnightCode transcript showing a read, an edit with a red and green diff, and a git diff",
-              width: 1876,
-              height: 1674,
               caption: "knightcode - tool calls",
             }}
             reverse
@@ -150,10 +152,8 @@ export default async function HomePage() {
               },
             ]}
             image={{
-              src: "/screens/sessions.webp",
+              src: sessionsScreen,
               alt: "KnightCode session tree with two branches that fork after the first reply",
-              width: 1876,
-              height: 1369,
               caption: "knightcode - session tree",
             }}
           />
@@ -180,12 +180,11 @@ export default async function HomePage() {
               { icon: CpuIcon, label: "OpenRouter is one route, alongside direct providers" },
             ]}
             image={{
-              src: "/screens/providers.webp",
+              src: providersScreen,
               alt: "KnightCode provider picker opened with /login",
-              width: 1876,
-              height: 1152,
               caption: "knightcode - /login",
             }}
+            reverse
           />
 
           <FeatureShowcase
@@ -213,13 +212,10 @@ export default async function HomePage() {
               },
             ]}
             image={{
-              src: "/screens/extensions.webp",
+              src: extensionsScreen,
               alt: "KnightCode startup listing project skills, prompts, and an extension, with the extension command run",
-              width: 1876,
-              height: 1195,
               caption: "knightcode - project resources",
             }}
-            reverse
           />
 
           <FeatureShowcase
@@ -247,12 +243,11 @@ export default async function HomePage() {
               },
             ]}
             image={{
-              src: "/screens/themes.webp",
+              src: themesScreen,
               alt: "KnightCode theme picker listing system, automatic, dark, and light",
-              width: 1876,
-              height: 1282,
               caption: "knightcode - /settings theme",
             }}
+            reverse
           />
         </div>
 

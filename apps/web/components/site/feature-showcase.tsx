@@ -21,10 +21,9 @@ interface FeatureShowcaseProps {
   description: string
   bullets: FeatureBullet[]
   image: {
-    src: string | StaticImageData
+    /** A static import, so the size comes from the file `bun run screenshots` wrote. */
+    src: StaticImageData
     alt: string
-    width: number
-    height: number
     caption?: string
   }
   reverse?: boolean
@@ -100,8 +99,8 @@ export function FeatureShowcase({
           <ScreenshotFrame
             src={image.src}
             alt={image.alt}
-            width={image.width}
-            height={image.height}
+            width={image.src.width}
+            height={image.src.height}
             caption={image.caption}
             priority={priority}
           />
