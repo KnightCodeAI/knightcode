@@ -1,5 +1,29 @@
 # @knightcodeai/cli
 
+## 0.12.0
+
+### Added
+
+- Added a shimmer to the knight in the startup header. In truecolor terminals it plays once at startup, then holds still, and stops early if the header scrolls away.
+
+- Added per-thinking-level sampling parameters for OpenAI-compatible models. `samplingParamsByThinkingLevel` in `models.json` overrides the model's `samplingParams` for the active thinking level, and a request can still override either.
+
+- Added a randomly picked verb to the working indicator for each prompt, such as `Pondering…`, with a highlight that sweeps across it.
+
+### Changed
+
+- Changed edit and write results to show line-numbered diffs with tinted added and removed rows, highlighted changed words and syntax-highlighted code; overwriting a file with `write` now shows a diff against its previous contents, and new files show a numbered preview.
+
+- Changed the transcript layout: user prompts start with a `❯` marker and assistant text and thinking are indented to the column tool-call text starts at. `outputPad` now sets only the right-hand margin.
+
+### Fixed
+
+- Fixed codemode failing after an update or uninstall replaced the install a session was running from. The QuickJS runtime path is now resolved once, the bundled Node worker starts from an in-memory copy, and an error after the install changed on disk shows a hint to restart the session.
+
+- Fixed cancelling a request or model refresh during an OAuth token refresh discarding the rotated credential. Providers that rotate refresh tokens, such as Sign in with ChatGPT, then rejected the next request with `refresh_token_invalidated`. Cancelling now only stops the wait for the credential lock; a refresh that has started completes and is saved.
+
+- Fixed the terminal UI drawing streamed output and other non-keyboard updates one timer tick late on Windows, about 15 ms.
+
 ## 0.11.4
 
 ### Added
