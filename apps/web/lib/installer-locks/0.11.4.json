@@ -1,0 +1,99 @@
+{
+  "name": "knightcode-managed-install",
+  "version": "0.11.4",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "knightcode-managed-install",
+      "version": "0.11.4",
+      "dependencies": {
+        "@knightcodeai/cli": "0.11.4"
+      }
+    },
+    "node_modules/@knightcodeai/cli": {
+      "version": "0.11.4",
+      "resolved": "https://registry.npmjs.org/@knightcodeai/cli/-/cli-0.11.4.tgz",
+      "integrity": "sha512-uMMxnKR5L5xg0/im1Eg9jF/fhyvI3BiNllASvMnU0eJV6Z6WPqKLVOfEkcci4hQOFZ4/B4W2T5xGO5l5ZoaU6Q==",
+      "license": "MIT",
+      "bin": {
+        "knightcode": "bin/knightcode"
+      },
+      "engines": {
+        "node": ">=22"
+      },
+      "optionalDependencies": {
+        "@knightcodeai/cli-darwin-arm64": "0.11.4",
+        "@knightcodeai/cli-darwin-x64": "0.11.4",
+        "@knightcodeai/cli-linux-arm64": "0.11.4",
+        "@knightcodeai/cli-linux-x64": "0.11.4",
+        "@knightcodeai/cli-win32-x64": "0.11.4"
+      }
+    },
+    "node_modules/@knightcodeai/cli-darwin-arm64": {
+      "version": "0.11.4",
+      "resolved": "https://registry.npmjs.org/@knightcodeai/cli-darwin-arm64/-/cli-darwin-arm64-0.11.4.tgz",
+      "integrity": "sha512-TMy1Y2TmoYEu1kJ67YVyPzNBjDh12pNW4SfQ7VqoexdZFUeY8mVil0aZygFoGxu4kGlOetIYEmXGafRv31S0zg==",
+      "cpu": [
+        "arm64"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ]
+    },
+    "node_modules/@knightcodeai/cli-darwin-x64": {
+      "version": "0.11.4",
+      "resolved": "https://registry.npmjs.org/@knightcodeai/cli-darwin-x64/-/cli-darwin-x64-0.11.4.tgz",
+      "integrity": "sha512-b6DqBpDrFmSMCo8cnO2oB6+RLh3DXqaBfvMszR2k5X43t1YuzTkJ2JtMiIf9z+b4OtcXjY6TGPEHUciXlM/ZYw==",
+      "cpu": [
+        "x64"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "darwin"
+      ]
+    },
+    "node_modules/@knightcodeai/cli-linux-arm64": {
+      "version": "0.11.4",
+      "resolved": "https://registry.npmjs.org/@knightcodeai/cli-linux-arm64/-/cli-linux-arm64-0.11.4.tgz",
+      "integrity": "sha512-oIWMZjKypuEEKijiBkWiTcIvDhZT4Yw/7UecStYAFDJgRbk5dmysjRdkxzGfH44RJVBaFOibF21RSXNf5jMKIg==",
+      "cpu": [
+        "arm64"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@knightcodeai/cli-linux-x64": {
+      "version": "0.11.4",
+      "resolved": "https://registry.npmjs.org/@knightcodeai/cli-linux-x64/-/cli-linux-x64-0.11.4.tgz",
+      "integrity": "sha512-sRbQnwIZrsr2mBxr5sWOw2k73Y/ncDKUm8Wgx/rMC6GtnRcr9y1yJ6GpSFuV/7pXi4kad/A7C2HbhwllWKJngg==",
+      "cpu": [
+        "x64"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "linux"
+      ]
+    },
+    "node_modules/@knightcodeai/cli-win32-x64": {
+      "version": "0.11.4",
+      "resolved": "https://registry.npmjs.org/@knightcodeai/cli-win32-x64/-/cli-win32-x64-0.11.4.tgz",
+      "integrity": "sha512-nTEHIxiz3BnbxQAtJk0idkkjkX+cwLjFbWPTtx73MtI4Ytv47VMkTOWse0/6SXTmvvh2wMjGBbCOYAhPRVxjtw==",
+      "cpu": [
+        "x64"
+      ],
+      "license": "MIT",
+      "optional": true,
+      "os": [
+        "win32"
+      ]
+    }
+  }
+}
