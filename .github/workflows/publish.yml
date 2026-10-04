@@ -280,7 +280,7 @@ jobs:
 
       # One clean GitHub Release per version for the main package (not the 5
       # platform packages). Body = the CHANGELOG.md section Changesets wrote.
-      # Idempotent: a re-run uploads the installer lock only when it is missing.
+      # Idempotent: a re-run uploads each installer file only when it is missing.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -289,12 +289,13 @@ jobs:
           version=$(node -p "require('./packages/cli/package.json').version")
           tag="@knightcodeai/cli@${version}"
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release for $tag already exists — adding the installer lock if it is missing."
-            if ! gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx installer-package-lock.json; then
-              gh release upload "$tag" \
-                release-assets/installer-package.json \
-                release-assets/installer-package-lock.json
-            fi
+            echo "Release for $tag already exists — adding any missing installer files."
+            assets=$(gh release view "$tag" --json assets --jq '.assets[].name')
+            for file in installer-package.json installer-package-lock.json; do
+              if ! printf '%s\n' "$assets" | grep -qx "$file"; then
+                gh release upload "$tag" "release-assets/$file"
+              fi
+            done
             exit 0
           fi
           notes=$(awk -v ver="$version" '

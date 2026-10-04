@@ -1,7 +1,6 @@
 import {
   installerPackageJson,
   parseInstallerVersion,
-  validateInstallerPackageJson,
 } from "@/lib/installer-lock"
 import { loadInstallerLock } from "@/lib/installer-release"
 
@@ -32,9 +31,7 @@ export async function GET(
     })
   }
 
-  const manifest = installerPackageJson(version)
-  if (validateInstallerPackageJson(manifest, version)) {
-    return new Response(null, { status: 502 })
-  }
-  return Response.json(manifest, { headers: { "cache-control": IMMUTABLE } })
+  return Response.json(installerPackageJson(version), {
+    headers: { "cache-control": IMMUTABLE },
+  })
 }

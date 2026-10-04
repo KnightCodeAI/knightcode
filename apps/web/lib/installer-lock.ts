@@ -54,27 +54,6 @@ export function installerPackageJson(version: string): InstallerPackageJson {
 }
 
 // Mirrors validate_managed_install_artifacts in public/install.sh.
-export function validateInstallerPackageJson(
-  manifest: unknown,
-  version: string
-): string | null {
-  if (!manifest || typeof manifest !== "object") {
-    return "package.json is not an object"
-  }
-  const file = manifest as {
-    version?: unknown
-    dependencies?: Record<string, unknown>
-  }
-  if (
-    file.version !== version ||
-    file.dependencies?.[CLI_PACKAGE] !== version
-  ) {
-    return `package.json must describe ${CLI_PACKAGE}@${version}`
-  }
-  return null
-}
-
-// Mirrors validate_managed_install_artifacts in public/install.sh.
 export function validateInstallerLock(
   lock: unknown,
   version: string

@@ -7,11 +7,10 @@ import {
   chooseLatestStable,
   CLI_PACKAGE,
   INSTALLER_LOCK_ASSET,
-  installerPackageJson,
   lockDownloadUrl,
   missingPlatformPackages,
+  PLATFORM_PACKAGES,
   validateInstallerLock,
-  validateInstallerPackageJson,
   versionFromReleaseTag,
 } from "./installer-lock"
 import {
@@ -32,15 +31,54 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
 }
 
+function requestUrl(input: string | URL | Request): string {
+  return typeof input === "string"
+    ? input
+    : input instanceof URL
+      ? input.href
+      : input.url
+}
+
+function lockFor(version: string) {
+  return {
+    lockfileVersion: 3,
+    version,
+    packages: {
+      "": { version, dependencies: { [CLI_PACKAGE]: version } },
+      [`node_modules/${CLI_PACKAGE}`]: { version },
+      ...Object.fromEntries(
+        PLATFORM_PACKAGES.map((name) => [`node_modules/${name}`, { version }])
+      ),
+    },
+  }
+}
+
+// npm says 0.12.0 is latest and its GitHub Release carries a lock asset.
+function releaseFetch(lock: unknown): typeof fetch {
+  return (async (input: string | URL | Request) => {
+    const url = requestUrl(input)
+    if (url.includes("registry.npmjs.org")) {
+      return jsonResponse({ "dist-tags": { latest: "0.12.0" } })
+    }
+    if (url === lockDownloadUrl("0.12.0")) return jsonResponse(lock)
+    if (url.includes("api.github.com")) {
+      return jsonResponse([
+        {
+          tag_name: "@knightcodeai/cli@0.12.0",
+          assets: [{ name: INSTALLER_LOCK_ASSET }],
+        },
+      ])
+    }
+    return jsonResponse(null, 404)
+  }) as typeof fetch
+}
+
 describe("installer lock contract", () => {
   it("accepts the bundled lock and every platform binary", () => {
     const version = "0.11.4"
     const lock = BUNDLED_INSTALLER_LOCKS[version]
     expect(validateInstallerLock(lock, version)).toBeNull()
     expect(missingPlatformPackages(lock)).toEqual([])
-    expect(
-      validateInstallerPackageJson(installerPackageJson(version), version)
-    ).toBeNull()
   })
 
   it("rejects a lock that install.sh would reject", () => {
@@ -109,35 +147,26 @@ describe("installer release selection", () => {
   })
 
   it("offers the npm latest version when its lock exists", async () => {
-    const fetchImpl = (async (input: string | URL | Request) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.href
-            : input.url
-      if (url.includes("registry.npmjs.org")) {
-        return jsonResponse({ "dist-tags": { latest: "0.12.0" } })
-      }
-      return jsonResponse([
-        {
-          tag_name: "@knightcodeai/cli@0.12.0",
-          assets: [{ name: INSTALLER_LOCK_ASSET }],
-        },
-      ])
-    }) as typeof fetch
+    expect(
+      await resolveLatestInstallerVersion(releaseFetch(lockFor("0.12.0")))
+    ).toBe("0.12.0")
+  })
 
-    expect(await resolveLatestInstallerVersion(fetchImpl)).toBe("0.12.0")
+  it("skips a release whose attached lock is invalid", async () => {
+    const wrongVersion = lockFor("0.11.0")
+    const { [`node_modules/${PLATFORM_PACKAGES[0]}`]: _, ...partial } =
+      lockFor("0.12.0").packages
+    const missingPlatform = { ...lockFor("0.12.0"), packages: partial }
+    for (const lock of [wrongVersion, missingPlatform, "not json"]) {
+      expect(await resolveLatestInstallerVersion(releaseFetch(lock))).toBe(
+        "0.11.4"
+      )
+    }
   })
 
   it("stays on the previous lock while a new release is still uploading", async () => {
     const fetchImpl = (async (input: string | URL | Request) => {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.href
-            : input.url
+      const url = requestUrl(input)
       if (url.includes("registry.npmjs.org")) {
         return jsonResponse({ "dist-tags": { latest: "0.12.0" } })
       }
@@ -220,19 +249,8 @@ describe("installer routes", () => {
   })
 
   it("uses a remote lock instead of the bundled copy", async () => {
-    const remote = {
-      lockfileVersion: 3,
-      version: "0.11.4",
-      packages: {
-        "": {
-          version: "0.11.4",
-          dependencies: { [CLI_PACKAGE]: "0.11.4" },
-        },
-        [`node_modules/${CLI_PACKAGE}`]: { version: "0.11.4" },
-      },
-    }
     const body = await loadInstallerLock("0.11.4", (async () =>
-      jsonResponse(remote)) as typeof fetch)
+      jsonResponse(lockFor("0.11.4"))) as typeof fetch)
     expect(body.ok).toBe(true)
     if (body.ok) expect(JSON.parse(body.body).packages[""].name).toBeUndefined()
   })

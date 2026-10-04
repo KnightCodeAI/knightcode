@@ -8,14 +8,13 @@
 // does not hide a version that was just published.
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	installerPackageJson,
 	missingPlatformPackages,
 	validateInstallerLock,
-	validateInstallerPackageJson,
 } from "../apps/web/lib/installer-lock.ts";
 
 const repoRoot = join(import.meta.dir, "..");
@@ -42,37 +41,40 @@ function packageVersion(): string {
 
 const version = packageVersion();
 const manifest = installerPackageJson(version);
-const manifestError = validateInstallerPackageJson(manifest, version);
-if (manifestError) throw new Error(manifestError);
 
-const stage = mkdtempSync(join(tmpdir(), "knightcode-installer-lock-"));
-writeFileSync(join(stage, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-
-const npm = spawnSync(
-	"npm",
-	[
-		"install",
-		"--ignore-scripts",
-		"--package-lock-only",
-		"--omit=dev",
-		"--include=optional",
-		"--no-fund",
-		"--no-audit",
-		"--min-release-age=0",
-	],
-	{
-		cwd: stage,
-		shell: process.platform === "win32",
-		stdio: "inherit",
-		env: { ...process.env, npm_config_min_release_age: "0" },
-	},
-);
-if (npm.status !== 0) {
-	throw new Error(`npm install --package-lock-only exited with ${npm.status ?? "unknown"}`);
+function resolveLock(): { version?: string } {
+	const stage = mkdtempSync(join(tmpdir(), "knightcode-installer-lock-"));
+	try {
+		writeFileSync(join(stage, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+		const npm = spawnSync(
+			"npm",
+			[
+				"install",
+				"--ignore-scripts",
+				"--package-lock-only",
+				"--omit=dev",
+				"--include=optional",
+				"--no-fund",
+				"--no-audit",
+				"--min-release-age=0",
+			],
+			{
+				cwd: stage,
+				shell: process.platform === "win32",
+				stdio: "inherit",
+				env: { ...process.env, npm_config_min_release_age: "0" },
+			},
+		);
+		if (npm.status !== 0) {
+			throw new Error(`npm install --package-lock-only exited with ${npm.status ?? "unknown"}`);
+		}
+		return JSON.parse(readFileSync(join(stage, "package-lock.json"), "utf8")) as { version?: string };
+	} finally {
+		rmSync(stage, { recursive: true, force: true });
+	}
 }
 
-const lockPath = join(stage, "package-lock.json");
-const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { version?: string };
+const lock = resolveLock();
 if (lock.version !== version) lock.version = version;
 const lockError = validateInstallerLock(lock, version);
 if (lockError) throw new Error(lockError);

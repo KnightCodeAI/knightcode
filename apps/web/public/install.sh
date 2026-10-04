@@ -257,10 +257,13 @@ install_node_npm() {
   method="$1"; label="$2"
 
   if [ -t 1 ] && [ "${TERM:-}" != "dumb" ]; then
-    install_node_npm_with_progress "$method" "$label"
+    install_node_npm_with_progress "$method" "$label" || return
   else
     printf '\nInstalling Node.js and npm with %s...\n\n' "$label"
-    run_node_install_method "$method"
+    if ! run_node_install_method "$method"; then
+      printf '\nNode.js installation failed.\n'
+      return 1
+    fi
     printf '\nNode.js and npm are installed.\n'
   fi
 
@@ -356,10 +359,10 @@ install_node_standalone() {
   node_tmp_dir="${TMPDIR:-/tmp}/knightcode-node.$$"
 
   rm -rf "$node_tmp_dir"
-  mkdir -p "$node_tmp_dir" "$node_base_dir"
+  mkdir -p "$node_tmp_dir" "$node_base_dir" || return 1
 
   printf 'Resolving Node.js binary for %s-%s\n' "$node_platform" "$node_arch"
-  curl -fsSL "$node_dist_base/SHASUMS256.txt" -o "$node_tmp_dir/SHASUMS256.txt"
+  curl -fsSL "$node_dist_base/SHASUMS256.txt" -o "$node_tmp_dir/SHASUMS256.txt" || return 1
   node_file=$(awk -v suffix="-$node_platform-$node_arch.tar.xz" '
     index($2, "node-v") == 1 && length($2) >= length(suffix) && substr($2, length($2) - length(suffix) + 1) == suffix { print $2; exit }
   ' "$node_tmp_dir/SHASUMS256.txt")
@@ -370,16 +373,20 @@ install_node_standalone() {
   fi
 
   printf 'Downloading Node.js %s\n' "${node_file%.tar.xz}"
-  curl -fsSL "$node_dist_base/$node_file" -o "$node_tmp_dir/$node_file"
-  verify_node_standalone_download "$node_tmp_dir" "$node_file"
-  ensure_node_standalone_extract_tools "$node_platform"
+  curl -fsSL "$node_dist_base/$node_file" -o "$node_tmp_dir/$node_file" || return 1
+  if ! verify_node_standalone_download "$node_tmp_dir" "$node_file"; then
+    printf 'Node.js download failed checksum verification.\n'
+    rm -rf "$node_tmp_dir"
+    return 1
+  fi
+  ensure_node_standalone_extract_tools "$node_platform" || return 1
 
   node_dir="$node_base_dir/${node_file%.tar.xz}"
   rm -rf "$node_dir"
   printf 'Extracting Node.js to %s\n' "$node_dir"
-  tar -xf "$node_tmp_dir/$node_file" -C "$node_base_dir"
+  tar -xf "$node_tmp_dir/$node_file" -C "$node_base_dir" || return 1
   rm -f "$node_base_dir/current"
-  ln -s "$node_dir" "$node_base_dir/current"
+  ln -s "$node_dir" "$node_base_dir/current" || return 1
   rm -rf "$node_tmp_dir"
   printf 'Node.js installed at %s\n' "$node_dir"
 }
@@ -395,6 +402,9 @@ verify_node_standalone_download() {
   elif command -v shasum >/dev/null 2>&1; then
     printf 'Verifying Node.js download\n'
     (cd "$checksum_dir" && shasum -a 256 -c SHASUMS256.selected)
+  else
+    printf 'sha256sum or shasum is required to verify the Node.js download.\n'
+    return 1
   fi
 }
 

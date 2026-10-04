@@ -4,6 +4,7 @@ import {
   CLI_REPOSITORY,
   INSTALLER_LOCK_ASSET,
   lockDownloadUrl,
+  missingPlatformPackages,
   parseInstallerVersion,
   STABLE_VERSION_RE,
   validateInstallerLock,
@@ -94,14 +95,18 @@ export async function resolveLatestInstallerVersion(
   ])
   const available = new Set<string>(Object.keys(BUNDLED_INSTALLER_LOCKS))
   for (const version of githubVersions ?? []) available.add(version)
-  if (
-    npmLatest &&
-    STABLE_VERSION_RE.test(npmLatest) &&
-    available.has(npmLatest)
-  ) {
-    return npmLatest
+  // The asset name alone does not prove the lock is valid. Check candidates
+  // newest first, so a broken upload falls back to the previous release.
+  let candidate =
+    npmLatest && available.has(npmLatest)
+      ? npmLatest
+      : chooseLatestStable(available)
+  while (candidate) {
+    if ((await loadInstallerLock(candidate, fetchImpl)).ok) return candidate
+    available.delete(candidate)
+    candidate = chooseLatestStable(available)
   }
-  return chooseLatestStable(available)
+  return null
 }
 
 export async function loadInstallerLock(
@@ -128,7 +133,12 @@ export async function loadInstallerLock(
         remoteStatus = 502
         lock = null
       }
-      if (lock && validateInstallerLock(lock, parsed) === null) {
+      // npm ci installs only the platform binaries the lock names.
+      if (
+        lock &&
+        validateInstallerLock(lock, parsed) === null &&
+        missingPlatformPackages(lock).length === 0
+      ) {
         return { ok: true, body: text.endsWith("\n") ? text : `${text}\n` }
       }
       if (lock) remoteStatus = 502
