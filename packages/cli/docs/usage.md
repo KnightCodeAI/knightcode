@@ -6,7 +6,8 @@ KnightCode may ask whether you trust the working folder before loading its proje
 
 <p align="center"><img src="images/interactive-mode.png" alt="KnightCode interactive mode showing a conversation, editor, and status information" width="750"></p>
 
-The transcript shows your prompts, KnightCode's responses, tool calls, results, and errors. You write prompts and commands in the editor. The footer shows the current folder, session, model, context usage, and accumulated usage and cost.
+The transcript shows your prompts, KnightCode's responses, tool calls, results, and errors. You write prompts and commands in the editor. The footer shows the current folder and session, the model and thinking level, context usage, accumulated cost,
+the latest output speed, and the git branch with its changed files and pull request.
 
 ## Enter a prompt
 
@@ -22,7 +23,10 @@ To include files or images:
 
 KnightCode shows each tool call and result while it works. Press `Ctrl+O` to expand or collapse tool output. Press `Ctrl+T` to show or hide thinking blocks.
 
-The startup header lists the instructions and resources KnightCode loaded. The editor border indicates the current thinking level. The footer updates as the model uses context and reports usage.
+The startup header shows the version, folder, and main keys, and KnightCode lists the instructions and resources it
+loaded below it. The editor frame's color indicates the current thinking level. The header, editor frame, and footer
+come from the built-in `ui` extension; set `"extensions": ["-builtin:ui"]` in [settings](settings.md#resources) for the
+plain layout. The footer updates as the model uses context and reports usage.
 
 KnightCode does not ask before every tool call. Review commands and changed files, and use a sandbox for untrusted or unattended work. See [Security](security.md).
 

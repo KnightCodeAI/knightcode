@@ -191,5 +191,26 @@ export function getNewEntries(entries: ChangelogEntry[], lastVersion: string): C
 	return entries.filter((entry) => compareVersions(entry, last) > 0);
 }
 
+/**
+ * Each change in `entries` as one plain-text line, in entry order: the top-level bullets with links, code
+ * spans and emphasis markers removed.
+ */
+export function getChangelogHighlights(entries: ChangelogEntry[]): string[] {
+	return entries.flatMap((entry) =>
+		entry.content
+			.split("\n")
+			.filter((line) => line.startsWith("- "))
+			.map((line) =>
+				line
+					.slice(2)
+					.replace(/!?\[([^\]\n]+)\]\([^)\n]*\)/g, "$1")
+					// Unwrap code spans as-is so `mcp__server__tool` keeps its underscores.
+					.replace(/`([^`]*)`|\*\*|__/g, (_match, code: string | undefined) => code ?? "")
+					.trim(),
+			)
+			.filter((highlight) => highlight.length > 0),
+	);
+}
+
 // Re-export getChangelogPath from paths.ts for convenience
 export { getChangelogPath } from "../config.ts";

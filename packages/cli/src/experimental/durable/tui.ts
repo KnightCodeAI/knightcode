@@ -9,14 +9,12 @@ import type {
 	UsageState,
 } from "@knightcode/durable";
 import {
-	Box,
 	type Component,
 	Container,
 	type Focusable,
 	fuzzyFilter,
 	getKeybindings,
 	Input,
-	Markdown,
 	ProcessTerminal,
 	ScrollView,
 	type SelectItem,
@@ -35,6 +33,7 @@ import { KeybindingsManager } from "../../core/keybindings.ts";
 import type { SettingsManager } from "../../core/settings-manager.ts";
 import { createAllToolRenderers } from "../../core/tools/renderers/index.ts";
 import { AssistantMessageComponent } from "../../modes/interactive/components/assistant-message.ts";
+import { CollapsibleCallComponent, countedSummary } from "../../modes/interactive/components/call-block.ts";
 import { CustomEditor } from "../../modes/interactive/components/custom-editor.ts";
 import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
 import { formatTokens } from "../../modes/interactive/components/footer.ts";
@@ -42,7 +41,7 @@ import { keyText } from "../../modes/interactive/components/keybinding-hints.ts"
 import { type StatusIndicator, WorkingStatusIndicator } from "../../modes/interactive/components/status-indicator.ts";
 import { ToolExecutionComponent, type ToolRenderers } from "../../modes/interactive/components/tool-execution.ts";
 import { UserMessageComponent } from "../../modes/interactive/components/user-message.ts";
-import { getEditorTheme, getMarkdownTheme, initTheme, theme } from "../../modes/interactive/theme/theme.ts";
+import { getEditorTheme, initTheme, theme } from "../../modes/interactive/theme/theme.ts";
 import { InteractiveThemeController } from "../../modes/interactive/theme/theme-controller.ts";
 import { agentOf, type DurableController, type DurableView, type DurableViewSource } from "./runtime.ts";
 
@@ -111,36 +110,6 @@ class ListSelector extends Container implements Focusable {
 	}
 }
 
-/** The summary that replaced earlier context: collapsed to one line until expanded. */
-class CompactionComponent extends Box {
-	readonly #summary: string;
-
-	constructor(summary: string, expanded: boolean) {
-		super(1, 1, (text) => theme.bg("customMessageBg", text));
-		this.#summary = summary;
-		this.setExpanded(expanded);
-	}
-
-	setExpanded(expanded: boolean): void {
-		this.clear();
-		this.addChild(new Text(theme.fg("customMessageLabel", theme.bold("[compaction]")), 0, 0));
-		this.addChild(new Spacer(1));
-		this.addChild(
-			expanded
-				? new Markdown(this.#summary, 0, 0, getMarkdownTheme(), {
-						color: (text: string) => theme.fg("customMessageText", text),
-					})
-				: new Text(
-						theme.fg("customMessageText", "Earlier context summarized (") +
-							theme.fg("dim", keyText("app.tools.expand")) +
-							theme.fg("customMessageText", " to expand)"),
-						0,
-						0,
-					),
-		);
-	}
-}
-
 interface Handlers {
 	submit(text: string): void;
 	followUp(text: string): void;
@@ -169,7 +138,7 @@ class DurableTui {
 	readonly #cards: ToolExecutionComponent[] = [];
 	/** Call IDs whose cards the streaming answer created; its entry takes them over. */
 	readonly #streamingCalls = new Set<string>();
-	readonly #summaries: CompactionComponent[] = [];
+	readonly #summaries: CollapsibleCallComponent[] = [];
 	/** Tool output and summaries shown in full; toggled like KnightCode. */
 	#expanded = false;
 	#renderedEntryIds: number[] = [];
@@ -459,10 +428,9 @@ class DurableTui {
 			const result = message as ToolResultMessage;
 			this.#tool(result.toolName, result.toolCallId).updateResult(result);
 		} else if (entry.kind === "knightcode.compaction") {
-			const summary = new CompactionComponent(
-				message?.role === "user" ? userText(message.content) : "",
-				this.#expanded,
-			);
+			const text = message?.role === "user" ? userText(message.content) : "";
+			const summary = new CollapsibleCallComponent("Compact", undefined, countedSummary("Summarized", text), text);
+			summary.setExpanded(this.#expanded);
 			this.#summaries.push(summary);
 			this.#chat.addChild(new Spacer(1));
 			this.#chat.addChild(summary);

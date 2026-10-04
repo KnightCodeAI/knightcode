@@ -5,6 +5,7 @@ import codemodeExtension from "./codemode/index.ts";
 import llamaExtension from "./llama/index.ts";
 import mcpExtension from "./mcp/index.ts";
 import toolSearchExtension from "./tool-search/index.ts";
+import uiExtension from "./ui/index.ts";
 import undoExtension from "./undo/index.ts";
 
 export const builtInExtensions: InlineExtension[] = [
@@ -21,4 +22,6 @@ export const builtInExtensions: InlineExtension[] = [
 	{ name: "remote", factory: remoteExtension, builtin: true },
 	// webfetch, websearch and /tools are built-ins.
 	{ name: "tools", factory: toolsExtension, builtin: true },
+	// KnightCode's header, editor frame and footer. Kept out of modes/interactive so resyncs never touch it.
+	{ name: "ui", factory: uiExtension, builtin: true },
 ];

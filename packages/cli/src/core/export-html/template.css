@@ -606,38 +606,6 @@
       font-weight: bold;
     }
 
-    /* Compaction / Branch Summary - matches customMessage colors from TUI */
-    .compaction {
-      background: var(--customMessageBg);
-      border-radius: 4px;
-      padding: var(--line-height);
-      cursor: pointer;
-    }
-
-    .compaction-label {
-      color: var(--customMessageLabel);
-      font-weight: bold;
-    }
-
-    .compaction-collapsed {
-      color: var(--customMessageText);
-    }
-
-    .compaction-content {
-      display: none;
-      color: var(--customMessageText);
-      white-space: pre-wrap;
-      margin-top: var(--line-height);
-    }
-
-    .compaction.expanded .compaction-collapsed {
-      display: none;
-    }
-
-    .compaction.expanded .compaction-content {
-      display: block;
-    }
-
     /* System prompt */
     .system-prompt {
       background: var(--customMessageBg);
@@ -784,52 +752,35 @@
       margin-left: 8px;
     }
 
-    /* Hook/custom messages */
-    .hook-message {
-      background: var(--customMessageBg);
-      color: var(--customMessageText);
-      padding: var(--line-height);
-      border-radius: 4px;
+    /* Skill, compaction, branch summary and extension messages: drawn like tool calls */
+    .call-output {
+      margin-top: var(--line-height);
+      color: var(--toolOutput);
+    }
+
+    .collapsible-call {
+      cursor: pointer;
+    }
+
+    .call-expand-hint {
+      color: var(--muted);
+    }
+
+    .collapsible-call .call-body {
+      display: none;
+      margin-top: var(--line-height);
+    }
+
+    .collapsible-call.expanded .call-body {
+      display: block;
+    }
+
+    .collapsible-call.expanded .call-expand-hint {
+      display: none;
     }
 
     body:not(.show-hidden-messages) .hook-message-hidden {
       display: none;
-    }
-
-    .hook-type {
-      color: var(--customMessageLabel);
-      font-weight: bold;
-    }
-
-    /* Skill invocation - matches compaction style (clickable, collapsed by default) */
-    .skill-invocation {
-      background: var(--customMessageBg);
-      border-radius: 4px;
-      padding: var(--line-height);
-      cursor: pointer;
-    }
-
-    .skill-invocation-label {
-      color: var(--customMessageLabel);
-      font-weight: bold;
-    }
-
-    .skill-invocation-collapsed {
-      color: var(--customMessageText);
-    }
-
-    .skill-invocation-content {
-      display: none;
-      color: var(--customMessageText);
-      margin-top: var(--line-height);
-    }
-
-    .skill-invocation.expanded .skill-invocation-collapsed {
-      display: none;
-    }
-
-    .skill-invocation.expanded .skill-invocation-content {
-      display: block;
     }
 
     .skill-invocation + .user-message {
@@ -838,18 +789,6 @@
 
     .skill-user-entry {
       position: relative;
-    }
-
-    /* Branch summary */
-    .branch-summary {
-      background: var(--customMessageBg);
-      padding: var(--line-height);
-      border-radius: 4px;
-    }
-
-    .branch-summary-header {
-      font-weight: bold;
-      color: var(--borderAccent);
     }
 
     /* Error */

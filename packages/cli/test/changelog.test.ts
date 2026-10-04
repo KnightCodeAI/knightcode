@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { type ChangelogEntry, normalizeChangelogLinks } from "../src/utils/changelog.ts";
+import { type ChangelogEntry, getChangelogHighlights, normalizeChangelogLinks } from "../src/utils/changelog.ts";
 
 const entry: ChangelogEntry = {
 	major: 0,
@@ -43,5 +43,33 @@ describe("normalizeChangelogLinks", () => {
 				"[Local anchor](#settings)",
 			].join("\n"),
 		);
+	});
+});
+
+describe("getChangelogHighlights", () => {
+	test("returns top-level bullets as plain text, newest entry first", () => {
+		const newer = {
+			...entry,
+			minor: 80,
+			content: [
+				"## 0.80.0",
+				"### Added",
+				"- Added `--flag` to **see** [docs](docs/a.md).",
+				"  continued line",
+				"### Fixed",
+				"- Fixed a crash.",
+			].join("\n"),
+		};
+		const older = { ...entry, content: "## 0.79.0\n\n- Changed the footer." };
+		expect(getChangelogHighlights([newer, older])).toEqual([
+			"Added --flag to see docs.",
+			"Fixed a crash.",
+			"Changed the footer.",
+		]);
+	});
+
+	test("keeps underscores inside code spans and drops empty bullets", () => {
+		const content = "- Fixed __bold__ `mcp__my-server__x` calls.\n- \n- `` ";
+		expect(getChangelogHighlights([{ ...entry, content }])).toEqual(["Fixed bold mcp__my-server__x calls."]);
 	});
 });

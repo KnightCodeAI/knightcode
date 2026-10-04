@@ -1,18 +1,20 @@
 import type { TextContent } from "@knightcode/ai";
 import type { Component } from "@knightcode/tui";
-import { Box, Container, Markdown, type MarkdownTheme, Spacer, Text } from "@knightcode/tui";
+import { Container, Markdown, type MarkdownTheme, Spacer } from "@knightcode/tui";
 import type { MessageRenderer } from "../../../core/extensions/types.ts";
 import type { CustomMessage } from "../../../core/messages.ts";
+import { formatToolCall } from "../../../core/tools/render-utils.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { callBlock } from "./call-block.ts";
 
 /**
- * Component that renders a custom message entry from extensions.
- * Uses distinct styling to differentiate from user messages.
+ * Component that renders a custom message entry from extensions. Without a custom renderer it is drawn like a
+ * tool call: `● customType` with the message text on the `⎿` gutter under it.
  */
 export class CustomMessageComponent extends Container {
 	private message: CustomMessage<unknown>;
 	private customRenderer?: MessageRenderer;
-	private box: Box;
+	private defaultComponent?: Component;
 	private customComponent?: Component;
 	private markdownTheme: MarkdownTheme;
 	private _expanded = false;
@@ -31,9 +33,6 @@ export class CustomMessageComponent extends Container {
 		this.outputPad = outputPad;
 
 		this.addChild(new Spacer(1));
-
-		// Create box with purple background (used for default rendering)
-		this.box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
 
 		this.rebuild();
 	}
@@ -63,7 +62,10 @@ export class CustomMessageComponent extends Container {
 			this.removeChild(this.customComponent);
 			this.customComponent = undefined;
 		}
-		this.removeChild(this.box);
+		if (this.defaultComponent) {
+			this.removeChild(this.defaultComponent);
+			this.defaultComponent = undefined;
+		}
 
 		// Try custom renderer first - it handles its own styling
 		if (this.customRenderer) {
@@ -84,16 +86,6 @@ export class CustomMessageComponent extends Container {
 			}
 		}
 
-		// Default rendering uses our box
-		this.addChild(this.box);
-		this.box.clear();
-
-		// Default rendering: label + content
-		const label = theme.fg("customMessageLabel", `\x1b[1m[${this.message.customType}]\x1b[22m`);
-		this.box.addChild(new Text(label, 0, 0));
-		this.box.addChild(new Spacer(1));
-
-		// Extract text content
 		let text: string;
 		if (typeof this.message.content === "string") {
 			text = this.message.content;
@@ -104,10 +96,12 @@ export class CustomMessageComponent extends Container {
 				.join("\n");
 		}
 
-		this.box.addChild(
+		this.defaultComponent = callBlock(
+			formatToolCall(theme, this.message.customType),
 			new Markdown(text, 0, 0, this.markdownTheme, {
-				color: (text: string) => theme.fg("customMessageText", text),
+				color: (text: string) => theme.fg("toolOutput", text),
 			}),
 		);
+		this.addChild(this.defaultComponent);
 	}
 }
