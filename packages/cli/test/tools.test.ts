@@ -261,6 +261,17 @@ describe("Coding Agent Tools", () => {
 			expect(result.details).toBeUndefined();
 		});
 
+		it("returns a display diff when overwriting a file that differs", async () => {
+			const testFile = join(testDir, "write-overwrite.txt");
+			writeFileSync(testFile, "one\r\ntwo\r\nthree\r\n");
+
+			const result = await writeTool.execute("test-call-3b", { path: testFile, content: "one\nTWO\nthree\n" });
+			expect(result.details?.diff).toBe(" 1 one\n-2 two\n+2 TWO\n 3 three");
+
+			const unchanged = await writeTool.execute("test-call-3c", { path: testFile, content: "one\nTWO\nthree\n" });
+			expect(unchanged.details).toBeUndefined();
+		});
+
 		it("should create parent directories", async () => {
 			const testFile = join(testDir, "nested", "dir", "test.txt");
 			const content = "Nested content";

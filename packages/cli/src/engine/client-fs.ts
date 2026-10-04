@@ -112,6 +112,11 @@ export function createClientFileOperations(
 		write: {
 			writeFile,
 			mkdir: async () => {},
+			readFile: (path) =>
+				readFile(path).then(
+					(buffer) => buffer.toString("utf-8"),
+					() => undefined,
+				),
 		},
 	};
 }
