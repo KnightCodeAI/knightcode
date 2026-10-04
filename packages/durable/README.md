@@ -83,7 +83,7 @@ Every async call takes a Chord `Context`, which carries cancellation. `BACKGROUN
 - **Conversation**: a transcript. `root()` creates the root conversation on first use; you can create more and fork them. A `Conversation` handle holds no state; compare handles by `id`.
 - **Entry**: one immutable transcript record, such as a user message (`knightcode.user`), a model response (`knightcode.assistant`), a tool result (`knightcode.tool-result`), a system prompt change (`knightcode.system`), a reset (`knightcode.reset`), or your own kind. The model sees the entries from the newest reset onward.
 - **Commit**: an atomic write. `conversation.commit((tx) => ...)` can append entries, edit documents, and create tasks together; either all of it is stored or none of it.
-- **Document**: typed JSON state stored next to the transcript and changed in commits. Built-in ones hold each conversation's agent choices (`knightcode.agent`), the running generation and tools (`knightcode.live`), queued submissions (`knightcode.inbox`), and spend (`knightcode.usage`).
+- **Document**: typed JSON state stored next to the transcript and changed in commits. Built-in ones hold each conversation's agent choices (`knightcode.agent`), provider-facing session identity (`knightcode.provider`), running generation and tools (`knightcode.live`), queued submissions (`knightcode.inbox`), and spend (`knightcode.usage`).
 - **Task**: a durable state machine that saves a checkpoint at every step, so a restarted process continues from the last one. Every task has an owner: its conversation, or another task. The Harness runs answers as built-in tasks: `knightcode.generation` calls the model and owns the `knightcode.tool` tasks of its tool calls, waits for them, and hands the run to the next generation.
 - **Submission**: something you hand to a conversation, either user input or an entry to write, which you can wait for.
 - **Turn and run**: a turn is one model response and its tool calls; a run is the turns from an input to its final answer. A conversation is busy while a run is going.
@@ -112,7 +112,9 @@ const root = await harness.root(context); // the same root as last time
 harness.resume(); // continue any run the last process left unfinished
 ```
 
-Work interrupted by a crash or close stays pending. `resume()` starts the task scheduler; submitting or waiting starts it too. A retried submission with the same `requestId` returns the existing submission instead of submitting twice:
+Work interrupted by a crash or close stays pending. `resume()` starts the task scheduler; submitting or waiting starts it too. Each conversation has its own persisted UUIDv7 in `knightcode.provider`, forwarded to @knightcode/ai as `sessionId` for provider prompt-cache and session affinity. It survives reopen, retries, reset, compaction, and model changes; a child or fork receives a fresh identity. A legacy conversation receives and persists one before its first generation or compaction request.
+
+A retried submission with the same `requestId` returns the existing submission instead of submitting twice:
 
 ```typescript
 const submission = await root.submit({ type: "input", content: "Hello", requestId: "greeting-1" }, context);
@@ -267,7 +269,7 @@ const view = await root.viewState(context);
 view.subscribe((value) => {
 	// value.entries: the active transcript
 	// value.docs["knightcode.live"]: the running generation (streamed partial, retry, deferred) and tool calls (output, details)
-	// value.docs["knightcode.inbox"], value.docs["knightcode.usage"], value.docs["knightcode.agent"]
+	// value.docs["knightcode.inbox"], value.docs["knightcode.usage"], value.docs["knightcode.agent"], value.docs["knightcode.provider"]
 	render(value);
 });
 // later: view.dispose();
@@ -394,7 +396,7 @@ const other = await harness.createConversation({ ownership: { kind: "ownerless" 
 const fork = await root.fork(entryId, { ownership: { kind: "ownerless" } }, context);
 ```
 
-A fork sees its parent's entries up to `entryId` and continues independently. It keeps the parent's agent as of that entry. Both take `agent` and `init`, applied in the creating commit.
+A fork sees its parent's entries up to `entryId` and continues independently. It keeps the parent's agent as of that entry but receives a fresh provider session identity. Both take `agent` and `init`, applied in the creating commit.
 
 ## Abort and Subagents
 
