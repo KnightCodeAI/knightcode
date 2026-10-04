@@ -65,7 +65,7 @@ jobs:
         with:
           bun-version: 1.3.3
 
-      - run: bun install
+      - run: bun install --frozen-lockfile
 
       # Network only, no API keys: generate-models.ts reads models.dev.
       - name: Generate model catalog JSON
