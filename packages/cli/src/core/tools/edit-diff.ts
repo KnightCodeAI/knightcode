@@ -376,7 +376,7 @@ export function generateUnifiedPatch(path: string, oldContent: string, newConten
 export function generateDiffString(
 	oldContent: string,
 	newContent: string,
-	contextLines = 4,
+	contextLines = 3,
 ): { diff: string; firstChangedLine: number | undefined } {
 	const parts = Diff.diffLines(oldContent, newContent);
 	const output: string[] = [];
@@ -427,7 +427,7 @@ export function generateDiffString(
 			if (hasLeadingChange && hasTrailingChange) {
 				if (raw.length <= contextLines * 2) {
 					for (const line of raw) {
-						const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+						const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
 						output.push(` ${lineNum} ${line}`);
 						oldLineNum++;
 						newLineNum++;
@@ -438,7 +438,7 @@ export function generateDiffString(
 					const skippedLines = raw.length - leadingLines.length - trailingLines.length;
 
 					for (const line of leadingLines) {
-						const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+						const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
 						output.push(` ${lineNum} ${line}`);
 						oldLineNum++;
 						newLineNum++;
@@ -449,7 +449,7 @@ export function generateDiffString(
 					newLineNum += skippedLines;
 
 					for (const line of trailingLines) {
-						const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+						const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
 						output.push(` ${lineNum} ${line}`);
 						oldLineNum++;
 						newLineNum++;
@@ -460,7 +460,7 @@ export function generateDiffString(
 				const skippedLines = raw.length - shownLines.length;
 
 				for (const line of shownLines) {
-					const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+					const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
 					output.push(` ${lineNum} ${line}`);
 					oldLineNum++;
 					newLineNum++;
@@ -480,7 +480,7 @@ export function generateDiffString(
 				}
 
 				for (const line of raw.slice(skippedLines)) {
-					const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+					const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
 					output.push(` ${lineNum} ${line}`);
 					oldLineNum++;
 					newLineNum++;

@@ -7,12 +7,12 @@
  */
 
 import { Box, Container, Text } from "@knightcode/tui";
-import { renderDiff } from "../../../modes/interactive/components/diff.ts";
+import { diffView } from "../../../modes/interactive/components/diff.ts";
 import type { Theme } from "../../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition } from "../../extensions/types.ts";
 import type { EditToolDetails } from "../edit.ts";
 import { computeEditsDiff, type Edit, type EditDiffError, type EditDiffResult } from "../edit-diff.ts";
-import { formatToolCall, formatToolSummary, plural, renderToolPath, shortenPath, str } from "../render-utils.ts";
+import { formatToolCall, renderToolPath, str } from "../render-utils.ts";
 
 type EditPreview = EditDiffResult | EditDiffError;
 export type EditRenderState = {
@@ -85,6 +85,10 @@ function formatEditCall(args: RenderableEditArgs | undefined, theme: Theme, cwd:
 	return formatToolCall(theme, "Update", pathDisplay);
 }
 
+function editPath(args: RenderableEditArgs | undefined): string | undefined {
+	return str(args?.file_path ?? args?.path) || undefined;
+}
+
 /** Count changed lines in a display diff (`+123 text` / `-123 text` / ` 123 text`). */
 function summarizeDiff(diff: string): { additions: number; removals: number } {
 	let additions = 0;
@@ -95,14 +99,22 @@ function summarizeDiff(diff: string): { additions: number; removals: number } {
 	}
 	return { additions, removals };
 }
+
+/** `Added 3 lines, removed 1 line`, with the counts in bold. */
+export function formatDiffSummary(diff: string, theme: Theme): string {
+	const { additions, removals } = summarizeDiff(diff);
+	const count = (n: number, word: string) => `${word} ${theme.bold(String(n))} ${n === 1 ? "line" : "lines"}`;
+	const parts: string[] = [];
+	if (additions > 0) parts.push(count(additions, "Added"));
+	if (removals > 0) parts.push(count(removals, parts.length > 0 ? "removed" : "Removed"));
+	return theme.fg("toolOutput", parts.length > 0 ? parts.join(", ") : "No changes");
+}
 function formatEditResult(
-	args: RenderableEditArgs | undefined,
 	preview: EditPreview | undefined,
 	result: EditToolResultLike,
 	theme: Theme,
 	isError: boolean,
-): string | undefined {
-	const rawPath = str(args?.file_path ?? args?.path);
+): { summary: string; diff?: string } | undefined {
 	const previewDiff = preview && !("error" in preview) ? preview.diff : undefined;
 	const previewError = preview && "error" in preview ? preview.error : undefined;
 	if (isError) {
@@ -113,38 +125,14 @@ function formatEditResult(
 		if (!errorText || errorText === previewError) {
 			return undefined;
 		}
-		return theme.fg("error", errorText);
+		return { summary: theme.fg("error", errorText) };
 	}
 
 	const diff = result.details?.diff ?? previewDiff;
 	if (!diff) {
 		return undefined;
 	}
-
-	const { additions, removals } = summarizeDiff(diff);
-	const target = rawPath ? shortenPath(rawPath) : "file";
-	const summary = formatToolSummary(
-		theme,
-		`Updated ${target} with ${plural(additions, "addition")} and ${plural(removals, "removal")}`,
-		false,
-	);
-	return `${summary}\n${renderDiff(diff, { filePath: rawPath ?? undefined })}`;
-}
-function getEditHeaderBg(
-	preview: EditPreview | undefined,
-	settledError: boolean | undefined,
-	theme: Theme,
-): (text: string) => string {
-	if (preview) {
-		if ("error" in preview) {
-			return (text: string) => theme.bg("toolErrorBg", text);
-		}
-		return (text: string) => theme.bg("toolSuccessBg", text);
-	}
-	if (settledError) {
-		return (text: string) => theme.bg("toolErrorBg", text);
-	}
-	return (text: string) => theme.bg("toolPendingBg", text);
+	return { summary: formatDiffSummary(diff, theme), diff };
 }
 function buildEditCallComponent(
 	component: EditCallRenderComponent,
@@ -160,9 +148,11 @@ function buildEditCallComponent(
 		return component;
 	}
 
-	const body =
-		"error" in component.preview ? theme.fg("error", component.preview.error) : renderDiff(component.preview.diff);
-	component.addChild(new Text(body, 0, 0));
+	if ("error" in component.preview) {
+		component.addChild(new Text(theme.fg("error", component.preview.error), 0, 0));
+	} else {
+		component.addChild(diffView(component.preview.diff, { filePath: editPath(args) }));
+	}
 	return component;
 }
 function setEditPreview(
@@ -250,19 +240,16 @@ export const editRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "rende
 			}
 		}
 
-		const output = formatEditResult(
-			context.args as RenderableEditArgs | undefined,
-			callComponent?.preview,
-			typedResult,
-			theme,
-			context.isError,
-		);
+		const output = formatEditResult(callComponent?.preview, typedResult, theme, context.isError);
 		const component = (context.lastComponent as Container | undefined) ?? new Container();
 		component.clear();
 		if (!output) {
 			return component;
 		}
-		component.addChild(new Text(output, 0, 0));
+		component.addChild(new Text(output.summary, 0, 0));
+		if (output.diff) {
+			component.addChild(diffView(output.diff, { filePath: editPath(context.args as RenderableEditArgs | undefined) }));
+		}
 		return component;
 	},
 };

@@ -60,7 +60,9 @@ export function createClientFileOperations(
 	capabilities: ClientFileCapabilities,
 ): { read: ReadOperations; edit: EditOperations; write: WriteOperations } {
 	async function readFile(absolutePath: string): Promise<Buffer> {
-		if (!capabilities.readTextFile || (await detectSupportedImageMimeTypeFromFile(absolutePath))) {
+		// A path the engine cannot open locally may still be a client buffer, so a failed sniff is not an image.
+		const image = await detectSupportedImageMimeTypeFromFile(absolutePath).catch(() => null);
+		if (!capabilities.readTextFile || image) {
 			return fsReadFile(absolutePath);
 		}
 		const scope = currentToolCall.getStore();
@@ -112,6 +114,14 @@ export function createClientFileOperations(
 		write: {
 			writeFile,
 			mkdir: async () => {},
+			// The display diff's old side must come from the store the write replaces.
+			...(capabilities.readTextFile === capabilities.writeTextFile && {
+				readFile: (path: string) =>
+					readFile(path).then(
+						(buffer) => buffer.toString("utf-8"),
+						() => undefined,
+					),
+			}),
 		},
 	};
 }

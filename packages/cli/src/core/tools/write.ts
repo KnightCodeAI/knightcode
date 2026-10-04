@@ -1,8 +1,10 @@
 import type { AgentTool } from "@knightcode/agent";
-import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
+import { mkdir as fsMkdir, readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
+import { stripBom } from "../../utils/text.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
+import { generateDiffString, normalizeToLF } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { writeRenderers } from "./renderers/write.ts";
@@ -20,6 +22,14 @@ export const writeToolSystemPromptContribution = {
 
 export type WriteToolInput = Static<typeof writeSchema>;
 
+export interface WriteToolDetails {
+	/** Display diff against the previous contents, when the write replaced a file that differed. */
+	diff?: string;
+}
+
+/** Larger files are written without a display diff. */
+const MAX_DIFF_CHARS = 1024 * 1024;
+
 /**
  * Pluggable operations for the write tool.
  * Override these to delegate file writing to remote systems (for example SSH).
@@ -29,12 +39,29 @@ export interface WriteOperations {
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
 	/** Create directory recursively */
 	mkdir: (dir: string) => Promise<void>;
+	/**
+	 * Read the current contents for the display diff, or undefined when there is nothing to diff against
+	 * (missing, unreadable, or too large). Without it, overwrites show no diff.
+	 */
+	readFile?: (absolutePath: string) => Promise<string | undefined>;
 }
 
 const defaultWriteOperations: WriteOperations = {
 	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
 	mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
+	// Display only: any read failure drops the diff, and the write itself reports an unwritable target.
+	readFile: (path) =>
+		fsStat(path)
+			.then((stats) => (stats.size > MAX_DIFF_CHARS ? undefined : fsReadFile(path, "utf-8")))
+			.catch(() => undefined),
 };
+
+function overwriteDiff(previous: string | undefined, content: string): string | undefined {
+	if (previous === undefined || previous.length + content.length > MAX_DIFF_CHARS) return undefined;
+	const before = normalizeToLF(stripBom(previous));
+	const after = normalizeToLF(stripBom(content));
+	return before === after ? undefined : generateDiffString(before, after).diff;
+}
 
 export interface WriteToolOptions {
 	/** Custom operations for file writing. Default: local filesystem */
@@ -44,7 +71,7 @@ export interface WriteToolOptions {
 export function createWriteToolDefinition(
 	cwd: string,
 	options?: WriteToolOptions,
-): ToolDefinition<typeof writeSchema, undefined> {
+): ToolDefinition<typeof writeSchema, WriteToolDetails | undefined> {
 	const ops = options?.operations ?? defaultWriteOperations;
 	return {
 		name: "write",
@@ -74,6 +101,8 @@ export function createWriteToolDefinition(
 				};
 
 				throwIfAborted();
+				const previous = await ops.readFile?.(absolutePath);
+				throwIfAborted();
 				// Create parent directories if needed.
 				await ops.mkdir(dir);
 				throwIfAborted();
@@ -82,9 +111,10 @@ export function createWriteToolDefinition(
 				await ops.writeFile(absolutePath, content);
 				throwIfAborted();
 
+				const diff = overwriteDiff(previous, content);
 				return {
 					content: [{ type: "text", text: `Successfully wrote to ${path}` }],
-					details: undefined,
+					details: diff ? { diff } : undefined,
 				};
 			});
 		},
