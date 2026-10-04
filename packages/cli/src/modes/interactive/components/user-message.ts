@@ -1,5 +1,6 @@
-import { Container, Markdown, type MarkdownTheme } from "@knightcode/tui";
+import { Container, Markdown, type MarkdownTheme, visibleWidth } from "@knightcode/tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
+import { USER_GUTTER, USER_INDENT } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
 
@@ -42,8 +43,8 @@ export class UserMessageComponent extends Container {
 		this.addChild(
 			new Markdown(
 				this.text,
-				this.outputPad,
-				1,
+				0,
+				0,
 				this.markdownTheme,
 				{
 					color: (content: string) => theme.fg("userMessageText", content),
@@ -59,7 +60,13 @@ export class UserMessageComponent extends Container {
 	}
 
 	override render(width: number): string[] {
-		const lines = super.render(width);
+		// The marker sits in the transcript gutter so the text starts where assistant and tool text do; output padding
+		// is the right margin.
+		const bg = (content: string) => theme.bg("userMessageBg", content);
+		const rightPad = bg(" ".repeat(this.outputPad));
+		const lines = super
+			.render(Math.max(1, width - visibleWidth(USER_GUTTER) - this.outputPad))
+			.map((line, i) => bg(i === 0 ? theme.fg("dim", USER_GUTTER) : USER_INDENT) + line + rightPad);
 		if (lines.length === 0) {
 			return lines;
 		}

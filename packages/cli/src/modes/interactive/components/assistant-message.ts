@@ -1,6 +1,7 @@
 import type { AssistantMessage } from "@knightcode/ai";
-import { Container, Markdown, type MarkdownTheme, MouseRegion, Spacer, Text } from "@knightcode/tui";
+import { Container, Gutter, Markdown, type MarkdownTheme, MouseRegion, Spacer, Text } from "@knightcode/tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
+import { BLOCK_INDENT } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { createMarkdownTransform } from "./markdown-transform.ts";
 
@@ -39,9 +40,9 @@ export class AssistantMessageComponent extends Container {
 		this.outputPad = outputPad;
 		this.markdownTransformers = markdownTransformers;
 
-		// Container for text/thinking content
+		// Container for text/thinking content, indented to the column tool calls and user prompts start their text at
 		this.contentContainer = new Container();
-		this.addChild(this.contentContainer);
+		this.addChild(new Gutter(this.contentContainer, BLOCK_INDENT, BLOCK_INDENT));
 
 		if (message) {
 			this.updateContent(message);
@@ -72,13 +73,11 @@ export class AssistantMessageComponent extends Container {
 
 	setOutputPad(padding: number): void {
 		this.outputPad = padding;
-		if (this.lastMessage) {
-			this.updateContent(this.lastMessage);
-		}
 	}
 
 	override render(width: number): string[] {
-		const lines = super.render(width);
+		// The gutter sets the left edge; output padding is the right margin.
+		const lines = super.render(Math.max(1, width - this.outputPad));
 		if (this.hasToolCalls || lines.length === 0) {
 			return lines;
 		}
@@ -111,7 +110,7 @@ export class AssistantMessageComponent extends Container {
 				// Assistant text messages with no background - trim the text
 				// Set paddingY=0 to avoid extra spacing before tool executions
 				this.contentContainer.addChild(
-					new Markdown(content.text.trim(), this.outputPad, 0, this.markdownTheme, undefined, {
+					new Markdown(content.text.trim(), 0, 0, this.markdownTheme, undefined, {
 						transform: createMarkdownTransform("assistant", this.isStreaming, this.markdownTransformers),
 					}),
 				);
@@ -142,10 +141,10 @@ export class AssistantMessageComponent extends Container {
 				const runIndex = thinkingRunIndex++;
 				const hidden = this.thinkingVisibilityOverrides.get(runIndex) ?? this.hideThinkingBlock;
 				const thinkingComponent = hidden
-					? new Text(theme.italic(theme.fg("thinkingText", this.hiddenThinkingLabel)), this.outputPad, 0)
+					? new Text(theme.italic(theme.fg("thinkingText", this.hiddenThinkingLabel)), 0, 0)
 					: new Markdown(
 							thinkingBlocks.join("\n\n"),
-							this.outputPad,
+							0,
 							0,
 							this.markdownTheme,
 							{
@@ -177,9 +176,7 @@ export class AssistantMessageComponent extends Container {
 		this.hasToolCalls = hasToolCalls;
 		if (message.stopReason === "length") {
 			this.contentContainer.addChild(new Spacer(1));
-			this.contentContainer.addChild(
-				new Text(theme.fg("error", "Response was truncated before completion."), this.outputPad, 0),
-			);
+			this.contentContainer.addChild(new Text(theme.fg("error", "Response was truncated before completion."), 0, 0));
 		} else if (!hasToolCalls) {
 			if (message.stopReason === "aborted") {
 				const abortMessage =
@@ -187,11 +184,11 @@ export class AssistantMessageComponent extends Container {
 						? message.errorMessage
 						: "Operation aborted";
 				this.contentContainer.addChild(new Spacer(1));
-				this.contentContainer.addChild(new Text(theme.fg("error", abortMessage), this.outputPad, 0));
+				this.contentContainer.addChild(new Text(theme.fg("error", abortMessage), 0, 0));
 			} else if (message.stopReason === "error") {
 				const errorMsg = message.errorMessage || "Unknown error";
 				this.contentContainer.addChild(new Spacer(1));
-				this.contentContainer.addChild(new Text(theme.fg("error", `Error: ${errorMsg}`), this.outputPad, 0));
+				this.contentContainer.addChild(new Text(theme.fg("error", `Error: ${errorMsg}`), 0, 0));
 			}
 		}
 	}

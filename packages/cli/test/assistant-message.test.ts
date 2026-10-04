@@ -108,9 +108,9 @@ describe("AssistantMessageComponent", () => {
 		const event: TuiMouseEvent = {
 			type: "click",
 			button: "left",
-			x: 1,
+			x: 2,
 			y: firstThinkingRow,
-			screenX: 1,
+			screenX: 2,
 			screenY: firstThinkingRow,
 			width,
 			height: lines.length,
@@ -140,15 +140,16 @@ describe("AssistantMessageComponent", () => {
 			"Thinking...",
 			1,
 		);
+		// Text starts after the gutter whatever the padding; padding only narrows the right edge.
 		const lines = component.render(80).map((line) => stripAnsi(line));
-
-		expect(lines.some((line) => line.includes(" hello"))).toBe(true);
-		expect(lines.some((line) => line.includes(" reasoning"))).toBe(true);
+		expect(lines.some((line) => line.startsWith("  hello"))).toBe(true);
+		expect(lines.some((line) => line.startsWith("  reasoning"))).toBe(true);
+		expect(Math.max(...lines.map((line) => line.length))).toBe(79);
 
 		component.setOutputPad(0);
 		const updatedLines = component.render(80).map((line) => stripAnsi(line));
-		expect(updatedLines.some((line) => line.startsWith("hello"))).toBe(true);
-		expect(updatedLines.some((line) => line.startsWith("reasoning"))).toBe(true);
+		expect(updatedLines.some((line) => line.startsWith("  hello"))).toBe(true);
+		expect(Math.max(...updatedLines.map((line) => line.length))).toBe(80);
 	});
 
 	test("chains Markdown transformers in registration order", () => {
@@ -158,7 +159,7 @@ describe("AssistantMessageComponent", () => {
 		const component = new AssistantMessageComponent(message, false, undefined, "Thinking...", 1, [
 			(markdown, context) => {
 				calls.push("formula");
-				expect(context).toEqual({ messageType: "assistant", isStreaming: false, availableWidth: 78 });
+				expect(context).toEqual({ messageType: "assistant", isStreaming: false, availableWidth: 77 });
 				return markdown.replace("$x^2$", "x²");
 			},
 			(markdown) => {
@@ -207,10 +208,10 @@ describe("AssistantMessageComponent", () => {
 			],
 		);
 
-		expect(stripAnsi(component.render(80).join("\n"))).toContain("answer (78)");
+		expect(stripAnsi(component.render(80).join("\n"))).toContain("answer (77)");
 		component.render(80);
-		expect(stripAnsi(component.render(60).join("\n"))).toContain("answer (58)");
-		expect(availableWidths).toEqual([78, 58]);
+		expect(stripAnsi(component.render(60).join("\n"))).toContain("answer (57)");
+		expect(availableWidths).toEqual([77, 57]);
 	});
 
 	test("continues the Markdown transformer chain when a transformer throws", () => {
@@ -266,12 +267,11 @@ describe("AssistantMessageComponent", () => {
 	test("uses configured output padding for user messages", () => {
 		initTheme("dark");
 
-		const paddedComponent = new UserMessageComponent("hello", undefined, 1);
-		const paddedLines = paddedComponent.render(40).map((line) => stripAnsi(line));
-		expect(paddedLines.some((line) => line.startsWith(" hello"))).toBe(true);
-
-		const unpaddedComponent = new UserMessageComponent("hello", undefined, 0);
-		const unpaddedLines = unpaddedComponent.render(40).map((line) => stripAnsi(line));
-		expect(unpaddedLines.some((line) => line.startsWith("hello"))).toBe(true);
+		const text = "aaaa bbbb cccc";
+		expect(new UserMessageComponent(text, undefined, 1).render(16).map(stripAnsi)).toEqual([
+			"❯ aaaa bbbb     ",
+			"  cccc          ",
+		]);
+		expect(new UserMessageComponent(text, undefined, 0).render(16).map(stripAnsi)).toEqual(["❯ aaaa bbbb cccc"]);
 	});
 });

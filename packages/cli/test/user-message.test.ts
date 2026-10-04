@@ -12,16 +12,25 @@ describe("UserMessageComponent", () => {
 	test("keeps user message height stable while moving closing OSC markers off line end", () => {
 		initTheme("dark");
 
-		const component = new UserMessageComponent("hello");
+		const component = new UserMessageComponent("hello\n\nworld");
 		const lines = component.render(20);
 
 		expect(lines).toHaveLength(3);
 		expect(lines[0]).toContain(OSC133_ZONE_START);
+		expect(lines[0]).toContain("hello");
 		expect(lines[0].endsWith(BG_RESET)).toBe(true);
 		expect(lines[0]).not.toContain(OSC133_ZONE_END);
-		expect(lines[1]).toContain("hello");
+		expect(lines[2]).toContain("world");
 		expect(lines[2].startsWith(OSC133_ZONE_END + OSC133_ZONE_FINAL)).toBe(true);
 		expect(lines[2].endsWith(BG_RESET)).toBe(true);
+	});
+
+	test("marks the first line with a pointer and hangs wrapped lines under the text", () => {
+		initTheme("dark");
+
+		const lines = new UserMessageComponent("one two three four five", undefined, 1).render(14).map(stripAnsi);
+
+		expect(lines).toEqual(["❯ one two     ", "  three four  ", "  five        "]);
 	});
 
 	test("chains Markdown transformers with user message context", () => {
@@ -30,7 +39,7 @@ describe("UserMessageComponent", () => {
 		const component = new UserMessageComponent("The input is $x^2$.", undefined, 1, [
 			(markdown, context) => {
 				calls.push("formula");
-				expect(context).toEqual({ messageType: "user", isStreaming: false, availableWidth: 78 });
+				expect(context).toEqual({ messageType: "user", isStreaming: false, availableWidth: 76 });
 				return markdown.replace("$x^2$", "x²");
 			},
 			(markdown) => {
