@@ -1,12 +1,16 @@
 import type { AssistantMessage } from "@knightcode/ai";
 import {
+	backgroundAnsi,
 	type Color,
+	type Component,
+	colorToRgb,
 	type EditorTheme,
 	foregroundAnsi,
 	getCapabilities,
 	hyperlink,
 	mixColors,
 	parseColor,
+	rgbColor,
 	truncateToWidth,
 	type TUI,
 	visibleWidth,
@@ -44,6 +48,21 @@ const PALETTES: Record<"dark" | "light", Color[]> = {
 	light: ["#e8912e", "#d95500", "#b84300", "#8f3300"].map((hex) => parseColor(hex)),
 };
 
+// The glint is near-white on dark terminals; on light ones white would vanish into the background.
+const HIGHLIGHTS: Record<"dark" | "light", Color> = { dark: parseColor("#fff4e0"), light: parseColor("#ffc46b") };
+
+/** Seconds for the palette to flow one full wave, and for the glint to sweep once; then the header holds still. */
+const FLOW_SECONDS = 5;
+const GLINT_SWEEP_SECONDS = 1.6;
+// Startup work blocks the event loop for ~1 s (stalls up to 165 ms measured), so the knight waits it out.
+// ponytail: fixed delay, not a readiness signal; a slower machine can still stutter the glint.
+const START_DELAY_MS = 1000;
+// Windows timers tick every 15.6 ms and round up, so the interval lands on two ticks (31 ms) when it has slack.
+// At 30 ms a millisecond of render work pushed ~15% of frames to three ticks (47 ms); 25 ms leaves 6 ms.
+const FRAME_MS = 25;
+// A late frame advances the animation by at most this much, so a stall pauses the glint instead of skipping it.
+const MAX_STEP_MS = 50;
+
 /** Sample the palette at `position` in [0, 1]. */
 function sample(palette: Color[], position: number): Color {
 	const scaled = Math.min(Math.max(position, 0), 1) * (palette.length - 1);
@@ -51,14 +70,136 @@ function sample(palette: Color[], position: number): Color {
 	return mixColors(palette[index]!, palette[index + 1]!, scaled - index);
 }
 
-function gradient(text: string, theme: Theme, phase = 0): string {
-	const chars = [...text];
-	const span = Math.max(chars.length - 1, 1);
+// Sampled once and stored as RGB: an oklch mix and conversion for every pixel of every frame cost ~6 ms per render.
+const RAMP_STEPS = 64;
+const ramp = (palette: Color[]) =>
+	Array.from({ length: RAMP_STEPS }, (_, i) => {
+		const { r, g, b } = colorToRgb(sample(palette, i / (RAMP_STEPS - 1)));
+		return rgbColor(r, g, b);
+	});
+const RAMPS: Record<"dark" | "light", Color[]> = { dark: ramp(PALETTES.dark), light: ramp(PALETTES.light) };
+
+/**
+ * Header color at `x` columns and `y` half-rows, so a unit is roughly square. The palette flows diagonally as a
+ * wave, and a glint sweeps once across the knight and on through the title.
+ */
+function shimmer(theme: Theme, x: number, y: number, time: number): Color {
+	const diagonal = x + y;
+	const wave = 0.5 - 0.5 * Math.cos(2 * Math.PI * (diagonal / 40 - time / FLOW_SECONDS));
+	const base = RAMPS[theme.appearance][Math.round(wave * (RAMP_STEPS - 1))]!;
+	const sweep = time / GLINT_SWEEP_SECONDS;
+	const glow = Math.exp(-(((diagonal - (sweep * 60 - 10)) / 3) ** 2));
+	if (glow < 0.01) return base;
+	return mixColors(base, HIGHLIGHTS[theme.appearance], glow * 0.8, "srgb");
+}
+
+/** The knight drawn in half-cell pixels: a full block becomes `▀` over a background, so each half has its own color. */
+function knight(theme: Theme, time: number): string[] {
 	const mode = theme.getColorMode();
-	const palette = PALETTES[theme.appearance];
-	return chars
-		.map((ch, i) => (ch === " " ? ch : `${foregroundAnsi(sample(palette, i / span / 1.4 + phase), mode)}${ch}\x1b[39m`))
-		.join("");
+	return LOGO.map((line, row) => {
+		// Colors are written only when they change and reset once per row; per-cell resets bloated every frame.
+		let out = "";
+		let fg = "";
+		let bg = "";
+		const cell = (ch: string, nextFg: string, nextBg: string) => {
+			if (nextFg && nextFg !== fg) {
+				out += nextFg;
+				fg = nextFg;
+			}
+			if (nextBg !== bg) {
+				out += nextBg || "\x1b[49m";
+				bg = nextBg;
+			}
+			out += ch;
+		};
+		const color = (x: number, half: number) => shimmer(theme, x, row * 2 + half, time);
+		[...line].forEach((ch, x) => {
+			if (ch === "█") cell("▀", foregroundAnsi(color(x, 0), mode), backgroundAnsi(color(x, 1), mode));
+			else if (ch === "▀") cell(ch, foregroundAnsi(color(x, 0), mode), "");
+			else if (ch === "▄") cell(ch, foregroundAnsi(color(x, 1), mode), "");
+			else cell(ch, "", "");
+		});
+		return fg ? `${out}\x1b[39;49m` : out;
+	});
+}
+
+/** The knight, title, cwd and key hints. The gradient glints once, only while the header is on screen in truecolor. */
+export class KnightHeader implements Component {
+	private readonly tui: TUI;
+	private readonly theme: Theme;
+	private readonly cwd: string;
+	private readonly start = performance.now();
+	/** Animation seconds, advanced in render by real time between frames. */
+	private time = 0;
+	private lastFrame: number | undefined;
+	private readonly timer: ReturnType<typeof setInterval>;
+
+	constructor(tui: TUI, theme: Theme, cwd: string) {
+		this.tui = tui;
+		this.theme = theme;
+		this.cwd = cwd;
+		this.timer = setInterval(() => {
+			if (performance.now() - this.start < START_DELAY_MS) return;
+			if (this.live() && this.time < GLINT_SWEEP_SECONDS) tui.requestRender();
+			else clearInterval(this.timer);
+		}, FRAME_MS);
+		this.timer.unref?.();
+	}
+
+	/**
+	 * Once the header leaves the screen its frame freezes: in regular mode, changing a row above the viewport
+	 * redraws everything and clears the scrollback. 256-color terminals keep the still frame; the steps would flicker.
+	 */
+	private live(): boolean {
+		return this.tui.viewportTop === 0 && this.theme.getColorMode() === "truecolor";
+	}
+
+	invalidate(): void {}
+
+	dispose(): void {
+		clearInterval(this.timer);
+	}
+
+	render(width: number): string[] {
+		const theme = this.theme;
+		const now = performance.now();
+		if (this.live() && now - this.start >= START_DELAY_MS) {
+			const step = Math.min(now - (this.lastFrame ?? now), MAX_STEP_MS) / 1000;
+			this.time = Math.min(this.time + step, GLINT_SWEEP_SECONDS);
+			this.lastFrame = now;
+		}
+		const logoWidth = Math.max(...LOGO.map((line) => visibleWidth(line)));
+		const logo = knight(theme, this.time);
+		const cwd = theme.fg("muted", formatCwdForFooter(this.cwd, process.env.HOME || process.env.USERPROFILE));
+		const separator = theme.fg("muted", " · ");
+		const hints = [
+			[
+				keyHint("app.interrupt", "interrupt"),
+				rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
+			].join(separator),
+			[rawKeyHint("/", "commands"), rawKeyHint("!", "bash")].join(separator),
+		];
+		const name = APP_NAME === "knightcode" ? "KnightCode" : APP_NAME;
+		// The title sits in the same color space as the knight, so the glint carries on into it.
+		const title = (x: number, y: number) => {
+			const mode = theme.getColorMode();
+			const letters = [...name].map((ch, i) => `${foregroundAnsi(shimmer(theme, x + i, y, this.time), mode)}${ch}`);
+			return `${theme.bold(`${letters.join("")}\x1b[39m`)}${theme.fg("dim", ` v${VERSION}`)}`;
+		};
+
+		// Knight on the left, text beside it and vertically centred, all flush with the transcript's 1-column pad.
+		const indent = " ";
+		const gap = " ".repeat(3);
+		const below = [cwd, "", ...hints];
+		const textWidth = Math.max(visibleWidth(`${name} v${VERSION}`), ...below.map((line) => visibleWidth(line)));
+		const fit = (line: string) => truncateToWidth(`${indent}${line}`, width);
+		if (indent.length + logoWidth + gap.length + textWidth > width) {
+			return ["", ...logo.map(fit), "", ...[title(0, (LOGO.length + 1) * 2), ...below].map(fit), ""];
+		}
+		const top = Math.floor((LOGO.length - below.length - 1) / 2);
+		const text = [title(logoWidth + gap.length, top * 2 + 0.5), ...below];
+		return ["", ...logo.map((line, row) => fit(`${line}${gap}${text[row - top] ?? ""}`)), ""];
+	}
 }
 
 /** `left` and `right` on one row; when both don't fit, left keeps ~45% and both truncate. */
@@ -179,37 +320,7 @@ export default function uiExtension(knightcode: ExtensionAPI): void {
 		changedFiles = undefined;
 		pullRequest = undefined;
 
-		ctx.ui.setHeader((_tui, theme) => ({
-			invalidate() {},
-			render(width: number): string[] {
-				const logoWidth = Math.max(...LOGO.map((line) => visibleWidth(line)));
-				const logo = LOGO.map((line, row) => gradient(line.padEnd(logoWidth), theme, row * 0.04));
-				const title = `${theme.bold(gradient(APP_NAME === "knightcode" ? "KnightCode" : APP_NAME, theme, 0.15))}${theme.fg("dim", ` v${VERSION}`)}`;
-				const cwd = theme.fg("muted", formatCwdForFooter(ctx.cwd, process.env.HOME || process.env.USERPROFILE));
-				const separator = theme.fg("muted", " · ");
-				const text = [
-					title,
-					cwd,
-					"",
-					[
-						keyHint("app.interrupt", "interrupt"),
-						rawKeyHint(`${keyText("app.clear")}/${keyText("app.exit")}`, "clear/exit"),
-					].join(separator),
-					[rawKeyHint("/", "commands"), rawKeyHint("!", "bash")].join(separator),
-				];
-
-				// Knight on the left, text beside it and vertically centred, all flush with the transcript's 1-column pad.
-				const indent = " ";
-				const gap = " ".repeat(3);
-				const textWidth = Math.max(...text.map((line) => visibleWidth(line)));
-				const fit = (line: string) => truncateToWidth(`${indent}${line}`, width);
-				if (indent.length + logoWidth + gap.length + textWidth > width) {
-					return ["", ...logo.map(fit), "", ...text.map(fit), ""];
-				}
-				const top = Math.floor((logo.length - text.length) / 2);
-				return ["", ...logo.map((line, row) => fit(`${line}${gap}${text[row - top] ?? ""}`)), ""];
-			},
-		}));
+		ctx.ui.setHeader((tui, theme) => new KnightHeader(tui, theme, ctx.cwd));
 
 		ctx.ui.setFooter((tui, theme, footerData) => {
 			requestRender = () => tui.requestRender();

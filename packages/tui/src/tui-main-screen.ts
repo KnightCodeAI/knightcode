@@ -132,6 +132,10 @@ export class TuiMainScreen extends TuiBase implements TUI {
 	private maxLinesRendered = 0;
 	private previousViewportTop = 0;
 
+	get viewportTop(): number {
+		return this.previousViewportTop;
+	}
+
 	captureRenderState(): TuiMainScreenRenderState {
 		return {
 			previousLines: [...this.previousLines],

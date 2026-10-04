@@ -1,10 +1,87 @@
-import { type TUI, visibleWidth } from "@knightcode/tui";
-import { describe, expect, it, vi } from "vitest";
+import { resetCapabilitiesCache, setCapabilities, type TUI, visibleWidth } from "@knightcode/tui";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
-import { FramedEditor } from "../src/extensions/ui/index.ts";
+import { FramedEditor, KnightHeader } from "../src/extensions/ui/index.ts";
 import { WorkingStatusIndicator } from "../src/modes/interactive/components/status-indicator.ts";
-import { getEditorTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { getEditorTheme, getThemeByName, initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
+
+describe("ui extension knight header", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+		resetCapabilitiesCache();
+	});
+
+	function header(trueColor: boolean) {
+		vi.useFakeTimers({ toFake: ["performance", "setInterval", "clearInterval"] });
+		setCapabilities({ images: null, trueColor, hyperlinks: false });
+		initTheme("dark");
+		const theme = getThemeByName("dark");
+		if (!theme) throw new Error("dark theme not found");
+		const tui = { requestRender: vi.fn(), viewportTop: 0 };
+		const knight = new KnightHeader(tui as unknown as TUI, theme, "/work");
+		// The animation clock advances per rendered frame, as it does under the real TUI.
+		tui.requestRender.mockImplementation(() => void knight.render(80));
+		return { tui, header: knight };
+	}
+
+	it("holds still through startup, then shimmers", () => {
+		const { tui, header: knight } = header(true);
+		const first = knight.render(80);
+		vi.advanceTimersByTime(900);
+		expect(tui.requestRender).not.toHaveBeenCalled();
+		expect(knight.render(80)).toEqual(first);
+		knight.dispose();
+	});
+
+	it("shimmers while on screen and freezes once scrolled off", () => {
+		const { tui, header: knight } = header(true);
+		const first = knight.render(80);
+		vi.advanceTimersByTime(1200);
+		expect(tui.requestRender).toHaveBeenCalled();
+		const moved = knight.render(80);
+		expect(moved).not.toEqual(first);
+		expect(moved.map(stripAnsi)).toEqual(first.map(stripAnsi));
+
+		// Rows above the viewport must not change, or regular mode clears the scrollback.
+		tui.viewportTop = 3;
+		tui.requestRender.mockClear();
+		vi.advanceTimersByTime(1000);
+		expect(tui.requestRender).not.toHaveBeenCalled();
+		expect(knight.render(80)).toEqual(moved);
+		knight.dispose();
+	});
+
+	it("stops after one glint", () => {
+		const { tui, header: knight } = header(true);
+		vi.advanceTimersByTime(3000);
+		const done = knight.render(80);
+		tui.requestRender.mockClear();
+		vi.advanceTimersByTime(5000);
+		expect(tui.requestRender).not.toHaveBeenCalled();
+		expect(knight.render(80)).toEqual(done);
+		knight.dispose();
+	});
+
+	it("stays still without truecolor", () => {
+		const { tui, header: knight } = header(false);
+		const first = knight.render(80);
+		vi.advanceTimersByTime(1000);
+		expect(tui.requestRender).not.toHaveBeenCalled();
+		expect(knight.render(80)).toEqual(first);
+		knight.dispose();
+	});
+
+	it("fits every width, stacking the text under the knight when narrow", () => {
+		const { header: knight } = header(true);
+		for (const width of [80, 30, 10]) {
+			for (const line of knight.render(width)) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+		}
+		expect(stripAnsi(knight.render(80)[2]!)).toContain("KnightCode");
+		expect(stripAnsi(knight.render(30).find((line) => stripAnsi(line).includes("Knight")) ?? "")).not.toContain("▀");
+		knight.dispose();
+	});
+});
 
 function editor(): FramedEditor {
 	initTheme("dark");
