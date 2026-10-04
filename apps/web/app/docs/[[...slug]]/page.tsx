@@ -88,12 +88,19 @@ export async function generateMetadata(props: {
 
   if (!page) notFound()
 
-  const ogUrl = `/og/docs/${slugs.join("/")}`
+  const ogUrl = ["/og/docs", ...slugs].join("/")
 
+  // A page's openGraph replaces the root layout's instead of merging into it,
+  // so the site-wide fields are repeated here.
   return {
     title: page.data.title,
     description: page.data.description,
+    alternates: { canonical: page.url },
     openGraph: {
+      type: "article",
+      url: page.url,
+      siteName: SITE.name,
+      locale: "en_US",
       images: [
         {
           url: ogUrl,
