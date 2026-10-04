@@ -137,6 +137,26 @@ describe("TUI render scheduling", () => {
 		assert.deepStrictEqual(component.lines, ["typed"]);
 		tui.stop();
 	});
+
+	it("renders in the current event-loop pass once the throttle interval has passed", async () => {
+		const terminal = new VirtualTerminal(40, 10);
+		const tui: TUI = new TuiMainScreen(terminal);
+		const component = new InputComponent();
+		component.lines = ["initial"];
+		tui.addChild(component);
+		tui.start();
+		tui.renderNow();
+		const renderCountBefore = component.renderCount;
+		await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+		tui.requestRender();
+		await new Promise<void>((resolve) => process.nextTick(resolve));
+		// A setTimeout(0) render would still be waiting for the next timers phase here.
+		await new Promise<void>((resolve) => setImmediate(resolve));
+
+		assert.strictEqual(component.renderCount, renderCountBefore + 1);
+		tui.stop();
+	});
 });
 
 describe("TUI debug logging", () => {

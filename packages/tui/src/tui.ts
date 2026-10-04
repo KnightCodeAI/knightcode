@@ -1041,7 +1041,8 @@ export abstract class TuiBase extends Container implements TUI {
 			}
 		};
 		// Once the throttle has passed, render in this event-loop pass. setTimeout(0) waits for the next timer
-		// tick, which is 15.6 ms on Windows: every frame and keystroke echo landed a tick late.
+		// tick, which is 15.6 ms on Windows, so every throttled frame landed a tick late. Keyboard input does
+		// not come through here; requestImmediateRender() renders it on the next tick.
 		if (delay > 0) this.renderTimer = setTimeout(render, delay);
 		else this.renderImmediate = setImmediate(render);
 	}
