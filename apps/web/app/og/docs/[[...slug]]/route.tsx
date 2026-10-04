@@ -2,23 +2,12 @@ import { source } from "@/lib/source"
 import { SITE } from "@/lib/site"
 import { ImageResponse } from "next/og"
 import { notFound } from "next/navigation"
-import fs from "node:fs"
-import path from "node:path"
+import { knightMark } from "@/lib/og"
 
 export async function generateStaticParams() {
   return source.getPages().map((page) => ({
     slug: page.slugs,
   }))
-}
-
-// Load logo once during module load / build time
-let logoDataUrl = ""
-try {
-  const logoPath = path.join(process.cwd(), "public/knightcode_icon_256.png")
-  const logoBuffer = fs.readFileSync(logoPath)
-  logoDataUrl = `data:image/png;base64,${logoBuffer.toString("base64")}`
-} catch (e) {
-  console.error("Failed to load logo from filesystem:", e)
 }
 
 export async function GET(
@@ -50,6 +39,7 @@ export async function GET(
     )
   })
 
+  const logo = await knightMark("#fafafa")
   const toc = page.data.toc || []
   const hasToc = toc.length > 0
 
@@ -78,34 +68,7 @@ export async function GET(
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {logoDataUrl ? (
-            <img
-              src={logoDataUrl}
-              alt=""
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 10,
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 10,
-                background: "linear-gradient(135deg, #fff 0%, #94a3b8 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#0a0a0a",
-                fontSize: 24,
-                fontWeight: 800,
-              }}
-            >
-              T
-            </div>
-          )}
+          <img src={logo} alt="" width={44} height={44} />
           <span
             style={{
               display: "flex",
