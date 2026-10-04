@@ -35,6 +35,33 @@ export class StatusIndicator extends Loader {
 	}
 }
 
+/** Milliseconds per glimmer step; matches the default spinner frame, so the glimmer moves one column per frame. */
+const GLIMMER_STEP_MS = 80;
+
+/**
+ * A three-column highlight sweeping across the text, recomputed from the clock on every spinner frame. The sweep
+ * starts and ends ten columns off-screen so it pauses between passes. Pre-styled text is left alone: splitting
+ * it would cut its escape sequences.
+ */
+export function glimmer(
+	text: string,
+	base: (text: string) => string,
+	shine: (text: string) => string,
+	now = Date.now(),
+): string {
+	const chars = Array.from(text);
+	if (chars.length === 0 || text.includes("\x1b")) return base(text);
+	const center = (Math.floor(now / GLIMMER_STEP_MS) % (chars.length + 20)) - 10;
+	const start = Math.min(chars.length, Math.max(0, center - 1));
+	const end = Math.min(chars.length, Math.max(0, center + 2));
+	const style = (part: string, color: (text: string) => string) => (part ? color(part) : "");
+	return (
+		style(chars.slice(0, start).join(""), base) +
+		style(chars.slice(start, end).join(""), shine) +
+		style(chars.slice(end).join(""), base)
+	);
+}
+
 export class WorkingStatusIndicator extends StatusIndicator {
 	/**
 	 * @param embeddedColor Resolved on every frame rather than captured, because the
@@ -52,7 +79,10 @@ export class WorkingStatusIndicator extends StatusIndicator {
 			"working",
 			ui,
 			(spinner) => (embeddedColor?.() ?? ((text: string) => theme.fg("accent", text)))(spinner),
-			(text) => (embeddedColor?.() ?? ((value: string) => theme.fg("muted", value)))(text),
+			(text) =>
+				glimmer(text, embeddedColor?.() ?? ((value: string) => theme.fg("muted", value)), (value) =>
+					theme.fg("text", value),
+				),
 			message,
 			indicator,
 		);

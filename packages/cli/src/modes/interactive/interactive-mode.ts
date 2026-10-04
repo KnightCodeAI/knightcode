@@ -186,6 +186,7 @@ import { editInExternalEditor } from "./external-editor.ts";
 import { refreshModelCatalogs } from "./model-catalog-refresh.ts";
 import { getModelSearchText } from "./model-search.ts";
 import { shareSession } from "./session-share.ts";
+import { SPINNER_VERBS } from "./spinner-verbs.ts";
 import {
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
@@ -472,7 +473,8 @@ export class InteractiveMode {
 	private workingMessage: string | undefined = undefined;
 	private workingVisible = true;
 	private workingIndicatorOptions: WorkingIndicatorOptions | undefined = undefined;
-	private readonly defaultWorkingMessage = "Working";
+	/** Drawn afresh each time the working indicator appears, so every prompt gets its own verb. */
+	private defaultWorkingMessage = "Working…";
 	private readonly defaultHiddenThinkingLabel = "Thinking...";
 	private hiddenThinkingLabel = this.defaultHiddenThinkingLabel;
 
@@ -2323,6 +2325,7 @@ export class InteractiveMode {
 			? (text: string) =>
 					(this.editor.borderColor ?? theme.getThinkingBorderColor(this.session.thinkingLevel || "off"))(text)
 			: undefined;
+		this.defaultWorkingMessage = `${SPINNER_VERBS[Math.floor(Math.random() * SPINNER_VERBS.length)]}…`;
 		this.showStatusIndicator(
 			new WorkingStatusIndicator(
 				this.ui,
