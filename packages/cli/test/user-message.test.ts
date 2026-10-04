@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { MarkdownTransformContext } from "../src/core/extensions/types.ts";
 import { UserMessageComponent } from "../src/modes/interactive/components/user-message.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
@@ -36,10 +37,12 @@ describe("UserMessageComponent", () => {
 	test("chains Markdown transformers with user message context", () => {
 		initTheme("dark");
 		const calls: string[] = [];
+		const contexts: MarkdownTransformContext[] = [];
 		const component = new UserMessageComponent("The input is $x^2$.", undefined, 1, [
 			(markdown, context) => {
 				calls.push("formula");
-				expect(context).toEqual({ messageType: "user", isStreaming: false, availableWidth: 76 });
+				// Asserted after render: the transformer chain swallows a throw from in here.
+				contexts.push(context);
 				return markdown.replace("$x^2$", "x²");
 			},
 			(markdown) => {
@@ -50,6 +53,8 @@ describe("UserMessageComponent", () => {
 
 		expect(stripAnsi(component.render(80).join("\n"))).toContain("The input is x². Done.");
 		expect(calls).toEqual(["formula", "suffix"]);
+		// 80 columns less the 2-column gutter and 1 column of output padding.
+		expect(contexts).toEqual([{ messageType: "user", isStreaming: false, availableWidth: 77 }]);
 	});
 
 	test("reapplies Markdown transformers when invalidated", () => {
