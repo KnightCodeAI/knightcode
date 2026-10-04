@@ -503,6 +503,7 @@ export abstract class TuiBase extends Container implements TUI {
 	private renderRequested = false;
 	private immediateRenderScheduled = false;
 	private renderTimer: NodeJS.Timeout | undefined;
+	private renderImmediate: NodeJS.Immediate | undefined;
 	private lastRenderAt = 0;
 	private static readonly MIN_RENDER_INTERVAL_MS = 16;
 	private showHardwareCursor = false;
@@ -1014,19 +1015,21 @@ export abstract class TuiBase extends Container implements TUI {
 	}
 
 	private cancelRenderTimer(): void {
-		if (!this.renderTimer) return;
 		clearTimeout(this.renderTimer);
+		clearImmediate(this.renderImmediate);
 		this.renderTimer = undefined;
+		this.renderImmediate = undefined;
 	}
 
 	private scheduleRender(): void {
-		if (this.stopped || this.renderTimer || !this.renderRequested) {
+		if (this.stopped || this.renderTimer || this.renderImmediate || !this.renderRequested) {
 			return;
 		}
 		const elapsed = performance.now() - this.lastRenderAt;
 		const delay = Math.max(0, TuiBase.MIN_RENDER_INTERVAL_MS - elapsed);
-		this.renderTimer = setTimeout(() => {
+		const render = () => {
 			this.renderTimer = undefined;
+			this.renderImmediate = undefined;
 			if (this.stopped || !this.renderRequested) {
 				return;
 			}
@@ -1036,7 +1039,12 @@ export abstract class TuiBase extends Container implements TUI {
 			if (this.renderRequested) {
 				this.scheduleRender();
 			}
-		}, delay);
+		};
+		// Once the throttle has passed, render in this event-loop pass. setTimeout(0) waits for the next timer
+		// tick, which is 15.6 ms on Windows, so every throttled frame landed a tick late. Keyboard input does
+		// not come through here; requestImmediateRender() renders it on the next tick.
+		if (delay > 0) this.renderTimer = setTimeout(render, delay);
+		else this.renderImmediate = setImmediate(render);
 	}
 
 	private handleTerminalInput(data: string): void {
