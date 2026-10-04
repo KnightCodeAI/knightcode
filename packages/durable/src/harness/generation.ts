@@ -31,6 +31,7 @@ import { applyBoundary, InboxDoc, prepareBoundary } from "./inbox.ts";
 import { assignJson } from "./json.ts";
 import { endRun, LiveDoc, type LiveState, type ToolSlot } from "./live.ts";
 import { planSystemEntries, renderSections, replaySections } from "./prompt.ts";
+import { ensureProviderSessionId } from "./provider.ts";
 import { appendToolResult, harnessError, ToolTask, type ToolTaskResult } from "./tool.ts";
 import type {
 	CompactionPolicy,
@@ -208,6 +209,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			const options: SimpleStreamOptions = {
 				...streamOptions,
 				signal: runtime.signal,
+				sessionId: await ensureProviderSessionId(runtime, context),
 				...(thinkingLevel === "off" ? {} : { reasoning: thinkingLevel }),
 			};
 			const message = await streamResponse(runtime, model, messages, options, attempt, context);
