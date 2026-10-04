@@ -24,7 +24,8 @@ To include files or images:
 KnightCode shows each tool call and result while it works. Press `Ctrl+O` to expand or collapse tool output. Press `Ctrl+T` to show or hide thinking blocks.
 
 The startup header shows the version, folder, and main keys, and KnightCode lists the instructions and resources it
-loaded below it. The editor frame's color indicates the current thinking level. The header, editor frame, and footer
+loaded below it. The knight in the header shimmers while it is on screen in a truecolor terminal and holds still once
+it scrolls away. The editor frame's color indicates the current thinking level. The header, editor frame, and footer
 come from the built-in `ui` extension; set `"extensions": ["-builtin:ui"]` in [settings](settings.md#resources) for the
 plain layout. The footer updates as the model uses context and reports usage.
 

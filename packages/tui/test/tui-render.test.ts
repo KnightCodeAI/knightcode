@@ -139,6 +139,23 @@ describe("TUI render scheduling", () => {
 	});
 });
 
+describe("TUI viewport top", () => {
+	it("stays 0 while the first row is on screen and grows once content scrolls past it", () => {
+		const terminal = new BoundedWriteTerminal();
+		terminal.rows = 5;
+		const tui = new TuiMainScreen(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+		component.lines = ["1", "2", "3"];
+		tui.renderNow();
+		assert.strictEqual(tui.viewportTop, 0);
+
+		component.lines = ["1", "2", "3", "4", "5", "6", "7"];
+		tui.renderNow();
+		assert.strictEqual(tui.viewportTop, 2);
+	});
+});
+
 describe("TUI debug logging", () => {
 	it("writes redraw logs to the provided directory", async () => {
 		const logDir = mkdtempSync(join(tmpdir(), "knightcode-tui-log-"));

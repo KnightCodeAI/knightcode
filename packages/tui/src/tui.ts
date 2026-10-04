@@ -456,6 +456,11 @@ export interface TUI extends Component {
 	terminal: Terminal;
 	onDebug?: () => void;
 	readonly fullRedraws: number;
+	/**
+	 * First content row on screen as of the last render; 0 while the top of the content is visible. In regular mode,
+	 * changing a row above it forces a full redraw that clears the scrollback.
+	 */
+	readonly viewportTop: number;
 	addChild(component: Component): void;
 	removeChild(component: Component): void;
 	clear(): void;
@@ -494,6 +499,7 @@ export function isViewportTUI(tui: TUI): tui is ViewportTUI {
 
 export abstract class TuiBase extends Container implements TUI {
 	abstract readonly mode: TuiMode;
+	abstract readonly viewportTop: number;
 	public terminal: Terminal;
 	private focusedComponent: Component | null = null;
 	private inputListeners = new Set<TuiInputListener>();
