@@ -47,4 +47,15 @@ describe("renderDiff", () => {
 		expect(tints(large[0]).size).toBe(1);
 		expect(tints(large[1]).size).toBe(1);
 	});
+
+	test("skips word emphasis when the removed and added runs differ in length", () => {
+		const lines = renderDiff(
+			generateDiffString("const VERSION = 1;\n", "const VERSION = 2;\nconst NAME = 3;\n").diff,
+			40,
+		);
+		const tints = (line: string) => new Set(line.match(/\x1b\[48;[0-9;]*m/g));
+
+		expect(lines).toHaveLength(3);
+		for (const line of lines) expect(tints(line).size).toBe(1);
+	});
 });

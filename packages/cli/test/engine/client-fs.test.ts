@@ -78,18 +78,38 @@ describe("client file operations", () => {
 	});
 
 	test("writes through the client and leaves disk alone, parent directories included", async () => {
-		const requests = scriptedRequests(() => ({ kind: "fs.write" }));
+		const requests = scriptedRequests((request) =>
+			request.kind === "fs.read" ? { kind: "error", code: "failed", message: "no buffer" } : { kind: "fs.write" },
+		);
 		const [, , write] = createClientFileTools(dir, "s1", requests, both, { autoResizeImages: false });
 		const file = join(dir, "a.txt");
+		const nested = join(dir, "new", "dir", "b.txt");
 		writeFileSync(file, "before");
 		await run(write, "tc-a", { path: "a.txt", content: "after" });
 		await run(write, "tc-b", { path: "new/dir/b.txt", content: "nested" });
 		expect(readFileSync(file, "utf-8")).toBe("before");
 		expect(existsSync(join(dir, "new"))).toBe(false);
+		// Each write first asks for the old contents to diff against; a path missing from engine disk included.
 		expect(requests.asked).toEqual([
+			{ kind: "fs.read", toolCallId: "tc-a", path: file },
 			{ kind: "fs.write", toolCallId: "tc-a", path: file, content: "after" },
-			{ kind: "fs.write", toolCallId: "tc-b", path: join(dir, "new", "dir", "b.txt"), content: "nested" },
+			{ kind: "fs.read", toolCallId: "tc-b", path: nested },
+			{ kind: "fs.write", toolCallId: "tc-b", path: nested, content: "nested" },
 		]);
+	});
+
+	test("an overwrite shows no diff when reads and writes go to different stores", async () => {
+		const requests = scriptedRequests(() => ({ kind: "fs.write" }));
+		const [, , write] = createClientFileTools(
+			dir,
+			"s1",
+			requests,
+			{ readTextFile: false, writeTextFile: true },
+			{ autoResizeImages: false },
+		);
+		writeFileSync(join(dir, "a.txt"), "on disk");
+		const result = (await run(write, "tc-a", { path: "a.txt", content: "after" })) as { details: unknown };
+		expect(result.details).toBeUndefined();
 	});
 
 	test("uses disk when the client lacks the capability", async () => {
@@ -118,6 +138,7 @@ describe("client file operations", () => {
 			["fs.read", "tc-read"],
 			["fs.read", "tc-edit"],
 			["fs.write", "tc-edit"],
+			["fs.read", "tc-write"],
 			["fs.write", "tc-write"],
 		]);
 		const edited = requests.asked.find((request) => request.kind === "fs.write" && request.toolCallId === "tc-edit");

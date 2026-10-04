@@ -39,7 +39,7 @@
 		"customMessageLabel": "orange",
 		"toolPendingBg": "#f4f0eb",
 		"toolSuccessBg": "#e0f0d6",
-		"toolErrorBg": "#fbe0d9",
+		"toolErrorBg": "#fce6e0",
 		"toolTitle": "text",
 		"toolOutput": "muted",
 		"mdHeading": "amber",

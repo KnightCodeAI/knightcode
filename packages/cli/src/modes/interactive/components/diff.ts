@@ -78,7 +78,10 @@ function wordRanges(oldText: string, newText: string): [Range[], Range[]] {
 	return total > 0 && changed / total > WORD_DIFF_MAX_CHANGE ? [[], []] : [oldRanges, newRanges];
 }
 
-/** Pair each run of removed rows with the added run after it, line by line, and mark changed words. */
+/**
+ * Pair a run of removed rows with an equally long added run after it, line by line, and mark changed
+ * words. Runs of different lengths are a reshaped block, where line k no longer corresponds to line k.
+ */
 function markWordChanges(rows: Row[]): void {
 	let i = 0;
 	while (i < rows.length) {
@@ -90,7 +93,7 @@ function markWordChanges(rows: Row[]): void {
 		while (i < rows.length && rows[i].kind === "-") i++;
 		const addedStart = i;
 		while (i < rows.length && rows[i].kind === "+") i++;
-		const pairs = Math.min(addedStart - removedStart, i - addedStart);
+		const pairs = addedStart - removedStart === i - addedStart ? i - addedStart : 0;
 		for (let k = 0; k < pairs; k++) {
 			const removed = rows[removedStart + k];
 			const added = rows[addedStart + k];

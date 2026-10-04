@@ -1,5 +1,5 @@
 import type { AgentTool } from "@knightcode/agent";
-import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
+import { mkdir as fsMkdir, readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import { stripBom } from "../../utils/text.ts";
@@ -39,14 +39,21 @@ export interface WriteOperations {
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
 	/** Create directory recursively */
 	mkdir: (dir: string) => Promise<void>;
-	/** Read the current contents, or undefined when the file does not exist. Without it, overwrites show no diff. */
+	/**
+	 * Read the current contents for the display diff, or undefined when there is nothing to diff against
+	 * (missing, unreadable, or too large). Without it, overwrites show no diff.
+	 */
 	readFile?: (absolutePath: string) => Promise<string | undefined>;
 }
 
 const defaultWriteOperations: WriteOperations = {
 	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
 	mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
-	readFile: (path) => fsReadFile(path, "utf-8").catch(() => undefined),
+	// Display only: any read failure drops the diff, and the write itself reports an unwritable target.
+	readFile: (path) =>
+		fsStat(path)
+			.then((stats) => (stats.size > MAX_DIFF_CHARS ? undefined : fsReadFile(path, "utf-8")))
+			.catch(() => undefined),
 };
 
 function overwriteDiff(previous: string | undefined, content: string): string | undefined {
