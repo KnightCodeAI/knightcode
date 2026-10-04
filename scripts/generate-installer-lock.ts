@@ -11,6 +11,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
 	installerPackageJson,
 	missingPlatformPackages,
@@ -42,7 +43,7 @@ function packageVersion(): string {
 const version = packageVersion();
 const manifest = installerPackageJson(version);
 
-function resolveLock(): { version?: string } {
+function resolveLock(): { version?: string } | undefined {
 	const stage = mkdtempSync(join(tmpdir(), "knightcode-installer-lock-"));
 	try {
 		writeFileSync(join(stage, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -56,6 +57,7 @@ function resolveLock(): { version?: string } {
 				"--include=optional",
 				"--no-fund",
 				"--no-audit",
+				"--prefer-online",
 				"--min-release-age=0",
 			],
 			{
@@ -66,7 +68,8 @@ function resolveLock(): { version?: string } {
 			},
 		);
 		if (npm.status !== 0) {
-			throw new Error(`npm install --package-lock-only exited with ${npm.status ?? "unknown"}`);
+			console.error(`npm install --package-lock-only exited with ${npm.status ?? "unknown"}`);
+			return undefined;
 		}
 		return JSON.parse(readFileSync(join(stage, "package-lock.json"), "utf8")) as { version?: string };
 	} finally {
@@ -74,7 +77,18 @@ function resolveLock(): { version?: string } {
 	}
 }
 
-const lock = resolveLock();
+// Right after `npm publish` the registry can still serve the packument from
+// before it for a few minutes, so the version that just shipped fails with
+// ETARGET. Retry; --prefer-online above keeps npm's own cache from replaying
+// the stale packument.
+const LOCK_ATTEMPTS = 12;
+let lock = resolveLock();
+for (let attempt = 2; !lock && attempt <= LOCK_ATTEMPTS; attempt++) {
+	console.error(`Retrying in 30s (attempt ${attempt}/${LOCK_ATTEMPTS})`);
+	await sleep(30_000);
+	lock = resolveLock();
+}
+if (!lock) throw new Error(`Could not resolve the installer lock for ${version} after ${LOCK_ATTEMPTS} attempts`);
 if (lock.version !== version) lock.version = version;
 const lockError = validateInstallerLock(lock, version);
 if (lockError) throw new Error(lockError);
