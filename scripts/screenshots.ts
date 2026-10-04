@@ -723,8 +723,7 @@ async function captureAll(names: string[]): Promise<void> {
 	const unknown = names.filter((n) => !SCENES[n]);
 	if (unknown.length) throw new Error(`unknown scene ${unknown.join(", ")}; known: ${Object.keys(SCENES).join(", ")}`);
 	const selected = names.length ? names : Object.keys(SCENES);
-	const work = join(tmpdir(), "knightcode-screenshots");
-	rmSync(work, { recursive: true, force: true });
+	const work = mkdtempSync(join(tmpdir(), "knightcode-screenshots-"));
 	const tools = findTools();
 	const browser = await openBrowser();
 	const failed: string[] = [];
@@ -765,6 +764,7 @@ async function captureAll(names: string[]): Promise<void> {
 		console.error(`failed: ${failed.join(", ")}; the HTML and dumps are in ${work}`);
 		process.exit(1);
 	}
+	rmSync(work, { recursive: true, force: true });
 }
 
 if (process.argv[2] === "--scene") await runScene(process.argv[3]);

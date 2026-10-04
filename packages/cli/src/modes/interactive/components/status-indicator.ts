@@ -38,6 +38,8 @@ export class StatusIndicator extends Loader {
 /** Milliseconds per glimmer step; matches the default spinner frame, so the glimmer moves one column per frame. */
 const GLIMMER_STEP_MS = 80;
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 /**
  * A three-column highlight sweeping across the text, recomputed from the clock on every spinner frame. The sweep
  * starts and ends ten columns off-screen so it pauses between passes. Pre-styled text is left alone: splitting
@@ -49,7 +51,8 @@ export function glimmer(
 	shine: (text: string) => string,
 	now = Date.now(),
 ): string {
-	const chars = Array.from(text);
+	// Graphemes, not code points, so a highlight edge never splits an emoji or a combining sequence.
+	const chars = Array.from(graphemes.segment(text), ({ segment }) => segment);
 	if (chars.length === 0 || text.includes("\x1b")) return base(text);
 	const center = (Math.floor(now / GLIMMER_STEP_MS) % (chars.length + 20)) - 10;
 	const start = Math.min(chars.length, Math.max(0, center - 1));

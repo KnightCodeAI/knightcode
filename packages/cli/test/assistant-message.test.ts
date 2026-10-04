@@ -127,6 +127,40 @@ describe("AssistantMessageComponent", () => {
 		expect(collapsed).toContain("second reasoning");
 	});
 
+	test("hit-tests at the width it rendered, inside the output padding", () => {
+		initTheme("dark");
+		// "aaaa bbbbbb" wraps at the padded width but would fit one column wider, shifting every row below it.
+		const component = new AssistantMessageComponent(
+			createAssistantMessage([
+				{ type: "thinking", thinking: "first" },
+				{ type: "text", text: "aaaa bbbbbb" },
+				{ type: "thinking", thinking: "second" },
+			]),
+		);
+		const width = 13;
+		const lines = component.render(width);
+		const secondRow = lines.findIndex((line) => stripAnsi(line).includes("second"));
+		const event: TuiMouseEvent = {
+			type: "click",
+			button: "left",
+			x: 2,
+			y: secondRow,
+			screenX: 2,
+			screenY: secondRow,
+			width,
+			height: lines.length,
+			shift: false,
+			alt: false,
+			ctrl: false,
+			clickCount: 1,
+		};
+		expect(component.handleMouse(event)?.handled).toBe(true);
+
+		const collapsed = stripAnsi(component.render(width).join("\n"));
+		expect(collapsed).toContain("first");
+		expect(collapsed).not.toContain("second");
+	});
+
 	test("uses configured output padding for text and thinking", () => {
 		initTheme("dark");
 

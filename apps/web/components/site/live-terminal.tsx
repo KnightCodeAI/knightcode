@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -325,7 +326,8 @@ function useGlintTime(): number {
 /** Columns the panel holds: the terminal width the header lays itself out for. */
 function useColumns(ref: React.RefObject<HTMLElement | null>): number {
   const [columns, setColumns] = useState(80)
-  useEffect(() => {
+  // Layout effect, so the first paint already uses the measured width.
+  useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     const probe = document.createElement("span")

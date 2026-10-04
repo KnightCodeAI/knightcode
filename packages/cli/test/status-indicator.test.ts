@@ -128,6 +128,15 @@ describe("status indicators", () => {
 				15 * 80,
 			),
 		).toBe("<\x1b[1mbold\x1b[22m>");
+		// A ZWJ emoji is one grapheme: the highlight takes all of it or none of it.
+		expect(
+			glimmer(
+				"a👩‍💻b",
+				(text) => `<${text}>`,
+				(text) => `[${text}]`,
+				10 * 80,
+			),
+		).toBe("[a👩‍💻]<b>");
 	});
 
 	it("disposes retry countdown updates", () => {

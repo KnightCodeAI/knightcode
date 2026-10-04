@@ -1,5 +1,14 @@
 import type { AssistantMessage } from "@knightcode/ai";
-import { Container, Gutter, Markdown, type MarkdownTheme, MouseRegion, Spacer, Text } from "@knightcode/tui";
+import {
+	Container,
+	Gutter,
+	Markdown,
+	type MarkdownTheme,
+	MouseRegion,
+	Spacer,
+	Text,
+	type TuiMouseEvent,
+} from "@knightcode/tui";
 import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { BLOCK_INDENT } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
@@ -85,6 +94,11 @@ export class AssistantMessageComponent extends Container {
 		lines[0] = OSC133_ZONE_START + lines[0];
 		lines[lines.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + lines[lines.length - 1];
 		return lines;
+	}
+
+	// Hit-test at the width render() laid out, or Container re-renders one column wider and rows can shift.
+	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
+		return super.handleMouse({ ...event, width: Math.max(1, event.width - this.outputPad) });
 	}
 
 	updateContent(message: AssistantMessage, isStreaming = this.isStreaming): void {
