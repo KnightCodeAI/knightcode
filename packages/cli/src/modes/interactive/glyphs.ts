@@ -24,7 +24,7 @@ export const ASTERISK = "✻";
 export const UPDATE_MARKER = "✦";
 
 /** User prompt marker. */
-export const USER_MARKER = ">";
+export const USER_MARKER = "❯";
 
 /** Gutter written before the first line of a tool call or assistant block. */
 export const BULLET_GUTTER = `${BULLET} `;

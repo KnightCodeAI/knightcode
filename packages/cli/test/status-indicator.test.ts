@@ -5,6 +5,7 @@ import { CustomEditor } from "../src/modes/interactive/components/custom-editor.
 import {
 	BranchSummaryStatusIndicator,
 	CompactionStatusIndicator,
+	glimmer,
 	IdleStatus,
 	RetryStatusIndicator,
 	WorkingStatusIndicator,
@@ -44,6 +45,8 @@ describe("status indicators", () => {
 
 	it("embeds the working indicator when the editor opts in", () => {
 		initTheme("dark");
+		// At time 0 the glimmer is off-screen, so the label is one border-coloured run.
+		vi.useFakeTimers({ now: 0 });
 		const tui = {
 			requestRender: vi.fn(),
 			terminal: { rows: 10 },
@@ -99,6 +102,41 @@ describe("status indicators", () => {
 		} finally {
 			for (const indicator of indicators) indicator.dispose();
 		}
+	});
+
+	it("sweeps a three-column glimmer across the text, pausing off-screen between passes", () => {
+		const at = (step: number) =>
+			glimmer(
+				"Pondering…",
+				(text) => text,
+				(text) => `[${text}]`,
+				step * 80,
+			);
+
+		expect(at(0)).toBe("Pondering…");
+		expect(at(10)).toBe("[Po]ndering…");
+		expect(at(15)).toBe("Pond[eri]ng…");
+		expect(at(20)).toBe("Pondering[…]");
+		expect(at(21)).toBe("Pondering…");
+		expect(at(30)).toBe("Pondering…");
+		expect(at(40)).toBe("[Po]ndering…");
+		expect(
+			glimmer(
+				"\x1b[1mbold\x1b[22m",
+				(text) => `<${text}>`,
+				(text) => `[${text}]`,
+				15 * 80,
+			),
+		).toBe("<\x1b[1mbold\x1b[22m>");
+		// A ZWJ emoji is one grapheme: the highlight takes all of it or none of it.
+		expect(
+			glimmer(
+				"a👩‍💻b",
+				(text) => `<${text}>`,
+				(text) => `[${text}]`,
+				10 * 80,
+			),
+		).toBe("[a👩‍💻]<b>");
 	});
 
 	it("disposes retry countdown updates", () => {

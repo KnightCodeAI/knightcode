@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -51,29 +52,56 @@ const C = {
 
 /* Glyph vocabulary: packages/cli/src/modes/interactive/glyphs.ts (non-darwin set). */
 const BULLET = "●"
+const BLOCK_INDENT = "  "
 const RESULT_GUTTER = "  ⎿  "
 const RESULT_INDENT = "     "
-const USER_GUTTER = "> "
+const USER_GUTTER = "❯ "
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+const SPINNER_MS = 80
 
-/** The header gradient: PALETTE in packages/cli/src/extensions/ui/index.ts. */
-const GRADIENT: CSSProperties = {
-  backgroundImage: "linear-gradient(90deg, #ffd08a, #ffab3d, #ff6a00, #e04a12)",
-  WebkitBackgroundClip: "text",
-  backgroundClip: "text",
-  color: "transparent",
-}
+/** modes/interactive/spinner-verbs.ts: one is drawn per prompt. */
+const SPINNER_VERBS = ["Accomplishing","Actualizing","Architecting","Armoring","Baking","Besieging","Bootstrapping","Brewing","Burrowing","Calculating","Cantering","Caramelizing","Cascading","Castling","Catapulting","Cerebrating","Channeling","Checkmating","Choreographing","Churning","Coalescing","Cogitating","Combobulating","Composing","Computing","Concocting","Considering","Contemplating","Cooking","Crafting","Creating","Crunching","Crystallizing","Cultivating","Deciphering","Deliberating","Determining","Dragon-slaying","Drawbridging","Dubbing","Elucidating","Embellishing","En-passanting","Enchanting","Envisioning","Fermenting","Fianchettoing","Finagling","Forging","Forking","Galloping","Gambiting","Generating","Germinating","Grail-seeking","Harmonizing","Hashing","Hatching","Heralding","Herding","Ideating","Imagining","Improvising","Incubating","Inferring","Infusing","Jousting","Kneading","Knighting","L-hopping","Lancing","Manifesting","Marinating","Metamorphosing","Moat-hopping","Mulling","Musing","Mustering","Noodling","Orchestrating","Outflanking","Parrying","Pawn-promoting","Percolating","Perusing","Philosophising","Pondering","Pouncing","Prestidigitating","Processing","Propagating","Puzzling","Questing","Rallying","Reticulating","Rook-lifting","Ruminating","Saddling","Sallying","Scouting","Scurrying","Simmering","Sketching","Spelunking","Spinning","Sprouting","Squiring","Stewing","Strategizing","Swashbuckling","Swooping","Synthesizing","Tempering","Thinking","Tilting","Tinkering","Transfiguring","Transmuting","Trotting","Troubadouring","Unfurling","Unravelling","Vanquishing","Whirring","Working","Wrangling"] // prettier-ignore
+const pickVerb = () =>
+  `${SPINNER_VERBS[Math.floor(Math.random() * SPINNER_VERBS.length)]}…`
 
-/** The knight, verbatim from extensions/ui/index.ts. */
-const SETUP_LOGO_LINES = [
-  "      ▄███▄▄",
-  "  ▄▄█████████▄▄",
-  "▀███▀▀▀█████████",
-  "    ▄███████████",
-  "   ██████████▀▀",
-  "  ███████████▄▄",
-  "  ▀▀▀▀▀▀▀▀▀▀▀▀▀",
+/** The knight, verbatim from extensions/ui/index.ts, trailing cells included. */
+const LOGO = [
+  "      ▄███▄▄     ",
+  "  ▄▄█████████▄▄  ",
+  "▀███▀▀▀█████████ ",
+  "    ▄███████████ ",
+  "   ██████████▀▀  ",
+  "  ███████████▄▄  ",
+  "  ▀▀▀▀▀▀▀▀▀▀▀▀▀  ",
 ]
+const LOGO_WIDTH = 17
+const LOGO_GAP = 3
+
+/**
+ * The header's dark ramp: PALETTES.dark in extensions/ui/index.ts, mixed in
+ * oklch and sampled at 64 steps exactly as RAMPS is, then stored as RGB.
+ */
+const RAMP: ReadonlyArray<readonly [number, number, number]> = [[255,208,138],[255,206,135],[255,205,131],[255,203,128],[255,201,125],[255,200,122],[255,198,118],[255,196,115],[255,195,111],[255,193,108],[255,191,104],[255,189,101],[255,188,97],[255,186,94],[255,184,90],[255,182,86],[255,180,82],[255,178,78],[255,177,74],[255,175,70],[255,173,66],[255,171,61],[255,168,58],[255,166,56],[255,163,53],[255,160,50],[255,157,47],[255,154,44],[255,152,42],[255,149,39],[255,146,36],[255,143,33],[255,140,30],[255,137,27],[255,133,24],[255,130,21],[255,127,18],[255,124,14],[255,120,11],[255,117,8],[255,113,5],[255,110,2],[255,106,0],[254,104,1],[252,103,2],[251,101,3],[249,100,4],[248,98,5],[246,97,6],[245,95,7],[243,94,8],[242,92,9],[240,91,10],[239,89,11],[237,88,12],[236,86,13],[234,85,14],[233,83,14],[231,82,15],[230,80,16],[228,79,16],[227,77,17],[226,76,17],[224,74,18]] // prettier-ignore
+const HIGHLIGHT = [255, 244, 224] as const
+const FLOW_SECONDS = 5
+const GLINT_SWEEP_SECONDS = 1.6
+const GLINT_DELAY_MS = 1000
+
+/** shimmer() from extensions/ui/index.ts: the colour at `x` columns and `y`
+ *  half-rows, `time` seconds into the glint. */
+function shimmer(x: number, y: number, time: number): string {
+  const diagonal = x + y
+  const wave =
+    0.5 - 0.5 * Math.cos(2 * Math.PI * (diagonal / 40 - time / FLOW_SECONDS))
+  const base = RAMP[Math.round(wave * (RAMP.length - 1))]!
+  const sweep = time / GLINT_SWEEP_SECONDS
+  const glow = Math.exp(-(((diagonal - (sweep * 60 - 10)) / 3) ** 2))
+  const mixed =
+    glow < 0.01
+      ? base
+      : base.map((c, i) => c + (HIGHLIGHT[i]! - c) * glow * 0.8)
+  return `rgb(${mixed.map(Math.round).join(",")})`
+}
 
 /** core/slash-commands.ts, in registry order. */
 const SLASH_COMMANDS: Array<{ name: string; description: string }> = [
@@ -167,28 +195,26 @@ type Span = {
   c?: string
   b?: boolean
   inverse?: boolean
-  /** Painted with the header gradient instead of `c`. */
-  g?: boolean
+  /** An animated spinner frame in place of `t`, as Loader draws it. */
+  spin?: boolean
 }
 type Row = {
   id: number
   gutter?: Span[]
   spans: Span[]
   bg?: string
-  /** Clip instead of wrap — for full-bleed rules drawn as repeated `─`. */
-  nowrap?: boolean
-  /** Line-height 1, so block-drawing glyphs tile vertically as they do in a
-   *  terminal cell grid. Without it the logo comes out striped. */
-  tight?: boolean
-  /** Session banner: the gradient knight with the title, folder and key hints
-   *  beside it. The ui extension's header. */
-  banner?: { logo: string[]; lines: Span[][] }
+  /** Output padding: the one-column right margin of user and assistant text. */
+  margin?: boolean
+  /** Session banner: the ui extension's KnightHeader. */
+  banner?: { version: string }
 }
 
 const s = (t: string, c?: string, b?: boolean): Span => ({ t, c, b })
 const blank = (): Span[] => [s("")]
-/** Markdown's 1-column pad: a gutter, so wrapped prose stays indented. */
+/** showStatus()'s 1-column pad: a gutter, so wrapped text stays indented. */
 const PAD: Span[] = [s(" ")]
+/** Assistant text hangs at the column tool calls and prompts start their text. */
+const INDENT: Span[] = [s(BLOCK_INDENT)]
 
 /** keyHint(): the key dim, the description muted. Joined with a non-breaking
  *  space so a wrap lands between hints, never inside one. */
@@ -197,19 +223,33 @@ const hint = (key: string, description: string): Span[] => [
   s(` ${description}`, C.muted),
 ]
 
+/** Loader's frame counter, one braille frame per 80ms. */
+function useSpinnerFrame(): number {
+  const reduceMotion = useReducedMotion()
+  const [frame, setFrame] = useState(0)
+  useEffect(() => {
+    if (reduceMotion) return
+    const id = setInterval(() => setFrame((f) => f + 1), SPINNER_MS)
+    return () => clearInterval(id)
+  }, [reduceMotion])
+  return frame
+}
+
+function Spinner() {
+  return <>{SPINNER[useSpinnerFrame() % SPINNER.length]}</>
+}
+
 function Spans({ spans }: { spans: Span[] }) {
   return (
     <>
       {spans.map((span, i) => {
         const style: CSSProperties = span.inverse
           ? { color: C.pageBg, background: C.text }
-          : span.g
-            ? { ...GRADIENT }
-            : { color: span.c ?? C.text }
+          : { color: span.c ?? C.text }
         if (span.b) style.fontWeight = 600
         return (
           <span key={i} style={style}>
-            {span.t}
+            {span.spin ? <Spinner /> : span.t}
           </span>
         )
       })}
@@ -218,40 +258,11 @@ function Spans({ spans }: { spans: Span[] }) {
 }
 
 const RowView = memo(function RowView({ row }: { row: Row }) {
-  if (row.banner) {
-    return (
-      <div className="flex items-center gap-[3ch] py-4 pl-[1ch]">
-        {/* leading-none is what makes the block glyphs tile; it also squashes
-            the art, because a terminal cell is ~2:1 and a 1em line box is
-            ~1.65:1. scaleY stretches the tiled block back to cell proportions
-            without reintroducing gaps between rows. */}
-        <span
-          className="shrink-0 leading-none whitespace-pre"
-          style={{ ...GRADIENT, transform: "scaleY(1.22)" }}
-        >
-          {row.banner.logo.join("\n")}
-        </span>
-        <div className="min-w-0">
-          {row.banner.lines.map((spans, i) => (
-            <div
-              key={i}
-              className="min-h-[1.45em] break-words whitespace-pre-wrap"
-            >
-              <Spans spans={spans} />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  if (row.banner) return <Banner version={row.banner.version} />
 
   return (
     <div
-      className={cn(
-        "flex w-full",
-        row.tight ? "leading-none" : "min-h-[1.45em]",
-        row.nowrap && "overflow-hidden"
-      )}
+      className={cn("flex min-h-[1.45em] w-full", row.margin && "pr-[1ch]")}
       style={row.bg ? { background: row.bg } : undefined}
     >
       {row.gutter && (
@@ -259,30 +270,194 @@ const RowView = memo(function RowView({ row }: { row: Row }) {
           <Spans spans={row.gutter} />
         </span>
       )}
-      <span
-        className={cn(
-          "min-w-0 flex-1",
-          row.nowrap ? "whitespace-pre" : "break-words whitespace-pre-wrap"
-        )}
-      >
+      <span className="min-w-0 flex-1 break-words whitespace-pre-wrap">
         <Spans spans={row.spans} />
       </span>
     </div>
   )
 })
 
+/* ---------------------------------------------------------------------------
+ * Header: KnightHeader from extensions/ui/index.ts, inside the header
+ * container's spacers.
+ * ------------------------------------------------------------------------- */
+const CWD = "~/dev/knightcode"
+const HINT_SEPARATOR = s(" · ", C.muted)
+const HINTS: Span[][] = [
+  [
+    ...hint("escape", "interrupt"),
+    HINT_SEPARATOR,
+    ...hint("ctrl+c/ctrl+d", "clear/exit"),
+  ],
+  [...hint("/", "commands"), HINT_SEPARATOR, ...hint("!", "bash")],
+]
+const spanWidth = (spans: Span[]) =>
+  spans.reduce((n, span) => n + span.t.length, 0)
+
+/** The glint plays once, a second after the header appears, then holds. */
+function useGlintTime(): number {
+  const reduceMotion = useReducedMotion()
+  const [time, setTime] = useState(0)
+  useEffect(() => {
+    if (reduceMotion) {
+      setTime(GLINT_SWEEP_SECONDS)
+      return
+    }
+    let frame = 0
+    let start: number | undefined
+    const tick = (now: number) => {
+      start ??= now
+      const t = Math.min((now - start) / 1000, GLINT_SWEEP_SECONDS)
+      setTime(t)
+      if (t < GLINT_SWEEP_SECONDS) frame = requestAnimationFrame(tick)
+    }
+    const timer = setTimeout(
+      () => (frame = requestAnimationFrame(tick)),
+      GLINT_DELAY_MS
+    )
+    return () => {
+      clearTimeout(timer)
+      cancelAnimationFrame(frame)
+    }
+  }, [reduceMotion])
+  return time
+}
+
+/** Columns the panel holds: the terminal width the header lays itself out for. */
+function useColumns(ref: React.RefObject<HTMLElement | null>): number {
+  const [columns, setColumns] = useState(80)
+  // Layout effect, so the first paint already uses the measured width.
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const probe = document.createElement("span")
+    probe.textContent = "0".repeat(100)
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre"
+    el.appendChild(probe)
+    const measure = () =>
+      setColumns(Math.floor(el.clientWidth / (probe.offsetWidth / 100)))
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    measure()
+    return () => {
+      observer.disconnect()
+      probe.remove()
+    }
+  }, [ref])
+  return columns
+}
+
+/** A logo row in half-cell pixels: each full block becomes `▀` over a
+ *  background, so its two halves take their own colours. */
+function LogoRow({ row, time }: { row: number; time: number }) {
+  return (
+    <>
+      {[...LOGO[row]!].map((ch, x) => {
+        const top =
+          ch === "█" || ch === "▀" ? shimmer(x, row * 2, time) : "transparent"
+        const bottom =
+          ch === "█" || ch === "▄"
+            ? shimmer(x, row * 2 + 1, time)
+            : "transparent"
+        return (
+          <span
+            key={x}
+            className="w-[1ch] shrink-0"
+            style={{
+              background: `linear-gradient(${top} 50%, ${bottom} 50%)`,
+            }}
+          />
+        )
+      })}
+    </>
+  )
+}
+
+function Banner({ version }: { version: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const columns = useColumns(ref)
+  const time = useGlintTime()
+
+  const title = (x: number, y: number): Span[] => [
+    ...[..."KnightCode"].map((ch, i) => s(ch, shimmer(x + i, y, time), true)),
+    s(` v${version}`, C.dim),
+  ]
+  const below: Span[][] = [[s(CWD, C.muted)], [], ...HINTS]
+  const textWidth = Math.max(
+    `KnightCode v${version}`.length,
+    ...below.map(spanWidth)
+  )
+  const wide = 1 + LOGO_WIDTH + LOGO_GAP + textWidth <= columns
+  const top = Math.floor((LOGO.length - below.length - 1) / 2)
+  const text = wide
+    ? [title(LOGO_WIDTH + LOGO_GAP, top * 2 + 0.5), ...below]
+    : [title(0, (LOGO.length + 1) * 2), ...below]
+
+  const line = (key: string, children?: React.ReactNode) => (
+    <div key={key} className="flex h-[1.45em] overflow-hidden whitespace-pre">
+      {children}
+    </div>
+  )
+  return (
+    <div ref={ref} className="relative">
+      {line("s0")}
+      {line("t0")}
+      {LOGO.map((_, row) =>
+        line(
+          `l${row}`,
+          <>
+            <span> </span>
+            <LogoRow row={row} time={time} />
+            {wide && text[row - top] && (
+              <span>
+                {" ".repeat(LOGO_GAP)}
+                <Spans spans={text[row - top]!} />
+              </span>
+            )}
+          </>
+        )
+      )}
+      {!wide && [
+        line("gap"),
+        ...text.map((spans, i) =>
+          line(
+            `x${i}`,
+            <span>
+              {" "}
+              <Spans spans={spans} />
+            </span>
+          )
+        ),
+      ]}
+      {line("t1")}
+      {line("s1")}
+    </div>
+  )
+}
+
 /**
  * While the agent runs, CustomEditor draws the status into the top border
- * itself, in the border colour: `╭── <spinner> Working ───╮`.
+ * itself: `╭── <spinner> Pondering… ───╮`, the spinner in the border colour and
+ * the verb glimmering from it to the text colour (glimmer() in
+ * status-indicator.ts).
  */
-function WorkingStatus({ static: frozen }: { static: boolean }) {
-  const [frame, setFrame] = useState(0)
-  useEffect(() => {
-    if (frozen) return
-    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER.length), 80)
-    return () => clearInterval(id)
-  }, [frozen])
-  return <>{`── ${SPINNER[frame]} Working `}</>
+function WorkingStatus({ verb }: { verb: string }) {
+  const reduceMotion = useReducedMotion()
+  const frame = useSpinnerFrame()
+  const chars = [...verb]
+  const center = reduceMotion
+    ? -10
+    : (Math.floor(Date.now() / SPINNER_MS) % (chars.length + 20)) - 10
+  const start = Math.min(chars.length, Math.max(0, center - 1))
+  const end = Math.min(chars.length, Math.max(0, center + 2))
+  return (
+    <>
+      {`── ${SPINNER[frame % SPINNER.length]} `}
+      {chars.slice(0, start).join("")}
+      <span style={{ color: C.text }}>{chars.slice(start, end).join("")}</span>
+      {`${chars.slice(end).join("")} `}
+    </>
+  )
 }
 
 /** One edge of the editor frame: corner, a rule clipped by the panel, corner. */
@@ -350,6 +525,37 @@ function summary(text: string, expandable = true): Span[] {
 }
 
 const path = (p: string): Span => s(p, C.accent)
+
+/** UserMessageComponent: the dim marker in the gutter, all on the message
+ *  background, with no spacer rows of its own. */
+const userMessage = (text: string): Partial<Row> => ({
+  gutter: [s(USER_GUTTER, C.dim)],
+  spans: [s(text, C.text)],
+  bg: C.userMsgBg,
+  margin: true,
+})
+
+/** BashExecutionComponent's spacer and echoed command. `!!` runs are left out
+ *  of context and drawn dim. */
+const bashCommand = (text: string): Array<Partial<Row>> => {
+  const excluded = text.startsWith("!!")
+  const marker = excluded ? "!!" : "!"
+  const command = text.slice(marker.length).trim()
+  return [
+    {},
+    {
+      gutter: [s(USER_GUTTER, C.dim)],
+      spans: [s(`${marker}${command}`, excluded ? C.dim : C.bashMode, true)],
+    },
+  ]
+}
+
+/** Its Loader row while the command runs: padded 1, spinner then message. */
+const RUNNING: Span[] = [
+  s(" "),
+  { t: "", c: C.bashMode, spin: true },
+  s(" Running... (escape to cancel)", C.muted),
+]
 
 /** Write's collapsed preview: the first 10 highlighted lines (tabs as three
  *  spaces), then the remainder count. renderers/write.ts. */
@@ -485,7 +691,8 @@ export function LiveTerminal({
   const [rows, setRows] = useState<Row[]>([])
   const [input, setInput] = useState("")
   const [cursor, setCursor] = useState(0)
-  const [working, setWorking] = useState(false)
+  // The verb the working status shows, or null while idle.
+  const [working, setWorking] = useState<string | null>(null)
   const [stats, setStats] = useState(BEFORE_TURN)
   const [menuDismissed, setMenuDismissed] = useState(false)
   // Selection is stored with the token it belongs to, so a changed query resets
@@ -495,13 +702,15 @@ export function LiveTerminal({
   const idRef = useRef(0)
   const runRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
+  const columnCount = useColumns(editorRef)
   const fieldRef = useRef<HTMLInputElement>(null)
   const stickRef = useRef(true)
   // Read inside the script instead of depended on: useReducedMotion settles from
   // null to a boolean after mount, and a dependency would replay the session.
   const reduceRef = useRef(false)
 
-  const bashMode = input.startsWith("!")
+  const bashMode = input.trimStart().startsWith("!")
   const borderColor = bashMode ? C.bashMode : C.thinkingMedium
 
   /* -------------------------------------------------- row helpers */
@@ -513,8 +722,7 @@ export function LiveTerminal({
       spans: item.spans ?? blank(),
       gutter: item.gutter,
       bg: item.bg,
-      nowrap: item.nowrap,
-      tight: item.tight,
+      margin: item.margin,
       banner: item.banner,
     }))
     setRows((prev) => [...prev, ...next])
@@ -570,7 +778,7 @@ export function LiveTerminal({
     ) => {
       const id = push({}, call)
       if (preview.length)
-        push({}, ...preview.map((spans) => ({ gutter: [s("  ")], spans })))
+        push({}, ...preview.map((spans) => ({ gutter: INDENT, spans })))
       await wait(latency)
       patch(id, { gutter: [s(`${BULLET} `, C.success)] })
       result.forEach((line, i) =>
@@ -582,9 +790,9 @@ export function LiveTerminal({
       await wait(180)
     }
 
-    /** Assistant prose, streamed a word at a time. Padded 1, no gutter. */
+    /** Assistant prose, streamed a word at a time, under the block indent. */
     const say = async (text: string, color = C.text) => {
-      const id = push({}, { gutter: PAD, spans: blank() })
+      const id = push({}, { gutter: INDENT, spans: blank(), margin: true })
       if (reduceRef.current) {
         patch(id, { spans: [s(text, color)] })
         await wait(0)
@@ -604,29 +812,7 @@ export function LiveTerminal({
       await wait(400)
 
       /* ---- session banner: the gradient knight beside title, folder, keys ---- */
-      push(
-        {
-          banner: {
-            logo: SETUP_LOGO_LINES,
-            lines: [
-              [{ t: "KnightCode", b: true, g: true }, s(` v${version}`, C.dim)],
-              [s("~/dev/knightcode", C.muted)],
-              [],
-              [
-                ...hint("escape", "interrupt"),
-                s(" · ", C.muted),
-                ...hint("ctrl+c/ctrl+d", "clear/exit"),
-              ],
-              [
-                ...hint("/", "commands"),
-                s(" · ", C.muted),
-                ...hint("!", "bash"),
-              ],
-            ],
-          },
-        },
-        {}
-      )
+      push({ banner: { version } })
       await wait(1600)
 
       /* ---- beat 1: an @ mention, picked from the menu rather than typed ---- */
@@ -647,12 +833,8 @@ export function LiveTerminal({
 
       /* ---- the turn ---- */
       clearInput()
-      push(
-        { spans: blank(), bg: C.userMsgBg },
-        { gutter: PAD, spans: [s(prompt, C.text)], bg: C.userMsgBg },
-        { spans: blank(), bg: C.userMsgBg }
-      )
-      setWorking(true)
+      push(userMessage(prompt))
+      setWorking(pickVerb())
       await wait(1000)
 
       await say(
@@ -764,7 +946,8 @@ export function LiveTerminal({
       push(
         {},
         {
-          gutter: PAD,
+          gutter: INDENT,
+          margin: true,
           spans: [
             s("- ", C.mdListBullet),
             s("agent-session.ts", C.mdCode),
@@ -774,14 +957,15 @@ export function LiveTerminal({
         }
       )
       push({
-        gutter: PAD,
+        gutter: INDENT,
+        margin: true,
         spans: [
           s("- ", C.mdListBullet),
           s("retry-cap.test.ts", C.mdCode),
           s(" — covers the cap and the event", C.text),
         ],
       })
-      setWorking(false)
+      setWorking(null)
       setStats(AFTER_TURN)
       await wait(1200)
 
@@ -789,25 +973,13 @@ export function LiveTerminal({
       await type("!bun run check")
       await wait(900)
       clearInput()
-      push(
-        {},
-        {
-          gutter: [s(USER_GUTTER, C.dim)],
-          spans: [s("!bun run check", C.bashMode, true)],
-        },
-        {
-          gutter: [s(RESULT_GUTTER, C.dim)],
-          spans: [s("$ tsc --noEmit", C.muted)],
-        }
-      )
+      push(...bashCommand("!bun run check"), {
+        gutter: [s(RESULT_GUTTER, C.dim)],
+        spans: [s("$ tsc --noEmit", C.muted)],
+      })
+      const loader = push({ gutter: [s(RESULT_INDENT, C.dim)], spans: RUNNING })
       await wait(1400)
-      push(
-        {
-          gutter: [s(RESULT_INDENT, C.dim)],
-          spans: [s("No type errors.", C.muted)],
-        },
-        {}
-      )
+      patch(loader, { spans: [s("No type errors.", C.muted)] })
     }
 
     script().catch((error) => {
@@ -904,7 +1076,7 @@ export function LiveTerminal({
   /* -------------------------------------------------- input */
   const takeOver = () => {
     if (runRef.current) runRef.current++
-    setWorking(false)
+    setWorking(null)
   }
 
   const applyCompletion = () => {
@@ -927,20 +1099,10 @@ export function LiveTerminal({
     setCursor(0)
 
     if (text.startsWith("!")) {
-      const command = text.replace(/^!+/, "")
-      push(
-        {},
-        { gutter: [s(USER_GUTTER, C.dim)], spans: [s(text, C.bashMode, true)] },
-        {
-          gutter: [s(RESULT_GUTTER, C.dim)],
-          spans: [s(`$ ${command}`, C.muted)],
-        },
-        {
-          gutter: [s(RESULT_INDENT, C.dim)],
-          spans: [s("Demo shell: nothing actually ran.", C.muted)],
-        },
-        {}
-      )
+      push(...bashCommand(text), {
+        gutter: [s(RESULT_GUTTER, C.dim)],
+        spans: [s("Demo shell: nothing actually ran.", C.muted)],
+      })
       return
     }
 
@@ -960,11 +1122,7 @@ export function LiveTerminal({
       return
     }
 
-    push(
-      { spans: blank(), bg: C.userMsgBg },
-      { gutter: PAD, spans: [s(text, C.text)], bg: C.userMsgBg },
-      { spans: blank(), bg: C.userMsgBg }
-    )
+    push(userMessage(text))
     void runReply(text)
   }
 
@@ -974,14 +1132,15 @@ export function LiveTerminal({
     const live = () => runRef.current === run
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-    setWorking(true)
+    setWorking(pickVerb())
     await sleep(700)
     if (!live()) return
 
     push(
       {},
       {
-        gutter: PAD,
+        gutter: INDENT,
+        margin: true,
         spans: [
           s(
             `Looking at "${truncate(prompt, 48)}" — reading the repo first.`,
@@ -1007,17 +1166,17 @@ export function LiveTerminal({
       { gutter: [s(RESULT_GUTTER, C.dim)], spans: summary("Found 6 matches") },
       {},
       {
-        gutter: PAD,
+        gutter: INDENT,
+        margin: true,
         spans: [
           s(
             "This panel is a demo of the TUI — install it to run the real thing.",
             C.text
           ),
         ],
-      },
-      {}
+      }
     )
-    setWorking(false)
+    setWorking(null)
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1066,12 +1225,29 @@ export function LiveTerminal({
   const before = input.slice(0, cursor)
   const at = input.slice(cursor, cursor + 1)
   const after = input.slice(cursor + 1)
-  const inputColor = bashMode ? C.bashMode : C.text
-
+  // Bash mode only recolours the frame; the text stays plain.
   const editorSpans: Span[] = [
-    s(before, inputColor, bashMode),
+    s(before),
     { t: at || " ", inverse: true },
-    s(after, inputColor, bashMode),
+    s(after),
+  ]
+
+  const footer = [
+    columns(
+      [s(CWD, C.text)],
+      [s("openrouter/anthropic/claude-opus-5 · medium", C.muted)],
+      columnCount
+    ),
+    columns(
+      [s(`${stats.context} · ${stats.cost} · ${stats.speed}`, C.muted)],
+      [
+        s(
+          `main · ${stats.files} ${stats.files === 1 ? "file" : "files"} changed · PR #252`,
+          C.muted
+        ),
+      ],
+      columnCount
+    ),
   ]
 
   return (
@@ -1145,10 +1321,11 @@ export function LiveTerminal({
           ))}
         </div>
 
-        {/* Editor */}
-        <div className="shrink-0">
+        {/* Editor, under the empty widget area's spacer row */}
+        <div ref={editorRef} className="shrink-0">
+          <div className="h-[1.45em]" />
           <FrameRule left="╭" right="╮" color={borderColor}>
-            {working && <WorkingStatus static={!!reduceMotion} />}
+            {working && <WorkingStatus verb={working} />}
           </FrameRule>
 
           <div className="flex">
@@ -1175,9 +1352,24 @@ export function LiveTerminal({
                       className="truncate whitespace-pre"
                       style={{ color: isSelected ? C.accent : C.text }}
                     >
-                      {/* One cell, as in a terminal grid: the font's arrow is wider than 1ch. */}
-                      <span className="inline-block w-[2ch] overflow-hidden align-top">
-                        {isSelected ? "→" : ""}
+                      {/* `→ `: the arrow drawn into one cell, as a terminal fits
+                          it to the grid. The font's glyph is a fallback wider
+                          than 1ch, which runs into the label. */}
+                      <span className="inline-flex h-[1.45em] w-[2ch] items-center align-top">
+                        {isSelected && (
+                          <svg
+                            viewBox="0 0 10 10"
+                            className="h-[1ch] w-[1ch]"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.3}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <path d="M0.5 5h9M6 1.5l3.5 3.5-3.5 3.5" />
+                          </svg>
+                        )}
                       </span>
                       {label}
                       {item.description && (
@@ -1199,29 +1391,12 @@ export function LiveTerminal({
           )}
 
           {/* Footer: folder | model, then context, cost, speed | git. */}
-          <div className="px-1 pt-0.5 pb-1.5">
-            <div className="flex justify-between gap-4">
-              <span className="truncate" style={{ color: C.text }}>
-                ~/dev/knightcode
-              </span>
-              <span
-                className="hidden shrink-0 sm:inline"
-                style={{ color: C.muted }}
-              >
-                openrouter/anthropic/claude-opus-5 · medium
-              </span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="truncate" style={{ color: C.muted }}>
-                {`${stats.context} · ${stats.cost} · ${stats.speed}`}
-              </span>
-              <span
-                className="hidden shrink-0 sm:inline"
-                style={{ color: C.muted }}
-              >
-                {`main · ${stats.files} ${stats.files === 1 ? "file" : "files"} changed · PR #252`}
-              </span>
-            </div>
+          <div className="pb-1.5">
+            {footer.map((spans, i) => (
+              <div key={i} className="overflow-hidden whitespace-pre">
+                <Spans spans={spans} />
+              </div>
+            ))}
           </div>
         </div>
 
@@ -1265,6 +1440,29 @@ function subsequence(text: string, query: string): boolean {
     if (i === needle.length) return true
   }
   return false
+}
+
+/** truncateToWidth() for one-cell text: a `...` ellipsis inside the limit. */
+function fit(text: string, max: number): string {
+  if (text.length <= max) return text
+  if (max <= 3) return ".".repeat(Math.max(0, max))
+  return `${text.slice(0, max - 3)}...`
+}
+
+/** The ui extension's footer row: `left` and `right` on one row; when both
+ *  don't fit, left keeps ~45% and both truncate. */
+function columns(left: Span[], right: Span[], width: number): Span[] {
+  const l = left.map((span) => span.t).join("")
+  const r = right.map((span) => span.t).join("")
+  const gap = width - l.length - r.length
+  if (gap >= 1) return [...left, s(" ".repeat(gap)), ...right]
+  const fittedLeft = fit(l, Math.max(1, Math.floor(width * 0.45)))
+  const fittedRight = fit(r, Math.max(1, width - fittedLeft.length - 1))
+  return [
+    s(fittedLeft, left[0]?.c),
+    s(" ".repeat(Math.max(1, width - fittedLeft.length - fittedRight.length))),
+    s(fittedRight, right[0]?.c),
+  ]
 }
 
 function truncate(text: string, max: number): string {

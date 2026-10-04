@@ -15,6 +15,7 @@
     "build:engine": "bun run scripts/build.ts --single --engine",
     "build:linux": "bun run scripts/build.ts --target=linux-x64",
     "bench": "bun run scripts/bench.ts",
+    "screenshots": "bun run scripts/screenshots.ts",
     "eval": "bun run --filter '@knightcode/evals' eval --",
     "link:cli": "bun run build:cli && cd packages/cli && bun link",
     "test": "bun run --filter '*' test",
