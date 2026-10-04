@@ -1,5 +1,61 @@
 # @knightcodeai/cli
 
+## 0.11.4
+
+### Added
+
+- Added copying of the OAuth sign-in URL from the message-copy keybinding on sign-in screens.
+
+- Added an opt-in MCP OAuth client metadata document, `oauth.clientRegistration` set to `cimd`. Dynamic client registration stays the default.
+
+- Added the Cloudflare Workers AI classifiers Clef and Clef Flash.
+
+- Added the built-in `ui` extension: a gradient knight header, a rounded editor frame, and a two-line footer with the model, context, cost, output speed, and the git branch with its changed files and pull request. Set `"extensions": ["-builtin:ui"]` for the plain layout.
+
+### Changed
+
+- Changed a project `mcp.json` entry that does not define a command or URL so it can only override `enabled`, `exposure`, and `toolExposure` of a global server.
+
+- Changed Anthropic mid-conversation tool updates to send each new tool inline, so redefining a tool keeps the cached prefix.
+
+- Changed Amazon Bedrock prices to include the long-context tiers from the model catalog.
+
+- Changed the notice after an update to list the top three changes, one line each, with a count of the rest and a pointer to `/changelog`, instead of printing the full release notes.
+
+- Changed the `dark` and `light` themes to warm grays with an orange accent.
+
+- Changed skill invocations, compaction and branch summaries, and extension messages to render like tool calls, in the terminal and in HTML exports, instead of as tinted `[label]` boxes.
+
+### Removed
+
+- Removed the daxnuts easter egg.
+
+### Fixed
+
+- Fixed `--models` parsing so empty entries are ignored.
+
+- Fixed code mode so a script that keeps printing stops at the output cap instead of growing without a bound.
+
+- Fixed WezTerm images so they stay on screen while the transcript scrolls.
+
+- Fixed Kitty-protocol terminals so non-PNG tool images are converted and shown.
+
+- Fixed MCP tool calls from a resumed session so they render before that server has connected.
+
+- Fixed Cloudflare AI Gateway requests for Anthropic models so dotted catalog ids are sent with the dashes Anthropic accepts.
+
+- Fixed Sign in with ChatGPT so a callback port that is already in use fails immediately instead of delivering the browser redirect to another login.
+
+- Fixed Amazon Bedrock thinking replay so models that accept block binding drop stale thinking blocks, and Claude Opus 4.6 and Sonnet 4.6 are not sent the field they reject.
+
+- Fixed provider errors that say the selected model is at capacity, so those requests are retried.
+
+- Fixed the NVIDIA default model pointing at `nemotron-3-super-120b-a12b`, which NVIDIA no longer lists; it is now `nemotron-3-ultra-550b-a55b`.
+
+### Security
+
+- Security update pins brace-expansion 5 to 5.0.12, closing a denial of service in that line's range parsing.
+
 ## 0.11.3
 
 ### Added
