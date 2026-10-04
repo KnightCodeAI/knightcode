@@ -1,0 +1,1 @@
+KnightCode: "Think two moves ahead." A glowing orange path hops across a dark chessboard through read, plan, edit and test to a checked ship square, beside a knight logo.
