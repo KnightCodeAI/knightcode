@@ -272,9 +272,15 @@ jobs:
           sha256sum -c SHA256SUMS
           ls -la
 
+      # After npm publish, so the lock resolves the version that just shipped.
+      # The JSON files are not knightcode-* archives, so they stay out of the
+      # archive count and SHA256SUMS above.
+      - name: Build installer lockfile
+        run: bun run scripts/generate-installer-lock.ts --out release-assets
+
       # One clean GitHub Release per version for the main package (not the 5
       # platform packages). Body = the CHANGELOG.md section Changesets wrote.
-      # Idempotent: skips if the release already exists (re-runs / no-op pushes).
+      # Idempotent: a re-run uploads the installer lock only when it is missing.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -283,7 +289,12 @@ jobs:
           version=$(node -p "require('./packages/cli/package.json').version")
           tag="@knightcodeai/cli@${version}"
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release for $tag already exists — nothing to do."
+            echo "Release for $tag already exists — adding the installer lock if it is missing."
+            if ! gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx installer-package-lock.json; then
+              gh release upload "$tag" \
+                release-assets/installer-package.json \
+                release-assets/installer-package-lock.json
+            fi
             exit 0
           fi
           notes=$(awk -v ver="$version" '

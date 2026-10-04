@@ -25,7 +25,7 @@ npm install -g --ignore-scripts @knightcodeai/cli
 
 This requires Node.js 22 or newer. KnightCode does not require dependency lifecycle scripts for a normal npm installation. You do not need Bun: it is bundled into the platform binary, which installs automatically as an optional dependency for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).
 
-On macOS or Linux, you can instead use the installer:
+On macOS or Linux, you can instead use the installer. It installs Node.js 22 if Node is missing:
 
 ```bash
 curl -fsSL https://knightcode.dev/install.sh | sh
