@@ -2,6 +2,7 @@
   "title": "Reference",
   "pages": [
     "cli",
+    "codemode",
     "slash-commands",
     "settings",
     "environment-variables",

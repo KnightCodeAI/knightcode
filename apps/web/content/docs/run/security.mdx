@@ -42,6 +42,7 @@ Project trust does not limit what tool calls can access or affect. After KnightC
 KnightCode requires a project-trust decision when it finds any of these resources from the current working directory:
 
 - `.knightcode/settings.json`
+- `.knightcode/mcp.json`
 - `.knightcode/extensions`, `.knightcode/skills`, `.knightcode/prompts`, or `.knightcode/themes`
 - `.knightcode/SYSTEM.md` or `.knightcode/APPEND_SYSTEM.md`
 - project `.agents/skills` in the current directory or an ancestor directory
@@ -51,6 +52,7 @@ A bare `.knightcode` directory does not require project trust.
 Granting project trust allows KnightCode to load:
 
 - project settings
+- project MCP servers from `.knightcode/mcp.json`
 - extensions, skills, prompt templates, themes, and system-prompt files under `.knightcode`
 - missing packages configured through project settings
 - project-local and project-package extensions

@@ -5,7 +5,8 @@
     "prompt-templates",
     "skills",
     "themes",
-    "packages"
+    "packages",
+    "mcp"
   ],
   "icon": "PaintBrush"
 }
