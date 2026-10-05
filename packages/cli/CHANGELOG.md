@@ -1,5 +1,29 @@
 # @knightcodeai/cli
 
+## 0.13.0
+
+### Added
+
+- Added background updates during interactive sessions for installer-managed installs, global npm and pnpm installs, and downloaded release binaries, with a download notice and an "Update ready — restart to apply" notice when it finishes.
+
+- Added temp-file copies of images shown by codemode `image()`: the result names each saved path before the image, so a later turn can copy or attach it.
+
+- Added `knightcode update` support for binaries downloaded from GitHub releases: the matching release archive is checksum-verified, smoke-tested, and swapped in place, keeping a renamed binary's name and any unrelated files beside it.
+
+### Changed
+
+- Changed the `azure-openai-responses` provider id to `azure`, which now also serves Azure Foundry Chat Completions deployments such as DeepSeek V4 Pro. Rename the `azure-openai-responses` key to `azure` in `auth.json`, `models.json`, and `settings.json`; `AZURE_OPENAI_DEPLOYMENT_NAME_MAP` now applies to Chat Completions deployments too.
+
+### Fixed
+
+- Fixed a closed or revoked terminal being recorded as a crash and prompting a bug report on the next start.
+
+- Fixed Home and End scrolling the transcript in fullscreen mode instead of moving the editor cursor; transcript top and bottom are now Ctrl+Home and Ctrl+End.
+
+- Fixed syntax highlighting losing its color after the first line of a multiline token, such as a Python docstring.
+
+- Fixed `knightcode update` for npm and pnpm installs hanging forever on a stalled package manager, failing on Windows while another KnightCode session held a native file, and reporting success when the installed binary was missing or still old.
+
 ## 0.12.0
 
 ### Added
