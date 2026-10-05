@@ -8,8 +8,8 @@ import {
 	CONFIG_DIR_NAME,
 	detectInstallMethod,
 	getAgentDir,
-	getPackageDir,
 	getSelfUpdateCommand,
+	getSelfUpdateLauncher,
 	getSelfUpdateUnavailableInstruction,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
@@ -23,14 +23,10 @@ import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import { DefaultResourceLoader, isBuiltinExtension } from "./core/resource-loader.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
-import { spawnProcess } from "./utils/child-process.ts";
+import { runGlobalSelfUpdate } from "./utils/global-self-update.ts";
 import { getActiveManagedInstallRoot, runManagedSelfUpdate } from "./utils/managed-self-update.ts";
 export { cleanupManagedInstall } from "./utils/managed-self-update.ts";
 import { formatVersionCheckError, getLatestPiRelease, isNewerPackageVersion } from "./utils/version-check.ts";
-import {
-	cleanupWindowsSelfUpdateQuarantine,
-	quarantineWindowsNativeDependencies,
-} from "./utils/windows-self-update.ts";
 
 export type PackageCommand = "install" | "remove" | "update" | "list";
 
@@ -502,39 +498,6 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 	return { packageName, installSpec, version: latestRelease.version, shouldRun: false };
 }
 
-async function runSelfUpdate(command: SelfUpdateCommand): Promise<void> {
-	console.log(chalk.dim(`Updating ${APP_NAME} with ${command.display}...`));
-	for (const step of command.steps ?? [command]) {
-		await new Promise<void>((resolve, reject) => {
-			const child = spawnProcess(step.command, step.args, {
-				stdio: "inherit",
-			});
-			child.on("error", (error) => {
-				reject(error);
-			});
-			child.on("close", (code, signal) => {
-				if (code === 0) {
-					resolve();
-				} else if (signal) {
-					reject(new Error(`${step.display} terminated by signal ${signal}`));
-				} else {
-					reject(new Error(`${step.display} exited with code ${code ?? "unknown"}`));
-				}
-			});
-		});
-	}
-}
-
-function prepareWindowsSelfUpdate(): void {
-	if (process.platform !== "win32") {
-		return;
-	}
-
-	const packageDir = getPackageDir();
-	cleanupWindowsSelfUpdateQuarantine(packageDir);
-	quarantineWindowsNativeDependencies(packageDir);
-}
-
 export interface PackageCommandRuntimeOptions {
 	extensionFactories?: InlineExtension[];
 }
@@ -879,6 +842,7 @@ export async function handlePackageCommand(
 						installSpec: selfUpdatePlan.installSpec,
 					};
 					const selfUpdateCommand = getSelfUpdateCommand(PACKAGE_NAME, selfUpdateNpmCommand, selfUpdateTarget);
+					const launcher = selfUpdateCommand?.steps ? undefined : getSelfUpdateLauncher(selfUpdateNpmCommand);
 					if (!selfUpdateCommand) {
 						printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdateTarget);
 						process.exitCode = 1;
@@ -888,12 +852,11 @@ export async function handlePackageCommand(
 						printSelfUpdateNote(selfUpdatePlan.note);
 					}
 					try {
-						// Both managers reinstall over a running executable, and the Windows
-						// gate above lets both through.
-						if (installMethod === "npm" || installMethod === "pnpm") {
-							prepareWindowsSelfUpdate();
-						}
-						await runSelfUpdate(selfUpdateCommand);
+						console.log(chalk.dim(`Updating ${APP_NAME} with ${selfUpdateCommand.display}...`));
+						await runGlobalSelfUpdate(selfUpdateCommand, {
+							version: options.force ? undefined : selfUpdatePlan.version,
+							launcher,
+						});
 					} catch (error: unknown) {
 						const message = error instanceof Error ? error.message : "Unknown package command error";
 						console.error(chalk.red(`Error: ${message}`));

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, toNamespacedPath } from "node:path";
-import { getCwdRelativePath } from "./paths.ts";
 
 const QUARANTINE_DIR_NAME = ".knightcode-native-quarantine";
 
@@ -23,42 +22,15 @@ function getQuarantineRoot(packageDir: string): string | undefined {
 	}
 }
 
-function getLoadedSharedObjectsInPackageDir(packageDir: string): string[] {
-	const sharedObjects = (process.report.getReport() as { sharedObjects?: unknown }).sharedObjects;
-	if (!Array.isArray(sharedObjects)) {
-		return [];
-	}
-
-	const root = normalizePath(packageDir).toLowerCase();
-	const seen = new Set<string>();
-	const loadedFiles: string[] = [];
-	for (const value of sharedObjects) {
-		if (typeof value !== "string") {
-			continue;
-		}
-		const filePath = normalizePath(value);
-		const comparisonPath = filePath.toLowerCase();
-		if (getCwdRelativePath(comparisonPath, root) === undefined || seen.has(comparisonPath)) {
-			continue;
-		}
-		seen.add(comparisonPath);
-		loadedFiles.push(filePath);
-	}
-	return loadedFiles;
-}
-
 /**
- * The compiled binary that bin/knightcode spawns lives inside the installed
- * package, and Windows refuses to delete or overwrite a running executable — so
- * the reinstall needs it moved aside for exactly the same reason a loaded native
- * addon does.
+ * Windows refuses to delete or overwrite a running executable or a loaded native
+ * addon, and any open KnightCode terminal (not just this process) may hold one.
+ * Renaming still works, so every native image in the package is moved aside.
  */
-function getRunningExecutableInPackageDir(packageDir: string): string[] {
-	const execPath = normalizePath(process.execPath);
-	if (getCwdRelativePath(execPath.toLowerCase(), packageDir.toLowerCase()) === undefined) {
-		return [];
-	}
-	return [execPath];
+function getNativeImagesInPackageDir(packageDir: string): string[] {
+	return readdirSync(packageDir, { recursive: true, encoding: "utf8" })
+		.filter((file) => /\.(exe|node|dll)$/i.test(file))
+		.map((file) => join(packageDir, file));
 }
 
 export function cleanupWindowsSelfUpdateQuarantine(packageDir: string): void {
@@ -80,12 +52,7 @@ export function quarantineWindowsNativeDependencies(packageDir: string): void {
 		return;
 	}
 
-	const loadedFiles = [
-		...new Set([
-			...getRunningExecutableInPackageDir(resolvedPackageDir),
-			...getLoadedSharedObjectsInPackageDir(resolvedPackageDir),
-		]),
-	];
+	const loadedFiles = getNativeImagesInPackageDir(resolvedPackageDir);
 	if (loadedFiles.length === 0) {
 		return;
 	}

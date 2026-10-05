@@ -359,6 +359,33 @@ export function getSelfUpdateCommand(
 	return command;
 }
 
+/** The compiled binary a global launcher resolves and spawns. */
+export const PLATFORM_BINARY_SPECIFIER = `@knightcodeai/cli-${process.platform}-${process.arch}/bin/${process.platform === "win32" ? "knightcode.exe" : "knightcode"}`;
+
+/** Find the launcher in the global installation that owns this running package. */
+export function getSelfUpdateLauncher(npmCommand?: string[]): string | undefined {
+	const candidates = getPathComparisonCandidates(getPackageDir());
+	for (const root of getGlobalPackageRoots(detectInstallMethod(), PACKAGE_NAME, npmCommand)) {
+		const ownsInstall = getPathComparisonCandidates(root).some((normalizedRoot) =>
+			candidates.some((candidate) => candidate.startsWith(`${normalizedRoot}${sep}`)),
+		);
+		const launcher = join(root, ...PACKAGE_NAME.split("/"), "bin", APP_NAME);
+		if (!existsSync(launcher)) continue;
+		if (ownsInstall) return launcher;
+		// pnpm resolves the running binary into its content-addressed store.
+		try {
+			const binary = createRequire(launcher).resolve(PLATFORM_BINARY_SPECIFIER);
+			if (
+				normalizeExistingPathForComparison(binary, true) === normalizeExistingPathForComparison(process.execPath, true)
+			)
+				return launcher;
+		} catch {
+			// This global root does not own the running platform package.
+		}
+	}
+	return undefined;
+}
+
 /** `runtime` is injectable for the same reason as in `detectInstallMethod`. */
 export function getSelfUpdateUnavailableInstruction(
 	packageName: string,
