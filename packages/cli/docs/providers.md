@@ -127,6 +127,8 @@ export AZURE_OPENAI_RESOURCE_NAME=your-resource
 
 Resource root URLs under `ai.azure.com`, `cognitiveservices.azure.com`, and `openai.azure.com` are normalized to the OpenAI API path.
 
+The provider id is `azure` (it was `azure-openai-responses`; rename that key in `auth.json`, `models.json`, and `settings.json`). It serves OpenAI models over the Responses API and Azure Foundry Chat Completions deployments such as DeepSeek V4 Pro (`azure/deepseek-v4-pro`). `AZURE_OPENAI_DEPLOYMENT_NAME_MAP` applies to both.
+
 ### Amazon Bedrock
 
 Bedrock can use a bearer token or an ambient AWS credential source:
