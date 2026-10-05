@@ -72,6 +72,17 @@ describe("ui extension knight header", () => {
 		knight.dispose();
 	});
 
+	it("bands the knight by row without truecolor instead of checkering it", () => {
+		const { header: knight } = header(false);
+		// Narrow enough that the text stacks under the knight, leaving logo-only rows.
+		for (const logo of knight.render(30).slice(1, 8)) {
+			// One color for top halves, one for bottom halves.
+			expect(new Set(logo.match(/\x1b\[38;5;\d+m/g) ?? []).size).toBeLessThanOrEqual(2);
+			expect(new Set(logo.match(/\x1b\[48;5;\d+m/g) ?? []).size).toBeLessThanOrEqual(1);
+		}
+		knight.dispose();
+	});
+
 	it("fits every width, stacking the text under the knight when narrow", () => {
 		const { header: knight } = header(true);
 		for (const width of [80, 30, 10]) {

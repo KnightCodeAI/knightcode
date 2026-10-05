@@ -112,7 +112,9 @@ function knight(theme: Theme, time: number): string[] {
 			}
 			out += ch;
 		};
-		const color = (x: number, half: number) => shimmer(theme, x, row * 2 + half, time);
+		// 256 colors (macOS Terminal) snap neighbouring pixels of the diagonal ramp to different palette steps, a
+		// checkerboard. Ramping by row alone gives clean horizontal bands instead.
+		const color = (x: number, half: number) => shimmer(theme, mode === "truecolor" ? x : 0, row * 2 + half, time);
 		[...line].forEach((ch, x) => {
 			if (ch === "█") cell("▀", foregroundAnsi(color(x, 0), mode), backgroundAnsi(color(x, 1), mode));
 			else if (ch === "▀") cell(ch, foregroundAnsi(color(x, 0), mode), "");
