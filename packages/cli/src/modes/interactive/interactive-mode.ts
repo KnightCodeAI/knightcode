@@ -136,7 +136,8 @@ import { getKnightcodeUserAgent } from "../../utils/user-agent.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { loadAllHighlightLanguages } from "../../utils/syntax-highlight.ts";
 import { ensureTool, type ToolStatus } from "../../utils/tools-manager.ts";
-import { checkForNewPiVersion, type LatestPiRelease } from "../../utils/version-check.ts";
+import type { LatestPiRelease } from "../../utils/version-check.ts";
+import { BackgroundUpdater, type BackgroundUpdateState } from "../../utils/background-update.ts";
 import { reportBug } from "./bug-report.ts";
 import { createChatViewport } from "./chat-viewport.ts";
 import { ArminComponent } from "./components/armin.ts";
@@ -541,6 +542,9 @@ export class InteractiveMode {
 	/** The `/bug` hint is shown at most once per session so error output stays readable. */
 	private bugReportHintShown = false;
 	private installChangeWarningShown = false;
+	private backgroundUpdater: BackgroundUpdater | undefined;
+	private updateNotice: ThemedText | undefined;
+	private updateState: BackgroundUpdateState | undefined;
 
 	// Extension UI state
 	private extensionSelector: ExtensionSelectorComponent | undefined = undefined;
@@ -1141,12 +1145,12 @@ export class InteractiveMode {
 				.finally(() => clearTimeout(timeout));
 		}
 
-		// Start version check asynchronously
-		checkForNewPiVersion(this.version).then((newRelease) => {
-			if (newRelease) {
-				this.showNewVersionNotification(newRelease);
-			}
-		});
+		this.backgroundUpdater = new BackgroundUpdater(
+			this.version,
+			this.settingsManager.getGlobalSettings().npmCommand,
+			(state) => this.showBackgroundUpdateNotification(state),
+		);
+		this.backgroundUpdater.start();
 
 		// Start package update check asynchronously
 		this.checkForPackageUpdates()
@@ -2507,7 +2511,7 @@ export class InteractiveMode {
 	): void {
 		container.clear();
 
-		if (widgets.size === 0) {
+		if (widgets.size === 0 && !(container === this.widgetContainerBelow && this.updateNotice)) {
 			if (spacerWhenEmpty) {
 				container.addChild(new Spacer(1));
 			}
@@ -2520,6 +2524,7 @@ export class InteractiveMode {
 		for (const component of widgets.values()) {
 			container.addChild(component);
 		}
+		if (container === this.widgetContainerBelow && this.updateNotice) container.addChild(this.updateNotice);
 	}
 
 	/**
@@ -4599,6 +4604,54 @@ export class InteractiveMode {
 			);
 		}
 		this.ui.requestRender();
+	}
+
+	private showBackgroundUpdateNotification(state: BackgroundUpdateState): void {
+		if (!this.isInitialized || this.isShuttingDown) return;
+		const previous = this.updateState;
+		const firstNotice = !previous;
+		this.updateState = state;
+		if (state.phase === "available") {
+			this.updateNotice = undefined;
+			this.renderWidgets();
+			// Also after "downloading", when the worker found an install it cannot update.
+			if (previous?.phase !== "available") this.showNewVersionNotification(state.release);
+			return;
+		}
+		const note = state.release.note?.trim();
+		if (firstNotice && note) {
+			this.chatContainer.addChild(new Spacer(1));
+			this.chatContainer.addChild(
+				new Markdown(note, 4, 0, this.getMarkdownThemeWithSettings(), {
+					color: (text) => theme.fg("muted", text),
+				}),
+			);
+		}
+		this.updateNotice ??= new ThemedText(
+			() => {
+				const current = this.updateState;
+				if (!current) return "";
+				const version = current.release.version;
+				const messages = {
+					downloading: `Downloading KnightCode ${version} in the background...`,
+					verifying: `Verifying KnightCode ${version}...`,
+					ready: `Update ${version} ready — restart to apply`,
+					failed: `Auto-update failed — retry with ${APP_NAME} update`,
+					waiting: "Another terminal is updating KnightCode; checking again later",
+					available: `${version} available`,
+				};
+				return theme.fg(current.phase === "failed" ? "warning" : "muted", messages[current.phase]);
+			},
+			1,
+			0,
+		);
+		this.updateNotice.invalidate();
+		this.renderWidgets();
+		if (process.platform === "win32") this.updateTerminalTitle();
+		if (state.phase === "ready") {
+			const resume = formatResumeCommand(this.sessionManager);
+			this.showStatus(`Update ${state.release.version} ready. Exit when convenient, then run ${resume ?? APP_NAME}.`);
+		}
 	}
 
 	showPackageUpdateNotification(packages: string[]): void {
@@ -6998,6 +7051,7 @@ export class InteractiveMode {
 	}
 
 	stop(fullscreenExitOutput = this.settingsManager.getFullscreenExitOutput()): void {
+		this.backgroundUpdater?.stop();
 		this.disposeActiveSelector();
 		if (this.settingsManager.getShowTerminalProgress()) {
 			this.ui.terminal.setProgress(false);

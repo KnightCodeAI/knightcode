@@ -26,6 +26,12 @@ Verify the installation:
 knightcode --version
 ```
 
+Supported installations download updates in the background during interactive
+sessions. When **Update ready — restart to apply** appears, exit and relaunch when
+convenient. You can also run `knightcode update` manually. See
+[Updating KnightCode](cli.md#update-knightcode-or-packages) for supported installs
+and how to disable automatic downloads.
+
 ## 2. Start KnightCode
 
 Change to the folder you want KnightCode to work with, then start it:

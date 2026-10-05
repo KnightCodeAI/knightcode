@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { Markdown, type MarkdownTheme } from "@knightcode/tui";
 import chalk from "chalk";
+import { valid } from "semver";
 import { selectConfig } from "./cli/config-selector.ts";
 import { createProjectTrustContext } from "./cli/project-trust.ts";
 import {
@@ -25,6 +26,7 @@ import { SettingsManager } from "./core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
 import { runGlobalSelfUpdate } from "./utils/global-self-update.ts";
 import { getStandaloneUpdateUnavailableReason, runStandaloneSelfUpdate } from "./utils/standalone-self-update.ts";
+import { UPDATE_EXIT_LOCKED, UPDATE_EXIT_UNSUPPORTED } from "./utils/update-process.ts";
 import { getActiveManagedInstallRoot, runManagedSelfUpdate } from "./utils/managed-self-update.ts";
 export { cleanupManagedInstall } from "./utils/managed-self-update.ts";
 import { formatVersionCheckError, getLatestPiRelease, isNewerPackageVersion } from "./utils/version-check.ts";
@@ -471,6 +473,16 @@ interface SelfUpdatePlan {
 }
 
 async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
+	const backgroundVersion = process.env.KNIGHTCODE_SELF_UPDATE_VERSION;
+	if (backgroundVersion) {
+		if (!valid(backgroundVersion)) throw new Error("Invalid background update version");
+		return {
+			packageName: PACKAGE_NAME,
+			installSpec: `${PACKAGE_NAME}@${backgroundVersion}`,
+			version: backgroundVersion,
+			shouldRun: isNewerPackageVersion(backgroundVersion, VERSION),
+		};
+	}
 	let latestRelease: Awaited<ReturnType<typeof getLatestPiRelease>>;
 	try {
 		latestRelease = await getLatestPiRelease(VERSION, { retry: true });
@@ -497,6 +509,13 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 
 	console.log(chalk.green(`${APP_NAME} is already up to date (v${VERSION})`));
 	return { packageName, installSpec, version: latestRelease.version, shouldRun: false };
+}
+
+/** Manual runs fail with 1; the background worker tells its session why. */
+function getSelfUpdateExitCode(error: unknown): number {
+	if (!process.env.KNIGHTCODE_SELF_UPDATE_VERSION) return 1;
+	if (error === UPDATE_EXIT_UNSUPPORTED) return UPDATE_EXIT_UNSUPPORTED;
+	return error instanceof Error && "code" in error && error.code === "ELOCKED" ? UPDATE_EXIT_LOCKED : 1;
 }
 
 export interface PackageCommandRuntimeOptions {
@@ -837,7 +856,7 @@ export async function handlePackageCommand(
 						if (unavailable) {
 							console.error(`error: ${APP_NAME} cannot self-update this installation. ${unavailable}`);
 							console.error(`Download from: https://github.com/KnightCodeAI/knightcode/releases/latest`);
-							process.exitCode = 1;
+							process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
 							return true;
 						}
 						if (selfUpdatePlan.note) {
@@ -848,7 +867,7 @@ export async function handlePackageCommand(
 							await runStandaloneSelfUpdate(selfUpdatePlan.version);
 						} catch (error: unknown) {
 							console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
-							process.exitCode = 1;
+							process.exitCode = getSelfUpdateExitCode(error);
 							return true;
 						}
 						console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));
@@ -857,7 +876,7 @@ export async function handlePackageCommand(
 					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
 						console.error(chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`));
 						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
-						process.exitCode = 1;
+						process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
 						return true;
 					}
 					const selfUpdateTarget = {
@@ -866,9 +885,10 @@ export async function handlePackageCommand(
 					};
 					const selfUpdateCommand = getSelfUpdateCommand(PACKAGE_NAME, selfUpdateNpmCommand, selfUpdateTarget);
 					const launcher = selfUpdateCommand?.steps ? undefined : getSelfUpdateLauncher(selfUpdateNpmCommand);
-					if (!selfUpdateCommand) {
+					// The background worker needs the owning launcher to recheck and verify the install.
+					if (!selfUpdateCommand || (process.env.KNIGHTCODE_SELF_UPDATE_VERSION && !launcher)) {
 						printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdateTarget);
-						process.exitCode = 1;
+						process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
 						return true;
 					}
 					if (selfUpdatePlan.note) {
@@ -887,7 +907,7 @@ export async function handlePackageCommand(
 							printPnpmSelfUpdateMetadataHint();
 						}
 						printSelfUpdateFallback(selfUpdateCommand);
-						process.exitCode = 1;
+						process.exitCode = getSelfUpdateExitCode(error);
 						return true;
 					}
 					console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));

@@ -1,6 +1,10 @@
 import { spawnProcess, waitForChildProcess } from "./child-process.ts";
 import { killProcessTree } from "./shell.ts";
 
+/** Exit codes the background update worker reports to the session that spawned it. */
+export const UPDATE_EXIT_LOCKED = 75;
+export const UPDATE_EXIT_UNSUPPORTED = 78;
+
 /** Longest a package manager step may run; a stalled npm otherwise holds the update lock forever. */
 export const UPDATE_STEP_TIMEOUT_MS = 10 * 60 * 1000;
 

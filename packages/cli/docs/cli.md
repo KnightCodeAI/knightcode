@@ -260,6 +260,31 @@ Add `--local` or `-l` to `install`, `remove`, `uninstall`, or `config` to use pr
 
 Running `knightcode update` without a target updates KnightCode itself.
 
+Interactive sessions check for updates at startup and hourly. Installer-managed
+installs, writable global package manager installs, and downloaded release
+binaries update in the background. A notice near the editor shows the download,
+then **Update ready — restart to apply**. Exit when convenient and relaunch; use
+the displayed resume command to continue the saved session. Active work is never
+restarted automatically.
+
+The script installer stages and verifies a separate release before changing the
+launcher, retaining the version that open sessions use. Global package manager
+installs update in place. A downloaded binary is replaced from the matching
+[GitHub release](https://github.com/KnightCodeAI/knightcode/releases) archive,
+checked against its `SHA256SUMS`, and smoke-tested before any file moves; files
+next to it that the release does not ship are left alone. These updates run in a
+separate process that can finish after you exit; other open sessions keep
+running their loaded binary, but files on disk may change. On Windows, automatic
+global updates support npm and pnpm. Source checkouts, custom binary overrides
+(`KNIGHTCODE_BIN_PATH`), non-writable installs, and package renames show manual
+update notices instead.
+
+Failed background updates show a manual retry command and are retried on a later
+check. Set `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` to retain update notices without
+automatic downloads. `KNIGHTCODE_SKIP_VERSION_CHECK=1` suppresses both automatic
+checks and downloads. Explicit `knightcode update` remains available. Offline,
+print, JSON, and RPC sessions do not start background updates.
+
 | Task | Command |
 |---|---|
 | Update KnightCode | `knightcode update` |
