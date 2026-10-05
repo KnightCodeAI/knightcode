@@ -35,6 +35,8 @@ export function createCodemodeExtension(options: CodemodeExtensionOptions = {}):
 				appendEntry: (customType, data) => knightcode.appendEntry(customType, data),
 				models: options.models ?? true,
 				getToolNamespace: (name) => knightcode.getAllTools().find((tool) => tool.name === name)?.namespace,
+				getToolGuidelines: () =>
+					new Map(knightcode.getAllTools().map((tool) => [tool.name, tool.promptGuidelines ?? []] as const)),
 				getMode: () => options.mode ?? readMode(knightcode),
 				getInlineBudget: () => options.inlineBudget ?? readInlineBudget(knightcode),
 			}),
