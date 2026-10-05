@@ -170,7 +170,7 @@ export async function getLatestVersion(repo: string): Promise<string> {
 }
 
 // Download a file from URL
-async function downloadFile(url: string, dest: string): Promise<void> {
+export async function downloadFile(url: string, dest: string): Promise<void> {
 	const response = await fetchWithRetry(url, undefined, { timeoutMs: DOWNLOAD_TIMEOUT_MS });
 
 	if (!response.ok) {
@@ -230,7 +230,7 @@ function runExtractionCommand(command: string, args: string[]): string | null {
 	return `${command}: ${formatSpawnFailure(result)}`;
 }
 
-function extractTarGzArchive(archivePath: string, extractDir: string, assetName: string): void {
+export function extractTarGzArchive(archivePath: string, extractDir: string, assetName: string): void {
 	const failure = runExtractionCommand("tar", ["xzf", archivePath, "-C", extractDir]);
 	if (failure) {
 		throw new Error(`Failed to extract ${assetName}: ${failure}`);
@@ -248,7 +248,7 @@ function getWindowsTarCommand(): string {
 	return "tar.exe";
 }
 
-function extractZipArchive(archivePath: string, extractDir: string, assetName: string): void {
+export function extractZipArchive(archivePath: string, extractDir: string, assetName: string): void {
 	const failures: string[] = [];
 
 	if (platform() === "win32") {

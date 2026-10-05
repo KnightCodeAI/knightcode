@@ -24,6 +24,7 @@ import { DefaultResourceLoader, isBuiltinExtension } from "./core/resource-loade
 import { SettingsManager } from "./core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
 import { runGlobalSelfUpdate } from "./utils/global-self-update.ts";
+import { getStandaloneUpdateUnavailableReason, runStandaloneSelfUpdate } from "./utils/standalone-self-update.ts";
 import { getActiveManagedInstallRoot, runManagedSelfUpdate } from "./utils/managed-self-update.ts";
 export { cleanupManagedInstall } from "./utils/managed-self-update.ts";
 import { formatVersionCheckError, getLatestPiRelease, isNewerPackageVersion } from "./utils/version-check.ts";
@@ -831,6 +832,28 @@ export async function handlePackageCommand(
 					}
 
 					const installMethod = detectInstallMethod();
+					if (installMethod === "bun-binary") {
+						const unavailable = getStandaloneUpdateUnavailableReason();
+						if (unavailable) {
+							console.error(`error: ${APP_NAME} cannot self-update this installation. ${unavailable}`);
+							console.error(`Download from: https://github.com/KnightCodeAI/knightcode/releases/latest`);
+							process.exitCode = 1;
+							return true;
+						}
+						if (selfUpdatePlan.note) {
+							printSelfUpdateNote(selfUpdatePlan.note);
+						}
+						try {
+							console.log(chalk.dim(`Downloading ${APP_NAME} ${selfUpdatePlan.version}...`));
+							await runStandaloneSelfUpdate(selfUpdatePlan.version);
+						} catch (error: unknown) {
+							console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+							process.exitCode = 1;
+							return true;
+						}
+						console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));
+						return true;
+					}
 					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
 						console.error(chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`));
 						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
