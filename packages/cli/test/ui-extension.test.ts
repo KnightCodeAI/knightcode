@@ -83,6 +83,20 @@ describe("ui extension knight header", () => {
 		knight.dispose();
 	});
 
+	it("reverses lone half blocks that touch the knight only in macOS Terminal", () => {
+		const { header: knight } = header(false);
+		const base = () => knight.render(30)[7]!;
+		vi.stubEnv("TERM_PROGRAM", "iTerm.app");
+		expect(base()).not.toContain("\x1b[7m");
+		expect(stripAnsi(base()).trim()).toMatch(/^▀+$/);
+		vi.stubEnv("TERM_PROGRAM", "Apple_Terminal");
+		// The base bar sits under the body, so it is drawn as reversed lower halves.
+		expect(base()).toContain("\x1b[7m");
+		expect(stripAnsi(base()).trim()).toMatch(/^▄+$/);
+		vi.unstubAllEnvs();
+		knight.dispose();
+	});
+
 	it("fits every width, stacking the text under the knight when narrow", () => {
 		const { header: knight } = header(true);
 		for (const width of [80, 30, 10]) {
