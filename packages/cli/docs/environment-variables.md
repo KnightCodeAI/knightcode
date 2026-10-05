@@ -85,7 +85,8 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_SERVER_ID` | Select the logical experimental server ID when `--server-id` is omitted |
 | `KNIGHTCODE_OFFLINE` | Disable automatic network activity, including model catalog refreshes |
 | `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS` | Set to `1`, `true`, or `yes` to stop backing up files before edits; `/undo` then rewinds the conversation only. See [Sessions](sessions.md#file-restore) |
-| `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable the `knightcode.dev` latest-version request |
+| `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable automatic version checks and downloads; explicit `knightcode update` still works |
+| `KNIGHTCODE_DISABLE_AUTO_UPDATE` | Set to `1` to disable automatic update downloads while retaining update notices; explicit `knightcode update` still works |
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
 | `KNIGHTCODE_SHARE_VIEWER_URL` | Override the base URL used by `/share` |

@@ -1,17 +1,7 @@
-import {
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { Markdown, type MarkdownTheme } from "@knightcode/tui";
 import chalk from "chalk";
-import lockfile from "proper-lockfile";
+import { valid } from "semver";
 import { selectConfig } from "./cli/config-selector.ts";
 import { createProjectTrustContext } from "./cli/project-trust.ts";
 import {
@@ -19,8 +9,8 @@ import {
 	CONFIG_DIR_NAME,
 	detectInstallMethod,
 	getAgentDir,
-	getPackageDir,
 	getSelfUpdateCommand,
+	getSelfUpdateLauncher,
 	getSelfUpdateUnavailableInstruction,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
@@ -34,186 +24,16 @@ import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import { DefaultResourceLoader, isBuiltinExtension } from "./core/resource-loader.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
-import { spawnProcess, spawnProcessSync, waitForChildProcess } from "./utils/child-process.ts";
-import { canonicalizePath, getCwdRelativePath } from "./utils/paths.ts";
-import { getKnightcodeUserAgent } from "./utils/user-agent.ts";
+import { runGlobalSelfUpdate } from "./utils/global-self-update.ts";
+import { getStandaloneUpdateUnavailableReason, runStandaloneSelfUpdate } from "./utils/standalone-self-update.ts";
+import { UPDATE_EXIT_LOCKED, UPDATE_EXIT_UNSUPPORTED } from "./utils/update-process.ts";
+import { getActiveManagedInstallRoot, runManagedSelfUpdate } from "./utils/managed-self-update.ts";
+export { cleanupManagedInstall } from "./utils/managed-self-update.ts";
 import { formatVersionCheckError, getLatestPiRelease, isNewerPackageVersion } from "./utils/version-check.ts";
-import {
-	cleanupWindowsSelfUpdateQuarantine,
-	quarantineWindowsNativeDependencies,
-} from "./utils/windows-self-update.ts";
 
 export type PackageCommand = "install" | "remove" | "update" | "list";
 
 type UpdateTarget = { type: "all" } | { type: "self" } | { type: "extensions"; source?: string } | { type: "models" };
-
-const DEFAULT_INSTALLER_API_BASE = "https://knightcode.dev/api/installer/releases";
-const MANAGED_INSTALL_MARKER = "managed-install.json";
-const MANAGED_RELEASE_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-
-function getActiveManagedInstallRoot(): string | undefined {
-	const configuredRoot = process.env.KNIGHTCODE_MANAGED_INSTALL_ROOT?.trim();
-	if (!configuredRoot) return undefined;
-
-	const managedRoot = resolve(configuredRoot);
-	const releasesDir = canonicalizePath(join(managedRoot, "releases"));
-	// The launcher environment is inherited by child processes. Do not classify a
-	// source checkout or another KnightCode installation launched from managed KnightCode as managed.
-	if (getCwdRelativePath(canonicalizePath(getPackageDir()), releasesDir) === undefined) return undefined;
-
-	const markerPath = join(managedRoot, MANAGED_INSTALL_MARKER);
-	try {
-		const marker = JSON.parse(readFileSync(markerPath, "utf8")) as {
-			kind?: unknown;
-			layout?: unknown;
-			schemaVersion?: unknown;
-		};
-		if (marker.kind !== "knightcode-managed-install" || marker.schemaVersion !== 1 || marker.layout !== "releases-v1") {
-			throw new Error();
-		}
-	} catch {
-		throw new Error(`Managed install marker is missing or invalid: ${markerPath}`);
-	}
-
-	return managedRoot;
-}
-
-async function fetchInstallerArtifact(url: string, label: string): Promise<string> {
-	const response = await fetch(url, { headers: { "User-Agent": getKnightcodeUserAgent(VERSION) } });
-	if (!response.ok) {
-		throw new Error(`Could not download managed installer ${label} from ${url}: HTTP ${response.status}`);
-	}
-	return await response.text();
-}
-
-async function runManagedNpmCi(stageDir: string): Promise<void> {
-	const args = [
-		"ci",
-		"--ignore-scripts",
-		"--min-release-age=0",
-		"--omit=dev",
-		"--include=optional",
-		"--no-fund",
-		"--no-audit",
-		"--loglevel=error",
-		"--progress=false",
-	];
-	const code = await waitForChildProcess(spawnProcess("npm", args, { cwd: stageDir, stdio: "inherit" }));
-	if (code !== 0) throw new Error(`npm ${args.join(" ")} exited with code ${code ?? "unknown"}`);
-}
-
-function verifyManagedRelease(releaseDir: string, expectedVersion: string): void {
-	const binPath = join(releaseDir, "node_modules", ".bin", process.platform === "win32" ? `${APP_NAME}.cmd` : APP_NAME);
-	const result = spawnProcessSync(binPath, ["--version"], {
-		encoding: "utf8",
-		stdio: ["ignore", "pipe", "pipe"],
-	});
-	if (result.error || result.status !== 0) {
-		const reason = result.error?.message || result.stderr.trim() || `exit code ${result.status ?? "unknown"}`;
-		throw new Error(`Could not verify managed KnightCode ${expectedVersion}: ${reason}`);
-	}
-	const installedVersion = result.stdout.trim();
-	if (installedVersion !== expectedVersion) {
-		throw new Error(`Managed KnightCode smoke test returned version ${installedVersion}; expected ${expectedVersion}.`);
-	}
-}
-
-function activateManagedRelease(managedRoot: string, version: string): void {
-	const currentPath = join(managedRoot, "current-version");
-	const temporaryPath = join(managedRoot, `current-version.tmp.${process.pid}-${Date.now()}`);
-	try {
-		writeFileSync(temporaryPath, `${version}\n`);
-		renameSync(temporaryPath, currentPath);
-	} finally {
-		rmSync(temporaryPath, { force: true });
-	}
-}
-
-function cleanupManagedStaging(managedRoot: string): void {
-	const stagingRoot = join(managedRoot, "staging");
-	try {
-		for (const entry of readdirSync(stagingRoot)) {
-			if (entry.startsWith("update-")) {
-				rmSync(join(stagingRoot, entry), { force: true, recursive: true });
-			}
-		}
-	} catch {
-		// The staging directory does not exist yet or is not writable.
-	}
-}
-
-export function cleanupManagedInstall(): void {
-	let managedRoot: string | undefined;
-	try {
-		managedRoot = getActiveManagedInstallRoot();
-	} catch {
-		return;
-	}
-	if (!managedRoot) return;
-
-	try {
-		const releaseLock = lockfile.lockSync(join(managedRoot, "update"), { realpath: false });
-		try {
-			cleanupManagedStaging(managedRoot);
-		} finally {
-			releaseLock();
-		}
-	} catch {
-		// A live update owns the staging directory, or cleanup is unavailable.
-	}
-}
-
-async function runManagedSelfUpdate(managedRoot: string, version: string): Promise<void> {
-	if (!MANAGED_RELEASE_VERSION_RE.test(version)) {
-		throw new Error(`Invalid managed release version: ${version}`);
-	}
-
-	let releaseLock: () => Promise<void>;
-	try {
-		releaseLock = await lockfile.lock(join(managedRoot, "update"), { realpath: false });
-	} catch (error: unknown) {
-		if (error instanceof Error && "code" in error && error.code === "ELOCKED") {
-			throw new Error("Another managed KnightCode update is already running.");
-		}
-		throw error;
-	}
-
-	let stageDir: string | undefined;
-	try {
-		cleanupManagedStaging(managedRoot);
-		const installerApiBase = (process.env.KNIGHTCODE_INSTALLER_API_BASE?.trim() || DEFAULT_INSTALLER_API_BASE).replace(
-			/\/+$/,
-			"",
-		);
-		const releaseUrl = `${installerApiBase}/${encodeURIComponent(version)}`;
-		const stagingRoot = join(managedRoot, "staging");
-		const releasesRoot = join(managedRoot, "releases");
-		mkdirSync(releasesRoot, { recursive: true });
-		const releaseDir = join(releasesRoot, version);
-		if (existsSync(releaseDir)) {
-			verifyManagedRelease(releaseDir, version);
-			activateManagedRelease(managedRoot, version);
-			return;
-		}
-
-		mkdirSync(stagingRoot, { recursive: true });
-		stageDir = mkdtempSync(join(stagingRoot, "update-"));
-		const [packageJsonContent, packageLockContent] = await Promise.all([
-			fetchInstallerArtifact(`${releaseUrl}/package.json`, "package.json"),
-			fetchInstallerArtifact(`${releaseUrl}/package-lock.json`, "package-lock.json"),
-		]);
-		writeFileSync(join(stageDir, "package.json"), packageJsonContent);
-		writeFileSync(join(stageDir, "package-lock.json"), packageLockContent);
-
-		await runManagedNpmCi(stageDir);
-		verifyManagedRelease(stageDir, version);
-		renameSync(stageDir, releaseDir);
-		activateManagedRelease(managedRoot, version);
-	} finally {
-		if (stageDir) rmSync(stageDir, { force: true, recursive: true });
-		await releaseLock();
-	}
-}
 
 const SELF_UPDATE_NOTE_MARKDOWN_THEME: MarkdownTheme = {
 	heading: (text) => chalk.bold(chalk.yellow(text)),
@@ -653,6 +473,16 @@ interface SelfUpdatePlan {
 }
 
 async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
+	const backgroundVersion = process.env.KNIGHTCODE_SELF_UPDATE_VERSION;
+	if (backgroundVersion) {
+		if (!valid(backgroundVersion)) throw new Error("Invalid background update version");
+		return {
+			packageName: PACKAGE_NAME,
+			installSpec: `${PACKAGE_NAME}@${backgroundVersion}`,
+			version: backgroundVersion,
+			shouldRun: isNewerPackageVersion(backgroundVersion, VERSION),
+		};
+	}
 	let latestRelease: Awaited<ReturnType<typeof getLatestPiRelease>>;
 	try {
 		latestRelease = await getLatestPiRelease(VERSION, { retry: true });
@@ -681,37 +511,11 @@ async function getSelfUpdatePlan(force: boolean): Promise<SelfUpdatePlan> {
 	return { packageName, installSpec, version: latestRelease.version, shouldRun: false };
 }
 
-async function runSelfUpdate(command: SelfUpdateCommand): Promise<void> {
-	console.log(chalk.dim(`Updating ${APP_NAME} with ${command.display}...`));
-	for (const step of command.steps ?? [command]) {
-		await new Promise<void>((resolve, reject) => {
-			const child = spawnProcess(step.command, step.args, {
-				stdio: "inherit",
-			});
-			child.on("error", (error) => {
-				reject(error);
-			});
-			child.on("close", (code, signal) => {
-				if (code === 0) {
-					resolve();
-				} else if (signal) {
-					reject(new Error(`${step.display} terminated by signal ${signal}`));
-				} else {
-					reject(new Error(`${step.display} exited with code ${code ?? "unknown"}`));
-				}
-			});
-		});
-	}
-}
-
-function prepareWindowsSelfUpdate(): void {
-	if (process.platform !== "win32") {
-		return;
-	}
-
-	const packageDir = getPackageDir();
-	cleanupWindowsSelfUpdateQuarantine(packageDir);
-	quarantineWindowsNativeDependencies(packageDir);
+/** Manual runs fail with 1; the background worker tells its session why. */
+function getSelfUpdateExitCode(error: unknown): number {
+	if (!process.env.KNIGHTCODE_SELF_UPDATE_VERSION) return 1;
+	if (error === UPDATE_EXIT_UNSUPPORTED) return UPDATE_EXIT_UNSUPPORTED;
+	return error instanceof Error && "code" in error && error.code === "ELOCKED" ? UPDATE_EXIT_LOCKED : 1;
 }
 
 export interface PackageCommandRuntimeOptions {
@@ -1047,10 +851,32 @@ export async function handlePackageCommand(
 					}
 
 					const installMethod = detectInstallMethod();
+					if (installMethod === "bun-binary") {
+						const unavailable = getStandaloneUpdateUnavailableReason();
+						if (unavailable) {
+							console.error(`error: ${APP_NAME} cannot self-update this installation. ${unavailable}`);
+							console.error(`Download from: https://github.com/KnightCodeAI/knightcode/releases/latest`);
+							process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
+							return true;
+						}
+						if (selfUpdatePlan.note) {
+							printSelfUpdateNote(selfUpdatePlan.note);
+						}
+						try {
+							console.log(chalk.dim(`Downloading ${APP_NAME} ${selfUpdatePlan.version}...`));
+							await runStandaloneSelfUpdate(selfUpdatePlan.version);
+						} catch (error: unknown) {
+							console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+							process.exitCode = getSelfUpdateExitCode(error);
+							return true;
+						}
+						console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));
+						return true;
+					}
 					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
 						console.error(chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`));
 						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
-						process.exitCode = 1;
+						process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
 						return true;
 					}
 					const selfUpdateTarget = {
@@ -1058,21 +884,22 @@ export async function handlePackageCommand(
 						installSpec: selfUpdatePlan.installSpec,
 					};
 					const selfUpdateCommand = getSelfUpdateCommand(PACKAGE_NAME, selfUpdateNpmCommand, selfUpdateTarget);
-					if (!selfUpdateCommand) {
+					const launcher = selfUpdateCommand?.steps ? undefined : getSelfUpdateLauncher(selfUpdateNpmCommand);
+					// The background worker needs the owning launcher to recheck and verify the install.
+					if (!selfUpdateCommand || (process.env.KNIGHTCODE_SELF_UPDATE_VERSION && !launcher)) {
 						printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdateTarget);
-						process.exitCode = 1;
+						process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
 						return true;
 					}
 					if (selfUpdatePlan.note) {
 						printSelfUpdateNote(selfUpdatePlan.note);
 					}
 					try {
-						// Both managers reinstall over a running executable, and the Windows
-						// gate above lets both through.
-						if (installMethod === "npm" || installMethod === "pnpm") {
-							prepareWindowsSelfUpdate();
-						}
-						await runSelfUpdate(selfUpdateCommand);
+						console.log(chalk.dim(`Updating ${APP_NAME} with ${selfUpdateCommand.display}...`));
+						await runGlobalSelfUpdate(selfUpdateCommand, {
+							version: options.force ? undefined : selfUpdatePlan.version,
+							launcher,
+						});
 					} catch (error: unknown) {
 						const message = error instanceof Error ? error.message : "Unknown package command error";
 						console.error(chalk.red(`Error: ${message}`));
@@ -1080,7 +907,7 @@ export async function handlePackageCommand(
 							printPnpmSelfUpdateMetadataHint();
 						}
 						printSelfUpdateFallback(selfUpdateCommand);
-						process.exitCode = 1;
+						process.exitCode = getSelfUpdateExitCode(error);
 						return true;
 					}
 					console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));
