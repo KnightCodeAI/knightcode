@@ -1,6 +1,14 @@
 import type { Context } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@knightcode/chord/context";
-import { type ExecutionEnv, type FileInfo, getOrThrow, type Result, type ShellOutputInfo } from "../env/index.ts";
+import {
+	type ExecutionEnv,
+	type FileInfo,
+	getOrThrow,
+	type Result,
+	type ShellOutputInfo,
+	type WatchChange,
+	type WatchTarget,
+} from "../env/index.ts";
 import type { EnvConformanceCase, EnvConformanceOptions } from "./types.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -38,6 +46,51 @@ async function readAll(
 	}
 }
 
+/** Whether a change reports `path`: an overflow, or a reported path at or above it. */
+function covers(change: WatchChange, path: string): boolean {
+	if ("overflow" in change) return true;
+	if (!("paths" in change)) return false;
+	return change.paths.some(
+		(reported) => path === reported || path.startsWith(`${reported}/`) || path.startsWith(`${reported}\\`),
+	);
+}
+
+/** Watch `targets` while `run` changes files, with a helper that waits for a change reporting a path. */
+async function watching(
+	env: ExecutionEnv,
+	targets: readonly WatchTarget[],
+	run: (helpers: {
+		readonly changes: WatchChange[];
+		/** Wait up to three seconds for a change, after the call, that reports `path`. */
+		expectChange(path: string, change: () => Promise<void>): Promise<void>;
+		absolute(path: string): Promise<string>;
+	}) => Promise<void>,
+): Promise<void> {
+	const changes: WatchChange[] = [];
+	const watcher = getOrThrow(await env.watch(targets, (change) => changes.push(change), context));
+	try {
+		const absolute = async (path: string) => getOrThrow(await env.absolutePath(path, context));
+		await run({
+			changes,
+			absolute,
+			async expectChange(path, change) {
+				const target = await absolute(path);
+				const from = changes.length;
+				await change();
+				const deadline = Date.now() + 3000;
+				while (!changes.slice(from).some((entry) => covers(entry, target))) {
+					if (Date.now() > deadline) {
+						throw new Error(`No change reported ${target}; got ${JSON.stringify(changes.slice(from))}`);
+					}
+					await new Promise((resolve) => setTimeout(resolve, 20));
+				}
+			},
+		});
+	} finally {
+		await watcher.close(context);
+	}
+}
+
 /**
  * Creates runner-independent cases for an `ExecutionEnv`. `withEnv` must call and await its callback exactly once per
  * case with an environment whose `cwd` is a fresh, empty, writable directory.
@@ -46,10 +99,13 @@ export function createEnvConformance(options: EnvConformanceOptions): readonly E
 	const assert = options.assertions;
 	const shell = options.shell ?? ["sh", "-c"];
 	const symlinks = options.symlinks ?? true;
-	const createCase = (name: string, test: EnvTest): EnvConformanceCase => ({
+	const createCase = (name: string, test: EnvTest, timeoutMs?: number): EnvConformanceCase => ({
 		name,
+		...(timeoutMs === undefined ? {} : { timeoutMs }),
 		run: () => options.withEnv(test),
 	});
+	// Watch cases wait up to three seconds per step, longer than test runners allow by default.
+	const watchCase = (name: string, test: EnvTest): EnvConformanceCase => createCase(name, test, 30_000);
 	const execCollect = async (env: ExecutionEnv, command: string | readonly string[], cwd?: string) => {
 		const output: Record<ShellOutputInfo["stream"], string> = { stdout: "", stderr: "" };
 		const result = await env.exec(
@@ -198,6 +254,99 @@ export function createEnvConformance(options: EnvConformanceOptions): readonly E
 			} finally {
 				await reader.close(context);
 			}
+		}),
+
+		watchCase("watch reports a missing file's creation, changes, replacement and removal", async (env) => {
+			await watching(env, [{ path: "AGENTS.md" }], async ({ expectChange }) => {
+				await expectChange("AGENTS.md", async () => {
+					getOrThrow(await env.writeFile("AGENTS.md", "one", context));
+				});
+				await expectChange("AGENTS.md", async () => {
+					getOrThrow(await env.writeFile("AGENTS.md", "two!", context));
+				});
+				// Editors replace a file by renaming a new one over it.
+				await expectChange("AGENTS.md", async () => {
+					getOrThrow(await env.writeFile("AGENTS.md.tmp", "three", context));
+					getOrThrow(await env.renameFile("AGENTS.md.tmp", "AGENTS.md", context));
+				});
+				await expectChange("AGENTS.md", async () => {
+					getOrThrow(await env.writeFile("AGENTS.md", "four", context));
+				});
+				await expectChange("AGENTS.md", async () => {
+					getOrThrow(await env.remove("AGENTS.md", undefined, context));
+				});
+			});
+		}),
+
+		watchCase("watch reports a missing target whose ancestors are created", async (env) => {
+			await watching(env, [{ path: "a/b/c/AGENTS.md" }], async ({ expectChange }) => {
+				await expectChange("a/b/c/AGENTS.md", async () => {
+					getOrThrow(await env.writeFile("a/b/c/AGENTS.md", "x", context));
+				});
+			});
+		}),
+
+		watchCase("watch follows directories created together with their contents", async (env) => {
+			getOrThrow(await env.createDir("skills", undefined, context));
+			await watching(env, [{ path: "skills", recursive: true }], async ({ expectChange }) => {
+				// Written before any watcher on the new directories can exist.
+				await expectChange("skills/a/b/SKILL.md", async () => {
+					getOrThrow(await env.writeFile("skills/a/b/SKILL.md", "one", context));
+				});
+				await expectChange("skills/a/b/SKILL.md", async () => {
+					getOrThrow(await env.writeFile("skills/a/b/SKILL.md", "two!", context));
+				});
+				await expectChange("skills/a/b/c/SKILL.md", async () => {
+					getOrThrow(await env.writeFile("skills/a/b/c/SKILL.md", "deeper", context));
+				});
+			});
+		}),
+
+		watchCase("watch keeps watching a path whose parent is renamed and recreated", async (env) => {
+			getOrThrow(await env.writeFile("proj/.knightcode/skills/x.md", "x", context));
+			await watching(env, [{ path: "proj/.knightcode/skills", recursive: true }], async ({ expectChange }) => {
+				await expectChange("proj/.knightcode/skills", async () => {
+					getOrThrow(await env.renameFile("proj/.knightcode", "proj/old", context));
+				});
+				await expectChange("proj/.knightcode/skills/y.md", async () => {
+					getOrThrow(await env.writeFile("proj/.knightcode/skills/y.md", "y", context));
+				});
+				await expectChange("proj/.knightcode/skills/y.md", async () => {
+					getOrThrow(await env.writeFile("proj/.knightcode/skills/y.md", "yy", context));
+				});
+			});
+		}),
+
+		watchCase("watch skips excluded entries and reports a rename out of them", async (env) => {
+			getOrThrow(await env.createDir("skills", undefined, context));
+			const targets: WatchTarget[] = [
+				{ path: "skills", recursive: true, exclude: { hidden: true, names: ["node_modules"] } },
+			];
+			await watching(env, targets, async ({ changes, expectChange, absolute }) => {
+				getOrThrow(await env.writeFile("skills/node_modules/dep/SKILL.md", "dep", context));
+				getOrThrow(await env.writeFile("skills/.SKILL.md.tmp", "draft", context));
+				await expectChange("skills/SKILL.md", async () => {
+					getOrThrow(await env.renameFile("skills/.SKILL.md.tmp", "skills/SKILL.md", context));
+				});
+				const hidden = [await absolute("skills/node_modules"), await absolute("skills/.SKILL.md.tmp")];
+				for (const change of changes) {
+					if (!("paths" in change)) continue;
+					for (const path of change.paths) {
+						assert.ok(!hidden.some((excluded) => path === excluded || path.startsWith(excluded)), `excluded ${path}`);
+					}
+				}
+			});
+		}),
+
+		watchCase("watch stops reporting once closed", async (env) => {
+			const changes: WatchChange[] = [];
+			const watcher = getOrThrow(await env.watch([{ path: "file.txt" }], (change) => changes.push(change), context));
+			assert.ok(watcher.mode === "native" || watcher.mode === "polling", "watcher reports its mode");
+			await watcher.close(context);
+			await watcher.close(context);
+			getOrThrow(await env.writeFile("file.txt", "x", context));
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			assert.deepEqual(changes, []);
 		}),
 
 		createCase("argv exec passes arguments to the program without shell parsing", async (env) => {
