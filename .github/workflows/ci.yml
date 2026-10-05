@@ -60,6 +60,10 @@ jobs:
       - name: Check changesets
         run: bun run scripts/changelog-sections.ts
 
+      # The env package's tests talk to its Rust daemon over a pipe.
+      - name: Build the env daemon
+        run: bun run --filter '@knightcode/env' build:daemon
+
       - name: Test
         run: bun run test
 

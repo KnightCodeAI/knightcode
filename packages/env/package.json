@@ -1,0 +1,22 @@
+{
+  "name": "@knightcode/env",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remote execution environments for KnightCode Durable: a small daemon deployed over SSH and its ExecutionEnv client",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@knightcode/chord": "workspace:*",
+    "@knightcode/durable": "workspace:*"
+  },
+  "scripts": {
+    "build:daemon": "cargo build --manifest-path daemon/Cargo.toml --locked",
+    "test": "vitest --run"
+  }
+}

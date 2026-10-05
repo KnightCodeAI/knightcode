@@ -83,6 +83,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Compiled platform binaries (built by CI / scripts/build.ts, never committed)
 packages/cli-*/bin/
 
+# The env package's Rust daemon build output
+packages/env/daemon/target/
+
 shenanigans/
 
 # Python (bench adapter)
