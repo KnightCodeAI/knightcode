@@ -216,6 +216,14 @@
         "typebox": "1.3.27",
       },
     },
+    "packages/env": {
+      "name": "@knightcode/env",
+      "version": "0.1.0",
+      "dependencies": {
+        "@knightcode/chord": "workspace:*",
+        "@knightcode/durable": "workspace:*",
+      },
+    },
     "packages/evals": {
       "name": "@knightcode/evals",
       "version": "0.1.0",
@@ -648,6 +656,8 @@
     "@knightcode/codemode": ["@knightcode/codemode@workspace:packages/codemode"],
 
     "@knightcode/durable": ["@knightcode/durable@workspace:packages/durable"],
+
+    "@knightcode/env": ["@knightcode/env@workspace:packages/env"],
 
     "@knightcode/evals": ["@knightcode/evals@workspace:packages/evals"],
 

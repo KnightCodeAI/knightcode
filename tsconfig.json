@@ -18,6 +18,7 @@
       "@knightcode/mcp/oauth": ["./packages/mcp/src/oauth/index.ts"],
       "@knightcode/mcp/testing": ["./packages/mcp/src/testing/index.ts"],
       "@knightcode/durable": ["./packages/durable/src/index.ts"],
+      "@knightcode/env": ["./packages/env/src/index.ts"],
       "@knightcode/durable/testing": ["./packages/durable/src/testing/index.ts"],
       "@knightcode/durable/*": ["./packages/durable/src/*.ts", "./packages/durable/src/*/index.ts", "./packages/durable/src/*"],
       "@knightcode/agent": ["./packages/agent/src/index.ts"],
