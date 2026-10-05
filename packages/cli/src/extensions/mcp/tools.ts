@@ -10,10 +10,7 @@
  * errors (`isError`) are error results for the model, but scripts still resolve to the result.
  */
 
-import { createHash, randomBytes } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
 import type { AgentToolResult } from "@knightcode/agent";
 import type { ImageContent, JsonValue, TextContent } from "@knightcode/ai";
 import {
@@ -35,6 +32,7 @@ import type {
 import { formatToolCallWithArgs, getTextOutput, replaceTabs } from "../../core/tools/render-utils.ts";
 import { formatSize, truncateMiddle } from "../../core/tools/truncate.ts";
 import { CollapsedToolOutput } from "../../modes/interactive/components/visual-truncate.ts";
+import { writeOutputFile } from "../../utils/output-files.ts";
 import type { McpExposure } from "./config.ts";
 
 /**
@@ -67,11 +65,8 @@ export interface McpToolDetails {
  */
 export type McpOutputSaver = (data: string | Uint8Array, extension: string) => Promise<string>;
 
-export async function saveToTempFile(data: string | Uint8Array, extension: string): Promise<string> {
-	const path = join(tmpdir(), `knightcode-mcp-${randomBytes(8).toString("hex")}${extension}`);
-	// Results can carry private data, so only the user may read the file.
-	await writeFile(path, data, { mode: 0o600 });
-	return path;
+export function saveToTempFile(data: string | Uint8Array, extension: string): Promise<string> {
+	return writeOutputFile("knightcode-mcp", extension, data);
 }
 
 export interface McpToolCaller {
