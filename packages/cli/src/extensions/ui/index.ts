@@ -41,10 +41,24 @@ const LOGO = [
 	"  ▀▀▀▀▀▀▀▀▀▀▀▀▀  ",
 ];
 
-/** The knight's pixels, a row per half cell, `true` where filled; the empty last row is dropped. */
-const PIXELS = LOGO.flatMap((line) =>
-	[0, 1].map((half) => [...line].map((ch) => ch === "█" || ch === (half ? "▄" : "▀"))),
-).filter((row, y, rows) => rows.slice(y).some((rest) => rest.includes(true)));
+/**
+ * The knight for macOS Terminal, area-sampled down from LOGO's 17x13 pixels and drawn a pixel per two-column cell of
+ * background color. Terminal draws block characters from the font, short of the cell edges, so the half-cell knight
+ * showed dark gaps and a grid there; only a cell's background reaches its edges. At LOGO's own resolution that knight
+ * was twice the height of the header, so it has fewer, larger pixels.
+ */
+const SOLID_LOGO = [
+	"    ###    ",
+	"   #####   ",
+	"########## ",
+	" ## ###### ",
+	"   ####### ",
+	"  #######  ",
+	" ########  ",
+	" ######### ",
+];
+/** One SOLID_LOGO pixel spans about this many LOGO pixels, so the gradient covers the same range. */
+const SOLID_SCALE = 1.6;
 
 // The site's brand ramp (apps/web: --brand #ff6a00 and the hero shader's warm stops), amber to ember.
 // Light terminals get a deeper ramp: pale amber washes out on a white background.
@@ -130,18 +144,15 @@ function knight(theme: Theme, time: number): string[] {
 	});
 }
 
-/**
- * The knight at double size, each pixel a two-column cell of background color. macOS Terminal draws block
- * characters from the font, short of the cell edges, so the half-cell knight showed dark gaps and a grid there;
- * only a cell's background reaches its edges.
- */
-function bigKnight(theme: Theme, time: number): string[] {
+/** SOLID_LOGO in background colors. */
+function solidKnight(theme: Theme, time: number): string[] {
 	const mode = theme.getColorMode();
-	return PIXELS.map((pixels, y) => {
+	return SOLID_LOGO.map((line, y) => {
 		let out = "";
 		let bg = "";
-		pixels.forEach((filled, x) => {
-			const next = filled ? backgroundAnsi(shimmer(theme, mode === "truecolor" ? x : 0, y, time), mode) : "";
+		[...line].forEach((pixel, x) => {
+			const at = (mode === "truecolor" ? x : 0) * SOLID_SCALE;
+			const next = pixel === "#" ? backgroundAnsi(shimmer(theme, at, y * SOLID_SCALE, time), mode) : "";
 			if (next !== bg) {
 				out += next || "\x1b[49m";
 				bg = next;
@@ -197,12 +208,12 @@ export class KnightHeader implements Component {
 			this.time = Math.min(this.time + step, GLINT_SWEEP_SECONDS);
 			this.lastFrame = now;
 		}
-		const big = process.env.TERM_PROGRAM === "Apple_Terminal";
-		const logo = big ? bigKnight(theme, this.time) : knight(theme, this.time);
-		const logoWidth = big ? PIXELS[0]!.length * 2 : Math.max(...LOGO.map((line) => visibleWidth(line)));
+		const solid = process.env.TERM_PROGRAM === "Apple_Terminal";
+		const logo = solid ? solidKnight(theme, this.time) : knight(theme, this.time);
+		const logoWidth = solid ? SOLID_LOGO[0]!.length * 2 : Math.max(...LOGO.map((line) => visibleWidth(line)));
 		// Cell position to the knight's pixel space, where shimmer() works.
-		const pixelX = (col: number) => (big ? col / 2 : col);
-		const pixelY = (row: number) => (big ? row : row * 2 + 0.5);
+		const pixelX = (col: number) => (solid ? (col / 2) * SOLID_SCALE : col);
+		const pixelY = (row: number) => (solid ? row * SOLID_SCALE : row * 2 + 0.5);
 		const cwd = theme.fg("muted", formatCwdForFooter(this.cwd, process.env.HOME || process.env.USERPROFILE));
 		const separator = theme.fg("muted", " · ");
 		const hints = [

@@ -83,19 +83,17 @@ describe("ui extension knight header", () => {
 		knight.dispose();
 	});
 
-	it("draws the knight at double size in background colors alone in macOS Terminal", () => {
+	it("draws the knight in background colors alone in macOS Terminal", () => {
 		const { header: knight } = header(true);
 		vi.stubEnv("TERM_PROGRAM", "Apple_Terminal");
-		// Narrow enough that the text stacks under the knight: 13 pixel rows, each pixel two columns.
-		const lines = knight.render(40);
-		const logo = lines.slice(1, 14);
-		for (const line of logo) {
-			expect(stripAnsi(line).trim()).toBe("");
+		// 8 pixel rows, each pixel two columns, with the text beside them.
+		const lines = knight.render(80);
+		expect(lines).toHaveLength(10);
+		for (const line of lines.slice(1, 9)) {
+			expect(stripAnsi(line).slice(0, 23).trim()).toBe("");
 			expect(line).toContain("\x1b[48;2;");
-			expect(visibleWidth(line)).toBe(35);
 		}
-		expect(lines[14]).toBe("");
-		expect(stripAnsi(lines[15]!)).toContain("KnightCode");
+		expect(stripAnsi(lines[2]!)).toContain("KnightCode");
 		vi.unstubAllEnvs();
 		expect(
 			knight
