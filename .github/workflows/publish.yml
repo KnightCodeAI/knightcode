@@ -206,6 +206,10 @@ jobs:
       - name: Check types
         run: bun run check-types
 
+      # Same as ci.yml: the env package's tests talk to its Rust daemon over a pipe.
+      - name: Build the env daemon
+        run: bun run --filter '@knightcode/env' build:daemon
+
       - name: Test
         run: bun run test
 
