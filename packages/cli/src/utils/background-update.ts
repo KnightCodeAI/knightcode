@@ -14,7 +14,6 @@ export type BackgroundUpdateState = {
 /** One updater per interactive process. Package changes are serialized across terminals. */
 export class BackgroundUpdater {
 	private readonly currentVersion: string;
-	private readonly npmCommand: string[] | undefined;
 	private readonly onState: (state: BackgroundUpdateState) => void;
 	private timer: NodeJS.Timeout | undefined;
 	private controller = new AbortController();
@@ -22,13 +21,8 @@ export class BackgroundUpdater {
 	private stopped = false;
 	private ready = false;
 
-	constructor(
-		currentVersion: string,
-		npmCommand: string[] | undefined,
-		onState: (state: BackgroundUpdateState) => void,
-	) {
+	constructor(currentVersion: string, onState: (state: BackgroundUpdateState) => void) {
 		this.currentVersion = currentVersion;
-		this.npmCommand = npmCommand;
 		this.onState = onState;
 	}
 

@@ -1145,10 +1145,8 @@ export class InteractiveMode {
 				.finally(() => clearTimeout(timeout));
 		}
 
-		this.backgroundUpdater = new BackgroundUpdater(
-			this.version,
-			this.settingsManager.getGlobalSettings().npmCommand,
-			(state) => this.showBackgroundUpdateNotification(state),
+		this.backgroundUpdater = new BackgroundUpdater(this.version, (state) =>
+			this.showBackgroundUpdateNotification(state),
 		);
 		this.backgroundUpdater.start();
 

@@ -39,7 +39,7 @@ beforeEach(() => {
 	vi.stubEnv("KNIGHTCODE_DISABLE_AUTO_UPDATE", undefined);
 	vi.stubEnv("KNIGHTCODE_BIN_PATH", undefined);
 	states = [];
-	updater = new BackgroundUpdater("1.0.0", ["npm", "--prefix", "custom"], (state) => states.push(state));
+	updater = new BackgroundUpdater("1.0.0", (state) => states.push(state));
 	mocks.check.mockResolvedValue({ version: "1.0.1" });
 	mocks.managedRoot.mockReturnValue("managed");
 	mocks.managedUpdate.mockImplementation(async (_root, version, options) => {
