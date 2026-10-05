@@ -83,15 +83,17 @@ describe("ui extension knight header", () => {
 		knight.dispose();
 	});
 
-	it("fills full cells with background alone in macOS Terminal", () => {
+	it("draws the knight in background colors alone in macOS Terminal", () => {
 		const { header: knight } = header(true);
-		// "    ▄███████████": one lone half block, then full cells.
-		const body = () => stripAnsi(knight.render(30)[4]!).trimEnd();
+		// Narrow enough that the text stacks under the knight, leaving logo-only rows.
+		const logo = () => knight.render(30).slice(1, 8);
 		vi.stubEnv("TERM_PROGRAM", "iTerm.app");
-		expect(body()).toBe("     ▄▀▀▀▀▀▀▀▀▀▀▀");
+		expect(logo().some((line) => /[▀▄]/.test(stripAnsi(line)))).toBe(true);
 		vi.stubEnv("TERM_PROGRAM", "Apple_Terminal");
-		expect(body()).toBe("     ▄");
-		expect(knight.render(30)[4]).toContain("\x1b[48;2;");
+		for (const line of logo()) {
+			expect(stripAnsi(line).trim()).toBe("");
+			expect(line).toContain("\x1b[48;2;");
+		}
 		vi.unstubAllEnvs();
 		knight.dispose();
 	});

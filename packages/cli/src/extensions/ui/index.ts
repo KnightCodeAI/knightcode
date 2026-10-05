@@ -41,6 +41,21 @@ const LOGO = [
 	"  ▀▀▀▀▀▀▀▀▀▀▀▀▀  ",
 ];
 
+/**
+ * The knight for macOS Terminal, in whole cells. Terminal draws block characters from the font, short of the cell
+ * edges, so every half block touching the body left a dark gap; only a cell's background reaches its edges. The
+ * snout, ears and base were all half-block steps, so this is redrawn for whole cells at the same size.
+ */
+const APPLE_TERMINAL_LOGO = [
+	"      ██  ██     ",
+	"    █████████    ",
+	"████████████████ ",
+	"█    ███████████ ",
+	"    ██████████   ",
+	"  ███████████    ",
+	"  █████████████  ",
+];
+
 // The site's brand ramp (apps/web: --brand #ff6a00 and the hero shader's warm stops), amber to ember.
 // Light terminals get a deeper ramp: pale amber washes out on a white background.
 const PALETTES: Record<"dark" | "light", Color[]> = {
@@ -96,10 +111,10 @@ function shimmer(theme: Theme, x: number, y: number, time: number): Color {
 /** The knight drawn in half-cell pixels: a full block becomes `▀` over a background, so each half has its own color. */
 function knight(theme: Theme, time: number): string[] {
 	const mode = theme.getColorMode();
-	// macOS Terminal draws `▀` from the font, short of the cell edges, so the background shows around every full cell
-	// as a grid. A space fills its whole cell with the background, so there full cells take one color, the halves' mix.
+	// In macOS Terminal full cells are background-colored spaces, one color each (the halves' mix): a `▀` falls short
+	// of the cell edges there and showed the background around every cell as a grid.
 	const appleTerminal = process.env.TERM_PROGRAM === "Apple_Terminal";
-	return LOGO.map((line, row) => {
+	return (appleTerminal ? APPLE_TERMINAL_LOGO : LOGO).map((line, row) => {
 		// Colors are written only when they change and reset once per row; per-cell resets bloated every frame.
 		let out = "";
 		let fg = "";

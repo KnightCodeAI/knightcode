@@ -2,4 +2,4 @@
 "@knightcodeai/cli": patch
 ---
 
-Fixed a grid of thin lines showing through the startup knight in macOS Terminal.
+Fixed gaps and grid lines in the startup knight in macOS Terminal, which now draws a whole-cell knight.
