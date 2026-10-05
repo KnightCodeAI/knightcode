@@ -11,17 +11,22 @@ import { cleanupWindowsSelfUpdateQuarantine, quarantineWindowsNativeDependencies
 // default 10 s would let another terminal steal a live lock mid-install.
 const SELF_UPDATE_LOCK = { realpath: false, stale: 120_000 } as const;
 
-/** One in-place update per user at a time, whatever the install method or caller. */
-export async function withSelfUpdateLock<T>(run: () => Promise<T>): Promise<T> {
+/**
+ * One in-place update per user at a time, whatever the install method or caller.
+ * `run` receives a signal that aborts if the lock is lost, at which point another
+ * terminal may already be updating; stop before touching the install.
+ */
+export async function withSelfUpdateLock<T>(run: (lockLost: AbortSignal) => Promise<T>): Promise<T> {
 	const agentDir = getAgentDir();
 	mkdirSync(agentDir, { recursive: true });
+	const lockLost = new AbortController();
 	const releaseLock = await lockfile.lock(join(agentDir, "self-update"), {
 		...SELF_UPDATE_LOCK,
 		// The default handler throws from a timer and crashes the process.
-		onCompromised: () => {},
+		onCompromised: (error) => lockLost.abort(error),
 	});
 	try {
-		return await run();
+		return await run(lockLost.signal);
 	} finally {
 		await releaseLock().catch(() => {});
 	}
@@ -30,6 +35,7 @@ export async function withSelfUpdateLock<T>(run: () => Promise<T>): Promise<T> {
 /** Startup cleanup that must not race a live update. */
 export function trySelfUpdateLockSync(run: () => void): void {
 	try {
+		mkdirSync(getAgentDir(), { recursive: true });
 		const releaseLock = lockfile.lockSync(join(getAgentDir(), "self-update"), SELF_UPDATE_LOCK);
 		try {
 			run();
@@ -37,7 +43,7 @@ export function trySelfUpdateLockSync(run: () => void): void {
 			releaseLock();
 		}
 	} catch {
-		// An update is running, or the agent dir does not exist yet.
+		// An update is running, or the agent dir is not writable.
 	}
 }
 
@@ -45,7 +51,7 @@ export async function runGlobalSelfUpdate(
 	command: SelfUpdateCommand,
 	options: { version?: string; launcher?: string } = {},
 ): Promise<void> {
-	await withSelfUpdateLock(async () => {
+	await withSelfUpdateLock(async (lockLost) => {
 		// Recheck after acquiring the same lock that manual and background updates use.
 		if (options.version && options.launcher) {
 			const metadata = JSON.parse(readFileSync(join(dirname(dirname(options.launcher)), "package.json"), "utf8")) as {
@@ -58,7 +64,9 @@ export async function runGlobalSelfUpdate(
 			quarantineWindowsNativeDependencies(getPackageDir());
 		}
 		for (const step of command.steps ?? [command]) {
-			await runUpdateProcess(step.command, step.args, { signal: AbortSignal.timeout(UPDATE_STEP_TIMEOUT_MS) });
+			await runUpdateProcess(step.command, step.args, {
+				signal: AbortSignal.any([lockLost, AbortSignal.timeout(UPDATE_STEP_TIMEOUT_MS)]),
+			});
 		}
 		if (options.version && options.launcher) {
 			// Run what the launcher will run: the platform binary, not the JS shim, so

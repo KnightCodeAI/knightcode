@@ -26,6 +26,10 @@ export async function runUpdateProcess(
 		if (child.pid) killProcessTree(child.pid);
 	};
 	options.signal?.addEventListener("abort", abort, { once: true });
+	// Under Node, a pipe that errors (EPIPE after a forced kill) with no listener
+	// throws; the exit code already reports the failure.
+	child.stdout.on("error", () => {});
+	child.stderr.on("error", () => {});
 	let stdout = "";
 	let stderr = "";
 	child.stdout.on("data", (chunk: Buffer) => {

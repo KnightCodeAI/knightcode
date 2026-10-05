@@ -1,12 +1,26 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import lockfile from "proper-lockfile";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as UpdateProcess from "../src/utils/update-process.ts";
-import { runStandaloneSelfUpdate } from "../src/utils/standalone-self-update.ts";
+import {
+	cleanupStandaloneInstall,
+	getStandaloneUpdateUnavailableReason,
+	runStandaloneSelfUpdate,
+} from "../src/utils/standalone-self-update.ts";
 
 const runProcess = vi.hoisted(() => vi.fn());
 vi.mock("../src/utils/update-process.ts", async (original) => ({
@@ -121,6 +135,47 @@ describe("standalone binary updates", () => {
 		expect(read(exe)).toBe("old binary");
 		expect(read("theme/dark.json")).toBe("old theme");
 		expect(read("zzz")).toBe("old file");
+	});
+
+	it("stops before swapping when the update lock is lost", async () => {
+		const realLock = lockfile.lock.bind(lockfile);
+		let compromise: ((error: Error) => void) | undefined;
+		const spy = vi.spyOn(lockfile, "lock").mockImplementation((file, options) => {
+			compromise = options?.onCompromised;
+			return realLock(file, options);
+		});
+		try {
+			// The lock goes stale while the smoke test runs; another terminal may own it now.
+			runProcess.mockImplementation(async () => {
+				compromise?.(new Error("lock compromised"));
+				return "1.0.1";
+			});
+			await expect(runStandaloneSelfUpdate("1.0.1", join(install, exe))).rejects.toThrow("lock compromised");
+			expect(read(exe)).toBe("old binary");
+			expect(read("theme/dark.json")).toBe("old theme");
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("updates a read-only binary in a writable directory", async () => {
+		chmodSync(join(install, exe), 0o555);
+		expect(getStandaloneUpdateUnavailableReason(join(install, exe))).toBeUndefined();
+		await runStandaloneSelfUpdate("1.0.1", join(install, exe));
+		expect(read(exe)).toBe("new binary");
+	});
+
+	it("restores files a crashed swap left only in the backup before deleting it", () => {
+		// The crash happened after theme/dark.json moved aside and before its
+		// replacement moved in; the binary had not been touched yet.
+		const backup = join(install, ".knightcode-update-old", "1-1");
+		mkdirSync(join(backup, "theme"), { recursive: true });
+		renameSync(join(install, "theme", "dark.json"), join(backup, "theme", "dark.json"));
+		writeFileSync(join(backup, exe), "replaced binary");
+		cleanupStandaloneInstall(join(install, exe));
+		expect(read("theme/dark.json")).toBe("old theme");
+		expect(read(exe)).toBe("old binary");
+		expect(existsSync(join(install, ".knightcode-update-old"))).toBe(false);
 	});
 
 	it("waits for an update another terminal is running", async () => {

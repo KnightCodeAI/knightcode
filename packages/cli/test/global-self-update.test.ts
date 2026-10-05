@@ -70,6 +70,29 @@ describe("global updates", () => {
 		);
 	});
 
+	it("stops a running install when the update lock is lost", async () => {
+		const realLock = lockfile.lock.bind(lockfile);
+		let compromise: ((error: Error) => void) | undefined;
+		const spy = vi.spyOn(lockfile, "lock").mockImplementation((file, options) => {
+			compromise = options?.onCompromised;
+			return realLock(file, options);
+		});
+		try {
+			runProcess.mockImplementation(
+				(_command: string, _args: string[], options: { signal: AbortSignal }) =>
+					new Promise((_resolve, reject) => {
+						options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+						compromise?.(new Error("lock compromised"));
+					}),
+			);
+			await expect(runGlobalSelfUpdate(command, { launcher, version: "1.0.1" })).rejects.toThrow("lock compromised");
+			// The install step was cancelled, so nothing was verified as installed.
+			expect(runProcess).toHaveBeenCalledOnce();
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
 	it("releases the lock on failure so a later manual attempt can recover", async () => {
 		runProcess.mockRejectedValueOnce(new Error("install failed"));
 		await expect(runGlobalSelfUpdate(command, { launcher, version: "1.0.1" })).rejects.toThrow("install failed");

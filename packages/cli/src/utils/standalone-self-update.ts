@@ -23,15 +23,17 @@ const RELEASE_TARGETS = new Set(["darwin-arm64", "darwin-x64", "linux-arm64", "l
 /** Files an update replaced. Windows cannot delete a running executable, so they wait for the next start. */
 const REPLACED_DIR = ".knightcode-update-old";
 const STAGE_PREFIX = ".knightcode-update-stage-";
+const RELEASE_BINARY = process.platform === "win32" ? "knightcode.exe" : "knightcode";
 
 /** Why a downloaded binary at `binaryPath` cannot replace itself, or undefined when it can. */
 export function getStandaloneUpdateUnavailableReason(binaryPath = process.execPath): string | undefined {
 	if (!RELEASE_TARGETS.has(`${process.platform}-${process.arch}`)) {
 		return `No prebuilt release for ${process.platform}-${process.arch}.`;
 	}
+	// Only the directory matters: the swap renames the binary aside, which works
+	// on a read-only file on every platform.
 	try {
 		accessSync(dirname(binaryPath), constants.W_OK);
-		accessSync(binaryPath, constants.W_OK);
 	} catch {
 		return `${dirname(binaryPath)} is not writable.`;
 	}
@@ -41,8 +43,21 @@ export function getStandaloneUpdateUnavailableReason(binaryPath = process.execPa
 /** Remove files replaced by an earlier update. Callers hold the self-update lock. */
 function cleanupStandaloneUpdate(binaryPath = process.execPath): void {
 	const dir = dirname(binaryPath);
+	const replaced = join(dir, REPLACED_DIR);
 	try {
-		rmSync(join(dir, REPLACED_DIR), { recursive: true, force: true });
+		// A crash between moving a file aside and moving its replacement in leaves
+		// the backup as the only copy. Put such files back before deleting backups.
+		if (existsSync(replaced)) {
+			for (const run of readdirSync(replaced).sort().reverse()) {
+				for (const file of listFiles(join(replaced, run))) {
+					const dest = join(dir, file === RELEASE_BINARY ? basename(binaryPath) : file);
+					if (existsSync(dest)) continue;
+					mkdirSync(dirname(dest), { recursive: true });
+					renameSync(join(replaced, run, file), dest);
+				}
+			}
+		}
+		rmSync(replaced, { recursive: true, force: true });
 		for (const entry of readdirSync(dir)) {
 			if (entry.startsWith(STAGE_PREFIX)) rmSync(join(dir, entry), { recursive: true, force: true });
 		}
@@ -80,15 +95,15 @@ async function fetchChecksum(url: string, asset: string): Promise<string> {
  * does not, which is why the old files are moved aside rather than overwritten.
  */
 export function runStandaloneSelfUpdate(version: string, binaryPath = process.execPath): Promise<void> {
-	return withSelfUpdateLock(() => replaceRelease(version, binaryPath));
+	return withSelfUpdateLock((lockLost) => replaceRelease(version, binaryPath, lockLost));
 }
 
-async function replaceRelease(version: string, binaryPath: string): Promise<void> {
+async function replaceRelease(version: string, binaryPath: string, lockLost: AbortSignal): Promise<void> {
 	const unavailable = getStandaloneUpdateUnavailableReason(binaryPath);
 	if (unavailable) throw new Error(unavailable);
 
 	const dir = dirname(binaryPath);
-	const releaseBinary = process.platform === "win32" ? "knightcode.exe" : "knightcode";
+	const releaseBinary = RELEASE_BINARY;
 	const asset = `knightcode-${process.platform}-${process.arch}${process.platform === "win32" ? ".zip" : ".tar.gz"}`;
 	const releaseUrl = `${RELEASES_URL}/${encodeURIComponent(`${PACKAGE_NAME}@${version}`)}`;
 
@@ -113,10 +128,13 @@ async function replaceRelease(version: string, binaryPath: string): Promise<void
 		if (process.platform !== "win32") chmodSync(stagedBinary, 0o755);
 		const installed = await runUpdateProcess(stagedBinary, ["--version"], {
 			quiet: true,
-			signal: AbortSignal.timeout(30_000),
+			signal: AbortSignal.any([lockLost, AbortSignal.timeout(30_000)]),
 		});
 		if (installed !== version)
 			throw new Error(`Downloaded ${asset} reports version ${installed}; expected ${version}.`);
+		// The swap below is synchronous, so this is the last point where another
+		// terminal's update could have taken over a lock this process let go stale.
+		lockLost.throwIfAborted();
 
 		// The binary goes last so an interrupted swap never runs new code against old assets.
 		const files = listFiles(extracted).sort((a, b) => Number(a === releaseBinary) - Number(b === releaseBinary));
