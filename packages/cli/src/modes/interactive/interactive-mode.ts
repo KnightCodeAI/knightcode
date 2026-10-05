@@ -545,6 +545,7 @@ export class InteractiveMode {
 	private backgroundUpdater: BackgroundUpdater | undefined;
 	private updateNotice: ThemedText | undefined;
 	private updateState: BackgroundUpdateState | undefined;
+	private updateNoteVersion: string | undefined;
 
 	// Extension UI state
 	private extensionSelector: ExtensionSelectorComponent | undefined = undefined;
@@ -4607,17 +4608,22 @@ export class InteractiveMode {
 	private showBackgroundUpdateNotification(state: BackgroundUpdateState): void {
 		if (!this.isInitialized || this.isShuttingDown) return;
 		const previous = this.updateState;
-		const firstNotice = !previous;
 		this.updateState = state;
+		// A release note is shown once per version, whichever notice comes first.
+		const noteShown = this.updateNoteVersion === state.release.version;
+		this.updateNoteVersion = state.release.version;
 		if (state.phase === "available") {
 			this.updateNotice = undefined;
 			this.renderWidgets();
-			// Also after "downloading", when the worker found an install it cannot update.
-			if (previous?.phase !== "available") this.showNewVersionNotification(state.release);
+			// Also after "downloading", when the worker found an install it cannot update,
+			// and again when an hourly check finds a newer release.
+			if (previous?.phase !== "available" || previous.release.version !== state.release.version) {
+				this.showNewVersionNotification(noteShown ? { ...state.release, note: undefined } : state.release);
+			}
 			return;
 		}
 		const note = state.release.note?.trim();
-		if (firstNotice && note) {
+		if (!noteShown && note) {
 			this.chatContainer.addChild(new Spacer(1));
 			this.chatContainer.addChild(
 				new Markdown(note, 4, 0, this.getMarkdownThemeWithSettings(), {

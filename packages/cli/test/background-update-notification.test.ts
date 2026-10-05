@@ -2,7 +2,7 @@ import { Container } from "@knightcode/tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import type { ThemedText } from "../src/modes/interactive/components/themed-text.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { getMarkdownTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
 import type { BackgroundUpdateState } from "../src/utils/background-update.ts";
 
 const methods = InteractiveMode.prototype as unknown as {
@@ -21,6 +21,9 @@ function fixture() {
 		isShuttingDown: false,
 		updateState: undefined as BackgroundUpdateState | undefined,
 		updateNotice: undefined as ThemedText | undefined,
+		updateNoteVersion: undefined as string | undefined,
+		chatContainer: new Container(),
+		getMarkdownThemeWithSettings: getMarkdownTheme,
 		widgetContainerBelow: new Container(),
 		renderWidgets: vi.fn(),
 		showStatus: vi.fn(),
@@ -28,6 +31,10 @@ function fixture() {
 		updateTerminalTitle: vi.fn(),
 		sessionManager: { isPersisted: () => false },
 	};
+}
+
+function render(container: Container): string {
+	return container.children.flatMap((child) => child.render(120)).join("\n");
 }
 
 describe("update notices", () => {
@@ -59,6 +66,23 @@ describe("update notices", () => {
 		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "available" });
 		expect(target.updateNotice).toBeUndefined();
 		expect(target.showNewVersionNotification).toHaveBeenCalledOnce();
+	});
+
+	it("shows the manual banner again when an hourly check finds a newer release", () => {
+		const target = fixture();
+		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "available" });
+		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.2" }, phase: "available" });
+		expect(target.showNewVersionNotification).toHaveBeenCalledTimes(2);
+		expect(target.showNewVersionNotification).toHaveBeenLastCalledWith(expect.objectContaining({ version: "1.0.2" }));
+	});
+
+	it("does not repeat a release note when the download falls back to the manual banner", () => {
+		const target = fixture();
+		const release = { version: "1.0.1", note: "Breaking: config moved" };
+		methods.showBackgroundUpdateNotification.call(target, { release, phase: "downloading" });
+		expect(render(target.chatContainer)).toContain("Breaking: config moved");
+		methods.showBackgroundUpdateNotification.call(target, { release, phase: "available" });
+		expect(target.showNewVersionNotification).toHaveBeenCalledWith({ version: "1.0.1", note: undefined });
 	});
 
 	it("does not repaint a stopped TUI", () => {
