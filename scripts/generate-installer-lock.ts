@@ -71,7 +71,15 @@ function resolveLock(): { version?: string } | undefined {
 			console.error(`npm install --package-lock-only exited with ${npm.status ?? "unknown"}`);
 			return undefined;
 		}
-		return JSON.parse(readFileSync(join(stage, "package-lock.json"), "utf8")) as { version?: string };
+		const lock = JSON.parse(readFileSync(join(stage, "package-lock.json"), "utf8")) as { version?: string };
+		// A stale platform packument does not fail the install: npm drops an
+		// unresolvable optional dependency silently. Retry that too.
+		const missing = missingPlatformPackages(lock);
+		if (missing.length > 0) {
+			console.error(`installer lock is missing platform packages: ${missing.join(", ")}`);
+			return undefined;
+		}
+		return lock;
 	} finally {
 		rmSync(stage, { recursive: true, force: true });
 	}
@@ -92,10 +100,6 @@ if (!lock) throw new Error(`Could not resolve the installer lock for ${version} 
 if (lock.version !== version) lock.version = version;
 const lockError = validateInstallerLock(lock, version);
 if (lockError) throw new Error(lockError);
-const missing = missingPlatformPackages(lock);
-if (missing.length > 0) {
-	throw new Error(`installer lock is missing platform packages: ${missing.join(", ")}`);
-}
 
 const body = `${JSON.stringify(lock, null, 2)}\n`;
 const out = readArg("--out");
