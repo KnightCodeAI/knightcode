@@ -21,6 +21,7 @@ import { homedir, constants as osConstants, tmpdir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Context } from "@knightcode/chord";
+import { StreamDecoder } from "./decode.ts";
 import {
 	type BinaryReader,
 	type DirReader,
@@ -30,6 +31,8 @@ import {
 	FileError,
 	type FileInfo,
 	type FileKind,
+	type FileWatcher,
+	type LineScan,
 	ok,
 	type Result,
 	type ShellExecOptions,
@@ -38,7 +41,11 @@ import {
 	type TextLine,
 	type TextLineReader,
 	toError,
+	type WatchChange,
+	type WatchTarget,
 } from "./index.ts";
+import { LineScanner } from "./line-scan.ts";
+import { NodeFileWatcher, type NodeWatchOptions } from "./node-watch.ts";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const MAX_TIMEOUT_SECONDS = MAX_TIMEOUT_MS / 1000;
@@ -380,7 +387,7 @@ function waitForChildProcess(
 class NodeTextLineReader implements TextLineReader {
 	private readonly file: Awaited<ReturnType<typeof openFile>>;
 	private readonly path: string;
-	private readonly decoder = new TextDecoder();
+	private readonly decoder = new StreamDecoder();
 	private readonly chunk = new Uint8Array(64 * 1024);
 	private byteOffset = 0;
 	private buffered = "";
@@ -421,7 +428,7 @@ class NodeTextLineReader implements TextLineReader {
 					this.buffered += this.decoder.decode();
 					this.ended = true;
 				} else {
-					this.buffered += this.decoder.decode(this.chunk.subarray(0, bytesRead), { stream: true });
+					this.buffered += this.decoder.decode(this.chunk.subarray(0, bytesRead));
 				}
 			}
 		} catch (error) {
@@ -498,6 +505,34 @@ class NodeBinaryReader implements BinaryReader {
 		return ok(bytes);
 	}
 
+	async scanLines(
+		options: { startLine: number; endLine?: number },
+		context: Context,
+	): Promise<Result<LineScan, FileError>> {
+		const aborted = abortResult<LineScan>(context.abortSignal, this.path);
+		if (aborted) return aborted;
+		if (this.closed) return closedResult("Binary reader", this.path);
+		let scanner: LineScanner;
+		try {
+			scanner = new LineScanner(options.startLine, options.endLine);
+		} catch {
+			return err(new FileError("invalid", "Invalid line range", this.path));
+		}
+		const chunk = new Uint8Array(64 * 1024);
+		try {
+			for (let position = 0; ;) {
+				const { bytesRead } = await this.file.read(chunk, 0, chunk.length, position);
+				const afterReadAbort = abortResult<LineScan>(context.abortSignal, this.path);
+				if (afterReadAbort) return afterReadAbort;
+				if (bytesRead === 0) return ok(scanner.finish());
+				scanner.push(chunk.subarray(0, bytesRead));
+				position += bytesRead;
+			}
+		} catch (error) {
+			return err(toFileError(error, this.path));
+		}
+	}
+
 	async close(_context: Context): Promise<void> {
 		if (this.closed) return;
 		this.closed = true;
@@ -568,12 +603,39 @@ export class NodeExecutionEnv implements ExecutionEnv {
 	cwd: string;
 	private shellPath?: string;
 	private shellEnv?: NodeJS.ProcessEnv;
+	private watchOptions: NodeWatchOptions;
 	private activeChildPids = new Set<number>();
 
-	constructor(options: { cwd: string; shellPath?: string; shellEnv?: NodeJS.ProcessEnv }) {
+	constructor(options: { cwd: string; shellPath?: string; shellEnv?: NodeJS.ProcessEnv; watch?: NodeWatchOptions }) {
 		this.cwd = options.cwd;
 		this.shellPath = options.shellPath;
 		this.shellEnv = options.shellEnv;
+		this.watchOptions = options.watch ?? {};
+	}
+
+	async watch(
+		targets: readonly WatchTarget[],
+		onChange: (change: WatchChange) => void,
+		context: Context,
+	): Promise<Result<FileWatcher, FileError>> {
+		const aborted = abortResult<FileWatcher>(context.abortSignal);
+		if (aborted) return aborted;
+		try {
+			const watcher = await NodeFileWatcher.open(
+				targets,
+				(path) => resolvePath(this.cwd, path),
+				onChange,
+				this.watchOptions,
+			);
+			const afterOpenAbort = abortResult<FileWatcher>(context.abortSignal);
+			if (afterOpenAbort) {
+				await watcher.close(context);
+				return afterOpenAbort;
+			}
+			return ok(watcher);
+		} catch (error) {
+			return err(toFileError(error));
+		}
 	}
 
 	async absolutePath(path: string, _context: Context): Promise<Result<string, FileError>> {
@@ -650,8 +712,8 @@ export class NodeExecutionEnv implements ExecutionEnv {
 				onAbort();
 			};
 			// One decoder per stream, so a character split across chunks of one stream survives interleaving.
-			const stdoutDecoder = new TextDecoder();
-			const stderrDecoder = new TextDecoder();
+			const stdoutDecoder = new StreamDecoder();
+			const stderrDecoder = new StreamDecoder();
 			// No output reaches the caller after exec() settled, for example from a descendant holding stdio open.
 			const emit = (text: string, stream: ShellOutputInfo["stream"]): void => {
 				if (settled || text === "" || options?.onOutput === undefined || callbackError !== undefined) return;
@@ -762,26 +824,25 @@ export class NodeExecutionEnv implements ExecutionEnv {
 				else signal.addEventListener("abort", onAbort, { once: true });
 			}
 
-			const feed =
-				(source: ShellOutputInfo["stream"], decoder: InstanceType<typeof TextDecoder>) => (chunk: Uint8Array) => {
-					emit(decoder.decode(chunk, { stream: true }), source);
-					const spill = options?.spill;
-					if (spill === undefined || chunk.length === 0) return;
-					if (spillStart !== undefined) {
-						startSpill(chunk);
-						return;
-					}
-					seenBytes += chunk.length;
-					for (let index = chunk.indexOf(0x0a); index !== -1; index = chunk.indexOf(0x0a, index + 1)) seenNewlines++;
-					const lines = seenNewlines + (chunk[chunk.length - 1] === 0x0a ? 0 : 1);
-					if (seenBytes <= spill.afterBytes && lines <= spill.afterLines) {
-						spillPrefix.push(chunk);
-						return;
-					}
-					for (const prefix of spillPrefix) startSpill(prefix);
-					spillPrefix.length = 0;
+			const feed = (source: ShellOutputInfo["stream"], decoder: StreamDecoder) => (chunk: Uint8Array) => {
+				emit(decoder.decode(chunk), source);
+				const spill = options?.spill;
+				if (spill === undefined || chunk.length === 0) return;
+				if (spillStart !== undefined) {
 					startSpill(chunk);
-				};
+					return;
+				}
+				seenBytes += chunk.length;
+				for (let index = chunk.indexOf(0x0a); index !== -1; index = chunk.indexOf(0x0a, index + 1)) seenNewlines++;
+				const lines = seenNewlines + (chunk[chunk.length - 1] === 0x0a ? 0 : 1);
+				if (seenBytes <= spill.afterBytes && lines <= spill.afterLines) {
+					spillPrefix.push(chunk);
+					return;
+				}
+				for (const prefix of spillPrefix) startSpill(prefix);
+				spillPrefix.length = 0;
+				startSpill(chunk);
+			};
 			child.stdout?.on("data", feed("stdout", stdoutDecoder));
 			child.stderr?.on("data", feed("stderr", stderrDecoder));
 
@@ -911,7 +972,7 @@ export class NodeExecutionEnv implements ExecutionEnv {
 				await file.close().catch(() => undefined);
 				return err(
 					stats.isDirectory()
-						? new FileError("is_directory", "Is a directory", resolved)
+						? new FileError("is_directory", "EISDIR: illegal operation on a directory, read", resolved)
 						: new FileError("invalid", "Not a regular file", resolved),
 				);
 			}
@@ -1152,3 +1213,4 @@ export class NodeExecutionEnv implements ExecutionEnv {
 		this.activeChildPids.clear();
 	}
 }
+export type { NodeWatchOptions } from "./node-watch.ts";

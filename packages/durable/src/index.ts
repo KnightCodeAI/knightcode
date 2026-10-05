@@ -9,7 +9,13 @@ export {
 	UserEntry,
 } from "./entries.ts";
 export { ConversationBusy, ReadAfterWrite, StorageRejected } from "./errors.ts";
-export { AgentDoc, configure, DEFAULT_COMPACTION_POLICY, DEFAULT_RETRY_POLICY } from "./harness/agent.ts";
+export {
+	AgentDoc,
+	configure,
+	DEFAULT_COMPACTION_POLICY,
+	DEFAULT_PROGRESS_POLICY,
+	DEFAULT_RETRY_POLICY,
+} from "./harness/agent.ts";
 export {
 	type CompactionCheckpoint,
 	type CompactionInput,
@@ -67,6 +73,7 @@ export type {
 	HooksOf,
 	InputSubmissionDraft,
 	ModelRef,
+	ProgressPolicy,
 	PromptInput,
 	PromptSection,
 	QueueMode,

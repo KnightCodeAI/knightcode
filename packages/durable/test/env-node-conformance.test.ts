@@ -4,13 +4,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { afterEach, describe, expect, it } from "vitest";
-import { getOrThrow } from "../src/env/index.ts";
+import { getOrThrow, type WatchChange } from "../src/env/index.ts";
 import { NodeExecutionEnv } from "../src/env/node.ts";
 import { registerEnvConformance } from "../src/testing/index.ts";
 
 const windows = process.platform === "win32";
 const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
 const context = BACKGROUND_CONTEXT;
+
+/**
+ * Remove a test directory. On Windows, `taskkill /T` runs asynchronously and can miss descendants such as Git Bash's
+ * `sleep`, so a killed command's processes can hold the directory for a while after `exec` settles; retry until they
+ * exit.
+ */
+async function removeTempDir(dir: string): Promise<void> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			rmSync(dir, { recursive: true, force: true });
+			return;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			if (attempt >= 80 || (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY")) throw error;
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+	}
+}
 
 registerEnvConformance(
 	{ describe, expect, it },
@@ -20,14 +38,56 @@ registerEnvConformance(
 		try {
 			await use(new NodeExecutionEnv({ cwd }));
 		} finally {
-			// On Windows, `taskkill /T` runs asynchronously, so a killed command's descendants can still hold the
-			// directory briefly after `exec` settles; retry on EBUSY.
-			rmSync(cwd, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+			await removeTempDir(cwd);
 		}
 	},
 	// Git Bash's `ln -s` copies instead of linking unless native symlinks are enabled.
 	windows ? { shell: [gitBash, "-c"], symlinks: false } : {},
 );
+
+registerEnvConformance(
+	{ describe, expect, it },
+	"NodeExecutionEnv conformance with polling watches",
+	async (use) => {
+		const cwd = mkdtempSync(join(tmpdir(), "knightcode-durable-env-conformance-"));
+		try {
+			await use(new NodeExecutionEnv({ cwd, watch: { mode: "polling", pollIntervalMs: 100 } }));
+		} finally {
+			await removeTempDir(cwd);
+		}
+	},
+	windows ? { shell: [gitBash, "-c"], symlinks: false } : {},
+);
+
+describe("NodeExecutionEnv watch limits", () => {
+	it("refuses a tree over the directory budget and stops with an error when one grows past it", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "knightcode-durable-env-watch-"));
+		try {
+			const env = new NodeExecutionEnv({ cwd, watch: { maxDirectories: 3 } });
+			getOrThrow(await env.createDir("tree/a/b", undefined, context));
+			getOrThrow(await env.createDir("tree/c", undefined, context));
+			expect(await env.watch([{ path: "tree", recursive: true }], () => {}, context)).toMatchObject({
+				ok: false,
+				error: { code: "invalid" },
+			});
+
+			getOrThrow(await env.remove("tree/c", { recursive: true }, context));
+			const changes: WatchChange[] = [];
+			const watcher = getOrThrow(
+				await env.watch([{ path: "tree", recursive: true }], (change) => changes.push(change), context),
+			);
+			getOrThrow(await env.createDir("tree/d", undefined, context));
+			const deadline = Date.now() + 3000;
+			while (!changes.some((change) => "error" in change) && Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, 20));
+			}
+			expect(changes.at(-1)).toMatchObject({ error: { code: "invalid" } });
+			await watcher.close(context);
+		} finally {
+			await removeTempDir(cwd);
+		}
+	});
+});
 
 describe("NodeExecutionEnv readers", () => {
 	const dirs: string[] = [];
@@ -36,9 +96,9 @@ describe("NodeExecutionEnv readers", () => {
 		dirs.push(dir);
 		return dir;
 	};
-	afterEach(() => {
-		for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
-	});
+	afterEach(async () => {
+		for (const dir of dirs.splice(0)) await removeTempDir(dir);
+	}, 15_000);
 
 	it("reads ranges spanning several internal chunks exactly", async () => {
 		const cwd = tempDir();
