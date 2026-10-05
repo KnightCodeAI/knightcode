@@ -41,20 +41,10 @@ const LOGO = [
 	"  ▀▀▀▀▀▀▀▀▀▀▀▀▀  ",
 ];
 
-/**
- * The knight for macOS Terminal, in whole cells. Terminal draws block characters from the font, short of the cell
- * edges, so every half block touching the body left a dark gap; only a cell's background reaches its edges. The
- * snout, ears and base were all half-block steps, so this is redrawn for whole cells at the same size.
- */
-const APPLE_TERMINAL_LOGO = [
-	"      ██  ██     ",
-	"    █████████    ",
-	"████████████████ ",
-	"█    ███████████ ",
-	"    ██████████   ",
-	"  ███████████    ",
-	"  █████████████  ",
-];
+/** The knight's pixels, a row per half cell, `true` where filled; the empty last row is dropped. */
+const PIXELS = LOGO.flatMap((line) =>
+	[0, 1].map((half) => [...line].map((ch) => ch === "█" || ch === (half ? "▄" : "▀"))),
+).filter((row, y, rows) => rows.slice(y).some((rest) => rest.includes(true)));
 
 // The site's brand ramp (apps/web: --brand #ff6a00 and the hero shader's warm stops), amber to ember.
 // Light terminals get a deeper ramp: pale amber washes out on a white background.
@@ -111,10 +101,7 @@ function shimmer(theme: Theme, x: number, y: number, time: number): Color {
 /** The knight drawn in half-cell pixels: a full block becomes `▀` over a background, so each half has its own color. */
 function knight(theme: Theme, time: number): string[] {
 	const mode = theme.getColorMode();
-	// In macOS Terminal full cells are background-colored spaces, one color each (the halves' mix): a `▀` falls short
-	// of the cell edges there and showed the background around every cell as a grid.
-	const appleTerminal = process.env.TERM_PROGRAM === "Apple_Terminal";
-	return (appleTerminal ? APPLE_TERMINAL_LOGO : LOGO).map((line, row) => {
+	return LOGO.map((line, row) => {
 		// Colors are written only when they change and reset once per row; per-cell resets bloated every frame.
 		let out = "";
 		let fg = "";
@@ -134,14 +121,34 @@ function knight(theme: Theme, time: number): string[] {
 		// checkerboard. Ramping by row alone gives clean horizontal bands instead.
 		const color = (x: number, half: number) => shimmer(theme, mode === "truecolor" ? x : 0, row * 2 + half, time);
 		[...line].forEach((ch, x) => {
-			if (ch === "█" && appleTerminal)
-				cell(" ", "", backgroundAnsi(mixColors(color(x, 0), color(x, 1), 0.5, "srgb"), mode));
-			else if (ch === "█") cell("▀", foregroundAnsi(color(x, 0), mode), backgroundAnsi(color(x, 1), mode));
+			if (ch === "█") cell("▀", foregroundAnsi(color(x, 0), mode), backgroundAnsi(color(x, 1), mode));
 			else if (ch === "▀") cell(ch, foregroundAnsi(color(x, 0), mode), "");
 			else if (ch === "▄") cell(ch, foregroundAnsi(color(x, 1), mode), "");
 			else cell(ch, "", "");
 		});
-		return fg || bg ? `${out}\x1b[39;49m` : out;
+		return fg ? `${out}\x1b[39;49m` : out;
+	});
+}
+
+/**
+ * The knight at double size, each pixel a two-column cell of background color. macOS Terminal draws block
+ * characters from the font, short of the cell edges, so the half-cell knight showed dark gaps and a grid there;
+ * only a cell's background reaches its edges.
+ */
+function bigKnight(theme: Theme, time: number): string[] {
+	const mode = theme.getColorMode();
+	return PIXELS.map((pixels, y) => {
+		let out = "";
+		let bg = "";
+		pixels.forEach((filled, x) => {
+			const next = filled ? backgroundAnsi(shimmer(theme, mode === "truecolor" ? x : 0, y, time), mode) : "";
+			if (next !== bg) {
+				out += next || "\x1b[49m";
+				bg = next;
+			}
+			out += "  ";
+		});
+		return bg ? `${out}\x1b[49m` : out;
 	});
 }
 
@@ -190,8 +197,12 @@ export class KnightHeader implements Component {
 			this.time = Math.min(this.time + step, GLINT_SWEEP_SECONDS);
 			this.lastFrame = now;
 		}
-		const logoWidth = Math.max(...LOGO.map((line) => visibleWidth(line)));
-		const logo = knight(theme, this.time);
+		const big = process.env.TERM_PROGRAM === "Apple_Terminal";
+		const logo = big ? bigKnight(theme, this.time) : knight(theme, this.time);
+		const logoWidth = big ? PIXELS[0]!.length * 2 : Math.max(...LOGO.map((line) => visibleWidth(line)));
+		// Cell position to the knight's pixel space, where shimmer() works.
+		const pixelX = (col: number) => (big ? col / 2 : col);
+		const pixelY = (row: number) => (big ? row : row * 2 + 0.5);
 		const cwd = theme.fg("muted", formatCwdForFooter(this.cwd, process.env.HOME || process.env.USERPROFILE));
 		const separator = theme.fg("muted", " · ");
 		const hints = [
@@ -203,9 +214,11 @@ export class KnightHeader implements Component {
 		];
 		const name = APP_NAME === "knightcode" ? "KnightCode" : APP_NAME;
 		// The title sits in the same color space as the knight, so the glint carries on into it.
-		const title = (x: number, y: number) => {
+		const title = (col: number, row: number) => {
 			const mode = theme.getColorMode();
-			const letters = [...name].map((ch, i) => `${foregroundAnsi(shimmer(theme, x + i, y, this.time), mode)}${ch}`);
+			const letters = [...name].map(
+				(ch, i) => `${foregroundAnsi(shimmer(theme, pixelX(col + i), pixelY(row), this.time), mode)}${ch}`,
+			);
 			return `${theme.bold(`${letters.join("")}\x1b[39m`)}${theme.fg("dim", ` v${VERSION}`)}`;
 		};
 
@@ -216,10 +229,10 @@ export class KnightHeader implements Component {
 		const textWidth = Math.max(visibleWidth(`${name} v${VERSION}`), ...below.map((line) => visibleWidth(line)));
 		const fit = (line: string) => truncateToWidth(`${indent}${line}`, width);
 		if (indent.length + logoWidth + gap.length + textWidth > width) {
-			return ["", ...logo.map(fit), "", ...[title(0, (LOGO.length + 1) * 2), ...below].map(fit), ""];
+			return ["", ...logo.map(fit), "", ...[title(0, logo.length + 1), ...below].map(fit), ""];
 		}
-		const top = Math.floor((LOGO.length - below.length - 1) / 2);
-		const text = [title(logoWidth + gap.length, top * 2 + 0.5), ...below];
+		const top = Math.floor((logo.length - below.length - 1) / 2);
+		const text = [title(logoWidth + gap.length, top), ...below];
 		return ["", ...logo.map((line, row) => fit(`${line}${gap}${text[row - top] ?? ""}`)), ""];
 	}
 }
