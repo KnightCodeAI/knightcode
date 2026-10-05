@@ -2,4 +2,4 @@
 "@knightcodeai/cli": patch
 ---
 
-Fixed dark hairlines cutting through the startup knight in macOS Terminal.
+Fixed a grid of thin lines showing through the startup knight in macOS Terminal.

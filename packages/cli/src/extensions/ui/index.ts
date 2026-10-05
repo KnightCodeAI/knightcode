@@ -96,19 +96,15 @@ function shimmer(theme: Theme, x: number, y: number, time: number): Color {
 /** The knight drawn in half-cell pixels: a full block becomes `▀` over a background, so each half has its own color. */
 function knight(theme: Theme, time: number): string[] {
 	const mode = theme.getColorMode();
+	// macOS Terminal draws `▀` from the font, short of the cell edges, so the background shows around every full cell
+	// as a grid. A space fills its whole cell with the background, so there full cells take one color, the halves' mix.
 	const appleTerminal = process.env.TERM_PROGRAM === "Apple_Terminal";
-	const filled = (row: number, x: number, halves: string) => halves.includes(LOGO[row]?.[x] ?? " ");
 	return LOGO.map((line, row) => {
 		// Colors are written only when they change and reset once per row; per-cell resets bloated every frame.
 		let out = "";
 		let fg = "";
 		let bg = "";
-		let reversed = false;
-		const cell = (ch: string, nextFg: string, nextBg: string, reverse = false) => {
-			if (reverse !== reversed) {
-				out += reverse ? "\x1b[7m" : "\x1b[27m";
-				reversed = reverse;
-			}
+		const cell = (ch: string, nextFg: string, nextBg: string) => {
 			if (nextFg && nextFg !== fg) {
 				out += nextFg;
 				fg = nextFg;
@@ -123,19 +119,14 @@ function knight(theme: Theme, time: number): string[] {
 		// checkerboard. Ramping by row alone gives clean horizontal bands instead.
 		const color = (x: number, half: number) => shimmer(theme, mode === "truecolor" ? x : 0, row * 2 + half, time);
 		[...line].forEach((ch, x) => {
-			if (ch === "█") cell("▀", foregroundAnsi(color(x, 0), mode), backgroundAnsi(color(x, 1), mode));
-			// macOS Terminal draws half blocks from the font, short of the cell edge, so a lone half block touching a
-			// filled cell leaves a dark hairline. Reversed, the color fills the cell background up to that edge and the
-			// opposite half block paints the empty half in the terminal's own background.
-			else if (ch === "▀" && appleTerminal && filled(row - 1, x, "█▄"))
-				cell("▄", foregroundAnsi(color(x, 0), mode), "", true);
-			else if (ch === "▄" && appleTerminal && filled(row + 1, x, "█▀"))
-				cell("▀", foregroundAnsi(color(x, 1), mode), "", true);
+			if (ch === "█" && appleTerminal)
+				cell(" ", "", backgroundAnsi(mixColors(color(x, 0), color(x, 1), 0.5, "srgb"), mode));
+			else if (ch === "█") cell("▀", foregroundAnsi(color(x, 0), mode), backgroundAnsi(color(x, 1), mode));
 			else if (ch === "▀") cell(ch, foregroundAnsi(color(x, 0), mode), "");
 			else if (ch === "▄") cell(ch, foregroundAnsi(color(x, 1), mode), "");
 			else cell(ch, "", "");
 		});
-		return fg || reversed ? `${out}\x1b[27;39;49m` : out;
+		return fg || bg ? `${out}\x1b[39;49m` : out;
 	});
 }
 
