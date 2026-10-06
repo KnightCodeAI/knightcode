@@ -62,6 +62,14 @@ describe("provider retry classification", () => {
 		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
 	});
 
+	it.each(["The pending stream has been canceled", "The pending stream has been canceled (caused by: socket closed)"])(
+		"matches HTTP/2 pending stream cancellation: %s",
+		(errorMessage) => {
+			// Regression: REWRITE-ME.
+			expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+		},
+	);
+
 	it("matches OpenAI Responses streams that end before terminal events", () => {
 		expect(
 			isRetryableAssistantError(

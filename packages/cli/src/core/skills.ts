@@ -349,10 +349,11 @@ export const SKILL_FILE_READ_TOOLS = ["read", "bash", "powershell"] as const;
 
 export type SkillFileReadTool = (typeof SKILL_FILE_READ_TOOLS)[number];
 
-const SKILL_FILE_READ_INSTRUCTIONS: Record<SkillFileReadTool, string> = {
+const SKILL_FILE_READ_INSTRUCTIONS: Record<SkillFileReadTool | "indirect", string> = {
 	read: "Use the read tool to load a skill's file when the task matches its description.",
 	bash: "Use bash to load a skill's file when the task matches its description.",
 	powershell: "Use PowerShell to load a skill's file when the task matches its description.",
+	indirect: "Load a skill's file when the task matches its description.",
 };
 
 /**
@@ -362,8 +363,11 @@ const SKILL_FILE_READ_INSTRUCTIONS: Record<SkillFileReadTool, string> = {
  *
  * Skills with disableModelInvocation=true are excluded from the prompt
  * (they can only be invoked explicitly via /skill:name commands).
+ *
+ * `fileReadTool` names the tool that loads skill files; `indirect` names none, for a reader that
+ * is reachable only through another tool.
  */
-export function formatSkillsForPrompt(skills: Skill[], fileReadTool: SkillFileReadTool = "read"): string {
+export function formatSkillsForPrompt(skills: Skill[], fileReadTool: SkillFileReadTool | "indirect" = "read"): string {
 	const visibleSkills = skills.filter((s) => !s.disableModelInvocation);
 
 	if (visibleSkills.length === 0) {
