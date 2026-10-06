@@ -3,8 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import lockfile from "proper-lockfile";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as Config from "../src/config.ts";
 import { getActiveManagedInstallRoot, runManagedSelfUpdate } from "../src/utils/managed-self-update.ts";
 import type * as UpdateProcess from "../src/utils/update-process.ts";
+
+// The fixture runs from releases/1.0.0. Pruning keeps the running VERSION, so it must match that release.
+vi.mock("../src/config.ts", async (original) => ({
+	...(await original<typeof Config>()),
+	VERSION: "1.0.0",
+}));
 
 const runProcess = vi.hoisted(() => vi.fn());
 vi.mock("../src/utils/update-process.ts", async (original) => ({
@@ -57,11 +64,24 @@ describe("managed update staging", () => {
 		expect(readdirSync(join(root, "staging"))).toEqual([]);
 	});
 
-	it("keeps the launcher on the working release after failed verification", async () => {
+	it.each(["downloaded", "cached"])("prunes unused versions after activating a %s release", async (release) => {
+		for (const entry of ["0.9.0", "0.9.1-beta.1", "0.9.1+build.1", "notes"]) {
+			mkdirSync(join(root, "releases", entry));
+		}
+		if (release === "cached") mkdirSync(join(root, "releases", "1.0.1"));
+
+		await expect(runManagedSelfUpdate(root, "1.0.1", { quiet: true })).resolves.toBe("1.0.1");
+
+		expect(readFileSync(join(root, "current-version"), "utf8")).toBe("1.0.1\n");
+		expect(readdirSync(join(root, "releases")).sort()).toEqual(["1.0.0", "1.0.1", "notes"]);
+	});
+
+	it("keeps the launcher and releases intact after failed verification", async () => {
+		mkdirSync(join(root, "releases", "0.9.0"));
 		verifiedVersion = "bad";
 		await expect(runManagedSelfUpdate(root, "1.0.1", { quiet: true })).rejects.toThrow("expected 1.0.1");
 		expect(readFileSync(join(root, "current-version"), "utf8")).toBe("1.0.0\n");
-		expect(existsSync(join(root, "releases", "1.0.1"))).toBe(false);
+		expect(readdirSync(join(root, "releases")).sort()).toEqual(["0.9.0", "1.0.0"]);
 		expect(readdirSync(join(root, "staging"))).toEqual([]);
 	});
 
