@@ -110,7 +110,7 @@ Theme colors describe interface roles rather than individual components. Use the
 | Markdown | `md*` |
 | Tool diffs | `toolDiff*`; added and removed rows are tinted with `toolSuccessBg` and `toolErrorBg` |
 | Syntax highlighting | `syntax*` |
-| Editor modes | `border` frames the prompt at every thinking level; `bashMode` frames shell input |
+| Editor modes | `border`, mixed 35% toward `text` for contrast, frames the prompt at every thinking level; `bashMode` frames shell input |
 | HTML export | `export.pageBg`, `export.cardBg`, `export.infoBg` |
 
 The schema is the format reference. The built-in themes provide complete values that you can copy and adjust.

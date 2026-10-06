@@ -90,7 +90,9 @@ describe("status indicators", () => {
 				const label = stripAnsi(indicator.render(120)[1]!).trim();
 				expect(stripAnsi(editor.render(120)[0]!)).toContain(`── ${label} `);
 				for (const width of [1, 4, 10, 20, 80, 120]) {
-					expect(visibleWidth(editor.render(width)[0]!)).toBe(width);
+					const topBorder = editor.render(width)[0]!;
+					expect(visibleWidth(topBorder)).toBe(width);
+					expect(stripAnsi(topBorder)).not.toContain("━");
 				}
 			}
 			vi.advanceTimersByTime(1000);

@@ -398,7 +398,8 @@ export class Theme {
 	}
 
 	getEditorBorderColor(): (str: string) => string {
-		return (str: string) => this.fg("border", str);
+		const fg = mixColors(this.colors.border, this.colors.text, 0.35);
+		return (str: string) => this.style(str, { fg });
 	}
 
 	getBashModeBorderColor(): (str: string) => string {
@@ -1112,7 +1113,7 @@ export function getSelectListTheme(): SelectListTheme {
 
 export function getEditorTheme(): EditorTheme {
 	return {
-		borderColor: (text: string) => theme.fg("border", text),
+		borderColor: (text: string) => theme.getEditorBorderColor()(text),
 		selectList: getSelectListTheme(),
 	};
 }

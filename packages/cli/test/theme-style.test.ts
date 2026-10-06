@@ -33,6 +33,27 @@ afterEach(() => {
 });
 
 describe("theme styles", () => {
+	it.each(["dark", "light"] as const)(
+		"gives the input border more contrast in %s without changing other borders",
+		(base) => {
+			const theme = loadTheme(base, (json) => {
+				json.colors.border = base === "dark" ? "#404040" : "#c0c0c0";
+				json.colors.text = base === "dark" ? "#c0c0c0" : "#404040";
+			});
+			const border = theme.getEditorBorderColor()("─");
+			const channels = /^\x1b\[38;2;(\d+);(\d+);(\d+)m─\x1b\[39m$/.exec(border);
+			expect(channels).not.toBeNull();
+			for (const channel of channels!.slice(1)) {
+				expect(Number(channel)).toBeGreaterThan(64);
+				expect(Number(channel)).toBeLessThan(192);
+			}
+			expect(colorToHex(theme.colors.border)).toBe(base === "dark" ? "#404040" : "#c0c0c0");
+			expect(theme.fg("border", "─")).toBe(
+				base === "dark" ? "\x1b[38;2;64;64;64m─\x1b[39m" : "\x1b[38;2;192;192;192m─\x1b[39m",
+			);
+		},
+	);
+
 	it("renders theme tokens the same as the generic text styler", () => {
 		const theme = loadTheme("dark");
 		expect(theme.style("Ready", { fg: "success", bg: "toolSuccessBg", bold: true })).toBe(
