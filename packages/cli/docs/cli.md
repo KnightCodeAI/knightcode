@@ -148,7 +148,7 @@ The MCP resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `re
 | `find` | Find paths using glob patterns |
 | `ls` | List directory contents |
 
-The [web tools](usage.md#web-tools) `webfetch` and `websearch` are off until enabled with `/tools`. A tool excluded here stays off whatever `/tools` says.
+The [web tools](usage.md#web-tools) `webfetch` and `websearch` and the [question tool](usage.md#questions) `ask_user` are off until enabled with `/tools` or named here. A tool excluded here stays off whatever `/tools` says, and one turned off with `/tools` stays off even when named here.
 
 Built-in extensions add two more tools. They are off by default; the MCP extension turns them on when an MCP server needs them (see [MCP](mcp.md#exposure)). To enable them yourself, name them in `--tools` or `defaultTools`.
 

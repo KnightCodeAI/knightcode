@@ -92,6 +92,8 @@ The dedicated history actions browse prompt history regardless of cursor positio
 | `tui.select.down` | `down` | Move selection down |
 | `tui.select.pageUp` | `pageUp` | Page up in list |
 | `tui.select.pageDown` | `pageDown` | Page down in list |
+| `tui.select.left` | `left` | Previous page of a selector, such as the previous question |
+| `tui.select.right` | `right` | Next page of a selector, such as the next question |
 | `tui.select.confirm` | `enter` | Confirm selection |
 | `tui.select.cancel` | `escape`, `ctrl+c` | Cancel selection |
 

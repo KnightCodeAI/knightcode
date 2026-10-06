@@ -46,6 +46,15 @@ describe("KeybindingsManager", () => {
 		assert.deepStrictEqual(keybindings.getKeys("tui.altScreen.bottom"), ["ctrl+end"]);
 	});
 
+	it("binds selector page navigation to the left and right arrows", () => {
+		const keybindings = new KeybindingsManager(TUI_KEYBINDINGS);
+
+		assert.deepStrictEqual(keybindings.getKeys("tui.select.left"), ["left"]);
+		assert.deepStrictEqual(keybindings.getKeys("tui.select.right"), ["right"]);
+		assert.strictEqual(keybindings.matches("\x1b[D", "tui.select.left"), true);
+		assert.strictEqual(keybindings.matches("\x1b[C", "tui.select.right"), true);
+	});
+
 	it("does not evict selector confirm when input submit is rebound", () => {
 		const keybindings = new KeybindingsManager(TUI_KEYBINDINGS, {
 			"tui.input.submit": ["enter", "ctrl+enter"],

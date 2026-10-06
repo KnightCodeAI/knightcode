@@ -187,9 +187,16 @@ describe("updateSettings", () => {
 describe("applyActiveTools", () => {
 	beforeEach(() => resetSessionOverrides());
 
-	test("adds enabled and removes disabled registry tools, leaving others alone", () => {
+	test("adds enabled registry tools and leaves one that is only off by default active", () => {
+		// beta was activated by something else (--tools, a resumed session, another extension).
 		const pi = fakePi(["read", "beta"]);
 		expect(applyActiveTools(pi, entries, {})).toBe(true);
+		expect(pi.active).toEqual(["read", "beta", "alpha"]);
+	});
+
+	test("removes a registry tool the user turned off", () => {
+		const pi = fakePi(["read", "alpha", "beta"]);
+		applyActiveTools(pi, entries, { beta: { enabled: false } });
 		expect(pi.active).toEqual(["read", "alpha"]);
 	});
 

@@ -18,11 +18,13 @@ type Command = {
 
 function fakePi(active: string[]) {
 	const registered: string[] = [];
+	const defaultActive: Array<boolean | undefined> = [];
 	const handlers = new Map<string, Handler[]>();
 	let command: Command | undefined;
 	const pi = {
-		registerTool: (tool: { name: string }) => {
+		registerTool: (tool: { name: string; defaultActive?: boolean }) => {
 			registered.push(tool.name);
+			defaultActive.push(tool.defaultActive);
 		},
 		registerCommand: (_name: string, options: Command) => {
 			command = options;
@@ -35,7 +37,7 @@ function fakePi(active: string[]) {
 			active.splice(0, active.length, ...names);
 		},
 	} as unknown as ExtensionAPI;
-	return { pi, registered, handlers, command: () => command!, active };
+	return { pi, registered, defaultActive, handlers, command: () => command!, active };
 }
 
 type Panel = { render(width: number): string[] };
@@ -82,20 +84,28 @@ afterEach(() => {
 });
 
 describe("factory", () => {
-	test("registers every registry tool and the tools command", () => {
-		const { pi, registered, command } = fakePi([]);
+	test("registers every registry tool inactive, and the tools command", () => {
+		const { pi, registered, defaultActive, command } = fakePi([]);
 		toolsExtension(pi);
-		expect(registered).toEqual(["webfetch", "websearch"]);
-		expect(TOOLS.map((e) => e.tool.name)).toEqual(["webfetch", "websearch", "scratchpad", "classifier-gate"]);
+		expect(registered).toEqual(["webfetch", "websearch", "ask_user"]);
+		expect(defaultActive).toEqual([false, false, false]);
+		expect(TOOLS.map((e) => e.tool.name)).toEqual([
+			"webfetch",
+			"websearch",
+			"ask_user",
+			"scratchpad",
+			"classifier-gate",
+		]);
 		expect(command()).toBeDefined();
 	});
 
-	test("session_start drops the tools that are off by default and keeps one persisted on", () => {
-		writePersisted({ webfetch: { enabled: true } }, stateFile());
-		const { pi, handlers, active } = fakePi(["read", "webfetch", "websearch"]);
+	test("session_start adds enabled tools and drops only the ones turned off", () => {
+		writePersisted({ webfetch: { enabled: true }, websearch: { enabled: false } }, stateFile());
+		const { pi, handlers, active } = fakePi(["read", "websearch", "ask_user"]);
 		toolsExtension(pi);
 		for (const handler of handlers.get("session_start") ?? []) handler();
-		expect(active).toEqual(["read", "webfetch"]);
+		// ask_user is only off by default: something else (here, the starting set) activated it, so it stays.
+		expect(active).toEqual(["read", "ask_user", "webfetch"]);
 	});
 
 	test("session_start re-adds a tool enabled for the session", async () => {
@@ -156,7 +166,7 @@ describe("/tools", () => {
 		await toolsCommand("", ctx, pi);
 		expect(prompts[0]).toEqual({
 			title: "Tools",
-			options: ["webfetch — off", "websearch — off", "scratchpad — off", "classifier-gate — off"],
+			options: ["webfetch — off", "websearch — off", "ask_user — off", "scratchpad — off", "classifier-gate — off"],
 		});
 		expect(prompts[1]).toEqual({
 			title: "webfetch",
@@ -192,7 +202,10 @@ describe("/tools", () => {
 			const { ctx, notices } = fakeCtx([]);
 			await toolsCommand(args, ctx, pi);
 			expect(notices).toEqual([
-				{ message: "Usage: /tools [webfetch|websearch|scratchpad|classifier-gate] [off|on|always]", type: "error" },
+				{
+					message: "Usage: /tools [webfetch|websearch|ask_user|scratchpad|classifier-gate] [off|on|always]",
+					type: "error",
+				},
 			]);
 		}
 	});
@@ -201,6 +214,7 @@ describe("/tools", () => {
 		expect(toolsCompletions("")).toEqual([
 			{ value: "webfetch", label: "webfetch" },
 			{ value: "websearch", label: "websearch" },
+			{ value: "ask_user", label: "ask_user" },
 			{ value: "scratchpad", label: "scratchpad" },
 			{ value: "classifier-gate", label: "classifier-gate" },
 		]);
