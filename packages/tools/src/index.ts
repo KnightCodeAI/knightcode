@@ -11,7 +11,9 @@ import { registerScratchpad } from "./scratchpad.ts";
  * default, and session_start reconciles the engine's active set with that state.
  */
 export default function toolsExtension(pi: ExtensionAPI): void {
-	for (const entry of TOOLS) if (!("feature" in entry.tool)) pi.registerTool(entry.tool);
+	// Inactive on registration: session_start turns on the enabled ones, so a tool that is off by
+	// default never needs removing and stays on when something else activates it.
+	for (const entry of TOOLS) if (!("feature" in entry.tool)) pi.registerTool({ ...entry.tool, defaultActive: false });
 	pi.registerCommand("tools", {
 		description: "Enable or disable KnightCode tools: off, for this session, or by default",
 		getArgumentCompletions: (prefix) => toolsCompletions(prefix),

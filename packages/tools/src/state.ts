@@ -141,8 +141,12 @@ export function describeMode(entry: ToolEntry, persisted: PersistedState = readP
 }
 
 /**
- * Reconciles the engine's active tool set with our state. Names the engine does not know
- * (a tool dropped by --tools/--exclude-tools) are ignored by setActiveTools, so adding is safe.
+ * Reconciles the engine's active tool set with our state: enabled tools are added, and tools the
+ * user turned off with /tools are removed. A tool that is only off by default is left as it is.
+ * Registry tools never activate on registration (index.ts), so one that is active anyway was
+ * named in --tools or defaultTools, restored with a resumed session, or activated by another
+ * extension, as plan mode does with ask_user. Names the engine does not know (a tool dropped by
+ * --tools/--exclude-tools) are ignored by setActiveTools, so adding is safe.
  */
 export function applyActiveTools(
 	pi: ActiveToolsApi,
@@ -158,7 +162,7 @@ export function applyActiveTools(
 		if (enabled && !active.has(name)) {
 			active.add(name);
 			changed = true;
-		} else if (!enabled && active.has(name)) {
+		} else if (!enabled && persisted[name]?.enabled === false && active.has(name)) {
 			active.delete(name);
 			changed = true;
 		}

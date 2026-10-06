@@ -55,7 +55,7 @@ Type `/` to search the available commands. The commands you will use most often 
 - `/thinking` selects how much reasoning the current model uses. Press `Shift+Tab` to cycle through supported levels.
 - `/login` and `/logout` manage provider access.
 - `/settings` changes common preferences.
-- `/tools` turns the [web tools](#web-tools), the [scratchpad](#scratchpad), and the [classifier gate](#classifier-gate) off, on for this session, or on by default.
+- `/tools` turns the [web tools](#web-tools), [questions](#questions), the [scratchpad](#scratchpad), and the [classifier gate](#classifier-gate) off, on for this session, or on by default.
 
 Prompt templates, skills, and extensions can add more commands to the same menu. See [Choose a Model](models.md), [Configuration](configuration.md), or the complete [Slash Commands reference](slash-commands.md).
 
@@ -110,9 +110,27 @@ The same changes work without the panel:
 /tools webfetch off
 ```
 
-Settings are stored in `~/.knightcode/agent/tools.json`, owner-readable only because it can hold the Brave key. `--tools` and `--exclude-tools` still apply: a tool excluded on the command line stays off whatever `/tools` says.
+Settings are stored in `~/.knightcode/agent/tools.json`, owner-readable only because it can hold the Brave key. `--tools` and `--exclude-tools` still apply: a tool excluded on the command line stays off whatever `/tools` says, and a tool named in `--tools` or `defaultTools` is on for that session unless you turned it off with `/tools`.
 
 Fetched pages and search results are marked as untrusted in the tool output so the model treats instructions inside them as data, but treat the tools like any other network access: a fetched page can still influence what the agent does next.
+
+## Questions
+
+`/tools ask_user on` lets the agent ask you one to three multiple-choice questions and wait for your answers, instead of guessing at intent or trade-offs it cannot settle from the code. The recommended option comes first.
+
+| Key | In the question picker |
+|-----|------------------------|
+| `Up`/`Down` | Choose an option |
+| `Enter` | Answer and go to the next question; on the last one, submit |
+| `Tab` | Add a note to the chosen option |
+| `Left`/`Right` | Move between questions |
+| `Esc` | Close the note or text field; otherwise interrupt the turn |
+
+The last row, **None of the above**, opens a field for your own answer. Submitting with questions left unanswered asks first, and **Go back** returns to the first one. The keys are the `tui.select.*` and `tui.input.tab` [keybindings](keybindings.md), so remapping them changes the picker too.
+
+In RPC mode the questions arrive as `select` and `input` dialogs, one per question, without notes. With no user to ask (print and JSON modes), the tool answers at once and the agent takes the recommended options and states them as assumptions.
+
+`ask_user` is off by default. When on, its declaration adds about 230 tokens to each request.
 
 ## Scratchpad
 

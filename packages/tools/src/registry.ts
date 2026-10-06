@@ -1,5 +1,6 @@
 import type { SettingItem } from "@knightcode/tui";
 import type { ModelRegistry, Theme, ToolDefinition } from "@knightcodeai/cli";
+import { askUserTool } from "./ask/tool.ts";
 import type { ToolSettings } from "./state.ts";
 import { webfetchTool } from "./web/fetch.ts";
 import { websearchSettings } from "./web/search-settings.ts";
@@ -28,6 +29,7 @@ export interface RegisteredToolEntry {
 export const TOOLS: RegisteredToolEntry[] = [
 	{ tool: webfetchTool, defaultEnabled: false },
 	{ tool: websearchTool, defaultEnabled: false, settings: websearchSettings },
+	{ tool: askUserTool, defaultEnabled: false },
 	scratchpadEntry,
 	classifierGateEntry,
 ];
