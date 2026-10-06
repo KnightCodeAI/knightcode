@@ -274,9 +274,10 @@ Running `knightcode update` without a target updates KnightCode itself.
 
 Interactive sessions check for updates at startup and hourly. Installer-managed
 installs, writable global package manager installs, and downloaded release
-binaries update in the background. A notice near the editor shows the download,
-then **Update ready — restart to apply**. Exit when convenient and relaunch; use
-the displayed resume command to continue the saved session. Active work is never
+binaries update in the background. A right-aligned line directly above the input
+shows **Downloading vX.Y.Z**, then **Restart for vX.Y.Z** in green. Errors are red;
+waiting for another terminal is yellow. Exit when convenient and relaunch; use
+the displayed restart command to continue the saved session. Active work is never
 restarted automatically.
 
 The script installer stages and verifies a separate release before changing the
