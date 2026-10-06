@@ -7,7 +7,15 @@ import { describe, expect, it, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
-import { getEditorTheme, initTheme, loadThemeFromPath } from "../src/modes/interactive/theme/theme.ts";
+import {
+	getEditorTheme,
+	initTheme,
+	loadThemeFromPath,
+	setThemeJsonValidator,
+} from "../src/modes/interactive/theme/theme.ts";
+import { validateThemeJson } from "../src/modes/interactive/theme/theme-json.ts";
+
+setThemeJsonValidator(validateThemeJson);
 
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 

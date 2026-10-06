@@ -436,9 +436,9 @@ function Banner({ version }: { version: string }) {
 
 /**
  * While the agent runs, CustomEditor draws the status into the top border
- * itself: `╭── <spinner> Pondering… ───╮`, the spinner in the border colour and
- * the verb glimmering from it to the text colour (glimmer() in
- * status-indicator.ts).
+ * itself: `╭── <spinner> Pondering… ───╮`. The spinner and verb use the accent
+ * softened 20% toward text in oklch, with a text-coloured glimmer, matching
+ * WorkingStatusIndicator in status-indicator.ts.
  */
 function WorkingStatus({ verb }: { verb: string }) {
   const reduceMotion = useReducedMotion()
@@ -451,10 +451,17 @@ function WorkingStatus({ verb }: { verb: string }) {
   const end = Math.min(chars.length, Math.max(0, center + 2))
   return (
     <>
-      {`── ${SPINNER[frame % SPINNER.length]} `}
-      {chars.slice(0, start).join("")}
-      <span style={{ color: C.text }}>{chars.slice(start, end).join("")}</span>
-      {`${chars.slice(end).join("")} `}
+      {"── "}
+      <span
+        style={{ color: `color-mix(in oklch, ${C.accent} 80%, ${C.text})` }}
+      >
+        {`${SPINNER[frame % SPINNER.length]} `}
+        {chars.slice(0, start).join("")}
+        <span style={{ color: C.text }}>
+          {chars.slice(start, end).join("")}
+        </span>
+        {`${chars.slice(end).join("")} `}
+      </span>
     </>
   )
 }
