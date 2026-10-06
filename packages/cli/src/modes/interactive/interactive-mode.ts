@@ -142,6 +142,7 @@ import { reportBug } from "./bug-report.ts";
 import { createChatViewport } from "./chat-viewport.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
+import { BackgroundUpdateNotice } from "./components/background-update-notice.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
@@ -545,7 +546,7 @@ export class InteractiveMode {
 	private bugReportHintShown = false;
 	private installChangeWarningShown = false;
 	private backgroundUpdater: BackgroundUpdater | undefined;
-	private updateNotice: ThemedText | undefined;
+	private updateNotice: BackgroundUpdateNotice | undefined;
 	private updateState: BackgroundUpdateState | undefined;
 	private updateNoteVersion: string | undefined;
 
@@ -2506,7 +2507,7 @@ export class InteractiveMode {
 	): void {
 		container.clear();
 
-		if (widgets.size === 0 && !(container === this.widgetContainerBelow && this.updateNotice)) {
+		if (widgets.size === 0 && !(container === this.widgetContainerAbove && this.updateNotice)) {
 			if (spacerWhenEmpty) {
 				container.addChild(new Spacer(1));
 			}
@@ -2519,7 +2520,7 @@ export class InteractiveMode {
 		for (const component of widgets.values()) {
 			container.addChild(component);
 		}
-		if (container === this.widgetContainerBelow && this.updateNotice) container.addChild(this.updateNotice);
+		if (container === this.widgetContainerAbove && this.updateNotice) container.addChild(this.updateNotice);
 	}
 
 	/**
@@ -4633,30 +4634,13 @@ export class InteractiveMode {
 				}),
 			);
 		}
-		this.updateNotice ??= new ThemedText(
-			() => {
-				const current = this.updateState;
-				if (!current) return "";
-				const version = current.release.version;
-				const messages = {
-					downloading: `Downloading KnightCode ${version} in the background...`,
-					verifying: `Verifying KnightCode ${version}...`,
-					ready: `Update ${version} ready — restart to apply`,
-					failed: `Auto-update failed — retry with ${APP_NAME} update`,
-					waiting: "Another terminal is updating KnightCode; checking again later",
-					available: `${version} available`,
-				};
-				return theme.fg(current.phase === "failed" ? "warning" : "muted", messages[current.phase]);
-			},
-			1,
-			0,
-		);
+		this.updateNotice ??= new BackgroundUpdateNotice(() => this.updateState);
 		this.updateNotice.invalidate();
 		this.renderWidgets();
 		if (process.platform === "win32") this.updateTerminalTitle();
 		if (state.phase === "ready") {
 			const resume = formatResumeCommand(this.sessionManager);
-			this.showStatus(`Update ${state.release.version} ready. Exit when convenient, then run ${resume ?? APP_NAME}.`);
+			this.showStatus(`Restart: ${resume ?? APP_NAME}`);
 		}
 	}
 

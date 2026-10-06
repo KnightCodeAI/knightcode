@@ -1,18 +1,15 @@
-import { Container } from "@knightcode/tui";
+import { type Component, Container, Text, visibleWidth } from "@knightcode/tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
-import type { ThemedText } from "../src/modes/interactive/components/themed-text.ts";
-import { getMarkdownTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { getMarkdownTheme, initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 import type { BackgroundUpdateState } from "../src/utils/background-update.ts";
 
 const methods = InteractiveMode.prototype as unknown as {
 	showBackgroundUpdateNotification(state: BackgroundUpdateState): void;
-	renderWidgetContainer(
-		container: Container,
-		widgets: Map<string, ThemedText>,
-		spacer: boolean,
-		leading: boolean,
-	): void;
+	renderWidgets(): void;
+	showStatus(message: string): void;
+	renderWidgetContainer(container: Container, widgets: Map<string, Component>, spacer: boolean, leading: boolean): void;
 };
 
 function fixture() {
@@ -20,13 +17,22 @@ function fixture() {
 		isInitialized: true,
 		isShuttingDown: false,
 		updateState: undefined as BackgroundUpdateState | undefined,
-		updateNotice: undefined as ThemedText | undefined,
+		updateNotice: undefined as Component | undefined,
 		updateNoteVersion: undefined as string | undefined,
 		chatContainer: new Container(),
 		getMarkdownThemeWithSettings: getMarkdownTheme,
+		widgetContainerAbove: new Container(),
 		widgetContainerBelow: new Container(),
-		renderWidgets: vi.fn(),
-		showStatus: vi.fn(),
+		extensionWidgetsAbove: new Map<string, Component>(),
+		extensionWidgetsBelow: new Map<string, Component>(),
+		ui: { requestRender: vi.fn() },
+		renderWidgetContainer: methods.renderWidgetContainer,
+		renderWidgets: vi.fn(function (this: object) {
+			methods.renderWidgets.call(this);
+		}),
+		showStatus: vi.fn(function (this: object, message: string) {
+			methods.showStatus.call(this, message);
+		}),
 		showNewVersionNotification: vi.fn(),
 		updateTerminalTitle: vi.fn(),
 		sessionManager: { isPersisted: () => false },
@@ -44,12 +50,65 @@ describe("update notices", () => {
 		const target = fixture();
 		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "downloading" });
 		const notice = target.updateNotice;
-		expect(notice?.render(120).join("\n")).toContain("Downloading KnightCode 1.0.1");
+		expect(stripAnsi(notice!.render(120).join("\n")).trim()).toBe("Downloading v1.0.1");
 		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "ready" });
 		expect(target.updateNotice).toBe(notice);
-		expect(notice?.render(120).join("\n")).toContain("restart to apply");
-		methods.renderWidgetContainer.call(target, target.widgetContainerBelow, new Map(), false, false);
-		expect(target.widgetContainerBelow.children).toEqual([notice]);
+		expect(stripAnsi(notice!.render(120).join("\n")).trim()).toBe("Restart for v1.0.1");
+		expect(target.widgetContainerAbove.children.at(-1)).toBe(notice);
+		expect(target.widgetContainerBelow.render(120)).toEqual([]);
+		expect(stripAnsi(render(target.chatContainer))).toContain("Restart: knightcode");
+	});
+
+	it("keeps the notice directly above the input, after extension widgets", () => {
+		const target = fixture();
+		target.extensionWidgetsAbove.set("above", new Text("Above widget", 0, 0));
+		target.extensionWidgetsBelow.set("below", new Text("Below widget", 0, 0));
+		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "downloading" });
+		const lines = target.widgetContainerAbove.render(40).map(stripAnsi);
+		expect(lines.at(-2)?.trim()).toBe("Above widget");
+		expect(lines.at(-1)).toBe(" ".repeat(21) + "Downloading v1.0.1 ");
+		expect(stripAnsi(render(target.widgetContainerBelow)).trim()).toBe("Below widget");
+	});
+
+	it.each([
+		{ phase: "downloading", text: "Downloading v1.0.1", color: "muted" },
+		{ phase: "verifying", text: "Verifying v1.0.1", color: "muted" },
+		{ phase: "ready", text: "Restart for v1.0.1", color: "success" },
+		{ phase: "failed", text: "v1.0.1 failed · knightcode update", color: "error" },
+		{ phase: "waiting", text: "v1.0.1 updating elsewhere", color: "warning" },
+	] as const)("renders a concise, colored $phase notice", ({ phase, text, color }) => {
+		const target = fixture();
+		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase });
+		const lines = target.updateNotice!.render(80);
+		expect(lines).toHaveLength(1);
+		expect(stripAnsi(lines[0]!).trim()).toBe(text);
+		expect(lines[0]).toContain(theme.fg(color, text));
+		expect(visibleWidth(lines[0]!)).toBe(80);
+		expect(stripAnsi(lines[0]!)).toMatch(/\S $/);
+	});
+
+	it.each([0, 1, 8, 20, 40, 120])("fits one right-aligned line at width %s without ellipses", (width) => {
+		const target = fixture();
+		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "downloading" });
+		const lines = target.updateNotice!.render(width);
+		expect(lines).toHaveLength(1);
+		expect(visibleWidth(lines[0]!)).toBe(width);
+		expect(stripAnsi(lines[0]!)).not.toMatch(/\.\.\.|…/);
+	});
+
+	it("recolors the ready notice when the theme changes", () => {
+		const target = fixture();
+		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "ready" });
+		const darkLine = target.updateNotice!.render(80)[0];
+		try {
+			initTheme("light");
+			target.widgetContainerAbove.invalidate();
+			const lightLine = target.updateNotice!.render(80)[0];
+			expect(lightLine).not.toBe(darkLine);
+			expect(lightLine).toContain(theme.fg("success", "Restart for v1.0.1"));
+		} finally {
+			initTheme("dark");
+		}
 	});
 
 	it("does not repeat the manual update banner on each hourly check", () => {
@@ -65,6 +124,8 @@ describe("update notices", () => {
 		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "downloading" });
 		methods.showBackgroundUpdateNotification.call(target, { release: { version: "1.0.1" }, phase: "available" });
 		expect(target.updateNotice).toBeUndefined();
+		expect(stripAnsi(render(target.widgetContainerAbove)).trim()).toBe("");
+		expect(target.widgetContainerBelow.render(120)).toEqual([]);
 		expect(target.showNewVersionNotification).toHaveBeenCalledOnce();
 	});
 
