@@ -1,5 +1,5 @@
 ---
-"@knightcodeai/cli": major
+"@knightcodeai/cli": minor
 ---
 
 Changed the prompt input border to use the theme's `border` color at every thinking level; the footer still shows
