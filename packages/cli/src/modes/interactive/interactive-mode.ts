@@ -1148,8 +1148,10 @@ export class InteractiveMode {
 				.finally(() => clearTimeout(timeout));
 		}
 
-		this.backgroundUpdater = new BackgroundUpdater(this.version, (state) =>
-			this.showBackgroundUpdateNotification(state),
+		this.backgroundUpdater = new BackgroundUpdater(
+			this.version,
+			(state) => this.showBackgroundUpdateNotification(state),
+			() => this.settingsManager.getAutoUpdate(),
 		);
 		this.backgroundUpdater.start();
 
@@ -4920,6 +4922,7 @@ export class InteractiveMode {
 					availableThemes: getAvailableThemes(),
 					hideThinkingBlock: this.hideThinkingBlock,
 					mermaidRenderingMode: this.settingsManager.getMermaidRenderingMode(),
+					autoUpdate: this.settingsManager.getAutoUpdate(),
 					collapseChangelog: this.settingsManager.getCollapseChangelog(),
 					enableInstallTelemetry: this.settingsManager.getEnableInstallTelemetry(),
 					doubleEscapeAction: this.settingsManager.getDoubleEscapeAction(),
@@ -5029,6 +5032,9 @@ export class InteractiveMode {
 					onShowCacheMissNoticesChange: (shown) => {
 						this.settingsManager.setShowCacheMissNotices(shown);
 						this.rebuildChatFromMessages();
+					},
+					onAutoUpdateChange: (enabled) => {
+						this.settingsManager.setAutoUpdate(enabled);
 					},
 					onCollapseChangelogChange: (collapsed) => {
 						this.settingsManager.setCollapseChangelog(collapsed);
