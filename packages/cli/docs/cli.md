@@ -292,10 +292,18 @@ global updates support npm and pnpm. Source checkouts, custom binary overrides
 update notices instead.
 
 Failed background updates show a manual retry command and are retried on a later
-check. Set `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` to retain update notices without
-automatic downloads. `KNIGHTCODE_SKIP_VERSION_CHECK=1` suppresses both automatic
-checks and downloads. Explicit `knightcode update` remains available. Offline,
-print, JSON, and RPC sessions do not start background updates.
+check. Automatic updates are on by default. To retain update notices without
+automatic downloads, open `/settings` and set **Automatic updates** to `false`,
+or add `"autoUpdate": false` to your user-level `~/.knightcode/agent/settings.json` (Windows:
+`%USERPROFILE%\.knightcode\agent\settings.json`). Project settings cannot override
+this preference. See [Disable automatic updates](settings.md#disable-automatic-updates)
+for a complete example and reload instructions.
+
+Alternatively, set `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` in your shell or operating
+system environment before launching KnightCode; it overrides `autoUpdate: true`.
+`KNIGHTCODE_SKIP_VERSION_CHECK=1` suppresses both automatic checks and downloads.
+Explicit `knightcode update` remains available regardless of the setting or either
+variable. Offline, print, JSON, and RPC sessions do not start background updates.
 
 | Task | Command |
 |---|---|

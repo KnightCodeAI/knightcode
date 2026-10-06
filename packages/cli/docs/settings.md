@@ -165,9 +165,55 @@ The built-in extensions are named `builtin:mcp`, `builtin:llama.cpp`, `builtin:c
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
+| `autoUpdate` | boolean | `true` | Download KnightCode CLI updates automatically while retaining update notices when `false`. **Can only be set in agent-directory settings.** `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` overrides this setting. See [Disable automatic updates](#disable-automatic-updates). |
 | `collapseChangelog` | boolean | `false` | After an update, show a one-line notice instead of the top three changes. |
 | `enableInstallTelemetry` | boolean | `true` | Enable anonymous install/update reporting and selected provider attribution headers. Does not control update checks. |
 | `enableAnalytics` | boolean | `false` | Opt in to analytics data sharing. Currently used only by the experimental first-run setup. |
 | `warnings.anthropicExtraUsage` | boolean | `true` | Warn when Anthropic subscription authentication may use paid extra usage. |
 
 The KnightCode IDE shares `enableInstallTelemetry` rather than keeping its own. Its first run and its settings write `enableInstallTelemetry` here, except while `KNIGHTCODE_TELEMETRY` is set, because the variable outranks the setting. The engine the IDE starts sends the same ping once per IDE version, with a `knightcode-ide` user agent, and records the version it was delivered for as `lastIdeVersion`. A ping that fails is retried on the next start.
+
+### Disable automatic updates
+
+Automatic updates are **on by default**. Open `/settings`, search for
+**Automatic updates**, and change it from `true` to `false`. KnightCode saves the
+preference in your user-level `settings.json`; no restart or `/reload` is needed.
+It applies to subsequent update checks and does not cancel a download already
+running. Change it back to `true` in `/settings` to re-enable automatic updates.
+
+Alternatively, add `"autoUpdate": false` to your user-level `settings.json`:
+
+- **Windows:** `%USERPROFILE%\.knightcode\agent\settings.json`
+- **macOS / Linux:** `~/.knightcode/agent/settings.json`
+
+```json
+{
+  "autoUpdate": false
+}
+```
+
+Create the file if it does not exist; otherwise add this property to the existing
+JSON object, keeping your other settings. If `KNIGHTCODE_CODING_AGENT_DIR` overrides
+the agent directory, use `settings.json` in that directory instead. Project-local
+`.knightcode/settings.json` cannot override this preference.
+
+KnightCode still checks for new versions and shows update notices, but does not
+download or install updates automatically. Run `knightcode update` whenever you
+want to update manually. Set `autoUpdate` to `true`, or remove it, to restore
+automatic updates.
+
+After manually editing the file, restart KnightCode or run `/reload`. The new preference
+applies to subsequent update checks; it does not cancel a download already running.
+
+Environment variables are optional alternatives, set in the shell or operating
+system environment **before launching KnightCode**, not inside `settings.json`:
+
+- `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` disables automatic downloads even when
+  `autoUpdate` is `true`. Unset the variable to let the setting control downloads
+  again. The updater treats any non-empty value as disabling, including `0`.
+- `KNIGHTCODE_SKIP_VERSION_CHECK=1` disables both automatic checks and downloads.
+
+Neither variable blocks explicit `knightcode update`. Offline, print, JSON, and
+RPC sessions never start background updates. See [Command Line](cli.md#update-knightcode-or-packages)
+for update behavior and [Environment Variables](environment-variables.md#update-controls)
+for shell examples.

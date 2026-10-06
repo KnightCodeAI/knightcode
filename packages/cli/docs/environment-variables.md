@@ -86,7 +86,7 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_OFFLINE` | Disable automatic network activity, including model catalog refreshes |
 | `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS` | Set to `1`, `true`, or `yes` to stop backing up files before edits; `/undo` then rewinds the conversation only. See [Sessions](sessions.md#file-restore) |
 | `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable automatic version checks and downloads; explicit `knightcode update` still works |
-| `KNIGHTCODE_DISABLE_AUTO_UPDATE` | Set to `1` to disable automatic update downloads while retaining update notices; explicit `knightcode update` still works |
+| `KNIGHTCODE_DISABLE_AUTO_UPDATE` | Set to `1` to disable automatic update downloads while retaining update notices, overriding the user-level [`autoUpdate` setting](settings.md#disable-automatic-updates); explicit `knightcode update` still works |
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
 | `KNIGHTCODE_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
@@ -100,5 +100,40 @@ These variables are read by KnightCode itself:
 | `BRAVE_API_KEY` | Brave Search key for `websearch` when none is stored with `/tools`; see [Web tools](usage.md#web-tools) |
 | `VISUAL`, `EDITOR` | External editor fallback when `externalEditor` is unset |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
+
+### Update controls
+
+Automatic updates are on by default. For a persistent preference without
+environment variables, open `/settings` and set **Automatic updates** to `false`,
+or set `"autoUpdate": false` in your user-level `settings.json`; see
+[Disable automatic updates](settings.md#disable-automatic-updates) for file locations
+and an example.
+
+To use an environment variable instead, set it before launching KnightCode.
+For the current PowerShell terminal:
+
+```powershell
+$env:KNIGHTCODE_DISABLE_AUTO_UPDATE = "1"
+knightcode
+```
+
+To persist it for your Windows user:
+
+```powershell
+[Environment]::SetEnvironmentVariable("KNIGHTCODE_DISABLE_AUTO_UPDATE", "1", "User")
+```
+
+Then restart your terminal app or IDE so new KnightCode processes inherit it.
+On macOS or Linux, add this line to your shell profile (`~/.zshrc` or `~/.bashrc`),
+then open a new terminal:
+
+```bash
+export KNIGHTCODE_DISABLE_AUTO_UPDATE=1
+```
+
+This variable overrides `autoUpdate: true`. Any non-empty value disables automatic
+downloads, including `0`; unset it to return control to `settings.json`. To suppress
+update notices and checks too, use `KNIGHTCODE_SKIP_VERSION_CHECK=1` instead.
+Explicit `knightcode update` remains available with either variable.
 
 Provider credentials such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and provider-specific configuration are listed in [Providers](providers.md#use-an-api-key-from-the-environment).

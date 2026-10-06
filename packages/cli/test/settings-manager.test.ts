@@ -410,6 +410,59 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("autoUpdate", () => {
+		it("defaults to enabled", () => {
+			expect(SettingsManager.create(projectDir, agentDir).getAutoUpdate()).toBe(true);
+		});
+
+		it.each([true, false])("reads the global preference %s", (enabled) => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ autoUpdate: enabled }));
+			expect(SettingsManager.create(projectDir, agentDir).getAutoUpdate()).toBe(enabled);
+		});
+
+		it.each([
+			[undefined, false, true],
+			[false, true, false],
+			[true, false, true],
+		])("ignores project autoUpdate when global=%s and project=%s", (global, project, expected) => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ autoUpdate: global }));
+			writeFileSync(join(projectDir, ".knightcode", "settings.json"), JSON.stringify({ autoUpdate: project }));
+			expect(SettingsManager.create(projectDir, agentDir).getAutoUpdate()).toBe(expected);
+		});
+
+		it.each(["false", "true", null, 0])("defaults invalid global values to enabled: %j", (value) => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ autoUpdate: value }));
+			expect(SettingsManager.create(projectDir, agentDir).getAutoUpdate()).toBe(true);
+		});
+
+		it("persists changes globally without changing project settings or unrelated preferences", async () => {
+			const settingsPath = join(agentDir, "settings.json");
+			const projectSettingsPath = join(projectDir, ".knightcode", "settings.json");
+			writeFileSync(settingsPath, JSON.stringify({ theme: "dark" }));
+			writeFileSync(projectSettingsPath, JSON.stringify({ autoUpdate: true }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+
+			manager.setAutoUpdate(false);
+			await manager.flush();
+
+			expect(manager.getAutoUpdate()).toBe(false);
+			expect(SettingsManager.create(projectDir, agentDir).getAutoUpdate()).toBe(false);
+			expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({ theme: "dark", autoUpdate: false });
+			expect(JSON.parse(readFileSync(projectSettingsPath, "utf8"))).toEqual({ autoUpdate: true });
+
+			manager.setAutoUpdate(true);
+			await manager.flush();
+			expect(SettingsManager.create(projectDir, agentDir).getAutoUpdate()).toBe(true);
+		});
+
+		it("reloads external changes to the global preference", async () => {
+			const manager = SettingsManager.create(projectDir, agentDir);
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ autoUpdate: false }));
+			await manager.reload();
+			expect(manager.getAutoUpdate()).toBe(false);
+		});
+	});
+
 	describe("cacheWarming", () => {
 		it("defaults to streaming and ignores project settings", () => {
 			expect(SettingsManager.create(projectDir, agentDir).getCacheWarmingMode()).toBe("streaming");

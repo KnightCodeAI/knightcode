@@ -80,6 +80,7 @@ export interface SettingsConfig {
 	hideThinkingBlock: boolean;
 	mermaidRenderingMode: MermaidRenderingMode;
 	showCacheMissNotices: boolean;
+	autoUpdate: boolean;
 	collapseChangelog: boolean;
 	enableInstallTelemetry: boolean;
 	doubleEscapeAction: "fork" | "tree" | "none";
@@ -119,6 +120,7 @@ export interface SettingsCallbacks {
 	onHideThinkingBlockChange: (hidden: boolean) => void;
 	onMermaidRenderingModeChange: (mode: MermaidRenderingMode) => void;
 	onShowCacheMissNoticesChange: (shown: boolean) => void;
+	onAutoUpdateChange: (enabled: boolean) => void;
 	onCollapseChangelogChange: (collapsed: boolean) => void;
 	onEnableInstallTelemetryChange: (enabled: boolean) => void;
 	onDoubleEscapeActionChange: (action: "fork" | "tree" | "none") => void;
@@ -547,6 +549,14 @@ export class SettingsSelectorComponent extends Container {
 				values: ["true", "false"],
 			},
 			{
+				id: "auto-update",
+				label: "Automatic updates",
+				description:
+					"Download CLI updates automatically (on by default). false keeps update notices and manual updates. KNIGHTCODE_DISABLE_AUTO_UPDATE or KNIGHTCODE_SKIP_VERSION_CHECK can disable updates regardless of this setting.",
+				currentValue: config.autoUpdate ? "true" : "false",
+				values: ["true", "false"],
+			},
+			{
 				id: "collapse-changelog",
 				label: "Collapse changelog",
 				description: "Show condensed changelog after updates",
@@ -923,6 +933,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "cache-miss-notices":
 						callbacks.onShowCacheMissNoticesChange(newValue === "true");
+						break;
+					case "auto-update":
+						callbacks.onAutoUpdateChange(newValue === "true");
 						break;
 					case "collapse-changelog":
 						callbacks.onCollapseChangelogChange(newValue === "true");

@@ -3,6 +3,7 @@ import type * as NodeChildProcess from "node:child_process";
 import type * as Config from "../src/config.ts";
 import type * as VersionCheck from "../src/utils/version-check.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SettingsManager } from "../src/core/settings-manager.ts";
 import { BackgroundUpdater, type BackgroundUpdateState } from "../src/utils/background-update.ts";
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ vi.mock("node:child_process", async (original) => ({
 }));
 
 let updater: BackgroundUpdater;
+let settings: SettingsManager;
 let states: BackgroundUpdateState[];
 
 beforeEach(() => {
@@ -39,7 +41,12 @@ beforeEach(() => {
 	vi.stubEnv("KNIGHTCODE_DISABLE_AUTO_UPDATE", undefined);
 	vi.stubEnv("KNIGHTCODE_BIN_PATH", undefined);
 	states = [];
-	updater = new BackgroundUpdater("1.0.0", (state) => states.push(state));
+	settings = SettingsManager.inMemory();
+	updater = new BackgroundUpdater(
+		"1.0.0",
+		(state) => states.push(state),
+		() => settings.getAutoUpdate(),
+	);
 	mocks.check.mockResolvedValue({ version: "1.0.1" });
 	mocks.managedRoot.mockReturnValue("managed");
 	mocks.managedUpdate.mockImplementation(async (_root, version, options) => {
@@ -71,11 +78,54 @@ describe("background updates", () => {
 		},
 	);
 
-	it("keeps a manual update notice when automatic downloads are disabled", async () => {
-		vi.stubEnv("KNIGHTCODE_DISABLE_AUTO_UPDATE", "1");
+	it.each(["1", "0"])("lets a non-empty environment override disable autoUpdate: true (%s)", async (value) => {
+		settings = SettingsManager.inMemory({ autoUpdate: true });
+		vi.stubEnv("KNIGHTCODE_DISABLE_AUTO_UPDATE", value);
 		await updater.check();
 		expect(states.map((state) => state.phase)).toEqual(["available"]);
 		expect(mocks.managedUpdate).not.toHaveBeenCalled();
+		expect(mocks.spawn).not.toHaveBeenCalled();
+	});
+
+	it.each(["managed", undefined])(
+		"retains notices without downloading when autoUpdate is false (root=%s)",
+		async (root) => {
+			settings = SettingsManager.inMemory({ autoUpdate: false });
+			mocks.managedRoot.mockReturnValue(root);
+			await updater.check();
+			expect(states.map((state) => state.phase)).toEqual(["available"]);
+			expect(mocks.managedUpdate).not.toHaveBeenCalled();
+			expect(mocks.spawn).not.toHaveBeenCalled();
+		},
+	);
+
+	it("uses the latest preference for each check", async () => {
+		settings = SettingsManager.inMemory({ autoUpdate: false });
+		await updater.check();
+		expect(states.map((state) => state.phase)).toEqual(["available"]);
+
+		settings.setAutoUpdate(true);
+		await settings.flush();
+		await updater.check();
+		expect(states.map((state) => state.phase)).toEqual(["available", "downloading", "verifying", "ready"]);
+	});
+
+	it("honors a preference disabled while a version check is pending", async () => {
+		let finish: ((release: { version: string }) => void) | undefined;
+		mocks.check.mockImplementation(
+			() =>
+				new Promise<{ version: string }>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const pending = updater.check();
+		settings.setAutoUpdate(false);
+		await settings.flush();
+		finish?.({ version: "1.0.1" });
+		await pending;
+		expect(states.map((state) => state.phase)).toEqual(["available"]);
+		expect(mocks.managedUpdate).not.toHaveBeenCalled();
+		expect(mocks.spawn).not.toHaveBeenCalled();
 	});
 
 	it.each([{ version: "bad" }, { version: "0.9.0" }, { version: "1.0.1", packageName: "renamed-package" }])(

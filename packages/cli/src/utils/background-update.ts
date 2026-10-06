@@ -15,15 +15,17 @@ export type BackgroundUpdateState = {
 export class BackgroundUpdater {
 	private readonly currentVersion: string;
 	private readonly onState: (state: BackgroundUpdateState) => void;
+	private readonly getAutoUpdate: () => boolean;
 	private timer: NodeJS.Timeout | undefined;
 	private controller = new AbortController();
 	private running = false;
 	private stopped = false;
 	private ready = false;
 
-	constructor(currentVersion: string, onState: (state: BackgroundUpdateState) => void) {
+	constructor(currentVersion: string, onState: (state: BackgroundUpdateState) => void, getAutoUpdate: () => boolean) {
 		this.currentVersion = currentVersion;
 		this.onState = onState;
+		this.getAutoUpdate = getAutoUpdate;
 	}
 
 	start(): void {
@@ -61,7 +63,8 @@ export class BackgroundUpdater {
 				!valid(release.version) ||
 				(comparePackageVersions(release.version, this.currentVersion) ?? -1) <= 0 ||
 				(release.packageName && release.packageName !== PACKAGE_NAME) ||
-				process.env.KNIGHTCODE_DISABLE_AUTO_UPDATE
+				process.env.KNIGHTCODE_DISABLE_AUTO_UPDATE ||
+				!this.getAutoUpdate()
 			) {
 				emit("available");
 				return;
