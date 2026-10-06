@@ -245,6 +245,18 @@ export class Theme {
 	private readonly dimTokens: ReadonlySet<ThemeColor>;
 	private readonly ownAppearance: ThemeAppearance | undefined;
 	private resolvedColors: { terminal: TerminalColors; colors: Readonly<Record<ThemeToken, Color>> } | undefined;
+	private editorBorderAnsi: { colors: Readonly<Record<ThemeToken, Color>>; ansi: string } | undefined;
+	private readonly editorBorderColor = (str: string): string => {
+		const colors = this.colors;
+		// Terminal colour reports replace the resolved palette, invalidating this derived escape sequence.
+		if (this.editorBorderAnsi?.colors !== colors) {
+			this.editorBorderAnsi = {
+				colors,
+				ansi: foregroundAnsi(mixColors(colors.border, colors.text, 0.35), this.mode),
+			};
+		}
+		return `${this.editorBorderAnsi.ansi}${str}\x1b[39m`;
+	};
 
 	constructor(
 		fgColors: Record<Exclude<ThemeColor, OptionalThemeColor>, string | number> &
@@ -398,8 +410,7 @@ export class Theme {
 	}
 
 	getEditorBorderColor(): (str: string) => string {
-		const fg = mixColors(this.colors.border, this.colors.text, 0.35);
-		return (str: string) => this.style(str, { fg });
+		return this.editorBorderColor;
 	}
 
 	getBashModeBorderColor(): (str: string) => string {
