@@ -14,6 +14,11 @@ import { useReducedMotion } from "motion/react"
 
 import { cn } from "@/lib/utils"
 
+import {
+  TerminalCodeLine,
+  type TerminalCodeLineProps,
+} from "./live-terminal-code-line"
+
 /* ---------------------------------------------------------------------------
  * Palette: packages/cli/src/modes/interactive/theme/dark.json, resolved.
  * The TUI owns its own colours, so this panel stays dark in both site themes -
@@ -37,9 +42,7 @@ const C = {
   mdHeading: "#ffb870",
   mdCode: "#ffb870",
   mdListBullet: "#ff8a3d",
-  diffAdded: "#8fb573",
   diffRemoved: "#ea6f59",
-  diffContext: "#9c958d",
   synComment: "#7b756e",
   synKeyword: "#ff8a3d",
   synFunction: "#ffb870",
@@ -47,6 +50,8 @@ const C = {
   synNumber: "#f2a65a",
   synType: "#e9c46a",
   synVariable: "#d9c2a8",
+  synOperator: "#9c958d",
+  synPunctuation: "#9c958d",
 } as const
 
 /* Glyph vocabulary: packages/cli/src/modes/interactive/glyphs.ts (non-darwin set). */
@@ -206,6 +211,8 @@ type Row = {
   margin?: boolean
   /** Session banner: the ui extension's KnightHeader. */
   banner?: { version: string }
+  /** Number/sign gutter and row tint shared by diffs and file previews. */
+  code?: Omit<TerminalCodeLineProps, "children">
 }
 
 const s = (t: string, c?: string, b?: boolean): Span => ({ t, c, b })
@@ -269,9 +276,15 @@ const RowView = memo(function RowView({ row }: { row: Row }) {
           <Spans spans={row.gutter} />
         </span>
       )}
-      <span className="min-w-0 flex-1 break-words whitespace-pre-wrap">
-        <Spans spans={row.spans} />
-      </span>
+      <div className="min-w-0 flex-1 break-words whitespace-pre-wrap">
+        {row.code ? (
+          <TerminalCodeLine {...row.code}>
+            <Spans spans={row.spans} />
+          </TerminalCodeLine>
+        ) : (
+          <Spans spans={row.spans} />
+        )}
+      </div>
     </div>
   )
 })
@@ -563,11 +576,145 @@ const RUNNING: Span[] = [
   s(" Running... (escape to cancel)", C.muted),
 ]
 
-/** Write's collapsed preview: the first 10 highlighted lines (tabs as three
- *  spaces), then the remainder count. renderers/write.ts. */
+/** Write's collapsed preview: the first 10 numbered, highlighted lines (tabs
+ *  as three spaces), then the remainder count. renderers/write.ts. */
 const kw = (t: string) => s(t, C.synKeyword)
 const str = (t: string) => s(t, C.synString)
 const fn = (t: string) => s(t, C.synFunction)
+const punct = (t: string) => s(t, C.synPunctuation)
+const op = (t: string) => s(t, C.synOperator)
+
+const diffLine = (
+  lineNumber: number,
+  spans: Span[],
+  kind: TerminalCodeLineProps["kind"] = "context"
+): Partial<Row> => ({ spans, code: { lineNumber, digits: 4, kind } })
+const OMITTED: Partial<Row> = {
+  spans: [],
+  code: { digits: 4, kind: "skip" },
+}
+
+/** The update fixture keeps the CLI's old/new numbering and highlights only
+ *  added and context code. This 1-to-3 replacement is a reshaped block, so the
+ *  CLI deliberately applies no word-level emphasis to it. */
+const UPDATE_DIFF: Partial<Row>[] = [
+  OMITTED,
+  diffLine(1455, [
+    s("   "),
+    kw("async"),
+    s(" "),
+    fn("retryAfterError"),
+    punct("("),
+    s("attempt", C.synVariable),
+    punct(": "),
+    s("number", C.synType),
+    punct("): "),
+    s("Promise", C.synType),
+    op("<"),
+    s("boolean", C.synType),
+    op(">"),
+    punct(" {"),
+  ]),
+  diffLine(1456, [
+    s("      "),
+    kw("const"),
+    s(" base "),
+    op("="),
+    s(" "),
+    kw("this"),
+    punct("."),
+    s("settings"),
+    punct("."),
+    s("retryBaseMs"),
+    punct(";"),
+  ]),
+  diffLine(1457, [
+    s("      "),
+    kw("if"),
+    punct(" ("),
+    s("attempt "),
+    op(">="),
+    s(" "),
+    kw("this"),
+    punct("."),
+    s("settings"),
+    punct("."),
+    s("maxRetries"),
+    punct(") "),
+    kw("return"),
+    s(" "),
+    kw("false"),
+    punct(";"),
+  ]),
+  diffLine(1458, [
+    s("      "),
+    kw("const"),
+    s(" delay "),
+    op("="),
+    s(" base "),
+    op("*"),
+    s(" "),
+    s("2", C.synNumber),
+    s(" "),
+    op("**"),
+    s(" attempt"),
+    punct(";"),
+  ]),
+  diffLine(1459, [s("      await sleep(delay);", C.diffRemoved)], "removed"),
+  diffLine(
+    1459,
+    [s("      // cap it: an outage must not stall us", C.synComment)],
+    "added"
+  ),
+  diffLine(
+    1460,
+    [
+      s("      "),
+      kw("await"),
+      s(" "),
+      fn("sleep"),
+      punct("("),
+      s("Math", C.synType),
+      punct("."),
+      fn("min"),
+      punct("("),
+      s("delay"),
+      punct(", "),
+      s("MAX_WAIT", C.synVariable),
+      punct("));"),
+    ],
+    "added"
+  ),
+  diffLine(
+    1461,
+    [
+      s("      "),
+      kw("this"),
+      punct("."),
+      fn("emit"),
+      punct("("),
+      str('"retry"'),
+      punct(", "),
+      s("attempt"),
+      punct(");"),
+    ],
+    "added"
+  ),
+  diffLine(1462, [s("      "), kw("return"), s(" "), kw("true"), punct(";")]),
+  diffLine(1463, [punct("   }")]),
+  diffLine(1464, blank()),
+  diffLine(1465, [
+    s("   "),
+    kw("get"),
+    s(" "),
+    fn("retryCount"),
+    punct("(): "),
+    s("number", C.synType),
+    punct(" {"),
+  ]),
+  OMITTED,
+]
+
 const WRITE_PREVIEW: Span[][] = [
   [
     kw("import"),
@@ -730,6 +877,7 @@ export function LiveTerminal({
       bg: item.bg,
       margin: item.margin,
       banner: item.banner,
+      code: item.code,
     }))
     setRows((prev) => [...prev, ...next])
     return next[next.length - 1]!.id
@@ -779,18 +927,24 @@ export function LiveTerminal({
     const tool = async (
       call: { gutter: Span[]; spans: Span[] },
       latency: number,
-      result: Span[][],
-      preview: Span[][] = []
+      result: Array<Span[] | Partial<Row>>,
+      preview: Array<Span[] | Partial<Row>> = []
     ) => {
       const id = push({}, call)
       if (preview.length)
-        push({}, ...preview.map((spans) => ({ gutter: INDENT, spans })))
+        push(
+          {},
+          ...preview.map((line) => ({
+            gutter: INDENT,
+            ...(Array.isArray(line) ? { spans: line } : line),
+          }))
+        )
       await wait(latency)
       patch(id, { gutter: [s(`${BULLET} `, C.success)] })
       result.forEach((line, i) =>
         push({
           gutter: [s(i === 0 ? RESULT_GUTTER : RESULT_INDENT, C.dim)],
-          spans: line,
+          ...(Array.isArray(line) ? { spans: line } : line),
         })
       )
       await wait(180)
@@ -886,38 +1040,14 @@ export function LiveTerminal({
         toolCall("Update", [path("packages/cli/src/core/agent-session.ts")]),
         1200,
         [
-          summary(
-            "Updated packages/cli/src/core/agent-session.ts with 3 additions and 1 removal",
-            false
-          ),
-          ...[
-            "      ...",
-            " 1455    async retryAfterError(attempt: number): Promise<boolean> {",
-            " 1456       const base = this.settings.retryBaseMs;",
-            " 1457       if (attempt >= this.settings.maxRetries) return false;",
-            " 1458       const delay = base * 2 ** attempt;",
-          ].map((line) => [s(line, C.diffContext)]),
-          [s("-1459       await sleep(delay);", C.diffRemoved)],
           [
-            s(
-              "+1459       // cap it: an outage must not stall us",
-              C.diffAdded
-            ),
+            s("Added ", C.toolOutput),
+            s("3", C.toolOutput, true),
+            s(" lines, removed ", C.toolOutput),
+            s("1", C.toolOutput, true),
+            s(" line", C.toolOutput),
           ],
-          [
-            s(
-              "+1460       await sleep(Math.min(delay, MAX_WAIT));",
-              C.diffAdded
-            ),
-          ],
-          [s('+1461       this.emit("retry", attempt);', C.diffAdded)],
-          ...[
-            " 1460       return true;",
-            " 1461    }",
-            " 1462 ",
-            " 1463    get retryCount(): number {",
-            "      ...",
-          ].map((line) => [s(line, C.diffContext)]),
+          ...UPDATE_DIFF,
         ]
       )
 
@@ -930,7 +1060,10 @@ export function LiveTerminal({
             false
           ),
         ],
-        WRITE_PREVIEW
+        WRITE_PREVIEW.map((spans, index) => ({
+          spans,
+          ...(index < 10 ? { code: { lineNumber: index + 1, digits: 2 } } : {}),
+        }))
       )
 
       await tool(
