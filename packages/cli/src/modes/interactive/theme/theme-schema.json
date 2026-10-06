@@ -39,7 +39,7 @@
 		},
 		"colors": {
 			"type": "object",
-			"description": "Theme color definitions (scrollbar, thinkingMax, and search highlight colors are optional and use compatible fallbacks)",
+			"description": "Theme color definitions (scrollbar and search highlight colors are optional and use compatible fallbacks)",
 			"required": [
 				"accent",
 				"border",
@@ -85,12 +85,6 @@
 				"syntaxType",
 				"syntaxOperator",
 				"syntaxPunctuation",
-				"thinkingOff",
-				"thinkingMinimal",
-				"thinkingLow",
-				"thinkingMedium",
-				"thinkingHigh",
-				"thinkingXhigh",
 				"bashMode"
 			],
 			"properties": {
@@ -285,34 +279,6 @@
 				"syntaxPunctuation": {
 					"$ref": "#/$defs/colorValue",
 					"description": "Syntax highlighting: punctuation"
-				},
-				"thinkingOff": {
-					"$ref": "#/$defs/colorValue",
-					"description": "Thinking level border: off"
-				},
-				"thinkingMinimal": {
-					"$ref": "#/$defs/colorValue",
-					"description": "Thinking level border: minimal"
-				},
-				"thinkingLow": {
-					"$ref": "#/$defs/colorValue",
-					"description": "Thinking level border: low"
-				},
-				"thinkingMedium": {
-					"$ref": "#/$defs/colorValue",
-					"description": "Thinking level border: medium"
-				},
-				"thinkingHigh": {
-					"$ref": "#/$defs/colorValue",
-					"description": "Thinking level border: high"
-				},
-				"thinkingXhigh": {
-					"$ref": "#/$defs/colorValue",
-					"description": "Thinking level border: xhigh"
-				},
-				"thinkingMax": {
-					"$ref": "#/$defs/colorValue",
-					"description": "Thinking level border: max (falls back to thinkingXhigh when omitted)"
 				},
 				"bashMode": {
 					"$ref": "#/$defs/colorValue",

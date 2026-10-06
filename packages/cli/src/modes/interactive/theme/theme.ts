@@ -1,6 +1,5 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ThinkingLevel } from "@knightcode/agent";
 import {
 	backgroundAnsi,
 	type Color,
@@ -96,13 +95,6 @@ export type ThemeColor =
 	| "syntaxType"
 	| "syntaxOperator"
 	| "syntaxPunctuation"
-	| "thinkingOff"
-	| "thinkingMinimal"
-	| "thinkingLow"
-	| "thinkingMedium"
-	| "thinkingHigh"
-	| "thinkingXhigh"
-	| "thinkingMax"
 	| "bashMode";
 
 export type ThemeBg =
@@ -125,7 +117,7 @@ export interface ThemeStyle extends TextAttributes {
 	bg?: ThemeBg | Color;
 }
 
-type OptionalThemeColor = "scrollbarTrack" | "scrollbarThumb" | "thinkingMax" | "searchMatchText";
+type OptionalThemeColor = "scrollbarTrack" | "scrollbarThumb" | "searchMatchText";
 type OptionalThemeBg = "searchMatchBg";
 
 // ============================================================================
@@ -164,7 +156,6 @@ function resolveThemeColors<T extends Record<string, ColorValue>>(
 function withThemeColorFallbacks(colors: ThemeJson["colors"]): ThemeJson["colors"] & {
 	scrollbarTrack: ColorValue;
 	scrollbarThumb: ColorValue;
-	thinkingMax: ColorValue;
 	searchMatchBg: ColorValue;
 	searchMatchText: ColorValue;
 } {
@@ -172,7 +163,6 @@ function withThemeColorFallbacks(colors: ThemeJson["colors"]): ThemeJson["colors
 		...colors,
 		scrollbarTrack: colors.scrollbarTrack ?? colors.muted,
 		scrollbarThumb: colors.scrollbarThumb ?? colors.text,
-		thinkingMax: colors.thinkingMax ?? colors.thinkingXhigh,
 		searchMatchBg: colors.searchMatchBg ?? colors.selectedBg,
 		searchMatchText: colors.searchMatchText ?? colors.text,
 	};
@@ -280,7 +270,6 @@ export class Theme {
 			...fgColors,
 			scrollbarTrack: fgColors.scrollbarTrack ?? fgColors.muted,
 			scrollbarThumb: fgColors.scrollbarThumb ?? fgColors.text,
-			thinkingMax: fgColors.thinkingMax ?? fgColors.thinkingXhigh,
 			searchMatchText: fgColors.searchMatchText ?? fgColors.text,
 		};
 		const backgrounds = { ...bgColors, searchMatchBg: bgColors.searchMatchBg ?? bgColors.selectedBg };
@@ -408,26 +397,8 @@ export class Theme {
 		return this.mode;
 	}
 
-	getThinkingBorderColor(level: ThinkingLevel): (str: string) => string {
-		// Map thinking levels to dedicated theme colors
-		switch (level) {
-			case "off":
-				return (str: string) => this.fg("thinkingOff", str);
-			case "minimal":
-				return (str: string) => this.fg("thinkingMinimal", str);
-			case "low":
-				return (str: string) => this.fg("thinkingLow", str);
-			case "medium":
-				return (str: string) => this.fg("thinkingMedium", str);
-			case "high":
-				return (str: string) => this.fg("thinkingHigh", str);
-			case "xhigh":
-				return (str: string) => this.fg("thinkingXhigh", str);
-			case "max":
-				return (str: string) => this.fg("thinkingMax", str);
-			default:
-				return (str: string) => this.fg("thinkingOff", str);
-		}
+	getEditorBorderColor(): (str: string) => string {
+		return (str: string) => this.fg("border", str);
 	}
 
 	getBashModeBorderColor(): (str: string) => string {
@@ -1141,7 +1112,7 @@ export function getSelectListTheme(): SelectListTheme {
 
 export function getEditorTheme(): EditorTheme {
 	return {
-		borderColor: (text: string) => theme.fg("borderMuted", text),
+		borderColor: (text: string) => theme.fg("border", text),
 		selectList: getSelectListTheme(),
 	};
 }

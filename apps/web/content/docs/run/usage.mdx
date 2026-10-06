@@ -30,7 +30,8 @@ KnightCode shows each tool call and result while it works. Press `Ctrl+O` to exp
 
 The startup header shows the version, folder, and main keys, and KnightCode lists the instructions and resources it
 loaded below it. In a truecolor terminal the knight in the header shimmers once at startup, then holds still; the
-shimmer stops early if the header scrolls away. The editor frame's color indicates the current thinking level. The
+shimmer stops early if the header scrolls away. The editor frame keeps one color at every thinking level;
+the footer shows the current level. Shell input (`!` or `!!`) keeps a distinct frame color. The
 header, editor frame, and footer come from the built-in `ui` extension; set `"extensions": ["-builtin:ui"]` in
 [settings](/docs/reference/settings#resources) for the plain layout. The footer updates as the model uses context and reports usage.
 

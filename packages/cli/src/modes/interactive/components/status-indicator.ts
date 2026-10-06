@@ -1,4 +1,4 @@
-import { type Component, Loader, type TUI, truncateToWidth } from "@knightcode/tui";
+import { type Component, Loader, mixColors, type TUI, truncateToWidth } from "@knightcode/tui";
 import type { WorkingIndicatorOptions } from "../../../core/extensions/index.ts";
 import { theme } from "../theme/theme.ts";
 import { CountdownTimer } from "./countdown-timer.ts";
@@ -38,6 +38,9 @@ export class StatusIndicator extends Loader {
 /** Milliseconds per glimmer step; matches the default spinner frame, so the glimmer moves one column per frame. */
 const GLIMMER_STEP_MS = 80;
 
+/** How far the working indicator moves from the accent toward the text colour. */
+const WORKING_SOFTEN = 0.2;
+
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /**
@@ -66,26 +69,15 @@ export function glimmer(
 }
 
 export class WorkingStatusIndicator extends StatusIndicator {
-	/**
-	 * @param embeddedColor Resolved on every frame rather than captured, because the
-	 * indicator outlives editor swaps: it returns the editor's border colour while the
-	 * indicator is drawn in that border, and undefined while it is on the standalone
-	 * row, where it takes the same accent/muted styling as every other indicator.
-	 */
-	constructor(
-		ui: TUI,
-		message: string,
-		indicator?: WorkingIndicatorOptions,
-		embeddedColor?: () => ((text: string) => string) | undefined,
-	) {
+	/** Accent softened slightly toward the text colour, with a text-coloured shimmer, in the border and on its own row. */
+	constructor(ui: TUI, message: string, indicator?: WorkingIndicatorOptions) {
+		const working = (text: string) =>
+			theme.style(text, { fg: mixColors(theme.colors.accent, theme.colors.text, WORKING_SOFTEN) });
 		super(
 			"working",
 			ui,
-			(spinner) => (embeddedColor?.() ?? ((text: string) => theme.fg("accent", text)))(spinner),
-			(text) =>
-				glimmer(text, embeddedColor?.() ?? ((value: string) => theme.fg("muted", value)), (value) =>
-					theme.fg("text", value),
-				),
+			working,
+			(text) => glimmer(text, working, (value) => theme.fg("text", value)),
 			message,
 			indicator,
 		);

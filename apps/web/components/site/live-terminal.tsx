@@ -40,7 +40,6 @@ const C = {
   diffAdded: "#8fb573",
   diffRemoved: "#ea6f59",
   diffContext: "#9c958d",
-  thinkingMedium: "#c2824a",
   synComment: "#7b756e",
   synKeyword: "#ff8a3d",
   synFunction: "#ffb870",
@@ -711,7 +710,7 @@ export function LiveTerminal({
   const reduceRef = useRef(false)
 
   const bashMode = input.trimStart().startsWith("!")
-  const borderColor = bashMode ? C.bashMode : C.thinkingMedium
+  const borderColor = bashMode ? C.bashMode : C.border
 
   /* -------------------------------------------------- row helpers */
   // Ids are allocated outside the updater: React may replay updaters, and the

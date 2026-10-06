@@ -217,8 +217,8 @@ function cmdTheme(themeName: string): void {
 	console.log("\n--- Diff ---");
 	["toolDiffAdded", "toolDiffRemoved", "toolDiffContext"].forEach(logColor);
 
-	console.log("\n--- Thinking ---");
-	["thinkingOff", "thinkingMinimal", "thinkingLow", "thinkingMedium", "thinkingHigh"].forEach(logColor);
+	console.log("\n--- Editor modes ---");
+	["bashMode"].forEach(logColor);
 
 	console.log("\n--- Backgrounds ---");
 	console.log("userMessageBg:", theme.bg("userMessageBg", " Sample "));
