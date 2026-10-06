@@ -210,6 +210,10 @@ jobs:
       - name: Build the env daemon
         run: bun run --filter '@knightcode/env' build:daemon
 
+      # Same as ci.yml: the env SSH bootstrap tests start a disposable sshd on localhost.
+      - name: Install an SSH server for the env bootstrap tests
+        run: command -v sshd || test -x /usr/sbin/sshd || (sudo apt-get update && sudo apt-get install -y openssh-server)
+
       - name: Test
         run: bun run test
 
