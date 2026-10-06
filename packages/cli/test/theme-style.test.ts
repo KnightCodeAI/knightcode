@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { colorToHex, okhslColor, styleText } from "@knightcode/tui";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadThemeFromPath, setTerminalColors } from "../src/modes/interactive/theme/theme.ts";
+import {
+	getEditorTheme,
+	loadThemeFromPath,
+	setTerminalColors,
+	setThemeInstance,
+} from "../src/modes/interactive/theme/theme.ts";
 
 const tempDirs: string[] = [];
 
@@ -33,6 +38,74 @@ afterEach(() => {
 });
 
 describe("theme styles", () => {
+	it.each(["dark", "light"] as const)(
+		"gives the input border more contrast in %s without changing other borders",
+		(base) => {
+			const theme = loadTheme(base, (json) => {
+				json.colors.border = base === "dark" ? "#404040" : "#c0c0c0";
+				json.colors.text = base === "dark" ? "#c0c0c0" : "#404040";
+			});
+			// Independently derived grayscale fixtures for a 35% OKLCH mix: 64 → 192 gives 106; 192 → 64 gives 145.
+			expect(theme.getEditorBorderColor()("─")).toBe(
+				base === "dark" ? "\x1b[38;2;106;106;106m─\x1b[39m" : "\x1b[38;2;145;145;145m─\x1b[39m",
+			);
+			expect(colorToHex(theme.colors.border)).toBe(base === "dark" ? "#404040" : "#c0c0c0");
+			expect(theme.fg("border", "─")).toBe(
+				base === "dark" ? "\x1b[38;2;64;64;64m─\x1b[39m" : "\x1b[38;2;192;192;192m─\x1b[39m",
+			);
+		},
+	);
+
+	it("reuses the border callback across repeated redraws", () => {
+		const theme = loadTheme("dark");
+		const borderColor = theme.getEditorBorderColor();
+		const first = borderColor("──");
+		for (let frame = 0; frame < 3; frame++) {
+			expect(theme.getEditorBorderColor()).toBe(borderColor);
+			expect(borderColor("──")).toBe(first);
+		}
+	});
+
+	it.each(["border", "text"] as const)(
+		"refreshes an existing border callback when terminal-default %s changes",
+		(token) => {
+			const theme = loadTheme("dark", (json) => {
+				json.colors.border = "#404040";
+				json.colors.text = "#c0c0c0";
+				json.colors[token] = "";
+			});
+			const borderColor = theme.getEditorBorderColor();
+			const guessed = borderColor("─");
+			const channel = token === "border" ? 64 : 192;
+			setTerminalColors({ foreground: { r: channel, g: channel, b: channel } });
+			expect(borderColor("─")).toBe("\x1b[38;2;106;106;106m─\x1b[39m");
+			expect(borderColor("─")).not.toBe(guessed);
+			expect(theme.getEditorBorderColor()).toBe(borderColor);
+
+			const nextChannel = token === "border" ? 192 : 64;
+			setTerminalColors({ foreground: { r: nextChannel, g: nextChannel, b: nextChannel } });
+			expect(borderColor("─")).toBe(
+				token === "border" ? "\x1b[38;2;192;192;192m─\x1b[39m" : "\x1b[38;2;64;64;64m─\x1b[39m",
+			);
+		},
+	);
+
+	it("keeps existing editor themes in sync when the active theme changes", () => {
+		const dark = loadTheme("dark", (json) => {
+			json.colors.border = "#404040";
+			json.colors.text = "#c0c0c0";
+		});
+		const light = loadTheme("light", (json) => {
+			json.colors.border = "#c0c0c0";
+			json.colors.text = "#404040";
+		});
+		setThemeInstance(dark);
+		const editorTheme = getEditorTheme();
+		expect(editorTheme.borderColor("─")).toBe("\x1b[38;2;106;106;106m─\x1b[39m");
+		setThemeInstance(light);
+		expect(editorTheme.borderColor("─")).toBe("\x1b[38;2;145;145;145m─\x1b[39m");
+	});
+
 	it("renders theme tokens the same as the generic text styler", () => {
 		const theme = loadTheme("dark");
 		expect(theme.style("Ready", { fg: "success", bg: "toolSuccessBg", bold: true })).toBe(
