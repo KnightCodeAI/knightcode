@@ -148,6 +148,10 @@ for (const target of targets) {
 		compile: {
 			target: target.bunTarget,
 			outfile,
+			// A compiled binary loads a cwd bunfig.toml and .env before main. A project
+			// preload can crash startup, and a project .env would leak into the process.
+			autoloadBunfig: false,
+			autoloadDotenv: false,
 			...(target.os === "win32" ? { windows: windowsMetadata(version) } : {}),
 		},
 		define: {

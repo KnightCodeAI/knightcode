@@ -1636,7 +1636,12 @@ function buildBaseCodexHeaders(
 	accountId: string,
 	token: string,
 ): Headers {
-	const headers = new Headers(initHeaders);
+	// Defaults first so model and caller headers can override them, matching the other providers.
+	// Not branding: the provider recognises this client identifier. Renaming it breaks auth.
+	const headers = new Headers({ originator: "knightcode", "User-Agent": getKnightcodeUserAgent() });
+	for (const [key, value] of Object.entries(initHeaders || {})) {
+		headers.set(key, value);
+	}
 	for (const [key, value] of Object.entries(additionalHeaders || {})) {
 		if (value === null) {
 			headers.delete(key);
@@ -1646,9 +1651,6 @@ function buildBaseCodexHeaders(
 	}
 	headers.set("Authorization", `Bearer ${token}`);
 	headers.set("chatgpt-account-id", accountId);
-	// Not branding: upstream-recognised client identifier. Renaming it breaks auth.
-	headers.set("originator", "knightcode");
-	headers.set("User-Agent", getKnightcodeUserAgent());
 	return headers;
 }
 
