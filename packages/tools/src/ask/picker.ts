@@ -127,6 +127,8 @@ export class AskPicker implements Component, Focusable {
 			const step = kb.matches(data, "tui.select.up") ? -1 : 1;
 			state.selected = (state.selected + step + rows) % rows;
 			state.committed = false;
+			// A note is about the option it was written for; carried along, it would be sent with another.
+			state.note = "";
 		} else if (this.questions.length > 1 && kb.matches(data, "tui.select.left")) {
 			this.current = (this.current - 1 + this.questions.length) % this.questions.length;
 		} else if (this.questions.length > 1 && kb.matches(data, "tui.select.right")) {

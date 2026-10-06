@@ -116,6 +116,16 @@ describe("AskPicker", () => {
 		expect(screen()).toContain("local!");
 	});
 
+	test("choosing another option drops the note written for the previous one", () => {
+		const { press, type, result, screen } = open([db, auth]);
+		press(KEY.tab);
+		type("keep the file local");
+		press(KEY.enter, KEY.left, KEY.down);
+		expect(screen()).not.toContain("note: keep the file local");
+		press(KEY.enter, KEY.enter);
+		expect(result.answers).toEqual({ database: { label: "Postgres" }, auth: { label: "OAuth" } });
+	});
+
 	test("None of the above opens a text field and answers with the typed text", () => {
 		const { press, type, result, screen } = open([db]);
 		press(KEY.down, KEY.down);

@@ -53,6 +53,9 @@ export function validateQuestions(questions: AskQuestion[]): string | undefined 
 		ids.add(q.id);
 		if (!q.question.trim()) return `Question "${q.id}" has no text.`;
 		if (q.options.some((o) => !o.label.trim())) return `Question "${q.id}" has an option with no label.`;
+		// The answer names the chosen option by its label, so two equal labels could not be told apart.
+		const labels = new Set(q.options.map((o) => o.label.trim()));
+		if (labels.size < q.options.length) return `Question "${q.id}" repeats an option label; labels must be unique.`;
 	}
 	return undefined;
 }

@@ -126,9 +126,9 @@ Fetched pages and search results are marked as untrusted in the tool output so t
 | `Left`/`Right` | Move between questions |
 | `Esc` | Close the note or text field; otherwise interrupt the turn |
 
-The last row, **None of the above**, opens a field for your own answer. Submitting with questions left unanswered asks first, and **Go back** returns to the first one. The keys are the `tui.select.*` and `tui.input.tab` [keybindings](keybindings.md), so remapping them changes the picker too.
+The last row, **None of the above**, opens a field for your own answer. Submitting with questions left unanswered asks first, and **Go back** returns to the first one. The keys are the `tui.select.*`, `tui.input.tab` and `tui.input.submit` [keybindings](keybindings.md) (`tui.input.submit` is `Enter` in the note and answer fields), so remapping them changes the picker too.
 
-In RPC mode the questions arrive as `select` and `input` dialogs, one per question, without notes. With no user to ask (print and JSON modes), the tool answers at once and the agent takes the recommended options and states them as assumptions.
+In RPC mode the questions arrive as `select` and `input` dialogs, one per question, without notes. In a run with no one to ask, such as print and JSON modes, the tool answers at once and the agent takes the recommended options and states them as assumptions.
 
 `ask_user` is off by default. When on, its declaration adds about 230 tokens to each request.
 

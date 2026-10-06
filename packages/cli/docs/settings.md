@@ -57,7 +57,7 @@ This replaces `bash` with `powershell` and enables `grep`: `["-bash", "+powershe
 
 CLI tool options override this setting for one invocation; `--tools` does not accept `+name` or `-name`. See [Command Line](cli.md#tools).
 
-The [web tools](usage.md#web-tools) `webfetch` and `websearch` and the [question tool](usage.md#questions) `ask_user` are not part of the default `defaultTools`. `/tools` turns them on and stores their settings, including the search provider and Brave key, in `~/.knightcode/agent/tools.json`. Naming one in `defaultTools` also turns it on, unless `/tools` has it off.
+The [web tools](usage.md#web-tools) `webfetch` and `websearch` and the [question tool](usage.md#questions) `ask_user` are not part of the default `defaultTools`. `/tools` turns them on for the current session, which writes nothing to disk, or on or off by default, which is saved in `~/.knightcode/agent/tools.json` together with the `websearch` provider and Brave key. Naming one in `defaultTools` also turns it on, unless `/tools` has it off.
 
 ## Sessions and context
 

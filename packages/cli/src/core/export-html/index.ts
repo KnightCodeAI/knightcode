@@ -185,6 +185,7 @@ function preRenderCustomTools(
 	toolRenderer: ToolHtmlRenderer,
 ): Record<string, RenderedToolHtml> {
 	const renderedTools: Record<string, RenderedToolHtml> = {};
+	const calls = new Map<string, { name: string; args: unknown }>();
 
 	for (const entry of entries) {
 		if (entry.type !== "message") continue;
@@ -194,6 +195,7 @@ function preRenderCustomTools(
 		if (msg.role === "assistant" && Array.isArray(msg.content)) {
 			for (const block of msg.content) {
 				if (block.type === "toolCall" && !TEMPLATE_RENDERED_TOOLS.has(block.name)) {
+					calls.set(block.id, { name: block.name, args: block.arguments });
 					const callHtml = toolRenderer.renderCall(block.id, block.name, block.arguments);
 					if (callHtml) {
 						renderedTools[block.id] = { callHtml };
@@ -216,8 +218,13 @@ function preRenderCustomTools(
 					msg.isError || false,
 				);
 				if (rendered) {
+					// Like the TUI tool row, draw the call again once its result exists: a call row can
+					// depend on the outcome, as ask_user's "Questions 1/2 answered" heading does.
+					const call = calls.get(msg.toolCallId);
+					const callHtml = call && toolRenderer.renderCall(msg.toolCallId, call.name, call.args);
 					renderedTools[msg.toolCallId] = {
 						...existing,
+						...(callHtml ? { callHtml } : {}),
 						resultHtmlCollapsed: rendered.collapsed,
 						resultHtmlExpanded: rendered.expanded,
 					};

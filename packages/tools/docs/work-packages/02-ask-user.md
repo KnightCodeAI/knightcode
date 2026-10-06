@@ -64,7 +64,7 @@ headless run.
 | Free text | Always offered by the UI as a last "None of the above" row that opens a text field; the model never lists it | A model-controlled `allowOther` flag (one more field; the user should always be able to step outside the options) |
 | Notes | Tab on a selected option opens a one-line note; the answer carries both | Notes only through "None of the above" (loses "yes, but...") |
 | Esc / ctrl+c | With a note or text field open: close it. Otherwise: interrupt the turn, the same thing Esc does everywhere else in the TUI | Decline and continue (the model guesses anyway, which is exactly what the user just refused) |
-| No user (`!ctx.hasUI`: print, JSON, engine) | Return immediately: "No user is available. Take the recommended option for each question and list it as an assumption." Not an error | An error result (models retry); blocking forever |
+| No user (`!ctx.hasUI`: print and JSON modes, which bind no UI context) | Return immediately: "No user is available. Take the recommended option for each question and list it as an assumption." Not an error | An error result (models retry); blocking forever |
 | RPC | Per question: `ctx.ui.select` with the labels plus "None of the above", which then opens `ctx.ui.input`; no notes | A new RPC message type (protocol change for one tool) |
 | Result to the model | One plain line per question id (see Result format) | JSON (more tokens, no gain for the model) |
 | Unanswered on submit | A two-row confirmation: "Submit" / "Go back" to the first unanswered question | Blocking submit until all are answered (the user may not care about one) |
@@ -103,7 +103,12 @@ No `promptSnippet`, no `promptGuidelines`: activating the tool changes only the
 tool declarations, never the system-prompt sections.
 
 `execute` validation, returned as an error result without opening any UI:
-duplicate `id`s, an empty `question` or `label`.
+duplicate `id`s, an empty `question` or `label`, and a label repeated within a
+question (the answer names the option by its label, so equal labels could not
+be told apart).
+
+Choosing another option clears the note on the question, since a note is about
+the option it was written for.
 
 ### Result format
 
@@ -264,8 +269,8 @@ cannot see which names came from `--tools`).
 
 ## Required tests
 
-- Validation: duplicate ids and empty labels return an error without touching
-  `ctx.ui`; the schema rejects 0 or 4 questions and 1 or 5 options.
+- Validation: duplicate ids, empty labels and repeated labels return an error
+  without touching `ctx.ui`; the schema rejects 0 or 4 questions and 1 or 5 options.
 - No user (`hasUI: false`): returns the assumption text with
   `status: "no_user"` immediately, and the run continues.
 - RPC path with a fake `ctx.ui`: picks a label; "None of the above" then input
@@ -304,8 +309,12 @@ Do not add:
   header.
 - Number-key shortcuts.
 - An RPC protocol message, an ACP elicitation in the IDE engine, or remote
-  (phone) UI. The engine and remote get the no-user path.
-- Questions from subagents. They have no UI and get the no-user path.
+  (phone) UI. Engine sessions load only the permission extension
+  (`packages/cli/src/engine/sessions.ts:378`), not the tools extension, so
+  `ask_user` does not exist there yet; plan mode's engine phase decides how
+  IDE questions work.
+- Questions from subagents. Any session without a UI context gets the no-user
+  path.
 - Any system-prompt section or guideline for the tool.
 - Changes to `examples/extensions/questionnaire.ts` or `question.ts`.
 
@@ -337,8 +346,8 @@ From the repo root:
 - The TUI picker supports options, notes, free text, question navigation,
   the unanswered confirmation and interrupt, using only configurable
   keybindings.
-- RPC answers through `select` and `input`; print, JSON, the engine and
-  subagents get the no-user result without blocking.
+- RPC answers through `select` and `input`; print, JSON and any other session
+  without a UI context get the no-user result without blocking.
 - An abort closes any open picker or dialog and releases the turn.
 - The required tests pass, `bun run check-types` is clean, and the changeset
   validator passes.

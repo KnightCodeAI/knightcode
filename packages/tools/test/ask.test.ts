@@ -86,6 +86,17 @@ describe("validateQuestions", () => {
 			'Question "database" has an option with no label.',
 		);
 	});
+
+	test("rejects repeated option labels, which the answer could not tell apart", () => {
+		const repeated = {
+			...db,
+			options: [
+				{ label: "Same", description: "a" },
+				{ label: "Same ", description: "b" },
+			],
+		};
+		expect(validateQuestions([repeated])).toBe('Question "database" repeats an option label; labels must be unique.');
+	});
 });
 
 describe("formatAnswers", () => {
