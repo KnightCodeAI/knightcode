@@ -1,5 +1,21 @@
 # @knightcodeai/cli
 
+## 0.14.1
+
+### Added
+
+- Added an `ask_user` tool that lets the agent ask you one to three multiple-choice questions in a picker and wait for your answers; enable it with `/tools ask_user on`.
+
+- Added an Automatic updates toggle in `/settings` and a user-level `autoUpdate` setting, enabled by default, to disable automatic CLI update downloads while retaining update notices and manual updates, with documented configuration examples and environment-variable precedence.
+
+### Changed
+
+- Changed `/tools` so a tool named in `--tools` or `defaultTools` stays on for the session; only turning it off with `/tools` removes it.
+
+- Changed automatic update notices to a compact, right-aligned line above the input, with version tags, green restart prompts, red errors, and yellow warnings.
+
+- Changed the input bar to use a higher-contrast border while keeping its original line characters and height.
+
 ## 0.14.0
 
 ### Added
