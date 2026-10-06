@@ -1,5 +1,45 @@
 # @knightcodeai/cli
 
+## 0.14.0
+
+### Added
+
+- Added native llama.cpp classifiers for decision models such as Julia-1. llama.cpp 0.6.0 reports `decisions` in a model's output modalities, and KnightCode calls those models through the System One endpoint. Chat models still answer from next-token probabilities.
+
+- Added `*` patterns to `--tools` and `--exclude-tools`, for example `--tools read,codemode,'mcp__radius__*'`, and `--no-mcp` to disable the built-in MCP support for one run.
+
+### Changed
+
+- Changed the prompt input border to use the theme's `border` color at every thinking level; the footer still shows
+  the level and shell input keeps its `bashMode` color. The `thinking*` theme colors are no longer used.
+  Breaking change: `Theme.getThinkingBorderColor(level)` is removed; extensions must use `Theme.getEditorBorderColor()`.
+
+- Changed the working spinner and verb to the theme's accent mixed 20% toward its text color, with a shimmer in the
+  theme's text color, both in the prompt border and on the standalone status row; they no longer change color with
+  the thinking level.
+
+### Fixed
+
+- Fixed a codemode script that patched built-ins (such as `Array.prototype.toJSON = ...`) crashing the host process and leaving the call unsettled. Built-ins are now frozen before the script runs, and malformed payloads from the sandbox worker fail the call as a `sandbox` error.
+
+- Fixed codemode scripts not receiving images from `read`: `tools.read()` now resolves to an image block for image files, which `image()` shows.
+
+- Fixed Codex requests ignoring a caller's `originator` and `User-Agent` headers. Those headers now replace the defaults. Authorization and the ChatGPT account id stay fixed.
+
+- Fixed system prompt rules and the skills hint naming tools hidden by `prepareLoadout`. Hidden tools are left out of the rules, the skills hint names no tool when the file reader is hidden, and `codemode` shows each tool's prompt guidelines with its declaration; `ToolLoadout` gains `getPromptGuidelines()`.
+
+- Fixed Bedrock requests that fail with `The pending stream has been canceled` after a stalled HTTP/2 connection not being retried automatically.
+
+- Fixed MCP session shutdown returning while a server was still connecting, leaving its transport open until the server answered or timed out.
+
+- Fixed MCP OAuth sign-in failing with `invalid_redirect_uri` on servers with OpenID Connect client registration: KnightCode now registers as a native client.
+
+- Fixed managed self-update leaving every previous release on disk. After a successful update KnightCode keeps the release that ran the update and the release just activated, and deletes older version directories.
+
+- Fixed the standalone binary loading `.env` and `bunfig.toml` from the working directory before startup. Project secrets no longer enter the process environment, and a project preload can no longer crash the binary.
+
+- Fixed `--tools` removing MCP tools, which left `knightcode --tools codemode` without any MCP servers. `--tools` now keeps MCP tools unless an entry starts with `mcp__`.
+
 ## 0.13.0
 
 ### Added
