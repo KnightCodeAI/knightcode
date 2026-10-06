@@ -348,7 +348,8 @@ describe("RemoteExecutionEnv against NodeExecutionEnv", () => {
 			[createReadTool(), { path: "bom.txt" }],
 			[createReadTool(), { path: "bad.txt" }],
 			[createReadTool(), { path: "missing.txt" }],
-			[createBashTool(), { command: "cat text.txt; echo err >&2; exit 0" }],
+			// One stream: stdout and stderr are separate pipes, so their relative order is a race in both environments.
+			[createBashTool(), { command: "{ cat text.txt; echo err; } >&2; exit 0" }],
 			[createBashTool(), { command: "exit 3" }],
 			[createBashTool(), { command: "printf 'a\\nb'; ls" }],
 		];
