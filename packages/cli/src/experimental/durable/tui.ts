@@ -276,7 +276,7 @@ class DurableTui {
 		this.#syncTasks(view.tasks);
 		this.#syncQueue((view.conversation.docs["knightcode.inbox"] ?? { items: [] }) as InboxState);
 		this.#syncNotices(view);
-		this.#editor.borderColor = theme.getThinkingBorderColor(agentOf(view.conversation).thinkingLevel ?? "off");
+		this.#editor.borderColor = theme.getEditorBorderColor();
 		this.#syncStatus(live);
 		this.#syncFooter(view);
 		if (this.#rebuilt) this.#transcript.scrollToEnd();
@@ -341,9 +341,7 @@ class DurableTui {
 		if (text === this.#statusText) return;
 		this.#statusText = text;
 		this.#indicator?.dispose();
-		this.#indicator = text
-			? new WorkingStatusIndicator(this.#ui, text, undefined, () => this.#editor.borderColor)
-			: undefined;
+		this.#indicator = text ? new WorkingStatusIndicator(this.#ui, text) : undefined;
 		this.#editor.setWorkingStatusIndicator(this.#indicator);
 	}
 

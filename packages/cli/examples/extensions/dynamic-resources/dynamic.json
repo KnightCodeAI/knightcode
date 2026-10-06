@@ -65,12 +65,6 @@
 		"syntaxType": "#4EC9B0",
 		"syntaxOperator": "#D4D4D4",
 		"syntaxPunctuation": "#D4D4D4",
-		"thinkingOff": "darkGray",
-		"thinkingMinimal": "#6e6e6e",
-		"thinkingLow": "#5f87af",
-		"thinkingMedium": "#81a2be",
-		"thinkingHigh": "#b294bb",
-		"thinkingXhigh": "#d183e8",
 		"bashMode": "green"
 	},
 	"export": {

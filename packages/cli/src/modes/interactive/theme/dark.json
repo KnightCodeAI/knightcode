@@ -64,13 +64,6 @@
 		"syntaxType": "yellow",
 		"syntaxOperator": "muted",
 		"syntaxPunctuation": "muted",
-		"thinkingOff": "line",
-		"thinkingMinimal": "#6e6052",
-		"thinkingLow": "#94714f",
-		"thinkingMedium": "#c2824a",
-		"thinkingHigh": "#ff8a3d",
-		"thinkingXhigh": "#ff6a00",
-		"thinkingMax": "#ff3d00",
 		"bashMode": "green"
 	},
 	"export": {

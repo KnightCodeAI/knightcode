@@ -2351,20 +2351,12 @@ export class InteractiveMode {
 	}
 
 	private showWorkingStatusIndicator(): void {
-		const colorFn = isWorkingStatusEditor(this.editor)
-			? (text: string) =>
-					(this.editor.borderColor ?? theme.getThinkingBorderColor(this.session.thinkingLevel || "off"))(text)
-			: undefined;
 		this.defaultWorkingMessage = `${SPINNER_VERBS[Math.floor(Math.random() * SPINNER_VERBS.length)]}…`;
 		this.showStatusIndicator(
 			new WorkingStatusIndicator(
 				this.ui,
 				this.workingMessage ?? this.defaultWorkingMessage,
 				this.workingIndicatorOptions,
-				() =>
-					this.activeWorkingIndicatorEmbedded
-						? (this.editor.borderColor ?? theme.getThinkingBorderColor(this.session.thinkingLevel || "off"))
-						: undefined,
 			),
 		);
 	}
@@ -4475,8 +4467,7 @@ export class InteractiveMode {
 		if (this.isBashMode) {
 			this.editor.borderColor = theme.getBashModeBorderColor();
 		} else {
-			const level = this.session.thinkingLevel || "off";
-			this.editor.borderColor = theme.getThinkingBorderColor(level);
+			this.editor.borderColor = theme.getEditorBorderColor();
 		}
 		this.activeStatusIndicator?.invalidate();
 		this.ui.requestRender();

@@ -55,12 +55,6 @@ const FAMILIES = {
 	orange: { hue: 52, saturation: { min: 0.12, max: 0.85 }, slot: 3 },
 	violet: { hue: 295, saturation: { min: 0.2, max: 0.6 }, slot: 5 },
 	calamine: { hue: 202.43, saturation: { min: 0.1, max: 0.74 }, slot: 6 },
-	thinkingSlate: { hue: 231.49, saturation: { min: 0.08, max: 0.2 }, slot: 4 },
-	thinkingBlue: { hue: 231.49, saturation: { min: 0.2, max: 0.45 }, slot: 4 },
-	thinkingPeriwinkle: { hue: 263.25, saturation: { min: 0.3, max: 0.6 }, slot: 6 },
-	thinkingViolet: { hue: 295, saturation: { min: 0.4, max: 0.75 }, slot: 5 },
-	thinkingMagenta: { hue: 337.5, saturation: { min: 0.5, max: 0.85 }, slot: 13 },
-	thinkingRed: { hue: 20, saturation: { min: 0.95, max: 1 }, slot: 1 },
 } satisfies Record<string, Family>;
 
 type FamilyName = keyof typeof FAMILIES;
@@ -117,14 +111,6 @@ const TOKEN_FAMILIES: Record<ThemeToken, FamilyName> = {
 	mdHeading: "yellow",
 	syntaxFunction: "yellow",
 	syntaxString: "orange",
-
-	thinkingOff: "neutral",
-	thinkingMinimal: "thinkingSlate",
-	thinkingLow: "thinkingBlue",
-	thinkingMedium: "thinkingPeriwinkle",
-	thinkingHigh: "thinkingViolet",
-	thinkingXhigh: "thinkingMagenta",
-	thinkingMax: "thinkingRed",
 };
 
 /** Palette slots for tokens that would otherwise share a hue with a similar token. */
@@ -152,55 +138,6 @@ const LEVELS = {
 	track: {
 		dark: { coefficients: [0.39028, -0.23015, 0.83573, 2.43829, -4.38292, 2.01582], reachable: [0, 0.946] },
 		light: { coefficients: [-5.24921, 38.37322, -107.28833, 152.10005, -106.17127, 29.18061], reachable: [0.368, 1] },
-	},
-	thinking0: {
-		dark: { coefficients: [0.52988, -0.05809, -0.30924, 4.63567, -6.52933, 2.89108], reachable: [0, 0.873] },
-		light: {
-			coefficients: [-28.27749, 182.85284, -469.62416, 603.15916, -384.59976, 97.35147],
-			reachable: [0.51, 1],
-		},
-	},
-	thinking1: {
-		dark: { coefficients: [0.55278, -0.03667, -0.45659, 4.95347, -6.90265, 3.0706], reachable: [0, 0.858] },
-		light: {
-			coefficients: [-37.10484, 235.86282, -596.62344, 754.3633, -474.00763, 118.3551],
-			reachable: [0.535, 1],
-		},
-	},
-	thinking2: {
-		dark: { coefficients: [0.57486, -0.01765, -0.58987, 5.25227, -7.27175, 3.25532], reachable: [0, 0.842] },
-		light: {
-			coefficients: [-59.89653, 377.05024, -945.07843, 1182.03145, -734.96375, 181.68658],
-			reachable: [0.556, 1],
-		},
-	},
-	thinking3: {
-		dark: { coefficients: [0.59621, -0.00062, -0.71148, 5.53588, -7.6392, 3.44606], reachable: [0, 0.827] },
-		light: {
-			coefficients: [-72.07122, 445.84082, -1099.57352, 1353.88793, -829.53392, 202.26164],
-			reachable: [0.58, 1],
-		},
-	},
-	thinking4: {
-		dark: { coefficients: [0.61691, 0.01462, -0.82288, 5.80651, -8.00641, 3.64333], reachable: [0, 0.811] },
-		light: {
-			coefficients: [-110.14338, 674.21488, -1645.75941, 2004.32367, -1215.15899, 293.3183],
-			reachable: [0.6, 1],
-		},
-	},
-	thinking5: {
-		dark: { coefficients: [0.63702, 0.02826, -0.92498, 6.06465, -8.37246, 3.84651], reachable: [0, 0.795] },
-		light: {
-			coefficients: [-175.47701, 1063.54495, -2570.70594, 3098.80776, -1860.15527, 444.76392],
-			reachable: [0.62, 1],
-		},
-	},
-	thinking6: {
-		dark: { coefficients: [0.65658, 0.04044, -1.01835, 6.30989, -8.73529, 4.05439], reachable: [0, 0.779] },
-		light: {
-			coefficients: [-183.81712, 1094.70055, -2602.68539, 3088.71276, -1826.91131, 430.75931],
-			reachable: [0.643, 1],
-		},
 	},
 	subtle: {
 		dark: { coefficients: [0.56762, -0.02475, -0.5383, 5.12628, -7.10931, 3.17324], reachable: [0, 0.848] },
@@ -267,24 +204,6 @@ const PANELS: ThemeBg[] = [
 	"searchMatchBg",
 	"customMessageBg",
 ];
-const THINKING: ThemeColor[] = [
-	"thinkingOff",
-	"thinkingMinimal",
-	"thinkingLow",
-	"thinkingMedium",
-	"thinkingHigh",
-	"thinkingXhigh",
-	"thinkingMax",
-];
-const THINKING_LEVELS: Level[] = [
-	"thinking0",
-	"thinking1",
-	"thinking2",
-	"thinking3",
-	"thinking4",
-	"thinking5",
-	"thinking6",
-];
 
 const each = (tokens: ThemeToken[], on: Surface[], level: Level): Rule[] =>
 	tokens.map((token) => ({ token, on, level }));
@@ -334,7 +253,6 @@ const RULES: Rule[] = [
 	...each(["mdQuoteBorder", "mdHr"], ["background", ...MESSAGE_PANELS, ...TOOL_PANELS], "readable"),
 	{ token: "scrollbarTrack", on: ["background"], level: "track" },
 	{ token: "scrollbarThumb", on: ["scrollbarTrack"], level: "thumb" },
-	...THINKING.map((token, index): Rule => ({ token, on: ["background"], level: THINKING_LEVELS[index] })),
 ];
 
 /** Relaxation compresses levels stronger than this one toward it before weakening all levels. */
