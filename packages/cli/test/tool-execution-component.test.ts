@@ -649,9 +649,10 @@ describe("ToolExecutionComponent parity", () => {
 		const event: TuiMouseEvent = {
 			type: "click",
 			button: "left",
-			x: 2,
+			// Default output padding shifts the row one cell right. x=3 is the first content column.
+			x: 3,
 			y: resultRow,
-			screenX: 2,
+			screenX: 3,
 			screenY: resultRow,
 			width,
 			height: lines.length,
