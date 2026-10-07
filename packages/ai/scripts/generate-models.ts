@@ -3051,6 +3051,11 @@ async function generateModels() {
 			candidate.contextWindow = 1000000;
 		}
 
+		// models.dev lists Sonnet 5.5 cache reads at $0.10; Anthropic bills them at 0.1x the $2 input rate.
+		if (candidate.provider === "anthropic" && candidate.id === "claude-sonnet-5-5") {
+			candidate.cost = { ...candidate.cost, cacheRead: 0.2 };
+		}
+
 		// models.dev may list Opus 5.5, Sonnet 5.5, and Haiku 5.5 before their effort metadata is complete.
 		if (
 			(candidate.provider === "anthropic" &&
