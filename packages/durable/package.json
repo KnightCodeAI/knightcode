@@ -17,6 +17,7 @@
     "./storage/sqlite": "./src/storage/sqlite/index.ts",
     "./storage/sqlite/node": "./src/storage/sqlite/node.ts",
     "./storage/sqlite/bun": "./src/storage/sqlite/bun.ts",
+    "./storage/sqlite/cloudflare": "./src/storage/sqlite/cloudflare.ts",
     "./testing": "./src/testing/index.ts",
     "./package.json": "./package.json",
     "./*": "./src/*.ts"

@@ -90,6 +90,7 @@ function rebuildBashResultRenderComponent(
 	showImages: boolean,
 	startedAt: number | undefined,
 	endedAt: number | undefined,
+	durationMs: number | undefined,
 ): void {
 	const state = component.state;
 	component.clear();
@@ -155,7 +156,11 @@ function rebuildBashResultRenderComponent(
 		component.addChild(new Text(theme.fg("warning", `[${warnings.join(". ")}]`), 0, 0));
 	}
 
-	if (startedAt !== undefined) {
+	// A final result's recorded duration wins: it is monotonic and survives reloads. The renderer's own clock is the
+	// fallback for live progress and for results stored without one.
+	if (!options.isPartial && durationMs !== undefined) {
+		component.addChild(new Text(`\n${theme.fg("muted", `Took ${formatDuration(durationMs)}`)}`, 0, 0));
+	} else if (startedAt !== undefined) {
 		const label = options.isPartial ? "Elapsed" : "Took";
 		const endTime = endedAt ?? Date.now();
 		component.addChild(new Text(theme.fg("muted", `${label} ${formatDuration(endTime - startedAt)}`), 0, 0));
@@ -201,6 +206,7 @@ export function createShellRenderers(
 				context.showImages,
 				state.startedAt,
 				state.endedAt,
+				context.durationMs,
 			);
 			component.invalidate();
 			return component;
