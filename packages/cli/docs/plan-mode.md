@@ -52,9 +52,9 @@ planning tool replaces the built-in implementation.
 
 Questions offer two to four choices, recommended first, plus a free-text answer.
 The TUI shows each option's description. RPC clients receive `select` and
-`input` dialogs. Cancelling a question lets the model proceed with its best
-judgment; aborting ends the run. Without UI, the model takes the recommended
-choice and records the decision under Assumptions.
+`input` dialogs. Cancelling a question interrupts the run, like aborting it.
+Without UI, the model takes the recommended choice and records the decision
+under Assumptions.
 
 A submitted plan contains the goal, specific changes and paths, verification
 commands, and assumptions. Each submission replaces the complete draft and

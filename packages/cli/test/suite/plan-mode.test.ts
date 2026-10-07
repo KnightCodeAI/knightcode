@@ -500,6 +500,16 @@ describe("enforced plan mode", () => {
 		expect(h.session.getActiveToolNames()).toEqual(active);
 	});
 
+	it("cancels tree navigation onto a malformed snapshot", async () => {
+		const manager = SessionManager.inMemory();
+		const target = manager.appendCustomEntry("plan-mode", { mode: "invalid" });
+		manager.appendCustomEntry("plan-mode", { mode: "off" });
+		const h = await setup({ sessionManager: manager });
+		const leaf = manager.getLeafId();
+		expect(await h.session.navigateTree(target, { summarize: false })).toMatchObject({ cancelled: true });
+		expect(manager.getLeafId()).toBe(leaf);
+	});
+
 	it("stale review and queued input cannot approve a plan", async () => {
 		const h = await setup();
 		h.setResponses([submission()]);
@@ -705,6 +715,21 @@ describe("enforced plan mode", () => {
 		h.session.extensionRunner.setFlagValue("plan", true);
 		await expect(h.session.bindExtensions({ mode: "json" })).rejects.toThrow(/Plan mode needs/);
 		await expect(h.session.prompt("task")).rejects.toThrow(/Plan mode needs/);
+		expect(h.faux.state.callCount).toBe(0);
+	});
+
+	it("runs no extension command after a failed restore", async () => {
+		const manager = SessionManager.inMemory();
+		manager.appendCustomEntry("plan-mode", { mode: "planning", draft: { revision: 1, markdown: PLAN } });
+		const h = await createHarness({
+			sessionManager: manager,
+			excludedToolNames: ["submit_plan"],
+			extensionFactories: [planMode],
+		});
+		harnesses.push(h);
+		await expect(h.session.bindExtensions({ mode: "json" })).rejects.toThrow(/Plan mode needs/);
+		await expect(h.session.prompt("/plan approve")).rejects.toThrow(/Plan mode needs/);
+		expect(snapshots(h)).toHaveLength(1);
 		expect(h.faux.state.callCount).toBe(0);
 	});
 

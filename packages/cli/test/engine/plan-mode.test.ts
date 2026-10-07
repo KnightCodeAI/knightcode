@@ -68,8 +68,11 @@ describe("engine planning", () => {
 		const updates = h.events.flatMap((e) =>
 			e.type.startsWith("session.") ? toSessionUpdates(e as SessionEvent, state) : [],
 		);
-		expect(JSON.stringify(updates)).toContain(PLAN.replaceAll("\n", "\\n"));
-		expect(JSON.stringify(historyUpdates(h.registry.messages(id), h.dir))).toContain(PLAN.replaceAll("\n", "\\n"));
+		// rawInput and the result details also carry the markdown, so check the rendered card content itself.
+		const rendered = [{ type: "content", content: { type: "text", text: PLAN } }];
+		for (const card of [updates, historyUpdates(h.registry.messages(id), h.dir)]) {
+			expect(card.find((u) => u.sessionUpdate === "tool_call")).toMatchObject({ content: rendered });
+		}
 		expect(h.count("session.request")).toBe(0);
 		await h.registry.prompt(id, { text: "/plan approve" });
 		await h.settled(2);

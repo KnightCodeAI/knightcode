@@ -255,16 +255,22 @@ export class AgentSessionRuntime {
 				sessionStartEvent: { type: "session_start", reason: "new", previousSessionFile },
 			}),
 		);
-		if (options?.setup) {
-			await options.setup(this.session.sessionManager);
-			this.session.refreshContext();
-		}
-		if (previousSelection) {
-			const model = previousSelection.model;
-			if (model && (model.provider !== this.session.model?.provider || model.id !== this.session.model?.id)) {
-				await this.session.setModel(model);
+		try {
+			if (options?.setup) {
+				await options.setup(this.session.sessionManager);
+				this.session.refreshContext();
 			}
-			this.session.setThinkingLevel(previousSelection.thinkingLevel);
+			if (previousSelection) {
+				const model = previousSelection.model;
+				if (model && (model.provider !== this.session.model?.provider || model.id !== this.session.model?.id)) {
+					await this.session.setModel(model);
+				}
+				this.session.setThinkingLevel(previousSelection.thinkingLevel);
+			}
+		} catch (error) {
+			// The old session is already disposed; the host must follow the replacement before the error surfaces.
+			await this.rebindSession?.(this.session);
+			throw error;
 		}
 		await this.finishSessionReplacement(options?.withSession);
 		return { cancelled: false };

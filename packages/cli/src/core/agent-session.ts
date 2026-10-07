@@ -2146,6 +2146,8 @@ export class AgentSession {
 
 		const command = this._extensionRunner.getCommand(commandName);
 		if (!command) return false;
+		// A failed startup can stop before later extensions initialize, so no command may run against that state.
+		this._assertExtensionStartup();
 
 		// Get command context from extension runner (includes session control methods)
 		let acknowledged = false;

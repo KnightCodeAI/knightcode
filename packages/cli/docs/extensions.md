@@ -217,10 +217,11 @@ These operations are command-only because calling them from lifecycle handlers c
 
 Use `await ctx.sendUserMessage(content, options)` in a command when completion
 must include the dispatched run. It rejects dispatch or preflight failures and
-resolves after command handling or complete agent settlement. The replacement
-context's method has the same contract. The originating prompt receives the
-nested dispatch's acceptance once, before settlement; command-only completion
-reports `handled`. Command-handler failures are reported and rethrown rather
+resolves after command handling or complete agent settlement. During an active
+run, a message sent with `deliverAs` is only queued: the promise resolves once
+it is queued, not when that run settles. The replacement context's method has
+the same contract. The originating prompt receives the nested dispatch's
+acceptance once, before settlement; command-only completion reports `handled`. Command-handler failures are reported and rethrown rather
 than acknowledged as successful. `knightcode.sendUserMessage()` remains
 fire-and-forget; waiting for idle after calling it is not equivalent because
 asynchronous preflight may still be running.
@@ -281,9 +282,9 @@ KnightCode reports handler errors and continues where possible. A `tool_call` ha
 
 Throw the exported `ExtensionStartupError` from `session_start` when an unsafe
 runtime must refuse initialization. Binding or reload propagates it to the
-host, and the failed session cannot prompt a provider or compact until
-successful startup/reload clears the failure. Ordinary handler errors remain
-nonfatal. The engine disposes failed startup sessions before announcing them.
+host, and the failed session cannot prompt a provider, compact, or run
+extension commands until successful startup/reload clears the failure. Ordinary
+handler errors remain nonfatal. The engine disposes failed startup sessions before announcing them.
 
 Release resources in `session_shutdown` even when normal operation attempted cleanup.
 Keep cleanup idempotent because cancellation, reload, session replacement, and process exit can converge on the same path.

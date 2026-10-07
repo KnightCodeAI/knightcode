@@ -60,10 +60,11 @@ knightcode -p --plan "Plan the authentication refactor"
 The built-in `--plan` extension flag enters enforced [plan mode](plan-mode.md)
 only on initial startup, including when opening a saved session. Later reloads,
 new sessions, resumes, and forks follow their saved state rather than reapplying
-the flag. Planning prints the submitted Markdown in text mode; implementation
-requires explicit `/plan approve`. Incompatible tool filters or active codemode
-`only` mode fail startup before any provider request. `--no-extensions` disables
-the built-in unless explicitly loaded with `-e builtin:plan-mode`.
+the flag. Print mode (`-p`) writes the submitted Markdown to stdout;
+implementation requires explicit `/plan approve`. Incompatible tool filters or
+active codemode `only` mode fail startup before any provider request.
+`--no-extensions` disables the built-in unless explicitly loaded with
+`-e builtin:plan-mode`.
 
 <a id="model-options"></a>
 

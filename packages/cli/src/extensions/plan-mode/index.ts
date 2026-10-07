@@ -226,7 +226,15 @@ export default function planMode(kc: ExtensionAPI): void {
 				? target.parentId
 				: target.id;
 		const branch = leaf ? ctx.sessionManager.getBranch(leaf) : [];
-		if (foldPlanState(branch).mode !== "planning") return;
+		let saved: PlanSnapshot;
+		try {
+			saved = foldPlanState(branch);
+		} catch (error) {
+			// The runner reports and swallows handler errors here, which would let navigation land on an unreadable plan.
+			notice(ctx, (error as Error).message, "warning");
+			return { cancel: true };
+		}
+		if (saved.mode !== "planning") return;
 		const declared = getCurrentSystemMessage(buildSessionContext(branch).messages)?.toolsAdded?.map((t) => t.name);
 		const error = refusal(declared ?? []);
 		if (error) {
