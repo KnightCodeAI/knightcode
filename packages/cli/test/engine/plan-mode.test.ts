@@ -78,13 +78,12 @@ describe("engine planning", () => {
 		expect(stdout).not.toHaveBeenCalled();
 	});
 
-	it("blocks shell and mutation before permissions, and questions take recorded assumptions", async () => {
+	it("blocks mutation before permissions, and questions take recorded assumptions", async () => {
 		const h = await setup();
 		const { id } = await h.registry.create({ cwd: h.dir });
 		h.faux.setResponses([
 			fauxAssistantMessage(
 				[
-					fauxToolCall("bash", { command: "echo unsafe" }),
 					fauxToolCall("write", { path: "bad", content: "bad" }),
 					fauxToolCall("ask_user", {
 						questions: [
@@ -107,7 +106,7 @@ describe("engine planning", () => {
 		await h.settled(1);
 		expect(h.count("session.request")).toBe(0);
 		const results = h.events.filter((e) => e.type === "session.tool_end");
-		expect(results.filter((e) => e.isError).map((e) => e.toolName)).toEqual(["bash", "write"]);
+		expect(results.filter((e) => e.isError).map((e) => e.toolName)).toEqual(["write"]);
 		expect(JSON.stringify(results)).toContain("as an assumption");
 		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 		await h.registry.prompt(id, { text: "/plan approve fresh" });

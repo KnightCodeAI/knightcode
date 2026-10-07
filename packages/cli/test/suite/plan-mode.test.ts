@@ -17,6 +17,7 @@ import { ENV_AGENT_DIR } from "../../src/config.ts";
 import planMode from "../../src/extensions/plan-mode/index.ts";
 import codemode from "../../src/extensions/codemode/index.ts";
 import { KeybindingsManager } from "../../src/core/keybindings.ts";
+import { initTheme } from "../../src/modes/interactive/theme/theme.ts";
 import { AgentSessionRuntime } from "../../src/core/agent-session-runtime.ts";
 import { createAgentSessionFromServices, createAgentSessionServices } from "../../src/core/agent-session-services.ts";
 import { foldPlanState } from "../../src/extensions/plan-mode/state.ts";
@@ -196,6 +197,49 @@ describe("enforced plan mode", () => {
 		);
 		await restored.session.extensionRunner.emit({ type: "session_start", reason: "resume" });
 		expect(opened).toBe(1);
+	});
+
+	/** A TUI whose review picker receives `keys` on its first opening and is dismissed after that. */
+	const reviewTui = (h: Harness, keys: string[]) => {
+		// The picker's text field draws with the global theme.
+		initTheme("dark");
+		let reviews = 0;
+		h.session.extensionRunner.setUIContext(
+			createTestUiContext({
+				custom: async <T>(factory: Parameters<ReturnType<typeof createTestUiContext>["custom"]>[0]) => {
+					if (reviews++ > 0) return undefined as T;
+					return await new Promise<T>((resolve) => {
+						const theme = h.session.extensionRunner.getUIContext().theme;
+						void Promise.resolve(
+							factory({ requestRender() {} } as never, theme, new KeybindingsManager(), resolve as never),
+						).then((picker) => {
+							for (const key of keys) picker.handleInput?.(key);
+						});
+					});
+				},
+			}),
+			"tui",
+		);
+	};
+	const lastUserText = (h: Harness) => JSON.stringify(h.session.messages.filter((m) => m.role === "user").at(-1));
+
+	it("TUI review sends typed feedback as a revision request", async () => {
+		const h = await setup();
+		reviewTui(h, ["\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\r", ..."make it shorter", "\r"]);
+		h.setResponses([submission(), submission("# Shorter plan")]);
+		await h.session.prompt("/plan task");
+		expect(lastUserText(h)).toContain("make it shorter");
+		expect(state(h)).toMatchObject({ mode: "planning", draft: { revision: 2, markdown: "# Shorter plan" } });
+	});
+
+	it("TUI review approves with a note that reaches the implementation request", async () => {
+		const h = await setup();
+		reviewTui(h, ["\t", ..."keep it small", "\r"]);
+		h.setResponses([submission(), fauxAssistantMessage("implemented")]);
+		await h.session.prompt("/plan task");
+		expect(state(h)).toMatchObject({ mode: "off", approved: 1 });
+		expect(lastUserText(h)).toContain("Implement the approved plan (revision 1).");
+		expect(lastUserText(h)).toContain("User note: keep it small");
 	});
 
 	it("RPC review can approve the displayed revision and waits for implementation", async () => {
@@ -379,16 +423,11 @@ describe("enforced plan mode", () => {
 		expect(JSON.stringify(recoveries[0])).toContain("Approved plan (revision 4)");
 	});
 
-	it.each(["shell", "question"] as const)("aborting a %s dialog releases the planning run", async (kind) => {
+	it("aborting a question dialog releases the planning run", async () => {
 		const h = await setup();
 		let opened = false;
 		h.session.extensionRunner.setUIContext(
 			createTestUiContext({
-				confirm: async (_title, _message, opts) =>
-					await new Promise<boolean>((resolve) => {
-						opened = true;
-						opts?.signal?.addEventListener("abort", () => resolve(false), { once: true });
-					}),
 				select: async (_title, _rows, opts) =>
 					await new Promise<string | undefined>((resolve) => {
 						opened = true;
@@ -399,20 +438,18 @@ describe("enforced plan mode", () => {
 		);
 		h.setResponses([
 			fauxAssistantMessage(
-				kind === "shell"
-					? fauxToolCall("bash", { command: "echo blocked" })
-					: fauxToolCall("ask_user", {
-							questions: [
-								{
-									id: "choice",
-									question: "Choose?",
-									options: [
-										{ label: "Patch (Recommended)", description: "Small change" },
-										{ label: "Rewrite", description: "Large change" },
-									],
-								},
+				fauxToolCall("ask_user", {
+					questions: [
+						{
+							id: "choice",
+							question: "Choose?",
+							options: [
+								{ label: "Patch (Recommended)", description: "Small change" },
+								{ label: "Rewrite", description: "Large change" },
 							],
-						}),
+						},
+					],
+				}),
 				{ stopReason: "toolUse" },
 			),
 		]);
@@ -529,7 +566,15 @@ describe("enforced plan mode", () => {
 		await h.session.prompt("/plan investigate");
 		const systems = h.session.messages.filter((m) => m.role === "system");
 		expect(systems).toHaveLength(2);
-		expect(systems[1].toolsAdded?.map((t) => t.name).sort()).toEqual(["ask_user", "find", "grep", "ls", "submit_plan"]);
+		expect(systems[1].toolsAdded?.map((t) => t.name).sort()).toEqual([
+			"ask_user",
+			"find",
+			"grep",
+			"ls",
+			"submit_plan",
+			"webfetch",
+			"websearch",
+		]);
 		expect(Object.keys(systems[1].sections ?? {}).sort()).toEqual(["rules", "tools"]);
 		await h.session.prompt("/plan off");
 		await h.session.prompt("/plan");
@@ -550,7 +595,6 @@ describe("enforced plan mode", () => {
 						fauxToolCall("ls", { path: "." }),
 						fauxToolCall("write", { path: "unsafe.txt", content: "bad" }),
 						fauxToolCall("edit", { path: "example.txt", edits: [{ oldText: "fixture", newText: "bad" }] }),
-						fauxToolCall("bash", { command: "echo bad" }),
 					],
 					{ stopReason: "toolUse" },
 				);
@@ -563,7 +607,7 @@ describe("enforced plan mode", () => {
 			expect.arrayContaining(["grep", "find", "ls"]),
 		);
 		expect(getToolResult(h, "ls").isError).toBe(false);
-		for (const name of ["write", "edit", "bash"]) expect(getToolResult(h, name).isError).toBe(true);
+		for (const name of ["write", "edit"]) expect(getToolResult(h, name).isError).toBe(true);
 		expect(existsSync(join(h.tempDir, "unsafe.txt"))).toBe(false);
 		expect(h.faux.state.callCount).toBe(2);
 		expect(state(h)).toMatchObject({ mode: "planning", draft: { revision: 1, markdown: PLAN } });
@@ -717,7 +761,7 @@ describe("enforced plan mode", () => {
 			});
 			expect(result).toMatchObject({ block: true });
 		}
-		for (const name of ["read", "grep", "find", "ls", "websearch", "webfetch"]) {
+		for (const name of ["read", "grep", "find", "ls", "websearch", "webfetch", "bash", "powershell"]) {
 			expect(
 				await h.session.extensionRunner.emitToolCall({
 					type: "tool_call",
@@ -729,28 +773,29 @@ describe("enforced plan mode", () => {
 		}
 	});
 
-	it.each([true, false])("requires shell confirmation (allow=%s) without approving the plan", async (allow) => {
+	it("turns on web tools for planning and names them in the instructions", async () => {
 		const h = await setup();
 		await h.session.prompt("/plan");
-		let warning = "";
-		h.session.extensionRunner.setUIContext(
-			createTestUiContext({
-				confirm: async (_title, message) => {
-					warning = message;
-					return allow;
-				},
-			}),
-			"rpc",
+		expect(h.session.getActiveToolNames()).toEqual(expect.arrayContaining(["websearch", "webfetch"]));
+		const instructions = JSON.stringify(
+			h.sessionManager
+				.getBranch()
+				.findLast((e) => e.type === "custom_message" && (e.details as { kind?: string })?.kind === "instructions"),
 		);
-		const result = await h.session.extensionRunner.emitToolCall({
-			type: "tool_call",
-			toolName: "bash",
-			toolCallId: "shell",
-			input: { command: "git diff" },
-		});
-		expect(result?.block ?? false).toBe(!allow);
-		expect(warning).toContain("may change files");
-		expect(warning).toContain("git diff");
-		expect(state(h).mode).toBe("planning");
+		expect(instructions).toContain("webfetch, websearch");
+	});
+
+	it("keeps web tools the user turned off out of planning and its instructions", async () => {
+		const h = await setup();
+		writeFileSync(join(h.tempDir, "tools.json"), JSON.stringify({ websearch: { enabled: false } }));
+		await h.session.prompt("/plan");
+		expect(h.session.getActiveToolNames()).toContain("webfetch");
+		expect(h.session.getActiveToolNames()).not.toContain("websearch");
+		const instructions = JSON.stringify(
+			h.sessionManager
+				.getBranch()
+				.findLast((e) => e.type === "custom_message" && (e.details as { kind?: string })?.kind === "instructions"),
+		);
+		expect(instructions).not.toContain("websearch");
 	});
 });

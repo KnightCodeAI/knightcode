@@ -1,4 +1,7 @@
 import { getCurrentSystemMessage } from "@knightcode/ai";
+import { AskPicker } from "@knightcode/tools/ask/picker";
+import type { AskAnswers } from "@knightcode/tools/ask/tool";
+import { readPersisted } from "@knightcode/tools/state";
 import { Markdown, Text } from "@knightcode/tui";
 import { Type } from "typebox";
 import { ExtensionStartupError } from "../../core/extensions/startup-error.ts";
@@ -7,11 +10,15 @@ import type { CustomMessage } from "../../core/messages.ts";
 import { writeRawStdout } from "../../core/output-guard.ts";
 import { buildSessionContext } from "../../core/session-manager.ts";
 import { getMarkdownTheme } from "../../modes/interactive/theme/theme.ts";
-import { PlanReviewPicker, type ReviewAction } from "./picker.ts";
 import { foldPlanState, type PlanSnapshot, type PlanTransition, transitionPlan } from "./state.ts";
 
-const ALLOWED = new Set(["read", "grep", "find", "ls", "websearch", "webfetch", "ask_user", "submit_plan"]);
+const INSPECT = ["read", "grep", "find", "ls", "webfetch", "websearch"];
+const SHELLS = ["bash", "powershell"];
+const ALLOWED = new Set([...INSPECT, ...SHELLS, "ask_user", "submit_plan"]);
 const LOADOUT = ["ask_user", "submit_plan", "read", "grep", "find", "ls"];
+// Planning benefits from research: on from entry unless the user turned them off in /tools. Like the
+// rest of the loadout they stay on afterwards, so leaving planning never rewrites the tool list.
+const WEB = ["webfetch", "websearch"];
 const REQUIRED_TOOLS =
 	"Plan mode needs the ask_user and submit_plan tools; include them in --tools and remove any matching --exclude-tools filters, or restart without --no-tools.";
 const CODEMODE_ONLY =
@@ -19,10 +26,29 @@ const CODEMODE_ONLY =
 const OUTSIDE = "Not in plan mode. If your plan was approved, continue implementing it.";
 const STALE = "The plan changed; run /plan to review the latest revision.";
 const EXIT = "<plan_mode>Plan mode has ended. Its restrictions no longer apply.</plan_mode>";
-const INSTRUCTIONS = `<plan_mode>
+type ReviewAction = "implement" | "fresh" | "keep" | "exit";
+const REVIEW: { action: ReviewAction; label: string; description: string }[] = [
+	{ action: "implement", label: "Implement", description: "Leave plan mode and implement it in this session." },
+	{ action: "fresh", label: "Implement in a fresh session", description: "Start clean with only the plan." },
+	{ action: "keep", label: "Keep planning", description: "Close this; run /plan to review it again." },
+	{ action: "exit", label: "Exit planning", description: "Leave plan mode without implementing; the draft is kept." },
+];
+const REVISE = { label: "Revise the plan", description: "Tell the model what to change." };
+
+/** Names only the tools this session has, so the model is never pointed at a disabled one. */
+function allowedLine(active: readonly string[]): string {
+	const inspect = INSPECT.filter((name) => active.includes(name));
+	const shells = SHELLS.filter((name) => active.includes(name));
+	const shell = shells.length
+		? ` ${shells.join(" and ")} commands are not checked: run only commands that inspect (git log, git diff, tests or builds that leave tracked files alone), never ones that edit, format, install, commit or otherwise change state.`
+		: "";
+	return `Allowed: ${inspect.length ? inspect.join(", ") : "no inspection tools"}, ask_user and submit_plan. Every other tool is blocked.${shell}`;
+}
+
+const instructions = (active: readonly string[]) => `<plan_mode>
 Plan mode is active. You are planning, not implementing. Only the user ends plan mode; if they ask you to do the work, plan how to do it.
 
-Allowed: read, grep, find, ls, webfetch, websearch, and shell commands the user confirms (unavailable when no user is present). Do not edit or write files or change state; such calls are blocked.
+${allowedLine(active)}
 
 1. Explore first. Never ask what the code can tell you.
 2. Ask only about intent and trade-offs the code cannot settle, using ask_user. If no user is available, take the recommended option and record it under Assumptions.
@@ -87,7 +113,9 @@ export default function planMode(kc: ExtensionAPI): void {
 	const reconcile = () => {
 		const available = new Set(kc.getAllTools().map((t) => t.name));
 		const active = kc.getActiveTools();
-		const missing = LOADOUT.filter((name) => available.has(name) && !active.includes(name));
+		const persisted = readPersisted();
+		const wanted = [...LOADOUT, ...WEB.filter((name) => persisted[name]?.enabled !== false)];
+		const missing = wanted.filter((name) => available.has(name) && !active.includes(name));
 		if (missing.length) kc.setActiveTools([...active, ...missing]);
 	};
 	const enter = (ctx: ExtensionContext) => {
@@ -97,7 +125,7 @@ export default function planMode(kc: ExtensionAPI): void {
 		persist({ type: "enter" }, ctx);
 		message(
 			"instructions",
-			INSTRUCTIONS +
+			instructions(kc.getActiveTools()) +
 				(snapshot.draft
 					? `\nAn earlier plan exists (revision ${snapshot.draft.revision}). If this is the same task, revise it; otherwise start fresh.`
 					: ""),
@@ -125,7 +153,7 @@ export default function planMode(kc: ExtensionAPI): void {
 		if (recovery?.details?.id === id) return;
 		const planning = snapshot.mode === "planning";
 		const content = planning
-			? INSTRUCTIONS +
+			? instructions(kc.getActiveTools()) +
 				(snapshot.draft ? `\n\nCurrent plan (revision ${snapshot.draft.revision}):\n\n${snapshot.draft.markdown}` : "")
 			: `Approved plan (revision ${snapshot.draft!.revision}) from before compaction; ignore it if complete.\n\n${snapshot.draft!.markdown}`;
 		recovery = {
@@ -166,22 +194,18 @@ export default function planMode(kc: ExtensionAPI): void {
 		},
 		renderCall: (args) =>
 			new Markdown(typeof args.markdown === "string" ? args.markdown : "", 0, 0, getMarkdownTheme()),
-		renderResult: (result) => {
-			const details = result.details;
-			return typeof details === "object" &&
-				details !== null &&
-				"markdown" in details &&
-				typeof details.markdown === "string"
-				? new Markdown(details.markdown, 0, 0, getMarkdownTheme())
-				: new Text(
-						result.content
+		// The call already shows the plan; a successful result would repeat it.
+		renderResult: (result) =>
+			new Text(
+				result.isError
+					? result.content
 							.filter((c) => c.type === "text")
 							.map((c) => c.text)
-							.join("\n"),
-						0,
-						0,
-					);
-		},
+							.join("\n")
+					: "",
+				0,
+				0,
+			),
 	});
 
 	kc.on("session_start", (event, ctx) => {
@@ -257,8 +281,7 @@ export default function planMode(kc: ExtensionAPI): void {
 				customType: "plan-mode",
 				display: false,
 				details: { kind: "reminder" },
-				content:
-					"<plan_mode>Plan mode is still active: read-only; end your turn with ask_user or submit_plan.</plan_mode>",
+				content: `<plan_mode>Plan mode is still active. ${allowedLine(kc.getActiveTools())} End your turn with ask_user or submit_plan.</plan_mode>`,
 			},
 		};
 	});
@@ -276,7 +299,7 @@ export default function planMode(kc: ExtensionAPI): void {
 		const first = calls.find((c) => c.name === "submit_plan");
 		if (first) batch = { ids: new Set(calls.map((c) => c.id)), designated: first.id, succeeded: false };
 	});
-	kc.on("tool_call", async (event, ctx) => {
+	kc.on("tool_call", (event) => {
 		if (snapshot.mode !== "planning") return;
 		if (batch?.ids.has(event.toolCallId) && event.toolCallId !== batch.designated)
 			return {
@@ -284,14 +307,9 @@ export default function planMode(kc: ExtensionAPI): void {
 				reason: "This batch contains a plan submission; submit the plan on its own.",
 			};
 		if (ALLOWED.has(event.toolName)) return;
-		if ((event.toolName === "bash" || event.toolName === "powershell") && ctx.hasUI && !ctx.signal?.aborted) {
-			const warning = `Working directory: ${ctx.cwd}\n\n${String(event.input.command ?? "")}\n\nThis command is not checked and may change files. Allowing it does not approve the plan.`;
-			const allowed = await ctx.ui.confirm("Run shell command while planning?", warning, { signal: ctx.signal });
-			if (allowed && !ctx.signal?.aborted) return;
-		}
 		return {
 			block: true,
-			reason: `Plan mode: \`${event.toolName}\` is blocked while planning. Use read, grep, find, ls, webfetch or websearch to investigate, ask_user to ask, and submit_plan to present the plan.`,
+			reason: `Plan mode: \`${event.toolName}\` is blocked while planning. ${allowedLine(kc.getActiveTools())}`,
 		};
 	});
 	kc.on("turn_end", () => {
@@ -332,7 +350,9 @@ export default function planMode(kc: ExtensionAPI): void {
 				}
 				return;
 			}
-			const approval = /^approve(?: (fresh))?(?: (\d+))?$/.exec(text);
+			// A note needs the revision before it, so "/plan approve this" stays a revision request.
+			const approval = /^approve(?: (fresh))?(?: (\d+)(?: ([\s\S]+))?)?$/.exec(text);
+			const note = approval?.[3] ? `\n\nUser note: ${approval[3]}` : "";
 			if (approval) {
 				if (approval[1] && ctx.mode === "engine") {
 					notice(ctx, "Fresh-session handoff is not available in the IDE yet; use /plan approve.");
@@ -349,7 +369,7 @@ export default function planMode(kc: ExtensionAPI): void {
 				if (approval[1]) {
 					const approved = transitionPlan(snapshot, { type: "approve" });
 					const parentSession = ctx.sessionManager.getSessionFile();
-					const handoff = `A previous planning session produced the plan below. Implement it in this fresh context. Treat the plan as the source of user intent, re-read files as needed, and verify the work. Planning transcript: ${parentSession ?? "(in-memory session)"}.\n\n${approved.draft!.markdown}`;
+					const handoff = `A previous planning session produced the plan below. Implement it in this fresh context. Treat the plan as the source of user intent, re-read files as needed, and verify the work. Planning transcript: ${parentSession ?? "(in-memory session)"}.\n\n${approved.draft!.markdown}${note}`;
 					await ctx.newSession({
 						preserveModel: true,
 						parentSession,
@@ -364,7 +384,7 @@ export default function planMode(kc: ExtensionAPI): void {
 				}
 				persist({ type: "approve" }, ctx);
 				await ctx.sendUserMessage(
-					`Plan mode has ended. Implement the approved plan (revision ${snapshot.draft!.revision}).`,
+					`Plan mode has ended. Implement the approved plan (revision ${snapshot.draft!.revision}).${note}`,
 				);
 				return;
 			}
@@ -386,23 +406,34 @@ export default function planMode(kc: ExtensionAPI): void {
 				const shown = JSON.stringify(snapshot);
 				lastShown = draft.revision;
 				let action: ReviewAction | undefined;
+				let feedback: string | undefined;
 				try {
-					if (ctx.mode === "tui")
-						action = await ctx.ui.custom<ReviewAction | undefined>(
+					if (ctx.mode === "tui") {
+						// The plan is already in the transcript, so the review only asks what to do with it.
+						const percent = ctx.getContextUsage()?.percent;
+						const options = REVIEW.map(({ action, label, description }) => ({
+							label,
+							description:
+								action === "fresh" && percent != null
+									? `${description} ${Math.round(percent)}% of the context is used now.`
+									: description,
+						}));
+						const answers = await ctx.ui.custom<AskAnswers | undefined>(
 							(tui, theme, keys, done) =>
-								new PlanReviewPicker(
-									draft.markdown,
-									draft.revision,
-									ctx.getContextUsage()?.percent ?? null,
+								new AskPicker(
+									[{ id: "plan", question: "Implement this plan?", options }],
+									tui,
 									theme,
 									keys,
 									done,
-									() => tui.requestRender(),
-									() => tui.terminal.rows,
 									controller.signal,
+									{ title: `Plan revision ${draft.revision}`, other: REVISE, cancel: "keep planning" },
 								),
 						);
-					else {
+						const answer = answers?.plan;
+						feedback = answer?.other ?? answer?.note;
+						action = answer?.other ? "keep" : REVIEW.find((r) => r.label === answer?.label)?.action;
+					} else {
 						const rows = ["Implement", "Implement in a fresh session", "Keep planning (Esc)", "Exit planning"];
 						const choice = await ctx.ui.select(`Plan revision ${draft.revision}\n\n${draft.markdown}`, rows, {
 							signal: controller.signal,
@@ -412,7 +443,7 @@ export default function planMode(kc: ExtensionAPI): void {
 				} finally {
 					if (reviewAbort === controller) reviewAbort = undefined;
 				}
-				if (controller.signal.aborted || action === undefined || action === "keep") return;
+				if (controller.signal.aborted || action === undefined || (action === "keep" && !feedback)) return;
 				if (
 					ctx.sessionManager.getSessionId() !== sessionId ||
 					JSON.stringify(foldPlanState(ctx.sessionManager.getBranch())) !== shown ||
@@ -422,10 +453,15 @@ export default function planMode(kc: ExtensionAPI): void {
 					notice(ctx, STALE, "warning");
 					return;
 				}
-				await ctx.sendUserMessage(
-					action === "exit" ? "/plan off" : `/plan approve${action === "fresh" ? " fresh" : ""} ${draft.revision}`,
-					{ expandPromptTemplates: true },
-				);
+				// Feedback while planning is a revision request; on approval it rides along as a note.
+				if (action === "keep") await ctx.sendUserMessage(feedback!);
+				else
+					await ctx.sendUserMessage(
+						action === "exit"
+							? "/plan off"
+							: `/plan approve${action === "fresh" ? " fresh" : ""} ${draft.revision}${feedback ? ` ${feedback}` : ""}`,
+						{ expandPromptTemplates: true },
+					);
 				return;
 			}
 			if (text) await ctx.sendUserMessage(text);

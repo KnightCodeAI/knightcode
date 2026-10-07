@@ -13,8 +13,8 @@ declarations.
 | `/plan` | Enter planning; when already planning, review the latest draft |
 | `/plan <task>` | Enter if needed and run the task as a planning prompt |
 | `/plan off` | Leave planning without discarding the draft |
-| `/plan approve [N]` | Approve the latest revision, or exactly revision N, and implement in this session |
-| `/plan approve fresh [N]` | Approve and implement in a fresh CLI session linked to the planning transcript |
+| `/plan approve [N [note]]` | Approve the latest revision, or exactly revision N, and implement in this session; a note after N is passed to the model |
+| `/plan approve fresh [N [note]]` | Approve and implement in a fresh CLI session linked to the planning transcript |
 | `--plan` | Enter planning on initial startup only, including when initially opening a saved session |
 
 All commands require an idle session without queued messages. Finish or
@@ -29,16 +29,17 @@ revision; it is not approval.
 ## What is enforced
 
 Planning permits model-issued calls to `read`, `grep`, `find`, `ls`, `webfetch`,
-`websearch`, `ask_user`, and `submit_plan`. The web tools must already be
-enabled. Every other tool is blocked, including file edits, MCP tools regardless
-of their read-only hints, custom tools, subagents, codemode, and tool search.
-Nested tool calls pass through the same gate.
+`websearch`, `bash`, `powershell`, `ask_user`, and `submit_plan`. Entering plan
+mode turns on `webfetch` and `websearch` unless they are turned off with
+`/tools`; like the other planning tools, they stay on afterwards. Every other
+tool is blocked, including file edits, MCP tools regardless of their read-only
+hints, custom tools, subagents, codemode, and tool search. Nested tool calls
+pass through the same gate. The planning instructions name only the tools the
+session has.
 
-`bash` and `powershell` require confirmation for **each call** in TUI or RPC
-mode. The dialog shows the working directory and full command. A confirmed
-command is not checked and may change files; confirmation does not approve the
-plan. Without dialog-capable UI, including the IDE, shell calls are blocked.
-User-started `!` commands are not gated.
+Shell commands are not checked. The model is told to run only commands that
+inspect, but a command can still change files. In the IDE, the editor's own
+permission prompt still applies. User-started `!` commands are not gated.
 
 This is not an operating-system sandbox. KnightCode still writes session data,
 and installed extensions remain trusted code that can access files directly.
@@ -61,10 +62,12 @@ increments its revision. Successful submission ends the run, including a mixed
 tool-call batch; executable sibling calls are blocked. Queued user input is
 preserved, not automatically run after submission.
 
-The TUI opens review after a new submission. Page-up/down scroll the Markdown;
-selection keys choose Implement, Implement in a fresh session, Keep planning,
-or Exit planning. Escape keeps planning. Review does not open automatically on
-resume. Session replacement, tree navigation, or a new run cancels an open
+The plan appears once in the transcript, in the submission's tool card. The TUI
+then opens review below it, in the same picker as questions: Implement,
+Implement in a fresh session, Keep planning, or Exit planning, plus **Revise the
+plan**, which takes your feedback as the next planning message. Tab adds a note
+to the highlighted choice; on an implement choice it is sent with the
+approval, and on Keep planning it is sent as feedback. Escape keeps planning. Review does not open automatically on resume. Session replacement, tree navigation, or a new run cancels an open
 picker. An action rechecks the shown revision before changing state.
 
 RPC reports a submission notification; `/plan` opens its review selection.
