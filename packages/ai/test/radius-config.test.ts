@@ -48,9 +48,9 @@ describe("Radius gateway config validation", () => {
 		expect(getRadiusCredentialConfig(credential([model(), bad]))).toBeUndefined();
 	});
 
-	it("rejects an empty catalog", () => {
-		// `[].every(...)` is true, so this passed validation and the refresh in radius.ts persisted
-		// the empty catalog over the cached models.
-		expect(getRadiusCredentialConfig(credential([]))).toBeUndefined();
+	it("accepts an empty catalog", () => {
+		// The organization disabled every model. Refresh must replace the cached catalog with nothing
+		// rather than keep offering models the gateway will refuse.
+		expect(getRadiusCredentialConfig(credential([]))?.models).toEqual([]);
 	});
 });
