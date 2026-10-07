@@ -1,5 +1,65 @@
 # @knightcodeai/cli
 
+## 0.15.0
+
+### Added
+
+- Added OpenAI's GPT-6 Luna decision model, and image input for classifiers whose input includes images.
+
+- Added terminal program status reports (OSC 7501) for working, blocked, done, error, and idle. Set KNIGHTCODE_PROGRAM_STATUS=0 to turn them off.
+
+- Added Claude Haiku 5.5, including adaptive thinking and its long-context price bracket.
+
+- Added plan mode: `/plan` blocks file edits and other mutating tools until you approve a submitted plan, and turns on web search and fetch while planning.
+
+- Added Azure provider notes for deployment name mapping, the API version override, and custom Foundry models.
+
+### Changed
+
+- Changed tool results and assistant messages so they record how long they took, and the transcript uses that duration after a reload.
+
+- Changed context estimates from 4 to 3.5 characters per token, so the output limit leaves more room.
+
+- Changed Radius so a fetched account catalog replaces the shipped baseline, including when every model is disabled.
+
+- Changed output padding so it also covers tool output, `!` command output, and summary blocks.
+
+- Changed codemode results so text and image items stay separate, several text items are marked in order, and console calls share one block.
+
+- Changed codemode tool descriptions so the lookup helpers are described as async.
+
+- Changed `--tools` so a list of only `+name` and `-name` entries edits the default selection instead of replacing it.
+
+### Fixed
+
+- Fixed Anthropic login when port 53692 is already taken, by binding a free loopback port and using that redirect URL.
+
+- Fixed Mistral responses that report finish reason error, so a transient server failure is retried.
+
+- Fixed model prices so a prompt-length bracket from the catalog is kept instead of dropped.
+
+- Fixed the Kimi K3 Moonshot price so cache writes stay free. The catalog lists the input rate as the cache-write cost, and Moonshot does not bill cache writes.
+
+- Fixed hyperlinks in Herdr. OSC 8 links turn on, and image protocols stay off when an outer terminal leaks its variables.
+
+- Fixed inline image resize under node --watch. Node's own worker messages are ignored, so a picture is no longer dropped as too large.
+
+- Fixed clipboard read on Termux by using its clipboard command on Android.
+
+- Fixed bash output so a color or OSC sequence split across two chunks is still stripped from the streamed and saved text.
+
+- Fixed MCP sign-in so closing the session cancels an in-flight login and does not refresh a token on the way out. A login also stops when its time limit is reached, including while discovery is stalled.
+
+- Fixed the MCP manager so it opens while server connections are still starting, and connection actions stay available.
+
+- Fixed Bedrock Converse so OpenAI models receive their reasoning effort.
+
+- Fixed provider retries when the error says the servers are busy.
+
+- Fixed fullscreen mode so rebuilding the transcript clears the selection.
+
+- Fixed the message type docs so system messages no longer document a replace flag, and assistant messages and tool results document thinking level and nested calls.
+
 ## 0.14.1
 
 ### Added
