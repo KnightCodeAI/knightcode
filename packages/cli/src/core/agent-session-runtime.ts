@@ -224,6 +224,7 @@ export class AgentSessionRuntime {
 	}
 
 	async newSession(options?: {
+		preserveModel?: boolean;
 		parentSession?: string;
 		setup?: (sessionManager: SessionManager) => Promise<void>;
 		withSession?: (ctx: ReplacedSessionContext) => Promise<void>;
@@ -233,6 +234,9 @@ export class AgentSessionRuntime {
 			return beforeResult;
 		}
 
+		const previousSelection = options?.preserveModel
+			? { model: this.session.model, thinkingLevel: this.session.thinkingLevel }
+			: undefined;
 		const previousSessionFile = this.session.sessionFile;
 		const sessionDir = this.session.sessionManager.getSessionDir();
 		const sessionManager = this.session.sessionManager.isPersisted()
@@ -254,6 +258,13 @@ export class AgentSessionRuntime {
 		if (options?.setup) {
 			await options.setup(this.session.sessionManager);
 			this.session.refreshContext();
+		}
+		if (previousSelection) {
+			const model = previousSelection.model;
+			if (model && (model.provider !== this.session.model?.provider || model.id !== this.session.model?.id)) {
+				await this.session.setModel(model);
+			}
+			this.session.setThinkingLevel(previousSelection.thinkingLevel);
 		}
 		await this.finishSessionReplacement(options?.withSession);
 		return { cancelled: false };

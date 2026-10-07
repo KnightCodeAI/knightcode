@@ -56,6 +56,7 @@ import type {
 } from "@knightcode/tui";
 import type { Static, TSchema } from "typebox";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
+import type { PromptDisposition } from "../agent-session.ts";
 import type { BashResult } from "../bash-executor.ts";
 import type { CacheWarmingDecisionEvent, CacheWarmingDecisionEventResult } from "../cache-warmer.ts";
 import type { CompactionPreparation, CompactionResult } from "../compaction/index.ts";
@@ -320,7 +321,14 @@ export interface CompactOptions {
 /**
  * Context passed to extension event handlers.
  */
-export type ExtensionMode = "tui" | "rpc" | "json" | "print";
+export type ExtensionMode = "tui" | "rpc" | "json" | "print" | "engine";
+
+export interface SendUserMessageOptions {
+	deliverAs?: "steer" | "followUp";
+	expandPromptTemplates?: boolean;
+	/** Internal acceptance hook forwarded through command and replacement-session dispatch. */
+	preflightResult?: (disposition: PromptDisposition) => void;
+}
 
 export interface ExtensionContext {
 	/** UI methods for user interaction */
@@ -399,6 +407,9 @@ export interface ExtensionToolContext extends ExtensionContext {
  * Includes session control methods only safe in user-initiated commands.
  */
 export interface ExtensionCommandContext extends ExtensionContext {
+	/** Dispatch user input, rejecting preflight failures and awaiting the complete run. */
+	sendUserMessage(content: string | (TextContent | ImageContent)[], options?: SendUserMessageOptions): Promise<void>;
+
 	/** Get the current base system-prompt construction options. */
 	getSystemPromptOptions(): BuildSystemPromptOptions;
 
@@ -407,6 +418,8 @@ export interface ExtensionCommandContext extends ExtensionContext {
 
 	/** Start a new session, optionally with initialization. */
 	newSession(options?: {
+		/** Keep the outgoing model and reasoning level instead of the host defaults. */
+		preserveModel?: boolean;
 		parentSession?: string;
 		setup?: (sessionManager: SessionManager) => Promise<void>;
 		withSession?: (ctx: ReplacedSessionContext) => Promise<void>;
@@ -443,11 +456,6 @@ export interface ReplacedSessionContext extends ExtensionCommandContext {
 	sendMessage<T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
 		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
-	): Promise<void>;
-
-	sendUserMessage(
-		content: string | (TextContent | ImageContent)[],
-		options?: { deliverAs?: "steer" | "followUp"; expandPromptTemplates?: boolean },
 	): Promise<void>;
 }
 
@@ -975,6 +983,8 @@ export interface BoundaryContextPreview {
 }
 
 export interface BoundaryState {
+	/** Accumulated end request. Later handlers cannot undo it. */
+	end: boolean;
 	entries: SessionBoundaryDraft[];
 	continue: boolean;
 	context: BoundaryContextPreview;
@@ -982,6 +992,8 @@ export interface BoundaryState {
 }
 
 export interface BoundaryResult {
+	/** End this run after committing the boundary, preserving queued user input. */
+	end?: boolean;
 	entries?: SessionBoundaryDraft[];
 	continue?: boolean;
 }
@@ -2162,6 +2174,7 @@ export interface ExtensionActions {
  * Required by all modes.
  */
 export interface ExtensionContextActions {
+	sendUserMessage: ExtensionCommandContext["sendUserMessage"];
 	getModel: () => Model<any> | undefined;
 	getScopedModels: () => readonly ScopedModel[];
 	isIdle: () => boolean;
@@ -2192,6 +2205,7 @@ export interface ExtensionContextActions {
 export interface ExtensionCommandContextActions {
 	waitForIdle: () => Promise<void>;
 	newSession: (options?: {
+		preserveModel?: boolean;
 		parentSession?: string;
 		setup?: (sessionManager: SessionManager) => Promise<void>;
 		withSession?: (ctx: ReplacedSessionContext) => Promise<void>;

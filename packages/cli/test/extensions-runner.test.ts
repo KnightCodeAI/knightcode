@@ -16,6 +16,7 @@ import {
 	loadExtensions,
 } from "../src/core/extensions/loader.ts";
 import { ExtensionRunner, emitProjectTrustEvent } from "../src/core/extensions/runner.ts";
+import { ExtensionStartupError } from "../src/core/extensions/startup-error.ts";
 import type {
 	ExtensionActions,
 	ExtensionContextActions,
@@ -98,6 +99,7 @@ describe("ExtensionRunner", () => {
 	};
 
 	const extensionContextActions: ExtensionContextActions = {
+		sendUserMessage: async () => {},
 		getModel: () => undefined,
 		isIdle: () => true,
 		isProjectTrusted: () => true,
@@ -914,6 +916,55 @@ describe("ExtensionRunner", () => {
 		expect(runner.resolveToolRenderers("a", () => undefined)).toEqual({ renderCall });
 		expect(runner.resolveToolRenderers("b", () => undefined)).toEqual({ renderShell: "self" });
 		expect(runner.resolveToolRenderers("b", () => ({ renderCall }))).toEqual({ renderCall });
+	});
+
+	it("rethrows fatal session startup errors but retains ordinary handler error reporting", async () => {
+		const runtime = createExtensionRuntime();
+		const extension = await loadExtensionFromFactory(
+			(kc) => {
+				kc.on("session_start", () => {
+					throw new ExtensionStartupError("cannot start safely");
+				});
+				kc.on("agent_start", () => {
+					throw new Error("ordinary handler failure");
+				});
+			},
+			tempDir,
+			createEventBus(),
+			runtime,
+		);
+		const runner = new ExtensionRunner([extension], runtime, tempDir, sessionManager, modelRegistry);
+		const errors: string[] = [];
+		runner.onError((error) => errors.push(error.error));
+		await expect(runner.emit({ type: "session_start", reason: "startup" })).rejects.toThrow("cannot start safely");
+		await expect(runner.emit({ type: "agent_start" })).resolves.toBeUndefined();
+		expect(errors).toContain("ordinary handler failure");
+	});
+
+	it("accumulates boundary end so later handlers cannot undo it", async () => {
+		const runtime = createExtensionRuntime();
+		const extension = await loadExtensionFromFactory(
+			(kc) => {
+				kc.on("agent_before_settle", () => ({ end: true }));
+				kc.on("agent_before_settle", (event) => {
+					expect(event.end).toBe(true);
+					return { end: false, continue: true, entries: [{ type: "custom", customType: "kept" }] };
+				});
+			},
+			tempDir,
+			createEventBus(),
+			runtime,
+		);
+		const runner = new ExtensionRunner([extension], runtime, tempDir, sessionManager, modelRegistry);
+		const result = await runner.emitBoundary({ type: "agent_before_settle", outcome: "completed" }, () => ({
+			contextEntries: [],
+			contextMessages: [],
+			llmMessages: [],
+			pendingMessages: [],
+			canContinue: false,
+		}));
+		expect(result.end).toBe(true);
+		expect(result.entries).toMatchObject([{ customType: "kept" }]);
 	});
 
 	describe("boundary chaining", () => {

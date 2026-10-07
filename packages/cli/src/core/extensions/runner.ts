@@ -12,7 +12,9 @@ import {
 } from "@knightcode/ai";
 import type { KeyId } from "@knightcode/tui";
 import { type Theme, theme } from "../../modes/interactive/theme/theme.ts";
+import type { PromptDisposition } from "../agent-session.ts";
 import type { CacheWarmingAction } from "../cache-warmer.ts";
+import { ExtensionStartupError } from "./startup-error.ts";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
 import type { KeybindingsConfig } from "../keybindings.ts";
 import type { ModelRegistry } from "../model-registry.ts";
@@ -213,10 +215,11 @@ type RunnerEmitResult<TEvent extends RunnerEmitEvent> = TEvent extends { type: "
 export type ExtensionErrorListener = (error: ExtensionError) => void;
 
 type BoundaryBaseEvent =
-	| Omit<TurnEndEvent, "entries" | "continue" | "context">
-	| Omit<AgentBeforeSettleEvent, "entries" | "continue" | "context">;
+	| Omit<TurnEndEvent, "entries" | "continue" | "end" | "context">
+	| Omit<AgentBeforeSettleEvent, "entries" | "continue" | "end" | "context">;
 
 interface BoundaryDispatchResult {
+	end: boolean;
 	entries: SessionBoundaryDraft[];
 	continue: boolean;
 	context: BoundaryContextPreview;
@@ -224,6 +227,7 @@ interface BoundaryDispatchResult {
 }
 
 export type NewSessionHandler = (options?: {
+	preserveModel?: boolean;
 	parentSession?: string;
 	setup?: (sessionManager: SessionManager) => Promise<void>;
 	withSession?: (ctx: ReplacedSessionContext) => Promise<void>;
@@ -366,6 +370,9 @@ export class ExtensionRunner {
 	private isProjectTrustedFn: () => boolean = () => true;
 	private getSignalFn: () => AbortSignal | undefined = () => undefined;
 	private waitForIdleFn: () => Promise<void> = async () => {};
+	private sendUserMessageFn: ExtensionContextActions["sendUserMessage"] = async () => {
+		throw new Error("User dispatch is not bound");
+	};
 	private abortFn: () => void = () => {};
 	private hasPendingMessagesFn: () => boolean = () => false;
 	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
@@ -434,6 +441,7 @@ export class ExtensionRunner {
 		this.runtime.createContext = () => this.createContext();
 
 		// Context actions (required)
+		this.sendUserMessageFn = contextActions.sendUserMessage;
 		this.getModel = contextActions.getModel;
 		this.getScopedModels = contextActions.getScopedModels;
 		this.isIdleFn = contextActions.isIdle;
@@ -983,7 +991,7 @@ export class ExtensionRunner {
 		});
 	}
 
-	createCommandContext(): ExtensionCommandContext {
+	createCommandContext(preflightResult?: (disposition: PromptDisposition) => void): ExtensionCommandContext {
 		// Use property descriptors instead of object spread so the guarded getters from
 		// createContext() stay lazy. A spread would eagerly read them once and freeze the
 		// old values into the returned object, bypassing stale-instance checks.
@@ -991,6 +999,27 @@ export class ExtensionRunner {
 			{},
 			Object.getOwnPropertyDescriptors(this.createContext()),
 		) as ExtensionCommandContext;
+		context.sendUserMessage = (content, options) => {
+			this.assertActive();
+			return this.sendUserMessageFn(content, {
+				...options,
+				preflightResult: preflightResult ?? options?.preflightResult,
+			});
+		};
+		const replacementOptions = <T extends { withSession?: (ctx: ReplacedSessionContext) => Promise<void> }>(
+			options: T,
+		): T => {
+			const withSession = options.withSession;
+			if (!withSession || !preflightResult) return options;
+			return {
+				...options,
+				withSession: async (ctx: ReplacedSessionContext) => {
+					const dispatch = ctx.sendUserMessage;
+					ctx.sendUserMessage = (content, opts) => dispatch(content, { ...opts, preflightResult });
+					await withSession(ctx);
+				},
+			};
+		};
 		context.getSystemPromptOptions = () => {
 			this.assertActive();
 			return this.getSystemPromptOptionsFn();
@@ -1001,11 +1030,11 @@ export class ExtensionRunner {
 		};
 		context.newSession = (options) => {
 			this.assertActive();
-			return this.newSessionHandler(options);
+			return this.newSessionHandler(options ? replacementOptions(options) : options);
 		};
 		context.fork = (entryId, options) => {
 			this.assertActive();
-			return this.forkHandler(entryId, options);
+			return this.forkHandler(entryId, options ? replacementOptions(options) : options);
 		};
 		context.navigateTree = (targetId, options) => {
 			this.assertActive();
@@ -1013,7 +1042,7 @@ export class ExtensionRunner {
 		};
 		context.switchSession = (sessionPath, options) => {
 			this.assertActive();
-			return this.switchSessionHandler(sessionPath, options);
+			return this.switchSessionHandler(sessionPath, options ? replacementOptions(options) : options);
 		};
 		context.reload = () => {
 			this.assertActive();
@@ -1029,6 +1058,7 @@ export class ExtensionRunner {
 		const ctx = this.createContext();
 		let entries: SessionBoundaryDraft[] = [];
 		let shouldContinue = false;
+		let end = false;
 		let context = await buildContext(entries);
 		let valid = true;
 
@@ -1038,10 +1068,12 @@ export class ExtensionRunner {
 					...baseEvent,
 					entries,
 					continue: shouldContinue,
+					end,
 					context,
 				} as TurnEndEvent | AgentBeforeSettleEvent;
 				try {
 					const handlerResult = (await handler(event, ctx)) as BoundaryResult | undefined;
+					end ||= handlerResult?.end === true;
 					if (handlerResult?.entries !== undefined) entries = handlerResult.entries;
 					if (handlerResult?.continue !== undefined) shouldContinue = handlerResult.continue;
 				} catch (err) {
@@ -1069,8 +1101,8 @@ export class ExtensionRunner {
 		}
 
 		return valid
-			? { entries, continue: shouldContinue, context, valid: true }
-			: { entries: [], continue: false, context, valid: false };
+			? { entries, continue: shouldContinue && !end, end, context, valid: true }
+			: { entries: [], continue: false, end, context, valid: false };
 	}
 
 	private isSessionBeforeEvent(event: RunnerEmitEvent): event is SessionBeforeEvent {
@@ -1098,6 +1130,7 @@ export class ExtensionRunner {
 						}
 					}
 				} catch (err) {
+					if (event.type === "session_start" && err instanceof ExtensionStartupError) throw err;
 					const message = err instanceof Error ? err.message : String(err);
 					const stack = err instanceof Error ? err.stack : undefined;
 					this.emitError({
