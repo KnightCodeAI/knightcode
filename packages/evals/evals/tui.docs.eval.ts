@@ -50,6 +50,7 @@ class RecordingTerminal {
 	clearScreen(): void {}
 	setTitle(_title: string): void {}
 	setProgress(_active: boolean): void {}
+	setProgramStatus(): void {}
 
 	requestResize(): void {
 		this.resizeHandler?.();
