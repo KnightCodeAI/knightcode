@@ -64,9 +64,10 @@ function sanitizeRadiusGatewayConfig(config: unknown): RadiusGatewayConfig | und
 	if (typeof config !== "object" || config === null || Array.isArray(config)) return undefined;
 	const { baseUrl, models } = config as Partial<RadiusGatewayConfig>;
 	if (typeof baseUrl !== "string" || !Array.isArray(models)) return undefined;
-	// Reject the whole config rather than filtering: a silently emptied catalog would be persisted
-	// by the refresh in radius.ts and would wipe the cached models.
-	if (models.length === 0 || !models.every(isRadiusGatewayModel)) return undefined;
+	// An empty list is a real catalog: the organization disabled every model, and refresh replaces the
+	// shipped baseline with it. A config that contains an invalid entry is still rejected whole, so a
+	// partial parse cannot wipe the cache.
+	if (!models.every(isRadiusGatewayModel)) return undefined;
 	return {
 		baseUrl,
 		models: models.map((model) => ({ ...model })),

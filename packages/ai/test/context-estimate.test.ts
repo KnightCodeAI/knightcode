@@ -42,6 +42,22 @@ const model: Model<"openai-responses"> = {
 };
 
 describe("context token estimation", () => {
+	// Regression: large new inputs need more room than chars/4 allows.
+	it("reserves 3.5 characters per token for new text when limiting output", () => {
+		const context = normalizeContext({
+			messages: [createAssistant(100, 2_000), { role: "user", content: "x".repeat(3_500), timestamp: 200 }],
+		});
+
+		expect(estimateContextTokens(context)).toEqual({
+			tokens: 3_000,
+			usageTokens: 2_000,
+			trailingTokens: 1_000,
+			lastUsageIndex: 0,
+		});
+		// 10_000 - 2_000 - ceil(1_000 * 1.5) - 4_096. The 1.5 pad is local; the 3.5 rate is the estimate.
+		expect(buildBaseOptions(model, context).maxTokens).toBe(2_404);
+	});
+
 	it("ignores stale assistant usage after a newer message is inserted before it", () => {
 		const context = normalizeContext({
 			systemPrompt: "system",
@@ -53,13 +69,13 @@ describe("context token estimation", () => {
 		});
 
 		expect(estimateContextTokens(context)).toEqual({
-			tokens: 1_005,
+			tokens: 1_149,
 			usageTokens: 0,
-			trailingTokens: 1_005,
+			trailingTokens: 1_149,
 			lastUsageIndex: null,
 		});
-		// 10_000 - ceil(1_005 * 1.5) - 4_096
-		expect(buildBaseOptions(model, context).maxTokens).toBe(4_396);
+		// 10_000 - ceil(1_149 * 1.5) - 4_096. The 1.5 pad is local; 1_149 is the 3.5 chars/token estimate.
+		expect(buildBaseOptions(model, context).maxTokens).toBe(4_180);
 	});
 
 	it("uses assistant usage again after a response to the inserted context", () => {
@@ -74,9 +90,9 @@ describe("context token estimation", () => {
 		});
 
 		expect(estimateContextTokens(context)).toEqual({
-			tokens: 2_001,
+			tokens: 2_002,
 			usageTokens: 2_000,
-			trailingTokens: 1,
+			trailingTokens: 2,
 			lastUsageIndex: 3,
 		});
 	});
