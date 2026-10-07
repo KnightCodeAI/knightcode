@@ -8,7 +8,14 @@ import { CollapsibleCallComponent, countedSummary } from "./call-block.ts";
  * rendered separately.
  */
 export class SkillInvocationMessageComponent extends CollapsibleCallComponent {
-	constructor(skillBlock: ParsedSkillBlock, markdownTheme?: MarkdownTheme) {
-		super("Skill", skillBlock.name, countedSummary("Loaded", skillBlock.content), skillBlock.content, markdownTheme);
+	constructor(skillBlock: ParsedSkillBlock, markdownTheme?: MarkdownTheme, outputPad = 1) {
+		super(
+			"Skill",
+			skillBlock.name,
+			countedSummary("Loaded", skillBlock.content),
+			skillBlock.content,
+			markdownTheme,
+			outputPad,
+		);
 	}
 }

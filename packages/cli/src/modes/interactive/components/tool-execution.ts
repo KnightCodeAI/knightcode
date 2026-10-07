@@ -19,6 +19,7 @@ import {
 import { ensurePngTranscoder } from "../../../utils/image-convert.ts";
 import { BLOCK_INDENT, BULLET, RESULT_GUTTER, RESULT_INDENT } from "../glyphs.ts";
 import { theme } from "../theme/theme.ts";
+import { paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
 import { keyHint } from "./keybinding-hints.ts";
 
 /** What this component needs from a tool: how to draw it, without executing it. */
@@ -29,6 +30,7 @@ const FALLBACK_PREVIEW_LINES = 10;
 export interface ToolExecutionOptions {
 	showImages?: boolean;
 	imageWidthCells?: number;
+	outputPad?: number;
 }
 
 export class ToolExecutionComponent extends Container {
@@ -51,6 +53,7 @@ export class ToolExecutionComponent extends Container {
 	private expanded = false;
 	private showImages: boolean;
 	private imageWidthCells: number;
+	private outputPad: number;
 	private isPartial = true;
 	private toolDefinition?: ToolRenderers;
 	private ui: TUI;
@@ -80,6 +83,7 @@ export class ToolExecutionComponent extends Container {
 		this.toolDefinition = toolDefinition;
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;
+		this.outputPad = options.outputPad ?? 1;
 		this.ui = ui;
 		this.cwd = cwd;
 
@@ -149,6 +153,7 @@ export class ToolExecutionComponent extends Container {
 			expanded: this.expanded,
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
+			outputPad: this.outputPad,
 		};
 	}
 
@@ -215,6 +220,11 @@ export class ToolExecutionComponent extends Container {
 		this.updateDisplay();
 	}
 
+	setOutputPad(outputPad: number): void {
+		this.outputPad = outputPad;
+		this.updateDisplay();
+	}
+
 	setShowImages(show: boolean): void {
 		this.showImages = show;
 		this.updateDisplay();
@@ -260,17 +270,22 @@ export class ToolExecutionComponent extends Container {
 			return lines;
 		}
 
-		return super.render(width);
+		const pad = Math.max(0, this.outputPad);
+		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
 	}
 
 	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
-		if (this.getRenderShell() !== "self") return super.handleMouse(event);
-		if (event.y <= 0 || event.y > this.selfRenderHeight) return undefined;
-		return this.selfRenderContainer.handleMouse({
-			...event,
-			y: event.y - 1,
-			height: this.selfRenderHeight,
-		});
+		if (this.getRenderShell() === "self") {
+			if (event.y <= 0 || event.y > this.selfRenderHeight) return undefined;
+			return this.selfRenderContainer.handleMouse({
+				...event,
+				y: event.y - 1,
+				height: this.selfRenderHeight,
+			});
+		}
+		const next = paddedMouseEvent(event, this.outputPad);
+		if (!next) return undefined;
+		return super.handleMouse(next);
 	}
 
 	private updateDisplay(): void {

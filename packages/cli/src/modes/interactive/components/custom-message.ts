@@ -1,11 +1,11 @@
 import type { TextContent } from "@knightcode/ai";
-import type { Component } from "@knightcode/tui";
+import type { Component, TuiMouseEvent } from "@knightcode/tui";
 import { Container, Markdown, type MarkdownTheme, Spacer } from "@knightcode/tui";
 import type { MessageRenderer } from "../../../core/extensions/types.ts";
 import type { CustomMessage } from "../../../core/messages.ts";
 import { formatToolCall } from "../../../core/tools/render-utils.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
-import { callBlock } from "./call-block.ts";
+import { callBlock, paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
 
 /**
  * Component that renders a custom message entry from extensions. Without a custom renderer it is drawn like a
@@ -45,10 +45,23 @@ export class CustomMessageComponent extends Container {
 	}
 
 	setOutputPad(outputPad: number): void {
-		if (this.outputPad !== outputPad) {
-			this.outputPad = outputPad;
-			this.rebuild();
-		}
+		if (this.outputPad === outputPad) return;
+		this.outputPad = outputPad;
+		// A custom renderer receives the pad when it is built. The default block reads it at render time.
+		if (this.customRenderer) this.rebuild();
+	}
+
+	override render(width: number): string[] {
+		if (this.customComponent) return super.render(width);
+		const pad = Math.max(0, this.outputPad);
+		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
+	}
+
+	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
+		if (this.customComponent) return super.handleMouse(event);
+		const next = paddedMouseEvent(event, this.outputPad);
+		if (!next) return undefined;
+		return super.handleMouse(next);
 	}
 
 	override invalidate(): void {
