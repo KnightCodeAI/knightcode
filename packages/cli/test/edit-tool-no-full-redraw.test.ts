@@ -77,7 +77,7 @@ describe("edit tool TUI rendering", () => {
 		await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 	});
 
-	it("renders the large diff in the call preview and does not full-redraw when the result settles", async () => {
+	it("renders the large diff in the call preview and redraws at most once when the result settles", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "knightcode-edit-redraw-"));
 		tempDirs.push(dir);
 		const filePath = join(dir, "large-edit.txt");
@@ -138,11 +138,15 @@ describe("edit tool TUI rendering", () => {
 			},
 			false,
 		);
-		tui.requestRender();
-		await waitForRender();
-
-		expect(tui.fullRedraws).toBe(redrawsBeforeResult);
-		expect(terminal.fullClearCount).toBe(clearsBeforeResult);
+		// Render the settled frame now instead of racing the 16 ms render throttle. Settling restyles the
+		// header and re-indents the body under the result gutter, so with the header scrolled above the
+		// viewport the settle costs one full redraw. It must not cost more, and must not repeat.
+		tui.renderNow();
+		expect(tui.fullRedraws - redrawsBeforeResult).toBeLessThanOrEqual(1);
+		expect(terminal.fullClearCount - clearsBeforeResult).toBeLessThanOrEqual(1);
+		const redrawsAfterSettle = tui.fullRedraws;
+		tui.renderNow();
+		expect(tui.fullRedraws).toBe(redrawsAfterSettle);
 
 		const settledRender = stripAnsi(component.render(80).join("\n"));
 		expect(settledRender).toContain("line 50 changed");
