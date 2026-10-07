@@ -35,6 +35,8 @@ export interface SessionState {
 	rejected: Set<string>;
 	/** Tool calls whose card already shows a diff; their end must not replace it with text. */
 	diffed: Set<string>;
+	/** Submitted Markdown must not be replaced by the submission acknowledgement. */
+	plans: Set<string>;
 	/** Display-only terminals by tool call id. */
 	terminals: Map<string, TerminalState>;
 	/**
@@ -45,7 +47,15 @@ export interface SessionState {
 }
 
 export function createSessionState(cwd: string): SessionState {
-	return { cwd, announced: new Set(), rejected: new Set(), diffed: new Set(), terminals: new Map(), cancelling: false };
+	return {
+		cwd,
+		announced: new Set(),
+		rejected: new Set(),
+		diffed: new Set(),
+		plans: new Set(),
+		terminals: new Map(),
+		cancelling: false,
+	};
 }
 
 function textOf(content: readonly ToolContent[]): string {
@@ -74,6 +84,18 @@ function exitCodeOf(text: string, isError: boolean): number | null {
 	return match ? Number(match[1]) : null;
 }
 
+function planContent(toolName: string, args: unknown): ToolCallContent[] | undefined {
+	if (
+		toolName !== "submit_plan" ||
+		typeof args !== "object" ||
+		args === null ||
+		!("markdown" in args) ||
+		typeof args.markdown !== "string"
+	)
+		return undefined;
+	return [{ type: "content", content: { type: "text", text: args.markdown } }];
+}
+
 function announce(
 	event: Extract<SessionEvent, { type: "session.tool_call" | "session.tool_start" }>,
 	state: SessionState,
@@ -82,7 +104,8 @@ function announce(
 	const { toolCallId, toolName, args } = event;
 	state.announced.add(toolCallId);
 	const meta: Record<string, unknown> = { [TOOL_NAME_META_KEY]: toolName };
-	let content: ToolCallContent[] | undefined;
+	let content = planContent(toolName, args);
+	if (content) state.plans.add(toolCallId);
 	if (SHELL_TOOLS.has(toolName)) {
 		const terminal: TerminalState = { id: randomUUID(), output: "" };
 		state.terminals.set(toolCallId, terminal);
@@ -133,7 +156,8 @@ export function toSessionUpdates(event: SessionEvent, state: SessionState): Sess
 				];
 			}
 			// `content` replaces the card's collection; a diff already there must survive a progress update.
-			if (state.diffed.has(event.toolCallId) || event.content.length === 0) return [];
+			if (state.diffed.has(event.toolCallId) || state.plans.has(event.toolCallId) || event.content.length === 0)
+				return [];
 			return [
 				{
 					sessionUpdate: "tool_call_update",
@@ -149,6 +173,7 @@ export function toSessionUpdates(event: SessionEvent, state: SessionState): Sess
 			const terminal = state.terminals.get(toolCallId);
 			state.terminals.delete(toolCallId);
 			state.announced.delete(toolCallId);
+			const planned = state.plans.delete(toolCallId);
 			const rawOutput = { content: text, ...(event.details !== undefined ? { details: event.details } : {}) };
 			if (state.rejected.delete(toolCallId) || (isError && state.cancelling)) {
 				state.diffed.delete(toolCallId);
@@ -170,7 +195,7 @@ export function toSessionUpdates(event: SessionEvent, state: SessionState): Sess
 					},
 				];
 			}
-			if (state.diffed.delete(toolCallId)) {
+			if (state.diffed.delete(toolCallId) || planned) {
 				return [{ sessionUpdate: "tool_call_update", toolCallId, status, rawOutput }];
 			}
 			return [
@@ -232,6 +257,7 @@ export function historyUpdates(messages: readonly unknown[], cwd: string): Sessi
 					});
 				} else if (block.type === "toolCall") {
 					const result = results.get(block.id);
+					const plan = planContent(block.name, block.arguments);
 					updates.push({
 						sessionUpdate: "tool_call",
 						toolCallId: block.id,
@@ -243,13 +269,15 @@ export function historyUpdates(messages: readonly unknown[], cwd: string): Sessi
 						rawInput: block.arguments,
 						...(result
 							? {
-									content: toolResultContent(result.content),
+									content: plan ?? toolResultContent(result.content),
 									rawOutput: {
 										content: textOf(result.content),
 										...(result.details !== undefined ? { details: result.details } : {}),
 									},
 								}
-							: {}),
+							: plan
+								? { content: plan }
+								: {}),
 						_meta: { [TOOL_NAME_META_KEY]: block.name },
 					});
 				}
