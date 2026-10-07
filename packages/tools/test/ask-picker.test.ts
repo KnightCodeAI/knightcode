@@ -64,6 +64,32 @@ describe("AskPicker", () => {
 		expect(text).toContain("tab add note · enter submit answer · left/right questions · escape interrupt");
 	});
 
+	test("a title and other row replace the progress line and None of the above", () => {
+		setKeybindings(new KeybindingsManager());
+		const done: (AskAnswers | undefined)[] = [];
+		const picker = new AskPicker(
+			[db],
+			{ requestRender: () => {} },
+			theme,
+			new KeybindingsManager(),
+			(answers) => done.push(answers),
+			undefined,
+			{
+				title: "Plan revision 2",
+				other: { label: "Revise the plan", description: "Tell the model what to change." },
+				cancel: "keep planning",
+			},
+		);
+		const text = picker.render(80).join("\n");
+		expect(text).toContain("Plan revision 2");
+		expect(text).not.toContain("Question 1/1");
+		expect(text).toContain("3. Revise the plan");
+		expect(text).not.toContain("None of the above");
+		expect(text).toContain("escape keep planning");
+		for (const key of [KEY.down, KEY.down, KEY.enter, ..."shorter", KEY.enter]) picker.handleInput(key);
+		expect(done).toEqual([{ database: { other: "shorter" } }]);
+	});
+
 	test("Enter commits and advances; Enter on the last question submits", () => {
 		const { press, result, screen } = open([db, auth]);
 		press(KEY.enter);

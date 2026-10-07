@@ -1,4 +1,9 @@
-import type { AssistantMessage, ImageContent } from "@knightcode/ai";
+import { fauxAssistantMessage, fauxToolCall, type AssistantMessage, type ImageContent } from "@knightcode/ai";
+import { askUserTool } from "@knightcode/tools/ask/tool";
+import { AgentSessionRuntime } from "../src/core/agent-session-runtime.ts";
+import { createAgentSessionServices } from "../src/core/agent-session-services.ts";
+import planMode from "../src/extensions/plan-mode/index.ts";
+import { createHarness } from "./suite/harness.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionShutdownEvent } from "../src/index.ts";
 import { runPrintMode } from "../src/modes/print-mode.ts";
@@ -91,6 +96,101 @@ afterEach(() => {
 });
 
 describe("runPrintMode", () => {
+	it.each(["plain", "mixed", "flag", "json", "approval", "dispatch-failure"] as const)(
+		"awaits real planning dispatch and frames %s output before teardown",
+		async (kind) => {
+			const h = await createHarness({
+				extensionFactories: [planMode, (kc) => kc.registerTool({ ...askUserTool, defaultActive: false })],
+				withConfiguredAuth: kind !== "dispatch-failure",
+			});
+			if (kind === "flag") h.session.extensionRunner.setFlagValue("plan", true);
+			const services = await createAgentSessionServices({
+				cwd: h.tempDir,
+				agentDir: h.tempDir,
+				modelRuntime: h.session.modelRuntime,
+				settingsManager: h.settingsManager,
+				resourceLoaderOptions: { noExtensions: true, noSkills: true, noContextFiles: true },
+			});
+			const runtime = new AgentSessionRuntime(h.session, services, async () => {
+				throw new Error("replacement not expected");
+			});
+			const plan = "# A complete plan\n\nChange the code and run tests.";
+			if (kind === "approval") {
+				await h.session.bindExtensions({ mode: "json" });
+				h.setResponses([
+					fauxAssistantMessage(fauxToolCall("submit_plan", { markdown: plan }), { stopReason: "toolUse" }),
+				]);
+				await h.session.prompt("/plan task");
+			}
+			const errors: string[] = [];
+			vi.spyOn(console, "error").mockImplementation((text) => errors.push(String(text)));
+			const chunks: string[] = [];
+			vi.spyOn(process.stdout, "write").mockImplementation((chunk, encodingOrCallback, callback) => {
+				chunks.push(String(chunk));
+				const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+				done?.();
+				return true;
+			});
+			const call = fauxToolCall("submit_plan", { markdown: plan });
+			h.setResponses([
+				async () => {
+					await new Promise((resolve) => setTimeout(resolve, 20));
+					if (kind === "approval") return fauxAssistantMessage("implemented");
+					return fauxAssistantMessage(kind === "mixed" ? [fauxToolCall("read", { path: "missing" }), call] : call, {
+						stopReason: "toolUse",
+					});
+				},
+			]);
+			try {
+				expect(
+					await runPrintMode(runtime, {
+						mode: kind === "json" ? "json" : "text",
+						initialMessage: kind === "approval" ? "/plan approve" : kind === "flag" ? "task" : "/plan task",
+					}),
+				).toBe(kind === "dispatch-failure" ? 1 : 0);
+				if (kind === "json") {
+					const records = chunks
+						.join("")
+						.trim()
+						.split("\n")
+						.map((line) => JSON.parse(line) as { type: string });
+					expect(records.some((r) => r.type === "tool_execution_end")).toBe(true);
+				} else
+					expect(chunks.join("")).toBe(
+						kind === "dispatch-failure" ? "" : kind === "approval" ? "implemented\n" : plan + "\n",
+					);
+				if (kind === "dispatch-failure") expect(errors.join("\n")).toContain("API key");
+				expect(h.faux.state.callCount).toBe(kind === "dispatch-failure" ? 0 : kind === "approval" ? 2 : 1);
+			} finally {
+				h.cleanup();
+			}
+		},
+	);
+
+	it("reports fatal plan startup without requesting a provider or printing a plan", async () => {
+		const h = await createHarness({ extensionFactories: [planMode], allowedToolNames: [] });
+		h.session.extensionRunner.setFlagValue("plan", true);
+		const services = await createAgentSessionServices({
+			cwd: h.tempDir,
+			agentDir: h.tempDir,
+			modelRuntime: h.session.modelRuntime,
+			settingsManager: h.settingsManager,
+			resourceLoaderOptions: { noExtensions: true, noSkills: true, noContextFiles: true },
+		});
+		const runtime = new AgentSessionRuntime(h.session, services, async () => {
+			throw new Error("replacement not expected");
+		});
+		const errors: string[] = [];
+		vi.spyOn(console, "error").mockImplementation((text) => errors.push(String(text)));
+		try {
+			expect(await runPrintMode(runtime, { mode: "text", initialMessage: "task" })).toBe(1);
+			expect(h.faux.state.callCount).toBe(0);
+			expect(errors.join("\n")).toContain("Plan mode needs");
+		} finally {
+			h.cleanup();
+		}
+	});
+
 	it("emits session_shutdown in text mode", async () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
 		const { session } = runtimeHost;

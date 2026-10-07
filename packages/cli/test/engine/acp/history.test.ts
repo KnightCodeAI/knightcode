@@ -82,6 +82,30 @@ describe("history updates", () => {
 		expect(idOf(6)).toBe(idOf(7));
 	});
 
+	test("replays a submitted plan from its arguments, not the acknowledgement", () => {
+		const [call] = historyUpdates(
+			[
+				{
+					role: "assistant",
+					content: [{ type: "toolCall", id: "p", name: "submit_plan", arguments: { markdown: "# Plan" } }],
+				},
+				{
+					role: "toolResult",
+					toolCallId: "p",
+					toolName: "submit_plan",
+					content: [{ type: "text", text: "Submitted as revision 1" }],
+					details: { revision: 1 },
+					isError: false,
+				},
+			],
+			cwd,
+		);
+		expect(call).toMatchObject({
+			content: [{ type: "content", content: { type: "text", text: "# Plan" } }],
+			rawOutput: { content: "Submitted as revision 1" },
+		});
+	});
+
 	test("redacted thinking and empty text are not shown", () => {
 		const updates = historyUpdates(
 			[

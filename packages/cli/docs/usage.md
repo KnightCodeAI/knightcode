@@ -130,7 +130,7 @@ The last row, **None of the above**, opens a field for your own answer. Submitti
 
 In RPC mode the questions arrive as `select` and `input` dialogs, one per question, without notes. In a run with no one to ask, such as print and JSON modes, the tool answers at once and the agent takes the recommended options and states them as assumptions.
 
-`ask_user` is off by default. When on, its declaration adds about 230 tokens to each request.
+`ask_user` is off by default. When on, its declaration adds about 230 tokens to each request. Plan mode turns it on while planning.
 
 ## Scratchpad
 

@@ -12,7 +12,7 @@ import type { InlineExtension } from "../core/extensions/index.ts";
 import { ClientRequestAborted, type ClientReply, type ClientRequests } from "./client-requests.ts";
 
 /** Built-in tools that only read never ask; everything else does. */
-const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(["read", "grep", "find", "ls"]);
+const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(["read", "grep", "find", "ls", "ask_user", "submit_plan"]);
 
 export function needsPermission(toolName: string): boolean {
 	return !READ_ONLY_TOOLS.has(toolName);

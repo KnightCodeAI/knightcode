@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join, parse } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from "@knightcode/ai/compat";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AgentSession } from "../../src/core/agent-session.ts";
 import {
 	type CreateAgentSessionRuntimeFactory,
 	createAgentSessionFromServices,
@@ -692,5 +693,23 @@ describe("AgentSessionRuntime characterization", () => {
 
 		expect(runtime.session.model?.id).toBe("faux-2");
 		expect(runtime.session.thinkingLevel).toBe("off");
+	});
+
+	it("rebinds the host to the replacement when restoring the preserved model fails", async () => {
+		const { runtime, faux } = await createRuntimeForTest(() => {});
+		await runtime.session.setModel(faux.getModel("faux-2")!);
+		const rebound: AgentSession[] = [];
+		runtime.setRebindSession(async (session) => {
+			rebound.push(session);
+		});
+		const setModel = vi
+			.spyOn(AgentSession.prototype, "setModel")
+			.mockRejectedValueOnce(new Error("No API key for faux/faux-2"));
+		try {
+			await expect(runtime.newSession({ preserveModel: true })).rejects.toThrow("No API key");
+		} finally {
+			setModel.mockRestore();
+		}
+		expect(rebound).toEqual([runtime.session]);
 	});
 });

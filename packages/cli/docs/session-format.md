@@ -173,6 +173,22 @@ Use `customType` to identify your extension's entries on reload. Interactive mod
 
 KnightCode stores [virtual model](virtual-models.md) router state as custom entries with `customType` `knightcode.virtual-model-state` and `data` `{ provider, modelId, state }`.
 
+#### Plan mode snapshots
+
+The built-in [plan mode](plan-mode.md) writes full snapshots with
+`customType: "plan-mode"`:
+
+```json
+{"type":"custom","id":"plan1234","parentId":"prev1234","timestamp":"2024-12-03T14:20:00.000Z","customType":"plan-mode","data":{"mode":"off","draft":{"revision":2,"markdown":"# Changes\n..."},"approved":2}}
+```
+
+`mode` is `off` or `planning`; `draft` and `approved` are optional. An approved
+revision must equal the draft revision and exist only while off. The latest
+snapshot on the selected branch wins, including entries omitted from model
+context by compaction. Exit and approval retain the draft; entry and submission
+clear approval. Malformed state refuses restoration rather than dropping the
+restrictions. No session version change is needed.
+
 ### CustomMessageEntry
 
 Extension-injected messages that DO participate in LLM context.
@@ -185,6 +201,12 @@ Fields:
 - `content`: String or `(TextContent | ImageContent)[]` (same as UserMessage)
 - `display`: `true` = show in TUI with distinct styling, `false` = hidden
 - `details`: Optional extension-specific metadata (not sent to LLM)
+
+Plan-mode messages use `customType: "plan-mode"`, `display: false`, and
+`details.kind` of `instructions`, `reminder`, `exit`, or `recovery`. Recovery
+also stores `id` (the compaction entry ID), `revision` when present, and `status`
+(`planning` or `approved`). Its content is frozen when appended, so later
+revisions cannot change earlier request content.
 
 ### LabelEntry
 

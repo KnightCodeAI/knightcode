@@ -19,6 +19,7 @@ export type {
 	SwitchSessionHandler,
 } from "./runner.ts";
 export { ExtensionRunner } from "./runner.ts";
+export { ExtensionStartupError } from "./startup-error.ts";
 export type {
 	AfterProviderResponseEvent,
 	AgentActivityOutcome,
@@ -147,6 +148,7 @@ export type {
 	ResourcesDiscoverResult,
 	SendMessageHandler,
 	SendUserMessageHandler,
+	SendUserMessageOptions,
 	SessionBeforeCompactEvent,
 	SessionBeforeCompactResult,
 	SessionBeforeForkEvent,

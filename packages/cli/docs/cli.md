@@ -50,6 +50,22 @@ KnightCode resolves `@path` from the current working directory. The working dire
 
 RPC mode rejects `@file` arguments. JSON and RPC modes reserve stdout for protocol records. See [JSON Event Stream](json.md) and [RPC Protocol](rpc.md).
 
+### Plan before implementing
+
+```sh
+knightcode --plan
+knightcode -p --plan "Plan the authentication refactor"
+```
+
+The built-in `--plan` extension flag enters enforced [plan mode](plan-mode.md)
+only on initial startup, including when opening a saved session. Later reloads,
+new sessions, resumes, and forks follow their saved state rather than reapplying
+the flag. Print mode (`-p`) writes the submitted Markdown to stdout;
+implementation requires explicit `/plan approve`. Incompatible tool filters or
+active codemode `only` mode fail startup before any provider request.
+`--no-extensions` disables the built-in unless explicitly loaded with
+`-e builtin:plan-mode`.
+
 <a id="model-options"></a>
 
 ## Models
