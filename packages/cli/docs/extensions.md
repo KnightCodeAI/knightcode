@@ -114,7 +114,7 @@ Handlers are awaited in stream order, so slow handlers delay stream consumption.
 
 `context` transforms conversation messages without prompt and tool system messages; KnightCode restores that state afterward. Use `context_with_system` only when a request-local transformation must own the complete transcript, and keep a system message at index zero.
 
-`turn_end` and `agent_before_settle` are actionable boundaries. Their handlers can chain proposed `custom`, `custom_message`, `context_edit`, or `compaction` entries and return `continue: true` for one next model request. Guard continuation conditions because an unconditional continuation can loop. Use the exported event declarations for the complete validation and ordering contract.
+`turn_end` and `agent_before_settle` are actionable boundaries. Their handlers can chain proposed `custom`, `custom_message`, `context_edit`, or `compaction` entries and return `continue: true` for one next model request. Returning `end: true` ends the owning run after valid entries are committed; it overrides continuation and does not drain queued user input. `event.end` exposes the accumulated end request, which later handlers cannot undo. Guard continuation conditions because an unconditional continuation can loop. Use the exported event declarations for the complete validation and ordering contract.
 
 <a id="cache_warming_decision"></a>
 
@@ -161,7 +161,7 @@ See [`hello.ts`](../examples/extensions/hello.ts), [`todo.ts`](../examples/exten
 
 `namespace: { name, description, instructions }` groups related tools, as MCP servers do. Codemode tools list a namespace under one heading with its `description`. `instructions` holds longer usage guidance; it is not listed, and codemode scripts read it with `describeNamespace(name)`.
 
-Registering a `direct` or `model-only` tool activates it; the other exposures are not activated on registration. The active set (`knightcode.getActiveTools()`, `knightcode.setActiveTools()`) is the set of tools declared to the model. `knightcode.getAllTools()` reports each tool's `exposure`, `namespace`, and `annotations`.
+Registering a `direct` or `model-only` tool activates it unless `defaultActive: false` keeps it optional; the other exposures are not activated on registration. The active set (`knightcode.getActiveTools()`, `knightcode.setActiveTools()`) is the set of tools declared to the model. `knightcode.getAllTools()` reports each tool's `exposure`, `namespace`, and `annotations`.
 
 `annotations` are hints about what a tool does, with the meaning of MCP tool annotations: `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`. MCP tools carry the hints their server declares. Missing hints take the MCP defaults: a tool is not read-only, and may be destructive and reach an open world. The hints are not verified, but a permission extension can use them to decide which calls to confirm. This confirms the calls Codex asks approval for:
 
@@ -215,6 +215,20 @@ Use `ctx.modelRegistry.getAvailableClassifiers()` and `ctx.modelRegistry.classif
 Command handlers receive `ExtensionCommandContext`, which adds operations for waiting until idle, reloading, tree navigation, and session replacement.
 These operations are command-only because calling them from lifecycle handlers can deadlock the runtime.
 
+Use `await ctx.sendUserMessage(content, options)` in a command when completion
+must include the dispatched run. It rejects dispatch or preflight failures and
+resolves after command handling or complete agent settlement. The replacement
+context's method has the same contract. The originating prompt receives the
+nested dispatch's acceptance once, before settlement; command-only completion
+reports `handled`. Command-handler failures are reported and rethrown rather
+than acknowledged as successful. `knightcode.sendUserMessage()` remains
+fire-and-forget; waiting for idle after calling it is not equivalent because
+asynchronous preflight may still be running.
+
+`ctx.newSession({ preserveModel: true, setup, withSession })` optionally keeps
+the outgoing model and reasoning level instead of the host defaults. Capture
+plain data before replacement and dispatch through `withSession`'s context.
+
 Session replacement invalidates the old context. Capture only plain data before switching, then use the fresh context supplied to `withSession` for session-bound work.
 
 <a id="state-management"></a>
@@ -246,7 +260,9 @@ Register an entry or message renderer when custom stored content should appear i
 Use `ctx.ui.custom()` only when the interaction needs its own rendering and input.
 See [Terminal UI](tui.md) for component, focus, overlay, theme, and performance guidance.
 
-Extensions load in interactive, RPC, JSON, and print modes.
+Extensions load in interactive, RPC, JSON, print, and engine modes. `ctx.mode`
+is `"engine"` in IDE engine sessions, which have no dialog-capable UI and must
+never print unframed content to stdout.
 Interactive mode provides the complete terminal UI. The [DOOM overlay example](../examples/extensions/doom-overlay/) uses a custom overlay component to render a game frame by frame:
 
 <p align="center"><img src="images/doom-extension.png" alt="The DOOM overlay example running over a KnightCode session" width="750"></p>
@@ -262,6 +278,12 @@ Keep tool and event behavior independent from rendering so non-interactive modes
 ### Errors and cleanup
 
 KnightCode reports handler errors and continues where possible. A `tool_call` handler failure blocks the tool as a fail-safe; a tool execution failure becomes an error result for the model.
+
+Throw the exported `ExtensionStartupError` from `session_start` when an unsafe
+runtime must refuse initialization. Binding or reload propagates it to the
+host, and the failed session cannot prompt a provider or compact until
+successful startup/reload clears the failure. Ordinary handler errors remain
+nonfatal. The engine disposes failed startup sessions before announcing them.
 
 Release resources in `session_shutdown` even when normal operation attempted cleanup.
 Keep cleanup idempotent because cancellation, reload, session replacement, and process exit can converge on the same path.
