@@ -10,6 +10,48 @@ function meta(update: { _meta?: { [key: string]: unknown } | null }): Record<str
 }
 
 describe("session updates", () => {
+	test("submission Markdown survives progress and the final acknowledgement", () => {
+		const state = createSessionState(cwd);
+		const [call] = toSessionUpdates(
+			{
+				type: "session.tool_call",
+				sessionId,
+				toolCallId: "plan",
+				toolName: "submit_plan",
+				args: { markdown: "# Plan" },
+			},
+			state,
+		);
+		expect(call).toMatchObject({ content: [{ type: "content", content: { type: "text", text: "# Plan" } }] });
+		expect(
+			toSessionUpdates(
+				{
+					type: "session.tool_update",
+					sessionId,
+					toolCallId: "plan",
+					toolName: "submit_plan",
+					content: [{ type: "text", text: "working" }],
+					details: undefined,
+				},
+				state,
+			),
+		).toEqual([]);
+		const [end] = toSessionUpdates(
+			{
+				type: "session.tool_end",
+				sessionId,
+				toolCallId: "plan",
+				toolName: "submit_plan",
+				content: [{ type: "text", text: "Submitted as revision 1" }],
+				details: { revision: 1 },
+				isError: false,
+			},
+			state,
+		);
+		expect(end).toMatchObject({ status: "completed", rawOutput: { content: "Submitted as revision 1" } });
+		expect(end).not.toHaveProperty("content");
+	});
+
 	test("text and thinking deltas become message and thought chunks", () => {
 		const state = createSessionState(cwd);
 		const text: SessionEvent = { type: "session.delta", sessionId, messageId: "m1", kind: "text", delta: "hi" };

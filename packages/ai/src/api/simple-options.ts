@@ -15,17 +15,15 @@ import { estimateContextTokens } from "../utils/estimate.ts";
 const CONTEXT_SAFETY_TOKENS = 4096;
 const MIN_MAX_TOKENS = 1;
 /**
- * Messages with no provider usage yet are estimated at 4 chars/token, but real tokenizers
- * land nearer 3 chars/token on code and JSON, so the estimate under-counts by up to ~25%.
+ * Messages with no provider usage yet are estimated at 3.5 chars/token, but real tokenizers
+ * land nearer 3 chars/token on code and JSON, and worse on minified JSON, base64, and CJK.
  * Reserving max_tokens against the raw estimate makes prompt + max_tokens exceed the window
  * on a large tail, and the provider rejects it with a context-length error that looks like
  * an overflow - so the agent compacts, max_tokens re-expands into the freed room, and the
  * next request fails the same way. Pad the estimated part so the reservation stays inside.
  *
- * 4/3 covers the documented 3-chars/token case exactly; the rest is cushion for the tails that
- * are worse than that (minified JSON, base64, CJK). The pad only binds when the prompt is already
- * near the window - the regime where an over-large max_tokens is a hard provider error and a
- * slightly smaller one still answers - so it buys back nothing to run it closer to the estimate.
+ * The pad only binds when the prompt is already near the window - the regime where an
+ * over-large max_tokens is a hard provider error and a slightly smaller one still answers.
  */
 const ESTIMATE_UNDERCOUNT_MARGIN = 1.5;
 

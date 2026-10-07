@@ -24,6 +24,20 @@ Some `ExtensionUIContext` methods are not supported or degraded in RPC mode beca
 
 Note: `ctx.mode` is `"rpc"` and `ctx.hasUI` is `true` in RPC mode because the dialog and fire-and-forget methods are functional via the extension UI sub-protocol. Use `ctx.mode === "tui"` to guard TUI-specific features like `custom()` that require a real terminal.
 
+## Plan mode dialogs
+
+[Plan mode](plan-mode.md) notifies when a draft is submitted. Sending `/plan`
+opens a `select` dialog with the rendered plan text in the title and the actions
+Implement, Implement in a fresh session, Keep planning (Esc), and Exit planning.
+It does not open review automatically in RPC mode.
+
+Planning questions use `select` with one option per choice, written as
+`<label> — <description>`, plus “None of the above”; return the option string
+exactly. Choosing “None of the above” opens `input` for a free-text answer.
+Shell commands are not confirmed while planning. Dialogs take an abort signal:
+cancellation, abort, or client disconnection must release the pending
+interaction. The plan status uses `setStatus` with the key `plan`.
+
 ## Requests from KnightCode
 
 All requests have `type: "extension_ui_request"`, a unique `id`, and a `method` field.

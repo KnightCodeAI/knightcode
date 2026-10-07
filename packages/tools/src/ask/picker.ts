@@ -16,6 +16,16 @@ import type { AskAnswers, AskQuestion } from "./tool.ts";
 export const OTHER_LABEL = "None of the above";
 const OTHER_DESCRIPTION = "Type your own answer.";
 
+/** Lets another flow reuse the picker for a single decision, such as plan review. */
+export interface AskPickerOptions {
+	/** Replaces the "Question i/n" progress line. */
+	title?: string;
+	/** Replaces the "None of the above" row. */
+	other?: { label: string; description: string };
+	/** What Escape does, shown in the hints; defaults to "interrupt". */
+	cancel?: string;
+}
+
 /** `options`: choosing a row. `note` and `other`: typing in the text field. `confirm`: submitting with gaps. */
 type Mode = "options" | "note" | "other" | "confirm";
 
@@ -48,6 +58,7 @@ export class AskPicker implements Component, Focusable {
 	private readonly keybindings: Pick<KeybindingsManager, "matches" | "getKeys">;
 	private readonly done: (answers: AskAnswers | undefined) => void;
 	private readonly signal: AbortSignal | undefined;
+	private readonly options: AskPickerOptions;
 	private readonly states: QuestionState[];
 	private current = 0;
 	private mode: Mode = "options";
@@ -64,6 +75,7 @@ export class AskPicker implements Component, Focusable {
 		keybindings: Pick<KeybindingsManager, "matches" | "getKeys">,
 		done: (answers: AskAnswers | undefined) => void,
 		signal: AbortSignal | undefined,
+		options: AskPickerOptions = {},
 	) {
 		this.questions = questions;
 		this.tui = tui;
@@ -71,6 +83,7 @@ export class AskPicker implements Component, Focusable {
 		this.keybindings = keybindings;
 		this.done = done;
 		this.signal = signal;
+		this.options = options;
 		this.states = questions.map(() => ({ selected: 0, committed: false, note: "", other: "" }));
 		signal?.addEventListener("abort", this.onAbort, { once: true });
 	}
@@ -258,9 +271,12 @@ export class AskPicker implements Component, Focusable {
 		const q = this.question();
 		const state = this.state();
 		const unanswered = this.unanswered();
-		const progress = t.fg("accent", t.bold(`Question ${this.current + 1}/${this.questions.length}`));
+		const progress = this.options.title
+			? t.fg("accent", t.bold(this.options.title))
+			: t.fg("accent", t.bold(`Question ${this.current + 1}/${this.questions.length}`)) +
+				(unanswered ? t.fg("muted", ` (${unanswered} unanswered)`) : "");
 		const lines = [
-			...wrapWithPrefix(" ", progress + (unanswered ? t.fg("muted", ` (${unanswered} unanswered)`) : ""), width),
+			...wrapWithPrefix(" ", progress, width),
 			...wrapWithPrefix(" ", t.fg("text", q.question), width),
 			"",
 		];
@@ -268,7 +284,8 @@ export class AskPicker implements Component, Focusable {
 			lines.push(...this.row(i, state.selected === i, option.label, option.description, width));
 		}
 		const other = q.options.length;
-		lines.push(...this.row(other, state.selected === other, OTHER_LABEL, OTHER_DESCRIPTION, width));
+		const row = this.options.other ?? { label: OTHER_LABEL, description: OTHER_DESCRIPTION };
+		lines.push(...this.row(other, state.selected === other, row.label, row.description, width));
 
 		if (this.input) {
 			this.input.focused = this.focused;
@@ -324,7 +341,7 @@ export class AskPicker implements Component, Focusable {
 						: "submit answer";
 			hints.push(hint(this.key("tui.select.confirm"), submit));
 			if (n > 1) hints.push(hint(`${this.key("tui.select.left")}/${this.key("tui.select.right")}`, "questions"));
-			hints.push(hint(this.key("tui.select.cancel"), "interrupt"));
+			hints.push(hint(this.key("tui.select.cancel"), this.options.cancel ?? "interrupt"));
 		}
 		return hints.join(t.fg("dim", " · "));
 	}

@@ -1,7 +1,9 @@
 import type { AgentTool } from "@knightcode/agent";
 import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
+import { registerFauxProvider } from "@knightcode/ai/compat";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ExtensionStartupError } from "../../src/core/extensions/startup-error.ts";
 import { createHarness, getMessageText, type Harness } from "./harness.ts";
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -17,6 +19,153 @@ describe("AgentSession actionable boundaries", () => {
 
 	afterEach(() => {
 		while (harnesses.length > 0) harnesses.pop()?.cleanup();
+	});
+
+	it("awaits command dispatch and acknowledges nested acceptance before settlement", async () => {
+		const started = deferred();
+		const release = deferred();
+		const dispositions: string[] = [];
+		let completed = false;
+		const harness = await createHarness({
+			extensionFactories: [
+				(kc) =>
+					kc.registerCommand("dispatch", {
+						handler: async (_args, ctx) => {
+							await ctx.sendUserMessage("nested task");
+							completed = true;
+						},
+					}),
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			async () => {
+				started.resolve();
+				await release.promise;
+				return fauxAssistantMessage("settled response");
+			},
+		]);
+		const run = harness.session.prompt("/dispatch", { preflightResult: (value) => dispositions.push(value) });
+		await started.promise;
+		expect(dispositions).toEqual(["started"]);
+		expect(completed).toBe(false);
+		release.resolve();
+		await run;
+		expect(completed).toBe(true);
+		expect(dispositions).toEqual(["started"]);
+		expect(harness.eventsOfType("agent_settled")).toHaveLength(1);
+	});
+
+	it("rejects failed command dispatch instead of acknowledging a handled command", async () => {
+		const harness = await createHarness({
+			withConfiguredAuth: false,
+			extensionFactories: [
+				(kc) =>
+					kc.registerCommand("dispatch", {
+						handler: async (_args, ctx) => {
+							await ctx.sendUserMessage("nested task");
+						},
+					}),
+			],
+		});
+		harnesses.push(harness);
+		const dispositions: string[] = [];
+		await expect(
+			harness.session.prompt("/dispatch", {
+				preflightResult: (value) => dispositions.push(value),
+			}),
+		).rejects.toThrow(/API key/);
+		expect(dispositions).toEqual([]);
+		expect(harness.faux.state.callCount).toBe(0);
+	});
+
+	it("fails closed after fatal startup until a successful reload", async () => {
+		let refuse = true;
+		const harness = await createHarness({
+			extensionFactories: [
+				(kc) => {
+					kc.on("session_start", () => {
+						if (refuse) throw new ExtensionStartupError("incompatible configuration");
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		await expect(harness.session.bindExtensions({})).rejects.toThrow("incompatible configuration");
+		await expect(harness.session.prompt("ordinary prompt")).rejects.toThrow("incompatible configuration");
+		await expect(
+			harness.session.sendCustomMessage(
+				{ customType: "test", content: "run", display: false },
+				{
+					triggerTurn: true,
+				},
+			),
+		).rejects.toThrow("incompatible configuration");
+		await expect(harness.session.compact()).rejects.toThrow("incompatible configuration");
+		expect(harness.faux.state.callCount).toBe(0);
+		refuse = false;
+		await harness.session.reload();
+		// Reload resets the compatibility provider registry; restore the test-only provider.
+		const restored = registerFauxProvider({ api: harness.faux.api });
+		try {
+			restored.setResponses([fauxAssistantMessage("usable again")]);
+			await harness.session.prompt("ordinary prompt");
+			expect(harness.session.getLastAssistantText(), JSON.stringify(harness.session.messages.at(-1))).toBe(
+				"usable again",
+			);
+			expect(restored.state.callCount).toBe(1);
+		} finally {
+			restored.unregister();
+		}
+	});
+
+	it.each(["turn_end", "agent_before_settle"] as const)(
+		"%s end overrides continuation and preserves queued work",
+		async (boundary) => {
+			let requested = false;
+			const harness = await createHarness({
+				extensionFactories: [
+					(kc) => {
+						const handler = () => {
+							if (requested) return;
+							requested = true;
+							kc.sendUserMessage("queued follow-up", { deliverAs: "followUp" });
+							return { end: true, continue: true, entries: [{ type: "custom" as const, customType: "end-marker" }] };
+						};
+						if (boundary === "turn_end") kc.on("turn_end", handler);
+						else kc.on("agent_before_settle", handler);
+					},
+				],
+			});
+			harnesses.push(harness);
+			harness.setResponses([fauxAssistantMessage("completed"), fauxAssistantMessage("must not run")]);
+			await harness.session.prompt("start");
+			expect(harness.faux.state.callCount).toBe(1);
+			expect(harness.session.pendingMessageCount).toBe(1);
+			expect(harness.eventsOfType("agent_settled")).toHaveLength(1);
+			expect(harness.sessionManager.getBranch()).toContainEqual(expect.objectContaining({ customType: "end-marker" }));
+		},
+	);
+
+	it("boundary end stops a tool batch even with immediate unknown and invalid calls", async () => {
+		const harness = await createHarness({
+			extensionFactories: [
+				(kc) => {
+					kc.on("turn_end", () => ({ end: true }));
+					kc.on("agent_before_settle", () => ({ continue: true }));
+				},
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage([fauxToolCall("unknown", {}), fauxToolCall("read", {})], { stopReason: "toolUse" }),
+			fauxAssistantMessage("must not run"),
+		]);
+		await harness.session.prompt("start");
+		expect(harness.faux.state.callCount).toBe(1);
+		expect(
+			harness.sessionManager.getBranch().filter((e) => e.type === "message" && e.message.role === "toolResult"),
+		).toHaveLength(2);
 	});
 
 	it("commits a retain-none turn_end compaction and explicitly continues once", async () => {
@@ -732,7 +881,8 @@ describe("AgentSession actionable boundaries", () => {
 		expect(harness.sessionManager.getEntries()).toContainEqual(
 			expect.objectContaining({ type: "custom", customType: "committed-after-abort", data: true }),
 		);
-		expect(harness.eventsOfType("agent_settled")).toHaveLength(1);
+		// Settlement reports the abort although the last response succeeded.
+		expect(harness.eventsOfType("agent_settled")).toEqual([{ type: "agent_settled", aborted: true }]);
 	});
 });
 

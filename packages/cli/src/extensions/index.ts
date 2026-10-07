@@ -4,6 +4,7 @@ import type { InlineExtension } from "../core/extensions/types.ts";
 import codemodeExtension from "./codemode/index.ts";
 import llamaExtension from "./llama/index.ts";
 import mcpExtension from "./mcp/index.ts";
+import planMode from "./plan-mode/index.ts";
 import toolSearchExtension from "./tool-search/index.ts";
 import uiExtension from "./ui/index.ts";
 import undoExtension from "./undo/index.ts";
@@ -20,6 +21,8 @@ export const builtInExtensions: InlineExtension[] = [
 	// /remote is a built-in command. Listing it under "Extensions" at startup would advertise an
 	// implementation detail as an add-on.
 	{ name: "remote", factory: remoteExtension, builtin: true },
+	// Enforce planning before the tools extension's classifier gate.
+	{ name: "plan-mode", factory: planMode, replaceable: true, builtin: true },
 	// webfetch, websearch and /tools are built-ins.
 	{ name: "tools", factory: toolsExtension, builtin: true },
 	// KnightCode's header, editor frame and footer. Kept out of modes/interactive so resyncs never touch it.

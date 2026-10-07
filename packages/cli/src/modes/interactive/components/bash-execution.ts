@@ -2,7 +2,7 @@
  * Component for displaying bash command execution with streaming output.
  */
 
-import { type Component, Container, Gutter, Loader, Spacer, Text, type TUI } from "@knightcode/tui";
+import { type Component, Container, Gutter, Loader, Spacer, Text, type TUI, type TuiMouseEvent } from "@knightcode/tui";
 import { plural } from "../../../core/tools/render-utils.ts";
 import {
 	DEFAULT_MAX_BYTES,
@@ -13,6 +13,7 @@ import {
 import { stripAnsi } from "../../../utils/ansi.ts";
 import { RESULT_GUTTER, RESULT_INDENT, USER_GUTTER, USER_INDENT } from "../glyphs.ts";
 import { theme } from "../theme/theme.ts";
+import { paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
 import { truncateToVisualLines } from "./visual-truncate.ts";
 
@@ -41,12 +42,15 @@ export class BashExecutionComponent extends Container {
 	private fullOutputPath?: string;
 	private expanded = false;
 	private contentContainer: Container;
-	private colorKey: "dim" | "bashMode";
+	/** `dim` marks `!!` commands, whose output is excluded from the model context. */
+	private readonly colorKey: "dim" | "bashMode";
 	private marker: string;
+	private outputPad: number;
 
-	constructor(command: string, ui: TUI, excludeFromContext = false) {
+	constructor(command: string, ui: TUI, excludeFromContext = false, outputPad = 1) {
 		super();
 		this.command = command;
+		this.outputPad = outputPad;
 
 		// Dim the whole block for commands excluded from context (the `!!` prefix)
 		this.colorKey = excludeFromContext ? "dim" : "bashMode";
@@ -82,6 +86,21 @@ export class BashExecutionComponent extends Container {
 	setExpanded(expanded: boolean): void {
 		this.expanded = expanded;
 		this.updateDisplay();
+	}
+
+	setOutputPad(outputPad: number): void {
+		this.outputPad = outputPad;
+	}
+
+	override render(width: number): string[] {
+		const pad = Math.max(0, this.outputPad);
+		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
+	}
+
+	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
+		const next = paddedMouseEvent(event, this.outputPad);
+		if (!next) return undefined;
+		return super.handleMouse(next);
 	}
 
 	override invalidate(): void {

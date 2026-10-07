@@ -18,7 +18,9 @@ import { readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { ThinkingLevel } from "@knightcode/agent";
 import type { Api, AssistantMessage, ImageContent, Model } from "@knightcode/ai";
+import { askUserTool } from "@knightcode/tools/ask/tool";
 import { getAgentDir } from "../config.ts";
+import planMode from "../extensions/plan-mode/index.ts";
 import type { AgentSession, AgentSessionEvent } from "../core/agent-session.ts";
 import { createAgentSessionFromServices, createAgentSessionServices } from "../core/agent-session-services.ts";
 import { emitSessionShutdownEvent } from "../core/extensions/runner.ts";
@@ -365,6 +367,7 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 		cwd: string,
 		sessionManager: SessionManager,
 		request: { model?: Model<Api>; capabilities?: Partial<ClientFileCapabilities> },
+		reason: "new" | "resume" | "fork",
 	): Promise<Entry> {
 		const capabilities: ClientFileCapabilities = {
 			readTextFile: request.capabilities?.readTextFile === true,
@@ -375,12 +378,24 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 			cwd,
 			agentDir,
 			modelRuntime: ctx.models,
-			resourceLoaderOptions: { extensionFactories: [createPermissionExtension(id, requests)] },
+			resourceLoaderOptions: {
+				extensionFactories: [
+					{ name: "plan-mode", factory: planMode, replaceable: true, builtin: true },
+					// Plan mode asks through ask_user; the CLI gets it from the tools extension, which the engine does not load.
+					{
+						name: "ask-user",
+						hidden: true,
+						factory: (knightcode) => knightcode.registerTool({ ...askUserTool, defaultActive: false }),
+					},
+					createPermissionExtension(id, requests),
+				],
+			},
 		});
 		// A saved session restores the model it last used when none is named here.
 		const { session } = await createAgentSessionFromServices({
 			services,
 			sessionManager,
+			sessionStartEvent: { type: "session_start", reason },
 			model: request.model ?? options.defaultModel,
 			customTools: createClientFileTools(services.cwd, id, requests, capabilities, {
 				autoResizeImages: services.settingsManager.getImageAutoResize(),
@@ -389,6 +404,29 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 		if (!session.model) {
 			session.dispose();
 			throw new SessionError("auth_required", "no model is available; sign in first");
+		}
+		try {
+			await session.bindExtensions({
+				mode: "engine",
+				onError: (error) => console.error(`Extension ${error.extensionPath}: ${error.error}`),
+				commandContextActions: {
+					waitForIdle: () => session.waitForIdle(),
+					newSession: async () => {
+						throw new SessionError("bad_request", "Session replacement is not available in the IDE");
+					},
+					fork: async () => {
+						throw new SessionError("bad_request", "Use the IDE to fork a session");
+					},
+					navigateTree: (targetId, options) => session.navigateTree(targetId, options),
+					switchSession: async () => {
+						throw new SessionError("bad_request", "Use the IDE to switch sessions");
+					},
+					reload: () => session.reload(),
+				},
+			});
+		} catch (error) {
+			session.dispose();
+			throw error;
 		}
 		const entry: Entry = {
 			id,
@@ -409,7 +447,7 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 		async create(request) {
 			const cwd = await directory(request.cwd);
 			const sessionManager = persisted ? SessionManager.create(cwd, dirFor(cwd)) : SessionManager.inMemory(cwd);
-			return summarize(await start(cwd, sessionManager, request));
+			return summarize(await start(cwd, sessionManager, request, "new"));
 		},
 
 		async open(request) {
@@ -423,7 +461,7 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 				// cwd would run with that project's tools, extensions and filesystem root.
 				const path = (await savedSessions(cwd)).find((info) => info.id === request.id)?.path;
 				if (!path) throw new SessionError("not_found", `no saved session: ${request.id}`);
-				return start(cwd, SessionManager.open(path, undefined, cwd), request);
+				return start(cwd, SessionManager.open(path, undefined, cwd), request, "resume");
 			})();
 			opening.set(request.id, opened);
 			try {
@@ -445,7 +483,7 @@ export function createSessionRegistry(ctx: EngineContext, options: CreateSession
 					: (await savedSessions(cwd)).find((info) => info.id === request.id)?.path;
 			// A live session writes its transcript with its first reply; before that there is nothing to copy.
 			if (!source || !existsSync(source)) throw new SessionError("not_found", `nothing to fork: ${request.id}`);
-			return summarize(await start(cwd, SessionManager.forkFrom(source, cwd, dirFor(cwd)), request));
+			return summarize(await start(cwd, SessionManager.forkFrom(source, cwd, dirFor(cwd)), request, "fork"));
 		},
 
 		summary(id) {

@@ -1,7 +1,38 @@
-import { type Component, Container, Gutter, Markdown, type MarkdownTheme, MouseRegion, Text } from "@knightcode/tui";
+import {
+	type Component,
+	Container,
+	Gutter,
+	Markdown,
+	type MarkdownTheme,
+	MouseRegion,
+	Text,
+	truncateToWidth,
+	type TuiMouseEvent,
+	visibleWidth,
+} from "@knightcode/tui";
 import { formatToolCall, formatToolSummary, plural } from "../../../core/tools/render-utils.ts";
 import { BLOCK_INDENT, BULLET_GUTTER, RESULT_GUTTER, RESULT_INDENT } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+
+const IMAGE_LINE = /\x1b_G|\x1b]1337;File=/;
+
+/** Shift transcript lines right, keeping them inside `width`. Blank lines and inline images stay put. */
+export function prefixOutputPad(lines: string[], outputPad: number, width = Number.POSITIVE_INFINITY): string[] {
+	if (outputPad <= 0) return lines;
+	const prefix = " ".repeat(outputPad);
+	return lines.map((line) => {
+		if (line.length === 0 || IMAGE_LINE.test(line)) return line;
+		const padded = prefix + line;
+		return visibleWidth(padded) > width ? truncateToWidth(padded, width, "") : padded;
+	});
+}
+
+/** The pointer in the unpadded content, or undefined when it lands in the pad. */
+export function paddedMouseEvent(event: TuiMouseEvent, outputPad: number): TuiMouseEvent | undefined {
+	const pad = Math.max(0, outputPad);
+	if (pad > 0 && event.x < pad) return undefined;
+	return { ...event, x: event.x - pad, width: Math.max(1, event.width - pad) };
+}
 
 /** `● call` with `result` hung under it on the `⎿` gutter: the shape of a finished tool call. */
 export function callBlock(call: string, result: Component, bullet: "success" | "error" = "success"): Container {
@@ -28,6 +59,7 @@ export class CollapsibleCallComponent extends Container {
 	private summary: string;
 	private body: string;
 	private markdownTheme: MarkdownTheme;
+	private outputPad: number;
 
 	constructor(
 		name: string,
@@ -35,6 +67,7 @@ export class CollapsibleCallComponent extends Container {
 		summary: string,
 		body: string,
 		markdownTheme: MarkdownTheme = getMarkdownTheme(),
+		outputPad = 1,
 	) {
 		super();
 		this.name = name;
@@ -42,12 +75,28 @@ export class CollapsibleCallComponent extends Container {
 		this.summary = summary;
 		this.body = body;
 		this.markdownTheme = markdownTheme;
+		this.outputPad = outputPad;
 		this.updateDisplay();
 	}
 
 	setExpanded(expanded: boolean): void {
 		this.expanded = expanded;
 		this.updateDisplay();
+	}
+
+	setOutputPad(outputPad: number): void {
+		this.outputPad = outputPad;
+	}
+
+	override render(width: number): string[] {
+		const pad = Math.max(0, this.outputPad);
+		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
+	}
+
+	override handleMouse(event: TuiMouseEvent): ReturnType<Container["handleMouse"]> {
+		const next = paddedMouseEvent(event, this.outputPad);
+		if (!next) return undefined;
+		return super.handleMouse(next);
 	}
 
 	override invalidate(): void {

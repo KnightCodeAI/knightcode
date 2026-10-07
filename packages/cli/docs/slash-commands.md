@@ -32,6 +32,20 @@ Extensions, prompt templates, and skills can add commands. The command menu in K
 | `/compact [instructions]` | Compact the current context, optionally with custom instructions |
 | `/import <path>` | Import and resume a JSONL session |
 
+## Planning
+
+| Command | Description |
+|---|---|
+| `/plan [task]` | Enter enforced planning, send a planning task, or review an existing draft |
+| `/plan off` | Exit planning and retain the draft |
+| `/plan approve [N [note]]` | Explicitly approve and implement the latest revision, or revision N, with an optional note |
+| `/plan approve fresh [N [note]]` | Implement in a fresh CLI session; unavailable in the IDE |
+
+Commands require an idle session with no pending input. Without a draft,
+`/plan` reports “No plan submitted yet; send a task to continue planning.” and
+opens no dialog. See [Plan mode](plan-mode.md) for tool restrictions, headless
+output, and restoration.
+
 ## Export and share
 
 | Command | Description |

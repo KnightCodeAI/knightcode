@@ -28,6 +28,10 @@
               "path": "usage.md"
             },
             {
+              "title": "Plan Before Implementing",
+              "path": "plan-mode.md"
+            },
+            {
               "title": "Choose a Model",
               "path": "models.md"
             },
