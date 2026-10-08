@@ -16,10 +16,10 @@ import { type BashOperations, createBashToolDefinition } from "../src/core/tools
 import { createGrepToolDefinition } from "../src/core/tools/grep.ts";
 import { createLsToolDefinition } from "../src/core/tools/ls.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
-import { withBuiltInRenderers } from "../src/core/tools/renderers/index.ts";
+import { createAllToolRenderers, withBuiltInRenderers } from "../src/core/tools/renderers/index.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
-import { RESULT_MARKER } from "../src/modes/interactive/glyphs.ts";
+import { BULLET, RESULT_MARKER } from "../src/modes/interactive/glyphs.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -53,6 +53,57 @@ describe("ToolExecutionComponent parity", () => {
 	afterEach(() => {
 		resetCapabilitiesCache();
 		vi.useRealTimers();
+	});
+
+	test.each([
+		...Object.entries(createAllToolRenderers()).map(([name, definition]) => ({ name, definition })),
+		{ name: "custom_tool", definition: createBaseToolDefinition() },
+		{ name: "mcp__server__tool", definition: undefined },
+	])("keeps the $name indicator grey until a final result", ({ name, definition }) => {
+		for (const isError of [false, true]) {
+			const component = new ToolExecutionComponent(
+				name,
+				`tool-status-${name}`,
+				{},
+				{},
+				definition,
+				createFakeTui(),
+				process.cwd(),
+			);
+			const expectPendingIndicator = () => {
+				const rendered = component.render(120).join("\n");
+				expect(rendered).toContain(theme.fg("dim", BULLET));
+				for (const color of ["accent", "success", "error"] as const) {
+					expect(rendered).not.toContain(theme.fg(color, BULLET));
+				}
+			};
+
+			expectPendingIndicator();
+			component.updateArgs({
+				path: "notes.txt",
+				command: "echo ok",
+				content: "one",
+				oldText: "before",
+				newText: "after",
+				pattern: "notes",
+			});
+			expectPendingIndicator();
+			component.setArgsComplete();
+			expectPendingIndicator();
+			component.markExecutionStarted();
+			expectPendingIndicator();
+			component.updateResult({ content: [], isError: false }, true);
+			expectPendingIndicator();
+			component.updateResult({ content: [{ type: "text", text: "partial output" }], isError }, true);
+			expectPendingIndicator();
+			component.invalidate();
+			expectPendingIndicator();
+
+			component.updateResult({ content: [{ type: "text", text: "final output" }], isError });
+			const completed = component.render(120).join("\n");
+			expect(completed).toContain(theme.fg(isError ? "error" : "success", BULLET));
+			expect(completed).not.toContain(theme.fg("dim", BULLET));
+		}
 	});
 
 	// The component loads the PNG transcoder itself, so this works in any TUI host.

@@ -121,19 +121,9 @@ export class ToolExecutionComponent extends Container {
 		return this.toolDefinition?.renderShell ?? "default";
 	}
 
-	/**
-	 * Status bullet. Its colour carries what the tinted background block used to:
-	 * queued / streaming args, executing, succeeded, failed.
-	 */
+	/** Status bullet: neutral until a final result, then succeeded or failed. */
 	private bulletGutter(): string {
-		let colorKey: "dim" | "accent" | "success" | "error";
-		if (this.result) {
-			colorKey = this.result.isError ? "error" : this.isPartial ? "accent" : "success";
-		} else if (this.executionStarted) {
-			colorKey = "accent";
-		} else {
-			colorKey = "dim";
-		}
+		const colorKey = this.result && !this.isPartial ? (this.result.isError ? "error" : "success") : "dim";
 		return `${theme.fg(colorKey, BULLET)} `;
 	}
 
