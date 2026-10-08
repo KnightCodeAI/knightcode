@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { ModelRegistry } from "@knightcodeai/cli";
 import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
 import { initTheme, theme } from "@knightcodeai/cli/modes/interactive/theme/theme";
+import { stripTerminalSequences } from "@knightcode/tui";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { TOOLS } from "../src/registry.ts";
 import { maskKey, toolSettingsPanel } from "../src/settings.ts";
@@ -31,8 +32,7 @@ function fakePi(active: string[]) {
 }
 
 function plain(lines: string[]): string {
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI colour codes
-	return lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "");
+	return stripTerminalSequences(lines.join("\n"));
 }
 
 function openPanel(entry = websearch, active = ["read"]) {
