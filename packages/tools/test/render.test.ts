@@ -26,16 +26,16 @@ const fetchDetails = {
 };
 
 describe("webfetch", () => {
-	test("call shows the tool name, a shortened url and the grep or offset", () => {
+	test("call shows the display name, a shortened url and the grep or offset", () => {
 		expect(webfetchCallText({ url: "https://bun.sh/docs" }, theme)).toBe(
-			"<toolTitle>*webfetch*</toolTitle>(<accent>https://bun.sh/docs</accent>)",
+			"<toolTitle>*Web Fetch*</toolTitle>(<accent>https://bun.sh/docs</accent>)",
 		);
 		expect(webfetchCallText({ url: fetchDetails.url }, theme)).toContain("…</accent>)");
 		expect(webfetchCallText({ url: "u", grep: "install" }, theme)).toContain(
 			"<accent>u</accent><toolOutput>, grep install</toolOutput>",
 		);
 		expect(webfetchCallText({ url: "u", offset: 401 }, theme)).toContain(", offset 401");
-		expect(webfetchCallText(undefined, theme)).toBe("<toolTitle>*webfetch*</toolTitle>(<accent></accent>)");
+		expect(webfetchCallText(undefined, theme)).toBe("<toolTitle>*Web Fetch*</toolTitle>(<accent></accent>)");
 	});
 
 	test("collapsed result summarises size, lines and cache state", () => {
@@ -69,9 +69,9 @@ describe("websearch", () => {
 		results: [{ title: "t", url: "u", snippet: "s" }],
 	};
 
-	test("call quotes the query", () => {
+	test("call shows the display name and quotes the query", () => {
 		expect(websearchCallText({ query: "bun docs" }, theme)).toBe(
-			'<toolTitle>*websearch*</toolTitle>(<accent>"bun docs"</accent>)',
+			'<toolTitle>*Web Search*</toolTitle>(<accent>"bun docs"</accent>)',
 		);
 	});
 

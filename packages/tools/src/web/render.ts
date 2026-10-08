@@ -29,7 +29,7 @@ export function webfetchCallText(args: Partial<WebfetchParams> | undefined, them
 	const extra =
 		args?.grep !== undefined ? `, grep ${args.grep}` : args?.offset !== undefined ? `, offset ${args.offset}` : "";
 	const url = theme.fg("accent", shorten(args?.url ?? "", URL_WIDTH));
-	return formatToolCall(theme, "webfetch", extra ? `${url}${theme.fg("toolOutput", extra)}` : url);
+	return formatToolCall(theme, "Web Fetch", extra ? `${url}${theme.fg("toolOutput", extra)}` : url);
 }
 
 export function webfetchResultText(result: RenderableResult<WebfetchDetails>, expanded: boolean, theme: Theme): string {
@@ -45,7 +45,7 @@ export function webfetchResultText(result: RenderableResult<WebfetchDetails>, ex
 }
 
 export function websearchCallText(args: Partial<WebsearchParams> | undefined, theme: Theme): string {
-	return formatToolCall(theme, "websearch", theme.fg("accent", `"${shorten(args?.query ?? "", 60)}"`));
+	return formatToolCall(theme, "Web Search", theme.fg("accent", `"${shorten(args?.query ?? "", 60)}"`));
 }
 
 export function websearchResultText(
