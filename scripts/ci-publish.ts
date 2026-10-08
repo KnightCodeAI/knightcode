@@ -146,11 +146,31 @@ if (DRY_RUN) {
 	process.exit(0);
 }
 
+// npm acknowledges an upload before the registry serves it, and big tarballs
+// can sit in that queue for over an hour: 0.15.1's win32-x64 package was
+// uploaded at 11:32 and served from 12:57, while the launcher went live in a
+// minute. The per-version URL is not CDN-cached, so it shows the real state.
+const SERVE_TIMEOUT_MS = 3 * 60 * 60 * 1000;
+async function waitUntilServed(name: string, wanted: string): Promise<void> {
+	const deadline = Date.now() + SERVE_TIMEOUT_MS;
+	while (!(await fetch(`https://registry.npmjs.org/${name}/${wanted}`).catch(() => undefined))?.ok) {
+		if (Date.now() > deadline) throw new Error(`npm still does not serve ${name}@${wanted}; re-run once it does`);
+		console.log(`Waiting for npm to serve ${name}@${wanted}...`);
+		await Bun.sleep(30_000);
+	}
+}
+
 let publishedAny = false;
 for (const { pkg, published } of states) {
 	if (published) {
 		console.log(`Skipping ${pkg.name}@${pkg.version}: already published\n`);
 		continue;
+	}
+	// The launcher becomes `latest` the moment it is served. Publishing it while
+	// a platform package is still queued gives `npm i -g` on that OS a launcher
+	// with no binary, and leaves the installer lock unresolvable.
+	if (!pkg.binary) {
+		for (const platform of packages) if (platform.binary) await waitUntilServed(platform.name, platform.version);
 	}
 	// --provenance needs `id-token: write` on the job; --ignore-scripts keeps a
 	// compromised transitive dependency from running code at publish time.
