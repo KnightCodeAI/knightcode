@@ -1,5 +1,23 @@
 # @knightcodeai/cli
 
+## 0.15.1
+
+### Added
+
+- Added JSON schemas for settings, models, keybindings, and themes. Theme files that contain unknown fields are now rejected.
+
+### Fixed
+
+- Fixed Claude Sonnet 5.5 cache-read pricing to the published $0.10 per million tokens.
+
+- Fixed running tool-call indicators using the accent color instead of neutral grey, including Bash, PowerShell, and other tools using the default rendering shell.
+
+- Fixed Mistral streams being cut off when the response body lasts longer than the request timeout. The timeout now applies only while waiting for response headers.
+
+- Fixed the input cursor stretching across edge cells in terminals that extend cell colors into the window padding; with `showHardwareCursor` enabled, only the terminal cursor is drawn.
+
+- Fixed web tool call titles to display Web Search and Web Fetch instead of raw tool names.
+
 ## 0.15.0
 
 ### Added
