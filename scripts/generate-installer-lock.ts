@@ -88,8 +88,9 @@ function resolveLock(): { version?: string } | undefined {
 // Right after `npm publish` the registry can still serve the packument from
 // before it for a few minutes, so the version that just shipped fails with
 // ETARGET. Retry; --prefer-online above keeps npm's own cache from replaying
-// the stale packument.
-const LOCK_ATTEMPTS = 12;
+// the stale packument. The platform packuments have taken over 6 minutes to
+// catch up (0.15.0), so allow 15.
+const LOCK_ATTEMPTS = 30;
 let lock = resolveLock();
 for (let attempt = 2; !lock && attempt <= LOCK_ATTEMPTS; attempt++) {
 	console.error(`Retrying in 30s (attempt ${attempt}/${LOCK_ATTEMPTS})`);
