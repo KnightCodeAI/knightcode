@@ -13,7 +13,7 @@ import {
 	loadThemeFromPath,
 	setThemeJsonValidator,
 } from "../src/modes/interactive/theme/theme.ts";
-import { validateThemeJson } from "../src/modes/interactive/theme/theme-json.ts";
+import { validateThemeJson } from "../src/modes/interactive/theme/theme-schema.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 setThemeJsonValidator(validateThemeJson);

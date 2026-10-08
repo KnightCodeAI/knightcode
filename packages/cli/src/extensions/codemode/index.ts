@@ -7,6 +7,7 @@
  */
 
 import type { ExtensionAPI, ExtensionFactory } from "../../core/extensions/types.ts";
+import { SETTINGS_DEFAULTS } from "../../core/settings-defaults.ts";
 import type { CodemodeMode } from "../../core/settings-manager.ts";
 import { createCodemodeToolDefinition } from "./tool.ts";
 
@@ -20,7 +21,7 @@ export interface CodemodeExtensionOptions {
 }
 
 function readMode(knightcode: ExtensionAPI): CodemodeMode {
-	return knightcode.getSettings().codemode?.mode === "only" ? "only" : "on";
+	return knightcode.getSettings().codemode?.mode === "only" ? "only" : SETTINGS_DEFAULTS.codemode.mode;
 }
 
 function readInlineBudget(knightcode: ExtensionAPI): number | undefined {
