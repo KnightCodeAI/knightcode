@@ -450,6 +450,12 @@
 	margin: 0;
 }
 
+/* Size all diff rows to the longest line, not just the visible scroll viewport. */
+.mono-block:has(> .diff-line) {
+	display: grid;
+	grid-template-columns: minmax(max-content, 1fr);
+}
+
 .diff-line {
 	display: block;
 	white-space: pre;
