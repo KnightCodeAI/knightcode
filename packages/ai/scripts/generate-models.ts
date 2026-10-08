@@ -2906,100 +2906,6 @@ async function generateModels() {
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark"),
 	);
 
-	// Claude Opus 5.5 offers low through max effort and no minimal.
-	// https://platform.claude.com/docs/en/models/opus-5-5/overview
-	// The levels are pinned here rather than taken from the catalog source, because an
-	// Anthropic model's level map is built before `forceAdaptiveThinking` is set, so
-	// `applyModelsDevReasoningOptionMetadata` skips the model and its published effort list
-	// never reaches the map.
-	const CLAUDE_OPUS_5_5_THINKING_LEVEL_MAP = {
-		off: null,
-		minimal: null,
-		low: "low",
-		medium: "medium",
-		high: "high",
-		xhigh: "xhigh",
-		max: "max",
-	} satisfies NonNullable<Model<Api>["thinkingLevelMap"]>;
-	const claudeOpus55 = allModels.find((model) => model.provider === "anthropic" && model.id === "claude-opus-5-5");
-	if (claudeOpus55) {
-		mergeThinkingLevelMap(claudeOpus55, CLAUDE_OPUS_5_5_THINKING_LEVEL_MAP);
-	} else {
-		// Carry the model while the catalog source omits it.
-		allModels.push({
-			id: "claude-opus-5-5",
-			name: "Claude Opus 5.5",
-			api: "anthropic-messages",
-			provider: "anthropic",
-			baseUrl: "https://api.anthropic.com",
-			reasoning: true,
-			thinkingLevelMap: CLAUDE_OPUS_5_5_THINKING_LEVEL_MAP,
-			input: ["text", "image"],
-			cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
-			contextWindow: 1000000,
-			maxTokens: 128000,
-		});
-	}
-
-	// Add Claude Sonnet 5.5 until models.dev includes it.
-	// https://platform.claude.com/docs/en/models/sonnet-5-5/overview
-	if (!allModels.some((model) => model.provider === "anthropic" && model.id === "claude-sonnet-5-5")) {
-		allModels.push({
-			id: "claude-sonnet-5-5",
-			name: "Claude Sonnet 5.5",
-			api: "anthropic-messages",
-			provider: "anthropic",
-			baseUrl: "https://api.anthropic.com",
-			reasoning: true,
-			thinkingLevelMap: {
-				off: null,
-				minimal: null,
-				low: "low",
-				medium: "medium",
-				high: "high",
-				xhigh: "xhigh",
-				max: "max",
-			},
-			input: ["text", "image"],
-			cost: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
-			contextWindow: 1000000,
-			maxTokens: 128000,
-		});
-	}
-
-	// Add Claude Haiku 5.5 until models.dev includes it. Prompts over 100k input tokens
-	// are billed at 5x for the whole request.
-	// https://platform.claude.com/docs/en/models/haiku-5-5/overview
-	if (!allModels.some((model) => model.provider === "anthropic" && model.id === "claude-haiku-5-5")) {
-		allModels.push({
-			id: "claude-haiku-5-5",
-			name: "Claude Haiku 5.5",
-			api: "anthropic-messages",
-			provider: "anthropic",
-			baseUrl: "https://api.anthropic.com",
-			reasoning: true,
-			thinkingLevelMap: {
-				off: null,
-				minimal: null,
-				low: "low",
-				medium: "medium",
-				high: "high",
-				xhigh: "xhigh",
-				max: "max",
-			},
-			input: ["text", "image"],
-			cost: {
-				input: 0.1,
-				output: 0.5,
-				cacheRead: 0.01,
-				cacheWrite: 0.125,
-				tiers: [{ inputTokensAbove: 100000, input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 }],
-			},
-			contextWindow: 1000000,
-			maxTokens: 128000,
-		});
-	}
-
 	// The authenticated Copilot catalog advertised these models on 2026-09-22,
 	// but models.dev did not include them yet.
 	const missingCopilotModels: Model<Api>[] = [
@@ -3049,11 +2955,6 @@ async function generateModels() {
 	for (const candidate of allModels) {
 		if (candidate.provider === "github-copilot" && GITHUB_COPILOT_EXTENDED_CONTEXT_MODELS.has(candidate.id)) {
 			candidate.contextWindow = 1000000;
-		}
-
-		// models.dev lists Sonnet 5.5 cache reads at $0.10; Anthropic bills them at 0.1x the $2 input rate.
-		if (candidate.provider === "anthropic" && candidate.id === "claude-sonnet-5-5") {
-			candidate.cost = { ...candidate.cost, cacheRead: 0.2 };
 		}
 
 		// models.dev may list Opus 5.5, Sonnet 5.5, and Haiku 5.5 before their effort metadata is complete.
