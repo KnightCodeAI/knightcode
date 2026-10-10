@@ -59,7 +59,7 @@ Otherwise say why this is not user-visible. Do not edit `CHANGELOG.md`.
 - Touches `packages/cli/src/core` or a built-in tool description. Why this is not an extension, a skill, or a prompt template:
 - Changes a flag, setting, keybinding, provider, or the session format. Docs updated in `packages/cli/docs` (the site copies those):
 - Touches paths, spawned shells, or line endings. Checked on Windows:
-- Changes something a person sees (TUI, site, IDE). Before/after, dark and light theme:
+- Changes something a person sees (TUI, site). Before/after, dark and light theme:
 - Adds or bumps a dependency. Why it is needed, and whether it has lifecycle scripts:
 - Where a reviewer should start, or what you are unsure about:
 

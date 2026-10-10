@@ -32,9 +32,7 @@ export default async function Page(props: {
   const slugPath = slugs.join("/")
   const docPath = page.path.replaceAll("\\", "/")
   const docFile = docPath.split("/").pop()?.replace(/\.mdx$/, "") ?? "index"
-  const gitUrl = docPath.startsWith("ide/")
-    ? `https://github.com/KnightCodeAI/knightcode/blob/main/apps/web/scripts/ide-doc.mdx`
-    : `https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/docs/${docFile}.md`
+  const gitUrl = `https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/docs/${docFile}.md`
   const rawMarkdownUrl = `/docs/${slugPath ? slugPath + ".md" : "index.md"}`
   const sciraUrl = `https://scira.app/?q=${SITE.url}/docs/${slugPath ? slugPath + ".md" : "index.md"}`
   const chatgptUrl = `https://chatgpt.com/?q=Read+this+page:+${SITE.url}/docs/${slugPath ? slugPath + ".md" : "index.md"}`

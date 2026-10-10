@@ -86,9 +86,7 @@ export default function PrivacyPage() {
             operating system, runtime, and CPU architecture. The site adds a
             coarse location (country, region, city) from the request and an
             anonymous ID made from a one-way hash of your IP address and user
-            agent. It does not store the address. The desktop IDE sends the
-            same ping once per IDE version, plus a few launch signals such as
-            first run and engine failure. The ping is on by default. Turn it off
+            agent. It does not store the address. The ping is on by default. Turn it off
             with <code>enableInstallTelemetry: false</code> or{" "}
             <code>KNIGHTCODE_TELEMETRY=0</code>. The same setting controls the
             identifying headers KnightCode adds to requests for OpenRouter,

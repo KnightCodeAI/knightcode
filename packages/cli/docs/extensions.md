@@ -261,9 +261,7 @@ Register an entry or message renderer when custom stored content should appear i
 Use `ctx.ui.custom()` only when the interaction needs its own rendering and input.
 See [Terminal UI](tui.md) for component, focus, overlay, theme, and performance guidance.
 
-Extensions load in interactive, RPC, JSON, print, and engine modes. `ctx.mode`
-is `"engine"` in IDE engine sessions, which have no dialog-capable UI and must
-never print unframed content to stdout.
+Extensions load in interactive, RPC, JSON, and print modes.
 Interactive mode provides the complete terminal UI. The [DOOM overlay example](../examples/extensions/doom-overlay/) uses a custom overlay component to render a game frame by frame:
 
 <p align="center"><img src="images/doom-extension.png" alt="The DOOM overlay example running over a KnightCode session" width="750"></p>
@@ -284,7 +282,7 @@ Throw the exported `ExtensionStartupError` from `session_start` when an unsafe
 runtime must refuse initialization. Binding or reload propagates it to the
 host, and the failed session cannot prompt a provider, compact, or run
 extension commands until successful startup/reload clears the failure. Ordinary
-handler errors remain nonfatal. The engine disposes failed startup sessions before announcing them.
+handler errors remain nonfatal.
 
 Release resources in `session_shutdown` even when normal operation attempted cleanup.
 Keep cleanup idempotent because cancellation, reload, session replacement, and process exit can converge on the same path.

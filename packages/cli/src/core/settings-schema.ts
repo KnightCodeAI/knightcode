@@ -207,12 +207,6 @@ export const SettingsSchema = Type.Object(
 	{
 		$schema: Type.Optional(Type.String({ description: "JSON Schema reference." })),
 		lastChangelogVersion: Type.Optional(Type.String()),
-		lastIdeVersion: Type.Optional(
-			Type.String({
-				description:
-					"Last IDE version the install ping was sent for. Separate from lastChangelogVersion, which drives the CLI changelog.",
-			}),
-		),
 		defaultProvider: Type.Optional(Type.String()),
 		defaultModel: Type.Optional(Type.String()),
 		defaultThinkingLevel: Type.Optional(ModelThinkingLevelSchema),

@@ -49,18 +49,9 @@ afterEach(() => {
 })
 
 describe("install pings", () => {
-  it("tells the IDE and the CLI apart by user agent", async () => {
-    await GET(ping("?version=1.0.0", { ua: IDE_UA }))
-    expect(sent).toHaveLength(1)
-    expect(sent[0].body.event).toBe("ide_install")
-    const ide = sent[0].body.properties as Record<string, unknown>
-    expect(ide.product).toBe("knightcode-ide")
-    expect(ide.version).toBe("1.0.0")
-    expect(ide.os).toBe("windows")
-    expect(ide.arch).toBe("x86_64")
-
-    stubFetch()
+  it("records a CLI install with the fields its user agent carries", async () => {
     await GET(ping("?version=0.4.2"))
+    expect(sent).toHaveLength(1)
     expect(sent[0].body.event).toBe("cli_install")
     const cli = sent[0].body.properties as Record<string, unknown>
     expect(cli.product).toBe("knightcode")
@@ -69,8 +60,14 @@ describe("install pings", () => {
     expect(cli.arch).toBe("x64")
   })
 
+  it("drops pings from the discontinued IDE", async () => {
+    const response = await GET(ping("?version=1.0.0", { ua: IDE_UA }))
+    expect(response.status).toBe(204)
+    expect(sent).toHaveLength(0)
+  })
+
   it("disables PostHog's own geoip, which describes Vercel's egress", async () => {
-    await GET(ping("?version=1.0.0", { ua: IDE_UA }))
+    await GET(ping("?version=1.0.0"))
     const props = sent[0].body.properties as Record<string, unknown>
     expect(props.$geoip_disable).toBe(true)
     expect(props.country).toBe("GB")
@@ -93,44 +90,20 @@ describe("the anonymous id", () => {
   })
 
   it("never carries the address or the raw user agent", async () => {
-    await GET(ping("?version=1.0.0", { ua: IDE_UA }))
+    await GET(ping("?version=1.0.0"))
     const wire = JSON.stringify(sent[0].body)
     expect(wire).not.toContain("203.0.113.7")
-    expect(wire).not.toContain(IDE_UA)
+    expect(wire).not.toContain(CLI_UA)
   })
 })
 
-describe("the launch-signal allowlist", () => {
-  const allowed: Array<[string, string, string]> = [
-    ["ide_first_run", "outcome", "completed"],
-    ["ide_engine_failed", "reason", "binary_missing"],
-    ["ide_first_turn", "provider", "anthropic"],
-    ["ide_seam_first_use", "seam", "buffer_inline_assist"],
-  ]
-
-  for (const [event, property, value] of allowed) {
-    it(`accepts ${event}`, async () => {
-      const response = await GET(
-        ping(`?version=1.0.0&event=${event}&${property}=${value}`, { ua: IDE_UA })
-      )
-      expect(response.status).toBe(204)
-      expect(sent).toHaveLength(1)
-      expect(sent[0].body.event).toBe(event)
-      expect((sent[0].body.properties as Record<string, unknown>)[property]).toBe(value)
-    })
-  }
-
-  it("rejects an event that is not on it, and sends nothing", async () => {
-    const response = await GET(ping("?version=1.0.0&event=ide_keystroke", { ua: IDE_UA }))
-    expect(response.status).toBe(400)
+describe("launch signals", () => {
+  it("rejects every event, including the IDE's old ones, and sends nothing", async () => {
+    for (const event of ["ide_first_run", "ide_keystroke"]) {
+      const response = await GET(ping(`?version=1.0.0&event=${event}`, { ua: IDE_UA }))
+      expect(response.status).toBe(400)
+    }
     expect(sent).toHaveLength(0)
-  })
-
-  it("truncates a property value rather than passing it through", async () => {
-    const long = "x".repeat(500)
-    await GET(ping(`?version=1.0.0&event=ide_engine_failed&reason=${long}`, { ua: IDE_UA }))
-    const props = sent[0].body.properties as Record<string, unknown>
-    expect((props.reason as string).length).toBe(64)
   })
 })
 
@@ -142,7 +115,7 @@ describe("without a write key", () => {
     expect(sent).toHaveLength(0)
   })
 
-  it("still rejects an unlisted event", async () => {
+  it("still rejects an event", async () => {
     delete process.env.POSTHOG_KEY
     const response = await GET(ping("?version=1.0.0&event=whatever"))
     expect(response.status).toBe(400)
