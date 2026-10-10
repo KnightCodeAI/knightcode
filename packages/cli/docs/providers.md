@@ -27,8 +27,9 @@ account, not just the current KnightCode session. Other subscription sign-ins,
 including the current `openai` ChatGPT sign-in, are listed as unsupported.
 
 Claude shows extra usage first. KnightCode draws from extra usage rather than
-Claude's plan limits, so the extra-usage line tracks KnightCode's consumption;
-the plan windows are shown only for reference. Codex windows describe the plan
+Claude's plan limits. The extra-usage percentage is account-wide and includes
+usage outside KnightCode; it does not measure this client's consumption alone.
+The plan windows are shown only for reference. Codex windows describe the plan
 allowance. Accounts with purchased credits can keep working at 0% remaining.
 
 Grok shows the weekly or monthly credit pool and, when reported, the Grok Build
