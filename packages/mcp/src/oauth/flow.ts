@@ -382,7 +382,8 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 		signal: options.signal,
 	};
 	if (options.authorizationCode) {
-		// RFC 9207: never send a code from another authorization server to this one.
+		// RFC 9207: never send a code from another authorization server to this one. Without metadata,
+		// iss is compared with the discovered server URL, so hiding metadata cannot skip the check.
 		const iss = options.iss;
 		if (metadata) {
 			if ((iss !== undefined || metadata.authorization_response_iss_parameter_supported) && iss !== metadata.issuer) {
@@ -390,7 +391,8 @@ async function runFlow(provider: OAuthClientProvider, options: OAuthFlowOptions)
 			}
 		} else if (iss !== undefined && !sameUrl(iss, discovered.authorizationServerUrl)) {
 			// Without metadata the expected issuer is the discovered server URL, which may be our own
-			// origin-root fallback, so a trailing-slash-only difference is not a mismatch.
+			// origin-root fallback, so a trailing-slash-only difference is not a mismatch. A foreign iss is
+			// still rejected, so hiding metadata cannot skip the check.
 			throw new OAuthIssuerMismatchError(discovered.authorizationServerUrl, iss);
 		}
 		const tokens = await exchangeAuthorizationCode(discovered.authorizationServerUrl, {
