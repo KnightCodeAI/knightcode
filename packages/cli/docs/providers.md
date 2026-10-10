@@ -17,6 +17,40 @@ Run `/logout` and select a provider to remove its stored credential. This does n
 
 `auth.json` can contain API keys and OAuth tokens. Keep it private and do not commit it.
 
+## Check subscription usage
+
+Run `/usage` in the interactive terminal to see remaining allowance and reset
+times reported by connected Claude (`anthropic`), OpenAI Codex (legacy)
+(`openai-codex`) and Grok (`xai`) subscription sign-ins. For Grok, run `/login xai`
+and choose "Sign in with SuperGrok or X Premium". The figures cover the whole
+account, not just the current KnightCode session. Other subscription sign-ins,
+including the current `openai` ChatGPT sign-in, are listed as unsupported.
+
+Claude shows extra usage first. KnightCode draws from extra usage rather than
+Claude's plan limits. The extra-usage percentage is account-wide and includes
+usage outside KnightCode; it does not measure this client's consumption alone.
+The plan windows are shown only for reference. Codex windows describe the plan
+allowance. Accounts with purchased credits can keep working at 0% remaining.
+
+Grok shows the weekly or monthly credit pool and, when reported, the Grok Build
+and API shares. These product lines are shares of the same pool, not separate
+allowances. Accounts with purchased credits or pay-as-you-go can keep working
+at 0% remaining. An xAI API key is billed separately and is not shown.
+
+`unavailable` means the provider did not report a valid value. A window whose
+reset has passed asks you to run `/usage` again instead of assuming the allowance
+has refilled. Each opening fetches once; there is no polling or Refresh key.
+Rate-limited providers are not requested again until their cooldown expires.
+
+The panel is read-only: it never buys credits or changes provider settings.
+It is available only in the interactive terminal, not RPC, print, JSON, or IDE
+engine sessions. It uses your configured credential store and the existing
+OAuth refresh path. Usage requests go only to the providers' fixed usage
+endpoints, not a configured model endpoint.
+
+Disable it with `"extensions": ["-builtin:usage"]` in settings, or disable all
+extensions with `--no-extensions`.
+
 ## Use an API key from the environment
 
 Environment variables are useful in CI and anywhere KnightCode should not store the key. Set the variable before starting KnightCode:
