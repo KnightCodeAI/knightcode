@@ -8,6 +8,7 @@ import planMode from "./plan-mode/index.ts";
 import toolSearchExtension from "./tool-search/index.ts";
 import uiExtension from "./ui/index.ts";
 import undoExtension from "./undo/index.ts";
+import usageExtension from "./usage/index.ts";
 
 export const builtInExtensions: InlineExtension[] = [
 	{ name: "llama.cpp", factory: llamaExtension, builtin: true },
@@ -18,6 +19,8 @@ export const builtInExtensions: InlineExtension[] = [
 	{ name: "mcp", factory: mcpExtension, replaceable: true, builtin: true },
 	// /undo is a built-in command; file checkpoints ride on the extension hooks so core stays untouched.
 	{ name: "undo", factory: undoExtension, builtin: true },
+	// /usage is a built-in command.
+	{ name: "usage", factory: usageExtension, builtin: true },
 	// /remote is a built-in command. Listing it under "Extensions" at startup would advertise an
 	// implementation detail as an add-on.
 	{ name: "remote", factory: remoteExtension, builtin: true },
