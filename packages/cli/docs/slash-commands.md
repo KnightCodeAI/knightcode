@@ -14,6 +14,7 @@ Extensions, prompt templates, and skills can add commands. The command menu in K
 | `/scoped-models` | Configure the models used by interactive cycling |
 | `/login [provider]` | Add provider authentication |
 | `/logout` | Remove provider authentication |
+| `/usage` | Show remaining subscription allowance and reset times for Claude, Codex and Grok sign-ins; see [Subscription usage](providers.md#check-subscription-usage) |
 | `/tools` | Turn `webfetch`, `websearch`, [`ask_user`](usage.md#questions), the [scratchpad](usage.md#scratchpad), and the [classifier gate](usage.md#classifier-gate) off, on for this session, or on by default; pick the search provider, its key, and the gate's model |
 | `/llama` | Manage models on the configured llama.cpp router |
 
