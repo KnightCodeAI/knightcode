@@ -230,6 +230,19 @@ describe("usage panel", () => {
 		expect(lines[0].search(/\d+% left/)).toBe(lines[1].search(/\d+% left/));
 	});
 
+	// PR #316: fractional percentages must not push the reset text onto another line.
+	it.each([66, 77, 78, 80])("keeps fractional quota and reset text together at %s columns", (width) => {
+		const row = ok(grok, 62.5);
+		if (row.state !== "ok") throw new Error("expected ok");
+		row.usage.windows[0].label = "Weekly";
+		const lines = render([row], width).split("\n");
+		const quota = lines.find((line) => line.includes("62.5% left"));
+		expect(quota).toBeDefined();
+		expect(quota).toMatch(/[█░]/);
+		expect(quota).toContain("62.5% left · resets in 1h 0m");
+		for (const line of lines.slice(1, -1)) expect(visibleWidth(line)).toBeLessThanOrEqual(width - 2);
+	});
+
 	it.each([40, 80])("fits all states in %s columns and never hides quota behind color", (width) => {
 		vi.spyOn(Date, "now").mockReturnValue(NOW);
 		const rows: UsageRow[] = [

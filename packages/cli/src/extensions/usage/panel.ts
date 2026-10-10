@@ -118,7 +118,7 @@ export class UsagePanel implements Component {
 		const reset = window.resetsAt === null ? "" : ` · resets in ${formatUsageDuration(window.resetsAt - now)}`;
 		// Reserve room for the widest percentage and the full reset text before adding a bar.
 		const barWidth =
-			width < 60 ? 0 : Math.max(0, Math.min(20, width - visibleWidth(label) - 9 - visibleWidth(reset) - 4));
+			width < 60 ? 0 : Math.max(0, Math.min(20, width - visibleWidth(label) - 10 - visibleWidth(reset) - 4));
 		let bar = "";
 		if (remaining !== null && barWidth >= 8) {
 			const filled = Math.max(0, Math.min(barWidth, Math.round((barWidth * remaining) / 100)));
