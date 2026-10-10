@@ -11,10 +11,6 @@
     "lastChangelogVersion": {
       "type": "string"
     },
-    "lastIdeVersion": {
-      "type": "string",
-      "description": "Last IDE version the install ping was sent for. Separate from lastChangelogVersion, which drives the CLI changelog."
-    },
     "defaultProvider": {
       "type": "string"
     },
