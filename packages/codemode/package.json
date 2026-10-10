@@ -10,6 +10,8 @@
     ".": "./src/index.ts",
     "./declarations": "./src/declarations.ts",
     "./source": "./src/source.ts",
+    "./portable": "./src/portable.ts",
+    "./cloudflare": "./src/cloudflare.ts",
     "./worker": "./src/runtime/worker.ts",
     "./package.json": "./package.json"
   },
