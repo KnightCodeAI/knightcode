@@ -1,7 +1,6 @@
 // Publish packages/cli/docs as the website manual. The site used to keep a
 // second guide, and that guide drifted into describing a different product.
-// Re-run this before `next dev` / `next build`. Do not edit content/docs by hand
-// except through scripts/ide-doc.mdx.
+// Re-run this before `next dev` / `next build`. Do not edit content/docs by hand.
 
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join, posix } from "node:path"
@@ -12,7 +11,6 @@ const repoRoot = join(webRoot, "..", "..")
 const cliDocs = join(repoRoot, "packages", "cli", "docs")
 const outDir = join(webRoot, "content", "docs")
 const imageOut = join(webRoot, "public", "docs", "images")
-const ideTemplate = join(webRoot, "scripts", "ide-doc.mdx")
 
 const FOLDER_SLUGS = {
 	"Run KnightCode": "run",
@@ -105,7 +103,6 @@ function walk(nodes, segments, bucket) {
 
 const rootPages = []
 walk(navigation, [], rootPages)
-rootPages.push("---Desktop IDE---", "ide")
 
 const listed = new Set(urlByFile.keys())
 for (const name of readdirSync(cliDocs)) {
@@ -272,12 +269,6 @@ for (const meta of metas) {
 	writeFileSync(join(dir, "meta.json"), `${JSON.stringify(payload, null, 2)}\n`)
 }
 
-mkdirSync(join(outDir, "ide"), { recursive: true })
-writeFileSync(join(outDir, "ide", "index.mdx"), readFileSync(ideTemplate, "utf8"))
-writeFileSync(
-	join(outDir, "ide", "meta.json"),
-	`${JSON.stringify({ title: "Desktop IDE", icon: "CodeFolder", pages: ["index"] }, null, 2)}\n`,
-)
 writeFileSync(join(outDir, "meta.json"), `${JSON.stringify({ pages: rootPages }, null, 2)}\n`)
 
 function bareExpressions(markdown) {
@@ -319,4 +310,4 @@ if (!usage.includes("](/docs/quickstart)") || !usage.includes('src="/docs/images
 	throw new Error("sync-cli-docs did not rewrite usage.md links or images")
 }
 
-console.log(`synced ${outputs.length} CLI docs and the IDE page`)
+console.log(`synced ${outputs.length} CLI docs`)

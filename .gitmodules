@@ -1,3 +1,0 @@
-[submodule "apps/desktop/ide"]
-	path = apps/desktop/ide
-	url = https://github.com/KnightCodeAI/knightcode-ide.git

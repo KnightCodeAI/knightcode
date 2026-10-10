@@ -1,4 +1,4 @@
-// scripts/build.ts — run with `bun run scripts/build.ts [--single] [--engine]`
+// scripts/build.ts — run with `bun run scripts/build.ts [--single]`
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../packages/cli/package.json";
@@ -12,8 +12,6 @@ const ENTRY = join(ROOT, "packages/cli/src/bun/cli.ts");
 const WORKER_ENTRY = join(ROOT, "packages/cli/src/utils/image-resize-worker.ts");
 // Codemode starts a worker by path. Bun only embeds workers that are entrypoints.
 const CODEMODE_WORKER_ENTRY = join(ROOT, "packages/cli/src/extensions/codemode/worker.ts");
-// The IDE's engine: a second binary from the same core, no TUI entry.
-const ENGINE_ENTRY = join(ROOT, "packages/cli/src/engine-entry.ts");
 
 // In a compiled binary `getPackageDir()` is `dirname(process.execPath)` (see
 // packages/cli/src/config.ts), so the runtime looks for package.json, themes,
@@ -102,11 +100,6 @@ const ALL_TARGETS: Target[] = [
 ];
 
 const single = process.argv.includes("--single");
-// The engine is consumed by the desktop IDE, which bundles it into its own
-// installer. It is not part of the npm platform packages: without this flag the
-// publish workflow would ship an extra ~115 MB binary to every CLI user for
-// nothing to run it.
-const withEngine = process.argv.includes("--engine");
 const targetFlag = process.argv.find((a) => a.startsWith("--target="))?.slice("--target=".length);
 
 let targets: Target[];
@@ -169,43 +162,6 @@ for (const target of targets) {
 
 	// Compiled binaries must be executable on POSIX (npm preserves the mode bit).
 	if (target.os !== "win32") chmodSync(outfile, 0o755);
-
-	if (!withEngine) continue;
-
-	// The engine is a second front door onto the same core, built from its own
-	// entry so the IDE never starts a CLI and asks it to behave like a server.
-	// It shares this target's runtime assets, already copied above.
-	const engineName = target.os === "win32" ? "knightcode-engine.exe" : "knightcode-engine";
-	const engineOutfile = join(outDir, engineName);
-
-	console.log(`Building ${target.os}-${target.arch} → ${engineOutfile}`);
-	const engineResult = await Bun.build({
-		entrypoints: [ENGINE_ENTRY, CODEMODE_WORKER_ENTRY],
-		target: "bun",
-		compile: {
-			target: target.bunTarget,
-			outfile: engineOutfile,
-			// The IDE starts the engine in whatever directory the IDE was launched
-			// from. A .env or bunfig.toml there would be read at startup, and a .env's
-			// API keys would show up as signed-in providers that signing out cannot
-			// remove. The engine takes credentials from auth.json and the environment
-			// the IDE hands it, never from files beside the user's working directory.
-			autoloadDotenv: false,
-			autoloadBunfig: false,
-			...(target.os === "win32" ? { windows: windowsMetadata(version) } : {}),
-		},
-		define: {
-			KNIGHTCODE_VERSION: JSON.stringify(version),
-		},
-	});
-
-	if (!engineResult.success) {
-		console.error(`Engine build failed for ${target.os}-${target.arch}`);
-		for (const log of engineResult.logs) console.error(log);
-		process.exit(1);
-	}
-
-	if (target.os !== "win32") chmodSync(engineOutfile, 0o755);
 }
 
 console.log("Build complete.");

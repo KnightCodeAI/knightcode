@@ -321,7 +321,7 @@ export interface CompactOptions {
 /**
  * Context passed to extension event handlers.
  */
-export type ExtensionMode = "tui" | "rpc" | "json" | "print" | "engine";
+export type ExtensionMode = "tui" | "rpc" | "json" | "print";
 
 export interface SendUserMessageOptions {
 	deliverAs?: "steer" | "followUp";

@@ -38,13 +38,12 @@ pass through the same gate. The planning instructions name only the tools the
 session has.
 
 Shell commands are not checked. The model is told to run only commands that
-inspect, but a command can still change files. In the IDE, the editor's own
-permission prompt still applies. User-started `!` commands are not gated.
+inspect, but a command can still change files. User-started `!` commands are
+not gated.
 
 This is not an operating-system sandbox. KnightCode still writes session data,
 and installed extensions remain trusted code that can access files directly.
-The planning gate runs before KnightCode's built-in classifier and engine
-permission gates. User and project extensions load first, so their handlers may
+The planning gate runs before KnightCode's built-in classifier gate. User and project extensions load first, so their handlers may
 run before it. Another extension registering `/plan`, `--plan`, or either
 planning tool replaces the built-in implementation.
 
@@ -71,8 +70,7 @@ approval, and on Keep planning it is sent as feedback. Escape keeps planning. Re
 picker. An action rechecks the shown revision before changing state.
 
 RPC reports a submission notification; `/plan` opens its review selection.
-The IDE displays the plan in the tool card and supports `/plan approve`, but
-fresh-session handoff is not available there. JSON mode adds no extra output:
+JSON mode adds no extra output:
 the submission tool-call events contain the Markdown.
 
 ## Print mode

@@ -362,10 +362,6 @@ export default function planMode(kc: ExtensionAPI): void {
 			const approval = /^approve(?: (fresh))?(?: (\d+)(?: ([\s\S]+))?)?$/.exec(text);
 			const note = approval?.[3] ? `\n\nUser note: ${approval[3]}` : "";
 			if (approval) {
-				if (approval[1] && ctx.mode === "engine") {
-					notice(ctx, "Fresh-session handoff is not available in the IDE yet; use /plan approve.");
-					return;
-				}
 				if (snapshot.mode !== "planning" || !snapshot.draft) {
 					notice(ctx, "No plan to approve.");
 					return;

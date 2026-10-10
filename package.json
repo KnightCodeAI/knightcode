@@ -12,7 +12,6 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx}\"",
     "build:cli": "bun run scripts/build.ts --single",
-    "build:engine": "bun run scripts/build.ts --single --engine",
     "build:linux": "bun run scripts/build.ts --target=linux-x64",
     "bench": "bun run scripts/bench.ts",
     "screenshots": "bun run scripts/screenshots.ts",

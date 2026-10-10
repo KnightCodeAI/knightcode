@@ -701,16 +701,6 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getLastIdeVersion(): string | undefined {
-		return this.settings.lastIdeVersion;
-	}
-
-	setLastIdeVersion(version: string): void {
-		this.globalSettings.lastIdeVersion = version;
-		this.markModified("lastIdeVersion");
-		this.save();
-	}
-
 	getSessionDir(): string | undefined {
 		const sessionDir = this.settings.sessionDir;
 		return sessionDir ? normalizePath(sessionDir) : sessionDir;

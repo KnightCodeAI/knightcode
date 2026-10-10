@@ -38,11 +38,9 @@ const nextConfig = {
       { source: "/docs/ai/security", destination: "/docs/run/security", permanent: true },
       { source: "/docs/reference/data", destination: "/docs/customize/configuration", permanent: true },
       { source: "/docs/reference/shortcuts", destination: "/docs/reference/keybindings", permanent: true },
-      { source: "/docs/ide/first-run", destination: "/docs/ide", permanent: true },
-      { source: "/docs/ide/engine", destination: "/docs/ide", permanent: true },
-      { source: "/docs/ide/updates", destination: "/docs/ide", permanent: true },
-      { source: "/docs/ide/privacy", destination: "/docs/ide", permanent: true },
-      { source: "/docs/ide/support", destination: "/docs/ide", permanent: true },
+      // The desktop IDE was discontinued; keep its old links from 404ing.
+      { source: "/ide", destination: "/", permanent: false },
+      { source: "/docs/ide/:path*", destination: "/docs", permanent: false },
     ]
   },
 }
