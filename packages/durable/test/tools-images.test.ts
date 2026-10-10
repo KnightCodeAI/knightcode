@@ -12,7 +12,7 @@ import { getOrThrow } from "../src/env/index.ts";
 import { NodeExecutionEnv } from "../src/env/node.ts";
 import { exifOrientation } from "../src/images/exif.ts";
 import { imageDimensions } from "../src/tools/image.ts";
-import { DEFAULT_IMAGE_LIMITS, type ImageProcessor, toBase64 } from "../src/tools/image-processor.ts";
+import { base64Length, DEFAULT_IMAGE_LIMITS, type ImageProcessor, toBase64 } from "../src/tools/image-processor.ts";
 import { createReadTool } from "../src/tools/read.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "knightcode-durable-images-"));
@@ -313,20 +313,29 @@ describe("read of images, with the Photon image processor", () => {
 		]);
 	});
 
-	// WASM encode of a noisy 2000x2000 image takes several seconds, and longer while the suite is busy.
 	it("re-encodes a PNG too large for the byte limit as JPEG at its size, and shrinks it when that is not enough", async () => {
-		const result = await read("big.png", noisyPng(1100, 1100), { images: processor });
+		const png = noisyPng(48, 48);
+		const underPng = base64Length(png.byteLength) - 1;
+		const result = await read("big.png", png, { images: processor, resize: { maxBytes: underPng } });
 		const jpeg = onlyImage(result);
 		expect(jpeg.mimeType).toBe("image/jpeg");
 		expect(messages(result)).toEqual(["Read image file [image/jpeg]. Converted from image/png to image/jpeg."]);
-		expect(jpeg.data.length).toBeLessThanOrEqual(DEFAULT_IMAGE_LIMITS.maxBytes);
-		expect(decodedImage(jpeg.data)).toMatchObject({ width: 1100, height: 1100 });
-		const tight = { ...DEFAULT_IMAGE_LIMITS, maxBytes: 200_000 };
-		const shrunk = await processor.prepare(noisyPng(2000, 2000), "image/png", tight);
+		expect(jpeg.data.length).toBeLessThanOrEqual(underPng);
+		expect(decodedImage(jpeg.data)).toMatchObject({ width: 48, height: 48 });
+		// 40 is the lowest JPEG quality the processor tries, so this is under every full-size encoding.
+		const image = PhotonImage.new_from_byteslice(png);
+		let underEveryFullSize: number;
+		try {
+			underEveryFullSize = base64Length(image.get_bytes_jpeg(40).byteLength) - 1;
+		} finally {
+			image.free();
+		}
+		const tight = { ...DEFAULT_IMAGE_LIMITS, maxBytes: underEveryFullSize };
+		const shrunk = await processor.prepare(png, "image/png", tight);
 		expect(shrunk!.data.length).toBeLessThanOrEqual(tight.maxBytes);
-		expect(shrunk!.resized?.from).toEqual({ width: 2000, height: 2000 });
-		expect(shrunk!.resized!.to.width).toBeLessThan(2000);
-	}, 20_000);
+		expect(shrunk!.resized?.from).toEqual({ width: 48, height: 48 });
+		expect(shrunk!.resized!.to.width).toBeLessThan(48);
+	});
 
 	it("keeps at least one pixel on each side of an extreme aspect ratio", async () => {
 		const result = await processor.prepare(encode(6000, 2, "png"), "image/png", DEFAULT_IMAGE_LIMITS);

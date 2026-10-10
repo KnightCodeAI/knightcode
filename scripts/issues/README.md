@@ -36,6 +36,12 @@ Restarting the server resumes any triage runs that were in flight.
 ./scripts/issues/run.sh   # http://127.0.0.1:7788
 ```
 
+From the repository root, the same process without the shell script:
+
+```bash
+node --conditions=source --import ./scripts/issues/register.mjs scripts/issues/main.ts
+```
+
 Open `http://127.0.0.1:7788/?t=<token>` once, with the token from `scripts/issues/data/token`. The server then sets a cookie, so later visits don't need the token.
 
 The agent authenticates through `~/.knightcode/agent/auth.json`, the same credentials knightcode uses.
