@@ -1,5 +1,19 @@
 # @knightcodeai/cli
 
+## 0.16.0
+
+### Added
+
+- Added /usage to show remaining subscription allowance and reset times for connected Claude, Codex and Grok sign-ins.
+
+### Removed
+
+- Removed the discontinued KnightCode IDE's engine and ACP adapter, along with the `"engine"` extension mode and the `lastIdeVersion` setting; the CLI itself is unchanged.
+
+### Fixed
+
+- Fixed macOS 27 killing KnightCode at launch with `SIGKILL (Code Signature Invalid)`: the macOS binaries are now re-signed after compiling.
+
 ## 0.15.2
 
 ### Fixed
