@@ -162,6 +162,27 @@ for (const target of targets) {
 
 	// Compiled binaries must be executable on POSIX (npm preserves the mode bit).
 	if (target.os !== "win32") chmodSync(outfile, 0o755);
+
+	// Bun's Mach-O keeps the linker's ad-hoc signature, which predates the appended
+	// __BUN payload. macOS 27 enforces it and SIGKILLs the binary at launch, so
+	// re-sign the finished file. --strict fails on a stale signature even on older
+	// macOS, where the binary would still run.
+	if (target.os === "darwin") {
+		if (process.platform !== "darwin") {
+			console.warn(`Skipping codesign for ${target.os}-${target.arch}: needs a macOS host`);
+		} else {
+			for (const args of [
+				["--force", "--sign", "-", outfile],
+				["--verify", "--strict", "--verbose=2", outfile],
+			]) {
+				const signed = Bun.spawnSync(["codesign", ...args], { stdout: "inherit", stderr: "inherit" });
+				if (signed.exitCode !== 0) {
+					console.error(`codesign ${args[0]} failed for ${target.os}-${target.arch}`);
+					process.exit(1);
+				}
+			}
+		}
+	}
 }
 
 console.log("Build complete.");
