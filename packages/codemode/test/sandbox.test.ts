@@ -837,6 +837,20 @@ describe("worker host", () => {
 		});
 	});
 
+	// Node 24 and 26 with --watch post dependency reports on the worker channel.
+	it("ignores Node --watch notifications from the worker", async () => {
+		const sandbox = new CodemodeSandbox({ workerUrl: new URL("./fixtures/raw-worker.ts", import.meta.url) });
+		sandboxes.push(sandbox);
+		const result = await sandbox.execute(
+			JSON.stringify([
+				{ "watch:require": ["/worker.js"] },
+				{ "watch:import": ["file:///worker.js"] },
+				{ type: "done", ok: true, value: "42", writes: "[]" },
+			]),
+		);
+		expect(result).toMatchObject({ ok: true, value: 42 });
+	});
+
 	// A malformed payload from the worker must fail the run as a sandbox error instead of
 	// throwing in the host's message listener and never settling.
 	it.each([
