@@ -166,11 +166,13 @@ function createHeld(sessionFile: string, key: string, timing: LockTiming): Held 
 	// proper-lockfile gives the lock up when a refresh fails: its directory was deleted (ENOENT), another
 	// process replaced it (the mtime is not ours), or the guarded fs refused (the token is not ours). A
 	// refresh that merely runs late, with the mtime still ours, is renewed by proper-lockfile itself. The
-	// default handler throws from a timer and kills the process; take the lock again instead, which fails
-	// if another process holds it or the session directory is gone.
+	// default handler throws from a timer and kills the process. Only a deleted lock directory, which leaves
+	// our token in place, is taken again; a changed or missing token means another holder may have written
+	// the file meanwhile, so our in-memory transcript is stale.
 	const onCompromised = () => {
 		if (entry.count === 0 || entry.lost) return;
 		try {
+			if (tokenOnDisk(sessionFile) !== entry.token) throw new SessionLockedError(sessionFile);
 			take(sessionFile, timing, entry, onCompromised);
 		} catch {
 			entry.lost = true;
@@ -191,6 +193,12 @@ export function acquireSessionLock(
 	if (fs.existsSync(sessionFile) && fs.statSync(sessionFile).nlink > 1) throw new SessionHardLinkedError(sessionFile);
 	const key = keyOf(sessionFile);
 	let entry = held.get(key);
+	// No local check has seen a takeover yet: counting on that entry would hand out a lost lock.
+	if (entry && tokenOnDisk(sessionFile) !== entry.token) {
+		entry.lost = true;
+		held.delete(key);
+		entry = undefined;
+	}
 	// A file move cannot share ownership: remaining managers would write to the old name.
 	// An exclusive reservation also refuses new counted handles until publication finishes.
 	if (entry && (exclusive || entry.exclusive)) throw new SessionLockedError(sessionFile, "this process");

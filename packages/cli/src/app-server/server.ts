@@ -191,6 +191,13 @@ export class AppServer implements Subscriber {
 
 	private receive(message: unknown): void {
 		if (!check(Envelope, message)) {
+			// A malformed answer to a server request must still settle it, or the approval waits forever.
+			const { id, method } = (message ?? {}) as { id?: RequestId; method?: unknown };
+			const pending = method === undefined && id !== undefined ? this.outgoing.get(id) : undefined;
+			if (pending) {
+				this.outgoing.delete(id!);
+				pending.reject(new AppServerError("invalidParams", "Malformed response"));
+			}
 			this.transport.send({ method: "error", params: { message: "Malformed message" } });
 			return;
 		}

@@ -63,3 +63,30 @@ test("structured response errors retain their class and recovery data", async ()
 	});
 	client.close();
 });
+
+test("a malformed response to a server request rejects the pending request", async () => {
+	const pair = createInProcessPair();
+	const sent: { id?: number; method?: string }[] = [];
+	pair.client.onMessage((message) => sent.push(message as { id?: number; method?: string }));
+	const server = new AppServer({ transport: pair.server, version: "0", mode: "desktop", handlers: {} });
+	pair.client.send({
+		id: 1,
+		method: "initialize",
+		params: { clientInfo: { name: "t", version: "0" }, protocolVersion: PROTOCOL_VERSION, capabilities: {} },
+	});
+	await tick();
+	pair.client.send({ method: "initialized", params: {} });
+	await tick();
+	const pending = server.request(
+		"item/toolCall/requestApproval",
+		{ threadId: "t", turnId: "u", itemId: "i", tool: "bash", input: {} },
+		new AbortController().signal,
+	);
+	await tick();
+	const id = sent.find((message) => message.method === "item/toolCall/requestApproval")!.id!;
+	// JSON-RPC libraries add a field the envelope schema does not allow.
+	const reply = { jsonrpc: "2.0", id, result: { decision: "accept" } };
+	pair.client.send(reply);
+	await expect(pending).rejects.toMatchObject({ code: "invalidParams", message: "Malformed response" });
+	pair.client.close();
+});

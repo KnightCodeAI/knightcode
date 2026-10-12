@@ -201,3 +201,25 @@ test("a deleted session directory loses the lock without crashing or recreating 
 	expect(existsSync(join(file, ".."))).toBe(false);
 	expect(() => lock.release()).not.toThrow();
 });
+
+test("a refresh after another holder took and released the lock loses it instead of taking it again", () => {
+	const file = sessionFile();
+	const lock = acquireSessionLock(file, FAST);
+	// The other holder appended while we stalled; our in-memory transcript lacks its entries.
+	takeOver(file);
+	rmSync(`${file}.lock`, { recursive: true, force: true });
+	rmSync(`${file}.lock-owner`, { force: true });
+	vi.advanceTimersByTime(FAST.updateMs);
+	expect(lock.lost).toBe(true);
+	expect(isLocked(file)).toBe(false);
+	lock.release();
+});
+
+test("a new acquisition does not count on an entry another process took over", () => {
+	const file = sessionFile();
+	const first = acquireSessionLock(file, FAST);
+	takeOver(file);
+	expect(() => acquireSessionLock(file, FAST)).toThrow(SessionLockedError);
+	expect(first.lost).toBe(true);
+	first.release();
+});

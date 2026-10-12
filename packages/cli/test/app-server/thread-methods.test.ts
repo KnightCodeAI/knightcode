@@ -266,3 +266,25 @@ test("thread/resume pages turns and says where the next page starts", async () =
 	expect(rest.turns).toHaveLength(1);
 	expect(rest.nextCursor).toBeUndefined();
 });
+
+test("thread/fork of a loaded thread resolves atItemId on its live branch", async () => {
+	const { cwd, sessionDir, threads, connect } = await startServer();
+	const manager = SessionManager.create(cwd, sessionDir);
+	const user = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 1 });
+	const root = manager.appendMessage(user("root"));
+	const side = manager.appendMessage(user("side"));
+	manager.branch(root);
+	// The file's leaf is the last append, on the other branch.
+	manager.appendMessage(user("main"));
+	const id = manager.getSessionId();
+	manager.close();
+	const a = await connect();
+	await a.client.request("thread/resume", { threadId: id });
+	// Moves the live leaf without writing to the file.
+	threads.get(id).session.sessionManager.branch(side);
+	const { turns } = await a.client.request("thread/read", { threadId: id });
+	const last = turns.at(-1)!;
+	const atItemId = "items" in last ? last.items[0].id : "";
+	const { thread } = await a.client.request("thread/fork", { threadId: id, atItemId });
+	expect(thread.id).not.toBe(id);
+});

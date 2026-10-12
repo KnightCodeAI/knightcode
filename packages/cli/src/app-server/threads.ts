@@ -290,7 +290,10 @@ export class ThreadManager {
 			const source = live?.file ?? (await this.files.find(threadId));
 			if (!source || !existsSync(source)) throw new AppServerError("threadNotFound", `nothing to fork: ${threadId}`);
 			this.assertOpen();
-			const { entries, manager } = this.branchOf(source);
+			// A live thread's leaf can move without an append, so its item ids come from the in-memory branch.
+			const { entries, manager } = live
+				? { entries: live.session.sessionManager.getBranch(), manager: live.session.sessionManager }
+				: this.branchOf(source);
 			const cwd = live?.session.sessionManager.getCwd() ?? manager.getHeader()?.cwd ?? process.cwd();
 			const leafId = atItemId === undefined ? undefined : entryForItem(entries, atItemId);
 			if (atItemId !== undefined && leafId === undefined)
