@@ -62,7 +62,8 @@ describe("host manager (real child processes)", () => {
 		await first.stop();
 		await second.start();
 		await second.stop();
-	});
+		// It starts and replaces real child processes; the 5 s default is too tight when every package suite runs at once.
+	}, 30_000);
 
 	it("a graceful exit still takes the child's descendants with it", async () => {
 		const file = scratch("grandchild-graceful");
