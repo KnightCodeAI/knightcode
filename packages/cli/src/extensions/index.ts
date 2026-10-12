@@ -6,11 +6,14 @@ import llamaExtension from "./llama/index.ts";
 import mcpExtension from "./mcp/index.ts";
 import planMode from "./plan-mode/index.ts";
 import toolSearchExtension from "./tool-search/index.ts";
+import { turnMarkerExtension } from "./turn-marker.ts";
 import uiExtension from "./ui/index.ts";
 import undoExtension from "./undo/index.ts";
 import usageExtension from "./usage/index.ts";
 
 export const builtInExtensions: InlineExtension[] = [
+	// First so live and persisted turns share the marker entry's id.
+	turnMarkerExtension,
 	{ name: "llama.cpp", factory: llamaExtension, builtin: true },
 	// Replaceable: an extension that registers `codemode`, `tool_search`, or `/mcp` (such as a third-party
 	// MCP extension) takes over instead of running alongside the built-in one.

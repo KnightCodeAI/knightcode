@@ -93,9 +93,13 @@ import {
 	withVirtualModels,
 } from "./virtual-models.ts";
 
+/** The registering session's extension runtime owns the route bound to its context. */
+export type VirtualModelOwner = object;
+const UNOWNED: VirtualModelOwner = Object.freeze({});
+
 interface RegisteredVirtualModel {
 	model: Model<Api>;
-	route: VirtualModelDefinition["route"];
+	routes: Map<VirtualModelOwner, VirtualModelDefinition["route"]>;
 }
 
 interface ModelRuntimeSnapshot {
@@ -657,6 +661,7 @@ export class ModelRuntime implements Models {
 		model: TModel;
 		options: Omit<TOptions, "transformHeaders"> & ProviderRequestOptions<TModel>;
 	}> {
+		options?.signal?.throwIfAborted();
 		const provider = this.models.getProvider(model.provider);
 		if (!provider) throw new ModelsError("provider", `Unknown provider: ${model.provider}`);
 		const resolution = await this.getAuth(model, {
@@ -664,12 +669,14 @@ export class ModelRuntime implements Models {
 			env: options?.env,
 			signal: options?.signal,
 		});
+		options?.signal?.throwIfAborted();
 		if (!resolution) throw new ModelsError("auth", `Provider is not configured: ${model.provider}`);
 
 		const { transformHeaders, ...rawProviderOptions } = options ?? {};
 		const providerOptions = rawProviderOptions as Omit<TOptions, "transformHeaders"> & ProviderRequestOptions<TModel>;
 		let headers = mergeHeaders(resolution.auth.headers, providerOptions.headers);
 		if (transformHeaders) headers = await transformHeaders(headers ?? {});
+		options?.signal?.throwIfAborted();
 		const env =
 			resolution.env || providerOptions.env ? { ...(resolution.env ?? {}), ...(providerOptions.env ?? {}) } : undefined;
 		const requestModel: TModel = resolution.auth.baseUrl ? { ...model, baseUrl: resolution.auth.baseUrl } : model;
@@ -697,6 +704,7 @@ export class ModelRuntime implements Models {
 				model,
 				options as (StreamOptions & ModelsRequestTransforms) | undefined,
 			);
+			options?.signal?.throwIfAborted();
 			return prepared.provider.stream(prepared.model, transcript, prepared.options as ApiStreamOptions<TApi>);
 		});
 	}
@@ -709,7 +717,12 @@ export class ModelRuntime implements Models {
 		return this.stream(model, context, options).result();
 	}
 
-	streamSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
+	streamSimple(
+		model: Model<Api>,
+		context: Context,
+		options?: ModelsSimpleStreamOptions,
+		owner?: VirtualModelOwner,
+	): AssistantMessageEventStream {
 		const transcript = normalizeContext(context);
 		if (isVirtualModel(model)) {
 			// Requests outside the agent loop are routed here. Callers sized them before routing, so
@@ -719,6 +732,7 @@ export class ModelRuntime implements Models {
 					reason: "direct",
 					thinkingLevel: options?.reasoning ?? "off",
 					signal: options?.signal,
+					owner,
 				});
 				const { maxTokens: limit } = route.model;
 				const maxTokens = options?.maxTokens && limit > 0 ? Math.min(options.maxTokens, limit) : options?.maxTokens;
@@ -727,18 +741,24 @@ export class ModelRuntime implements Models {
 				// resolves its own, so they are not sent to the wrong vendor.
 				const { apiKey, headers, env, ...rest } = options ?? {};
 				const auth = route.model.provider === model.provider ? { apiKey, headers, env } : {};
-				return this.streamSimple(route.model, context, { ...rest, ...auth, maxTokens, reasoning });
+				return this.streamSimple(route.model, context, { ...rest, ...auth, maxTokens, reasoning }, owner);
 			});
 		}
 		return lazyStream(model, async () => {
 			assertChatModel(model);
 			const prepared = await this.prepareRequest(model, options);
+			options?.signal?.throwIfAborted();
 			return prepared.provider.streamSimple(prepared.model, transcript, prepared.options as SimpleStreamOptions);
 		});
 	}
 
-	completeSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): Promise<AssistantMessage> {
-		return this.streamSimple(model, context, options).result();
+	completeSimple(
+		model: Model<Api>,
+		context: Context,
+		options?: ModelsSimpleStreamOptions,
+		owner?: VirtualModelOwner,
+	): Promise<AssistantMessage> {
+		return this.streamSimple(model, context, options, owner).result();
 	}
 
 	streamDeferred(
@@ -749,6 +769,7 @@ export class ModelRuntime implements Models {
 		return lazyStream(model, async () => {
 			assertChatModel(model);
 			const prepared = await this.prepareRequest(model, options);
+			options?.signal?.throwIfAborted();
 			if (!prepared.provider.fetchDeferred) {
 				throw new ModelsError("provider", `Provider ${model.provider} does not support deferred responses`);
 			}
@@ -771,6 +792,7 @@ export class ModelRuntime implements Models {
 	): Promise<void> {
 		assertChatModel(model);
 		const prepared = await this.prepareRequest(model, options);
+		options?.signal?.throwIfAborted();
 		if (!prepared.provider.cancelDeferred) {
 			throw new ModelsError("provider", `Provider ${model.provider} does not support deferred responses`);
 		}
@@ -785,6 +807,7 @@ export class ModelRuntime implements Models {
 		try {
 			assertImageModel(model);
 			const prepared = await this.prepareRequest(model, options);
+			options?.signal?.throwIfAborted();
 			if (!prepared.provider.generateImages) {
 				throw new ModelsError("provider", `Provider ${model.provider} does not support image generation`);
 			}
@@ -803,6 +826,7 @@ export class ModelRuntime implements Models {
 			assertClassifierModel(model);
 			assertClassifierInputSupported(model, context);
 			const prepared = await this.prepareRequest(model, options);
+			options?.signal?.throwIfAborted();
 			if (!prepared.provider.classify) {
 				throw new ModelsError("provider", `Provider ${model.provider} does not support classification`);
 			}
@@ -942,10 +966,10 @@ export class ModelRuntime implements Models {
 
 	/**
 	 * Register a virtual model under `definition.provider`, which may also list physical models or
-	 * several virtual models. Re-registering the same provider and id replaces the virtual model.
+	 * several virtual models. Re-registering replaces only the registering owner's route.
 	 * Throws when the id belongs to a physical model of that provider.
 	 */
-	registerVirtualModel(definition: VirtualModelDefinition): void {
+	registerVirtualModel(definition: VirtualModelDefinition, owner: VirtualModelOwner = UNOWNED): void {
 		const { provider: providerId, id } = definition;
 		if (!providerId.trim() || !id.trim()) throw new Error("Virtual model provider and id must not be empty.");
 		const existing = this.models.getModel(providerId, id);
@@ -953,7 +977,9 @@ export class ModelRuntime implements Models {
 			throw new Error(`Virtual model ${providerId}/${id} conflicts with a physical model.`);
 		}
 		const models = this.virtualModels.get(providerId) ?? new Map<string, RegisteredVirtualModel>();
-		models.set(id, { model: createVirtualModel(definition), route: (request) => definition.route(request) });
+		const routes = models.get(id)?.routes ?? new Map<VirtualModelOwner, VirtualModelDefinition["route"]>();
+		routes.set(owner, (request) => definition.route(request));
+		models.set(id, { model: createVirtualModel(definition), routes });
 		this.virtualModels.set(providerId, models);
 		if (!this.recomposeProvider(providerId) && !this.snapshot.configuredProviders.has(providerId)) {
 			// A provider of only virtual models needs no credentials. Mark it configured now: session
@@ -966,13 +992,25 @@ export class ModelRuntime implements Models {
 		void this.refresh({ allowNetwork: false });
 	}
 
-	unregisterVirtualModel(providerId: string, id: string): void {
+	unregisterVirtualModel(providerId: string, id: string, owner: VirtualModelOwner = UNOWNED): void {
 		const models = this.virtualModels.get(providerId);
-		if (!models?.delete(id)) return;
+		const entry = models?.get(id);
+		if (!models || !entry?.routes.delete(owner)) return;
+		if (entry.routes.size > 0) return;
+		models.delete(id);
 		if (models.size === 0) this.virtualModels.delete(providerId);
 		this.recomposeProvider(providerId);
 		this.updateModelSnapshot();
 		void this.refresh({ allowNetwork: false });
+	}
+
+	/** Release the routes bound to a disposed session without affecting other sessions. */
+	releaseVirtualModels(owner: VirtualModelOwner): void {
+		for (const [providerId, models] of [...this.virtualModels]) {
+			for (const [id, entry] of [...models]) {
+				if (entry.routes.has(owner)) this.unregisterVirtualModel(providerId, id, owner);
+			}
+		}
 	}
 
 	/**
@@ -993,17 +1031,20 @@ export class ModelRuntime implements Models {
 			signal?: AbortSignal;
 			failed?: AssistantMessage;
 			state?: unknown;
+			owner?: VirtualModelOwner;
 		},
 	): Promise<ModelRoute> {
 		const name = `Virtual model ${model.provider}/${model.id}`;
 		const virtual = this.virtualModels.get(model.provider)?.get(model.id);
 		if (!virtual) throw new Error(`${name} is not registered.`);
-		const { failed, ...request } = options;
+		const router = virtual.routes.get(options.owner ?? UNOWNED) ?? virtual.routes.get(UNOWNED);
+		if (!router) throw new Error(`${name} is not registered in this session.`);
+		const { failed, owner: _owner, ...request } = options;
 		const latest = findLatestResponse(messages);
 		const previousModel = latest && this.getPhysicalModel(latest.provider, latest.model);
 		// A failed routing attempt names the virtual model; there is no physical request to report.
 		const failedModel = failed && this.getPhysicalModel(failed.provider, failed.model);
-		const route = await virtual.route({
+		const route = await router({
 			...request,
 			model,
 			previous: previousModel && { model: previousModel, thinkingLevel: latest?.thinkingLevel },

@@ -321,13 +321,15 @@ export interface CompactOptions {
 /**
  * Context passed to extension event handlers.
  */
-export type ExtensionMode = "tui" | "rpc" | "json" | "print";
+export type ExtensionMode = "tui" | "rpc" | "json" | "print" | "desktop";
 
 export interface SendUserMessageOptions {
 	deliverAs?: "steer" | "followUp";
 	expandPromptTemplates?: boolean;
 	/** Internal acceptance hook forwarded through command and replacement-session dispatch. */
 	preflightResult?: (disposition: PromptDisposition) => void;
+	/** Cancellation follows command dispatch and session replacement. */
+	signal?: AbortSignal;
 }
 
 export interface ExtensionContext {
@@ -418,6 +420,8 @@ export interface ExtensionCommandContext extends ExtensionContext {
 
 	/** Start a new session, optionally with initialization. */
 	newSession(options?: {
+		/** Internal cancellation owner of the initiating dispatch. */
+		signal?: AbortSignal;
 		/** Keep the outgoing model and reasoning level instead of the host defaults. */
 		preserveModel?: boolean;
 		parentSession?: string;
@@ -428,7 +432,11 @@ export interface ExtensionCommandContext extends ExtensionContext {
 	/** Fork from a specific entry, creating a new session file. */
 	fork(
 		entryId: string,
-		options?: { position?: "before" | "at"; withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
+		options?: {
+			position?: "before" | "at";
+			signal?: AbortSignal;
+			withSession?: (ctx: ReplacedSessionContext) => Promise<void>;
+		},
 	): Promise<{ cancelled: boolean }>;
 
 	/** Navigate to a different point in the session tree. */
@@ -440,7 +448,7 @@ export interface ExtensionCommandContext extends ExtensionContext {
 	/** Switch to a different session file. */
 	switchSession(
 		sessionPath: string,
-		options?: { withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
+		options?: { signal?: AbortSignal; withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
 	): Promise<{ cancelled: boolean }>;
 
 	/** Reload extensions, skills, prompts, themes, and context files. */
@@ -2247,6 +2255,7 @@ export interface ExtensionContextActions {
 export interface ExtensionCommandContextActions {
 	waitForIdle: () => Promise<void>;
 	newSession: (options?: {
+		signal?: AbortSignal;
 		preserveModel?: boolean;
 		parentSession?: string;
 		setup?: (sessionManager: SessionManager) => Promise<void>;
@@ -2254,7 +2263,11 @@ export interface ExtensionCommandContextActions {
 	}) => Promise<{ cancelled: boolean }>;
 	fork: (
 		entryId: string,
-		options?: { position?: "before" | "at"; withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
+		options?: {
+			position?: "before" | "at";
+			signal?: AbortSignal;
+			withSession?: (ctx: ReplacedSessionContext) => Promise<void>;
+		},
 	) => Promise<{ cancelled: boolean }>;
 	navigateTree: (
 		targetId: string,
@@ -2262,7 +2275,7 @@ export interface ExtensionCommandContextActions {
 	) => Promise<{ cancelled: boolean }>;
 	switchSession: (
 		sessionPath: string,
-		options?: { withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
+		options?: { signal?: AbortSignal; withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
 	) => Promise<{ cancelled: boolean }>;
 	reload: () => Promise<void>;
 }

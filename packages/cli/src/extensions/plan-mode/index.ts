@@ -331,7 +331,8 @@ export default function planMode(kc: ExtensionAPI): void {
 		submitted = undefined;
 		if (revision === undefined || snapshot.draft?.revision !== revision) return;
 		if (ctx.mode === "print") writeRawStdout(snapshot.draft.markdown + "\n");
-		else if (ctx.mode === "rpc") notice(ctx, `Plan revision ${revision} submitted. Run /plan to review.`);
+		else if (ctx.mode === "rpc" || ctx.mode === "desktop")
+			notice(ctx, `Plan revision ${revision} submitted. Run /plan to review.`);
 		else if (ctx.mode === "tui" && lastShown !== revision) {
 			kc.sendUserMessage("/plan", { expandPromptTemplates: true });
 		}

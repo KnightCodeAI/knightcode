@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join, parse } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from "@knightcode/ai/compat";
+import lockfile from "proper-lockfile";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSession } from "../../src/core/agent-session.ts";
@@ -124,6 +125,15 @@ describe("AgentSessionRuntime characterization", () => {
 
 		return { runtime, faux, tempDir };
 	}
+
+	it("replacing the session releases the old session file lock", async () => {
+		const { runtime } = await createRuntimeForTest(() => {});
+		await runtime.session.prompt("hello");
+		const oldFile = runtime.session.sessionFile!;
+		expect(lockfile.checkSync(oldFile, { realpath: false })).toBe(true);
+		await runtime.newSession();
+		expect(lockfile.checkSync(oldFile, { realpath: false })).toBe(false);
+	});
 
 	it("persists message_end assistant replacements to the session manager", async () => {
 		const { runtime } = await createRuntimeForTest((knightcode: ExtensionAPI) => {

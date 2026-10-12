@@ -240,6 +240,16 @@ Session replacement invalidates the old context. Capture only plain data before 
 
 ### State
 
+Module-level variables are shared by every session in the process that loads
+the extension, and so are the providers it registers: one session calling
+`unregisterProvider` removes the provider for all of them. The desktop app's
+app server runs many sessions in one process, so keep per-session state inside
+the factory closure, not at module level. Virtual models are the exception:
+each session keeps its own route. Active cached factories are pinned; up to
+256 inactive factories remain. Eviction or `/reload` can re-evaluate a module
+on a future load, so module globals are not persistent storage. Eviction
+never tears down a live session's extension.
+
 Choose storage based on how state participates in the conversation:
 
 | State | Storage |
@@ -264,7 +274,9 @@ Register an entry or message renderer when custom stored content should appear i
 Use `ctx.ui.custom()` only when the interaction needs its own rendering and input.
 See [Terminal UI](tui.md) for component, focus, overlay, theme, and performance guidance.
 
-Extensions load in interactive, RPC, JSON, and print modes.
+Extensions load in interactive, RPC, JSON, print, and desktop modes.
+Desktop mode currently has no extension UI (`hasUI` is false); terminal
+components remain unavailable even when desktop dialogs are added.
 Interactive mode provides the complete terminal UI. The [DOOM overlay example](../examples/extensions/doom-overlay/) uses a custom overlay component to render a game frame by frame:
 
 <p align="center"><img src="images/doom-extension.png" alt="The DOOM overlay example running over a KnightCode session" width="750"></p>

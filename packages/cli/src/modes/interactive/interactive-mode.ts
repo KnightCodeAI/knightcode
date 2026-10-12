@@ -105,6 +105,7 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { RADIUS_MCP_URL, RADIUS_PROVIDER_ID } from "../../core/radius.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
+import { SessionLockedError } from "../../core/session-lock.ts";
 import {
 	type SessionEntry,
 	SessionManager,
@@ -5752,7 +5753,11 @@ export class InteractiveMode {
 						const next = (nextName ?? "").trim();
 						if (!next) return;
 						const mgr = SessionManager.open(sessionFilePath);
-						mgr.appendSessionInfo(next);
+						try {
+							mgr.appendSessionInfo(next);
+						} finally {
+							mgr.close();
+						}
 					},
 					showRenameHint: true,
 					keybindings: this.keybindings,
@@ -5780,6 +5785,24 @@ export class InteractiveMode {
 			this.showStatus("Resumed session");
 			return result;
 		} catch (error: unknown) {
+			if (error instanceof SessionLockedError) {
+				const fork = await this.showExtensionConfirm(
+					"Session is open elsewhere",
+					"It is open in another KnightCode process. Continue in a fork of it?",
+				);
+				if (!fork) {
+					this.showStatus("Resume cancelled");
+					return { cancelled: true };
+				}
+				const forked = SessionManager.forkFrom(
+					error.sessionFile,
+					this.runtimeHost.cwd,
+					this.sessionManager.getSessionDir(),
+				);
+				const forkPath = forked.getSessionFile()!;
+				forked.close();
+				return this.handleResumeSession(forkPath, options);
+			}
 			if (error instanceof MissingSessionCwdError) {
 				const selectedCwd = await this.promptForMissingSessionCwd(error);
 				if (!selectedCwd) {

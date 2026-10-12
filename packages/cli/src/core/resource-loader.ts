@@ -16,6 +16,7 @@ import {
 	createExtensionRuntime,
 	loadExtensionFromFactory,
 	loadExtensionsCached,
+	releaseExtensionCache,
 } from "./extensions/loader.ts";
 import type {
 	Extension,
@@ -158,6 +159,10 @@ export interface ResourceLoader {
 	getAppendSystemPromptSources(): Array<{ path: string }>;
 	extendResources(paths: ResourceExtensionPaths): void;
 	reload(options?: ResourceLoaderReloadOptions): Promise<void>;
+	/** Release runtime-owned cache leases; custom uncached loaders need no cleanup. */
+	dispose?(): void;
+	/** Release only cached factories; absent on uncached custom loaders. */
+	releaseExtensionCache?(): void;
 }
 
 function resolvePromptInput(input: string | undefined, description: string): string | undefined {
@@ -388,6 +393,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private lastPromptPaths: string[];
 	private lastThemePaths: string[];
 	private loaded: boolean;
+	private extensionRuntimes = new Set<ExtensionRuntime>();
 
 	constructor(options: DefaultResourceLoaderOptions) {
 		this.cwd = resolvePath(options.cwd);
@@ -527,7 +533,26 @@ export class DefaultResourceLoader implements ResourceLoader {
 		return this.loadCurrentExtensionSet({ includeInlineFactories: true });
 	}
 
+	dispose(): void {
+		this.releaseExtensionCache();
+	}
+
+	releaseExtensionCache(): void {
+		for (const runtime of this.extensionRuntimes) releaseExtensionCache(runtime);
+		this.extensionRuntimes.clear();
+	}
+
 	async reload(options?: ResourceLoaderReloadOptions): Promise<void> {
+		this.dispose();
+		try {
+			await this.reloadResources(options);
+		} catch (error) {
+			this.dispose();
+			throw error;
+		}
+	}
+
+	private async reloadResources(options?: ResourceLoaderReloadOptions): Promise<void> {
 		resetTimings("extensions");
 
 		if (this.loaded) {
@@ -714,6 +739,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		);
 		const packageWarnings = collectExtensionPackageWarnings(extensionPaths, metadataByPath);
 		const extensionsResult = await loadExtensionsCached(extensionPaths, this.cwd, this.eventBus);
+		this.extensionRuntimes.add(extensionsResult.runtime);
 		mergeExtensionWarnings(extensionsResult, packageWarnings);
 		if (!options.includeInlineFactories) {
 			return extensionsResult;
@@ -741,6 +767,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 			this.eventBus,
 			runtime,
 		);
+		this.extensionRuntimes.add(result.runtime);
 		for (const path of paths.filter(isBuiltinPath)) {
 			const builtin = this.builtinExtensions.get(path.slice(BUILTIN_PATH_PREFIX.length));
 			if (!builtin) {

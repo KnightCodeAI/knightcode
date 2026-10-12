@@ -279,7 +279,10 @@ export {
 	createWriteTool,
 	type PromptTemplate,
 } from "./core/sdk.ts";
+export { SessionHardLinkedError, SessionLockedError } from "./core/session-lock.ts";
 export {
+	SessionClosedError,
+	SessionLockLostError,
 	type BranchSummaryEntry,
 	buildContextEntries,
 	buildSessionContext,

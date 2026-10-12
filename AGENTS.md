@@ -21,6 +21,7 @@ is no build step for development.
 | `packages/agent` | Agent loop, proxy stream, and their types |
 | `packages/durable` | Durable conversation, task and document runtime (Pico): record contracts and storage |
 | `packages/tui` | Terminal UI library with differential rendering |
+| `packages/app-server-protocol` | Schemas and types of the app server protocol; imports nothing from `ai` or `agent` |
 | `packages/telemetry` · `evals` | Telemetry contracts, eval harness |
 | `apps/web` | The website. Separate toolchain; not covered by the root type check |
 

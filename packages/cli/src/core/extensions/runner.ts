@@ -234,6 +234,7 @@ interface BoundaryDispatchResult {
 }
 
 export type NewSessionHandler = (options?: {
+	signal?: AbortSignal;
 	preserveModel?: boolean;
 	parentSession?: string;
 	setup?: (sessionManager: SessionManager) => Promise<void>;
@@ -242,7 +243,11 @@ export type NewSessionHandler = (options?: {
 
 export type ForkHandler = (
 	entryId: string,
-	options?: { position?: "before" | "at"; withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
+	options?: {
+		position?: "before" | "at";
+		signal?: AbortSignal;
+		withSession?: (ctx: ReplacedSessionContext) => Promise<void>;
+	},
 ) => Promise<{ cancelled: boolean }>;
 
 export type NavigateTreeHandler = (
@@ -252,7 +257,7 @@ export type NavigateTreeHandler = (
 
 export type SwitchSessionHandler = (
 	sessionPath: string,
-	options?: { withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
+	options?: { signal?: AbortSignal; withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
 ) => Promise<{ cancelled: boolean }>;
 
 export type ReloadHandler = () => Promise<void>;
@@ -998,7 +1003,10 @@ export class ExtensionRunner {
 		});
 	}
 
-	createCommandContext(preflightResult?: (disposition: PromptDisposition) => void): ExtensionCommandContext {
+	createCommandContext(
+		preflightResult?: (disposition: PromptDisposition) => void,
+		signal?: AbortSignal,
+	): ExtensionCommandContext {
 		// Use property descriptors instead of object spread so the guarded getters from
 		// createContext() stay lazy. A spread would eagerly read them once and freeze the
 		// old values into the returned object, bypassing stale-instance checks.
@@ -1011,18 +1019,22 @@ export class ExtensionRunner {
 			return this.sendUserMessageFn(content, {
 				...options,
 				preflightResult: preflightResult ?? options?.preflightResult,
+				signal: signal ?? options?.signal,
 			});
 		};
-		const replacementOptions = <T extends { withSession?: (ctx: ReplacedSessionContext) => Promise<void> }>(
+		const replacementOptions = <
+			T extends { signal?: AbortSignal; withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
+		>(
 			options: T,
 		): T => {
 			const withSession = options.withSession;
-			if (!withSession || !preflightResult) return options;
+			if (!withSession) return { ...options, signal: signal ?? options.signal };
 			return {
 				...options,
+				signal: signal ?? options.signal,
 				withSession: async (ctx: ReplacedSessionContext) => {
 					const dispatch = ctx.sendUserMessage;
-					ctx.sendUserMessage = (content, opts) => dispatch(content, { ...opts, preflightResult });
+					ctx.sendUserMessage = (content, opts) => dispatch(content, { ...opts, preflightResult, signal });
 					await withSession(ctx);
 				},
 			};
@@ -1037,11 +1049,11 @@ export class ExtensionRunner {
 		};
 		context.newSession = (options) => {
 			this.assertActive();
-			return this.newSessionHandler(options ? replacementOptions(options) : options);
+			return this.newSessionHandler(replacementOptions(options ?? {}));
 		};
 		context.fork = (entryId, options) => {
 			this.assertActive();
-			return this.forkHandler(entryId, options ? replacementOptions(options) : options);
+			return this.forkHandler(entryId, replacementOptions(options ?? {}));
 		};
 		context.navigateTree = (targetId, options) => {
 			this.assertActive();
@@ -1049,7 +1061,7 @@ export class ExtensionRunner {
 		};
 		context.switchSession = (sessionPath, options) => {
 			this.assertActive();
-			return this.switchSessionHandler(sessionPath, options ? replacementOptions(options) : options);
+			return this.switchSessionHandler(sessionPath, replacementOptions(options ?? {}));
 		};
 		context.reload = () => {
 			this.assertActive();
@@ -1121,14 +1133,17 @@ export class ExtensionRunner {
 		);
 	}
 
-	async emit<TEvent extends RunnerEmitEvent>(event: TEvent): Promise<RunnerEmitResult<TEvent>> {
+	async emit<TEvent extends RunnerEmitEvent>(event: TEvent, signal?: AbortSignal): Promise<RunnerEmitResult<TEvent>> {
+		signal ??= "signal" in event ? event.signal : undefined;
 		const ctx = this.createContext();
 		let result: SessionBeforeEventResult | undefined;
 
 		for (const { ext, handlers } of snapshotEventHandlers(this.extensions, event.type)) {
 			for (const handler of handlers) {
+				if (signal?.aborted) return result as RunnerEmitResult<TEvent>;
 				try {
 					const handlerResult = await handler(event, ctx);
+					if (signal?.aborted) return result as RunnerEmitResult<TEvent>;
 
 					if (this.isSessionBeforeEvent(event) && handlerResult) {
 						result = handlerResult as SessionBeforeEventResult;
@@ -1425,11 +1440,12 @@ export class ExtensionRunner {
 		return currentPayload;
 	}
 
-	async emitBeforeProviderHeaders(headers: ProviderHeaders): Promise<ProviderHeaders> {
+	async emitBeforeProviderHeaders(headers: ProviderHeaders, signal?: AbortSignal): Promise<ProviderHeaders> {
 		const ctx = this.createContext();
 
 		for (const { ext, handlers } of snapshotEventHandlers(this.extensions, "before_provider_headers")) {
 			for (const handler of handlers) {
+				if (signal?.aborted) return headers;
 				try {
 					// Handlers mutate `headers` in place; the return value is ignored.
 					const event: BeforeProviderHeadersEvent = {
@@ -1437,6 +1453,7 @@ export class ExtensionRunner {
 						headers,
 					};
 					await handler(event, ctx);
+					if (signal?.aborted) return headers;
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
 					const stack = err instanceof Error ? err.stack : undefined;
@@ -1456,6 +1473,7 @@ export class ExtensionRunner {
 	async emitBeforeAgentStart(
 		trigger: BeforeAgentStartTrigger,
 		systemPromptOptions: BuildSystemPromptOptions,
+		signal?: AbortSignal,
 	): Promise<BeforeAgentStartCombinedResult> {
 		const currentOptions = normalizeBuildSystemPromptOptions(systemPromptOptions);
 		const renderCurrentSystemPrompt = (): string => buildSystemPrompt(currentOptions);
@@ -1468,6 +1486,7 @@ export class ExtensionRunner {
 
 		for (const { ext, handlers } of snapshotEventHandlers(this.extensions, "before_agent_start")) {
 			for (const handler of handlers) {
+				if (signal?.aborted) return { messages, systemPromptOptions: currentOptions };
 				try {
 					const event: BeforeAgentStartEvent = {
 						...trigger,
@@ -1478,6 +1497,7 @@ export class ExtensionRunner {
 						systemPromptOptions: currentOptions,
 					};
 					const handlerResult = await handler(event, ctx);
+					if (signal?.aborted) return { messages, systemPromptOptions: currentOptions };
 
 					if (handlerResult) {
 						const result = handlerResult as BeforeAgentStartEventResult;
@@ -1553,6 +1573,7 @@ export class ExtensionRunner {
 		images: ImageContent[] | undefined,
 		source: InputSource,
 		streamingBehavior?: "steer" | "followUp",
+		signal?: AbortSignal,
 	): Promise<InputEventResult> {
 		const ctx = this.createContext();
 		let currentText = text;
@@ -1560,6 +1581,7 @@ export class ExtensionRunner {
 
 		for (const { ext, handlers } of snapshotEventHandlers(this.extensions, "input")) {
 			for (const handler of handlers) {
+				if (signal?.aborted) return { action: "handled" };
 				try {
 					const event: InputEvent = {
 						type: "input",
@@ -1569,6 +1591,7 @@ export class ExtensionRunner {
 						streamingBehavior,
 					};
 					const result = (await handler(event, ctx)) as InputEventResult | undefined;
+					if (signal?.aborted) return { action: "handled" };
 					if (result?.action === "handled") return result;
 					if (result?.action === "transform") {
 						currentText = result.text;

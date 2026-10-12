@@ -14,6 +14,7 @@ knightcode list
 knightcode config [options]
 knightcode auth <check|print-api-key|print-bearer-token> [options]
 knightcode mcp <list|login|logout> [options]
+knightcode app-server [-e <extension>]... [--session-dir <dir>]
 ```
 
 <a id="modes"></a>
@@ -364,6 +365,14 @@ Authentication commands require `--provider <provider>` or `--model <model>`. Se
 | `--min-expiry <duration>` | `print-bearer-token` | Require remaining token lifetime using `ms`, `s`, `m`, or `h`, such as `30m` |
 
 Credential-printing commands write secrets to stdout.
+
+## App server
+
+`knightcode app-server` hosts many threads in one headless process. It reads
+newline-delimited JSON requests from stdin, writes protocol messages to stdout,
+and logs to stderr. It exits when stdin closes, unloading sessions and releasing
+their locks. See [App Server](app-server.md) for the handshake, threads, approvals,
+payload retrieval, and limits.
 
 ## MCP commands
 
