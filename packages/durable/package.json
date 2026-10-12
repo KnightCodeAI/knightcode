@@ -11,6 +11,7 @@
     "./env": "./src/env/index.ts",
     "./env/node": "./src/env/node.ts",
     "./codemode": "./src/codemode/index.ts",
+    "./tool-search": "./src/tool-search/index.ts",
     "./tools": "./src/tools/index.ts",
     "./images": "./src/images/index.ts",
     "./images/node": "./src/images/node.ts",

@@ -70,7 +70,11 @@ describe("code mode description and section", () => {
 		setup.registry.install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [GITHUB] }));
 		setup.registry.install({
 			name: "tools",
-			tools: [tool("read", "Read a file."), tool("mcp__github__list_issues", "List issues.", { callers: ["tools"] })],
+			tools: [
+				tool("read", "Read a file."),
+				tool("mcp__github__list_issues", "List issues.", { callers: ["tools"] }),
+				tool("mcp__github__get_issue", "Get an issue.", { deferred: true }),
+			],
 		});
 		setup.faux.setResponses([fauxAssistantMessage([fauxText("hi")]) as AssistantMessage]);
 		const { harness, root } = await openChat(new MemoryStorage(), setup);
@@ -79,6 +83,8 @@ describe("code mode description and section", () => {
 		const sections = (system.model![0] as { sections?: Record<string, string> }).sections!;
 		expect(sections.codemode).toContain("### `read`");
 		expect(sections.codemode).toContain("### `mcp__github__list_issues`");
+		// Deferred tools are found with searchTools(), not listed.
+		expect(sections.codemode).not.toContain("mcp__github__get_issue");
 		// The code mode tool itself is not callable from scripts.
 		expect(sections.codemode).not.toContain("### `codemode`");
 		// The tool declaration carries the script grammar; @knightcode/ai applies it only for models that support it.
