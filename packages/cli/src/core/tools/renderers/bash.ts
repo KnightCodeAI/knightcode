@@ -12,7 +12,15 @@ import { truncateToVisualLines } from "../../../modes/interactive/components/vis
 import { theme } from "../../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../../extensions/types.ts";
 import type { BashToolDetails } from "../bash.ts";
-import { formatToolCall, getTextOutput, invalidArgText, plural, str } from "../render-utils.ts";
+import {
+	formatToolCall,
+	getTextOutput,
+	invalidArgText,
+	plural,
+	startToolTimer,
+	str,
+	toolTimerText,
+} from "../render-utils.ts";
 import { DEFAULT_MAX_BYTES, formatSize } from "../truncate.ts";
 
 const BASH_PREVIEW_LINES = 5;
@@ -26,17 +34,6 @@ class BashResultRenderComponent extends Container {
 		cachedWidth: undefined,
 		cachedLines: undefined,
 	};
-}
-function formatDuration(ms: number): string {
-	const seconds = ms / 1000;
-	if (seconds < 60) return `${seconds.toFixed(1)}s`;
-
-	const totalSeconds = Math.floor(seconds);
-	const minutes = Math.floor(totalSeconds / 60);
-	const remainder = totalSeconds % 60;
-	if (minutes < 60) return `${minutes}m ${remainder}s`;
-
-	return `${Math.floor(minutes / 60)}h ${minutes % 60}m ${remainder}s`;
 }
 function formatShellCall(
 	args: { command?: string; timeout?: number } | undefined,
@@ -88,9 +85,7 @@ function rebuildBashResultRenderComponent(
 	},
 	options: ToolRenderResultOptions,
 	showImages: boolean,
-	startedAt: number | undefined,
-	endedAt: number | undefined,
-	durationMs: number | undefined,
+	timerText: string | undefined,
 ): void {
 	const state = component.state;
 	component.clear();
@@ -156,15 +151,7 @@ function rebuildBashResultRenderComponent(
 		component.addChild(new Text(theme.fg("warning", `[${warnings.join(". ")}]`), 0, 0));
 	}
 
-	// A final result's recorded duration wins: it is monotonic and survives reloads. The renderer's own clock is the
-	// fallback for live progress and for results stored without one.
-	if (!options.isPartial && durationMs !== undefined) {
-		component.addChild(new Text(`\n${theme.fg("muted", `Took ${formatDuration(durationMs)}`)}`, 0, 0));
-	} else if (startedAt !== undefined) {
-		const label = options.isPartial ? "Elapsed" : "Took";
-		const endTime = endedAt ?? Date.now();
-		component.addChild(new Text(theme.fg("muted", `${label} ${formatDuration(endTime - startedAt)}`), 0, 0));
-	}
+	if (timerText) component.addChild(new Text(`\n${theme.fg("muted", timerText)}`, 0, 0));
 }
 
 /** Shell renderers are shared by bash and powershell, which differ only in the name they display. */
@@ -173,11 +160,7 @@ export function createShellRenderers(
 ): Pick<ToolDefinition<any, any>, "renderCall" | "renderResult"> {
 	return {
 		renderCall(args, _theme, context) {
-			const state = context.state;
-			if (context.executionStarted && state.startedAt === undefined) {
-				state.startedAt = Date.now();
-				state.endedAt = undefined;
-			}
+			startToolTimer(context);
 			const component =
 				context.lastComponent instanceof ShellCallRenderComponent
 					? context.lastComponent
@@ -186,28 +169,10 @@ export function createShellRenderers(
 			return component;
 		},
 		renderResult(result, options, _theme, context) {
-			const state = context.state;
-			if (state.startedAt !== undefined && options.isPartial && !state.interval) {
-				state.interval = setInterval(() => context.invalidate(), 1000);
-			}
-			if (!options.isPartial || context.isError) {
-				state.endedAt ??= Date.now();
-				if (state.interval) {
-					clearInterval(state.interval);
-					state.interval = undefined;
-				}
-			}
+			const timerText = toolTimerText(context, options.isPartial);
 			const component =
 				(context.lastComponent as BashResultRenderComponent | undefined) ?? new BashResultRenderComponent();
-			rebuildBashResultRenderComponent(
-				component,
-				result as any,
-				options,
-				context.showImages,
-				state.startedAt,
-				state.endedAt,
-				context.durationMs,
-			);
+			rebuildBashResultRenderComponent(component, result as any, options, context.showImages, timerText);
 			component.invalidate();
 			return component;
 		},
