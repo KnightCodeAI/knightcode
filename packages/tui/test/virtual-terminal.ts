@@ -214,6 +214,8 @@ export class VirtualTerminal implements Terminal {
 	async waitForRender(): Promise<void> {
 		await new Promise<void>((resolve) => process.nextTick(resolve));
 		await new Promise<void>((resolve) => setTimeout(resolve, 20));
+		// A frame queued with setImmediate can lose to the timer when the loop stalls; flush must follow it.
+		await new Promise<void>((resolve) => setImmediate(resolve));
 		await this.flush();
 	}
 }
