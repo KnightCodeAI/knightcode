@@ -7,6 +7,7 @@ export default mergeConfig(
 		test: {
 			globals: true,
 			environment: "node",
+			setupFiles: ["./test/setup-document-retention.ts"],
 			reporters: process.env.GITHUB_ACTIONS ? ["dot", "github-actions"] : ["dot"],
 		},
 	}),
