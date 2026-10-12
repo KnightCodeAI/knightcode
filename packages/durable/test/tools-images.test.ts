@@ -527,7 +527,8 @@ describe("createNodePhotonImages", () => {
 		const inline = await prepareOn(await createNodePhotonImages({ worker: false }));
 		const threaded = await prepareOn(processor);
 		expect(inline).toBeGreaterThan(200);
-		expect(threaded).toBeLessThan(100);
+		// Relative, not absolute: a loaded CI machine stretches both gaps, but the worker still has to beat the inline run.
+		expect(threaded).toBeLessThan(inline / 2);
 	}, 60_000);
 
 	it("gives the same result as the calling thread, and keeps the caller's bytes", async () => {
