@@ -82,7 +82,8 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 			if (current?.marked) current.end = parseTurnEnd(entry.type === "custom" ? entry.data : undefined);
 			continue;
 		}
-		if (isUser(entry) && !current?.marked) open(entry.id, false);
+		// A user message after a turn's end starts a new prompt: steering and follow-ups come before the end.
+		if (isUser(entry) && (!current?.marked || current.end !== undefined)) open(entry.id, false);
 		if (!current) continue;
 		const t = current;
 		if (entry.type === "compaction") {

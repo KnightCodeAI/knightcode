@@ -1006,11 +1006,19 @@ export class ModelRuntime implements Models {
 
 	/** Release the routes bound to a disposed session without affecting other sessions. */
 	releaseVirtualModels(owner: VirtualModelOwner): void {
+		const changed = new Set<string>();
 		for (const [providerId, models] of [...this.virtualModels]) {
 			for (const [id, entry] of [...models]) {
-				if (entry.routes.has(owner)) this.unregisterVirtualModel(providerId, id, owner);
+				if (!entry.routes.delete(owner) || entry.routes.size > 0) continue;
+				models.delete(id);
+				changed.add(providerId);
 			}
+			if (models.size === 0) this.virtualModels.delete(providerId);
 		}
+		if (changed.size === 0) return;
+		for (const providerId of changed) this.recomposeProvider(providerId);
+		this.updateModelSnapshot();
+		void this.refresh({ allowNetwork: false });
 	}
 
 	/**

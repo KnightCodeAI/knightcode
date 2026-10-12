@@ -5794,13 +5794,21 @@ export class InteractiveMode {
 					this.showStatus("Resume cancelled");
 					return { cancelled: true };
 				}
-				const forked = SessionManager.forkFrom(
-					error.sessionFile,
-					this.runtimeHost.cwd,
-					this.sessionManager.getSessionDir(),
-				);
-				const forkPath = forked.getSessionFile()!;
-				forked.close();
+				let forkPath: string;
+				try {
+					const forked = SessionManager.forkFrom(
+						error.sessionFile,
+						this.runtimeHost.cwd,
+						this.sessionManager.getSessionDir(),
+					);
+					forkPath = forked.getSessionFile()!;
+					forked.close();
+				} catch (forkError: unknown) {
+					this.showError(
+						`Failed to fork session: ${forkError instanceof Error ? forkError.message : String(forkError)}`,
+					);
+					return { cancelled: true };
+				}
 				return this.handleResumeSession(forkPath, options);
 			}
 			if (error instanceof MissingSessionCwdError) {

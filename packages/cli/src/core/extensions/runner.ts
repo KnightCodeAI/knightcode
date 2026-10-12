@@ -1034,7 +1034,12 @@ export class ExtensionRunner {
 				signal: signal ?? options.signal,
 				withSession: async (ctx: ReplacedSessionContext) => {
 					const dispatch = ctx.sendUserMessage;
-					ctx.sendUserMessage = (content, opts) => dispatch(content, { ...opts, preflightResult, signal });
+					ctx.sendUserMessage = (content, opts) =>
+						dispatch(content, {
+							...opts,
+							preflightResult: preflightResult ?? opts?.preflightResult,
+							signal: signal ?? opts?.signal,
+						});
 					await withSession(ctx);
 				},
 			};

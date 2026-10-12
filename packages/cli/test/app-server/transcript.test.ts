@@ -114,6 +114,13 @@ test("an idle compaction after the end entry stays in that turn", () => {
 	expect(turns[0].items.at(-1)).toMatchObject({ type: "compaction", id: `${m.id}:compaction:0`, summary: "sum" });
 });
 
+test("an unmarked user message after a turn's end opens a new turn", () => {
+	const m = marker();
+	const later = user("from a run without markers");
+	const turns = readTurns("t", [m, user("go"), assistant([{ type: "text", text: "a" }]), end("completed"), later]);
+	expect(turns.map((t) => t.id)).toEqual([m.id, later.id]);
+});
+
 test("a session without markers reads back one turn per user message", () => {
 	const first = user("one");
 	const second = user("two");

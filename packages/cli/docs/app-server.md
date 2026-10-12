@@ -102,9 +102,9 @@ a later turn; the waiting request returns `invalidParams`.
 
 ### Subscriptions and replacement
 
-`thread/start`, `thread/resume`, and `thread/fork` subscribe the requesting
-connection. `thread/unsubscribe` withdraws it. Every initialized connection gets
-thread/sidebar and account updates. Only subscribers get turn/item notifications,
+`thread/start`, `thread/resume`, `thread/fork`, and `turn/start` subscribe the
+requesting connection. `thread/unsubscribe` withdraws it. Every initialized
+connection gets thread/sidebar and account updates. Only subscribers get turn/item notifications,
 deltas, retries, and queue updates. Approvals target one subscriber at a time.
 
 `thread/resume` returns history and subscribes in the same synchronous send step.
