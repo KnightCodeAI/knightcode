@@ -1603,6 +1603,34 @@ Content`,
 	});
 
 	describe("pattern filtering in top-level arrays", () => {
+		// Regression: a literal ~ in exclusion and exact patterns never matched the expanded path.
+		it("should expand ~ in exclusion and exact patterns", async () => {
+			// os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
+			const previousHome = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+			process.env.HOME = tempDir;
+			process.env.USERPROFILE = tempDir;
+
+			try {
+				const skillsDir = join(tempDir, "extra", "skills");
+				for (const name of ["keep", "glob-excluded", "exact-excluded"]) {
+					mkdirSync(join(skillsDir, name), { recursive: true });
+					writeFileSync(join(skillsDir, name, "SKILL.md"), `---\nname: ${name}\ndescription: ${name}\n---\n`);
+				}
+
+				settingsManager.setSkillPaths(["~/extra/skills", "!~/extra/skills/glob-*", "-~/extra/skills/exact-excluded"]);
+
+				const result = await packageManager.resolve();
+				expect(result.skills.some((r) => isEnabled(r, "keep/SKILL.md"))).toBe(true);
+				expect(result.skills.some((r) => isDisabled(r, "glob-excluded/SKILL.md"))).toBe(true);
+				expect(result.skills.some((r) => isDisabled(r, "exact-excluded/SKILL.md"))).toBe(true);
+			} finally {
+				for (const [name, value] of Object.entries(previousHome)) {
+					if (value === undefined) delete process.env[name];
+					else process.env[name] = value;
+				}
+			}
+		});
+
 		it("should exclude extensions with ! pattern", async () => {
 			const extDir = join(agentDir, "extensions");
 			mkdirSync(extDir, { recursive: true });
