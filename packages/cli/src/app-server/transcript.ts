@@ -170,11 +170,17 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 	return result.map((t) => t.turn);
 }
 
-// ponytail: replays the reader per entry, O(n²) on the branch; index items while reading if fork latency shows up.
 export function entryForItem(entries: readonly SessionEntry[], itemId: string): string | undefined {
-	for (let i = 0; i < entries.length; i++) {
-		const turns = readTurns("", entries.slice(0, i + 1));
-		if (turns.some((t) => t.items.some((item) => item.id === itemId))) return entries[i].id;
+	// Reading never removes an item, so presence is monotonic in the prefix length: bisect for the first one.
+	const has = (length: number) =>
+		readTurns("", entries.slice(0, length)).some((t) => t.items.some((item) => item.id === itemId));
+	if (!has(entries.length)) return undefined;
+	let low = 1;
+	let high = entries.length;
+	while (low < high) {
+		const mid = (low + high) >> 1;
+		if (has(mid)) high = mid;
+		else low = mid + 1;
 	}
-	return undefined;
+	return entries[low - 1].id;
 }

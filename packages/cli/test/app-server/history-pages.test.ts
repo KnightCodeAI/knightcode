@@ -81,3 +81,34 @@ test("old-page history keeps a separate current running snapshot and respects th
 			MAX_HISTORY_RESPONSE_BYTES,
 		);
 });
+
+test("a byte-limited page takes as many inline turns as fit, and no more", () => {
+	entries.length = 0;
+	for (let i = 0; i < 30; i++) add(i, "x".repeat(60_000));
+	const page = pageHistory({ thread, entries }, store);
+	const bytes = Buffer.byteLength(JSON.stringify({ thread, ...page })) + HISTORY_ENVELOPE_RESERVE_BYTES;
+	expect(page.turns.every((t) => !("payload" in t))).toBe(true);
+	expect(bytes).toBeLessThanOrEqual(MAX_HISTORY_RESPONSE_BYTES);
+	// The next older turn would not have fit.
+	expect(bytes + 60_000).toBeGreaterThan(MAX_HISTORY_RESPONSE_BYTES);
+	expect(page.turns.at(-1)?.id).toBe("m29");
+});
+
+test("a rejected turn's payload reference is released", () => {
+	entries.length = 0;
+	add(0, "😀".repeat(20_000));
+	const runningTurn = (text: string): WireTurn => ({
+		id: "active",
+		threadId: thread.id,
+		status: "inProgress",
+		items: [{ type: "agentMessage", id: "i", text }],
+	});
+	// Leave less room than a turn reference needs.
+	const empty = Buffer.byteLength(JSON.stringify({ thread, turns: [], runningTurn: runningTurn("") }));
+	const filler = "y".repeat(MAX_HISTORY_RESPONSE_BYTES - HISTORY_ENVELOPE_RESERVE_BYTES - empty - 10);
+	const before = store.getStats().payloads;
+	expect(() => pageHistory({ thread, entries, runningTurn: runningTurn(filler) }, store)).toThrow(
+		expect.objectContaining({ code: "internal" }),
+	);
+	expect(store.getStats().payloads).toBe(before);
+});

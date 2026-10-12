@@ -60,30 +60,33 @@ export function pageHistory(
 	const before = cursor ? turns.findIndex((turn) => turn.id === cursor.beforeTurnId) : turns.length;
 	if (before < 0) invalid();
 	const page: HistoryPage = { turns: [], ...(runningTurn === undefined ? {} : { runningTurn }) };
+	// Sized incrementally: each turn adds its JSON and a separating comma, a cursor adds its member.
+	let bytes = Buffer.byteLength(JSON.stringify({ thread, ...page })) + HISTORY_ENVELOPE_RESERVE_BYTES;
+	if (bytes > MAX_HISTORY_RESPONSE_BYTES)
+		throw new AppServerError("internal", "Thread metadata or active snapshot exceeds the history response limit");
 	for (let i = before - 1; i >= 0 && page.turns.length < MAX_HISTORY_TURNS; i--) {
 		const turn = payloads.turn(turns[i]);
-		const candidate: HistoryPage = { ...page, turns: [turn, ...page.turns], nextCursor: undefined };
-		if (i > 0)
-			candidate.nextCursor = encode({
-				version: 1,
-				threadId: thread.id,
-				branchTipId: entries[tip].id,
-				beforeTurnId: turn.id,
-				...(excludedActiveTurnId === undefined ? {} : { excludedActiveTurnId }),
-			});
-		const bytes = Buffer.byteLength(JSON.stringify({ thread, ...candidate })) + HISTORY_ENVELOPE_RESERVE_BYTES;
-		if (bytes > MAX_HISTORY_RESPONSE_BYTES) {
+		const turnBytes = Buffer.byteLength(JSON.stringify(turn)) + (page.turns.length > 0 ? 1 : 0);
+		const nextCursor =
+			i > 0
+				? encode({
+						version: 1,
+						threadId: thread.id,
+						branchTipId: entries[tip].id,
+						beforeTurnId: turn.id,
+						...(excludedActiveTurnId === undefined ? {} : { excludedActiveTurnId }),
+					})
+				: undefined;
+		const cursorBytes = nextCursor === undefined ? 0 : Buffer.byteLength(`,"nextCursor":"${nextCursor}"`);
+		if (bytes + turnBytes + cursorBytes > MAX_HISTORY_RESPONSE_BYTES) {
+			if ("payload" in turn) payloads.release(turn.payload);
 			if (page.turns.length === 0)
 				throw new AppServerError("internal", "Thread metadata or active snapshot exceeds the history response limit");
 			break;
 		}
-		page.turns = candidate.turns;
-		page.nextCursor = candidate.nextCursor;
+		bytes += turnBytes;
+		page.turns.unshift(turn);
+		page.nextCursor = nextCursor;
 	}
-	if (
-		Buffer.byteLength(JSON.stringify({ thread, ...page })) + HISTORY_ENVELOPE_RESERVE_BYTES >
-		MAX_HISTORY_RESPONSE_BYTES
-	)
-		throw new AppServerError("internal", "Thread metadata exceeds the history response limit");
 	return page;
 }

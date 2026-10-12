@@ -169,6 +169,12 @@ export class PayloadStore {
 		return result.ref ? { inputRef: result.ref } : { input: result.inline };
 	}
 
+	/** Drop a reference that was never handed to a client. */
+	release(ref: PayloadRef): void {
+		const payload = this.records.get(ref.id);
+		if (payload) this.remove(ref.id, payload);
+	}
+
 	private assertOpen(): void {
 		if (this.closing) throw new AppServerError("shuttingDown", "the payload store is shutting down");
 	}
