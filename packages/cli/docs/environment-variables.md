@@ -93,6 +93,7 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_BUG_ENDPOINT` | Override the origin `/bug` uploads go to; default is `https://remote.knightcode.dev` |
 | `KNIGHTCODE_RADIUS_GATEWAY` | Override the Radius gateway origin used by Radius relay connections |
 | `KNIGHTCODE_HARDWARE_CURSOR` | Set to `1` to show the hardware cursor; see [Terminal setup](terminal-setup.md) |
+| `KNIGHTCODE_CLIPBOARD_OSC52` | Set to `1` to also send copied text to the terminal with OSC 52 after the local clipboard write, as KnightCode does over SSH. Use it when a remote client reaches KnightCode without SSH variables, such as a multiplexer attached from another machine or a remote IDE daemon |
 | `KNIGHTCODE_HYPERLINKS` | Override OSC 8 hyperlink detection with `1`, `0`, or `auto` |
 | `KNIGHTCODE_PROGRAM_STATUS` | Override OSC 7501 program status detection: `1` always reports, `0` never reports; otherwise KnightCode reports only after the terminal confirms support. See [Terminal setup](terminal-setup.md#program-status) |
 | `KNIGHTCODE_IMAGE_PROTOCOL` | Override inline image detection with `kitty`, `iterm2`, `none`, or `auto` |

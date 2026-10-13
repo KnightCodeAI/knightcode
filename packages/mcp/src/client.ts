@@ -64,6 +64,8 @@ interface PendingRequest {
 	timer: ReturnType<typeof setTimeout> | undefined;
 	signal: AbortSignal | undefined;
 	onAbort: () => void;
+	/** Aborted when the request settles, so the transport does not dispatch (or retry) it afterwards. */
+	sendController: AbortController;
 	cancellable: boolean;
 	onProgress: ((progress: ProgressNotification) => void) | undefined;
 	progressToken: JsonRpcId | undefined;
@@ -420,6 +422,7 @@ export class McpClient {
 						method !== "initialize",
 						String(options.signal?.reason ?? "Aborted"),
 					),
+				sendController: new AbortController(),
 				cancellable: method !== "initialize",
 				onProgress: options.onProgress,
 				progressToken,
@@ -428,7 +431,9 @@ export class McpClient {
 			if (progressToken !== undefined) this.progressRequests.set(progressToken, id);
 			options.signal?.addEventListener("abort", entry.onAbort, { once: true });
 			this.armTimeout(id, entry);
-			transport.send(message).catch((error) => this.cancelPending(id, error, false));
+			transport
+				.send(message, { signal: entry.sendController.signal })
+				.catch((error) => this.cancelPending(id, error, false));
 		});
 	}
 
@@ -568,6 +573,7 @@ export class McpClient {
 		if (entry.timer) clearTimeout(entry.timer);
 		if (entry.progressToken !== undefined) this.progressRequests.delete(entry.progressToken);
 		entry.signal?.removeEventListener("abort", entry.onAbort);
+		entry.sendController.abort();
 	}
 
 	private rejectPending(error: unknown): void {
