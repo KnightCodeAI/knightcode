@@ -69,7 +69,7 @@ jobs:
         run: command -v sshd || test -x /usr/sbin/sshd || (sudo apt-get update && sudo apt-get install -y openssh-server)
 
       - name: Test
-        run: npm test
+        run: bun run test
 
       # Compiling the binary is part of the release path; break here rather than
       # in the publish workflow, where a failure blocks an in-flight release.
