@@ -53,6 +53,13 @@ describe("provider retry classification", () => {
 		).toBe(true);
 	});
 
+	it.each(["Provider returned error", "The upstream provider returned an error"])(
+		"matches provider wrapper wording %j",
+		(errorMessage) => {
+			expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+		},
+	);
+
 	it.each([
 		wrappedDnsLookupError,
 		"connect ENOTFOUND api.example.com",
