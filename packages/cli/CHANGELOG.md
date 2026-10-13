@@ -1,5 +1,23 @@
 # @knightcodeai/cli
 
+## 0.17.1
+
+### Added
+
+- Added a `sessionShareDestination` setting (`auto`, `gist` or `radius`) so `/share` can be pinned to a GitHub gist or a Radius artifact.
+
+### Fixed
+
+- Fixed Anthropic requests failing when a tool returned an error result that contained an image; the image is now replaced with a short text note.
+
+- Fixed repeated codemode timeouts or aborts accumulating surviving workers; at most two codemode workers now run at once across sessions, counting a cancelled worker until it exits.
+
+- Fixed stopping a codemode script or reaching its deadline waiting for a non-interruptible built-in to return on Bun; the call now ends promptly.
+
+- Fixed resumed sessions dropping tools activated during the session. Resume now restores the session's active tools, with `--tools +name`/`-name` entries applied to them, unless `--tools` with tool names, `--no-tools`, or `--no-builtin-tools` selects tools explicitly.
+
+- Fixed tool-call arguments losing fields when a string contained an invalid `\u` escape such as `\usepackage`; the text is now kept literally.
+
 ## 0.17.0
 
 ### Added
