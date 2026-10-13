@@ -80,7 +80,7 @@ Before submitting a PR:
 ```bash
 bun install
 bun run check-types
-bun run test
+npm test
 ```
 
 Both must pass. CI runs exactly these plus a binary build and smoke test; see

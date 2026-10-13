@@ -68,7 +68,7 @@ change flags, settings, keybindings, providers, or the session format.
 Run from the repo root unless stated otherwise.
 
 - After code changes (not docs): `bun run check-types` (full output, no tail). Fix every error before committing. It does not run tests.
-- Never run `bun run build:cli` or the full `bun run test` unless the user asks.
+- Never run `bun run build:cli` or the full `npm test` unless the user asks.
 - Tests are per-package. Run the specific test you touched from the package root:
   - Vitest packages (`ai`, `agent`, `cli`, `client`, `server`, `protocol`, `evals`): `bun x vitest --run test/specific.test.ts`
   - `packages/tui` (`node:test`): `node --test test/specific.test.ts`
