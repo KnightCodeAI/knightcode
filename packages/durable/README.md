@@ -359,6 +359,12 @@ await env.exec(["git", "status", "--porcelain=v2", "-z"], {
 
 Abort the context to stop one call; `cleanup()` is for shutting the environment down. A custom environment can check itself with `registerEnvConformance()` from `@knightcode/durable/testing`, like storage below.
 
+Some environments also implement the optional `listFiles()`: the files and directories below a directory at any depth, as `fd` lists them, skipping what git ignores and stopping at bounds with `truncated`. `NodeExecutionEnv` does not; knightcode-env's `RemoteExecutionEnv` and `LocalExecutionEnv` do. Callers fall back to their own walk when the method is missing or fails with `not_supported`:
+
+```typescript
+const listing = await env.listFiles?.(".", { exclude: ["node_modules"], maxEntries: 50_000 }, context);
+```
+
 ## Reload
 
 Installing an extension with an installed name replaces it in place, in one step:
@@ -739,7 +745,6 @@ Examples that call OpenAI need `OPENAI_API_KEY`; most use the faux provider othe
 ## Design Documents
 
 - [`docs/spec.md`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/durable/docs/spec.md): the normative specification
-- [`docs/pico-v5-handoff.md`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/durable/docs/pico-v5-handoff.md): the implementation plan
 
 Benchmarks: `bun run bench:storage`, `bun run bench:storage:memory`, `bun run bench:tool-output`, `bun run bench:nested-tools`, and `bun run bench:nested-images`.
 

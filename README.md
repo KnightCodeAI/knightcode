@@ -29,7 +29,6 @@ tokens, measured.
 | `packages/durable` | Durable conversation, task and document runtime (Pico) |
 | `packages/tui` | Terminal UI library with differential rendering |
 | `packages/telemetry` | Vendor-neutral telemetry contracts |
-| `packages/protocol` · `client` · `server` | RPC protocol and transports |
 
 ## Development
 

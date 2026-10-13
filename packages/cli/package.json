@@ -47,13 +47,10 @@
   "devDependencies": {
     "@knightcode/agent": "workspace:*",
     "@knightcode/ai": "workspace:*",
-    "@knightcode/client": "workspace:*",
     "@knightcode/codemode": "workspace:*",
     "@knightcode/mcp": "workspace:*",
-    "@knightcode/protocol": "workspace:*",
     "@knightcode/remote": "workspace:*",
     "@knightcode/tools": "workspace:*",
-    "@knightcode/server": "workspace:*",
     "@knightcode/tui": "workspace:*",
     "@silvia-odwyer/photon-node": "0.3.4",
     "@types/cross-spawn": "6.0.6",
