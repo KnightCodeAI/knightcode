@@ -1,5 +1,69 @@
 # @knightcodeai/cli
 
+## 0.17.0
+
+### Added
+
+- Added `KNIGHTCODE_CLIPBOARD_OSC52=1`, which also sends copied text to the terminal with OSC 52 for remote clients that leave no SSH variables, such as a multiplexer attached from another machine or a remote IDE daemon.
+
+- Added `aliases` to tool namespaces; codemode's `describeNamespace()` and the `namespace` option of `searchTools()` match them, and MCP namespaces use the server name.
+
+- Added per-key OpenRouter model lists: with an OpenRouter key, KnightCode lists only the chat models that key may use, with the key's context size, max output, and prices, including guardrails and regional endpoints set as the base URL in `models.json`. The list is saved and used offline.
+
+- Added `reachesTools` to tool definitions, so tools that reach other tools (such as `codemode` and `tool_search`) declare which tools a call may reach; the MCP extension uses it to wait for the servers a call needs and to decide whether a replacement `codemode` or `tool_search` tool can reach MCP tools.
+
+- Added elapsed time while a codemode script runs and its total time once it finishes to the codemode tool row, like bash rows.
+
+### Changed
+
+- Changed codemode declarations of MCP tools to spell out the result type (`content`, `structuredContent`, `isError`) instead of referring to `CallToolResult<T>`, which `describeTool()`, `searchTools()` and `ALL_TOOLS` showed without defining it; the codemode description no longer includes the shared MCP types.
+
+- Changed codemode tool declarations to show input constraints such as integer, minimum and maximum, length, pattern and default as `@` tags on property comments, so scripts see them without the tool repeating them in its description.
+
+- Changed compaction, branch summaries and bug reports to leave thinking blocks out of the conversation they serialize; replayed thinking is often not part of the live context, so including it could make a summarization request larger than the context it summarizes and fail on every attempt.
+
+- Changed the JSON schemas for settings, models, keybindings and themes to be served from https://knightcode.dev/schemas/ instead of GitHub raw URLs; the bundled themes, docs and examples now use the new `$schema` address, and existing files with the old address keep validating.
+
+### Removed
+
+- Removed the experimental `knightcode server` and `knightcode client` commands (behind `KNIGHTCODE_EXPERIMENTAL=1`), their plugin and session-worker processes, and the `KNIGHTCODE_SERVER_DIR`, `KNIGHTCODE_SERVER_ID` and `KNIGHTCODE_RADIUS_GATEWAY` variables; the Radius gateway override only served the removed Radius relay.
+
+### Fixed
+
+- Fixed Anthropic tools marked `strict: "prefer"` failing when the provider rejects the strict tool set for grammar size, tool count, or union limits; the request is now retried once with those tools non-strict, and `strict: "require"` tools stay strict.
+
+- Fixed credential updates failing on Windows with EPERM when a just-removed `auth.json.lock` directory was still delete-pending; the lock is now retried briefly.
+
+- Fixed `before_agent_start` not firing for runs started by `knightcode.sendMessage(..., { triggerTurn: true })`, which let the system prompt change mid-run and broke the provider prompt cache. `BeforeAgentStartEvent` is now a union on `messageType` (`"user"` or `"custom"`), and the session counts as busy from the start of run setup, so messages sent meanwhile join the starting run.
+
+- Fixed the codemode tool description to say that a tool whose declaration returns an object also resolves on failure when it returned that object, so scripts check its fields instead of expecting a rejection.
+
+- Fixed codemode blocking the process for seconds to minutes after scripts with many `text()` calls; joining the output items was quadratic.
+
+- Fixed codemode ignoring a `// @options:` line that is not the first line of the script, which ran the script without the requested `timeout_ms`; the call now fails with an error before the script runs.
+
+- Fixed an MCP tool call that was cancelled or timed out while waiting for a shared OAuth refresh still being sent to the server once the refresh finished.
+
+- Fixed `knightcode mcp login --timeout` being described as a wait for the browser; it limits the whole sign-in, including requests to the authorization server.
+
+- Fixed MCP servers with resources keeping their tools out of the first prompt while a slow resource listing finished (a large drive, for example). Connecting no longer lists resources; `/mcp` and `knightcode mcp list` now show that a server offers resources, and the resource tools still list and read them on demand.
+
+- Fixed MCP tool calls failing when the server returns structured content that is not an object (an array, `null` or a primitive, as MCP 2026-07-28 allows); codemode declarations of MCP tools without an output schema now type `structuredContent` as `unknown` instead of an object.
+
+- Fixed OpenRouter router models such as `openrouter/auto` showing a cost of -$1,000,000 per 1M tokens; OpenRouter's negative placeholder prices are now 0.
+
+- Fixed print mode succeeding silently when the response stopped at the model's output token limit: it still prints the partial text, and now also warns on stderr and exits 1.
+
+- Fixed `~` in resource setting patterns such as `!~/skills/pdf`, `+~/x` and `-~/x` never matching, because it was compared literally instead of expanded to the home directory.
+
+- Fixed "The upstream provider returned an error" not being retried as a transient provider error.
+
+- Fixed images in Herdr rendering as text placeholders; Kitty graphics are now enabled there.
+
+- Fixed the mouse wheel sending raw escape sequences to an open dialog instead of scrolling the transcript.
+
+- Fixed delayed terminal replies (color queries and version or graphics responses) being typed as keystrokes, such as a stray Ctrl+G opening the external editor.
+
 ## 0.16.0
 
 ### Added
