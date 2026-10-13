@@ -22,6 +22,15 @@ const nextConfig = {
       },
     ];
   },
+  async headers() {
+    return [
+      {
+        // Editors fetch these from $schema; browser-based ones need CORS.
+        source: "/schemas/:path*",
+        headers: [{ key: "Access-Control-Allow-Origin", value: "*" }],
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: "/docs/getting-started", destination: "/docs/quickstart", permanent: true },

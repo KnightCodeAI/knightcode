@@ -37,3 +37,6 @@ next-env.d.ts
 
 # fumadocs
 .source/
+
+# Copied from packages/cli/schemas by scripts/sync-cli-docs.mjs
+/public/schemas

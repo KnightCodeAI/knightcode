@@ -2,7 +2,7 @@
 
 This reference lists user-configurable settings, their types, defaults, and purposes. Project settings override agent-directory settings. Resource lists are combined. See [Configuration](configuration.md) for file locations and trust behavior.
 
-Add `"$schema": "https://raw.githubusercontent.com/KnightCodeAI/knightcode/main/packages/cli/schemas/settings.schema.json"` to `settings.json` for editor validation and completion.
+Add `"$schema": "https://knightcode.dev/schemas/settings.schema.json"` to `settings.json` for editor validation and completion.
 
 ## Model and thinking
 

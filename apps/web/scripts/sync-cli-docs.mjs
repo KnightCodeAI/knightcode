@@ -11,6 +11,8 @@ const repoRoot = join(webRoot, "..", "..")
 const cliDocs = join(repoRoot, "packages", "cli", "docs")
 const outDir = join(webRoot, "content", "docs")
 const imageOut = join(webRoot, "public", "docs", "images")
+const cliSchemas = join(repoRoot, "packages", "cli", "schemas")
+const schemaOut = join(webRoot, "public", "schemas")
 
 const FOLDER_SLUGS = {
 	"Run KnightCode": "run",
@@ -144,7 +146,7 @@ function escapeProse(text) {
 	for (let i = 0; i < text.length; i++) {
 		const c = text[i]
 		if (c === "{" || c === "}") {
-			out += `\\${c}`
+			out += `\${c}`
 			continue
 		}
 		if (c !== "<") {
@@ -252,6 +254,9 @@ rmSync(outDir, { recursive: true, force: true })
 mkdirSync(outDir, { recursive: true })
 rmSync(imageOut, { recursive: true, force: true })
 cpSync(join(cliDocs, "images"), imageOut, { recursive: true })
+// Served at /schemas/*.schema.json: the $id and $schema URLs in the config files point here.
+rmSync(schemaOut, { recursive: true, force: true })
+cpSync(cliSchemas, schemaOut, { recursive: true })
 
 for (const output of outputs) {
 	const markdown = readFileSync(join(cliDocs, output.file), "utf8")
