@@ -7,8 +7,6 @@
 			"@knightcode/agent/*": ["../agent/dist/*.d.ts"],
 			"@knightcode/ai": ["../ai/dist/index.d.ts"],
 			"@knightcode/ai/*": ["../ai/dist/*.d.ts", "../ai/dist/providers/*.d.ts"],
-			"@knightcode/client": ["../client/dist/index.d.ts"],
-			"@knightcode/protocol": ["../protocol/dist/index.d.ts"],
 			"@knightcode/tui": ["../tui/dist/index.d.ts"],
 			"@knightcode/tui/*": ["../tui/dist/*.d.ts", "../tui/dist/components/*.d.ts"]
 		},

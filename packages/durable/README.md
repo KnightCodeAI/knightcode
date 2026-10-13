@@ -702,8 +702,6 @@ Examples that call OpenAI need `OPENAI_API_KEY`; most use the faux provider othe
 ## Design Documents
 
 - [`docs/spec.md`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/durable/docs/spec.md): the normative specification
-- [`docs/pico-v5-handoff.md`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/durable/docs/pico-v5-handoff.md): the implementation plan
-- [`docs/pico-v5-chord-usage.md`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/durable/docs/pico-v5-chord-usage.md): how the package uses Chord
 
 Benchmarks: `bun run bench:storage`, `bun run bench:storage:memory`, `bun run bench:tool-output`, `bun run bench:nested-tools`, and `bun run bench:nested-images`.
 
