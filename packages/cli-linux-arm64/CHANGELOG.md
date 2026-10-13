@@ -1,5 +1,7 @@
 # @knightcodeai/cli-linux-arm64
 
+## 0.17.0
+
 ## 0.16.0
 
 ## 0.15.2

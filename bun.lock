@@ -625,7 +625,6 @@
 
     "@knightcode/chord": ["@knightcode/chord@workspace:packages/chord"],
 
-
     "@knightcode/codemode": ["@knightcode/codemode@workspace:packages/codemode"],
 
     "@knightcode/durable": ["@knightcode/durable@workspace:packages/durable"],
@@ -636,9 +635,7 @@
 
     "@knightcode/mcp": ["@knightcode/mcp@workspace:packages/mcp"],
 
-
     "@knightcode/remote": ["@knightcode/remote@workspace:packages/remote"],
-
 
     "@knightcode/telemetry": ["@knightcode/telemetry@workspace:packages/telemetry"],
 
