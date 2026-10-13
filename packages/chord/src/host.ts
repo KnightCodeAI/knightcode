@@ -746,7 +746,8 @@ export class HostImpl implements Host, HostCore {
 
 	#addConnection(link: Link, config: ConstructorParameters<typeof Connection>[2]): Connection {
 		const connection = new Connection(this, link, config);
-		this.connections.add(connection);
+		// A link that was already closed closed the connection in its constructor: keeping it would route to it forever.
+		if (connection.open) this.connections.add(connection);
 		return connection;
 	}
 
@@ -796,7 +797,10 @@ export class HostImpl implements Host, HostCore {
 	#childNamed(name: string): Connection | undefined {
 		return [...this.connections].find(
 			(connection) =>
-				connection.role === "downstream" && connection.peer.kind === "host" && connection.peer.name === name,
+				connection.open &&
+				connection.role === "downstream" &&
+				connection.peer.kind === "host" &&
+				connection.peer.name === name,
 		);
 	}
 
