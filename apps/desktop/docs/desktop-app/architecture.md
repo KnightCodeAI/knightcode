@@ -867,6 +867,22 @@ A new feature that seems to need a harness change first states why the
 server cannot do it. A genuine harness bug (for example, a host-hook failure
 retried as a network error) is fixed upstream in pi and arrives by resync.
 
+**Owed: move cancellation out of the harness (Phase A3).** Phase A threaded an
+`AbortSignal` through `AgentSession.prompt()` preflight, `setModel`,
+`setThinkingLevel`, extension commands and session replacement, auto-compaction,
+`ExtensionRunner.emit*`, and `ModelRuntime.prepareRequest` (about 400 lines in
+`agent-session.ts`, `extensions/runner.ts`, `extensions/types.ts`,
+`model-runtime.ts`, `sdk.ts`), so that `turn/interrupt` stops a `turn/start`
+before its run exists. The server can do this without the harness: let
+preflight finish, then call `session.abort()` as soon as the run starts if the
+start was cancelled meanwhile. The visible difference is a brief turn that
+completes `interrupted`, and input hooks that already ran. Phase A3 makes that
+change, reverts the harness part, and adapts `review-preflight.test.ts`,
+`replacement*.test.ts` and `prompt-signal.test.ts`. Phase A's concurrency fixes
+in `agent-session.ts` (overlapping-prompt guard, `isSettling` admission,
+`raceAbort` listener cleanup, compaction-abort results) are offered to pi
+upstream at the same time.
+
 ## 5. Server internals
 
 ### 5.1 Layout
@@ -1987,6 +2003,11 @@ its protocol package (section 4.7). Files:
   (section 5.10).
 - Docs: `app-server.md`, `session-format.md` (the end entry's `kind`).
 - Changeset: folded into the app server's `Added` entry; nothing has shipped.
+
+### Phase A3 — cancellation out of the harness
+
+Owed (section 4.7). Independent of the desktop phases; do it before the next
+resync from pi if possible, since it removes most of Phase A's conflict surface.
 
 ### Phase B — workspaces, diffs, git
 

@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+/*
+ * Tokens (desktop-shell.md section 11.2). Colours come from the terminal's dark.json and light.json,
+ * so the desktop and the terminal read as one product. Components use only these properties.
+ * ponytail: hand-picked per theme; section 11.1's OKLCH derivation from surface/ink/accent comes with themes.
+ */
+:root {
+	--kc-bg-shell: #13110f;
+	--kc-bg-surface: #191613;
+	--kc-bg-elevated: #221e1a;
+	--kc-bg-hover: #2a2622;
+	--kc-bg-selected: #3a2a1d;
+	--kc-text: #e7e2db;
+	--kc-text-muted: #9c958d;
+	--kc-text-faint: #7b756e;
+	--kc-text-on-accent: #1a120c;
+	--kc-border: #2e2a26;
+	--kc-border-strong: #4a443e;
+	--kc-focus: #ff8a3d;
+	--kc-accent: #ff8a3d;
+	--kc-accent-hover: #ff9d5c;
+	--kc-success: #8fb573;
+	--kc-warning: #e9c46a;
+	--kc-danger: #ea6f59;
+	--kc-diff-add-bg: #1f3124;
+	--kc-diff-add-text: #8fb573;
+	--kc-diff-del-bg: #3c211b;
+	--kc-diff-del-text: #ea6f59;
+	--kc-user-bubble: #26221f;
+	--kc-font-ui: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+	--kc-font-code: "Cascadia Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--kc-size-ui: 13px;
+	--kc-size-code: 12px;
+	--kc-radius: 8px;
+	color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+	:root {
+		--kc-bg-shell: #f3efe9;
+		--kc-bg-surface: #fbf9f6;
+		--kc-bg-elevated: #ffffff;
+		--kc-bg-hover: #ece6df;
+		--kc-bg-selected: #fbe5d2;
+		--kc-text: #2b2622;
+		--kc-text-muted: #6f675f;
+		--kc-text-faint: #8c847c;
+		--kc-text-on-accent: #ffffff;
+		--kc-border: #e6dfd7;
+		--kc-border-strong: #d3cbc2;
+		--kc-focus: #b34600;
+		--kc-accent: #b34600;
+		--kc-accent-hover: #c95300;
+		--kc-success: #497433;
+		--kc-warning: #856400;
+		--kc-danger: #bf3925;
+		--kc-diff-add-bg: #e0f0d6;
+		--kc-diff-add-text: #497433;
+		--kc-diff-del-bg: #fce6e0;
+		--kc-diff-del-text: #bf3925;
+		--kc-user-bubble: #f3eee8;
+		color-scheme: light;
+	}
+}
+
+@theme inline {
+	--color-shell: var(--kc-bg-shell);
+	--color-surface: var(--kc-bg-surface);
+	--color-elevated: var(--kc-bg-elevated);
+	--color-hover: var(--kc-bg-hover);
+	--color-selected: var(--kc-bg-selected);
+	--color-ink: var(--kc-text);
+	--color-muted: var(--kc-text-muted);
+	--color-faint: var(--kc-text-faint);
+	--color-on-accent: var(--kc-text-on-accent);
+	--color-line: var(--kc-border);
+	--color-line-strong: var(--kc-border-strong);
+	--color-accent: var(--kc-accent);
+	--color-accent-hover: var(--kc-accent-hover);
+	--color-success: var(--kc-success);
+	--color-warning: var(--kc-warning);
+	--color-danger: var(--kc-danger);
+	--color-add-bg: var(--kc-diff-add-bg);
+	--color-add: var(--kc-diff-add-text);
+	--color-del-bg: var(--kc-diff-del-bg);
+	--color-del: var(--kc-diff-del-text);
+	--color-bubble: var(--kc-user-bubble);
+	--font-ui: var(--kc-font-ui);
+	--font-code: var(--kc-font-code);
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--kc-bg-surface);
+	color: var(--kc-text);
+	font-family: var(--kc-font-ui);
+	font-size: var(--kc-size-ui);
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	user-select: none;
+	overflow: hidden;
+}
+
+.selectable,
+.selectable * {
+	user-select: text;
+}
+
+.drag {
+	-webkit-app-region: drag;
+}
+.no-drag {
+	-webkit-app-region: no-drag;
+}
+
+/* In the base layer, so a utility such as focus-visible:outline-none can override it. */
+@layer base {
+	:focus-visible {
+		outline: 2px solid var(--kc-focus);
+		outline-offset: 1px;
+	}
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--kc-border-strong);
+	border: 3px solid transparent;
+	background-clip: padding-box;
+	border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.markdown > :first-child {
+	margin-top: 0;
+}
+.markdown > :last-child {
+	margin-bottom: 0;
+}
+
+@keyframes kc-pulse {
+	0%,
+	100% {
+		opacity: 0.35;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+.kc-pulse {
+	animation: kc-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-pulse {
+		animation: none;
+	}
+}

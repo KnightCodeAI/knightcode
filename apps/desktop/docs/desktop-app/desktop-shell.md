@@ -1112,6 +1112,16 @@ depend on them as stated.
 
 ### Phase S1 — shell, threads, composer, approvals (needs A2)
 
+Status (2026-10-15), first milestone in place: Forge + Vite + React scaffold, the app server
+child with restart backoff, the router (sections 4.2-4.3, unit-tested), the window port, host
+methods for folders, links, clipboard and state, the `app://` protocol with CSP, desktop state,
+the sidebar (projects, recent, needs attention), the transcript with turn grouping and markdown,
+the composer (queue, steer, stop, model, thinking and approval pickers), and approval cards.
+Still open in S1: tabs and right/bottom regions, settings screens, palette, onboarding and
+sign-in, archive screen, thread menu and rename, `@` and `/` pickers, image attachments, the
+quit question, OKLCH theme derivation, history paging, optimistic-message edge cases, the
+renderer and end-to-end tests of section 16.
+
 - `apps/desktop/package.json`, `forge.config.ts`, `vite.*.config.ts`,
   `tsconfig.json`; root workspace entry; AGENTS.md layout row.
 - `src/main/`: `index.ts` (single instance, deep links, windows),

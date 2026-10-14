@@ -24,6 +24,7 @@ is no build step for development.
 | `packages/app-server-protocol` | Schemas and types of the app server protocol; imports nothing from `ai` or `agent` |
 | `packages/telemetry` · `evals` | Telemetry contracts, eval harness |
 | `apps/web` | The website. Separate toolchain; not covered by the root type check |
+| `apps/desktop` | The Electron desktop app (Forge + Vite + React). Talks to `knightcode app-server`; own `tsconfig.json` and Vitest run, not covered by the root type check |
 
 Everything except `packages/cli*` is private and consumed through the workspace.
 The root `tsconfig.json` maps every `@knightcode/*` and `@knightcodeai/cli`

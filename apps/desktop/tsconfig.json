@@ -1,0 +1,18 @@
+{
+	// Separate from the root type check (apps/ has its own toolchains). Main, preload and renderer
+	// share one config: the renderer never imports Node modules, which the bundler would reject.
+	"compilerOptions": {
+		"target": "ES2023",
+		"lib": ["ES2023", "DOM", "DOM.Iterable"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"types": ["vite/client", "node"],
+		"jsx": "react-jsx",
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"allowImportingTsExtensions": true,
+		"verbatimModuleSyntax": true
+	},
+	"include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "*.config.ts"]
+}
