@@ -6,9 +6,11 @@
  * server picks.
  */
 
-import { SettingsManager } from "../core/settings-manager.ts";
+import { getSupportedThinkingLevels } from "@knightcode/ai";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { resolvePath } from "../utils/paths.ts";
+import { readSettings, writeSetting } from "./config.ts";
+import { AppServerError } from "./errors.ts";
 import type { AppServerContext } from "./context.ts";
 import type { Handlers } from "./server.ts";
 
@@ -24,6 +26,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 				contextWindow: model.contextWindow,
 				maxTokens: model.maxTokens,
 				reasoning: model.reasoning,
+				thinkingLevels: getSupportedThinkingLevels(model),
 				input: [...model.input],
 			}));
 			// The terminal may have moved the choice since startup.
@@ -34,14 +37,40 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 			return { models, default: chosen ? `${chosen.provider}/${chosen.id}` : null };
 		},
 		"config/read": async ({ cwd }) => {
-			if (cwd === undefined) {
-				await ctx.settings.reload();
-				return { settings: ctx.settings.getSettings() };
-			}
-			const resolved = resolvePath(cwd);
+			const resolved = cwd === undefined ? undefined : resolvePath(cwd);
 			const trusted =
-				!hasTrustRequiringProjectResources(resolved) || new ProjectTrustStore(ctx.agentDir).get(resolved) === true;
-			return { settings: SettingsManager.create(resolved, ctx.agentDir, { projectTrusted: trusted }).getSettings() };
+				resolved !== undefined &&
+				(!hasTrustRequiringProjectResources(resolved) || new ProjectTrustStore(ctx.agentDir).get(resolved) === true);
+			return readSettings(ctx.agentDir, resolved, trusted);
+		},
+		"config/write": async ({ scope, cwd, key, value, expectedVersion }) => {
+			const resolved = cwd === undefined ? undefined : resolvePath(cwd);
+			if (scope === "project") {
+				if (resolved === undefined) throw new AppServerError("invalidParams", "project writes require cwd");
+				if (new ProjectTrustStore(ctx.agentDir).get(resolved) !== true)
+					throw new AppServerError("invalidParams", "project is not trusted", { reason: "untrusted" });
+			}
+			const keyPath = key.split(".");
+			if (keyPath.some((part) => part === "__proto__" || part === "constructor" || part === "prototype"))
+				throw new AppServerError("invalidParams", "invalid settings key");
+			const result = writeSetting(ctx.agentDir, resolved, scope, keyPath, value, expectedVersion);
+			if (!result.ok)
+				throw new AppServerError("configConflict", "settings changed since they were read", {
+					version: result.version,
+				});
+			if (scope === "global") await ctx.settings.reload();
+			return { version: result.version };
+		},
+		"project/trust/read": async ({ cwd }) => {
+			const resolved = resolvePath(cwd);
+			return {
+				trusted: new ProjectTrustStore(ctx.agentDir).get(resolved),
+				needsTrust: hasTrustRequiringProjectResources(resolved),
+			};
+		},
+		"project/trust/set": async ({ cwd, trusted }) => {
+			new ProjectTrustStore(ctx.agentDir).set(resolvePath(cwd), trusted);
+			return {};
 		},
 	};
 }

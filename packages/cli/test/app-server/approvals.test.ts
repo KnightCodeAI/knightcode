@@ -1,5 +1,5 @@
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { APPROVAL_MODE_ENTRY, needsApproval } from "../../src/app-server/approvals.ts";
@@ -56,16 +56,22 @@ test("decline blocks with the rejection reason and the item reads declined", asy
 	expect((done!.params.item as { status: string }).status).toBe("declined");
 });
 
-test("acceptForSession stops later requests for that tool", async () => {
-	const { a, faux, asked, thread } = await bashTurn(() => "acceptForSession");
+test("acceptForSession stops later requests for that non-shell tool", async () => {
+	const { a, faux, asked, thread, cwd } = await bashTurn(() => "acceptForSession");
+	writeFileSync(join(cwd, "a.txt"), "a\n");
 	faux.setResponses([
-		fauxAssistantMessage([fauxToolCall("bash", { command: "echo 1" })], { stopReason: "toolUse" }),
-		fauxAssistantMessage([fauxToolCall("bash", { command: "echo 2" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxToolCall("edit", { path: "a.txt", edits: [{ oldText: "a", newText: "b" }] })], {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage([fauxToolCall("edit", { path: "a.txt", edits: [{ oldText: "b", newText: "c" }] })], {
+			stopReason: "toolUse",
+		}),
 		fauxAssistantMessage([fauxText("ok")]),
 	]);
 	await a.client.request("turn/start", { threadId: thread.id, text: "run twice" });
 	await a.waitFor("turn/completed");
-	expect(asked).toEqual(["bash"]);
+	expect(asked).toEqual(["edit"]);
+	expect(readFileSync(join(cwd, "a.txt"), "utf8")).toBe("c\n");
 });
 
 test("fullAccess never asks; autoEdit asks for bash but not edit", async () => {
@@ -195,7 +201,10 @@ test("an unsubscribe with no other subscriber blocks the call as cancelled", asy
 	await only.client.request("thread/unsubscribe", { threadId: thread.id });
 	await only.waitFor("serverRequest/cancelled");
 	// Not subscribed any more: it sees the turn end through the sidebar broadcast (§4.5).
-	await only.waitFor("thread/status/changed", (p) => p.threadId === thread.id && p.status === "idle");
+	await only.waitFor(
+		"thread/status/changed",
+		(p) => p.threadId === thread.id && (p.status as { type: string }).type === "idle",
+	);
 	const turns = await only.readTurns(thread.id);
 	const call = turns[0].items.find((i) => i.type === "toolCall");
 	expect(call).toMatchObject({ status: "failed", output: [{ type: "text", text: "Tool call cancelled" }] });
@@ -220,7 +229,10 @@ test("a disconnect with no other subscriber blocks the call as cancelled, and it
 	await only.client.request("turn/start", { threadId: thread.id, text: "go" });
 	await onlyAsked;
 	only.close();
-	await watcher.waitFor("thread/status/changed", (p) => p.threadId === thread.id && p.status === "idle");
+	await watcher.waitFor(
+		"thread/status/changed",
+		(p) => p.threadId === thread.id && (p.status as { type: string }).type === "idle",
+	);
 	const turns = await watcher.readTurns(thread.id);
 	const call = turns[0].items.find((i) => i.type === "toolCall");
 	expect(call).toMatchObject({ status: "failed", output: [{ type: "text", text: "Tool call cancelled" }] });

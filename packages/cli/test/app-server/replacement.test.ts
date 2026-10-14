@@ -25,7 +25,10 @@ test("ctx.newSession replaces the thread for every subscriber and unloads the ol
 	expect(replaced.oldThreadId).toBe(thread.id);
 	const next = (replaced.thread as { id: string }).id;
 	expect(next).not.toBe(thread.id);
-	await b.waitFor("thread/status/changed", (p) => p.threadId === thread.id && p.status === "notLoaded");
+	await b.waitFor(
+		"thread/status/changed",
+		(p) => p.threadId === thread.id && (p.status as { type: string }).type === "notLoaded",
+	);
 	expect(shutdowns).toContain("new");
 	expect(server.threads.loadedCount()).toBe(1);
 	server.faux.setResponses([fauxAssistantMessage([fauxText("hi")])]);
@@ -59,7 +62,10 @@ test("ctx.switchSession to a thread already loaded reuses its session", async ()
 	expect((replaced.thread as { id: string }).id).toBe(target.id);
 	expect(server.threads.get(target.id).session).toBe(targetSession);
 	expect(server.threads.get(target.id).subscribers.size).toBe(2);
-	await b.waitFor("thread/status/changed", (p) => p.threadId === source.id && p.status === "notLoaded");
+	await b.waitFor(
+		"thread/status/changed",
+		(p) => p.threadId === source.id && (p.status as { type: string }).type === "notLoaded",
+	);
 });
 
 test("shutdown waits for a replacement whose target load is parked in an extension", async () => {

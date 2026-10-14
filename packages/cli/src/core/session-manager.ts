@@ -792,7 +792,7 @@ function getSessionHeaderCwd(header: SessionHeader): string | undefined {
 	return typeof cwd === "string" ? cwd : undefined;
 }
 
-function sessionCwdMatches(cwd: string | undefined, resolvedCwd: string): boolean {
+export function sessionCwdMatches(cwd: string | undefined, resolvedCwd: string): boolean {
 	return cwd !== undefined && cwd !== "" && resolvePath(cwd) === resolvedCwd;
 }
 
@@ -847,7 +847,7 @@ function getMessageActivityTime(entry: SessionMessageEntry): number | undefined 
 	return Number.isNaN(t) ? undefined : t;
 }
 
-async function buildSessionInfo(
+export async function buildSessionInfo(
 	filePath: string,
 	signal?: AbortSignal,
 	fileStats?: Stats,
@@ -949,7 +949,7 @@ interface SessionFileCandidate {
 	stats?: Stats;
 }
 
-async function mapWithConcurrency<T, R>(
+export async function mapWithConcurrency<T, R>(
 	items: T[],
 	limit: number,
 	map: (item: T, index: number) => Promise<R>,

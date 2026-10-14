@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { SessionManager } from "../../src/core/session-manager.ts";
@@ -92,7 +92,7 @@ test("a failed archive broadcasts notLoaded after disposing the runtime", async 
 	expect(threads.loadedCount()).toBe(0);
 	expect(a.notifications).toContainEqual({
 		method: "thread/status/changed",
-		params: { threadId: id, status: "notLoaded" },
+		params: { threadId: id, status: { type: "notLoaded" } },
 	});
 	expect(a.notifications.some((n) => n.method === "thread/archived")).toBe(false);
 });
@@ -101,6 +101,7 @@ test("idle ownership loss rejects admission and unloads even without a mapped tu
 	const { cwd, sessionDir, threads, connect } = await startServer();
 	const { id, file } = saved(cwd, sessionDir);
 	const a = await connect();
+	const sidebar = await connect();
 	await a.client.request("thread/resume", { threadId: id });
 	writeFileSync(`${file}.lock-owner`, "replacement-owner");
 	await expect(a.client.request("turn/start", { threadId: id, text: "go" })).rejects.toMatchObject({
@@ -109,6 +110,53 @@ test("idle ownership loss rejects admission and unloads even without a mapped tu
 	await vi.waitFor(() => expect(threads.loadedCount()).toBe(0));
 	expect(a.notifications.some((n) => n.method === "error")).toBe(true);
 	expect(a.notifications.some((n) => n.method === "turn/started")).toBe(false);
+	const message = "Another KnightCode process took this thread's session file; it was closed here.";
+	await sidebar.waitFor(
+		"thread/status/changed",
+		(p) => p.threadId === id && (p.status as { type: string }).type === "systemError",
+	);
+	expect((await sidebar.client.request("thread/list", {})).threads.find((t) => t.id === id)?.status).toEqual({
+		type: "systemError",
+		message,
+	});
+	const beforeRecovery = sidebar.notifications.length;
+	let enter!: () => void;
+	let open!: () => void;
+	const entered = new Promise<void>((resolve) => (enter = resolve));
+	const gate = new Promise<void>((resolve) => (open = resolve));
+	const spy = vi.spyOn(threads.files, "find").mockImplementationOnce(async () => {
+		enter();
+		await gate;
+		throw new Error("reload failed");
+	});
+	const failed = a.client.request("thread/resume", { threadId: id }).catch((e: unknown) => e);
+	await entered;
+	open();
+	expect(await failed).toMatchObject({ code: "internal" });
+	spy.mockRestore();
+	expect(sidebar.notifications.slice(beforeRecovery).some((n) => n.method === "thread/status/changed")).toBe(false);
+	expect((await sidebar.client.request("thread/list", {})).threads.find((t) => t.id === id)?.status.type).toBe(
+		"systemError",
+	);
+	// The simulated other holder released its temporary-file lock.
+	rmSync(`${file}.lock`, { recursive: true, force: true });
+	rmSync(`${file}.lock-owner`, { force: true });
+	await a.client.request("thread/resume", { threadId: id });
+	await vi.waitFor(() =>
+		expect(
+			sidebar.notifications
+				.slice(beforeRecovery)
+				.some(
+					(n) =>
+						n.method === "thread/status/changed" &&
+						n.params.threadId === id &&
+						(n.params.status as { type: string }).type === "idle",
+				),
+		).toBe(true),
+	);
+	expect((await sidebar.client.request("thread/list", {})).threads.find((t) => t.id === id)?.status).toEqual({
+		type: "idle",
+	});
 });
 
 test("unload settles a cancelled start without waiting for a non-cooperative input hook", async () => {

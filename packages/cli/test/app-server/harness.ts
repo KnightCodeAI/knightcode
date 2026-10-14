@@ -1,4 +1,4 @@
-import type { Turn } from "@knightcode/app-server-protocol";
+import type { ResultOf, Turn } from "@knightcode/app-server-protocol";
 import { fauxProvider } from "@knightcode/ai";
 import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
 import { mkdtempSync } from "node:fs";
@@ -8,6 +8,7 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 import type { AppServerClient } from "../../src/app-server/client.ts";
 import { type AppServerContext, createAppServerContext } from "../../src/app-server/context.ts";
+import { appServerHandlers } from "../../src/app-server/entry.ts";
 import { createInProcessClient } from "../../src/app-server/in-process.ts";
 import { ThreadManager, type ThreadManagerOptions } from "../../src/app-server/threads.ts";
 
@@ -21,6 +22,7 @@ export async function cleanupServers(): Promise<void> {
 
 export interface TestClient {
 	client: AppServerClient;
+	initializeResult: ResultOf<"initialize">;
 	notifications: Array<{ method: string; params: Record<string, unknown> }>;
 	waitFor(
 		method: string,
@@ -44,7 +46,10 @@ export async function startServer(options: StartServerOptions = {}) {
 	const faux = fauxProvider({
 		provider: `faux-as-${counter++}`,
 		tokensPerSecond: options.tokensPerSecond,
-		models: [{ id: "faux-1", reasoning: true }],
+		models: [
+			{ id: "faux-1", reasoning: true },
+			{ id: "faux-plain", reasoning: false },
+		],
 	});
 	const ctx: AppServerContext = await createAppServerContext({
 		agentDir,
@@ -63,9 +68,12 @@ export async function startServer(options: StartServerOptions = {}) {
 		for (const dir of [cwd, agentDir, sessionDir])
 			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 	});
-	const connect = async (mode: "desktop" | "tui" = "tui"): Promise<TestClient> => {
+	const connect = async (
+		mode: "desktop" | "tui" = "tui",
+		options?: { optOutNotifications?: string[] },
+	): Promise<TestClient> => {
 		const client = createInProcessClient({
-			handlers: threads.handlers(),
+			handlers: appServerHandlers(ctx, threads),
 			version: "0",
 			mode,
 			onInitialized: (c) => ctx.connections.add(c),
@@ -80,9 +88,10 @@ export async function startServer(options: StartServerOptions = {}) {
 			notifications.push({ method, params: params as Record<string, unknown> });
 			for (const wake of [...waiters]) wake();
 		});
-		await client.initialize();
+		const initializeResult = await client.initialize(options);
 		return {
 			client,
+			initializeResult,
 			notifications,
 			close: () => client.close(),
 			async readTurns(threadId, cursor) {

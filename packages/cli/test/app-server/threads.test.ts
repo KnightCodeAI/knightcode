@@ -29,7 +29,13 @@ test("thread/start returns an idle thread on the pinned model and broadcasts thr
 	const a = await connect();
 	const b = await connect();
 	const { thread } = await a.client.request("thread/start", { cwd });
-	expect(thread).toMatchObject({ cwd, projectCwd: cwd, status: "idle", archived: false, approvalMode: "fullAccess" });
+	expect(thread).toMatchObject({
+		cwd,
+		projectCwd: cwd,
+		status: { type: "idle" },
+		archived: false,
+		approvalMode: "fullAccess",
+	});
 	expect(thread.model?.id).toBe(faux.getModel().id);
 	await b.waitFor("thread/started", (p) => (p.thread as { id: string }).id === thread.id);
 });
@@ -199,7 +205,10 @@ test("a thread with no subscriber unloads after the idle timeout and releases it
 	await vi.advanceTimersByTimeAsync(60_001);
 	expect(threads.loadedCount()).toBe(0);
 	expect(isLocked(file)).toBe(false);
-	await a.waitFor("thread/status/changed", (p) => p.threadId === id && p.status === "notLoaded");
+	await a.waitFor(
+		"thread/status/changed",
+		(p) => p.threadId === id && (p.status as { type: string }).type === "notLoaded",
+	);
 });
 
 test("the idle timer does not unload a busy thread", async () => {

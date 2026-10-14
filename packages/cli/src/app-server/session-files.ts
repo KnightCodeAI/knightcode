@@ -38,6 +38,21 @@ export function isArchivedPath(file: string): boolean {
 	return basename(dirname(file)) === ARCHIVE_DIR;
 }
 
+/** Parent identity comes from its header, also after an archive move, never from the file name. */
+export function parentIdOf(path: string | undefined, onRead?: (path: string) => void): string | undefined {
+	if (!path) return undefined;
+	const dir = dirname(path);
+	const name = basename(path);
+	const candidates = isArchivedPath(path) ? [path, join(dirname(dir), name)] : [path, join(dir, ARCHIVE_DIR, name)];
+	for (const candidate of candidates) {
+		if (!existsSync(candidate)) continue;
+		onRead?.(candidate);
+		const id = readSessionHeaderForDiscovery(candidate)?.id;
+		if (id) return id;
+	}
+	return undefined;
+}
+
 /**
  * Thread id to session file. Goes by the id in each file's header, not its name: an imported or
  * renamed transcript keeps its header id under another name. A remembered path is confirmed by
@@ -53,6 +68,10 @@ export class SessionFileIndex {
 
 	remember(id: string, file: string): void {
 		this.paths.set(id, file);
+	}
+
+	forget(id: string): void {
+		this.paths.delete(id);
 	}
 
 	// ponytail: a miss reads every header in every session dir; keep a persistent index if that shows up.

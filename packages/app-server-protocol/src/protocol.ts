@@ -9,8 +9,6 @@
 
 import { type Static, type TSchema, Type } from "typebox";
 
-export const PROTOCOL_VERSION = 1;
-
 function Obj<P extends Record<string, TSchema>>(properties: P) {
 	return Type.Object(properties, { additionalProperties: false });
 }
@@ -28,7 +26,6 @@ export const ErrorCode = Type.Union([
 	Type.Literal("invalidParams"),
 	Type.Literal("methodNotFound"),
 	Type.Literal("notInitialized"),
-	Type.Literal("versionMismatch"),
 	Type.Literal("threadNotFound"),
 	Type.Literal("threadLockedElsewhere"),
 	Type.Literal("turnInProgress"),
@@ -39,10 +36,19 @@ export const ErrorCode = Type.Union([
 	Type.Literal("gitConflict"),
 	Type.Literal("notGitRepo"),
 	Type.Literal("toolMissing"),
+	Type.Literal("turnMismatch"),
+	Type.Literal("configConflict"),
+	Type.Literal("threadNotArchived"),
 	Type.Literal("shuttingDown"),
 	Type.Literal("internal"),
 ]);
 export type ErrorCode = Static<typeof ErrorCode>;
+
+export const Platform = Obj({
+	os: Type.Union([Type.Literal("win32"), Type.Literal("darwin"), Type.Literal("linux")]),
+	arch: Str,
+	homeDir: Str,
+});
 
 export const ResponseError = Obj({ code: ErrorCode, message: Str, data: Type.Optional(Type.Unknown()) });
 export type ResponseError = Static<typeof ResponseError>;
@@ -86,13 +92,25 @@ export const ModelSelector = Obj({ provider: Str, id: Str });
 export type ModelSelector = Static<typeof ModelSelector>;
 export const ImageRef = Obj({ mimeType: Str, data: Str });
 export type ImageRef = Static<typeof ImageRef>;
+export const ImageInput = Type.Union([ImageRef, Obj({ path: Str })]);
+export type ImageInput = Static<typeof ImageInput>;
+const ClientMessageId = Type.String({ minLength: 1, maxLength: 128 });
 export const ToolOutput = Type.Union([
 	Obj({ type: Type.Literal("text"), text: Str }),
 	Obj({ type: Type.Literal("image"), mimeType: Str, data: Str }),
 ]);
 export type ToolOutput = Static<typeof ToolOutput>;
 
-export const ThreadStatus = Type.Union([Type.Literal("notLoaded"), Type.Literal("idle"), Type.Literal("active")]);
+export const ThreadStatus = Type.Union([
+	Obj({ type: Type.Literal("notLoaded") }),
+	Obj({ type: Type.Literal("idle") }),
+	Obj({
+		type: Type.Literal("active"),
+		waitingOn: Type.Array(Type.Union([Type.Literal("approval"), Type.Literal("dialog")])),
+	}),
+	Obj({ type: Type.Literal("systemError"), message: Str }),
+]);
+export type ThreadStatus = Static<typeof ThreadStatus>;
 /** Phase A has local workspaces only; Phase B adds worktrees. */
 export const Workspace = Obj({ mode: Type.Literal("local") });
 
@@ -103,6 +121,8 @@ export const ThreadSummary = Obj({
 	name: Str,
 	status: ThreadStatus,
 	archived: Bool,
+	createdAt: Str,
+	forkedFromId: Type.Optional(Str),
 	updatedAt: Str,
 });
 export type ThreadSummary = Static<typeof ThreadSummary>;
@@ -114,6 +134,8 @@ export const Thread = Obj({
 	name: Str,
 	status: ThreadStatus,
 	archived: Bool,
+	createdAt: Str,
+	forkedFromId: Type.Optional(Str),
 	updatedAt: Str,
 	workspace: Workspace,
 	approvalMode: ApprovalMode,
@@ -125,6 +147,7 @@ export type Thread = Static<typeof Thread>;
 export const FileChange = Obj({
 	path: Str,
 	kind: Type.Union([Type.Literal("add"), Type.Literal("modify"), Type.Literal("delete")]),
+	diff: Type.Optional(Str),
 });
 export type FileChange = Static<typeof FileChange>;
 
@@ -137,12 +160,22 @@ export const ToolCallStatus = Type.Union([
 ]);
 export type ToolCallStatus = Static<typeof ToolCallStatus>;
 
+const Times = { startedAt: Type.Optional(Num), completedAt: Type.Optional(Num) };
+
 export const Item = Type.Union([
-	Obj({ type: Type.Literal("userMessage"), id: Str, text: Str, images: Type.Array(ImageRef) }),
-	Obj({ type: Type.Literal("agentMessage"), id: Str, text: Str }),
-	Obj({ type: Type.Literal("reasoning"), id: Str, text: Str }),
+	Obj({
+		type: Type.Literal("userMessage"),
+		id: Str,
+		text: Str,
+		images: Type.Array(ImageRef),
+		clientMessageId: Type.Optional(ClientMessageId),
+		...Times,
+	}),
+	Obj({ type: Type.Literal("agentMessage"), id: Str, text: Str, ...Times }),
+	Obj({ type: Type.Literal("reasoning"), id: Str, text: Str, ...Times }),
 	Obj({
 		type: Type.Literal("toolCall"),
+		...Times,
 		id: Str,
 		tool: Str,
 		input: Type.Unknown(),
@@ -152,8 +185,8 @@ export const Item = Type.Union([
 		/** Set on completion for `edit` and `write`; part of the call, so it has no position of its own (§4.2). */
 		fileChanges: Type.Optional(Type.Array(FileChange)),
 	}),
-	Obj({ type: Type.Literal("compaction"), id: Str, summary: Str }),
-	Obj({ type: Type.Literal("extensionMessage"), id: Str, extension: Str, text: Str }),
+	Obj({ type: Type.Literal("compaction"), id: Str, summary: Str, ...Times }),
+	Obj({ type: Type.Literal("extensionMessage"), id: Str, extension: Str, text: Str, ...Times }),
 ]);
 export type Item = Static<typeof Item>;
 
@@ -163,11 +196,25 @@ export const TurnStatus = Type.Union([
 	Type.Literal("interrupted"),
 	Type.Literal("failed"),
 ]);
+export const TurnErrorKind = Type.Union([
+	Type.Literal("auth"),
+	Type.Literal("rateLimit"),
+	Type.Literal("contextOverflow"),
+	Type.Literal("network"),
+	Type.Literal("provider"),
+	Type.Literal("other"),
+]);
+export const TurnError = Obj({ message: Str, kind: TurnErrorKind });
+export type TurnError = Static<typeof TurnError>;
+const SummaryError = Obj({ message: Type.String({ maxLength: 2000 }), kind: TurnErrorKind });
+
 export const Turn = Obj({
 	id: Str,
 	threadId: Str,
 	status: TurnStatus,
-	error: Type.Optional(Str),
+	startedAt: Num,
+	completedAt: Type.Optional(Num),
+	error: Type.Optional(TurnError),
 	items: Type.Array(Item),
 });
 export type Turn = Static<typeof Turn>;
@@ -193,14 +240,18 @@ export const TurnSummary = Obj({
 	id: Str,
 	threadId: Str,
 	status: TurnStatus,
-	error: Type.Optional(Type.String({ maxLength: 2000 })),
+	startedAt: Num,
+	completedAt: Type.Optional(Num),
+	error: Type.Optional(SummaryError),
 });
 export type TurnSummary = Static<typeof TurnSummary>;
 export const TurnReference = Obj({
 	id: Str,
 	threadId: Str,
 	status: TurnStatus,
-	error: Type.Optional(Type.String({ maxLength: 2000 })),
+	startedAt: Num,
+	completedAt: Type.Optional(Num),
+	error: Type.Optional(SummaryError),
 	payload: PayloadRef,
 });
 export const WireTurn = Type.Union([Turn, TurnReference]);
@@ -212,6 +263,17 @@ export const TurnStartResult = Obj({
 });
 export type TurnStartResult = Static<typeof TurnStartResult>;
 
+export const TokenUsage = Obj({
+	input: Num,
+	output: Num,
+	cacheRead: Num,
+	cacheWrite: Num,
+	cost: Num,
+	contextTokens: Type.Optional(Num),
+	contextWindow: Num,
+});
+export type TokenUsage = Static<typeof TokenUsage>;
+
 const ModelInfo = Obj({
 	provider: Str,
 	providerName: Str,
@@ -220,6 +282,7 @@ const ModelInfo = Obj({
 	contextWindow: Num,
 	maxTokens: Num,
 	reasoning: Bool,
+	thinkingLevels: Type.Array(ThinkingLevel),
 	input: Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")])),
 });
 const AuthKind = Type.Union([Type.Literal("oauth"), Type.Literal("api_key")]);
@@ -243,16 +306,40 @@ export const LoginState = Type.Union([
 ]);
 export type LoginState = Static<typeof LoginState>;
 
-const TurnInput = Obj({ threadId: Str, text: Str, images: Type.Optional(Type.Array(ImageRef)) });
+const WarningFields = {
+	message: Str,
+	source: Type.Union([
+		Type.Literal("settings"),
+		Type.Literal("extension"),
+		Type.Literal("trust"),
+		Type.Literal("server"),
+	]),
+	path: Type.Optional(Str),
+	line: Type.Optional(Num),
+	column: Type.Optional(Num),
+};
+export const Warning = Obj(WarningFields);
+export type Warning = Static<typeof Warning>;
+const SettingsScope = Type.Union([Type.Literal("global"), Type.Literal("project")]);
+
+/** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
+const QueueEntry = Obj({ id: Str, text: Str });
+export const TurnQueue = Obj({ steering: Type.Array(Str), followUp: Type.Array(QueueEntry) });
+export type TurnQueue = Static<typeof TurnQueue>;
 
 export const ClientRequests = {
 	initialize: {
 		params: Obj({
 			clientInfo: Obj({ name: Str, version: Str }),
-			protocolVersion: Num,
-			capabilities: Obj({ localHandles: Type.Optional(Bool) }),
+			capabilities: Obj({
+				localHandles: Type.Optional(Bool),
+				optOutNotifications: Type.Optional(Type.Array(Str, { maxItems: 256 })),
+			}),
 		}),
-		result: Obj({ serverInfo: Obj({ name: Type.Literal("knightcode"), version: Str }), protocolVersion: Num }),
+		result: Obj({
+			serverInfo: Obj({ name: Type.Literal("knightcode"), version: Str }),
+			platform: Platform,
+		}),
 	},
 	"thread/start": {
 		params: Obj({
@@ -262,18 +349,24 @@ export const ClientRequests = {
 			model: Type.Optional(ModelSelector),
 			thinkingLevel: Type.Optional(ThinkingLevel),
 		}),
-		result: Obj({ thread: Thread }),
+		result: Obj({ thread: Thread, warnings: Type.Array(Warning) }),
 	},
 	"thread/resume": {
 		params: Obj({ threadId: Str, cursor: Type.Optional(Str) }),
 		result: Obj({
 			thread: Thread,
+			queue: TurnQueue,
+			usage: TokenUsage,
+			warnings: Type.Array(Warning),
 			turns: Type.Array(WireTurn),
 			runningTurn: Type.Optional(WireTurn),
 			nextCursor: Type.Optional(Str),
 		}),
 	},
-	"thread/fork": { params: Obj({ threadId: Str, atItemId: Type.Optional(Str) }), result: Obj({ thread: Thread }) },
+	"thread/fork": {
+		params: Obj({ threadId: Str, atItemId: Type.Optional(Str) }),
+		result: Obj({ thread: Thread, warnings: Type.Array(Warning) }),
+	},
 	"thread/list": {
 		params: Obj({ cwd: Type.Optional(Str), cursor: Type.Optional(Str), archived: Type.Optional(Bool) }),
 		result: Obj({ threads: Type.Array(ThreadSummary), nextCursor: Type.Optional(Str) }),
@@ -289,7 +382,11 @@ export const ClientRequests = {
 			nextCursor: Type.Optional(Str),
 		}),
 	},
-	"thread/unsubscribe": { params: ThreadId, result: Empty },
+	"thread/unsubscribe": {
+		params: ThreadId,
+		result: Obj({ status: Type.Union([Type.Literal("unsubscribed"), Type.Literal("notSubscribed")]) }),
+	},
+	"thread/delete": { params: ThreadId, result: Empty },
 	"thread/archive": { params: ThreadId, result: Empty },
 	"thread/unarchive": { params: ThreadId, result: Empty },
 	"thread/name/set": { params: Obj({ threadId: Str, name: Str }), result: Empty },
@@ -307,7 +404,8 @@ export const ClientRequests = {
 		params: Obj({
 			threadId: Str,
 			text: Str,
-			images: Type.Optional(Type.Array(ImageRef)),
+			images: Type.Optional(Type.Array(ImageInput)),
+			clientMessageId: Type.Optional(ClientMessageId),
 			requestId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
 		}),
 		result: TurnStartResult,
@@ -320,15 +418,74 @@ export const ClientRequests = {
 		}),
 		result: Obj({ data: Str, nextOffset: Type.Optional(Type.Integer({ minimum: 0 })), eof: Bool }),
 	},
-	"turn/steer": { params: TurnInput, result: Empty },
-	"turn/followUp": { params: TurnInput, result: Empty },
-	"turn/interrupt": { params: ThreadId, result: Empty },
+	"turn/steer": {
+		params: Obj({ threadId: Str, expectedTurnId: Str, text: Str, images: Type.Optional(Type.Array(ImageInput)) }),
+		result: Empty,
+	},
+	"turn/queue/add": {
+		params: Obj({
+			threadId: Str,
+			text: Str,
+			images: Type.Optional(Type.Array(ImageInput)),
+			clientMessageId: Type.Optional(ClientMessageId),
+		}),
+		result: Obj({ queueId: Str }),
+	},
+	"turn/queue/remove": { params: Obj({ threadId: Str, queueId: Str }), result: Obj({ removed: Bool }) },
+	"turn/interrupt": { params: Obj({ threadId: Str, turnId: Type.Optional(Str) }), result: Empty },
+	"file/search": {
+		params: Obj({
+			cwd: Str,
+			query: Type.String({ minLength: 1, maxLength: 256 }),
+			limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+			searchId: Type.Optional(Type.String({ maxLength: 128 })),
+		}),
+		result: Obj({ files: Type.Array(Obj({ path: Str, score: Num, indices: Type.Array(Num) })), truncated: Bool }),
+	},
 	"model/list": {
 		params: Empty,
 		result: Obj({ models: Type.Array(ModelInfo), default: Type.Union([Str, Type.Null()]) }),
 	},
+	"server/diagnostics": {
+		params: Empty,
+		result: Obj({
+			rssBytes: Num,
+			heapBytes: Num,
+			loadedThreads: Num,
+			loadingThreads: Num,
+			payloadFiles: Num,
+			payloadBytes: Num,
+			inactiveFactories: Num,
+			uptimeMs: Num,
+			listingFilesOpened: Num,
+			listingBytesScanned: Num,
+		}),
+	},
 	"command/list": { params: ThreadId, result: Obj({ commands: Type.Array(Obj({ name: Str, description: Str })) }) },
-	"config/read": { params: Obj({ cwd: Type.Optional(Str) }), result: Obj({ settings: Type.Unknown() }) },
+	"config/read": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			settings: Type.Unknown(),
+			origins: Type.Record(Str, SettingsScope),
+			versions: Obj({ global: Str, project: Type.Optional(Str) }),
+			errors: Type.Array(Warning),
+		}),
+	},
+	"config/write": {
+		params: Obj({
+			scope: SettingsScope,
+			cwd: Type.Optional(Str),
+			key: Type.String({ minLength: 1, maxLength: 256, pattern: "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$" }),
+			value: Type.Unknown(),
+			expectedVersion: Type.Optional(Str),
+		}),
+		result: Obj({ version: Str }),
+	},
+	"project/trust/read": {
+		params: Obj({ cwd: Str }),
+		result: Obj({ trusted: Type.Union([Bool, Type.Null()]), needsTrust: Bool }),
+	},
+	"project/trust/set": { params: Obj({ cwd: Str, trusted: Bool }), result: Empty },
 	"account/list": {
 		params: Empty,
 		result: Obj({
@@ -360,10 +517,13 @@ export const ServerNotifications = {
 	"thread/name/updated": Obj({ threadId: Str, name: Str }),
 	"thread/settings/updated": Obj({ thread: Thread }),
 	"thread/archived": Obj({ threadId: Str, archived: Bool }),
+	"thread/deleted": Obj({ threadId: Str }),
+	"thread/turn/completed": Obj({ turn: TurnSummary }),
 	"turn/started": Obj({ turn: Turn, requestId: Type.Optional(Str) }),
 	"turn/completed": Obj({ turn: TurnSummary }),
 	"turn/retry": Obj({ threadId: Str, turnId: Str, attempt: Num, maxAttempts: Num, delayMs: Num, error: Str }),
-	"turn/queue/updated": Obj({ threadId: Str, steering: Type.Array(Str), followUp: Type.Array(Str) }),
+	"thread/tokenUsage/updated": Obj({ threadId: Str, turnId: Str, usage: TokenUsage }),
+	"turn/queue/updated": Obj({ threadId: Str, steering: Type.Array(Str), followUp: Type.Array(QueueEntry) }),
 	"item/started": ItemEvent,
 	"item/completed": ItemEvent,
 	/** A streamed item whose block the finalized message no longer has (a message_end handler replaced it). */
@@ -379,38 +539,40 @@ export const ServerNotifications = {
 	"serverRequest/cancelled": Obj({ id: RequestId }),
 	"account/login/updated": LoginState,
 	"account/updated": Obj({ provider: Str, authenticated: Bool }),
+	warning: Obj({ ...WarningFields, threadId: Type.Optional(Str) }),
 	error: Obj({ message: Str, threadId: Type.Optional(Str) }),
 } as const;
 
-export const ApprovalDecision = Type.Union([
+const ApprovalDecisionKind = Type.Union([
 	Type.Literal("accept"),
 	Type.Literal("acceptForSession"),
+	Type.Literal("acceptPrefixForSession"),
 	Type.Literal("decline"),
-	Type.Literal("cancel"),
 ]);
-export type ApprovalDecision = Static<typeof ApprovalDecision>;
+const ApprovalCommon = {
+	threadId: Str,
+	turnId: Str,
+	itemId: Str,
+	tool: Str,
+	parentItemId: Type.Optional(Str),
+	reason: Type.Optional(Str),
+	prefix: Type.Optional(Str),
+	decisions: Type.Array(ApprovalDecisionKind),
+};
+export const ApprovalResult = Type.Union([
+	Obj({ decision: Type.Union([Type.Literal("accept"), Type.Literal("acceptForSession"), Type.Literal("cancel")]) }),
+	Obj({ decision: Type.Literal("acceptPrefixForSession") }),
+	Obj({ decision: Type.Literal("decline"), message: Type.Optional(Type.String({ maxLength: 4000 })) }),
+]);
+export type ApprovalResult = Static<typeof ApprovalResult>;
 
 export const ServerRequests = {
 	"item/toolCall/requestApproval": {
 		params: Type.Union([
-			Obj({
-				threadId: Str,
-				turnId: Str,
-				itemId: Str,
-				tool: Str,
-				input: Type.Unknown(),
-				parentItemId: Type.Optional(Str),
-			}),
-			Obj({
-				threadId: Str,
-				turnId: Str,
-				itemId: Str,
-				tool: Str,
-				inputRef: PayloadRef,
-				parentItemId: Type.Optional(Str),
-			}),
+			Obj({ ...ApprovalCommon, input: Type.Unknown() }),
+			Obj({ ...ApprovalCommon, inputRef: PayloadRef }),
 		]),
-		result: Obj({ decision: ApprovalDecision }),
+		result: ApprovalResult,
 	},
 } as const;
 
@@ -428,7 +590,6 @@ export function schemaDocument() {
 	return {
 		$schema: "https://json-schema.org/draft/2020-12/schema",
 		title: "KnightCode app server protocol",
-		protocolVersion: PROTOCOL_VERSION,
 		envelope: Envelope,
 		clientRequests: ClientRequests,
 		clientNotifications: ClientNotifications,

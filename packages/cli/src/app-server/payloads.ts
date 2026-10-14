@@ -143,7 +143,9 @@ export class PayloadStore {
 			id: turn.id,
 			threadId: turn.threadId,
 			status: turn.status,
-			...(turn.error === undefined ? {} : { error: preview(turn.error, 2000) }),
+			startedAt: turn.startedAt,
+			...(turn.completedAt === undefined ? {} : { completedAt: turn.completedAt }),
+			...(turn.error === undefined ? {} : { error: { ...turn.error, message: preview(turn.error.message, 2000) } }),
 		};
 	}
 

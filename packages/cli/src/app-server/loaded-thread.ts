@@ -1,6 +1,14 @@
 /** One live thread: its session, subscribers, approval state, lifecycle state and operation queue (§5.1, §5.6). */
 
-import type { ApprovalMode, NotificationMethod, NotificationParams, Thread } from "@knightcode/app-server-protocol";
+import type {
+	ApprovalMode,
+	ImageRef,
+	NotificationMethod,
+	NotificationParams,
+	Thread,
+	ThreadStatus,
+	Warning,
+} from "@knightcode/app-server-protocol";
 import type { AgentSession } from "../core/agent-session.ts";
 import { emitSessionShutdownEvent } from "../core/extensions/runner.ts";
 import { AppServerError, SubscriberGone } from "./errors.ts";
@@ -8,6 +16,7 @@ import type { ItemMapper } from "./item-mapper.ts";
 import type { PayloadStore } from "./payloads.ts";
 import type { Subscriber } from "./server.ts";
 import { isArchivedPath } from "./session-files.ts";
+import type { AppServerContext } from "./context.ts";
 
 const TITLE_LENGTH = 200;
 
@@ -28,8 +37,20 @@ export function titleOf(name: string | undefined, firstMessage: string): string 
 export class LoadedThread {
 	readonly id: string;
 	readonly payloads: PayloadStore;
+	readonly forkedFromId: string | undefined;
+	private readonly broadcast: AppServerContext["broadcast"];
+	readonly openRequests = new Set<object>();
 	mapper!: ItemMapper;
 	pendingTurnRequestId?: string;
+	/** The starting turn's clientMessageId; the mapper puts it on the turn's first user message. */
+	pendingClientMessageId?: string;
+	/**
+	 * Inputs waiting for the thread to go idle, each its own turn, in order (§4.6). They live here, not in
+	 * the agent's queue, so removing one never races the loop that would deliver it.
+	 */
+	readonly queued: { id: string; text: string; images?: ImageRef[]; clientMessageId?: string; by: Subscriber }[] = [];
+	/** A queued input is starting; no second one starts until it has. */
+	draining = false;
 	/** Admission completes only after the mapper created a durable turn identity. */
 	acceptTurnStart?: () => void;
 	private reservation?: AbortController;
@@ -50,6 +71,8 @@ export class LoadedThread {
 	lastTurnSubscriber: Subscriber | undefined;
 	approvalMode: ApprovalMode;
 	readonly allowed = new Set<string>();
+	readonly loadWarnings: Warning[] = [];
+	readonly allowedPrefixes = new Map<"bash" | "powershell", Set<string>>();
 	/** Abort controllers of server requests in flight for this thread. */
 	readonly pending = new Set<AbortController>();
 	/**
@@ -74,8 +97,12 @@ export class LoadedThread {
 		approvalMode: ApprovalMode,
 		onActivityEnd: () => void,
 		payloads: PayloadStore,
+		broadcast: AppServerContext["broadcast"],
+		forkedFromId?: string,
 	) {
 		this.payloads = payloads;
+		this.broadcast = broadcast;
+		this.forkedFromId = forkedFromId;
 		this.id = session.sessionManager.getSessionId();
 		this.session = session;
 		this.projectCwd = projectCwd;
@@ -115,6 +142,20 @@ export class LoadedThread {
 		return this.hold(() => run);
 	}
 
+	waitingOn(): ("approval" | "dialog")[] {
+		return this.openRequests.size > 0 ? ["approval"] : [];
+	}
+
+	status(): ThreadStatus {
+		return this.session.isIdle && !this.session.isSettling
+			? { type: "idle" }
+			: { type: "active", waitingOn: this.waitingOn() };
+	}
+
+	broadcastStatus(): void {
+		this.broadcast("thread/status/changed", { threadId: this.id, status: this.status() });
+	}
+
 	toThread(): Thread {
 		const { session } = this;
 		const model = session.model;
@@ -130,7 +171,9 @@ export class LoadedThread {
 			cwd: session.sessionManager.getCwd(),
 			projectCwd: this.projectCwd,
 			name: titleOf(session.sessionManager.getSessionName(), firstText),
-			status: session.isIdle && !session.isSettling ? "idle" : "active",
+			status: this.status(),
+			createdAt: session.sessionManager.getHeader()?.timestamp ?? "",
+			...(this.forkedFromId ? { forkedFromId: this.forkedFromId } : {}),
 			archived: this.file !== undefined && isArchivedPath(this.file),
 			updatedAt:
 				session.sessionManager.getLeafEntry()?.timestamp ?? session.sessionManager.getHeader()?.timestamp ?? "",

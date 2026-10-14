@@ -96,6 +96,10 @@ Sessions created before system messages existed have no leading system message; 
 
 Assistant messages name the model that produced them. Newer messages also record `thinkingLevel`, the KnightCode thinking level requested for that response.
 
+Assistant `durationMs`, when present, measures the reply from its numeric
+`timestamp`; the app server derives final text/reasoning completion times from
+these fields.
+
 ### ModelChangeEntry
 
 Emitted when the user switches models mid-session. The latest entry is the selected model, which may be a [virtual model](virtual-models.md); assistant messages then name the physical model that answered.
@@ -185,10 +189,20 @@ The built-in turn-marker extension writes `knightcode.turn` at the first
 {"type":"custom","id":"end12345","parentId":"reply123","timestamp":"2026-10-11T14:00:05.000Z","customType":"knightcode.turnEnd","data":{"status":"completed"}}
 ```
 
-End status is `completed`, `interrupted`, or `failed`, with an optional `error`
-string. The marker's entry ID is the [app-server](app-server.md) turn ID. Retries,
-automatic recovery, steering, and queued follow-ups before settlement share one
-boundary. A later independent prompt starts another turn. A marker without a
+End status is `completed`, `interrupted`, or `failed`, with optional
+`error: {message, kind}`. Kinds are `auth`, `rateLimit`, `contextOverflow`,
+`network`, `provider`, and `other`, classified from the error text. For example:
+
+```json
+{"type":"custom","id":"end54321","parentId":"reply123","timestamp":"2026-10-11T14:00:05.000Z","customType":"knightcode.turnEnd","data":{"status":"failed","error":{"message":"Too many requests","kind":"rateLimit"}}}
+```
+
+An end entry whose `error` is a plain string reads as
+`{message: <string>, kind: "other"}`. The marker/end-entry timestamps define the app server's final turn
+`startedAt`/`completedAt` in Unix milliseconds.
+
+The marker's entry ID is the [app-server](app-server.md) turn ID. Retries,
+automatic recovery, and steering before settlement share one boundary. A later independent prompt starts another turn. A marker without a
 valid end entry reads as `interrupted`, including after a crash.
 
 Item IDs are deterministic ordinals within the turn, such as

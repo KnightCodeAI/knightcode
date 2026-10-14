@@ -5,19 +5,60 @@
  */
 
 import type { AssistantMessage } from "@knightcode/ai";
-import type { Item, Turn, WireTurn } from "@knightcode/app-server-protocol";
-import type { AgentSessionEvent } from "../core/agent-session.ts";
+import { calculateContextTokens } from "../core/compaction/index.ts";
+import type { Item, TokenUsage, Turn, TurnQueue, WireTurn } from "@knightcode/app-server-protocol";
+import type { AgentSession, AgentSessionEvent } from "../core/agent-session.ts";
+import { addUsageToTotals, type UsageTotals } from "../core/usage-totals.ts";
+import { getLatestCompactionEntry } from "../core/session-manager.ts";
 import {
 	openMarkerOf,
 	TURN_END_TYPE,
 	TURN_MARKER_TYPE,
 	type TurnEnd,
 	turnEndAt,
+	turnEndEntryAt,
 	turnEndOf,
 } from "../extensions/turn-marker.ts";
 import type { AppServerContext } from "./context.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
-import { fileChangesOf, outputOf, textOf, toolCallStatus } from "./transcript.ts";
+import {
+	assistantTimes,
+	callStartedAt,
+	entryTime,
+	fileChangesOf,
+	outputOf,
+	textOf,
+	toolCallStatus,
+} from "./transcript.ts";
+
+/** Steers the agent has not delivered yet, and the server's own queued inputs. */
+export function queueOf(thread: LoadedThread): TurnQueue {
+	return {
+		steering: [...thread.session.getSteeringMessages()],
+		followUp: thread.queued.map(({ id, text }) => ({ id, text })),
+	};
+}
+
+/** Billed entry usage, plus the finalized reply not appended yet when subscribers hear message_end. */
+export function usageOf(session: AgentSession, pending?: AssistantMessage): TokenUsage {
+	const stats = session.getSessionStats();
+	const { input, output, cacheRead, cacheWrite } = stats.tokens;
+	const totals: UsageTotals = { input, output, cacheRead, cacheWrite, cost: stats.cost };
+	const context = session.getContextUsage();
+	let contextTokens = context?.tokens ?? undefined;
+	if (pending) {
+		addUsageToTotals(totals, pending.usage);
+		if (pending.stopReason !== "aborted" && pending.stopReason !== "error") {
+			const tokens = calculateContextTokens(pending.usage);
+			if (tokens > 0) contextTokens = tokens;
+		}
+	}
+	return {
+		...totals,
+		...(contextTokens === undefined ? {} : { contextTokens }),
+		contextWindow: context?.contextWindow ?? session.model?.contextWindow ?? 0,
+	};
+}
 
 type ToolCallItem = Extract<Item, { type: "toolCall" }>;
 type TextItem = Extract<Item, { type: "agentMessage" | "reasoning" }>;
@@ -78,6 +119,8 @@ export class ItemMapper {
 	/** The running turn's counters, or the last turn's between runs (restored from the file on load). */
 	private counters: Counters | undefined;
 	private streaming: Streaming | undefined;
+	/** For the running turn's first user message. */
+	private clientMessageId: string | undefined;
 	private calls = new Map<string, ToolCallItem>();
 	/** Top-level item id to its current index, for the snapshot's order. */
 	private positions = new Map<string, number>();
@@ -174,21 +217,26 @@ export class ItemMapper {
 			case "agent_start": {
 				// A retry, follow-up or overflow recovery starts the agent again inside the same turn (§4.2).
 				if (this.turn) return;
-				const marker = openMarkerOf(this.manager.getBranch());
-				let id = marker?.id;
-				if (!id) {
+				let marker = openMarkerOf(this.manager.getBranch());
+				if (!marker) {
 					// The built-in was disabled or failed; write the marker here so ids still agree.
 					console.error(`app-server: no turn marker in thread ${threadId}; writing one`);
-					id = this.manager.appendCustomEntry(TURN_MARKER_TYPE);
+					marker = this.manager.getEntry(this.manager.appendCustomEntry(TURN_MARKER_TYPE))!;
 				}
-				this.turn = { id, threadId, status: "inProgress", items: [] };
+				const id = marker.id;
+				this.turn = { id, threadId, status: "inProgress", startedAt: entryTime(marker), items: [] };
 				this.counters = { id, users: 0, customs: 0, compactions: 0, assistants: 0, items: 0 };
 				this.streaming = undefined;
 				this.calls.clear();
 				this.positions.clear();
-				this.broadcast("thread/status/changed", { threadId, status: "active" });
+				this.broadcast("thread/status/changed", {
+					threadId,
+					status: { type: "active", waitingOn: this.thread.waitingOn() },
+				});
 				const requestId = this.thread.pendingTurnRequestId;
 				this.thread.pendingTurnRequestId = undefined;
+				this.clientMessageId = this.thread.pendingClientMessageId;
+				this.thread.pendingClientMessageId = undefined;
 				this.thread.notify("turn/started", { turn: { ...this.turn, items: [] }, ...(requestId ? { requestId } : {}) });
 				this.thread.acceptTurnStart?.();
 				return;
@@ -207,6 +255,7 @@ export class ItemMapper {
 				if (!item) {
 					item =
 						inner.type === "text_delta" ? { type: "agentMessage", id, text: "" } : { type: "reasoning", id, text: "" };
+					item.startedAt = Date.now();
 					// Provisional: blocks that start later (a tool call) may come before it; message_end settles it.
 					const index = this.streaming.base + this.streaming.open.size;
 					this.streaming.open.set(inner.contentIndex, item);
@@ -228,26 +277,37 @@ export class ItemMapper {
 				if (!counters) return;
 				if (message.role === "custom") {
 					// Inside a run or between runs: an idle extension message belongs to the last turn, as on read-back.
-					this.appendWhole(
-						{
-							type: "extensionMessage",
-							id: `${counters.id}:custom:${counters.customs++}`,
-							extension: message.customType,
-							text: textOf(message.content),
-						},
-						counters,
-					);
+					const item: Item = {
+						type: "extensionMessage",
+						id: `${counters.id}:custom:${counters.customs++}`,
+						extension: message.customType,
+						text: textOf(message.content),
+					};
+					const index = counters.items++;
+					const turnId = counters.id;
+					this.started(item, index, turnId);
+					// Read-back has only the entry's time. Inside a run the session saves the entry right after
+					// notifying subscribers, in the same synchronous step, so it exists one microtask later.
+					queueMicrotask(() => {
+						const leaf = this.manager.getLeafEntry();
+						item.completedAt = leaf?.type === "custom_message" ? entryTime(leaf) : message.timestamp;
+						this.completed(item, index, turnId);
+					});
 					return;
 				}
 				if (!this.turn) return;
 				if (message.role === "user") {
 					const content =
 						typeof message.content === "string" ? [{ type: "text" as const, text: message.content }] : message.content;
+					const clientMessageId = this.clientMessageId;
+					this.clientMessageId = undefined;
 					this.appendWhole(
 						{
 							type: "userMessage",
+							...(clientMessageId ? { clientMessageId } : {}),
 							id: `${this.turn.id}:user:${counters.users++}`,
 							text: textOf(content),
+							completedAt: message.timestamp,
 							images: content.flatMap((c) => (c.type === "image" ? [{ mimeType: c.mimeType, data: c.data }] : [])),
 						},
 						counters,
@@ -261,7 +321,8 @@ export class ItemMapper {
 					const content = message.content as Parameters<typeof outputOf>[0];
 					call.status = toolCallStatus(message.isError, content);
 					call.output = outputOf(content);
-					const changes = fileChangesOf(call.tool, call.input, message.isError);
+					call.completedAt = message.timestamp;
+					const changes = fileChangesOf(call.tool, call.input, message.isError, message.details);
 					if (changes.length > 0) call.fileChanges = changes;
 					this.completed(call, this.positions.get(call.id));
 				}
@@ -282,6 +343,7 @@ export class ItemMapper {
 					input: event.args,
 					status: "running",
 					output: [],
+					startedAt: Date.now(),
 					...(event.parentToolCallId ? { parentItemId: event.parentToolCallId } : {}),
 				};
 				this.calls.set(event.toolCallId, nested);
@@ -307,23 +369,33 @@ export class ItemMapper {
 				const blocks = Array.isArray(content) ? content : [];
 				item.status = toolCallStatus(event.isError, blocks);
 				item.output = outputOf(blocks);
+				item.completedAt = Date.now();
 				this.completed(item, undefined);
 				return;
 			}
 			case "compaction_start":
-				if (!this.turn) this.broadcast("thread/status/changed", { threadId, status: "active" });
+				if (!this.turn)
+					this.broadcast("thread/status/changed", {
+						threadId,
+						status: { type: "active", waitingOn: this.thread.waitingOn() },
+					});
 				return;
 			case "compaction_end": {
 				const counters = this.counters;
 				const summary = (event as { result?: { summary?: string } }).result?.summary;
 				if (counters && summary !== undefined) {
 					this.appendWhole(
-						{ type: "compaction", id: `${counters.id}:compaction:${counters.compactions++}`, summary },
+						{
+							type: "compaction",
+							id: `${counters.id}:compaction:${counters.compactions++}`,
+							summary,
+							completedAt: entryTime(getLatestCompactionEntry(this.manager.getBranch())!),
+						},
 						counters,
 					);
 				}
 				if (!this.turn) {
-					this.broadcast("thread/status/changed", { threadId, status: "idle" });
+					this.broadcast("thread/status/changed", { threadId, status: { type: "idle" } });
 					this.onSettled();
 				}
 				return;
@@ -343,8 +415,7 @@ export class ItemMapper {
 			case "queue_update":
 				this.thread.notify("turn/queue/updated", {
 					threadId,
-					steering: [...event.steering],
-					followUp: [...event.followUp],
+					...queueOf(this.thread),
 				});
 				return;
 			case "session_info_changed":
@@ -391,6 +462,7 @@ export class ItemMapper {
 					input: block.arguments,
 					status: "pending",
 					output: [],
+					startedAt: callStartedAt(message),
 				};
 				this.calls.set(block.id, call);
 				this.started(call, index++);
@@ -404,9 +476,15 @@ export class ItemMapper {
 			// A block that streamed no delta still exists on read-back; start it here.
 			if (item !== existing) this.started(item, index);
 			item.text = text;
+			Object.assign(item, assistantTimes(message));
 			this.completed(item, index++);
 		});
 		counters.items = index;
+		this.thread.notify("thread/tokenUsage/updated", {
+			threadId: this.thread.id,
+			turnId: turn.id,
+			usage: usageOf(this.thread.session, message),
+		});
 	}
 
 	/**
@@ -433,7 +511,10 @@ export class ItemMapper {
 		if (!end) {
 			end =
 				error !== undefined
-					? { status: "failed", error: error instanceof Error ? error.message : String(error) }
+					? {
+							status: "failed",
+							error: { message: error instanceof Error ? error.message : String(error), kind: "other" },
+						}
 					: turnEndOf(aborted, this.manager.getBranch());
 			try {
 				this.manager.appendCustomEntry(TURN_END_TYPE, end);
@@ -442,10 +523,14 @@ export class ItemMapper {
 				console.error(`app-server: could not record the end of turn ${turn.id}: ${String(writeError)}`);
 			}
 		}
+		const endEntry = turnEndEntryAt(this.manager.getBranch());
+		turn.completedAt = endEntry ? entryTime(endEntry) : Date.now();
 		turn.status = end.status;
 		if (end.error) turn.error = end.error;
-		this.thread.notify("turn/completed", { turn: this.thread.payloads.summary(turn) });
-		this.broadcast("thread/status/changed", { threadId: this.thread.id, status: "idle" });
+		const summary = this.thread.payloads.summary(turn);
+		this.thread.notify("turn/completed", { turn: summary });
+		this.broadcast("thread/turn/completed", { turn: summary });
+		this.broadcast("thread/status/changed", { threadId: this.thread.id, status: { type: "idle" } });
 		this.onSettled();
 	}
 }

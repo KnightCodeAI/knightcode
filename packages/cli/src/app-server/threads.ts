@@ -5,8 +5,9 @@
  * and the single load path are §5.6.
  */
 
-import { existsSync, statSync } from "node:fs";
-import { mkdir, stat } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { mkdir, stat, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type {
 	ApprovalMode,
@@ -18,17 +19,24 @@ import type {
 	WireTurn,
 	ImageRef,
 	TurnStartResult,
+	Warning,
 } from "@knightcode/app-server-protocol";
 import type { AgentSession } from "../core/agent-session.ts";
 import { createAgentSessionFromServices, createAgentSessionServices } from "../core/agent-session-services.ts";
 import type { InlineExtension } from "../core/extensions/types.ts";
-import { SessionHardLinkedError, SessionLockedError } from "../core/session-lock.ts";
+import { getExtensionCacheStats } from "../core/extensions/loader.ts";
+import {
+	acquireSessionLock,
+	type SessionLock,
+	SessionHardLinkedError,
+	SessionLockedError,
+} from "../core/session-lock.ts";
 import {
 	loadEntriesFromFile,
 	readSessionHeaderForDiscovery,
 	SessionManager,
 	type SessionEntry,
-	type SessionInfo,
+	sessionCwdMatches,
 } from "../core/session-manager.ts";
 import { SettingsManager } from "../core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
@@ -36,17 +44,22 @@ import { builtInExtensions } from "../extensions/index.ts";
 import { resolvePath } from "../utils/paths.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
+import { positionOf } from "./config.ts";
+import { FileSearch } from "./file-search.ts";
 import { APPROVAL_MODE_ENTRY, createApprovalExtension, readApprovalMode } from "./approvals.ts";
-import { ItemMapper } from "./item-mapper.ts";
+import { ItemMapper, queueOf, usageOf } from "./item-mapper.ts";
+import { readImageInput } from "./image-input.ts";
 import { StartRequest } from "./start-request.ts";
 import { LoadedThread, titleOf } from "./loaded-thread.ts";
 import { pageHistory, type HistoryPage } from "./history-pages.ts";
 import { ListingPages } from "./listing-pages.ts";
+import { type IndexedSession, listWithIndex, type ReadKind } from "./listing-index.ts";
 import { PayloadStore } from "./payloads.ts";
 import { readTurns, entryForItem, textOf } from "./transcript.ts";
 import { type Commit, commitOnSend, type Handlers, type Subscriber } from "./server.ts";
 import {
 	ARCHIVE_DIR,
+	parentIdOf,
 	isArchivedPath,
 	liveDirFor,
 	moveSessionFileWithoutReplace,
@@ -73,7 +86,12 @@ export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
 export class ThreadManager {
 	readonly files: SessionFileIndex;
 	readonly payloads: PayloadStore;
+	readonly systemErrors = new Map<string, string>();
 	private readonly listingPages = new ListingPages();
+	private readonly fileSearch = new FileSearch();
+	private readonly startedAt = Date.now();
+	private listingFilesOpened = 0;
+	private listingBytesScanned = 0;
 	private readonly startsBySignal = new Map<AbortSignal, StartRequest>();
 	private readonly ctx: AppServerContext;
 	private readonly options: ThreadManagerOptions;
@@ -93,6 +111,23 @@ export class ThreadManager {
 		this.idleMs = options.idleMs ?? DEFAULT_IDLE_MS;
 		this.files = new SessionFileIndex(ctx);
 		this.payloads = new PayloadStore(ctx.agentDir);
+	}
+
+	diagnostics(): ResultOf<"server/diagnostics"> {
+		const memory = process.memoryUsage();
+		const payloads = this.payloads.getStats();
+		return {
+			rssBytes: memory.rss,
+			heapBytes: memory.heapUsed,
+			loadedThreads: this.threads.size,
+			loadingThreads: this.loading.size,
+			payloadFiles: payloads.payloads,
+			payloadBytes: payloads.bytes,
+			inactiveFactories: getExtensionCacheStats().inactive,
+			uptimeMs: Date.now() - this.startedAt,
+			listingFilesOpened: this.listingFilesOpened,
+			listingBytesScanned: this.listingBytesScanned,
+		};
 	}
 
 	loadedCount(): number {
@@ -122,7 +157,7 @@ export class ThreadManager {
 		return work;
 	}
 
-	start(params: ParamsOf<"thread/start">, by: Subscriber): Promise<Thread> {
+	start(params: ParamsOf<"thread/start">, by: Subscriber): Promise<ResultOf<"thread/start">> {
 		return this.track(async () => {
 			const cwd = resolvePath(params.cwd);
 			const stats = await stat(cwd).catch(() => undefined);
@@ -145,7 +180,7 @@ export class ThreadManager {
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });
-			return summary;
+			return { thread: summary, warnings: [...thread.loadWarnings] };
 		});
 	}
 
@@ -167,7 +202,13 @@ export class ThreadManager {
 				thread.mapper?.wireSnapshot(),
 			);
 			this.subscribe(thread, by);
-			return { thread: summary, ...history };
+			return {
+				thread: summary,
+				...history,
+				queue: queueOf(thread),
+				usage: usageOf(thread.session),
+				warnings: [...thread.loadWarnings],
+			};
 		});
 	}
 
@@ -200,18 +241,23 @@ export class ThreadManager {
 		this.assertOpen();
 		return this.listingPages.page(params, async () => {
 			const archived = params.archived === true;
-			let infos: SessionInfo[];
+			const onRead = (_path: string, _kind: ReadKind, bytes: number) => {
+				this.listingFilesOpened++;
+				this.listingBytesScanned += bytes;
+			};
+			let sessions: IndexedSession[] = [];
 			if (params.cwd !== undefined) {
 				const cwd = resolvePath(params.cwd);
 				const live = liveDirFor(this.ctx, cwd);
 				const dir = archived ? join(live, ARCHIVE_DIR) : live;
-				infos = existsSync(dir) ? await SessionManager.list(cwd, dir) : [];
+				if (existsSync(dir)) sessions = await listWithIndex(dir, { onRead });
+				if (this.ctx.sessionDir !== undefined) sessions = sessions.filter((s) => sessionCwdMatches(s.cwd, cwd));
 			} else {
-				infos = (
-					await Promise.all((await sessionDirs(this.ctx, archived)).map((dir) => SessionManager.listAll(dir)))
-				).flat();
+				// Sequential directories keep the whole listing at at most 64 concurrent scans.
+				for (const dir of await sessionDirs(this.ctx, archived))
+					sessions.push(...(await listWithIndex(dir, { onRead })));
 			}
-			return infos
+			return sessions
 				.filter((info) => info.messageCount > 0)
 				.sort((a, b) => b.modified.getTime() - a.modified.getTime())
 				.map((info): ThreadSummary => {
@@ -220,8 +266,10 @@ export class ThreadManager {
 						id: info.id,
 						cwd: info.cwd,
 						projectCwd: info.cwd,
-						name: titleOf(info.name, info.firstMessage),
-						status: live ? (live.session.isIdle && !live.session.isSettling ? "idle" : "active") : "notLoaded",
+						name: info.title,
+						status: live?.status() ?? this.unloadedStatus(info.id),
+						createdAt: info.created.toISOString(),
+						forkedFromId: info.forkedFromId,
 						archived: isArchivedPath(info.path),
 						updatedAt: info.modified.toISOString(),
 					};
@@ -252,7 +300,9 @@ export class ThreadManager {
 			cwd: header?.cwd ?? "",
 			projectCwd: header?.cwd ?? "",
 			name: titleOf(manager.getSessionName(), firstText),
-			status: "notLoaded",
+			status: this.unloadedStatus(threadId),
+			createdAt: header?.timestamp ?? "",
+			forkedFromId: parentIdOf(header?.parentSession),
 			archived: isArchivedPath(file),
 			updatedAt: statSync(file).mtime.toISOString(),
 		};
@@ -271,7 +321,7 @@ export class ThreadManager {
 		await this.transition(threadId, async (thread) => {
 			if (thread) {
 				await thread.dispose();
-				this.ctx.broadcast("thread/status/changed", { threadId, status: "notLoaded" });
+				this.ctx.broadcast("thread/status/changed", { threadId, status: this.unloadedStatus(threadId) });
 			}
 			const file = await this.files.find(threadId);
 			if (!file) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
@@ -284,7 +334,63 @@ export class ThreadManager {
 		this.ctx.broadcast("thread/archived", { threadId, archived });
 	}
 
-	fork(threadId: string, atItemId: string | undefined, by: Subscriber): Promise<Thread> {
+	async delete(threadId: string): Promise<void> {
+		this.assertOpen();
+		const found = await this.files.find(threadId);
+		if (!found) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
+		if (!isArchivedPath(found)) throw new AppServerError("threadNotArchived", "archive the thread before deleting it");
+		// No await between the busy check and transition's synchronous ready-map removal.
+		if (this.threads.get(threadId)?.busy) throw new AppServerError("turnInProgress", "interrupt the turn first");
+		await this.transition(threadId, async (thread) => {
+			// Refusals before disposal restore the original ready thread and its subscribers.
+			let file: string | undefined;
+			try {
+				file = await this.files.find(threadId);
+				if (!file) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
+				if (!isArchivedPath(file))
+					throw new AppServerError("threadNotArchived", "archive the thread before deleting it");
+				if (thread?.busy) throw new AppServerError("turnInProgress", "interrupt the turn first");
+			} catch (error) {
+				if (thread?.state === "ready") this.threads.set(threadId, thread);
+				throw error;
+			}
+			if (thread) {
+				await thread.dispose();
+				this.ctx.broadcast("thread/status/changed", { threadId, status: { type: "notLoaded" } });
+			}
+			let lock: SessionLock;
+			try {
+				lock = acquireSessionLock(file, undefined, true);
+			} catch (error) {
+				if (error instanceof SessionLockedError)
+					throw new AppServerError("threadLockedElsewhere", "the thread is open in another KnightCode process");
+				if (error instanceof SessionHardLinkedError)
+					throw new AppServerError("archiveConflict", error.message, {
+						reason: "duplicateLinks",
+						paths: await this.files.findAll(threadId),
+					});
+				throw error;
+			}
+			try {
+				if (readSessionHeaderForDiscovery(file)?.id !== threadId)
+					throw new AppServerError("threadNotFound", `the file no longer holds thread ${threadId}`);
+				if (lock.lost) throw new AppServerError("threadLockedElsewhere", "another process took the file");
+				await unlink(file).catch((error: unknown) => {
+					throw new AppServerError(
+						"internal",
+						`could not delete ${file}: ${error instanceof Error ? error.message : String(error)}`,
+					);
+				});
+			} finally {
+				lock.release();
+			}
+			this.files.forget(threadId);
+			this.systemErrors.delete(threadId);
+		});
+		this.ctx.broadcast("thread/deleted", { threadId });
+	}
+
+	fork(threadId: string, atItemId: string | undefined, by: Subscriber): Promise<ResultOf<"thread/fork">> {
 		return this.track(async () => {
 			const live = this.threads.get(threadId);
 			const source = live?.file ?? (await this.files.find(threadId));
@@ -315,7 +421,7 @@ export class ThreadManager {
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });
-			return summary;
+			return { thread: summary, warnings: [...thread.loadWarnings] };
 		});
 	}
 
@@ -379,14 +485,15 @@ export class ThreadManager {
 		thread.idleTimer = undefined;
 	}
 
-	unsubscribe(threadId: string, by: Subscriber): void {
+	unsubscribe(threadId: string, by: Subscriber): boolean {
 		const thread = this.threads.get(threadId);
-		if (!thread) return;
-		thread.subscribers.delete(by);
+		if (!thread) return false;
+		const subscribed = thread.subscribers.delete(by);
 		if (thread.lastTurnSubscriber === by) thread.lastTurnSubscriber = undefined;
 		// An approval waiting on `by` would otherwise wait for a dialog it may no longer show (§4.5).
 		thread.withdrawFrom(by);
 		this.scheduleIdle(thread);
+		return subscribed;
 	}
 
 	disconnect(by: Subscriber): void {
@@ -446,12 +553,18 @@ export class ThreadManager {
 		await this.transition(threadId, (thread) =>
 			thread!.dispose(reason, targetSessionFile, options.waitForQueue ?? true),
 		);
-		this.ctx.broadcast("thread/status/changed", { threadId, status: "notLoaded" });
+		this.ctx.broadcast("thread/status/changed", { threadId, status: this.unloadedStatus(threadId) });
+	}
+
+	private unloadedStatus(threadId: string): ThreadSummary["status"] {
+		const message = this.systemErrors.get(threadId);
+		return message === undefined ? { type: "notLoaded" } : { type: "systemError", message };
 	}
 
 	/** Refuse new loads, wait for every load operation in flight, then unload everything in parallel (§5.6). */
 	async closeAll(): Promise<void> {
 		this.shuttingDown = true;
+		this.fileSearch.close();
 		// Loop: an operation may still be inside track() when the snapshot is taken.
 		while (this.inFlight.size > 0) await Promise.allSettled([...this.inFlight]);
 		await Promise.allSettled([...this.threads.keys()].map((id) => this.unload(id)));
@@ -544,7 +657,15 @@ export class ThreadManager {
 			const stored = reason === "resume" ? readApprovalMode(sessionManager.getBranch()) : undefined;
 			const effective = stored ?? approvalMode ?? defaultApprovalMode(mode);
 			if (reason !== "resume") sessionManager.appendCustomEntry(APPROVAL_MODE_ENTRY, effective);
-			const thread = new LoadedThread(session, cwd, effective, () => this.scheduleIdle(thread), this.payloads);
+			const thread = new LoadedThread(
+				session,
+				cwd,
+				effective,
+				() => this.afterActivity(thread),
+				this.payloads,
+				this.ctx.broadcast,
+				parentIdOf(sessionManager.getHeader()?.parentSession),
+			);
 			created = thread;
 			holder.thread = thread;
 			await this.bind(thread, mode);
@@ -555,9 +676,37 @@ export class ThreadManager {
 			);
 			thread.mapper.restore(readTurns(thread.id, session.sessionManager.getBranch()));
 			thread.unsubscribeSession = session.subscribe((event) => thread.mapper.handle(event));
+			for (const diagnostic of session.settingsManager.drainErrors()) {
+				let content = "";
+				try {
+					if (diagnostic.path) content = readFileSync(diagnostic.path, "utf8");
+				} catch {
+					/* Diagnostic survives a removed file. */
+				}
+				thread.loadWarnings.push({
+					source: "settings",
+					message: diagnostic.error.message,
+					...(diagnostic.path ? { path: diagnostic.path } : {}),
+					...positionOf(content, diagnostic.error),
+				});
+			}
+			const extensions = session.resourceLoader.getExtensions();
+			for (const { path, error } of extensions.errors)
+				thread.loadWarnings.push({ source: "extension", path, message: error });
+			for (const { path, warning } of extensions.warnings ?? [])
+				thread.loadWarnings.push({ source: "extension", path, message: warning });
+			for (const diagnostic of services.diagnostics)
+				if (diagnostic.type !== "info") thread.loadWarnings.push({ source: "extension", message: diagnostic.message });
+			if (hasTrustRequiringProjectResources(cwd) && new ProjectTrustStore(this.ctx.agentDir).get(cwd) === null)
+				thread.loadWarnings.push({
+					source: "trust",
+					message:
+						"This project has its own extensions and settings; they were not loaded. Trust the project to use them.",
+				});
 			// A shutdown that began during the load must not leave this thread behind.
 			this.assertOpen();
 			this.threads.set(thread.id, thread);
+			if (this.systemErrors.delete(thread.id)) thread.broadcastStatus();
 			if (thread.file) this.files.remember(thread.id, thread.file);
 			// No model is fine: an extension provider may register later, and turn/start answers authRequired (§5.2).
 			return thread;
@@ -597,6 +746,10 @@ export class ThreadManager {
 
 	private afterSettle(thread: LoadedThread): void {
 		if (thread.session.sessionManager.hasLostLock()) {
+			this.systemErrors.set(
+				thread.id,
+				"Another KnightCode process took this thread's session file; it was closed here.",
+			);
 			for (const subscriber of thread.subscribers)
 				subscriber.notify("error", {
 					threadId: thread.id,
@@ -607,7 +760,66 @@ export class ThreadManager {
 		}
 		// A microtask is not enough: deferred prompts can await hooks before entering the next run.
 		if (thread.state === "ready")
-			void thread.session.waitForIdle({ includeSettlement: true }).then(() => this.scheduleIdle(thread));
+			void thread.session.waitForIdle({ includeSettlement: true }).then(() => this.afterActivity(thread));
+	}
+
+	/** Something on the thread ended: start the next queued input, else let the idle timer run. */
+	private afterActivity(thread: LoadedThread): void {
+		this.drainQueue(thread);
+		this.scheduleIdle(thread);
+	}
+
+	private notifyQueue(thread: LoadedThread): void {
+		thread.notify("turn/queue/updated", { threadId: thread.id, ...queueOf(thread) });
+	}
+
+	/**
+	 * Start the oldest queued input once nothing else runs (Codex's queue, codex-rs/ext/queue): the input
+	 * starts a turn of its own, so the agent's loop never holds input a client could still remove.
+	 */
+	private drainQueue(thread: LoadedThread): void {
+		if (thread.state !== "ready" || thread.draining || thread.busy || thread.reservedStart) return;
+		const next = thread.queued.shift();
+		if (!next) return;
+		thread.draining = true;
+		this.notifyQueue(thread);
+		void this.startTurn(thread.id, next.text, next.images, next.by, undefined, next.clientMessageId)
+			.catch((error: unknown) => {
+				// Dropped, not retried: a start that failed (no model, signed out) would fail again in a loop.
+				thread.notify("error", {
+					threadId: thread.id,
+					message: `A queued message could not start: ${error instanceof Error ? error.message : String(error)}`,
+				});
+			})
+			.finally(() => {
+				thread.draining = false;
+				this.afterActivity(thread);
+			});
+	}
+
+	async addQueued(
+		threadId: string,
+		text: string,
+		images: ImageRef[] | undefined,
+		clientMessageId: string | undefined,
+		by: Subscriber,
+	): Promise<{ queueId: string }> {
+		const thread = await this.ensureLoaded(threadId, by.mode);
+		this.subscribe(thread, by);
+		const queueId = randomUUID();
+		thread.queued.push({ id: queueId, text, images, clientMessageId, by });
+		this.notifyQueue(thread);
+		this.drainQueue(thread);
+		return { queueId };
+	}
+
+	removeQueued(threadId: string, queueId: string): boolean {
+		const thread = this.get(threadId);
+		const index = thread.queued.findIndex((entry) => entry.id === queueId);
+		if (index === -1) return false;
+		thread.queued.splice(index, 1);
+		this.notifyQueue(thread);
+		return true;
 	}
 
 	private setApprovalMode(thread: LoadedThread, mode: ApprovalMode): void {
@@ -622,6 +834,7 @@ export class ThreadManager {
 		images: ImageRef[] | undefined,
 		by: Subscriber,
 		requestId?: string,
+		clientMessageId?: string,
 	): Promise<TurnStartResult> {
 		const thread = await this.ensureLoaded(threadId, by.mode);
 		this.subscribe(thread, by);
@@ -677,6 +890,7 @@ export class ThreadManager {
 							if (!authorized) throw new AppServerError("authRequired", `not signed in to ${model.provider}`);
 							thread.lastTurnSubscriber = by;
 							thread.pendingTurnRequestId = request.requestId;
+							thread.pendingClientMessageId = clientMessageId;
 							let accepted = false;
 							await new Promise<void>((resolve, reject) => {
 								void session
@@ -734,21 +948,21 @@ export class ThreadManager {
 			if (owner.acceptTurnStart === acceptTurn) owner.acceptTurnStart = undefined;
 			owner.pendingStarts.delete(start);
 			if (owner.reservedStart === start) owner.reservedStart = undefined;
-			if (request.disposition !== "started" && owner.pendingTurnRequestId === request.requestId)
+			if (request.disposition !== "started" && owner.pendingTurnRequestId === request.requestId) {
 				owner.pendingTurnRequestId = undefined;
+				owner.pendingClientMessageId = undefined;
+			}
 			this.startsBySignal.delete(start.signal);
 			this.scheduleIdle(owner);
 		}
 	}
 
-	async queue(
-		threadId: string,
-		kind: "steer" | "followUp",
-		text: string,
-		images: ImageRef[] | undefined,
-	): Promise<void> {
+	/** Hand input to the running turn through the agent's own steering; it cannot be taken back. */
+	async steer(threadId: string, expectedTurnId: string, text: string, images: ImageRef[] | undefined): Promise<void> {
 		const thread = this.get(threadId);
 		if (!thread.session.isStreaming) throw new AppServerError("invalidParams", "no turn is running; use turn/start");
+		if (thread.mapper.currentTurnId() !== expectedTurnId)
+			throw new AppServerError("turnMismatch", "the owning turn changed");
 		await thread.hold(async () => {
 			const session = thread.session;
 			const turnId = thread.mapper.currentTurnId();
@@ -776,17 +990,14 @@ export class ThreadManager {
 							!session.isStreaming ||
 							thread.mapper.currentTurnId() !== turnId
 						)
-							throw new AppServerError("invalidParams", "the queued input no longer belongs to a running turn");
+							throw new AppServerError("turnMismatch", "the queued input no longer belongs to a running turn");
 						accepted = true;
 						thread.pending.delete(controller);
 					},
 				};
 				const content = images?.map((image) => ({ type: "image" as const, ...image }));
-				await Promise.race([
-					kind === "steer" ? session.steer(text, content, options) : session.followUp(text, content, options),
-					cancelled,
-				]);
-				if (!accepted) throw new AppServerError("invalidParams", "the queued input was cancelled");
+				await Promise.race([session.steer(text, content, options), cancelled]);
+				if (!accepted) throw new AppServerError("invalidParams", "the steer was cancelled");
 			} finally {
 				controller.signal.removeEventListener("abort", onAbort);
 				unsubscribe();
@@ -795,9 +1006,19 @@ export class ThreadManager {
 		});
 	}
 
-	async interrupt(threadId: string): Promise<void> {
+	/**
+	 * Stop the turn. Queued inputs are dropped as the terminal's Escape drops them: the client still has
+	 * their text from turn/queue/updated, to put back in the composer.
+	 */
+	async interrupt(threadId: string, turnId?: string): Promise<void> {
 		const thread = this.threads.get(threadId);
+		if (turnId !== undefined && thread?.mapper.currentTurnId() !== turnId)
+			throw new AppServerError("turnMismatch", "the owning turn changed");
 		if (!thread) return;
+		if (thread.queued.length > 0) {
+			thread.queued.length = 0;
+			this.notifyQueue(thread);
+		}
 		for (const start of thread.pendingStarts) start.abort();
 		thread.abortPending();
 		await thread.session.abort();
@@ -848,7 +1069,11 @@ export class ThreadManager {
 				request.owner = next;
 				next.pendingStarts.add(request.controller);
 				if (willDispatch) next.reservedStart = request.controller;
-				if (old.pendingTurnRequestId === request.requestId) old.pendingTurnRequestId = undefined;
+				if (old.pendingTurnRequestId === request.requestId) {
+					next.pendingClientMessageId = old.pendingClientMessageId;
+					old.pendingTurnRequestId = undefined;
+					old.pendingClientMessageId = undefined;
+				}
 				next.pendingTurnRequestId = request.requestId;
 			}
 		} catch (error) {
@@ -873,7 +1098,12 @@ export class ThreadManager {
 		const { session } = thread;
 		await session.bindExtensions({
 			mode,
-			onError: (error) => console.error(`Extension ${error.extensionPath}: ${error.error}`),
+			onError: (error) => {
+				console.error(`Extension ${error.extensionPath}: ${error.error}`);
+				const warning: Warning = { source: "extension", path: error.extensionPath, message: error.error };
+				if (this.threads.get(thread.id) === thread) thread.notify("warning", { ...warning, threadId: thread.id });
+				else thread.loadWarnings.push(warning);
+			},
 			commandContextActions: {
 				waitForIdle: () => session.waitForIdle(),
 				navigateTree: (targetId, options) => session.navigateTree(targetId, options),
@@ -983,6 +1213,8 @@ export class ThreadManager {
 
 	handlers(): Handlers {
 		return {
+			"server/diagnostics": async () => this.diagnostics(),
+			"file/search": (params) => this.fileSearch.search(params),
 			"command/list": async ({ threadId }) => {
 				const { session } = this.get(threadId);
 				return {
@@ -1000,11 +1232,29 @@ export class ThreadManager {
 					],
 				};
 			},
-			"turn/start": ({ threadId, text, images, requestId }, connection) =>
-				this.startTurn(threadId, text, images, connection, requestId),
-			"turn/steer": ({ threadId, text, images }) => this.queue(threadId, "steer", text, images).then(() => ({})),
-			"turn/followUp": ({ threadId, text, images }) => this.queue(threadId, "followUp", text, images).then(() => ({})),
-			"turn/interrupt": ({ threadId }) => this.interrupt(threadId).then(() => ({})),
+			"turn/start": async ({ threadId, text, images, requestId, clientMessageId }, connection) =>
+				this.startTurn(
+					threadId,
+					text,
+					images && (await Promise.all(images.map(readImageInput))),
+					connection,
+					requestId,
+					clientMessageId,
+				),
+			"turn/steer": async ({ threadId, expectedTurnId, text, images }) => {
+				await this.steer(threadId, expectedTurnId, text, images && (await Promise.all(images.map(readImageInput))));
+				return {};
+			},
+			"turn/queue/add": async ({ threadId, text, images, clientMessageId }, connection) =>
+				this.addQueued(
+					threadId,
+					text,
+					images && (await Promise.all(images.map(readImageInput))),
+					clientMessageId,
+					connection,
+				),
+			"turn/interrupt": ({ threadId, turnId }) => this.interrupt(threadId, turnId).then(() => ({})),
+			"turn/queue/remove": async ({ threadId, queueId }) => ({ removed: this.removeQueued(threadId, queueId) }),
 			"thread/compact": ({ threadId, instructions }, connection) =>
 				this.ensureLoaded(threadId, connection.mode).then((thread) =>
 					thread.exclusive(async () => {
@@ -1025,12 +1275,12 @@ export class ThreadManager {
 						return { thread: summary };
 					}),
 				),
-			"thread/start": (params, connection) => this.start(params, connection).then((thread) => ({ thread })),
+			"thread/start": (params, connection) => this.start(params, connection),
 			"thread/resume": ({ threadId, cursor }, connection) => this.resume(threadId, cursor, connection),
 			"thread/list": (params) => this.list(params),
 			"thread/read": ({ threadId, cursor }) => this.read(threadId, cursor),
-			"thread/fork": ({ threadId, atItemId }, connection) =>
-				this.fork(threadId, atItemId, connection).then((thread) => ({ thread })),
+			"thread/fork": ({ threadId, atItemId }, connection) => this.fork(threadId, atItemId, connection),
+			"thread/delete": ({ threadId }) => this.delete(threadId).then(() => ({})),
 			"thread/archive": ({ threadId }) => this.archive(threadId, true).then(() => ({})),
 			"thread/unarchive": ({ threadId }) => this.archive(threadId, false).then(() => ({})),
 			"thread/name/set": ({ threadId, name }, connection) =>
@@ -1041,10 +1291,9 @@ export class ThreadManager {
 					}),
 				),
 			"payload/read": (params) => this.payloads.read(params),
-			"thread/unsubscribe": async ({ threadId }, connection) => {
-				this.unsubscribe(threadId, connection);
-				return {};
-			},
+			"thread/unsubscribe": async ({ threadId }, connection) => ({
+				status: this.unsubscribe(threadId, connection) ? "unsubscribed" : "notSubscribed",
+			}),
 		};
 	}
 }

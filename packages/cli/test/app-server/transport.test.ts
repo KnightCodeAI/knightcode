@@ -165,7 +165,7 @@ test("in-process close drains what was sent; abort drops it", async () => {
 	const drained = createInProcessPair();
 	const gotDrained: unknown[] = [];
 	drained.client.onMessage((m) => gotDrained.push(m));
-	drained.server.send({ id: 1, error: { code: "versionMismatch", message: "x" } });
+	drained.server.send({ id: 1, error: { code: "internal", message: "x" } });
 	drained.server.close();
 	await tick();
 	expect(gotDrained).toHaveLength(1);

@@ -147,7 +147,7 @@ test("a declined call reads back declined, a failed end reads back failed, an em
 	const turns = readTurns("t", entries);
 	expect(turns).toHaveLength(1);
 	expect(turns[0].items.find((i) => i.id === "c2")).toMatchObject({ status: "declined" });
-	expect(turns[0]).toMatchObject({ status: "failed", error: "boom" });
+	expect(turns[0]).toMatchObject({ status: "failed", error: { message: "boom", kind: "other" } });
 });
 
 test("entryForItem finds the entry holding an item", () => {
@@ -157,4 +157,29 @@ test("entryForItem finds the entry holding an item", () => {
 	expect(entryForItem([m, u, a], `${m.id}:user:0`)).toBe(u.id);
 	expect(entryForItem([m, u, a], `${m.id}:0:0`)).toBe(a.id);
 	expect(entryForItem([m, u, a], "nope")).toBeUndefined();
+});
+
+test("turn and item times use the durable marker, messages and end", () => {
+	const m = marker();
+	const u = user("hi");
+	const a = assistant([
+		{ type: "text", text: "read" },
+		{ type: "toolCall", id: "c", name: "read", arguments: {} },
+	]);
+	const r = toolResult("c", "read", "ok");
+	const e = end("completed");
+	if (u.type !== "message" || a.type !== "message" || r.type !== "message" || a.message.role !== "assistant")
+		throw new Error("fixtures");
+	u.message.timestamp = 1000;
+	a.message.timestamp = 2000;
+	a.message.durationMs = 500;
+	r.message.timestamp = 3000;
+	e.timestamp = new Date(4000).toISOString();
+	const [turn] = readTurns("t", [m, u, a, r, e]);
+	expect(turn.startedAt).toBe(Date.parse(m.timestamp));
+	expect(turn.completedAt).toBe(4000);
+	expect(turn.items[0]).toMatchObject({ completedAt: 1000 });
+	expect(turn.items[0]).not.toHaveProperty("startedAt");
+	expect(turn.items[1]).toMatchObject({ startedAt: 2000, completedAt: 2500 });
+	expect(turn.items[2]).toMatchObject({ startedAt: 2500, completedAt: 3000 });
 });

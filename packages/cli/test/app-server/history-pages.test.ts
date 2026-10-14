@@ -23,7 +23,8 @@ const thread: ThreadSummary = {
 	cwd: "cwd",
 	projectCwd: "cwd",
 	name: "n",
-	status: "idle",
+	status: { type: "idle" },
+	createdAt: "2026-10-11T00:00:00.000Z",
 	archived: false,
 	updatedAt: "2026-10-11",
 };
@@ -66,6 +67,7 @@ test("old-page history keeps a separate current running snapshot and respects th
 	entries.length = 0;
 	for (let i = 0; i < 51; i++) add(i, "😀".repeat(20_000));
 	const runningTurn: WireTurn = {
+		startedAt: 1,
 		id: "active",
 		threadId: thread.id,
 		status: "inProgress",
@@ -98,6 +100,7 @@ test("a rejected turn's payload reference is released", () => {
 	entries.length = 0;
 	add(0, "😀".repeat(20_000));
 	const runningTurn = (text: string): WireTurn => ({
+		startedAt: 1,
 		id: "active",
 		threadId: thread.id,
 		status: "inProgress",

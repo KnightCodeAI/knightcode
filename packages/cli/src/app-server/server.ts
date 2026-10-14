@@ -15,7 +15,6 @@ import {
 	type NotificationMethod,
 	type NotificationParams,
 	type ParamsOf,
-	PROTOCOL_VERSION,
 	type RequestId,
 	type ResultOf,
 	type ServerRequestMethod,
@@ -23,6 +22,7 @@ import {
 	type ServerRequestResult,
 	ServerRequests,
 } from "@knightcode/app-server-protocol";
+import { arch, homedir } from "node:os";
 import type { TSchema } from "typebox";
 import { Compile } from "typebox/compile";
 import { AppServerError, SubscriberGone } from "./errors.ts";
@@ -96,6 +96,7 @@ export class AppServer implements Subscriber {
 	private readonly transport: Transport;
 	private readonly options: AppServerOptions;
 	private state: "new" | "initializing" | "ready" | "closed" = "new";
+	private optedOut: ReadonlySet<string> = new Set();
 	private nextRequestId = 1;
 	private readonly outgoing = new Map<RequestId, Outgoing>();
 	/** Requests accepted and not yet answered; after EOF, output closes once this is empty (§5.6). */
@@ -113,7 +114,7 @@ export class AppServer implements Subscriber {
 	}
 
 	notify<M extends NotificationMethod>(method: M, params: NotificationParams<M>): void {
-		if (this.state === "ready") this.transport.send({ method, params });
+		if (this.state === "ready" && !this.optedOut.has(method)) this.transport.send({ method, params });
 	}
 
 	request<M extends ServerRequestMethod>(
@@ -256,13 +257,12 @@ export class AppServer implements Subscriber {
 			const result = value instanceof Commit ? value.run() : value;
 			this.transport.send({ id, result });
 		} catch (error) {
-			if (this.state === "closed" && !(error instanceof AppServerError && error.code === "versionMismatch")) return;
+			if (this.state === "closed") return;
 			const failure =
 				error instanceof AppServerError
 					? { code: error.code, message: error.message, ...(error.data === undefined ? {} : { data: error.data }) }
 					: { code: "internal" as const, message: error instanceof Error ? error.message : String(error) };
 			this.transport.send({ id, error: failure });
-			if (failure.code === "versionMismatch") this.close();
 		} finally {
 			this.unfinishedAnswers.delete(settle);
 		}
@@ -282,13 +282,11 @@ export class AppServer implements Subscriber {
 
 	private initialize(params: ParamsOf<"initialize">): ResultOf<"initialize"> {
 		if (this.state !== "new") throw new AppServerError("invalidParams", "already initialized");
-		if (params.protocolVersion !== PROTOCOL_VERSION) {
-			throw new AppServerError(
-				"versionMismatch",
-				`client speaks protocol ${params.protocolVersion}, server speaks ${PROTOCOL_VERSION}`,
-			);
-		}
+		this.optedOut = new Set(params.capabilities.optOutNotifications ?? []);
 		this.state = "initializing";
-		return { serverInfo: { name: "knightcode", version: this.options.version }, protocolVersion: PROTOCOL_VERSION };
+		return {
+			serverInfo: { name: "knightcode", version: this.options.version },
+			platform: { os: process.platform as "win32" | "darwin" | "linux", arch: arch(), homeDir: homedir() },
+		};
 	}
 }

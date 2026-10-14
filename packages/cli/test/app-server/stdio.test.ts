@@ -3,7 +3,6 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PROTOCOL_VERSION } from "@knightcode/app-server-protocol";
 import { afterEach, expect, test, vi } from "vitest";
 import { attachJsonlLineReader } from "../../src/modes/rpc/jsonl.ts";
 import { AppServerClient } from "../../src/app-server/client.ts";
@@ -77,7 +76,7 @@ async function handshakeAndThread(s: ReturnType<typeof spawnServer>): Promise<st
 	s.send({
 		id: 1,
 		method: "initialize",
-		params: { clientInfo: { name: "e2e", version: "0" }, protocolVersion: PROTOCOL_VERSION, capabilities: {} },
+		params: { clientInfo: { name: "e2e", version: "0" }, capabilities: {} },
 	});
 	await s.waitFor((m) => m.id === 1);
 	s.send({ method: "initialized", params: {} });
@@ -121,7 +120,7 @@ test("EOF answers a non-cooperative loading request with shuttingDown before the
 	s.send({
 		id: 1,
 		method: "initialize",
-		params: { clientInfo: { name: "e2e", version: "0" }, protocolVersion: PROTOCOL_VERSION, capabilities: {} },
+		params: { clientInfo: { name: "e2e", version: "0" }, capabilities: {} },
 	});
 	await s.waitFor((m) => m.id === 1);
 	s.send({ method: "initialized", params: {} });
@@ -180,10 +179,10 @@ test("a response sent just before stdin closes still reaches the client", async 
 	s.send({
 		id: 1,
 		method: "initialize",
-		params: { clientInfo: { name: "e2e", version: "0" }, protocolVersion: PROTOCOL_VERSION, capabilities: {} },
+		params: { clientInfo: { name: "e2e", version: "0" }, capabilities: {} },
 	});
 	s.child.stdin!.end();
-	expect((await s.waitFor((m) => m.id === 1)).result).toMatchObject({ protocolVersion: PROTOCOL_VERSION });
+	expect((await s.waitFor((m) => m.id === 1)).result).toMatchObject({ serverInfo: { name: "knightcode" } });
 	expect(await exited).toBe(0);
 }, 60_000);
 

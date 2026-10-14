@@ -1,4 +1,3 @@
-import { PROTOCOL_VERSION } from "@knightcode/app-server-protocol";
 import { expect, test } from "vitest";
 import { AppServerError } from "../../src/app-server/errors.ts";
 import { createInProcessClient, createInProcessPair } from "../../src/app-server/in-process.ts";
@@ -23,7 +22,7 @@ test("malformed initialized params cannot complete the handshake", async () => {
 	pair.client.send({
 		id: 1,
 		method: "initialize",
-		params: { clientInfo: { name: "t", version: "0" }, protocolVersion: PROTOCOL_VERSION, capabilities: {} },
+		params: { clientInfo: { name: "t", version: "0" }, capabilities: {} },
 	});
 	await tick();
 	pair.client.send({ method: "initialized", params: { typo: true } });
@@ -72,14 +71,14 @@ test("a malformed response to a server request rejects the pending request", asy
 	pair.client.send({
 		id: 1,
 		method: "initialize",
-		params: { clientInfo: { name: "t", version: "0" }, protocolVersion: PROTOCOL_VERSION, capabilities: {} },
+		params: { clientInfo: { name: "t", version: "0" }, capabilities: {} },
 	});
 	await tick();
 	pair.client.send({ method: "initialized", params: {} });
 	await tick();
 	const pending = server.request(
 		"item/toolCall/requestApproval",
-		{ threadId: "t", turnId: "u", itemId: "i", tool: "bash", input: {} },
+		{ threadId: "t", turnId: "u", itemId: "i", tool: "bash", input: {}, decisions: ["accept", "decline"] },
 		new AbortController().signal,
 	);
 	await tick();

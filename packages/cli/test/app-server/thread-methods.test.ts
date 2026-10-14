@@ -40,7 +40,7 @@ test("thread/read on a saved thread writes nothing and returns its turns", async
 	writeFileSync(file, before);
 	const a = await connect();
 	const read = await a.client.request("thread/read", { threadId: id });
-	expect(read.thread.status).toBe("notLoaded");
+	expect(read.thread.status).toEqual({ type: "notLoaded" });
 	expect(read.turns).toHaveLength(1);
 	expect(readFileSync(file, "utf8")).toBe(before);
 });

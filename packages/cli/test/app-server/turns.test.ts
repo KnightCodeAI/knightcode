@@ -1,12 +1,14 @@
 import { fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall } from "@knightcode/ai";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { Type } from "typebox";
 import type { ExtensionAPI } from "../../src/index.ts";
 import { SessionManager } from "../../src/core/session-manager.ts";
 import { TURN_MARKER_TYPE } from "../../src/extensions/turn-marker.ts";
+import { createHeldTurn } from "./fixtures/held-turn-extension.ts";
 import { routedFrom, virtualModelExtension } from "./fixtures/virtual-model-extension.ts";
 import { cleanupServers, startServer, type TestClient } from "./harness.ts";
 
@@ -24,6 +26,8 @@ type LiveItem = {
 	status?: string;
 	parentItemId?: string;
 	output?: unknown;
+	startedAt?: number;
+	completedAt?: number;
 };
 const itemOf = (n: Note) => n.params.item as LiveItem;
 const isItemEvent = (n: Note) => n.method === "item/started" || n.method === "item/completed";
@@ -66,6 +70,8 @@ async function expectReadBackMatches(c: TestClient, threadId: string): Promise<v
 	expect(new Set(live.keys())).toEqual(new Set(items.map((i) => i.id)));
 	for (const item of items) {
 		const seen = live.get(item.id)!;
+		expect(seen.startedAt).toBe(item.startedAt);
+		expect(seen.completedAt).toBe(item.completedAt);
 		if (item.type === "toolCall") {
 			expect(seen.status).toBe(item.status);
 			expect(seen.output).toEqual(item.output);
@@ -78,6 +84,8 @@ async function expectReadBackMatches(c: TestClient, threadId: string): Promise<v
 	expect(turns.map((t) => t.id)).toEqual(started);
 	const statuses = turnsCompleted(c).map((n) => (n.params.turn as { status: string }).status);
 	expect(turns.map((t) => t.status)).toEqual(statuses);
+	const outcomes = turnsCompleted(c).map((n) => n.params.turn as { startedAt: number; completedAt?: number });
+	expect(turns.map((t) => [t.startedAt, t.completedAt])).toEqual(outcomes.map((t) => [t.startedAt, t.completedAt]));
 }
 
 /** A promise and the function that resolves it: a gate a test opens, or a signal a hook gives. */
@@ -111,7 +119,10 @@ test("a turn emits its notifications in order and ends completed", async () => {
 });
 
 test("live ids equal read-back ids: tool call, thinking, a second message, and a steer sent mid-turn", async () => {
-	const { cwd, faux, connect } = await startServer({ tokensPerSecond: 40 });
+	const held = createHeldTurn();
+	const { cwd, faux, connect } = await startServer({
+		extraExtensions: [{ name: "held-turn", factory: held.extension }],
+	});
 	const a = await connect();
 	writeFileSync(join(cwd, "a.txt"), "hello world\n");
 	const { thread } = await a.client.request("thread/start", { cwd });
@@ -119,6 +130,7 @@ test("live ids equal read-back ids: tool call, thinking, a second message, and a
 		fauxAssistantMessage(
 			[
 				fauxThinking("plan the edit carefully"),
+				fauxToolCall("hold", {}),
 				fauxToolCall("edit", { path: "a.txt", edits: [{ oldText: "world", newText: "there" }] }),
 			],
 			{ stopReason: "toolUse" },
@@ -126,13 +138,21 @@ test("live ids equal read-back ids: tool call, thinking, a second message, and a
 		fauxAssistantMessage([fauxText("edited, and noted your steer")]),
 	]);
 	await a.client.request("turn/start", { threadId: thread.id, text: "edit it" });
-	await a.waitFor("turn/started");
-	await a.client.request("turn/steer", { threadId: thread.id, text: "also keep it short" });
+	const { turn } = await a.waitFor("turn/started");
+	await held.entered;
+	await a.client.request("turn/steer", {
+		threadId: thread.id,
+		expectedTurnId: (turn as { id: string }).id,
+		text: "also keep it short",
+	});
+	held.release();
 	await a.waitFor("turn/completed");
 	const userItems = a.notifications.filter((n) => n.method === "item/completed" && itemOf(n).type === "userMessage");
 	expect(userItems).toHaveLength(2);
 	expect(turnsCompleted(a)).toHaveLength(1);
-	const edited = a.notifications.find((n) => n.method === "item/completed" && itemOf(n).type === "toolCall");
+	const edited = a.notifications.find(
+		(n) => n.method === "item/completed" && itemOf(n).type === "toolCall" && itemOf(n).tool === "edit",
+	);
 	expect(edited?.params.item).toMatchObject({ fileChanges: [{ path: "a.txt", kind: "modify" }] });
 	await expectReadBackMatches(a, thread.id);
 });
@@ -182,8 +202,11 @@ test("a message_end handler that replaces a tool result changes the live complet
 	await expectReadBackMatches(a, thread.id);
 });
 
-test("an automatic retry and a follow-up stay inside one turn", async () => {
-	const { cwd, faux, agentDir, connect } = await startServer({ tokensPerSecond: 40 });
+test("an automatic retry and a steer stay inside one turn", async () => {
+	const held = createHeldTurn();
+	const { cwd, faux, agentDir, connect } = await startServer({
+		extraExtensions: [{ name: "held-turn", factory: held.extension }],
+	});
 	// The retry settings and retryable error text of test/suite/agent-session-retry-events.test.ts.
 	writeFileSync(
 		join(agentDir, "settings.json"),
@@ -192,12 +215,19 @@ test("an automatic retry and a follow-up stay inside one turn", async () => {
 	const a = await connect();
 	const { thread } = await a.client.request("thread/start", { cwd });
 	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("hold", {})], { stopReason: "toolUse" }),
 		fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded_error" }),
 		fauxAssistantMessage([fauxText("recovered after the retry")]),
-		fauxAssistantMessage([fauxText("and the follow-up")]),
 	]);
 	await a.client.request("turn/start", { threadId: thread.id, text: "go" });
-	await a.client.request("turn/followUp", { threadId: thread.id, text: "then this" });
+	const { turn } = await a.waitFor("turn/started");
+	await held.entered;
+	await a.client.request("turn/steer", {
+		threadId: thread.id,
+		expectedTurnId: (turn as { id: string }).id,
+		text: "then this",
+	});
+	held.release();
 	await a.waitFor("turn/completed");
 	expect(a.notifications.filter((n) => n.method === "turn/started")).toHaveLength(1);
 	expect(a.notifications.some((n) => n.method === "turn/retry")).toBe(true);
@@ -537,4 +567,359 @@ test("thread/fork at an item copies the branch up to that item into a new thread
 	expect(forked.id).not.toBe(thread.id);
 	const read = await a.client.request("thread/read", { threadId: forked.id });
 	expect(read.turns).toHaveLength(1);
+});
+
+test("turn and item times agree live and read back, including provider error kinds", async () => {
+	const { cwd, faux, agentDir, connect } = await startServer();
+	writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ retry: { enabled: false } }));
+	const a = await connect();
+	writeFileSync(join(cwd, "a.txt"), "one\n");
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("read", { path: "a.txt" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("read it")]),
+	]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "read a.txt" });
+	const done = (await a.waitFor("turn/completed")).turn as { startedAt: number; completedAt: number };
+	expect(done.completedAt).toBeGreaterThanOrEqual(done.startedAt);
+	await expectReadBackMatches(a, thread.id);
+	const call = (await a.readTurns(thread.id))[0].items.find((i) => i.type === "toolCall")!;
+	expect(call.startedAt).toBeDefined();
+	expect(call.completedAt!).toBeGreaterThanOrEqual(call.startedAt!);
+	for (const [message, kind] of [
+		["429 Too Many Requests", "rateLimit"],
+		["prompt is too long: 210000 tokens > 200000 maximum", "contextOverflow"],
+	]) {
+		faux.setResponses([fauxAssistantMessage("", { stopReason: "error", errorMessage: message })]);
+		const completedIds = new Set(turnsCompleted(a).map((n) => (n.params.turn as { id: string }).id));
+		await a.client.request("turn/start", { threadId: thread.id, text: "again" });
+		const failed = (await a.waitFor("turn/completed", (p) => !completedIds.has((p.turn as { id: string }).id)))
+			.turn as { error: { kind: string; message: string } };
+		expect(failed.error.kind).toBe(kind);
+		expect((await a.readTurns(thread.id)).at(-1)!.error).toEqual(failed.error);
+	}
+});
+
+test("an extension message keeps its time live and read back", async () => {
+	const { cwd, faux, connect } = await startServer({
+		extraExtensions: [
+			{
+				name: "note",
+				factory: (k) => {
+					k.on("agent_start", () => k.sendMessage({ customType: "note", content: "noted", display: true }));
+				},
+			},
+		],
+	});
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([fauxAssistantMessage([fauxText("ok")])]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "hi" });
+	await a.waitFor("turn/completed");
+	await expectReadBackMatches(a, thread.id);
+	expect((await a.readTurns(thread.id))[0].items.find((i) => i.type === "extensionMessage")?.completedAt).toBeTypeOf(
+		"number",
+	);
+});
+
+test("an idle compaction keeps its durable time live and read back", async () => {
+	const { cwd, faux, threads, agentDir, connect } = await startServer();
+	writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ compaction: { keepRecentTokens: 1 } }));
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([fauxAssistantMessage("one"), fauxAssistantMessage("summary")]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "hi" });
+	await a.waitFor("turn/completed");
+	await a.client.request("thread/compact", { threadId: thread.id });
+	const live = (await a.waitFor("item/completed", (p) => (p.item as { type: string }).type === "compaction")).item as {
+		id: string;
+		completedAt: number;
+	};
+	const entry = threads
+		.get(thread.id)
+		.session.sessionManager.getBranch()
+		.findLast((e) => e.type === "compaction")!;
+	expect(live.completedAt).toBe(Date.parse(entry.timestamp));
+	expect((await a.readTurns(thread.id)).flatMap((t) => t.items).find((i) => i.id === live.id)?.completedAt).toBe(
+		live.completedAt,
+	);
+});
+
+test("nested calls have live times but no read-back items", async () => {
+	const held = createHeldTurn();
+	const { cwd, faux, threads, connect } = await startServer({
+		extraExtensions: [{ name: "held", factory: held.extension }],
+	});
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("hold", {}, { id: "parent-1" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage("done"),
+	]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "go" });
+	try {
+		await held.entered;
+		const mapper = threads.get(thread.id).mapper;
+		mapper.handle({
+			type: "tool_execution_start",
+			toolCallId: "nested-1",
+			toolName: "read",
+			args: {},
+			parentToolCallId: "parent-1",
+		});
+		mapper.handle({
+			type: "tool_execution_end",
+			toolCallId: "nested-1",
+			toolName: "read",
+			result: { content: [{ type: "text", text: "ok" }], details: {} },
+			isError: false,
+		});
+	} finally {
+		held.release();
+	}
+	await a.waitFor("turn/completed");
+	const nested = a.notifications
+		.filter((n) => n.method === "item/completed" && itemOf(n).id === "nested-1")
+		.map(itemOf);
+	expect(nested).toHaveLength(1);
+	expect(nested[0].completedAt!).toBeGreaterThanOrEqual(nested[0].startedAt!);
+	expect((await a.readTurns(thread.id)).flatMap((t) => t.items).some((i) => i.id === "nested-1")).toBe(false);
+});
+
+test("a lost end entry reads interrupted without completedAt", async () => {
+	const held = createHeldTurn();
+	const { cwd, faux, threads, connect } = await startServer({
+		extraExtensions: [{ name: "held", factory: held.extension }],
+	});
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("hold", {})], { stopReason: "toolUse" }),
+		fauxAssistantMessage("done"),
+	]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "go" });
+	try {
+		await held.entered;
+		writeFileSync(`${threads.get(thread.id).file!}.lock-owner`, "replacement-owner");
+	} finally {
+		held.release();
+	}
+	const live = (await a.waitFor("turn/completed")).turn as { completedAt?: number };
+	expect(live.completedAt).toBeTypeOf("number");
+	await vi.waitFor(() => expect(threads.loadedCount()).toBe(0));
+	const [turn] = await a.readTurns(thread.id);
+	expect(turn.status).toBe("interrupted");
+	expect(turn.completedAt).toBeUndefined();
+});
+
+test.each(["completed", "failed", "interrupted"])(
+	"sidebar receives a bounded %s outcome without subscribing",
+	async (expectedStatus) => {
+		const held = createHeldTurn();
+		const { cwd, faux, threads, agentDir, connect } = await startServer({
+			extraExtensions: [{ name: "held", factory: held.extension }],
+		});
+		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ retry: { enabled: false } }));
+		const a = await connect();
+		const sidebar = await connect();
+		const { thread } = await a.client.request("thread/start", { cwd });
+		faux.setResponses([
+			expectedStatus === "interrupted"
+				? fauxAssistantMessage([fauxToolCall("hold", {})], { stopReason: "toolUse" })
+				: expectedStatus === "failed"
+					? fauxAssistantMessage("", { stopReason: "error", errorMessage: "401 Unauthorized" })
+					: fauxAssistantMessage("done"),
+		]);
+		await a.client.request("turn/start", { threadId: thread.id, text: "go" });
+		try {
+			if (expectedStatus === "interrupted") {
+				await held.entered;
+				await a.client.request("turn/interrupt", { threadId: thread.id });
+			}
+		} finally {
+			held.release();
+		}
+		const outcome = (await sidebar.waitFor("thread/turn/completed")).turn;
+		const latest = (await sidebar.readTurns(thread.id)).at(-1)!;
+		const { items: _items, ...summary } = latest;
+		expect(outcome).toEqual(summary);
+		expect(latest.status).toBe(expectedStatus);
+		expect(outcome).not.toHaveProperty("payload");
+		expect(sidebar.notifications.some((n) => n.method === "turn/completed" || n.method.startsWith("item/"))).toBe(
+			false,
+		);
+		const count = threads.loadedCount();
+		const subscribers = threads.get(thread.id).subscribers.size;
+		const fresh = await connect();
+		expect((await fresh.readTurns(thread.id)).at(-1)).toEqual(latest);
+		expect(threads.loadedCount()).toBe(count);
+		expect(threads.get(thread.id).subscribers.size).toBe(subscribers);
+	},
+);
+
+test("sidebar error messages are capped at 2000 characters", async () => {
+	const { cwd, faux, agentDir, connect } = await startServer();
+	writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ retry: { enabled: false } }));
+	const a = await connect();
+	const sidebar = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([fauxAssistantMessage("", { stopReason: "error", errorMessage: "x".repeat(10000) })]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "go" });
+	const outcome = (await sidebar.waitFor("thread/turn/completed")).turn as { error: { message: string } };
+	expect(outcome.error.message.length).toBeLessThanOrEqual(2000);
+});
+
+// Valid 2x2 PNG from image-processing.test.ts; the plan's signature-only sample cannot be decoded.
+const PNG = Buffer.from(
+	"iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAABIeJ9nAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURf8AAP///0EdNBEAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gEOADM5Ddoh/wAAAAxJREFUCNdjYGBgAAAABAABJzQnCgAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wMS0xNFQwMDo1MTo1NyswMDowMOnKzHgAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDEtMTRUMDA6NTE6NTcrMDA6MDCYl3TEAAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTAxLTE0VDAwOjUxOjU3KzAwOjAwz4JVGwAAAABJRU5ErkJggg==",
+	"base64",
+);
+const userItems = (c: TestClient) =>
+	c.notifications
+		.filter((n) => n.method === "item/completed" && itemOf(n).type === "userMessage")
+		.map((n) => n.params.item as { text: string; clientMessageId?: string });
+
+test("an edit carries its diff live and read back", async () => {
+	const { cwd, faux, connect } = await startServer();
+	const a = await connect();
+	writeFileSync(join(cwd, "a.txt"), "hello world\n");
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("edit", { path: "a.txt", edits: [{ oldText: "world", newText: "there" }] })], {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage("done"),
+	]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "edit" });
+	await a.waitFor("turn/completed");
+	const live = [...completedItems(a).values()].find((i) => i.tool === "edit") as LiveItem & {
+		fileChanges: { path: string; diff?: string }[];
+	};
+	expect(live.fileChanges[0].diff).toContain("-hello world");
+	expect(live.fileChanges[0].diff).toContain("+hello there");
+	const read = (await a.readTurns(thread.id))[0].items.find((i) => i.type === "toolCall") as { fileChanges: unknown };
+	expect(read.fileChanges).toEqual(live.fileChanges);
+});
+
+test("an extension tool reports fileChanges; malformed reports are ignored whole", async () => {
+	const diff = "@@ -1 +1 @@\n-a\n+b";
+	const { cwd, faux, connect } = await startServer({
+		extraExtensions: [
+			{
+				name: "report",
+				factory: (k) => {
+					k.registerTool({
+						name: "rename_symbol",
+						label: "Rename",
+						description: "Reports changes",
+						parameters: Type.Object({ ok: Type.Boolean() }),
+						execute: async (_id, params) => ({
+							content: [{ type: "text", text: "renamed" }],
+							details: params.ok
+								? {
+										fileChanges: [
+											{ path: "src/a.ts", kind: "modify", diff },
+											{ path: "src/new.ts", kind: "add" },
+										],
+									}
+								: { fileChanges: [{ path: "src/a.ts", kind: "rename" }] },
+						}),
+					});
+				},
+			},
+		],
+	});
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("rename_symbol", { ok: true }), fauxToolCall("rename_symbol", { ok: false })], {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage("done"),
+	]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "rename" });
+	await a.waitFor("turn/completed");
+	const calls = [...completedItems(a).values()].filter((i) => i.tool === "rename_symbol") as Array<
+		LiveItem & { fileChanges?: unknown }
+	>;
+	expect(calls[0].fileChanges).toEqual([
+		{ path: "src/a.ts", kind: "modify", diff },
+		{ path: "src/new.ts", kind: "add" },
+	]);
+	expect(calls[1].fileChanges).toBeUndefined();
+	const read = (await a.readTurns(thread.id))[0].items.filter((i) => i.type === "toolCall");
+	expect(read.map((i) => i.fileChanges)).toEqual(calls.map((i) => i.fileChanges));
+});
+
+test("clientMessageId follows message identity through templates and input hooks", async () => {
+	const { cwd, faux, agentDir, connect } = await startServer({
+		extraExtensions: [
+			{
+				name: "rewrite",
+				factory: (k) => {
+					k.on("input", (event) =>
+						event.text === "rewrite me" ? { action: "transform", text: "rewritten by a hook" } : { action: "continue" },
+					);
+				},
+			},
+		],
+	});
+	mkdirSync(join(agentDir, "prompts"), { recursive: true });
+	writeFileSync(join(agentDir, "prompts", "greet.md"), "Say hello to $1");
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([fauxAssistantMessage("one"), fauxAssistantMessage("two")]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "/greet Bob", clientMessageId: "c-1" });
+	await a.waitFor("turn/completed");
+	await a.client.request("turn/start", { threadId: thread.id, text: "rewrite me", clientMessageId: "c-2" });
+	await vi.waitFor(() => expect(turnsCompleted(a)).toHaveLength(2));
+	expect(userItems(a).map((u) => [u.text, u.clientMessageId])).toEqual([
+		["Say hello to Bob", "c-1"],
+		["rewritten by a hook", "c-2"],
+	]);
+	expect((await a.readTurns(thread.id)).flatMap((t) => t.items).some((i) => "clientMessageId" in i)).toBe(false);
+});
+
+test("an input a hook handles creates no message and echoes nothing", async () => {
+	const { cwd, connect } = await startServer({
+		extraExtensions: [
+			{
+				name: "swallow",
+				factory: (k) => {
+					k.on("input", (event) => (event.text === "skip me" ? { action: "handled" } : { action: "continue" }));
+				},
+			},
+		],
+	});
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	expect(
+		(await a.client.request("turn/start", { threadId: thread.id, text: "skip me", clientMessageId: "c-9" })).status,
+	).toBe("handled");
+	expect(userItems(a)).toEqual([]);
+});
+
+test("turn/start with an image path stores the image; a bad path starts nothing", async () => {
+	const { cwd, faux, connect } = await startServer();
+	const a = await connect();
+	const file = join(cwd, "shot.png");
+	writeFileSync(file, PNG);
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([fauxAssistantMessage("I see it")]);
+	await a.client.request("turn/start", {
+		threadId: thread.id,
+		text: "look",
+		images: [{ path: file }],
+		clientMessageId: "c-3",
+	});
+	await a.waitFor("turn/completed");
+	const user = (await a.readTurns(thread.id))[0].items.find((i) => i.type === "userMessage") as {
+		images: { mimeType: string; data: string }[];
+	};
+	expect(user.images).toEqual([{ mimeType: "image/png", data: PNG.toString("base64") }]);
+	expect(userItems(a)[0].clientMessageId).toBe("c-3");
+	await expect(
+		a.client.request("turn/start", { threadId: thread.id, text: "x", images: [{ path: join(cwd, "nope.png") }] }),
+	).rejects.toMatchObject({ code: "invalidParams" });
+	expect(a.notifications.filter((n) => n.method === "turn/started")).toHaveLength(1);
 });

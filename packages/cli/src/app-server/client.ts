@@ -8,7 +8,6 @@ import {
 	type WireItem,
 	type WireTurn,
 	type ParamsOf,
-	PROTOCOL_VERSION,
 	type RequestId,
 	type ResultOf,
 	type ServerRequestMethod,
@@ -54,11 +53,10 @@ export class AppServerClient {
 		this.transport.send({ method, params });
 	}
 
-	async initialize(name = "test"): Promise<ResultOf<"initialize">> {
+	async initialize(options: { name?: string; optOutNotifications?: string[] } = {}): Promise<ResultOf<"initialize">> {
 		const result = await this.request("initialize", {
-			clientInfo: { name, version: "0" },
-			protocolVersion: PROTOCOL_VERSION,
-			capabilities: {},
+			clientInfo: { name: options.name ?? "test", version: "0" },
+			capabilities: options.optOutNotifications ? { optOutNotifications: options.optOutNotifications } : {},
 		});
 		this.notify("initialized", {});
 		return result;

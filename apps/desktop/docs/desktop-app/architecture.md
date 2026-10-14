@@ -5,7 +5,12 @@ Date: 2026-10-10, revised 2026-10-11 after the IDE sunset (#313), a gap review
 and a design review (turn identity, shared model runtime, lock contract,
 thread lifecycle, snapshots, transport limits, Phase B git safety), followed
 by an implementation-risk review (canonical ownership, replacement
-cancellation, bounded history, start outcomes, listing and memory costs)
+cancellation, bounded history, start outcomes, listing and memory costs);
+revised 2026-10-13 (section 4.6) after a study of the Codex desktop app's
+protocol and UI, alongside the new [desktop-shell.md](./desktop-shell.md);
+revised 2026-10-15 to keep the server above the harness (section 4.7): the
+queue, error kinds and settings writes moved out of `packages/agent`,
+`packages/ai` and `AgentSession`, and the protocol lost its version number
 
 One long-lived process, `knightcode app-server`, hosts every KnightCode
 session on the machine that a client has opened. The desktop app talks to it
@@ -13,8 +18,9 @@ over stdio; the terminal CLI runs the same server in its own process over an
 in-memory transport. One protocol, one engine, every surface.
 
 This document covers the server, its protocol, and the move of the terminal
-CLI onto it. The Electron shell and its UI are a separate specification;
-section 9 lists what this one binds them to.
+CLI onto it. The Electron shell and its UI are specified in
+[desktop-shell.md](./desktop-shell.md); section 9 lists what this one binds
+them to.
 
 ---
 
@@ -70,6 +76,12 @@ Prior art, read for structure only; no code is copied:
     memory.
 15. OpenCode `packages/gui-extensions/README.md` — a desktop app whose
     terminal, review and browser are extensions on one public SDK.
+16. The Codex desktop app's bundled app server (`codex app-server
+    generate-ts`, codex-cli 0.162) — the protocol a shipped multi-thread
+    desktop client actually uses. Section 4.6 lists what this protocol adopts
+    from it, what it adapts, and what it deliberately leaves out. Its source
+    (`shenanigans/codex`, `codex-rs/app-server`, `codex-rs/ext/queue`) shows
+    where Codex puts each feature relative to its core.
 
 ---
 
@@ -199,12 +211,18 @@ type Response<R> =
 	| { id: RequestId; error: { code: ErrorCode; message: string; data?: unknown } };
 
 type ErrorCode =
-	| "invalidParams" | "methodNotFound" | "notInitialized" | "versionMismatch"
+	| "invalidParams" | "methodNotFound" | "notInitialized"
 	| "threadNotFound" | "threadLockedElsewhere" | "turnInProgress"
 	| "invalidCursor" | "payloadNotFound" | "archiveConflict"
 	| "authRequired" | "gitConflict" | "notGitRepo" | "toolMissing"
+	| "turnMismatch" | "configConflict" | "threadNotArchived"
 	| "shuttingDown" | "internal";
 ```
+
+`turnMismatch` answers a steer, follow-up or interrupt whose `expectedTurnId`
+or `turnId` names a turn that is not the running one (section 4.4).
+`configConflict` answers a `config/write` whose `expectedVersion` is stale.
+`threadNotArchived` answers `thread/delete` on a thread that is not archived.
 
 String envelope request ids are limited to 128 Unicode code points. History
 paging reserves 1,024 bytes for the envelope/id, including JSON escaping,
@@ -227,17 +245,28 @@ The first client message must be `initialize`:
 ```ts
 interface InitializeParams {
 	clientInfo: { name: string; version: string };
-	protocolVersion: number;
-	capabilities: { localHandles?: boolean }; // true only on the in-process transport
+	capabilities: {
+		localHandles?: boolean;               // true only on the in-process transport
+		optOutNotifications?: string[];       // exact notification method names this connection never receives
+	};
 }
 interface InitializeResult {
 	serverInfo: { name: "knightcode"; version: string };
-	protocolVersion: number;
+	platform: { os: "win32" | "darwin" | "linux"; arch: string; homeDir: string };
 }
 ```
 
-A different `protocolVersion` answers `versionMismatch` and closes the
-connection. The client then sends the `initialized` notification. Any other
+`optOutNotifications` is checked in the fan-out, before a notification is
+serialized: the terminal opts out of `thread/tokenUsage/updated` when its
+footer reads usage itself, a client that renders no reasoning opts out of
+`item/reasoning/delta`. Opting out of a sidebar notification only affects
+that connection. Unknown names are ignored, so a client written for a later
+protocol does not fail. `platform` lets a client shorten paths under
+`homeDir` and label shells without asking the host OS itself.
+
+There is no protocol version, as in Codex's app server: the desktop app
+bundles its server, and a client that needs a newer one compares
+`serverInfo.version`. The client then sends the `initialized` notification. Any other
 method before that answers `notInitialized`.
 
 ### 4.2 Data types
@@ -248,39 +277,73 @@ interface Thread {
 	cwd: string;                // the worktree path for a worktree thread
 	projectCwd: string;         // the project the thread belongs to; equals cwd for a local thread
 	name: string;               // session name, or first line of the first message
-	status: "notLoaded" | "idle" | "active";
+	status: ThreadStatus;
 	archived: boolean;
+	createdAt: string;          // ISO 8601, from the session header
 	updatedAt: string;          // ISO 8601
-	workspace: { mode: "local" } | { mode: "worktree"; path: string; branch: string; baseRef: string }; // baseRef: a commit SHA (6.1)
+	forkedFromId?: string;      // the parent's header id (never parsed from a file name); absent when the parent is gone
+	workspace:
+		| { mode: "local" }
+		| { mode: "worktree"; path: string; branch: string; baseRef: string; // baseRef: a commit SHA (6.1)
+		    carriedLocalChanges?: boolean; setupFailed?: boolean };
 	approvalMode: ApprovalMode;
 	model?: ModelRef;
 	thinkingLevel: ThinkingLevel;
 }
 
+type ThreadStatus =
+	| { type: "notLoaded" }
+	| { type: "idle" }
+	| { type: "active"; waitingOn: ("approval" | "dialog")[] }
+	| { type: "systemError"; message: string };
+
 interface Turn {
 	id: string;
 	threadId: string;
 	status: "inProgress" | "completed" | "interrupted" | "failed";
-	error?: string;
+	error?: TurnError;
+	startedAt: number;          // Unix ms: the marker entry's timestamp
+	completedAt?: number;       // Unix ms: the end entry's timestamp
 	items: Item[];              // filled on thread/read; empty on turn/started
 }
 
-type Item =
-	| { type: "userMessage"; id: string; text: string; images: ImageRef[] }
+interface TurnError {
+	message: string;
+	kind: "auth" | "rateLimit" | "contextOverflow" | "network" | "provider" | "other";
+}
+
+interface ItemTimes { startedAt?: number; completedAt?: number } // Unix ms, section 4.2 "Timestamps"
+
+type Item = ItemTimes & (
+	| { type: "userMessage"; id: string; text: string; images: ImageRef[]; clientMessageId?: string }
 	| { type: "agentMessage"; id: string; text: string }
 	| { type: "reasoning"; id: string; text: string }
 	| { type: "toolCall"; id: string; tool: string; input: unknown;
 	    status: "pending" | "running" | "completed" | "failed" | "declined";
 	    output: ToolOutput[]; parentItemId?: string;
-	    fileChanges?: { path: string; kind: "add" | "modify" | "delete" }[]; view?: View }
+	    fileChanges?: FileChange[]; view?: View }
 	| { type: "compaction"; id: string; summary: string }
-	| { type: "extensionMessage"; id: string; extension: string; text: string; view?: View };
+	| { type: "extensionMessage"; id: string; extension: string; text: string; view?: View });
+
+interface FileChange {
+	path: string;
+	kind: "add" | "modify" | "delete";
+	diff?: string;              // unified diff of this file from the tool's result
+}
 
 type ApprovalMode = "ask" | "autoEdit" | "fullAccess";
 type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 interface ModelRef { provider: string; id: string; name: string; contextWindow: number }
 type ToolOutput = { type: "text"; text: string } | { type: "image"; mimeType: string; data: string };
 interface ImageRef { mimeType: string; data: string } // base64, as the session file stores images
+type ImageInput = ImageRef | { path: string };         // a client-side file the server reads (section 4.4)
+
+interface TokenUsage {
+	input: number; output: number; cacheRead: number; cacheWrite: number;
+	cost: number;               // USD, as the provider usage reports it; 0 when unknown
+	contextTokens?: number;     // tokens of the last request's context; absent until the first reply
+	contextWindow: number;
+}
 
 interface PayloadRef {
 	id: string;                 // opaque capability, not a path or a client-selected file name
@@ -290,7 +353,8 @@ interface ItemReference {
 	type: "itemReference"; id: string; itemType: Item["type"]; payload: PayloadRef;
 }
 interface TurnSummary {
-	id: string; threadId: string; status: Turn["status"]; error?: string;
+	id: string; threadId: string; status: Turn["status"]; error?: TurnError;
+	startedAt: number; completedAt?: number;
 }
 interface TurnReference extends TurnSummary { payload: PayloadRef }
 type WireItem = Item | ItemReference;
@@ -304,6 +368,78 @@ interface TurnStartResult {
 
 `ThinkingLevel` mirrors `@knightcode/agent` by value. A protocol test asserts
 the two unions are equal so they cannot drift.
+
+`ThreadStatus` is an object so the sidebar can tell blocked from busy without
+subscribing: `waitingOn` lists the kinds of server request currently open on
+the thread (an approval, an extension dialog), and every change to it is a
+`thread/status/changed`. `systemError` is entered when the server unloads a
+thread for a reason the user must see (its lock was lost, section 5.5; a
+reload after a crash failed) and is left by the next successful load.
+
+#### Timestamps
+
+Every message in the session file carries `timestamp` (Unix ms), and custom
+entries carry the entry's own, so times read back exactly as they streamed:
+
+- A turn starts at its marker's timestamp and completes at its end entry's,
+  including a marker the mapper wrote itself when the built-in did not. A
+  turn whose end entry could not be written (its lock was lost) completes live
+  at the time the run settled, and reads back `interrupted` with no
+  `completedAt`: the one case where live and read-back differ, as they already
+  do for its status.
+- An assistant message's `timestamp` is when its request started and its
+  `durationMs` how long the response took (`packages/ai/src/types.ts:589-596`).
+  Its `agentMessage` and `reasoning` items start at `timestamp` and complete
+  at `timestamp + durationMs` (absent `durationMs`: no `completedAt`).
+- `userMessage` items complete at the message's `timestamp`. `compaction`
+  items complete at the compaction entry's timestamp, which exists before
+  `compaction_end` is emitted. `extensionMessage` items complete at the custom
+  message's `timestamp`; its entry is written with that same timestamp
+  (`appendCustomMessageEntry` takes it), so read-back agrees. None of the
+  three carries `startedAt`.
+- A top-level `toolCall` starts when its assistant message completed
+  (`timestamp + durationMs`, else `timestamp`) and completes at its tool
+  result's `timestamp`, so its duration includes any time spent waiting for
+  approval. A nested call's times are live only, as the call is.
+
+#### Client message ids
+
+`clientMessageId` is never inferred from text: hooks transform input, skills
+and templates expand it, image processing appends hints, and commands consume
+it. It rides on the input that starts a turn (`turn/start`, a queued input):
+the thread holds it beside `pendingTurnRequestId`, the mapper takes it at
+`agent_start` and puts it on that turn's first `userMessage`. It is never
+persisted. An input that a command or hook handles starts no turn and echoes
+nothing; a removed queued input takes its id with it. Steers carry none.
+
+#### Turn error kind
+
+An assistant message records `errorMessage` and diagnostics but no HTTP
+status, and auto-retry already classifies errors by message pattern
+(`isRetryableAssistantError`, `packages/ai/src/utils/retry.ts`). So `kind`
+comes from `classifyAssistantError` in the turn-marker built-in
+(`packages/cli/src/extensions/turn-marker.ts`), with its own patterns: `isContextOverflow` (`packages/ai/src/utils/overflow.ts:137`) is
+`contextOverflow`; the provider-limit and rate patterns are `rateLimit`;
+authentication patterns (unauthorized, invalid or missing key, expired
+token) are `auth`; connection and stream failures are `network`; any other
+error is `provider`. `other` is for a run that failed without an assistant
+error (the prompt rejected) and for legacy string errors. One function serves both paths and the
+end entry stores the kind with the status. Clients choose an action from it
+("Sign in", "Compact and retry", "Retry") and never parse `message`.
+
+A failure thrown by a host hook (an extension's `prepareRequest`) is
+classified by its wording like any other. Pi's retry likewise retries one
+whose text looks transient; telling the two apart needs provenance on the
+message, a harness change that belongs upstream, not in this server.
+
+#### File change diffs
+
+`edit`'s result already carries a unified `patch` (`core/tools/edit.ts:208`);
+`fileChanges[].diff` is that patch for the file. A call whose diff makes the
+item larger than 64 KiB travels as an `ItemReference` like any other large
+item (section 5.9), so no second size rule is needed. `write` produces no patch, so its change carries no `diff`; the
+changes pane (section 6.2) is the complete view. Extension tools that report
+`fileChanges` in their result details may supply `diff` the same way.
 
 `View` is section 8.2.
 
@@ -382,6 +518,9 @@ So:
   block order. Clients order a turn's items by `index` and move an item when
   its `item/completed` index differs. Indexes of earlier messages never
   change. Nested calls carry no index; they render under `parentItemId`.
+  Streaming `item/started` may carry provisional `startedAt: Date.now()`;
+  `item/completed` replaces the placeholder's times, text, fileChanges and
+  index with the finalized values.
 - The finalized message decides, not the stream. `message_end` handlers may
   replace a message (`emitMessageEnd`), and the session saves the
   replacement. So `item/completed` takes an assistant message's text and
@@ -425,7 +564,7 @@ of the tree is Phase D's `thread/tree/read`.
 | `message_end` (custom, from `sendMessage`) | `item/started` + `item/completed` `extensionMessage`; `extension` is the message's `customType`; between runs it joins the last turn |
 | `message_update` `text_delta` | `item/agentMessage/delta` (an `agentMessage` item starts, with a provisional `index`, on its block's first delta) |
 | `message_update` `thinking_delta` | `item/reasoning/delta` (a `reasoning` item starts on its block's first delta) |
-| `message_end` (assistant) | first `item/removed` for every obsolete streamed block (gone or changed kind); then, in block order, `item/started` `toolCall` `pending` for each call, `item/started` for a new text/thinking block, and `item/completed` for every text/thinking item with finalized text and `index`; the assistant counter advances |
+| `message_end` (assistant) | first `item/removed` for every obsolete streamed block (gone or changed kind); then, in block order, `item/started` `toolCall` `pending` for each call, `item/started` for a new text/thinking block, and `item/completed` for every text/thinking item with finalized text and `index`; the assistant counter advances; then `thread/tokenUsage/updated` with the thread's accumulated usage and this request's context size |
 | `message_end` (tool result) | `item/completed` `toolCall` with status, output, and `fileChanges` for `edit` and `write`, from the saved result |
 | `tool_execution_start` | nothing for a top-level call (the snapshot shows it running); `item/started` `toolCall` `running` with `parentItemId` for a nested call |
 | `tool_execution_update` | `item/toolCall/outputDelta` |
@@ -436,12 +575,18 @@ of the tree is Phase D's `thread/tree/read`.
 | `session_info_changed` | `thread/name/updated` |
 | `thinking_level_changed` | `thread/settings/updated` |
 | extension event `model_select` | `thread/settings/updated`. There is no session event for a model change, and `appendModelChange` emits no `entry_appended`; the thread's hidden inline extension (section 5.4) listens for `model_select`, which also covers an extension's `setModel` |
-| `agent_settled` | `item/completed` `failed` for calls that never finished; `turn/completed` with the status of the turn's end entry, `thread/status/changed` `idle`, then `turn/diff/updated` when files changed while it ran (section 6.2) |
+| `agent_settled` | `item/completed` `failed` for calls that never finished; `turn/completed` to subscribers and `thread/turn/completed` to every initialized connection with one bounded outcome summary from the turn's end entry, then `thread/status/changed` `idle`, then `turn/diff/updated` when files changed while it ran (section 6.2) |
+
+Outside the session's events, the thread itself emits
+`thread/status/changed` whenever its open server requests change kind (the
+first approval or dialog opens, the last one resolves), so `waitingOn` is
+current in every sidebar.
 
 `agent_end` is not mapped: a turn ends when the session settles, after queued
 follow-ups. The engine's `forward()` (`sessions.ts:250-312`) is the starting
 point; the status comes from the end entry (section 4.2), so a live
-`turn/completed` and a later `thread/read` always agree.
+`turn/completed` and a later `thread/read` agree except when a lost lock
+prevents writing the end entry (section 4.2).
 
 The mapper keeps the running turn's items, including the text streamed so
 far, so `thread/resume` and `thread/read` can return a running turn as it
@@ -457,24 +602,31 @@ Phase A:
 
 | Method | Params → result |
 | --- | --- |
-| `thread/start` | `{cwd, workspace?, approvalMode?, model?, thinkingLevel?}` → `{thread}`; `thread.model` is absent when no model is available yet (section 5.2) |
-| `thread/resume` | `{threadId, cursor?}` → `{thread, turns, runningTurn?, nextCursor?}`; subscribes the connection; historical `turns` are paged independently of the complete current `runningTurn` snapshot (section 4.5) |
-| `thread/fork` | `{threadId, atItemId?}` → `{thread}` |
+| `thread/start` | `{cwd, workspace?, approvalMode?, model?, thinkingLevel?}` → `{thread, warnings}`; `thread.model` is absent when no model is available yet (section 5.2); `warnings` are the thread's load diagnostics (section 4.5) |
+| `thread/resume` | `{threadId, cursor?}` → `{thread, turns, runningTurn?, nextCursor?, queue, usage, warnings}`; `warnings` are the thread's load diagnostics, returned on every resume so each window that opens the thread sees them; `usage` is the thread's `TokenUsage` as the terminal footer computes it (`AgentSession.getSessionStats()`: every entry, compacted history included, so it matches what was billed; context from `getContextUsage()`); subscribes the connection; historical `turns` are paged independently of the complete current `runningTurn` snapshot (section 4.5) |
+| `thread/fork` | `{threadId, atItemId?}` → `{thread, warnings}` |
 | `thread/list` | `{cwd?, cursor?, archived?}` → `{threads, nextCursor?}`; each a `ThreadSummary` (`Thread` without workspace, approval mode, model and thinking level). Phase A explicitly scans full transcripts on an initial list to obtain names and first messages; it is not a lightweight metadata index. Continuations page a cached, immutable summary snapshot. With an explicit shared session directory, `cwd` filters by each header |
 | `thread/read` | `{threadId, cursor?}` → `{thread, turns, runningTurn?, nextCursor?}`; does not load, subscribe, lock or write the session file. `thread` is a `Thread` when the thread is loaded and a `ThreadSummary` when it is not: workspace, approval mode, model and thinking level live in session state that only a load restores |
-| `thread/unsubscribe` | `{threadId}` → `{}` |
+| `thread/unsubscribe` | `{threadId}` → `{status: "unsubscribed" \| "notSubscribed"}` |
 | `thread/archive` / `thread/unarchive` | `{threadId}` → `{}` |
+| `thread/delete` | `{threadId}` → `{}`; refuses before disturbing anything: an unarchived thread answers `threadNotArchived`, and a busy one `turnInProgress`, checked synchronously in the same step that enters the closing transition (section 5.6), so no turn can start between the check and the fence. Inside the transition it checks the file and busy again before disturbing anything, and a refusal there puts the thread back, still loaded and subscribed. Only then does it unload the thread, take the file's lock exclusively without reading or repairing the transcript, verify the header id, unlink, and broadcast `thread/deleted`. Another process's lock answers `threadLockedElsewhere`; an unlink failure keeps the file and answers `internal`. Clients confirm with the user first: it cannot be undone |
 | `thread/name/set` | `{threadId, name}` → `{}` |
 | `thread/settings/update` | `{threadId, model?, thinkingLevel?, approvalMode?}` → `{thread}`; also during a turn, applying from the next model request, as the terminal's `/model` does |
 | `thread/compact` | `{threadId, instructions?}` → `{}` |
-| `turn/start` | `{threadId, text, images?, requestId?}` → `TurnStartResult`; `started` means preflight accepted a run, `handled` means a command/input hook handled it without a run, and `cancelled` means the signal stopped it. The result names the effective thread and correlation token. `turn/started {turn, requestId?}` carries the same token for request-launched runs; its durable turn id still comes from the marker at `agent_start`, and it may precede the response. Only `started` requires a later completion. A busy turn/compaction or conflicting preflight answers `turnInProgress` |
-| `turn/steer` | `{threadId, text, images?}` → `{}`; `invalidParams` when no turn runs (use `turn/start`) |
-| `turn/followUp` | `{threadId, text, images?}` → `{}`; `invalidParams` when no turn runs |
-| `turn/interrupt` | `{threadId}` → `{}` |
+| `turn/start` | `{threadId, text, images?: ImageInput[], requestId?, clientMessageId?}` → `TurnStartResult`; `started` means preflight accepted a run, `handled` means a command/input hook handled it without a run, and `cancelled` means the signal stopped it. The result names the effective thread and correlation token. `turn/started {turn, requestId?}` carries the same token for request-launched runs; its durable turn id still comes from the marker at `agent_start`, and it may precede the response. Only `started` requires a later completion. A busy turn/compaction or conflicting preflight answers `turnInProgress`. Images given by path (`ImageInput`) are read before the start is admitted, so a bad path answers `invalidParams` and starts nothing; a `turn/interrupt` sent during that read (at most 20 MiB per image) finds no start to cancel |
+| `turn/steer` | `{threadId, expectedTurnId, text, images?}` → `{}`; hands the input to the running turn through the agent's own steering, where it cannot be taken back. `invalidParams` when no turn runs (use `turn/start`), `turnMismatch` when the running turn is not `expectedTurnId`. Images given by path are read before the input is admitted (as for `turn/start`) |
+| `turn/queue/add` | `{threadId, text, images?, clientMessageId?}` → `{queueId}`; the server holds the input and starts it as its own turn once the thread is idle, oldest first (at once on an idle thread). A queued input that fails to start is dropped with an `error` notification. `turn/interrupt` drops the queue |
+| `turn/queue/remove` | `{threadId, queueId}` → `{removed: boolean}`; removes a queued input that has not started. `removed: true` means it never starts; false means unknown, already started, or already removed. The queue lives in the server, so removal never races the agent loop. Editing a queued input is remove then re-add |
+| `turn/interrupt` | `{threadId, turnId?}` → `{}`; with `turnId`, `turnMismatch` when another turn runs, so a late click cannot stop the next turn |
 | `payload/read` | `{id, offset, maxBytes?}` → `{data, nextOffset?, eof}`; `data` is base64 for a bounded byte chunk of referenced UTF-8 JSON (section 5.9) |
-| `model/list` | `{}` → `{models}` |
+| `model/list` | `{}` → `{models, default}`; each model carries `thinkingLevels: ThinkingLevel[]`, the levels it accepts (`["off"]` for a model without reasoning), so a picker offers only those |
 | `command/list` | `{threadId}` → `{commands}` (extension commands, prompt templates, skills, as `commandsOf` builds them) |
-| `config/read` | `{cwd?}` → effective settings |
+| `config/read` | `{cwd?}` → `{settings, origins, versions, errors}`; settings, origins and each version come from one read of each file as it is now (never from state loaded earlier), so a version always matches the settings returned. `origins` maps each set dotted key to `"global"` or `"project"` (absent: default); `versions` is `{global, project?}`, a content hash of each file; `errors` are settings files that failed to parse, as `Warning`s with path and, when the runtime reports it, line and column |
+| `config/write` | `{scope: "global" \| "project", cwd?, key, value, expectedVersion?}` → `{version}`; `key` is a dotted path, `value` `null` deletes it. A stale `expectedVersion` answers `configConflict` and writes nothing. The compare and the write happen under the settings file's lock, also when the file does not exist yet, on a write queue shared by every settings manager in the process for that file (so a write queued earlier by a thread's manager lands first), and the call answers only once the server's settings reflect the file. Global writes go through the server's own settings manager. The file keeps its other keys |
+| `project/trust/read` | `{cwd}` → `{trusted: boolean \| null, needsTrust: boolean}`; `null` when the user has not decided |
+| `project/trust/set` | `{cwd, trusted}` → `{}`; records the decision in `ProjectTrustStore`, as the terminal's prompt does (`main.ts:854-891`); loaded threads in that project see it on their next load |
+| `file/search` | `{cwd, query, limit?, searchId?}` → `{files: {path, score, indices}[], truncated}`; fuzzy match over the files the `find` tool lists for `cwd` (gitignore respected), at most `limit` (default 50). A newer request with the same `searchId` makes the older one answer at once with no files, even while the listing is still running, and a listing nobody waits for any more is stopped. At most 2 listings run at once; listings are cached per cwd for 10 s, at most 8 cwds, and read at most 32 MiB of output. `truncated` is true when the 32 MiB output cap or 200,000-path cap was reached (cached) or `fd` failed after printing some files (served, not cached); `fd` failing with no output answers `internal` with its error output, never cached. The listing process is killed after 15 s and on shutdown; `fd` missing answers `toolMissing` |
+| `server/diagnostics` | `{}` → `{rssBytes, heapBytes, loadedThreads, loadingThreads, payloadFiles, payloadBytes, inactiveFactories, uptimeMs, listingFilesOpened, listingBytesScanned}`; the figures section 13 measures, observable in a shipped app. The two listing counters are running totals of the transcripts and parent headers the listing opened and the transcript bytes it scanned (section 5.10) |
 | `account/list` | `{}` → `{accounts}` |
 | `account/login/start` | `{provider, type: "oauth" \| "api_key"}` → `{loginId}`; progress as `account/login/updated` (a provider can offer both) |
 | `account/login/answer` | `{loginId, value}` → `{}` |
@@ -485,8 +637,13 @@ Phase B: section 6. Phase C: section 8. Phase D adds the terminal's remaining
 needs (section 7.2).
 
 Server to client notifications: `thread/started`, `thread/replaced`,
-`thread/status/changed`,
+`thread/status/changed`, `thread/deleted`, `thread/tokenUsage/updated`
+(`{threadId, turnId, usage: TokenUsage}`), `warning` (`{message, threadId?,
+source: "settings" | "extension" | "trust" | "server", path?, line?,
+column?}`: something the user should fix that did not fail a request, such as
+an extension that failed at runtime; routed as section 4.5 says),
 `thread/name/updated`, `thread/settings/updated`, `thread/archived`,
+`thread/turn/completed` (`{turn: TurnSummary}`, without items or payload),
 `turn/started`, `turn/completed`, `turn/retry`, `turn/queue/updated`,
 `turn/diff/updated` (Phase B; not in the Phase A schema), `item/started`,
 `item/completed` (both with the item's
@@ -511,10 +668,27 @@ Two kinds of notification:
 - Sidebar notifications go to every initialized connection, so a thread
   list stays current without subscribing to every thread: `thread/started`,
   `thread/status/changed`, `thread/name/updated`, `thread/archived`,
+  `thread/deleted`, `thread/turn/completed`, `warning` without a `threadId`,
   `account/login/updated`, `account/updated`.
 - Every other thread-scoped notification goes only to subscribers:
-  `thread/replaced`, `thread/settings/updated`, `turn/*`, `item/*`.
+  `thread/replaced`, `thread/settings/updated`, `turn/*`, `item/*`, and
+  `warning` with a `threadId`.
   `serverRequest/cancelled` goes to the connection the request went to.
+
+`thread/turn/completed` carries the same times, status and bounded typed
+error as `turn/completed`. Sidebar initialization reads the newest
+`thread/read` page for visible rows only, without loading or subscribing;
+`TurnReference` exposes the same summary without fetching its payload. No
+persisted outcome index or server-side unread state is needed.
+
+Warnings that arise while a thread loads (its project settings fail to
+parse, an extension fails to import or reports a warning, the project's own
+resources were skipped because it is not trusted yet) exist before any
+connection is subscribed, so a notification would reach no one. They are kept
+on the loaded thread as its load warnings and returned in the response of
+`thread/start`, `thread/resume` and `thread/fork`. Warnings after load go to
+the thread's subscribers. `config/read` returns settings parse errors in its
+own result, so the settings screen shows them without a thread.
 
 History cursors are opaque, versioned anchors, not offsets from a moving
 end. Each binds the thread id, branch-tip entry id at the initial read, last
@@ -532,7 +706,10 @@ and nested calls, represented inline or by an immutable `TurnReference`.
 Historical pages exclude that turn, so it appears once. Even a resume with
 an old cursor supplies the current running snapshot. The server freezes the
 snapshot, validates the cursor, and subscribes in the synchronous commit
-that writes the response; invalid cursors establish no subscription. The
+that writes the response. That commit also computes required `queue: TurnQueue`
+(`steering` texts and `followUp` `{id, text}` entries) from live state, never
+from history or handler-entry state. An empty snapshot clears stale client
+queue entries; invalid cursors establish no subscription or queue snapshot. The
 first subsequent notification is the next change. When a snapshot is a
 reference, the client buffers subsequent notifications while fetching its
 chunks, installs it, then replays those notifications in order. Payload
@@ -587,7 +764,108 @@ what `AgentSessionRuntime` does in the terminal, in the same order:
    Target interrupt/unload and process shutdown cancel it there; completion
    removes it from its current owner's set, not its original owner's set.
 
+### 4.6 What the Codex study added
+
+Nothing has shipped against the protocol, so these changes were made in place
+and the sections above already describe them; there is no version number to
+bump (4.1). This section is the list of what the Codex study added after
+Phase A, for the implementer of Phase A2 (section 10).
+
+Each change exists because a shipped multi-thread desktop client needed it.
+The Codex desktop app's bundled server was the reference: where it has the
+same capability, its shape was weighed; where KnightCode's design is already
+stronger, it was left alone (end of this section).
+
+| Change | Why |
+| --- | --- |
+| `ThreadStatus` becomes an object with `active.waitingOn` and `systemError` (4.2) | With twenty threads, the sidebar must show which are blocked on the user without subscribing to them. Codex: `activeFlags` `waitingOnApproval`, `waitingOnUserInput` |
+| `Thread.createdAt`, `forkedFromId` (4.2) | Sort by creation; show "Forked from" |
+| `Turn.startedAt`, `completedAt`; item `startedAt`, `completedAt` (4.2) | "Worked for 2m", "Ran in 4.2s"; read back from message timestamps, so live and read-back agree |
+| `Turn.error` becomes `TurnError {message, kind}` (4.2) | A client picks "Sign in" or "Compact and retry" from `kind` instead of matching text. Codex's desktop matches error text to detect a missing capability, which is the failure this prevents |
+| `thread/turn/completed` sidebar summary, initialized by newest-page `thread/read` (4.3–4.5) | Every window sees failed and unread outcomes without subscribing to every thread |
+| `FileChange.diff` (4.2) | Inline per-file diffs in the transcript without a git call per tool row |
+| `ImageInput` adds `{path}` (4.2, 4.4) | A 4K screenshot is about 8 MiB as base64 inside one `turn/start` line; the server and client share a disk, so the client sends the path. Codex: `localImage {path}` |
+| `clientMessageId` on `turn/start` and `turn/queue/add`, echoed on the turn's first `userMessage` (live only), never matched by text (4.2) | Optimistic rendering of a sent message, reconciled when the item arrives |
+| `expectedTurnId` on steer, `turnId` on interrupt, `turnMismatch` (4.1, 4.4) | A steer typed while turn 1 ends must not land in turn 2; an interrupt clicked late must not stop the next turn. Codex: `expectedTurnId` is required on steer |
+| Required live `queue: TurnQueue` on resume at the synchronous send commit; a server-side queue: `turn/queue/add` returns `queueId`, each input starts its own turn when the thread is idle, `turn/queue/remove`; `turn/queue/updated` carries undelivered steers as text and queued inputs as `{id, text}` (4.4) | The composer edits and deletes queued messages. Codex keeps its queue above its core (`codex-rs/ext/queue`, `thread_queue_processor.rs`; the core only offers "start if idle"), and so does this server: no agent-loop change, nothing to withdraw from a loop that already drained it |
+| `thread/tokenUsage/updated`, `TokenUsage` (4.3, 4.4) | A context ring and cost per thread, pushed after each reply. Replaces Phase D's `thread/contextUsage/read` and `thread/stats/read` pulls (section 7.2) |
+| `model/list` `thinkingLevels` per model (4.4) | The picker offers only levels the model accepts |
+| Approval `decisions`, `reason`, command `prefix`, decline `message`, `acceptPrefixForSession` (5.4) | `acceptForSession` on `bash` approves every shell command, which makes `ask` meaningless after one click. Codex: "Allow commands that start with …" |
+| `config/read` origins, versions and parse errors from one read, `config/write`, `configConflict`, load warnings in `thread/start`/`resume`/`fork` results, `warning` (4.4, 4.5) | The settings UI edits settings through the server that owns them, without clobbering a concurrent edit, and shows where a value comes from |
+| `project/trust/read`, `project/trust/set` (4.4) | The desktop's trust prompt (desktop-shell.md section 9.12) without a desktop-side trust store |
+| `file/search` (4.4) | `@` file mentions in the composer. Codex: `fuzzyFileSearch` |
+| `thread/delete`, `thread/deleted`, `threadNotArchived` (4.1, 4.4) | Users remove threads for good; restricting it to archived threads makes deletion a two-step act |
+| `thread/unsubscribe` result status (4.4) | The desktop's main process counts holders (desktop-shell.md section 4.3) and needs to know whether it was subscribed |
+| `initialize` `optOutNotifications`, result `platform` (4.1) | Clients skip traffic they never render; paths and shell labels need the host's OS and home directory |
+| `server/diagnostics` (4.4) | Section 13's memory figures, observable in a shipped app |
+| Listing index (5.10) | Section 13 measured a 31.6 s initial `thread/list` at 10,000 sessions on Windows |
+| Worktree `carryLocalChanges`, include list, setup command, branch prefix (6.1) | A new worktree that lacks the user's uncommitted work or `.env` is unusable for the task; most projects need an install step |
+
+Considered and left out, with the reason:
+
+- Sandbox and permission profiles, network rules, an AI reviewer of approvals:
+  no OS sandbox in v1 (section 12). The classifier gate's decisions surface as
+  `reason` on approvals instead.
+- Server-side daemon, WebSocket and Unix socket listeners, remote control,
+  remote environments, `fs/*` and `process/*` methods: the server and its
+  clients share a machine in v1. When a shared daemon arrives, a stdio-to-socket
+  proxy subcommand is the cheapest client path.
+- Destructive `thread/revert`: the session tree already keeps every branch;
+  `thread/fork {atItemId}` and Phase D's tree navigation cover it.
+- Projects, sidebar sections and thread attachments on the server: sidebar
+  organisation is desktop state (desktop-shell.md section 7.3).
+- Typed tool items (command, file change, MCP call, web search): a generic
+  `toolCall` plus `view` keeps extension tools first-class. The desktop
+  renders built-in tools by name.
+- Separate reasoning summary and raw channels, message phases, plan items,
+  goals, memories, realtime voice, plugin marketplaces, scheduled runs.
+- Per-turn sticky overrides on `turn/start`: `thread/settings/update` is the
+  one way to change settings.
+- Numeric error codes: the string codes with `data` are more useful.
+- Typed `mention` and `skill` inputs: an `@` mention is text the composer
+  inserts (`file/search` finds the path), and a skill is invoked by its
+  slash command, which `turn/start` already expands.
+- A persistent "Always allow" approval across threads and restarts: approvals
+  last for the thread's load (5.4); a lasting allow list is a settings
+  change the user makes deliberately, not one click on a request.
+- A separate thinking duration ("Thought for 12s"): reasoning items carry
+  their assistant message's times, which include the reply after the
+  thinking, so the desktop labels the row "Thought" and the turn carries
+  "Worked for".
+
+Where KnightCode's protocol was already the stronger design, kept as is: item
+`index` and `item/removed`, byte limits and payload references, branch-anchored
+history cursors with a frozen running-turn snapshot, start dispositions and
+`thread/replaced`, the ownership-token lock, single-recipient approvals,
+SHA-pinned worktrees and handoff safety, declarative extension views.
+
 ---
+
+### 4.7 The harness boundary
+
+The harness (`packages/agent`, `packages/ai`, and `AgentSession`,
+`SessionManager` and `SettingsManager` in `packages/cli/src/core`) comes from
+pi and is resynced from it regularly, so every edit there is a merge conflict
+on every resync. The server is built on the harness's public API and the
+extension API, as Codex's `codex-rs/app-server` is built on `codex-core`.
+
+What multi-thread hosting genuinely needed went into the harness in Phase A:
+the session-file lock (section 5.3), a per-session extension runtime over the
+shared model runtime, and an abort signal on prompts. Everything else lives
+in `packages/cli/src/app-server/`:
+
+| Feature | Where |
+| --- | --- |
+| Queued input, removable until it starts | `LoadedThread.queued`, drained by `ThreadManager` (Codex: `ext/queue`) |
+| Steering | the session's own `steer()` |
+| Turn error kinds | `classifyAssistantError` in the turn-marker built-in |
+| Settings reads and compare-and-swap writes | `config.ts` over `FileSettingsStorage` and `SettingsManager.fromStorage` |
+| Optimistic message ids | `LoadedThread.pendingClientMessageId`, taken by the mapper at `agent_start` |
+| Extension message times | the mapper reads the saved entry one microtask after `message_end` |
+
+A new feature that seems to need a harness change first states why the
+server cannot do it. A genuine harness bug (for example, a host-hook failure
+retried as a network error) is fixed upstream in pi and arrives by resync.
 
 ## 5. Server internals
 
@@ -750,17 +1028,99 @@ as neither, so `ask` and `autoEdit` both ask for them.
 type ToolCallApprovalParams = {
 	threadId: string; turnId: string; itemId: string;
 	tool: string; parentItemId?: string;
+	reason?: string;                      // why this call needs a decision, when a gate gave one
+	prefix?: string;                      // shell tools only: the command prefix `acceptPrefixForSession` would allow
+	decisions: ("accept" | "acceptForSession" | "acceptPrefixForSession" | "decline")[];
 } & ({ input: unknown } | { inputRef: PayloadRef });
-interface ToolCallApprovalResult {
-	decision: "accept" | "acceptForSession" | "decline" | "cancel";
-}
+type ToolCallApprovalResult =
+	| { decision: "accept" | "acceptForSession" | "cancel" }
+	| { decision: "acceptPrefixForSession" }
+	| { decision: "decline"; message?: string };
 ```
 
 An approval carries exactly one of inline `input` and oversized `inputRef`;
 resolve the reference before presenting the decision. Both/none is invalid.
 
+`decisions` lists what the client may answer; any other answer is treated as
+`decline`. `cancel` is always allowed and never listed.
+
 `acceptForSession` adds the tool name to the thread's allow set until the
-thread unloads, as the engine's `allow_always` did.
+thread unloads, as the engine's `allow_always` did. It is not offered for
+`bash` and `powershell`: allowing the whole shell after one approval makes
+`ask` mean nothing. Shell tools get `acceptPrefixForSession` instead:
+
+- The rule fails closed: a prefix is offered only for a command form the
+  server positively recognises, and anything else is approved whole or not
+  at all.
+- No prefix when the command contains, anywhere, a character that can chain,
+  expand, quote, glob or redirect. In bash: `;` `&` `|` `` ` `` `<` `>` `(`
+  `)` `{` `}` `[` `]` `$` `\` `'` `"` `*` `?` `!` `#` `~` and newlines. In
+  PowerShell: `;` `&` `|` `` ` `` `<` `>` `(` `)` `{` `}` `[` `]` `$` `'`
+  `"` `@` and newlines. So `git commit -m "fix"` is always asked about; the
+  cost of a few extra questions is accepted.
+- No prefix when the first word assigns a variable (`PATH=/tmp npm test`).
+- The first word is classified by its program name: last path segment, lower
+  case, without `.exe`, `.cmd`, `.bat`, `.com` or `.ps1`, so
+  `C:\Python\python.exe` is `python` and `IEX` is `iex`.
+- A wrapper that runs another command or changes how one runs (`sudo`, `env`,
+  `xargs`, `find`, `timeout`, `nohup`, `source`, `.`, `exec`, `eval`,
+  `Invoke-Expression`, `Start-Process`, …) never gets a prefix.
+- An interpreter (`python`, `node`, `bash`, `sh`, `pwsh`, `cmd`, `npx`, `awk`,
+  …) gets one only together with the script or module it runs (`python
+  check.py`, `python -m pytest`, `npx cowsay`), and none when a flag comes
+  first (`python -c`, `bash -c`, `cmd /c`) or the script is itself a
+  dispatcher (`npx npm`).
+- A nested target that is itself a dispatcher (a wrapper, an interpreter, or
+  a multi-command tool such as `npm` or `git`) never ends a prefix: `uv run
+  npm test`, `npx npm test` and `uv run git status` get none, because a
+  prefix ending at `npm` or `git` would cover everything those can run
+  (`uv run npm exec node ...`, `uv run git push`).
+- A multi-command tool (`npm`, `pnpm`, `yarn`, `bun`, `git`, `cargo`, `go`,
+  `dotnet`, `uv`, `make`, `docker`, `kubectl`, `gh`) gets its first two words
+  (`npm test`, `git status`), none when a flag comes before the subcommand
+  (`git -C . status`, `bun -e`), and three words when the subcommand runs a
+  named script or package binary (`npm run build`, `go run main.go`, `uv run
+  pytest`), none when that target is missing or is a dispatcher (`uv run
+  python`, `uv run npm`). Which subcommands run a named target is listed per
+  tool (`npm run`/`exec`/`x`, `pnpm` and `yarn` `run`/`exec`/`dlx`, `bun
+  run`/`x`, `uv run`, `go run`, `cargo run`). Subcommands that run an
+  arbitrary command inside something else (`docker run`/`exec`, `kubectl
+  exec`/`run`/`debug`/`attach`, `dotnet exec`, `git submodule`, `gh
+  extension`/`alias`) never get a prefix.
+- `pip`, `pipx`, `poetry`, `pdm`, `hatch`, `conda` and `podman` are
+  multi-command tools too (`pip install`, `poetry run pytest`; `podman
+  run`/`exec` never), and `wsl`, `chroot`, `setsid`, `stdbuf`, `flock`,
+  `pkexec`, `systemd-run` and `busybox` are wrappers.
+- A program with no subcommands (`ls`, `cat`, `echo`, `grep`, `rg`,
+  `Get-ChildItem`, … listed in the code) gets its first word, as written.
+- Any other program might be a multi-command tool the lists miss, so it gets
+  its first two words, never its name alone: `pip install` must not cover
+  `pip uninstall`. None when the second word is a flag, missing or a
+  dispatcher, and three words when the second is a generic runner
+  subcommand (`run`, `exec`, `x`, `dlx`) followed by a named target.
+- A later command matches an allowed prefix only if it would itself be
+  offered exactly that prefix under these rules (case-insensitively in
+  PowerShell). `npm test` allows `npm test -- --ci`, not `npm testx`, not
+  `npm test && rm -rf build`, and not `PATH=/tmp npm test`; a stored prefix
+  shorter than the command's own (`pip` against `pip uninstall`) never
+  matches, whatever produced it.
+- The lists are the residual risk, but a gap in them narrows a prefix rather
+  than widening it: a name missing from the no-subcommand list only makes its
+  prefix longer. What remains is a program that runs other code through an
+  unlisted, non-generic subcommand (`mytool shell`). Adding a name to the
+  wrapper, interpreter, multi-command or dispatching-subcommand lists is
+  always safe. Approving a script runner (`npm run build`) trusts that
+  script's current and future content, which the agent can edit; the user
+  approves it by name.
+- The prefix set lives with the tool allow set and ends with it.
+
+`decline` with `message` blocks the call with "The user rejected this tool
+call: <message>", so the model learns what to do instead.
+
+`reason` names a fact that makes this call riskier than its tool suggests. The
+gate sets one: "Writes outside this thread's workspace" for an
+`edit` or `write` whose path resolves outside the thread's cwd. Gates that
+block (plan mode, the classifier) are unchanged and never produce a request.
 
 The mode is a property of the thread, stored as a custom entry
 `knightcode.approvalMode`. The effective mode is written when a thread is
@@ -956,8 +1316,9 @@ time on the thread's queue (`LoadedThread.exclusive`):
 - `thread/settings/update`, which does not need idle: it applies from the
   next model request, also mid-turn.
 
-`turn/interrupt`, `turn/steer` and `turn/followUp` do not queue: they act on
-the running turn.
+`turn/interrupt` and `turn/steer` do not wait in this queue: they act on the
+running turn. `turn/queue/add` holds its input in the thread's own list until
+the thread is idle, then starts it through the same `turn/start` path.
 
 Preflight can wait on an authentication check, asynchronous `input` or
 `before_agent_start` hooks, or an extension command, all while the session
@@ -1030,8 +1391,10 @@ new subscriptions.
 
 `turn/start` calls `session.prompt()` with the engine's preflight pattern
 (`sessions.ts:531-561`) inside the thread's queue: the request resolves once
-preflight passes, and the outcome is `turn/completed`. `turn/steer` and
-`turn/followUp` call the session's queues. `turn/interrupt` cancels every
+preflight passes, and the outcome is `turn/completed`. `turn/steer` calls the
+session's `steer()`. After every activity ends (a settled run, a released hold)
+the thread starts its oldest queued input if nothing else runs, one at a time.
+`turn/interrupt` drops the queued inputs, cancels every
 start not yet launched (section 5.6), aborts pending client requests and
 calls `session.abort()`; the end entry records the abort as `interrupted`.
 
@@ -1111,10 +1474,75 @@ miss scans the session directories.
 - End of input does not close output (section 5.6). `close("drain")` is the
   only path that ends output gracefully.
 - `close("drain")` delivers what was already sent, then closes;
-  `close("abort")` drops it. A `versionMismatch` answer drains, so the client
-  receives the error before the connection ends. Overflow aborts.
+  `close("abort")` drops it. Overflow aborts.
 - There is no limit on requests in flight per connection: the clients are
   the desktop app's main process and the terminal, which pace themselves.
+
+### 5.10 Listing index
+
+Section 13 measured what a full-transcript scan costs: 105 MB read and up to
+31.6 s for an initial `thread/list` of 10,000 sessions on Windows, on every
+app start. Almost all of those files had not changed since the last listing.
+
+Each session directory gets `.thread-index.json`, a cache of what a listing
+needs per file:
+
+```ts
+interface ThreadIndex {
+	version: 1;
+	entries: Record<string, {            // key: file name
+		size: number; mtimeMs: number;   // the file's stat when it was summarized
+		session: {                       // null: a .jsonl that is not a session
+			id: string; cwd: string;
+			title: string;               // the display title, at most 201 code points (titleOf)
+			forkedFromId?: string;       // the parent's header id, read once when the fork was scanned
+			created: string; modified: string; messageCount: number;
+		} | null;
+	}>;
+}
+```
+
+An entry stores the listing summary only, never the first message or any
+message text: a transcript whose first message is 100 MiB gives an entry of a
+few hundred bytes.
+
+- An initial `thread/list` reads the directory and stats every transcript,
+  which reads no file contents. An entry whose size and mtime match is used
+  as is; a new or changed file is scanned as today and its entry replaced; an
+  entry whose file is gone is dropped.
+- If anything changed, the index is written to a temporary file in the same
+  directory and renamed over the old one. A rename cannot be half-done, so a
+  reader sees the old index or the new one.
+- The index is a cache, never the source of truth. A missing, unparsable,
+  other-version or oversized (over 16 MiB, refused unread) index means a full
+  scan and a rewrite. Each entry is checked against a schema that rejects
+  unknown properties, its dates must parse and its title must be at most 201
+  code points; an entry that fails, even in an index that is valid JSON, is
+  treated as missing and its file rescanned. Records are rebuilt from the
+  named fields only, so nothing else in the file reaches memory. Loading a
+  thread still confirms the id from the file's header (section 5.8).
+- A fork's parent is identified by the parent's header, never by its file
+  name, which an imported or renamed transcript can make misleading. The
+  header is read when the fork is first scanned (at the parent's path, or its
+  `archived/` sibling, since archiving moves files without renaming them) and
+  cached as `forkedFromId`; a warm listing opens no transcript, parents
+  included. The listing counts every transcript and parent header it opens
+  (`server/diagnostics`), so this is measurable.
+- Writing the index is best effort: the listing is computed first, and a
+  failed write (read-only directory, rename refused) is ignored after removing
+  the temporary file. It only costs a rescan next time.
+- Concurrency is bounded across the whole listing, not per directory:
+  directories are listed one after another, each with at most 64 transcripts
+  open at once.
+- Two processes (the desktop's server and a terminal) may each rewrite it.
+  The last rename wins; both indexes are derived from the same files, so the
+  cost of a lost update is one more scan of the files it missed.
+- The archive directory has its own index. A move between the two (section
+  5.8) needs no index update: each side's next listing sees the change by
+  stat.
+
+Acceptance (section 13): a second initial listing of 10,000 unchanged
+sessions reads zero transcript bytes and opens zero transcripts.
 
 ---
 
@@ -1149,6 +1577,62 @@ instead (`SessionManager.create(worktreePath, projectSessionDir)`), and
 
 A cwd outside a git repository supports only `{mode: "local"}`; worktree mode
 answers `notGitRepo`.
+
+#### Starting from the user's uncommitted work
+
+`{mode: "worktree", carryLocalChanges: true}` starts the worktree from the
+main checkout as it is on disk, not as last committed. A user who asks for a
+fix to the file they are editing expects the agent to see that edit.
+
+The obvious way, applying the main checkout's diff inside the new worktree
+(Codex copies the diff and untracked files across), makes those edits
+uncommitted changes of the worktree. Every later diff and the handoff would
+then count them as the thread's work, and handing off would apply the user's
+own edits to their checkout a second time, which conflicts.
+
+So the server snapshots instead, with the temporary-index technique of
+section 6.2, which never touches the user's index or files:
+
+1. `GIT_INDEX_FILE=<temp copy>`, `git add -A`, `git write-tree`: a tree of
+   the working directory, tracked and untracked, not ignored.
+2. `git commit-tree <tree> -p <HEAD> -m "Local changes at thread start"`: a
+   commit no branch points to.
+3. That commit is `baseSha`, and the worktree is added at it as above.
+
+The thread's change set is then exactly what it did after the snapshot.
+Handoff (below) is unchanged: `apply` brings over only the thread's work, and
+`merge` brings the snapshot commit too, which a dirty main checkout already
+contains, so `merge` with `carryLocalChanges` answers `gitConflict` with
+`data.reason: "localChanges"` unless the main checkout's working tree still
+equals the snapshot tree. The thread records `carriedLocalChanges: true` in
+`workspace` so clients can say "Started from your uncommitted changes".
+
+#### Project worktree settings
+
+In the project's settings (`.knightcode/settings.json`, so only applied when
+the project is trusted) or the global ones:
+
+```ts
+interface WorktreeSettings {
+	branchPrefix?: string;     // default "kc/"; the branch is `<branchPrefix><threadId>`
+	include?: string[];        // gitignore-style patterns of ignored files to copy in, such as ".env"
+	setup?: string;            // a shell command run in the new worktree before the thread is returned
+}
+```
+
+- `include` copies matching ignored files from the main checkout after
+  `git worktree add`. Without it a worktree has no `.env`, no local config,
+  and the agent's first test run fails for a reason the user cannot see.
+- `setup` runs through the platform shell (`bash -c` or `powershell
+  -NoProfile -Command`, argument array) in the worktree, with a 10-minute
+  timeout. Its output streams as `thread/workspace/progress {threadId, phase:
+  "setup", output}` to the connection that started the thread. A failure
+  keeps the worktree and the thread, sets `workspace.setupFailed: true`, and
+  returns the thread with the last 4 KiB of output in a `warning`; the user
+  can still work in it or archive it.
+- An untrusted project's settings are not loaded (section 5.2), so its
+  `include` and `setup` do not apply. `project/trust/read` reports
+  `needsTrust`, and a client asks for trust before offering a worktree.
 
 `thread/worktree/handoff {threadId, strategy: "merge" | "apply"}` hands over
 the thread's whole change set: commits on `kc/<threadId>`, uncommitted edits
@@ -1210,9 +1694,9 @@ so in the result. Worktrees the app server did not create are never touched.
 
 | Method | Behaviour |
 | --- | --- |
-| `thread/diff/read {threadId}` | working tree against base (`HEAD` for local, `baseRef` for worktree): files, hunks, line ranges, binary flag |
+| `thread/diff/read {threadId}` | working tree against base (`HEAD` for local, `baseRef` for worktree): files, hunks, line ranges, binary flag. With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call |
 | `thread/diff/revert {threadId, path, hunk?}` | reverse-applies one hunk or restores one file |
-| `thread/diff/comment {threadId, comments}` | composes one follow-up message quoting each comment's anchored lines, then behaves as `turn/followUp` |
+| `thread/diff/comment {threadId, comments}` | composes one follow-up message quoting each comment's anchored lines, then behaves as `turn/queue/add` |
 
 `turn/diff/updated {threadId, turnId, files}` follows `turn/completed` when
 file contents changed while the turn ran (attribution below). Tool calls'
@@ -1294,8 +1778,9 @@ it lands: `thread/tree/read`, `thread/tree/navigate`, `thread/clone`,
 `thread/export`, `thread/import`, `thread/settings/update` fields for scoped
 models, steering mode, follow-up mode, auto-compaction, auto-retry and cache
 warming, `turn/queue/clear`, `turn/retry/abort`, `shell/exec` and
-`shell/abort` for `!` commands, `thread/contextUsage/read`,
-`thread/stats/read`.
+`shell/abort` for `!` commands. Context usage and session stats come from
+`thread/tokenUsage/updated` and the `usage` of `thread/resume`,
+not from separate reads.
 
 ### 7.3 Local handles
 
@@ -1380,7 +1865,10 @@ Required tests pin its token cost.
 
 ## 9. Requirements on the desktop specification
 
-The Electron shell and UI are specified separately. That specification must:
+The Electron shell and UI are specified in
+[desktop-shell.md](./desktop-shell.md), which answers each requirement below
+(its sections 5.1, 4, 5.3, 12.4, 12.1, 12.1, 11, 10 and 9.8 in order). That
+specification must:
 
 - Bundle the platform `knightcode` binary outside `app.asar` in the app's
   resources directory, and spawn `knightcode app-server` from there. Never a
@@ -1469,10 +1957,42 @@ The rest of the engine stays deleted.
 - Changesets: `Added` (the app server), `Added` (the session lock and fork
   offer).
 
+### Phase A2 — the Codex study additions
+
+The changes of section 4.6, before any client ships, all in the app server and
+its protocol package (section 4.7). Files:
+
+- `packages/app-server-protocol/src/protocol.ts`: every type and method of
+  section 4.6, no version number; regenerated
+  `packages/cli/docs/app-server.schema.json`.
+- `packages/cli/src/app-server/server.ts`: `optOutNotifications` in fan-out,
+  `platform`, `server/diagnostics`.
+- `item-mapper.ts`, `transcript.ts`: timestamps, `TurnError`, `fileChanges`
+  diffs, `clientMessageId`, `thread/tokenUsage/updated`; live and read-back
+  share each computation.
+- `extensions/turn-marker.ts`: `classifyAssistantError`; the end entry stores
+  `error.kind`.
+- `threads.ts`, `loaded-thread.ts`: object `ThreadStatus` with `waitingOn` and
+  `systemError`; `expectedTurnId` and `turnId` checks; `thread/delete`; the
+  server-side queue; image `{path}` input (absolute path, regular file, at
+  most 20 MiB, type from the file's magic bytes, read once at the request and
+  stored base64 as today).
+- `config.ts` (new): `config/read` and `config/write` over `FileSettingsStorage`
+  and `SettingsManager.fromStorage`, unchanged.
+- `approvals.ts`, `command-prefix.ts`: `decisions`, `reason`, `prefix` and its
+  matching rules, decline `message` (section 5.4).
+- `models.ts`: `thinkingLevels` per model; `project/trust/*`.
+- `file-search.ts` (new): `file/search`.
+- `listing-pages.ts`, `listing-index.ts`, `session-files.ts`: the listing index
+  (section 5.10).
+- Docs: `app-server.md`, `session-format.md` (the end entry's `kind`).
+- Changeset: folded into the app server's `Added` entry; nothing has shipped.
+
 ### Phase B — workspaces, diffs, git
 
 - `packages/cli/src/app-server/workspaces.ts`, `diff.ts`, `git.ts`; methods
-  of section 6 in `protocol.ts`.
+  of section 6 in `protocol.ts`, including `carryLocalChanges`, worktree
+  settings and `thread/workspace/progress` (section 6.1).
 - Docs: `app-server.md`.
 - Changeset: `Added`.
 
@@ -1540,9 +2060,7 @@ Session files and the model runtime (`packages/cli/test/`):
 Server (`packages/cli/test/app-server/`, faux provider, in-process transport
 unless stated):
 
-- A method before `initialize` answers `notInitialized`; a wrong
-  `protocolVersion` answers `versionMismatch`, and the error arrives before
-  the close.
+- A method before `initialize` answers `notInitialized`.
 - Transports: a malformed line answers an `error` and the connection stays
   open; an oversized line is dropped up to its newline, counted in UTF-8
   bytes (a multibyte line under the limit in characters but over it in bytes
@@ -1709,6 +2227,55 @@ Implementation-risk regressions (Phase A unless noted):
   cleanup failure preserve user state or report `recoveryRequired`; never
   assert that clean `merge-tree` preflight alone prevents `MERGE_HEAD`.
 
+Section 4.6 additions (Phase A2 unless noted):
+
+- A connection that opted
+  out of `item/reasoning/delta` receives none, others still do; an unknown
+  opt-out name is ignored.
+- A thread with an open approval reads `active` with `waitingOn: ["approval"]`
+  in `thread/status/changed` on a connection not subscribed to it, and
+  `active` with `waitingOn: []` after the decision. A lost lock leaves the
+  thread `systemError` until a resume succeeds.
+- Turn and item timestamps, `TurnError.kind`, `fileChanges[].diff` and
+  `clientMessageId` match between live notifications and `thread/read` (the
+  last is live only and absent on read-back). A faux provider error with a
+  rate-limit message reads back `kind: "rateLimit"`, an overflow
+  `contextOverflow`.
+- A steer with a stale `expectedTurnId` answers `turnMismatch` and queues
+  nothing; `turn/interrupt` with an old `turnId` does not stop the running
+  turn. A queued follow-up removed by `queueId` is never delivered, also
+  when removed while the agent loop already holds it.
+- `turn/start` with `{path}` to a PNG stores the same image as the base64
+  form; a path to a directory, a non-image or a file over 20 MiB answers
+  `invalidParams` and starts nothing.
+- `thread/tokenUsage/updated` follows each assistant `message_end`, and its
+  totals equal `thread/resume`'s `usage` afterwards.
+- `model/list` gives `["off"]` for a model without reasoning.
+- Approvals: `bash` never offers `acceptForSession`; `npm test` offers prefix
+  `npm test`; `npm test && rm -rf x`, `` echo `id` ``, `a | b`, `a > f` and a
+  multi-line command offer no prefix; after `acceptPrefixForSession`,
+  `npm test -- --ci` runs unasked and `npm testx`, `npm test; ls` ask.
+  `wsl ls` offers no prefix; `pip install x` offers `pip install`, which
+  never covers `pip uninstall`, and a stored `pip` matches nothing. A
+  decline with a message blocks with that message. An `edit` outside cwd
+  carries the outside-workspace `reason`.
+- `config/write` with a stale `expectedVersion` answers `configConflict` and
+  leaves the file byte-for-byte; `config/read` reports a project-set key's
+  origin as `project`; an unparsable settings file produces one `warning`
+  with its path.
+- `file/search` ranks `src/app-server/threads.ts` first for `thrds` and
+  respects `.gitignore`; a superseding request ends the earlier one early.
+- `thread/delete` on an unarchived thread answers `threadNotArchived`; on an
+  archived one removes the file and broadcasts `thread/deleted`.
+- Listing index: after one listing, a second reads zero transcript bytes; an
+  appended session is rescanned alone; a corrupt index is rebuilt; a deleted
+  file disappears from the list.
+- Phase B: a worktree started with `carryLocalChanges` contains the user's
+  uncommitted and untracked (not ignored) files, `thread/diff/read` is empty
+  before the first turn, and handoff `apply` brings back only the thread's
+  edits. `include` copies a matching ignored `.env`; a failing `setup`
+  leaves the thread with `setupFailed: true` and a `warning`.
+
 Race tests block on explicit gates that prove the operation reached its
 blocking point (an extension factory or hook that signals it was entered,
 a stubbed await that does the same), and assert order with recorded events.
@@ -1745,7 +2312,12 @@ Do not add:
 - A second registry beside `ThreadManager`, or any use of the experimental
   durable server.
 - System-prompt text beyond the one docs entry in section 8.3.
-- Backward compatibility with the engine's HTTP routes.
+- Backward compatibility with the engine's HTTP routes, or with protocol 1.
+- Sandbox or permission profiles, network approval rules, or an AI reviewer
+  of approvals (section 4.6).
+- A destructive history revert; server-side projects, sidebar sections or
+  thread attachments (section 4.6).
+- `acceptForSession` for `bash` or `powershell` (section 5.4).
 
 ---
 
@@ -1781,6 +2353,11 @@ From the repo root:
   transcripts. Record bytes read, latency and peak heap. Continuations must
   not rescan transcripts. Phase A accepts the initial full scan explicitly;
   do not claim constant-cost or lightweight listing without a metadata index.
+  Phase A2 repeats the benchmark with the listing index (section 5.10),
+  through `thread/list` with the checked-in harness
+  `packages/cli/test/app-server/bench/thread-list.bench.ts`, and records the
+  same columns plus index size; the warm initial listing must
+  read zero transcript bytes. The cold one still scans everything once.
 - Manual: `bun run start` works end to end after each Phase D slice: prompt,
   tool call, `/model`, `/tree`, `/fork`, `!ls`, an extension dialog, an
   extension `ctx.ui.custom` component.
@@ -1932,6 +2509,65 @@ into an invented target. Initial listing demonstrably reads full transcripts;
 only continuation work avoids rescans. This fixture does not establish constant
 initial listing cost or a lightweight metadata index.
 
+### Phase A2 listing — 2026-10-14
+
+Checked-in harness: `packages/cli/test/app-server/bench/thread-list.bench.ts`.
+Run from the repository root with `bun <harness> 1000` and `10000`. Windows
+used Bun 1.3.3 x64; Ubuntu/WSL2 used its already installed Bun 1.4.2 x64 on
+Linux 6.6.87.2-microsoft-standard-WSL2. The Linux run read this source checkout
+through `/mnt/c` and reused existing dependencies; its generated transcripts
+and index lived on native Linux `/tmp`. No dependencies or system runtimes
+were installed, and no turns or provider requests ran. The two runtimes and
+concurrent shared-laptop activity prevent treating these as isolated OS ratios.
+
+Each fresh process generated the requested base count, one single-message
+100 MiB transcript, and twenty fork/parent pairs (41 additional transcripts).
+Parent filenames deliberately carry UUIDs different from their header IDs.
+The harness uses the production handlers and in-process protocol client;
+`thread/list` and `server/diagnostics` are real protocol requests, not direct
+index calls. It traverses every cold and warm page and asserts the total count.
+Cold means no index, not a flushed operating-system cache. Diagnostics count
+transcript scans using file sizes, plus parent-header opens without header
+bytes; they exclude index I/O and stats. The peak is sampled JSC heap every
+2 ms, including a final sample, not an exact allocation maximum or OS RSS.
+
+The [complete printed JSONL](../../../../packages/cli/test/app-server/bench/results/protocol-2.jsonl)
+records all 1,776 responses: Windows 1,000 runs 1/2, Windows 10,000 runs 1/2,
+Linux 1,000 runs 1/2, then Linux 10,000 runs 1/2. Each run contains the initial
+response and all continuations, cold followed by warm. The table records all
+sixteen initial responses and each run's continuation latency range. Values
+are raw bytes and milliseconds; no noisy result was discarded or smoothed.
+
+| Platform | Base sessions | Run | Scan | Fixture bytes | Scan bytes | Opens | Initial ms | Peak JSC heap bytes | Index bytes | Continuation ms (min–max) |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Windows | 1,000 | 1 | cold | 105,224,869 | 105,224,869 | 1,061 | 2301.7 | 118,016,956 | 362,279 | 0.8–1.5 |
+| Windows | 1,000 | 1 | warm | 105,224,869 | 0 | 0 | 50.2 | 23,375,746 | 362,279 | 0.9–1.7 |
+| Windows | 1,000 | 2 | cold | 105,224,869 | 105,224,869 | 1,061 | 1755.7 | 130,474,981 | 362,279 | 0.7–1.8 |
+| Windows | 1,000 | 2 | warm | 105,224,869 | 0 | 0 | 56.2 | 23,832,703 | 362,279 | 0.9–1.8 |
+| Windows | 10,000 | 1 | cold | 108,383,869 | 108,383,869 | 10,061 | 9422.6 | 124,280,689 | 3,494,279 | 0.7–5.2 |
+| Windows | 10,000 | 1 | warm | 108,383,869 | 0 | 0 | 220.2 | 31,622,996 | 3,494,279 | 0.8–3.9 |
+| Windows | 10,000 | 2 | cold | 108,383,869 | 108,383,869 | 10,061 | 8359.2 | 125,161,236 | 3,494,279 | 0.7–4.1 |
+| Windows | 10,000 | 2 | warm | 108,383,869 | 0 | 0 | 244.5 | 31,589,045 | 3,494,279 | 0.7–3.5 |
+| Linux/WSL2 | 1,000 | 1 | cold | 105,186,633 | 105,186,633 | 1,061 | 16645.3 | 230,255,666 | 330,008 | 0.6–1.5 |
+| Linux/WSL2 | 1,000 | 1 | warm | 105,186,633 | 0 | 0 | 46.2 | 230,909,329 | 330,008 | 0.6–1.0 |
+| Linux/WSL2 | 1,000 | 2 | cold | 105,186,633 | 105,186,633 | 1,061 | 12251.2 | 333,446,716 | 330,008 | 0.7–1.3 |
+| Linux/WSL2 | 1,000 | 2 | warm | 105,186,633 | 0 | 0 | 47.8 | 333,633,209 | 330,008 | 0.8–1.3 |
+| Linux/WSL2 | 10,000 | 1 | cold | 108,021,633 | 108,021,633 | 10,061 | 20444.2 | 341,229,967 | 3,180,625 | 0.6–3.0 |
+| Linux/WSL2 | 10,000 | 1 | warm | 108,021,633 | 0 | 0 | 354.6 | 31,154,034 | 3,180,625 | 0.4–2.7 |
+| Linux/WSL2 | 10,000 | 2 | cold | 108,021,633 | 108,021,633 | 10,061 | 12026.3 | 342,117,026 | 3,180,558 | 0.5–1.4 |
+| Linux/WSL2 | 10,000 | 2 | warm | 108,021,633 | 0 | 0 | 332.7 | 343,919,680 | 3,180,558 | 0.5–2.8 |
+
+Every warm initial response and all 1,760 continuation responses report zero
+opens and scan bytes. Cold listings report exactly one scan per transcript
+plus twenty parent-header opens, including every misleadingly named parent.
+The largest index was 3,494,279 bytes, below its 16 MiB limit despite the
+100 MiB first message; titles, not message bodies, are cached. These assertions
+are in the harness and all eight runs passed. Warm listing still reads the
+index and stats files, so zero transcript bytes is not constant-cost listing.
+Cold scanning and retained heap remain runtime- and GC-dependent.
+
+### Phase A acceptance record — 2026-10-12
+
 Stdio lifecycle coverage now includes eight cases: unread stdout, EOF with an
 accepted response, a faux turn, EPIPE extension shutdown, EOF mid-turn, unfinished
 non-cooperative preflight/load responses, and a complete 65 MiB payload round trip.
@@ -1952,8 +2588,8 @@ passed, and a fresh read-only review accepted both boundaries and found no
 important remaining issue in its inspected scope. The queued-input regression
 also verifies cancellation settles its request before a gated callback returns.
 
-Phase A acceptance gates are satisfied and protocol v1 is frozen to the generated
-schema. Raw measurements, review reports and verification logs remain in the local
+Phase A acceptance gates are satisfied and protocol v1 was frozen to the generated
+schema; section 4.6 (Phase A2) supersedes it before any client ships. Raw measurements, review reports and verification logs remain in the local
 implementation ledger's evidence directory. Owned scratch installations/downloads
 and temporary measurement scripts are removed after validation. This does not
 claim completion of worktrees, git/diffs or desktop UI in later phases.

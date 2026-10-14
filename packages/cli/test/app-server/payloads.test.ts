@@ -84,14 +84,16 @@ test("a turn over 64 MiB progresses through a small reference and keeps full err
 		id: "t",
 		threadId: "thread",
 		status: "failed",
-		error: "😀".repeat(3_000),
+		startedAt: 1,
+		completedAt: 2,
+		error: { message: "😀".repeat(3_000), kind: "provider" },
 		items: [{ type: "agentMessage", id: "i", text: "a".repeat(65 * 1024 * 1024) }],
 	};
 	const wire = value.turn(turn);
 	expect("payload" in wire).toBe(true);
 	expect(Buffer.byteLength(JSON.stringify(wire))).toBeLessThan(INLINE_PAYLOAD_BYTES);
 	if (!("payload" in wire)) throw new Error("expected reference");
-	expect([...wire.error!]).toHaveLength(2_000);
+	expect([...wire.error!.message]).toHaveLength(2_000);
 	expect(wire.payload.byteLength).toBeGreaterThan(64 * 1024 * 1024);
 	const chunk = await value.read({ id: wire.payload.id, offset: 0 });
 	expect(Buffer.from(chunk.data, "base64").length).toBe(49_152);
@@ -106,7 +108,7 @@ test("a turn over 64 MiB progresses through a small reference and keeps full err
 	try {
 		await client.initialize();
 		const restored = await client.resolveTurn(wire);
-		expect(restored.error).toBe("😀".repeat(3_000));
+		expect(restored.error).toEqual({ message: "😀".repeat(3_000), kind: "provider" });
 		const item = restored.items[0];
 		expect(item.type).toBe("agentMessage");
 		if (item.type !== "agentMessage") throw new Error("expected agent text");

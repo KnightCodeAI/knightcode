@@ -8,7 +8,8 @@ const summaries = (): ThreadSummary[] =>
 		cwd: "cwd",
 		projectCwd: "cwd",
 		name: `Thread ${i}`,
-		status: "notLoaded",
+		status: { type: "notLoaded" },
+		createdAt: "2026-10-11T00:00:00.000Z",
 		archived: false,
 		updatedAt: "2026-10-11T00:00:00.000Z",
 	}));

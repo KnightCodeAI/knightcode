@@ -87,3 +87,12 @@ test("an aborted run ends interrupted", async () => {
 	await running.catch(() => {});
 	expect(ends(harness.session.sessionManager.getBranch())).toEqual([{ status: "interrupted" }]);
 });
+
+test("a failed provider turn stores an actionable error kind", async () => {
+	harness = await createHarness({ extensionFactories: [turnMarkerExtension], settings: { retry: { enabled: false } } });
+	harness.setResponses([fauxAssistantMessage("", { stopReason: "error", errorMessage: "401 Unauthorized" })]);
+	await harness.session.prompt("go");
+	expect(ends(harness.session.sessionManager.getBranch())).toEqual([
+		{ status: "failed", error: { message: "401 Unauthorized", kind: "auth" } },
+	]);
+});

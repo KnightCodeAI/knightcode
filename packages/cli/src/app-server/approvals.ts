@@ -7,10 +7,13 @@
  * subscriber and blocks on anything but accept.
  */
 
-import { type ApprovalDecision, ApprovalMode, type ServerRequestParams } from "@knightcode/app-server-protocol";
+import { isAbsolute, relative, sep } from "node:path";
+import { type ApprovalResult, ApprovalMode, type ServerRequestParams } from "@knightcode/app-server-protocol";
 import { Compile } from "typebox/compile";
 import type { InlineExtension } from "../core/extensions/types.ts";
 import type { SessionEntry } from "../core/session-manager.ts";
+import { resolveToCwd } from "../core/tools/path-utils.ts";
+import { commandPrefix, matchesPrefix } from "./command-prefix.ts";
 import { SubscriberGone } from "./errors.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 import { CANCELLED_REASON, DECLINED_REASON } from "./transcript.ts";
@@ -18,6 +21,23 @@ import { CANCELLED_REASON, DECLINED_REASON } from "./transcript.ts";
 const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(["read", "grep", "find", "ls", "ask_user", "submit_plan"]);
 const EDIT_TOOLS: ReadonlySet<string> = new Set(["edit", "write"]);
 const isApprovalMode = Compile(ApprovalMode);
+
+function shellOf(tool: string): "bash" | "powershell" | undefined {
+	return tool === "bash" || tool === "powershell" ? tool : undefined;
+}
+function commandOf(input: unknown): string | undefined {
+	const command = typeof input === "object" && input !== null ? (input as { command?: unknown }).command : undefined;
+	return typeof command === "string" ? command : undefined;
+}
+function reasonFor(tool: string, input: unknown, cwd: string): string | undefined {
+	if (!EDIT_TOOLS.has(tool)) return undefined;
+	const path = typeof input === "object" && input !== null ? (input as { path?: unknown }).path : undefined;
+	if (typeof path !== "string") return undefined;
+	const inside = relative(cwd, resolveToCwd(path, cwd));
+	return inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)
+		? "Writes outside this thread's workspace"
+		: undefined;
+}
 
 export const APPROVAL_MODE_ENTRY = "knightcode.approvalMode";
 
@@ -49,14 +69,30 @@ export async function askApproval(
 	thread: LoadedThread,
 	params: ServerRequestParams<"item/toolCall/requestApproval">,
 	signal: AbortSignal,
-): Promise<ApprovalDecision> {
+): Promise<ApprovalResult> {
+	const token = {};
+	thread.openRequests.add(token);
+	if (thread.openRequests.size === 1) thread.broadcastStatus();
+	try {
+		return await askEachSubscriber(thread, params, signal);
+	} finally {
+		thread.openRequests.delete(token);
+		if (thread.openRequests.size === 0) thread.broadcastStatus();
+	}
+}
+
+async function askEachSubscriber(
+	thread: LoadedThread,
+	params: ServerRequestParams<"item/toolCall/requestApproval">,
+	signal: AbortSignal,
+): Promise<ApprovalResult> {
 	const tried = new Set<unknown>();
 	for (;;) {
 		const candidates = [thread.lastTurnSubscriber, ...thread.subscribers].filter(
 			(s): s is NonNullable<typeof s> => s !== undefined && thread.subscribers.has(s) && !tried.has(s),
 		);
 		const target = candidates[0];
-		if (!target || signal.aborted) return "cancel";
+		if (!target || signal.aborted) return { decision: "cancel" };
 		tried.add(target);
 		// The attempt's own controller: aborted by the request's signal, or by withdrawFrom(target).
 		const attempt = new AbortController();
@@ -65,9 +101,9 @@ export async function askApproval(
 		const ask = { target, controller: attempt };
 		thread.asks.add(ask);
 		try {
-			return (await target.request("item/toolCall/requestApproval", params, attempt.signal)).decision;
+			return await target.request("item/toolCall/requestApproval", params, attempt.signal);
 		} catch (error) {
-			if (signal.aborted) return "cancel";
+			if (signal.aborted) return { decision: "cancel" };
 			if (error instanceof SubscriberGone) continue;
 			throw error;
 		} finally {
@@ -87,21 +123,38 @@ export function createApprovalExtension(holder: { thread?: LoadedThread }): Inli
 				if (!thread || !needsApproval(thread.approvalMode, event.toolName) || thread.allowed.has(event.toolName)) {
 					return undefined;
 				}
+				const shell = shellOf(event.toolName);
+				const command = shell ? commandOf(event.input) : undefined;
+				if (
+					shell &&
+					command &&
+					[...(thread.allowedPrefixes.get(shell) ?? [])].some((prefix) => matchesPrefix(command, prefix, shell))
+				)
+					return undefined;
+				const prefix = shell && command ? commandPrefix(command, shell) : undefined;
+				const reason = reasonFor(event.toolName, event.input, thread.session.sessionManager.getCwd());
+				const decisions: ServerRequestParams<"item/toolCall/requestApproval">["decisions"] = ["accept"];
+				if (!shell) decisions.push("acceptForSession");
+				if (prefix) decisions.push("acceptPrefixForSession");
+				decisions.push("decline");
 				// The loop awaits this handler, so the request must release itself on abort.
 				const controller = new AbortController();
 				const onAbort = () => controller.abort();
 				ctx.signal?.addEventListener("abort", onAbort, { once: true });
 				if (ctx.signal?.aborted) onAbort();
 				thread.pending.add(controller);
-				let decision: ApprovalDecision;
+				let result: ApprovalResult;
 				try {
-					decision = await askApproval(
+					result = await askApproval(
 						thread,
 						{
 							threadId: thread.id,
 							turnId: thread.mapper.currentTurnId() ?? "",
 							itemId: event.toolCallId,
 							tool: event.toolName,
+							decisions,
+							...(prefix ? { prefix } : {}),
+							...(reason ? { reason } : {}),
 							...thread.payloads.input(event.input),
 							...(event.parentToolCallId ? { parentItemId: event.parentToolCallId } : {}),
 						},
@@ -111,9 +164,28 @@ export function createApprovalExtension(holder: { thread?: LoadedThread }): Inli
 					thread.pending.delete(controller);
 					ctx.signal?.removeEventListener("abort", onAbort);
 				}
-				if (decision === "acceptForSession") thread.allowed.add(event.toolName);
-				if (decision === "accept" || decision === "acceptForSession") return undefined;
-				return { block: true, reason: decision === "cancel" ? CANCELLED_REASON : DECLINED_REASON };
+				const offered = new Set<string>(decisions);
+				const answer =
+					result.decision === "cancel" || offered.has(result.decision) ? result : { decision: "decline" as const };
+				if (answer.decision === "acceptForSession") thread.allowed.add(event.toolName);
+				if (answer.decision === "acceptPrefixForSession" && shell && prefix) {
+					const set = thread.allowedPrefixes.get(shell) ?? new Set<string>();
+					set.add(prefix);
+					thread.allowedPrefixes.set(shell, set);
+				}
+				if (
+					answer.decision === "accept" ||
+					answer.decision === "acceptForSession" ||
+					answer.decision === "acceptPrefixForSession"
+				)
+					return undefined;
+				const reasonText =
+					answer.decision === "cancel"
+						? CANCELLED_REASON
+						: answer.decision === "decline" && answer.message
+							? `${DECLINED_REASON}: ${answer.message}`
+							: DECLINED_REASON;
+				return { block: true, reason: reasonText };
 			});
 		},
 	};
