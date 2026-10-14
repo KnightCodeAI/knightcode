@@ -175,6 +175,13 @@ describe("Google thinking level maps", () => {
 		expect(payload.config?.thinkingConfig).toEqual({ thinkingBudget: 0 });
 	});
 
+	// Gemini 4 Argon rejected thinkingBudget and ignored a selected thinking level.
+	it.each(googleAdapters)("uses thinking levels for Gemini 4 models on $name", async ({ capture }) => {
+		const payload = await capture("gemini-4-argon", {}, "medium");
+
+		expect(payload.config?.thinkingConfig).toEqual({ includeThoughts: true, thinkingLevel: "MEDIUM" });
+	});
+
 	it.each(["xhigh", "max"] as const)("maps Google Generative AI %s to a supported level", async (reasoning) => {
 		const payload = await captureGooglePayload(
 			googleModel("gemini-3.7-flash", { xhigh: "high", max: "high" }),
