@@ -1,5 +1,35 @@
 # @knightcodeai/cli
 
+## 0.17.2
+
+### Changed
+
+- Changed OpenAI GPT-6 models to keep the prompt cache when the thinking level changes. A change now goes in as a configuration update instead of rewriting the reasoning effort, so earlier turns stay cached. Sign-in with ChatGPT and proxies keep the previous behavior.
+
+- Changed Kimi Coding to Chat Completions at `api.kimi.com/coding/v1`. K3, K3-256K, and Kimi For Coding keep tools loaded mid-conversation in later system messages, so the prompt cache holds. Highspeed still puts added tools in the top-level list because it rejects tool-bearing system messages.
+
+### Fixed
+
+- Fixed the context window for Codex GPT-6.1 Sol. Codex reports 500,000 tokens for that model. Other Codex models stay at 272,000.
+
+- Fixed thinking being stored after the answer text when a proxy such as LiteLLM sends reasoning and content in the same OpenAI-compatible stream chunk. The message now keeps the order the model produced.
+
+- Fixed gateway errors reading "Unable to forward upstream stream" failing the turn. They are now retried like other transient provider errors.
+
+- Fixed Gemini 4 models ignoring the selected thinking level. Gemini 4 Argon rejected `thinkingBudget`, so Gemini 4 and later now send `thinkingLevel`.
+
+- Fixed the provider chosen for a model reference depending on catalog order. `--model`, `--models`, `/model` and credential printing now share one resolver: credentials decide between providers that offer the same model, an ambiguous match is reported instead of falling through to a fuzzy match, and a `:<thinking>` suffix no longer changes the provider. A `--models` entry offered by several providers is added for each, with a warning.
+
+- Fixed OpenCode and OpenCode Go requests that went to routes which no longer exist. Gemini models on OpenCode Go now work, and MiniMax M2.7 uses Anthropic Messages.
+
+- Fixed empty quoted prompt-template arguments. `""` and `''` stay in place, so later arguments are not shifted and positional defaults still apply.
+
+- Fixed read-tool line ranges built from numeric strings and nulls. The TUI, the session tree, and HTML export now show the same range.
+
+- Fixed finished tool calls whose arguments were not valid JSON. The tool no longer runs with only the fields parsed before the error. The model is told the arguments were malformed.
+
+- Fixed Xiaomi MiMo requests that sent `reasoning_effort`. MiMo only accepts a thinking on/off toggle, so the control is off or high and `reasoning_effort` is no longer sent.
+
 ## 0.17.1
 
 ### Added
