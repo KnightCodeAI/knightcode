@@ -53,6 +53,18 @@ describe("provider retry classification", () => {
 		).toBe(true);
 	});
 
+	// A gateway that cannot relay the upstream response sends this as a bare response.failed event.
+	it("matches gateway failure to forward the upstream stream", () => {
+		expect(
+			isRetryableAssistantError(
+				fauxAssistantMessage("", {
+					stopReason: "error",
+					errorMessage: "Unable to forward upstream stream",
+				}),
+			),
+		).toBe(true);
+	});
+
 	it.each(["Provider returned error", "The upstream provider returned an error"])(
 		"matches provider wrapper wording %j",
 		(errorMessage) => {
