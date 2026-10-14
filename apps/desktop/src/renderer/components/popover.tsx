@@ -1,3 +1,4 @@
+import { matches } from "../keys.ts";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 /** A button that opens a panel; clicking outside or Escape closes it. */
@@ -22,7 +23,7 @@ export function Popover({
 			if (!ref.current?.contains(event.target as Node)) setOpen(false);
 		};
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
+			if (matches(event, "desktop.picker.dismiss")) {
 				event.stopPropagation();
 				setOpen(false);
 			}

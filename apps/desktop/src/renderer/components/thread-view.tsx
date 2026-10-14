@@ -1,13 +1,83 @@
-/** One thread: header, transcript that sticks to the bottom while streaming, approvals, composer (section 9.3). */
+/**
+ * One thread (desktop-shell.md section 9.3): a header with the thread menu, the transcript that sticks
+ * to the bottom while streaming, older history on demand, approvals and the composer.
+ */
 
-import { ArrowDown, CircleAlert, Folder } from "lucide-react";
+import { ArrowDown, CircleAlert, Folder, MoreHorizontal } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { client } from "../client.ts";
 import { basename } from "../format.ts";
-import { isMac } from "../keys.ts";
-import { dismissPending, openThread, send, useStore } from "../store.ts";
+import { matches, useBinding } from "../keys.ts";
+import {
+	archive,
+	compact,
+	dismissPending,
+	fork,
+	loadEarlier,
+	openThread,
+	pinThread,
+	rename,
+	send,
+	transcriptMarkdown,
+	useStore,
+} from "../store.ts";
 import { ApprovalCard } from "./approval.tsx";
 import { Composer } from "./composer.tsx";
 import { TurnView, UserBubble } from "./items.tsx";
+import { MenuItem, Popover } from "./popover.tsx";
+
+const NO_PINS: string[] = [];
+
+function ThreadMenu({ id, cwd, onRename }: { id: string; cwd: string; onRename: () => void }) {
+	const pinned = useStore((s) => (s.desktop?.pinnedThreads ?? NO_PINS).includes(id));
+	const copy = (text: string) => void client.host("host/clipboard/writeText", { text });
+	const Separator = () => <div className="my-1 border-t border-line" />;
+	return (
+		<Popover
+			side="bottom"
+			align="right"
+			trigger={(open) => (
+				<button
+					type="button"
+					title="Thread menu"
+					className={`no-drag flex size-8 items-center justify-center rounded-lg ${open ? "bg-hover text-ink" : "text-muted hover:bg-hover hover:text-ink"}`}
+				>
+					<MoreHorizontal size={17} />
+				</button>
+			)}
+		>
+			{(close) => {
+				const item = (label: string, run: () => void, danger = false) => (
+					<MenuItem
+						danger={danger}
+						onClick={() => {
+							close();
+							run();
+						}}
+					>
+						{label}
+					</MenuItem>
+				);
+				return (
+					<div className="w-60">
+						{item("Rename", onRename)}
+						{item(pinned ? "Unpin" : "Pin", () => pinThread(id, !pinned))}
+						<Separator />
+						{item("Fork", () => void fork(id))}
+						{item("Compact context", () => void compact(id))}
+						<Separator />
+						{item("Copy transcript as Markdown", () => copy(transcriptMarkdown(id)))}
+						{item("Copy working directory", () => copy(cwd))}
+						{item("Copy thread id", () => copy(id))}
+						{item("Show in folder", () => void client.host("host/shell/showInFolder", { path: cwd }))}
+						<Separator />
+						{item("Archive", () => void archive(id), true)}
+					</div>
+				);
+			}}
+		</Popover>
+	);
+}
 
 export function ThreadView({ id }: { id: string }) {
 	const view = useStore((s) => s.held[id]);
@@ -15,29 +85,60 @@ export function ThreadView({ id }: { id: string }) {
 	const summary = useStore((s) => s.threads.find((t) => t.id === id));
 	const scroller = useRef<HTMLDivElement>(null);
 	const [pinned, setPinned] = useState(true);
+	const [renaming, setRenaming] = useState<string | undefined>();
+	const [loadingEarlier, setLoadingEarlier] = useState(false);
 
 	useEffect(() => {
 		setPinned(true);
+		setRenaming(undefined);
 	}, [id]);
 	useLayoutEffect(() => {
 		const el = scroller.current;
 		if (el && pinned) el.scrollTop = el.scrollHeight;
 	});
+	useBinding("desktop.thread.archive", () => void archive(id));
 
 	const name = view?.thread.name || summary?.name || "Untitled";
 	const cwd = view?.thread.cwd ?? summary?.cwd ?? "";
+	const commitRename = () => {
+		const value = renaming?.trim();
+		setRenaming(undefined);
+		if (value && value !== name) void rename(id, value);
+	};
 
 	return (
 		<div className="flex h-full min-w-0 flex-1 flex-col">
-			<header
-				className={`drag flex h-10 shrink-0 items-center gap-3 border-b border-line px-4 ${isMac() ? "" : "pr-36"}`}
-			>
-				<span className="truncate font-medium">{name}</span>
-				{cwd ? (
-					<span className="flex min-w-0 items-center gap-1 text-[12px] text-faint" title={cwd}>
-						<Folder size={12} /> <span className="truncate">{basename(cwd)}</span>
+			<header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-5">
+				<Folder size={16} className="shrink-0 text-muted" />
+				{renaming !== undefined ? (
+					<input
+						autoFocus
+						value={renaming}
+						onChange={(e) => setRenaming(e.target.value)}
+						onBlur={commitRename}
+						onKeyDown={(e) => {
+							if (matches(e, "desktop.item.activate")) commitRename();
+							if (matches(e, "desktop.picker.dismiss")) setRenaming(undefined);
+						}}
+						className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2 py-1 font-medium outline-none"
+					/>
+				) : (
+					<button
+						type="button"
+						onDoubleClick={() => setRenaming(name)}
+						title={`${name}\n${cwd}`}
+						className="min-w-0 truncate text-left text-[15px] font-medium"
+					>
+						{name}
+					</button>
+				)}
+				{cwd && renaming === undefined ? (
+					<span className="hidden min-w-0 shrink truncate text-[13px] text-faint lg:block" title={cwd}>
+						{basename(cwd)}
 					</span>
 				) : null}
+				<div className="flex-1" />
+				<ThreadMenu id={id} cwd={cwd} onRename={() => setRenaming(name)} />
 			</header>
 			<div
 				ref={scroller}
@@ -48,12 +149,33 @@ export function ThreadView({ id }: { id: string }) {
 				className="relative min-h-0 flex-1 overflow-y-auto"
 			>
 				<div className="mx-auto max-w-3xl space-y-8 px-6 pt-6 pb-10">
+					{view?.nextCursor ? (
+						<div className="flex justify-center">
+							<button
+								type="button"
+								disabled={loadingEarlier}
+								onClick={() => {
+									setLoadingEarlier(true);
+									setPinned(false);
+									void loadEarlier(id).finally(() => setLoadingEarlier(false));
+								}}
+								className="rounded-full border border-line px-3 py-1 text-[13px] text-muted hover:bg-hover hover:text-ink"
+							>
+								{loadingEarlier ? "Loading…" : "Load earlier messages"}
+							</button>
+						</div>
+					) : null}
 					{failure ? (
 						<div className="flex items-center gap-2 rounded-[var(--kc-radius)] border border-danger/30 bg-del-bg px-3 py-2 text-danger">
 							<CircleAlert size={14} /> {failure}
 							<button type="button" className="ml-auto underline" onClick={() => void openThread(id)}>
 								Retry
 							</button>
+							{failure.includes("another KnightCode") ? (
+								<button type="button" className="underline" onClick={() => void fork(id)}>
+									Fork it
+								</button>
+							) : null}
 						</div>
 					) : null}
 					{!view && !failure ? <div className="kc-pulse text-faint">Loading…</div> : null}

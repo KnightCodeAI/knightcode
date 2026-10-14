@@ -9,6 +9,7 @@ import type { Message } from "@knightcode/app-server-protocol";
 import {
 	app,
 	BrowserWindow,
+	dialog,
 	MessageChannelMain,
 	type MessagePortMain,
 	Menu,
@@ -215,10 +216,22 @@ if (!app.requestSingleInstanceLock()) {
 	app.on("window-all-closed", () => {
 		if (process.platform !== "darwin") app.quit();
 	});
-	// ponytail: quits without the "N threads are running" question of section 5.4; add with the quit dialog.
 	app.on("before-quit", (event) => {
 		if (quitting || !server) return;
 		event.preventDefault();
+		const running = router.activeThreads();
+		if (running > 0) {
+			const options = {
+				type: "warning" as const,
+				buttons: ["Quit", "Cancel"],
+				defaultId: 1,
+				cancelId: 1,
+				message: `${running} ${running === 1 ? "thread is" : "threads are"} running. Quit and interrupt ${running === 1 ? "it" : "them"}?`,
+			};
+			const parent = BrowserWindow.getFocusedWindow();
+			const choice = parent ? dialog.showMessageBoxSync(parent, options) : dialog.showMessageBoxSync(options);
+			if (choice !== 0) return;
+		}
 		quitting = true;
 		void server.stop().finally(() => app.quit());
 	});

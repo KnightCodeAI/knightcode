@@ -1,5 +1,8 @@
 /** Host methods: what a sandboxed renderer cannot do itself (desktop-shell.md section 4.4). */
 
+import { randomUUID } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { app, type BrowserWindow, clipboard, dialog, shell } from "electron";
 import { Compile } from "typebox/compile";
 import { type HostMethod, HostMethods, type HostRequest, type HostResponse } from "../shared/host-protocol.ts";
@@ -54,7 +57,7 @@ async function run(
 			shell.showItemInFolder(params.path as string);
 			return {};
 		case "host/clipboard/writeText":
-			clipboard.writeText(params.text as string);
+			await clipboard.writeText(params.text as string);
 			return {};
 		case "host/window/setTitle":
 			window.setTitle(params.title as string);
@@ -64,6 +67,80 @@ async function run(
 		case "host/state/write":
 			state.write(params.state as Parameters<StateFile["write"]>[0]);
 			return {};
+		case "host/dialog/openFiles": {
+			const result = await dialog.showOpenDialog(window, {
+				properties: ["openFile", "multiSelections"],
+				filters: params.images ? [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }] : [],
+			});
+			return { paths: result.canceled ? [] : result.filePaths };
+		}
+		case "host/clipboard/readImage": {
+			// The app server reads images by path (architecture.md section 4.2), so a paste becomes a private file.
+			const item = (await clipboard.read()).find((i) => i.types.includes("image/png"));
+			if (!item) return {};
+			const blob = await item.getType("image/png");
+			const dir = join(app.getPath("temp"), "knightcode-desktop-paste");
+			mkdirSync(dir, { recursive: true, mode: 0o700 });
+			const path = join(dir, `${randomUUID()}.png`);
+			writeFileSync(path, Buffer.from(await blob.arrayBuffer()), { mode: 0o600 });
+			return { path };
+		}
+		case "host/window/setTheme":
+			if (process.platform === "win32")
+				window.setTitleBarOverlay({ color: "#00000000", symbolColor: params.dark ? "#ececec" : "#1a1c1f", height: 40 });
+			return {};
+		case "host/app/command": {
+			const contents = window.webContents;
+			switch (params.command as string) {
+				case "undo":
+					contents.undo();
+					break;
+				case "redo":
+					contents.redo();
+					break;
+				case "cut":
+					contents.cut();
+					break;
+				case "copy":
+					contents.copy();
+					break;
+				case "paste":
+					contents.paste();
+					break;
+				case "selectAll":
+					contents.selectAll();
+					break;
+				case "reload":
+					contents.reload();
+					break;
+				case "toggleDevTools":
+					if (!app.isPackaged) contents.toggleDevTools();
+					break;
+				case "zoomIn":
+					contents.setZoomLevel(contents.getZoomLevel() + 0.5);
+					break;
+				case "zoomOut":
+					contents.setZoomLevel(contents.getZoomLevel() - 0.5);
+					break;
+				case "resetZoom":
+					contents.setZoomLevel(0);
+					break;
+				case "minimize":
+					window.minimize();
+					break;
+				case "toggleMaximize":
+					if (window.isMaximized()) window.unmaximize();
+					else window.maximize();
+					break;
+				case "close":
+					window.close();
+					break;
+				case "quit":
+					app.quit();
+					break;
+			}
+			return {};
+		}
 		case "host/app/info":
 			return {
 				appVersion: app.getVersion(),

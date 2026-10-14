@@ -8,7 +8,9 @@ import { useSyncExternalStore } from "react";
 import type {
 	ApprovalMode,
 	ApprovalResult,
+	ImageInput,
 	Item,
+	LoginState,
 	PayloadRef,
 	RequestId,
 	ResultOf,
@@ -22,15 +24,12 @@ import type {
 	WireItem,
 	WireTurn,
 } from "@knightcode/app-server-protocol";
-import type { DesktopState } from "../shared/host-protocol.ts";
+import { DEFAULT_PREFERENCES, type DesktopState, type Preferences } from "../shared/host-protocol.ts";
 import { type AnyNotification, type AnyServerRequest, client, RequestError } from "./client.ts";
+import { placeItem, toView, type ViewItem, type ViewTurn } from "./turns.ts";
 
 export type ModelInfo = ResultOf<"model/list">["models"][number];
-/** A rendered item: its protocol value plus its top-level position (absent for nested calls). */
-export type ViewItem = Item & { index?: number };
-export interface ViewTurn extends Omit<Turn, "items"> {
-	items: ViewItem[];
-}
+export type { ViewItem, ViewTurn };
 export interface Approval {
 	id: RequestId;
 	params: ServerRequestParams<"item/toolCall/requestApproval">;
@@ -48,10 +47,18 @@ export interface ThreadView {
 	approvals: Approval[];
 	retry?: { attempt: number; maxAttempts: number; delayMs: number; error: string; at: number };
 	pending: PendingMessage[];
+	/** Older history: a thread/read cursor, absent once the first turn is loaded. */
+	nextCursor?: string;
 	notice?: string;
 }
 
-export type View = { kind: "thread"; id: string } | { kind: "new"; cwd?: string };
+export type SettingsPage = "general" | "appearance" | "models" | "approvals" | "shortcuts" | "about";
+export type View =
+	| { kind: "thread"; id: string }
+	| { kind: "new"; cwd?: string }
+	| { kind: "settings"; page: SettingsPage }
+	| { kind: "archive" };
+export type Accounts = ResultOf<"account/list">;
 
 export interface State {
 	server: { state: "starting" | "ready" | "restarting" | "failed"; message?: string };
@@ -63,6 +70,12 @@ export interface State {
 	models: ModelInfo[];
 	defaultModel: string | null;
 	toasts: { id: number; text: string }[];
+	/** Back/forward over views (the title bar arrows). */
+	history: { stack: View[]; index: number };
+	accounts: Accounts | undefined;
+	logins: Record<string, LoginState>;
+	sidebarOpen: boolean;
+	paletteOpen: boolean;
 }
 
 let state: State = {
@@ -75,6 +88,11 @@ let state: State = {
 	models: [],
 	defaultModel: null,
 	toasts: [],
+	history: { stack: [{ kind: "new" }], index: 0 },
+	accounts: undefined,
+	logins: {},
+	sidebarOpen: true,
+	paletteOpen: false,
 };
 const listeners = new Set<() => void>();
 
@@ -98,6 +116,34 @@ export const getState = (): State => state;
 const NO_PROJECTS: DesktopState["projects"] = [];
 /** Selectors must return stable values: a fresh `[]` per read re-renders forever. */
 export const selectProjects = (s: State) => s.desktop?.projects ?? NO_PROJECTS;
+export const selectPreferences = (s: State): Preferences => s.desktop?.preferences ?? DEFAULT_PREFERENCES;
+
+const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
+
+/** Show a view and record it for back/forward. */
+export function navigate(view: View): void {
+	set((s) => {
+		if (sameView(s.view, view)) return s;
+		const stack = [...s.history.stack.slice(0, s.history.index + 1), view].slice(-50);
+		return { ...s, view, history: { stack, index: stack.length - 1 } };
+	});
+}
+
+export function goBack(delta: -1 | 1): void {
+	const { stack, index } = state.history;
+	const next = stack[index + delta];
+	if (!next) return;
+	set((s) => ({ ...s, view: next, history: { stack, index: index + delta } }));
+	if (next.kind === "thread" && !state.held[next.id]) void openThread(next.id);
+}
+
+export function setSidebarOpen(open: boolean): void {
+	set((s) => ({ ...s, sidebarOpen: open }));
+}
+
+export function setPaletteOpen(open: boolean): void {
+	set((s) => ({ ...s, paletteOpen: open }));
+}
 
 function updateThread(id: string, fn: (view: ThreadView) => ThreadView): void {
 	set((s) => (s.held[id] ? { ...s, held: { ...s.held, [id]: fn(s.held[id]!) } } : s));
@@ -132,26 +178,6 @@ const resolveTurn = async (wire: WireTurn): Promise<Turn> =>
 	"payload" in wire ? ((await readPayload(wire.payload)) as Turn) : wire;
 const resolveItem = async (wire: WireItem): Promise<Item> =>
 	wire.type === "itemReference" ? ((await readPayload(wire.payload)) as Item) : wire;
-
-/** Read-back items arrive in index order; nested calls carry no index (architecture.md section 4.2). */
-function toView(turn: Turn): ViewTurn {
-	let index = 0;
-	return {
-		...turn,
-		items: turn.items.map((item) =>
-			item.type === "toolCall" && item.parentItemId ? item : { ...item, index: index++ },
-		),
-	};
-}
-
-function placeItem(items: ViewItem[], item: ViewItem): ViewItem[] {
-	const rest = items.filter((i) => i.id !== item.id);
-	if (item.index === undefined) return [...rest, item];
-	// Items at or after this index shift; the latest index wins (desktop-shell.md section 7.1).
-	const before = rest.filter((i) => i.index === undefined || i.index < item.index!);
-	const after = rest.filter((i) => i.index !== undefined && i.index >= item.index!);
-	return [...before, item, ...after];
-}
 
 function withTurn(view: ThreadView, turnId: string, fn: (turn: ViewTurn) => ViewTurn): ThreadView {
 	const index = view.turns.findIndex((t) => t.id === turnId);
@@ -202,10 +228,7 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 			return;
 		case "thread/replaced": {
 			const { oldThreadId, thread } = n.params;
-			set((s) => ({
-				...s,
-				view: s.view.kind === "thread" && s.view.id === oldThreadId ? { kind: "thread", id: thread.id } : s.view,
-			}));
+			if (state.view.kind === "thread" && state.view.id === oldThreadId) navigate({ kind: "thread", id: thread.id });
 			await openThread(thread.id);
 			return;
 		}
@@ -306,6 +329,13 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 		case "error":
 			toast(n.params.message);
 			return;
+		case "account/login/updated":
+			set((s) => ({ ...s, logins: { ...s.logins, [n.params.loginId]: n.params } }));
+			if (n.params.status === "complete") void Promise.all([refreshAccounts(), refreshModels()]);
+			return;
+		case "account/updated":
+			void Promise.all([refreshAccounts(), refreshModels()]);
+			return;
 		default:
 			return;
 	}
@@ -340,7 +370,7 @@ async function connected(): Promise<void> {
 	try {
 		const desktop = state.desktop ?? (await client.host("host/state/read", {}));
 		set((s) => ({ ...s, desktop }));
-		await Promise.all([refreshThreads(), refreshModels()]);
+		await Promise.all([refreshThreads(), refreshModels(), refreshAccounts()]);
 		// After a restart the new server has no subscriptions: resume what this window shows.
 		for (const id of Object.keys(state.held)) void openThread(id);
 	} catch (error) {
@@ -377,7 +407,7 @@ export function updateDesktop(fn: (d: DesktopState) => DesktopState): void {
 }
 
 export function showNew(cwd?: string): void {
-	set((s) => ({ ...s, view: { kind: "new", cwd } }));
+	navigate(cwd ? { kind: "new", cwd } : { kind: "new" });
 }
 
 export async function addProject(): Promise<string | undefined> {
@@ -390,7 +420,8 @@ export async function addProject(): Promise<string | undefined> {
 }
 
 export async function openThread(id: string): Promise<void> {
-	set((s) => ({ ...s, view: { kind: "thread", id }, opening: { ...s.opening, [id]: undefined } }));
+	navigate({ kind: "thread", id });
+	set((s) => ({ ...s, opening: { ...s.opening, [id]: undefined } }));
 	try {
 		const result = await client.request("thread/resume", { threadId: id });
 		const turns = await Promise.all(result.turns.map(resolveTurn));
@@ -407,6 +438,7 @@ export async function openThread(id: string): Promise<void> {
 					usage: result.usage,
 					approvals: s.held[id]?.approvals ?? [],
 					pending: s.held[id]?.pending ?? [],
+					...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
 				},
 			},
 		}));
@@ -424,35 +456,43 @@ export async function startThread(
 	cwd: string,
 	text: string,
 	options: { model?: { provider: string; id: string }; thinkingLevel?: ThinkingLevel; approvalMode?: ApprovalMode },
+	images?: ImageInput[],
 ): Promise<void> {
 	const { thread, warnings } = await client.request("thread/start", { cwd, ...options });
 	for (const warning of warnings) toast(warning.message);
+	navigate({ kind: "thread", id: thread.id });
 	set((s) => ({
 		...s,
-		view: { kind: "thread", id: thread.id },
 		held: {
 			...s.held,
 			[thread.id]: { thread, turns: [], queue: { steering: [], followUp: [] }, approvals: [], pending: [] },
 		},
 	}));
-	await send(thread.id, text);
+	await send(thread.id, text, images);
 }
 
 const newClientId = () => crypto.randomUUID();
 
 /** Start a turn on an idle thread, queue on a running one (section 9.4). */
-export async function send(threadId: string, text: string): Promise<void> {
+export async function send(threadId: string, text: string, images?: ImageInput[]): Promise<void> {
 	const view = state.held[threadId];
 	if (!view) return;
 	const running = view.turns.some((t) => t.status === "inProgress");
 	if (running) {
-		await client.request("turn/queue/add", { threadId, text }).catch((e: unknown) => toast(errorText(e)));
+		await client
+			.request("turn/queue/add", { threadId, text, ...(images?.length ? { images } : {}) })
+			.catch((e: unknown) => toast(errorText(e)));
 		return;
 	}
 	const clientMessageId = newClientId();
 	updateThread(threadId, (v) => ({ ...v, pending: [...v.pending, { clientMessageId, text }] }));
 	try {
-		const result = await client.request("turn/start", { threadId, text, clientMessageId });
+		const result = await client.request("turn/start", {
+			threadId,
+			text,
+			clientMessageId,
+			...(images?.length ? { images } : {}),
+		});
 		if (result.status !== "started")
 			updateThread(threadId, (v) => ({
 				...v,
@@ -517,4 +557,142 @@ export async function rename(threadId: string, name: string): Promise<void> {
 
 export async function compact(threadId: string): Promise<void> {
 	await client.request("thread/compact", { threadId }).catch((e: unknown) => toast(errorText(e)));
+}
+
+// --- history, accounts, archive, pickers -----------------------------------------------------
+
+/** Older turns, prepended above what is shown (section 9.3). */
+export async function loadEarlier(threadId: string): Promise<void> {
+	const cursor = state.held[threadId]?.nextCursor;
+	if (!cursor) return;
+	try {
+		const page = await client.request("thread/read", { threadId, cursor });
+		const older = (await Promise.all(page.turns.map(resolveTurn))).map(toView);
+		updateThread(threadId, (v) => {
+			const known = new Set(v.turns.map((t) => t.id));
+			const { nextCursor: _, ...rest } = v;
+			return {
+				...rest,
+				turns: [...older.filter((t) => !known.has(t.id)), ...v.turns],
+				...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+			};
+		});
+	} catch (error) {
+		toast(errorText(error));
+	}
+}
+
+export async function refreshAccounts(): Promise<void> {
+	try {
+		const accounts = await client.request("account/list", {});
+		set((s) => ({ ...s, accounts }));
+	} catch (error) {
+		toast(errorText(error));
+	}
+}
+
+export async function startLogin(provider: string, type: "oauth" | "api_key"): Promise<string | undefined> {
+	try {
+		const { loginId } = await client.request("account/login/start", { provider, type });
+		return loginId;
+	} catch (error) {
+		toast(errorText(error));
+		return undefined;
+	}
+}
+
+export async function answerLogin(loginId: string, value: string): Promise<void> {
+	await client.request("account/login/answer", { loginId, value }).catch((e: unknown) => toast(errorText(e)));
+}
+
+export async function cancelLogin(loginId: string): Promise<void> {
+	await client.request("account/login/cancel", { loginId }).catch(() => {});
+	set((s) => {
+		const { [loginId]: _, ...logins } = s.logins;
+		return { ...s, logins };
+	});
+}
+
+export async function logout(provider: string): Promise<void> {
+	await client.request("account/logout", { provider }).catch((e: unknown) => toast(errorText(e)));
+	await Promise.all([refreshAccounts(), refreshModels()]);
+}
+
+/** The terminal and the desktop share one default model, in settings.json. */
+export async function setDefaultModel(model: ModelInfo): Promise<void> {
+	try {
+		await client.request("config/write", { scope: "global", key: "defaultProvider", value: model.provider });
+		await client.request("config/write", { scope: "global", key: "defaultModel", value: model.id });
+		await refreshModels();
+	} catch (error) {
+		toast(errorText(error));
+	}
+}
+
+export function setPreference<K extends keyof Preferences>(key: K, value: Preferences[K]): void {
+	updateDesktop((d) => ({ ...d, preferences: { ...(d.preferences ?? DEFAULT_PREFERENCES), [key]: value } }));
+}
+
+export async function listArchived(): Promise<ThreadSummary[]> {
+	const threads: ThreadSummary[] = [];
+	let cursor: string | undefined;
+	do {
+		const page = await client.request("thread/list", cursor ? { archived: true, cursor } : { archived: true });
+		threads.push(...page.threads);
+		cursor = page.nextCursor;
+	} while (cursor && threads.length < 500);
+	return threads;
+}
+
+export async function unarchive(threadId: string): Promise<void> {
+	await client.request("thread/unarchive", { threadId }).catch((e: unknown) => toast(errorText(e)));
+}
+
+export async function deleteThread(threadId: string): Promise<void> {
+	await client.request("thread/delete", { threadId }).catch((e: unknown) => toast(errorText(e)));
+}
+
+export async function fork(threadId: string, atItemId?: string): Promise<void> {
+	try {
+		const { thread } = await client.request("thread/fork", atItemId ? { threadId, atItemId } : { threadId });
+		upsertSummary(thread);
+		await openThread(thread.id);
+	} catch (error) {
+		toast(errorText(error));
+	}
+}
+
+export async function listCommands(threadId: string): Promise<{ name: string; description: string }[]> {
+	try {
+		return (await client.request("command/list", { threadId })).commands;
+	} catch {
+		return [];
+	}
+}
+
+/** One searchId per composer, so each keystroke supersedes the last search (section 9.4). */
+export function searchFiles(cwd: string, query: string, searchId: string) {
+	return client.request("file/search", { cwd, query, searchId, limit: 30 });
+}
+
+export function pinThread(threadId: string, pinned: boolean): void {
+	updateDesktop((d) => ({
+		...d,
+		pinnedThreads: pinned
+			? [...d.pinnedThreads.filter((id) => id !== threadId), threadId]
+			: d.pinnedThreads.filter((id) => id !== threadId),
+	}));
+}
+
+/** The transcript as Markdown, for "Copy transcript". */
+export function transcriptMarkdown(threadId: string): string {
+	const view = state.held[threadId];
+	if (!view) return "";
+	const out: string[] = [];
+	for (const turn of view.turns)
+		for (const item of turn.items) {
+			if (item.type === "userMessage") out.push(`**You:** ${item.text}`);
+			else if (item.type === "agentMessage") out.push(item.text);
+		}
+	return out.join("\n\n");
 }

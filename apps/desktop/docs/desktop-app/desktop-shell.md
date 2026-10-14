@@ -1112,15 +1112,20 @@ depend on them as stated.
 
 ### Phase S1 — shell, threads, composer, approvals (needs A2)
 
-Status (2026-10-15), first milestone in place: Forge + Vite + React scaffold, the app server
-child with restart backoff, the router (sections 4.2-4.3, unit-tested), the window port, host
-methods for folders, links, clipboard and state, the `app://` protocol with CSP, desktop state,
-the sidebar (projects, recent, needs attention), the transcript with turn grouping and markdown,
-the composer (queue, steer, stop, model, thinking and approval pickers), and approval cards.
-Still open in S1: tabs and right/bottom regions, settings screens, palette, onboarding and
-sign-in, archive screen, thread menu and rename, `@` and `/` pickers, image attachments, the
-quit question, OKLCH theme derivation, history paging, optimistic-message edge cases, the
-renderer and end-to-end tests of section 16.
+Status (2026-10-15): the S1 list is in place apart from the items below. Built: Forge + Vite +
+React scaffold, the app server child with restart backoff, the router (sections 4.2-4.3), the
+window port, host methods, `app://` with CSP, desktop state and preferences, the quit question,
+the Codex-style title bar with inline menu and back/forward, the sidebar (pinned, needs
+attention, projects, recents, search), the transcript with turn grouping, markdown and older
+history, the thread menu, the composer (queue, steer, stop, `@` and `/` pickers, image
+attachments by path, model, thinking and approval pickers, Full access confirmation), approval
+cards, settings (General, Appearance, Models & accounts with sign-in, Approvals, Keyboard
+shortcuts, About), the archive screen, the command palette, onboarding on the new-thread screen,
+light and dark themes. Tests: router, state file, transcript ordering, keybindings and a
+key-comparison scan, theme contrast (20). Moved out of S1: tabs and the right and bottom
+regions go to S2 and S3, where the changes pane, terminal and preview give them content; the
+OKLCH derivation goes with user themes (S3); end-to-end tests need Playwright, a new dependency
+to approve.
 
 - `apps/desktop/package.json`, `forge.config.ts`, `vite.*.config.ts`,
   `tsconfig.json`; root workspace entry; AGENTS.md layout row.

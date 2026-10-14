@@ -1,71 +1,76 @@
 @import "tailwindcss";
 
 /*
- * Tokens (desktop-shell.md section 11.2). Colours come from the terminal's dark.json and light.json,
- * so the desktop and the terminal read as one product. Components use only these properties.
+ * Tokens (desktop-shell.md section 11.2). Neutral greys sampled from the Codex desktop app
+ * (2026-10-15), KnightCode's orange as the accent. Components use only these properties.
  * ponytail: hand-picked per theme; section 11.1's OKLCH derivation from surface/ink/accent comes with themes.
  */
-:root {
-	--kc-bg-shell: #13110f;
-	--kc-bg-surface: #191613;
-	--kc-bg-elevated: #221e1a;
-	--kc-bg-hover: #2a2622;
-	--kc-bg-selected: #3a2a1d;
-	--kc-text: #e7e2db;
-	--kc-text-muted: #9c958d;
-	--kc-text-faint: #7b756e;
+:root,
+:root[data-theme="dark"] {
+	--kc-bg-shell: #202020;
+	--kc-bg-sidebar: #1b1b1b;
+	--kc-bg-surface: #181818;
+	--kc-bg-elevated: #262626;
+	--kc-bg-composer: #2f2f2f;
+	--kc-bg-hover: #262626;
+	--kc-bg-selected: #2d2d2d;
+	--kc-text: #ececec;
+	--kc-text-muted: #acacac;
+	--kc-text-faint: #7c7c7c;
 	--kc-text-on-accent: #1a120c;
-	--kc-border: #2e2a26;
-	--kc-border-strong: #4a443e;
+	--kc-border: #2b2b2b;
+	--kc-border-strong: #3a3a3a;
 	--kc-focus: #ff8a3d;
 	--kc-accent: #ff8a3d;
 	--kc-accent-hover: #ff9d5c;
-	--kc-success: #8fb573;
-	--kc-warning: #e9c46a;
-	--kc-danger: #ea6f59;
-	--kc-diff-add-bg: #1f3124;
-	--kc-diff-add-text: #8fb573;
-	--kc-diff-del-bg: #3c211b;
-	--kc-diff-del-text: #ea6f59;
-	--kc-user-bubble: #26221f;
+	--kc-success: #4ec27a;
+	--kc-warning: #e9b949;
+	--kc-danger: #f0605a;
+	--kc-diff-add-bg: #16301f;
+	--kc-diff-add-text: #4ec27a;
+	--kc-diff-del-bg: #3a1a1a;
+	--kc-diff-del-text: #f0605a;
+	--kc-user-bubble: #2f2f2f;
 	--kc-font-ui: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 	--kc-font-code: "Cascadia Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-	--kc-size-ui: 13px;
-	--kc-size-code: 12px;
-	--kc-radius: 8px;
+	--kc-size-ui: 14px;
+	--kc-size-code: 12.5px;
+	--kc-radius: 10px;
 	color-scheme: dark;
 }
 
-@media (prefers-color-scheme: light) {
-	:root {
-		--kc-bg-shell: #f3efe9;
-		--kc-bg-surface: #fbf9f6;
-		--kc-bg-elevated: #ffffff;
-		--kc-bg-hover: #ece6df;
-		--kc-bg-selected: #fbe5d2;
-		--kc-text: #2b2622;
-		--kc-text-muted: #6f675f;
-		--kc-text-faint: #8c847c;
-		--kc-text-on-accent: #ffffff;
-		--kc-border: #e6dfd7;
-		--kc-border-strong: #d3cbc2;
-		--kc-focus: #b34600;
-		--kc-accent: #b34600;
-		--kc-accent-hover: #c95300;
-		--kc-success: #497433;
-		--kc-warning: #856400;
-		--kc-danger: #bf3925;
-		--kc-diff-add-bg: #e0f0d6;
-		--kc-diff-add-text: #497433;
-		--kc-diff-del-bg: #fce6e0;
-		--kc-diff-del-text: #bf3925;
-		--kc-user-bubble: #f3eee8;
-		color-scheme: light;
-	}
+:root[data-theme="light"] {
+	--kc-bg-shell: #f3f3f3;
+	--kc-bg-sidebar: #f7f7f7;
+	--kc-bg-surface: #ffffff;
+	--kc-bg-elevated: #ffffff;
+	--kc-bg-composer: #f3f3f3;
+	--kc-bg-hover: #ececec;
+	--kc-bg-selected: #e6e6e6;
+	--kc-text: #1a1c1f;
+	--kc-text-muted: #5d5f63;
+	--kc-text-faint: #8e9094;
+	--kc-text-on-accent: #ffffff;
+	--kc-border: #e5e5e5;
+	--kc-border-strong: #d4d4d4;
+	--kc-focus: #c24f00;
+	--kc-accent: #c24f00;
+	--kc-accent-hover: #d65a00;
+	--kc-success: #1f8a4c;
+	--kc-warning: #9a6a00;
+	--kc-danger: #c93a32;
+	--kc-diff-add-bg: #e3f5e9;
+	--kc-diff-add-text: #1f8a4c;
+	--kc-diff-del-bg: #fce8e7;
+	--kc-diff-del-text: #c93a32;
+	--kc-user-bubble: #f0f0f0;
+	color-scheme: light;
 }
 
 @theme inline {
 	--color-shell: var(--kc-bg-shell);
+	--color-sidebar: var(--kc-bg-sidebar);
+	--color-composer: var(--kc-bg-composer);
 	--color-surface: var(--kc-bg-surface);
 	--color-elevated: var(--kc-bg-elevated);
 	--color-hover: var(--kc-bg-hover);

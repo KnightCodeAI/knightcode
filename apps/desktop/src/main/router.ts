@@ -67,6 +67,8 @@ export class Router {
 	private readonly lastStarter = new Map<string, number>();
 	/** Keyed by the server's request id, sent to windows unchanged. */
 	private readonly serverRequests = new Map<string, ServerRequest>();
+	/** Threads whose last status was active, from the sidebar notifications every connection gets. */
+	private readonly active = new Set<string>();
 
 	constructor(server: RouterServer) {
 		this.server = server;
@@ -81,6 +83,10 @@ export class Router {
 		this.windows.delete(windowId);
 		for (const [threadId, set] of this.holders) if (set.has(windowId)) this.release(windowId, threadId);
 		for (const [id, pending] of this.pending) if (pending.windowId === windowId) this.pending.delete(id);
+	}
+
+	activeThreads(): number {
+		return this.active.size;
 	}
 
 	heldThreads(windowId?: number): string[] {
@@ -154,6 +160,7 @@ export class Router {
 		for (const [id, request] of this.serverRequests)
 			this.toWindow(request.windowId, { method: "serverRequest/cancelled", params: { id } });
 		this.serverRequests.clear();
+		this.active.clear();
 	}
 
 	private serverRequest(message: Extract<Message, { method: string; id: RequestId }>): void {
@@ -190,6 +197,11 @@ export class Router {
 			if (starter !== undefined) this.lastStarter.set(newId, starter);
 			this.lastStarter.delete(oldId);
 			return;
+		}
+		if (message.method === "thread/status/changed") {
+			const { threadId, status } = params as { threadId: string; status: { type: string } };
+			if (status.type === "active") this.active.add(threadId);
+			else this.active.delete(threadId);
 		}
 		const threadId = SIDEBAR.has(message.method) ? undefined : threadOf(params);
 		if (threadId === undefined) {
