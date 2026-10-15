@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ShellOutputSkip } from "../src/env/index.ts";
-import { OutputBuffer, type OutputLimits } from "../src/harness/output.ts";
+import { OutputBuffer, type OutputLimits, type OutputSkip } from "../src/output.ts";
 
 /** Deterministic PRNG (mulberry32) so failures reproduce from the printed seed. */
 function random(seed: number): () => number {
@@ -25,7 +24,7 @@ function randomChunk(next: () => number): string {
 	return text;
 }
 
-function measure(text: string): ShellOutputSkip {
+function measure(text: string): OutputSkip {
 	let newlines = 0;
 	for (const character of text) if (character === "\n") newlines++;
 	return { bytes: Buffer.byteLength(text, "utf8"), newlines, endsWithNewline: text.endsWith("\n") };
@@ -94,7 +93,6 @@ function checkSeed(seed: number): void {
 	expect(skips >= 0).toBe(true);
 }
 
-// The 3000-seed loops take under a second alone; `bun run test` runs every package at once and CI starved one past 5 s.
 describe("OutputBuffer skipped output", () => {
 	// Progress commits snapshot at arbitrary moments; snapshots compact what is stored and must never change the window.
 	// A compaction to exactly the kept window lost the character that decides where a later window's first line starts.
@@ -117,11 +115,11 @@ describe("OutputBuffer skipped output", () => {
 			}
 			expect(sampled.snapshot(), `seed ${seed}`).toEqual(plain.snapshot());
 		}
-	}, 30_000);
+	});
 
 	it("matches the full stream for every legal skip pattern", () => {
 		for (let seed = 1; seed <= 3000; seed++) checkSeed(seed);
-	}, 30_000);
+	});
 
 	it("counts skipped bytes, lines and the final newline exactly", () => {
 		const limits: OutputLimits = { maxBytes: 1000, maxLines: 2, retain: "tail" };
