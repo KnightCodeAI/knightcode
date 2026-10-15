@@ -3,15 +3,19 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "./database.ts";
-import { SqliteStorage } from "./storage.ts";
+import { validateSqliteSchemaPrefix } from "./schema.ts";
+import { SqliteStorage, type SqliteStorageOptions } from "./storage.ts";
 
 /** Node SQLite connection settings for a durable storage file. */
-export type NodeSqliteStorageOptions = {
+export type NodeSqliteDatabaseOptions = {
 	/** SQLite WAL auto-checkpoint threshold. SQLite and this adapter default to 1,000 pages; 0 disables it. */
 	readonly walAutoCheckpointPages?: number;
 	/** Time SQLite waits for a competing file lock. SQLite defaults to 0; this adapter defaults to 5,000 ms. */
 	readonly busyTimeoutMs?: number;
 };
+
+/** Node SQLite connection settings plus durable storage options. */
+export type NodeSqliteStorageOptions = NodeSqliteDatabaseOptions & SqliteStorageOptions;
 
 const DEFAULT_WAL_AUTO_CHECKPOINT_PAGES = 1_000;
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
@@ -202,7 +206,7 @@ export class NodeSqliteDatabase extends NodeSqliteExecutor implements SqliteData
  */
 export async function configureSqliteDatabase(
 	connection: SyncSqliteConnection,
-	options: NodeSqliteStorageOptions = {},
+	options: NodeSqliteDatabaseOptions = {},
 ): Promise<NodeSqliteDatabase> {
 	const checkpointPages = options.walAutoCheckpointPages ?? DEFAULT_WAL_AUTO_CHECKPOINT_PAGES;
 	const adapter = new NodeSqliteDatabase(connection);
@@ -227,14 +231,14 @@ export async function prepareSqlitePath(path: string): Promise<void> {
 }
 
 /** Default time SQLite waits for a competing file lock, in milliseconds. */
-export function sqliteBusyTimeoutMs(options: NodeSqliteStorageOptions): number {
+export function sqliteBusyTimeoutMs(options: NodeSqliteDatabaseOptions): number {
 	return options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS;
 }
 
 /** Open and configure a Node-backed SQLite database facade. */
 export async function openNodeSqliteDatabase(
 	path: string,
-	options: NodeSqliteStorageOptions = {},
+	options: NodeSqliteDatabaseOptions = {},
 ): Promise<NodeSqliteDatabase> {
 	await prepareSqlitePath(path);
 	// Loaded on use rather than imported: Bun has no `node:sqlite`, and a static import would fail any Bun
@@ -245,10 +249,12 @@ export async function openNodeSqliteDatabase(
 	return configureSqliteDatabase(new Database(path, { timeout: sqliteBusyTimeoutMs(options) }), options);
 }
 
-/** Open or create file-backed durable storage using Node's built-in SQLite. */
+/** Open or create file-backed durable storage using Node's built-in SQLite, optionally under a table prefix. */
 export async function openNodeSqliteStorage(
 	path: string,
 	options: NodeSqliteStorageOptions = {},
 ): Promise<SqliteStorage> {
-	return SqliteStorage.open(await openNodeSqliteDatabase(path, options));
+	const { prefix, ...databaseOptions } = options;
+	if (prefix !== undefined) validateSqliteSchemaPrefix(prefix);
+	return SqliteStorage.open(await openNodeSqliteDatabase(path, databaseOptions), { prefix });
 }

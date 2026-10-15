@@ -16,6 +16,7 @@ describe.skipIf(!hasBun)("Bun SQLite adapter", () => {
 			journal: "wal",
 			rollbackError: "boom",
 			rows: ["a", "b"],
+			prefixed: true,
 		});
 	}, 30_000);
 });

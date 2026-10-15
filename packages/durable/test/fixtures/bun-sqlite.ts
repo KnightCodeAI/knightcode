@@ -31,12 +31,20 @@ try {
 	await (await openBunSqliteStorage(storagePath)).close(BACKGROUND_CONTEXT);
 	await (await openBunSqliteStorage(storagePath)).close(BACKGROUND_CONTEXT);
 
+	const prefixedPath = join(dir, "prefixed.sqlite");
+	await (await openBunSqliteStorage(prefixedPath, { prefix: "kc_" })).close(BACKGROUND_CONTEXT);
+	const prefixedDb = await openBunSqliteDatabase(prefixedPath);
+	const prefixedTables = await prefixedDb.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'");
+	await prefixedDb.close();
+	const prefixed = prefixedTables.length > 0 && prefixedTables.every((table) => table.name.startsWith("kc_"));
+
 	console.log(
 		JSON.stringify({
 			missing: missing === undefined,
 			journal: journal?.journal_mode,
 			rollbackError,
 			rows: rows.map((row) => row.v),
+			prefixed,
 		}),
 	);
 } finally {
