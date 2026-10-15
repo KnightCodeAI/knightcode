@@ -17,7 +17,16 @@ const cleanups: Array<() => Promise<void>> = [];
 
 /** Call from afterEach. */
 export async function cleanupServers(): Promise<void> {
-	for (const cleanup of cleanups.splice(0)) await cleanup();
+	const errors: unknown[] = [];
+	for (const cleanup of cleanups.splice(0)) {
+		try {
+			await cleanup();
+		} catch (error) {
+			errors.push(error);
+		}
+	}
+	if (errors.length === 1) throw errors[0];
+	if (errors.length > 1) throw new AggregateError(errors, "server cleanup failed");
 }
 
 export interface TestClient {
@@ -64,10 +73,13 @@ export async function startServer(options: StartServerOptions = {}) {
 	await ctx.models.refresh({ allowNetwork: false });
 	const threads = new ThreadManager(ctx, options);
 	cleanups.push(async () => {
-		await threads.closeAll();
-		ctx.dispose();
-		for (const dir of [cwd, agentDir, sessionDir])
-			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+		try {
+			await threads.closeAll();
+		} finally {
+			ctx.dispose();
+			for (const dir of [cwd, agentDir, sessionDir])
+				await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+		}
 	});
 	const connect = async (
 		mode: "desktop" | "tui" = "tui",

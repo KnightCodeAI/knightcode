@@ -2560,12 +2560,14 @@ transcript scans using file sizes, plus parent-header opens without header
 bytes; they exclude index I/O and stats. The peak is sampled JSC heap every
 2 ms, including a final sample, not an exact allocation maximum or OS RSS.
 
-The [complete printed JSONL](../../../../packages/cli/test/app-server/bench/results/protocol-2.jsonl)
-records all 1,776 responses: Windows 1,000 runs 1/2, Windows 10,000 runs 1/2,
-Linux 1,000 runs 1/2, then Linux 10,000 runs 1/2. Each run contains the initial
-response and all continuations, cold followed by warm. The table records all
-sixteen initial responses and each run's continuation latency range. Values
-are raw bytes and milliseconds; no noisy result was discarded or smoothed.
+The [summary JSONL](../../../../packages/cli/test/app-server/bench/results/protocol-2.jsonl)
+holds one line per scan, sixteen in all, derived from the 1,776 printed
+responses: Windows 1,000 runs 1/2, Windows 10,000 runs 1/2, Linux 1,000 runs
+1/2, then Linux 10,000 runs 1/2, cold followed by warm. Each line carries the
+initial response's counters and time, the continuation count with min/p50/max
+latency, and the peak JSC heap across the whole scan. The table's heap column
+is the initial response's peak only. Values are raw bytes and milliseconds; no
+noisy result was discarded or smoothed.
 
 | Platform | Base sessions | Run | Scan | Fixture bytes | Scan bytes | Opens | Initial ms | Peak JSC heap bytes | Index bytes | Continuation ms (min–max) |
 | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
