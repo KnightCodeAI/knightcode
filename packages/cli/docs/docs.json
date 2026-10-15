@@ -28,6 +28,10 @@
               "path": "usage.md"
             },
             {
+              "title": "Use the Desktop App",
+              "path": "desktop.md"
+            },
+            {
               "title": "Plan Before Implementing",
               "path": "plan-mode.md"
             },
@@ -195,6 +199,10 @@
         {
           "title": "RPC Extension UI",
           "path": "rpc-extension-ui.md"
+        },
+        {
+          "title": "App Server Protocol",
+          "path": "app-server.md"
         },
         {
           "title": "Message Types",
