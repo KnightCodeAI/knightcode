@@ -1019,9 +1019,14 @@ export class ThreadManager {
 			thread.queued.length = 0;
 			this.notifyQueue(thread);
 		}
+		const starting = thread.pendingStarts.size > 0;
 		for (const start of thread.pendingStarts) start.abort();
 		thread.abortPending();
-		await thread.session.abort();
+		const stopped = thread.session.abort();
+		// A start still in preflight keeps the session busy until its hooks return; the turn ends as
+		// cancelled then, so the interrupt does not wait for an extension handler.
+		if (starting) stopped.catch(() => {});
+		else await stopped;
 	}
 
 	private async cancelled(

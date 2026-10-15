@@ -365,7 +365,7 @@ test("cancelled model preservation cannot overwrite newer target model and think
 	}
 });
 
-test("a rejected overlapping core prompt cannot settle the run owned by another prompt", async () => {
+test("a prompt during another prompt's preflight is rejected without touching that run", async () => {
 	const hold = gate();
 	const server = await startServer({
 		tokensPerSecond: 50,
@@ -388,25 +388,17 @@ test("a rejected overlapping core prompt cannot settle the run owned by another 
 	const a = await server.connect();
 	const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
 	const session = server.threads.get(thread.id).session;
-	const blocked = session.prompt("blocked").catch((error: unknown) => error);
+	server.faux.setResponses([fauxAssistantMessage("blocked reply")]);
+	const blocked = session.prompt("blocked");
 	await hold.entered;
-	server.faux.setResponses([fauxAssistantMessage("running ".repeat(100))]);
-	const running = session.prompt("running");
-	await a.waitFor("item/agentMessage/delta");
-	const activePrompt = session.systemPrompt;
-	const activeTools = session.getActiveToolNames();
 	try {
-		hold.open();
-		expect(await blocked).toBeInstanceOf(Error);
-		expect(session.isStreaming).toBe(true);
-		expect(session.systemPrompt === activePrompt).toBe(true);
-		expect(session.getActiveToolNames()).toEqual(activeTools);
-		expect(a.notifications.some((n) => n.method === "turn/completed")).toBe(false);
+		// The run counts as busy from its preflight on, so the second prompt cannot start a run of its own.
+		await expect(session.prompt("running")).rejects.toThrow("already processing");
 	} finally {
 		hold.open();
-		await session.abort();
-		await running;
 	}
+	await blocked;
+	await a.waitFor("turn/completed");
 });
 
 test.each(["new", "fork", "switch"] as const)("cancelled %s pre-hooks stop downstream callbacks", async (kind) => {
