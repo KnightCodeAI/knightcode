@@ -1,3 +1,4 @@
+import type { Message } from "@knightcode/app-server-protocol";
 import { expect, test } from "vitest";
 import { AppServerError } from "../../src/app-server/errors.ts";
 import { createInProcessClient, createInProcessPair } from "../../src/app-server/in-process.ts";
@@ -87,5 +88,17 @@ test("a malformed response to a server request rejects the pending request", asy
 	const reply = { jsonrpc: "2.0", id, result: { decision: "accept" } };
 	pair.client.send(reply);
 	await expect(pending).rejects.toMatchObject({ code: "invalidParams", message: "Malformed response" });
+	pair.client.close();
+});
+
+test("a malformed request with an id gets an error response", async () => {
+	const pair = createInProcessPair();
+	const replies: unknown[] = [];
+	pair.client.onMessage((message) => replies.push(message));
+	new AppServer({ transport: pair.server, version: "0", mode: "desktop", handlers: {} });
+	// JSON-RPC allows leaving params out; the envelope does not.
+	pair.client.send({ id: 7, method: "model/list" } as unknown as Message);
+	await tick();
+	expect(replies).toContainEqual({ id: 7, error: { code: "invalidParams", message: "Malformed request" } });
 	pair.client.close();
 });

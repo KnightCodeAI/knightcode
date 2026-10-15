@@ -132,6 +132,18 @@ test("a malformed stored mode restores as ask", async () => {
 	expect(thread.approvalMode).toBe("ask");
 });
 
+test("forking a saved thread on a terminal connection keeps its stored mode", async () => {
+	const { cwd, sessionDir, connect } = await startServer();
+	const manager = SessionManager.create(cwd, sessionDir);
+	manager.appendCustomEntry(APPROVAL_MODE_ENTRY, "ask");
+	manager.appendMessage({ role: "user", content: [{ type: "text", text: "hi" }], timestamp: 1 });
+	const id = manager.getSessionId();
+	manager.close();
+	const terminal = await connect("tui");
+	const { thread } = await terminal.client.request("thread/fork", { threadId: id });
+	expect(thread.approvalMode).toBe("ask");
+});
+
 test("a disconnect with another subscriber moves the request", async () => {
 	const server = await startServer();
 	const first = await server.connect("desktop");

@@ -198,6 +198,10 @@ export class AppServer implements Subscriber {
 			if (pending) {
 				this.outgoing.delete(id!);
 				pending.reject(new AppServerError("invalidParams", "Malformed response"));
+			} else if (method !== undefined && (typeof id === "number" || (typeof id === "string" && id.length <= 128))) {
+				// A malformed request with a usable id must still be answered, or its caller waits forever.
+				this.transport.send({ id, error: { code: "invalidParams", message: "Malformed request" } });
+				return;
 			}
 			this.transport.send({ method: "error", params: { message: "Malformed message" } });
 			return;

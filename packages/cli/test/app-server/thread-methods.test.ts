@@ -288,3 +288,24 @@ test("thread/fork of a loaded thread resolves atItemId on its live branch", asyn
 	const { thread } = await a.client.request("thread/fork", { threadId: id, atItemId });
 	expect(thread.id).not.toBe(id);
 });
+
+test("thread/fork of a loaded thread without atItemId copies its live branch", async () => {
+	const { cwd, sessionDir, threads, connect } = await startServer();
+	const manager = SessionManager.create(cwd, sessionDir);
+	const user = (text: string) => ({ role: "user" as const, content: [{ type: "text" as const, text }], timestamp: 1 });
+	const root = manager.appendMessage(user("root"));
+	const side = manager.appendMessage(user("side"));
+	manager.branch(root);
+	manager.appendMessage(user("main"));
+	const id = manager.getSessionId();
+	manager.close();
+	const a = await connect();
+	await a.client.request("thread/resume", { threadId: id });
+	threads.get(id).session.sessionManager.branch(side);
+	const { thread } = await a.client.request("thread/fork", { threadId: id });
+	const { turns } = await a.client.request("thread/read", { threadId: thread.id });
+	const texts = turns.flatMap((turn) =>
+		"items" in turn ? turn.items.flatMap((item) => (item.type === "userMessage" ? [item.text] : [])) : [],
+	);
+	expect(texts).toEqual(["root", "side"]);
+});

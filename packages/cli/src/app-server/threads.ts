@@ -418,7 +418,9 @@ export class ThreadManager {
 				? { entries: live.session.sessionManager.getBranch(), manager: live.session.sessionManager }
 				: this.branchOf(source);
 			const cwd = live?.session.sessionManager.getCwd() ?? manager.getHeader()?.cwd ?? process.cwd();
-			const leafId = atItemId === undefined ? undefined : entryForItem(entries, atItemId);
+			// Without atItemId a live thread forks at its in-memory leaf (null after a reset: an empty fork).
+			const leafId =
+				atItemId === undefined ? live?.session.sessionManager.getLeafId() : entryForItem(entries, atItemId);
 			if (atItemId !== undefined && leafId === undefined)
 				throw new AppServerError("invalidParams", `no item ${atItemId} in ${threadId}`);
 			const sessionManager = SessionManager.forkFrom(
@@ -431,7 +433,7 @@ export class ThreadManager {
 				sessionManager,
 				by.mode,
 				"fork",
-				live?.approvalMode ?? defaultApprovalMode(by.mode),
+				live?.approvalMode ?? readApprovalMode(entries) ?? defaultApprovalMode(by.mode),
 			);
 			if (thread.state !== "ready")
 				throw new AppServerError("threadNotFound", `fork closed while loading: ${thread.id}`);

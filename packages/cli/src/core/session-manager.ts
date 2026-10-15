@@ -1954,7 +1954,8 @@ export class SessionManager {
 		sourcePath: string,
 		targetCwd: string,
 		sessionDir?: string,
-		options?: NewSessionOptions & { leafId?: string },
+		/** `leafId` copies that branch; null copies no entries; absent copies the whole file. */
+		options?: NewSessionOptions & { leafId?: string | null },
 	): SessionManager {
 		const resolvedSourcePath = canonicalSessionPath(resolvePath(sourcePath));
 		const resolvedTargetCwd = resolvePath(targetCwd);
@@ -1994,7 +1995,9 @@ export class SessionManager {
 		const copied =
 			options?.leafId === undefined
 				? sourceEntries.filter((entry) => entry.type !== "session")
-				: branchEntries(sourceEntries, options.leafId);
+				: options.leafId === null
+					? []
+					: branchEntries(sourceEntries, options.leafId);
 		const content = [newHeader, ...copied].map((entry) => `${JSON.stringify(entry)}\n`).join("");
 		const lock = acquireSessionLock(newSessionFile);
 		let created = false;
