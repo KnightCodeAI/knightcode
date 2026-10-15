@@ -67,6 +67,9 @@ test("a new thread reports createdAt, and a fork names its origin (§4.2)", asyn
 	await a.waitFor("turn/completed");
 	const { thread: fork } = await a.client.request("thread/fork", { threadId: thread.id });
 	expect(fork.forkedFromId).toBe(thread.id);
+	// The fork is named after its source so the two can be told apart.
+	expect(fork.name).toBe("hi (fork)");
 	const listed = await a.client.request("thread/list", { cwd });
 	expect(listed.threads.find((t) => t.id === fork.id)?.forkedFromId).toBe(thread.id);
+	expect(listed.threads.find((t) => t.id === fork.id)?.name).toBe("hi (fork)");
 });

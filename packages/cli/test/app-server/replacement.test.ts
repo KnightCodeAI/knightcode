@@ -106,7 +106,14 @@ test("command/list returns extension commands, and sendMessage produces an exten
 	const a = await server.connect();
 	const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
 	const { commands } = await a.client.request("command/list", { threadId: thread.id });
-	expect(commands.map((c) => c.name)).toEqual(expect.arrayContaining(["fresh", "goto", "note"]));
+	expect(commands.map((c) => c.name)).toEqual(expect.arrayContaining(["fresh", "goto", "note", "plan"]));
+	// Built-ins that need the terminal's pickers and panels are not offered to the desktop.
+	expect(commands.map((c) => c.name).filter((n) => ["usage", "llama", "undo"].includes(n))).toEqual([]);
+	// Before a thread exists, a project's commands come from an unbound in-memory session.
+	const listed = await a.client.request("thread/list", { cwd: server.cwd });
+	const byCwd = await a.client.request("command/list", { cwd: server.cwd });
+	expect(byCwd.commands).toEqual(commands);
+	expect((await a.client.request("thread/list", { cwd: server.cwd })).threads).toEqual(listed.threads);
 	server.faux.setResponses([fauxAssistantMessage([fauxText("ack")])]);
 	await a.client.request("turn/start", { threadId: thread.id, text: "/note" });
 	const item = await a.waitFor("item/completed", (p) => (p.item as { type: string }).type === "extensionMessage");

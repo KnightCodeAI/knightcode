@@ -63,7 +63,7 @@ Start a thread with its project directory:
 ```
 
 Wait for each response. `thread/start` and `thread/fork` return
-`{thread, warnings}`. `thread/resume` also returns warnings; render them from the
+`{thread, warnings}`. A fork is named after its source with ` (fork)` appended. `thread/resume` also returns warnings; render them from the
 response, because they can occur before subscription. A warning has
 `{message, source, path?, line?, column?}`, where `source` is `settings`,
 `extension`, `trust`, or `server`. Malformed settings, refused extension loads,
@@ -378,6 +378,19 @@ listing failures return `internal`.
 
 ```json
 {"id":15,"method":"file/search","params":{"cwd":"/path/to/project","query":"src/config","limit":20,"searchId":"composer"}}
+```
+
+### `command/list`
+
+Params: `{threadId}` or `{cwd}`. Result: `{commands: [{name, description}]}`:
+extension commands, prompt templates, and skills as `skill:<name>`, without the
+leading `/`. With `cwd`, the server lists what a new thread in that project would
+offer, from a session it builds in memory and never binds: no extension starts,
+and nothing is written. Built-in commands that only work in the terminal
+(`usage`, `llama`, `undo`) are left out.
+
+```json
+{"id":17,"method":"command/list","params":{"cwd":"/path/to/project"}}
 ```
 
 ### `thread/delete`

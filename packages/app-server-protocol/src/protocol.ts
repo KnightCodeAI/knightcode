@@ -461,7 +461,10 @@ export const ClientRequests = {
 			listingBytesScanned: Num,
 		}),
 	},
-	"command/list": { params: ThreadId, result: Obj({ commands: Type.Array(Obj({ name: Str, description: Str })) }) },
+	"command/list": {
+		params: Type.Union([ThreadId, Obj({ cwd: Str })]),
+		result: Obj({ commands: Type.Array(Obj({ name: Str, description: Str })) }),
+	},
 	"config/read": {
 		params: Obj({ cwd: Type.Optional(Str) }),
 		result: Obj({

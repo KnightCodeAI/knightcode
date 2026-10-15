@@ -83,6 +83,23 @@ export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
 	return mode === "desktop" ? "ask" : "fullAccess";
 }
 
+// ponytail: a fixed list of built-in commands that do nothing outside the terminal (they need a picker or a
+// terminal panel). Replace with command metadata or desktop dialogs when extension UI reaches the desktop (Phase C).
+const TERMINAL_ONLY_COMMANDS = new Set(["usage", "llama", "undo"]);
+
+function commandsOf(session: AgentSession): ResultOf<"command/list">["commands"] {
+	return [
+		...session.extensionRunner
+			.getRegisteredCommands()
+			.filter((command) => !TERMINAL_ONLY_COMMANDS.has(command.invocationName))
+			.map((command) => ({ name: command.invocationName, description: command.description ?? "" })),
+		...session.promptTemplates.map((template) => ({ name: template.name, description: template.description ?? "" })),
+		...session.resourceLoader
+			.getSkills()
+			.skills.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description ?? "" })),
+	];
+}
+
 export class ThreadManager {
 	readonly files: SessionFileIndex;
 	readonly payloads: PayloadStore;
@@ -418,6 +435,8 @@ export class ThreadManager {
 			);
 			if (thread.state !== "ready")
 				throw new AppServerError("threadNotFound", `fork closed while loading: ${thread.id}`);
+			// The copy carries its source's name; mark it so the two can be told apart.
+			thread.session.setSessionName(`${thread.toThread().name} (fork)`);
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });
@@ -630,35 +649,8 @@ export class ThreadManager {
 		let services: Awaited<ReturnType<typeof createAgentSessionServices>> | undefined;
 		let session: AgentSession | undefined;
 		try {
-			const projectTrusted =
-				!hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(this.ctx.agentDir).get(cwd) === true;
 			const holder: { thread?: LoadedThread } = {};
-			services = await createAgentSessionServices({
-				cwd,
-				agentDir: this.ctx.agentDir,
-				modelRuntime: this.ctx.models,
-				settingsManager: SettingsManager.create(cwd, this.ctx.agentDir, { projectTrusted }),
-				resourceLoaderOptions: {
-					extensionFactories: [
-						...builtInExtensions,
-						...this.threadExtensions(holder),
-						...(this.options.extraExtensions ?? []),
-						// Inline extensions load after all others, so this input handler runs last.
-						{
-							name: "app-server-start-guard",
-							hidden: true,
-							factory: (knightcode) => {
-								// A start interrupted during earlier input handlers or a command launches nothing.
-								knightcode.on("input", () =>
-									holder.thread?.dispatching?.signal.aborted ? { action: "handled" as const } : undefined,
-								);
-							},
-						},
-					],
-					additionalExtensionPaths: this.options.extensionPaths,
-					disabledBuiltinExtensions: this.options.disabledBuiltinExtensions,
-				},
-			});
+			services = await this.servicesFor(cwd, holder);
 			({ session } = await createAgentSessionFromServices({
 				services,
 				sessionManager,
@@ -736,6 +728,65 @@ export class ThreadManager {
 			}
 			throw error;
 		}
+	}
+
+	/** The services a thread's session is built from; `holder.thread` is set once the thread exists. */
+	private servicesFor(cwd: string, holder: { thread?: LoadedThread }) {
+		const projectTrusted =
+			!hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(this.ctx.agentDir).get(cwd) === true;
+		return createAgentSessionServices({
+			cwd,
+			agentDir: this.ctx.agentDir,
+			modelRuntime: this.ctx.models,
+			settingsManager: SettingsManager.create(cwd, this.ctx.agentDir, { projectTrusted }),
+			resourceLoaderOptions: {
+				extensionFactories: [
+					...builtInExtensions,
+					...this.threadExtensions(holder),
+					...(this.options.extraExtensions ?? []),
+					// Inline extensions load after all others, so this input handler runs last.
+					{
+						name: "app-server-start-guard",
+						hidden: true,
+						factory: (knightcode) => {
+							// A start interrupted during earlier input handlers or a command launches nothing.
+							knightcode.on("input", () =>
+								holder.thread?.dispatching?.signal.aborted ? { action: "handled" as const } : undefined,
+							);
+						},
+					},
+				],
+				additionalExtensionPaths: this.options.extensionPaths,
+				disabledBuiltinExtensions: this.options.disabledBuiltinExtensions,
+			},
+		});
+	}
+
+	/**
+	 * Commands for a project that has no thread yet: an in-memory session that is never bound, so no
+	 * extension starts and nothing is written. Extensions register their commands as they load.
+	 */
+	private commandsFor(cwdParam: string): Promise<ResultOf<"command/list">> {
+		return this.track(async () => {
+			const cwd = resolvePath(cwdParam);
+			const stats = await stat(cwd).catch(() => undefined);
+			if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${cwdParam}`);
+			const services = await this.servicesFor(cwd, {});
+			let session: AgentSession | undefined;
+			try {
+				({ session } = await createAgentSessionFromServices({
+					services,
+					sessionManager: SessionManager.inMemory(cwd),
+				}));
+				return { commands: commandsOf(session) };
+			} finally {
+				if (session) session.dispose();
+				else {
+					this.ctx.models.releaseVirtualModels(services.resourceLoader.getExtensions().runtime);
+					services.resourceLoader.releaseExtensionCache?.();
+				}
+			}
+		});
 	}
 
 	/** Per-thread bridge for model changes, which are extension-only events. */
@@ -1255,23 +1306,10 @@ export class ThreadManager {
 		return {
 			"server/diagnostics": async () => this.diagnostics(),
 			"file/search": (params) => this.fileSearch.search(params),
-			"command/list": async ({ threadId }) => {
-				const { session } = this.get(threadId);
-				return {
-					commands: [
-						...session.extensionRunner
-							.getRegisteredCommands()
-							.map((command) => ({ name: command.invocationName, description: command.description ?? "" })),
-						...session.promptTemplates.map((template) => ({
-							name: template.name,
-							description: template.description ?? "",
-						})),
-						...session.resourceLoader
-							.getSkills()
-							.skills.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description ?? "" })),
-					],
-				};
-			},
+			"command/list": async (params) =>
+				"threadId" in params
+					? { commands: commandsOf(this.get(params.threadId).session) }
+					: this.commandsFor(params.cwd),
 			"turn/start": async ({ threadId, text, images, requestId, clientMessageId }, connection) =>
 				this.startTurn(
 					threadId,
