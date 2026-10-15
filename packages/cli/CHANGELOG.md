@@ -1,5 +1,27 @@
 # @knightcodeai/cli
 
+## 0.17.3
+
+### Changed
+
+- Changed Kimi Coding to use Chat Completions at https://api.kimi.com/coding/v1, the protocol the official Kimi Code client uses. K3, K3-256K and Kimi For Coding accept tools declared in later system messages, so tools loaded mid-conversation keep the prompt cache. Kimi Code Highspeed rejects tool-bearing system messages and keeps added tools in the top-level list.
+
+### Fixed
+
+- Fixed Kimi Coding requests failing with HTTP 404. The provider uses Anthropic Messages at https://api.kimi.com/coding again, so the client no longer appends /v1/messages to a base URL that already ends in /v1.
+
+- Fixed turning thinking off for Claude Haiku 5.5 and Opus 5. Those models accept disabled thinking, but KnightCode kept thinking on the way it does for Opus 5.5. Off now sends disabled thinking and leaves out effort markers, which Anthropic rejects while thinking is disabled.
+
+- Fixed thinking from a previous model being replayed as visible text after switching models. Thinking from another model is now dropped: its signatures and encrypted reasoning only work with the model that produced them, and readable thinking sent as plain text made the new model treat it as part of its own reply.
+
+- Fixed images in failed tool results being replaced by a note for Anthropic and for Claude on Bedrock. Both reject images inside an error tool result, so the images are now sent right after the turn's tool results with a caption naming the tool call.
+
+- Fixed closing an extension overlay removing a different overlay. When another overlay had opened above it, closing the lower one hid the topmost overlay instead and left the closed one on screen.
+
+- Fixed retries when a provider says the service is temporarily unavailable, including when the message has no status code.
+
+- Fixed the default model for the Xiaomi providers. It was `mimo-v2.5-pro`, which Xiaomi no longer lists, so choosing a Xiaomi provider without a model found nothing; the default is now `mimo-v2.6-pro`.
+
 ## 0.17.2
 
 ### Changed
