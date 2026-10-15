@@ -25,6 +25,14 @@ test("modifiers must match exactly: Enter sends, Shift+Enter does not", () => {
 	expect(matchesBinding(key("Enter", { ctrlKey: true }), "desktop.composer.steer", false)).toBe(true);
 });
 
+test("off macOS ctrl names mod, and the Windows key blocks a match", () => {
+	const ctrlJ = { "desktop.palette": ["ctrl+j"] };
+	expect(matchesBinding(key("j", { ctrlKey: true }), "desktop.palette", false, ctrlJ)).toBe(true);
+	expect(matchesBinding(key("j", { ctrlKey: true }), "desktop.palette", true, ctrlJ)).toBe(true);
+	expect(matchesBinding(key("j", { metaKey: true }), "desktop.palette", true, ctrlJ)).toBe(false);
+	expect(matchesBinding(key("Enter", { metaKey: true }), "desktop.composer.send", false)).toBe(false);
+});
+
 test("overrides replace the defaults for one id", () => {
 	expect(matchesBinding(key("j", { ctrlKey: true }), "desktop.palette", false, { "desktop.palette": ["mod+j"] })).toBe(
 		true,

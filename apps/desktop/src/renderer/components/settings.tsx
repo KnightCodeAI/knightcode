@@ -184,13 +184,15 @@ export function LoginFlow({ loginId, onDone }: { loginId: string; onDone: () => 
 						<div key={i} className="space-y-1.5">
 							<div className="text-muted">Enter this code at the sign-in page:</div>
 							<div className="selectable font-code text-xl tracking-widest">{e.userCode}</div>
-							<button
-								type="button"
-								onClick={() => void client.host("host/shell/openExternal", { url: e.verificationUri! })}
-								className="flex items-center gap-2 rounded-lg border border-line-strong px-3 py-1.5 hover:bg-hover"
-							>
-								<ExternalLink size={14} /> Open {e.verificationUri}
-							</button>
+							{e.verificationUri ? (
+								<button
+									type="button"
+									onClick={() => void client.host("host/shell/openExternal", { url: e.verificationUri! })}
+									className="flex items-center gap-2 rounded-lg border border-line-strong px-3 py-1.5 hover:bg-hover"
+								>
+									<ExternalLink size={14} /> Open {e.verificationUri}
+								</button>
+							) : null}
 						</div>
 					);
 				return e.message ? (

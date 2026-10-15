@@ -22,7 +22,11 @@ export class StateFile {
 		} catch {
 			// Falls through to setting the file aside.
 		}
-		renameSync(this.path, join(this.path, "..", `desktop-state.corrupt-${Date.now()}.json`));
+		try {
+			renameSync(this.path, join(this.path, "..", `desktop-state.corrupt-${Date.now()}.json`));
+		} catch {
+			// The defaults still apply; the next write replaces the file.
+		}
 		return structuredClone(DEFAULT_STATE);
 	}
 

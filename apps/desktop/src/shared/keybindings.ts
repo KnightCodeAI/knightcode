@@ -44,11 +44,11 @@ function matchesKeys(event: KeyLike, keys: string, mac: boolean): boolean {
 	const parts = keys.toLowerCase().split("+");
 	const key = parts.pop()!;
 	const wants = new Set(parts);
-	const mod = mac ? event.metaKey : event.ctrlKey;
-	const ctrl = mac ? event.ctrlKey : false;
-	if (wants.has("mod") !== mod || wants.has("shift") !== event.shiftKey || wants.has("alt") !== event.altKey)
-		return false;
-	if (wants.has("ctrl") !== ctrl) return false;
+	if (wants.has("shift") !== event.shiftKey || wants.has("alt") !== event.altKey) return false;
+	// Off macOS `ctrl` is another name for `mod`, and `meta` is the Windows or Super key.
+	const ctrl = mac ? wants.has("ctrl") : wants.has("mod") || wants.has("ctrl");
+	const meta = mac ? wants.has("mod") : wants.has("meta");
+	if (ctrl !== event.ctrlKey || meta !== event.metaKey) return false;
 	return event.key.toLowerCase() === key;
 }
 

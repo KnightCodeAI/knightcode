@@ -134,7 +134,7 @@ export function goBack(delta: -1 | 1): void {
 	const next = stack[index + delta];
 	if (!next) return;
 	set((s) => ({ ...s, view: next, history: { stack, index: index + delta } }));
-	if (next.kind === "thread" && !state.held[next.id]) void openThread(next.id);
+	if (next.kind === "thread" && !state.held[next.id]) void resumeThread(next.id);
 }
 
 export function setSidebarOpen(open: boolean): void {
@@ -229,7 +229,12 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 		case "thread/replaced": {
 			const { oldThreadId, thread } = n.params;
 			if (state.view.kind === "thread" && state.view.id === oldThreadId) navigate({ kind: "thread", id: thread.id });
-			await openThread(thread.id);
+			// The server unloaded the old thread; holding it would resume it again after a restart.
+			set((s) => {
+				const { [oldThreadId]: _old, ...held } = s.held;
+				return { ...s, held };
+			});
+			await resumeThread(thread.id);
 			return;
 		}
 		case "turn/started": {
@@ -377,7 +382,7 @@ async function connected(): Promise<void> {
 		set((s) => ({ ...s, desktop }));
 		await Promise.all([refreshThreads(), refreshModels(), refreshAccounts()]);
 		// After a restart the new server has no subscriptions: resume what this window shows.
-		for (const id of Object.keys(state.held)) void openThread(id);
+		for (const id of Object.keys(state.held)) void resumeThread(id);
 	} catch (error) {
 		toast(errorText(error));
 	}
@@ -426,6 +431,11 @@ export async function addProject(): Promise<string | undefined> {
 
 export async function openThread(id: string): Promise<void> {
 	navigate({ kind: "thread", id });
+	await resumeThread(id);
+}
+
+/** Subscribe to a thread and load its history without changing the view. */
+async function resumeThread(id: string): Promise<void> {
 	set((s) => ({ ...s, opening: { ...s.opening, [id]: undefined } }));
 	try {
 		const result = await client.request("thread/resume", { threadId: id });
