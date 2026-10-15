@@ -1126,7 +1126,8 @@ light and dark themes. Tests: router, state file, transcript ordering, keybindin
 key-comparison scan, theme contrast (20). Moved out of S1: tabs and the right and bottom
 regions go to S2 and S3, where the changes pane, terminal and preview give them content; the
 OKLCH derivation goes with user themes (S3); end-to-end tests need Playwright, a new dependency
-to approve.
+to approve; "Open in…" (`open-in.ts`, `host/openIn/list`) goes to S2, where file tabs and the
+changes pane give it a place.
 
 - `apps/desktop/package.json`, `forge.config.ts`, `vite.*.config.ts`,
   `tsconfig.json`; root workspace entry; AGENTS.md layout row.
@@ -1145,6 +1146,7 @@ to approve.
 ### Phase S2 — changes, worktrees, git (needs B)
 
 - Changes pane, worktree composer options, handoff UI, Worktrees settings.
+- Read-only file tabs and "Open in…" (section 9.9): `src/main/open-in.ts`, `host/openIn/list`.
 
 ### Phase S3 — GUI extensions, terminal, preview, extension UI (needs C)
 

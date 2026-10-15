@@ -288,12 +288,7 @@ function WorkItems({ items, streamingId }: { items: ViewItem[]; streamingId?: st
 							<Markdown text={item.text} />
 						</div>
 					);
-				if (item.type === "compaction")
-					return (
-						<div key={item.id} className="flex items-center gap-2 px-1.5 py-1 text-faint">
-							<Layers size={14} /> Context compacted
-						</div>
-					);
+				if (item.type === "compaction") return <CompactionDivider key={item.id} />;
 				if (item.type === "extensionMessage")
 					return (
 						<div key={item.id} className="px-1.5 py-1.5">
@@ -304,6 +299,19 @@ function WorkItems({ items, streamingId }: { items: ViewItem[]; streamingId?: st
 				if (item.type === "userMessage") return <UserBubble key={item.id} text={item.text} images={item.images} />;
 				return null;
 			})}
+		</div>
+	);
+}
+
+/** Compaction as a rule across the transcript: it changes what the model sees, so it is never folded away. */
+function CompactionDivider() {
+	return (
+		<div className="flex items-center gap-3 px-1.5 py-1 text-[12px] text-faint">
+			<span className="h-px flex-1 bg-line" />
+			<span className="flex items-center gap-1.5">
+				<Layers size={13} /> Context compacted
+			</span>
+			<span className="h-px flex-1 bg-line" />
 		</div>
 	);
 }
@@ -321,7 +329,10 @@ export function TurnView({
 	const rest = turn.items.filter((i) => i !== first);
 	const finalIndex = running ? -1 : rest.findLastIndex((i) => i.type === "agentMessage");
 	const final = finalIndex >= 0 ? rest[finalIndex] : undefined;
-	const work = final ? rest.filter((i) => i !== final) : rest;
+	// Compactions stay visible: those before the final reply show above it, later ones below.
+	const compactedBefore = rest.some((i, n) => i.type === "compaction" && (finalIndex < 0 || n < finalIndex));
+	const compactedAfter = finalIndex >= 0 && rest.some((i, n) => i.type === "compaction" && n > finalIndex);
+	const work = rest.filter((i) => i !== final && i.type !== "compaction");
 	const last = turn.items.at(-1);
 	const streamingId =
 		running && last && (last.type === "reasoning" || last.type === "agentMessage") ? last.id : undefined;
@@ -358,11 +369,13 @@ export function TurnView({
 							) : null}
 						</div>
 					) : null}
+					{compactedBefore ? <CompactionDivider /> : null}
 					{final?.type === "agentMessage" ? (
 						<div className="border-t border-line px-1.5 pt-3">
 							<Markdown text={final.text} />
 						</div>
 					) : null}
+					{compactedAfter ? <CompactionDivider /> : null}
 					{turn.status === "interrupted" ? <div className="px-1.5 text-faint">Interrupted</div> : null}
 					{turn.status === "failed" ? (
 						<div className="flex items-start gap-2 rounded-[var(--kc-radius)] border border-danger/30 bg-del-bg px-3 py-2 text-danger">
