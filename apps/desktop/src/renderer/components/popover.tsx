@@ -1,23 +1,19 @@
-import { matches } from "../keys.ts";
+import { Check } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { matches } from "../keys.ts";
 
-/**
- * A button that opens a panel; clicking outside or Escape closes it. `anchored` places the panel against the
- * nearest positioned ancestor instead of the button, as the composer's menus open above the whole composer.
- */
+/** A button that opens a menu above or below it; clicking outside or Escape closes it. Styled after Codex's. */
 export function Popover({
 	trigger,
 	children,
 	align = "left",
 	side = "top",
-	anchored = false,
 	className = "",
 }: {
 	trigger: (open: boolean) => ReactNode;
 	children: (close: () => void) => ReactNode;
 	align?: "left" | "right";
 	side?: "top" | "bottom";
-	anchored?: boolean;
 	className?: string;
 }) {
 	const [open, setOpen] = useState(false);
@@ -41,11 +37,11 @@ export function Popover({
 		};
 	}, [open]);
 	return (
-		<div ref={ref} className={anchored ? undefined : "relative"}>
+		<div ref={ref} className="relative">
 			<div onClick={() => setOpen(!open)}>{trigger(open)}</div>
 			{open ? (
 				<div
-					className={`absolute z-30 min-w-56 rounded-xl border border-line-strong bg-elevated p-1 shadow-2xl ${side === "top" ? "bottom-full mb-2" : "top-full mt-2"} ${align === "left" ? "left-0" : "right-0"} ${className}`}
+					className={`kc-menu absolute z-30 min-w-56 ${side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${align === "left" ? "left-0" : "right-0"} ${className}`}
 				>
 					{children(() => setOpen(false))}
 				</div>
@@ -54,25 +50,42 @@ export function Popover({
 	);
 }
 
+/** A menu's caption, as Codex heads its menus ("Select model", "How should … be approved?"). */
+export function MenuCaption({ children }: { children: ReactNode }) {
+	return <div className="px-2 pt-1 pb-1.5 text-[13px] leading-4 text-desc">{children}</div>;
+}
+
 export function MenuItem({
 	children,
 	onClick,
 	checked,
 	danger,
+	icon,
+	description,
 }: {
 	children: ReactNode;
 	onClick: () => void;
 	checked?: boolean;
+	/** Drawn in the caution colour, title and description both, as Codex draws Full access. */
 	danger?: boolean;
+	icon?: ReactNode;
+	description?: ReactNode;
 }) {
 	return (
 		<button
 			type="button"
 			onClick={onClick}
-			className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-hover ${danger ? "text-danger" : ""}`}
+			data-checked={checked || undefined}
+			className={`kc-row ${danger ? "text-caution" : "text-ink"}`}
 		>
-			<span className="min-w-0 flex-1">{children}</span>
-			{checked ? <span className="text-accent">✓</span> : null}
+			{icon ? <span className={`flex shrink-0 ${description ? "self-start pt-[3px]" : ""}`}>{icon}</span> : null}
+			<span className="min-w-0 flex-1">
+				<span className="block truncate">{children}</span>
+				{description ? (
+					<span className={`block text-[12px] leading-[14px] ${danger ? "" : "text-desc"}`}>{description}</span>
+				) : null}
+			</span>
+			{checked ? <Check size={15} className="ml-2 shrink-0" /> : null}
 		</button>
 	);
 }

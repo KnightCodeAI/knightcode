@@ -699,18 +699,18 @@ follows that arrangement; it has no voice buttons in v1 (section 14).
 
 ### 9.5 Approvals
 
-`item/toolCall/requestApproval` renders as a card at the bottom of the
-transcript, above the composer, and the thread's sidebar row shows "Waiting
-on you":
+`item/toolCall/requestApproval` renders as a card in the composer's place, as
+Codex shows a request (the composer stays mounted underneath, so a draft
+survives), and the thread's sidebar row shows "Waiting on you":
 
 ```text
 +--------------------------------------------------------------+
-| Run this command?                                             |
-|   $ npm test -- --watch=false                                 |
-|   in C:\work\app                                              |
-|   reason: flagged by the classifier gate (when present)       |
-|                                                               |
-|  [Allow once]  [Allow `npm test` for this thread]  [Deny v]   |
+| [>_] Run command                                              |
+| Allow KnightCode to run this command?                         |
+|   npm test -- --watch=false                                   |
+|   in app                                                      |
+| flagged by the classifier gate (the reason, when present)     |
+|                               [Deny Esc]  [Allow once Enter|v] |
 +--------------------------------------------------------------+
 ```
 
@@ -722,8 +722,9 @@ on you":
 - "Allow `<prefix>` for this thread" appears when the server offered a
   `prefix`. "Allow `<tool>` for this thread" is offered for
   non-shell tools.
-- Deny has a menu item "Deny and tell KnightCode why…", which opens a field;
-  the text is sent as the decline `message`.
+- The arrow beside Allow once holds the longer-lived allowances and "Deny and
+  say what to do instead…", which opens a field; the text is sent as the
+  decline `message`.
 - Enter allows once; Esc denies. Both only while the card has focus, which it
   takes when it appears unless the user is typing in the composer.
 - `serverRequest/cancelled` removes the card with "Request withdrawn".

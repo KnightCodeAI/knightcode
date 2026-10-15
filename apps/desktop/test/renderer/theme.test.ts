@@ -35,5 +35,8 @@ for (const [name, selector] of [
 			expect(contrast(t["--kc-text-muted"]!, t[surface]!), `muted on ${surface}`).toBeGreaterThanOrEqual(3);
 		}
 		expect(contrast(t["--kc-text-on-accent"]!, t["--kc-accent"]!), "text on accent").toBeGreaterThanOrEqual(4.5);
+		// Full access in menus, and the button that confirms it.
+		expect(contrast(t["--kc-caution"]!, t["--kc-bg-panel"]!), "caution on panel").toBeGreaterThanOrEqual(4.5);
+		expect(contrast(t["--kc-text-on-accent"]!, t["--kc-caution"]!), "text on caution").toBeGreaterThanOrEqual(4.5);
 	});
 }

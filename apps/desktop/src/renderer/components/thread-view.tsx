@@ -208,12 +208,13 @@ export function ThreadView({ id }: { id: string }) {
 					</button>
 				</div>
 			) : null}
+			{/* A request takes the composer's place, as in Codex; the composer stays mounted so a draft survives. */}
 			{view?.approvals[0] ? (
-				<div className="px-4">
-					<ApprovalCard key={String(view.approvals[0].id)} threadId={id} approval={view.approvals[0]} cwd={cwd} />
-				</div>
+				<ApprovalCard key={String(view.approvals[0].id)} threadId={id} approval={view.approvals[0]} cwd={cwd} />
 			) : null}
-			<Composer threadId={id} />
+			<div className={view?.approvals[0] ? "hidden" : undefined}>
+				<Composer threadId={id} />
+			</div>
 		</div>
 	);
 }

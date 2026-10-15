@@ -10,16 +10,22 @@ import {
 	ArrowUp,
 	Check,
 	ChevronDown,
+	ChevronLeft,
+	ChevronRight,
+	CircleAlert,
 	FileText,
+	Folder,
 	FolderOpen,
 	FolderPlus,
 	Hand,
 	ImagePlus,
+	Lightbulb,
 	Plus,
-	ShieldAlert,
+	Search,
 	ShieldCheck,
-	Slash,
+	Sparkles,
 	Square,
+	SquareSlash,
 	X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -41,12 +47,12 @@ import {
 	updateSettings,
 	useStore,
 } from "../store.ts";
-import { MenuItem, Popover } from "./popover.tsx";
+import { MenuCaption, MenuItem, Popover } from "./popover.tsx";
 
 const MODES: { mode: ApprovalMode; name: string; detail: string; icon: typeof Hand }[] = [
 	{ mode: "ask", name: "Ask for approval", detail: "Ask before running commands or editing files", icon: Hand },
 	{ mode: "autoEdit", name: "Auto-edit", detail: "Edit files freely, ask before running commands", icon: ShieldCheck },
-	{ mode: "fullAccess", name: "Full access", detail: "Run commands and edit files without asking", icon: ShieldAlert },
+	{ mode: "fullAccess", name: "Full access", detail: "Run commands and edit files without asking", icon: CircleAlert },
 ];
 
 const LEVEL_NAMES: Record<string, string> = {
@@ -55,7 +61,8 @@ const LEVEL_NAMES: Record<string, string> = {
 	low: "Low",
 	medium: "Medium",
 	high: "High",
-	xhigh: "Max",
+	xhigh: "Extra high",
+	max: "Max",
 };
 
 /** Full access asks once per thread (section 9.4). */
@@ -76,25 +83,27 @@ function ApprovalPicker({
 	const Icon = current.icon;
 	return (
 		<Popover
-			anchored
-			trigger={() => (
+			trigger={(open) => (
 				<button
 					type="button"
-					className={`flex h-8 items-center gap-1.5 rounded-full px-2.5 hover:bg-hover ${mode === "fullAccess" ? "text-danger" : "text-muted"}`}
+					className={`flex h-7 items-center gap-1.5 rounded-full px-2 text-[13px] hover:bg-row ${open ? "bg-row" : ""} ${mode === "fullAccess" ? "text-caution" : "text-muted hover:text-ink"}`}
 				>
-					<Icon size={15} /> {current.name}
+					<Icon size={16} /> {current.name}
 				</button>
 			)}
 		>
 			{(close) =>
 				confirming ? (
-					<div className="w-72 p-2.5">
-						<div className="mb-3">KnightCode will run commands and edit files without asking.</div>
-						<div className="flex justify-end gap-2">
+					<div className="w-[300px] p-2">
+						<div className="text-[13px] font-medium text-ink">Allow full access?</div>
+						<div className="mt-1 text-[12px] leading-4 text-desc">
+							KnightCode will run commands and edit files in this thread without asking.
+						</div>
+						<div className="mt-3 flex justify-end gap-1.5">
 							<button
 								type="button"
 								onClick={() => setConfirming(false)}
-								className="rounded-lg px-3 py-1.5 hover:bg-hover"
+								className="h-7 rounded-full border border-hairline px-3 text-[13px] text-ink hover:bg-row"
 							>
 								Cancel
 							</button>
@@ -106,19 +115,21 @@ function ApprovalPicker({
 									close();
 									onChange("fullAccess");
 								}}
-								className="rounded-lg bg-danger px-3 py-1.5 font-medium text-white"
+								className="h-7 rounded-full bg-caution px-3 text-[13px] font-medium text-on-accent hover:opacity-90"
 							>
 								Allow full access
 							</button>
 						</div>
 					</div>
 				) : (
-					<div className="w-80">
-						<div className="px-2.5 pt-1.5 pb-1 text-[12px] font-medium text-faint">How should KnightCode act?</div>
+					<div className="w-[390px]">
+						<MenuCaption>How should KnightCode act?</MenuCaption>
 						{MODES.filter((m) => m.mode !== "fullAccess" || allowFullAccess || mode === "fullAccess").map(
 							({ mode: m, name, detail, icon: ModeIcon }) => (
 								<MenuItem
 									key={m}
+									icon={<ModeIcon size={16} />}
+									description={detail}
 									checked={m === mode}
 									danger={m === "fullAccess"}
 									onClick={() => {
@@ -130,13 +141,7 @@ function ApprovalPicker({
 										onChange(m);
 									}}
 								>
-									<div className="flex items-start gap-2.5">
-										<ModeIcon size={15} className="mt-0.5 shrink-0" />
-										<div>
-											<div>{name}</div>
-											<div className="text-[12px] text-muted">{detail}</div>
-										</div>
-									</div>
+									{name}
 								</MenuItem>
 							),
 						)}
@@ -158,8 +163,129 @@ function ModelPicker({
 	onModel: (model: ModelInfo) => void;
 	onThinking: (level: ThinkingLevel) => void;
 }) {
+	const levels = model?.thinkingLevels ?? [];
+	const effort = model && thinking && levels.length > 1 ? (LEVEL_NAMES[thinking] ?? thinking) : undefined;
+	return (
+		<Popover
+			align="right"
+			trigger={(open) => (
+				<button
+					type="button"
+					className={`flex h-7 items-center gap-1 rounded-full px-2.5 text-[13px] hover:bg-row ${open ? "bg-row" : ""}`}
+				>
+					<span className="font-medium text-ink">{model ? model.name : "Choose a model"}</span>
+					{effort ? <span className="font-medium text-desc">{effort}</span> : null}
+					<ChevronDown size={14} className="text-desc" />
+				</button>
+			)}
+		>
+			{(close) => (
+				<ModelMenu
+					model={model}
+					thinking={thinking}
+					onModel={(m) => {
+						close();
+						onModel(m);
+					}}
+					onThinking={onThinking}
+				/>
+			)}
+		</Popover>
+	);
+}
+
+/**
+ * Codex's model picker: the effort slider first, the model list one step away behind the header. Lives inside
+ * the popover, so it starts on the slider each time the menu opens.
+ */
+function ModelMenu({
+	model,
+	thinking,
+	onModel,
+	onThinking,
+}: {
+	model: ModelInfo | undefined;
+	thinking: ThinkingLevel | undefined;
+	onModel: (model: ModelInfo) => void;
+	onThinking: (level: ThinkingLevel) => void;
+}) {
+	const levels = model?.thinkingLevels ?? [];
+	const [view, setView] = useState<"effort" | "list">(model && levels.length > 1 ? "effort" : "list");
+	if (view === "effort" && model) {
+		const level = thinking && levels.includes(thinking) ? thinking : levels[0]!;
+		return (
+			<div className="w-[254px]">
+				<button type="button" onClick={() => setView("list")} className="kc-row justify-center text-[14px] font-medium">
+					<span className="truncate text-ink">{model.name}</span>
+					<span className="-ml-1 text-desc">{LEVEL_NAMES[level] ?? level}</span>
+					<ChevronRight size={12} className="-ml-1 text-desc" />
+				</button>
+				<EffortSlider levels={levels} value={level} onChange={onThinking} />
+			</div>
+		);
+	}
+	return <ModelList model={model} onModel={onModel} onBack={model && levels.length > 1 ? () => setView("effort") : undefined} />;
+}
+
+/** Reasoning effort as Codex draws it: a pill track, a dot per level, a white knob over a native range input. */
+function EffortSlider({
+	levels,
+	value,
+	onChange,
+}: {
+	levels: readonly ThinkingLevel[];
+	value: ThinkingLevel;
+	onChange: (level: ThinkingLevel) => void;
+}) {
+	const index = Math.max(0, levels.indexOf(value));
+	const last = levels.length - 1;
+	// Positions run between the knob's centre at either end, 14px in from each side.
+	const at = (i: number) => `calc(14px + (100% - 28px) * ${i / last})`;
+	return (
+		<div className="relative mx-2 mt-1 mb-2 h-6">
+			<div className="absolute inset-0 rounded-full bg-track" />
+			<div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `calc(${at(index)} + 14px)` }} />
+			{levels.map((level, i) => (
+				<span
+					key={level}
+					className={`absolute top-[10px] size-1 -translate-x-1/2 rounded-full ${i <= index ? "bg-white/30" : "bg-desc"}`}
+					style={{ left: at(i) }}
+				/>
+			))}
+			<span
+				className="pointer-events-none absolute top-[-2px] size-7 -translate-x-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/0.3)] transition-[left] duration-150"
+				style={{ left: at(index) }}
+			/>
+			<input
+				type="range"
+				min={0}
+				max={last}
+				step={1}
+				value={index}
+				aria-label="Reasoning effort"
+				aria-valuetext={LEVEL_NAMES[value] ?? value}
+				onChange={(e) => onChange(levels[Number(e.target.value)]!)}
+				className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+			/>
+		</div>
+	);
+}
+
+function ModelList({
+	model,
+	onModel,
+	onBack,
+}: {
+	model: ModelInfo | undefined;
+	onModel: (model: ModelInfo) => void;
+	onBack: (() => void) | undefined;
+}) {
 	const models = useStore((s) => s.models);
 	const [query, setQuery] = useState("");
+	const list = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		list.current?.querySelector("[data-checked]")?.scrollIntoView({ block: "center" });
+	}, []);
 	const groups = useMemo(() => {
 		const q = query.toLowerCase();
 		const map = new Map<string, ModelInfo[]>();
@@ -169,77 +295,48 @@ function ModelPicker({
 		}
 		return [...map];
 	}, [models, query]);
-	const levels = model?.thinkingLevels ?? [];
 	return (
-		<Popover
-			align="right"
-			anchored
-			trigger={() => (
-				<button type="button" className="flex h-8 items-center gap-1.5 rounded-full px-2.5 hover:bg-hover">
-					<span className="text-ink">{model ? model.name : "Choose a model"}</span>
-					{model && thinking && levels.length > 1 ? (
-						<span className="text-muted">{LEVEL_NAMES[thinking] ?? thinking}</span>
-					) : null}
-					<ChevronDown size={13} className="text-muted" />
-				</button>
-			)}
-		>
-			{(close) => (
-				<div className="w-80">
-					{levels.length > 1 ? (
-						<div className="border-b border-line px-2.5 pt-2 pb-2.5">
-							<div className="mb-1.5 flex justify-between text-[12px]">
-								<span className="font-medium text-faint">Thinking</span>
-								<span className="text-muted">{thinking ? (LEVEL_NAMES[thinking] ?? thinking) : "Default"}</span>
-							</div>
-							<div className="flex gap-1">
-								{levels.map((level) => (
-									<button
-										key={level}
-										type="button"
-										title={LEVEL_NAMES[level] ?? level}
-										onClick={() => onThinking(level)}
-										className={`h-1.5 flex-1 rounded-full ${thinking && levels.indexOf(level) <= levels.indexOf(thinking) ? "bg-accent" : "bg-hover hover:bg-line-strong"}`}
-									/>
-								))}
-							</div>
-						</div>
-					) : null}
-					<input
-						autoFocus
-						value={query}
-						onChange={(e) => setQuery(e.target.value)}
-						placeholder="Search models"
-						className="mx-1 my-1.5 w-[calc(100%-0.5rem)] rounded-lg border border-line bg-surface px-2.5 py-1.5 outline-none focus:border-line-strong"
-					/>
-					<div className="max-h-72 overflow-y-auto">
-						{groups.length === 0 ? (
-							<div className="px-2.5 py-2 text-muted">No models. Sign in to a provider in Settings.</div>
-						) : null}
-						{groups.map(([provider, list]) => (
-							<div key={provider}>
-								<div className="px-2.5 pt-2 pb-1 text-[12px] font-medium text-faint">{provider}</div>
-								{list.map((m) => (
-									<MenuItem
-										key={`${m.provider}/${m.id}`}
-										checked={model?.provider === m.provider && model.id === m.id}
-										onClick={() => {
-											close();
-											onModel(m);
-										}}
-									>
-										<div className="flex items-baseline justify-between gap-2">
-											<span>{m.name}</span>
-											<span className="text-[12px] text-faint">{tokens(m.contextWindow)}</span>
-										</div>
-									</MenuItem>
-								))}
-							</div>
+		<div className="flex max-h-[min(420px,70vh)] w-[280px] flex-col">
+			<div className="flex items-center gap-1 px-2 pt-1 pb-1">
+				{onBack ? (
+					<button type="button" title="Back" onClick={onBack} className="-ml-1 rounded-full p-0.5 text-desc hover:text-ink">
+						<ChevronLeft size={14} />
+					</button>
+				) : null}
+				<span className="text-[13px] text-desc">Select model</span>
+			</div>
+			<label className="mx-1 mb-1 flex items-center gap-2 rounded-[15px] bg-row px-2 py-[5px] text-[13px]">
+				<Search size={14} className="shrink-0 text-desc" />
+				<input
+					autoFocus
+					value={query}
+					onChange={(e) => setQuery(e.target.value)}
+					placeholder="Search models"
+					className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-desc focus-visible:outline-none"
+				/>
+			</label>
+			<div ref={list} className="min-h-0 overflow-y-auto">
+				{groups.length === 0 ? (
+					<div className="px-2 py-1.5 text-[13px] text-desc">
+						{models.length ? "No matching models" : "No models. Sign in to a provider in Settings."}
+					</div>
+				) : null}
+				{groups.map(([provider, list]) => (
+					<div key={provider}>
+						<div className="px-2 pt-2 pb-1 text-[12px] text-desc">{provider}</div>
+						{list.map((m) => (
+							<MenuItem
+								key={`${m.provider}/${m.id}`}
+								checked={model?.provider === m.provider && model.id === m.id}
+								onClick={() => onModel(m)}
+							>
+								<span title={`${tokens(m.contextWindow)} context`}>{m.name}</span>
+							</MenuItem>
 						))}
 					</div>
-				</div>
-			)}
-		</Popover>
+				))}
+			</div>
+		</div>
 	);
 }
 
@@ -287,13 +384,25 @@ function ProjectPicker({ cwd, onChange }: { cwd: string | undefined; onChange: (
 	);
 }
 
+/** A row in the panel above the composer: an insertion for `@` and `/`, or an action from the + menu. */
 interface Suggestion {
 	key: string;
 	label: string;
 	detail?: string;
-	insert: string;
-	icon: "file" | "command";
+	insert?: string;
+	run?: () => void;
+	section?: string;
+	icon: keyof typeof SUGGESTION_ICONS;
 }
+
+const SUGGESTION_ICONS = {
+	file: FileText,
+	folder: Folder,
+	command: SquareSlash,
+	skill: Sparkles,
+	image: ImagePlus,
+	plan: Lightbulb,
+};
 
 /** The `@` or `/` token the caret is in, if any. */
 /** An attached image as a thumbnail; the file name shows on hover. */
@@ -349,6 +458,19 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const searchId = useMemo(() => `composer-${crypto.randomUUID()}`, []);
 	const commands = useRef<{ name: string; description: string }[] | undefined>(undefined);
+	const panelRef = useRef<HTMLDivElement>(null);
+	const boxRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		panelRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
+	}, [selected, suggestions]);
+	useEffect(() => {
+		if (!suggestions) return;
+		const onDown = (event: MouseEvent) => {
+			if (!boxRef.current?.contains(event.target as Node)) setSuggestions(undefined);
+		};
+		window.addEventListener("mousedown", onDown);
+		return () => window.removeEventListener("mousedown", onDown);
+	}, [suggestions]);
 
 	useEffect(() => {
 		if (newCwd) setCwd(newCwd);
@@ -395,29 +517,43 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 			if (!target) return setSuggestions(undefined);
 			commands.current ??= await listCommands(target);
 			const q = token.query.toLowerCase();
+			// Commands A to Z, then skills, as Codex orders its list.
 			const items = commands.current
 				.filter((c) => c.name.toLowerCase().includes(q))
+				.sort(
+					(a, b) =>
+						Number(a.name.startsWith("skill:")) - Number(b.name.startsWith("skill:")) || a.name.localeCompare(b.name),
+				)
 				.slice(0, 30)
-				.map((c): Suggestion => ({
-					key: c.name,
-					label: `/${c.name}`,
-					detail: c.description,
-					insert: `/${c.name} `,
-					icon: "command",
-				}));
+				.map((c): Suggestion => {
+					const skill = c.name.startsWith("skill:");
+					return {
+						key: c.name,
+						label: skill ? c.name.slice("skill:".length) : c.name,
+						detail: c.description,
+						insert: `/${c.name} `,
+						icon: skill ? "skill" : "command",
+					};
+				});
 			setSelected(0);
 			return setSuggestions(items.length ? { items, truncated: false, start: token.start } : undefined);
 		}
 		if (!workdir || token.query.length === 0) return setSuggestions(undefined);
 		try {
 			const result = await searchFiles(workdir, token.query, searchId);
-			const items = result.files.map((f): Suggestion => ({
-				key: f.path,
-				label: basename(f.path),
-				detail: f.path,
-				insert: `@${f.path} `,
-				icon: "file",
-			}));
+			const items = result.files.map((f): Suggestion => {
+				const folder = /[\\/]$/.test(f.path);
+				const path = f.path.replace(/[\\/]$/, "");
+				const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+				const dir = cut < 0 ? "" : path.slice(0, cut);
+				return {
+					key: f.path,
+					label: basename(path),
+					detail: dir,
+					insert: `@${f.path} `,
+					icon: folder ? "folder" : "file",
+				};
+			});
 			setSelected(0);
 			setSuggestions(items.length ? { items, truncated: result.truncated, start: token.start } : undefined);
 		} catch {
@@ -426,14 +562,20 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 	};
 
 	const accept = (suggestion: Suggestion) => {
+		if (suggestion.run) {
+			setSuggestions(undefined);
+			suggestion.run();
+			return;
+		}
 		const el = ref.current;
 		const caret = el?.selectionStart ?? text.length;
 		const start = suggestions?.start ?? caret;
-		const next = text.slice(0, start) + suggestion.insert + text.slice(caret);
+		const insert = suggestion.insert ?? "";
+		const next = text.slice(0, start) + insert + text.slice(caret);
 		setText(next);
 		setSuggestions(undefined);
 		requestAnimationFrame(() => {
-			const pos = start + suggestion.insert.length;
+			const pos = start + insert.length;
 			el?.focus();
 			el?.setSelectionRange(pos, pos);
 		});
@@ -477,6 +619,42 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 		if (paths.length) setImages((list) => [...list, ...paths]);
 	};
 
+	/** The + menu: Codex's "Add" panel above the composer, sharing the suggestion panel and its keys. */
+	const toggleAddMenu = async () => {
+		if (suggestions?.items[0]?.section === "Add") return setSuggestions(undefined);
+		const target = threadId ? { threadId } : workdir ? { cwd: workdir } : undefined;
+		if (target) commands.current ??= await listCommands(target);
+		const items: Suggestion[] = [
+			{
+				key: "add:images",
+				section: "Add",
+				icon: "image",
+				label: "Images",
+				detail: "Attach screenshots or pictures",
+				run: () => void attachFiles(),
+			},
+		];
+		if (commands.current?.some((c) => c.name === "plan"))
+			items.push({
+				key: "add:plan",
+				section: "Add",
+				icon: "plan",
+				label: "Plan mode",
+				detail: "Plan the work before changing anything",
+				run: () => {
+					const next = text.startsWith("/plan ") ? text : `/plan ${text}`;
+					setText(next);
+					requestAnimationFrame(() => {
+						ref.current?.focus();
+						ref.current?.setSelectionRange(next.length, next.length);
+					});
+				},
+			});
+		setSelected(0);
+		setSuggestions({ items, truncated: false, start: ref.current?.selectionStart ?? text.length });
+		ref.current?.focus();
+	};
+
 	const queued = view
 		? [
 				...view.queue.steering.map((t) => ({ id: undefined, text: t, steer: true })),
@@ -492,32 +670,38 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 					<ProjectPicker cwd={cwd} onChange={setCwd} />
 				</div>
 			) : null}
-			<div className="relative">
+			<div ref={boxRef} className="relative">
 				{suggestions ? (
-					<div className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-72 overflow-y-auto rounded-2xl border border-line-strong bg-elevated p-1 shadow-2xl">
-						{suggestions.items.map((s, i) => (
-							<button
-								key={s.key}
-								type="button"
-								onMouseDown={(e) => {
-									e.preventDefault();
-									accept(s);
-								}}
-								onMouseEnter={() => setSelected(i)}
-								className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left ${i === selected ? "bg-hover" : ""}`}
-							>
-								{s.icon === "file" ? (
-									<FileText size={15} className="shrink-0 text-muted" />
-								) : (
-									<Slash size={15} className="shrink-0 text-muted" />
-								)}
-								<span className="shrink-0">{s.label}</span>
-								{s.detail ? <span className="min-w-0 truncate text-[12px] text-faint">{s.detail}</span> : null}
-							</button>
-						))}
-						{suggestions.truncated ? (
-							<div className="px-2.5 py-1 text-[12px] text-faint">Some files may be missing</div>
-						) : null}
+					<div className="absolute inset-x-0 bottom-full z-20 mb-1 flex max-h-80 flex-col overflow-hidden rounded-[20px] bg-panel p-1 shadow-[0_0_0_1px_var(--kc-hairline),var(--kc-menu-shadow)]">
+						<div ref={panelRef} className="min-h-0 overflow-y-auto">
+							{suggestions.items.map((s, i) => {
+								const Icon = SUGGESTION_ICONS[s.icon];
+								return (
+									<div key={s.key}>
+										{s.section && s.section !== suggestions.items[i - 1]?.section ? (
+											<div className="px-2 pt-1 pb-1 text-[13px] text-desc">{s.section}</div>
+										) : null}
+										<button
+											type="button"
+											data-active={i === selected}
+											onMouseDown={(e) => {
+												e.preventDefault();
+												accept(s);
+											}}
+											onMouseEnter={() => setSelected(i)}
+											className="kc-row text-ink"
+										>
+											<Icon size={16} className="shrink-0" />
+											<span className="shrink-0">{s.label}</span>
+											{s.detail ? <span className="min-w-0 truncate text-desc">{s.detail}</span> : null}
+										</button>
+									</div>
+								);
+							})}
+							{suggestions.truncated ? (
+								<div className="px-2 py-1 text-[12px] text-desc">Some files may be missing</div>
+							) : null}
+						</div>
 					</div>
 				) : null}
 				<div className="rounded-[26px] bg-composer shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
@@ -608,33 +792,15 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 						className="selectable block max-h-[300px] w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[15px] leading-relaxed outline-none placeholder:text-faint focus-visible:outline-none"
 					/>
 					<div className="flex items-center gap-0.5 px-2.5 pb-2.5">
-						<Popover
-							anchored
-							trigger={() => (
-								<button
-									type="button"
-									title="Add"
-									className="flex size-8 items-center justify-center rounded-full text-muted hover:bg-hover hover:text-ink"
-								>
-									<Plus size={18} />
-								</button>
-							)}
+						<button
+							type="button"
+							title="Add"
+							onMouseDown={(e) => e.preventDefault()}
+							onClick={() => void toggleAddMenu()}
+							className={`flex size-7 items-center justify-center rounded-full text-muted hover:bg-row hover:text-ink ${suggestions?.items[0]?.section === "Add" ? "bg-row text-ink" : ""}`}
 						>
-							{(close) => (
-								<div className="w-56">
-									<MenuItem
-										onClick={() => {
-											close();
-											void attachFiles();
-										}}
-									>
-										<span className="flex items-center gap-2">
-											<ImagePlus size={15} /> Add images
-										</span>
-									</MenuItem>
-								</div>
-							)}
-						</Popover>
+							<Plus size={18} />
+						</button>
 						<ApprovalPicker
 							mode={mode}
 							threadKey={threadId ?? "new"}
