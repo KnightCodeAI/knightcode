@@ -51,10 +51,10 @@ export const defaultModelPerProvider: Partial<Record<KnownProvider, string>> = {
 	"qwen-token-plan": "qwen3.7-max",
 	"qwen-token-plan-cn": "qwen3.7-max",
 	"qwen-token-plan-individual": "qwen3.8-max",
-	xiaomi: "mimo-v2.5-pro",
-	"xiaomi-token-plan-cn": "mimo-v2.5-pro",
-	"xiaomi-token-plan-ams": "mimo-v2.5-pro",
-	"xiaomi-token-plan-sgp": "mimo-v2.5-pro",
+	xiaomi: "mimo-v2.6-pro",
+	"xiaomi-token-plan-cn": "mimo-v2.6-pro",
+	"xiaomi-token-plan-ams": "mimo-v2.6-pro",
+	"xiaomi-token-plan-sgp": "mimo-v2.6-pro",
 	// AgentRouter funds its channels from per-model budget pools. The Opus and GPT pools
 	// were drained as of 2026-09-01 (402 "Budget pool quota has been exhausted", reproducible
 	// outside KnightCode and under every other client), so a stronger default would name a
