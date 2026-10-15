@@ -1,5 +1,5 @@
 import { fauxAssistantMessage } from "@knightcode/ai";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import type { ExtensionAPI } from "../../src/index.ts";
 import { cleanupServers, startServer } from "./harness.ts";
 import { createGate } from "./fixtures/gate-extension.ts";
@@ -84,8 +84,10 @@ test("interrupt during target loading stays cancelled after replacement, without
 	const result = await starting;
 	expect(result.status).toBe("cancelled");
 	expect(a.notifications.some((note) => note.method === "turn/started")).toBe(false);
-	expect(server.threads.get(result.threadId).pendingStarts.size).toBe(0);
+	// The answer comes before the cancelled preflight finishes; it then releases what it held.
+	await vi.waitFor(() => expect(server.threads.get(result.threadId).pendingStarts.size).toBe(0));
 	expect(server.threads.get(result.threadId).reservedStart).toBeUndefined();
+	expect(a.notifications.some((note) => note.method === "turn/started")).toBe(false);
 	expect(server.faux.getPendingResponseCount()).toBe(1);
 });
 

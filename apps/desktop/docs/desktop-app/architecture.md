@@ -850,9 +850,9 @@ on every resync. The server is built on the harness's public API and the
 extension API, as Codex's `codex-rs/app-server` is built on `codex-core`.
 
 What multi-thread hosting genuinely needed went into the harness in Phase A:
-the session-file lock (section 5.3), a per-session extension runtime over the
-shared model runtime, and an abort signal on prompts. Everything else lives
-in `packages/cli/src/app-server/`:
+the session-file lock (section 5.3) and a per-session extension runtime over
+the shared model runtime. Everything else lives in
+`packages/cli/src/app-server/`:
 
 | Feature | Where |
 | --- | --- |
@@ -867,21 +867,31 @@ A new feature that seems to need a harness change first states why the
 server cannot do it. A genuine harness bug (for example, a host-hook failure
 retried as a network error) is fixed upstream in pi and arrives by resync.
 
-**Owed: move cancellation out of the harness (Phase A3).** Phase A threaded an
-`AbortSignal` through `AgentSession.prompt()` preflight, `setModel`,
-`setThinkingLevel`, extension commands and session replacement, auto-compaction,
-`ExtensionRunner.emit*`, and `ModelRuntime.prepareRequest` (about 400 lines in
-`agent-session.ts`, `extensions/runner.ts`, `extensions/types.ts`,
-`model-runtime.ts`, `sdk.ts`), so that `turn/interrupt` stops a `turn/start`
-before its run exists. The server can do this without the harness: let
-preflight finish, then call `session.abort()` as soon as the run starts if the
-start was cancelled meanwhile. The visible difference is a brief turn that
-completes `interrupted`, and input hooks that already ran. Phase A3 makes that
-change, reverts the harness part, and adapts `review-preflight.test.ts`,
-`replacement*.test.ts` and `prompt-signal.test.ts`. Phase A's concurrency fixes
-in `agent-session.ts` (overlapping-prompt guard, `isSettling` admission,
-`raceAbort` listener cleanup, compaction-abort results) are offered to pi
-upstream at the same time.
+**Cancellation lives in the server (Phase A3, done 2026-10-15).** Phase A had
+threaded an `AbortSignal` through `AgentSession.prompt()` preflight, model and
+thinking changes, extension commands, auto-compaction, `ExtensionRunner.emit*`
+and `ModelRuntime.prepareRequest`. A3 reverted all of it. Upstream now treats a
+session as busy from the start of a run's preflight, and `abort()` then stops
+the run at `agent_start`. The server builds on that:
+
+- `LoadedThread.dispatching` names the start whose `prompt()` is running.
+  Session-replacing commands read its signal, so a cancelled replacement backs
+  out without the harness carrying the signal.
+- A hidden `app-server-start-guard` extension, loaded last, answers `input` with
+  `handled` once that start was interrupted. A start interrupted during input
+  hooks or a command therefore launches nothing, and `turn/start` answers
+  `cancelled` at once while the hooks finish in the background, still holding
+  the thread's queue.
+- A start interrupted during the run's own preflight (compaction,
+  `before_agent_start`) returns `started`, and its turn completes `interrupted`
+  without a model request.
+- `turn/interrupt` never waits for hooks; unload and EOF answer pending starts at
+  once.
+
+What it gave up: hooks already dispatched run to completion. Phase A's
+concurrency fixes in `agent-session.ts` (overlapping-prompt guard, `isSettling`
+admission, `raceAbort` listener cleanup, compaction-abort results) stay, to be
+offered to pi upstream.
 
 ## 5. Server internals
 
@@ -1337,29 +1347,31 @@ running turn. `turn/queue/add` holds its input in the thread's own list until
 the thread is idle, then starts it through the same `turn/start` path.
 
 Preflight can wait on an authentication check, asynchronous `input` or
-`before_agent_start` hooks, or an extension command, all while the session
-still reads idle, so `session.abort()` alone would not stop a start that has
-not launched yet. Each `turn/start` gets an abort controller as soon as its
-thread is loaded, before it queues and before the first await of
-preflight; `turn/interrupt` and unload abort every such controller. The
-signal reaches every point where a start can launch something:
+`before_agent_start` hooks, or an extension command. Each `turn/start` gets an
+abort controller as soon as its thread is loaded, before it queues and before
+the first await of preflight; `turn/interrupt` and unload abort every such
+controller. The harness carries no signal (section 4.7); the server stops a
+start at these points:
 
-- the app server's own auth check, re-checked after the await;
-- `prompt()`, right before it queues a steer and right before it launches
-  the run (a small `PromptOptions.signal` in the core);
-- extension commands: `prompt()` checks the signal before running a
-  command, and the command's `ctx.sendUserMessage` passes it on to the
-  prompt it starts, exactly as it already passes on the acceptance hook
-  `preflightResult`. `/plan <task>` dispatches its task this way, so an
-  interrupt while the command runs stops the nested prompt too.
+- its own auth check, re-checked after the await;
+- the `input` event: the hidden `app-server-start-guard` extension loads last
+  and answers `handled` once the start that owns the thread's running
+  `prompt()` (`LoadedThread.dispatching`) is aborted. A command's
+  `ctx.sendUserMessage` prompts through the same input handlers, so
+  `/plan <task>` interrupted while the command runs launches nothing either;
+- session replacement: `newSession`, `fork` and `switchSession` read the
+  dispatching start's signal and back out before publishing;
+- the run's own preflight: from `_startRun` on the session is busy, so
+  `session.abort()` aborts compaction and stops the run at `agent_start`.
 
-A start cancelled anywhere launches nothing: `turn/start` answers
-`{status: "cancelled", threadId, requestId}` and no `turn/started` follows.
-A command/input hook that handles it without a run answers `handled`, not
-`cancelled`. The core's `PromptDisposition` does not change: RPC mode
-returns it and section 12 excludes RPC changes. A signal-stopped prompt
-reports `handled` to `preflightResult`, and the app server answers
-`cancelled` because its own start signal is aborted. The initiating start
+Interrupted before the run exists, `turn/start` answers
+`{status: "cancelled", threadId, requestId}` at once and no `turn/started`
+follows; hooks already running finish in the background while the start still
+holds the thread's queue. Interrupted during the run's own preflight, it
+answers `started` and the turn completes `interrupted` without a model
+request. A command/input hook that handles it without a run answers
+`handled`, not `cancelled`. The core's `PromptDisposition` does not change:
+RPC mode returns it and section 12 excludes RPC changes. The initiating start
 is request-owned with a mutable thread owner (section 4.5), so disposing a
 replaced thread never cancels its forwarded prompt. Out of reach:
 `knightcode.sendMessage(..., {triggerTurn: true})` is the extension API, not
@@ -1946,10 +1958,6 @@ The rest of the engine stays deleted.
   virtual-model routes; the terminal's fork offer on a held lock.
 - `packages/cli/src/core/model-runtime.ts`, `agent-session-services.ts`,
   `agent-session.ts`: owned virtual-model routes (section 5.2).
-- `agent-session.ts`, `extensions/runner.ts`, `extensions/types.ts`:
-  `PromptOptions.signal` and `SendUserMessageOptions.signal`, checked before
-  a command runs, a steer queues or a run launches, and passed through a
-  command's `ctx.sendUserMessage` (section 5.6).
 - `packages/cli/src/extensions/turn-marker.ts` (new), registered first in
   `extensions/index.ts`: the hidden `turn-marker` built-in (section 4.2).
 - `packages/cli/src/core/output-guard.ts`: `writeRawStdoutReporting`, a
@@ -2006,8 +2014,8 @@ its protocol package (section 4.7). Files:
 
 ### Phase A3 — cancellation out of the harness
 
-Owed (section 4.7). Independent of the desktop phases; do it before the next
-resync from pi if possible, since it removes most of Phase A's conflict surface.
+Done 2026-10-15 (section 4.7): the harness signal plumbing is reverted and
+cancellation lives in `threads.ts` and the start-guard extension.
 
 ### Phase B — workspaces, diffs, git
 

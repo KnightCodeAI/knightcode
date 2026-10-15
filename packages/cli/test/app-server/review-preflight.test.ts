@@ -37,7 +37,7 @@ function seedPreflightCompaction(server: Awaited<ReturnType<typeof startServer>>
 	return session;
 }
 
-test("a cancelled replacement cannot publish later or dispose newer source work", async () => {
+test("a cancelled replacement cannot publish later, and newer work runs on the source thread", async () => {
 	const hold = gate();
 	let loads = 0;
 	const server = await startServer({
@@ -66,9 +66,11 @@ test("a cancelled replacement cannot publish later or dispose newer source work"
 	await a.client.request("turn/interrupt", { threadId: thread.id });
 	expect(await starting).toMatchObject({ status: "cancelled", threadId: thread.id });
 	server.faux.setResponses([fauxAssistantMessage("new source work ".repeat(100))]);
-	await a.client.request("turn/start", { threadId: thread.id, text: "new work" });
-	await a.waitFor("item/agentMessage/delta");
+	// The cancelled command still holds the thread's queue until its replacement load returns.
+	const newWork = a.client.request("turn/start", { threadId: thread.id, text: "new work" });
 	hold.open();
+	expect(await newWork).toMatchObject({ status: "started", threadId: thread.id });
+	await a.waitFor("item/agentMessage/delta");
 	await vi.waitFor(() => expect((server.threads as unknown as { loading: Map<string, unknown> }).loading.size).toBe(0));
 	try {
 		expect(server.threads.get(thread.id).session.isStreaming).toBe(true);
@@ -118,10 +120,9 @@ test("released cancelled input cannot compact, invoke later hooks or mutate the 
 	expect(readFileSync(session.sessionManager.getSessionFile()!, "utf8")).toBe(before);
 });
 
-test("preflight compaction inherits the initiating cancellation instead of creating an independent operation", async () => {
+test("interrupt during preflight compaction aborts it and the run ends interrupted", async () => {
 	const hold = gate();
 	let compactSignal: AbortSignal | undefined;
-	let laterCompactionHooks = 0;
 	const server = await startServer({
 		extraExtensions: [
 			{
@@ -139,9 +140,39 @@ test("preflight compaction inherits the initiating cancellation instead of creat
 							},
 						};
 					});
-					k.on("session_before_compact", () => {
-						laterCompactionHooks++;
-						k.appendEntry("late-compaction", {});
+				},
+			},
+		],
+	});
+	const a = await server.connect();
+	const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
+	const session = seedPreflightCompaction(server, thread.id);
+	const starting = a.client.request("turn/start", { threadId: thread.id, text: "go" });
+	await hold.entered;
+	try {
+		await a.client.request("turn/interrupt", { threadId: thread.id });
+		expect(compactSignal?.aborted).toBe(true);
+		// The run was being prepared, so it exists and stops at once (architecture.md 4.7).
+		expect(await starting).toMatchObject({ status: "started" });
+		const { turn } = await a.waitFor("turn/completed");
+		expect(turn).toMatchObject({ status: "interrupted" });
+	} finally {
+		hold.open();
+	}
+	await vi.waitFor(() => expect(session.isCompacting).toBe(false));
+	expect(session.sessionManager.getEntries().some((e) => e.type === "compaction")).toBe(false);
+});
+
+test("a start interrupted during its input hooks answers at once and launches no run", async () => {
+	const hold = gate();
+	const server = await startServer({
+		extraExtensions: [
+			{
+				name: "chain",
+				factory: (k) => {
+					k.on("input", async () => {
+						hold.enter();
+						await hold.released;
 					});
 				},
 			},
@@ -149,66 +180,45 @@ test("preflight compaction inherits the initiating cancellation instead of creat
 	});
 	const a = await server.connect();
 	const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
-	const loaded = server.threads.get(thread.id);
-	const session = seedPreflightCompaction(server, thread.id);
+	server.faux.setResponses([fauxAssistantMessage("must remain unused")]);
 	const starting = a.client.request("turn/start", { threadId: thread.id, text: "go" });
 	await hold.entered;
-	try {
-		// Abort the initiating signal directly, not session.abort(), so this verifies signal forwarding.
-		[...loaded.pendingStarts][0].abort();
-		expect(await starting).toMatchObject({ status: "cancelled" });
-		expect(compactSignal?.aborted).toBe(true);
-	} finally {
-		hold.open();
-	}
-	await vi.waitFor(() => expect(session.isCompacting).toBe(false));
-	expect(laterCompactionHooks).toBe(0);
-	expect(session.sessionManager.getEntries().some((e) => e.type === "compaction")).toBe(false);
+	await a.client.request("turn/interrupt", { threadId: thread.id });
+	expect(await starting).toMatchObject({ status: "cancelled" });
+	hold.open();
+	await vi.waitFor(() => expect(server.threads.get(thread.id).pendingStarts.size).toBe(0));
+	expect(server.faux.getPendingResponseCount()).toBe(1);
 	expect(a.notifications.some((n) => n.method === "turn/started")).toBe(false);
 });
 
-test.each(["input", "before_agent_start"] as const)(
-	"cancelled %s dispatch stops before the next extension handler",
-	async (stage) => {
-		const hold = gate();
-		let late = 0;
-		const server = await startServer({
-			extraExtensions: [
-				{
-					name: "chain",
-					factory: (k) => {
-						if (stage === "input") {
-							k.on("input", async () => {
-								hold.enter();
-								await hold.released;
-							});
-							k.on("input", () => {
-								late++;
-							});
-						} else {
-							k.on("before_agent_start", async () => {
-								hold.enter();
-								await hold.released;
-							});
-							k.on("before_agent_start", () => {
-								late++;
-							});
-						}
-					},
+test("a start interrupted during before_agent_start runs only until agent_start", async () => {
+	const hold = gate();
+	const server = await startServer({
+		extraExtensions: [
+			{
+				name: "chain",
+				factory: (k) => {
+					k.on("before_agent_start", async () => {
+						hold.enter();
+						await hold.released;
+					});
 				},
-			],
-		});
-		const a = await server.connect();
-		const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
-		const starting = a.client.request("turn/start", { threadId: thread.id, text: "go" });
-		await hold.entered;
-		await a.client.request("turn/interrupt", { threadId: thread.id });
-		expect(await starting).toMatchObject({ status: "cancelled" });
-		hold.open();
-		await new Promise<void>((r) => setImmediate(r));
-		expect(late).toBe(0);
-	},
-);
+			},
+		],
+	});
+	const a = await server.connect();
+	const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
+	server.faux.setResponses([fauxAssistantMessage("must remain unused")]);
+	const starting = a.client.request("turn/start", { threadId: thread.id, text: "go" });
+	await hold.entered;
+	// The interrupt answers without waiting for the hook.
+	await a.client.request("turn/interrupt", { threadId: thread.id });
+	hold.open();
+	expect(await starting).toMatchObject({ status: "started" });
+	const { turn } = await a.waitFor("turn/completed");
+	expect(turn).toMatchObject({ status: "interrupted" });
+	expect(server.faux.getPendingResponseCount()).toBe(1);
+});
 
 test("unloading during a gated settlement still completes the accepted mapped turn", async () => {
 	const hold = gate();
@@ -401,68 +411,68 @@ test("a prompt during another prompt's preflight is rejected without touching th
 	await a.waitFor("turn/completed");
 });
 
-test.each(["new", "fork", "switch"] as const)("cancelled %s pre-hooks stop downstream callbacks", async (kind) => {
-	const hold = gate();
-	let late = 0;
-	let forkId = "";
-	let targetFile = "";
-	const server = await startServer({
-		extraExtensions: [
-			{
-				name: "replacement-chain",
-				factory: (k) => {
-					const before = async () => {
-						hold.enter();
-						await hold.released;
-					};
-					const later = () => {
-						late++;
-						k.appendEntry("late-replacement", {});
-					};
-					if (kind === "fork") {
-						k.on("session_before_fork", before);
-						k.on("session_before_fork", later);
-					} else {
-						k.on("session_before_switch", before);
-						k.on("session_before_switch", later);
-					}
-					k.registerCommand("replace", {
-						handler: async (_args, ctx) => {
-							if (kind === "new") await ctx.newSession();
-							else if (kind === "fork") await ctx.fork(forkId, { position: "at" });
-							else await ctx.switchSession(targetFile);
-						},
-					});
+test.each(["new", "fork", "switch"] as const)(
+	"a %s cancelled in its pre-hooks does not replace the thread",
+	async (kind) => {
+		const hold = gate();
+		let late = 0;
+		let forkId = "";
+		let targetFile = "";
+		const server = await startServer({
+			extraExtensions: [
+				{
+					name: "replacement-chain",
+					factory: (k) => {
+						const before = async () => {
+							hold.enter();
+							await hold.released;
+						};
+						const later = () => {
+							late++;
+						};
+						if (kind === "fork") {
+							k.on("session_before_fork", before);
+							k.on("session_before_fork", later);
+						} else {
+							k.on("session_before_switch", before);
+							k.on("session_before_switch", later);
+						}
+						k.registerCommand("replace", {
+							handler: async (_args, ctx) => {
+								if (kind === "new") await ctx.newSession();
+								else if (kind === "fork") await ctx.fork(forkId, { position: "at" });
+								else await ctx.switchSession(targetFile);
+							},
+						});
+					},
 				},
-			},
-		],
-	});
-	const a = await server.connect();
-	const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
-	const session = server.threads.get(thread.id).session;
-	forkId = session.sessionManager.appendMessage({ role: "user", content: "saved", timestamp: Date.now() });
-	session.sessionManager.appendMessage(fauxAssistantMessage("saved answer"));
-	session.refreshContext();
-	if (kind === "switch") {
-		const target = await a.client.request("thread/start", { cwd: server.cwd });
-		targetFile = server.threads.get(target.thread.id).file!;
-	}
-	const starting = a.client.request("turn/start", { threadId: thread.id, text: "/replace" });
-	await hold.entered;
-	try {
-		await a.client.request("turn/interrupt", { threadId: thread.id });
-		expect(await starting).toMatchObject({ status: "cancelled" });
-		hold.open();
-		await new Promise<void>((resolve) => setImmediate(resolve));
-		expect(late).toBe(0);
-		expect(
-			session.sessionManager.getEntries().some((e) => e.type === "custom" && e.customType === "late-replacement"),
-		).toBe(false);
-		expect(a.notifications.some((n) => n.method === "thread/replaced")).toBe(false);
-	} finally {
-		hold.open();
-	}
-});
+			],
+		});
+		const a = await server.connect();
+		const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
+		const session = server.threads.get(thread.id).session;
+		forkId = session.sessionManager.appendMessage({ role: "user", content: "saved", timestamp: Date.now() });
+		session.sessionManager.appendMessage(fauxAssistantMessage("saved answer"));
+		session.refreshContext();
+		if (kind === "switch") {
+			const target = await a.client.request("thread/start", { cwd: server.cwd });
+			targetFile = server.threads.get(target.thread.id).file!;
+		}
+		const starting = a.client.request("turn/start", { threadId: thread.id, text: "/replace" });
+		await hold.entered;
+		try {
+			await a.client.request("turn/interrupt", { threadId: thread.id });
+			expect(await starting).toMatchObject({ status: "cancelled" });
+			hold.open();
+			// Hooks already dispatched run to completion (architecture.md 4.7); the replacement still backs out.
+			await vi.waitFor(() => expect(late).toBe(1));
+			await vi.waitFor(() => expect(server.threads.get(thread.id).pendingStarts.size).toBe(0));
+			expect(a.notifications.some((n) => n.method === "thread/replaced")).toBe(false);
+		} finally {
+			hold.open();
+		}
+	},
+);
 
 test.each([
 	["interrupt", "extension"],
@@ -524,7 +534,8 @@ test.each([
 		finished = true;
 	});
 	try {
-		expect(await starting).toMatchObject({ status: "cancelled" });
+		// Unload cancels the start; an interrupt stops the run it was preparing (architecture.md 4.7).
+		expect(await starting).toMatchObject({ status: kind === "unload" ? "cancelled" : "started" });
 		await vi.waitFor(() => expect(finished).toBe(true), { timeout: 1000 });
 		expect(session.isCompacting).toBe(false);
 		if (remove) expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
@@ -535,9 +546,8 @@ test.each([
 	}
 });
 
-test.each(["headers", "provider"])("cancelled default summary cannot launch subsequent %s work", async (stage) => {
+test("an interrupted default summary makes no live provider request", async () => {
 	const hold = gate();
-	let later = 0;
 	const server = await startServer({
 		extraExtensions: [
 			{
@@ -546,9 +556,6 @@ test.each(["headers", "provider"])("cancelled default summary cannot launch subs
 					k.on("before_provider_headers", async () => {
 						hold.enter();
 						await hold.released;
-					});
-					k.on("before_provider_headers", () => {
-						later++;
 					});
 				},
 			},
@@ -560,49 +567,26 @@ test.each(["headers", "provider"])("cancelled default summary cannot launch subs
 	server.faux.setResponses([fauxAssistantMessage("must not generate a summary")]);
 	const starting = a.client.request("turn/start", { threadId: thread.id, text: "go" });
 	await hold.entered;
+	const calls: (boolean | undefined)[] = [];
+	const original = server.ctx.models.streamSimple.bind(server.ctx.models);
+	vi.spyOn(server.ctx.models, "streamSimple").mockImplementation((model, context, options, owner) => {
+		calls.push(options?.signal?.aborted);
+		return original(model, context, options, owner);
+	});
 	try {
 		await a.client.request("turn/interrupt", { threadId: thread.id });
-		expect(await starting).toMatchObject({ status: "cancelled" });
+		expect(await starting).toMatchObject({ status: "started" });
 		hold.open();
-		await new Promise<void>((resolve) => setImmediate(resolve));
-		if (stage === "headers") expect(later).toBe(0);
-		else expect(server.faux.state.callCount).toBe(0);
+		await a.waitFor("turn/completed");
+		await vi.waitFor(() => expect(session.isCompacting).toBe(false));
+		// The summary request and the stopped run may still reach the provider, but only already aborted.
+		expect(calls.length).toBeGreaterThan(0);
+		expect(calls.every((aborted) => aborted === true)).toBe(true);
 		expect(session.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
 	} finally {
 		hold.open();
 		await starting;
 	}
-});
-
-test("cancelled thinking selection stops downstream extension handlers", async () => {
-	const hold = gate();
-	const controller = new AbortController();
-	let late = 0;
-	const server = await startServer({
-		extraExtensions: [
-			{
-				name: "thinking-chain",
-				factory: (k) => {
-					k.on("thinking_level_select", async () => {
-						hold.enter();
-						await hold.released;
-					});
-					k.on("thinking_level_select", () => {
-						late++;
-					});
-				},
-			},
-		],
-	});
-	const a = await server.connect();
-	const { thread } = await a.client.request("thread/start", { cwd: server.cwd });
-	const session = server.threads.get(thread.id).session;
-	session.setThinkingLevel(session.thinkingLevel === "high" ? "low" : "high", { signal: controller.signal });
-	await hold.entered;
-	controller.abort();
-	hold.open();
-	await new Promise<void>((resolve) => setImmediate(resolve));
-	expect(late).toBe(0);
 });
 
 test("idle unloading rearms after a deferred settlement prompt is handled without launching a run", async () => {

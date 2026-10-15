@@ -661,7 +661,6 @@ export class ModelRuntime implements Models {
 		model: TModel;
 		options: Omit<TOptions, "transformHeaders"> & ProviderRequestOptions<TModel>;
 	}> {
-		options?.signal?.throwIfAborted();
 		const provider = this.models.getProvider(model.provider);
 		if (!provider) throw new ModelsError("provider", `Unknown provider: ${model.provider}`);
 		const resolution = await this.getAuth(model, {
@@ -669,14 +668,12 @@ export class ModelRuntime implements Models {
 			env: options?.env,
 			signal: options?.signal,
 		});
-		options?.signal?.throwIfAborted();
 		if (!resolution) throw new ModelsError("auth", `Provider is not configured: ${model.provider}`);
 
 		const { transformHeaders, ...rawProviderOptions } = options ?? {};
 		const providerOptions = rawProviderOptions as Omit<TOptions, "transformHeaders"> & ProviderRequestOptions<TModel>;
 		let headers = mergeHeaders(resolution.auth.headers, providerOptions.headers);
 		if (transformHeaders) headers = await transformHeaders(headers ?? {});
-		options?.signal?.throwIfAborted();
 		const env =
 			resolution.env || providerOptions.env ? { ...(resolution.env ?? {}), ...(providerOptions.env ?? {}) } : undefined;
 		const requestModel: TModel = resolution.auth.baseUrl ? { ...model, baseUrl: resolution.auth.baseUrl } : model;
@@ -704,7 +701,6 @@ export class ModelRuntime implements Models {
 				model,
 				options as (StreamOptions & ModelsRequestTransforms) | undefined,
 			);
-			options?.signal?.throwIfAborted();
 			return prepared.provider.stream(prepared.model, transcript, prepared.options as ApiStreamOptions<TApi>);
 		});
 	}
@@ -747,7 +743,6 @@ export class ModelRuntime implements Models {
 		return lazyStream(model, async () => {
 			assertChatModel(model);
 			const prepared = await this.prepareRequest(model, options);
-			options?.signal?.throwIfAborted();
 			return prepared.provider.streamSimple(prepared.model, transcript, prepared.options as SimpleStreamOptions);
 		});
 	}
@@ -769,7 +764,6 @@ export class ModelRuntime implements Models {
 		return lazyStream(model, async () => {
 			assertChatModel(model);
 			const prepared = await this.prepareRequest(model, options);
-			options?.signal?.throwIfAborted();
 			if (!prepared.provider.fetchDeferred) {
 				throw new ModelsError("provider", `Provider ${model.provider} does not support deferred responses`);
 			}
@@ -792,7 +786,6 @@ export class ModelRuntime implements Models {
 	): Promise<void> {
 		assertChatModel(model);
 		const prepared = await this.prepareRequest(model, options);
-		options?.signal?.throwIfAborted();
 		if (!prepared.provider.cancelDeferred) {
 			throw new ModelsError("provider", `Provider ${model.provider} does not support deferred responses`);
 		}
@@ -807,7 +800,6 @@ export class ModelRuntime implements Models {
 		try {
 			assertImageModel(model);
 			const prepared = await this.prepareRequest(model, options);
-			options?.signal?.throwIfAborted();
 			if (!prepared.provider.generateImages) {
 				throw new ModelsError("provider", `Provider ${model.provider} does not support image generation`);
 			}
@@ -826,7 +818,6 @@ export class ModelRuntime implements Models {
 			assertClassifierModel(model);
 			assertClassifierInputSupported(model, context);
 			const prepared = await this.prepareRequest(model, options);
-			options?.signal?.throwIfAborted();
 			if (!prepared.provider.classify) {
 				throw new ModelsError("provider", `Provider ${model.provider} does not support classification`);
 			}

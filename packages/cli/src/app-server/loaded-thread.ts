@@ -86,6 +86,8 @@ export class LoadedThread {
 	unsubscribeSession: () => void = () => {};
 	/** turn/starts not yet launched (Task 11), from before they queue. turn/interrupt and dispose abort them all. */
 	readonly pendingStarts = new Set<AbortController>();
+	/** The start whose session.prompt() is running; commands it dispatches replace the session on its behalf. */
+	dispatching: AbortController | undefined;
 	/** Requests holding the thread: queued or running operations, one-off changes. */
 	private ops = 0;
 	private queue: Promise<unknown> = Promise.resolve();

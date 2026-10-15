@@ -119,11 +119,6 @@ dispatch. A host that needs the full boundary can use
 `waitForIdle({ includeSettlement: true })`; do not call that form from a settlement
 hook, because it would wait for itself.
 
-`prompt()`, `steer()`, and `followUp()` accept an optional `signal` to cancel input
-interception/preflight before launching or queueing work. Already executing
-trusted callbacks cannot be preempted or have their private effects rolled back.
-Use `abort()` to stop an accepted agent run.
-
 ## Subscribing to events
 
 Subscribe before prompting when the host needs streamed output:
@@ -159,11 +154,6 @@ Each boundary can be supplied explicitly:
 - `sessionManager` supplies persistent or in-memory conversation history.
 - `resourceLoader` supplies extensions, skills, prompt templates, themes, and context files.
 - `tools`, `noTools`, `excludeTools`, and `customTools` control the active tool set.
-
-`setModel()`, `cycleModel()`, and `setThinkingLevel()` accept a `signal` in their
-mutation options. In particular, `setModel()` checks it after asynchronous
-authentication and before changing the selection, so cancelled restoration cannot
-overwrite a newer model/thinking choice.
 
 Use `DefaultResourceLoader` when you want standard discovery with selected overrides. Supply a custom `ResourceLoader` when the host owns resource storage and discovery completely.
 

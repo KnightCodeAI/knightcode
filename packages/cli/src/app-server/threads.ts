@@ -643,6 +643,17 @@ export class ThreadManager {
 						...builtInExtensions,
 						...this.threadExtensions(holder),
 						...(this.options.extraExtensions ?? []),
+						// Inline extensions load after all others, so this input handler runs last.
+						{
+							name: "app-server-start-guard",
+							hidden: true,
+							factory: (knightcode) => {
+								// A start interrupted during earlier input handlers or a command launches nothing.
+								knightcode.on("input", () =>
+									holder.thread?.dispatching?.signal.aborted ? { action: "handled" as const } : undefined,
+								);
+							},
+						},
 					],
 					additionalExtensionPaths: this.options.extensionPaths,
 					disabledBuiltinExtensions: this.options.disabledBuiltinExtensions,
@@ -848,113 +859,130 @@ export class ThreadManager {
 		let acceptTurn: (() => void) | undefined;
 		this.startsBySignal.set(start.signal, request);
 		thread.pendingStarts.add(start);
-		try {
-			await thread.exclusive(async () => {
-				const onAbort = () => {
-					request.record("cancelled");
-					cancel();
-				};
-				let cancel!: () => void;
-				const cancelled = new Promise<void>((resolve) => {
-					cancel = resolve;
-				});
-				start.signal.addEventListener("abort", onAbort, { once: true });
-				if (start.signal.aborted) onAbort();
-				try {
-					await Promise.race([
-						cancelled,
-						(async () => {
-							if (start.signal.aborted) {
-								request.record("cancelled");
-								return;
-							}
-							if (thread.reservedStart && thread.reservedStart !== start)
-								throw new AppServerError("turnInProgress", "replacement preflight reserved this thread");
-							const { session } = thread;
-							if (session.sessionManager.hasLostLock()) {
-								this.afterSettle(thread);
-								throw new AppServerError("threadLockedElsewhere", "the session file is no longer owned here");
-							}
-							if (!session.isIdle || session.isSettling)
-								throw new AppServerError("turnInProgress", "a turn or compaction is running");
-							const model = session.model;
-							if (!model)
-								throw new AppServerError("authRequired", "no model selected; pick one with thread/settings/update");
-							const authorized =
-								this.ctx.models.hasConfiguredAuth(model.provider) ||
-								(await this.ctx.models.checkAuth(model.provider)) !== undefined;
-							if (start.signal.aborted) {
-								request.record("cancelled");
-								return;
-							}
-							if (!authorized) throw new AppServerError("authRequired", `not signed in to ${model.provider}`);
-							thread.lastTurnSubscriber = by;
-							thread.pendingTurnRequestId = request.requestId;
-							thread.pendingClientMessageId = clientMessageId;
-							let accepted = false;
-							await new Promise<void>((resolve, reject) => {
-								void session
-									.prompt(text, {
-										images: images?.map((image) => ({ type: "image" as const, ...image })),
-										source: "rpc",
-										signal: start.signal,
-										preflightResult: (disposition) => {
-											if (disposition === "queued") {
-												reject(new AppServerError("turnInProgress", "start unexpectedly queued on a running target"));
-												return;
-											}
-											if (disposition === "started") {
-												acceptTurn = () => {
-													request.record("started");
-													accepted = request.disposition === "started";
-													resolve();
-												};
-												request.owner.acceptTurnStart = acceptTurn;
-												return;
-											}
-											request.record(disposition === "handled" && start.signal.aborted ? "cancelled" : disposition);
-											accepted = request.disposition === "started";
-											resolve();
-										},
-									})
-									.then(() => {
-										if (!accepted) {
-											request.record(start.signal.aborted ? "cancelled" : "handled");
-											resolve();
+		const work = (async (): Promise<TurnStartResult> => {
+			try {
+				await thread.exclusive(async () => {
+					if (start.signal.aborted) {
+						request.record("cancelled");
+						return;
+					}
+					if (thread.reservedStart && thread.reservedStart !== start)
+						throw new AppServerError("turnInProgress", "replacement preflight reserved this thread");
+					const { session } = thread;
+					if (session.sessionManager.hasLostLock()) {
+						this.afterSettle(thread);
+						throw new AppServerError("threadLockedElsewhere", "the session file is no longer owned here");
+					}
+					if (!session.isIdle || session.isSettling)
+						throw new AppServerError("turnInProgress", "a turn or compaction is running");
+					const model = session.model;
+					if (!model)
+						throw new AppServerError("authRequired", "no model selected; pick one with thread/settings/update");
+					const authorized =
+						this.ctx.models.hasConfiguredAuth(model.provider) ||
+						(await this.ctx.models.checkAuth(model.provider)) !== undefined;
+					if (start.signal.aborted) {
+						request.record("cancelled");
+						return;
+					}
+					if (!authorized) throw new AppServerError("authRequired", `not signed in to ${model.provider}`);
+					thread.lastTurnSubscriber = by;
+					thread.pendingTurnRequestId = request.requestId;
+					thread.pendingClientMessageId = clientMessageId;
+					let accepted = false;
+					// Preflight (input hooks, commands, before_agent_start) runs to completion even when the start is
+					// interrupted meanwhile; the session has no cancellation of its own there (architecture.md 4.7).
+					thread.dispatching = start;
+					// Closing answers at once: the session is disposed, so a hook that never returns cannot hold EOF.
+					let release!: () => void;
+					const closing = new Promise<void>((resolve) => {
+						release = resolve;
+					});
+					const onAbort = () => {
+						if (request.owner.state === "ready") return;
+						request.record("cancelled");
+						release();
+					};
+					start.signal.addEventListener("abort", onAbort, { once: true });
+					try {
+						const prompting = new Promise<void>((resolve, reject) => {
+							void session
+								.prompt(text, {
+									images: images?.map((image) => ({ type: "image" as const, ...image })),
+									source: "rpc",
+									preflightResult: (disposition) => {
+										if (disposition === "queued") {
+											reject(new AppServerError("turnInProgress", "start unexpectedly queued on a running target"));
+											return;
 										}
-									})
-									.catch((error: unknown) => {
-										if (accepted) request.owner.mapper.settled(false, error);
-										else if (request.owner.session.sessionManager.hasLostLock()) {
-											this.afterSettle(request.owner);
-											reject(new AppServerError("threadLockedElsewhere", "the session file is no longer owned here"));
-										} else
-											reject(new AppServerError("internal", error instanceof Error ? error.message : String(error)));
-									});
-							});
-						})(),
-					]);
-				} finally {
-					start.signal.removeEventListener("abort", onAbort);
+										if (disposition === "started") {
+											// Interrupted during preflight: the run stops at agent_start and the turn ends interrupted.
+											if (start.signal.aborted) request.owner.session.abort().catch(() => {});
+											acceptTurn = () => {
+												request.record("started");
+												accepted = request.disposition === "started";
+												resolve();
+											};
+											request.owner.acceptTurnStart = acceptTurn;
+											return;
+										}
+										request.record(disposition === "handled" && start.signal.aborted ? "cancelled" : disposition);
+										accepted = request.disposition === "started";
+										resolve();
+									},
+								})
+								.then(() => {
+									if (!accepted) {
+										request.record(start.signal.aborted ? "cancelled" : "handled");
+										resolve();
+									}
+								})
+								.catch((error: unknown) => {
+									if (accepted) request.owner.mapper.settled(false, error);
+									else if (request.owner.session.sessionManager.hasLostLock()) {
+										this.afterSettle(request.owner);
+										reject(new AppServerError("threadLockedElsewhere", "the session file is no longer owned here"));
+									} else reject(new AppServerError("internal", error instanceof Error ? error.message : String(error)));
+								});
+						});
+						await Promise.race([prompting, closing]);
+					} finally {
+						start.signal.removeEventListener("abort", onAbort);
+						if (thread.dispatching === start) thread.dispatching = undefined;
+						if (request.owner.dispatching === start) request.owner.dispatching = undefined;
+					}
+				}, false);
+				return request.result();
+			} catch (error) {
+				if (!start.signal.aborted) throw error;
+				request.record("cancelled");
+				return request.result();
+			} finally {
+				const owner = request.owner;
+				if (owner.acceptTurnStart === acceptTurn) owner.acceptTurnStart = undefined;
+				owner.pendingStarts.delete(start);
+				if (owner.reservedStart === start) owner.reservedStart = undefined;
+				if (request.disposition !== "started" && owner.pendingTurnRequestId === request.requestId) {
+					owner.pendingTurnRequestId = undefined;
+					owner.pendingClientMessageId = undefined;
 				}
-			}, false);
-			return request.result();
-		} catch (error) {
-			if (!start.signal.aborted) throw error;
-			request.record("cancelled");
-			return request.result();
-		} finally {
-			const owner = request.owner;
-			if (owner.acceptTurnStart === acceptTurn) owner.acceptTurnStart = undefined;
-			owner.pendingStarts.delete(start);
-			if (owner.reservedStart === start) owner.reservedStart = undefined;
-			if (request.disposition !== "started" && owner.pendingTurnRequestId === request.requestId) {
-				owner.pendingTurnRequestId = undefined;
-				owner.pendingClientMessageId = undefined;
+				this.startsBySignal.delete(start.signal);
+				this.scheduleIdle(owner);
 			}
-			this.startsBySignal.delete(start.signal);
-			this.scheduleIdle(owner);
-		}
+		})();
+		// Interrupted before its run exists, the start launches nothing (the start guard answers its input),
+		// so answer now; the preflight finishes in the background, still holding the thread's queue.
+		const early = new Promise<TurnStartResult>((resolve) => {
+			const onAbort = () => {
+				if (request.disposition || !request.owner.session.isIdle) return;
+				request.record("cancelled");
+				resolve(request.result());
+			};
+			start.signal.addEventListener("abort", onAbort, { once: true });
+			const detach = () => start.signal.removeEventListener("abort", onAbort);
+			work.then(detach, detach);
+		});
+		return Promise.race([work, early]);
 	}
 
 	/** Hand input to the running turn through the agent's own steering; it cannot be taken back. */
@@ -982,7 +1010,6 @@ export class ThreadManager {
 			try {
 				const options = {
 					source: "rpc" as const,
-					signal: controller.signal,
 					preflightResult: () => {
 						if (
 							controller.signal.aborted ||
@@ -1039,7 +1066,7 @@ export class ThreadManager {
 		if (signal?.aborted) return true;
 		const runner = thread.session.extensionRunner;
 		if (!runner.hasHandlers(event.type)) return false;
-		return (await runner.emit(event, signal))?.cancel === true || signal?.aborted === true;
+		return (await runner.emit(event))?.cancel === true || signal?.aborted === true;
 	}
 
 	/** Publish a replacement atomically with cancellation ownership, then invalidate the old session. */
@@ -1073,6 +1100,8 @@ export class ThreadManager {
 				if (old.reservedStart === request.controller) old.reservedStart = undefined;
 				request.owner = next;
 				next.pendingStarts.add(request.controller);
+				// The replacement's own dispatch (withSession) belongs to the same start.
+				if (old.dispatching === request.controller) next.dispatching = request.controller;
 				if (willDispatch) next.reservedStart = request.controller;
 				if (old.pendingTurnRequestId === request.requestId) {
 					next.pendingClientMessageId = old.pendingClientMessageId;
@@ -1114,9 +1143,10 @@ export class ThreadManager {
 				navigateTree: (targetId, options) => session.navigateTree(targetId, options),
 				reload: () => session.reload(),
 				newSession: async (options) => {
+					const signal = thread.dispatching?.signal;
 					if (
-						(await this.cancelled(thread, { type: "session_before_switch", reason: "new" }, options?.signal)) ||
-						options?.signal?.aborted
+						(await this.cancelled(thread, { type: "session_before_switch", reason: "new" }, signal)) ||
+						signal?.aborted
 					)
 						return { cancelled: true };
 					const selection = options?.preserveModel
@@ -1131,29 +1161,33 @@ export class ThreadManager {
 						thread,
 						() => this.load(manager, mode, "new", thread.approvalMode),
 						"new",
-						options?.signal,
+						signal,
 						options?.withSession !== undefined,
 					);
-					if (options?.signal?.aborted) return { cancelled: true };
+					if (signal?.aborted) return { cancelled: true };
 					if (options?.setup) {
 						await options.setup(next.session.sessionManager);
 						next.session.refreshContext();
 					}
-					if (options?.signal?.aborted) return { cancelled: true };
+					if (signal?.aborted) return { cancelled: true };
 					if (selection?.model) {
-						await next.session.setModel(selection.model, { signal: options?.signal });
-						if (options?.signal?.aborted) return { cancelled: true };
-						next.session.setThinkingLevel(selection.thinking, { signal: options?.signal });
+						// Authentication can wait on the network. Wait here, where a start cancelled meanwhile can still
+						// back out, so it cannot overwrite a selection made after the cancel.
+						await this.ctx.models.checkAuth(selection.model.provider);
+						if (signal?.aborted) return { cancelled: true };
+						await next.session.setModel(selection.model);
+						next.session.setThinkingLevel(selection.thinking);
 					}
-					if (options?.signal?.aborted) return { cancelled: true };
+					if (signal?.aborted) return { cancelled: true };
 					if (options?.withSession) await options.withSession(next.session.createReplacedSessionContext());
 					return { cancelled: false };
 				},
 				fork: async (entryId, options) => {
+					const signal = thread.dispatching?.signal;
 					const position = options?.position ?? "before";
 					if (
-						(await this.cancelled(thread, { type: "session_before_fork", entryId, position }, options?.signal)) ||
-						options?.signal?.aborted
+						(await this.cancelled(thread, { type: "session_before_fork", entryId, position }, signal)) ||
+						signal?.aborted
 					)
 						return { cancelled: true };
 					const file = thread.file;
@@ -1176,14 +1210,15 @@ export class ThreadManager {
 						thread,
 						() => this.load(manager, mode, "fork", thread.approvalMode),
 						"fork",
-						options?.signal,
+						signal,
 						options?.withSession !== undefined,
 					);
-					if (options?.signal?.aborted) return { cancelled: true };
+					if (signal?.aborted) return { cancelled: true };
 					if (options?.withSession) await options.withSession(next.session.createReplacedSessionContext());
 					return { cancelled: false };
 				},
 				switchSession: async (sessionPath, options) => {
+					const signal = thread.dispatching?.signal;
 					const target = resolvePath(sessionPath);
 					if (
 						(await this.cancelled(
@@ -1193,9 +1228,9 @@ export class ThreadManager {
 								reason: "resume",
 								targetSessionFile: target,
 							},
-							options?.signal,
+							signal,
 						)) ||
-						options?.signal?.aborted
+						signal?.aborted
 					)
 						return { cancelled: true };
 					const id = readSessionHeaderForDiscovery(target)?.id;
@@ -1205,10 +1240,10 @@ export class ThreadManager {
 						thread,
 						() => this.ensureLoaded(id, mode),
 						"resume",
-						options?.signal,
+						signal,
 						options?.withSession !== undefined,
 					);
-					if (options?.signal?.aborted) return { cancelled: true };
+					if (signal?.aborted) return { cancelled: true };
 					if (options?.withSession) await options.withSession(next.session.createReplacedSessionContext());
 					return { cancelled: false };
 				},

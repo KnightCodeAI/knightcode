@@ -1294,10 +1294,10 @@ describe("ExtensionRunner", () => {
 
 			const commandContext = runner.createCommandContext();
 			await commandContext.fork("entry-1");
-			expect(fork).toHaveBeenCalledWith("entry-1", { signal: undefined });
+			expect(fork).toHaveBeenCalledWith("entry-1", undefined);
 
 			await commandContext.fork("entry-2", { position: "at" });
-			expect(fork).toHaveBeenLastCalledWith("entry-2", { position: "at", signal: undefined });
+			expect(fork).toHaveBeenLastCalledWith("entry-2", { position: "at" });
 		});
 	});
 

@@ -168,6 +168,12 @@ delivered yet, and the queued inputs.
 queued inputs, as Escape does in the terminal; the client still has their text
 from `turn/queue/updated` to restore into its composer.
 
+An interrupt answers at once; it does not wait for extension hooks. A start
+interrupted during its input hooks or an extension command returns `cancelled`
+and launches nothing, but hooks already running finish. A start interrupted
+later, during compaction before the run or `before_agent_start`, returns
+`started`, and its turn completes `interrupted` without a model request.
+
 Settings changes and compaction serialize with starts;
 a thread already running refuses another start with `turnInProgress`. Settlement
 hooks and their deferred dispatch also retain admission until they finish.
