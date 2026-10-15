@@ -85,6 +85,8 @@ export class ServerConnection {
 		child.stdout.setEncoding("utf8");
 		child.stdout.on("data", (chunk: string) => this.read(chunk));
 		child.stderr.on("data", (chunk: Buffer) => this.log?.write(chunk));
+		// EPIPE after the child dies must not become an uncaught exception in main; its exit restarts it.
+		child.stdin.on("error", (error) => this.log?.write(`stdin error: ${error.message}\n`));
 		child.on("error", (error) => {
 			this.log?.write(`spawn failed: ${error.message}\n`);
 			this.exited(child);

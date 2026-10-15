@@ -146,6 +146,9 @@ async function run(
 			}
 			return {};
 		}
+		case "host/server/restart":
+			server.restart();
+			return {};
 		case "host/app/info":
 			return {
 				appVersion: app.getVersion(),

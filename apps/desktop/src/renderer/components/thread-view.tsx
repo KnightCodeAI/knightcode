@@ -118,7 +118,10 @@ export function ThreadView({ id }: { id: string }) {
 						onBlur={commitRename}
 						onKeyDown={(e) => {
 							if (matches(e, "desktop.item.activate")) commitRename();
-							if (matches(e, "desktop.picker.dismiss")) setRenaming(undefined);
+							if (matches(e, "desktop.picker.dismiss")) {
+								e.preventDefault();
+								setRenaming(undefined);
+							}
 						}}
 						className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2 py-1 font-medium outline-none"
 					/>

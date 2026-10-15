@@ -44,6 +44,7 @@ import {
 	send,
 	startThread,
 	steer,
+	toast,
 	updateSettings,
 	useStore,
 } from "../store.ts";
@@ -224,7 +225,13 @@ function ModelMenu({
 			</div>
 		);
 	}
-	return <ModelList model={model} onModel={onModel} onBack={model && levels.length > 1 ? () => setView("effort") : undefined} />;
+	return (
+		<ModelList
+			model={model}
+			onModel={onModel}
+			onBack={model && levels.length > 1 ? () => setView("effort") : undefined}
+		/>
+	);
 }
 
 /** Reasoning effort as Codex draws it: a pill track, a dot per level, a white knob over a native range input. */
@@ -244,7 +251,10 @@ function EffortSlider({
 	return (
 		<div className="relative mx-2 mt-1 mb-2 h-6">
 			<div className="absolute inset-0 rounded-full bg-track" />
-			<div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `calc(${at(index)} + 14px)` }} />
+			<div
+				className="absolute inset-y-0 left-0 rounded-full bg-accent"
+				style={{ width: `calc(${at(index)} + 14px)` }}
+			/>
 			{levels.map((level, i) => (
 				<span
 					key={level}
@@ -299,7 +309,12 @@ function ModelList({
 		<div className="flex max-h-[min(420px,70vh)] w-[280px] flex-col">
 			<div className="flex items-center gap-1 px-2 pt-1 pb-1">
 				{onBack ? (
-					<button type="button" title="Back" onClick={onBack} className="-ml-1 rounded-full p-0.5 text-desc hover:text-ink">
+					<button
+						type="button"
+						title="Back"
+						onClick={onBack}
+						className="-ml-1 rounded-full p-0.5 text-desc hover:text-ink"
+					>
 						<ChevronLeft size={14} />
 					</button>
 				) : null}
@@ -411,7 +426,10 @@ function ImageChip({ path, onRemove }: { path: string; onRemove: () => void }) {
 		void client.host("host/image/thumbnail", { path }).then(({ dataUrl }) => setSrc(dataUrl));
 	}, [path]);
 	return (
-		<span title={basename(path)} className="group relative size-14 overflow-hidden rounded-lg border border-line bg-hover">
+		<span
+			title={basename(path)}
+			className="group relative size-14 overflow-hidden rounded-lg border border-line bg-hover"
+		>
 			{src ? (
 				<img src={src} alt={basename(path)} className="size-full object-cover" />
 			) : (
@@ -599,7 +617,11 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 					approvalMode: mode,
 				},
 				attached,
-			);
+			).catch((error: unknown) => {
+				setText(value);
+				setImages(images);
+				toast(error instanceof Error ? error.message : String(error));
+			});
 			return;
 		}
 		setText("");
@@ -610,7 +632,9 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 
 	useBinding(
 		"desktop.turn.interrupt",
-		() => threadId && void interrupt(threadId),
+		() => {
+			if (threadId) void interrupt(threadId);
+		},
 		running && text.length === 0 && !view?.approvals.length && !suggestions,
 	);
 
@@ -747,9 +771,12 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 						onPaste={(event) => {
 							if (![...event.clipboardData.items].some((item) => item.type.startsWith("image/"))) return;
 							event.preventDefault();
-							void client.host("host/clipboard/readImage", {}).then(({ path }) => {
-								if (path) setImages((list) => [...list, path]);
-							});
+							void client
+								.host("host/clipboard/readImage", {})
+								.then(({ path }) => {
+									if (path) setImages((list) => [...list, path]);
+								})
+								.catch((error: unknown) => toast(error instanceof Error ? error.message : String(error)));
 						}}
 						onKeyDown={(event) => {
 							if (event.nativeEvent.isComposing) return;

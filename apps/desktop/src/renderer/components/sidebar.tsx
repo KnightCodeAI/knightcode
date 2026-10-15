@@ -199,6 +199,7 @@ export function Sidebar() {
 						onChange={(e) => setQuery(e.target.value)}
 						onKeyDown={(e) => {
 							if (!matches(e, "desktop.picker.dismiss")) return;
+							e.preventDefault();
 							setSearching(false);
 							setQuery("");
 						}}

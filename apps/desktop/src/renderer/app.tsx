@@ -8,7 +8,7 @@ import { Settings } from "./components/settings.tsx";
 import { Sidebar } from "./components/sidebar.tsx";
 import { ThreadView } from "./components/thread-view.tsx";
 import { TitleBar } from "./components/titlebar.tsx";
-import { useBinding } from "./keys.ts";
+import { isEditable, isMac, useBinding } from "./keys.ts";
 import {
 	addProject,
 	goBack,
@@ -71,6 +71,9 @@ function ServerBanner() {
 		return (
 			<div className="flex items-center gap-2 border-b border-danger/30 bg-del-bg px-4 py-2 text-danger">
 				<CircleAlert size={14} /> {server.message ?? "KnightCode stopped."}
+				<button type="button" className="underline" onClick={() => void client.host("host/server/restart", {})}>
+					Restart
+				</button>
 				<button type="button" className="underline" onClick={() => navigate({ kind: "settings", page: "about" })}>
 					Show logs
 				</button>
@@ -99,6 +102,12 @@ function useTheme(): void {
 	}, [theme]);
 }
 
+/** Option+Arrow moves the caret by word in a macOS text field, so leave it to the field there. */
+function navigateHistory(event: KeyboardEvent, delta: -1 | 1): false | undefined {
+	if (isMac() && isEditable(event.target)) return false;
+	goBack(delta);
+}
+
 export function App() {
 	const view = useStore((s) => s.view);
 	const toasts = useStore((s) => s.toasts);
@@ -110,8 +119,8 @@ export function App() {
 	useBinding("desktop.sidebar.toggle", () => setSidebarOpen(!sidebarOpen));
 	useBinding("desktop.palette", () => setPaletteOpen(!paletteOpen));
 	useBinding("desktop.settings", () => navigate({ kind: "settings", page: "general" }));
-	useBinding("desktop.nav.back", () => goBack(-1));
-	useBinding("desktop.nav.forward", () => goBack(1));
+	useBinding("desktop.nav.back", (event) => navigateHistory(event, -1));
+	useBinding("desktop.nav.forward", (event) => navigateHistory(event, 1));
 	return (
 		<div className="flex h-full flex-col bg-shell">
 			<TitleBar />

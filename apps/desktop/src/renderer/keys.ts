@@ -6,16 +6,22 @@ export const isMac = () => window.knightcode.platform === "darwin";
 export const matches = (event: KeyboardEvent | React.KeyboardEvent, id: KeybindingId) =>
 	matchesBinding(event, id, isMac());
 
-/** A window-level handler for one binding id; the latest handler always runs. */
-export function useBinding(id: KeybindingId, handler: (event: KeyboardEvent) => void, enabled = true): void {
+export const isEditable = (target: EventTarget | null) =>
+	target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select"));
+
+/**
+ * A window-level handler for one binding id; the latest handler always runs. Keys a field already
+ * handled are skipped, and a handler returning `false` leaves the key to its default action.
+ */
+export function useBinding(id: KeybindingId, handler: (event: KeyboardEvent) => void | false, enabled = true): void {
 	const ref = useRef(handler);
 	ref.current = handler;
 	useEffect(() => {
 		if (!enabled) return;
 		const listener = (event: KeyboardEvent) => {
-			if (!matches(event, id)) return;
+			if (event.defaultPrevented || !matches(event, id)) return;
+			if (ref.current(event) === false) return;
 			event.preventDefault();
-			ref.current(event);
 		};
 		window.addEventListener("keydown", listener);
 		return () => window.removeEventListener("keydown", listener);

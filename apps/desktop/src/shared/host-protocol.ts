@@ -88,9 +88,13 @@ export const HostMethods = {
 		result: Obj({ paths: Type.Array(Type.String()) }),
 	},
 	"host/clipboard/readImage": { params: Obj({}), result: Obj({ path: Type.Optional(Type.String()) }) },
-	"host/image/thumbnail": { params: Obj({ path: Type.String() }), result: Obj({ dataUrl: Type.Optional(Type.String()) }) },
+	"host/image/thumbnail": {
+		params: Obj({ path: Type.String() }),
+		result: Obj({ dataUrl: Type.Optional(Type.String()) }),
+	},
 	"host/window/setTheme": { params: Obj({ dark: Type.Boolean() }), result: Obj({}) },
 	"host/app/command": { params: Obj({ command: AppCommand }), result: Obj({}) },
+	"host/server/restart": { params: Obj({}), result: Obj({}) },
 	"host/app/info": {
 		params: Obj({}),
 		result: Obj({
