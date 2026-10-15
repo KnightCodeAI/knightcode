@@ -67,7 +67,8 @@ export interface State {
 	threads: ThreadSummary[];
 	view: View;
 	held: Record<string, ThreadView>;
-	opening: Record<string, string | undefined>;
+	/** Why the last resume failed; `code` is the server's error code, when it sent one. */
+	opening: Record<string, { message: string; code?: string } | undefined>;
 	models: ModelInfo[];
 	defaultModel: string | null;
 	toasts: { id: number; text: string }[];
@@ -167,10 +168,12 @@ async function readPayload(ref: PayloadRef): Promise<unknown> {
 	for (;;) {
 		const chunk = await client.request("payload/read", { id: ref.id, offset });
 		const binary = atob(chunk.data);
+		// Typed-array writes past the end are dropped silently; JSON.parse would then fail with no cause.
+		if (offset + binary.length > ref.byteLength) throw new Error("payload chunk exceeds its declared length");
 		for (let i = 0; i < binary.length; i++) bytes[offset + i] = binary.charCodeAt(i);
 		offset += binary.length;
 		if (chunk.eof) break;
-		if (binary.length === 0) throw new Error("payload made no progress");
+		if (binary.length === 0 || chunk.nextOffset !== offset) throw new Error("payload chunk made no progress");
 	}
 	return JSON.parse(new TextDecoder().decode(bytes.subarray(0, offset)));
 }
@@ -453,6 +456,16 @@ export async function openThread(id: string): Promise<void> {
 async function resumeThread(id: string): Promise<void> {
 	set((s) => ({ ...s, opening: { ...s.opening, [id]: undefined } }));
 	const buffer: (() => Promise<void> | void)[] = [];
+	// Events arriving during the replay join the buffer, so order holds until it drains.
+	const drain = async () => {
+		for (let next = buffer.shift(); next; next = buffer.shift()) {
+			try {
+				await next();
+			} catch (replayError) {
+				console.error(replayError);
+			}
+		}
+	};
 	try {
 		const result = await client.request("thread/resume", { threadId: id });
 		// Each port message is its own task, so nothing newer than the response has arrived yet.
@@ -478,20 +491,15 @@ async function resumeThread(id: string): Promise<void> {
 			},
 		}));
 		for (const warning of result.warnings) toast(warning.message);
-		// Events arriving during the replay join the buffer, so order holds until it drains.
-		for (let next = buffer.shift(); next; next = buffer.shift()) {
-			try {
-				await next();
-			} catch (replayError) {
-				console.error(replayError);
-			}
-		}
+		await drain();
 	} catch (error) {
+		const code = error instanceof RequestError ? error.code : undefined;
 		const message =
-			error instanceof RequestError && error.code === "threadLockedElsewhere"
-				? "This thread is open in another KnightCode process."
-				: errorText(error);
-		set((s) => ({ ...s, opening: { ...s.opening, [id]: message } }));
+			code === "threadLockedElsewhere" ? "This thread is open in another KnightCode process." : errorText(error);
+		set((s) => ({ ...s, opening: { ...s.opening, [id]: { message, ...(code ? { code } : {}) } } }));
+		// No snapshot replaced the held view, which saw every event up to the buffer: apply the buffer so it
+		// stays current. With no held view the events have nothing to update.
+		await drain();
 	} finally {
 		if (resuming.get(id) === buffer) resuming.delete(id);
 	}
@@ -518,6 +526,13 @@ export async function startThread(
 
 const newClientId = () => crypto.randomUUID();
 
+/** The composer is already cleared: keep a failed queue or steer as a failed bubble with Retry, not a toast. */
+const failedSend = (threadId: string, text: string, images: ImageInput[] | undefined) => (error: unknown) =>
+	updateThread(threadId, (v) => ({
+		...v,
+		pending: [...v.pending, { clientMessageId: newClientId(), text, images, failed: errorText(error) }],
+	}));
+
 /** Start a turn on an idle thread, queue on a running one (section 9.4). */
 export async function send(threadId: string, text: string, images?: ImageInput[]): Promise<void> {
 	const view = state.held[threadId];
@@ -526,7 +541,7 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 	if (running) {
 		await client
 			.request("turn/queue/add", { threadId, text, ...(images?.length ? { images } : {}) })
-			.catch((e: unknown) => toast(errorText(e)));
+			.catch(failedSend(threadId, text, images));
 		return;
 	}
 	const clientMessageId = newClientId();
@@ -556,7 +571,7 @@ export async function steer(threadId: string, text: string, images?: ImageInput[
 	if (!turn) return send(threadId, text, images);
 	await client
 		.request("turn/steer", { threadId, expectedTurnId: turn.id, text, ...(images?.length ? { images } : {}) })
-		.catch((e: unknown) => toast(errorText(e)));
+		.catch(failedSend(threadId, text, images));
 }
 
 export async function interrupt(threadId: string): Promise<void> {
