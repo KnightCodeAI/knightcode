@@ -830,7 +830,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 						</button>
 						<ApprovalPicker
 							mode={mode}
-							threadKey={threadId ?? "new"}
+							threadKey={threadId ?? searchId}
 							onChange={(m) => (threadId ? void updateSettings(threadId, { approvalMode: m }) : setDraftMode(m))}
 						/>
 						<div className="flex-1" />

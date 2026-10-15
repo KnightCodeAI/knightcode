@@ -19,8 +19,9 @@ bun run start
 
 In a source checkout the app starts the server with `bun packages/cli/src/bun/cli.ts
 app-server`. Set `KNIGHTCODE_DESKTOP_SERVER` to run a different command (for example an
-installed `knightcode`); `app-server` is appended. A packaged build ignores it and runs only
-its bundled binary.
+installed `knightcode`); `app-server` is appended. The value is split on whitespace with no
+quoting, so a path containing spaces (`C:\Program Files\...`) cannot be named; put its folder
+on `PATH` and give the bare name. A packaged build ignores it and runs only its bundled binary.
 
 Server output goes to `app-server.log` in the app's logs folder (`%APPDATA%\KnightCode\logs`
 on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on Linux).

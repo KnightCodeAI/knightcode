@@ -24,6 +24,7 @@ export function resolveServerCommand(packaged: boolean, appPath: string, resourc
 	}
 	const override = process.env.KNIGHTCODE_DESKTOP_SERVER?.trim();
 	if (override) {
+		// ponytail: no quoting, so no spaces in paths (documented in desktop.md); parse a JSON array if that bites.
 		const [command, ...args] = override.split(/\s+/);
 		return { command: command!, args: [...args, "app-server"] };
 	}
@@ -138,9 +139,10 @@ export class ServerConnection {
 		}
 	}
 
-	send(message: Message): void {
-		if (!this.child?.stdin.writable) return;
+	send(message: Message): boolean {
+		if (!this.child?.stdin.writable) return false;
 		this.child.stdin.write(`${JSON.stringify(message)}\n`);
+		return true;
 	}
 
 	/** Main's own requests (`m:` ids); window requests go through the router. */

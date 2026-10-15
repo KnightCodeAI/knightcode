@@ -14,7 +14,8 @@ export interface WindowLink {
 }
 
 export interface RouterServer {
-	send(message: Message): void;
+	/** False when no child can take the message. */
+	send(message: Message): boolean;
 	initializeResult(): unknown | undefined;
 }
 
@@ -126,8 +127,15 @@ export class Router {
 				this.release(windowId, params.threadId, false);
 			}
 			const serverId = `w${windowId}:${message.id}`;
+			// Between an exit and the next child, serverRestarted() has already run: nothing else would answer.
+			if (!this.server.send({ ...message, id: serverId })) {
+				this.toWindow(windowId, {
+					id: message.id,
+					error: { code: "serverRestarted", message: "KnightCode is not running" },
+				});
+				return;
+			}
 			this.pending.set(serverId, { windowId, clientId: message.id, method: message.method, params });
-			this.server.send({ ...message, id: serverId });
 			return;
 		}
 		if (isNotification(message)) return; // `initialized` is main's own.

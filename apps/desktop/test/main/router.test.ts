@@ -4,8 +4,10 @@ import { Router, type WindowLink } from "../../src/main/router.ts";
 
 function setup() {
 	const toServer: Message[] = [];
+	/** True while no child runs (restart backoff or failed). */
+	const server = { down: false };
 	const router = new Router({
-		send: (m) => toServer.push(m),
+		send: (m) => !server.down && (toServer.push(m), true),
 		initializeResult: () => ({ serverInfo: { name: "knightcode", version: "1" } }),
 	});
 	const inbox = new Map<number, unknown[]>();
@@ -27,7 +29,7 @@ function setup() {
 		const sent = toServer.at(-1) as { id: string };
 		router.fromServer({ id: sent.id, result } as Message);
 	};
-	return { router, toServer, inbox, open, focus, roundTrip };
+	return { router, toServer, inbox, open, focus, roundTrip, server };
 }
 
 const thread = (id: string) => ({ thread: { id } });
@@ -53,6 +55,19 @@ describe("router", () => {
 		router.fromWindow(1, { id: 1, method: "initialize", params: {} } as Message);
 		expect(toServer).toEqual([]);
 		expect(inbox.get(1)).toEqual([{ id: 1, result: { serverInfo: { name: "knightcode", version: "1" } } }]);
+	});
+
+	test("a request sent while no app server runs fails at once instead of waiting forever", () => {
+		const { router, toServer, inbox, open, server } = setup();
+		open(1);
+		router.serverRestarted();
+		server.down = true;
+		router.fromWindow(1, { id: 3, method: "thread/resume", params: { threadId: "t1" } } as Message);
+		expect(toServer).toEqual([]);
+		expect(inbox.get(1)).toEqual([{ id: 3, error: { code: "serverRestarted", message: "KnightCode is not running" } }]);
+		// Not left pending: the next restart has nothing to fail twice.
+		router.serverRestarted();
+		expect(inbox.get(1)).toHaveLength(1);
 	});
 
 	test("thread notifications go to holders only; sidebar notifications to every window", () => {

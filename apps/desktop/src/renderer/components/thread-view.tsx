@@ -170,11 +170,11 @@ export function ThreadView({ id }: { id: string }) {
 					) : null}
 					{failure ? (
 						<div className="flex items-center gap-2 rounded-[var(--kc-radius)] border border-danger/30 bg-del-bg px-3 py-2 text-danger">
-							<CircleAlert size={14} /> {failure}
+							<CircleAlert size={14} /> {failure.message}
 							<button type="button" className="ml-auto underline" onClick={() => void openThread(id)}>
 								Retry
 							</button>
-							{failure.includes("another KnightCode") ? (
+							{failure.code === "threadLockedElsewhere" ? (
 								<button type="button" className="underline" onClick={() => void fork(id)}>
 									Fork it
 								</button>
