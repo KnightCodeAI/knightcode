@@ -39,7 +39,8 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
 	// Status codes stand alone: a permanent 400 whose body mentions "15200 tokens"
 	// or a request id containing the digits is not a transient failure.
 	"\\b(?:429|500|502|503|504|520|524)\\b",
-	"service.?unavailable",
+	// Also matches "The service is temporarily unavailable".
+	"service.?(?:is.?)?(?:temporarily.?)?unavailable",
 	"server.?error",
 	"internal.?error",
 
