@@ -33,6 +33,9 @@ const SIDEBAR = new Set([
 /** Requests whose success makes the sender hold the thread. */
 const HOLDING = new Set(["thread/start", "thread/resume", "thread/fork", "turn/start", "turn/queue/add"]);
 
+/** The window id of a pending request whose window closed or reloaded. */
+const GONE = -1;
+
 interface Pending {
 	windowId: number;
 	clientId: RequestId;
@@ -82,7 +85,9 @@ export class Router {
 	detach(windowId: number): void {
 		this.windows.delete(windowId);
 		for (const [threadId, set] of this.holders) if (set.has(windowId)) this.release(windowId, threadId);
-		for (const [id, pending] of this.pending) if (pending.windowId === windowId) this.pending.delete(id);
+		// Kept, not dropped: a late holding response must still release the server's subscription. A reload
+		// reattaches the same id, so the entries stop pointing at it.
+		for (const pending of this.pending.values()) if (pending.windowId === windowId) pending.windowId = GONE;
 	}
 
 	activeThreads(): number {
@@ -107,11 +112,15 @@ export class Router {
 				return;
 			}
 			if (message.method === "thread/unsubscribe" && typeof params.threadId === "string") {
+				// Forwarding would drop main's one subscription out from under the windows that hold it.
 				const set = this.holders.get(params.threadId);
+				if (set && !set.has(windowId)) {
+					this.toWindow(windowId, { id: message.id, result: { status: "notSubscribed" } });
+					return;
+				}
 				if (set && set.size > 1) {
-					const held = set.has(windowId);
 					this.release(windowId, params.threadId);
-					this.toWindow(windowId, { id: message.id, result: { status: held ? "unsubscribed" : "notSubscribed" } });
+					this.toWindow(windowId, { id: message.id, result: { status: "unsubscribed" } });
 					return;
 				}
 				this.release(windowId, params.threadId, false);
@@ -144,6 +153,8 @@ export class Router {
 			if (threadId && this.windows.has(pending.windowId)) {
 				this.hold(pending.windowId, threadId);
 				if (pending.method === "turn/start") this.lastStarter.set(threadId, pending.windowId);
+			} else if (threadId && !this.holders.has(threadId)) {
+				this.server.send({ id: `m:release:${threadId}`, method: "thread/unsubscribe", params: { threadId } });
 			}
 		}
 		this.toWindow(pending.windowId, { ...response, id: pending.clientId });

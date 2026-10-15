@@ -88,6 +88,32 @@ describe("router", () => {
 		expect(toServer.slice(before).map((m) => (m as { method: string }).method)).toEqual(["thread/unsubscribe"]);
 	});
 
+	test("an unsubscribe from a window that does not hold the thread is answered locally", () => {
+		const { router, toServer, inbox, open, roundTrip } = setup();
+		open(1);
+		open(2);
+		roundTrip(1, 1, "thread/resume", { threadId: "t" }, thread("t"));
+		const before = toServer.length;
+		router.fromWindow(2, { id: 3, method: "thread/unsubscribe", params: { threadId: "t" } } as Message);
+		expect(toServer.length).toBe(before);
+		expect(inbox.get(2)!.at(-1)).toEqual({ id: 3, result: { status: "notSubscribed" } });
+		expect(router.heldThreads(1)).toEqual(["t"]);
+	});
+
+	test("a holding response that arrives after its window reloaded unsubscribes the server", () => {
+		const { router, toServer, inbox, open } = setup();
+		open(1);
+		router.fromWindow(1, { id: 1, method: "thread/resume", params: { threadId: "t" } } as Message);
+		const sent = toServer.at(-1) as { id: string };
+		// A reload detaches and reattaches the same window id.
+		router.detach(1);
+		open(1);
+		router.fromServer({ id: sent.id, result: thread("t") } as Message);
+		expect(router.heldThreads()).toEqual([]);
+		expect(inbox.get(1)).toEqual([]);
+		expect(toServer.at(-1)).toMatchObject({ method: "thread/unsubscribe", params: { threadId: "t" } });
+	});
+
 	test("an approval goes to the last turn/start sender; closing it moves the request to the other holder", () => {
 		const { router, toServer, inbox, open, roundTrip } = setup();
 		open(1);

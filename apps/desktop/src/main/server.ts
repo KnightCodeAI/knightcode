@@ -95,6 +95,8 @@ export class ServerConnection {
 		});
 		void this.handshake().catch((error: unknown) => {
 			this.log?.write(`handshake failed: ${error instanceof Error ? error.message : String(error)}\n`);
+			// A live child that refused the handshake would leave the state at starting; its exit restarts it.
+			if (this.child === child) child.kill();
 		});
 	}
 

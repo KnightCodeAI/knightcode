@@ -1238,6 +1238,8 @@ Do not add:
 From the repo root:
 
 - `bun run check-types`
+- `cd apps/desktop && bun run check-types` (the root check does not cover
+  `apps/desktop`)
 - `cd apps/desktop && bun x vitest --run`
 - `cd apps/desktop && bun x playwright test` (end to end)
 - `rg -n "nodeIntegration: true|contextIsolation: false|sandbox: false" apps/desktop/src`

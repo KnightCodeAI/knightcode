@@ -404,7 +404,6 @@ const SUGGESTION_ICONS = {
 	plan: Lightbulb,
 };
 
-/** The `@` or `/` token the caret is in, if any. */
 /** An attached image as a thumbnail; the file name shows on hover. */
 function ImageChip({ path, onRemove }: { path: string; onRemove: () => void }) {
 	const [src, setSrc] = useState<string>();
@@ -430,6 +429,7 @@ function ImageChip({ path, onRemove }: { path: string; onRemove: () => void }) {
 	);
 }
 
+/** The `@` or `/` token the caret is in, if any. */
 function tokenAt(text: string, caret: number): { kind: "@" | "/"; start: number; query: string } | undefined {
 	const before = text.slice(0, caret);
 	const at = /(^|\s)@([^\s@]*)$/.exec(before);
@@ -605,7 +605,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 		setText("");
 		setImages([]);
 		const steering = running && (prefs.whileRunning === "steer") !== alternate;
-		void (steering ? steer(threadId, value) : send(threadId, value, attached));
+		void (steering ? steer(threadId, value, attached) : send(threadId, value, attached));
 	};
 
 	useBinding(

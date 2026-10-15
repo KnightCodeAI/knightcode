@@ -1,5 +1,10 @@
 # Phase A — app server core: implementation plan
 
+> **Status (2026-10-15): implemented, then superseded.** The protocol has no version number
+> (`PROTOCOL_VERSION` below is gone), and later amendments moved work into the app server.
+> architecture.md and `packages/cli/docs/app-server.md` are the current design; read this plan
+> as history, not as work to do.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship `knightcode app-server`: one headless process that hosts many KnightCode threads over one `ModelRuntime`, speaks the Phase A protocol over stdio and in-process, locks live session files, gates tools with three approval modes, and unloads idle threads.

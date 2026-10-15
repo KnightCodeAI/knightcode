@@ -37,6 +37,7 @@ export interface Approval {
 export interface PendingMessage {
 	clientMessageId: string;
 	text: string;
+	images?: ImageInput[];
 	failed?: string;
 }
 export interface ThreadView {
@@ -234,7 +235,8 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 				const { [oldThreadId]: _old, ...held } = s.held;
 				return { ...s, held };
 			});
-			await resumeThread(thread.id);
+			// Not awaited: resumeThread waits for the event chain this handler runs on.
+			void resumeThread(thread.id);
 			return;
 		}
 		case "turn/started": {
@@ -354,14 +356,27 @@ function applyServerRequest(request: AnyServerRequest): void {
 	}));
 }
 
-// Notifications apply in arrival order even when one awaits a payload.
+/**
+ * Live events for threads whose thread/resume answered but whose snapshot is not installed yet; they
+ * are newer than the snapshot and replay after it (app-server.md, thread/resume).
+ */
+const resuming = new Map<string, (() => Promise<void> | void)[]>();
+
+function threadOfEvent(params: unknown): string | undefined {
+	const p = params as { threadId?: unknown; turn?: { threadId?: unknown }; thread?: { id?: unknown } } | undefined;
+	const id = p?.threadId ?? p?.turn?.threadId ?? p?.thread?.id;
+	return typeof id === "string" ? id : undefined;
+}
+
+// Events apply in arrival order even when one awaits a payload.
 let chain = Promise.resolve();
-client.onNotification((n) => {
-	chain = chain.then(() => applyNotification(n)).catch((error: unknown) => console.error(error));
-});
-client.onServerRequest((r) => {
-	chain = chain.then(() => applyServerRequest(r));
-});
+function enqueue(params: unknown, apply: () => Promise<void> | void): void {
+	const buffer = resuming.get(threadOfEvent(params) ?? "");
+	if (buffer) buffer.push(apply);
+	else chain = chain.then(apply).catch((error: unknown) => console.error(error));
+}
+client.onNotification((n) => enqueue(n.params, () => applyNotification(n)));
+client.onServerRequest((r) => enqueue(r.params, () => applyServerRequest(r)));
 client.onHostEvent((event) => {
 	if (event.event !== "server/state") return;
 	const wasReady = state.server.state === "ready";
@@ -437,8 +452,13 @@ export async function openThread(id: string): Promise<void> {
 /** Subscribe to a thread and load its history without changing the view. */
 async function resumeThread(id: string): Promise<void> {
 	set((s) => ({ ...s, opening: { ...s.opening, [id]: undefined } }));
+	const buffer: (() => Promise<void> | void)[] = [];
 	try {
 		const result = await client.request("thread/resume", { threadId: id });
+		// Each port message is its own task, so nothing newer than the response has arrived yet.
+		resuming.set(id, buffer);
+		// Older events still queued are in the snapshot; let them land first so it overwrites them.
+		await chain;
 		const turns = await Promise.all(result.turns.map(resolveTurn));
 		const running = result.runningTurn ? await resolveTurn(result.runningTurn) : undefined;
 		if (running && !turns.some((t) => t.id === running.id)) turns.push(running);
@@ -458,12 +478,22 @@ async function resumeThread(id: string): Promise<void> {
 			},
 		}));
 		for (const warning of result.warnings) toast(warning.message);
+		// Events arriving during the replay join the buffer, so order holds until it drains.
+		for (let next = buffer.shift(); next; next = buffer.shift()) {
+			try {
+				await next();
+			} catch (replayError) {
+				console.error(replayError);
+			}
+		}
 	} catch (error) {
 		const message =
 			error instanceof RequestError && error.code === "threadLockedElsewhere"
 				? "This thread is open in another KnightCode process."
 				: errorText(error);
 		set((s) => ({ ...s, opening: { ...s.opening, [id]: message } }));
+	} finally {
+		if (resuming.get(id) === buffer) resuming.delete(id);
 	}
 }
 
@@ -500,7 +530,7 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 		return;
 	}
 	const clientMessageId = newClientId();
-	updateThread(threadId, (v) => ({ ...v, pending: [...v.pending, { clientMessageId, text }] }));
+	updateThread(threadId, (v) => ({ ...v, pending: [...v.pending, { clientMessageId, text, images }] }));
 	try {
 		const result = await client.request("turn/start", {
 			threadId,
@@ -521,11 +551,11 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 	}
 }
 
-export async function steer(threadId: string, text: string): Promise<void> {
+export async function steer(threadId: string, text: string, images?: ImageInput[]): Promise<void> {
 	const turn = state.held[threadId]?.turns.findLast((t) => t.status === "inProgress");
-	if (!turn) return send(threadId, text);
+	if (!turn) return send(threadId, text, images);
 	await client
-		.request("turn/steer", { threadId, expectedTurnId: turn.id, text })
+		.request("turn/steer", { threadId, expectedTurnId: turn.id, text, ...(images?.length ? { images } : {}) })
 		.catch((e: unknown) => toast(errorText(e)));
 }
 

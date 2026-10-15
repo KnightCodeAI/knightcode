@@ -190,7 +190,7 @@ export function ThreadView({ id }: { id: string }) {
 							failed={p.failed}
 							onRetry={() => {
 								dismissPending(id, p.clientMessageId);
-								void send(id, p.text);
+								void send(id, p.text, p.images);
 							}}
 							onDismiss={() => dismissPending(id, p.clientMessageId)}
 						/>

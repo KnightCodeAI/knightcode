@@ -240,7 +240,14 @@ export function LoginFlow({ loginId, onDone }: { loginId: string; onDone: () => 
 					)}
 				</div>
 			) : null}
-			{login.status === "failed" ? <div className="text-danger">{login.error}</div> : null}
+			{login.status === "failed" ? (
+				<div className="space-y-2">
+					<div className="text-danger">{login.error}</div>
+					<button type="button" onClick={onDone} className="text-muted underline">
+						Dismiss
+					</button>
+				</div>
+			) : null}
 			{login.status === "pending" ? (
 				<button type="button" onClick={() => void cancelLogin(loginId).then(onDone)} className="text-muted underline">
 					Cancel
