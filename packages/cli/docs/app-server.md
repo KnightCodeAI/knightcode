@@ -351,7 +351,8 @@ not a separate desktop-side preference.
 
 Params: `{cwd, trusted}` with a boolean decision. Result: `{}`. Writes the
 server-owned trust store; subsequent loads and config reads use it. Already
-loaded runtimes are not silently rebuilt. Filesystem failures return `internal`.
+loaded runtimes are not silently rebuilt. A `cwd` that is not an existing
+directory returns `invalidParams`. Filesystem failures return `internal`.
 
 ```json
 {"id":14,"method":"project/trust/set","params":{"cwd":"/path/to/project","trusted":true}}
@@ -421,7 +422,7 @@ add opens, but not bytes. They exclude index reads and filesystem stat work.
 Diagnostics observe the shared server, not only this connection.
 
 ```json
-{"id":17,"method":"server/diagnostics","params":{}}
+{"id":18,"method":"server/diagnostics","params":{}}
 ```
 
 ## Ownership, unloading, and shutdown

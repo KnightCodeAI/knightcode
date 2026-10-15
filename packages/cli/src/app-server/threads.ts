@@ -335,20 +335,33 @@ export class ThreadManager {
 		this.assertOpen();
 		const live = this.threads.get(threadId);
 		if (live?.busy) throw new AppServerError("turnInProgress", "interrupt the turn first");
+		let changed = false;
 		await this.transition(threadId, async (thread) => {
+			// Refusals and no-op requests before disposal restore the original ready thread and its subscribers.
+			let file: string | undefined;
+			try {
+				file = await this.files.find(threadId);
+				if (!file) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
+				if (thread?.busy) throw new AppServerError("turnInProgress", "interrupt the turn first");
+			} catch (error) {
+				if (thread?.state === "ready") this.threads.set(threadId, thread);
+				throw error;
+			}
+			if (isArchivedPath(file) === archived) {
+				if (thread?.state === "ready") this.threads.set(threadId, thread);
+				return;
+			}
+			changed = true;
 			if (thread) {
 				await thread.dispose();
 				this.ctx.broadcast("thread/status/changed", { threadId, status: this.unloadedStatus(threadId) });
 			}
-			const file = await this.files.find(threadId);
-			if (!file) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
-			if (isArchivedPath(file) === archived) return;
 			const target = archived ? join(dirname(file), ARCHIVE_DIR) : dirname(dirname(file));
 			await mkdir(target, { recursive: true });
 			const moved = join(target, basename(file));
 			await moveSessionFileWithoutReplace(file, moved, threadId, () => this.files.remember(threadId, moved));
 		});
-		this.ctx.broadcast("thread/archived", { threadId, archived });
+		if (changed) this.ctx.broadcast("thread/archived", { threadId, archived });
 	}
 
 	async delete(threadId: string): Promise<void> {
@@ -1092,9 +1105,9 @@ export class ThreadManager {
 	 */
 	async interrupt(threadId: string, turnId?: string): Promise<void> {
 		const thread = this.threads.get(threadId);
-		if (turnId !== undefined && thread?.mapper.currentTurnId() !== turnId)
-			throw new AppServerError("turnMismatch", "the owning turn changed");
 		if (!thread) return;
+		if (turnId !== undefined && thread.mapper.currentTurnId() !== turnId)
+			throw new AppServerError("turnMismatch", "the owning turn changed");
 		if (thread.queued.length > 0) {
 			thread.queued.length = 0;
 			this.notifyQueue(thread);

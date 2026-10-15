@@ -13,6 +13,7 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import {
@@ -481,6 +482,8 @@ export class AgentSession {
 	private _abortDuringBeforeSettle = false;
 	private _isEmittingAgentSettled = false;
 	private _settledDispatchDepth = 0;
+	/** Set inside a deferred settlement action and everything it awaits: those calls may start the next run. */
+	private readonly _settlementOwned = new AsyncLocalStorage<true>();
 	private readonly _deferredSettledActions: Array<() => Promise<void>> = [];
 
 	private _resourceLoader: ResourceLoader;
@@ -1159,7 +1162,7 @@ export class AgentSession {
 				// Keep external admission closed through preflight and nested settlement. Hooks still see idle.
 				this._settledDispatchDepth++;
 				try {
-					for (const action of deferred) await action();
+					for (const action of deferred) await this._settlementOwned.run(true, action);
 				} finally {
 					this._settledDispatchDepth--;
 				}
@@ -1911,7 +1914,12 @@ export class AgentSession {
 	// =========================================================================
 
 	private _assertAgentPromptReady(): void {
-		if (!this.isIdle || this.agent.state.isStreaming)
+		// While deferred settlement actions run, only they may start a run: hooks see idle, but admission is theirs.
+		if (
+			!this.isIdle ||
+			this.agent.state.isStreaming ||
+			(this._settledDispatchDepth > 0 && !this._settlementOwned.getStore())
+		)
 			throw new Error("An agent run or compaction is already active. Wait for idle before prompting.");
 	}
 

@@ -6,6 +6,7 @@
  * server picks.
  */
 
+import { stat } from "node:fs/promises";
 import { getSupportedThinkingLevels } from "@knightcode/ai";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { resolvePath } from "../utils/paths.ts";
@@ -69,7 +70,11 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 			};
 		},
 		"project/trust/set": async ({ cwd, trusted }) => {
-			new ProjectTrustStore(ctx.agentDir).set(resolvePath(cwd), trusted);
+			const resolved = resolvePath(cwd);
+			// A typo would otherwise leave a permanent trust entry for a path that is not a project.
+			const stats = await stat(resolved).catch(() => undefined);
+			if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${cwd}`);
+			new ProjectTrustStore(ctx.agentDir).set(resolved, trusted);
 			return {};
 		},
 	};

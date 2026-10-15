@@ -89,6 +89,45 @@ describe("regression #6363: agent settled event and idle waiting", () => {
 		expect(settledIdleStates).toEqual([true]);
 	});
 
+	it("keeps external prompts out while a deferred settlement prompt awaits an input handler", async () => {
+		let release = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let markBlocked = () => {};
+		const blocked = new Promise<void>((resolve) => {
+			markBlocked = resolve;
+		});
+		let sent = false;
+		const harness = await createHarness({
+			extensionFactories: [
+				(knightcode) => {
+					knightcode.on("agent_settled", () => {
+						if (sent) return;
+						sent = true;
+						knightcode.sendUserMessage("deferred");
+					});
+					knightcode.on("input", async (event) => {
+						if (event.text !== "deferred") return;
+						markBlocked();
+						await gate;
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([fauxAssistantMessage("first"), fauxAssistantMessage("second")]);
+
+		const first = harness.session.prompt("hello");
+		await blocked;
+		expect(harness.session.isIdle).toBe(true);
+		await expect(harness.session.prompt("external")).rejects.toThrow(/already active/);
+		release();
+		await first;
+
+		expect(getUserTexts(harness)).toEqual(["hello", "deferred"]);
+	});
+
 	it("extension command waitForIdle waits for session-level settlement", async () => {
 		let releaseTool = () => {};
 		const released = new Promise<void>((resolve) => {

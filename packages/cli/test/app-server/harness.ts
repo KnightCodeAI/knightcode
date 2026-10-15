@@ -49,9 +49,16 @@ export interface StartServerOptions extends ThreadManagerOptions {
 }
 
 export async function startServer(options: StartServerOptions = {}) {
-	const cwd = mkdtempSync(join(tmpdir(), "knightcode-as-cwd-"));
-	const agentDir = options.agentDir ?? mkdtempSync(join(tmpdir(), "knightcode-as-agent-"));
-	const sessionDir = options.sessionDir ?? mkdtempSync(join(tmpdir(), "knightcode-as-sessions-"));
+	// Only directories made here are removed: a caller-supplied agentDir or sessionDir belongs to the caller.
+	const created: string[] = [];
+	const temp = (prefix: string) => {
+		const dir = mkdtempSync(join(tmpdir(), prefix));
+		created.push(dir);
+		return dir;
+	};
+	const cwd = temp("knightcode-as-cwd-");
+	const agentDir = options.agentDir ?? temp("knightcode-as-agent-");
+	const sessionDir = options.sessionDir ?? temp("knightcode-as-sessions-");
 	const faux = fauxProvider({
 		provider: `faux-as-${counter++}`,
 		tokensPerSecond: options.tokensPerSecond,
@@ -77,8 +84,7 @@ export async function startServer(options: StartServerOptions = {}) {
 			await threads.closeAll();
 		} finally {
 			ctx.dispose();
-			for (const dir of [cwd, agentDir, sessionDir])
-				await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+			for (const dir of created) await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 		}
 	});
 	const connect = async (
@@ -97,6 +103,8 @@ export async function startServer(options: StartServerOptions = {}) {
 		});
 		const notifications: TestClient["notifications"] = [];
 		const waiters = new Set<() => void>();
+		// Per method, the index after the last notification a waitFor returned: a repeated wait needs a newer one.
+		const cursors = new Map<string, number>();
 		client.onNotification((method, params) => {
 			notifications.push({ method, params: params as Record<string, unknown> });
 			for (const wake of [...waiters]) wake();
@@ -113,7 +121,14 @@ export async function startServer(options: StartServerOptions = {}) {
 			},
 			waitFor(method, predicate = () => true, ms = 5_000) {
 				return new Promise((resolve, reject) => {
-					const find = () => notifications.find((n) => n.method === method && predicate(n.params));
+					const find = () => {
+						const index = notifications.findIndex(
+							(n, i) => i >= (cursors.get(method) ?? 0) && n.method === method && predicate(n.params),
+						);
+						if (index === -1) return undefined;
+						cursors.set(method, index + 1);
+						return notifications[index];
+					};
 					const hit = find();
 					if (hit) return resolve(hit.params);
 					const timer = setTimeout(() => {
@@ -139,13 +154,17 @@ export async function startServer(options: StartServerOptions = {}) {
 export function waitForLine(stream: Readable, text: string, ms = 15_000): Promise<void> {
 	return new Promise((resolve, reject) => {
 		let buffer = "";
-		const timer = setTimeout(() => reject(new Error(`timed out waiting for "${text}"`)), ms);
-		stream.on("data", (chunk: Buffer) => {
+		const onData = (chunk: Buffer) => {
 			buffer += chunk.toString("utf8");
-			if (buffer.split("\n").includes(text)) {
-				clearTimeout(timer);
-				resolve();
-			}
-		});
+			if (!buffer.split("\n").includes(text)) return;
+			clearTimeout(timer);
+			stream.off("data", onData);
+			resolve();
+		};
+		const timer = setTimeout(() => {
+			stream.off("data", onData);
+			reject(new Error(`timed out waiting for "${text}"`));
+		}, ms);
+		stream.on("data", onData);
 	});
 }

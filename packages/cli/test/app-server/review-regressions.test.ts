@@ -97,6 +97,18 @@ test("a failed archive broadcasts notLoaded after disposing the runtime", async 
 	expect(a.notifications.some((n) => n.method === "thread/archived")).toBe(false);
 });
 
+test("unarchiving a loaded, unarchived thread keeps it loaded and broadcasts nothing", async () => {
+	const { cwd, sessionDir, threads, connect } = await startServer();
+	const { id } = saved(cwd, sessionDir);
+	const a = await connect();
+	await a.client.request("thread/resume", { threadId: id });
+	await a.client.request("thread/unarchive", { threadId: id });
+	expect(threads.loadedCount()).toBe(1);
+	expect(a.notifications.some((n) => n.method === "thread/archived" || n.method === "thread/status/changed")).toBe(
+		false,
+	);
+});
+
 test("idle ownership loss rejects admission and unloads even without a mapped turn", async () => {
 	const { cwd, sessionDir, threads, connect } = await startServer();
 	const { id, file } = saved(cwd, sessionDir);

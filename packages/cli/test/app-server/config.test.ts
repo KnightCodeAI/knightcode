@@ -70,6 +70,11 @@ test("project trust can be read and set; trusted project keys report their origi
 	expect(await a.client.request("project/trust/read", { cwd })).toEqual({ trusted: null, needsTrust: true });
 	await a.client.request("project/trust/set", { cwd, trusted: true });
 	expect(await a.client.request("project/trust/read", { cwd })).toEqual({ trusted: true, needsTrust: true });
+	const missing = `${cwd}-missing`; // not under cwd, whose trust it would inherit
+	await expect(a.client.request("project/trust/set", { cwd: missing, trusted: true })).rejects.toMatchObject({
+		code: "invalidParams",
+	});
+	expect(await a.client.request("project/trust/read", { cwd: missing })).toMatchObject({ trusted: null });
 	const read = await a.client.request("config/read", { cwd });
 	expect(read.origins.theme).toBe("project");
 });

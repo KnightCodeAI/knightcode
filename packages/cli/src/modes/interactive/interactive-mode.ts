@@ -5812,7 +5812,20 @@ export class InteractiveMode {
 					);
 					return { cancelled: true };
 				}
-				return this.handleResumeSession(forkPath, options);
+				// One attempt only: recursing would offer to fork the fork if another process locked it meanwhile.
+				try {
+					const result = await this.runtimeHost.switchSession(forkPath, {
+						withSession: options?.withSession,
+						projectTrustContextFactory: (cwd) => this.createProjectTrustContext(cwd),
+					});
+					if (!result.cancelled) this.showStatus("Resumed session");
+					return result;
+				} catch (retryError: unknown) {
+					this.showError(
+						`Failed to open fork: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+					);
+					return { cancelled: true };
+				}
 			}
 			if (error instanceof MissingSessionCwdError) {
 				const selectedCwd = await this.promptForMissingSessionCwd(error);
