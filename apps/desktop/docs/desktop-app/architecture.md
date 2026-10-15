@@ -219,8 +219,8 @@ type ErrorCode =
 	| "shuttingDown" | "internal";
 ```
 
-`turnMismatch` answers a steer, follow-up or interrupt whose `expectedTurnId`
-or `turnId` names a turn that is not the running one (section 4.4).
+`turnMismatch` answers a steer or interrupt whose `expectedTurnId` or `turnId`
+names a turn that is not the running one (section 4.4).
 `configConflict` answers a `config/write` whose `expectedVersion` is stale.
 `threadNotArchived` answers `thread/delete` on a thread that is not archived.
 
@@ -605,7 +605,7 @@ Phase A:
 | `thread/start` | `{cwd, workspace?, approvalMode?, model?, thinkingLevel?}` → `{thread, warnings}`; `thread.model` is absent when no model is available yet (section 5.2); `warnings` are the thread's load diagnostics (section 4.5) |
 | `thread/resume` | `{threadId, cursor?}` → `{thread, turns, runningTurn?, nextCursor?, queue, usage, warnings}`; `warnings` are the thread's load diagnostics, returned on every resume so each window that opens the thread sees them; `usage` is the thread's `TokenUsage` as the terminal footer computes it (`AgentSession.getSessionStats()`: every entry, compacted history included, so it matches what was billed; context from `getContextUsage()`); subscribes the connection; historical `turns` are paged independently of the complete current `runningTurn` snapshot (section 4.5) |
 | `thread/fork` | `{threadId, atItemId?}` → `{thread, warnings}` |
-| `thread/list` | `{cwd?, cursor?, archived?}` → `{threads, nextCursor?}`; each a `ThreadSummary` (`Thread` without workspace, approval mode, model and thinking level). Phase A explicitly scans full transcripts on an initial list to obtain names and first messages; it is not a lightweight metadata index. Continuations page a cached, immutable summary snapshot. With an explicit shared session directory, `cwd` filters by each header |
+| `thread/list` | `{cwd?, cursor?, archived?}` → `{threads, nextCursor?}`; each a `ThreadSummary` (`Thread` without workspace, approval mode, model and thinking level). Names and first messages come from the per-directory `.thread-index.json` cache (section 5.10): a cold list scans each transcript once, a warm list reads none. Continuations page a cached, immutable summary snapshot. With an explicit shared session directory, `cwd` filters by each header |
 | `thread/read` | `{threadId, cursor?}` → `{thread, turns, runningTurn?, nextCursor?}`; does not load, subscribe, lock or write the session file. `thread` is a `Thread` when the thread is loaded and a `ThreadSummary` when it is not: workspace, approval mode, model and thinking level live in session state that only a load restores |
 | `thread/unsubscribe` | `{threadId}` → `{status: "unsubscribed" \| "notSubscribed"}` |
 | `thread/archive` / `thread/unarchive` | `{threadId}` → `{}` |
@@ -620,7 +620,7 @@ Phase A:
 | `turn/interrupt` | `{threadId, turnId?}` → `{}`; with `turnId`, `turnMismatch` when another turn runs, so a late click cannot stop the next turn |
 | `payload/read` | `{id, offset, maxBytes?}` → `{data, nextOffset?, eof}`; `data` is base64 for a bounded byte chunk of referenced UTF-8 JSON (section 5.9) |
 | `model/list` | `{}` → `{models, default}`; each model carries `thinkingLevels: ThinkingLevel[]`, the levels it accepts (`["off"]` for a model without reasoning), so a picker offers only those |
-| `command/list` | `{threadId}` → `{commands}` (extension commands, prompt templates, skills, as `commandsOf` builds them) |
+| `command/list` | `{threadId}` or `{cwd}` → `{commands}` (extension commands, prompt templates, skills, as `commandsOf` builds them). With `cwd` the server lists what a new thread in that project would offer, from an unbound in-memory session |
 | `config/read` | `{cwd?}` → `{settings, origins, versions, errors}`; settings, origins and each version come from one read of each file as it is now (never from state loaded earlier), so a version always matches the settings returned. `origins` maps each set dotted key to `"global"` or `"project"` (absent: default); `versions` is `{global, project?}`, a content hash of each file; `errors` are settings files that failed to parse, as `Warning`s with path and, when the runtime reports it, line and column |
 | `config/write` | `{scope: "global" \| "project", cwd?, key, value, expectedVersion?}` → `{version}`; `key` is a dotted path, `value` `null` deletes it. A stale `expectedVersion` answers `configConflict` and writes nothing. The compare and the write happen under the settings file's lock, also when the file does not exist yet, on a write queue shared by every settings manager in the process for that file (so a write queued earlier by a thread's manager lands first), and the call answers only once the server's settings reflect the file. Global writes go through the server's own settings manager. The file keeps its other keys |
 | `project/trust/read` | `{cwd}` → `{trusted: boolean \| null, needsTrust: boolean}`; `null` when the user has not decided |
@@ -722,8 +722,9 @@ Listing cursors refer to a 5-minute immutable summary snapshot and its next
 index, bound to the `cwd`/`archived` filters. A new initial list refreshes it;
 sidebar notifications update current state independently. Expiry or changed
 filters answers `invalidCursor`. Keep at most 32 such snapshots, evicting the
-least recently used; eviction also makes their cursors invalid. Initial
-listing retains today's full-transcript scan cost; section 13 measures it.
+least recently used; eviction also makes their cursors invalid. A cold
+initial listing scans each transcript once; a warm one reads zero transcript
+bytes through `.thread-index.json` (section 5.10; section 13 measures both).
 
 A server request goes to one subscriber: the one that most recently started a
 turn on that thread. The thread records which subscriber each open request
@@ -1215,11 +1216,11 @@ The contract:
   A fork at an item writes only the path to that entry (`forkFrom`'s
   `leafId`), so there is never a full intermediate copy to delete, and an
   unknown item is rejected before any file exists.
-- A switch to a new file keeps one order: canonical path, new lock, then
-  memory and the lock together, then the rewrite, and only then the old
-  lock's release. A refused lock changes nothing; a failure after memory
-  moved restores the old file under the old lock. A write also checks that
-  the held lock is for the current path, not merely that some lock is held.
+- A switch to a new file keeps one order: canonical path, new lock, the old
+  lock's release, then memory and the rewrite. A refused lock changes
+  nothing; a failure after that closes the manager (see below). A write also
+  checks that the held lock is for the current path, not merely that some
+  lock is held.
 - `close()` is final. A closed manager stays readable and rejects every
   write with `SessionClosedError`; reopening is a new manager. Otherwise a
   closed manager whose file another process has since opened would append
