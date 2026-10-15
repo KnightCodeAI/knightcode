@@ -83,9 +83,9 @@ async function captureToolResultContent(context: Context): Promise<unknown> {
 
 describe("Anthropic tool results with images", () => {
 	// The API rejects an error tool result that carries anything but text with a 400.
-	it("replaces images in an error tool result with a text note", async () => {
+	it("replaces images in an error tool result with a pointer to the images sent after it", async () => {
 		const content = await captureToolResultContent(contextWithToolResult(true));
-		expect(JSON.stringify(content)).toContain("image omitted");
+		expect(JSON.stringify(content)).toContain("image attached after the tool results");
 		expect(JSON.stringify(content)).not.toContain('"type":"image"');
 	});
 
