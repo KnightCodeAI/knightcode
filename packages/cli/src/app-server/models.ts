@@ -51,7 +51,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 					throw new AppServerError("invalidParams", "project is not trusted", { reason: "untrusted" });
 			}
 			const keyPath = key.split(".");
-			if (keyPath.some((part) => part === "__proto__" || part === "constructor" || part === "prototype"))
+			if (keyPath.some((part) => part === "" || part === "__proto__" || part === "constructor" || part === "prototype"))
 				throw new AppServerError("invalidParams", "invalid settings key");
 			const result = writeSetting(ctx.agentDir, resolved, scope, keyPath, value, expectedVersion);
 			if (!result.ok)

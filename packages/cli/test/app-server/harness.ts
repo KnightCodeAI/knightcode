@@ -65,6 +65,7 @@ export async function startServer(options: StartServerOptions = {}) {
 	const threads = new ThreadManager(ctx, options);
 	cleanups.push(async () => {
 		await threads.closeAll();
+		ctx.dispose();
 		for (const dir of [cwd, agentDir, sessionDir])
 			await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 	});

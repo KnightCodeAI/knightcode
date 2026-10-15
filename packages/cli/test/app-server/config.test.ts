@@ -124,6 +124,10 @@ test("corrupt config/write rejects without writing; project writes require cwd a
 	await expect(
 		a.client.request("config/write", { scope: "global", key: "__proto__.polluted", value: true }),
 	).rejects.toMatchObject({ code: "invalidParams" });
+	for (const key of ["", "a..b"])
+		await expect(a.client.request("config/write", { scope: "global", key, value: true })).rejects.toMatchObject({
+			code: "invalidParams",
+		});
 });
 
 test("load settings and runner warnings are responses; later runner warnings go only to subscribers", async () => {

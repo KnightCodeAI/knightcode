@@ -1482,9 +1482,16 @@ export class AgentSession {
 			this._cacheWarmer.cancel();
 		}
 		cleanupSessionResources(this.sessionId);
-		this._modelRuntime.releaseVirtualModels(this._virtualModelOwner);
-		this._resourceLoader.dispose?.();
-		this.sessionManager.close();
+		// Each step runs even if an earlier one throws, so the session lock is always released.
+		try {
+			this._modelRuntime.releaseVirtualModels(this._virtualModelOwner);
+		} finally {
+			try {
+				this._resourceLoader.dispose?.();
+			} finally {
+				this.sessionManager.close();
+			}
+		}
 	}
 
 	// =========================================================================
