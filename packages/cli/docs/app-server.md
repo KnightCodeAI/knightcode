@@ -9,8 +9,8 @@ The transport is newline-delimited JSON over stdin/stdout. Messages use JSON-RPC
 2.0 request, response, and notification shapes without a `"jsonrpc"` field.
 There is no protocol version number: the client and the server ship together,
 and a client that needs a newer server checks `serverInfo.version`. It is
-separate from the single-session [RPC mode](rpc.md). Worktrees and desktop UI are later phases;
-those features are not implemented by this server yet.
+separate from the single-session [RPC mode](rpc.md). Worktrees, diffs, git operations and
+extension dialogs are later phases; this server does not implement them yet.
 
 ## Starting
 

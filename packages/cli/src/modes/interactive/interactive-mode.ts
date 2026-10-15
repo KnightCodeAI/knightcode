@@ -107,6 +107,7 @@ import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { SessionLockedError } from "../../core/session-lock.ts";
 import {
+	readSessionHeaderForDiscovery,
 	type SessionEntry,
 	SessionManager,
 	sessionEntryToContextMessages,
@@ -5796,10 +5797,12 @@ export class InteractiveMode {
 				}
 				let forkPath: string;
 				try {
+					// The picker lists other projects' sessions too: fork into the source's project.
+					const sourceCwd = readSessionHeaderForDiscovery(error.sessionFile)?.cwd || this.runtimeHost.cwd;
 					const forked = SessionManager.forkFrom(
 						error.sessionFile,
-						this.runtimeHost.cwd,
-						this.sessionManager.getSessionDir(),
+						sourceCwd,
+						this.sessionManager.usesDefaultSessionDir() ? undefined : this.sessionManager.getSessionDir(),
 					);
 					forkPath = forked.getSessionFile()!;
 					forked.close();
