@@ -3,11 +3,13 @@ import type { SqliteValue } from "./database.ts";
 import {
 	configureSqliteDatabase,
 	type NodeSqliteDatabase,
+	type NodeSqliteDatabaseOptions,
 	type NodeSqliteStorageOptions,
 	prepareSqlitePath,
 	type SyncSqliteConnection,
 	sqliteBusyTimeoutMs,
 } from "./node.ts";
+import { validateSqliteSchemaPrefix } from "./schema.ts";
 import { SqliteStorage } from "./storage.ts";
 
 /** The part of `bun:sqlite` this adapter uses. Declared here so the package needs no Bun type definitions. */
@@ -27,6 +29,9 @@ interface BunDatabase {
 type BunDatabaseConstructor = new (path: string) => BunDatabase;
 
 /** Bun SQLite connection settings for a durable storage file; the same settings as the Node adapter. */
+export type BunSqliteDatabaseOptions = NodeSqliteDatabaseOptions;
+
+/** Bun SQLite connection settings plus durable storage options. */
 export type BunSqliteStorageOptions = NodeSqliteStorageOptions;
 
 /** Present a `bun:sqlite` database as the synchronous connection the shared adapter drives. */
@@ -57,7 +62,7 @@ function toSyncConnection(database: BunDatabase): SyncSqliteConnection {
 /** Open and configure a Bun-backed SQLite database facade. */
 export async function openBunSqliteDatabase(
 	path: string,
-	options: BunSqliteStorageOptions = {},
+	options: BunSqliteDatabaseOptions = {},
 ): Promise<NodeSqliteDatabase> {
 	await prepareSqlitePath(path);
 	// Loaded on use rather than imported, so Node can load this module without failing on `bun:sqlite`.
@@ -72,10 +77,12 @@ export async function openBunSqliteDatabase(
 	return configureSqliteDatabase(toSyncConnection(database), options);
 }
 
-/** Open or create file-backed durable storage using Bun's built-in SQLite. */
+/** Open or create file-backed durable storage using Bun's built-in SQLite, optionally under a table prefix. */
 export async function openBunSqliteStorage(
 	path: string,
 	options: BunSqliteStorageOptions = {},
 ): Promise<SqliteStorage> {
-	return SqliteStorage.open(await openBunSqliteDatabase(path, options));
+	const { prefix, ...databaseOptions } = options;
+	if (prefix !== undefined) validateSqliteSchemaPrefix(prefix);
+	return SqliteStorage.open(await openBunSqliteDatabase(path, databaseOptions), { prefix });
 }
