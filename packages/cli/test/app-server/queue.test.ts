@@ -45,6 +45,12 @@ test("a steer or interrupt naming a turn that is no longer running answers turnM
 	expect(turns.flatMap((t) => t.items).some((i) => i.type === "userMessage" && i.text === "late")).toBe(false);
 });
 
+test("an interrupt naming a turn of a thread that is not loaded succeeds", async () => {
+	const { connect } = await startServer();
+	const a = await connect();
+	await expect(a.client.request("turn/interrupt", { threadId: "not-loaded", turnId: "t1" })).resolves.toEqual({});
+});
+
 const completedTurns = (a: TestClient) => a.notifications.filter((n) => n.method === "turn/completed").length;
 
 test("queued inputs start their own turns in order; removal before start; removed ids not reused", async () => {

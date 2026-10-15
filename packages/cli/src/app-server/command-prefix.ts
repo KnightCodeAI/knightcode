@@ -3,6 +3,8 @@
  * a command form recognised below, and a later command is covered only if it would get the same prefix itself.
  * Anything unrecognised (an operator, an expansion, a quote, a flag where a subcommand belongs, a wrapper, an
  * interpreter running inline code, or a nested target that is itself a dispatcher) is approved whole or not at all.
+ * So is any command with a flag or assignment after its prefix: options can run programs (`rg --pre x`,
+ * `go test -exec x`, `make CC=x`) or write files (`tree -o x`, `git log --output=x`).
  */
 
 type Shell = "bash" | "powershell";
@@ -208,6 +210,12 @@ const withTarget = (first: string, second: string, third: string | undefined): s
 	isName(third) && !dispatches(third) ? `${first} ${second} ${third}` : undefined;
 
 export function commandPrefix(command: string, shell: Shell): string | undefined {
+	const prefix = formPrefix(command, shell);
+	if (prefix === undefined) return undefined;
+	return words(command).slice(words(prefix).length).every(isName) ? prefix : undefined;
+}
+
+function formPrefix(command: string, shell: Shell): string | undefined {
 	if (UNSAFE[shell].test(command)) return undefined;
 	const [first, second, third] = words(command);
 	if (first === undefined || first.includes("=")) return undefined; // FOO=1 cmd overrides the environment

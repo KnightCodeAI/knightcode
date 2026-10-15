@@ -232,7 +232,8 @@ export function acquireSessionLock(
 			if (check()) return;
 			try {
 				owned.unlock();
-				fs.rmSync(ownerFile(sessionFile), { force: true });
+				// Another process may have taken the lock and written its token since unlock().
+				if (tokenOnDisk(sessionFile) === owned.token) fs.rmSync(ownerFile(sessionFile), { force: true });
 			} catch {
 				// Already gone (the directory was deleted); released is what the caller wanted.
 			}

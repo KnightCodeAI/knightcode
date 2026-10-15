@@ -6,26 +6,26 @@ const SHELLS: Shell[] = ["bash", "powershell"];
 
 test("prefixes for recognised forms", () => {
 	const offered: Array<[string, Shell, string]> = [
-		["npm test -- --watch=false", "bash", "npm test"],
+		["npm test src", "bash", "npm test"],
 		["npm run build", "bash", "npm run build"],
 		["git status", "bash", "git status"],
 		["go run main.go", "bash", "go run main.go"],
-		["python -m pytest -q", "bash", "python -m pytest"],
-		["python scripts/check.py --fix", "bash", "python scripts/check.py"],
+		["python -m pytest tests", "bash", "python -m pytest"],
+		["python scripts/check.py fix", "bash", "python scripts/check.py"],
 		["npx cowsay hi", "bash", "npx cowsay"],
-		["uv run pytest -q", "bash", "uv run pytest"],
-		["bun x prettier --check", "bash", "bun x prettier"],
+		["uv run pytest tests", "bash", "uv run pytest"],
+		["bun x prettier src", "bash", "bun x prettier"],
 		["docker ps", "bash", "docker ps"],
-		["ls -la", "bash", "ls"],
+		["ls src", "bash", "ls"],
 		["echo one", "bash", "echo"],
 		// A program on no list gets two words, never its name alone (review round 4).
 		["./build.sh release", "bash", "./build.sh release"],
 		["pip install requests", "bash", "pip install"],
 		["poetry install", "bash", "poetry install"],
-		["poetry run pytest -q", "bash", "poetry run pytest"],
-		["mytool sync --all", "bash", "mytool sync"],
+		["poetry run pytest tests", "bash", "poetry run pytest"],
+		["mytool sync all", "bash", "mytool sync"],
 		["mytool run lint", "bash", "mytool run lint"],
-		["Get-ChildItem -Force", "powershell", "Get-ChildItem"],
+		["Get-ChildItem src", "powershell", "Get-ChildItem"],
 		["C:\\Tools\\python.exe check.py", "powershell", "C:\\Tools\\python.exe check.py"],
 		["Npm Test", "powershell", "Npm Test"],
 	];
@@ -96,6 +96,19 @@ test("no prefix, in either shell, for forms that chain, quote, dispatch or run o
 		"mytool run",
 		"mytool run npm",
 		"mytool npm test",
+		// A flag, path flag or assignment after the prefix: options can run programs or write files.
+		"rg --pre /tmp/x pattern",
+		"rg --pre=x pattern",
+		"tree -o out",
+		"ls -la",
+		"Get-ChildItem -Force",
+		"make build CC=x",
+		"npm test --script-shell=x",
+		"npm test -- --ci",
+		"go test -exec x",
+		"git log --output=x",
+		"python check.py -v",
+		"dotnet build /p:x",
 		// Operators, quotes, script blocks.
 		"npm test && rm -rf build",
 		"npm test; ls",
@@ -123,7 +136,8 @@ test("no prefix, in either shell, for forms that chain, quote, dispatch or run o
 
 test("a prefix covers only commands that would be offered exactly that prefix themselves", () => {
 	const cases: Array<[string, string, Shell, boolean]> = [
-		["npm test -- --ci", "npm test", "bash", true],
+		["npm test src", "npm test", "bash", true],
+		["npm test -- --ci", "npm test", "bash", false],
 		["npm testx", "npm test", "bash", false],
 		["npm test; ls", "npm test", "bash", false],
 		["npm run", "npm run build", "bash", false],
@@ -131,10 +145,12 @@ test("a prefix covers only commands that would be offered exactly that prefix th
 		["PATH=/tmp npm test", "npm test", "bash", false],
 		["NPM test", "npm test", "bash", false],
 		["NPM test", "npm test", "powershell", true],
-		["python check.py -v", "python check.py", "bash", true],
+		["python check.py fast", "python check.py", "bash", true],
+		["python check.py -v", "python check.py", "bash", false],
 		["python -c 1", "python check.py", "bash", false],
 		["echo two words", "echo", "bash", true],
-		["pip install -r requirements.txt", "pip install", "bash", true],
+		["pip install requests", "pip install", "bash", true],
+		["pip install -r requirements.txt", "pip install", "bash", false],
 		["pip uninstall -y numpy", "pip install", "bash", false],
 		["poetry run python -c 1", "poetry install", "bash", false],
 	];
@@ -150,5 +166,14 @@ test("a prefix covers only commands that would be offered exactly that prefix th
 		expect(matchesPrefix("wsl rm -rf /", "wsl", shell)).toBe(false);
 		expect(matchesPrefix("pip uninstall -y numpy", "pip", shell)).toBe(false);
 		expect(matchesPrefix("poetry run python -c 1", "poetry", shell)).toBe(false);
+		// Review round 5: options after an approved prefix ran programs or wrote files.
+		expect(matchesPrefix("rg --pre /tmp/x pattern", "rg", shell)).toBe(false);
+		expect(matchesPrefix("tree -o out", "tree", shell)).toBe(false);
+		expect(matchesPrefix("git grep -O./x.sh foo", "git grep", shell)).toBe(false);
+		expect(matchesPrefix("git grep --open-files-in-pager=./x.sh foo", "git grep", shell)).toBe(false);
+		expect(matchesPrefix("git fetch --upload-pack=./x.sh", "git fetch", shell)).toBe(false);
+		expect(matchesPrefix("npm test --script-shell=x", "npm test", shell)).toBe(false);
+		expect(matchesPrefix("make build CC=x", "make build", shell)).toBe(false);
+		expect(matchesPrefix("rg pattern src", "rg", shell)).toBe(true);
 	}
 });
