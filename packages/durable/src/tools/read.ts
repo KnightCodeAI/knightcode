@@ -1,4 +1,5 @@
 import type { Context } from "@knightcode/chord";
+import { characterEnd } from "@knightcode/chord/output";
 import { type Static, Type } from "typebox";
 import {
 	type BinaryReader,
@@ -9,7 +10,6 @@ import {
 	startsWithBom,
 } from "../env/index.ts";
 import { defineTool } from "../harness/define.ts";
-import { characterEnd } from "../harness/output.ts";
 import type { ToolDiagnostic, ToolExecutionApi, ToolExecutionResult, ToolRegistration } from "../harness/types.ts";
 import {
 	DEFAULT_MAX_BYTES,

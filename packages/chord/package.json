@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./context": "./src/context/index.ts",
+    "./output": "./src/output.ts",
     "./delta": "./src/delta/index.ts",
     "./node": "./src/node.ts",
     "./package.json": "./package.json",
