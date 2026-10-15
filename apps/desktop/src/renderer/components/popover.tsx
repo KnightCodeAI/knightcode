@@ -1,18 +1,23 @@
 import { matches } from "../keys.ts";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-/** A button that opens a panel; clicking outside or Escape closes it. */
+/**
+ * A button that opens a panel; clicking outside or Escape closes it. `anchored` places the panel against the
+ * nearest positioned ancestor instead of the button, as the composer's menus open above the whole composer.
+ */
 export function Popover({
 	trigger,
 	children,
 	align = "left",
 	side = "top",
+	anchored = false,
 	className = "",
 }: {
 	trigger: (open: boolean) => ReactNode;
 	children: (close: () => void) => ReactNode;
 	align?: "left" | "right";
 	side?: "top" | "bottom";
+	anchored?: boolean;
 	className?: string;
 }) {
 	const [open, setOpen] = useState(false);
@@ -36,7 +41,7 @@ export function Popover({
 		};
 	}, [open]);
 	return (
-		<div ref={ref} className="relative">
+		<div ref={ref} className={anchored ? undefined : "relative"}>
 			<div onClick={() => setOpen(!open)}>{trigger(open)}</div>
 			{open ? (
 				<div

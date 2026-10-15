@@ -76,6 +76,7 @@ function ApprovalPicker({
 	const Icon = current.icon;
 	return (
 		<Popover
+			anchored
 			trigger={() => (
 				<button
 					type="button"
@@ -172,6 +173,7 @@ function ModelPicker({
 	return (
 		<Popover
 			align="right"
+			anchored
 			trigger={() => (
 				<button type="button" className="flex h-8 items-center gap-1.5 rounded-full px-2.5 hover:bg-hover">
 					<span className="text-ink">{model ? model.name : "Choose a model"}</span>
@@ -294,6 +296,31 @@ interface Suggestion {
 }
 
 /** The `@` or `/` token the caret is in, if any. */
+/** An attached image as a thumbnail; the file name shows on hover. */
+function ImageChip({ path, onRemove }: { path: string; onRemove: () => void }) {
+	const [src, setSrc] = useState<string>();
+	useEffect(() => {
+		void client.host("host/image/thumbnail", { path }).then(({ dataUrl }) => setSrc(dataUrl));
+	}, [path]);
+	return (
+		<span title={basename(path)} className="group relative size-14 overflow-hidden rounded-lg border border-line bg-hover">
+			{src ? (
+				<img src={src} alt={basename(path)} className="size-full object-cover" />
+			) : (
+				<ImagePlus size={16} className="m-auto mt-[19px] text-muted" />
+			)}
+			<button
+				type="button"
+				title="Remove image"
+				onClick={onRemove}
+				className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+			>
+				<X size={11} />
+			</button>
+		</span>
+	);
+}
+
 function tokenAt(text: string, caret: number): { kind: "@" | "/"; start: number; query: string } | undefined {
 	const before = text.slice(0, caret);
 	const at = /(^|\s)@([^\s@]*)$/.exec(before);
@@ -334,6 +361,10 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 		commands.current = undefined;
 	}, [threadId]);
 	useEffect(() => {
+		// A new thread's commands come from its project.
+		commands.current = undefined;
+	}, [cwd]);
+	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
 		el.style.height = "auto";
@@ -360,8 +391,9 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 		const token = tokenAt(value, caret);
 		if (!token) return setSuggestions(undefined);
 		if (token.kind === "/") {
-			if (!threadId) return setSuggestions(undefined);
-			commands.current ??= await listCommands(threadId);
+			const target = threadId ? { threadId } : workdir ? { cwd: workdir } : undefined;
+			if (!target) return setSuggestions(undefined);
+			commands.current ??= await listCommands(target);
 			const q = token.query.toLowerCase();
 			const items = commands.current
 				.filter((c) => c.name.toLowerCase().includes(q))
@@ -512,18 +544,11 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 					{images.length > 0 ? (
 						<div className="flex flex-wrap gap-2 px-4 pt-3">
 							{images.map((path) => (
-								<span key={path} className="flex items-center gap-1.5 rounded-lg bg-hover px-2 py-1 text-[12px]">
-									<ImagePlus size={13} className="text-muted" />
-									<span className="max-w-48 truncate">{basename(path)}</span>
-									<button
-										type="button"
-										title="Remove"
-										onClick={() => setImages((list) => list.filter((p) => p !== path))}
-										className="text-faint hover:text-ink"
-									>
-										<X size={12} />
-									</button>
-								</span>
+								<ImageChip
+									key={path}
+									path={path}
+									onRemove={() => setImages((list) => list.filter((p) => p !== path))}
+								/>
 							))}
 						</div>
 					) : null}
@@ -584,6 +609,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 					/>
 					<div className="flex items-center gap-0.5 px-2.5 pb-2.5">
 						<Popover
+							anchored
 							trigger={() => (
 								<button
 									type="button"

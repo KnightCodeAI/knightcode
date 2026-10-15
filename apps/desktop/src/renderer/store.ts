@@ -363,6 +363,11 @@ client.onHostEvent((event) => {
 	set((s) => ({ ...s, server: { state: event.state, message: event.message } }));
 	if (event.state === "ready" && !wasReady) void connected();
 });
+// Threads started elsewhere (the terminal, another window) send no notification here; coming back to the
+// window is when they matter.
+window.addEventListener("focus", () => {
+	if (state.server.state === "ready") void refreshThreads().catch(() => {});
+});
 
 // --- actions ----------------------------------------------------------------------------------
 
@@ -662,9 +667,12 @@ export async function fork(threadId: string, atItemId?: string): Promise<void> {
 	}
 }
 
-export async function listCommands(threadId: string): Promise<{ name: string; description: string }[]> {
+/** A thread's commands, or a project's before it has a thread. */
+export async function listCommands(
+	target: { threadId: string } | { cwd: string },
+): Promise<{ name: string; description: string }[]> {
 	try {
-		return (await client.request("command/list", { threadId })).commands;
+		return (await client.request("command/list", target)).commands;
 	} catch {
 		return [];
 	}
@@ -692,7 +700,41 @@ export function transcriptMarkdown(threadId: string): string {
 	for (const turn of view.turns)
 		for (const item of turn.items) {
 			if (item.type === "userMessage") out.push(`**You:** ${item.text}`);
-			else if (item.type === "agentMessage") out.push(item.text);
+			else if (item.type === "agentMessage") out.push(`**KnightCode:** ${item.text}`);
+			else if (item.type === "extensionMessage") out.push(`**${item.extension}:** ${item.text}`);
+			else if (item.type === "toolCall") {
+				// Consecutive calls form one list.
+				const line = `- ${toolLine(item)}${item.status === "failed" ? " (failed)" : ""}`;
+				if (out.at(-1)?.startsWith("- ")) out[out.length - 1] += `\n${line}`;
+				else out.push(line);
+			}
 		}
 	return out.join("\n\n");
+}
+
+/** A tool call as one line of text, after the transcript's tool rows. */
+function toolLine(item: Extract<Item, { type: "toolCall" }>): string {
+	const input = (item.input ?? {}) as Record<string, unknown>;
+	const text = (key: string) => (typeof input[key] === "string" ? (input[key] as string) : "");
+	const path = text("path") || text("file_path");
+	switch (item.tool) {
+		case "bash":
+		case "powershell":
+			return `Ran \`${text("command").split("\n")[0]}\``;
+		case "read":
+			return `Read \`${path}\``;
+		case "edit":
+			return `Edited \`${path}\``;
+		case "write":
+			return `Wrote \`${path}\``;
+		case "grep":
+		case "find":
+		case "ls":
+		case "glob":
+			return `Searched${text("pattern") ? ` \`${text("pattern")}\`` : ""}${path ? ` in \`${path}\`` : ""}`;
+		default: {
+			const first = Object.values(input).find((v): v is string => typeof v === "string");
+			return `\`${item.tool}\`${first ? ` ${first.split("\n")[0]}` : ""}`;
+		}
+	}
 }

@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { app, type BrowserWindow, clipboard, dialog, shell } from "electron";
+import { app, type BrowserWindow, clipboard, dialog, nativeImage, shell } from "electron";
 import { Compile } from "typebox/compile";
 import { type HostMethod, HostMethods, type HostRequest, type HostResponse } from "../shared/host-protocol.ts";
 import type { ServerConnection } from "./server.ts";
@@ -84,6 +84,11 @@ async function run(
 			const path = join(dir, `${randomUUID()}.png`);
 			writeFileSync(path, Buffer.from(await blob.arrayBuffer()), { mode: 0o600 });
 			return { path };
+		}
+		case "host/image/thumbnail": {
+			// The renderer cannot read files; a small data URL is enough for an attachment chip.
+			const image = nativeImage.createFromPath(params.path as string);
+			return image.isEmpty() ? {} : { dataUrl: image.resize({ height: 96 }).toDataURL() };
 		}
 		case "host/window/setTheme":
 			if (process.platform === "win32")
