@@ -43,8 +43,12 @@ import {
 // The storage layout, index format, and version ordering are defined in
 // model-catalog-protocol.ts, which the catalog server shares to serve these artifacts.
 // Bump only when generated model metadata needs behavior older KnightCode
-// clients do not have. Clients below this version keep their built-in catalog.
-const MINIMUM_KNIGHTCODE_VERSION = "0.1.0";
+// clients do not have. Clients below this version keep the last catalog
+// published under the previous minimum.
+// 0.17.4: kimi-coding models use openai-completions at /coding/v1; older
+// clients only implement anthropic-messages for kimi-coding and ignore a
+// model's api.
+const MINIMUM_KNIGHTCODE_VERSION = "0.17.4";
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const INDEX_CACHE_CONTROL = "no-store";
