@@ -1123,7 +1123,9 @@ attachments by path, model, thinking and approval pickers, Full access confirmat
 cards, settings (General, Appearance, Models & accounts with sign-in, Approvals, Keyboard
 shortcuts, About), the archive screen, the command palette, onboarding on the new-thread screen,
 light and dark themes. Tests: router, state file, transcript ordering, keybindings and a
-key-comparison scan, theme contrast (20). Moved out of S1: tabs and the right and bottom
+key-comparison scan, theme contrast, server restart backoff and quit deadline, preload origin
+check, `app://` path rule, resume after a restart (36); section 16 is covered apart from the quit
+dialog itself, which needs the end-to-end harness. Moved out of S1: tabs and the right and bottom
 regions go to S2 and S3, where the changes pane, terminal and preview give them content; the
 OKLCH derivation goes with user themes (S3); end-to-end tests need Playwright, a new dependency
 to approve; "Open in…" (`open-in.ts`, `host/openIn/list`) goes to S2, where file tabs and the

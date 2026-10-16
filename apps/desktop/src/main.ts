@@ -3,7 +3,7 @@
  * one MessagePort each, and the host methods a sandboxed renderer cannot run itself.
  */
 
-import { join, normalize, relative, sep } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Message } from "@knightcode/app-server-protocol";
 import {
@@ -21,6 +21,7 @@ import {
 } from "electron";
 import type { HostEvent, HostRequest } from "./shared/host-protocol.ts";
 import { handleHost } from "./main/host.ts";
+import { rendererPath } from "./main/protocol-scheme.ts";
 import { Router } from "./main/router.ts";
 import { resolveServerCommand, ServerConnection, type ServerState } from "./main/server.ts";
 import { loginShellEnv } from "./main/shell-env.ts";
@@ -67,15 +68,8 @@ let server: ServerConnection;
 function serveRenderer(request: Request): Promise<Response> | Response {
 	const url = new URL(request.url);
 	if (url.host !== "desktop") return new Response(null, { status: 404 });
-	let decoded: string;
-	try {
-		decoded = decodeURIComponent(url.pathname);
-	} catch {
-		return new Response(null, { status: 400 });
-	}
-	const path = normalize(join(RENDERER_DIR, decoded));
-	const inside = relative(RENDERER_DIR, path);
-	if (inside.startsWith("..") || inside.includes(`..${sep}`)) return new Response(null, { status: 403 });
+	const path = rendererPath(RENDERER_DIR, url.pathname);
+	if (typeof path === "number") return new Response(null, { status: path });
 	return net.fetch(pathToFileURL(path).toString()).then((response) => {
 		const headers = new Headers(response.headers);
 		headers.set("Content-Security-Policy", CSP);

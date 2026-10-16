@@ -187,6 +187,20 @@ describe("router", () => {
 		expect(router.heldThreads(1)).toEqual(["new"]);
 	});
 
+	test("the quit question counts threads whose last status is active, in any window or none", () => {
+		const { router, open } = setup();
+		open(1);
+		const status = (threadId: string, type: string) =>
+			router.fromServer({ method: "thread/status/changed", params: { threadId, status: { type } } } as Message);
+		status("a", "active");
+		status("b", "active");
+		status("a", "idle");
+		expect(router.activeThreads()).toBe(1);
+		// A restart interrupts every turn; nothing is left to ask about.
+		router.serverRestarted();
+		expect(router.activeThreads()).toBe(0);
+	});
+
 	test("a server exit fails forwarded requests and cancels open server requests", () => {
 		const { router, inbox, open, roundTrip } = setup();
 		open(1);
