@@ -21,7 +21,7 @@ afterEach(async () => {
 	for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
-function spawnServer(stall?: "command" | "factory") {
+function spawnServer(stall?: "command" | "factory", readStdout = true) {
 	const agentDir = mkdtempSync(join(tmpdir(), "knightcode-as-e2e-agent-"));
 	const cwd = mkdtempSync(join(tmpdir(), "knightcode-as-e2e-cwd-"));
 	dirs.push(agentDir, cwd);
@@ -51,10 +51,11 @@ function spawnServer(stall?: "command" | "factory") {
 	child.stdin!.on("error", () => {});
 	const lines: Array<Record<string, unknown>> = [];
 	const waiters = new Set<() => void>();
-	attachJsonlLineReader(child.stdout!, (line) => {
-		lines.push(JSON.parse(line));
-		for (const wake of [...waiters]) wake();
-	});
+	if (readStdout)
+		attachJsonlLineReader(child.stdout!, (line) => {
+			lines.push(JSON.parse(line));
+			for (const wake of [...waiters]) wake();
+		});
 	const waitFor = (predicate: (m: Record<string, unknown>) => boolean) =>
 		new Promise<Record<string, unknown>>((resolve, reject) => {
 			const timer = setTimeout(() => reject(new Error("timed out")), 30_000);
@@ -135,7 +136,8 @@ test("EOF answers a non-cooperative loading request with shuttingDown before the
 }, 60_000);
 
 test("a history turn above 64 MiB round-trips fully through bounded stdio payload chunks", async () => {
-	const s = spawnServer();
+	// The client's transport reads stdout; a second reader would hold every chunk twice.
+	const s = spawnServer(undefined, false);
 	const manager = SessionManager.create(s.cwd, getDefaultSessionDir(s.cwd, s.agentDir));
 	manager.appendMessage({ role: "user", content: "z".repeat(65 * 1024 * 1024), timestamp: 1 });
 	const id = manager.getSessionId();

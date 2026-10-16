@@ -451,7 +451,9 @@ export class ThreadManager {
 			if (thread.state !== "ready")
 				throw new AppServerError("threadNotFound", `fork closed while loading: ${thread.id}`);
 			// The copy carries its source's name; mark it so the two can be told apart.
-			thread.session.setSessionName(`${thread.toThread().name} (fork)`);
+			thread.session.setSessionName(
+				`${thread.session.sessionManager.getSessionName() || thread.toThread().name} (fork)`,
+			);
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });

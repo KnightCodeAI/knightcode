@@ -19,7 +19,7 @@ export type TurnErrorKind = "auth" | "rateLimit" | "contextOverflow" | "network"
 
 const RATE_LIMIT = /rate.?limit|too many requests|\b429\b|quota|usage.?limit/i;
 const AUTH =
-	/\b40[13]\b|unauthori[sz]ed|forbidden|invalid.{0,24}(?:api.?key|token|credential)|(?:missing|no).{0,12}api.?key|authentication|expired.{0,24}token|token.{0,24}expired/i;
+	/\b40[13]\b|unauthori[sz]ed|forbidden|invalid.{0,24}(?:api.?key|(?:\b|_)token\b|credential)|(?:missing|no).{0,12}api.?key|authentication|expired.{0,24}token|token.{0,24}expired/i;
 const NETWORK =
 	/network.?error|connection.?(?:error|refused|lost|reset)|other side closed|fetch failed|getaddrinfo|ENOTFOUND|EAI_AGAIN|ECONNRESET|socket hang up|timed? ?out|websocket.?(?:closed|error)|stream ended|ended without/i;
 

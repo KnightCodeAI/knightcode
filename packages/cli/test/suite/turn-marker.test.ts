@@ -1,7 +1,12 @@
 import { fauxAssistantMessage } from "@knightcode/ai";
 import { afterEach, expect, test } from "vitest";
 import type { SessionEntry } from "../../src/core/session-manager.ts";
-import { TURN_END_TYPE, TURN_MARKER_TYPE, turnMarkerExtension } from "../../src/extensions/turn-marker.ts";
+import {
+	classifyAssistantError,
+	TURN_END_TYPE,
+	TURN_MARKER_TYPE,
+	turnMarkerExtension,
+} from "../../src/extensions/turn-marker.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 let harness: Harness | undefined;
@@ -95,4 +100,14 @@ test("a failed provider turn stores an actionable error kind", async () => {
 	expect(ends(harness.session.sessionManager.getBranch())).toEqual([
 		{ status: "failed", error: { message: "401 Unauthorized", kind: "auth" } },
 	]);
+});
+
+test("a token-limit parameter error is not classified as auth", () => {
+	const kind = (errorMessage: string) =>
+		classifyAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }));
+	expect(kind("Invalid value for max_tokens: must be positive")).toBe("provider");
+	expect(kind("Invalid 'max_output_tokens': integer below minimum")).toBe("provider");
+	expect(kind("invalid_token")).toBe("auth");
+	expect(kind("Invalid access token")).toBe("auth");
+	expect(kind("invalid x-api-key")).toBe("auth");
 });

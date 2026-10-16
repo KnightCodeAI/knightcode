@@ -1475,24 +1475,27 @@ export class AgentSession {
 			// Dispose must succeed even if an abort hook throws.
 		}
 
-		this._extensionRunner.invalidate(
-			"This extension ctx is stale after session replacement or reload. Do not use a captured knightcode or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
-		);
-		this._disconnectFromAgent();
-		this._eventListeners = [];
-		if (this._cacheWarmer) {
-			this._cacheWarmer.onWarmed = undefined;
-			this._cacheWarmer.cancel();
-		}
-		cleanupSessionResources(this.sessionId);
 		// Each step runs even if an earlier one throws, so the session lock is always released.
 		try {
-			this._modelRuntime.releaseVirtualModels(this._virtualModelOwner);
+			this._extensionRunner.invalidate(
+				"This extension ctx is stale after session replacement or reload. Do not use a captured knightcode or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
+			);
+			this._disconnectFromAgent();
+			this._eventListeners = [];
+			if (this._cacheWarmer) {
+				this._cacheWarmer.onWarmed = undefined;
+				this._cacheWarmer.cancel();
+			}
+			cleanupSessionResources(this.sessionId);
 		} finally {
 			try {
-				this._resourceLoader.dispose?.();
+				this._modelRuntime.releaseVirtualModels(this._virtualModelOwner);
 			} finally {
-				this.sessionManager.close();
+				try {
+					this._resourceLoader.dispose?.();
+				} finally {
+					this.sessionManager.close();
+				}
 			}
 		}
 	}
