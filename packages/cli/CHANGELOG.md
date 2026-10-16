@@ -1,5 +1,15 @@
 # @knightcodeai/cli
 
+## 0.17.4
+
+### Fixed
+
+- Fixed retries for node-fetch errors worded "request to <url> failed, reason:", including a Google token refresh that reports an empty reason. Those failures now retry like other fetch transport errors.
+
+- Fixed tool results that contain only whitespace being sent as text. OpenAI and Google requests now treat that text as empty and use the same placeholder as a result with no text.
+
+- Fixed compaction summaries that failed with "generation hit the token cap" when reasoning used up a fixed output limit. Summary requests no longer set maxTokens, so the provider sizes output from the model's limit and the request that was sent. reserveTokens only decides when automatic compaction starts.
+
 ## 0.17.3
 
 ### Changed
