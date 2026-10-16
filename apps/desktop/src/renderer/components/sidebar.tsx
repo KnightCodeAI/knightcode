@@ -45,7 +45,12 @@ function ThreadRow({ thread, selected, pinned }: { thread: ThreadSummary; select
 			role="button"
 			tabIndex={0}
 			onClick={() => void openThread(thread.id)}
-			onKeyDown={(e) => matches(e, "desktop.item.activate") && void openThread(thread.id)}
+			onKeyDown={(e) => {
+				// Enter on the nested Pin or Archive button bubbles here; that button's click handles it.
+				if (e.target !== e.currentTarget || !matches(e, "desktop.item.activate")) return;
+				e.preventDefault();
+				void openThread(thread.id);
+			}}
 			title={`${thread.name || "Untitled"}\n${thread.cwd}`}
 			className={`group flex h-[34px] cursor-default items-center gap-2 rounded-lg pr-1.5 pl-2.5 ${selected ? "bg-selected text-ink" : "text-ink/90 hover:bg-hover"}`}
 		>

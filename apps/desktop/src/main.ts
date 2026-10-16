@@ -67,7 +67,13 @@ let server: ServerConnection;
 function serveRenderer(request: Request): Promise<Response> | Response {
 	const url = new URL(request.url);
 	if (url.host !== "desktop") return new Response(null, { status: 404 });
-	const path = normalize(join(RENDERER_DIR, decodeURIComponent(url.pathname)));
+	let decoded: string;
+	try {
+		decoded = decodeURIComponent(url.pathname);
+	} catch {
+		return new Response(null, { status: 400 });
+	}
+	const path = normalize(join(RENDERER_DIR, decoded));
 	const inside = relative(RENDERER_DIR, path);
 	if (inside.startsWith("..") || inside.includes(`..${sep}`)) return new Response(null, { status: 403 });
 	return net.fetch(pathToFileURL(path).toString()).then((response) => {

@@ -104,10 +104,18 @@ export class ServerConnection {
 	}
 
 	private async handshake(): Promise<void> {
-		const result = (await this.request("initialize", {
-			clientInfo: { name: "knightcode-desktop", version: this.options.clientVersion },
-			capabilities: {},
-		})) as InitializeResult;
+		// A child that hangs before answering never exits, so only a deadline reaches the restart path.
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const deadline = new Promise<never>((_resolve, reject) => {
+			timer = setTimeout(() => reject(new Error("initialize timed out")), 30_000);
+		});
+		const result = (await Promise.race([
+			this.request("initialize", {
+				clientInfo: { name: "knightcode-desktop", version: this.options.clientVersion },
+				capabilities: {},
+			}),
+			deadline,
+		]).finally(() => clearTimeout(timer))) as InitializeResult;
 		this.initializeResult = result;
 		this.send({ method: "initialized", params: {} });
 		this.setState("ready");
