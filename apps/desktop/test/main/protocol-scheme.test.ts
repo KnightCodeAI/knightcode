@@ -15,7 +15,8 @@ test("app:// refuses paths that leave the renderer directory", () => {
 	expect(serve("app://desktop/../../etc/passwd")).toBe(join(DIR, "etc", "passwd"));
 	expect(serve("app://desktop/..%2f..%2fetc%2fpasswd")).toBe(403);
 	expect(serve("app://desktop/assets/..%2f..%2f..%2fsecret")).toBe(403);
-	expect(serve("app://desktop/..%5c..%5csecret")).toBe(process.platform === "win32" ? 403 : join(DIR, "..\\..\\secret"));
+	// A separator on Windows, part of one `..`-led file name on POSIX: refused either way.
+	expect(serve("app://desktop/..%5c..%5csecret")).toBe(403);
 });
 
 test("app:// answers a malformed escape with 400", () => {
