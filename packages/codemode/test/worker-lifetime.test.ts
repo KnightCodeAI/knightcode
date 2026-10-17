@@ -217,7 +217,8 @@ describe.each(runtimes)("$name process lifetime", ({ name, command, available })
 			const { stdout } = await promisify(execFile)(command, [fixture, how], { timeout: 20000 });
 			const lines = stdout.trim().split(/\r?\n/);
 			const result = JSON.parse(lines[0]) as { type: string; kind: string; elapsedMs: number };
-			expect(result).toMatchObject({ type: "result", kind: how === "timeout" ? "timeout" : "aborted" });
+			// The whole line in the failure message: a "sandbox" kind is only explained by its message.
+			expect(result, lines[0]).toMatchObject({ type: "result", kind: how === "timeout" ? "timeout" : "aborted" });
 			expect(result.elapsedMs).toBeLessThan(1000);
 			// Bun under load sometimes exits without the exit handler's line while the terminated worker is
 			// still pending (about 1 run in 25 with eight at once), so only Node must report its exit.

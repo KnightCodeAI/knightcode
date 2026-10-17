@@ -41,6 +41,7 @@ try {
 		JSON.stringify({
 			type: "result",
 			kind: result.error.kind,
+			message: result.error.message,
 			elapsedMs: performance.now() - started,
 			workerExited,
 		}),
