@@ -157,7 +157,9 @@ function escapeProse(text) {
 		if (rest.startsWith("<!--")) {
 			const end = rest.indexOf("-->")
 			if (end !== -1) {
-				out += rest.slice(0, end + 3)
+				// MDX treats `<!--` as a JSX tag and rejects the `!`.
+				const inner = rest.slice(4, end).replaceAll("*/", "* /")
+				out += `{/*${inner}*/}`
 				i += end + 2
 				continue
 			}
@@ -218,7 +220,14 @@ function describe(body) {
 	for (const line of lines) {
 		const trimmed = line.trim()
 		if (!started) {
-			if (trimmed === "" || trimmed.startsWith("<") || trimmed.startsWith("!") || trimmed.startsWith("#") || trimmed.startsWith("|")) {
+			if (
+				trimmed === "" ||
+				trimmed.startsWith("<") ||
+				trimmed.startsWith("{/*") ||
+				trimmed.startsWith("!") ||
+				trimmed.startsWith("#") ||
+				trimmed.startsWith("|")
+			) {
 				continue
 			}
 			started = true
@@ -292,7 +301,6 @@ function bareExpressions(markdown) {
 			i += tag[0].length - 1
 			continue
 		}
-		if (rest.startsWith("<!--")) continue
 		problems.push(rest.slice(0, 40).replaceAll("\n", " "))
 	}
 	return problems
