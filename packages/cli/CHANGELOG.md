@@ -1,5 +1,23 @@
 # @knightcodeai/cli
 
+## 0.17.5
+
+### Added
+
+- Added a generated reference for every `models.json` field, including routing a built-in provider through a proxy `baseUrl`.
+
+- Added `knightcode app-server`, a headless multi-thread server over a JSON-RPC-shaped stdio protocol, with durable history, bounded payload retrieval, per-thread tool approvals with command-prefix allows, typed turn errors, a removable message queue, settings writes, and idle unloading.
+
+- Added ownership locks on live session files, with a fork offer when resuming a session open in another KnightCode process.
+
+### Changed
+
+- Changed the default NVIDIA model to `nvidia/nemotron-3.5-super-vl-120b-a12b`.
+
+### Fixed
+
+- Fixed retries for gateway errors that say the request failed, the stream was interrupted, or the HTTP/2 stream failed.
+
 ## 0.17.4
 
 ### Fixed
