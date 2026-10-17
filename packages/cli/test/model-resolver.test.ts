@@ -722,6 +722,10 @@ describe("default model selection", () => {
 		expect(defaultModelPerProvider.xai).toBe("grok-4.7");
 	});
 
+	test("nvidia default tracks current model", () => {
+		expect(defaultModelPerProvider.nvidia).toBe("nvidia/nemotron-3.5-super-vl-120b-a12b");
+	});
+
 	test("qwen token plan individual default tracks current model", () => {
 		expect(defaultModelPerProvider["qwen-token-plan-individual"]).toBe("qwen3.8-max");
 	});
