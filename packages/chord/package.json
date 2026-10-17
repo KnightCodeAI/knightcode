@@ -12,6 +12,9 @@
     "./output": "./src/output.ts",
     "./delta": "./src/delta/index.ts",
     "./node": "./src/node.ts",
+    "./sqlite": "./src/sqlite/index.ts",
+    "./sqlite/node": "./src/sqlite/node.ts",
+    "./sqlite/cloudflare": "./src/sqlite/cloudflare.ts",
     "./package.json": "./package.json",
     "./*": "./src/*.ts"
   },
