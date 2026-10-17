@@ -32,6 +32,7 @@
       "@knightcode/chord/delta": ["./packages/chord/src/delta/index.ts"],
       "@knightcode/chord/output": ["./packages/chord/src/output.ts"],
       "@knightcode/chord/*": ["./packages/chord/src/*.ts", "./packages/chord/src/*"],
+      "@knightcode/app-server-protocol": ["./packages/app-server-protocol/src/index.ts"],
       "@knightcode/remote": ["./packages/remote/src/index.ts"],
       "@knightcode/remote/*": ["./packages/remote/src/*"],
       "@knightcode/tools": ["./packages/tools/src/index.ts"],

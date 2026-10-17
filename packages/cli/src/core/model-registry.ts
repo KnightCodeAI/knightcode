@@ -26,7 +26,7 @@ import type {
 	Provider,
 	ProviderHeaders,
 } from "@knightcode/ai";
-import type { ModelRuntime } from "./model-runtime.ts";
+import type { ModelRuntime, VirtualModelOwner } from "./model-runtime.ts";
 import type { AuthStatus, ProviderConfigInput } from "./provider-composer.ts";
 import type { VirtualModelDefinition } from "./virtual-models.ts";
 
@@ -48,9 +48,11 @@ export { clearApiKeyCache } from "./provider-composer.ts";
  */
 export class ModelRegistry {
 	private readonly runtime: ModelRuntime;
+	private readonly owner: VirtualModelOwner | undefined;
 
-	constructor(runtime: ModelRuntime) {
+	constructor(runtime: ModelRuntime, owner?: VirtualModelOwner) {
 		this.runtime = runtime;
+		this.owner = owner;
 	}
 
 	/** Reload models.json asynchronously. Await before making synchronous registry reads. */
@@ -130,7 +132,7 @@ export class ModelRegistry {
 
 	/** Stream with provider-neutral options and request-time authentication. */
 	streamSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
-		return this.runtime.streamSimple(model, context, options);
+		return this.runtime.streamSimple(model, context, options, this.owner);
 	}
 
 	complete<TApi extends Api>(
@@ -230,11 +232,11 @@ export class ModelRegistry {
 	}
 
 	registerVirtualModel(definition: VirtualModelDefinition): void {
-		this.runtime.registerVirtualModel(definition);
+		this.runtime.registerVirtualModel(definition, this.owner);
 	}
 
 	unregisterVirtualModel(providerName: string, id: string): void {
-		this.runtime.unregisterVirtualModel(providerName, id);
+		this.runtime.unregisterVirtualModel(providerName, id, this.owner);
 	}
 
 	getRegisteredProviderConfig(providerName: string): ProviderConfigInput | undefined {

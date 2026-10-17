@@ -93,6 +93,35 @@ Use `--no-session` for an ephemeral run. An ephemeral session cannot be resumed 
 
 Use `--session` when you already know the session path or ID. Use `--fork` to create a new session from an existing session before interactive mode starts.
 
+## Session ownership
+
+Only one KnightCode process may write a persisted session at a time. Opening a
+session locks its canonical file path and canonical parent directory binding.
+Symlink and Windows junction aliases identify the same file; hard-linked
+transcripts are refused because distinct names could bypass ownership. Managers
+inside one process share counted ownership; the final `close()` releases it.
+
+If another terminal or the [app server](app-server.md) owns the session, terminal
+startup and `/resume` offer to continue in a fork. Accepting reads the source
+without changing it and creates an independently owned transcript. Declining
+keeps the current interactive session. Non-interactive invocations fail rather
+than waiting for input.
+
+Locks are refreshed while live. After a crashed or stalled owner's lock expires,
+another process can take it. The old owner detects this before writes, refuses
+mutations, and never removes the new owner's lock. Read-only listings, exports,
+history reads, and fork-source reads need no ownership and never repair or migrate
+the source. Repairs and migrations happen only when an owner opens it.
+
+Closing a persisted manager is final: it remains readable but cannot write again.
+Reopen through a new `SessionManager.open()` after closing or disposing its
+session. See the [SDK ownership example](sdk.md#session-ownership).
+
+App-server archive/unarchive operations own both source and destination until
+publication and lookup updates finish. They refuse collisions, publish without
+replacement, and report recovery paths if a move cannot finish; they do not
+silently overwrite another transcript.
+
 ## Export or share a session
 
 Use `/export` to write the current session as HTML or JSONL. Use `/share` to upload it and get a viewer link. By default, KnightCode uses a Radius artifact when Radius authentication is configured; otherwise, it uses a private GitHub gist. Set [`sessionShareDestination`](settings.md#sessions-and-context) to `gist` or `radius` to force one destination.

@@ -9,6 +9,7 @@ import { createInterface } from "node:readline";
 import { type ImageContent, modelsAreEqual } from "@knightcode/ai";
 import { setCapabilityOverrides } from "@knightcode/tui";
 import chalk from "chalk";
+import { runAppServer } from "./app-server/entry.ts";
 import { type Args, type Mode, normalizeSessionName, parseArgs, printHelp } from "./cli/args.ts";
 import {
 	type AuthCheckResult,
@@ -57,6 +58,7 @@ import {
 	MissingSessionCwdError,
 	type SessionCwdIssue,
 } from "./core/session-cwd.ts";
+import { SessionLockedError } from "./core/session-lock.ts";
 import { assertValidSessionId, SessionManager } from "./core/session-manager.ts";
 import { collectSettingsDiagnostics, deduplicateDiagnostics } from "./core/settings-diagnostics.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
@@ -337,9 +339,9 @@ function validateSessionIdFlags(parsed: Args): void {
 	}
 }
 
-function openSessionOrExit(path: string, sessionDir?: string): SessionManager {
+async function openSessionOrExit(path: string, cwd: string, sessionDir?: string): Promise<SessionManager> {
 	try {
-		return SessionManager.open(path, sessionDir);
+		return await openOrOfferFork(() => SessionManager.open(path, sessionDir), cwd, sessionDir, confirmFork);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		console.error(chalk.red(`Error: ${message}`));
@@ -355,6 +357,31 @@ function forkSessionOrExit(sourcePath: string, cwd: string, sessionDir?: string,
 		console.error(chalk.red(`Error: ${message}`));
 		process.exit(1);
 	}
+}
+
+/** A held source remains read-only; accepting the offer creates an independently owned fork. */
+export async function openOrOfferFork(
+	open: () => SessionManager,
+	cwd: string,
+	sessionDir: string | undefined,
+	confirm: (message: string) => Promise<boolean>,
+): Promise<SessionManager> {
+	try {
+		return open();
+	} catch (error) {
+		if (!(error instanceof SessionLockedError)) throw error;
+		console.error(chalk.yellow(error.message));
+		if (!(await confirm("Continue in a fork of it?"))) throw error;
+		return SessionManager.forkFrom(error.sessionFile, cwd, sessionDir);
+	}
+}
+
+const confirmFork = (message: string): Promise<boolean> =>
+	process.stdin.isTTY && process.stdout.isTTY ? promptConfirm(message) : Promise.resolve(false);
+
+function exitWithError(error: unknown): never {
+	console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+	process.exit(1);
 }
 
 export async function createSessionManager(
@@ -396,7 +423,7 @@ export async function createSessionManager(
 		switch (resolved.type) {
 			case "path":
 			case "local":
-				return openSessionOrExit(resolved.path, sessionDir);
+				return openSessionOrExit(resolved.path, cwd, sessionDir);
 
 			case "global": {
 				console.log(chalk.yellow(`Session found in different project: ${resolved.cwd}`));
@@ -425,20 +452,22 @@ export async function createSessionManager(
 				console.log(chalk.dim("No session selected"));
 				process.exit(0);
 			}
-			return SessionManager.open(selectedPath, sessionDir);
+			return openSessionOrExit(selectedPath, cwd, sessionDir);
 		} finally {
 			stopThemeWatcher();
 		}
 	}
 
 	if (parsed.continue) {
-		return SessionManager.continueRecent(cwd, sessionDir);
+		return openOrOfferFork(() => SessionManager.continueRecent(cwd, sessionDir), cwd, sessionDir, confirmFork).catch(
+			exitWithError,
+		);
 	}
 
 	if (parsed.sessionId) {
 		const existingSession = findLocalSessionByExactId(parsed.sessionId, cwd, sessionDir);
 		if (existingSession) {
-			return SessionManager.open(existingSession.path, sessionDir);
+			return openSessionOrExit(existingSession.path, cwd, sessionDir);
 		}
 		console.error(
 			chalk.yellow(
@@ -623,6 +652,11 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
+	if (args[0] === "app-server") {
+		await runAppServer(args.slice(1));
+		return;
+	}
+
 	const parsed = parseArgs(args);
 	if (parsed.diagnostics.length > 0) {
 		for (const d of parsed.diagnostics) {
@@ -704,7 +738,10 @@ export async function main(args: string[], options?: MainOptions) {
 			if (!selectedCwd) {
 				process.exit(0);
 			}
+			// Open before closing: the counted lock stays held, so another process cannot take the file between.
+			const previous = sessionManager;
 			sessionManager = SessionManager.open(missingSessionCwdIssue.sessionFile!, sessionDir, selectedCwd);
+			previous.close();
 		} else {
 			console.error(chalk.red(new MissingSessionCwdError(missingSessionCwdIssue).message));
 			process.exit(1);

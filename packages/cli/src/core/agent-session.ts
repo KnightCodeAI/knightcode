@@ -13,6 +13,7 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import {
@@ -379,16 +380,27 @@ const ABORTED = Symbol("aborted");
  */
 function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
 	return new Promise<T | typeof ABORTED>((resolve, reject) => {
-		const onAbort = () => resolve(ABORTED);
-		// An already-aborted signal settles immediately but still goes through the
-		// same path: returning early instead would leave `promise` with nothing
-		// attached, and a later rejection from work nobody awaits would surface as an
-		// unhandled rejection. Settling first only makes the handlers below no-ops.
+		let settled = false;
+		const settle = (): boolean => {
+			if (settled) return false;
+			settled = true;
+			signal.removeEventListener("abort", onAbort);
+			return true;
+		};
+		const onAbort = () => {
+			if (settle()) resolve(ABORTED);
+		};
 		if (signal.aborted) onAbort();
 		else signal.addEventListener("abort", onAbort, { once: true });
-		// Dropped once the race is decided either way, so winning does not leave the
-		// listener - and the promise and resolve closure it captures - on the signal.
-		promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+		// Always observe late rejection, but detach the signal as soon as either side wins.
+		promise.then(
+			(value) => {
+				if (settle()) resolve(value);
+			},
+			(error: unknown) => {
+				if (settle()) reject(error);
+			},
+		);
 	});
 }
 
@@ -425,6 +437,8 @@ export class AgentSession {
 	private _extensionStartupFailure: Error | undefined;
 	private _idleWaitPromise: Promise<void> | undefined;
 	private _resolveIdleWait: (() => void) | undefined;
+	private _settledIdleWaitPromise: Promise<void> | undefined;
+	private _resolveSettledIdleWait: (() => void) | undefined;
 
 	/** Tracks pending steering messages for UI display. Removed when delivered. */
 	private _steeringMessages: string[] = [];
@@ -467,6 +481,9 @@ export class AgentSession {
 	private _isBeforeSettle = false;
 	private _abortDuringBeforeSettle = false;
 	private _isEmittingAgentSettled = false;
+	private _settledDispatchDepth = 0;
+	/** Set inside a deferred settlement action and everything it awaits: those calls may start the next run. */
+	private readonly _settlementOwned = new AsyncLocalStorage<true>();
 	private readonly _deferredSettledActions: Array<() => Promise<void>> = [];
 
 	private _resourceLoader: ResourceLoader;
@@ -561,6 +578,10 @@ export class AgentSession {
 		if (this._usesDefaultTools) this._restoreToolsFromTranscript(this._defaultToolModifiers);
 	}
 
+	private get _virtualModelOwner(): object {
+		return this._resourceLoader.getExtensions().runtime;
+	}
+
 	get modelRuntime(): ModelRuntime {
 		return this._modelRuntime;
 	}
@@ -620,6 +641,7 @@ export class AgentSession {
 		const { model, thinkingLevel } = isVirtualModel(selectedModel)
 			? await this._modelRuntime.resolveModel(selectedModel, convertToLlm(this.messages), {
 					reason: "direct",
+					owner: this._virtualModelOwner,
 					thinkingLevel: this.thinkingLevel,
 					signal,
 				})
@@ -858,6 +880,7 @@ export class AgentSession {
 			const state = getVirtualModelState(this.sessionManager.getBranch(), model.provider, model.id);
 			const route = await this._modelRuntime.resolveModel(model, convertToLlm(context.messages), {
 				reason: failed ? "retry" : userTurn ? "user" : "continuation",
+				owner: this._virtualModelOwner,
 				thinkingLevel,
 				signal,
 				failed,
@@ -1085,9 +1108,15 @@ export class AgentSession {
 		});
 	}
 
-	private async _emitSessionCompactFailed(event: Omit<SessionCompactFailedEvent, "type">): Promise<void> {
+	private async _emitSessionCompactFailed(
+		event: Omit<SessionCompactFailedEvent, "type">,
+		signal?: AbortSignal,
+	): Promise<void> {
 		if (this._extensionRunner.hasHandlers("session_compact_failed")) {
-			await this._extensionRunner.emit({ type: "session_compact_failed", ...event });
+			// Failure observers still hear cancellation, but cannot keep the cancelled operation busy.
+			const emitted = this._extensionRunner.emit({ type: "session_compact_failed", ...event });
+			if (signal) await raceAbort(emitted, signal);
+			else await emitted;
 		}
 	}
 
@@ -1101,9 +1130,14 @@ export class AgentSession {
 	}
 
 	private _resolveIdleWaitIfIdle(): void {
-		if (!this.isIdle || !this._resolveIdleWait) {
-			return;
+		if (!this.isIdle) return;
+		if (!this.isSettling && this._resolveSettledIdleWait) {
+			const resolve = this._resolveSettledIdleWait;
+			this._settledIdleWaitPromise = undefined;
+			this._resolveSettledIdleWait = undefined;
+			resolve();
 		}
+		if (!this._resolveIdleWait) return;
 		const resolve = this._resolveIdleWait;
 		this._idleWaitPromise = undefined;
 		this._resolveIdleWait = undefined;
@@ -1115,23 +1149,27 @@ export class AgentSession {
 		this._isAgentRunActive = false;
 		this._isEmittingAgentSettled = true;
 		try {
-			const aborted = this._agentRunAbortRequested;
-			await this._extensionRunner.emit({ type: "agent_settled", aborted });
-			this._emit({ type: "agent_settled", aborted });
-		} finally {
-			this._isEmittingAgentSettled = false;
-		}
-
-		const deferred = this._deferredSettledActions.splice(0);
-		if (deferred.length > 0) {
 			try {
-				for (const action of deferred) await action();
+				const aborted = this._agentRunAbortRequested;
+				await this._extensionRunner.emit({ type: "agent_settled", aborted });
+				this._emit({ type: "agent_settled", aborted });
 			} finally {
-				this._resolveIdleWaitIfIdle();
+				this._isEmittingAgentSettled = false;
 			}
-			return;
+
+			const deferred = this._deferredSettledActions.splice(0);
+			if (deferred.length > 0) {
+				// Keep external admission closed through preflight and nested settlement. Hooks still see idle.
+				this._settledDispatchDepth++;
+				try {
+					for (const action of deferred) await this._settlementOwned.run(true, action);
+				} finally {
+					this._settledDispatchDepth--;
+				}
+			}
+		} finally {
+			this._resolveIdleWaitIfIdle();
 		}
-		this._resolveIdleWaitIfIdle();
 	}
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
@@ -1437,16 +1475,29 @@ export class AgentSession {
 			// Dispose must succeed even if an abort hook throws.
 		}
 
-		this._extensionRunner.invalidate(
-			"This extension ctx is stale after session replacement or reload. Do not use a captured knightcode or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
-		);
-		this._disconnectFromAgent();
-		this._eventListeners = [];
-		if (this._cacheWarmer) {
-			this._cacheWarmer.onWarmed = undefined;
-			this._cacheWarmer.cancel();
+		// Each step runs even if an earlier one throws, so the session lock is always released.
+		try {
+			this._extensionRunner.invalidate(
+				"This extension ctx is stale after session replacement or reload. Do not use a captured knightcode or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
+			);
+			this._disconnectFromAgent();
+			this._eventListeners = [];
+			if (this._cacheWarmer) {
+				this._cacheWarmer.onWarmed = undefined;
+				this._cacheWarmer.cancel();
+			}
+			cleanupSessionResources(this.sessionId);
+		} finally {
+			try {
+				this._modelRuntime.releaseVirtualModels(this._virtualModelOwner);
+			} finally {
+				try {
+					this._resourceLoader.dispose?.();
+				} finally {
+					this.sessionManager.close();
+				}
+			}
 		}
-		cleanupSessionResources(this.sessionId);
 	}
 
 	// =========================================================================
@@ -1500,6 +1551,11 @@ export class AgentSession {
 	/** Whether the session has no active agent run, compaction, branch summary, retry, or queued continuation. */
 	get isIdle(): boolean {
 		return !this._isAgentRunActive && !this.isCompacting;
+	}
+
+	/** Settlement hooks and their deferred dispatch still own admission, even while hooks see idle. */
+	get isSettling(): boolean {
+		return this._isEmittingAgentSettled || this._settledDispatchDepth > 0;
 	}
 
 	/** Current effective system prompt, including changes not yet sent to the model. */
@@ -1860,6 +1916,16 @@ export class AgentSession {
 	// Prompting
 	// =========================================================================
 
+	private _assertAgentPromptReady(): void {
+		// While deferred settlement actions run, only they may start a run: hooks see idle, but admission is theirs.
+		if (
+			!this.isIdle ||
+			this.agent.state.isStreaming ||
+			(this._settledDispatchDepth > 0 && !this._settlementOwned.getStore())
+		)
+			throw new Error("An agent run or compaction is already active. Wait for idle before prompting.");
+	}
+
 	/**
 	 * Start a run from a user or custom message. The session counts as busy from here on, so
 	 * messages sent while before_agent_start handlers run are queued into this run instead of
@@ -1868,6 +1934,8 @@ export class AgentSession {
 	 */
 	private async _startRun(trigger: BeforeAgentStartTrigger, onStarted?: () => void): Promise<void> {
 		this._assertExtensionStartup();
+		// Reject before changing run flags: a failed overlapping prompt must not settle another owner's run.
+		this._assertAgentPromptReady();
 		this._agentRunEnded = false;
 		this._isAgentRunActive = true;
 		this._agentRunAbortRequested = false;
@@ -2149,6 +2217,7 @@ export class AgentSession {
 		}
 
 		this._assertExtensionStartup();
+		this._assertAgentPromptReady();
 
 		// Validate model
 		if (!this.model) {
@@ -2158,6 +2227,7 @@ export class AgentSession {
 		const hasConfiguredAuth =
 			this._modelRuntime.hasConfiguredAuth(this.model.provider) ||
 			(await this._modelRuntime.checkAuth(this.model.provider)) !== undefined;
+		this._assertAgentPromptReady();
 		if (!hasConfiguredAuth) {
 			const isOAuth = this._modelRuntime.isUsingOAuth(this.model.provider);
 			if (isOAuth) {
@@ -2251,18 +2321,28 @@ export class AgentSession {
 		text: string,
 		images: ImageContent[] | undefined,
 		behavior: "steer" | "followUp",
-		source: InputSource,
+		options?: Pick<PromptOptions, "source" | "preflightResult">,
 	): Promise<QueuedInputDisposition> {
 		if (text.startsWith("/")) {
 			this._throwIfExtensionCommand(text);
 		}
 
-		const processedInput = await this._runInputHandlers(text, images, source, this.isStreaming ? behavior : undefined);
-		if (!processedInput) return "handled";
+		const processedInput = await this._runInputHandlers(
+			text,
+			images,
+			options?.source ?? "interactive",
+			this.isStreaming ? behavior : undefined,
+		);
+		if (!processedInput) {
+			options?.preflightResult?.("handled");
+			return "handled";
+		}
 
 		let expandedText = this._expandSkillCommand(processedInput.text);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
+		// The host can revalidate the owning turn here; queue insertion has no intervening await.
+		options?.preflightResult?.("queued");
 		if (behavior === "steer") {
 			await this._queueSteer(expandedText, processedInput.images);
 		} else {
@@ -2283,9 +2363,9 @@ export class AgentSession {
 	async steer(
 		text: string,
 		images?: ImageContent[],
-		options?: { source?: InputSource },
+		options?: Pick<PromptOptions, "source" | "preflightResult">,
 	): Promise<QueuedInputDisposition> {
-		return this._queueUserInput(text, images, "steer", options?.source ?? "interactive");
+		return this._queueUserInput(text, images, "steer", options);
 	}
 
 	/**
@@ -2299,9 +2379,9 @@ export class AgentSession {
 	async followUp(
 		text: string,
 		images?: ImageContent[],
-		options?: { source?: InputSource },
+		options?: Pick<PromptOptions, "source" | "preflightResult">,
 	): Promise<QueuedInputDisposition> {
-		return this._queueUserInput(text, images, "followUp", options?.source ?? "interactive");
+		return this._queueUserInput(text, images, "followUp", options);
 	}
 
 	/**
@@ -2516,11 +2596,18 @@ export class AgentSession {
 		await this.waitForIdle();
 	}
 
-	async waitForIdle(): Promise<void> {
-		if (this.isIdle) {
+	/** includeSettlement also waits for hooks and deferred dispatch; do not use it from a settlement hook. */
+	async waitForIdle(options: { includeSettlement?: boolean } = {}): Promise<void> {
+		if (options.includeSettlement) {
+			while (!this.isIdle || this.isSettling) {
+				this._settledIdleWaitPromise ??= new Promise<void>((resolve) => {
+					this._resolveSettledIdleWait = resolve;
+				});
+				await this._settledIdleWaitPromise;
+			}
 			return;
 		}
-		await this._getIdleWaitPromise();
+		if (!this.isIdle) await this._getIdleWaitPromise();
 	}
 
 	// =========================================================================
@@ -3203,15 +3290,19 @@ export class AgentSession {
 			let extensionCompaction: CompactionResult | undefined;
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
-				const extensionResult = (await this._extensionRunner.emit({
-					type: "session_before_compact",
-					preparation,
-					branchEntries: pathEntries,
-					customInstructions: undefined,
-					reason,
-					willRetry,
-					signal: abortController.signal,
-				})) as SessionBeforeCompactResult | undefined;
+				const extensionResult = await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_before_compact",
+						preparation,
+						branchEntries: pathEntries,
+						customInstructions: undefined,
+						reason,
+						willRetry,
+						signal: abortController.signal,
+					}),
+					abortController.signal,
+				);
+				if (extensionResult === ABORTED) throw new Error("Compaction cancelled");
 
 				if (extensionResult?.cancel) {
 					cancelledByExtension = true;
@@ -3240,13 +3331,11 @@ export class AgentSession {
 				details = extensionCompaction.details;
 			} else {
 				// Shared default summary generator, also used by manual compaction.
-				const compactResult = await this._runDefaultCompaction(
-					preparation,
-					model,
-					undefined,
+				const compactResult = await raceAbort(
+					this._runDefaultCompaction(preparation, model, undefined, abortController.signal, reason),
 					abortController.signal,
-					reason,
 				);
+				if (compactResult === ABORTED) throw new Error("Compaction cancelled");
 				summary = compactResult.summary;
 				firstKeptEntryId = compactResult.firstKeptEntryId;
 				tokensBefore = compactResult.tokensBefore;
@@ -3265,13 +3354,16 @@ export class AgentSession {
 				CompactionEntry | undefined;
 
 			if (this._extensionRunner && savedCompactionEntry) {
-				await this._extensionRunner.emit({
-					type: "session_compact",
-					compactionEntry: savedCompactionEntry,
-					fromExtension,
-					reason,
-					willRetry,
-				});
+				await raceAbort(
+					this._extensionRunner.emit({
+						type: "session_compact",
+						compactionEntry: savedCompactionEntry,
+						fromExtension,
+						reason,
+						willRetry,
+					}),
+					abortController.signal,
+				);
 			}
 
 			const result: CompactionResult = {
@@ -3282,7 +3374,16 @@ export class AgentSession {
 				usage,
 				details,
 			};
-			this._emit({ type: "compaction_end", reason, result, aborted: false, willRetry });
+			// Persistence already won: retain the successful result, but cancellation of
+			// observer waiting must not authorize an overflow retry or queued continuation.
+			this._emit({
+				type: "compaction_end",
+				reason,
+				result,
+				aborted: false,
+				willRetry: willRetry && !abortController.signal.aborted,
+			});
+			if (abortController.signal.aborted) return false;
 
 			if (willRetry) return true;
 
@@ -3306,13 +3407,16 @@ export class AgentSession {
 					willRetry: false,
 					errorMessage,
 				});
-				await this._emitSessionCompactFailed({
-					reason,
-					errorMessage,
-					aborted,
-					willRetry: false,
-					fromExtension,
-				});
+				await this._emitSessionCompactFailed(
+					{
+						reason,
+						errorMessage,
+						aborted,
+						willRetry: false,
+						fromExtension,
+					},
+					abortController?.signal,
+				);
 			}
 			return false;
 		} finally {
@@ -3577,11 +3681,11 @@ export class AgentSession {
 					this._refreshCurrentModelFromRegistry();
 				},
 				registerVirtualModel: (definition) => {
-					this._modelRuntime.registerVirtualModel(definition);
+					this._modelRuntime.registerVirtualModel(definition, this._virtualModelOwner);
 					this._refreshCurrentModelFromRegistry();
 				},
 				unregisterVirtualModel: (provider, id) => {
-					this._modelRuntime.unregisterVirtualModel(provider, id);
+					this._modelRuntime.unregisterVirtualModel(provider, id, this._virtualModelOwner);
 					this._refreshCurrentModelFromRegistry();
 				},
 			},
@@ -3739,7 +3843,7 @@ export class AgentSession {
 			extensionsResult.runtime,
 			this._cwd,
 			this.sessionManager,
-			new ModelRegistry(this._modelRuntime),
+			new ModelRegistry(this._modelRuntime, extensionsResult.runtime),
 		);
 		if (this._extensionRunnerRef) {
 			this._extensionRunnerRef.current = this._extensionRunner;
@@ -3759,9 +3863,11 @@ export class AgentSession {
 
 	async reload(options?: { beforeSessionStart?: () => void | Promise<void> }): Promise<void> {
 		const oldRunner = this._extensionRunner;
+		const oldOwner = this._virtualModelOwner;
 		const previousFlagValues = oldRunner.getFlagValues();
 		await emitSessionShutdownEvent(oldRunner, { type: "session_shutdown", reason: "reload" });
 		oldRunner.invalidate();
+		this._modelRuntime.releaseVirtualModels(oldOwner);
 		const getDefaultTools = () =>
 			this._usesDefaultTools
 				? applyToolModifiers(this.settingsManager.getDefaultTools() ?? DEFAULT_TOOL_NAMES, this._defaultToolModifiers)

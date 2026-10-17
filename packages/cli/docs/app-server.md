@@ -1,0 +1,479 @@
+# App Server
+
+`knightcode app-server` hosts many conversation threads in one process. The
+threads share models and credentials but own separate session files, extension
+runtimes, tools, approvals, and turn queues. The desktop app can spawn it; scripts
+can use the same protocol.
+
+The transport is newline-delimited JSON over stdin/stdout. Messages use JSON-RPC
+2.0 request, response, and notification shapes without a `"jsonrpc"` field.
+There is no protocol version number: the client and the server ship together,
+and a client that needs a newer server checks `serverInfo.version`. It is
+separate from the single-session [RPC mode](rpc.md). Worktrees, diffs, git operations and
+extension dialogs are later phases; this server does not implement them yet.
+
+## Starting
+
+```sh
+knightcode app-server [-e <extension>]... [--session-dir <dir>]
+```
+
+`-e` / `--extension` is repeatable. Paths resolve against the process working
+directory and load in each thread as explicitly trusted CLI paths. Project-local
+resources still follow [project trust](security.md#understand-project-trust).
+Extension dialogs and custom UI are not yet available in desktop mode; extensions
+see `mode: "desktop"` and `hasUI: false`.
+
+Session storage uses `--session-dir`, then
+`KNIGHTCODE_CODING_AGENT_SESSION_DIR`, then the global `sessionDir` setting.
+Without an override, sessions use the per-project layout described in
+[Sessions](sessions.md). stdout carries only protocol messages; logs go to stderr.
+Closing stdin shuts down the server. `knightcode app-server --help` (or `-h`)
+prints usage on stderr and exits without opening a connection.
+
+## Handshake
+
+Send a request with a string or numeric `id`:
+
+```json
+{"id":1,"method":"initialize","params":{"clientInfo":{"name":"example","version":"1.0"},"capabilities":{"optOutNotifications":["item/reasoning/delta"]}}}
+```
+
+The result contains `serverInfo` and `platform: {os, arch, homeDir}`. `os` is `win32`, `darwin`, or `linux`.
+`capabilities.optOutNotifications` is an optional array of at most 256 method
+names, scoped to this connection. Unknown names are tolerated. It filters only
+notifications, never responses or server requests such as approvals.
+
+Wait for its result, then send the notification:
+
+```json
+{"method":"initialized","params":{}}
+```
+
+Only then send other requests. Requests before initialization return `notInitialized`. Unknown methods return
+`methodNotFound`; invalid parameters return `invalidParams`.
+
+## Threads and turns
+
+Start a thread with its project directory:
+
+```json
+{"id":2,"method":"thread/start","params":{"cwd":"/path/to/project","approvalMode":"ask"}}
+{"id":3,"method":"model/list","params":{}}
+```
+
+Wait for each response. `thread/start` and `thread/fork` return
+`{thread, warnings}`. A fork is named after its source with ` (fork)` appended. `thread/resume` also returns warnings; render them from the
+response, because they can occur before subscription. A warning has
+`{message, source, path?, line?, column?}`, where `source` is `settings`,
+`extension`, `trust`, or `server`. Malformed settings, refused extension loads,
+and undecided project trust do not silently disappear. Later extension errors
+send a subscriber-only `warning` with `threadId`.
+
+Threads and list summaries include `createdAt` (header creation time) and
+optional `forkedFromId` (the parent's header ID, not a UUID inferred from its
+filename). List summaries use file modification time for `updatedAt`; loaded
+threads use the latest entry time, falling back to the header. Their `status`
+is one of:
+
+- `{type: "notLoaded"}`
+- `{type: "idle"}`
+- `{type: "active", waitingOn: []}`; the array can contain `approval` and `dialog`.
+- `{type: "systemError", message}`; ownership loss remains visible after unload
+  until a successful reload.
+
+`thread/status/changed` broadcasts these objects, including the first opening
+and last closing of an approval or dialog.
+
+Extension providers appear in `model/list` after a thread has loaded them.
+Each model has `thinkingLevels`, the accepted picker values; non-reasoning
+models report `["off"]`. Pick a model using `thread/settings/update`, with
+`threadId` and `model: {provider, id}`, before starting a turn if no usable model
+is selected.
+
+```json
+{"id":4,"method":"turn/start","params":{"threadId":"THREAD_ID","text":"Explain this repository","requestId":"client-start-1","clientMessageId":"optimistic-1","images":[{"path":"/absolute/path/screenshot.png"}]}}
+```
+
+A start returns `{status, threadId, requestId}`. `status` is `started`, `handled`
+(an extension consumed the input), or `cancelled` (cancelled before acceptance).
+It does not wait for the turn to finish. The optional client token `requestId`
+is echoed in the response and `turn/started`; it is distinct from the JSON request
+`id`. Session-replacing commands preserve it and return the effective target
+thread ID. The first acceptance wins even if cancellation follows later.
+
+`turn/start` and `turn/queue/add` accept optional `clientMessageId` (1–128
+characters). It is echoed on the first live `userMessage` of the turn the input
+starts, after input transformations; it is not persisted. A handled or removed
+input creates no matching item.
+Their `images` accept inline `{mimeType, data}` base64 images or `{path}` on the
+server's shared filesystem. Path images must be absolute, regular PNG, JPEG,
+GIF, or WebP files of at most 20 MiB; missing, relative, non-image, directory,
+and oversized inputs return `invalidParams`.
+
+A plain text turn sends these notifications in order:
+
+1. `turn/started`
+2. `item/started` and `item/completed` for the user message
+3. `item/started` for the agent message
+4. Zero or more `item/agentMessage/delta` notifications
+5. `item/completed` for the agent message
+6. `turn/completed`
+
+A turn is one agent run between durable start and end entries. Automatic retries,
+recovery, and steering may span several low-level agent runs inside it. Turn IDs come from persisted marker entries; item IDs use durable
+ordinals except tool calls, which retain their call IDs. Final messages decide
+item contents and statuses. `Turn` requires numeric `startedAt` and optionally
+has `completedAt`; items optionally carry both. Times are Unix milliseconds,
+unlike thread creation/modification times, which are ISO strings. Durable turn
+markers and end entries determine final turn times. Assistant text/reasoning
+uses message timestamp and duration, and tool calls finish at the tool-result
+timestamp. User, compaction, and extension items may have only completion time.
+Nested calls are live-only. An interrupted turn without an end entry has no
+completion time.
+
+Started-item times and streaming contents are provisional. `item/completed`
+replaces **times, text, fileChanges, and index**; do not just append deltas.
+`index` is the item's top-level position in the turn: order by its latest value,
+because a streaming item's index can change at message end. `item/removed`
+withdraws an item dropped by a message-end handler.
+Nested tool calls carry `parentItemId` and no top-level index. A saved turn with
+no end entry reads as `interrupted`. See [Session Format](session-format.md).
+
+Completed edit/write calls include `fileChanges: [{path, kind, diff?}]`;
+`kind` is `add`, `modify`, or `delete`. A non-empty tool-result patch becomes
+`diff`. Extension tools can report validated file changes through result details;
+a malformed report is ignored as a whole. Failed calls report no changes.
+
+`turn/completed` contains a summary without items, avoiding a second large
+transcript transfer. Failed turns have `error: {message, kind}`, where `kind`
+is `auth`, `rateLimit`, `contextOverflow`, `network`, `provider`, or `other`,
+classified from the error text. Summaries and references bound `error.message` to 2,000 characters;
+full payloads retain it. Interrupted outcomes take precedence over failures.
+
+`turn/steer` hands input to the running turn and requires `expectedTurnId`, the
+currently running turn ID. A stale ID returns `turnMismatch`, so a steer never
+lands in a later turn. A steer cannot be taken back once accepted.
+
+`turn/queue/add` queues input on the server and returns `{queueId}`. Each queued
+input starts a turn of its own once the thread is idle, oldest first; on an idle
+thread it starts at once. Until it starts it is removable with
+`turn/queue/remove`. A queued input that fails to start (no model, signed out) is
+dropped with an `error` notification. `turn/queue/updated` sends
+`{threadId, steering: [text], followUp: [{id, text}]}`: steers the agent has not
+delivered yet, and the queued inputs.
+
+`turn/interrupt` accepts optional `turnId`; a supplied stale ID returns
+`turnMismatch`, while omitting it retains interrupt-current behavior. It drops
+queued inputs, as Escape does in the terminal; the client still has their text
+from `turn/queue/updated` to restore into its composer.
+
+An interrupt answers at once; it does not wait for extension hooks. A start
+interrupted during its input hooks or an extension command returns `cancelled`
+and launches nothing, but hooks already running finish. A start interrupted
+later, during compaction before the run or `before_agent_start`, returns
+`started`, and its turn completes `interrupted` without a model request.
+
+Settings changes and compaction serialize with starts;
+a thread already running refuses another start with `turnInProgress`. Settlement
+hooks and their deferred dispatch also retain admission until they finish.
+Steering input still waiting in interception belongs to that running
+turn: interruption, unloading, or settlement cancels it. It cannot silently enter
+a later turn; the waiting request returns `invalidParams`.
+
+### Subscriptions and replacement
+
+`thread/start`, `thread/resume`, `thread/fork`, and `turn/start` subscribe the
+requesting connection. `thread/unsubscribe` withdraws it. Every initialized
+connection gets thread/sidebar and account updates, including
+`thread/turn/completed: {turn}` for completed, failed, and interrupted outcomes.
+Only subscribers get `turn/completed`, turn/item notifications, deltas, retries,
+queue updates, and `thread/tokenUsage/updated`. Approvals target one subscriber
+at a time.
+
+Initialize visible sidebar rows from newest-page `thread/read`, without loading
+or subscribing to all threads or resolving referenced turn payloads. Keep live
+outcomes arriving during a read and apply them after its result. An absent saved
+last-seen turn ID establishes a baseline; live completions can still mark unread.
+Active/waiting status outranks the previous outcome; `systemError` stays separate.
+Desktop OS notifications are for live outcomes, not initial history.
+
+`thread/resume` returns history and subscribes in the same synchronous send step.
+Its separate `runningTurn` is a current snapshot, even when an old history cursor
+is supplied. Its required `queue` and `usage` are also live send-time snapshots,
+not values from handler entry or the history cursor. Buffer queue/usage events
+while awaiting the response, install the snapshots (an empty queue clears stale
+state), then replay the buffered events. Invalid cursors subscribe nobody.
+Install `runningTurn` before applying buffered deltas. `thread/replaced` moves
+subscriptions to the new thread; captured old extension contexts become stale.
+`thread/unsubscribe` returns `{status: "unsubscribed" | "notSubscribed"}`.
+
+`TokenUsage` contains cumulative `input`, `output`, `cacheRead`, `cacheWrite`,
+and `cost`, plus optional `contextTokens` and required `contextWindow`.
+`thread/tokenUsage/updated: {threadId, turnId, usage}` arrives after every finalized
+assistant reply, including replies before tool results and compacted-history
+billing. `contextTokens` can be absent when the current context is unknown.
+
+### History, listings, and large values
+
+`thread/read` reads saved history without loading or locking the thread and never
+writes the source. `thread/resume` loads and owns it. History pages contain at most
+50 turns, newest page first; turns within a page are chronological. `nextCursor`
+anchors later pages to the original branch prefix, so appends cannot shift the
+page. Diverged, foreign, or malformed cursors return `invalidCursor`.
+
+Initial `thread/list` uses a per-directory `.thread-index.json` metadata cache.
+It stats transcripts and rescans only new or changed files; the first cold scan
+still reads their full history. Cached titles are bounded, never full messages,
+and fork origins are cached after resolving parent headers. Warm listings open
+no unchanged transcripts or parent headers. Missing, corrupt, invalid, or
+oversized (over 16 MiB) indexes rebuild safely; cache writes are best effort.
+Directories are scanned sequentially, with at most 64 transcripts open.
+
+Continuations use an immutable summary snapshot without rescanning. Up to 32
+snapshots are retained with a five-minute sliding expiry; expired, evicted, or
+filter-mismatched cursors return `invalidCursor`.
+
+Large turns/items and tool input/output use immutable payload references rather
+than oversized protocol lines. Call `payload/read` with the reference ID and a
+byte `offset`; concatenate base64-decoded chunks until `eof`. `nextOffset`, when
+present, is the next byte offset, not a character count. References expire after
+30 minutes without access; reread the thread to obtain new references. IDs grant
+access only to server-owned spool files, not arbitrary filesystem paths.
+
+## Approvals
+
+Desktop threads default to `ask`; terminal-mode in-process threads default to
+`fullAccess`. Effective mode is persisted on the branch; invalid stored state
+restores as `ask`.
+
+| Tool | `ask` | `autoEdit` | `fullAccess` |
+|---|---|---|---|
+| `read`, `grep`, `find`, `ls`, `ask_user`, `submit_plan` | Allow | Allow | Allow |
+| `edit`, `write` | Ask | Allow | Allow |
+| Shell, other extension, and MCP tools | Ask | Ask | Allow |
+
+Built-in plan and classifier restrictions run before this gate. Approvals are
+not a filesystem or operating-system sandbox.
+
+The server sends `item/toolCall/requestApproval` with thread/turn/item IDs, the
+tool name, input or an input reference, and required `decisions`. Optional
+`reason` explains the gate (for example, an outside-workspace write), and
+optional `prefix` is the offered shell command prefix. Render the supplied
+choices, not a hardcoded list. Reply to its `id` with a result such as
+`{"decision":"accept"}` or
+`{"decision":"decline","message":"Use the project-local file instead"}`.
+A decline message is optional and bounded to 4,000 characters; it reaches the
+agent as the tool's decline reason. `cancel` always blocks execution. An
+unoffered decision is treated as decline and never grants permission.
+
+`acceptForSession` remembers a non-shell tool name for this thread's load,
+never across unloads. **It is never offered for bash or PowerShell.** Shells
+can instead offer `acceptPrefixForSession` with a positively understood prefix.
+For example, a `git status` grant covers `git status --short`, not `git reset`.
+Only simple, recognized command forms get a prefix; chaining, redirection,
+substitution, quoted/escaped command names, script dispatchers, interpreters,
+nested wrappers, and unrecognized subcommand forms fail closed. A later command
+must independently produce exactly the granted prefix, not merely start with
+its text. Grants are shell-specific and confined to this thread's load.
+
+The most recent initiating subscriber is asked first. Disconnect or unsubscribe
+cancels that attempt and migrates it to another subscriber; no subscribers means
+cancel. `serverRequest/cancelled` withdraws an outstanding request.
+
+## Method reference
+
+All methods require the handshake. Common errors are `notInitialized`,
+`invalidParams`, and `shuttingDown`; the additional errors below are
+method-specific. The generated schema remains the exhaustive field reference.
+
+### `turn/queue/remove`
+
+Params: `{threadId, queueId}`. Result: `{removed}`. `removed: true` means the
+input will not start; false means it was unknown, already started, or already
+removed. This does not edit saved history.
+Errors: `threadNotFound`.
+
+```json
+{"id":10,"method":"turn/queue/remove","params":{"threadId":"THREAD_ID","queueId":"QUEUE_ID"}}
+```
+
+### `config/read`
+
+Params: optional `{cwd}`. Result: `{settings, origins, versions, errors}`.
+Without cwd, only global settings are read. With cwd, trusted project settings
+merge over global settings; untrusted project files are not read. `origins`
+maps dotted leaf keys to `global` or `project`. `versions.global` and optional
+`versions.project` are SHA-256 hashes of raw file contents, or `"none"` for an
+absent or unread untrusted scope. Settings, origins, versions, and parse errors
+come from the same scope reads, not cached settings paired with fresh versions.
+Parse errors appear as structured `source: "settings"` warnings with an
+optional path and available one-based line/column; unaffected scopes still read.
+Storage read/lock failures return `internal`.
+
+```json
+{"id":11,"method":"config/read","params":{"cwd":"/path/to/project"}}
+```
+
+### `config/write`
+
+Params: `{scope, key, value, cwd?, expectedVersion?}`. `scope` is `global` or
+`project`; `key` is a dotted key such as `retry.provider.maxRetryDelayMs`.
+`value: null` deletes the leaf. Result: `{version}`, after the write and reload.
+Project writes require cwd and an explicitly trusted project. Writes and ordinary
+settings setters share a per-file queue across manager instances. Under the file
+lock, `expectedVersion`, if present, compares against the current raw-content
+hash; existing migrations run before the edit, so deleting a canonical key does
+not resurrect its legacy alias. Corrupt JSON is refused without overwriting it.
+
+Errors: `configConflict` with `data: {version}` when the file changed; reread and
+resolve the conflict rather than blindly retrying. `invalidParams` rejects
+untrusted project writes (`data.reason: "untrusted"`), missing project cwd,
+malformed keys, and prototype-pollution segments (`__proto__`, `constructor`,
+`prototype`). Read/parse/write failures return `internal`.
+
+```json
+{"id":12,"method":"config/write","params":{"scope":"global","key":"theme","value":"dark","expectedVersion":"none"}}
+```
+
+### `project/trust/read`
+
+Params: `{cwd}`. Result: `{trusted, needsTrust}`. `trusted` is true, false, or
+null (undecided); `needsTrust` means project-local resources require a decision.
+This reads the server-owned [trust store](security.md#understand-project-trust),
+not a separate desktop-side preference.
+
+```json
+{"id":13,"method":"project/trust/read","params":{"cwd":"/path/to/project"}}
+```
+
+### `project/trust/set`
+
+Params: `{cwd, trusted}` with a boolean decision. Result: `{}`. Writes the
+server-owned trust store; subsequent loads and config reads use it. Already
+loaded runtimes are not silently rebuilt. A `cwd` that is not an existing
+directory returns `invalidParams`. Filesystem failures return `internal`.
+
+```json
+{"id":14,"method":"project/trust/set","params":{"cwd":"/path/to/project","trusted":true}}
+```
+
+### `file/search`
+
+Params: `{cwd, query, limit?, searchId?}`. `query` is 1–256 characters, `limit`
+is 1–200 (default 50), and `searchId` is at most 128 characters. Result:
+`{files: [{path, score, indices}], truncated}` with cwd-relative paths, fuzzy
+scores, and matched character indices. The server lists paths with `fd` using
+an argument array, never a shell. A newer request using the same `searchId`
+(including from another connection) immediately supersedes the older one,
+which returns `{files: [], truncated: false}` unless shutdown takes precedence.
+
+Listings have a ten-second TTL, at most eight cached cwds, and at most two active
+listings. Output is capped at 200,000 paths or 32 MiB stdout, with
+`truncated: true` when the bounded listing is retained; a 15-second timeout
+rejects with `internal`. Partial failed output is usable but never cached;
+empty failed output rejects. No remaining waiters means abort; shutdown always
+returns `shuttingDown`, even if child rejection
+arrives after superseding. `toolMissing` means `fd` is unavailable; other empty
+listing failures return `internal`.
+
+```json
+{"id":15,"method":"file/search","params":{"cwd":"/path/to/project","query":"src/config","limit":20,"searchId":"composer"}}
+```
+
+### `command/list`
+
+Params: `{threadId}` or `{cwd}`. Result: `{commands: [{name, description}]}`:
+extension commands, prompt templates, and skills as `skill:<name>`, without the
+leading `/`. With `cwd`, the server lists what a new thread in that project would
+offer, from a session it builds in memory and never binds: no extension starts,
+and nothing is written. Built-in commands that only work in the terminal
+(`usage`, `llama`, `undo`) are left out.
+
+```json
+{"id":17,"method":"command/list","params":{"cwd":"/path/to/project"}}
+```
+
+### `thread/delete`
+
+Params: `{threadId}`. Result: `{}`. Permanently removes an archived transcript;
+it does not use the interactive resume selector's trash command. Archive first,
+then explicitly delete. The thread must have no running/admitted work. Deletion
+fences new starts and reloads, rechecks archive/busy state inside that fence,
+and locks/verifies the raw file before unlinking. Refused rechecks preserve the
+loaded thread and subscriptions. Success broadcasts `thread/deleted: {threadId}`
+to every initialized connection.
+
+Errors: `threadNotFound`, `threadNotArchived`, `turnInProgress`,
+`threadLockedElsewhere`, and `archiveConflict` for hard-linked transcripts;
+filesystem failures return `internal`.
+
+```json
+{"id":16,"method":"thread/delete","params":{"threadId":"ARCHIVED_THREAD_ID"}}
+```
+
+### `server/diagnostics`
+
+Params: `{}`. Result: `rssBytes`, `heapBytes`, `loadedThreads`, `loadingThreads`,
+`payloadFiles`, `payloadBytes`, `inactiveFactories`, `uptimeMs`,
+`listingFilesOpened`, and `listingBytesScanned`. The listing counters are
+cumulative: transcript scans account for file sizes and parent-header lookups
+add opens, but not bytes. They exclude index reads and filesystem stat work.
+Diagnostics observe the shared server, not only this connection.
+
+```json
+{"id":18,"method":"server/diagnostics","params":{}}
+```
+
+## Ownership, unloading, and shutdown
+
+Only one process may own a persisted session file. Symlink/junction aliases share
+ownership; hard-linked transcripts are refused. `threadLockedElsewhere` means
+another process owns it. [Terminal resume](sessions.md#session-ownership) offers
+to fork instead. Read-only discovery and history require no ownership.
+
+If ownership is lost to another process, the thread closes with an `error`
+notification rather than continuing writes. Archive/unarchive owns both paths,
+refuses destination collisions, and never overwrites another transcript. An
+`archiveConflict` can include structured recovery data naming surviving files.
+
+A thread unloads after ten minutes without a subscriber and with no running work.
+Unloading releases its session lock, owned virtual routes, and extension-cache
+leases. The factory cache retains at most 256 inactive factories plus actively
+leased entries. Runtime module unloading is not promised; see
+[extension state and cache behavior](extensions.md).
+
+On stdin EOF or SIGINT/SIGTERM, new input stops immediately, pending login flows
+cancel, and every thread unloads. Accepted requests still receive answers; work
+that cannot finish returns `shuttingDown`. Output drains after accepted requests
+settle. At nine seconds, unfinished accepted dispatches receive `shuttingDown`;
+late results cannot publish a second response. The final second is reserved for
+output drain before the ten-second hard exit, including a client that has stopped
+reading stdout. Trusted JavaScript already executing remains cooperative; the
+server cannot roll back its private effects or preempt a synchronous callback.
+
+## Limits and client reference
+
+Limits count UTF-8 bytes:
+
+- 64 MiB per stdin line; an oversized line is dropped with an error notification.
+- 64 MiB of pending unread output before the connection aborts.
+- 1 MiB per history/list response, including envelope reserve.
+- 64 KiB per inline turn/item; larger values use references.
+- 48 KiB per payload chunk before base64 encoding.
+
+The in-repository `AppServerClient` supports typed `request`, `onNotification`,
+`onRequest`, `readPayload`, `resolveTurn`, and `resolveItem` calls. Its
+`AppServerError` preserves `code`, `message`, and `data` exactly; inspect `data`
+for archive recovery information instead of parsing message strings.
+`createInProcessClient` connects the same server/client over an in-memory
+transport. A host owns the shared context and `ThreadManager`: stop input, dispose
+the context to cancel logins, and await `threads.closeAll()` on shutdown.
+
+Every message is defined in [app-server.schema.json](app-server.schema.json).
+Regenerate it from the workspace:
+
+```sh
+cd packages/app-server-protocol
+bun run generate:schema
+```

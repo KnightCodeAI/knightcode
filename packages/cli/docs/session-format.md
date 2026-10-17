@@ -27,7 +27,9 @@ Sessions have a version field in the header:
 - **Version 2**: Tree structure with `id`/`parentId` linking
 - **Version 3**: Renamed `hookMessage` role to `custom` (extensions unification)
 
-Existing sessions are automatically migrated to the current version (v3) when loaded.
+Existing sessions are automatically migrated to the current version (v3) when
+opened by an owning manager. Read-only discovery, history, export, and fork-source
+reads do not rewrite or migrate the source file. See [ownership](sessions.md#session-ownership).
 
 ## Source Files
 
@@ -93,6 +95,10 @@ Sessions created before system messages existed have no leading system message; 
 ```
 
 Assistant messages name the model that produced them. Newer messages also record `thinkingLevel`, the KnightCode thinking level requested for that response.
+
+Assistant `durationMs`, when present, measures the reply from its numeric
+`timestamp`; the app server derives final text/reasoning completion times from
+these fields.
 
 ### ModelChangeEntry
 
@@ -172,6 +178,43 @@ Extension state persistence. Does NOT participate in LLM context.
 Use `customType` to identify your extension's entries on reload. Interactive mode can render custom entries via `knightcode.registerEntryRenderer(customType, renderer)`, but they still do not participate in LLM context.
 
 KnightCode stores [virtual model](virtual-models.md) router state as custom entries with `customType` `knightcode.virtual-model-state` and `data` `{ provider, modelId, state }`.
+
+#### Turn boundaries
+
+The built-in turn-marker extension writes `knightcode.turn` at the first
+`agent_start` of a run and `knightcode.turnEnd` at `agent_settled`:
+
+```json
+{"type":"custom","id":"turn1234","parentId":"prev1234","timestamp":"2026-10-11T14:00:00.000Z","customType":"knightcode.turn"}
+{"type":"custom","id":"end12345","parentId":"reply123","timestamp":"2026-10-11T14:00:05.000Z","customType":"knightcode.turnEnd","data":{"status":"completed"}}
+```
+
+End status is `completed`, `interrupted`, or `failed`, with optional
+`error: {message, kind}`. Kinds are `auth`, `rateLimit`, `contextOverflow`,
+`network`, `provider`, and `other`, classified from the error text. For example:
+
+```json
+{"type":"custom","id":"end54321","parentId":"reply123","timestamp":"2026-10-11T14:00:05.000Z","customType":"knightcode.turnEnd","data":{"status":"failed","error":{"message":"Too many requests","kind":"rateLimit"}}}
+```
+
+An end entry whose `error` is a plain string reads as
+`{message: <string>, kind: "other"}`. The marker/end-entry timestamps define the app server's final turn
+`startedAt`/`completedAt` in Unix milliseconds.
+
+The marker's entry ID is the [app-server](app-server.md) turn ID. Retries,
+automatic recovery, and steering before settlement share one boundary. A later independent prompt starts another turn. A marker without a
+valid end entry reads as `interrupted`, including after a crash.
+
+Item IDs are deterministic ordinals within the turn, such as
+`turn1234:user:0`, except tool calls, which retain their original call IDs.
+Assistant text/thinking ordinals follow finalized content order; nested calls
+are live-only. Unmarked legacy history is grouped by user-message boundaries
+and uses those entry IDs as turn IDs. Turn markers are custom entries, not a new
+session-file version, and never enter model context.
+
+App-server approval modes use `customType: "knightcode.approvalMode"` with `data`
+of `ask`, `autoEdit`, or `fullAccess`. The latest value on the branch wins;
+malformed stored data restores as `ask` rather than widening access.
 
 #### Plan mode snapshots
 

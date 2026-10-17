@@ -115,9 +115,67 @@ function getAliases(): Record<string, string> {
 
 type HandlerFn = (...args: unknown[]) => Promise<unknown>;
 
-let extensionCacheCwd: string | undefined;
 let extensionCacheGeneration = 0;
+/** Inactive factories are retained in LRU order; live runtimes pin their factories. */
+export const MAX_INACTIVE_EXTENSION_FACTORIES = 256;
 const extensionCache = new Map<string, ExtensionFactory>();
+const extensionImports = new Map<string, Promise<ExtensionFactory | undefined>>();
+const extensionCachePins = new Map<string, number>();
+const extensionCacheLeases = new WeakMap<ExtensionRuntime, Set<string>>();
+
+function cacheKey(token: ExtensionCacheToken, extensionPath: string): string {
+	return JSON.stringify([token.generation, token.cwd, extensionPath]);
+}
+
+function pruneExtensionCache(): void {
+	let inactive = 0;
+	for (const key of extensionCache.keys()) if (!extensionCachePins.has(key)) inactive++;
+	for (const key of extensionCache.keys()) {
+		if (extensionCachePins.has(key)) continue;
+		if (JSON.parse(key)[0] !== extensionCacheGeneration || inactive > MAX_INACTIVE_EXTENSION_FACTORIES) {
+			extensionCache.delete(key);
+			inactive--;
+		}
+	}
+}
+
+function releaseCacheKey(runtime: ExtensionRuntime, key: string): void {
+	if (!extensionCacheLeases.get(runtime)?.delete(key)) return;
+	const remaining = (extensionCachePins.get(key) ?? 1) - 1;
+	if (remaining > 0) extensionCachePins.set(key, remaining);
+	else extensionCachePins.delete(key);
+}
+
+/** Pin before async loading. A runtime owns each resolved key at most once. */
+export function leaseExtensionCache(runtime: ExtensionRuntime, cwd: string, paths: readonly string[]): void {
+	const token = useExtensionCacheCwd(cwd);
+	leaseCacheKeys(runtime, token, paths);
+}
+
+function leaseCacheKeys(runtime: ExtensionRuntime, token: ExtensionCacheToken, paths: readonly string[]): void {
+	let leases = extensionCacheLeases.get(runtime);
+	if (!leases) extensionCacheLeases.set(runtime, (leases = new Set()));
+	for (const extPath of paths) {
+		const key = cacheKey(token, resolvePath(extPath, token.cwd, { normalizeUnicodeSpaces: true }));
+		if (!leases.has(key)) {
+			leases.add(key);
+			extensionCachePins.set(key, (extensionCachePins.get(key) ?? 0) + 1);
+		}
+	}
+}
+
+/** Idempotent: loaders own leases until disposal or failed construction. */
+export function releaseExtensionCache(runtime: ExtensionRuntime): void {
+	for (const key of extensionCacheLeases.get(runtime) ?? []) releaseCacheKey(runtime, key);
+	extensionCacheLeases.delete(runtime);
+	pruneExtensionCache();
+}
+
+export function getExtensionCacheStats(): { active: number; inactive: number; importing: number } {
+	let active = 0;
+	for (const key of extensionCache.keys()) if (extensionCachePins.has(key)) active++;
+	return { active, inactive: extensionCache.size - active, importing: extensionImports.size };
+}
 
 interface ExtensionCacheToken {
 	cwd: string;
@@ -125,18 +183,12 @@ interface ExtensionCacheToken {
 }
 
 export function clearExtensionCache(): void {
-	extensionCache.clear();
-	extensionCacheCwd = undefined;
 	extensionCacheGeneration++;
+	pruneExtensionCache();
 }
 
 function useExtensionCacheCwd(cwd: string): ExtensionCacheToken {
-	const resolvedCwd = resolvePath(cwd);
-	if (extensionCacheCwd !== undefined && extensionCacheCwd !== resolvedCwd) {
-		clearExtensionCache();
-	}
-	extensionCacheCwd = resolvedCwd;
-	return { cwd: resolvedCwd, generation: extensionCacheGeneration };
+	return { cwd: resolvePath(cwd), generation: extensionCacheGeneration };
 }
 
 /**
@@ -186,6 +238,7 @@ export function createExtensionRuntime(): ExtensionRuntime {
 				"This extension ctx is stale after session replacement or reload. Do not use a captured knightcode or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().";
 			for (const unsubscribe of eventBusUnsubscribers) unsubscribe();
 			eventBusUnsubscribers.clear();
+			releaseExtensionCache(runtime);
 		},
 		trackEventBusSubscription: (unsubscribe) => {
 			let active = true;
@@ -552,22 +605,32 @@ function createExtensionAPI(
 	};
 }
 
-function isCurrentCacheToken(cacheToken: ExtensionCacheToken | undefined): cacheToken is ExtensionCacheToken {
-	return (
-		cacheToken !== undefined &&
-		extensionCacheCwd === cacheToken.cwd &&
-		extensionCacheGeneration === cacheToken.generation
-	);
+async function loadExtensionModule(extensionPath: string, cacheToken?: ExtensionCacheToken) {
+	if (!cacheToken) return importExtensionModule(extensionPath);
+	const key = cacheKey(cacheToken, extensionPath);
+	const cached = extensionCache.get(key);
+	if (cached) {
+		extensionCache.delete(key);
+		extensionCache.set(key, cached);
+		return cached;
+	}
+	let pending = extensionImports.get(key);
+	if (!pending) {
+		pending = importExtensionModule(extensionPath)
+			.then((factory) => {
+				if (factory && cacheToken.generation === extensionCacheGeneration) extensionCache.set(key, factory);
+				return factory;
+			})
+			.finally(() => {
+				extensionImports.delete(key);
+				pruneExtensionCache();
+			});
+		extensionImports.set(key, pending);
+	}
+	return pending;
 }
 
-async function loadExtensionModule(extensionPath: string, cacheToken?: ExtensionCacheToken) {
-	if (isCurrentCacheToken(cacheToken)) {
-		const cachedFactory = extensionCache.get(extensionPath);
-		if (cachedFactory) {
-			return cachedFactory;
-		}
-	}
-
+async function importExtensionModule(extensionPath: string): Promise<ExtensionFactory | undefined> {
 	const createJitiImpl = await getCreateJiti();
 	// Compiled binaries and the bundled Node distribution use embedded modules.
 	// Source TypeScript reuses host modules and root tsconfig paths. Unbundled
@@ -586,9 +649,6 @@ async function loadExtensionModule(extensionPath: string, cacheToken?: Extension
 	const factory = module as ExtensionFactory;
 	if (typeof factory !== "function") {
 		return undefined;
-	}
-	if (isCurrentCacheToken(cacheToken)) {
-		extensionCache.set(extensionPath, factory);
 	}
 	return factory;
 }
@@ -691,6 +751,8 @@ async function loadExtensionsInternal(
 	const resolvedCwd = cacheToken?.cwd ?? resolvePath(cwd);
 	const resolvedEventBus = eventBus ?? createEventBus();
 	const resolvedRuntime = runtime ?? createExtensionRuntime();
+	// Pin all planned imports before the first await, including pending imports.
+	if (cacheToken) leaseCacheKeys(resolvedRuntime, cacheToken, paths);
 
 	for (const extPath of paths) {
 		const { extension, error } = await loadExtension(
@@ -702,6 +764,13 @@ async function loadExtensionsInternal(
 		);
 
 		if (error) {
+			if (cacheToken) {
+				releaseCacheKey(
+					resolvedRuntime,
+					cacheKey(cacheToken, resolvePath(extPath, resolvedCwd, { normalizeUnicodeSpaces: true })),
+				);
+				pruneExtensionCache();
+			}
 			errors.push({ path: extPath, error });
 			continue;
 		}

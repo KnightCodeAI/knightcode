@@ -395,6 +395,102 @@ describe("AgentSession compaction characterization", () => {
 		expect(getStreamCallCount()).toBe(1);
 	});
 
+	it("cancellation after a committed overflow compaction cannot authorize agent continuation", async () => {
+		let enter!: () => void;
+		let release!: () => void;
+		const entered = new Promise<void>((resolve) => {
+			enter = resolve;
+		});
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const harness = await createHarness({
+			models: [{ id: "faux-1", contextWindow: 1000, maxTokens: 100 }],
+			settings: { compaction: { keepRecentTokens: 1, reserveTokens: 0 } },
+			extensionFactories: [
+				(k) => {
+					k.on("session_before_compact", (event) => ({
+						compaction: {
+							summary: "committed",
+							firstKeptEntryId: event.preparation.firstKeptEntryId,
+							tokensBefore: event.preparation.tokensBefore,
+						},
+					}));
+					k.on("session_compact", async () => {
+						enter();
+						await gate;
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage("partial", { stopReason: "length" }),
+			fauxAssistantMessage("must not continue"),
+		]);
+		const prompting = harness.session.prompt("x".repeat(5000));
+		await entered;
+		try {
+			harness.session.abortCompaction();
+			await prompting;
+			expect(harness.faux.state.callCount).toBe(1);
+			expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+			expect(harness.eventsOfType("compaction_end").at(-1)).toMatchObject({
+				result: { summary: "committed" },
+				aborted: false,
+				willRetry: false,
+			});
+		} finally {
+			release();
+			await prompting;
+		}
+	});
+
+	it("cancelled committed threshold compaction does not authorize delivery of queued work", async () => {
+		let enter!: () => void;
+		let release!: () => void;
+		const entered = new Promise<void>((resolve) => {
+			enter = resolve;
+		});
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const harness = await createHarness({
+			extensionFactories: [
+				(k) => {
+					k.on("session_before_compact", (event) => ({
+						compaction: {
+							summary: "committed",
+							firstKeptEntryId: event.preparation.firstKeptEntryId,
+							tokensBefore: event.preparation.tokensBefore,
+						},
+					}));
+					k.on("session_compact", async () => {
+						enter();
+						await gate;
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		await harness.session.followUp("queued after compaction");
+		const compaction = (harness.session as unknown as SessionWithCompactionInternals)._runAutoCompaction(
+			"threshold",
+			false,
+		);
+		await entered;
+		try {
+			harness.session.abortCompaction();
+			expect(await compaction).toBe(false);
+			expect(harness.session.agent.hasQueuedMessages()).toBe(true);
+			expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(1);
+		} finally {
+			release();
+			await compaction;
+		}
+	});
+
 	it("notifies extensions when auto-compaction fails", async () => {
 		const failedEvents: Array<{
 			reason: "manual" | "threshold" | "overflow";

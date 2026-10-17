@@ -1,3 +1,5 @@
+import { write as writeFd } from "node:fs";
+
 interface StdoutTakeoverState {
 	rawStdoutWrite: (chunk: string, callback?: (error?: Error | null) => void) => boolean;
 	rawStderrWrite: (chunk: string, callback?: (error?: Error | null) => void) => boolean;
@@ -90,6 +92,38 @@ export function writeRawStdout(text: string): void {
 	void rawStdoutWriteTail.catch(() => {
 		process.exit(1);
 	});
+}
+
+/**
+ * Share the ordered queue, but report EPIPE so servers can shut down in order.
+ * process.stdout.write can block the event loop on pipes (notably on Windows).
+ * Async fd writes use the I/O worker pool, keeping the shutdown timer runnable
+ * even when the client stops reading. Partial writes must not duplicate bytes.
+ */
+export function writeRawStdoutReporting(text: string): Promise<void> {
+	if (text.length === 0) return Promise.resolve();
+	const write = rawStdoutWriteTail.then(async () => {
+		const buffer = Buffer.from(text, "utf8");
+		let offset = 0;
+		while (offset < buffer.length) {
+			try {
+				const written = await new Promise<number>((resolve, reject) => {
+					writeFd(1, buffer, offset, buffer.length - offset, null, (error, bytesWritten) => {
+						if (error) reject(error);
+						else resolve(bytesWritten);
+					});
+				});
+				if (written === 0) throw new Error("stdout write made no progress");
+				offset += written;
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code !== "ENOBUFS" && code !== "EAGAIN" && code !== "EWOULDBLOCK") throw error;
+				await new Promise<void>((resolve) => setTimeout(resolve, RAW_STDOUT_RETRY_DELAY_MS));
+			}
+		}
+	});
+	rawStdoutWriteTail = write.catch(() => {});
+	return write;
 }
 
 export async function waitForRawStdoutBackpressure(): Promise<void> {

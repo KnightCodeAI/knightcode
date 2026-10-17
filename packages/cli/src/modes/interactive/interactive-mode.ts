@@ -105,7 +105,9 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { RADIUS_MCP_URL, RADIUS_PROVIDER_ID } from "../../core/radius.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
+import { SessionLockedError } from "../../core/session-lock.ts";
 import {
+	readSessionHeaderForDiscovery,
 	type SessionEntry,
 	SessionManager,
 	sessionEntryToContextMessages,
@@ -5754,7 +5756,11 @@ export class InteractiveMode {
 						const next = (nextName ?? "").trim();
 						if (!next) return;
 						const mgr = SessionManager.open(sessionFilePath);
-						mgr.appendSessionInfo(next);
+						try {
+							mgr.appendSessionInfo(next);
+						} finally {
+							mgr.close();
+						}
 					},
 					showRenameHint: true,
 					keybindings: this.keybindings,
@@ -5782,6 +5788,47 @@ export class InteractiveMode {
 			this.showStatus("Resumed session");
 			return result;
 		} catch (error: unknown) {
+			if (error instanceof SessionLockedError) {
+				const fork = await this.showExtensionConfirm(
+					"Session is open elsewhere",
+					"It is open in another KnightCode process. Continue in a fork of it?",
+				);
+				if (!fork) {
+					this.showStatus("Resume cancelled");
+					return { cancelled: true };
+				}
+				let forkPath: string;
+				try {
+					// The picker lists other projects' sessions too: fork into the source's project.
+					const sourceCwd = readSessionHeaderForDiscovery(error.sessionFile)?.cwd || this.runtimeHost.cwd;
+					const forked = SessionManager.forkFrom(
+						error.sessionFile,
+						sourceCwd,
+						this.sessionManager.usesDefaultSessionDir() ? undefined : this.sessionManager.getSessionDir(),
+					);
+					forkPath = forked.getSessionFile()!;
+					forked.close();
+				} catch (forkError: unknown) {
+					this.showError(
+						`Failed to fork session: ${forkError instanceof Error ? forkError.message : String(forkError)}`,
+					);
+					return { cancelled: true };
+				}
+				// One attempt only: recursing would offer to fork the fork if another process locked it meanwhile.
+				try {
+					const result = await this.runtimeHost.switchSession(forkPath, {
+						withSession: options?.withSession,
+						projectTrustContextFactory: (cwd) => this.createProjectTrustContext(cwd),
+					});
+					if (!result.cancelled) this.showStatus("Resumed session");
+					return result;
+				} catch (retryError: unknown) {
+					this.showError(
+						`Failed to open fork: ${retryError instanceof Error ? retryError.message : String(retryError)}`,
+					);
+					return { cancelled: true };
+				}
+			}
 			if (error instanceof MissingSessionCwdError) {
 				const selectedCwd = await this.promptForMissingSessionCwd(error);
 				if (!selectedCwd) {

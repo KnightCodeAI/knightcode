@@ -53,7 +53,51 @@ See the checked [sessions example](../examples/sdk/11-sessions.ts) for creating,
 
 `cwd` selects the workspace used for project resource discovery, context files, session grouping, and built-in tool paths. Pass it explicitly when the target differs from `process.cwd()`.
 
-`session.dispose()` aborts active work, invalidates extension contexts, disconnects from the agent, and removes event listeners. Call it when the session is no longer needed.
+`session.dispose()` aborts active work, invalidates extension contexts,
+disconnects from the agent, removes listeners, closes its persisted manager, and
+releases its owned virtual-model routes and extension-cache leases. Call it when
+the session is no longer needed. Other sessions sharing the model runtime retain
+their routes. Runtime module unloading is not promised.
+
+<a id="session-ownership"></a>
+
+### Session ownership
+
+Persisted managers own a canonical file/parent binding. The SDK exports
+`SessionLockedError`, `SessionHardLinkedError`, `SessionClosedError`, and
+`SessionLockLostError`; catch their classes rather than parsing messages.
+Read-only listings and fork-source reads do not lock or rewrite the source.
+
+```typescript
+import { SessionLockedError, SessionManager } from "@knightcodeai/cli";
+
+function openOrFork(file: string, cwd: string, sessionDir: string) {
+  try {
+    return SessionManager.open(file, sessionDir);
+  } catch (error) {
+    if (!(error instanceof SessionLockedError)) throw error;
+    return SessionManager.forkFrom(error.sessionFile, cwd, sessionDir);
+  }
+}
+
+const manager = openOrFork("/sessions/example.jsonl", process.cwd(), "/sessions");
+const file = manager.getSessionFile()!;
+manager.close();
+// Never reuse the closed manager for writing; reopening creates a new owner.
+const reopened = SessionManager.open(file, "/sessions");
+try {
+  reopened.appendSessionInfo("Continued work");
+} finally {
+  reopened.close();
+}
+```
+
+Closing a persisted manager is final; reads remain available. `setSessionFile()`
+first acquires the target. Acquisition refusal retains the old writable binding.
+A failure after rebinding closes the manager and releases both ownership handles;
+open a new manager to recover. In-memory managers require no file ownership.
+See [Sessions](sessions.md#session-ownership) for stale takeover and archive rules,
+and [App Server](app-server.md) for multi-thread subprocess/in-process integration.
 
 `AgentSessionRuntime` adds `newSession()`, `switchSession()`, `fork()`, and `importFromJsonl()`. Each operation replaces the active `AgentSession` and recreates services for the target working directory.
 
@@ -68,6 +112,12 @@ A prompt sent while the session is already streaming must specify whether it sho
 A steering message enters after the current assistant turn and its tool calls. A follow-up enters after the current run finishes its pending work. `steer()` and `followUp()` expose those behaviors directly and return `"queued"` if the input was queued (including after an extension transformed it), or `"handled"` if an extension consumed it.
 
 `abort()` stops the active operation and waits for the session to become idle. `waitForIdle()` waits without aborting it.
+
+Settlement hooks intentionally see an idle session so they can schedule deferred
+prompts. `session.isSettling` remains true through those hooks and their deferred
+dispatch. A host that needs the full boundary can use
+`waitForIdle({ includeSettlement: true })`; do not call that form from a settlement
+hook, because it would wait for itself.
 
 ## Subscribing to events
 

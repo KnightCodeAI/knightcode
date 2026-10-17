@@ -1,0 +1,229 @@
+@import "tailwindcss";
+
+/*
+ * Tokens (desktop-shell.md section 11.2). Neutral greys sampled from the Codex desktop app
+ * (2026-10-15), KnightCode's orange as the accent. Components use only these properties.
+ * ponytail: hand-picked per theme; section 11.1's OKLCH derivation from surface/ink/accent comes with themes.
+ */
+:root,
+:root[data-theme="dark"] {
+	--kc-bg-shell: #202020;
+	--kc-bg-sidebar: #1b1b1b;
+	--kc-bg-surface: #181818;
+	--kc-bg-elevated: #262626;
+	--kc-bg-composer: #2f2f2f;
+	--kc-bg-hover: #262626;
+	--kc-bg-selected: #2d2d2d;
+	--kc-text: #ececec;
+	--kc-text-muted: #acacac;
+	--kc-text-faint: #7c7c7c;
+	--kc-text-on-accent: #1a120c;
+	--kc-border: #2b2b2b;
+	--kc-border-strong: #3a3a3a;
+	--kc-focus: #ff8a3d;
+	--kc-accent: #ff8a3d;
+	--kc-accent-hover: #ff9d5c;
+	--kc-success: #4ec27a;
+	--kc-warning: #e9b949;
+	--kc-danger: #f0605a;
+	--kc-diff-add-bg: #16301f;
+	--kc-diff-add-text: #4ec27a;
+	--kc-diff-del-bg: #3a1a1a;
+	--kc-diff-del-text: #f0605a;
+	--kc-user-bubble: #2f2f2f;
+	/* Menus and composer panels, measured from Codex's (2026-10-15). */
+	--kc-bg-menu: rgb(45 45 45 / 0.9);
+	--kc-bg-panel: #2d2d2d;
+	--kc-bg-row: rgb(255 255 255 / 0.08);
+	--kc-hairline: rgb(255 255 255 / 0.082);
+	--kc-text-desc: rgb(255 255 255 / 0.5);
+	--kc-text-head: rgb(255 255 255 / 0.65);
+	--kc-caution: #ff8549;
+	--kc-track: rgb(255 255 255 / 0.1);
+	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.3);
+	--kc-font-ui: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+	--kc-font-code: "Cascadia Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--kc-size-ui: 14px;
+	--kc-size-code: 12.5px;
+	--kc-radius: 10px;
+	color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+	--kc-bg-shell: #f3f3f3;
+	--kc-bg-sidebar: #f7f7f7;
+	--kc-bg-surface: #ffffff;
+	--kc-bg-elevated: #ffffff;
+	--kc-bg-composer: #f3f3f3;
+	--kc-bg-hover: #ececec;
+	--kc-bg-selected: #e6e6e6;
+	--kc-text: #1a1c1f;
+	--kc-text-muted: #5d5f63;
+	--kc-text-faint: #8e9094;
+	--kc-text-on-accent: #ffffff;
+	--kc-border: #e5e5e5;
+	--kc-border-strong: #d4d4d4;
+	--kc-focus: #c24f00;
+	--kc-accent: #c24f00;
+	--kc-accent-hover: #d65a00;
+	--kc-success: #1f8a4c;
+	--kc-warning: #9a6a00;
+	--kc-danger: #c93a32;
+	--kc-diff-add-bg: #e3f5e9;
+	--kc-diff-add-text: #1f8a4c;
+	--kc-diff-del-bg: #fce8e7;
+	--kc-diff-del-text: #c93a32;
+	--kc-user-bubble: #f0f0f0;
+	--kc-bg-menu: rgb(255 255 255 / 0.92);
+	--kc-bg-panel: #ffffff;
+	--kc-bg-row: rgb(0 0 0 / 0.05);
+	--kc-hairline: rgb(0 0 0 / 0.1);
+	--kc-text-desc: rgb(0 0 0 / 0.5);
+	--kc-text-head: rgb(0 0 0 / 0.62);
+	--kc-caution: #c2410c;
+	--kc-track: rgb(0 0 0 / 0.08);
+	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.12);
+	color-scheme: light;
+}
+
+@theme inline {
+	--color-shell: var(--kc-bg-shell);
+	--color-sidebar: var(--kc-bg-sidebar);
+	--color-composer: var(--kc-bg-composer);
+	--color-surface: var(--kc-bg-surface);
+	--color-elevated: var(--kc-bg-elevated);
+	--color-hover: var(--kc-bg-hover);
+	--color-selected: var(--kc-bg-selected);
+	--color-ink: var(--kc-text);
+	--color-muted: var(--kc-text-muted);
+	--color-faint: var(--kc-text-faint);
+	--color-on-accent: var(--kc-text-on-accent);
+	--color-line: var(--kc-border);
+	--color-line-strong: var(--kc-border-strong);
+	--color-accent: var(--kc-accent);
+	--color-accent-hover: var(--kc-accent-hover);
+	--color-success: var(--kc-success);
+	--color-warning: var(--kc-warning);
+	--color-danger: var(--kc-danger);
+	--color-add-bg: var(--kc-diff-add-bg);
+	--color-add: var(--kc-diff-add-text);
+	--color-del-bg: var(--kc-diff-del-bg);
+	--color-del: var(--kc-diff-del-text);
+	--color-bubble: var(--kc-user-bubble);
+	--color-menu: var(--kc-bg-menu);
+	--color-panel: var(--kc-bg-panel);
+	--color-row: var(--kc-bg-row);
+	--color-hairline: var(--kc-hairline);
+	--color-desc: var(--kc-text-desc);
+	--color-head: var(--kc-text-head);
+	--color-caution: var(--kc-caution);
+	--color-track: var(--kc-track);
+	--font-ui: var(--kc-font-ui);
+	--font-code: var(--kc-font-code);
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--kc-bg-surface);
+	color: var(--kc-text);
+	font-family: var(--kc-font-ui);
+	font-size: var(--kc-size-ui);
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	user-select: none;
+	overflow: hidden;
+}
+
+.selectable,
+.selectable * {
+	user-select: text;
+}
+
+.drag {
+	-webkit-app-region: drag;
+}
+.no-drag {
+	-webkit-app-region: no-drag;
+}
+
+/* In the base layer, so a utility such as focus-visible:outline-none can override it. */
+@layer base {
+	:focus-visible {
+		outline: 2px solid var(--kc-focus);
+		outline-offset: 1px;
+	}
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--kc-border-strong);
+	border: 3px solid transparent;
+	background-clip: padding-box;
+	border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* A dropdown's surface: translucent, blurred, 20px corners, a hairline ring. */
+@layer components {
+	.kc-menu {
+		border-radius: 20px;
+		padding: 4px;
+		background: var(--kc-bg-menu);
+		backdrop-filter: blur(8px);
+		box-shadow:
+			0 0 0 1px var(--kc-hairline),
+			var(--kc-menu-shadow);
+	}
+	/* A row in a menu or composer panel: 13px text, 15px corners, the highlight shared by hover and keys. */
+	.kc-row {
+		display: flex;
+		width: 100%;
+		align-items: center;
+		gap: 8px;
+		border-radius: 15px;
+		padding: 5px 8px;
+		text-align: left;
+		font-size: 13px;
+		line-height: 18.5px;
+	}
+	.kc-row:hover,
+	.kc-row[data-active="true"] {
+		background: var(--kc-bg-row);
+	}
+}
+
+.markdown > :first-child {
+	margin-top: 0;
+}
+.markdown > :last-child {
+	margin-bottom: 0;
+}
+
+@keyframes kc-pulse {
+	0%,
+	100% {
+		opacity: 0.35;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+.kc-pulse {
+	animation: kc-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-pulse {
+		animation: none;
+	}
+}

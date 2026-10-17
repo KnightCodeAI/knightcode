@@ -47,6 +47,7 @@
   "devDependencies": {
     "@knightcode/agent": "workspace:*",
     "@knightcode/ai": "workspace:*",
+    "@knightcode/app-server-protocol": "workspace:*",
     "@knightcode/codemode": "workspace:*",
     "@knightcode/mcp": "workspace:*",
     "@knightcode/remote": "workspace:*",

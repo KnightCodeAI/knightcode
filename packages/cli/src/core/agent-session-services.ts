@@ -151,7 +151,12 @@ export async function createAgentSessionServices(
 		agentDir,
 		settingsManager,
 	});
-	await resourceLoader.reload(options.resourceLoaderReloadOptions);
+	try {
+		await resourceLoader.reload(options.resourceLoaderReloadOptions);
+	} catch (error) {
+		resourceLoader.dispose();
+		throw error;
+	}
 
 	const diagnostics: AgentSessionRuntimeDiagnostic[] = [];
 	const extensionsResult = resourceLoader.getExtensions();
@@ -181,7 +186,7 @@ export async function createAgentSessionServices(
 	extensionsResult.runtime.pendingNativeProviderRegistrations = [];
 	for (const { definition, extensionPath } of extensionsResult.runtime.pendingVirtualModelRegistrations) {
 		try {
-			modelRuntime.registerVirtualModel(definition);
+			modelRuntime.registerVirtualModel(definition, extensionsResult.runtime);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			diagnostics.push({
@@ -191,8 +196,14 @@ export async function createAgentSessionServices(
 		}
 	}
 	extensionsResult.runtime.pendingVirtualModelRegistrations = [];
-	await modelRuntime.refresh({ allowNetwork: false });
-	diagnostics.push(...applyExtensionFlagValues(resourceLoader, options.extensionFlagValues));
+	try {
+		await modelRuntime.refresh({ allowNetwork: false });
+		diagnostics.push(...applyExtensionFlagValues(resourceLoader, options.extensionFlagValues));
+	} catch (error) {
+		modelRuntime.releaseVirtualModels(extensionsResult.runtime);
+		resourceLoader.dispose();
+		throw error;
+	}
 
 	return {
 		cwd,
@@ -229,5 +240,9 @@ export async function createAgentSessionFromServices(
 		noTools: options.noTools,
 		customTools: options.customTools,
 		sessionStartEvent: options.sessionStartEvent,
+	}).catch((error: unknown) => {
+		options.services.modelRuntime.releaseVirtualModels(options.services.resourceLoader.getExtensions().runtime);
+		options.services.resourceLoader.dispose?.();
+		throw error;
 	});
 }

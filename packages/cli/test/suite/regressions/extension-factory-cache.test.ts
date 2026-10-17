@@ -2,7 +2,13 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { clearExtensionCache, loadExtensions, loadExtensionsCached } from "../../../src/core/extensions/loader.ts";
+import type { ExtensionRuntime } from "../../../src/core/extensions/types.ts";
+import {
+	clearExtensionCache,
+	loadExtensions,
+	loadExtensionsCached,
+	releaseExtensionCache,
+} from "../../../src/core/extensions/loader.ts";
 import { DefaultResourceLoader } from "../../../src/core/resource-loader.ts";
 
 interface TestState {
@@ -39,6 +45,8 @@ export default function () {
 
 describe("extension factory cache", () => {
 	const roots: string[] = [];
+	const runtimes: ExtensionRuntime[] = [];
+	const loaders: DefaultResourceLoader[] = [];
 
 	function fixture(name: string) {
 		const root = join(
@@ -59,6 +67,8 @@ describe("extension factory cache", () => {
 	});
 
 	afterEach(() => {
+		for (const runtime of runtimes.splice(0)) releaseExtensionCache(runtime);
+		for (const loader of loaders.splice(0)) loader.dispose();
 		while (roots.length > 0) {
 			const root = roots.pop();
 			if (root && existsSync(root)) {
@@ -76,6 +86,7 @@ describe("extension factory cache", () => {
 
 		const first = await loadExtensionsCached([extensionPath], cwd);
 		const second = await loadExtensionsCached([extensionPath], cwd);
+		runtimes.push(first.runtime, second.runtime);
 
 		expect(state().moduleLoads).toBe(1);
 		expect(state().factoryRuns).toBe(2);
@@ -108,6 +119,7 @@ describe("extension factory cache", () => {
 			noThemes: true,
 		});
 
+		loaders.push(loader);
 		await loader.reload();
 		await loader.reload();
 
@@ -124,9 +136,9 @@ describe("extension factory cache", () => {
 		const extensionPath = join(root, "counting.ts");
 		writeCountingExtension(extensionPath);
 
-		await loadExtensionsCached([extensionPath], firstCwd);
-		await loadExtensionsCached([extensionPath], secondCwd);
-		await loadExtensionsCached([extensionPath], secondCwd);
+		for (const cwd of [firstCwd, secondCwd, secondCwd]) {
+			runtimes.push((await loadExtensionsCached([extensionPath], cwd)).runtime);
+		}
 
 		expect(state().moduleLoads).toBe(2);
 		expect(state().factoryRuns).toBe(3);
