@@ -35,7 +35,8 @@
     "start": "bun --env-file=../../.env run src/bun/cli.ts",
     "check-types": "tsc --noEmit -p ../../tsconfig.json",
     "test": "vitest --run",
-    "generate:schemas": "bun scripts/generate-schemas.ts"
+    "generate:schemas": "bun scripts/generate-schemas.ts",
+    "generate:references": "bun scripts/generate-references.ts"
   },
   "optionalDependencies": {
     "@knightcodeai/cli-linux-x64": "0.17.4",
