@@ -111,8 +111,148 @@ export const ThreadStatus = Type.Union([
 	Obj({ type: Type.Literal("systemError"), message: Str }),
 ]);
 export type ThreadStatus = Static<typeof ThreadStatus>;
-/** Phase A has local workspaces only; Phase B adds worktrees. */
-export const Workspace = Obj({ mode: Type.Literal("local") });
+/** What a thread/start asks for (§6.1). */
+export const WorkspaceRequest = Type.Union([
+	Obj({ mode: Type.Literal("local") }),
+	Obj({
+		mode: Type.Literal("worktree"),
+		/** Branch or commit to start from; default the project checkout's HEAD (Codex's "What branch should this chat start from?"). */
+		baseRef: Type.Optional(Str),
+		/** Bring the project checkout's uncommitted changes along, as uncommitted edits. Not with baseRef. */
+		carryLocalChanges: Type.Optional(Bool),
+		/** A name from the project's .knightcode/environments.json; absent = "Work without environment". */
+		environment: Type.Optional(Str),
+	}),
+]);
+export type WorkspaceRequest = Static<typeof WorkspaceRequest>;
+export const Workspace = Type.Union([
+	Obj({
+		mode: Type.Literal("local"),
+		/** The worktree a handed-off thread came from; a handoff back returns it there. */
+		worktree: Type.Optional(Str),
+	}),
+	Obj({
+		mode: Type.Literal("worktree"),
+		/** The worktree's root; the thread's cwd is this or the same subdirectory the project cwd had. */
+		path: Str,
+		/** The commit the worktree started from (a SHA). */
+		baseRef: Str,
+		/** The thread that created the worktree. */
+		ownerThreadId: Str,
+		environment: Type.Optional(Str),
+		setupFailed: Type.Optional(Bool),
+		/** The worktree was deleted; thread/worktree/restore brings it back. */
+		deleted: Type.Optional(Bool),
+	}),
+]);
+export type Workspace = Static<typeof Workspace>;
+const WorkspaceMode = Type.Union([Type.Literal("local"), Type.Literal("worktree")]);
+
+const PlatformScript = Obj({
+	default: Type.Optional(Str),
+	macos: Type.Optional(Str),
+	linux: Type.Optional(Str),
+	windows: Type.Optional(Str),
+});
+export type PlatformScript = Static<typeof PlatformScript>;
+export const Environment = Obj({
+	name: Type.String({ minLength: 1, maxLength: 100 }),
+	setup: Type.Optional(PlatformScript),
+	cleanup: Type.Optional(PlatformScript),
+	/** Shown in the desktop's toolbar and run in its terminal (desktop shell S2); the server only stores them. */
+	actions: Type.Optional(
+		Type.Array(
+			Obj({ name: Type.String({ minLength: 1, maxLength: 100 }), icon: Type.Optional(Str), command: PlatformScript }),
+			{ maxItems: 50 },
+		),
+	),
+});
+export type Environment = Static<typeof Environment>;
+
+export const DiffScope = Type.Union([
+	Type.Literal("lastTurn"),
+	Type.Literal("uncommitted"),
+	Type.Literal("unstaged"),
+	Type.Literal("staged"),
+	Type.Literal("committed"),
+	Type.Literal("branch"),
+]);
+export type DiffScope = Static<typeof DiffScope>;
+/** Which diff a hunk, a revert or a comment refers to. */
+const ScopeSelector = {
+	scope: Type.Optional(DiffScope),
+	/** `branch`: the branch to compare with (Codex's "HEAD → Select branch"). */
+	against: Type.Optional(Str),
+	/** `committed`: the commit to show, from git/log. */
+	commit: Type.Optional(Str),
+};
+export const DiffHunk = Obj({
+	/** sha256 of path, header and lines: a hunk that changed gets a new id. */
+	id: Str,
+	header: Str,
+	oldStart: Num,
+	oldLines: Num,
+	newStart: Num,
+	newLines: Num,
+	/** Each line keeps its prefix: " ", "+", "-", or "\\" for "No newline at end of file". */
+	lines: Type.Array(Str),
+});
+export type DiffHunk = Static<typeof DiffHunk>;
+export const DiffFile = Obj({
+	path: Str,
+	oldPath: Type.Optional(Str),
+	status: Type.Union([
+		Type.Literal("added"),
+		Type.Literal("modified"),
+		Type.Literal("deleted"),
+		Type.Literal("renamed"),
+		Type.Literal("typeChanged"),
+	]),
+	binary: Bool,
+	additions: Num,
+	deletions: Num,
+	/** Hunks left out: the file's patch is over 512 KiB, or the read's raw or serialized budget ran out. */
+	tooLarge: Type.Optional(Bool),
+	hunks: Type.Array(DiffHunk),
+});
+export type DiffFile = Static<typeof DiffFile>;
+export const DiffComment = Obj({
+	...ScopeSelector,
+	path: Str,
+	/** Codex's L/R: the old or the new side of the diff. */
+	side: Type.Union([Type.Literal("old"), Type.Literal("new")]),
+	startLine: Type.Integer({ minimum: 1 }),
+	endLine: Type.Integer({ minimum: 1 }),
+	body: Type.String({ minLength: 1, maxLength: 8000 }),
+});
+export type DiffComment = Static<typeof DiffComment>;
+const Comments = Type.Optional(Type.Array(DiffComment, { minItems: 1, maxItems: 50 }));
+const ReadContext = Type.Integer({ minimum: 0, maximum: 1_000_000 });
+const ActionContext = Type.Integer({ minimum: 1, maximum: 1_000_000 });
+const DiffTarget = {
+	threadId: Str,
+	path: Type.Optional(Str),
+	hunkId: Type.Optional(Str),
+	context: Type.Optional(ActionContext),
+};
+const BranchName = Type.String({ maxLength: 200 });
+
+/** `data.reason` of a gitConflict error. */
+export const GitConflictReason = Type.Union([
+	Type.Literal("diffChanged"),
+	Type.Literal("patchFailed"),
+	Type.Literal("concurrentChange"),
+	Type.Literal("pushRejected"),
+	Type.Literal("localChanges"),
+	Type.Literal("operationInProgress"),
+	Type.Literal("branchExists"),
+	Type.Literal("recoveryRequired"),
+	Type.Literal("worktreeDeleted"),
+	Type.Literal("worktreeMissing"),
+	Type.Literal("worktreeInUse"),
+	Type.Literal("submodules"),
+]);
+export type GitConflictReason = Static<typeof GitConflictReason>;
 
 export const ThreadSummary = Obj({
 	id: Str,
@@ -124,6 +264,7 @@ export const ThreadSummary = Obj({
 	createdAt: Str,
 	forkedFromId: Type.Optional(Str),
 	updatedAt: Str,
+	workspaceMode: WorkspaceMode,
 });
 export type ThreadSummary = Static<typeof ThreadSummary>;
 
@@ -169,6 +310,8 @@ export const Item = Type.Union([
 		text: Str,
 		images: Type.Array(ImageRef),
 		clientMessageId: Type.Optional(ClientMessageId),
+		/** Review comments sent with the input; the model read them quoted into its text. */
+		comments: Type.Optional(Type.Array(DiffComment)),
 		...Times,
 	}),
 	Obj({ type: Type.Literal("agentMessage"), id: Str, text: Str, ...Times }),
@@ -344,7 +487,7 @@ export const ClientRequests = {
 	"thread/start": {
 		params: Obj({
 			cwd: Str,
-			workspace: Type.Optional(Workspace),
+			workspace: Type.Optional(WorkspaceRequest),
 			approvalMode: Type.Optional(ApprovalMode),
 			model: Type.Optional(ModelSelector),
 			thinkingLevel: Type.Optional(ThinkingLevel),
@@ -364,8 +507,112 @@ export const ClientRequests = {
 		}),
 	},
 	"thread/fork": {
-		params: Obj({ threadId: Str, atItemId: Type.Optional(Str) }),
+		params: Obj({
+			threadId: Str,
+			atItemId: Type.Optional(Str),
+			/** Absent: the fork shares the source's workspace. */
+			workspace: Type.Optional(Obj({ mode: Type.Literal("worktree") })),
+		}),
 		result: Obj({ thread: Thread, warnings: Type.Array(Warning) }),
+	},
+	"thread/handoff": {
+		params: Obj({
+			threadId: Str,
+			to: Type.Union([Type.Literal("local"), Type.Literal("worktree")]),
+			branch: Type.Optional(BranchName),
+			environment: Type.Optional(Str),
+		}),
+		result: Obj({ thread: Thread, branch: Type.Optional(Str), warnings: Type.Array(Warning) }),
+	},
+	"thread/worktree/restore": { params: ThreadId, result: Obj({ thread: Thread }) },
+	"worktree/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			worktrees: Type.Array(
+				Obj({
+					path: Str,
+					projectCwd: Str,
+					head: Type.Optional(Str),
+					branch: Type.Optional(Str),
+					threadIds: Type.Array(Str),
+					lastUsedAt: Num,
+					deleted: Bool,
+				}),
+			),
+		}),
+	},
+	"worktree/delete": { params: Obj({ path: Str }), result: Obj({ snapshot: Type.Optional(Str) }) },
+	"environment/list": {
+		params: Obj({ cwd: Str }),
+		result: Obj({ environments: Type.Array(Environment), trusted: Bool }),
+	},
+	"environment/save": {
+		params: Obj({ cwd: Str, environments: Type.Array(Environment, { maxItems: 50 }) }),
+		result: Empty,
+	},
+	"thread/diff/read": {
+		params: Obj({
+			threadId: Str,
+			...ScopeSelector,
+			context: Type.Optional(ReadContext),
+			ignoreWhitespace: Type.Optional(Bool),
+		}),
+		result: Obj({
+			scope: DiffScope,
+			files: Type.Array(DiffFile),
+			filesOmitted: Type.Optional(Num),
+			untrackedSkipped: Type.Optional(Num),
+			turnId: Type.Optional(Str),
+			stale: Type.Optional(Bool),
+			against: Type.Optional(Str),
+		}),
+	},
+	"thread/diff/revert": { params: Obj({ ...DiffTarget, ...ScopeSelector }), result: Obj({ paths: Type.Array(Str) }) },
+	"git/status": {
+		params: ThreadId,
+		result: Obj({
+			branch: Type.Optional(Str),
+			head: Type.Optional(Str),
+			upstream: Type.Optional(Str),
+			ahead: Num,
+			behind: Num,
+			staged: Num,
+			unstaged: Num,
+			untracked: Num,
+			conflicted: Num,
+			operation: Type.Optional(
+				Type.Union([Type.Literal("merge"), Type.Literal("rebase"), Type.Literal("cherryPick"), Type.Literal("revert")]),
+			),
+		}),
+	},
+	"git/stage": { params: Obj(DiffTarget), result: Obj({ paths: Type.Array(Str) }) },
+	"git/unstage": { params: Obj(DiffTarget), result: Obj({ paths: Type.Array(Str) }) },
+	"git/commit": {
+		params: Obj({
+			threadId: Str,
+			message: Type.Optional(Type.String({ maxLength: 20000 })),
+			/** Codex's "Include unstaged changes"; default true. */
+			includeUnstaged: Type.Optional(Bool),
+		}),
+		result: Obj({ commit: Str, message: Str }),
+	},
+	"git/push": { params: ThreadId, result: Obj({ remote: Str, branch: Str, setUpstream: Bool }) },
+	"git/pr/create": {
+		params: Obj({ threadId: Str, title: Type.Optional(Str), body: Type.Optional(Str), draft: Type.Optional(Bool) }),
+		result: Obj({ url: Str }),
+	},
+	"git/branch/create": { params: Obj({ threadId: Str, name: BranchName }), result: Obj({ branch: Str }) },
+	"git/branch/switch": { params: Obj({ threadId: Str, name: BranchName }), result: Obj({ branch: Str }) },
+	"git/branches": {
+		params: ThreadId,
+		result: Obj({ current: Type.Optional(Str), defaultBranch: Type.Optional(Str), branches: Type.Array(Str) }),
+	},
+	"git/log": {
+		params: Obj({ threadId: Str, limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })) }),
+		result: Obj({
+			base: Type.Optional(Str),
+			commits: Type.Array(Obj({ sha: Str, subject: Str, author: Str, time: Num })),
+		}),
 	},
 	"thread/list": {
 		params: Obj({ cwd: Type.Optional(Str), cursor: Type.Optional(Str), archived: Type.Optional(Bool) }),
@@ -387,7 +634,25 @@ export const ClientRequests = {
 		result: Obj({ status: Type.Union([Type.Literal("unsubscribed"), Type.Literal("notSubscribed")]) }),
 	},
 	"thread/delete": { params: ThreadId, result: Empty },
-	"thread/archive": { params: ThreadId, result: Empty },
+	"thread/archive": {
+		params: ThreadId,
+		result: Obj({
+			worktree: Type.Optional(
+				Obj({
+					deleted: Bool,
+					snapshot: Type.Optional(Str),
+					reason: Type.Optional(
+						Type.Union([
+							Type.Literal("autoDeleteOff"),
+							Type.Literal("inUse"),
+							Type.Literal("notManaged"),
+							Type.Literal("submodules"),
+						]),
+					),
+				}),
+			),
+		}),
+	},
 	"thread/unarchive": { params: ThreadId, result: Empty },
 	"thread/name/set": { params: Obj({ threadId: Str, name: Str }), result: Empty },
 	"thread/settings/update": {
@@ -407,6 +672,7 @@ export const ClientRequests = {
 			images: Type.Optional(Type.Array(ImageInput)),
 			clientMessageId: Type.Optional(ClientMessageId),
 			requestId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+			comments: Comments,
 		}),
 		result: TurnStartResult,
 	},
@@ -428,6 +694,7 @@ export const ClientRequests = {
 			text: Str,
 			images: Type.Optional(Type.Array(ImageInput)),
 			clientMessageId: Type.Optional(ClientMessageId),
+			comments: Comments,
 		}),
 		result: Obj({ queueId: Str }),
 	},
@@ -521,6 +788,13 @@ export const ServerNotifications = {
 	"thread/settings/updated": Obj({ thread: Thread }),
 	"thread/archived": Obj({ threadId: Str, archived: Bool }),
 	"thread/deleted": Obj({ threadId: Str }),
+	/** Files whose content changed while the turn ran; not only the turn's own edits (§6.2). */
+	"turn/diff/updated": Obj({ threadId: Str, turnId: Str, files: Type.Array(Str) }),
+	"thread/workspace/progress": Obj({
+		threadId: Str,
+		phase: Type.Union([Type.Literal("setup"), Type.Literal("cleanup")]),
+		output: Str,
+	}),
 	"thread/turn/completed": Obj({ turn: TurnSummary }),
 	"turn/started": Obj({ turn: Turn, requestId: Type.Optional(Str) }),
 	"turn/completed": Obj({ turn: TurnSummary }),

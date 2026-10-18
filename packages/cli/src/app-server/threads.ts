@@ -289,6 +289,7 @@ export class ThreadManager {
 						forkedFromId: info.forkedFromId,
 						archived: isArchivedPath(info.path),
 						updatedAt: info.modified.toISOString(),
+						workspaceMode: "local",
 					};
 				});
 		});
@@ -322,6 +323,7 @@ export class ThreadManager {
 			forkedFromId: parentIdOf(header?.parentSession),
 			archived: isArchivedPath(file),
 			updatedAt: statSync(file).mtime.toISOString(),
+			workspaceMode: "local",
 		};
 		return { thread, ...this.history(thread, entries, cursor) };
 	}

@@ -9,6 +9,7 @@ import {
 	ClientRequests,
 	schemaDocument,
 	ServerNotifications,
+	GitConflictReason,
 	ServerRequests,
 	type ThinkingLevel,
 } from "../src/index.ts";
@@ -38,6 +39,36 @@ const summary = {
 	createdAt: "2026-10-11T00:00:00.000Z",
 	archived: false,
 	updatedAt: "2026-10-11T00:00:00.000Z",
+	workspaceMode: "worktree",
+};
+const worktreeThread = {
+	...thread,
+	workspace: { mode: "worktree", path: "/w/ab12/p", baseRef: "0123abcd", ownerThreadId: "t1", environment: "dev" },
+};
+const comment = { scope: "uncommitted", path: "a.txt", side: "new", startLine: 2, endLine: 2, body: "rename this" };
+const environment = {
+	name: "dev",
+	setup: { default: "bun install", windows: "bun install --no-save" },
+	cleanup: { default: "rm -rf node_modules" },
+	actions: [{ name: "Test", icon: "play", command: { default: "bun test" } }],
+};
+const diffFile = {
+	path: "a.txt",
+	status: "modified",
+	binary: false,
+	additions: 1,
+	deletions: 1,
+	hunks: [
+		{
+			id: "h1",
+			header: "@@ -1,3 +1,3 @@",
+			oldStart: 1,
+			oldLines: 3,
+			newStart: 1,
+			newLines: 3,
+			lines: [" one", "-two", "+TWO", " three"],
+		},
+	],
 };
 const turn = { id: "m1", threadId: "t1", status: "completed", startedAt: 1, completedAt: 2, items: [] };
 const item = { type: "agentMessage", id: "m1:0:0", text: "hi", startedAt: 1, completedAt: 2 };
@@ -51,9 +82,33 @@ const requestParams: Record<string, unknown> = {
 		capabilities: { optOutNotifications: ["item/reasoning/delta"] },
 	},
 	"server/diagnostics": {},
-	"thread/start": { cwd: "/p", approvalMode: "ask", model: { provider: "faux", id: "m" }, thinkingLevel: "low" },
+	"thread/start": {
+		cwd: "/p",
+		workspace: { mode: "worktree", baseRef: "main", environment: "dev" },
+		approvalMode: "ask",
+		model: { provider: "faux", id: "m" },
+		thinkingLevel: "low",
+	},
 	"thread/resume": { threadId: "t1", cursor: "opaque-history-anchor" },
-	"thread/fork": { threadId: "t1", atItemId: "m1:user:0" },
+	"thread/fork": { threadId: "t1", atItemId: "m1:user:0", workspace: { mode: "worktree" } },
+	"thread/handoff": { threadId: "t1", to: "local", branch: "kc/fix-it", environment: "dev" },
+	"thread/worktree/restore": { threadId: "t1" },
+	"worktree/list": { cwd: "/p" },
+	"worktree/delete": { path: "/w/ab12/p" },
+	"environment/list": { cwd: "/p" },
+	"environment/save": { cwd: "/p", environments: [environment] },
+	"thread/diff/read": { threadId: "t1", scope: "branch", against: "main", context: 3, ignoreWhitespace: true },
+	"thread/diff/revert": { threadId: "t1", scope: "uncommitted", path: "a.txt", hunkId: "h1", context: 3 },
+	"git/status": { threadId: "t1" },
+	"git/stage": { threadId: "t1", path: "a.txt" },
+	"git/unstage": { threadId: "t1", path: "a.txt", hunkId: "h1" },
+	"git/commit": { threadId: "t1", message: "fix it", includeUnstaged: false },
+	"git/push": { threadId: "t1" },
+	"git/pr/create": { threadId: "t1", title: "Fix it", body: "Body", draft: true },
+	"git/branch/create": { threadId: "t1", name: "kc/fix-it" },
+	"git/branch/switch": { threadId: "t1", name: "main" },
+	"git/branches": { threadId: "t1" },
+	"git/log": { threadId: "t1", limit: 50 },
 	"thread/list": { cwd: "/p", cursor: "opaque-list-snapshot", archived: false },
 	"thread/read": { threadId: "t1", cursor: "opaque-history-anchor" },
 	"thread/unsubscribe": { threadId: "t1" },
@@ -63,14 +118,20 @@ const requestParams: Record<string, unknown> = {
 	"thread/name/set": { threadId: "t1", name: "n" },
 	"thread/settings/update": { threadId: "t1", thinkingLevel: "high", approvalMode: "fullAccess" },
 	"thread/compact": { threadId: "t1", instructions: "keep the plan" },
-	"turn/start": { threadId: "t1", text: "hi", clientMessageId: "c1", images: [{ path: "/p/shot.png" }] },
+	"turn/start": {
+		threadId: "t1",
+		text: "hi",
+		clientMessageId: "c1",
+		images: [{ path: "/p/shot.png" }],
+		comments: [comment],
+	},
 	"turn/steer": {
 		threadId: "t1",
 		expectedTurnId: "m1",
 		text: "also this",
 		images: [{ mimeType: "image/png", data: "AA==" }],
 	},
-	"turn/queue/add": { threadId: "t1", text: "then this", clientMessageId: "c2" },
+	"turn/queue/add": { threadId: "t1", text: "then this", clientMessageId: "c2", comments: [comment] },
 	"turn/queue/remove": { threadId: "t1", queueId: "q1" },
 	"turn/interrupt": { threadId: "t1" },
 	"payload/read": { id: "issued-payload-id", offset: 0, maxBytes: 49152 },
@@ -113,12 +174,53 @@ const requestResults: Record<string, unknown> = {
 		warnings: [],
 		nextCursor: "opaque-history-anchor",
 	},
-	"thread/fork": { thread, warnings: [] },
+	"thread/fork": { thread: worktreeThread, warnings: [] },
+	"thread/handoff": { thread, branch: "kc/fix-it", warnings: [] },
+	"thread/worktree/restore": { thread: worktreeThread },
+	"worktree/list": {
+		worktrees: [
+			{
+				path: "/w/ab12/p",
+				projectCwd: "/p",
+				head: "0123abcd",
+				branch: "kc/fix-it",
+				threadIds: ["t1"],
+				lastUsedAt: 1,
+				deleted: false,
+			},
+		],
+	},
+	"worktree/delete": { snapshot: "4567cdef" },
+	"environment/list": { environments: [environment], trusted: true },
+	"environment/save": {},
+	"thread/diff/read": { scope: "lastTurn", files: [diffFile], filesOmitted: 0, untrackedSkipped: 0, turnId: "m1" },
+	"thread/diff/revert": { paths: ["a.txt"] },
+	"git/status": {
+		branch: "main",
+		head: "0123abcd",
+		upstream: "origin/main",
+		ahead: 1,
+		behind: 0,
+		staged: 1,
+		unstaged: 2,
+		untracked: 3,
+		conflicted: 0,
+		operation: "merge",
+	},
+	"git/stage": { paths: ["a.txt"] },
+	"git/unstage": { paths: ["a.txt"] },
+	"git/commit": { commit: "89abcdef", message: "fix it" },
+	"git/push": { remote: "origin", branch: "kc/fix-it", setUpstream: true },
+	"git/pr/create": { url: "https://github.com/o/r/pull/1" },
+	"git/branch/create": { branch: "kc/fix-it" },
+	"git/branch/switch": { branch: "main" },
+	"git/branches": { current: "main", defaultBranch: "main", branches: ["main", "kc/fix-it"] },
+	"git/log": { base: "0123abcd", commits: [{ sha: "89abcdef", subject: "fix it", author: "Test", time: 1 }] },
 	"thread/list": { threads: [summary], nextCursor: "opaque-list-snapshot" },
 	"thread/read": { thread: summary, turns: [turn] },
 	"thread/unsubscribe": { status: "unsubscribed" },
 	"thread/delete": {},
-	"thread/archive": {},
+	"thread/archive": { worktree: { deleted: true, snapshot: "4567cdef" } },
 	"thread/unarchive": {},
 	"thread/name/set": {},
 	"thread/settings/update": { thread },
@@ -176,6 +278,8 @@ const notificationParams: Record<string, unknown> = {
 	"thread/settings/updated": { thread },
 	"thread/archived": { threadId: "t1", archived: true },
 	"thread/deleted": { threadId: "t1" },
+	"turn/diff/updated": { threadId: "t1", turnId: "m1", files: ["a.txt"] },
+	"thread/workspace/progress": { threadId: "t1", phase: "setup", output: "installing" },
 	"turn/started": { turn, requestId: "r1" },
 	"turn/completed": { turn: { id: "m1", threadId: "t1", status: "completed", startedAt: 1, completedAt: 2 } },
 	"thread/tokenUsage/updated": { threadId: "t1", turnId: "m1", usage },
@@ -267,6 +371,42 @@ describe("app server protocol", () => {
 			checkSchema(`${method} params`, params, serverRequestParams[method]);
 			checkSchema(`${method} result`, result, serverRequestResults[method]);
 		}
+	});
+
+	test("Phase B params reject malformed values", () => {
+		const params = (method: keyof typeof ClientRequests) => Compile(ClientRequests[method].params);
+		expect(params("thread/handoff").Check({ threadId: "t1" })).toBe(false);
+		expect(params("git/push").Check({ threadId: "t1", force: true })).toBe(false);
+		expect(params("git/stage").Check({ threadId: "t1", path: "a.txt", context: 0 })).toBe(false);
+		expect(params("turn/start").Check({ threadId: "t1", text: "x", comments: [{ ...comment, endLine: 0 }] })).toBe(
+			false,
+		);
+		expect(params("turn/start").Check({ threadId: "t1", text: "x", comments: [] })).toBe(false);
+		const noCommand = { ...environment, actions: [{ name: "Test" }] };
+		expect(params("environment/save").Check({ cwd: "/p", environments: [noCommand] })).toBe(false);
+		const userItem = { type: "userMessage", id: "m1:user:0", text: "hi", images: [], comments: [comment] };
+		expect(Compile(ServerNotifications["item/completed"]).Check({ threadId: "t1", turnId: "m1", item: userItem })).toBe(
+			true,
+		);
+	});
+
+	test("gitConflict reasons are the listed set", () => {
+		expect(GitConflictReason.anyOf.map((s: { const: string }) => s.const).sort()).toEqual(
+			[
+				"diffChanged",
+				"patchFailed",
+				"concurrentChange",
+				"pushRejected",
+				"localChanges",
+				"operationInProgress",
+				"branchExists",
+				"recoveryRequired",
+				"worktreeDeleted",
+				"worktreeMissing",
+				"worktreeInUse",
+				"submodules",
+			].sort(),
+		);
 	});
 
 	test("the generated JSON Schema is up to date", () => {

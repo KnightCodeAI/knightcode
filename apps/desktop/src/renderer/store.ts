@@ -193,7 +193,8 @@ function withTurn(view: ThreadView, turnId: string, fn: (turn: ViewTurn) => View
 
 // --- notifications ----------------------------------------------------------------------------
 
-function upsertSummary(summary: ThreadSummary): void {
+function upsertSummary(thread: Thread): void {
+	const summary: ThreadSummary = { ...thread, workspaceMode: thread.workspace.mode };
 	set((s) => {
 		const threads = s.threads.filter((t) => t.id !== summary.id);
 		return { ...s, threads: [summary, ...threads].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };

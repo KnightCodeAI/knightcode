@@ -294,17 +294,43 @@
 						"type": "string"
 					},
 					"workspace": {
-						"type": "object",
-						"required": [
-							"mode"
-						],
-						"properties": {
-							"mode": {
-								"type": "string",
-								"const": "local"
+						"anyOf": [
+							{
+								"type": "object",
+								"required": [
+									"mode"
+								],
+								"properties": {
+									"mode": {
+										"type": "string",
+										"const": "local"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"mode"
+								],
+								"properties": {
+									"mode": {
+										"type": "string",
+										"const": "worktree"
+									},
+									"baseRef": {
+										"type": "string"
+									},
+									"carryLocalChanges": {
+										"type": "boolean"
+									},
+									"environment": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
 							}
-						},
-						"additionalProperties": false
+						]
 					},
 					"approvalMode": {
 						"anyOf": [
@@ -497,17 +523,58 @@
 								"type": "string"
 							},
 							"workspace": {
-								"type": "object",
-								"required": [
-									"mode"
-								],
-								"properties": {
-									"mode": {
-										"type": "string",
-										"const": "local"
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"mode"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "local"
+											},
+											"worktree": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"mode",
+											"path",
+											"baseRef",
+											"ownerThreadId"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "worktree"
+											},
+											"path": {
+												"type": "string"
+											},
+											"baseRef": {
+												"type": "string"
+											},
+											"ownerThreadId": {
+												"type": "string"
+											},
+											"environment": {
+												"type": "string"
+											},
+											"setupFailed": {
+												"type": "boolean"
+											},
+											"deleted": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
 									}
-								},
-								"additionalProperties": false
+								]
 							},
 							"approvalMode": {
 								"anyOf": [
@@ -776,17 +843,58 @@
 								"type": "string"
 							},
 							"workspace": {
-								"type": "object",
-								"required": [
-									"mode"
-								],
-								"properties": {
-									"mode": {
-										"type": "string",
-										"const": "local"
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"mode"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "local"
+											},
+											"worktree": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"mode",
+											"path",
+											"baseRef",
+											"ownerThreadId"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "worktree"
+											},
+											"path": {
+												"type": "string"
+											},
+											"baseRef": {
+												"type": "string"
+											},
+											"ownerThreadId": {
+												"type": "string"
+											},
+											"environment": {
+												"type": "string"
+											},
+											"setupFailed": {
+												"type": "boolean"
+											},
+											"deleted": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
 									}
-								},
-								"additionalProperties": false
+								]
 							},
 							"approvalMode": {
 								"anyOf": [
@@ -1111,6 +1219,84 @@
 																"type": "string",
 																"minLength": 1,
 																"maxLength": 128
+															},
+															"comments": {
+																"type": "array",
+																"items": {
+																	"type": "object",
+																	"required": [
+																		"path",
+																		"side",
+																		"startLine",
+																		"endLine",
+																		"body"
+																	],
+																	"properties": {
+																		"scope": {
+																			"anyOf": [
+																				{
+																					"type": "string",
+																					"const": "lastTurn"
+																				},
+																				{
+																					"type": "string",
+																					"const": "uncommitted"
+																				},
+																				{
+																					"type": "string",
+																					"const": "unstaged"
+																				},
+																				{
+																					"type": "string",
+																					"const": "staged"
+																				},
+																				{
+																					"type": "string",
+																					"const": "committed"
+																				},
+																				{
+																					"type": "string",
+																					"const": "branch"
+																				}
+																			]
+																		},
+																		"against": {
+																			"type": "string"
+																		},
+																		"commit": {
+																			"type": "string"
+																		},
+																		"path": {
+																			"type": "string"
+																		},
+																		"side": {
+																			"anyOf": [
+																				{
+																					"type": "string",
+																					"const": "old"
+																				},
+																				{
+																					"type": "string",
+																					"const": "new"
+																				}
+																			]
+																		},
+																		"startLine": {
+																			"type": "integer",
+																			"minimum": 1
+																		},
+																		"endLine": {
+																			"type": "integer",
+																			"minimum": 1
+																		},
+																		"body": {
+																			"type": "string",
+																			"minLength": 1,
+																			"maxLength": 8000
+																		}
+																	},
+																	"additionalProperties": false
+																}
 															},
 															"startedAt": {
 																"type": "number"
@@ -1615,6 +1801,84 @@
 															"type": "string",
 															"minLength": 1,
 															"maxLength": 128
+														},
+														"comments": {
+															"type": "array",
+															"items": {
+																"type": "object",
+																"required": [
+																	"path",
+																	"side",
+																	"startLine",
+																	"endLine",
+																	"body"
+																],
+																"properties": {
+																	"scope": {
+																		"anyOf": [
+																			{
+																				"type": "string",
+																				"const": "lastTurn"
+																			},
+																			{
+																				"type": "string",
+																				"const": "uncommitted"
+																			},
+																			{
+																				"type": "string",
+																				"const": "unstaged"
+																			},
+																			{
+																				"type": "string",
+																				"const": "staged"
+																			},
+																			{
+																				"type": "string",
+																				"const": "committed"
+																			},
+																			{
+																				"type": "string",
+																				"const": "branch"
+																			}
+																		]
+																	},
+																	"against": {
+																		"type": "string"
+																	},
+																	"commit": {
+																		"type": "string"
+																	},
+																	"path": {
+																		"type": "string"
+																	},
+																	"side": {
+																		"anyOf": [
+																			{
+																				"type": "string",
+																				"const": "old"
+																			},
+																			{
+																				"type": "string",
+																				"const": "new"
+																			}
+																		]
+																	},
+																	"startLine": {
+																		"type": "integer",
+																		"minimum": 1
+																	},
+																	"endLine": {
+																		"type": "integer",
+																		"minimum": 1
+																	},
+																	"body": {
+																		"type": "string",
+																		"minLength": 1,
+																		"maxLength": 8000
+																	}
+																},
+																"additionalProperties": false
+															}
 														},
 														"startedAt": {
 															"type": "number"
@@ -2006,6 +2270,19 @@
 					},
 					"atItemId": {
 						"type": "string"
+					},
+					"workspace": {
+						"type": "object",
+						"required": [
+							"mode"
+						],
+						"properties": {
+							"mode": {
+								"type": "string",
+								"const": "worktree"
+							}
+						},
+						"additionalProperties": false
 					}
 				},
 				"additionalProperties": false
@@ -2134,17 +2411,58 @@
 								"type": "string"
 							},
 							"workspace": {
-								"type": "object",
-								"required": [
-									"mode"
-								],
-								"properties": {
-									"mode": {
-										"type": "string",
-										"const": "local"
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"mode"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "local"
+											},
+											"worktree": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"mode",
+											"path",
+											"baseRef",
+											"ownerThreadId"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "worktree"
+											},
+											"path": {
+												"type": "string"
+											},
+											"baseRef": {
+												"type": "string"
+											},
+											"ownerThreadId": {
+												"type": "string"
+											},
+											"environment": {
+												"type": "string"
+											},
+											"setupFailed": {
+												"type": "boolean"
+											},
+											"deleted": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
 									}
-								},
-								"additionalProperties": false
+								]
 							},
 							"approvalMode": {
 								"anyOf": [
@@ -2270,6 +2588,1628 @@
 				"additionalProperties": false
 			}
 		},
+		"thread/handoff": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"to"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"to": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "local"
+							},
+							{
+								"type": "string",
+								"const": "worktree"
+							}
+						]
+					},
+					"branch": {
+						"type": "string",
+						"maxLength": 200
+					},
+					"environment": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"thread",
+					"warnings"
+				],
+				"properties": {
+					"thread": {
+						"type": "object",
+						"required": [
+							"id",
+							"cwd",
+							"projectCwd",
+							"name",
+							"status",
+							"archived",
+							"createdAt",
+							"updatedAt",
+							"workspace",
+							"approvalMode",
+							"thinkingLevel"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							},
+							"name": {
+								"type": "string"
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"type"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "notLoaded"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"type"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "idle"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"type",
+											"waitingOn"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "active"
+											},
+											"waitingOn": {
+												"type": "array",
+												"items": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "approval"
+														},
+														{
+															"type": "string",
+															"const": "dialog"
+														}
+													]
+												}
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"type",
+											"message"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "systemError"
+											},
+											"message": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									}
+								]
+							},
+							"archived": {
+								"type": "boolean"
+							},
+							"createdAt": {
+								"type": "string"
+							},
+							"forkedFromId": {
+								"type": "string"
+							},
+							"updatedAt": {
+								"type": "string"
+							},
+							"workspace": {
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"mode"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "local"
+											},
+											"worktree": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"mode",
+											"path",
+											"baseRef",
+											"ownerThreadId"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "worktree"
+											},
+											"path": {
+												"type": "string"
+											},
+											"baseRef": {
+												"type": "string"
+											},
+											"ownerThreadId": {
+												"type": "string"
+											},
+											"environment": {
+												"type": "string"
+											},
+											"setupFailed": {
+												"type": "boolean"
+											},
+											"deleted": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
+									}
+								]
+							},
+							"approvalMode": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "ask"
+									},
+									{
+										"type": "string",
+										"const": "autoEdit"
+									},
+									{
+										"type": "string",
+										"const": "fullAccess"
+									}
+								]
+							},
+							"model": {
+								"type": "object",
+								"required": [
+									"provider",
+									"id",
+									"name",
+									"contextWindow"
+								],
+								"properties": {
+									"provider": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"contextWindow": {
+										"type": "number"
+									}
+								},
+								"additionalProperties": false
+							},
+							"thinkingLevel": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "off"
+									},
+									{
+										"type": "string",
+										"const": "minimal"
+									},
+									{
+										"type": "string",
+										"const": "low"
+									},
+									{
+										"type": "string",
+										"const": "medium"
+									},
+									{
+										"type": "string",
+										"const": "high"
+									},
+									{
+										"type": "string",
+										"const": "xhigh"
+									},
+									{
+										"type": "string",
+										"const": "max"
+									}
+								]
+							}
+						},
+						"additionalProperties": false
+					},
+					"branch": {
+						"type": "string"
+					},
+					"warnings": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"message",
+								"source"
+							],
+							"properties": {
+								"message": {
+									"type": "string"
+								},
+								"source": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "settings"
+										},
+										{
+											"type": "string",
+											"const": "extension"
+										},
+										{
+											"type": "string",
+											"const": "trust"
+										},
+										{
+											"type": "string",
+											"const": "server"
+										}
+									]
+								},
+								"path": {
+									"type": "string"
+								},
+								"line": {
+									"type": "number"
+								},
+								"column": {
+									"type": "number"
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"thread/worktree/restore": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"thread"
+				],
+				"properties": {
+					"thread": {
+						"type": "object",
+						"required": [
+							"id",
+							"cwd",
+							"projectCwd",
+							"name",
+							"status",
+							"archived",
+							"createdAt",
+							"updatedAt",
+							"workspace",
+							"approvalMode",
+							"thinkingLevel"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							},
+							"name": {
+								"type": "string"
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"type"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "notLoaded"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"type"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "idle"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"type",
+											"waitingOn"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "active"
+											},
+											"waitingOn": {
+												"type": "array",
+												"items": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "approval"
+														},
+														{
+															"type": "string",
+															"const": "dialog"
+														}
+													]
+												}
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"type",
+											"message"
+										],
+										"properties": {
+											"type": {
+												"type": "string",
+												"const": "systemError"
+											},
+											"message": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									}
+								]
+							},
+							"archived": {
+								"type": "boolean"
+							},
+							"createdAt": {
+								"type": "string"
+							},
+							"forkedFromId": {
+								"type": "string"
+							},
+							"updatedAt": {
+								"type": "string"
+							},
+							"workspace": {
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"mode"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "local"
+											},
+											"worktree": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"mode",
+											"path",
+											"baseRef",
+											"ownerThreadId"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "worktree"
+											},
+											"path": {
+												"type": "string"
+											},
+											"baseRef": {
+												"type": "string"
+											},
+											"ownerThreadId": {
+												"type": "string"
+											},
+											"environment": {
+												"type": "string"
+											},
+											"setupFailed": {
+												"type": "boolean"
+											},
+											"deleted": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
+									}
+								]
+							},
+							"approvalMode": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "ask"
+									},
+									{
+										"type": "string",
+										"const": "autoEdit"
+									},
+									{
+										"type": "string",
+										"const": "fullAccess"
+									}
+								]
+							},
+							"model": {
+								"type": "object",
+								"required": [
+									"provider",
+									"id",
+									"name",
+									"contextWindow"
+								],
+								"properties": {
+									"provider": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"contextWindow": {
+										"type": "number"
+									}
+								},
+								"additionalProperties": false
+							},
+							"thinkingLevel": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "off"
+									},
+									{
+										"type": "string",
+										"const": "minimal"
+									},
+									{
+										"type": "string",
+										"const": "low"
+									},
+									{
+										"type": "string",
+										"const": "medium"
+									},
+									{
+										"type": "string",
+										"const": "high"
+									},
+									{
+										"type": "string",
+										"const": "xhigh"
+									},
+									{
+										"type": "string",
+										"const": "max"
+									}
+								]
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"worktree/list": {
+			"params": {
+				"type": "object",
+				"properties": {
+					"cwd": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"worktrees"
+				],
+				"properties": {
+					"worktrees": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"path",
+								"projectCwd",
+								"threadIds",
+								"lastUsedAt",
+								"deleted"
+							],
+							"properties": {
+								"path": {
+									"type": "string"
+								},
+								"projectCwd": {
+									"type": "string"
+								},
+								"head": {
+									"type": "string"
+								},
+								"branch": {
+									"type": "string"
+								},
+								"threadIds": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
+								"lastUsedAt": {
+									"type": "number"
+								},
+								"deleted": {
+									"type": "boolean"
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"worktree/delete": {
+			"params": {
+				"type": "object",
+				"required": [
+					"path"
+				],
+				"properties": {
+					"path": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"snapshot": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"environment/list": {
+			"params": {
+				"type": "object",
+				"required": [
+					"cwd"
+				],
+				"properties": {
+					"cwd": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"environments",
+					"trusted"
+				],
+				"properties": {
+					"environments": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"name"
+							],
+							"properties": {
+								"name": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 100
+								},
+								"setup": {
+									"type": "object",
+									"properties": {
+										"default": {
+											"type": "string"
+										},
+										"macos": {
+											"type": "string"
+										},
+										"linux": {
+											"type": "string"
+										},
+										"windows": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								"cleanup": {
+									"type": "object",
+									"properties": {
+										"default": {
+											"type": "string"
+										},
+										"macos": {
+											"type": "string"
+										},
+										"linux": {
+											"type": "string"
+										},
+										"windows": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								"actions": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"name",
+											"command"
+										],
+										"properties": {
+											"name": {
+												"type": "string",
+												"minLength": 1,
+												"maxLength": 100
+											},
+											"icon": {
+												"type": "string"
+											},
+											"command": {
+												"type": "object",
+												"properties": {
+													"default": {
+														"type": "string"
+													},
+													"macos": {
+														"type": "string"
+													},
+													"linux": {
+														"type": "string"
+													},
+													"windows": {
+														"type": "string"
+													}
+												},
+												"additionalProperties": false
+											}
+										},
+										"additionalProperties": false
+									},
+									"maxItems": 50
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"trusted": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"environment/save": {
+			"params": {
+				"type": "object",
+				"required": [
+					"cwd",
+					"environments"
+				],
+				"properties": {
+					"cwd": {
+						"type": "string"
+					},
+					"environments": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"name"
+							],
+							"properties": {
+								"name": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 100
+								},
+								"setup": {
+									"type": "object",
+									"properties": {
+										"default": {
+											"type": "string"
+										},
+										"macos": {
+											"type": "string"
+										},
+										"linux": {
+											"type": "string"
+										},
+										"windows": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								"cleanup": {
+									"type": "object",
+									"properties": {
+										"default": {
+											"type": "string"
+										},
+										"macos": {
+											"type": "string"
+										},
+										"linux": {
+											"type": "string"
+										},
+										"windows": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								"actions": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"name",
+											"command"
+										],
+										"properties": {
+											"name": {
+												"type": "string",
+												"minLength": 1,
+												"maxLength": 100
+											},
+											"icon": {
+												"type": "string"
+											},
+											"command": {
+												"type": "object",
+												"properties": {
+													"default": {
+														"type": "string"
+													},
+													"macos": {
+														"type": "string"
+													},
+													"linux": {
+														"type": "string"
+													},
+													"windows": {
+														"type": "string"
+													}
+												},
+												"additionalProperties": false
+											}
+										},
+										"additionalProperties": false
+									},
+									"maxItems": 50
+								}
+							},
+							"additionalProperties": false
+						},
+						"maxItems": 50
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"thread/diff/read": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "lastTurn"
+							},
+							{
+								"type": "string",
+								"const": "uncommitted"
+							},
+							{
+								"type": "string",
+								"const": "unstaged"
+							},
+							{
+								"type": "string",
+								"const": "staged"
+							},
+							{
+								"type": "string",
+								"const": "committed"
+							},
+							{
+								"type": "string",
+								"const": "branch"
+							}
+						]
+					},
+					"against": {
+						"type": "string"
+					},
+					"commit": {
+						"type": "string"
+					},
+					"context": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 1000000
+					},
+					"ignoreWhitespace": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"scope",
+					"files"
+				],
+				"properties": {
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "lastTurn"
+							},
+							{
+								"type": "string",
+								"const": "uncommitted"
+							},
+							{
+								"type": "string",
+								"const": "unstaged"
+							},
+							{
+								"type": "string",
+								"const": "staged"
+							},
+							{
+								"type": "string",
+								"const": "committed"
+							},
+							{
+								"type": "string",
+								"const": "branch"
+							}
+						]
+					},
+					"files": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"path",
+								"status",
+								"binary",
+								"additions",
+								"deletions",
+								"hunks"
+							],
+							"properties": {
+								"path": {
+									"type": "string"
+								},
+								"oldPath": {
+									"type": "string"
+								},
+								"status": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "added"
+										},
+										{
+											"type": "string",
+											"const": "modified"
+										},
+										{
+											"type": "string",
+											"const": "deleted"
+										},
+										{
+											"type": "string",
+											"const": "renamed"
+										},
+										{
+											"type": "string",
+											"const": "typeChanged"
+										}
+									]
+								},
+								"binary": {
+									"type": "boolean"
+								},
+								"additions": {
+									"type": "number"
+								},
+								"deletions": {
+									"type": "number"
+								},
+								"tooLarge": {
+									"type": "boolean"
+								},
+								"hunks": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"id",
+											"header",
+											"oldStart",
+											"oldLines",
+											"newStart",
+											"newLines",
+											"lines"
+										],
+										"properties": {
+											"id": {
+												"type": "string"
+											},
+											"header": {
+												"type": "string"
+											},
+											"oldStart": {
+												"type": "number"
+											},
+											"oldLines": {
+												"type": "number"
+											},
+											"newStart": {
+												"type": "number"
+											},
+											"newLines": {
+												"type": "number"
+											},
+											"lines": {
+												"type": "array",
+												"items": {
+													"type": "string"
+												}
+											}
+										},
+										"additionalProperties": false
+									}
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"filesOmitted": {
+						"type": "number"
+					},
+					"untrackedSkipped": {
+						"type": "number"
+					},
+					"turnId": {
+						"type": "string"
+					},
+					"stale": {
+						"type": "boolean"
+					},
+					"against": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"thread/diff/revert": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"hunkId": {
+						"type": "string"
+					},
+					"context": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 1000000
+					},
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "lastTurn"
+							},
+							{
+								"type": "string",
+								"const": "uncommitted"
+							},
+							{
+								"type": "string",
+								"const": "unstaged"
+							},
+							{
+								"type": "string",
+								"const": "staged"
+							},
+							{
+								"type": "string",
+								"const": "committed"
+							},
+							{
+								"type": "string",
+								"const": "branch"
+							}
+						]
+					},
+					"against": {
+						"type": "string"
+					},
+					"commit": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"paths"
+				],
+				"properties": {
+					"paths": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/status": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"ahead",
+					"behind",
+					"staged",
+					"unstaged",
+					"untracked",
+					"conflicted"
+				],
+				"properties": {
+					"branch": {
+						"type": "string"
+					},
+					"head": {
+						"type": "string"
+					},
+					"upstream": {
+						"type": "string"
+					},
+					"ahead": {
+						"type": "number"
+					},
+					"behind": {
+						"type": "number"
+					},
+					"staged": {
+						"type": "number"
+					},
+					"unstaged": {
+						"type": "number"
+					},
+					"untracked": {
+						"type": "number"
+					},
+					"conflicted": {
+						"type": "number"
+					},
+					"operation": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "merge"
+							},
+							{
+								"type": "string",
+								"const": "rebase"
+							},
+							{
+								"type": "string",
+								"const": "cherryPick"
+							},
+							{
+								"type": "string",
+								"const": "revert"
+							}
+						]
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/stage": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"hunkId": {
+						"type": "string"
+					},
+					"context": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 1000000
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"paths"
+				],
+				"properties": {
+					"paths": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/unstage": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"hunkId": {
+						"type": "string"
+					},
+					"context": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 1000000
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"paths"
+				],
+				"properties": {
+					"paths": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/commit": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string",
+						"maxLength": 20000
+					},
+					"includeUnstaged": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"commit",
+					"message"
+				],
+				"properties": {
+					"commit": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/push": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"remote",
+					"branch",
+					"setUpstream"
+				],
+				"properties": {
+					"remote": {
+						"type": "string"
+					},
+					"branch": {
+						"type": "string"
+					},
+					"setUpstream": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/pr/create": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"body": {
+						"type": "string"
+					},
+					"draft": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"url"
+				],
+				"properties": {
+					"url": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/branch/create": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"name"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string",
+						"maxLength": 200
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"branch"
+				],
+				"properties": {
+					"branch": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/branch/switch": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"name"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string",
+						"maxLength": 200
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"branch"
+				],
+				"properties": {
+					"branch": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/branches": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"branches"
+				],
+				"properties": {
+					"current": {
+						"type": "string"
+					},
+					"defaultBranch": {
+						"type": "string"
+					},
+					"branches": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"git/log": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"limit": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 200
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"commits"
+				],
+				"properties": {
+					"base": {
+						"type": "string"
+					},
+					"commits": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"sha",
+								"subject",
+								"author",
+								"time"
+							],
+							"properties": {
+								"sha": {
+									"type": "string"
+								},
+								"subject": {
+									"type": "string"
+								},
+								"author": {
+									"type": "string"
+								},
+								"time": {
+									"type": "number"
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
 		"thread/list": {
 			"params": {
 				"type": "object",
@@ -2304,7 +4244,8 @@
 								"status",
 								"archived",
 								"createdAt",
-								"updatedAt"
+								"updatedAt",
+								"workspaceMode"
 							],
 							"properties": {
 								"id": {
@@ -2406,6 +4347,18 @@
 								},
 								"updatedAt": {
 									"type": "string"
+								},
+								"workspaceMode": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "local"
+										},
+										{
+											"type": "string",
+											"const": "worktree"
+										}
+									]
 								}
 							},
 							"additionalProperties": false
@@ -2560,17 +4513,58 @@
 										"type": "string"
 									},
 									"workspace": {
-										"type": "object",
-										"required": [
-											"mode"
-										],
-										"properties": {
-											"mode": {
-												"type": "string",
-												"const": "local"
+										"anyOf": [
+											{
+												"type": "object",
+												"required": [
+													"mode"
+												],
+												"properties": {
+													"mode": {
+														"type": "string",
+														"const": "local"
+													},
+													"worktree": {
+														"type": "string"
+													}
+												},
+												"additionalProperties": false
+											},
+											{
+												"type": "object",
+												"required": [
+													"mode",
+													"path",
+													"baseRef",
+													"ownerThreadId"
+												],
+												"properties": {
+													"mode": {
+														"type": "string",
+														"const": "worktree"
+													},
+													"path": {
+														"type": "string"
+													},
+													"baseRef": {
+														"type": "string"
+													},
+													"ownerThreadId": {
+														"type": "string"
+													},
+													"environment": {
+														"type": "string"
+													},
+													"setupFailed": {
+														"type": "boolean"
+													},
+													"deleted": {
+														"type": "boolean"
+													}
+												},
+												"additionalProperties": false
 											}
-										},
-										"additionalProperties": false
+										]
 									},
 									"approvalMode": {
 										"anyOf": [
@@ -2657,7 +4651,8 @@
 									"status",
 									"archived",
 									"createdAt",
-									"updatedAt"
+									"updatedAt",
+									"workspaceMode"
 								],
 								"properties": {
 									"id": {
@@ -2759,6 +4754,18 @@
 									},
 									"updatedAt": {
 										"type": "string"
+									},
+									"workspaceMode": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "local"
+											},
+											{
+												"type": "string",
+												"const": "worktree"
+											}
+										]
 									}
 								},
 								"additionalProperties": false
@@ -2898,6 +4905,84 @@
 																"type": "string",
 																"minLength": 1,
 																"maxLength": 128
+															},
+															"comments": {
+																"type": "array",
+																"items": {
+																	"type": "object",
+																	"required": [
+																		"path",
+																		"side",
+																		"startLine",
+																		"endLine",
+																		"body"
+																	],
+																	"properties": {
+																		"scope": {
+																			"anyOf": [
+																				{
+																					"type": "string",
+																					"const": "lastTurn"
+																				},
+																				{
+																					"type": "string",
+																					"const": "uncommitted"
+																				},
+																				{
+																					"type": "string",
+																					"const": "unstaged"
+																				},
+																				{
+																					"type": "string",
+																					"const": "staged"
+																				},
+																				{
+																					"type": "string",
+																					"const": "committed"
+																				},
+																				{
+																					"type": "string",
+																					"const": "branch"
+																				}
+																			]
+																		},
+																		"against": {
+																			"type": "string"
+																		},
+																		"commit": {
+																			"type": "string"
+																		},
+																		"path": {
+																			"type": "string"
+																		},
+																		"side": {
+																			"anyOf": [
+																				{
+																					"type": "string",
+																					"const": "old"
+																				},
+																				{
+																					"type": "string",
+																					"const": "new"
+																				}
+																			]
+																		},
+																		"startLine": {
+																			"type": "integer",
+																			"minimum": 1
+																		},
+																		"endLine": {
+																			"type": "integer",
+																			"minimum": 1
+																		},
+																		"body": {
+																			"type": "string",
+																			"minLength": 1,
+																			"maxLength": 8000
+																		}
+																	},
+																	"additionalProperties": false
+																}
 															},
 															"startedAt": {
 																"type": "number"
@@ -3402,6 +5487,84 @@
 															"type": "string",
 															"minLength": 1,
 															"maxLength": 128
+														},
+														"comments": {
+															"type": "array",
+															"items": {
+																"type": "object",
+																"required": [
+																	"path",
+																	"side",
+																	"startLine",
+																	"endLine",
+																	"body"
+																],
+																"properties": {
+																	"scope": {
+																		"anyOf": [
+																			{
+																				"type": "string",
+																				"const": "lastTurn"
+																			},
+																			{
+																				"type": "string",
+																				"const": "uncommitted"
+																			},
+																			{
+																				"type": "string",
+																				"const": "unstaged"
+																			},
+																			{
+																				"type": "string",
+																				"const": "staged"
+																			},
+																			{
+																				"type": "string",
+																				"const": "committed"
+																			},
+																			{
+																				"type": "string",
+																				"const": "branch"
+																			}
+																		]
+																	},
+																	"against": {
+																		"type": "string"
+																	},
+																	"commit": {
+																		"type": "string"
+																	},
+																	"path": {
+																		"type": "string"
+																	},
+																	"side": {
+																		"anyOf": [
+																			{
+																				"type": "string",
+																				"const": "old"
+																			},
+																			{
+																				"type": "string",
+																				"const": "new"
+																			}
+																		]
+																	},
+																	"startLine": {
+																		"type": "integer",
+																		"minimum": 1
+																	},
+																	"endLine": {
+																		"type": "integer",
+																		"minimum": 1
+																	},
+																	"body": {
+																		"type": "string",
+																		"minLength": 1,
+																		"maxLength": 8000
+																	}
+																},
+																"additionalProperties": false
+															}
 														},
 														"startedAt": {
 															"type": "number"
@@ -3850,7 +6013,43 @@
 			},
 			"result": {
 				"type": "object",
-				"properties": {},
+				"properties": {
+					"worktree": {
+						"type": "object",
+						"required": [
+							"deleted"
+						],
+						"properties": {
+							"deleted": {
+								"type": "boolean"
+							},
+							"snapshot": {
+								"type": "string"
+							},
+							"reason": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "autoDeleteOff"
+									},
+									{
+										"type": "string",
+										"const": "inUse"
+									},
+									{
+										"type": "string",
+										"const": "notManaged"
+									},
+									{
+										"type": "string",
+										"const": "submodules"
+									}
+								]
+							}
+						},
+						"additionalProperties": false
+					}
+				},
 				"additionalProperties": false
 			}
 		},
@@ -4096,17 +6295,58 @@
 								"type": "string"
 							},
 							"workspace": {
-								"type": "object",
-								"required": [
-									"mode"
-								],
-								"properties": {
-									"mode": {
-										"type": "string",
-										"const": "local"
+								"anyOf": [
+									{
+										"type": "object",
+										"required": [
+											"mode"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "local"
+											},
+											"worktree": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									},
+									{
+										"type": "object",
+										"required": [
+											"mode",
+											"path",
+											"baseRef",
+											"ownerThreadId"
+										],
+										"properties": {
+											"mode": {
+												"type": "string",
+												"const": "worktree"
+											},
+											"path": {
+												"type": "string"
+											},
+											"baseRef": {
+												"type": "string"
+											},
+											"ownerThreadId": {
+												"type": "string"
+											},
+											"environment": {
+												"type": "string"
+											},
+											"setupFailed": {
+												"type": "boolean"
+											},
+											"deleted": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
 									}
-								},
-								"additionalProperties": false
+								]
 							},
 							"approvalMode": {
 								"anyOf": [
@@ -4267,6 +6507,86 @@
 						"type": "string",
 						"minLength": 1,
 						"maxLength": 128
+					},
+					"comments": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"path",
+								"side",
+								"startLine",
+								"endLine",
+								"body"
+							],
+							"properties": {
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "lastTurn"
+										},
+										{
+											"type": "string",
+											"const": "uncommitted"
+										},
+										{
+											"type": "string",
+											"const": "unstaged"
+										},
+										{
+											"type": "string",
+											"const": "staged"
+										},
+										{
+											"type": "string",
+											"const": "committed"
+										},
+										{
+											"type": "string",
+											"const": "branch"
+										}
+									]
+								},
+								"against": {
+									"type": "string"
+								},
+								"commit": {
+									"type": "string"
+								},
+								"path": {
+									"type": "string"
+								},
+								"side": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "old"
+										},
+										{
+											"type": "string",
+											"const": "new"
+										}
+									]
+								},
+								"startLine": {
+									"type": "integer",
+									"minimum": 1
+								},
+								"endLine": {
+									"type": "integer",
+									"minimum": 1
+								},
+								"body": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 8000
+								}
+							},
+							"additionalProperties": false
+						},
+						"minItems": 1,
+						"maxItems": 50
 					}
 				},
 				"additionalProperties": false
@@ -4464,6 +6784,86 @@
 						"type": "string",
 						"minLength": 1,
 						"maxLength": 128
+					},
+					"comments": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"path",
+								"side",
+								"startLine",
+								"endLine",
+								"body"
+							],
+							"properties": {
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "lastTurn"
+										},
+										{
+											"type": "string",
+											"const": "uncommitted"
+										},
+										{
+											"type": "string",
+											"const": "unstaged"
+										},
+										{
+											"type": "string",
+											"const": "staged"
+										},
+										{
+											"type": "string",
+											"const": "committed"
+										},
+										{
+											"type": "string",
+											"const": "branch"
+										}
+									]
+								},
+								"against": {
+									"type": "string"
+								},
+								"commit": {
+									"type": "string"
+								},
+								"path": {
+									"type": "string"
+								},
+								"side": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "old"
+										},
+										{
+											"type": "string",
+											"const": "new"
+										}
+									]
+								},
+								"startLine": {
+									"type": "integer",
+									"minimum": 1
+								},
+								"endLine": {
+									"type": "integer",
+									"minimum": 1
+								},
+								"body": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 8000
+								}
+							},
+							"additionalProperties": false
+						},
+						"minItems": 1,
+						"maxItems": 50
 					}
 				},
 				"additionalProperties": false
@@ -5368,17 +7768,58 @@
 							"type": "string"
 						},
 						"workspace": {
-							"type": "object",
-							"required": [
-								"mode"
-							],
-							"properties": {
-								"mode": {
-									"type": "string",
-									"const": "local"
+							"anyOf": [
+								{
+									"type": "object",
+									"required": [
+										"mode"
+									],
+									"properties": {
+										"mode": {
+											"type": "string",
+											"const": "local"
+										},
+										"worktree": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								{
+									"type": "object",
+									"required": [
+										"mode",
+										"path",
+										"baseRef",
+										"ownerThreadId"
+									],
+									"properties": {
+										"mode": {
+											"type": "string",
+											"const": "worktree"
+										},
+										"path": {
+											"type": "string"
+										},
+										"baseRef": {
+											"type": "string"
+										},
+										"ownerThreadId": {
+											"type": "string"
+										},
+										"environment": {
+											"type": "string"
+										},
+										"setupFailed": {
+											"type": "boolean"
+										},
+										"deleted": {
+											"type": "boolean"
+										}
+									},
+									"additionalProperties": false
 								}
-							},
-							"additionalProperties": false
+							]
 						},
 						"approvalMode": {
 							"anyOf": [
@@ -5585,17 +8026,58 @@
 							"type": "string"
 						},
 						"workspace": {
-							"type": "object",
-							"required": [
-								"mode"
-							],
-							"properties": {
-								"mode": {
-									"type": "string",
-									"const": "local"
+							"anyOf": [
+								{
+									"type": "object",
+									"required": [
+										"mode"
+									],
+									"properties": {
+										"mode": {
+											"type": "string",
+											"const": "local"
+										},
+										"worktree": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								{
+									"type": "object",
+									"required": [
+										"mode",
+										"path",
+										"baseRef",
+										"ownerThreadId"
+									],
+									"properties": {
+										"mode": {
+											"type": "string",
+											"const": "worktree"
+										},
+										"path": {
+											"type": "string"
+										},
+										"baseRef": {
+											"type": "string"
+										},
+										"ownerThreadId": {
+											"type": "string"
+										},
+										"environment": {
+											"type": "string"
+										},
+										"setupFailed": {
+											"type": "boolean"
+										},
+										"deleted": {
+											"type": "boolean"
+										}
+									},
+									"additionalProperties": false
 								}
-							},
-							"additionalProperties": false
+							]
 						},
 						"approvalMode": {
 							"anyOf": [
@@ -5903,17 +8385,58 @@
 							"type": "string"
 						},
 						"workspace": {
-							"type": "object",
-							"required": [
-								"mode"
-							],
-							"properties": {
-								"mode": {
-									"type": "string",
-									"const": "local"
+							"anyOf": [
+								{
+									"type": "object",
+									"required": [
+										"mode"
+									],
+									"properties": {
+										"mode": {
+											"type": "string",
+											"const": "local"
+										},
+										"worktree": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								{
+									"type": "object",
+									"required": [
+										"mode",
+										"path",
+										"baseRef",
+										"ownerThreadId"
+									],
+									"properties": {
+										"mode": {
+											"type": "string",
+											"const": "worktree"
+										},
+										"path": {
+											"type": "string"
+										},
+										"baseRef": {
+											"type": "string"
+										},
+										"ownerThreadId": {
+											"type": "string"
+										},
+										"environment": {
+											"type": "string"
+										},
+										"setupFailed": {
+											"type": "boolean"
+										},
+										"deleted": {
+											"type": "boolean"
+										}
+									},
+									"additionalProperties": false
 								}
-							},
-							"additionalProperties": false
+							]
 						},
 						"approvalMode": {
 							"anyOf": [
@@ -6016,6 +8539,58 @@
 			],
 			"properties": {
 				"threadId": {
+					"type": "string"
+				}
+			},
+			"additionalProperties": false
+		},
+		"turn/diff/updated": {
+			"type": "object",
+			"required": [
+				"threadId",
+				"turnId",
+				"files"
+			],
+			"properties": {
+				"threadId": {
+					"type": "string"
+				},
+				"turnId": {
+					"type": "string"
+				},
+				"files": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			},
+			"additionalProperties": false
+		},
+		"thread/workspace/progress": {
+			"type": "object",
+			"required": [
+				"threadId",
+				"phase",
+				"output"
+			],
+			"properties": {
+				"threadId": {
+					"type": "string"
+				},
+				"phase": {
+					"anyOf": [
+						{
+							"type": "string",
+							"const": "setup"
+						},
+						{
+							"type": "string",
+							"const": "cleanup"
+						}
+					]
+				},
+				"output": {
 					"type": "string"
 				}
 			},
@@ -6251,6 +8826,84 @@
 												"type": "string",
 												"minLength": 1,
 												"maxLength": 128
+											},
+											"comments": {
+												"type": "array",
+												"items": {
+													"type": "object",
+													"required": [
+														"path",
+														"side",
+														"startLine",
+														"endLine",
+														"body"
+													],
+													"properties": {
+														"scope": {
+															"anyOf": [
+																{
+																	"type": "string",
+																	"const": "lastTurn"
+																},
+																{
+																	"type": "string",
+																	"const": "uncommitted"
+																},
+																{
+																	"type": "string",
+																	"const": "unstaged"
+																},
+																{
+																	"type": "string",
+																	"const": "staged"
+																},
+																{
+																	"type": "string",
+																	"const": "committed"
+																},
+																{
+																	"type": "string",
+																	"const": "branch"
+																}
+															]
+														},
+														"against": {
+															"type": "string"
+														},
+														"commit": {
+															"type": "string"
+														},
+														"path": {
+															"type": "string"
+														},
+														"side": {
+															"anyOf": [
+																{
+																	"type": "string",
+																	"const": "old"
+																},
+																{
+																	"type": "string",
+																	"const": "new"
+																}
+															]
+														},
+														"startLine": {
+															"type": "integer",
+															"minimum": 1
+														},
+														"endLine": {
+															"type": "integer",
+															"minimum": 1
+														},
+														"body": {
+															"type": "string",
+															"minLength": 1,
+															"maxLength": 8000
+														}
+													},
+													"additionalProperties": false
+												}
 											},
 											"startedAt": {
 												"type": "number"
@@ -6802,6 +9455,84 @@
 											"minLength": 1,
 											"maxLength": 128
 										},
+										"comments": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"required": [
+													"path",
+													"side",
+													"startLine",
+													"endLine",
+													"body"
+												],
+												"properties": {
+													"scope": {
+														"anyOf": [
+															{
+																"type": "string",
+																"const": "lastTurn"
+															},
+															{
+																"type": "string",
+																"const": "uncommitted"
+															},
+															{
+																"type": "string",
+																"const": "unstaged"
+															},
+															{
+																"type": "string",
+																"const": "staged"
+															},
+															{
+																"type": "string",
+																"const": "committed"
+															},
+															{
+																"type": "string",
+																"const": "branch"
+															}
+														]
+													},
+													"against": {
+														"type": "string"
+													},
+													"commit": {
+														"type": "string"
+													},
+													"path": {
+														"type": "string"
+													},
+													"side": {
+														"anyOf": [
+															{
+																"type": "string",
+																"const": "old"
+															},
+															{
+																"type": "string",
+																"const": "new"
+															}
+														]
+													},
+													"startLine": {
+														"type": "integer",
+														"minimum": 1
+													},
+													"endLine": {
+														"type": "integer",
+														"minimum": 1
+													},
+													"body": {
+														"type": "string",
+														"minLength": 1,
+														"maxLength": 8000
+													}
+												},
+												"additionalProperties": false
+											}
+										},
 										"startedAt": {
 											"type": "number"
 										},
@@ -7195,6 +9926,84 @@
 											"type": "string",
 											"minLength": 1,
 											"maxLength": 128
+										},
+										"comments": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"required": [
+													"path",
+													"side",
+													"startLine",
+													"endLine",
+													"body"
+												],
+												"properties": {
+													"scope": {
+														"anyOf": [
+															{
+																"type": "string",
+																"const": "lastTurn"
+															},
+															{
+																"type": "string",
+																"const": "uncommitted"
+															},
+															{
+																"type": "string",
+																"const": "unstaged"
+															},
+															{
+																"type": "string",
+																"const": "staged"
+															},
+															{
+																"type": "string",
+																"const": "committed"
+															},
+															{
+																"type": "string",
+																"const": "branch"
+															}
+														]
+													},
+													"against": {
+														"type": "string"
+													},
+													"commit": {
+														"type": "string"
+													},
+													"path": {
+														"type": "string"
+													},
+													"side": {
+														"anyOf": [
+															{
+																"type": "string",
+																"const": "old"
+															},
+															{
+																"type": "string",
+																"const": "new"
+															}
+														]
+													},
+													"startLine": {
+														"type": "integer",
+														"minimum": 1
+													},
+													"endLine": {
+														"type": "integer",
+														"minimum": 1
+													},
+													"body": {
+														"type": "string",
+														"minLength": 1,
+														"maxLength": 8000
+													}
+												},
+												"additionalProperties": false
+											}
 										},
 										"startedAt": {
 											"type": "number"
