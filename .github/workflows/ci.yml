@@ -75,7 +75,16 @@ jobs:
       # publish workflow, where a failure blocks an in-flight release.
       # pack-test builds the Node bundle npm ships and runs it from an install,
       # on the oldest Node the package supports (engines in packages/cli) rather
-      # than whatever the runner image ships.
+      # than whatever the runner image ships, and on an unsupported Node, which
+      # must get the launcher's version message rather than a crash.
+      - name: Setup Node (unsupported)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20.20.2
+
+      - name: Record the unsupported Node for pack-test
+        run: echo "KNIGHTCODE_PACK_TEST_OLD_NODE=$(command -v node)" >> "$GITHUB_ENV"
+
       - name: Setup Node (minimum supported)
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
