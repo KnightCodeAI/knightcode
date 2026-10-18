@@ -129,7 +129,10 @@ function getSelfUpdateCommandForMethod(
 	const target = normalizeSelfUpdatePackageTarget(updatePackageTarget);
 	// engine-strict makes npm and pnpm refuse a release whose engines.node excludes this Node;
 	// by default they install it with a warning, and it then fails to start. yarn refuses by
-	// default. bun has no such check.
+	// default. bun has no such check. Not after a rename: the old package is removed first, since
+	// both own the same bin, and a refused install would leave no CLI instead of one that says
+	// which Node it needs.
+	const engineStrict = target.packageName === installedPackageName;
 	switch (method) {
 		case "bun-binary":
 			return undefined;
@@ -145,7 +148,7 @@ function getSelfUpdateCommandForMethod(
 					"install",
 					"-g",
 					"--ignore-scripts",
-					"--config.engine-strict=true",
+					...(engineStrict ? ["--config.engine-strict=true"] : []),
 					"--config.minimumReleaseAge=0",
 					...binDirArgs,
 					target.installSpec,
@@ -184,7 +187,7 @@ function getSelfUpdateCommandForMethod(
 				"install",
 				"-g",
 				"--ignore-scripts",
-				"--engine-strict",
+				...(engineStrict ? ["--engine-strict"] : []),
 				"--min-release-age=0",
 				target.installSpec,
 			]);

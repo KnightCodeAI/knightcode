@@ -225,17 +225,8 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: [
-				"--prefix",
-				prefix,
-				"install",
-				"-g",
-				"--ignore-scripts",
-				"--engine-strict",
-				"--min-release-age=0",
-				"@new-scope/knightcode",
-			],
-			display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli && npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @new-scope/knightcode`,
+			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/knightcode"],
+			display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
 			steps: [
 				{
 					command: "npm",
@@ -250,11 +241,10 @@ describe("detectInstallMethod", () => {
 						"install",
 						"-g",
 						"--ignore-scripts",
-						"--engine-strict",
 						"--min-release-age=0",
 						"@new-scope/knightcode",
 					],
-					display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @new-scope/knightcode`,
+					display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
 				},
 			],
 		});
@@ -341,16 +331,9 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: [
-				"install",
-				"-g",
-				"--ignore-scripts",
-				"--config.engine-strict=true",
-				"--config.minimumReleaseAge=0",
-				"@new-scope/knightcode",
-			],
+			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/knightcode"],
 			display:
-				"pnpm remove -g @knightcodeai/cli && pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 @new-scope/knightcode",
+				"pnpm remove -g @knightcodeai/cli && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
 			steps: [
 				{
 					command: "pnpm",
@@ -359,16 +342,8 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "pnpm",
-					args: [
-						"install",
-						"-g",
-						"--ignore-scripts",
-						"--config.engine-strict=true",
-						"--config.minimumReleaseAge=0",
-						"@new-scope/knightcode",
-					],
-					display:
-						"pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 @new-scope/knightcode",
+					args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/knightcode"],
+					display: "pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
 				},
 			],
 		});
