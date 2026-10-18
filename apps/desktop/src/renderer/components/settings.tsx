@@ -585,6 +585,18 @@ function About() {
 	);
 }
 
+function PageLink({ page, current }: { page: (typeof PAGES)[number]; current: SettingsPage }) {
+	return (
+		<button
+			type="button"
+			onClick={() => navigate({ kind: "settings", page: page.page })}
+			className={`flex h-[34px] w-full items-center rounded-lg px-2.5 ${page.page === current ? "bg-selected" : "text-muted hover:bg-hover hover:text-ink"}`}
+		>
+			{page.label}
+		</button>
+	);
+}
+
 export function Settings({ page }: { page: SettingsPage }) {
 	const body = {
 		general: <General />,
@@ -599,15 +611,19 @@ export function Settings({ page }: { page: SettingsPage }) {
 		<div className="flex h-full min-w-0 flex-1">
 			<nav className="w-56 shrink-0 border-r border-line p-3">
 				<div className="px-2.5 pt-1 pb-3 text-[17px] font-semibold">Settings</div>
-				{PAGES.map((p) => (
-					<button
-						key={p.page}
-						type="button"
-						onClick={() => navigate({ kind: "settings", page: p.page })}
-						className={`flex h-[34px] w-full items-center rounded-lg px-2.5 ${p.page === page ? "bg-selected" : "text-muted hover:bg-hover hover:text-ink"}`}
-					>
-						{p.label}
-					</button>
+				{PAGES.slice(0, -2).map((p) => (
+					<PageLink key={p.page} page={p} current={page} />
+				))}
+				{/* Archived threads were in the sidebar's footer; Codex keeps archived chats in settings. */}
+				<button
+					type="button"
+					onClick={() => navigate({ kind: "archive" })}
+					className="flex h-[34px] w-full items-center rounded-lg px-2.5 text-muted hover:bg-hover hover:text-ink"
+				>
+					Archived threads
+				</button>
+				{PAGES.slice(-2).map((p) => (
+					<PageLink key={p.page} page={p} current={page} />
 				))}
 			</nav>
 			<div className="min-w-0 flex-1 overflow-y-auto">

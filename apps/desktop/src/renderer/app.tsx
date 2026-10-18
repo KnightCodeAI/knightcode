@@ -4,6 +4,7 @@ import { client } from "./client.ts";
 import { ArchiveView } from "./components/archive.tsx";
 import { Composer } from "./components/composer.tsx";
 import { Palette } from "./components/palette.tsx";
+import { Rail } from "./components/rail.tsx";
 import { Settings } from "./components/settings.tsx";
 import { Sidebar } from "./components/sidebar.tsx";
 import { ThreadView } from "./components/thread-view.tsx";
@@ -126,18 +127,22 @@ export function App() {
 			<TitleBar />
 			<ServerBanner />
 			<div className="flex min-h-0 flex-1">
-				{sidebarOpen ? <Sidebar /> : null}
-				<main className="flex min-w-0 flex-1 bg-surface">
-					{view.kind === "thread" ? (
-						<ThreadView key={view.id} id={view.id} />
-					) : view.kind === "settings" ? (
-						<Settings page={view.page} />
-					) : view.kind === "archive" ? (
-						<ArchiveView />
-					) : (
-						<NewThread cwd={view.cwd} />
-					)}
-				</main>
+				<Rail />
+				{/* Sidebar and content sit in one card beside the rail, rounded where they meet it, as in Codex. */}
+				<div className="flex min-w-0 flex-1 overflow-hidden rounded-tl-[12px] border-t border-l border-line">
+					{sidebarOpen ? <Sidebar /> : null}
+					<main className="flex min-w-0 flex-1 bg-surface">
+						{view.kind === "thread" ? (
+							<ThreadView key={view.id} id={view.id} />
+						) : view.kind === "settings" ? (
+							<Settings page={view.page} />
+						) : view.kind === "archive" ? (
+							<ArchiveView />
+						) : (
+							<NewThread cwd={view.cwd} />
+						)}
+					</main>
+				</div>
 			</div>
 			{paletteOpen ? <Palette /> : null}
 			<div className="pointer-events-none fixed right-4 bottom-4 z-50 space-y-2">

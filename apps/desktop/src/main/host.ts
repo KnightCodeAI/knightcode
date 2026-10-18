@@ -7,6 +7,7 @@ import { app, type BrowserWindow, clipboard, dialog, nativeImage, shell } from "
 import { Compile } from "typebox/compile";
 import { type HostMethod, HostMethods, type HostRequest, type HostResponse } from "../shared/host-protocol.ts";
 import { refuseToOpen } from "./open-path.ts";
+import { readProfile, signIn, signOut } from "./profile.ts";
 import type { ServerConnection } from "./server.ts";
 import type { StateFile } from "./state.ts";
 
@@ -56,6 +57,13 @@ async function run(
 		}
 		case "host/shell/showInFolder":
 			shell.showItemInFolder(params.path as string);
+			return {};
+		case "host/profile/read":
+			return readProfile();
+		case "host/profile/signIn":
+			return signIn();
+		case "host/profile/signOut":
+			await signOut();
 			return {};
 		case "host/shell/openPath": {
 			const refused = refuseToOpen(params.path as string);

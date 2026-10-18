@@ -14,7 +14,6 @@ import {
 	Pin,
 	PinOff,
 	Search,
-	Settings,
 	SquarePen,
 	X,
 } from "lucide-react";
@@ -291,23 +290,6 @@ export function Sidebar() {
 						))}
 					</Section>
 				) : null}
-			</div>
-			<div className="flex shrink-0 items-center gap-1 border-t border-line px-2 py-2">
-				<button
-					type="button"
-					onClick={() => navigate({ kind: "settings", page: "general" })}
-					className={`flex h-8 flex-1 items-center gap-2 rounded-lg px-2.5 text-muted hover:bg-hover hover:text-ink ${view.kind === "settings" ? "bg-selected text-ink" : ""}`}
-				>
-					<Settings size={15} /> Settings
-				</button>
-				<button
-					type="button"
-					title="Archived threads"
-					onClick={() => navigate({ kind: "archive" })}
-					className={`flex size-8 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-ink ${view.kind === "archive" ? "bg-selected text-ink" : ""}`}
-				>
-					<Archive size={15} />
-				</button>
 			</div>
 		</aside>
 	);

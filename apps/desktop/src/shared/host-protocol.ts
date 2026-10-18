@@ -51,6 +51,12 @@ export const DEFAULT_STATE: DesktopState = {
 	preferences: DEFAULT_PREFERENCES,
 };
 
+export const Profile = Type.Union([
+	Obj({ signedIn: Type.Literal(false) }),
+	Obj({ signedIn: Type.Literal(true), login: Type.Optional(Type.String()), avatarUrl: Type.Optional(Type.String()) }),
+]);
+export type Profile = Static<typeof Profile>;
+
 /** Menu and window commands main runs on the sender's webContents. */
 export const APP_COMMANDS = [
 	"undo",
@@ -81,6 +87,11 @@ export const HostMethods = {
 	"host/shell/showInFolder": { params: Obj({ path: Type.String() }), result: Obj({}) },
 	/** Open a file in the system's default app ("Open in editor"); program and script files are refused. */
 	"host/shell/openPath": { params: Obj({ path: Type.String() }), result: Obj({}) },
+	/** The rail's profile: the GitHub account of the KnightCode Remote sign-in the CLI shares. */
+	"host/profile/read": { params: Obj({}), result: Profile },
+	/** GitHub's device flow in the browser; resolves once the sign-in is approved. */
+	"host/profile/signIn": { params: Obj({}), result: Profile },
+	"host/profile/signOut": { params: Obj({}), result: Obj({}) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
 	"host/state/read": { params: Obj({}), result: DesktopState },

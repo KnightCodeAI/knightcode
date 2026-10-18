@@ -34,7 +34,7 @@ const DEV_URL = MAIN_WINDOW_VITE_DEV_SERVER_URL;
 const ORIGIN = DEV_URL ? new URL(DEV_URL).origin : "app://desktop";
 const RENDERER_DIR = join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const CSP =
-	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
 	"font-src 'self'; connect-src 'self'; frame-src kc-ext:; worker-src 'self' blob:";
 
 protocol.registerSchemesAsPrivileged([

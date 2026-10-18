@@ -13,8 +13,8 @@ export function Popover({
 	trigger: (open: boolean) => ReactNode;
 	children: (close: () => void) => ReactNode;
 	align?: "left" | "right";
-	/** "left" opens beside the trigger, as Codex opens a summary's submenus. */
-	side?: "top" | "bottom" | "left";
+	/** "left" opens beside the enclosing menu, as Codex opens a summary's submenus; "right" beside the trigger, bottom-aligned (the rail's profile menu). */
+	side?: "top" | "bottom" | "left" | "right";
 	className?: string;
 }) {
 	const [open, setOpen] = useState(false);
@@ -43,7 +43,7 @@ export function Popover({
 			<div onClick={() => setOpen(!open)}>{trigger(open)}</div>
 			{open ? (
 				<div
-					className={`kc-menu absolute z-30 ${side === "left" ? "top-0 right-full me-3" : `min-w-56 ${side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${align === "left" ? "left-0" : "right-0"}`} ${className}`}
+					className={`kc-menu absolute z-30 ${side === "left" ? "top-0 right-full me-3" : side === "right" ? "bottom-0 left-full ms-[5px]" : `min-w-56 ${side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${align === "left" ? "left-0" : "right-0"}`} ${className}`}
 				>
 					{children(() => setOpen(false))}
 				</div>
