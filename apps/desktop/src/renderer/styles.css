@@ -262,6 +262,19 @@ body {
 		0 3px 7.5px rgb(0 0 0 / 0.04),
 		0 0 20px rgb(0 0 0 / 0.05);
 }
+/* The Changes file tree (@pierre/trees) in the pane's colors: 13px rows, the ghost hover as the selection. */
+.kc-tree {
+	--trees-bg-override: transparent;
+	--trees-fg-override: var(--kc-text-strong);
+	--trees-fg-muted-override: var(--kc-text-desc);
+	--trees-font-family-override: var(--kc-font-ui);
+	--trees-font-size-override: 13px;
+	--trees-font-weight-regular-override: 400;
+	--trees-selected-bg-override: var(--kc-ghost-hover);
+	--trees-selected-fg-override: var(--kc-text-strong);
+	--trees-selected-focused-border-color-override: transparent;
+	--trees-border-radius-override: 10px;
+}
 /* Variables the diff overrides (diff-overrides.css) read inside @pierre/diffs' shadow root. */
 .kc-changes {
 	--color-surface: var(--kc-bg-surface);

@@ -6,6 +6,7 @@
 
 import type { DiffComment, DiffFile, DiffScope, ResultOf } from "@knightcode/app-server-protocol";
 import { type DiffLineAnnotation, PatchDiff } from "@pierre/diffs/react";
+import { FileTree, useFileTree } from "@pierre/trees/react";
 import {
 	ChevronDown,
 	ChevronRight,
@@ -396,97 +397,38 @@ function FileSection({
 	);
 }
 
-interface TreeNode {
-	name: string;
-	path: string;
-	file?: DiffFile;
-	children: TreeNode[];
-}
+/**
+ * The changed files as a @pierre/trees tree, after Codex's: folders open, one-child chains flattened, "+N -N" per
+ * file. The model is made once per mount, so a new file set or new totals remount it (keyed by the caller).
+ */
+/** The tree trims a plain space between decoration parts. */
+const NBSP = String.fromCodePoint(0xa0);
 
-function buildTree(files: DiffFile[]): TreeNode[] {
-	const root: TreeNode = { name: "", path: "", children: [] };
-	for (const file of files) {
-		const parts = file.path.split("/");
-		let node = root;
-		parts.forEach((part, i) => {
-			const path = parts.slice(0, i + 1).join("/");
-			let child = node.children.find((c) => c.name === part && !c.file === i < parts.length - 1);
-			if (!child) {
-				child = { name: part, path, children: [], ...(i === parts.length - 1 ? { file } : {}) };
-				node.children.push(child);
-			}
-			node = child;
-		});
-	}
-	// One-child folder chains read as one row ("src/app"), as in Codex's tree.
-	const squash = (node: TreeNode): TreeNode => {
-		let current = node;
-		while (!current.file && current.children.length === 1 && !current.children[0]!.file) {
-			const only = current.children[0]!;
-			current = { ...only, name: current.name ? `${current.name}/${only.name}` : only.name };
-		}
-		return { ...current, children: current.children.map(squash) };
-	};
-	return root.children.map(squash).sort((a, b) => Number(Boolean(a.file)) - Number(Boolean(b.file)));
-}
-
-function Tree({
-	nodes,
-	depth,
-	selected,
-	onSelect,
-}: {
-	nodes: TreeNode[];
-	depth: number;
-	selected?: string;
-	onSelect: (path: string) => void;
-}) {
-	const [closed, setClosed] = useState<Set<string>>(new Set());
-	return (
-		<>
-			{nodes.map((node) =>
-				node.file ? (
-					<button
-						key={node.path}
-						type="button"
-						onClick={() => onSelect(node.path)}
-						style={{ paddingInlineStart: 8 + depth * 12 }}
-						className={`flex h-8 w-full items-center gap-2 rounded-lg pe-1.5 text-start text-[13px] ${selected === node.path ? "bg-ghost-hover text-ink" : "text-ink hover:bg-ghost-hover"}`}
-					>
-						<FileIcon path={node.path} />
-						<span className="min-w-0 flex-1 truncate">{node.name}</span>
-						<Totals additions={node.file.additions} deletions={node.file.deletions} className="text-[11px]" />
-					</button>
-				) : (
-					<div key={node.path}>
-						<button
-							type="button"
-							onClick={() =>
-								setClosed((set) => {
-									const next = new Set(set);
-									if (next.has(node.path)) next.delete(node.path);
-									else next.add(node.path);
-									return next;
-								})
-							}
-							style={{ paddingInlineStart: 4 + depth * 12 }}
-							className="flex h-8 w-full items-center gap-1.5 rounded-lg text-start text-[13px] text-ink hover:bg-ghost-hover"
-						>
-							{closed.has(node.path) ? (
-								<ChevronRight size={14} className="text-desc" />
-							) : (
-								<ChevronDown size={14} className="text-desc" />
-							)}
-							<span className="truncate">{node.name}</span>
-						</button>
-						{closed.has(node.path) ? null : (
-							<Tree nodes={node.children} depth={depth + 1} selected={selected} onSelect={onSelect} />
-						)}
-					</div>
-				),
-			)}
-		</>
-	);
+function ChangesTree({ files, onSelect }: { files: DiffFile[]; onSelect: (path: string) => void }) {
+	const byPath = new Map(files.map((f) => [f.path, f]));
+	const { model } = useFileTree({
+		paths: files.map((f) => f.path),
+		initialExpansion: "open",
+		flattenEmptyDirectories: true,
+		icons: { set: "complete", colored: true },
+		itemHeight: 32,
+		onSelectionChange: (paths) => {
+			const path = paths[0];
+			if (path && byPath.has(path)) onSelect(path);
+		},
+		renderRowDecoration: ({ item }) => {
+			const file = byPath.get(item.path);
+			if (!file) return null;
+			return {
+				text: `+${file.additions} -${file.deletions}`,
+				parts: [
+					{ text: `+${file.additions}`, color: "var(--kc-git-added)" },
+					{ text: `${NBSP}-${file.deletions}`, color: "var(--kc-git-deleted)" },
+				],
+			};
+		},
+	});
+	return <FileTree model={model} className="kc-tree h-full" />;
 }
 
 function Empty({ title, detail, action }: { title: string; detail: string; action?: ReactNode }) {
@@ -517,7 +459,6 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 	});
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 	const [filter, setFilter] = useState("");
-	const [selectedFile, setSelectedFile] = useState<string>();
 	const [commits, setCommits] = useState<ResultOf<"git/log">["commits"]>([]);
 	const [branches, setBranches] = useState<ResultOf<"git/branches">>();
 	const scroller = useRef<HTMLDivElement>(null);
@@ -562,7 +503,6 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 
 	const files = read?.files ?? [];
 	const shown = filter ? files.filter((f) => f.path.toLowerCase().includes(filter.toLowerCase())) : files;
-	const tree = useMemo(() => buildTree(shown), [shown]);
 	const label = SCOPES.find((s) => s.scope === selector.scope)!.label;
 
 	const act = async (action: "stage" | "unstage" | "revert", file: DiffFile) => {
@@ -591,7 +531,6 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 	};
 
 	const scrollTo = (path: string) => {
-		setSelectedFile(path);
 		const index = shown.findIndex((f) => f.path === path);
 		scroller.current?.querySelectorAll<HTMLElement>("[data-file-section]")[index]?.scrollIntoView({ block: "start" });
 	};
@@ -870,7 +809,11 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 							{shown.length === 0 && filter ? (
 								<div className="px-2 py-1.5 text-[13px] text-ink">No matching files</div>
 							) : (
-								<Tree nodes={tree} depth={0} selected={selectedFile} onSelect={scrollTo} />
+								<ChangesTree
+									key={shown.map((f) => `${f.path}:${f.additions}:${f.deletions}`).join("|")}
+									files={shown}
+									onSelect={scrollTo}
+								/>
 							)}
 						</div>
 					</div>
