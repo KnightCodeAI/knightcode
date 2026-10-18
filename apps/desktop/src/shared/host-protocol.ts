@@ -79,6 +79,8 @@ export const HostMethods = {
 	},
 	"host/shell/openExternal": { params: Obj({ url: Type.String() }), result: Obj({}) },
 	"host/shell/showInFolder": { params: Obj({ path: Type.String() }), result: Obj({}) },
+	/** Open a file in the system's default app ("Open in editor"); program and script files are refused. */
+	"host/shell/openPath": { params: Obj({ path: Type.String() }), result: Obj({}) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
 	"host/state/read": { params: Obj({}), result: DesktopState },

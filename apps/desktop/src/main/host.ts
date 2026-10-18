@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { app, type BrowserWindow, clipboard, dialog, nativeImage, shell } from "electron";
 import { Compile } from "typebox/compile";
 import { type HostMethod, HostMethods, type HostRequest, type HostResponse } from "../shared/host-protocol.ts";
+import { refuseToOpen } from "./open-path.ts";
 import type { ServerConnection } from "./server.ts";
 import type { StateFile } from "./state.ts";
 
@@ -56,6 +57,13 @@ async function run(
 		case "host/shell/showInFolder":
 			shell.showItemInFolder(params.path as string);
 			return {};
+		case "host/shell/openPath": {
+			const refused = refuseToOpen(params.path as string);
+			if (refused) throw new Error(refused);
+			const failure = await shell.openPath(params.path as string);
+			if (failure) throw new Error(failure);
+			return {};
+		}
 		case "host/clipboard/writeText":
 			await clipboard.writeText(params.text as string);
 			return {};
