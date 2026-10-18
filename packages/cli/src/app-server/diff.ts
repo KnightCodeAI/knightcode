@@ -162,7 +162,7 @@ async function resolveCommit(repo: Repo, ref: string): Promise<string | undefine
 const treeOf = (repo: Repo, commit: string) => git(repo.root, ["rev-parse", "--verify", `${commit}^{tree}`]);
 
 /** The crate's default_worktree_base: the remote HEAD (origin first), then origin/main, origin/master, main, master. */
-async function defaultBranch(repo: Repo): Promise<string | undefined> {
+export async function defaultBranch(repo: Repo): Promise<string | undefined> {
 	const remotes = (await git(repo.root, ["remote"])).split("\n").filter(Boolean);
 	remotes.sort((a, b) => (a === "origin" ? -1 : b === "origin" ? 1 : 0));
 	for (const remote of remotes) {
@@ -605,6 +605,21 @@ function failedPaths(stderr: string): string[] {
  * hunk. A structural change (rename, add, delete, mode or type change, binary) carries operations of its own in
  * its header, so a hunk of it would also rename, chmod or create the whole file: refused.
  */
+/** One file's sections and parsed hunks between two trees, and the hunk with `hunkId` if it is still there. */
+export async function findHunk(
+	repo: Repo,
+	trees: Pick<ScopeTrees, "from" | "to">,
+	entry: NameStatus,
+	hunkId: string,
+	context: number,
+): Promise<{ file: DiffFile; sections: Buffer[]; hunk: DiffHunk | undefined }> {
+	const paths = entry.oldPath ? [entry.oldPath, entry.path] : [entry.path];
+	const patch = await machinePatch(repo, trees.from, trees.to, { paths, context });
+	const sections = splitPatch([entry], patch).get(entry) ?? [];
+	const file = parseFile(entry, sections, false);
+	return { file, sections, hunk: file.hunks.find((h) => h.id === hunkId) };
+}
+
 export async function hunkPatch(
 	repo: Repo,
 	trees: Pick<ScopeTrees, "from" | "to">,
@@ -612,11 +627,7 @@ export async function hunkPatch(
 	hunkId: string,
 	context: number,
 ): Promise<Buffer> {
-	const paths = entry.oldPath ? [entry.oldPath, entry.path] : [entry.path];
-	const patch = await machinePatch(repo, trees.from, trees.to, { paths, context });
-	const sections = splitPatch([entry], patch).get(entry) ?? [];
-	const file = parseFile(entry, sections, false);
-	const hunk = file.hunks.find((h) => h.id === hunkId);
+	const { file, sections, hunk } = await findHunk(repo, trees, entry, hunkId, context);
 	const structural =
 		entry.status !== "M" || sections.length !== 1 || file.binary || /\n(old|new) mode /.test(sections[0].toString());
 	if (structural && (hunk || file.binary)) throw invalid("revert or stage the whole file");

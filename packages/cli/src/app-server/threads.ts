@@ -55,7 +55,20 @@ import {
 	TURN_DIFF_ENTRY,
 	TurnChanges,
 } from "./diff.ts";
-import { repoOf, requireRepo, withRepoLock } from "./git.ts";
+import { type Repo, repoOf, requireRepo, withRepoLock } from "./git.ts";
+import {
+	type GitActionContext,
+	gitBranchCreate,
+	gitBranches,
+	gitBranchSwitch,
+	gitCommit,
+	gitLog,
+	gitPullRequest,
+	gitPush,
+	gitStage,
+	gitStatus,
+	gitUnstage,
+} from "./git-actions.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
@@ -140,6 +153,8 @@ export interface ThreadManagerOptions {
 	shellConfig?: ShellConfig;
 	/** thread/diff/read response budgets; tests shrink them. */
 	diffBudgets?: DiffBudgets;
+	/** The gh command and leading arguments for git/pr/create; tests point it at a stand-in. */
+	ghCommand?: string[];
 }
 
 export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
@@ -277,6 +292,25 @@ export class ThreadManager {
 			throw error;
 		}
 		return release;
+	}
+
+	/**
+	 * A git or diff request on a thread's checkout: tracked, so shutdown waits for it and a request after shutdown
+	 * began answers shuttingDown; the thread is held, never queued behind a turn. `mutates` takes the repository lock.
+	 */
+	private onCheckout<T>(
+		threadId: string,
+		mode: "desktop" | "tui",
+		mutates: boolean,
+		fn: (thread: LoadedThread, repo: Repo, ctx: GitActionContext) => Promise<T>,
+	): Promise<T> {
+		return this.track(() =>
+			this.withThread(threadId, mode, async (thread) => {
+				const repo = await requireRepo(thread.session.sessionManager.getCwd());
+				const ctx = { signal: this.shutdown.signal, models: this.ctx.models, ghCommand: this.options.ghCommand };
+				return mutates ? withRepoLock(repo, () => fn(thread, repo, ctx)) : fn(thread, repo, ctx);
+			}),
+		);
 	}
 
 	/** The text the model reads for an input with review comments; validated before the input is accepted. */
@@ -1650,16 +1684,18 @@ export class ThreadManager {
 				);
 			},
 			"thread/diff/revert": (params, connection) =>
-				this.ensureLoaded(params.threadId, connection.mode).then(async (thread) => {
-					const repo = await requireRepo(thread.session.sessionManager.getCwd());
-					const release = await this.reserveCheckouts([repo.root], "revert");
-					try {
-						await revertHooks.afterReserve();
-						return await thread.exclusive(() => withRepoLock(repo, () => revertDiff(thread, repo, params)));
-					} finally {
-						release();
-					}
-				}),
+				this.track(() =>
+					this.ensureLoaded(params.threadId, connection.mode).then(async (thread) => {
+						const repo = await requireRepo(thread.session.sessionManager.getCwd());
+						const release = await this.reserveCheckouts([repo.root], "revert");
+						try {
+							await revertHooks.afterReserve();
+							return await thread.exclusive(() => withRepoLock(repo, () => revertDiff(thread, repo, params)));
+						} finally {
+							release();
+						}
+					}),
+				),
 			"turn/interrupt": ({ threadId, turnId }) => this.interrupt(threadId, turnId).then(() => ({})),
 			"turn/queue/remove": async ({ threadId, queueId }) => ({ removed: this.removeQueued(threadId, queueId) }),
 			"thread/compact": ({ threadId, instructions }, connection) =>
@@ -1684,9 +1720,33 @@ export class ThreadManager {
 				),
 			"thread/start": (params, connection) => this.start(params, connection),
 			"thread/diff/read": (params, connection) =>
-				this.withThread(params.threadId, connection.mode, (thread) =>
+				this.onCheckout(params.threadId, connection.mode, false, (thread) =>
 					readThreadDiff(thread, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS),
 				),
+			"git/status": ({ threadId }, connection) =>
+				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitStatus(repo)),
+			"git/stage": (params, connection) =>
+				this.onCheckout(params.threadId, connection.mode, true, (thread, repo) => gitStage(thread, repo, params)),
+			"git/unstage": (params, connection) =>
+				this.onCheckout(params.threadId, connection.mode, true, (thread, repo) => gitUnstage(thread, repo, params)),
+			"git/commit": (params, connection) =>
+				this.onCheckout(params.threadId, connection.mode, true, (thread, repo, ctx) =>
+					gitCommit(thread, repo, params, ctx),
+				),
+			"git/push": ({ threadId }, connection) =>
+				this.onCheckout(threadId, connection.mode, true, (_thread, repo, ctx) => gitPush(repo, ctx)),
+			"git/pr/create": (params, connection) =>
+				this.onCheckout(params.threadId, connection.mode, false, (_thread, repo, ctx) =>
+					gitPullRequest(repo, params, ctx),
+				),
+			"git/branches": ({ threadId }, connection) =>
+				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitBranches(repo)),
+			"git/branch/create": ({ threadId, name }, connection) =>
+				this.onCheckout(threadId, connection.mode, true, (_thread, repo) => gitBranchCreate(repo, name)),
+			"git/branch/switch": ({ threadId, name }, connection) =>
+				this.onCheckout(threadId, connection.mode, true, (_thread, repo) => gitBranchSwitch(repo, name)),
+			"git/log": ({ threadId, limit }, connection) =>
+				this.onCheckout(threadId, connection.mode, false, (thread, repo) => gitLog(thread, repo, limit ?? 50)),
 			"environment/list": async ({ cwd }) => {
 				const projectCwd = this.projectOf(cwd);
 				return {
