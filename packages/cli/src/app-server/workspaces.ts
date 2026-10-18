@@ -6,7 +6,10 @@
 
 import { randomBytes } from "node:crypto";
 import {
+	constants as fsConstants,
+	copyFileSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	readdirSync,
 	readFileSync,
@@ -17,7 +20,16 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import type { Warning, Workspace } from "@knightcode/app-server-protocol";
+import { StringDecoder } from "node:string_decoder";
+import {
+	Environment,
+	type NotificationParams,
+	type PlatformScript,
+	type Warning,
+	type Workspace,
+} from "@knightcode/app-server-protocol";
+import { CONFIG_DIR_NAME } from "../config.ts";
+import { getShellConfig, type ShellConfig } from "../utils/shell.ts";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
 import { readSettings } from "./config.ts";
@@ -27,10 +39,13 @@ import {
 	headTree,
 	machineApply,
 	machinePatch,
+	ProcessKilled,
 	ProcessKillUnconfirmed,
 	type Repo,
+	repoOf,
 	requireRepo,
 	runGit,
+	runProcess,
 	snapshotTree,
 	submodulePaths,
 	withRepoLock,
@@ -98,7 +113,7 @@ export interface WorktreeSettings {
 /** Test gates only (Global Constraints): each is awaited at the named point. */
 export const workspaceHooks = {
 	afterWorktreeAdd: async () => {},
-	beforeInclude: async () => {},
+	beforeInclude: async (_worktree: string) => {},
 	afterForkFrom: async () => {},
 	beforeHandoffApply: async () => {},
 	afterUserCheck: async () => {},
@@ -454,4 +469,327 @@ export function keptWorktree(error: unknown, manifest: Manifest): AppServerError
 		return new AppServerError(error.code, error.message, { ...original, ...data });
 	}
 	return new AppServerError("internal", error instanceof Error ? error.message : String(error), data);
+}
+
+const EnvironmentsFile = Type.Object(
+	{ version: Type.Literal(1), environments: Type.Array(Environment, { maxItems: 50 }) },
+	{ additionalProperties: false },
+);
+const checkEnvironmentsFile = Compile(EnvironmentsFile);
+const environmentsPath = (projectCwd: string) => join(projectCwd, CONFIG_DIR_NAME, "environments.json");
+
+function duplicateName(environments: Environment[]): string | undefined {
+	const seen = new Set<string>();
+	for (const { name } of environments) {
+		if (seen.has(name)) return name;
+		seen.add(name);
+	}
+	return undefined;
+}
+
+/** The project's environments (§6.1): a missing file is none, an invalid one is invalidParams naming the problem. */
+export function readEnvironments(projectCwd: string): Environment[] {
+	const file = environmentsPath(projectCwd);
+	if (!existsSync(file)) return [];
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(readFileSync(file, "utf8"));
+	} catch (error) {
+		throw new AppServerError("invalidParams", `${file}: ${error instanceof Error ? error.message : String(error)}`);
+	}
+	if (!checkEnvironmentsFile.Check(parsed)) {
+		const first = checkEnvironmentsFile.Errors(parsed)[0];
+		throw new AppServerError(
+			"invalidParams",
+			`${file}: ${first ? `${first.instancePath || "/"} ${first.message}` : "not a valid environments file"}`,
+		);
+	}
+	const duplicate = duplicateName(parsed.environments);
+	if (duplicate) throw new AppServerError("invalidParams", `${file}: two environments are named "${duplicate}"`);
+	return parsed.environments;
+}
+
+/** Writes the file with a temp file and rename; it holds no code that runs here, so it needs no trust. */
+export function saveEnvironments(projectCwd: string, environments: Environment[]): void {
+	const duplicate = duplicateName(environments);
+	if (duplicate) throw new AppServerError("invalidParams", `two environments are named "${duplicate}"`);
+	const file = environmentsPath(projectCwd);
+	mkdirSync(dirname(file), { recursive: true });
+	const temp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+	writeFileSync(temp, `${JSON.stringify({ version: 1, environments }, null, 2)}\n`);
+	renameSync(temp, file);
+}
+
+/** The variant for this platform when present and not blank, else `default` when not blank. */
+export function scriptFor(script: PlatformScript | undefined): string | undefined {
+	if (!script) return undefined;
+	const key = WIN ? "windows" : process.platform === "darwin" ? "macos" : "linux";
+	const variant = script[key];
+	if (variant?.trim()) return variant;
+	return script.default?.trim() ? script.default : undefined;
+}
+
+const INCLUDE_MAX_FILES = 10_000;
+const INCLUDE_MAX_BYTES = 512 * 1024 * 1024;
+
+/** Paths of `candidates` that `git check-ignore` (run at `cwd` with `extra` args) reports ignored. */
+async function ignoredOf(
+	cwd: string,
+	candidates: string[],
+	extra: string[],
+	signal: AbortSignal,
+): Promise<Set<string>> {
+	if (candidates.length === 0) return new Set();
+	const result = await runGit(cwd, ["check-ignore", "-z", "--stdin", ...extra], {
+		input: `${candidates.join("\0")}\0`,
+		// check-ignore refuses the literal pathspec mode; it matches paths against ignore rules and never globs them.
+		env: { GIT_LITERAL_PATHSPECS: "0" },
+		signal,
+	});
+	if (result.code !== 0 && result.code !== 1) throw new Error(`git check-ignore: ${result.stderr.trim()}`);
+	return new Set(result.stdout.toString("utf8").split("\0").filter(Boolean));
+}
+
+/**
+ * Copies the ignored files `.worktreeinclude` lists (§6.1). Only files ignored in both checkouts, so a copy never
+ * becomes an untracked file a commit or handoff would publish; nothing is ever created through a link.
+ */
+export async function copyWorktreeInclude(
+	sourceRoot: string,
+	worktreeRoot: string,
+	warnings: Warning[],
+	signal: AbortSignal,
+): Promise<void> {
+	await workspaceHooks.beforeInclude(worktreeRoot);
+	const include = join(sourceRoot, ".worktreeinclude");
+	if (!lstatSync(include, { throwIfNoEntry: false })?.isFile()) return;
+	const listed = await runGit(sourceRoot, ["ls-files", "-z", "--others", "--ignored", `--exclude-from=${include}`], {
+		signal,
+	});
+	const candidates = listed.stdout.toString("utf8").split("\0").filter(Boolean);
+	const inSource = await ignoredOf(sourceRoot, candidates, [], signal);
+	const inWorktree = await ignoredOf(worktreeRoot, candidates, ["--no-index"], signal);
+	let files = 0;
+	let bytes = 0;
+	for (const path of candidates) {
+		if (!inSource.has(path)) continue;
+		if (!inWorktree.has(path)) {
+			warnings.push({
+				source: "server",
+				message: `${path} was not copied into the worktree: the worktree does not ignore it, so it could be committed`,
+			});
+			continue;
+		}
+		const source = lstatSync(join(sourceRoot, path), { throwIfNoEntry: false });
+		if (!source?.isFile()) continue;
+		if (files >= INCLUDE_MAX_FILES || bytes + source.size > INCLUDE_MAX_BYTES) {
+			warnings.push({
+				source: "server",
+				message: `.worktreeinclude: stopped at ${files} files; more than ${INCLUDE_MAX_FILES} files or 512 MiB`,
+			});
+			return;
+		}
+		const parts = path.split("/");
+		let dir = worktreeRoot;
+		let blocked = false;
+		for (const part of parts.slice(0, -1)) {
+			dir = join(dir, part);
+			const info = lstatSync(dir, { throwIfNoEntry: false });
+			if (!info) mkdirSync(dir);
+			else if (info.isSymbolicLink() || !info.isDirectory()) {
+				blocked = true;
+				break;
+			}
+		}
+		if (blocked) {
+			warnings.push({ source: "server", message: `${path} was not copied: a directory on its way is a link` });
+			continue;
+		}
+		try {
+			copyFileSync(join(sourceRoot, path), join(worktreeRoot, ...parts), fsConstants.COPYFILE_EXCL);
+			files++;
+			bytes += source.size;
+		} catch (error) {
+			warnings.push({
+				source: "server",
+				message: `${path} was not copied: ${error instanceof Error ? error.message : String(error)}`,
+			});
+		}
+	}
+}
+
+const PROGRESS_MS = 100;
+const PROGRESS_BYTES = 64 * 1024;
+const TAIL_BYTES = 4096;
+
+type Progress = (params: NotificationParams<"thread/workspace/progress">) => void;
+
+export interface ScriptRun {
+	phase: "setup" | "cleanup";
+	script: string;
+	threadId: string;
+	projectCwd: string;
+	sourceCwd: string;
+	worktreeCwd: string;
+	timeoutMs: number;
+	signal: AbortSignal;
+	progress?: Progress;
+	shellConfig?: ShellConfig;
+}
+
+/** The outcome of an environment script; output lives only in the progress stream and a 4 KiB tail. */
+export async function runEnvironmentScript(
+	run: ScriptRun,
+): Promise<{ ok: true } | { ok: false; tail: string; reason: "exit" | "timeout" | "unconfirmed" | "noShell" }> {
+	let tail = "";
+	let pending = "";
+	let dropped = 0;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const flush = () => {
+		timer = undefined;
+		if (!pending && !dropped) return;
+		const output = dropped ? `[… ${dropped} bytes dropped]\n${pending}` : pending;
+		pending = "";
+		dropped = 0;
+		if (run.progress) run.progress({ threadId: run.threadId, phase: run.phase, output });
+		else process.stderr.write(output);
+	};
+	const decoder = new StringDecoder("utf8");
+	const take = (chunk: Buffer) => {
+		const text = decoder.write(chunk);
+		tail = (tail + text).slice(-TAIL_BYTES);
+		pending += text;
+		if (pending.length > PROGRESS_BYTES) {
+			dropped += pending.length - PROGRESS_BYTES;
+			pending = pending.slice(-PROGRESS_BYTES);
+		}
+		timer ??= setTimeout(flush, PROGRESS_MS);
+	};
+	let config: ShellConfig;
+	try {
+		config = run.shellConfig ?? getShellConfig();
+	} catch (error) {
+		return { ok: false, tail: error instanceof Error ? error.message : String(error), reason: "noShell" };
+	}
+	const stdin = config.commandTransport === "stdin";
+	try {
+		const result = await runProcess(config.shell, stdin ? config.args : [...config.args, run.script], {
+			cwd: run.projectCwd,
+			input: stdin ? run.script : undefined,
+			env: { KNIGHTCODE_SOURCE_TREE_PATH: run.sourceCwd, KNIGHTCODE_WORKTREE_PATH: run.worktreeCwd },
+			timeoutMs: run.timeoutMs,
+			signal: run.signal,
+			collectStdout: false,
+			stderrTailBytes: TAIL_BYTES,
+			onStdout: take,
+			onStderr: take,
+		});
+		return result.code === 0 ? { ok: true } : { ok: false, tail, reason: "exit" };
+	} catch (error) {
+		if (run.signal.aborted) throw error;
+		if (error instanceof ProcessKilled) return { ok: false, tail, reason: "timeout" };
+		if (error instanceof ProcessKillUnconfirmed) return { ok: false, tail, reason: "unconfirmed" };
+		if (error instanceof AppServerError && error.code === "toolMissing")
+			return { ok: false, tail: error.message, reason: "noShell" };
+		throw error;
+	} finally {
+		clearTimeout(timer);
+		tail += decoder.end();
+		flush();
+	}
+}
+
+export interface PrepareInput {
+	settings: WorktreeSettings;
+	manifest: Manifest;
+	threadId: string;
+	trusted: boolean;
+	warnings: Warning[];
+	signal: AbortSignal;
+	progress?: Progress;
+	shellConfig?: ShellConfig;
+}
+
+/** After creation: `.worktreeinclude`, then the environment's setup script (§6.1). Returns the manifest as written. */
+export async function prepareWorktree(input: PrepareInput): Promise<Manifest> {
+	const { manifest, warnings, signal } = input;
+	const source = await repoOf(manifest.sourceCwd);
+	if (source) await copyWorktreeInclude(source.root, manifest.path, warnings, signal);
+	if (manifest.environment === undefined) return manifest;
+	if (!input.trusted) {
+		warnings.push({
+			source: "trust",
+			message: `This project is not trusted, so the setup of environment "${manifest.environment}" did not run.`,
+		});
+		return manifest;
+	}
+	const environment = readEnvironments(manifest.projectCwd).find((e) => e.name === manifest.environment);
+	const script = scriptFor(environment?.setup);
+	if (!script) return manifest;
+	let outcome: Awaited<ReturnType<typeof runEnvironmentScript>>;
+	try {
+		outcome = await runEnvironmentScript({
+			phase: "setup",
+			script,
+			threadId: input.threadId,
+			projectCwd: manifest.projectCwd,
+			sourceCwd: manifest.sourceCwd,
+			worktreeCwd: manifest.cwd,
+			timeoutMs: 600_000,
+			signal,
+			progress: input.progress,
+			shellConfig: input.shellConfig,
+		});
+	} catch (error) {
+		if (signal.aborted) throw new AppServerError("shuttingDown", "the app server shut down during the worktree setup");
+		throw error;
+	}
+	if (outcome.ok) return manifest;
+	const updated: Manifest = { ...manifest, setupFailed: true };
+	writeManifest(input.settings, updated);
+	const why =
+		outcome.reason === "timeout"
+			? "timed out"
+			: outcome.reason === "unconfirmed"
+				? "timed out; a setup process may still be running"
+				: outcome.reason === "noShell"
+					? "found no shell to run in"
+					: "failed";
+	warnings.push({
+		source: "server",
+		message: `The setup of environment "${manifest.environment}" ${why}:\n${outcome.tail}`,
+	});
+	return updated;
+}
+
+/** Before a deletion (Task 10): the environment's cleanup script; a failure is a warning, the deletion goes on. */
+export async function runCleanup(input: Omit<PrepareInput, "settings">): Promise<void> {
+	const { manifest, warnings } = input;
+	if (manifest.environment === undefined || !input.trusted) return;
+	let environment: Environment | undefined;
+	try {
+		environment = readEnvironments(manifest.projectCwd).find((e) => e.name === manifest.environment);
+	} catch (error) {
+		warnings.push({ source: "server", message: error instanceof Error ? error.message : String(error) });
+		return;
+	}
+	const script = scriptFor(environment?.cleanup);
+	if (!script) return;
+	const outcome = await runEnvironmentScript({
+		phase: "cleanup",
+		script,
+		threadId: input.threadId,
+		projectCwd: manifest.projectCwd,
+		sourceCwd: manifest.sourceCwd,
+		worktreeCwd: manifest.cwd,
+		timeoutMs: 300_000,
+		signal: input.signal,
+		progress: input.progress,
+		shellConfig: input.shellConfig,
+	});
+	if (!outcome.ok)
+		warnings.push({
+			source: "server",
+			message: `The cleanup of environment "${manifest.environment}" failed:\n${outcome.tail}`,
+		});
 }

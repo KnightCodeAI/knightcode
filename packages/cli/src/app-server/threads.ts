@@ -43,6 +43,7 @@ import { SettingsManager } from "../core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { builtInExtensions } from "../extensions/index.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
+import type { ShellConfig } from "../utils/shell.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
@@ -73,6 +74,9 @@ import {
 	type Manifest,
 	manifestFor,
 	placeThread,
+	prepareWorktree,
+	readEnvironments,
+	saveEnvironments,
 	samePath,
 	touchManifest,
 	type WorktreeSettings,
@@ -92,6 +96,8 @@ export interface ThreadManagerOptions {
 	extraExtensions?: InlineExtension[];
 	/** Built-ins to leave out, as the terminal's --no-mcp does. */
 	disabledBuiltinExtensions?: string[];
+	/** The shell environment scripts run in; tests inject one, production uses getShellConfig(). */
+	shellConfig?: ShellConfig;
 }
 
 export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
@@ -195,6 +201,12 @@ export class ThreadManager {
 		return worktreeSettings(this.ctx.agentDir, warnings);
 	}
 
+	/** The project a cwd belongs to: a managed worktree's project, else the cwd itself. */
+	private projectOf(cwd: string): string {
+		const resolved = resolvePath(cwd);
+		return manifestFor(this.worktrees(), resolved)?.projectCwd ?? resolved;
+	}
+
 	start(params: ParamsOf<"thread/start">, by: Subscriber): Promise<ResultOf<"thread/start">> {
 		return this.track(async () => {
 			const cwd = resolvePath(params.cwd);
@@ -208,6 +220,11 @@ export class ThreadManager {
 			let created: { manifest: Manifest; cwd: string } | undefined;
 			let sessionManager: SessionManager;
 			if (workspace?.mode === "worktree") {
+				if (
+					workspace.environment !== undefined &&
+					!readEnvironments(projectCwd).some((e) => e.name === workspace.environment)
+				)
+					throw new AppServerError("invalidParams", `no environment named "${workspace.environment}"`);
 				const threadId = uuidv7();
 				created = await createWorktree({
 					settings,
@@ -221,6 +238,23 @@ export class ThreadManager {
 					signal: this.shutdown.signal,
 					warnings,
 				});
+				try {
+					created.manifest = await prepareWorktree({
+						settings,
+						manifest: created.manifest,
+						threadId,
+						trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
+						warnings,
+						signal: this.shutdown.signal,
+						progress: (params) => by.notify("thread/workspace/progress", params),
+						shellConfig: this.options.shellConfig,
+					});
+				} catch (error) {
+					const stopped = this.shutdown.signal.aborted
+						? new AppServerError("shuttingDown", "the app server shut down while the worktree was prepared")
+						: error;
+					throw keptWorktree(stopped, created.manifest);
+				}
 				sessionManager = SessionManager.create(created.cwd, liveDirFor(this.ctx, projectCwd), { id: threadId });
 			} else sessionManager = SessionManager.create(cwd, liveDirFor(this.ctx, projectCwd));
 			let thread: LoadedThread;
@@ -1448,6 +1482,17 @@ export class ThreadManager {
 					}),
 				),
 			"thread/start": (params, connection) => this.start(params, connection),
+			"environment/list": async ({ cwd }) => {
+				const projectCwd = this.projectOf(cwd);
+				return {
+					environments: readEnvironments(projectCwd),
+					trusted: new ProjectTrustStore(this.ctx.agentDir).get(projectCwd) === true,
+				};
+			},
+			"environment/save": async ({ cwd, environments }) => {
+				saveEnvironments(this.projectOf(cwd), environments);
+				return {};
+			},
 			"thread/resume": ({ threadId, cursor }, connection) => this.resume(threadId, cursor, connection),
 			"thread/list": (params) => this.list(params),
 			"thread/read": ({ threadId, cursor }) => this.read(threadId, cursor),
