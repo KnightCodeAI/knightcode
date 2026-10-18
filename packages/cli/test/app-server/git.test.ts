@@ -81,6 +81,18 @@ test("tracked-only snapshots leave untracked files out", async () => {
 	expect(sh(dir, "ls-tree", "--name-only", await snapshotTree((await repoOf(dir))!, false))).not.toContain("u.txt");
 });
 
+test("a size limit leaves large untracked files out of a snapshot, never tracked ones", async () => {
+	const dir = repoDir();
+	write(dir, "big.bin", "x".repeat(2048));
+	write(dir, "small.txt", "s");
+	write(dir, "a.txt", "y".repeat(4096));
+	const repo = (await repoOf(dir))!;
+	const names = async (limit?: number) =>
+		sh(dir, "ls-tree", "--name-only", await snapshotTree(repo, true, undefined, limit)).split("\n");
+	expect(await names(1024)).toEqual(["a.txt", "small.txt"]);
+	expect(await names()).toEqual(["a.txt", "big.bin", "small.txt"]);
+});
+
 test("countUntracked stops at limit + 1", async () => {
 	const dir = repoDir();
 	for (let i = 0; i < 20; i++) write(dir, `u/${i}.txt`, String(i));

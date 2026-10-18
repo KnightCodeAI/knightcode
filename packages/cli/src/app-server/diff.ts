@@ -21,6 +21,7 @@ import {
 	type Repo,
 	requireRepo,
 	runGit,
+	LARGE_UNTRACKED_BYTES,
 	snapshotTree,
 	submodulePaths,
 } from "./git.ts";
@@ -75,7 +76,12 @@ export class TurnChanges {
 		if (this.closed) return Promise.resolve();
 		this.before ??= this.enqueue(async () => {
 			const untracked = (await countUntracked(this.repo, UNTRACKED_LIMIT)) <= UNTRACKED_LIMIT;
-			const tree = await snapshotTree(this.repo, untracked, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS));
+			const tree = await snapshotTree(
+				this.repo,
+				untracked,
+				AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
+				LARGE_UNTRACKED_BYTES,
+			);
 			await turnChangeHooks.afterSnapshot("before");
 			return { tree, untracked };
 		});
@@ -90,7 +96,12 @@ export class TurnChanges {
 		void this.enqueue(async () => {
 			const start = await before;
 			if (!start) return;
-			const after = await snapshotTree(this.repo, start.untracked, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS));
+			const after = await snapshotTree(
+				this.repo,
+				start.untracked,
+				AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
+				LARGE_UNTRACKED_BYTES,
+			);
 			await turnChangeHooks.afterSnapshot("after");
 			if (after === start.tree) return;
 			const listed = await git(this.repo.root, ["diff", "--name-only", "-z", "--no-renames", start.tree, after]);
@@ -138,7 +149,7 @@ export async function workingTree(
 	signal?: AbortSignal,
 ): Promise<{ tree: string; untrackedSkipped?: number }> {
 	if ((await countUntracked(repo, UNTRACKED_LIMIT, signal)) <= UNTRACKED_LIMIT)
-		return { tree: await snapshotTree(repo, true, signal) };
+		return { tree: await snapshotTree(repo, true, signal, LARGE_UNTRACKED_BYTES) };
 	return {
 		tree: await snapshotTree(repo, false, signal),
 		untrackedSkipped: await countUntracked(repo, 999_999, signal),

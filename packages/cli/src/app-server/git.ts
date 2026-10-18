@@ -432,14 +432,35 @@ export function indexTree(repo: Repo, signal?: AbortSignal): Promise<string> {
 	return withTemporaryIndex(repo, signal, (run) => run(["write-tree"]));
 }
 
-/** The working tree's content as a tree: tracked files, plus untracked not ignored ones when `untracked`. */
-export function snapshotTree(repo: Repo, untracked: boolean, signal?: AbortSignal): Promise<string> {
+/**
+ * The working tree's content as a tree: tracked files, plus untracked not ignored ones when `untracked`. With
+ * `maxUntrackedBytes`, larger untracked files are left out, as Codex's turn snapshots leave out files over 10 MiB:
+ * hashing them on every turn would stall it. Deletion and handoff snapshots never pass a limit.
+ */
+export function snapshotTree(
+	repo: Repo,
+	untracked: boolean,
+	signal?: AbortSignal,
+	maxUntrackedBytes?: number,
+): Promise<string> {
 	return withTemporaryIndex(repo, signal, async (run) => {
 		// No pathspec: at the root it is the whole tree, and "." fails in a repository with no files at all.
-		await run(["add", untracked ? "-A" : "-u"]);
+		if (!untracked || maxUntrackedBytes === undefined) await run(["add", untracked ? "-A" : "-u"]);
+		else {
+			await run(["add", "-u"]);
+			const small = (await run(["ls-files", "--others", "--exclude-standard", "-z"])).split("\0").filter((path) => {
+				const info = lstatSync(join(repo.root, path), { throwIfNoEntry: false });
+				return path !== "" && info !== undefined && info.size <= maxUntrackedBytes;
+			});
+			if (small.length > 0)
+				await run(["add", "--pathspec-from-file=-", "--pathspec-file-nul"], `${small.join("\0")}\0`);
+		}
 		return run(["write-tree"]);
 	});
 }
+
+/** Untracked files over this size are left out of turn snapshots and diff reads (Codex's default). */
+export const LARGE_UNTRACKED_BYTES = 10 * 1024 * 1024;
 
 /** Stops at limit + 1. */
 export async function countUntracked(repo: Repo, limit: number, signal?: AbortSignal): Promise<number> {
