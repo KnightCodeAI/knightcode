@@ -37,8 +37,11 @@ import { AppServerError } from "./errors.ts";
 import {
 	git,
 	headTree,
+	indexTree,
 	machineApply,
 	machinePatch,
+	operationIn,
+	pathsInTheWay,
 	ProcessKilled,
 	ProcessKillUnconfirmed,
 	type Repo,
@@ -792,4 +795,188 @@ export async function runCleanup(input: Omit<PrepareInput, "settings">): Promise
 			source: "server",
 			message: `The cleanup of environment "${manifest.environment}" failed:\n${outcome.tail}`,
 		});
+}
+
+const conflict = (reason: string, message: string, data: object = {}) =>
+	new AppServerError("gitConflict", message, { reason, ...data });
+
+async function optionalGit(cwd: string, args: string[]): Promise<string | null> {
+	const result = await runGit(cwd, args);
+	return result.code === 0 ? result.stdout.toString("utf8").trim() : null;
+}
+
+const isAncestor = async (cwd: string, ancestor: string, of: string) =>
+	(await runGit(cwd, ["merge-base", "--is-ancestor", ancestor, of])).code === 0;
+
+const nulList = (text: string) => text.split("\0").filter(Boolean);
+
+/** A handoff branch name from the chat's title (Codex: `codex/change-two-to-two-in`). */
+export function branchSlug(title: string): string {
+	const slug = title
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.slice(0, 40)
+		.replace(/-+$/, "");
+	return slug || "handoff";
+}
+
+export interface HandoffInput {
+	settings: WorktreeSettings;
+	manifest: Manifest;
+	threadId: string;
+	title: string;
+	to: "local" | "worktree";
+	branch?: string;
+	/** The thread was born in this worktree (its header cwd is inside it). */
+	bornInWorktree: boolean;
+	agentDir: string;
+	main: Repo;
+	worktree: Repo;
+	warnings: Warning[];
+	signal: AbortSignal;
+}
+
+/**
+ * Phase B of `thread/handoff` (§6.1): moves the uncommitted changes between the worktree and the main checkout, as
+ * Codex's "Hand off" does: the destination must be clean, the changes are saved to a patch first, applied in the
+ * destination and only then removed from the source. Runs no hooks and creates no commit.
+ */
+export async function handoffChanges(input: HandoffInput): Promise<{ manifest: Manifest; branch?: string }> {
+	const { main, worktree, signal, warnings } = input;
+	const internal = { internal: true, signal };
+	const [source, dest] = input.to === "local" ? [worktree, main] : [main, worktree];
+	for (const repo of [main, worktree]) {
+		if (operationIn(repo) || (await git(repo.root, ["ls-files", "-u"], { signal })) !== "")
+			throw conflict("operationInProgress", `finish the merge, rebase, cherry-pick or revert in ${repo.root} first`);
+	}
+	if (!(await optionalGit(main.root, ["rev-parse", "-q", "--verify", "HEAD"])))
+		throw new AppServerError("invalidParams", `commit something in ${main.root} first`);
+	const dirty = nulList(
+		await git(dest.root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"], { signal }),
+	)
+		.filter((record) => record.length > 3)
+		.map((record) => record.slice(3));
+	if (dirty.length > 0)
+		throw conflict("localChanges", "Stash or commit your local changes to hand off.", {
+			paths: dirty,
+			recoveryInstructions: ["Stash or commit your local changes to hand off."],
+		});
+
+	const sourceHead = await git(source.root, ["rev-parse", "HEAD"], { signal });
+	const head = await headTree(source);
+	const working = await snapshotTree(source, true, signal);
+	if ((await submodulePaths(source, head, working)).length > 0)
+		throw new AppServerError("invalidParams", "submodule changes are not supported here; commit them in the submodule");
+	const staged = nulList(await git(source.root, ["diff", "--cached", "--name-only", "--no-renames", "-z"], { signal }));
+	const patch = await machinePatch(source, head, working, { binary: true, signal });
+	const stagedPatch = await machinePatch(source, head, await indexTree(source, signal), { binary: true, signal });
+	const changed = nulList(
+		await git(source.root, ["diff", "--name-only", "--no-renames", "-z", head, working], { signal }),
+	);
+	const destHead = await git(dest.root, ["rev-parse", "HEAD"], { signal });
+	const moved = nulList(
+		await git(dest.root, ["diff", "--name-only", "--no-renames", "-z", destHead, sourceHead], { signal }),
+	);
+	const inTheWay = await pathsInTheWay(dest, [...moved, ...changed]);
+	if (inTheWay.length > 0)
+		throw conflict("localChanges", "These ignored files would be overwritten by the handoff.", {
+			paths: inTheWay,
+			recoveryInstructions: ["These ignored files would be overwritten by the handoff. Move them away first."],
+		});
+	const saved = join(input.agentDir, "handoff");
+	mkdirSync(saved, { recursive: true });
+	const patchPath = join(saved, `${input.threadId}-${Date.now()}.patch`);
+	writeFileSync(patchPath, patch);
+	writeFileSync(patchPath.replace(/\.patch$/, ".staged.patch"), stagedPatch);
+
+	const apply = async (target: Repo, describe: string) => {
+		for (const check of [true, false]) {
+			const result = await machineApply(target.root, patch, { check, signal });
+			if (result.code !== 0)
+				throw conflict("recoveryRequired", "the uncommitted changes could not be applied", {
+					patch: patchPath,
+					output: result.stderr,
+					recoveryInstructions: [
+						`${describe}, but the uncommitted changes could not be applied there. They are still in ${source.root} and in ${patchPath}.`,
+					],
+				});
+		}
+	};
+	const removeFromSource = async () => {
+		const paths = [...new Set([...changed, ...staged])];
+		const reversed = await machineApply(source.root, patch, { reverse: true, signal });
+		const reset =
+			paths.length === 0
+				? { code: 0 }
+				: await runGit(source.root, ["reset", "-q", "--pathspec-from-file=-", "--pathspec-file-nul"], {
+						input: paths.join("\0"),
+						signal,
+					});
+		if (reversed.code !== 0 || reset.code !== 0)
+			warnings.push({
+				source: "server",
+				message: `The changes were moved, but could not be removed from ${source.root}: ${paths.join(", ")}`,
+			});
+	};
+	const kept = async (ref: string, sha: string, where: string) => {
+		await git(main.root, ["update-ref", ref, sha], internal);
+		warnings.push({
+			source: "server",
+			message: `Commit ${sha.slice(0, 7)} in ${where} is on no branch; it was kept as ${ref}.`,
+		});
+	};
+	const manifest = { ...input.manifest, placement: { ...input.manifest.placement } };
+
+	if (input.to === "local") {
+		const wtBranch = await optionalGit(worktree.root, ["symbolic-ref", "-q", "--short", "HEAD"]);
+		const exists = async (name: string) =>
+			(await runGit(main.root, ["rev-parse", "-q", "--verify", `refs/heads/${name}`])).code === 0;
+		const previous = manifest.handoffBranch;
+		const reusable =
+			previous !== undefined &&
+			(await exists(previous)) &&
+			(await isAncestor(main.root, `refs/heads/${previous}`, sourceHead));
+		const target =
+			wtBranch ?? input.branch ?? (reusable ? previous : `${input.settings.branchPrefix}${branchSlug(input.title)}`);
+		if (!validBranchName(target) || (await runGit(main.root, ["check-ref-format", "--branch", target])).code !== 0)
+			throw new AppServerError("invalidParams", `not a valid branch name: ${target}`);
+		const reuse = target === previous && reusable;
+		const existing = await exists(target);
+		if (existing && target !== wtBranch && !reuse) throw conflict("branchExists", `a branch named ${target} exists`);
+		const mainRef = await optionalGit(main.root, ["symbolic-ref", "-q", "--short", "HEAD"]);
+		const mainHead = await git(main.root, ["rev-parse", "HEAD"], { signal });
+		if (!mainRef && !(await isAncestor(main.root, mainHead, sourceHead)))
+			await kept(`refs/knightcode/kept/main/${Date.now()}`, mainHead, main.root);
+		// git checks a branch out in one place only.
+		if (wtBranch) await git(worktree.root, ["checkout", "-q", "--detach"], internal);
+		const switched = await runGit(main.root, ["switch", "-q", existing ? "-C" : "-c", target, sourceHead], internal);
+		if (switched.code !== 0) {
+			await runGit(main.root, ["switch", "-q", ...(mainRef ? [mainRef] : ["--detach", mainHead])], internal);
+			if (wtBranch) await runGit(worktree.root, ["switch", "-q", wtBranch], internal);
+			throw new AppServerError("internal", `could not check out ${target}: ${switched.stderr.trim()}`);
+		}
+		await workspaceHooks.beforeHandoffApply();
+		await apply(main, `${target} is checked out in ${main.root}`);
+		await removeFromSource();
+		manifest.placement[input.threadId] = "local";
+		manifest.handoffBranch = target;
+		writeManifest(input.settings, manifest);
+		return { manifest, branch: target };
+	}
+
+	const wtHead = await git(worktree.root, ["rev-parse", "HEAD"], { signal });
+	if (!(await isAncestor(worktree.root, wtHead, sourceHead)))
+		await kept(`refs/knightcode/kept/${basename(dirname(manifest.path))}/${Date.now()}`, wtHead, worktree.root);
+	await git(worktree.root, ["--work-tree=.", "checkout", "-q", "--detach", sourceHead], {
+		...internal,
+		noFilters: true,
+	});
+	await workspaceHooks.beforeHandoffApply();
+	await apply(worktree, `The worktree ${worktree.root} is at ${sourceHead.slice(0, 7)}`);
+	await removeFromSource();
+	if (input.bornInWorktree) delete manifest.placement[input.threadId];
+	else manifest.placement[input.threadId] = "worktree";
+	writeManifest(input.settings, manifest);
+	return { manifest };
 }

@@ -55,7 +55,7 @@ import {
 	TURN_DIFF_ENTRY,
 	TurnChanges,
 } from "./diff.ts";
-import { type Repo, repoOf, requireRepo, withRepoLock } from "./git.ts";
+import { type Repo, repoOf, requireRepo, runGit, withRepoLock } from "./git.ts";
 import {
 	type GitActionContext,
 	gitBranchCreate,
@@ -95,6 +95,7 @@ import {
 } from "./session-files.ts";
 import {
 	createWorktree,
+	handoffChanges,
 	keptWorktree,
 	type Manifest,
 	manifestFor,
@@ -130,6 +131,8 @@ function removeTranscript(manager: SessionManager): void {
 		lock.release();
 	}
 }
+
+const repoHead = async (repo: Repo) => (await runGit(repo.root, ["rev-parse", "-q", "--verify", "HEAD"])).code === 0;
 
 const sameProject = (a: string, b: string) =>
 	samePath(canonicalizePath(resolvePath(a)), canonicalizePath(resolvePath(b)));
@@ -311,6 +314,107 @@ export class ThreadManager {
 				return mutates ? withRepoLock(repo, () => fn(thread, repo, ctx)) : fn(thread, repo, ctx);
 			}),
 		);
+	}
+
+	/**
+	 * `thread/handoff` (§6.1) in three phases, so no phase waits on a lock or queue it holds: A prepares the
+	 * destination worktree, B moves the changes with both checkouts reserved, C reloads the thread where it now runs.
+	 */
+	handoff(params: ParamsOf<"thread/handoff">, by: Subscriber): Promise<ResultOf<"thread/handoff">> {
+		return this.track(async () => {
+			const thread = await this.ensureLoaded(params.threadId, by.mode);
+			if (!thread.file || !existsSync(thread.file))
+				throw new AppServerError("invalidParams", "send a message before handing off");
+			const warnings: Warning[] = [];
+			const settings = this.worktrees(warnings);
+			const sessionManager = thread.session.sessionManager;
+			const cwd = sessionManager.getCwd();
+			const headerCwd = sessionManager.getHeader()?.cwd ?? cwd;
+			const placed = placeThread(settings, thread.id, headerCwd);
+			if ((params.to === "local") !== (placed.workspace.mode === "worktree"))
+				throw new AppServerError(
+					"invalidParams",
+					`the thread already runs ${params.to === "local" ? "locally" : "in a worktree"}`,
+				);
+			let manifest = placed.manifest;
+			// Phase A: a thread born in the main checkout gets its worktree, at the main checkout's HEAD.
+			if (!manifest) {
+				const main = await requireRepo(cwd);
+				if (!(await repoHead(main)))
+					throw new AppServerError("invalidParams", `commit something in ${main.root} first`);
+				const created = await createWorktree({
+					settings,
+					projectCwd: thread.projectCwd,
+					sourceCwd: cwd,
+					threadId: thread.id,
+					ownerThreadId: thread.id,
+					environment: params.environment,
+					signal: this.shutdown.signal,
+					warnings,
+				});
+				manifest = await prepareWorktree({
+					settings,
+					manifest: created.manifest,
+					threadId: thread.id,
+					trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
+					warnings,
+					signal: this.shutdown.signal,
+					progress: (p) => by.notify("thread/workspace/progress", p),
+					shellConfig: this.options.shellConfig,
+				});
+			}
+			if (manifest.deleted)
+				throw new AppServerError("gitConflict", "the worktree of this chat was deleted", {
+					reason: "worktreeDeleted",
+					worktree: manifest.path,
+					recoveryInstructions: ["The worktree of this chat was deleted. Restore it to continue."],
+				});
+			const main = await requireRepo(manifest.mainRoot);
+			const worktree = await requireRepo(manifest.path);
+			// Phase B.
+			const release = await this.reserveCheckouts([main.root, worktree.root], "handoff");
+			try {
+				const bound = manifest;
+				const moved = await thread.exclusive(() =>
+					withRepoLock(main, () =>
+						handoffChanges({
+							settings,
+							manifest: bound,
+							threadId: thread.id,
+							title: thread.toThread().name,
+							to: params.to,
+							branch: params.branch,
+							bornInWorktree: manifestFor(settings, headerCwd) !== undefined,
+							agentDir: this.ctx.agentDir,
+							main,
+							worktree,
+							warnings,
+							signal: this.shutdown.signal,
+						}),
+					),
+				);
+				// Phase C, still holding both checkouts: no turn starts in either in between.
+				const next = await this.relocate(thread, by);
+				return { thread: next.toThread(), ...(moved.branch ? { branch: moved.branch } : {}), warnings };
+			} finally {
+				release();
+			}
+		});
+	}
+
+	/** Reload a thread where its manifest now places it, carrying its queue and subscribers as a replacement does. */
+	private async relocate(thread: LoadedThread, by: Subscriber): Promise<LoadedThread> {
+		const queued = thread.queued.splice(0);
+		const subscribers = [...thread.subscribers];
+		const last = thread.lastTurnSubscriber;
+		await this.unload(thread.id, "resume", undefined, { waitForQueue: false });
+		const next = await this.ensureLoaded(thread.id, by.mode);
+		for (const subscriber of subscribers) this.subscribe(next, subscriber);
+		next.queued.push(...queued);
+		next.lastTurnSubscriber = last ?? next.lastTurnSubscriber;
+		next.notify("thread/replaced", { oldThreadId: thread.id, thread: next.toThread() });
+		this.notifyQueue(next);
+		return next;
 	}
 
 	/** The text the model reads for an input with review comments; validated before the input is accepted. */
@@ -1719,6 +1823,7 @@ export class ThreadManager {
 					}),
 				),
 			"thread/start": (params, connection) => this.start(params, connection),
+			"thread/handoff": (params, connection) => this.handoff(params, connection),
 			"thread/diff/read": (params, connection) =>
 				this.onCheckout(params.threadId, connection.mode, false, (thread) =>
 					readThreadDiff(thread, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS),

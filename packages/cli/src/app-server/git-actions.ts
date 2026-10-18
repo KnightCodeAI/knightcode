@@ -4,12 +4,23 @@
  */
 
 import { lstatSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ParamsOf, ResultOf } from "@knightcode/app-server-protocol";
 import type { ModelRuntime } from "../core/model-runtime.ts";
 import { defaultBranch, findHunk, hunkPatch, nameStatus, scopeTrees } from "./diff.ts";
 import { AppServerError } from "./errors.ts";
-import { git, headTree, indexTree, machineApply, machinePatch, type Repo, runGit, runProcess } from "./git.ts";
+import {
+	git,
+	headTree,
+	indexTree,
+	machineApply,
+	machinePatch,
+	operationIn,
+	pathsInTheWay,
+	type Repo,
+	runGit,
+	runProcess,
+} from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 import { validBranchName } from "./workspaces.ts";
 
@@ -77,18 +88,6 @@ async function statusRecords(repo: Repo, untracked: "normal" | "all") {
 		} else if (field.startsWith("? ")) records.push({ kind: "?", xy: "??", submodule: false, path: field.slice(2) });
 	}
 	return { records, branch };
-}
-
-const OPERATIONS: [string, "merge" | "rebase" | "cherryPick" | "revert"][] = [
-	["MERGE_HEAD", "merge"],
-	["rebase-merge", "rebase"],
-	["rebase-apply", "rebase"],
-	["CHERRY_PICK_HEAD", "cherryPick"],
-	["REVERT_HEAD", "revert"],
-];
-
-export function operationIn(repo: Repo): "merge" | "rebase" | "cherryPick" | "revert" | undefined {
-	return OPERATIONS.find(([name]) => lstatSync(join(repo.gitDir, name), { throwIfNoEntry: false }))?.[1];
 }
 
 export async function gitStatus(repo: Repo): Promise<ResultOf<"git/status">> {
@@ -315,25 +314,6 @@ export async function gitBranchCreate(repo: Repo, name: string): Promise<ResultO
 		throw conflict("branchExists", `a branch named ${name} exists`);
 	await git(repo.root, ["switch", "-q", "-c", name]);
 	return { branch: name };
-}
-
-/**
- * Paths a checkout of other content would overwrite without git's own refusal: an untracked or ignored entry at a
- * written path, or a non-directory where a written path needs a directory. Git refuses untracked files itself but
- * silently overwrites ignored ones a branch tracks.
- */
-export async function pathsInTheWay(repo: Repo, written: string[]): Promise<string[]> {
-	if (written.length === 0) return [];
-	const tracked = new Set((await git(repo.root, ["ls-files", "-z"])).split("\0").filter(Boolean));
-	const blocked = new Set<string>();
-	for (const path of written) {
-		if (!tracked.has(path) && lstatSync(join(repo.root, path), { throwIfNoEntry: false })) blocked.add(path);
-		for (let parent = dirname(path); parent !== "." && parent !== "/" && parent !== ""; parent = dirname(parent)) {
-			const info = lstatSync(join(repo.root, parent), { throwIfNoEntry: false });
-			if (info && !info.isDirectory() && !tracked.has(parent)) blocked.add(parent);
-		}
-	}
-	return [...blocked];
 }
 
 export async function gitBranchSwitch(repo: Repo, name: string): Promise<ResultOf<"git/branch/switch">> {

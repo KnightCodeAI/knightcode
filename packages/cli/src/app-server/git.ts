@@ -8,7 +8,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { copyFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { AppServerError } from "./errors.ts";
 
 export interface ProcessOptions {
@@ -540,4 +540,43 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
 
 export async function currentEntries(repo: Repo, paths: string[], signal?: AbortSignal): Promise<Map<string, string>> {
 	return entriesOf(repo, await snapshotTree(repo, true, signal), paths);
+}
+
+const OPERATIONS: [string, "merge" | "rebase" | "cherryPick" | "revert"][] = [
+	["MERGE_HEAD", "merge"],
+	["rebase-merge", "rebase"],
+	["rebase-apply", "rebase"],
+	["CHERRY_PICK_HEAD", "cherryPick"],
+	["REVERT_HEAD", "revert"],
+];
+
+export function operationIn(repo: Repo): "merge" | "rebase" | "cherryPick" | "revert" | undefined {
+	return OPERATIONS.find(([name]) => lstatSync(join(repo.gitDir, name), { throwIfNoEntry: false }))?.[1];
+}
+
+/**
+ * Paths a checkout of other content would overwrite without git's own refusal: an untracked or ignored entry at a
+ * written path, or a non-directory where a written path needs a directory. Git refuses untracked files itself but
+ * silently overwrites ignored ones a branch tracks.
+ */
+export async function pathsInTheWay(repo: Repo, written: string[]): Promise<string[]> {
+	if (written.length === 0) return [];
+	const tracked = new Set((await git(repo.root, ["ls-files", "-z"])).split("\0").filter(Boolean));
+	const blocked = new Set<string>();
+	// ENOTDIR (a file where a directory would be) is "not there" for the path itself; its parent reports it.
+	const lstat = (path: string) => {
+		try {
+			return lstatSync(join(repo.root, path), { throwIfNoEntry: false });
+		} catch {
+			return undefined;
+		}
+	};
+	for (const path of written) {
+		if (!tracked.has(path) && lstat(path)) blocked.add(path);
+		for (let parent = dirname(path); parent !== "." && parent !== "/" && parent !== ""; parent = dirname(parent)) {
+			const info = lstat(parent);
+			if (info && !info.isDirectory() && !tracked.has(parent)) blocked.add(parent);
+		}
+	}
+	return [...blocked];
 }
