@@ -32,8 +32,10 @@ describe("package distribution entrypoints", () => {
 		expect(packageJson.optionalDependencies).toBeUndefined();
 	});
 
-	test("needs a Node with node:sqlite unflagged", () => {
-		expect(packageJson.engines.node).toBe(">=22.19.0");
+	// The oldest Node the bundle runs on: undici 8 calls worker_threads.markAsUncloneable when it
+	// loads. The launcher refuses anything older, and CI's pack-test runs a turn on exactly this.
+	test("needs the oldest Node the bundle runs on", () => {
+		expect(packageJson.engines.node).toBe(">=22.10.0");
 	});
 
 	test("depends only on what the bundle leaves external", () => {

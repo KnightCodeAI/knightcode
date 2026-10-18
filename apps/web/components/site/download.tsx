@@ -19,7 +19,7 @@ const setupNotes = [
   {
     icon: CommandLineIcon,
     title: "Install from npm",
-    desc: "Node.js 22.19 or newer. One global install exposes knightcode on macOS, Linux, and Windows. Lifecycle scripts are not required.",
+    desc: "Node.js 22.10 or newer. One global install exposes knightcode on macOS, Linux, and Windows. Lifecycle scripts are not required.",
   },
   {
     icon: CpuIcon,

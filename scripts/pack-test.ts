@@ -2,7 +2,9 @@
 // Packs @knightcodeai/cli with real `npm pack`, installs the tarball into a
 // throwaway project the way users get it, and runs the installed command.
 import { $ } from "bun";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../packages/cli/package.json";
@@ -56,6 +58,59 @@ try {
 		throw new Error("--help printed no usage banner");
 	}
 	console.log("✓ --help exit 0");
+
+	const entry = join(proj, "node_modules", "@knightcodeai", "cli", pkg.bin.knightcode);
+
+	// One real turn on this Node, against a local OpenAI-compatible server. --version and --help
+	// send no request, and the request path is where an older Node broke: undici 8 decoding zstd.
+	const server = createServer((_request, response) => {
+		const chunk = (delta: object, finish_reason: string | null) =>
+			`data: ${JSON.stringify({ id: "pack-test", object: "chat.completion.chunk", created: 0, model: "mock-model", choices: [{ index: 0, delta, finish_reason }] })}\n\n`;
+		response.writeHead(200, { "content-type": "text/event-stream" });
+		response.end(
+			`${chunk({ role: "assistant", content: "pack-test-turn" }, null)}${chunk({}, "stop")}data: [DONE]\n\n`,
+		);
+	});
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	try {
+		const agentDir = join(work, "agent");
+		mkdirSync(agentDir);
+		const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+		const provider = { baseUrl, api: "openai-completions", apiKey: "pack-test", models: [{ id: "mock-model" }] };
+		writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { mock: provider } }));
+		// Bun.spawn, not $: print mode reads piped stdin to EOF, and a $ redirect never closes it.
+		const turn = Bun.spawn(["node", entry, "--offline", "--model", "mock/mock-model", "-p", "ping"], {
+			cwd: proj,
+			env: { ...process.env, KNIGHTCODE_CODING_AGENT_DIR: agentDir },
+			stdin: "ignore",
+			stdout: "pipe",
+			stderr: "pipe",
+			timeout: 120_000,
+		});
+		const [exitCode, stdout, stderr] = await Promise.all([
+			turn.exited,
+			new Response(turn.stdout).text(),
+			new Response(turn.stderr).text(),
+		]);
+		if (exitCode !== 0 || !stdout.includes("pack-test-turn")) {
+			throw new Error(`print-mode turn exited ${exitCode}: ${stderr}${stdout}`);
+		}
+		console.log("✓ print-mode turn");
+	} finally {
+		server.close();
+	}
+
+	// npm installs the package on any Node with only a warning. An unsupported one must get the
+	// launcher's version message, not a crash from inside the runtime. CI sets this.
+	const oldNode = process.env.KNIGHTCODE_PACK_TEST_OLD_NODE;
+	if (oldNode) {
+		const old = await $`${oldNode} ${entry} --version`.nothrow().quiet();
+		const message = old.stderr.toString();
+		if (old.exitCode !== 1 || !message.includes(`requires Node.js ${pkg.engines.node.slice(2)} or newer`)) {
+			throw new Error(`${oldNode} --version exited ${old.exitCode}: ${message}${old.stdout.toString()}`);
+		}
+		console.log(`✓ unsupported Node refused: ${message.split("\n")[0]}`);
+	}
 
 	// The TUI's native helpers ship inside the bundle for every platform. Check the
 	// <platform>-<arch> directory loadNativePlatformHelper reads, not just the OS.

@@ -31,7 +31,7 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=22.10.0"
   },
   "scripts": {
     "dev": "bun --env-file=../../.env run --watch src/bun/cli.ts",

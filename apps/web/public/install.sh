@@ -154,11 +154,11 @@ run_preflight_checks() {
   if command -v node >/dev/null 2>&1; then
     node_version=$(node --version)
     if ! node_version_string_is_new_enough "$node_version"; then
-      printf 'error: KnightCode requires Node.js 22.19 or newer. Found %s.\n' "$node_version"
+      printf 'error: KnightCode requires Node.js 22.10 or newer. Found %s.\n' "$node_version"
       status=1
     fi
   else
-    printf 'error: Node.js 22.19 or newer is required to install KnightCode.\n'
+    printf 'error: Node.js 22.10 or newer is required to install KnightCode.\n'
     status=1
   fi
 
@@ -184,18 +184,18 @@ install_node_npm_interactive() {
   esac
 
   if ! ( : <>/dev/tty ) 2>/dev/null; then
-    printf 'No terminal detected; install Node.js 22.19 or newer and npm, then run this installer again.\n'
+    printf 'No terminal detected; install Node.js 22.10 or newer and npm, then run this installer again.\n'
     return 1
   fi
   exec 3<>/dev/tty
 
-  printf 'KnightCode needs Node.js 22.19 or newer and npm. Install them now with %s? [Y/n] ' "$label" >&3
+  printf 'KnightCode needs Node.js 22.10 or newer and npm. Install them now with %s? [Y/n] ' "$label" >&3
   if ! IFS= read -r answer <&3; then
     answer=
   fi
   exec 3>&-
   case "$answer" in
-    n|N|no|NO) printf '\nInstall Node.js 22.19 or newer and npm, then run this installer again.\n'; return 1 ;;
+    n|N|no|NO) printf '\nInstall Node.js 22.10 or newer and npm, then run this installer again.\n'; return 1 ;;
     *) ;;
   esac
 
@@ -252,8 +252,8 @@ node_version_string_is_new_enough() {
   case "$major" in ''|*[!0-9]*) return 1 ;; esac
   case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
 
-  # 22.19: node:sqlite runs without a flag.
-  [ "$major" -gt 22 ] || { [ "$major" -eq 22 ] && [ "$minor" -ge 19 ]; }
+  # 22.10: undici 8, which KnightCode bundles, calls worker_threads.markAsUncloneable when it loads.
+  [ "$major" -gt 22 ] || { [ "$major" -eq 22 ] && [ "$minor" -ge 10 ]; }
 }
 
 install_node_npm() {

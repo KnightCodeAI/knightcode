@@ -61,7 +61,7 @@ export default function TermsPage() {
         <h2>2. Installing KnightCode</h2>
         <p>
           The install command is <code>{INSTALL_COMMAND}</code>. It needs
-          Node.js 22.19 or newer. <code>--ignore-scripts</code> is safe for a
+          Node.js 22.10 or newer. <code>--ignore-scripts</code> is safe for a
           normal install: the package ships prebuilt JavaScript and does not
           need a dependency lifecycle script.
         </p>
