@@ -13,6 +13,7 @@ import type {
 import type { AgentSession } from "../core/agent-session.ts";
 import { emitSessionShutdownEvent } from "../core/extensions/runner.ts";
 import { AppServerError, SubscriberGone } from "./errors.ts";
+import type { TurnChanges } from "./diff.ts";
 import type { ItemMapper } from "./item-mapper.ts";
 import type { PayloadStore } from "./payloads.ts";
 import type { Subscriber } from "./server.ts";
@@ -42,6 +43,8 @@ export class LoadedThread {
 	private readonly broadcast: AppServerContext["broadcast"];
 	readonly openRequests = new Set<object>();
 	mapper!: ItemMapper;
+	/** Turn change detection; undefined outside a git repository (§6.2). */
+	changes: TurnChanges | undefined;
 	pendingTurnRequestId?: string;
 	/** The starting turn's clientMessageId; the mapper puts it on the turn's first user message. */
 	pendingClientMessageId?: string;
@@ -244,6 +247,8 @@ export class LoadedThread {
 			// A gated settlement hook can outlive abort() while the runtime already reports idle.
 			// Finish the mapped turn before detaching, so accepted starts keep their completion obligation.
 			if (this.mapper?.currentTurnId()) this.mapper.settled(true);
+			// The forced settle may have queued a last after-snapshot; its record is written before the manager closes.
+			await this.changes?.close();
 			this.unsubscribeSession();
 			await emitSessionShutdownEvent(this.session.extensionRunner, {
 				type: "session_shutdown",

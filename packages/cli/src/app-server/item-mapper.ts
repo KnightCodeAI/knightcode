@@ -114,7 +114,7 @@ interface Streaming {
 export class ItemMapper {
 	private readonly thread: LoadedThread;
 	private readonly broadcast: AppServerContext["broadcast"];
-	private readonly onSettled: () => void;
+	private readonly onSettled: (turnId?: string) => void;
 	private turn: Turn | undefined;
 	/** The running turn's counters, or the last turn's between runs (restored from the file on load). */
 	private counters: Counters | undefined;
@@ -125,7 +125,7 @@ export class ItemMapper {
 	/** Top-level item id to its current index, for the snapshot's order. */
 	private positions = new Map<string, number>();
 
-	constructor(thread: LoadedThread, broadcast: AppServerContext["broadcast"], onSettled: () => void) {
+	constructor(thread: LoadedThread, broadcast: AppServerContext["broadcast"], onSettled: (turnId?: string) => void) {
 		this.thread = thread;
 		this.broadcast = broadcast;
 		this.onSettled = onSettled;
@@ -531,6 +531,6 @@ export class ItemMapper {
 		this.thread.notify("turn/completed", { turn: summary });
 		this.broadcast("thread/turn/completed", { turn: summary });
 		this.broadcast("thread/status/changed", { threadId: this.thread.id, status: { type: "idle" } });
-		this.onSettled();
+		this.onSettled(turn.id);
 	}
 }

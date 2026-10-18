@@ -44,7 +44,8 @@ import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/tr
 import { builtInExtensions } from "../extensions/index.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ShellConfig } from "../utils/shell.ts";
-import { DEFAULT_DIFF_BUDGETS, type DiffBudgets, readThreadDiff } from "./diff.ts";
+import { DEFAULT_DIFF_BUDGETS, type DiffBudgets, readThreadDiff, TURN_DIFF_ENTRY, TurnChanges } from "./diff.ts";
+import { repoOf } from "./git.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
@@ -869,11 +870,24 @@ export class ThreadManager {
 			holder.thread = thread;
 			thread.resolveWorkspace = () => placeThread(settings, id, headerCwd).workspace;
 			touchManifest(settings, cwd);
+			const repo = await repoOf(cwd);
+			if (repo)
+				thread.changes = new TurnChanges(
+					repo,
+					(record) => {
+						try {
+							thread.session.sessionManager.appendCustomEntry(TURN_DIFF_ENTRY, record);
+						} catch (error) {
+							console.error(`app-server: could not record the changes of turn ${record.turnId}: ${String(error)}`);
+						}
+					},
+					({ turnId, files }) => thread.notify("turn/diff/updated", { threadId: thread.id, turnId, files }),
+				);
 			await this.bind(thread, mode);
 			thread.mapper = new ItemMapper(
 				thread,
 				(method, params) => this.ctx.broadcast(method, params),
-				() => this.afterSettle(thread),
+				(turnId) => this.afterSettle(thread, turnId),
 			);
 			thread.mapper.restore(readTurns(thread.id, session.sessionManager.getBranch()));
 			thread.unsubscribeSession = session.subscribe((event) => thread.mapper.handle(event));
@@ -1002,10 +1016,22 @@ export class ThreadManager {
 				},
 			},
 			createApprovalExtension(holder),
+			// After the approval gate, so a declined call never snapshots.
+			{
+				name: "app-server-turn-changes",
+				hidden: true,
+				factory: (knightcode) => {
+					knightcode.on("tool_call", async () => {
+						await holder.thread?.changes?.beforeTool();
+						return undefined;
+					});
+				},
+			},
 		];
 	}
 
-	private afterSettle(thread: LoadedThread): void {
+	private afterSettle(thread: LoadedThread, turnId?: string): void {
+		thread.changes?.settled(turnId);
 		if (thread.session.sessionManager.hasLostLock()) {
 			this.systemErrors.set(
 				thread.id,

@@ -28,6 +28,83 @@ export interface TurnDiffRecord {
 	turnId: string;
 	before: string;
 	after: string;
+	files: string[];
+}
+
+/** Test gate only (Global Constraints): awaited after each snapshot. */
+export const turnChangeHooks = { afterSnapshot: async (_phase: "before" | "after") => {} };
+
+const SNAPSHOT_TIMEOUT_MS = 30_000;
+
+/**
+ * "Files that changed while the turn ran" (§6.2): the working tree's content as a tree before the turn's first tool
+ * call and after it settled, compared. One chain per thread runs every snapshot, so a turn's "before" waits for the
+ * previous turn's "after".
+ */
+export class TurnChanges {
+	private readonly repo: Repo;
+	private readonly record: (record: TurnDiffRecord) => void;
+	private readonly notify: (record: TurnDiffRecord) => void;
+	private chain: Promise<void> = Promise.resolve();
+	private before: Promise<{ tree: string; untracked: boolean } | undefined> | undefined;
+	private closed = false;
+
+	constructor(repo: Repo, record: (r: TurnDiffRecord) => void, notify: (r: TurnDiffRecord) => void) {
+		this.repo = repo;
+		this.record = record;
+		this.notify = notify;
+	}
+
+	private enqueue<T>(work: () => Promise<T>): Promise<T | undefined> {
+		const run = this.chain.then(work).catch((error: unknown) => {
+			console.error(
+				`app-server: turn change detection failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
+			return undefined;
+		});
+		this.chain = run.then(() => {});
+		return run;
+	}
+
+	/** Awaited by every tool_call of a turn; the first starts the before-snapshot, the rest share it. */
+	beforeTool(): Promise<void> {
+		if (this.closed) return Promise.resolve();
+		this.before ??= this.enqueue(async () => {
+			const untracked = (await countUntracked(this.repo, UNTRACKED_LIMIT)) <= UNTRACKED_LIMIT;
+			const tree = await snapshotTree(this.repo, untracked, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS));
+			await turnChangeHooks.afterSnapshot("before");
+			return { tree, untracked };
+		});
+		return this.before.then(() => {});
+	}
+
+	/** After settle: queue the after-snapshot (same untracked mode as before) on the thread's chain. */
+	settled(turnId: string | undefined): void {
+		const before = this.before;
+		if (this.closed || !before || turnId === undefined) return;
+		this.before = undefined;
+		void this.enqueue(async () => {
+			const start = await before;
+			if (!start) return;
+			const after = await snapshotTree(this.repo, start.untracked, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS));
+			await turnChangeHooks.afterSnapshot("after");
+			if (after === start.tree) return;
+			const listed = await git(this.repo.root, ["diff", "--name-only", "-z", "--no-renames", start.tree, after]);
+			const record = { turnId, before: start.tree, after, files: listed.split("\0").filter(Boolean) };
+			this.record(record);
+			this.notify(record);
+		});
+	}
+
+	/** Resolves when every queued snapshot finished and its record was handed to `record`. */
+	idle(): Promise<void> {
+		return this.chain;
+	}
+
+	async close(): Promise<void> {
+		await this.chain;
+		this.closed = true;
+	}
 }
 
 export interface ScopeTrees {
