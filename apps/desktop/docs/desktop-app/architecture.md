@@ -2058,6 +2058,16 @@ cancellation lives in `threads.ts` and the start-guard extension.
 - Docs: `app-server.md`.
 - Changeset: `Added`.
 
+Status (2026-10-18): done, on `feat/app-server-worktrees` (Tasks 0-11 of
+`phase-b-plan.md`). Modules: `git.ts`, `workspaces.ts`, `diff.ts`,
+`git-actions.ts`; tests `test/app-server/{git,worktrees,worktree-setup,
+worktree-fork,diff,turn-diff,diff-actions,git-actions,handoff,
+worktree-archive}.test.ts`. Departures from the plan are recorded with their
+reasons in the commit history; the notable one is that `git worktree remove`
+deletes the administration directory even when removing the checkout fails, so
+a leftover directory is removed only when empty and otherwise left in place
+with a warning.
+
 ### Phase C — extension UI over the protocol
 
 - `protocol.ts`: `ui/*` messages; `view.ts`.
@@ -2657,6 +2667,29 @@ schema; section 4.6 (Phase A2) supersedes it before any client ships. Raw measur
 implementation ledger's evidence directory. Owned scratch installations/downloads
 and temporary measurement scripts are removed after validation. This does not
 claim completion of worktrees, git/diffs or desktop UI in later phases.
+
+### Phase B validation — 2026-10-18
+
+Windows 11 build 26200, Bun 1.3, Git for Windows 2.47.1. `test/app-server/`:
+45 files, 431 tests passed, 5 skipped (POSIX-only symlink, mode and tab-name
+cases). WSL2 could not run on the measuring machine (virtualization is off), so
+the Linux run is the CI job's; macOS is not measured.
+
+On this repository (2,344 tracked files, 12,339 untracked ones in a 2.1 GB
+directory the user keeps beside the code), five runs each: a turn snapshot
+took 197-251 ms and an `uncommitted` `thread/diff/read` 643-668 ms. More than
+500 untracked files make both tracked-only, so the untracked directory is not
+hashed. Forced to include untracked files, the snapshot took 10.5-23.8 s, so
+turn snapshots and diff reads also leave out untracked files over 10 MiB, as
+Codex's turn snapshots do; deletion and handoff snapshots never do.
+
+Codex parity walk (Task 11 step 4) ran through the in-process client, since the
+desktop panes come in S2: worktree start with an environment, the six Changes
+scopes, a comment sent with a turn, a commit with a generated message, a fork
+into a new worktree, a handoff refused while the main checkout was dirty and
+done once clean, archive and restore. Each behaved as the "Codex parity" table
+of `phase-b-plan.md` says; the tests named in section 10's Phase B note pin
+every step.
 
 ## 14. Stop condition
 
