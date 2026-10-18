@@ -5,6 +5,7 @@
  */
 
 import type { DiffComment, DiffFile, DiffScope, ResultOf } from "@knightcode/app-server-protocol";
+import { type FileDiffOptions, isHighlighterLoaded, preloadHighlighter, type SelectedLineRange } from "@pierre/diffs";
 import { type DiffLineAnnotation, PatchDiff } from "@pierre/diffs/react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import {
@@ -132,6 +133,12 @@ function CommentCard({
 	onDelete?: () => void;
 }) {
 	const [text, setText] = useState("");
+	const input = useRef<HTMLTextAreaElement>(null);
+	// Not autoFocus: the card mounts before @pierre/diffs moves it into the document, so that focus is lost.
+	useEffect(() => {
+		const frame = requestAnimationFrame(() => input.current?.focus());
+		return () => cancelAnimationFrame(frame);
+	}, []);
 	return (
 		<div className="w-full max-w-3xl min-w-0 p-1.5 font-ui">
 			<div className="kc-comment overflow-hidden rounded-[12.5px] bg-soft">
@@ -152,7 +159,7 @@ function CommentCard({
 				) : (
 					<div className="p-3">
 						<textarea
-							autoFocus
+							ref={input}
 							rows={1}
 							value={text}
 							onChange={(e) => setText(e.target.value)}
@@ -244,6 +251,30 @@ function FileSection({
 	];
 	const full = `${cwd.replace(/[\\/]+$/, "")}/${file.path}`;
 	const scope = selector.scope;
+	// Stable across renders: @pierre/diffs restarts its render on any option change, and a restart while the
+	// highlighter is still loading leaves the file blank.
+	const themeType = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+	const diffOptions = useMemo<FileDiffOptions<Annotation, undefined>>(
+		() => ({
+			theme: { dark: "pierre-dark", light: "pierre-light" },
+			themeType,
+			diffStyle: options.split ? ("split" as const) : ("unified" as const),
+			diffIndicators: "bars" as const,
+			overflow: options.wrap ? ("wrap" as const) : ("scroll" as const),
+			hunkSeparators: "line-info" as const,
+			lineDiffType: options.wordDiffs ? ("word-alt" as const) : ("none" as const),
+			disableFileHeader: true,
+			enableGutterUtility: true,
+			unsafeCSS: diffOverrides,
+			onGutterUtilityClick: (range: SelectedLineRange) =>
+				setDraft({
+					side: range.side === "deletions" ? "old" : "new",
+					start: Math.min(range.start, range.end ?? range.start),
+					end: Math.max(range.start, range.end ?? range.start),
+				}),
+		}),
+		[themeType, options.split, options.wrap, options.wordDiffs],
+	);
 	return (
 		<div className="group/file-diff flex flex-col pb-0.5">
 			<div className="sticky top-0 z-10 bg-surface">
@@ -339,24 +370,14 @@ function FileSection({
 				<PatchDiff<Annotation>
 					patch={patchOf(file)}
 					disableWorkerPool
-					options={{
-						theme: { dark: "pierre-dark", light: "pierre-light" },
-						themeType: document.documentElement.dataset.theme === "light" ? "light" : "dark",
-						diffStyle: options.split ? "split" : "unified",
-						diffIndicators: "bars",
-						overflow: options.wrap ? "wrap" : "scroll",
-						hunkSeparators: "line-info",
-						lineDiffType: options.wordDiffs ? "word-alt" : "none",
-						disableFileHeader: true,
-						enableGutterUtility: true,
-						unsafeCSS: diffOverrides,
-						onGutterUtilityClick: (range) =>
-							setDraft({
-								side: range.side === "deletions" ? "old" : "new",
-								start: Math.min(range.start, range.end ?? range.start),
-								end: Math.max(range.start, range.end ?? range.start),
-							}),
-					}}
+					options={diffOptions}
+					// The selection follows the open draft: left to the library, it outlives a save or cancel, and the next
+					// "+" reuses it instead of the line clicked.
+					selectedLines={
+						draft
+							? { start: draft.start, end: draft.end, side: draft.side === "old" ? "deletions" : "additions" }
+							: null
+					}
 					lineAnnotations={annotations}
 					renderAnnotation={(annotation) => {
 						const comment = annotation.metadata.comment;
@@ -401,6 +422,13 @@ function FileSection({
  * The changed files as a @pierre/trees tree, after Codex's: folders open, one-child chains flattened, "+N -N" per
  * file. The model is made once per mount, so a new file set or new totals remount it (keyed by the caller).
  */
+/**
+ * A diff first rendered while the shared highlighter is still loading stays blank: @pierre/diffs 1.5.2 caches nothing
+ * for it, then drops the highlighted result for want of a cache entry. With the highlighter and its themes loaded first,
+ * a file renders as plain text at once and picks up its highlighting when its language loads.
+ */
+const highlighterReady = preloadHighlighter({ themes: ["pierre-dark", "pierre-light"], langs: [] });
+
 /** The tree trims a plain space between decoration parts. */
 const NBSP = String.fromCodePoint(0xa0);
 
@@ -449,6 +477,10 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 	const [read, setRead] = useState<Read | undefined>();
 	const [error, setError] = useState<RequestError | Error | undefined>();
 	const [loading, setLoading] = useState(false);
+	const [highlighter, setHighlighter] = useState(isHighlighterLoaded);
+	useEffect(() => {
+		if (!highlighter) void highlighterReady.then(() => setHighlighter(true));
+	}, [highlighter]);
 	const [opts, setOpts] = useState({
 		fullFiles: false,
 		wordDiffs: true,
@@ -764,7 +796,7 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 							{selector.scope === "lastTurn" && files.length > 0 ? (
 								<div className="px-4 pt-2 pb-1 text-[12px] text-desc">Files that changed while this turn ran</div>
 							) : null}
-							{shown.map((file) => (
+							{(highlighter ? shown : []).map((file) => (
 								<div key={file.path} data-file-section="">
 									<FileSection
 										threadId={threadId}
