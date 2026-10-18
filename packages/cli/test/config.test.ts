@@ -158,7 +158,7 @@ describe("detectInstallMethod", () => {
 
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(getUpdateInstruction("@knightcodeai/cli")).toBe(
-			"Run: pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @knightcodeai/cli",
+			"Run: pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 @knightcodeai/cli",
 		);
 	});
 
@@ -180,8 +180,17 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("npm");
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@knightcodeai/cli"],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli`,
+			args: [
+				"--prefix",
+				prefix,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--engine-strict",
+				"--min-release-age=0",
+				"@knightcodeai/cli",
+			],
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli`,
 		});
 	});
 
@@ -195,8 +204,17 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@knightcodeai/cli@1.2.3"],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli@1.2.3`,
+			args: [
+				"--prefix",
+				prefix,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--engine-strict",
+				"--min-release-age=0",
+				"@knightcodeai/cli@1.2.3",
+			],
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli@1.2.3`,
 		});
 	});
 
@@ -207,8 +225,17 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/knightcode"],
-			display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
+			args: [
+				"--prefix",
+				prefix,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--engine-strict",
+				"--min-release-age=0",
+				"@new-scope/knightcode",
+			],
+			display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli && npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @new-scope/knightcode`,
 			steps: [
 				{
 					command: "npm",
@@ -223,10 +250,11 @@ describe("detectInstallMethod", () => {
 						"install",
 						"-g",
 						"--ignore-scripts",
+						"--engine-strict",
 						"--min-release-age=0",
 						"@new-scope/knightcode",
 					],
-					display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
+					display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @new-scope/knightcode`,
 				},
 			],
 		});
@@ -240,8 +268,17 @@ describe("detectInstallMethod", () => {
 
 		expect(command).toEqual({
 			command: "npm",
-			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@knightcodeai/cli"],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli`,
+			args: [
+				"--prefix",
+				prefix,
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--engine-strict",
+				"--min-release-age=0",
+				"@knightcodeai/cli",
+			],
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli`,
 		});
 	});
 
@@ -256,6 +293,7 @@ describe("detectInstallMethod", () => {
 			"install",
 			"-g",
 			"--ignore-scripts",
+			"--engine-strict",
 			"--min-release-age=0",
 			"@knightcodeai/cli",
 		]);
@@ -267,7 +305,7 @@ describe("detectInstallMethod", () => {
 		const command = getSelfUpdateCommand("@knightcodeai/cli");
 
 		expect(command?.display).toBe(
-			`npm --prefix "${prefix}" install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli`,
+			`npm --prefix "${prefix}" install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli`,
 		);
 	});
 
@@ -278,7 +316,7 @@ describe("detectInstallMethod", () => {
 
 		expect(detectInstallMethod()).toBe("npm");
 		expect(getUpdateInstruction("@knightcodeai/cli")).toBe(
-			"Run: npm install -g --ignore-scripts --min-release-age=0 @knightcodeai/cli",
+			"Run: npm install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli",
 		);
 	});
 
@@ -303,9 +341,16 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/knightcode"],
+			args: [
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--config.engine-strict=true",
+				"--config.minimumReleaseAge=0",
+				"@new-scope/knightcode",
+			],
 			display:
-				"pnpm remove -g @knightcodeai/cli && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
+				"pnpm remove -g @knightcodeai/cli && pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 @new-scope/knightcode",
 			steps: [
 				{
 					command: "pnpm",
@@ -314,8 +359,16 @@ describe("detectInstallMethod", () => {
 				},
 				{
 					command: "pnpm",
-					args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/knightcode"],
-					display: "pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
+					args: [
+						"install",
+						"-g",
+						"--ignore-scripts",
+						"--config.engine-strict=true",
+						"--config.minimumReleaseAge=0",
+						"@new-scope/knightcode",
+					],
+					display:
+						"pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 @new-scope/knightcode",
 				},
 			],
 		});
@@ -359,8 +412,15 @@ describe("detectInstallMethod", () => {
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
-			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", packageName],
-			display: `pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 ${packageName}`,
+			args: [
+				"install",
+				"-g",
+				"--ignore-scripts",
+				"--config.engine-strict=true",
+				"--config.minimumReleaseAge=0",
+				packageName,
+			],
+			display: `pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 ${packageName}`,
 		});
 	});
 
