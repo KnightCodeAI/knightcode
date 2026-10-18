@@ -5,7 +5,19 @@
  */
 
 import type { ThreadSummary } from "@knightcode/app-server-protocol";
-import { Archive, ChevronRight, Folder, FolderPlus, Pin, PinOff, Search, Settings, SquarePen, X } from "lucide-react";
+import {
+	Archive,
+	ChevronRight,
+	Folder,
+	FolderPlus,
+	GitBranchPlus,
+	Pin,
+	PinOff,
+	Search,
+	Settings,
+	SquarePen,
+	X,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { matches } from "../keys.ts";
 import { basename, relativeTime, samePath } from "../format.ts";
@@ -56,6 +68,9 @@ function ThreadRow({ thread, selected, pinned }: { thread: ThreadSummary; select
 		>
 			<span className="min-w-0 flex-1 truncate">{thread.name || "Untitled"}</span>
 			<StatusMark thread={thread} />
+			{thread.workspaceMode === "worktree" ? (
+				<GitBranchPlus size={13} aria-label="Worktree" className="shrink-0 text-faint group-hover:hidden" />
+			) : null}
 			<span className="shrink-0 text-[12px] text-faint group-hover:hidden">{relativeTime(thread.updatedAt)}</span>
 			<span className="hidden shrink-0 items-center group-hover:flex">
 				<button

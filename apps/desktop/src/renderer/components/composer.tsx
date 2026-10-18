@@ -5,7 +5,7 @@
  * go to the server as paths.
  */
 
-import type { ApprovalMode, ImageInput, ThinkingLevel } from "@knightcode/app-server-protocol";
+import type { ApprovalMode, ImageInput, ThinkingLevel, WorkspaceRequest } from "@knightcode/app-server-protocol";
 import {
 	ArrowUp,
 	Check,
@@ -48,6 +48,7 @@ import {
 	updateSettings,
 	useStore,
 } from "../store.ts";
+import { CommentsChip, WorkspacePopover } from "./git.tsx";
 import { MenuCaption, MenuItem, Popover } from "./popover.tsx";
 
 const MODES: { mode: ApprovalMode; name: string; detail: string; icon: typeof Hand }[] = [
@@ -89,7 +90,7 @@ function ApprovalPicker({
 					type="button"
 					className={`flex h-7 items-center gap-1.5 rounded-full px-2 text-[13px] hover:bg-row ${open ? "bg-row" : ""} ${mode === "fullAccess" ? "text-caution" : "text-muted hover:text-ink"}`}
 				>
-					<Icon size={16} /> {current.name}
+					<Icon size={16} /> <span className="@max-[520px]:hidden">{current.name}</span>
 				</button>
 			)}
 		>
@@ -172,10 +173,10 @@ function ModelPicker({
 			trigger={(open) => (
 				<button
 					type="button"
-					className={`flex h-7 items-center gap-1 rounded-full px-2.5 text-[13px] hover:bg-row ${open ? "bg-row" : ""}`}
+					className={`flex h-7 items-center gap-1 rounded-full px-2.5 text-[13px] whitespace-nowrap hover:bg-row ${open ? "bg-row" : ""}`}
 				>
 					<span className="font-medium text-ink">{model ? model.name : "Choose a model"}</span>
-					{effort ? <span className="font-medium text-desc">{effort}</span> : null}
+					{effort ? <span className="font-medium text-desc @max-[520px]:hidden">{effort}</span> : null}
 					<ChevronDown size={14} className="text-desc" />
 				</button>
 			)}
@@ -469,6 +470,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 	const [draftModel, setDraftModel] = useState<{ provider: string; id: string } | undefined>();
 	const [draftThinking, setDraftThinking] = useState<ThinkingLevel | undefined>();
 	const [draftMode, setDraftMode] = useState<ApprovalMode>("ask");
+	const [workspace, setWorkspace] = useState<WorkspaceRequest>({ mode: "local" });
 	const [suggestions, setSuggestions] = useState<
 		{ items: Suggestion[]; truncated: boolean; start: number } | undefined
 	>();
@@ -615,6 +617,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 					model: { provider: model.provider, id: model.id },
 					...(draftThinking ? { thinkingLevel: draftThinking } : {}),
 					approvalMode: mode,
+					...(workspace.mode === "worktree" ? { workspace } : {}),
 				},
 				attached,
 			).catch((error: unknown) => {
@@ -688,10 +691,11 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 	const modKey = window.knightcode.platform === "darwin" ? "⌘" : "Ctrl";
 
 	return (
-		<div className="mx-auto w-full max-w-3xl px-4 pb-4">
+		<div className="@container mx-auto w-full max-w-3xl px-4 pb-4">
 			{!threadId ? (
 				<div className="mb-1.5 flex items-center gap-1">
 					<ProjectPicker cwd={cwd} onChange={setCwd} />
+					<WorkspacePopover cwd={cwd} value={workspace} onChange={setWorkspace} />
 				</div>
 			) : null}
 			<div ref={boxRef} className="relative">
@@ -747,6 +751,11 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 									) : null}
 								</div>
 							))}
+						</div>
+					) : null}
+					{threadId ? (
+						<div className="flex flex-wrap gap-2 px-4 pt-3 empty:hidden">
+							<CommentsChip threadId={threadId} />
 						</div>
 					) : null}
 					{images.length > 0 ? (
@@ -836,7 +845,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 						<div className="flex-1" />
 						{view?.usage?.contextTokens && view.usage.contextWindow ? (
 							<span
-								className="mr-1 text-[12px] text-faint"
+								className="mr-1 text-[12px] whitespace-nowrap text-faint @max-[520px]:hidden"
 								title={`${tokens(view.usage.contextTokens)} of ${tokens(view.usage.contextWindow)} tokens · $${view.usage.cost.toFixed(2)} this thread`}
 							>
 								{Math.round((view.usage.contextTokens / view.usage.contextWindow) * 100)}% used

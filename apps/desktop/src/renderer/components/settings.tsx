@@ -5,21 +5,25 @@
 
 import { Check, ExternalLink, KeyRound, LogIn, LogOut } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import type { LoginState } from "@knightcode/app-server-protocol";
+import type { Environment, LoginState, ResultOf } from "@knightcode/app-server-protocol";
 import { DESKTOP_KEYBINDINGS } from "../../shared/keybindings.ts";
 import { client } from "../client.ts";
+import { basename } from "../format.ts";
 import { isMac, matches } from "../keys.ts";
 import {
 	answerLogin,
 	cancelLogin,
+	errorText,
 	logout,
 	navigate,
 	refreshAccounts,
+	selectProjects,
 	type SettingsPage,
 	selectPreferences,
 	setDefaultModel,
 	setPreference,
 	startLogin,
+	toast,
 	useStore,
 } from "../store.ts";
 
@@ -28,6 +32,7 @@ const PAGES: { page: SettingsPage; label: string }[] = [
 	{ page: "appearance", label: "Appearance" },
 	{ page: "models", label: "Models & accounts" },
 	{ page: "approvals", label: "Approvals" },
+	{ page: "worktrees", label: "Worktrees" },
 	{ page: "shortcuts", label: "Keyboard shortcuts" },
 	{ page: "about", label: "About" },
 ];
@@ -356,6 +361,163 @@ function Approvals() {
 	);
 }
 
+type WorktreeSettings = { autoDelete?: boolean; keep?: number; fetchBeforeCreate?: boolean; branchPrefix?: string };
+type WorktreeRow = ResultOf<"worktree/list">["worktrees"][number];
+
+/** Worktree settings (settings.json, shared with the terminal), each project's environments, and the managed worktrees. */
+function Worktrees() {
+	const projects = useStore(selectProjects);
+	const [settings, setSettings] = useState<WorktreeSettings>({});
+	const [worktrees, setWorktrees] = useState<WorktreeRow[]>([]);
+	const [project, setProject] = useState(projects[0]?.path);
+	const [environments, setEnvironments] = useState<Environment[]>([]);
+	const [trusted, setTrusted] = useState(true);
+	const reload = () => {
+		void client
+			.request("config/read", {})
+			.then((r) => setSettings(((r.settings as { worktrees?: WorktreeSettings }).worktrees ?? {}) as WorktreeSettings));
+		void client.request("worktree/list", {}).then((r) => setWorktrees(r.worktrees.filter((w) => !w.deleted)));
+	};
+	useEffect(reload, []);
+	useEffect(() => {
+		if (!project) return;
+		void client
+			.request("environment/list", { cwd: project })
+			.then((r) => {
+				setEnvironments(r.environments);
+				setTrusted(r.trusted);
+			})
+			.catch((e: unknown) => toast(errorText(e)));
+	}, [project]);
+	const write = (key: keyof WorktreeSettings, value: unknown) =>
+		void client
+			.request("config/write", { scope: "global", key: `worktrees.${key}`, value })
+			.then(() => setSettings((s) => ({ ...s, [key]: value })))
+			.catch((e: unknown) => toast(errorText(e)));
+	const saveEnvironments = (next: Environment[]) => {
+		setEnvironments(next);
+		if (project)
+			void client
+				.request("environment/save", { cwd: project, environments: next.filter((e) => e.name.trim()) })
+				.catch((e: unknown) => toast(errorText(e)));
+	};
+	const field = "rounded-lg border border-line-strong bg-surface px-2 py-1.5 outline-none focus:border-accent";
+	return (
+		<>
+			<Card title="Worktrees">
+				<Row title="Branch prefix" detail="Branches made for a worktree's changes start with this.">
+					<input
+						defaultValue={settings.branchPrefix ?? "kc/"}
+						key={settings.branchPrefix}
+						onBlur={(e) => e.target.value !== (settings.branchPrefix ?? "kc/") && write("branchPrefix", e.target.value)}
+						className={`w-32 ${field}`}
+					/>
+				</Row>
+				<Row
+					title="Delete worktrees automatically"
+					detail="Archiving a thread deletes its worktree; a snapshot is kept."
+				>
+					<Toggle value={settings.autoDelete ?? true} onChange={(v) => write("autoDelete", v)} />
+				</Row>
+				<Row title="Worktrees to keep" detail="The least recently used past this many are deleted.">
+					<input
+						type="number"
+						min={1}
+						defaultValue={settings.keep ?? 15}
+						key={settings.keep}
+						onBlur={(e) => {
+							const n = Math.floor(Number(e.target.value));
+							if (n >= 1 && n !== (settings.keep ?? 15)) write("keep", n);
+						}}
+						className={`w-20 ${field}`}
+					/>
+				</Row>
+				<Row title="Fetch before creating" detail="Fetch the base branch's remote before each new worktree.">
+					<Toggle value={settings.fetchBeforeCreate ?? false} onChange={(v) => write("fetchBeforeCreate", v)} />
+				</Row>
+			</Card>
+			<Card title="Local environments">
+				<Row
+					title="Project"
+					detail={trusted ? "Setup runs in each new worktree." : "Trust this project to run its setup scripts."}
+				>
+					<select value={project ?? ""} onChange={(e) => setProject(e.target.value)} className={`max-w-64 ${field}`}>
+						{projects.map((p) => (
+							<option key={p.path} value={p.path}>
+								{basename(p.path)}
+							</option>
+						))}
+					</select>
+				</Row>
+				{environments.map((env, i) => (
+					<div key={i} className="space-y-2 border-b border-line py-4">
+						<div className="flex gap-2">
+							<input
+								defaultValue={env.name}
+								placeholder="Name"
+								onBlur={(e) =>
+									saveEnvironments(environments.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+								}
+								className={`flex-1 ${field}`}
+							/>
+							<button
+								type="button"
+								onClick={() => saveEnvironments(environments.filter((_, j) => j !== i))}
+								className="rounded-lg px-2.5 py-1 text-muted hover:bg-hover hover:text-ink"
+							>
+								Remove
+							</button>
+						</div>
+						<textarea
+							defaultValue={env.setup?.default ?? ""}
+							placeholder="Setup script (runs in the new worktree)"
+							onBlur={(e) =>
+								saveEnvironments(
+									environments.map((x, j) => (j === i ? { ...x, setup: { ...x.setup, default: e.target.value } } : x)),
+								)
+							}
+							className={`h-20 w-full resize-y font-code text-[12px] ${field}`}
+						/>
+					</div>
+				))}
+				<div className="py-3">
+					<button
+						type="button"
+						disabled={!project}
+						onClick={() => setEnvironments([...environments, { name: "" }])}
+						className="rounded-lg border border-line-strong px-2.5 py-1 hover:bg-hover"
+					>
+						Add environment
+					</button>
+				</div>
+			</Card>
+			<Card title="Managed worktrees">
+				{worktrees.length ? null : <div className="py-4 text-muted">No worktrees.</div>}
+				{worktrees.map((w) => (
+					<Row
+						key={w.path}
+						title={`${basename(w.projectCwd)} · ${w.branch ?? w.head?.slice(0, 7) ?? "detached"}`}
+						detail={w.path}
+					>
+						<button
+							type="button"
+							onClick={() =>
+								void client
+									.request("worktree/delete", { path: w.path })
+									.then(reload)
+									.catch((e: unknown) => toast(errorText(e)))
+							}
+							className="rounded-lg px-2.5 py-1 text-muted hover:bg-hover hover:text-ink"
+						>
+							Delete
+						</button>
+					</Row>
+				))}
+			</Card>
+		</>
+	);
+}
+
 function Shortcuts() {
 	const mod = isMac() ? "⌘" : "Ctrl";
 	const show = (keys: string) =>
@@ -429,6 +591,7 @@ export function Settings({ page }: { page: SettingsPage }) {
 		appearance: <Appearance />,
 		models: <Models />,
 		approvals: <Approvals />,
+		worktrees: <Worktrees />,
 		shortcuts: <Shortcuts />,
 		about: <About />,
 	}[page];
