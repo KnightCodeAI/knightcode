@@ -44,7 +44,8 @@ export interface TestClient {
 
 export interface StartServerOptions extends ThreadManagerOptions {
 	tokensPerSecond?: number;
-	sessionDir?: string;
+	/** null: no explicit session dir, so threads use the per-project default layout under the temp agentDir. */
+	sessionDir?: string | null;
 	agentDir?: string;
 }
 
@@ -58,7 +59,7 @@ export async function startServer(options: StartServerOptions = {}) {
 	};
 	const cwd = temp("knightcode-as-cwd-");
 	const agentDir = options.agentDir ?? temp("knightcode-as-agent-");
-	const sessionDir = options.sessionDir ?? temp("knightcode-as-sessions-");
+	const sessionDir = options.sessionDir === null ? undefined : (options.sessionDir ?? temp("knightcode-as-sessions-"));
 	const faux = fauxProvider({
 		provider: `faux-as-${counter++}`,
 		tokensPerSecond: options.tokensPerSecond,
@@ -147,7 +148,8 @@ export async function startServer(options: StartServerOptions = {}) {
 			},
 		};
 	};
-	return { ctx, threads, faux, cwd, sessionDir, agentDir, connect };
+	// "" in the default layout: the caller asked for no session dir and has none to read.
+	return { ctx, threads, faux, cwd, sessionDir: sessionDir ?? "", agentDir, connect };
 }
 
 /** Resolves when `stream` prints a line equal to `text`. */
