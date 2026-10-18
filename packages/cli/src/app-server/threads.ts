@@ -6,7 +6,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { mkdir, stat, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type {
@@ -79,9 +79,32 @@ import {
 	saveEnvironments,
 	samePath,
 	touchManifest,
+	workspaceHooks,
 	type WorktreeSettings,
 	worktreeSettings,
 } from "./workspaces.ts";
+
+/**
+ * Unlinks a session file this manager wrote, after closing it: only when its header still names the manager's id,
+ * under an exclusive lock as thread/delete takes it. A file another process holds stays.
+ */
+function removeTranscript(manager: SessionManager): void {
+	const file = manager.getSessionFile();
+	const id = manager.getSessionId();
+	manager.close();
+	if (!file || !existsSync(file) || readSessionHeaderForDiscovery(file)?.id !== id) return;
+	let lock: SessionLock;
+	try {
+		lock = acquireSessionLock(file, undefined, true);
+	} catch {
+		return;
+	}
+	try {
+		if (!lock.lost) unlinkSync(file);
+	} finally {
+		lock.release();
+	}
+}
 
 const sameProject = (a: string, b: string) =>
 	samePath(canonicalizePath(resolvePath(a)), canonicalizePath(resolvePath(b)));
@@ -513,7 +536,12 @@ export class ThreadManager {
 		this.ctx.broadcast("thread/deleted", { threadId });
 	}
 
-	fork(threadId: string, atItemId: string | undefined, by: Subscriber): Promise<ResultOf<"thread/fork">> {
+	fork(
+		threadId: string,
+		atItemId: string | undefined,
+		workspace: ParamsOf<"thread/fork">["workspace"],
+		by: Subscriber,
+	): Promise<ResultOf<"thread/fork">> {
 		return this.track(async () => {
 			const live = this.threads.get(threadId);
 			const source = live?.file ?? (await this.files.find(threadId));
@@ -523,26 +551,67 @@ export class ThreadManager {
 			const { entries, manager } = live
 				? { entries: live.session.sessionManager.getBranch(), manager: live.session.sessionManager }
 				: this.branchOf(source);
-			const cwd = live?.session.sessionManager.getCwd() ?? manager.getHeader()?.cwd ?? process.cwd();
+			const warnings: Warning[] = [];
+			const settings = this.worktrees(warnings);
+			const headerCwd = manager.getHeader()?.cwd ?? process.cwd();
+			const placed = placeThread(settings, threadId, headerCwd);
+			// Where the source runs now (a handed-off source runs in the main checkout) and the project it belongs to.
+			const cwd = live?.session.sessionManager.getCwd() ?? placed.cwd;
+			const sourceProject = placed.manifest?.projectCwd ?? cwd;
+			const dir = liveDirFor(this.ctx, sourceProject);
 			// Without atItemId a live thread forks at its in-memory leaf (null after a reset: an empty fork).
 			const leafId =
 				atItemId === undefined ? live?.session.sessionManager.getLeafId() : entryForItem(entries, atItemId);
 			if (atItemId !== undefined && leafId === undefined)
 				throw new AppServerError("invalidParams", `no item ${atItemId} in ${threadId}`);
-			const sessionManager = SessionManager.forkFrom(
-				source,
-				cwd,
-				liveDirFor(this.ctx, cwd),
-				leafId === undefined ? undefined : { leafId },
-			);
-			const thread = await this.load(
-				sessionManager,
-				by.mode,
-				"fork",
-				live?.approvalMode ?? readApprovalMode(entries) ?? defaultApprovalMode(by.mode),
-			);
-			if (thread.state !== "ready")
-				throw new AppServerError("threadNotFound", `fork closed while loading: ${thread.id}`);
+			let created: { manifest: Manifest; cwd: string } | undefined;
+			let sessionManager: SessionManager;
+			if (workspace?.mode === "worktree") {
+				// Codex's "Fork in a new worktree": the source checkout's HEAD, its uncommitted changes carried along.
+				const id = uuidv7();
+				created = await createWorktree({
+					settings,
+					projectCwd: sourceProject,
+					sourceCwd: cwd,
+					threadId: id,
+					ownerThreadId: id,
+					carryLocalChanges: true,
+					environment: placed.workspace.mode === "worktree" ? placed.workspace.environment : undefined,
+					signal: this.shutdown.signal,
+					warnings,
+				});
+				try {
+					created.manifest = await prepareWorktree({
+						settings,
+						manifest: created.manifest,
+						threadId: id,
+						trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
+						warnings,
+						signal: this.shutdown.signal,
+						progress: (params) => by.notify("thread/workspace/progress", params),
+						shellConfig: this.options.shellConfig,
+					});
+					sessionManager = SessionManager.forkFrom(source, created.cwd, dir, { id, leafId });
+				} catch (error) {
+					throw keptWorktree(error, created.manifest);
+				}
+			} else sessionManager = SessionManager.forkFrom(source, cwd, dir, leafId === undefined ? undefined : { leafId });
+			let thread: LoadedThread;
+			try {
+				await workspaceHooks.afterForkFrom();
+				thread = await this.load(
+					sessionManager,
+					by.mode,
+					"fork",
+					live?.approvalMode ?? readApprovalMode(entries) ?? defaultApprovalMode(by.mode),
+				);
+				if (thread.state !== "ready")
+					throw new AppServerError("threadNotFound", `fork closed while loading: ${thread.id}`);
+			} catch (error) {
+				// The fork is not returned, so its transcript must not stay behind as a thread nobody asked for.
+				removeTranscript(sessionManager);
+				throw created ? keptWorktree(error, created.manifest) : error;
+			}
 			// The copy carries its source's name; mark it so the two can be told apart.
 			thread.session.setSessionName(
 				`${thread.session.sessionManager.getSessionName() || thread.toThread().name} (fork)`,
@@ -550,7 +619,7 @@ export class ThreadManager {
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });
-			return { thread: summary, warnings: [...thread.loadWarnings] };
+			return { thread: summary, warnings: [...warnings, ...thread.loadWarnings] };
 		});
 	}
 
@@ -1496,7 +1565,8 @@ export class ThreadManager {
 			"thread/resume": ({ threadId, cursor }, connection) => this.resume(threadId, cursor, connection),
 			"thread/list": (params) => this.list(params),
 			"thread/read": ({ threadId, cursor }) => this.read(threadId, cursor),
-			"thread/fork": ({ threadId, atItemId }, connection) => this.fork(threadId, atItemId, connection),
+			"thread/fork": ({ threadId, atItemId, workspace }, connection) =>
+				this.fork(threadId, atItemId, workspace, connection),
 			"thread/delete": ({ threadId }) => this.delete(threadId).then(() => ({})),
 			"thread/archive": ({ threadId }) => this.archive(threadId, true).then(() => ({})),
 			"thread/unarchive": ({ threadId }) => this.archive(threadId, false).then(() => ({})),
