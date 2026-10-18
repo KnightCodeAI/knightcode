@@ -285,11 +285,10 @@ describe("agent resolution", () => {
 			defineExtension<AppTool>({ name: "a", hooks: [hook(ToolTask, first), hook(GenerationTask, onYield)] }),
 		);
 		local.install(defineExtension<AppTool>({ name: "b", hooks: [hook(ToolTask, second)] }));
-		expect(agentHooks(resolve(undefined, local.snapshot()), "knightcode.tool")).toEqual([first, second]);
-		expect(agentHooks(resolve({ extensions: ["b", "a"] }, local.snapshot()), "knightcode.tool")).toEqual([
-			second,
-			first,
-		]);
+		const a = { extension: "a", handlers: first };
+		const b = { extension: "b", handlers: second };
+		expect(agentHooks(resolve(undefined, local.snapshot()), "knightcode.tool")).toEqual([a, b]);
+		expect(agentHooks(resolve({ extensions: ["b", "a"] }, local.snapshot()), "knightcode.tool")).toEqual([b, a]);
 		expect(agentHooks(resolve({ extensions: ["b"] }, local.snapshot()), "knightcode.generation")).toEqual([]);
 
 		const defaults = resolve(undefined, local.snapshot());
