@@ -23,7 +23,7 @@ const DATASET = "terminal-bench/terminal-bench-2-1@6";
 // In KnightCode's own catalog (providers/data/openrouter.json), so the agent runs
 // on the built-in entry — 1M context, openrouter thinking format, real cost data.
 const MODEL = "openrouter/deepseek/deepseek-v4-flash-0731";
-const BINARY = join(ROOT, "packages/cli-linux-x64/bin/knightcode");
+const BINARY = join(ROOT, "dist/release/linux-x64/knightcode");
 
 const args = process.argv.slice(2);
 const has = (...flags: string[]) => flags.some((f) => args.includes(f));

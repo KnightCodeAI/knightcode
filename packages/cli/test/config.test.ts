@@ -1,5 +1,5 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { homedir, tmpdir } from "os";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { delimiter, join } from "path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
@@ -7,6 +7,7 @@ import {
 	detectInstallMethod,
 	findNodePackageDir,
 	getSelfUpdateCommand,
+	getSelfUpdatePackageDir,
 	getSelfUpdateUnavailableInstruction,
 	getUpdateInstruction,
 } from "../src/config.ts";
@@ -424,73 +425,52 @@ describe("detectInstallMethod", () => {
 	});
 });
 
-describe("detectInstallMethod for compiled binaries", () => {
-	// bin/knightcode spawns the compiled binary out of node_modules, so every
-	// installed KnightCode runs as one. Only a binary outside a package manager's
-	// tree is a standalone download.
+describe("detectInstallMethod for the Bun release binary", () => {
+	// npm and the installer ship the Node bundle, so a Bun-compiled executable is
+	// always a GitHub release download, wherever it sits.
 	const binary = { bunBinary: true, bunRuntime: true };
 
-	test("classifies an npm-installed binary by its install path, not its build", () => {
-		setExecPath(join("/usr/lib/node_modules/@knightcodeai/cli-linux-x64/bin/knightcode"));
-
-		expect(detectInstallMethod(binary)).toBe("npm");
-	});
-
-	test("classifies a pnpm-installed binary as pnpm", () => {
-		setExecPath(
-			"C:\\Users\\Admin\\AppData\\Local\\pnpm\\global\\5\\.pnpm\\@knightcodeai+cli-win32-x64\\node_modules\\@knightcodeai\\cli-win32-x64\\bin\\knightcode.exe",
-		);
-
-		expect(detectInstallMethod(binary)).toBe("pnpm");
-	});
-
-	test("classifies a bun-installed binary as bun", () => {
-		setExecPath(join(homedir(), ".bun/install/global/node_modules/@knightcodeai/cli-linux-x64/bin/knightcode"));
-
-		expect(detectInstallMethod(binary)).toBe("bun");
-	});
-
-	test("still reports a standalone download as bun-binary", () => {
-		setExecPath("/opt/knightcode/knightcode");
-
-		expect(detectInstallMethod(binary)).toBe("bun-binary");
-	});
-
-	test.each(["/opt/npm/knightcode", "/opt/pnpm/knightcode", "/srv/yarn/knightcode"])(
-		"does not mistake %s for a package manager install",
+	test.each(["/opt/knightcode/knightcode", "/opt/npm/knightcode", "/srv/node_modules/somewhere/knightcode"])(
+		"reports %s as a standalone download",
 		(execPath) => {
 			setExecPath(execPath);
 
 			expect(detectInstallMethod(binary)).toBe("bun-binary");
+			expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli", undefined, undefined, binary)).toBe(
+				"Download from: https://github.com/KnightCodeAI/knightcode/releases/latest",
+			);
 		},
 	);
+});
 
-	test("points a binary copied under an unrelated node_modules at the download", () => {
-		const temp = mkdtempSync(join(tmpdir(), "knightcode-copied-"));
-		const packageDir = join(temp, "node_modules", "somewhere", "bin");
-		mkdirSync(packageDir, { recursive: true });
-		tempDir = temp;
-		process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
-		setExecPath(join(packageDir, "knightcode"));
+describe("getSelfUpdatePackageDir", () => {
+	test("finds the global npm package this process runs from", () => {
+		const { packageDir } = createNpmPrefixInstall();
+		writeFileSync(join(packageDir, "package.json"), "{}");
 
-		expect(detectInstallMethod(binary)).toBe("npm");
-		expect(getSelfUpdateCommand("@knightcodeai/cli")).toBeUndefined();
-		expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli", undefined, undefined, binary)).toBe(
-			"Download from: https://github.com/KnightCodeAI/knightcode/releases/latest",
-		);
+		expect(realpathSync(getSelfUpdatePackageDir() ?? "")).toBe(realpathSync(packageDir));
 	});
 
-	test("self-updates a binary installed into a custom npm prefix", () => {
-		const { prefix, packageDir } = createNpmPrefixInstall();
-		// A binary's package dir is the executable's own directory, not the package root.
-		const binDir = join(packageDir, "bin");
-		mkdirSync(binDir, { recursive: true });
-		process.env.KNIGHTCODE_PACKAGE_DIR = binDir;
-		setExecPath(join(binDir, "knightcode"));
+	test("follows a pnpm global link into the store", () => {
+		const { root, packageDir } = createPnpmGlobalInstall();
+		const storeDir = join(root, ".pnpm", "@knightcodeai+cli@0.0.0", "node_modules", "@knightcodeai", "cli");
+		mkdirSync(storeDir, { recursive: true });
+		writeFileSync(join(storeDir, "package.json"), "{}");
+		rmSync(packageDir, { recursive: true, force: true });
+		symlinkSync(storeDir, packageDir, "junction");
+		process.env.KNIGHTCODE_PACKAGE_DIR = storeDir;
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli");
+		expect(realpathSync(getSelfUpdatePackageDir() ?? "")).toBe(realpathSync(storeDir));
+	});
 
-		expect(command?.args.slice(0, 2)).toEqual(["--prefix", prefix]);
+	test("ignores a global package that is not the running one", () => {
+		const { packageDir } = createNpmPrefixInstall();
+		writeFileSync(join(packageDir, "package.json"), "{}");
+		const other = join(tempDir!, "elsewhere", "@knightcodeai", "cli");
+		mkdirSync(other, { recursive: true });
+		process.env.KNIGHTCODE_PACKAGE_DIR = other;
+
+		expect(getSelfUpdatePackageDir()).toBeUndefined();
 	});
 });
 

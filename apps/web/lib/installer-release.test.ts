@@ -8,8 +8,6 @@ import {
   CLI_PACKAGE,
   INSTALLER_LOCK_ASSET,
   lockDownloadUrl,
-  missingPlatformPackages,
-  PLATFORM_PACKAGES,
   validateInstallerLock,
   versionFromReleaseTag,
 } from "./installer-lock"
@@ -46,9 +44,6 @@ function lockFor(version: string) {
     packages: {
       "": { version, dependencies: { [CLI_PACKAGE]: version } },
       [`node_modules/${CLI_PACKAGE}`]: { version },
-      ...Object.fromEntries(
-        PLATFORM_PACKAGES.map((name) => [`node_modules/${name}`, { version }])
-      ),
     },
   }
 }
@@ -74,11 +69,11 @@ function releaseFetch(lock: unknown): typeof fetch {
 }
 
 describe("installer lock contract", () => {
-  it("accepts the bundled lock and every platform binary", () => {
+  it("accepts the bundled lock", () => {
     const version = "0.11.4"
-    const lock = BUNDLED_INSTALLER_LOCKS[version]
-    expect(validateInstallerLock(lock, version)).toBeNull()
-    expect(missingPlatformPackages(lock)).toEqual([])
+    expect(
+      validateInstallerLock(BUNDLED_INSTALLER_LOCKS[version], version)
+    ).toBeNull()
   })
 
   it("rejects a lock that install.sh would reject", () => {
@@ -154,10 +149,10 @@ describe("installer release selection", () => {
 
   it("skips a release whose attached lock is invalid", async () => {
     const wrongVersion = lockFor("0.11.0")
-    const { [`node_modules/${PLATFORM_PACKAGES[0]}`]: _, ...partial } =
+    const { [`node_modules/${CLI_PACKAGE}`]: _, ...partial } =
       lockFor("0.12.0").packages
-    const missingPlatform = { ...lockFor("0.12.0"), packages: partial }
-    for (const lock of [wrongVersion, missingPlatform, "not json"]) {
+    const missingCli = { ...lockFor("0.12.0"), packages: partial }
+    for (const lock of [wrongVersion, missingCli, "not json"]) {
       expect(await resolveLatestInstallerVersion(releaseFetch(lock))).toBe(
         "0.11.4"
       )

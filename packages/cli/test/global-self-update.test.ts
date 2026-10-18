@@ -13,26 +13,27 @@ vi.mock("../src/utils/update-process.ts", async (original) => ({
 }));
 
 let root: string;
-let launcher: string;
+let packageDir: string;
 const command = { command: "npm", args: ["install", "-g", "package@1.0.1"], display: "npm install" };
 
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), "knightcode-global-update-"));
-	const packageDir = join(root, "package");
-	mkdirSync(join(packageDir, "bin"), { recursive: true });
-	launcher = join(packageDir, "bin", "knightcode");
-	writeFileSync(join(packageDir, "package.json"), JSON.stringify({ version: "1.0.0" }));
-	// The platform package the launcher resolves; verification runs its binary.
-	const platformDir = join(root, "node_modules", "@knightcodeai", `cli-${process.platform}-${process.arch}`);
-	mkdirSync(join(platformDir, "bin"), { recursive: true });
-	writeFileSync(join(platformDir, "package.json"), JSON.stringify({ name: "platform" }));
-	writeFileSync(join(platformDir, "bin", process.platform === "win32" ? "knightcode.exe" : "knightcode"), "");
+	packageDir = join(root, "package");
+	mkdirSync(packageDir, { recursive: true });
+	writePackage("1.0.0");
 	vi.stubEnv("KNIGHTCODE_CODING_AGENT_DIR", root);
 	vi.stubEnv("KNIGHTCODE_PACKAGE_DIR", packageDir);
 	runProcess
 		.mockReset()
-		.mockImplementation(async (_command: string, args: string[]) => (args[0] === "--version" ? "1.0.1" : ""));
+		.mockImplementation(async (_command: string, args: string[]) => (args[1] === "--version" ? "1.0.1" : ""));
 });
+
+function writePackage(version: string): void {
+	writeFileSync(
+		join(packageDir, "package.json"),
+		JSON.stringify({ version, bin: { knightcode: "./dist/bundle/cli.js" } }),
+	);
+}
 
 afterEach(() => {
 	vi.unstubAllEnvs();
@@ -43,7 +44,7 @@ describe("global updates", () => {
 	it("serializes manual and background installs with the same lock", async () => {
 		const release = await lockfile.lock(join(root, "self-update"), { realpath: false });
 		try {
-			await expect(runGlobalSelfUpdate(command, { launcher, version: "1.0.1" })).rejects.toMatchObject({
+			await expect(runGlobalSelfUpdate(command, { packageDir, version: "1.0.1" })).rejects.toMatchObject({
 				code: "ELOCKED",
 			});
 			expect(runProcess).not.toHaveBeenCalled();
@@ -53,19 +54,19 @@ describe("global updates", () => {
 	});
 
 	it("does not downgrade an installation updated by another terminal", async () => {
-		writeFileSync(join(root, "package", "package.json"), JSON.stringify({ version: "1.0.2" }));
-		await runGlobalSelfUpdate(command, { launcher, version: "1.0.1" });
+		writePackage("1.0.2");
+		await runGlobalSelfUpdate(command, { packageDir, version: "1.0.1" });
 		expect(runProcess).not.toHaveBeenCalled();
 	});
 
-	it("rejects an install whose platform binary still reports the old version", async () => {
-		runProcess.mockImplementation(async (_command: string, args: string[]) => (args[0] === "--version" ? "1.0.0" : ""));
-		await expect(runGlobalSelfUpdate(command, { launcher, version: "1.0.1" })).rejects.toThrow(
+	it("rejects an install whose entry point still reports the old version", async () => {
+		runProcess.mockImplementation(async (_command: string, args: string[]) => (args[1] === "--version" ? "1.0.0" : ""));
+		await expect(runGlobalSelfUpdate(command, { packageDir, version: "1.0.1" })).rejects.toThrow(
 			"reports version 1.0.0; expected 1.0.1",
 		);
 		expect(runProcess).toHaveBeenLastCalledWith(
-			expect.stringContaining(`cli-${process.platform}-${process.arch}`),
-			["--version"],
+			process.execPath,
+			[join(packageDir, "dist", "bundle", "cli.js"), "--version"],
 			expect.objectContaining({ quiet: true }),
 		);
 	});
@@ -85,7 +86,7 @@ describe("global updates", () => {
 						compromise?.(new Error("lock compromised"));
 					}),
 			);
-			await expect(runGlobalSelfUpdate(command, { launcher, version: "1.0.1" })).rejects.toThrow("lock compromised");
+			await expect(runGlobalSelfUpdate(command, { packageDir, version: "1.0.1" })).rejects.toThrow("lock compromised");
 			// The install step was cancelled, so nothing was verified as installed.
 			expect(runProcess).toHaveBeenCalledOnce();
 		} finally {
@@ -95,8 +96,8 @@ describe("global updates", () => {
 
 	it("releases the lock on failure so a later manual attempt can recover", async () => {
 		runProcess.mockRejectedValueOnce(new Error("install failed"));
-		await expect(runGlobalSelfUpdate(command, { launcher, version: "1.0.1" })).rejects.toThrow("install failed");
-		await expect(runGlobalSelfUpdate(command, { launcher, version: "1.0.1" })).resolves.toBeUndefined();
+		await expect(runGlobalSelfUpdate(command, { packageDir, version: "1.0.1" })).rejects.toThrow("install failed");
+		await expect(runGlobalSelfUpdate(command, { packageDir, version: "1.0.1" })).resolves.toBeUndefined();
 		expect(runProcess).toHaveBeenCalledTimes(3);
 	});
 });

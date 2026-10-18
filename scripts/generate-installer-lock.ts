@@ -12,11 +12,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import {
-	installerPackageJson,
-	missingPlatformPackages,
-	validateInstallerLock,
-} from "../apps/web/lib/installer-lock.ts";
+import { installerPackageJson, validateInstallerLock } from "../apps/web/lib/installer-lock.ts";
 
 const repoRoot = join(import.meta.dir, "..");
 
@@ -71,23 +67,14 @@ function resolveLock(): { version?: string } | undefined {
 			console.error(`npm install --package-lock-only exited with ${npm.status ?? "unknown"}`);
 			return undefined;
 		}
-		const lock = JSON.parse(readFileSync(join(stage, "package-lock.json"), "utf8")) as { version?: string };
-		// A stale platform packument does not fail the install: npm drops an
-		// unresolvable optional dependency silently. Retry that too.
-		const missing = missingPlatformPackages(lock);
-		if (missing.length > 0) {
-			console.error(`installer lock is missing platform packages: ${missing.join(", ")}`);
-			return undefined;
-		}
-		return lock;
+		return JSON.parse(readFileSync(join(stage, "package-lock.json"), "utf8")) as { version?: string };
 	} finally {
 		rmSync(stage, { recursive: true, force: true });
 	}
 }
 
-// ci:publish waits for npm to serve the platform packages before it publishes
-// the launcher, but not for the launcher itself, so the version that just
-// shipped can still fail with ETARGET for a minute or two. Retry;
+// npm acknowledges a publish before the registry serves it, so the version
+// that just shipped can still fail with ETARGET for a minute or two. Retry;
 // --prefer-online above keeps npm's own cache from replaying the stale
 // packument.
 const LOCK_ATTEMPTS = 30;

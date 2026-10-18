@@ -1,8 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import lockfile from "proper-lockfile";
-import { getAgentDir, getPackageDir, PLATFORM_BINARY_SPECIFIER, type SelfUpdateCommand } from "../config.ts";
+import { APP_NAME, getAgentDir, getPackageDir, type SelfUpdateCommand } from "../config.ts";
 import { runUpdateProcess, UPDATE_STEP_TIMEOUT_MS } from "./update-process.ts";
 import { comparePackageVersions } from "./version-check.ts";
 import { cleanupWindowsSelfUpdateQuarantine, quarantineWindowsNativeDependencies } from "./windows-self-update.ts";
@@ -49,15 +48,18 @@ export function trySelfUpdateLockSync(run: () => void): void {
 
 export async function runGlobalSelfUpdate(
 	command: SelfUpdateCommand,
-	options: { version?: string; launcher?: string } = {},
+	options: { version?: string; packageDir?: string } = {},
 ): Promise<void> {
 	await withSelfUpdateLock(async (lockLost) => {
-		// Recheck after acquiring the same lock that manual and background updates use.
-		if (options.version && options.launcher) {
-			const metadata = JSON.parse(readFileSync(join(dirname(dirname(options.launcher)), "package.json"), "utf8")) as {
+		const readInstalled = (packageDir: string) =>
+			JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as {
 				version?: string;
+				bin?: string | Record<string, string>;
 			};
-			if ((comparePackageVersions(metadata.version ?? "", options.version) ?? -1) >= 0) return;
+		// Recheck after acquiring the same lock that manual and background updates use.
+		if (options.version && options.packageDir) {
+			const installed = readInstalled(options.packageDir);
+			if ((comparePackageVersions(installed.version ?? "", options.version) ?? -1) >= 0) return;
 		}
 		if (process.platform === "win32") {
 			cleanupWindowsSelfUpdateQuarantine(getPackageDir());
@@ -68,16 +70,17 @@ export async function runGlobalSelfUpdate(
 				signal: AbortSignal.any([lockLost, AbortSignal.timeout(UPDATE_STEP_TIMEOUT_MS)]),
 			});
 		}
-		if (options.version && options.launcher) {
-			// Run what the launcher will run: the platform binary, not the JS shim, so
-			// a skipped optional dependency fails here instead of on the next start.
-			const binary = createRequire(options.launcher).resolve(PLATFORM_BINARY_SPECIFIER);
-			const installed = await runUpdateProcess(binary, ["--version"], {
+		if (options.version && options.packageDir) {
+			// Start the installed entry point the way the next session will, so a
+			// broken or partial install fails here instead of on the next start.
+			const { bin } = readInstalled(options.packageDir);
+			const entry = join(options.packageDir, (typeof bin === "string" ? bin : bin?.[APP_NAME]) ?? "");
+			const installed = await runUpdateProcess(process.execPath, [entry, "--version"], {
 				quiet: true,
 				signal: AbortSignal.timeout(30_000),
 			});
 			if ((comparePackageVersions(installed, options.version) ?? -1) < 0) {
-				throw new Error(`Installed ${binary} reports version ${installed}; expected ${options.version}.`);
+				throw new Error(`Installed ${entry} reports version ${installed}; expected ${options.version}.`);
 			}
 		}
 	});

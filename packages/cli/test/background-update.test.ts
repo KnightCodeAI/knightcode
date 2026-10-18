@@ -11,11 +11,17 @@ const mocks = vi.hoisted(() => ({
 	managedRoot: vi.fn(),
 	managedUpdate: vi.fn(),
 	spawn: vi.fn(),
+	runtime: { bunBinary: true, bundledNode: false },
 }));
 
 vi.mock("../src/config.ts", async (original) => ({
 	...(await original<typeof Config>()),
-	isBunBinary: true,
+	get isBunBinary() {
+		return mocks.runtime.bunBinary;
+	},
+	get isBundledNode() {
+		return mocks.runtime.bundledNode;
+	},
 }));
 vi.mock("../src/utils/version-check.ts", async (original) => ({
 	...(await original<typeof VersionCheck>()),
@@ -39,7 +45,8 @@ beforeEach(() => {
 	vi.stubEnv("KNIGHTCODE_OFFLINE", undefined);
 	vi.stubEnv("KNIGHTCODE_SKIP_VERSION_CHECK", undefined);
 	vi.stubEnv("KNIGHTCODE_DISABLE_AUTO_UPDATE", undefined);
-	vi.stubEnv("KNIGHTCODE_BIN_PATH", undefined);
+	mocks.runtime.bunBinary = true;
+	mocks.runtime.bundledNode = false;
 	states = [];
 	settings = SettingsManager.inMemory();
 	updater = new BackgroundUpdater(
@@ -219,9 +226,22 @@ describe("background updates", () => {
 		expect(states.map((state) => state.phase)).toEqual(["downloading", phase]);
 	});
 
-	it("never replaces a KNIGHTCODE_BIN_PATH override with a release", async () => {
+	it("runs the Node bundle's worker through its entry point", async () => {
 		workerExits(0);
-		vi.stubEnv("KNIGHTCODE_BIN_PATH", "/dev/build/knightcode");
+		mocks.runtime.bunBinary = false;
+		mocks.runtime.bundledNode = true;
+		await updater.check();
+		expect(mocks.spawn).toHaveBeenCalledWith(
+			process.execPath,
+			[process.argv[1], "update", "--self"],
+			expect.objectContaining({ detached: true }),
+		);
+		expect(states.map((state) => state.phase)).toEqual(["downloading", "ready"]);
+	});
+
+	it("never replaces a source checkout with a release", async () => {
+		workerExits(0);
+		mocks.runtime.bunBinary = false;
 		await updater.check();
 		expect(mocks.spawn).not.toHaveBeenCalled();
 		expect(states.map((state) => state.phase)).toEqual(["available"]);

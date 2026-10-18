@@ -29,7 +29,7 @@ const faqs = [
   },
   {
     q: "Which OSes are supported?",
-    a: "macOS, Linux, and Windows. The npm install needs Node.js 22 or newer and pulls the matching platform binary.",
+    a: "macOS, Linux, and Windows. The npm install needs Node.js 22.19 or newer.",
   },
   {
     q: "Where do I report bugs or request features?",
