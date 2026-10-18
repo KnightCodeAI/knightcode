@@ -3,7 +3,11 @@ import net from "node:net";
 import tls from "node:tls";
 import * as undici from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyHttpProxySettings, configureHttpDispatcher } from "../src/core/http-dispatcher.ts";
+import {
+	applyHttpProxySettings,
+	configureHttpDispatcher,
+	omitZstdAcceptEncoding,
+} from "../src/core/http-dispatcher.ts";
 
 const PROXY_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY"] as const;
 const DISPATCHER_PROXY_ENV_KEYS = [...PROXY_ENV_KEYS, "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"] as const;
@@ -142,6 +146,32 @@ describe("http dispatcher", () => {
 				new Promise<void>((resolve) => proxy.close(() => resolve())),
 				new Promise<void>((resolve) => origin.close(() => resolve())),
 			]);
+		}
+	});
+
+	it("stops fetch asking for zstd where Node cannot decode it", async () => {
+		const received: (string | undefined)[] = [];
+		const origin = http.createServer((request, response) => {
+			received.push(request.headers["accept-encoding"]);
+			response.end("origin");
+		});
+		await new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve));
+		const address = origin.address();
+		if (!address || typeof address === "string") {
+			throw new Error("Origin did not bind to a TCP port");
+		}
+		const agent = new undici.Agent();
+		const dispatcher = agent.compose(omitZstdAcceptEncoding);
+		try {
+			const url = `http://127.0.0.1:${address.port}/`;
+			// Over HTTP fetch asks for no zstd itself, so ask the way it does over HTTPS.
+			for (const encoding of ["br, gzip, deflate, zstd", "zstd;q=1"]) {
+				await undici.fetch(url, { dispatcher, headers: { "accept-encoding": encoding } }).then((r) => r.text());
+			}
+			expect(received).toEqual(["br, gzip, deflate", "identity"]);
+		} finally {
+			await agent.close();
+			await new Promise<void>((resolve) => origin.close(() => resolve()));
 		}
 	});
 
