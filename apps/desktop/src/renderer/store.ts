@@ -8,6 +8,7 @@ import { useSyncExternalStore } from "react";
 import type {
 	ApprovalMode,
 	ApprovalResult,
+	DiffComment,
 	ImageInput,
 	Item,
 	LoginState,
@@ -23,9 +24,12 @@ import type {
 	TurnQueue,
 	WireItem,
 	WireTurn,
+	WorkspaceRequest,
 } from "@knightcode/app-server-protocol";
 import { DEFAULT_PREFERENCES, type DesktopState, type Preferences } from "../shared/host-protocol.ts";
 import { type AnyNotification, type AnyServerRequest, client, RequestError } from "./client.ts";
+
+export { RequestError };
 import { placeItem, toView, type ViewItem, type ViewTurn } from "./turns.ts";
 
 export type ModelInfo = ResultOf<"model/list">["models"][number];
@@ -53,7 +57,7 @@ export interface ThreadView {
 	notice?: string;
 }
 
-export type SettingsPage = "general" | "appearance" | "models" | "approvals" | "shortcuts" | "about";
+export type SettingsPage = "general" | "appearance" | "models" | "approvals" | "worktrees" | "shortcuts" | "about";
 export type View =
 	| { kind: "thread"; id: string }
 	| { kind: "new"; cwd?: string }
@@ -67,8 +71,8 @@ export interface State {
 	threads: ThreadSummary[];
 	view: View;
 	held: Record<string, ThreadView>;
-	/** Why the last resume failed; `code` is the server's error code, when it sent one. */
-	opening: Record<string, { message: string; code?: string } | undefined>;
+	/** Why the last resume failed; `code` and `data` are the server's, when it sent them. */
+	opening: Record<string, { message: string; code?: string; data?: unknown } | undefined>;
 	models: ModelInfo[];
 	defaultModel: string | null;
 	toasts: { id: number; text: string }[];
@@ -78,6 +82,14 @@ export interface State {
 	logins: Record<string, LoginState>;
 	sidebarOpen: boolean;
 	paletteOpen: boolean;
+	/** The right region (desktop-shell.md section 9.6): open, and its width in px. */
+	panel: { open: boolean; width: number };
+	/** Review comments drafted on the diff, per thread; they go with the next message (Codex's "1 comment"). */
+	comments: Record<string, DiffComment[]>;
+	/** Bumped by turn/diff/updated, so an open Changes pane reloads. */
+	diffVersion: Record<string, number>;
+	/** The latest output of a worktree's setup script, per thread. */
+	progress: Record<string, string>;
 }
 
 let state: State = {
@@ -95,6 +107,10 @@ let state: State = {
 	logins: {},
 	sidebarOpen: true,
 	paletteOpen: false,
+	panel: { open: false, width: 0 },
+	comments: {},
+	diffVersion: {},
+	progress: {},
 };
 const listeners = new Set<() => void>();
 
@@ -158,7 +174,7 @@ export function toast(text: string): void {
 	setTimeout(() => set((s) => ({ ...s, toasts: s.toasts.filter((t) => t.id !== id) })), 5000);
 }
 
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // --- payloads ---------------------------------------------------------------------------------
 
@@ -231,6 +247,17 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 		case "thread/turn/completed":
 			patchSummary(n.params.turn.threadId, { updatedAt: new Date().toISOString() });
 			return;
+		case "turn/diff/updated":
+			refreshDiff(n.params.threadId);
+			return;
+		case "thread/workspace/progress": {
+			const { threadId, output } = n.params;
+			set((s) => ({
+				...s,
+				progress: { ...s.progress, [threadId]: ((s.progress[threadId] ?? "") + output).slice(-4096) },
+			}));
+			return;
+		}
 		case "thread/replaced": {
 			const { oldThreadId, thread } = n.params;
 			if (state.view.kind === "thread" && state.view.id === oldThreadId) navigate({ kind: "thread", id: thread.id });
@@ -495,9 +522,13 @@ async function resumeThread(id: string): Promise<void> {
 		await drain();
 	} catch (error) {
 		const code = error instanceof RequestError ? error.code : undefined;
+		const data = error instanceof RequestError ? error.data : undefined;
 		const message =
 			code === "threadLockedElsewhere" ? "This thread is open in another KnightCode process." : errorText(error);
-		set((s) => ({ ...s, opening: { ...s.opening, [id]: { message, ...(code ? { code } : {}) } } }));
+		set((s) => ({
+			...s,
+			opening: { ...s.opening, [id]: { message, ...(code ? { code } : {}), ...(data ? { data } : {}) } },
+		}));
 		// No snapshot replaced the held view, which saw every event up to the buffer: apply the buffer so it
 		// stays current. With no held view the events have nothing to update.
 		await drain();
@@ -509,7 +540,12 @@ async function resumeThread(id: string): Promise<void> {
 export async function startThread(
 	cwd: string,
 	text: string,
-	options: { model?: { provider: string; id: string }; thinkingLevel?: ThinkingLevel; approvalMode?: ApprovalMode },
+	options: {
+		model?: { provider: string; id: string };
+		thinkingLevel?: ThinkingLevel;
+		approvalMode?: ApprovalMode;
+		workspace?: WorkspaceRequest;
+	},
 	images?: ImageInput[],
 ): Promise<void> {
 	const { thread, warnings } = await client.request("thread/start", { cwd, ...options });
@@ -534,15 +570,18 @@ const failedSend = (threadId: string, text: string, images: ImageInput[] | undef
 		pending: [...v.pending, { clientMessageId: newClientId(), text, images, failed: errorText(error) }],
 	}));
 
-/** Start a turn on an idle thread, queue on a running one (section 9.4). */
+/** Start a turn on an idle thread, queue on a running one (section 9.4). Drafted review comments go along. */
 export async function send(threadId: string, text: string, images?: ImageInput[]): Promise<void> {
 	const view = state.held[threadId];
 	if (!view) return;
+	const comments = state.comments[threadId] ?? [];
+	const extra = comments.length ? { comments } : {};
+	const clearComments = () => set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [] } }));
 	const running = view.turns.some((t) => t.status === "inProgress");
 	if (running) {
 		await client
-			.request("turn/queue/add", { threadId, text, ...(images?.length ? { images } : {}) })
-			.catch(failedSend(threadId, text, images));
+			.request("turn/queue/add", { threadId, text, ...(images?.length ? { images } : {}), ...extra })
+			.then(clearComments, failedSend(threadId, text, images));
 		return;
 	}
 	const clientMessageId = newClientId();
@@ -553,7 +592,9 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 			text,
 			clientMessageId,
 			...(images?.length ? { images } : {}),
+			...extra,
 		});
+		clearComments();
 		if (result.status !== "started")
 			updateThread(threadId, (v) => ({
 				...v,
@@ -792,5 +833,54 @@ function toolLine(item: Extract<Item, { type: "toolCall" }>): string {
 			const first = Object.values(input).find((v): v is string => typeof v === "string");
 			return `\`${item.tool}\`${first ? ` ${first.split("\n")[0]}` : ""}`;
 		}
+	}
+}
+
+// --- workspaces, diffs and git (desktop-shell.md section 9.6) ---------------------------------
+
+/** Reload an open Changes pane after something other than a turn changed the checkout (a commit, a switch). */
+export function refreshDiff(threadId: string): void {
+	set((s) => ({ ...s, diffVersion: { ...s.diffVersion, [threadId]: (s.diffVersion[threadId] ?? 0) + 1 } }));
+}
+
+export function setPanel(panel: Partial<State["panel"]>): void {
+	set((s) => ({ ...s, panel: { ...s.panel, ...panel } }));
+}
+
+export function addComment(threadId: string, comment: DiffComment): void {
+	set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [...(s.comments[threadId] ?? []), comment] } }));
+}
+
+export function removeComment(threadId: string, comment: DiffComment): void {
+	set((s) => ({
+		...s,
+		comments: { ...s.comments, [threadId]: (s.comments[threadId] ?? []).filter((c) => c !== comment) },
+	}));
+}
+
+/** Move the chat and its uncommitted changes between its worktree and the main checkout. */
+export async function handoff(
+	threadId: string,
+	to: "local" | "worktree",
+	branch?: string,
+): Promise<{ branch?: string } | RequestError> {
+	try {
+		const result = await client.request("thread/handoff", { threadId, to, ...(branch ? { branch } : {}) });
+		for (const warning of result.warnings) toast(warning.message);
+		updateThread(threadId, (v) => ({ ...v, thread: result.thread }));
+		upsertSummary(result.thread);
+		return { ...(result.branch ? { branch: result.branch } : {}) };
+	} catch (error) {
+		return error instanceof RequestError ? error : new RequestError("internal", errorText(error));
+	}
+}
+
+/** Rebuild a deleted worktree from its snapshot, then open the thread in it. */
+export async function restoreWorktree(threadId: string): Promise<void> {
+	try {
+		await client.request("thread/worktree/restore", { threadId });
+		await resumeThread(threadId);
+	} catch (error) {
+		toast(errorText(error));
 	}
 }

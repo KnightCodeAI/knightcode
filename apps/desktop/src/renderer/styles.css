@@ -41,6 +41,16 @@
 	--kc-caution: #ff8549;
 	--kc-track: rgb(255 255 255 / 0.1);
 	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.3);
+	/* Changes pane and git, measured from Codex's (2026-10-18). */
+	--kc-git-added: #40c977;
+	--kc-git-deleted: #fa423e;
+	--kc-soft: rgb(255 255 255 / 0.03);
+	--kc-ghost-hover: rgb(255 255 255 / 0.078);
+	--kc-info-bg: rgb(27 35 46);
+	--kc-info: rgb(135 179 250);
+	--kc-text-strong: #ffffff;
+	--kc-surface-secondary: #141414;
+	--kc-danger-text: rgb(255 103 100);
 	--kc-font-ui: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 	--kc-font-code: "Cascadia Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	--kc-size-ui: 14px;
@@ -83,6 +93,15 @@
 	--kc-caution: #c2410c;
 	--kc-track: rgb(0 0 0 / 0.08);
 	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.12);
+	--kc-git-added: #00a240;
+	--kc-git-deleted: #e02e2a;
+	--kc-soft: rgb(0 0 0 / 0.03);
+	--kc-ghost-hover: rgb(0 0 0 / 0.05);
+	--kc-info-bg: #e8f0fe;
+	--kc-info: #1a5fd6;
+	--kc-text-strong: #0d0d0d;
+	--kc-surface-secondary: #f9f9f9;
+	--kc-danger-text: #d93b36;
 	color-scheme: light;
 }
 
@@ -118,6 +137,14 @@
 	--color-head: var(--kc-text-head);
 	--color-caution: var(--kc-caution);
 	--color-track: var(--kc-track);
+	--color-git-added: var(--kc-git-added);
+	--color-git-deleted: var(--kc-git-deleted);
+	--color-soft: var(--kc-soft);
+	--color-ghost-hover: var(--kc-ghost-hover);
+	--color-info-bg: var(--kc-info-bg);
+	--color-info: var(--kc-info);
+	--color-strong: var(--kc-text-strong);
+	--color-danger-text: var(--kc-danger-text);
 	--font-ui: var(--kc-font-ui);
 	--font-code: var(--kc-font-code);
 }
@@ -201,6 +228,54 @@ body {
 	.kc-row[data-active="true"] {
 		background: var(--kc-bg-row);
 	}
+}
+
+/* Codex's commit and pull request cards, and its dialogs (handoff, Work here). */
+.kc-card {
+	background: var(--kc-bg-panel);
+	border: 1px solid var(--kc-hairline);
+	box-shadow: 0 16px 32px -8px rgb(0 0 0 / 0.19);
+}
+.kc-dialog {
+	background: var(--kc-bg-menu);
+	backdrop-filter: blur(8px);
+	box-shadow:
+		0 0 0 0.5px var(--kc-hairline),
+		0 16px 32px -8px rgb(0 0 0 / 0.19);
+}
+
+/* Codex's control capsule (Changes header): a pill on a blurred surface, a half-pixel ring, a soft shadow. */
+.kc-capsule {
+	background: color-mix(in srgb, var(--kc-bg-surface) 80%, var(--kc-text-strong) 4%);
+	backdrop-filter: blur(24px);
+	box-shadow:
+		0 0 0 0.5px var(--kc-hairline),
+		0 8px 16px -4px rgb(0 0 0 / 0.12);
+}
+/* A backdrop filter inside the capsule's own cannot blur the page, so its menus are opaque instead. */
+.kc-capsule .kc-menu {
+	background: var(--kc-bg-panel);
+}
+.kc-comment {
+	box-shadow:
+		0 0 0 0.5px rgb(255 255 255 / 0.157),
+		0 3px 7.5px rgb(0 0 0 / 0.04),
+		0 0 20px rgb(0 0 0 / 0.05);
+}
+/* Variables the diff overrides (diff-overrides.css) read inside @pierre/diffs' shadow root. */
+.kc-changes {
+	--color-surface: var(--kc-bg-surface);
+	--color-text: var(--kc-text-strong);
+	--color-text-info: #2c67c5;
+	--color-background-primary-ghost-hover: var(--kc-ghost-hover);
+	--color-surface-secondary: var(--kc-surface-secondary);
+	--kc-diff-description: var(--kc-text-desc);
+	--diffs-addition-base: var(--kc-git-added);
+	--diffs-deletion-base: var(--kc-git-deleted);
+	--diffs-font-family: ui-monospace, "SFMono-Regular", "SF Mono", menlo, consolas, "Liberation Mono", monospace;
+	--diffs-font-size: 12px;
+	--diffs-line-height: calc(12px * 1.8);
+	--diffs-mixer: light-dark(#000, #fff);
 }
 
 .markdown > :first-child {

@@ -17,6 +17,7 @@ export const DESKTOP_KEYBINDINGS = {
 	"desktop.thread.archive": { defaultKeys: ["mod+shift+a"], description: "Archive the thread" },
 	"desktop.project.open": { defaultKeys: ["mod+o"], description: "Add a project folder" },
 	"desktop.sidebar.toggle": { defaultKeys: ["mod+b"], description: "Toggle the sidebar" },
+	"desktop.panel.toggle": { defaultKeys: ["mod+shift+g"], description: "Toggle the Changes panel" },
 	"desktop.turn.interrupt": { defaultKeys: ["escape"], description: "Stop the running turn" },
 	"desktop.composer.send": { defaultKeys: ["enter"], description: "Send the message" },
 	"desktop.composer.newline": { defaultKeys: ["shift+enter"], description: "Insert a new line" },

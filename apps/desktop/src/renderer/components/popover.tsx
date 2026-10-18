@@ -13,7 +13,8 @@ export function Popover({
 	trigger: (open: boolean) => ReactNode;
 	children: (close: () => void) => ReactNode;
 	align?: "left" | "right";
-	side?: "top" | "bottom";
+	/** "left" opens beside the trigger, as Codex opens a summary's submenus. */
+	side?: "top" | "bottom" | "left";
 	className?: string;
 }) {
 	const [open, setOpen] = useState(false);
@@ -37,11 +38,12 @@ export function Popover({
 		};
 	}, [open]);
 	return (
-		<div ref={ref} className="relative">
+		// A "left" menu anchors to the enclosing menu instead (the nearest positioned ancestor), so it sits beside it.
+		<div ref={ref} className={side === "left" ? undefined : "relative"}>
 			<div onClick={() => setOpen(!open)}>{trigger(open)}</div>
 			{open ? (
 				<div
-					className={`kc-menu absolute z-30 min-w-56 ${side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${align === "left" ? "left-0" : "right-0"} ${className}`}
+					className={`kc-menu absolute z-30 ${side === "left" ? "top-0 right-full me-3" : `min-w-56 ${side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${align === "left" ? "left-0" : "right-0"}`} ${className}`}
 				>
 					{children(() => setOpen(false))}
 				</div>
