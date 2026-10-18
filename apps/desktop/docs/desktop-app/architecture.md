@@ -283,9 +283,9 @@ interface Thread {
 	updatedAt: string;          // ISO 8601
 	forkedFromId?: string;      // the parent's header id (never parsed from a file name); absent when the parent is gone
 	workspace:
-		| { mode: "local" }
-		| { mode: "worktree"; path: string; branch: string; baseRef: string; // baseRef: a commit SHA (6.1)
-		    carriedLocalChanges?: boolean; setupFailed?: boolean };
+		| { mode: "local"; worktree?: string } // worktree: the one a handed-off thread came from (6.1)
+		| { mode: "worktree"; path: string; baseRef: string; ownerThreadId: string; // baseRef: a commit SHA (6.1)
+		    environment?: string; setupFailed?: boolean; deleted?: boolean };
 	approvalMode: ApprovalMode;
 	model?: ModelRef;
 	thinkingLevel: ThinkingLevel;
@@ -800,7 +800,7 @@ stronger, it was left alone (end of this section).
 | `initialize` `optOutNotifications`, result `platform` (4.1) | Clients skip traffic they never render; paths and shell labels need the host's OS and home directory |
 | `server/diagnostics` (4.4) | Section 13's memory figures, observable in a shipped app |
 | Listing index (5.10) | Section 13 measured a 31.6 s initial `thread/list` at 10,000 sessions on Windows |
-| Worktree `carryLocalChanges`, include list, setup command, branch prefix (6.1) | A new worktree that lacks the user's uncommitted work or `.env` is unusable for the task; most projects need an install step |
+| Worktree `carryLocalChanges`, `.worktreeinclude`, environments with setup and cleanup scripts (6.1) | A new worktree that lacks the user's uncommitted work or `.env` is unusable for the task; most projects need an install step |
 
 Considered and left out, with the reason:
 
@@ -1579,153 +1579,174 @@ sessions reads zero transcript bytes and opens zero transcripts.
 
 ### 6.1 Worktree or local
 
+Workspaces follow the Codex desktop app, checked by driving it on 2026-10-17
+and against Codex's open-source worktree crate (Phase B plan, "Codex
+parity").
+
 `thread/start` takes `workspace`:
 
-- `{mode: "local"}`: the thread runs in `cwd`.
-- `{mode: "worktree", baseRef?}`: first resolve the base to a commit,
-  `git rev-parse --verify <baseRef ?? HEAD>^{commit}`, then `git worktree
-  add -b kc/<threadId> <path> <baseSha>` into
-  `<agentDir>/worktrees/<project-hash>/<threadId>`. The thread's cwd is the
-  worktree; `Thread.workspace` records path, branch and `baseRef`, which is
-  always that commit SHA, never `HEAD` or a branch name. A stored `HEAD` or
-  branch moves as the user keeps working, so every later diff against it
-  would show a different change set; the SHA is fixed.
-- The branch name uses the whole thread id. Session ids are UUIDv7, whose
-  leading characters are a millisecond timestamp, so a short prefix is not
-  random: two threads created within the same few minutes share their first
-  8 characters (a probe produced the same branch name twice). Naming a
-  thread does not rename its branch; one name for the thread's whole life is
-  what `thread/archive` cleanup and the handoff look up.
+- `{mode: "local"}`: the thread runs in `cwd`. A `cwd` inside a managed
+  worktree is a new thread in that worktree (Codex's "New chat in this
+  worktree").
+- `{mode: "worktree", baseRef?, carryLocalChanges?, environment?}`: a new
+  git worktree on a **detached `HEAD`** at `baseRef`'s commit (default: the
+  project checkout's `HEAD`). No branch is created; "Create branch here"
+  (`git/branch/create`) or a handoff makes one. The base is stored as a SHA,
+  never a branch name, so later diffs against it keep showing the same change
+  set. The thread's cwd is the worktree, or the same subdirectory of it when
+  the project cwd is a subdirectory of the repository.
 
-The default session directory is derived from cwd
-(`session-manager.ts:580`), so a worktree thread's file would land in a
-directory of its own and `thread/list {cwd: project}` would not find it. A
-worktree thread's session file goes in the project's session directory
-instead (`SessionManager.create(worktreePath, projectSessionDir)`), and
-`Thread.projectCwd` names the project.
+Worktrees live in `<root>/<bucket>/<repoName>`: `root` is the user's
+`worktrees.root` setting (default `<agentDir>/worktrees`), `bucket` four
+random hex digits, `repoName` the repository folder's name. A manifest,
+`<root>/<bucket>/worktree.json`, is written before the worktree exists and
+names the project, the base SHA, the owner thread, the environment, and where
+handed-off threads run. A thread's workspace is derived from its cwd and that
+manifest: a session file is written only after the first message, and every
+path that creates a session (start, fork, resume, an extension's
+`newSession` or `fork`) already passes the cwd. The bucket and its manifest
+outlive a deleted checkout, so a deleted worktree can still be described and
+restored.
 
-A cwd outside a git repository supports only `{mode: "local"}`; worktree mode
-answers `notGitRepo`.
+The checkout is created with `git worktree add --detach --no-checkout` and
+filled with `git reset --hard`, with hooks, fsmonitor and every configured
+filter disabled and Git LFS smudging off, as Codex's crate does. No user code
+runs while a worktree is made, so a failed creation is rolled back completely.
 
-#### Starting from the user's uncommitted work
+`carryLocalChanges` applies the project checkout's uncommitted changes
+(staged, unstaged and untracked; not ignored files) to the new worktree as
+uncommitted edits, as Codex does for a branch "with local changes". The
+user's checkout is only read.
 
-`{mode: "worktree", carryLocalChanges: true}` starts the worktree from the
-main checkout as it is on disk, not as last committed. A user who asks for a
-fix to the file they are editing expects the agent to see that edit.
+A worktree's trust is its project's (keyed by the worktree path, every new
+worktree would ask again); its settings files are its own committed
+`.knightcode/`, like any checkout's. The default session directory is
+derived from cwd (`session-manager.ts:580`), so a worktree thread's session
+file goes in the project's session directory instead, and
+`Thread.projectCwd` names the project. A cwd outside a git repository
+supports only `{mode: "local"}`; worktree mode answers `notGitRepo`.
 
-The obvious way, applying the main checkout's diff inside the new worktree
-(Codex copies the diff and untracked files across), makes those edits
-uncommitted changes of the worktree. Every later diff and the handoff would
-then count them as the thread's work, and handing off would apply the user's
-own edits to their checkout a second time, which conflicts.
+#### Environments and `.worktreeinclude`
 
-So the server snapshots instead, with the temporary-index technique of
-section 6.2, which never touches the user's index or files:
+A project's environments are in `.knightcode/environments.json`, which can
+be committed: each has a name, a setup script and a cleanup script (each with
+`default`, `macos`, `linux` and `windows` variants; the platform's variant
+wins) and actions for the desktop's toolbar. `environment/list` and
+`environment/save` read and write the file; a worktree start or handoff
+names one environment or none (Codex's "Work without environment").
 
-1. `GIT_INDEX_FILE=<temp copy>`, `git add -A`, `git write-tree`: a tree of
-   the working directory, tracked and untracked, not ignored.
-2. `git commit-tree <tree> -p <HEAD> -m "Local changes at thread start"`: a
-   commit no branch points to.
-3. That commit is `baseSha`, and the worktree is added at it as above.
+- The setup script runs when the worktree is created, at the project root,
+  with `KNIGHTCODE_SOURCE_TREE_PATH` (the checkout the worktree came from)
+  and `KNIGHTCODE_WORKTREE_PATH` (the new worktree) in its environment,
+  through the platform shell with an argument array and a 10-minute timeout.
+  Its output streams as `thread/workspace/progress {threadId, phase:
+  "setup", output}` to the connection that started the thread. A failure
+  keeps the worktree and the thread, sets `workspace.setupFailed: true`, and
+  returns the thread with the last 4 KiB of output in a `warning`.
+- The cleanup script runs at the project root before a worktree is deleted,
+  with the same variables; a failure is a warning and the deletion proceeds.
+- An untrusted project's environment never runs (section 5.2); the start
+  continues without setup and carries a `trust` warning.
+- Git-ignored files are not copied into a worktree unless the repository
+  root's `.worktreeinclude` (gitignore syntax) lists them, such as `.env`. A
+  file is copied only if the worktree ignores it too, and nothing is ever
+  created through a symlink or junction.
 
-The thread's change set is then exactly what it did after the snapshot.
-Handoff (below) is unchanged: `apply` brings over only the thread's work, and
-`merge` brings the snapshot commit too, which a dirty main checkout already
-contains, so `merge` with `carryLocalChanges` answers `gitConflict` with
-`data.reason: "localChanges"` unless the main checkout's working tree still
-equals the snapshot tree. The thread records `carriedLocalChanges: true` in
-`workspace` so clients can say "Started from your uncommitted changes".
-
-#### Project worktree settings
-
-In the project's settings (`.knightcode/settings.json`, so only applied when
-the project is trusted) or the global ones:
+#### User settings
 
 ```ts
-interface WorktreeSettings {
-	branchPrefix?: string;     // default "kc/"; the branch is `<branchPrefix><threadId>`
-	include?: string[];        // gitignore-style patterns of ignored files to copy in, such as ".env"
-	setup?: string;            // a shell command run in the new worktree before the thread is returned
+interface WorktreesSettings { // the `worktrees` member of the global settings file
+	root?: string;              // absolute; default <agentDir>/worktrees
+	autoDelete?: boolean;       // default true: archive deletes, and old worktrees are pruned
+	keep?: number;              // default 15: managed worktrees kept before the least recently used are pruned
+	fetchBeforeCreate?: boolean; // default false: fetch the base's upstream before each new worktree
+	branchPrefix?: string;      // default "kc/": handoff branch names
 }
 ```
 
-- `include` copies matching ignored files from the main checkout after
-  `git worktree add`. Without it a worktree has no `.env`, no local config,
-  and the agent's first test run fails for a reason the user cannot see.
-- `setup` runs through the platform shell (`bash -c` or `powershell
-  -NoProfile -Command`, argument array) in the worktree, with a 10-minute
-  timeout. Its output streams as `thread/workspace/progress {threadId, phase:
-  "setup", output}` to the connection that started the thread. A failure
-  keeps the worktree and the thread, sets `workspace.setupFailed: true`, and
-  returns the thread with the last 4 KiB of output in a `warning`; the user
-  can still work in it or archive it.
-- An untrusted project's settings are not loaded (section 5.2), so its
-  `include` and `setup` do not apply. `project/trust/read` reports
-  `needsTrust`, and a client asks for trust before offering a worktree.
+#### Handoff
 
-`thread/worktree/handoff {threadId, strategy: "merge" | "apply"}` hands over
-the thread's whole change set: commits on `kc/<threadId>`, uncommitted edits
-and untracked files (not ignored ones). `git diff <baseRef>...` alone would
-miss the last two. Both strategies start the same way:
+`thread/handoff {threadId, to: "local" | "worktree", branch?, environment?}`
+moves a chat and its uncommitted changes between its worktree and the main
+checkout (Codex's "Hand off", whose dialog reads "Check out branch … in a
+local workspace and detach it from worktree."). Each chat keeps its worktree,
+so a handoff back returns it there.
 
-1. Refuse while a turn runs (`turnInProgress`).
-2. Commit everything pending in the worktree onto `kc/<threadId>`:
-   `git add -A`, then `git commit` with the message from section 6.3. The
-   change set is now exactly `<mergeBase>..kc/<threadId>`, where
-   `<mergeBase>` is `git merge-base HEAD kc/<threadId>` in the main checkout.
+1. Both checkouts are reserved (no turn starts and no tool runs in either)
+   and must have no merge, rebase, cherry-pick or revert in progress. The
+   destination must be clean: nothing staged, no tracked change, no untracked
+   file that is not ignored, and no ignored file where the handoff writes a
+   file (git's checkout would overwrite it). Otherwise `gitConflict` with
+   `data.reason: "localChanges"` and "Stash or commit your local changes to
+   hand off."
+2. The source's uncommitted changes are captured as one binary patch and
+   saved under `<agentDir>/handoff/` before anything moves.
+3. To local: the worktree's `HEAD` becomes a branch checked out in the main
+   checkout: the worktree's own branch (then the worktree is detached first,
+   since git checks a branch out in one place only), else the requested name,
+   else `<branchPrefix><title-slug>`; the previous handoff's branch is
+   fast-forwarded instead when it is still checked out there. To worktree:
+   the worktree is detached at the main checkout's `HEAD`, which stays on its
+   branch; a thread born in the main checkout gets a new worktree.
+4. The patch is applied in the destination, then reverse-applied in the
+   source; the changes leave the source only after they landed. A failure to
+   apply answers `recoveryRequired` naming the saved patch, with the source
+   untouched.
+5. The thread is reloaded where it now runs; its session header keeps its
+   original cwd, and the manifest records where it runs.
 
-Serialize mutating app-server Git operations per canonical checkout path,
-not per thread. Handoff reserves both source and destination checkout queues
-in canonical sorted order; shared-ref mutations also serialize by the common
-Git directory. Before handoff, refuse a pre-existing merge/rebase/cherry-pick
-or unresolved index; record HEAD, branch refs, index bytes, and affected
-tracked/untracked file fingerprints. Resolve the source branch to a fixed
-commit SHA after committing it. Use the captured SHAs for preflight and
-execution, and re-check HEAD/index/file fingerprints immediately before
-publication. A changed precondition answers `gitConflict` with
-`data.reason: "concurrentChange"`, without overwriting the new user state.
-This queue cannot prevent an editor or an external Git process from writing.
+The handoff runs no hooks and creates no commit: it moves the user's own work.
+A chat with no message yet has no session file to reload and is not handed
+off.
 
-Then:
+#### Deleting and restoring worktrees
 
-- `merge`: preflight with `git merge-tree --write-tree --name-only
-  <capturedHead> <sourceSha>`. Exit code 1 means tree conflicts: answer
-  `gitConflict` with paths and leave the main checkout unchanged. A clean
-  preflight permits `git merge --no-ff <sourceSha>` but is not a transaction:
-  a rejecting `pre-merge-commit` hook can leave `MERGE_HEAD`, and hooks or
-  external writers can change files. Classify local-change refusal as
-  `data.reason: "localChanges"`. On later failure, inspect Git state; attempt
-  `git merge --abort` only if this operation created that merge and the
-  captured/observed state proves it will preserve pre-existing changes and
-  intervening edits. Verify the result against the captured state. Otherwise
-  stop and report `gitConflict` with `data: {reason: "recoveryRequired",
-  operation, paths, recoveryInstructions}`; never force-reset, stash, or
-  remove merge metadata to pretend success. `merge-tree --write-tree` needs
-  Git 2.38 or later; older Git answers `toolMissing`.
-- `apply`: `git diff --binary <mergeBase> <sourceSha>`, then `git apply
-  --check`, re-check the captured checkout state, then `git apply`. No
-  `--3way`, which could write conflict markers. A normal patch rejection
-  leaves the checkout unchanged; an external race or I/O failure requires
-  inspection and the same conservative recovery reporting. Successful
-  application leaves the change uncommitted on top of the user's edits.
+Archiving a thread deletes its worktree, and when there are more managed
+worktrees than `worktrees.keep` the least recently used are pruned, as in
+Codex; `worktrees.autoDelete: false` turns both off, and `worktree/delete`
+deletes one from the settings list (`worktree/list`). A worktree another
+thread is loaded or loading in, or that a reservation holds, is never
+deleted, and neither is one another unarchived thread uses on archive, one
+that is still being prepared, or one with an initialized submodule (the
+snapshot would record only its gitlink, not the files inside it).
+Deletion commits a snapshot first: the worktree's tracked and untracked
+files (not ignored ones) as a commit whose first parent is the worktree's
+`HEAD` and whose second parent holds the staged state, kept under its own
+ref, `refs/knightcode/snapshots/<bucket>/<time>`, and recorded in the manifest
+before the checkout is touched. A removal that fails part-way keeps that
+snapshot and is finished, not snapshotted again, on the next attempt. Then the environment's cleanup script runs
+and `git worktree remove --force` removes the checkout; installed
+dependencies and other ignored files go with it. Only registrations in the
+managed layout whose `.git` file points back to them are removed; there is no
+repository-wide `git worktree prune`, so the user's own worktrees and stale
+registrations are never touched.
 
-Neither strategy resolves conflicts or discards user changes. The server
-cleans up an operation it can safely undo; it does not promise that arbitrary
-hooks, I/O failures or concurrent external writers can never leave a merge
-in progress. Unsafe cleanup is reported, with instructions, not attempted.
-Archive/worktree cleanup follows this same per-checkout mutation queue.
+Resuming a thread whose worktree was deleted answers `gitConflict` with
+`data.reason: "worktreeDeleted"`; `thread/read` still works.
+`thread/worktree/restore` rebuilds the worktree at its old path from the
+snapshot: detached at the old `HEAD`, with the working files and the staged
+state exactly as they were.
 
-`thread/archive` on a worktree thread removes the worktree only when it has
-no uncommitted changes; otherwise it archives and keeps the worktree, and says
-so in the result. Worktrees the app server did not create are never touched.
+`thread/fork` takes `workspace` too: absent, the fork shares the source's
+workspace (Codex's "Fork in this worktree"); `{mode: "worktree"}` gives it a
+new worktree at the source checkout's `HEAD` carrying the source's
+uncommitted changes ("Fork in a new worktree"). `ThreadSummary.workspaceMode`
+marks worktree threads in listings without loading them.
+
+Serialize mutating app-server git operations per repository (its common git
+directory), not per thread: a worktree and its main checkout share refs, and
+one queue needs no lock ordering. The queue cannot stop an editor or an
+external git process from writing; each mutation re-checks what it depends
+on and answers `gitConflict` with `data.reason: "concurrentChange"` rather
+than overwrite.
 
 ### 6.2 Diffs
 
 | Method | Behaviour |
 | --- | --- |
-| `thread/diff/read {threadId}` | working tree against base (`HEAD` for local, `baseRef` for worktree): files, hunks, line ranges, binary flag. With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call |
-| `thread/diff/revert {threadId, path, hunk?}` | reverse-applies one hunk or restores one file |
-| `thread/diff/comment {threadId, comments}` | composes one follow-up message quoting each comment's anchored lines, then behaves as `turn/queue/add` |
+| `thread/diff/read {threadId, scope?, against?, commit?, context?, ignoreWhitespace?}` | `scope`, Codex's Changes sources: `lastTurn` (the last turn that changed files, before to after), `uncommitted` (`HEAD` to working tree; the default), `unstaged` (index to working tree), `staged` (`HEAD` to index), `committed` (one `commit`, from `git/log`), `branch` (the merge base with `against` to working tree; `against` defaults to the worktree's `baseRef`, else the upstream, else the default branch). `ignoreWhitespace` is Codex's "Hide white space". Files, hunks with content-hash ids, line ranges, binary flag; `context` lines around each hunk (a large value gives whole files). With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call. The serialized response stays within a fixed budget: files past it come without hunks (`tooLarge`), or are only counted (`filesOmitted`) |
+| `thread/diff/revert {threadId, scope?, against?, path?, hunkId?, context?}` | reverse-applies one hunk, one file, or the whole scope to the working tree; `lastTurn` without a path undoes the turn. A hunk that changed since it was read answers `gitConflict` `diffChanged`. Refused while a turn runs |
+| `turn/start`, `turn/queue/add` with `comments` | review comments are drafts the client keeps (Codex: "Local comment on line R2", a "1 comment" chip) and sends with the next input; the server quotes each comment's lines from its scope's trees into the text the model reads, and the user item shows the comments, not that text |
 
 `turn/diff/updated {threadId, turnId, files}` follows `turn/completed` when
 file contents changed while the turn ran (attribution below). Tool calls'
@@ -1743,8 +1764,12 @@ touching the user's index:
    write-tree`. The tree id names every tracked and untracked, not ignored,
    file's content.
 
-Taken at the run's first `agent_start` and at `agent_settled`; when the two
-tree ids differ, `files` is `git diff --name-only <before> <after>`. That
+Taken before the turn's first tool call (files change only through tools;
+a hidden `tool_call` handler after the approval gate awaits it) and after
+the turn settles, one snapshot at a time per thread; when the two tree ids
+differ, `files` is `git diff --name-only <before> <after>`, and the pair is
+stored as a `knightcode.turnDiff` custom entry so `lastTurn` reads back after
+a reload. That
 names every file whose content changed during the turn, including a second
 edit to a file that was already dirty.
 
@@ -1764,9 +1789,16 @@ and `git/*` answer `notGitRepo`. Tool calls still carry `fileChanges`.
 
 ### 6.3 Git
 
-`git/stage`, `git/unstage` (`{threadId, path, hunk?}`), `git/commit
-{threadId, message?}`, `git/push {threadId}`, `git/pr/create {threadId,
-title?, body?}`.
+`git/status {threadId}` (branch, upstream, ahead/behind, staged/unstaged/
+untracked counts, an operation in progress), `git/stage`, `git/unstage`
+(`{threadId, path?, hunkId?, context?}`), `git/commit {threadId, message?,
+includeUnstaged?}` (Codex's "Include unstaged changes", on by default),
+`git/push {threadId}`, `git/pr/create {threadId, title?, body?, draft?}`,
+`git/branches`, `git/branch/create {threadId, name}` (Codex's "Create branch
+here"), `git/branch/switch {threadId, name}` and `git/log {threadId,
+limit?}` (the commits since the base, for the Committed source).
+Each acts on the thread's own checkout: its worktree, or the user's checkout
+for a local thread.
 
 An empty commit message asks the thread's model for one from the staged diff,
 outside the conversation. `git/pr/create` runs `gh pr create`; without `gh`
@@ -2188,17 +2220,17 @@ unless stated):
 - `ui/dialog` round-trips select, confirm, input and editor; `ui/widget`
   with lines and with a view reaches the subscriber; a factory widget over a
   connection without `localHandles` behaves as RPC mode does.
-- Worktrees (temporary git repo): create, turn edits a tracked file and
-  creates an untracked one, handoff `apply` leaves both uncommitted in the
-  main checkout; handoff `merge` merges the branch including both; a
-  conflicting `merge` or `apply` answers `gitConflict` with paths and leaves
-  the main checkout byte-for-byte unchanged, with no merge in progress, also
-  when the checkout was already dirty; archive refuses to delete a worktree
-  with uncommitted changes; a worktree thread appears in `thread/list` for
-  its project's cwd. Two worktree threads created in the same second get
-  different branches. A thread created with `baseRef: "HEAD"` stores the
-  commit SHA, and a commit the user makes afterwards in the main checkout
-  does not change its `thread/diff/read`.
+- Worktrees (temporary git repo): create (detached, no branch), a turn edits
+  a tracked file and creates an untracked one, a handoff to local checks out
+  a new branch in the main checkout with both uncommitted there and the
+  worktree left clean; a dirty main checkout (a tracked edit, or only an
+  untracked file) refuses the handoff with `localChanges` and is left
+  byte-for-byte unchanged; archive deletes the worktree after a snapshot, and
+  restore brings the uncommitted edit back; a worktree thread appears in
+  `thread/list` for its project's cwd. Two worktree threads created in the
+  same second get different buckets. A thread created with `baseRef: "HEAD"`
+  stores the commit SHA, and a commit the user makes afterwards in the main
+  checkout does not change its `branch` diff.
 - A turn whose `bash` call writes a file emits `turn/diff/updated`; so does
   a second turn editing a file the first already modified. The user's index
   is unchanged afterwards. In a directory outside git, worktree mode,
@@ -2252,10 +2284,10 @@ Implementation-risk regressions (Phase A unless noted):
   The first disposition wins; matching `turn/started` has the request token,
   including before-response delivery and independent extension-triggered runs.
 - `AppServerClient` preserves structured `error.data` byte-for-byte.
-- Phase B: rejecting merge hook, pre-existing merge/rebase, dirty/untracked
-  files, concurrent HEAD/index edits, external writes, failed apply and
-  cleanup failure preserve user state or report `recoveryRequired`; never
-  assert that clean `merge-tree` preflight alone prevents `MERGE_HEAD`.
+- Phase B: a handoff refused for a dirty destination or an operation in
+  progress changes nothing; a failed apply keeps the changes in the source
+  and in the saved patch (`recoveryRequired`); a deletion whose removal fails
+  keeps the worktree and its snapshot.
 
 Section 4.6 additions (Phase A2 unless noted):
 
@@ -2301,10 +2333,10 @@ Section 4.6 additions (Phase A2 unless noted):
   appended session is rescanned alone; a corrupt index is rebuilt; a deleted
   file disappears from the list.
 - Phase B: a worktree started with `carryLocalChanges` contains the user's
-  uncommitted and untracked (not ignored) files, `thread/diff/read` is empty
-  before the first turn, and handoff `apply` brings back only the thread's
-  edits. `include` copies a matching ignored `.env`; a failing `setup`
-  leaves the thread with `setupFailed: true` and a `warning`.
+  uncommitted and untracked (not ignored) files as uncommitted changes, and
+  the user's checkout is unchanged. `.worktreeinclude` copies a matching
+  ignored `.env`; a failing setup script leaves the thread with
+  `setupFailed: true` and a `warning`.
 
 Race tests block on explicit gates that prove the operation reached its
 blocking point (an extension factory or hook that signals it was entered,
