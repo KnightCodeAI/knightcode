@@ -6,13 +6,13 @@ For native Windows setup, read [Windows Setup](windows.md). For Android, read [T
 
 ## 1. Install KnightCode
 
-On macOS or Linux, you can use the installer. It installs Node.js 22.10 or newer if Node is missing or older, then installs KnightCode for your user:
+On macOS or Linux, you can use the installer. It installs Node.js 22.19 or newer if Node is missing or older, then installs KnightCode for your user:
 
 ```bash
 curl -fsSL https://knightcode.dev/install.sh | sh
 ```
 
-Alternatively, install KnightCode from npm. This requires Node.js 22.10 or newer:
+Alternatively, install KnightCode from npm. This requires Node.js 22.19 or newer:
 
 ```bash
 npm install -g --ignore-scripts @knightcodeai/cli

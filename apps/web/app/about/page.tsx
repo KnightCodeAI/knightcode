@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 }
 
 const stack = [
-  { label: "Node.js 22.10", note: "Published npm install" },
+  { label: "Node.js 22.19", note: "Published npm install" },
   { label: "@knightcode/tui", note: "Terminal UI" },
   { label: "@knightcode/ai", note: "Providers, auth, streaming" },
   { label: "@knightcode/agent", note: "Loop, tools, compaction, sessions" },

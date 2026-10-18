@@ -183,8 +183,7 @@ validateExternalImports(metafiles);
 // not say why: Node 22.9 lacks worker_threads.markAsUncloneable, which undici 8 calls on load,
 // and Node 20 lacks fs.globSync, which the runtime imports. Old Node must be able to parse the
 // launcher itself: a named import of a missing export fails to link, and an exit code rather
-// than process.exit() lets a Windows pipe flush the message. The runtime is loaded with import()
-// because require() of an ES module needs Node 22.12 without a flag.
+// than process.exit() lets a Windows pipe flush the message.
 const launcher = `#!/usr/bin/env node
 import module from "node:module";
 
@@ -199,7 +198,7 @@ if (differs !== -1 && current[differs] < required[differs]) {
 	process.exitCode = 1;
 } else {
 	if (module.enableCompileCache) module.enableCompileCache();
-	import("./cli-runtime.js");
+	module.createRequire(import.meta.url)("./cli-runtime.js");
 }
 `;
 writeFileSync(join(BUNDLE, "cli.js"), launcher);

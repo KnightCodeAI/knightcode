@@ -90,7 +90,7 @@ export default async function HomePage() {
               },
               {
                 icon: Search01Icon,
-                label: "Node.js 22.10 or newer for the npm install",
+                label: "Node.js 22.19 or newer for the npm install",
               },
             ]}
             image={{

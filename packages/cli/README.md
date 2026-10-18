@@ -23,9 +23,9 @@ Install the command-line interface with npm:
 npm install -g --ignore-scripts @knightcodeai/cli
 ```
 
-This requires Node.js 22.10 or newer. KnightCode does not require dependency lifecycle scripts for a normal npm installation, and it runs on your Node: you do not need Bun. For a machine without Node, each [GitHub release](https://github.com/KnightCodeAI/knightcode/releases) also carries standalone binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).
+This requires Node.js 22.19 or newer. KnightCode does not require dependency lifecycle scripts for a normal npm installation, and it runs on your Node: you do not need Bun. For a machine without Node, each [GitHub release](https://github.com/KnightCodeAI/knightcode/releases) also carries standalone binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).
 
-On macOS or Linux, you can instead use the installer. It installs Node.js 22.10 or newer if Node is missing or older:
+On macOS or Linux, you can instead use the installer. It installs Node.js 22.19 or newer if Node is missing or older:
 
 ```bash
 curl -fsSL https://knightcode.dev/install.sh | sh
