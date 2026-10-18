@@ -7,6 +7,7 @@
 import type { AssistantMessage } from "@knightcode/ai";
 import type { FileChange, Item, ToolOutput, Turn } from "@knightcode/app-server-protocol";
 import type { SessionEntry } from "../core/session-manager.ts";
+import { TURN_COMMENTS_ENTRY, type TurnComments } from "./diff.ts";
 import {
 	classifyAssistantError,
 	isTurnEnd,
@@ -207,8 +208,22 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 			}
 		}
 	}
+	// Review comments apply only to the user item their start produced, never to "the next user message".
+	const reviews = new Map<string, TurnComments>();
+	for (const entry of entries)
+		if (entry.type === "custom" && entry.customType === TURN_COMMENTS_ENTRY) {
+			const review = entry.data as TurnComments;
+			reviews.set(review.itemId, review);
+		}
 	const result = turns.filter((t) => t.turn.items.length > 0);
 	result.forEach((t) => {
+		for (const item of t.turn.items) {
+			const review = item.type === "userMessage" ? reviews.get(item.id) : undefined;
+			if (review && item.type === "userMessage") {
+				item.text = review.text;
+				item.comments = review.comments;
+			}
+		}
 		const active = t.turn.id === activeTurnId;
 		if (t.marked) {
 			if (t.end) {

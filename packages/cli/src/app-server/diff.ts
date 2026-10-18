@@ -4,21 +4,25 @@
  */
 
 import { createHash } from "node:crypto";
-import type { DiffFile, DiffHunk, DiffScope, ParamsOf, ResultOf } from "@knightcode/app-server-protocol";
+import type { DiffComment, DiffFile, DiffHunk, DiffScope, ParamsOf, ResultOf } from "@knightcode/app-server-protocol";
 import type { SessionEntry } from "../core/session-manager.ts";
 import { AppServerError } from "./errors.ts";
 import {
 	countUntracked,
+	currentEntries,
 	emptyTree,
+	entriesOf,
 	git,
 	headTree,
 	indexTree,
+	machineApply,
 	machinePatch,
 	OutputTooLarge,
 	type Repo,
 	requireRepo,
 	runGit,
 	snapshotTree,
+	submodulePaths,
 } from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 
@@ -491,4 +495,183 @@ export async function readThreadDiff(
 		...(trees.stale ? { stale: true } : {}),
 		...(trees.against !== undefined ? { against: trees.against } : {}),
 	};
+}
+
+/** Review comments recorded on the user item their start produced: `{itemId, comments, text}`. */
+export const TURN_COMMENTS_ENTRY = "knightcode.turnComments";
+export interface TurnComments {
+	itemId: string;
+	comments: DiffComment[];
+	/** The user's own text; the model read it after the quoted comments. */
+	text: string;
+}
+
+/** Test gate only (Global Constraints): awaited after a revert took its checkout reservation. */
+export const revertHooks = { afterReserve: async () => {} };
+
+const invalid = (message: string) => new AppServerError("invalidParams", message);
+const conflict = (reason: string, message: string, data: object = {}) =>
+	new AppServerError("gitConflict", message, { reason, ...data });
+
+const QUOTE_MAX_LINES = 200;
+const QUOTE_MAX_BYTES = 16 * 1024;
+const COMPOSED_MAX_BYTES = 256 * 1024;
+
+/**
+ * The text the model reads for an input with review comments (§6.2): each comment's lines quoted from its scope's
+ * trees, never the filesystem, so the quote is what the reviewed diff showed. Then the user's own text.
+ */
+export async function composeReview(
+	thread: LoadedThread,
+	repo: Repo,
+	comments: DiffComment[],
+	text: string,
+): Promise<string> {
+	const scopes = new Map<string, Promise<{ trees: ScopeTrees; names: NameStatus[] }>>();
+	const blobs = new Map<string, Promise<Buffer>>();
+	const blocks: string[] = [];
+	for (const comment of comments) {
+		const scope = comment.scope ?? "uncommitted";
+		const key = JSON.stringify([scope, comment.against, comment.commit]);
+		let pending = scopes.get(key);
+		if (!pending) {
+			pending = scopeTrees(thread, repo, { scope, against: comment.against, commit: comment.commit }).then(
+				async (trees) => ({ trees, names: trees.from ? await nameStatus(repo, trees.from, trees.to) : [] }),
+			);
+			scopes.set(key, pending);
+		}
+		const { trees, names } = await pending;
+		const entry = names.find((n) => n.path === comment.path);
+		if (!entry) throw invalid(`${comment.path} is not in the ${scope} diff`);
+		if (comment.side === "old" && entry.status === "A") throw invalid(`${comment.path} has no old side`);
+		if (comment.side === "new" && entry.status === "D") throw invalid(`${comment.path} has no new side`);
+		if (comment.endLine < comment.startLine) throw invalid("endLine is before startLine");
+		const tree = comment.side === "old" ? trees.from : trees.to;
+		const path = comment.side === "old" ? (entry.oldPath ?? entry.path) : entry.path;
+		const spec = `${tree}:${path}`;
+		let blob = blobs.get(spec);
+		if (!blob) {
+			blob = runGit(repo.root, ["cat-file", "blob", spec]).then((r) => {
+				if (r.code !== 0) throw invalid(`${comment.path} cannot be read on the ${comment.side} side`);
+				return r.stdout;
+			});
+			blobs.set(spec, blob);
+		}
+		let content: string;
+		try {
+			const bytes = await blob;
+			if (bytes.includes(0)) throw new Error("binary");
+			content = strictUtf8.decode(bytes);
+		} catch (error) {
+			if (error instanceof AppServerError) throw error;
+			throw invalid(`${comment.path} is binary`);
+		}
+		const lines = content.split("\n");
+		if (lines.at(-1) === "") lines.pop();
+		if (comment.endLine > lines.length) throw invalid(`${comment.path} has ${lines.length} lines`);
+		const quoted = lines.slice(comment.startLine - 1, comment.endLine);
+		if (quoted.length > QUOTE_MAX_LINES || Buffer.byteLength(quoted.join("\n")) > QUOTE_MAX_BYTES)
+			throw invalid(`a comment quotes at most ${QUOTE_MAX_LINES} lines and 16 KiB`);
+		const range =
+			comment.startLine === comment.endLine
+				? `line ${comment.startLine}`
+				: `lines ${comment.startLine}-${comment.endLine}`;
+		// ponytail: a quote containing ``` ends the fence early; a longer fence would need scanning the lines.
+		blocks.push(
+			`\`${comment.path}\` ${range} (${comment.side}):\n\`\`\`\n${quoted.join("\n")}\n\`\`\`\n${comment.body}`,
+		);
+	}
+	const composed = `Review comments on the changes:\n\n${blocks.join("\n\n")}\n\n${text}`;
+	if (Buffer.byteLength(composed) > COMPOSED_MAX_BYTES) throw invalid("the review comments quote more than 256 KiB");
+	return composed;
+}
+
+const sameEntries = (a: Map<string, string>, b: Map<string, string>) =>
+	a.size === b.size && [...a].every(([path, entry]) => b.get(path) === entry);
+
+function failedPaths(stderr: string): string[] {
+	const paths = new Set<string>();
+	for (const pattern of [
+		/^error: patch failed: (.+):\d+$/gm,
+		/^error: (.+): does not exist in working tree$/gm,
+		/^error: (.+): already exists in working directory$/gm,
+	])
+		for (const match of stderr.matchAll(pattern)) paths.add(match[1]);
+	return [...paths];
+}
+
+/**
+ * The patch of one hunk of an ordinary modified file: its `diff --git`, `index`, `---` and `+++` lines plus that
+ * hunk. A structural change (rename, add, delete, mode or type change, binary) carries operations of its own in
+ * its header, so a hunk of it would also rename, chmod or create the whole file: refused.
+ */
+export async function hunkPatch(
+	repo: Repo,
+	trees: Pick<ScopeTrees, "from" | "to">,
+	entry: NameStatus,
+	hunkId: string,
+	context: number,
+): Promise<Buffer> {
+	const paths = entry.oldPath ? [entry.oldPath, entry.path] : [entry.path];
+	const patch = await machinePatch(repo, trees.from, trees.to, { paths, context });
+	const sections = splitPatch([entry], patch).get(entry) ?? [];
+	const file = parseFile(entry, sections, false);
+	const hunk = file.hunks.find((h) => h.id === hunkId);
+	const structural =
+		entry.status !== "M" || sections.length !== 1 || file.binary || /\n(old|new) mode /.test(sections[0].toString());
+	if (structural && (hunk || file.binary)) throw invalid("revert or stage the whole file");
+	if (!hunk) throw conflict("diffChanged", `${entry.path} changed since it was read`, { paths: [entry.path] });
+	const text = sections[0].toString("utf8");
+	const header = text.slice(0, text.indexOf("\n@@ ") + 1);
+	return Buffer.from(`${header}${hunk.header}\n${hunk.lines.join("\n")}\n`, "utf8");
+}
+
+/** `thread/diff/revert`, run with the checkout reserved, in the thread's exclusive queue and the repository lock. */
+export async function revertDiff(
+	thread: LoadedThread,
+	repo: Repo,
+	params: ParamsOf<"thread/diff/revert">,
+): Promise<ResultOf<"thread/diff/revert">> {
+	const scope = params.scope ?? "uncommitted";
+	if (scope === "staged") throw invalid("unstage with git/unstage");
+	if (scope === "committed") throw invalid("a commit is not reverted from here");
+	if (params.hunkId !== undefined && params.path === undefined) throw invalid("a hunk needs its path");
+	const trees = await scopeTrees(thread, repo, { scope, against: params.against, commit: params.commit });
+	if (trees.stale) throw invalid("the turn's snapshot is no longer in the repository");
+	if (!trees.from) throw invalid(`the ${scope} diff is empty`);
+	const names = await nameStatus(repo, trees.from, trees.to);
+	let target = names;
+	if (params.path !== undefined) {
+		const entry = names.find((n) => n.path === params.path);
+		if (!entry) throw invalid(`${params.path} is not in the ${scope} diff`);
+		target = [entry];
+	}
+	const paths = target.flatMap((e) => (e.oldPath ? [e.oldPath, e.path] : [e.path]));
+	if (paths.length === 0) return { paths: [] };
+	if ((await submodulePaths(repo, trees.from, trees.to, paths)).length > 0)
+		throw invalid("submodule changes are not supported here; commit them in the submodule");
+	const context = params.context ?? 3;
+	const patch =
+		params.hunkId !== undefined
+			? await hunkPatch(repo, trees, target[0], params.hunkId, context)
+			: await machinePatch(repo, trees.from, trees.to, {
+					paths: params.path !== undefined ? paths : undefined,
+					binary: true,
+					context,
+				});
+	// Undo only what is still exactly as the turn left it, so git's offset search can never pick another place.
+	if (scope === "lastTurn" && !sameEntries(await currentEntries(repo, paths), await entriesOf(repo, trees.to, paths)))
+		throw conflict("diffChanged", "files changed since the turn", { paths });
+	const check = await machineApply(repo.root, patch, { reverse: true, check: true });
+	if (check.code !== 0) {
+		const failed = failedPaths(check.stderr);
+		throw conflict("patchFailed", "the change no longer applies", {
+			paths: failed.length > 0 ? failed : paths,
+			output: check.stderr,
+		});
+	}
+	const applied = await machineApply(repo.root, patch, { reverse: true });
+	if (applied.code !== 0)
+		throw conflict("patchFailed", "the change no longer applies", { paths, output: applied.stderr });
+	return { paths: target.map((e) => e.path) };
 }

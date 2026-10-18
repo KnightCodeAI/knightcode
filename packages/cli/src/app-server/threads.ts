@@ -11,6 +11,7 @@ import { mkdir, stat, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type {
 	ApprovalMode,
+	DiffComment,
 	ParamsOf,
 	ResultOf,
 	Thread,
@@ -44,8 +45,17 @@ import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/tr
 import { builtInExtensions } from "../extensions/index.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ShellConfig } from "../utils/shell.ts";
-import { DEFAULT_DIFF_BUDGETS, type DiffBudgets, readThreadDiff, TURN_DIFF_ENTRY, TurnChanges } from "./diff.ts";
-import { repoOf } from "./git.ts";
+import {
+	composeReview,
+	DEFAULT_DIFF_BUDGETS,
+	type DiffBudgets,
+	readThreadDiff,
+	revertDiff,
+	revertHooks,
+	TURN_DIFF_ENTRY,
+	TurnChanges,
+} from "./diff.ts";
+import { repoOf, requireRepo, withRepoLock } from "./git.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
@@ -113,6 +123,11 @@ const sameProject = (a: string, b: string) =>
 
 const DEFAULT_IDLE_MS = 10 * 60_000;
 
+/** Test gate only (Global Constraints): awaited between a queued input's dequeue and its start's registration. */
+export const queueHooks = { afterDequeue: async () => {} };
+
+type Review = { comments: DiffComment[]; text: string };
+
 export interface ThreadManagerOptions {
 	idleMs?: number;
 	/** `-e` paths: loaded in every thread as trusted CLI extensions. */
@@ -171,6 +186,8 @@ export class ThreadManager {
 	private shuttingDown = false;
 	/** Aborted first thing in closeAll: git and setup processes the manager started stop with it. */
 	private readonly shutdown = new AbortController();
+	/** Checkout root → the operation holding it: no turn starts and no tool runs there meanwhile (§6.1). */
+	private readonly reservedCheckouts = new Map<string, string>();
 
 	constructor(ctx: AppServerContext, options: ThreadManagerOptions = {}) {
 		this.ctx = ctx;
@@ -222,6 +239,51 @@ export class ThreadManager {
 		const done = () => this.inFlight.delete(work);
 		void work.then(done, done);
 		return work;
+	}
+
+	/** A turn runs, a start is registered, or a dequeued input is about to register one. */
+	private running(thread: LoadedThread): boolean {
+		return thread.draining || thread.pendingStarts.size > 0 || !thread.session.isIdle || thread.session.isSettling;
+	}
+
+	private reservedFor(thread: LoadedThread): boolean {
+		return thread.checkoutRoot !== undefined && this.reservedCheckouts.has(thread.checkoutRoot);
+	}
+
+	/**
+	 * Take the checkouts for `what`, synchronously with the check that nothing runs in them. Then wait for closing
+	 * threads and every in-flight turn snapshot there, so a turn that just completed has its record first.
+	 */
+	async reserveCheckouts(roots: string[], what: string): Promise<() => void> {
+		const held = new Set(roots);
+		for (const root of held)
+			if (this.reservedCheckouts.has(root))
+				throw new AppServerError("turnInProgress", `the checkout is busy: ${this.reservedCheckouts.get(root)}`);
+		const inside = [...this.threads.values()].filter((t) => t.checkoutRoot !== undefined && held.has(t.checkoutRoot));
+		if (inside.some((t) => this.running(t)))
+			throw new AppServerError("turnInProgress", "a turn is running in this checkout; interrupt it first");
+		for (const root of held) this.reservedCheckouts.set(root, what);
+		const release = () => {
+			for (const root of held) if (this.reservedCheckouts.get(root) === what) this.reservedCheckouts.delete(root);
+			for (const thread of this.threads.values())
+				if (thread.checkoutRoot !== undefined && held.has(thread.checkoutRoot)) this.afterActivity(thread);
+		};
+		try {
+			// ponytail: waits for every closing thread, not only those in the checkout; closings are short.
+			await Promise.allSettled([...this.closing.values()]);
+			await Promise.all(inside.map((t) => t.changes?.idle()));
+		} catch (error) {
+			release();
+			throw error;
+		}
+		return release;
+	}
+
+	/** The text the model reads for an input with review comments; validated before the input is accepted. */
+	private async review(threadId: string, mode: "desktop" | "tui", comments: DiffComment[], text: string) {
+		const thread = await this.ensureLoaded(threadId, mode);
+		const repo = await requireRepo(thread.session.sessionManager.getCwd());
+		return { prompt: await composeReview(thread, repo, comments, text), review: { comments, text } };
 	}
 
 	private worktrees(warnings: Warning[] = []): WorktreeSettings {
@@ -871,6 +933,7 @@ export class ThreadManager {
 			thread.resolveWorkspace = () => placeThread(settings, id, headerCwd).workspace;
 			touchManifest(settings, cwd);
 			const repo = await repoOf(cwd);
+			thread.checkoutRoot = repo?.root;
 			if (repo)
 				thread.changes = new TurnChanges(
 					repo,
@@ -1022,7 +1085,14 @@ export class ThreadManager {
 				hidden: true,
 				factory: (knightcode) => {
 					knightcode.on("tool_call", async () => {
-						await holder.thread?.changes?.beforeTool();
+						const thread = holder.thread;
+						// Also covers runs an extension launches without turn/start.
+						if (thread && this.reservedFor(thread))
+							return {
+								block: true,
+								reason: "the checkout is being reverted, handed off or deleted; try again when it finishes",
+							};
+						await thread?.changes?.beforeTool();
 						return undefined;
 					});
 				},
@@ -1067,11 +1137,17 @@ export class ThreadManager {
 	 */
 	private drainQueue(thread: LoadedThread): void {
 		if (thread.state !== "ready" || thread.draining || thread.busy || thread.reservedStart) return;
+		// A reserved checkout keeps the input queued; the release runs afterActivity, which drains it then.
+		if (this.reservedFor(thread)) return;
 		const next = thread.queued.shift();
 		if (!next) return;
 		thread.draining = true;
 		this.notifyQueue(thread);
-		void this.startTurn(thread.id, next.text, next.images, next.by, undefined, next.clientMessageId)
+		void queueHooks
+			.afterDequeue()
+			.then(() =>
+				this.startTurn(thread.id, next.text, next.images, next.by, undefined, next.clientMessageId, next.review),
+			)
 			.catch((error: unknown) => {
 				// Dropped, not retried: a start that failed (no model, signed out) would fail again in a loop.
 				thread.notify("error", {
@@ -1091,11 +1167,12 @@ export class ThreadManager {
 		images: ImageRef[] | undefined,
 		clientMessageId: string | undefined,
 		by: Subscriber,
+		review?: Review,
 	): Promise<{ queueId: string }> {
 		const thread = await this.ensureLoaded(threadId, by.mode);
 		this.subscribe(thread, by);
 		const queueId = randomUUID();
-		thread.queued.push({ id: queueId, text, images, clientMessageId, by });
+		thread.queued.push({ id: queueId, text, images, clientMessageId, review, by });
 		this.notifyQueue(thread);
 		this.drainQueue(thread);
 		return { queueId };
@@ -1123,9 +1200,12 @@ export class ThreadManager {
 		by: Subscriber,
 		requestId?: string,
 		clientMessageId?: string,
+		review?: Review,
 	): Promise<TurnStartResult> {
 		const thread = await this.ensureLoaded(threadId, by.mode);
 		this.subscribe(thread, by);
+		if (this.reservedFor(thread))
+			throw new AppServerError("turnInProgress", "the checkout is being reverted, handed off or deleted");
 		// Refuse an already-lost binding before registering a start that unload would cancel.
 		if (thread.session.sessionManager.hasLostLock()) {
 			this.afterSettle(thread);
@@ -1152,6 +1232,8 @@ export class ThreadManager {
 					}
 					if (!session.isIdle || session.isSettling)
 						throw new AppServerError("turnInProgress", "a turn or compaction is running");
+					if (this.reservedFor(thread))
+						throw new AppServerError("turnInProgress", "the checkout is being reverted, handed off or deleted");
 					const model = session.model;
 					if (!model)
 						throw new AppServerError("authRequired", "no model selected; pick one with thread/settings/update");
@@ -1166,6 +1248,7 @@ export class ThreadManager {
 					thread.lastTurnSubscriber = by;
 					thread.pendingTurnRequestId = request.requestId;
 					thread.pendingClientMessageId = clientMessageId;
+					thread.pendingReview = review;
 					let accepted = false;
 					// Preflight (input hooks, commands, before_agent_start) runs to completion even when the start is
 					// interrupted meanwhile; the session has no cancellation of its own there (architecture.md 4.7).
@@ -1242,6 +1325,7 @@ export class ThreadManager {
 				if (request.disposition !== "started" && owner.pendingTurnRequestId === request.requestId) {
 					owner.pendingTurnRequestId = undefined;
 					owner.pendingClientMessageId = undefined;
+					owner.pendingReview = undefined;
 				}
 				this.startsBySignal.delete(start.signal);
 				this.scheduleIdle(owner);
@@ -1382,8 +1466,10 @@ export class ThreadManager {
 				if (willDispatch) next.reservedStart = request.controller;
 				if (old.pendingTurnRequestId === request.requestId) {
 					next.pendingClientMessageId = old.pendingClientMessageId;
+					next.pendingReview = old.pendingReview;
 					old.pendingTurnRequestId = undefined;
 					old.pendingClientMessageId = undefined;
+					old.pendingReview = undefined;
 				}
 				next.pendingTurnRequestId = request.requestId;
 			}
@@ -1536,27 +1622,44 @@ export class ThreadManager {
 				"threadId" in params
 					? { commands: commandsOf(this.get(params.threadId).session) }
 					: this.commandsFor(params.cwd),
-			"turn/start": async ({ threadId, text, images, requestId, clientMessageId }, connection) =>
-				this.startTurn(
+			"turn/start": async ({ threadId, text, images, requestId, clientMessageId, comments }, connection) => {
+				const reviewed = comments ? await this.review(threadId, connection.mode, comments, text) : undefined;
+				return this.startTurn(
 					threadId,
-					text,
+					reviewed?.prompt ?? text,
 					images && (await Promise.all(images.map(readImageInput))),
 					connection,
 					requestId,
 					clientMessageId,
-				),
+					reviewed?.review,
+				);
+			},
 			"turn/steer": async ({ threadId, expectedTurnId, text, images }) => {
 				await this.steer(threadId, expectedTurnId, text, images && (await Promise.all(images.map(readImageInput))));
 				return {};
 			},
-			"turn/queue/add": async ({ threadId, text, images, clientMessageId }, connection) =>
-				this.addQueued(
+			"turn/queue/add": async ({ threadId, text, images, clientMessageId, comments }, connection) => {
+				const reviewed = comments ? await this.review(threadId, connection.mode, comments, text) : undefined;
+				return this.addQueued(
 					threadId,
-					text,
+					reviewed?.prompt ?? text,
 					images && (await Promise.all(images.map(readImageInput))),
 					clientMessageId,
 					connection,
-				),
+					reviewed?.review,
+				);
+			},
+			"thread/diff/revert": (params, connection) =>
+				this.ensureLoaded(params.threadId, connection.mode).then(async (thread) => {
+					const repo = await requireRepo(thread.session.sessionManager.getCwd());
+					const release = await this.reserveCheckouts([repo.root], "revert");
+					try {
+						await revertHooks.afterReserve();
+						return await thread.exclusive(() => withRepoLock(repo, () => revertDiff(thread, repo, params)));
+					} finally {
+						release();
+					}
+				}),
 			"turn/interrupt": ({ threadId, turnId }) => this.interrupt(threadId, turnId).then(() => ({})),
 			"turn/queue/remove": async ({ threadId, queueId }) => ({ removed: this.removeQueued(threadId, queueId) }),
 			"thread/compact": ({ threadId, instructions }, connection) =>

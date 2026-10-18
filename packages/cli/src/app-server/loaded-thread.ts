@@ -2,6 +2,7 @@
 
 import type {
 	ApprovalMode,
+	DiffComment,
 	ImageRef,
 	NotificationMethod,
 	NotificationParams,
@@ -48,11 +49,22 @@ export class LoadedThread {
 	pendingTurnRequestId?: string;
 	/** The starting turn's clientMessageId; the mapper puts it on the turn's first user message. */
 	pendingClientMessageId?: string;
+	/** The starting turn's review comments and typed text; the mapper records them on its first user message. */
+	pendingReview?: { comments: DiffComment[]; text: string };
+	/** The checkout root this thread runs in, when it is a git repository (§6.1 reservations). */
+	checkoutRoot: string | undefined;
 	/**
 	 * Inputs waiting for the thread to go idle, each its own turn, in order (§4.6). They live here, not in
 	 * the agent's queue, so removing one never races the loop that would deliver it.
 	 */
-	readonly queued: { id: string; text: string; images?: ImageRef[]; clientMessageId?: string; by: Subscriber }[] = [];
+	readonly queued: {
+		id: string;
+		text: string;
+		images?: ImageRef[];
+		clientMessageId?: string;
+		review?: { comments: DiffComment[]; text: string };
+		by: Subscriber;
+	}[] = [];
 	/** A queued input is starting; no second one starts until it has. */
 	draining = false;
 	/** Admission completes only after the mapper created a durable turn identity. */
