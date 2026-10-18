@@ -21,6 +21,7 @@ import type {
 	TurnStartResult,
 	Warning,
 } from "@knightcode/app-server-protocol";
+import { uuidv7 } from "@knightcode/ai";
 import type { AgentSession } from "../core/agent-session.ts";
 import { createAgentSessionFromServices, createAgentSessionServices } from "../core/agent-session-services.ts";
 import type { InlineExtension } from "../core/extensions/types.ts";
@@ -41,7 +42,7 @@ import {
 import { SettingsManager } from "../core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { builtInExtensions } from "../extensions/index.ts";
-import { resolvePath } from "../utils/paths.ts";
+import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
@@ -66,6 +67,20 @@ import {
 	sessionDirs,
 	SessionFileIndex,
 } from "./session-files.ts";
+import {
+	createWorktree,
+	keptWorktree,
+	type Manifest,
+	manifestFor,
+	placeThread,
+	samePath,
+	touchManifest,
+	type WorktreeSettings,
+	worktreeSettings,
+} from "./workspaces.ts";
+
+const sameProject = (a: string, b: string) =>
+	samePath(canonicalizePath(resolvePath(a)), canonicalizePath(resolvePath(b)));
 
 const DEFAULT_IDLE_MS = 10 * 60_000;
 
@@ -121,6 +136,8 @@ export class ThreadManager {
 	/** Every load operation (start, resume, fork, a replacement's load), from its first step; shutdown waits for all. */
 	private readonly inFlight = new Set<Promise<unknown>>();
 	private shuttingDown = false;
+	/** Aborted first thing in closeAll: git and setup processes the manager started stop with it. */
+	private readonly shutdown = new AbortController();
 
 	constructor(ctx: AppServerContext, options: ThreadManagerOptions = {}) {
 		this.ctx = ctx;
@@ -174,30 +191,56 @@ export class ThreadManager {
 		return work;
 	}
 
+	private worktrees(warnings: Warning[] = []): WorktreeSettings {
+		return worktreeSettings(this.ctx.agentDir, warnings);
+	}
+
 	start(params: ParamsOf<"thread/start">, by: Subscriber): Promise<ResultOf<"thread/start">> {
 		return this.track(async () => {
 			const cwd = resolvePath(params.cwd);
 			const stats = await stat(cwd).catch(() => undefined);
 			if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${params.cwd}`);
-			const sessionManager = SessionManager.create(cwd, liveDirFor(this.ctx, cwd));
-			const thread = await this.load(
-				sessionManager,
-				by.mode,
-				"new",
-				params.approvalMode ?? defaultApprovalMode(by.mode),
-			);
+			const warnings: Warning[] = [];
+			const settings = this.worktrees(warnings);
+			// A start inside a managed worktree is a thread of that worktree's project (Codex's "New chat in this worktree").
+			const projectCwd = manifestFor(settings, cwd)?.projectCwd ?? cwd;
+			const workspace = params.workspace;
+			let created: { manifest: Manifest; cwd: string } | undefined;
+			let sessionManager: SessionManager;
+			if (workspace?.mode === "worktree") {
+				const threadId = uuidv7();
+				created = await createWorktree({
+					settings,
+					projectCwd,
+					sourceCwd: cwd,
+					threadId,
+					ownerThreadId: threadId,
+					baseRef: workspace.baseRef,
+					carryLocalChanges: workspace.carryLocalChanges,
+					environment: workspace.environment,
+					signal: this.shutdown.signal,
+					warnings,
+				});
+				sessionManager = SessionManager.create(created.cwd, liveDirFor(this.ctx, projectCwd), { id: threadId });
+			} else sessionManager = SessionManager.create(cwd, liveDirFor(this.ctx, projectCwd));
+			let thread: LoadedThread;
+			try {
+				thread = await this.load(sessionManager, by.mode, "new", params.approvalMode ?? defaultApprovalMode(by.mode));
+			} catch (error) {
+				throw created ? keptWorktree(error, created.manifest) : error;
+			}
 			try {
 				if (params.model) await this.setModel(thread, params.model.provider, params.model.id);
 				if (params.thinkingLevel) thread.session.setThinkingLevel(params.thinkingLevel);
 			} catch (error) {
 				// A thread the client never got must not stay loaded.
 				await this.unload(thread.id);
-				throw error;
+				throw created ? keptWorktree(error, created.manifest) : error;
 			}
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });
-			return { thread: summary, warnings: [...thread.loadWarnings] };
+			return { thread: summary, warnings: [...warnings, ...thread.loadWarnings] };
 		});
 	}
 
@@ -262,34 +305,47 @@ export class ThreadManager {
 				this.listingFilesOpened++;
 				this.listingBytesScanned += bytes;
 			};
+			const settings = this.worktrees();
 			let sessions: IndexedSession[] = [];
+			const placed = (info: IndexedSession) => {
+				const place = placeThread(settings, info.id, info.cwd);
+				return { info, place, projectCwd: place.manifest?.projectCwd ?? info.cwd };
+			};
+			let entries: ReturnType<typeof placed>[];
 			if (params.cwd !== undefined) {
-				const cwd = resolvePath(params.cwd);
+				const requested = resolvePath(params.cwd);
+				const cwd = manifestFor(settings, requested)?.projectCwd ?? requested;
 				const live = liveDirFor(this.ctx, cwd);
 				const dir = archived ? join(live, ARCHIVE_DIR) : live;
 				if (existsSync(dir)) sessions = await listWithIndex(dir, { onRead });
-				if (this.ctx.sessionDir !== undefined) sessions = sessions.filter((s) => sessionCwdMatches(s.cwd, cwd));
+				entries = sessions.map(placed);
+				// One explicit directory holds every project: keep this project's threads, worktree ones included.
+				if (this.ctx.sessionDir !== undefined)
+					entries = entries.filter(
+						(e) => sessionCwdMatches(e.info.cwd, cwd) || (e.projectCwd !== "" && sameProject(e.projectCwd, cwd)),
+					);
 			} else {
 				// Sequential directories keep the whole listing at at most 64 concurrent scans.
 				for (const dir of await sessionDirs(this.ctx, archived))
 					sessions.push(...(await listWithIndex(dir, { onRead })));
+				entries = sessions.map(placed);
 			}
-			return sessions
-				.filter((info) => info.messageCount > 0)
-				.sort((a, b) => b.modified.getTime() - a.modified.getTime())
-				.map((info): ThreadSummary => {
+			return entries
+				.filter(({ info }) => info.messageCount > 0)
+				.sort((a, b) => b.info.modified.getTime() - a.info.modified.getTime())
+				.map(({ info, place, projectCwd }): ThreadSummary => {
 					const live = this.threads.get(info.id);
 					return {
 						id: info.id,
-						cwd: info.cwd,
-						projectCwd: info.cwd,
+						cwd: place.cwd,
+						projectCwd,
 						name: info.title,
 						status: live?.status() ?? this.unloadedStatus(info.id),
 						createdAt: info.created.toISOString(),
 						forkedFromId: info.forkedFromId,
 						archived: isArchivedPath(info.path),
 						updatedAt: info.modified.toISOString(),
-						workspaceMode: "local",
+						workspaceMode: place.workspace.mode,
 					};
 				});
 		});
@@ -313,17 +369,18 @@ export class ThreadManager {
 		const firstUser = entries.find((entry) => entry.type === "message" && entry.message.role === "user");
 		const firstText =
 			firstUser?.type === "message" && firstUser.message.role === "user" ? textOf(firstUser.message.content) : "";
+		const place = header?.cwd ? placeThread(this.worktrees(), threadId, header.cwd) : undefined;
 		const thread: ThreadSummary = {
 			id: threadId,
-			cwd: header?.cwd ?? "",
-			projectCwd: header?.cwd ?? "",
+			cwd: place?.cwd ?? header?.cwd ?? "",
+			projectCwd: place?.manifest?.projectCwd ?? header?.cwd ?? "",
 			name: titleOf(manager.getSessionName(), firstText),
 			status: this.unloadedStatus(threadId),
 			createdAt: header?.timestamp ?? "",
 			forkedFromId: parentIdOf(header?.parentSession),
 			archived: isArchivedPath(file),
 			updatedAt: statSync(file).mtime.toISOString(),
-			workspaceMode: "local",
+			workspaceMode: place?.workspace.mode ?? "local",
 		};
 		return { thread, ...this.history(thread, entries, cursor) };
 	}
@@ -492,9 +549,18 @@ export class ThreadManager {
 		if (!file) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
 		// Shutdown may have begun during the lookup; do not take a lock it would have to release.
 		this.assertOpen();
+		const headerCwd = readSessionHeaderForDiscovery(file)?.cwd;
+		const placed = headerCwd ? placeThread(this.worktrees(), threadId, headerCwd) : undefined;
+		if (placed?.workspace.mode === "worktree" && placed.workspace.deleted)
+			throw new AppServerError("gitConflict", "the worktree of this chat was deleted", {
+				reason: "worktreeDeleted",
+				worktree: placed.workspace.path,
+				recoveryInstructions: ["The worktree of this chat was deleted. Restore it to continue."],
+			});
 		let sessionManager: SessionManager;
 		try {
-			sessionManager = SessionManager.open(file);
+			// A handed-off thread runs where its manifest places it; its header keeps the cwd it was born in.
+			sessionManager = SessionManager.open(file, undefined, placed?.manifest ? placed.cwd : undefined);
 		} catch (error) {
 			if (error instanceof SessionLockedError) {
 				throw new AppServerError("threadLockedElsewhere", "the thread is open in another KnightCode process");
@@ -602,6 +668,7 @@ export class ThreadManager {
 	/** Refuse new loads, wait for every load operation in flight, then unload everything in parallel (§5.6). */
 	async closeAll(): Promise<void> {
 		this.shuttingDown = true;
+		this.shutdown.abort();
 		this.fileSearch.close();
 		// Loop: an operation may still be inside track() when the snapshot is taken.
 		while (this.inFlight.size > 0) await Promise.allSettled([...this.inFlight]);
@@ -664,12 +731,16 @@ export class ThreadManager {
 		approvalMode?: ApprovalMode,
 	): Promise<LoadedThread> {
 		const cwd = sessionManager.getCwd();
+		const settings = this.worktrees();
+		const id = sessionManager.getSessionId();
+		const headerCwd = sessionManager.getHeader()?.cwd ?? cwd;
+		const projectCwd = placeThread(settings, id, headerCwd).manifest?.projectCwd ?? cwd;
 		let created: LoadedThread | undefined;
 		let services: Awaited<ReturnType<typeof createAgentSessionServices>> | undefined;
 		let session: AgentSession | undefined;
 		try {
 			const holder: { thread?: LoadedThread } = {};
-			services = await this.servicesFor(cwd, holder);
+			services = await this.servicesFor(cwd, projectCwd, holder);
 			({ session } = await createAgentSessionFromServices({
 				services,
 				sessionManager,
@@ -681,7 +752,7 @@ export class ThreadManager {
 			if (reason !== "resume") sessionManager.appendCustomEntry(APPROVAL_MODE_ENTRY, effective);
 			const thread = new LoadedThread(
 				session,
-				cwd,
+				projectCwd,
 				effective,
 				() => this.afterActivity(thread),
 				this.payloads,
@@ -690,6 +761,8 @@ export class ThreadManager {
 			);
 			created = thread;
 			holder.thread = thread;
+			thread.resolveWorkspace = () => placeThread(settings, id, headerCwd).workspace;
+			touchManifest(settings, cwd);
 			await this.bind(thread, mode);
 			thread.mapper = new ItemMapper(
 				thread,
@@ -719,7 +792,7 @@ export class ThreadManager {
 				thread.loadWarnings.push({ source: "extension", path, message: warning });
 			for (const diagnostic of services.diagnostics)
 				if (diagnostic.type !== "info") thread.loadWarnings.push({ source: "extension", message: diagnostic.message });
-			if (hasTrustRequiringProjectResources(cwd) && new ProjectTrustStore(this.ctx.agentDir).get(cwd) === null)
+			if (hasTrustRequiringProjectResources(cwd) && new ProjectTrustStore(this.ctx.agentDir).get(projectCwd) === null)
 				thread.loadWarnings.push({
 					source: "trust",
 					message:
@@ -750,9 +823,10 @@ export class ThreadManager {
 	}
 
 	/** The services a thread's session is built from; `holder.thread` is set once the thread exists. */
-	private servicesFor(cwd: string, holder: { thread?: LoadedThread }) {
+	private servicesFor(cwd: string, projectCwd: string, holder: { thread?: LoadedThread }) {
+		// A worktree's trust is its project's: keyed by the worktree path, every new worktree would ask again (§6.1).
 		const projectTrusted =
-			!hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(this.ctx.agentDir).get(cwd) === true;
+			!hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(this.ctx.agentDir).get(projectCwd) === true;
 		return createAgentSessionServices({
 			cwd,
 			agentDir: this.ctx.agentDir,
@@ -790,7 +864,7 @@ export class ThreadManager {
 			const cwd = resolvePath(cwdParam);
 			const stats = await stat(cwd).catch(() => undefined);
 			if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${cwdParam}`);
-			const services = await this.servicesFor(cwd, {});
+			const services = await this.servicesFor(cwd, manifestFor(this.worktrees(), cwd)?.projectCwd ?? cwd, {});
 			let session: AgentSession | undefined;
 			try {
 				({ session } = await createAgentSessionFromServices({
@@ -839,6 +913,7 @@ export class ThreadManager {
 			void this.unload(thread.id);
 			return;
 		}
+		touchManifest(this.worktrees(), thread.session.sessionManager.getCwd());
 		// A microtask is not enough: deferred prompts can await hooks before entering the next run.
 		if (thread.state === "ready")
 			void thread.session.waitForIdle({ includeSettlement: true }).then(() => this.afterActivity(thread));

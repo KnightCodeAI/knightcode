@@ -8,6 +8,7 @@ import type {
 	Thread,
 	ThreadStatus,
 	Warning,
+	Workspace,
 } from "@knightcode/app-server-protocol";
 import type { AgentSession } from "../core/agent-session.ts";
 import { emitSessionShutdownEvent } from "../core/extensions/runner.ts";
@@ -67,6 +68,8 @@ export class LoadedThread {
 	}
 	readonly session: AgentSession;
 	readonly projectCwd: string;
+	/** Derived from the session cwd and the worktree manifest on every read, so a manifest update shows at once. */
+	resolveWorkspace: () => Workspace = () => ({ mode: "local" });
 	readonly subscribers = new Set<Subscriber>();
 	lastTurnSubscriber: Subscriber | undefined;
 	approvalMode: ApprovalMode;
@@ -110,6 +113,10 @@ export class LoadedThread {
 		this.projectCwd = projectCwd;
 		this.approvalMode = approvalMode;
 		this.onActivityEnd = onActivityEnd;
+	}
+
+	get workspace(): Workspace {
+		return this.resolveWorkspace();
 	}
 
 	get file(): string | undefined {
@@ -179,7 +186,7 @@ export class LoadedThread {
 			archived: this.file !== undefined && isArchivedPath(this.file),
 			updatedAt:
 				session.sessionManager.getLeafEntry()?.timestamp ?? session.sessionManager.getHeader()?.timestamp ?? "",
-			workspace: { mode: "local" },
+			workspace: this.workspace,
 			approvalMode: this.approvalMode,
 			...(model
 				? { model: { provider: model.provider, id: model.id, name: model.name, contextWindow: model.contextWindow } }
