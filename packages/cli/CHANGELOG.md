@@ -1,5 +1,15 @@
 # @knightcodeai/cli
 
+## 0.18.1
+
+### Fixed
+
+- Fixed `knightcode` failing with an unrelated error on a Node.js older than it supports. It now exits with a message naming the required and the installed Node.js versions.
+
+- Fixed npm and pnpm self-updates installing a release that the running Node.js cannot start. The update now fails and the installed version keeps working.
+
+- Fixed `knightcode` crashing with `zlib.createZstdDecompress is not a function` on Node.js 23.0 through 23.7. It no longer asks servers for zstd-compressed responses that this Node.js cannot decode.
+
 ## 0.18.0
 
 ### Added
