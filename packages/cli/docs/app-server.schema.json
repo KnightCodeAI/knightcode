@@ -4119,16 +4119,32 @@
 		},
 		"git/branches": {
 			"params": {
-				"type": "object",
-				"required": [
-					"threadId"
-				],
-				"properties": {
-					"threadId": {
-						"type": "string"
+				"anyOf": [
+					{
+						"type": "object",
+						"required": [
+							"threadId"
+						],
+						"properties": {
+							"threadId": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"cwd"
+						],
+						"properties": {
+							"cwd": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
 					}
-				},
-				"additionalProperties": false
+				]
 			},
 			"result": {
 				"type": "object",

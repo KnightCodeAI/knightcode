@@ -354,6 +354,14 @@ test("branches lists newest first with the current one", async () => {
 	expect(result.branches).toContain("main");
 });
 
+test("branches are listed for a project cwd before any thread exists", async () => {
+	const s = await repoServer();
+	sh(s.cwd, "branch", "feature");
+	const result = await s.a.client.request("git/branches", { cwd: s.cwd });
+	expect(result.current).toBe("main");
+	expect(result.branches.sort()).toEqual(["feature", "main"]);
+});
+
 test("log in a worktree lists only the thread's commits since its base", async () => {
 	const s = await repoServer();
 	const { thread } = await worktreeThread(s);

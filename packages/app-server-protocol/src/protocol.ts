@@ -604,7 +604,8 @@ export const ClientRequests = {
 	"git/branch/create": { params: Obj({ threadId: Str, name: BranchName }), result: Obj({ branch: Str }) },
 	"git/branch/switch": { params: Obj({ threadId: Str, name: BranchName }), result: Obj({ branch: Str }) },
 	"git/branches": {
-		params: ThreadId,
+		/** A project cwd lists branches before any thread exists (the new-chat branch picker). */
+		params: Type.Union([ThreadId, Obj({ cwd: Str })]),
 		result: Obj({ current: Type.Optional(Str), defaultBranch: Type.Optional(Str), branches: Type.Array(Str) }),
 	},
 	"git/log": {

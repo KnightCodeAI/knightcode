@@ -107,7 +107,7 @@ const requestParams: Record<string, unknown> = {
 	"git/pr/create": { threadId: "t1", title: "Fix it", body: "Body", draft: true },
 	"git/branch/create": { threadId: "t1", name: "kc/fix-it" },
 	"git/branch/switch": { threadId: "t1", name: "main" },
-	"git/branches": { threadId: "t1" },
+	"git/branches": { cwd: "/p" },
 	"git/log": { threadId: "t1", limit: 50 },
 	"thread/list": { cwd: "/p", cursor: "opaque-list-snapshot", archived: false },
 	"thread/read": { threadId: "t1", cursor: "opaque-history-anchor" },

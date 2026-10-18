@@ -2110,8 +2110,10 @@ export class ThreadManager {
 				this.onCheckout(params.threadId, connection.mode, false, (_thread, repo, ctx) =>
 					gitPullRequest(repo, params, ctx),
 				),
-			"git/branches": ({ threadId }, connection) =>
-				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitBranches(repo)),
+			"git/branches": async (params, connection) =>
+				"threadId" in params
+					? this.onCheckout(params.threadId, connection.mode, false, (_thread, repo) => gitBranches(repo))
+					: gitBranches(await requireRepo(resolvePath(params.cwd))),
 			"git/branch/create": ({ threadId, name }, connection) =>
 				this.onCheckout(threadId, connection.mode, true, (_thread, repo) => gitBranchCreate(repo, name)),
 			"git/branch/switch": ({ threadId, name }, connection) =>
