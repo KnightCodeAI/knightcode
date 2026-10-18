@@ -23,6 +23,7 @@ import {
 	snapshotTree,
 	withRepoLock,
 } from "../../src/app-server/git.ts";
+import { readDiff } from "../../src/app-server/diff.ts";
 import { checkoutState, makeRepo, sh, write } from "./fixtures/git-repo.ts";
 
 const saved = { ...process.env };
@@ -315,6 +316,15 @@ test("hostile diff environment and config do not change machine patches", async 
 	expect(patch.match(/^@@ -1,7 \+1,7 @@/gm)).toHaveLength(2);
 	expect(patch).toContain("\n+four\n");
 	expect(patch).toContain("\n-4\n");
+	const read = await readDiff(
+		repo,
+		{ from: await headTree(repo), to: await snapshotTree(repo, false) },
+		{ context: 3 },
+	);
+	expect(read.files.map((f) => [f.path, f.hunks.length])).toEqual([
+		["a.txt", 1],
+		["b.txt", 1],
+	]);
 	expect((await machineApply(dir, Buffer.from(patch), { reverse: true })).code).toBe(0);
 	expect(readFileSync(join(dir, "a.txt"), "utf8")).toBe(lines("4"));
 	expect(sh(dir, "status", "--porcelain", "--untracked-files=no")).toBe("");

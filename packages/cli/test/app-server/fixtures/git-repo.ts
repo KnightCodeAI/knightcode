@@ -51,7 +51,22 @@ export function shEnv(cwd: string, extra: Record<string, string>, ...args: strin
 		{ GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: devNull },
 		extra,
 	);
-	const result = spawnSync("git", ["-c", "core.quotepath=false", ...args], { cwd, env, encoding: "utf8" });
+	let result = spawnSync("git", ["-c", "core.quotepath=false", ...args], { cwd, env, encoding: "utf8" });
+	if (result.status !== 0 && result.stderr.includes("index.lock")) {
+		const procs = spawnSync(
+			"powershell",
+			[
+				"-NoProfile",
+				"-Command",
+				"Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'git|sh' } | ForEach-Object { [string]$_.ProcessId + ' ' + $_.ParentProcessId + ' ' + $_.CommandLine }",
+			],
+			{ encoding: "utf8" },
+		);
+		console.error(`PROBE procs:\n${procs.stdout}`);
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
+		result = spawnSync("git", ["-c", "core.quotepath=false", ...args], { cwd, env, encoding: "utf8" });
+		console.error("PROBE retry status:", result.status, result.stderr);
+	}
 	if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
 	return result.stdout.replace(/\n$/, "");
 }

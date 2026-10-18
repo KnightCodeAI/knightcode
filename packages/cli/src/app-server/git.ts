@@ -460,7 +460,14 @@ export async function machinePatch(
 	repo: Repo,
 	from: string,
 	to: string,
-	options: { paths?: string[]; context?: number; binary?: boolean; ignoreWhitespace?: boolean; signal?: AbortSignal },
+	options: {
+		paths?: string[];
+		context?: number;
+		binary?: boolean;
+		ignoreWhitespace?: boolean;
+		maxStdoutBytes?: number;
+		signal?: AbortSignal;
+	},
 ): Promise<Buffer> {
 	const args = [
 		...["-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false", "-c", "diff.relative=false"],
@@ -475,7 +482,7 @@ export async function machinePatch(
 		to,
 		...(options.paths ? ["--", ...options.paths] : []),
 	];
-	const result = await runGit(repo.root, args, { signal: options.signal });
+	const result = await runGit(repo.root, args, { signal: options.signal, maxStdoutBytes: options.maxStdoutBytes });
 	if (result.code !== 0) throw new GitError(args, result.code, result.stderr);
 	return result.stdout;
 }

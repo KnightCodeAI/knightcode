@@ -44,6 +44,7 @@ import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/tr
 import { builtInExtensions } from "../extensions/index.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ShellConfig } from "../utils/shell.ts";
+import { DEFAULT_DIFF_BUDGETS, type DiffBudgets, readThreadDiff } from "./diff.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
@@ -121,6 +122,8 @@ export interface ThreadManagerOptions {
 	disabledBuiltinExtensions?: string[];
 	/** The shell environment scripts run in; tests inject one, production uses getShellConfig(). */
 	shellConfig?: ShellConfig;
+	/** thread/diff/read response budgets; tests shrink them. */
+	diffBudgets?: DiffBudgets;
 }
 
 export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
@@ -1551,6 +1554,10 @@ export class ThreadManager {
 					}),
 				),
 			"thread/start": (params, connection) => this.start(params, connection),
+			"thread/diff/read": (params, connection) =>
+				this.withThread(params.threadId, connection.mode, (thread) =>
+					readThreadDiff(thread, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS),
+				),
 			"environment/list": async ({ cwd }) => {
 				const projectCwd = this.projectOf(cwd);
 				return {
