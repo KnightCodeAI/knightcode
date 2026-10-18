@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { mkdir, stat, unlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import type {
 	ApprovalMode,
 	DiffComment,
@@ -94,9 +94,15 @@ import {
 	SessionFileIndex,
 } from "./session-files.ts";
 import {
+	allManifests,
 	createWorktree,
+	type DeleteResult,
+	deleteWorktreeLocked,
 	handoffChanges,
 	keptWorktree,
+	readManifestFile,
+	registrationOf,
+	restoreWorktreeLocked,
 	type Manifest,
 	manifestFor,
 	placeThread,
@@ -131,6 +137,8 @@ function removeTranscript(manager: SessionManager): void {
 		lock.release();
 	}
 }
+
+const pathKey = (path: string) => (process.platform === "win32" ? path.toLowerCase() : path);
 
 const repoHead = async (repo: Repo) => (await runGit(repo.root, ["rev-parse", "-q", "--verify", "HEAD"])).code === 0;
 
@@ -206,6 +214,12 @@ export class ThreadManager {
 	private readonly shutdown = new AbortController();
 	/** Checkout root → the operation holding it: no turn starts and no tool runs there meanwhile (§6.1). */
 	private readonly reservedCheckouts = new Map<string, string>();
+	/** Thread ids and manifest paths whose worktree is being prepared or restored: fenced against deletion. */
+	private readonly preparing = new Set<string>();
+	/** Manifest path → ids of threads loaded or loading in that worktree. */
+	private readonly worktreeUsers = new Map<string, Set<string>>();
+	/** Manifest path → the deletion in progress there. */
+	private readonly deleting = new Map<string, Promise<DeleteResult | { deleted: false; reason: "inUse" }>>();
 
 	constructor(ctx: AppServerContext, options: ThreadManagerOptions = {}) {
 		this.ctx = ctx;
@@ -257,6 +271,192 @@ export class ThreadManager {
 		const done = () => this.inFlight.delete(work);
 		void work.then(done, done);
 		return work;
+	}
+
+	private addUser(path: string, id: string): void {
+		const key = pathKey(path);
+		let users = this.worktreeUsers.get(key);
+		if (!users) this.worktreeUsers.set(key, (users = new Set()));
+		users.add(id);
+	}
+
+	private removeUser(path: string, id: string): void {
+		const key = pathKey(path);
+		const users = this.worktreeUsers.get(key);
+		users?.delete(id);
+		if (users?.size === 0) this.worktreeUsers.delete(key);
+	}
+
+	/** In use, being prepared or restored, or reserved: never deleted now. */
+	private fenced(manifest: Manifest): boolean {
+		if (this.preparing.has(manifest.path) || this.preparing.has(manifest.ownerThreadId)) return true;
+		if (Object.keys(manifest.placement).some((id) => this.preparing.has(id))) return true;
+		if ((this.worktreeUsers.get(pathKey(manifest.path))?.size ?? 0) > 0) return true;
+		return [...this.reservedCheckouts.keys()].some((root) => samePath(root, manifest.path));
+	}
+
+	/** Ids of the threads that belong to a worktree: its owner, its placements, and every saved thread inside it. */
+	private async threadsOf(manifest: Manifest): Promise<{ id: string; archived: boolean }[]> {
+		const ids = new Map<string, boolean>();
+		const inside = (cwd: string) => {
+			const rel = relative(manifest.path, canonicalizePath(cwd));
+			return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+		};
+		const live = liveDirFor(this.ctx, manifest.projectCwd);
+		for (const [dir, archived] of [
+			[live, false],
+			[join(live, ARCHIVE_DIR), true],
+		] as const) {
+			if (!existsSync(dir)) continue;
+			for (const session of await listWithIndex(dir))
+				if (
+					session.messageCount > 0 &&
+					(session.id === manifest.ownerThreadId || manifest.placement[session.id] !== undefined || inside(session.cwd))
+				)
+					ids.set(session.id, archived);
+		}
+		return [...ids].map(([id, archived]) => ({ id, archived }));
+	}
+
+	/**
+	 * Delete a managed worktree after its snapshot (§6.1). The fence check, the reservation and the `deleting` entry
+	 * happen in one synchronous step, so a load that registered first keeps the worktree and one after it waits.
+	 */
+	private deleteManaged(
+		manifest: Manifest,
+		reason: "archive" | "prune" | "user",
+		warnings: Warning[],
+	): Promise<DeleteResult | { deleted: false; reason: "inUse" }> {
+		const key = pathKey(manifest.path);
+		const running = this.deleting.get(key);
+		if (running) return running;
+		if (this.fenced(manifest)) return Promise.resolve({ deleted: false, reason: "inUse" });
+		this.reservedCheckouts.set(manifest.path, "delete");
+		const work = (async () => {
+			try {
+				await workspaceHooks.afterUserCheck();
+				// ponytail: waits for every closing thread, not only those in the worktree; closings are short.
+				await Promise.allSettled([...this.closing.values()]);
+				const repo = await requireRepo(manifest.mainRoot);
+				return await withRepoLock(repo, () =>
+					deleteWorktreeLocked({
+						settings: this.worktrees(),
+						manifest,
+						reason,
+						trusted: new ProjectTrustStore(this.ctx.agentDir).get(manifest.projectCwd) === true,
+						warnings,
+						signal: this.shutdown.signal,
+						shellConfig: this.options.shellConfig,
+					}),
+				);
+			} finally {
+				if (this.reservedCheckouts.get(manifest.path) === "delete") this.reservedCheckouts.delete(manifest.path);
+			}
+		})();
+		this.deleting.set(key, work);
+		const clear = () => {
+			if (this.deleting.get(key) === work) this.deleting.delete(key);
+		};
+		void work.then(clear, clear);
+		return work;
+	}
+
+	private reportWarnings(warnings: Warning[], threadId?: string): void {
+		for (const warning of warnings) this.ctx.broadcast("warning", { ...warning, ...(threadId ? { threadId } : {}) });
+	}
+
+	/** Past `worktrees.keep`, the least recently used managed worktrees go, each after a snapshot (§6.1). */
+	private async prune(): Promise<void> {
+		const warnings: Warning[] = [];
+		const settings = this.worktrees(warnings);
+		if (!settings.autoDelete) return;
+		const kept = allManifests(settings)
+			.filter((m) => !m.deleted)
+			.sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+		let count = kept.length;
+		for (const manifest of kept) {
+			if (count <= settings.keep) break;
+			if ((await this.deleteManaged(manifest, "prune", warnings)).deleted) count--;
+		}
+		this.reportWarnings(warnings);
+	}
+
+	private schedulePrune(): void {
+		void this.track(() => this.prune()).catch((error: unknown) => {
+			if (!(error instanceof AppServerError && error.code === "shuttingDown"))
+				console.error(
+					`app-server: pruning worktrees failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+		});
+	}
+
+	/** After an archive: delete the thread's worktree unless another thread still uses it (§6.1). */
+	private async archiveWorktree(threadId: string): Promise<ResultOf<"thread/archive">> {
+		const file = await this.files.find(threadId);
+		const headerCwd = file ? readSessionHeaderForDiscovery(file)?.cwd : undefined;
+		const warnings: Warning[] = [];
+		const settings = this.worktrees(warnings);
+		const manifest = headerCwd ? placeThread(settings, threadId, headerCwd).manifest : undefined;
+		if (!manifest) return {};
+		if (!settings.autoDelete) return { worktree: { deleted: false, reason: "autoDeleteOff" } };
+		if (manifest.deleted && !manifest.deleted.removalFailed)
+			return {
+				worktree: { deleted: true, ...(manifest.deleted.snapshot ? { snapshot: manifest.deleted.snapshot } : {}) },
+			};
+		const others = [...(this.worktreeUsers.get(pathKey(manifest.path)) ?? [])].filter((id) => id !== threadId);
+		const saved = (await this.threadsOf(manifest)).filter((t) => t.id !== threadId && !t.archived);
+		if (others.length > 0 || saved.length > 0) return { worktree: { deleted: false, reason: "inUse" } };
+		const result = await this.deleteManaged(manifest, "archive", warnings);
+		this.reportWarnings(warnings, threadId);
+		this.schedulePrune();
+		if (result.deleted)
+			return { worktree: { deleted: true, ...(result.snapshot ? { snapshot: result.snapshot } : {}) } };
+		return { worktree: { deleted: false, reason: result.reason } };
+	}
+
+	/** `thread/worktree/restore`: rebuild the deleted worktree from its snapshot, then load the thread there. */
+	private restore(threadId: string, by: Subscriber): Promise<ResultOf<"thread/worktree/restore">> {
+		return this.track(async () => {
+			const file = await this.files.find(threadId);
+			if (!file) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
+			const headerCwd = readSessionHeaderForDiscovery(file)?.cwd ?? "";
+			const manifest = placeThread(this.worktrees(), threadId, headerCwd).manifest;
+			if (!manifest?.deleted) throw new AppServerError("invalidParams", "the worktree of this chat is not deleted");
+			await this.restoreManaged(manifest, threadId);
+			try {
+				const thread = await this.ensureLoaded(threadId, by.mode);
+				this.subscribe(thread, by);
+				return { thread: thread.toThread() };
+			} finally {
+				this.preparing.delete(manifest.path);
+			}
+		});
+	}
+
+	/** Rebuilds a deleted worktree; the manifest path stays in `preparing` until the caller loaded its thread. */
+	private async restoreManaged(manifest: Manifest, threadId: string): Promise<Manifest> {
+		await this.deleting.get(pathKey(manifest.path))?.catch(() => {});
+		this.preparing.add(manifest.path);
+		try {
+			const warnings: Warning[] = [];
+			const repo = await requireRepo(manifest.mainRoot);
+			const restored = await withRepoLock(repo, () =>
+				restoreWorktreeLocked({
+					settings: this.worktrees(),
+					manifest,
+					reason: "user",
+					trusted: new ProjectTrustStore(this.ctx.agentDir).get(manifest.projectCwd) === true,
+					warnings,
+					signal: this.shutdown.signal,
+					shellConfig: this.options.shellConfig,
+				}),
+			);
+			this.reportWarnings(warnings, threadId);
+			return restored;
+		} catch (error) {
+			this.preparing.delete(manifest.path);
+			throw error;
+		}
 	}
 
 	/** A turn runs, a start is registered, or a dequeued input is about to register one. */
@@ -337,67 +537,78 @@ export class ThreadManager {
 					`the thread already runs ${params.to === "local" ? "locally" : "in a worktree"}`,
 				);
 			let manifest = placed.manifest;
-			// Phase A: a thread born in the main checkout gets its worktree, at the main checkout's HEAD.
-			if (!manifest) {
-				const main = await requireRepo(cwd);
-				if (!(await repoHead(main)))
-					throw new AppServerError("invalidParams", `commit something in ${main.root} first`);
-				const created = await createWorktree({
-					settings,
-					projectCwd: thread.projectCwd,
-					sourceCwd: cwd,
-					threadId: thread.id,
-					ownerThreadId: thread.id,
-					environment: params.environment,
-					signal: this.shutdown.signal,
-					warnings,
-				});
-				manifest = await prepareWorktree({
-					settings,
-					manifest: created.manifest,
-					threadId: thread.id,
-					trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
-					warnings,
-					signal: this.shutdown.signal,
-					progress: (p) => by.notify("thread/workspace/progress", p),
-					shellConfig: this.options.shellConfig,
-				});
-			}
-			if (manifest.deleted)
-				throw new AppServerError("gitConflict", "the worktree of this chat was deleted", {
-					reason: "worktreeDeleted",
-					worktree: manifest.path,
-					recoveryInstructions: ["The worktree of this chat was deleted. Restore it to continue."],
-				});
-			const main = await requireRepo(manifest.mainRoot);
-			const worktree = await requireRepo(manifest.path);
-			// Phase B.
-			const release = await this.reserveCheckouts([main.root, worktree.root], "handoff");
+			this.preparing.add(thread.id);
+			let restored: string | undefined;
 			try {
-				const bound = manifest;
-				const moved = await thread.exclusive(() =>
-					withRepoLock(main, () =>
-						handoffChanges({
-							settings,
-							manifest: bound,
-							threadId: thread.id,
-							title: thread.toThread().name,
-							to: params.to,
-							branch: params.branch,
-							bornInWorktree: manifestFor(settings, headerCwd) !== undefined,
-							agentDir: this.ctx.agentDir,
-							main,
-							worktree,
-							warnings,
-							signal: this.shutdown.signal,
-						}),
-					),
-				);
-				// Phase C, still holding both checkouts: no turn starts in either in between.
-				const next = await this.relocate(thread, by);
-				return { thread: next.toThread(), ...(moved.branch ? { branch: moved.branch } : {}), warnings };
+				// Phase A: a thread born in the main checkout gets its worktree, at the main checkout's HEAD.
+				if (manifest?.deleted) {
+					manifest = await this.restoreManaged(manifest, thread.id);
+					restored = manifest.path;
+				}
+				if (!manifest) {
+					const main = await requireRepo(cwd);
+					if (!(await repoHead(main)))
+						throw new AppServerError("invalidParams", `commit something in ${main.root} first`);
+					const created = await createWorktree({
+						settings,
+						projectCwd: thread.projectCwd,
+						sourceCwd: cwd,
+						threadId: thread.id,
+						ownerThreadId: thread.id,
+						environment: params.environment,
+						signal: this.shutdown.signal,
+						warnings,
+					});
+					manifest = await prepareWorktree({
+						settings,
+						manifest: created.manifest,
+						threadId: thread.id,
+						trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
+						warnings,
+						signal: this.shutdown.signal,
+						progress: (p) => by.notify("thread/workspace/progress", p),
+						shellConfig: this.options.shellConfig,
+					});
+				}
+				if (manifest.deleted)
+					throw new AppServerError("gitConflict", "the worktree of this chat was deleted", {
+						reason: "worktreeDeleted",
+						worktree: manifest.path,
+						recoveryInstructions: ["The worktree of this chat was deleted. Restore it to continue."],
+					});
+				const main = await requireRepo(manifest.mainRoot);
+				const worktree = await requireRepo(manifest.path);
+				// Phase B.
+				const release = await this.reserveCheckouts([main.root, worktree.root], "handoff");
+				try {
+					const bound = manifest;
+					const moved = await thread.exclusive(() =>
+						withRepoLock(main, () =>
+							handoffChanges({
+								settings,
+								manifest: bound,
+								threadId: thread.id,
+								title: thread.toThread().name,
+								to: params.to,
+								branch: params.branch,
+								bornInWorktree: manifestFor(settings, headerCwd) !== undefined,
+								agentDir: this.ctx.agentDir,
+								main,
+								worktree,
+								warnings,
+								signal: this.shutdown.signal,
+							}),
+						),
+					);
+					// Phase C, still holding both checkouts: no turn starts in either in between.
+					const next = await this.relocate(thread, by);
+					return { thread: next.toThread(), ...(moved.branch ? { branch: moved.branch } : {}), warnings };
+				} finally {
+					release();
+				}
 			} finally {
-				release();
+				this.preparing.delete(thread.id);
+				if (restored) this.preparing.delete(restored);
 			}
 		});
 	}
@@ -446,50 +657,58 @@ export class ThreadManager {
 			const workspace = params.workspace;
 			let created: { manifest: Manifest; cwd: string } | undefined;
 			let sessionManager: SessionManager;
-			if (workspace?.mode === "worktree") {
-				if (
-					workspace.environment !== undefined &&
-					!readEnvironments(projectCwd).some((e) => e.name === workspace.environment)
-				)
-					throw new AppServerError("invalidParams", `no environment named "${workspace.environment}"`);
-				const threadId = uuidv7();
-				created = await createWorktree({
-					settings,
-					projectCwd,
-					sourceCwd: cwd,
-					threadId,
-					ownerThreadId: threadId,
-					baseRef: workspace.baseRef,
-					carryLocalChanges: workspace.carryLocalChanges,
-					environment: workspace.environment,
-					signal: this.shutdown.signal,
-					warnings,
-				});
-				try {
-					created.manifest = await prepareWorktree({
-						settings,
-						manifest: created.manifest,
-						threadId,
-						trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
-						warnings,
-						signal: this.shutdown.signal,
-						progress: (params) => by.notify("thread/workspace/progress", params),
-						shellConfig: this.options.shellConfig,
-					});
-				} catch (error) {
-					const stopped = this.shutdown.signal.aborted
-						? new AppServerError("shuttingDown", "the app server shut down while the worktree was prepared")
-						: error;
-					throw keptWorktree(stopped, created.manifest);
-				}
-				sessionManager = SessionManager.create(created.cwd, liveDirFor(this.ctx, projectCwd), { id: threadId });
-			} else sessionManager = SessionManager.create(cwd, liveDirFor(this.ctx, projectCwd));
+			let preparingId: string | undefined;
 			let thread: LoadedThread;
 			try {
-				thread = await this.load(sessionManager, by.mode, "new", params.approvalMode ?? defaultApprovalMode(by.mode));
-			} catch (error) {
-				throw created ? keptWorktree(error, created.manifest) : error;
+				if (workspace?.mode === "worktree") {
+					if (
+						workspace.environment !== undefined &&
+						!readEnvironments(projectCwd).some((e) => e.name === workspace.environment)
+					)
+						throw new AppServerError("invalidParams", `no environment named "${workspace.environment}"`);
+					const threadId = uuidv7();
+					this.preparing.add(threadId);
+					preparingId = threadId;
+					created = await createWorktree({
+						settings,
+						projectCwd,
+						sourceCwd: cwd,
+						threadId,
+						ownerThreadId: threadId,
+						baseRef: workspace.baseRef,
+						carryLocalChanges: workspace.carryLocalChanges,
+						environment: workspace.environment,
+						signal: this.shutdown.signal,
+						warnings,
+					});
+					try {
+						created.manifest = await prepareWorktree({
+							settings,
+							manifest: created.manifest,
+							threadId,
+							trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
+							warnings,
+							signal: this.shutdown.signal,
+							progress: (params) => by.notify("thread/workspace/progress", params),
+							shellConfig: this.options.shellConfig,
+						});
+					} catch (error) {
+						const stopped = this.shutdown.signal.aborted
+							? new AppServerError("shuttingDown", "the app server shut down while the worktree was prepared")
+							: error;
+						throw keptWorktree(stopped, created.manifest);
+					}
+					sessionManager = SessionManager.create(created.cwd, liveDirFor(this.ctx, projectCwd), { id: threadId });
+				} else sessionManager = SessionManager.create(cwd, liveDirFor(this.ctx, projectCwd));
+				try {
+					thread = await this.load(sessionManager, by.mode, "new", params.approvalMode ?? defaultApprovalMode(by.mode));
+				} catch (error) {
+					throw created ? keptWorktree(error, created.manifest) : error;
+				}
+			} finally {
+				if (preparingId) this.preparing.delete(preparingId);
 			}
+			if (created) this.schedulePrune();
 			try {
 				if (params.model) await this.setModel(thread, params.model.provider, params.model.id);
 				if (params.thinkingLevel) thread.session.setThinkingLevel(params.thinkingLevel);
@@ -651,7 +870,7 @@ export class ThreadManager {
 		return thread.hold(() => fn(thread));
 	}
 
-	async archive(threadId: string, archived: boolean): Promise<void> {
+	async archive(threadId: string, archived: boolean): Promise<ResultOf<"thread/archive">> {
 		this.assertOpen();
 		const live = this.threads.get(threadId);
 		if (live?.busy) throw new AppServerError("turnInProgress", "interrupt the turn first");
@@ -668,7 +887,11 @@ export class ThreadManager {
 				throw error;
 			}
 			if (isArchivedPath(file) === archived) {
-				if (thread?.state === "ready") this.threads.set(threadId, thread);
+				// An archived thread that is loaded still unloads, so its worktree can go below.
+				if (archived && thread) {
+					await thread.dispose();
+					this.ctx.broadcast("thread/status/changed", { threadId, status: this.unloadedStatus(threadId) });
+				} else if (thread?.state === "ready") this.threads.set(threadId, thread);
 				return;
 			}
 			changed = true;
@@ -682,6 +905,8 @@ export class ThreadManager {
 			await moveSessionFileWithoutReplace(file, moved, threadId, () => this.files.remember(threadId, moved));
 		});
 		if (changed) this.ctx.broadcast("thread/archived", { threadId, archived });
+		// After the closing transition settled, so the deletion never waits on its own entry.
+		return archived ? this.archiveWorktree(threadId) : {};
 	}
 
 	async delete(threadId: string): Promise<void> {
@@ -770,52 +995,68 @@ export class ThreadManager {
 				throw new AppServerError("invalidParams", `no item ${atItemId} in ${threadId}`);
 			let created: { manifest: Manifest; cwd: string } | undefined;
 			let sessionManager: SessionManager;
-			if (workspace?.mode === "worktree") {
-				// Codex's "Fork in a new worktree": the source checkout's HEAD, its uncommitted changes carried along.
-				const id = uuidv7();
-				created = await createWorktree({
-					settings,
-					projectCwd: sourceProject,
-					sourceCwd: cwd,
-					threadId: id,
-					ownerThreadId: id,
-					carryLocalChanges: true,
-					environment: placed.workspace.mode === "worktree" ? placed.workspace.environment : undefined,
-					signal: this.shutdown.signal,
-					warnings,
-				});
-				try {
-					created.manifest = await prepareWorktree({
-						settings,
-						manifest: created.manifest,
-						threadId: id,
-						trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
-						warnings,
-						signal: this.shutdown.signal,
-						progress: (params) => by.notify("thread/workspace/progress", params),
-						shellConfig: this.options.shellConfig,
-					});
-					sessionManager = SessionManager.forkFrom(source, created.cwd, dir, { id, leafId });
-				} catch (error) {
-					throw keptWorktree(error, created.manifest);
-				}
-			} else sessionManager = SessionManager.forkFrom(source, cwd, dir, leafId === undefined ? undefined : { leafId });
+			let forkId: string | undefined;
 			let thread: LoadedThread;
 			try {
-				await workspaceHooks.afterForkFrom();
-				thread = await this.load(
-					sessionManager,
-					by.mode,
-					"fork",
-					live?.approvalMode ?? readApprovalMode(entries) ?? defaultApprovalMode(by.mode),
-				);
-				if (thread.state !== "ready")
-					throw new AppServerError("threadNotFound", `fork closed while loading: ${thread.id}`);
-			} catch (error) {
-				// The fork is not returned, so its transcript must not stay behind as a thread nobody asked for.
-				removeTranscript(sessionManager);
-				throw created ? keptWorktree(error, created.manifest) : error;
+				if (workspace?.mode === "worktree") {
+					// Codex's "Fork in a new worktree": the source checkout's HEAD, its uncommitted changes carried along.
+					const id = uuidv7();
+					forkId = id;
+					this.preparing.add(id);
+					// A source whose worktree was deleted forks from its snapshot (or, without one, its base).
+					const gone = placed.workspace.mode === "worktree" && placed.workspace.deleted ? placed.manifest : undefined;
+					const inMain = gone && join(gone.mainRoot, relative(gone.path, canonicalizePath(cwd)));
+					created = await createWorktree({
+						settings,
+						projectCwd: sourceProject,
+						sourceCwd: gone ? (existsSync(inMain!) ? inMain! : gone.mainRoot) : cwd,
+						threadId: id,
+						ownerThreadId: id,
+						...(gone
+							? gone.deleted?.snapshot
+								? { snapshot: gone.deleted.snapshot }
+								: { baseRef: gone.baseRef }
+							: { carryLocalChanges: true }),
+						environment: placed.workspace.mode === "worktree" ? placed.workspace.environment : undefined,
+						signal: this.shutdown.signal,
+						warnings,
+					});
+					try {
+						created.manifest = await prepareWorktree({
+							settings,
+							manifest: created.manifest,
+							threadId: id,
+							trusted: new ProjectTrustStore(this.ctx.agentDir).get(created.manifest.projectCwd) === true,
+							warnings,
+							signal: this.shutdown.signal,
+							progress: (params) => by.notify("thread/workspace/progress", params),
+							shellConfig: this.options.shellConfig,
+						});
+						sessionManager = SessionManager.forkFrom(source, created.cwd, dir, { id, leafId });
+					} catch (error) {
+						throw keptWorktree(error, created.manifest);
+					}
+				} else
+					sessionManager = SessionManager.forkFrom(source, cwd, dir, leafId === undefined ? undefined : { leafId });
+				try {
+					await workspaceHooks.afterForkFrom();
+					thread = await this.load(
+						sessionManager,
+						by.mode,
+						"fork",
+						live?.approvalMode ?? readApprovalMode(entries) ?? defaultApprovalMode(by.mode),
+					);
+					if (thread.state !== "ready")
+						throw new AppServerError("threadNotFound", `fork closed while loading: ${thread.id}`);
+				} catch (error) {
+					// The fork is not returned, so its transcript must not stay behind as a thread nobody asked for.
+					removeTranscript(sessionManager);
+					throw created ? keptWorktree(error, created.manifest) : error;
+				}
+			} finally {
+				if (forkId) this.preparing.delete(forkId);
 			}
+			if (created) this.schedulePrune();
 			// The copy carries its source's name; mark it so the two can be told apart.
 			thread.session.setSessionName(
 				`${thread.session.sessionManager.getSessionName() || thread.toThread().name} (fork)`,
@@ -1005,12 +1246,37 @@ export class ThreadManager {
 		reason: "new" | "resume" | "fork",
 		approvalMode?: ApprovalMode,
 	): Promise<LoadedThread> {
-		const building = this.track(() => this.build(sessionManager, mode, reason, approvalMode)).catch(
-			(error: unknown) => {
-				if (error instanceof AppServerError && error.code === "shuttingDown") sessionManager.close();
-				throw error;
-			},
+		// A thread running in a managed worktree registers before its first await (§6.1 deletion fence).
+		const placed = placeThread(
+			this.worktrees(),
+			sessionManager.getSessionId(),
+			sessionManager.getHeader()?.cwd ?? sessionManager.getCwd(),
 		);
+		const worktree = placed.workspace.mode === "worktree" ? placed.manifest?.path : undefined;
+		if (worktree) this.addUser(worktree, sessionManager.getSessionId());
+		const building = this.track(async () => {
+			if (worktree) {
+				try {
+					await this.deleting.get(pathKey(worktree))?.catch(() => {});
+					if (readManifestFile(worktree)?.deleted)
+						throw new AppServerError("gitConflict", "the worktree of this chat was deleted", {
+							reason: "worktreeDeleted",
+							worktree,
+							recoveryInstructions: ["The worktree of this chat was deleted. Restore it to continue."],
+						});
+				} catch (error) {
+					sessionManager.close();
+					throw error;
+				}
+			}
+			const thread = await this.build(sessionManager, mode, reason, approvalMode);
+			if (worktree) thread.onClosed = () => this.removeUser(worktree, thread.id);
+			return thread;
+		}).catch((error: unknown) => {
+			if (worktree) this.removeUser(worktree, sessionManager.getSessionId());
+			if (error instanceof AppServerError && error.code === "shuttingDown") sessionManager.close();
+			throw error;
+		});
 		// Every build is visible by id while it runs (§5.6), not only those ensureLoaded starts. A fork's or a
 		// replacement's file exists before its load finishes, so thread/list can show it: a resume of that id must
 		// join this build instead of opening a second session on the file (the in-process lock is counted and would
@@ -1869,7 +2135,47 @@ export class ThreadManager {
 			"thread/fork": ({ threadId, atItemId, workspace }, connection) =>
 				this.fork(threadId, atItemId, workspace, connection),
 			"thread/delete": ({ threadId }) => this.delete(threadId).then(() => ({})),
-			"thread/archive": ({ threadId }) => this.archive(threadId, true).then(() => ({})),
+			"thread/archive": ({ threadId }) => this.track(() => this.archive(threadId, true)),
+			"thread/worktree/restore": ({ threadId }, connection) => this.restore(threadId, connection),
+			"worktree/list": async ({ cwd }) => {
+				const settings = this.worktrees();
+				const project = cwd === undefined ? undefined : this.projectOf(cwd);
+				const worktrees: ResultOf<"worktree/list">["worktrees"] = [];
+				for (const manifest of allManifests(settings)) {
+					if (project !== undefined && !sameProject(manifest.projectCwd, project)) continue;
+					const registration = manifest.deleted ? undefined : await registrationOf(manifest);
+					const ours = registration?.status === "ours" ? registration : undefined;
+					worktrees.push({
+						path: manifest.path,
+						projectCwd: manifest.projectCwd,
+						...(ours?.head ? { head: ours.head } : {}),
+						...(ours?.branch ? { branch: ours.branch } : {}),
+						threadIds: (await this.threadsOf(manifest)).map((t) => t.id),
+						lastUsedAt: manifest.lastUsedAt,
+						deleted: manifest.deleted !== undefined,
+					});
+				}
+				return { worktrees };
+			},
+			"worktree/delete": ({ path }) =>
+				this.track(async () => {
+					const manifest = manifestFor(this.worktrees(), resolvePath(path));
+					if (!manifest || !samePath(manifest.path, canonicalizePath(resolvePath(path))))
+						throw new AppServerError("invalidParams", `not a managed worktree: ${path}`);
+					const warnings: Warning[] = [];
+					const result = await this.deleteManaged(manifest, "user", warnings);
+					this.reportWarnings(warnings);
+					if (result.deleted) return result.snapshot ? { snapshot: result.snapshot } : {};
+					if (result.reason === "inUse")
+						throw new AppServerError("gitConflict", "a chat is using this worktree", { reason: "worktreeInUse" });
+					if (result.reason === "submodules")
+						throw new AppServerError(
+							"gitConflict",
+							"Remove or commit the nested repositories' work, then delete the worktree.",
+							{ reason: "submodules", paths: result.paths },
+						);
+					throw new AppServerError("invalidParams", `${path} is not this project's managed worktree`);
+				}),
 			"thread/unarchive": ({ threadId }) => this.archive(threadId, false).then(() => ({})),
 			"thread/name/set": ({ threadId, name }, connection) =>
 				this.withThread(threadId, connection.mode, (thread) =>

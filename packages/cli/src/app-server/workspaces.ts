@@ -18,8 +18,9 @@ import {
 	rmSync,
 	statSync,
 	writeFileSync,
+	type Dirent,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
 	Environment,
@@ -243,6 +244,12 @@ export function manifestPlacing(settings: WorktreeSettings, threadId: string): M
 	return allManifests(settings).find((manifest) => manifest.placement[threadId] !== undefined);
 }
 
+/** The manifest file as it is now, bypassing the memo (deletion re-reads it under the lock). */
+export function readManifestFile(path: string): Manifest | undefined {
+	manifests.delete(join(dirname(path), "worktree.json"));
+	return readManifest(join(dirname(path), "worktree.json"));
+}
+
 export function writeManifest(_settings: WorktreeSettings, manifest: Manifest): void {
 	const file = join(dirname(manifest.path), "worktree.json");
 	const temp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
@@ -311,6 +318,8 @@ export interface CreateInput {
 	ownerThreadId: string;
 	baseRef?: string;
 	carryLocalChanges?: boolean;
+	/** A deletion snapshot to start from: its first parent is the base, its working state is carried. */
+	snapshot?: string;
 	environment?: string;
 	signal: AbortSignal;
 	warnings: Warning[];
@@ -379,7 +388,7 @@ async function create(input: CreateInput, sourceRepo: Repo): Promise<{ manifest:
 	const mainRoot = (await requireRepo(input.projectCwd)).root;
 	const prefix = sourceRepo.prefix;
 	if (input.settings.fetchBeforeCreate) await fetchBase(sourceRepo, input.baseRef, signal, input.warnings);
-	const revision = `${input.baseRef ?? "HEAD"}^{commit}`;
+	const revision = input.snapshot ? `${input.snapshot}^1^{commit}` : `${input.baseRef ?? "HEAD"}^{commit}`;
 	const resolved = await runGit(sourceRepo.root, ["rev-parse", "--verify", "--end-of-options", revision], { signal });
 	if (resolved.code !== 0) {
 		throw new AppServerError(
@@ -396,7 +405,9 @@ async function create(input: CreateInput, sourceRepo: Repo): Promise<{ manifest:
 			throw new AppServerError("invalidParams", `the base commit has no ${prefix}`);
 	}
 	let patch: Buffer | undefined;
-	if (input.carryLocalChanges) {
+	if (input.snapshot)
+		patch = await machinePatch(sourceRepo, `${baseSha}^{tree}`, `${input.snapshot}^{tree}`, { binary: true, signal });
+	else if (input.carryLocalChanges) {
 		const from = await headTree(sourceRepo);
 		const to = await snapshotTree(sourceRepo, true, signal);
 		if ((await submodulePaths(sourceRepo, from, to)).length > 0)
@@ -979,4 +990,311 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 	else manifest.placement[input.threadId] = "worktree";
 	writeManifest(input.settings, manifest);
 	return { manifest };
+}
+
+const GIT_IDENTITY = {
+	GIT_AUTHOR_NAME: "KnightCode",
+	GIT_AUTHOR_EMAIL: "knightcode@localhost",
+	GIT_COMMITTER_NAME: "KnightCode",
+	GIT_COMMITTER_EMAIL: "knightcode@localhost",
+};
+
+export type Registration =
+	| { status: "ours"; head?: string; branch?: string }
+	| { status: "none" }
+	/** Registered, but the checkout directory is gone. */
+	| { status: "gone" }
+	| { status: "notManaged" };
+
+const gitPath = (path: string) => (WIN ? path.replace(/\\/g, "/").toLowerCase() : path);
+
+/**
+ * The project repository's registration of the manifest's path, when its `.git` file points back to it (the
+ * crate's backlink check). A path registered by another repository, or whose `.git` names another admin dir, is
+ * not ours.
+ */
+export async function registrationOf(manifest: Manifest): Promise<Registration> {
+	const project = await repoOf(manifest.mainRoot);
+	if (!project || !samePath(project.commonDir, manifest.commonDir)) return { status: "notManaged" };
+	const fields = (await git(project.root, ["worktree", "list", "--porcelain", "-z"])).split("\0");
+	let record: Record<string, string> | undefined;
+	let current: Record<string, string> = {};
+	for (const field of [...fields, ""]) {
+		if (field === "") {
+			if (current.worktree && gitPath(resolve(current.worktree)) === gitPath(manifest.path)) record = current;
+			current = {};
+			continue;
+		}
+		const space = field.indexOf(" ");
+		current[space === -1 ? field : field.slice(0, space)] = space === -1 ? "" : field.slice(space + 1);
+	}
+	const dotGit = join(manifest.path, ".git");
+	if (!record) return existsSync(dotGit) ? { status: "notManaged" } : { status: "none" };
+	if (!existsSync(manifest.path)) return { status: "gone" };
+	let adminDir: string;
+	try {
+		adminDir = /^gitdir: (.+)$/m.exec(readFileSync(dotGit, "utf8"))?.[1]?.trim() ?? "";
+		const back = readFileSync(join(adminDir, "gitdir"), "utf8").trim();
+		if (gitPath(resolve(back)) !== gitPath(dotGit)) return { status: "notManaged" };
+		if (!samePath(realpathSync.native(join(adminDir, "..", "..")), manifest.commonDir)) return { status: "notManaged" };
+	} catch {
+		return { status: "notManaged" };
+	}
+	return {
+		status: "ours",
+		...(record.HEAD ? { head: record.HEAD } : {}),
+		...(record.branch ? { branch: record.branch.replace(/^refs\/heads\//, "") } : {}),
+	};
+}
+
+/**
+ * Nested repositories a snapshot would record as a gitlink only: gitlinks with a `.git` in the snapshot tree or the
+ * real index, and any `.git` below the root found by a walk that never follows links nor enters ignored directories.
+ */
+export async function nestedRepositories(root: string, tree: string): Promise<string[]> {
+	const found = new Set<string>();
+	const gitlinks = [
+		...(await git(root, ["ls-tree", "-r", "-z", tree])).split("\0").map((r) => r.split("\t")),
+		...(await git(root, ["ls-files", "-s", "-z"])).split("\0").map((r) => r.split("\t")),
+	];
+	for (const [meta, path] of gitlinks)
+		if (path && meta.startsWith("160000") && existsSync(join(root, path, ".git"))) found.add(path);
+	let level = [""];
+	while (level.length > 0) {
+		const next: string[] = [];
+		for (const dir of level) {
+			let entries: Dirent[];
+			try {
+				entries = readdirSync(join(root, dir), { withFileTypes: true });
+			} catch {
+				continue;
+			}
+			for (const entry of entries) {
+				const rel = dir ? `${dir}/${entry.name}` : entry.name;
+				if (entry.name === ".git") {
+					if (dir) found.add(dir);
+					continue;
+				}
+				if (entry.isDirectory() && !entry.isSymbolicLink()) next.push(rel);
+			}
+		}
+		if (next.length === 0) break;
+		const ignored = await runGit(root, ["check-ignore", "-z", "--stdin"], {
+			input: `${next.map((d) => `${d}/`).join("\0")}\0`,
+			env: { GIT_LITERAL_PATHSPECS: "0" },
+		});
+		const skip = new Set(
+			ignored.stdout
+				.toString("utf8")
+				.split("\0")
+				.filter(Boolean)
+				.map((d) => d.replace(/\/$/, "")),
+		);
+		level = next.filter((d) => !skip.has(d));
+	}
+	return [...found].sort();
+}
+
+export interface DeleteInput {
+	settings: WorktreeSettings;
+	manifest: Manifest;
+	reason: "archive" | "prune" | "user";
+	trusted: boolean;
+	warnings: Warning[];
+	signal: AbortSignal;
+	progress?: Progress;
+	shellConfig?: ShellConfig;
+}
+
+export type DeleteResult =
+	{ deleted: true; snapshot?: string } | { deleted: false; reason: "notManaged" | "submodules"; paths?: string[] };
+
+async function workingState(worktree: string, signal: AbortSignal) {
+	const repo = await requireRepo(worktree);
+	return {
+		repo,
+		head: await git(worktree, ["rev-parse", "HEAD"], { signal }),
+		index: await indexTree(repo, signal),
+		tree: await snapshotTree(repo, true, signal),
+	};
+}
+
+async function snapshotCommit(worktree: string, state: Awaited<ReturnType<typeof workingState>>, reason: string) {
+	const options = { internal: true, env: GIT_IDENTITY };
+	const index = await git(
+		worktree,
+		["commit-tree", state.index, "-p", state.head, "-m", `KnightCode worktree index: ${reason}`],
+		options,
+	);
+	return git(
+		worktree,
+		["commit-tree", state.tree, "-p", state.head, "-p", index, "-m", `KnightCode worktree snapshot: ${reason}`],
+		options,
+	);
+}
+
+/**
+ * A partly removed checkout: the directory gone (nothing to inventory) or its `.git` file gone, written back from
+ * the saved admin dir when that still names this path. False when nothing can be done safely.
+ */
+function repairPartlyRemoved(manifest: Manifest, warnings: Warning[]): "gone" | "ok" | "unsafe" {
+	if (!existsSync(manifest.path)) return "gone";
+	const dotGit = join(manifest.path, ".git");
+	if (existsSync(dotGit)) return "ok";
+	const adminDir = manifest.deleted?.adminDir;
+	try {
+		if (adminDir && gitPath(resolve(readFileSync(join(adminDir, "gitdir"), "utf8").trim())) === gitPath(dotGit)) {
+			writeFileSync(dotGit, `gitdir: ${adminDir}\n`);
+			return "ok";
+		}
+	} catch {
+		/* falls through to the warning */
+	}
+	warnings.push({
+		source: "server",
+		message: `${manifest.path} was partly removed and cannot be inspected safely; its snapshot ${manifest.deleted?.snapshot ?? ""} is kept.`,
+	});
+	return "unsafe";
+}
+
+/** Removes the checkout (step 6); records `removalFailed` and the state after a failed attempt. */
+async function removeCheckout(input: DeleteInput, manifest: Manifest): Promise<DeleteResult> {
+	const deleted = manifest.deleted!;
+	const adminDir = await runGit(manifest.path, ["rev-parse", "--path-format=absolute", "--git-dir"]);
+	if (adminDir.code === 0) deleted.adminDir = adminDir.stdout.toString("utf8").trim();
+	writeManifest(input.settings, manifest);
+	const removed = await runGit(manifest.mainRoot, ["worktree", "remove", "--force", manifest.path], {
+		internal: true,
+		signal: input.signal,
+	});
+	if (removed.code === 0) {
+		rmSync(manifest.path, { recursive: true, force: true });
+		delete deleted.removalFailed;
+		delete deleted.afterFailure;
+		writeManifest(input.settings, manifest);
+		return { deleted: true, snapshot: deleted.snapshot };
+	}
+	deleted.removalFailed = true;
+	if (repairPartlyRemoved(manifest, input.warnings) === "ok") {
+		const state = await workingState(manifest.path, input.signal).catch(() => undefined);
+		if (state) deleted.afterFailure = { head: state.head, index: state.index, tree: state.tree };
+	}
+	writeManifest(input.settings, manifest);
+	input.warnings.push({
+		source: "server",
+		message: `The worktree ${manifest.path} could not be removed completely (${removed.stderr.trim()}); its snapshot is kept and the next deletion finishes it.`,
+	});
+	return { deleted: true, snapshot: deleted.snapshot };
+}
+
+/**
+ * Deletes a managed worktree after committing a snapshot of it (§6.1), with the repository lock held by the
+ * caller and the manager's fence already passed.
+ */
+export async function deleteWorktreeLocked(input: DeleteInput): Promise<DeleteResult> {
+	const manifest = readManifestFile(input.manifest.path) ?? input.manifest;
+	if (manifest.deleted && !manifest.deleted.removalFailed)
+		return { deleted: true, snapshot: manifest.deleted.snapshot };
+	const registration = await registrationOf(manifest);
+	if (registration.status === "notManaged") return { deleted: false, reason: "notManaged" };
+	if (registration.status !== "ours" || !existsSync(manifest.path)) {
+		// A registration whose directory is gone: `worktree remove --force` drops it (works on a missing path).
+		if (registration.status === "gone")
+			await runGit(manifest.mainRoot, ["worktree", "remove", "--force", manifest.path], { internal: true });
+		// git removes its admin dir even when removing the checkout fails (a held directory on Windows), so a
+		// leftover is no longer a checkout: an empty one goes, anything written into it stays.
+		if (existsSync(manifest.path)) {
+			if (readdirSync(manifest.path).length === 0) rmSync(manifest.path, { recursive: true, force: true });
+			else
+				input.warnings.push({
+					source: "server",
+					message: `${manifest.path} is no longer a git checkout; its files were left in place.${manifest.deleted?.snapshot ? ` The worktree's work is in ${manifest.deleted.snapshot}.` : ""}`,
+				});
+		}
+		manifest.deleted ??= { reason: input.reason, at: Date.now() };
+		delete manifest.deleted.removalFailed;
+		writeManifest(input.settings, manifest);
+		return { deleted: true, snapshot: manifest.deleted.snapshot };
+	}
+	if (manifest.deleted?.removalFailed && repairPartlyRemoved(manifest, input.warnings) === "unsafe")
+		return { deleted: true, snapshot: manifest.deleted.snapshot };
+	const state = await workingState(manifest.path, input.signal);
+	const nested = await nestedRepositories(manifest.path, state.tree);
+	if (nested.length > 0) return { deleted: false, reason: "submodules", paths: nested };
+	const bucket = basename(dirname(manifest.path));
+	if (!manifest.deleted) {
+		const at = Date.now();
+		const snapshot = await snapshotCommit(manifest.path, state, input.reason);
+		await git(manifest.path, ["update-ref", `refs/knightcode/snapshots/${bucket}/${at}`, snapshot], { internal: true });
+		manifest.deleted = { snapshot, reason: input.reason, at };
+		writeManifest(input.settings, manifest);
+		await runCleanup({ ...input, manifest, threadId: manifest.ownerThreadId });
+	} else {
+		const after = manifest.deleted.afterFailure;
+		if (!after || after.head !== state.head || after.index !== state.index || after.tree !== state.tree) {
+			const at = Date.now();
+			const later = await snapshotCommit(manifest.path, state, `${input.reason} after a failed removal`);
+			const ref = `refs/knightcode/snapshots/${bucket}/${at}`;
+			await git(manifest.path, ["update-ref", ref, later], { internal: true });
+			manifest.deleted.later = [...(manifest.deleted.later ?? []), ref];
+			writeManifest(input.settings, manifest);
+			input.warnings.push({
+				source: "server",
+				message: `Work done in ${manifest.path} after its first removal failed was saved as ${ref}.`,
+			});
+		}
+	}
+	return removeCheckout(input, manifest);
+}
+
+/**
+ * Rebuilds a deleted worktree at its old path from its snapshot: detached at the old HEAD, the working files and the
+ * staged state as they were. Caller holds the repository lock.
+ */
+export async function restoreWorktreeLocked(input: DeleteInput): Promise<Manifest> {
+	let manifest = readManifestFile(input.manifest.path) ?? input.manifest;
+	const snapshot = manifest.deleted?.snapshot;
+	if (!manifest.deleted) return manifest;
+	if (!snapshot || (await runGit(manifest.mainRoot, ["cat-file", "-e", snapshot])).code !== 0)
+		throw new AppServerError("gitConflict", "the worktree was deleted without a snapshot", {
+			reason: "worktreeMissing",
+			recoveryInstructions: ["Fork this chat into a new worktree to continue."],
+		});
+	if (manifest.deleted.removalFailed) {
+		const finished = await deleteWorktreeLocked(input);
+		if (!finished.deleted)
+			throw new AppServerError("gitConflict", "nested repositories are in the way", {
+				reason: finished.reason,
+				paths: finished.paths,
+			});
+		manifest = readManifestFile(manifest.path) ?? manifest;
+		if (manifest.deleted?.removalFailed)
+			throw new AppServerError("gitConflict", `${manifest.path} could not be removed to restore it`, {
+				reason: "worktreeInUse",
+			});
+	}
+	const { path } = manifest;
+	const internal = { internal: true, signal: input.signal };
+	let registered = false;
+	try {
+		await git(manifest.mainRoot, ["worktree", "add", "--detach", "--no-checkout", path, `${snapshot}^1`], internal);
+		registered = true;
+		const config = await git(path, ["rev-parse", "--path-format=absolute", "--git-path", "config.worktree"]);
+		await git(path, ["config", "--file", config, "core.worktree", path], internal);
+		await git(path, ["--work-tree=.", "reset", "-q", "--hard", "--no-recurse-submodules", snapshot], {
+			...internal,
+			noFilters: true,
+		});
+		await git(path, ["reset", "-q", "--soft", `${snapshot}^1`], internal);
+		await git(path, ["--work-tree=.", "read-tree", `${snapshot}^2^{tree}`], internal);
+	} catch (error) {
+		if (registered) await runGit(manifest.mainRoot, ["worktree", "remove", "--force", path], { internal: true });
+		throw error;
+	}
+	for (const ref of manifest.deleted?.later ?? [])
+		input.warnings.push({ source: "server", message: `Later work from this worktree is in ${ref}.` });
+	const restored: Manifest = { ...manifest, lastUsedAt: Date.now() };
+	delete restored.deleted;
+	writeManifest(input.settings, restored);
+	return restored;
 }

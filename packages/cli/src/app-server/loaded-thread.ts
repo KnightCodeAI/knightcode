@@ -83,6 +83,8 @@ export class LoadedThread {
 	}
 	readonly session: AgentSession;
 	readonly projectCwd: string;
+	/** Runs once the thread is disposed (the manager's worktree-user registry). */
+	onClosed: () => void = () => {};
 	/** Derived from the session cwd and the worktree manifest on every read, so a manifest update shows at once. */
 	resolveWorkspace: () => Workspace = () => ({ mode: "local" });
 	readonly subscribers = new Set<Subscriber>();
@@ -269,6 +271,7 @@ export class LoadedThread {
 			});
 			this.session.dispose();
 			this.state = "closed";
+			this.onClosed();
 		}
 	}
 }
