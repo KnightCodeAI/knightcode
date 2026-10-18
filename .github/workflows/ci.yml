@@ -73,7 +73,14 @@ jobs:
 
       # Both builds are part of the release path; break here rather than in the
       # publish workflow, where a failure blocks an in-flight release.
-      # pack-test builds the Node bundle npm ships and runs it from an install.
+      # pack-test builds the Node bundle npm ships and runs it from an install,
+      # on the oldest Node the package supports (engines in packages/cli) rather
+      # than whatever the runner image ships.
+      - name: Setup Node (minimum supported)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.19.0
+
       - name: Build and pack-test the Node bundle
         run: bun run scripts/pack-test.ts
 

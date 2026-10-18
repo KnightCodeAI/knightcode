@@ -10,7 +10,7 @@
 //   4. skip the publish if the version is already on npm, publish with provenance
 //   5. tag the release and push it
 //
-// Step 4 is what makes a failed run safe to re-run.
+// Steps 4 and 5 are idempotent, which is what makes a failed run safe to re-run.
 import { $ } from "bun";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -99,14 +99,16 @@ if (DRY_RUN) {
 	process.exit(0);
 }
 
+// A run that published but died before pushing the tag must still tag on re-run,
+// so an existing version skips only the publish.
 if (published) {
-	console.log(`${name}@${version} was already on npm; nothing to tag.`);
-	process.exit(0);
+	console.log(`${name}@${version} is already on npm; skipping publish.\n`);
+} else {
+	// --provenance needs `id-token: write` on the job; --ignore-scripts keeps a
+	// compromised transitive dependency from running code at publish time.
+	await $`npm publish --access public --provenance --ignore-scripts`.cwd(DIR);
+	console.log();
 }
-// --provenance needs `id-token: write` on the job; --ignore-scripts keeps a
-// compromised transitive dependency from running code at publish time.
-await $`npm publish --access public --provenance --ignore-scripts`.cwd(DIR);
-console.log();
 
 // 5. tag the released commit. changesets/action owns the Version PR, not the
 // tag, so the tag is created here against the merged commit that was published.
@@ -126,4 +128,4 @@ if (exists.exitCode === 0) {
 	console.log(`Pushed ${tag}`);
 }
 
-console.log(`\nPublished KnightCode ${version}`);
+console.log(`\n${published ? "Tagged" : "Published"} KnightCode ${version}`);

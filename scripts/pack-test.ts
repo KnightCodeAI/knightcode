@@ -32,8 +32,13 @@ try {
 	// runtime dependency fails here.
 	const run = (...args: string[]) => $`npm exec --offline --no -- knightcode ${args}`.cwd(proj).nothrow().quiet();
 
-	// --version must print exactly the package version.
-	const version = (await run("--version")).stdout.toString().trim();
+	// --version must print exactly the package version. Check the exit code first:
+	// a bin that crashes on startup prints nothing, and "got ''" hides why.
+	const versionRun = await run("--version");
+	if (versionRun.exitCode !== 0) {
+		throw new Error(`--version exited ${versionRun.exitCode}: ${versionRun.stderr.toString()}`);
+	}
+	const version = versionRun.stdout.toString().trim();
 	if (version !== expectedVersion) {
 		throw new Error(`--version mismatch: got "${version}", expected "${expectedVersion}"`);
 	}
@@ -52,10 +57,13 @@ try {
 	}
 	console.log("✓ --help exit 0");
 
-	// The TUI's native helpers ship inside the bundle for every platform.
-	const native = join(proj, "node_modules", "@knightcodeai", "cli", "dist", "bundle", "native", process.platform);
-	if (["darwin", "linux", "win32"].includes(process.platform) && !existsSync(native)) {
-		throw new Error(`Package has no native helpers for ${process.platform}`);
+	// The TUI's native helpers ship inside the bundle for every platform. Check the
+	// <platform>-<arch> directory loadNativePlatformHelper reads, not just the OS.
+	const target = `${process.platform}-${process.arch}`;
+	const prebuilds = join(process.platform, "prebuilds", target);
+	const shipped = join(proj, "node_modules", "@knightcodeai", "cli", "dist", "bundle", "native", prebuilds);
+	if (existsSync(join(ROOT, "packages", "tui", "native", prebuilds)) && !existsSync(shipped)) {
+		throw new Error(`Package has no native helpers for ${target}`);
 	}
 	console.log("✓ native helpers present");
 
