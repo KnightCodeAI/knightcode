@@ -4,7 +4,6 @@ import {
   CLI_REPOSITORY,
   INSTALLER_LOCK_ASSET,
   lockDownloadUrl,
-  missingPlatformPackages,
   parseInstallerVersion,
   STABLE_VERSION_RE,
   validateInstallerLock,
@@ -133,12 +132,7 @@ export async function loadInstallerLock(
         remoteStatus = 502
         lock = null
       }
-      // npm ci installs only the platform binaries the lock names.
-      if (
-        lock &&
-        validateInstallerLock(lock, parsed) === null &&
-        missingPlatformPackages(lock).length === 0
-      ) {
+      if (lock && validateInstallerLock(lock, parsed) === null) {
         return { ok: true, body: text.endsWith("\n") ? text : `${text}\n` }
       }
       if (lock) remoteStatus = 502

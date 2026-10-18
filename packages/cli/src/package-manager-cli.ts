@@ -10,7 +10,7 @@ import {
 	detectInstallMethod,
 	getAgentDir,
 	getSelfUpdateCommand,
-	getSelfUpdateLauncher,
+	getSelfUpdatePackageDir,
 	getSelfUpdateUnavailableInstruction,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
@@ -884,9 +884,9 @@ export async function handlePackageCommand(
 						installSpec: selfUpdatePlan.installSpec,
 					};
 					const selfUpdateCommand = getSelfUpdateCommand(PACKAGE_NAME, selfUpdateNpmCommand, selfUpdateTarget);
-					const launcher = selfUpdateCommand?.steps ? undefined : getSelfUpdateLauncher(selfUpdateNpmCommand);
-					// The background worker needs the owning launcher to recheck and verify the install.
-					if (!selfUpdateCommand || (process.env.KNIGHTCODE_SELF_UPDATE_VERSION && !launcher)) {
+					const packageDir = selfUpdateCommand?.steps ? undefined : getSelfUpdatePackageDir(selfUpdateNpmCommand);
+					// The background worker needs the owning package to recheck and verify the install.
+					if (!selfUpdateCommand || (process.env.KNIGHTCODE_SELF_UPDATE_VERSION && !packageDir)) {
 						printSelfUpdateUnavailable(selfUpdateNpmCommand, selfUpdateTarget);
 						process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
 						return true;
@@ -898,7 +898,7 @@ export async function handlePackageCommand(
 						console.log(chalk.dim(`Updating ${APP_NAME} with ${selfUpdateCommand.display}...`));
 						await runGlobalSelfUpdate(selfUpdateCommand, {
 							version: options.force ? undefined : selfUpdatePlan.version,
-							launcher,
+							packageDir,
 						});
 					} catch (error: unknown) {
 						const message = error instanceof Error ? error.message : "Unknown package command error";

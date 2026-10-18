@@ -2,16 +2,7 @@
   "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [
-    [
-      "@knightcodeai/cli",
-      "@knightcodeai/cli-linux-x64",
-      "@knightcodeai/cli-linux-arm64",
-      "@knightcodeai/cli-darwin-x64",
-      "@knightcodeai/cli-darwin-arm64",
-      "@knightcodeai/cli-win32-x64"
-    ]
-  ],
+  "fixed": [],
   "linked": [],
   "access": "public",
   "baseBranch": "main",

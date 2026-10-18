@@ -15,8 +15,7 @@ is no build step for development.
 
 | Package | What it is |
 | --- | --- |
-| `packages/cli` | `@knightcodeai/cli` — the `knightcode` binary: CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills. The only published package with source |
-| `packages/cli-{linux,darwin,win32}-*` | Published platform packages; hold a compiled binary in `bin/`, no source |
+| `packages/cli` | `@knightcodeai/cli` — the `knightcode` command: CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills. The only published package. npm gets an esbuild bundle that runs on Node (`bun run build:cli`, `scripts/build-bundle.ts`); Bun-compiled standalone binaries (`bun run build:binary`, `scripts/build.ts`) are GitHub release downloads only |
 | `packages/ai` | Multi-provider LLM layer: providers, API adapters, OAuth, model catalog |
 | `packages/agent` | Agent loop, proxy stream, and their types |
 | `packages/durable` | Durable conversation, task and document runtime (Pico): record contracts and storage |
@@ -69,7 +68,7 @@ change flags, settings, keybindings, providers, or the session format.
 Run from the repo root unless stated otherwise.
 
 - After code changes (not docs): `bun run check-types` (full output, no tail). Fix every error before committing. It does not run tests.
-- Never run `bun run build:cli` or the full `bun run test` unless the user asks.
+- Never run `bun run build:cli`, `bun run build:binary`, or the full `bun run test` unless the user asks.
 - Tests are per-package. Run the specific test you touched from the package root:
   - Vitest packages (`ai`, `agent`, `cli`, `evals`): `bun x vitest --run test/specific.test.ts`
   - `packages/tui` (`node:test`): `node --test test/specific.test.ts`
@@ -204,9 +203,7 @@ a single heading, so two user-visible changes in one branch means two
 changesets — a second `bun run changeset` on the same branch takes the next
 free `-2` suffix rather than refusing.
 
-The six `@knightcodeai/cli*` packages are a fixed group in
-`.changeset/config.json` — they always version together, so one changeset naming
-`@knightcodeai/cli` covers the platform packages too. Reach for `bun x changeset`
+`@knightcodeai/cli` is the only published package. Reach for `bun x changeset`
 only for the rare change that releases some other package. Private
 `@knightcode/*` packages are never published and take no changeset.
 
@@ -214,8 +211,8 @@ Releases are automated by `.github/workflows/publish.yml`; there is no local
 release command and nothing to publish by hand:
 
 1. A push to `main` with changesets present opens or updates a `chore(release): version packages` PR (`bun run ci:version`, which also regroups the new changelog section under its category headings and drops the commit-hash prefixes).
-2. Merging that PR leaves no changesets and a version npm does not have, which triggers the build matrix: each binary is compiled on its own native OS and smoke-tested (`--version`, `--help`) before it goes near npm. `darwin-x64` is cross-compiled and skips the smoke test — there is no free Intel runner.
-3. The `publish` job re-runs `check-types` and `test`, reassembles the tested binaries into the platform packages, runs `bun run ci:publish` (pack-test plus `changeset publish` with npm provenance), pushes tags, and creates a GitHub Release with per-platform archives and `SHA256SUMS`.
+2. Merging that PR leaves no changesets and a version npm does not have, which triggers the build matrix: each standalone binary is compiled on its own native OS and smoke-tested (`--version`, `--help`). `darwin-x64` is cross-compiled and skips the smoke test — there is no free Intel runner.
+3. The `publish` job re-runs `check-types` and `test`, builds the Node bundle, runs `bun run ci:publish` (pack-test plus `npm publish` with provenance), pushes tags, and creates a GitHub Release with the per-platform binary archives, `SHA256SUMS`, and the installer lockfile.
 
 The `npm-publish` environment holds `NPM_TOKEN` and can gate releases behind
 required reviewers. If a publish fails partway, re-run the job — `ci:publish`

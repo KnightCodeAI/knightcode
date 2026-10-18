@@ -15,7 +15,7 @@ on:
       - ".github/workflows/publish.yml"
 
 # No cancel-in-progress on purpose: cancelling a run mid-publish could leave a
-# partial release (some of the 6 fixed-group packages published, others not).
+# partial release (the npm package published without its GitHub Release).
 # Queue overlapping runs instead of cancelling them.
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -26,9 +26,10 @@ jobs:
   # Manages the "Version Packages" PR on every push. When changesets are present
   # it opens/updates the PR and stops. The build + publish jobs below only run
   # when there are no changesets left AND the version in the repo is not yet on
-  # npm — i.e. exactly once, on the Version Packages merge. Without the registry
-  # check, every ordinary merge (no changesets) would spin up the full 5-OS
-  # build matrix just to no-op at `changeset publish`.
+  # npm or has no GitHub Release — i.e. once, on the Version Packages merge, plus
+  # on the next push after a run that died partway. Without that check, every
+  # ordinary merge (no changesets) would spin up the full 5-OS build matrix just
+  # to no-op at `npm publish`.
   version:
     runs-on: ubuntu-latest
     permissions:
@@ -53,24 +54,24 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # All 6 fixed-group packages must be checked, not just the main one: a
-      # release run that fails partway can leave some platform packages
-      # unpublished, and a re-run must still fire for the stragglers. Keep the
-      # list in sync with the fixed group in .changeset/config.json. The empty
-      # check alongside the exit code covers old npm versions where a missing
-      # version exited 0 with no output.
+      # The empty check alongside the exit code covers old npm versions where a
+      # missing version exited 0 with no output. A version on npm without its
+      # GitHub Release is unfinished too: the run died after `npm publish`. Every
+      # step after it is idempotent, so the next run finishes the release.
       - name: Check whether the current version is unpublished
         id: release
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           local_ver=$(node -p "require('./packages/cli/package.json').version")
           needs_publish=false
-          for pkg in @knightcodeai/cli @knightcodeai/cli-linux-x64 @knightcodeai/cli-linux-arm64 @knightcodeai/cli-darwin-x64 @knightcodeai/cli-darwin-arm64 @knightcodeai/cli-win32-x64; do
-            if [ -z "$(npm view "${pkg}@${local_ver}" version 2>/dev/null)" ]; then
-              needs_publish=true
-              break
-            fi
-          done
+          if [ -z "$(npm view "@knightcodeai/cli@${local_ver}" version 2>/dev/null)" ]; then
+            needs_publish=true
+          elif ! gh release view "@knightcodeai/cli@${local_ver}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "@knightcodeai/cli@${local_ver} is on npm but has no GitHub Release; finishing it."
+            needs_publish=true
+          fi
           echo "needsPublish=${needs_publish}" >> "$GITHUB_OUTPUT"
           echo "local=$local_ver needsPublish=$needs_publish"
 
@@ -84,9 +85,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Build each binary on its own native OS and run it headlessly before it goes
-  # anywhere near npm — a compiled binary that cannot start is the one failure
-  # `npm pack` can never catch. Only darwin-x64 has no free native runner
+  # Build each standalone binary on its own native OS and run it headlessly. npm
+  # ships the Node bundle; these are the GitHub Release downloads, and a broken
+  # one still blocks the release. Only darwin-x64 has no free native runner
   # (GitHub retired the Intel image); it is cross-compiled on the arm64 mac and
   # skips the smoke test, since macOS runners ship without Rosetta.
   build:
@@ -140,7 +141,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
-          bin="packages/cli-${TARGET}/bin/knightcode"
+          bin="dist/release/${TARGET}/knightcode"
           if [ "$TARGET" = "win32-x64" ]; then bin="$bin.exe"; fi
           echo "→ knightcode --version"
           "$bin" --version
@@ -153,14 +154,13 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cli-${{ matrix.target }}
-          path: packages/cli-${{ matrix.target }}/bin/
+          name: release-${{ matrix.target }}
+          path: dist/release/${{ matrix.target }}/
           if-no-files-found: error
           retention-days: 1
 
-  # Reassemble the tested binaries into their package folders, validate the full
-  # npm install path (pack-test), then publish every package Changesets considers
-  # unpublished. Publishes the exact artifacts the build job produced.
+  # Build the Node bundle, validate the full npm install path (pack-test), publish
+  # it, then attach the tested binaries from the build job to the GitHub Release.
   publish:
     needs: [version, build]
     if: needs.version.outputs.hasChangesets == 'false' && needs.version.outputs.needsPublish == 'true'
@@ -217,49 +217,33 @@ jobs:
       - name: Test
         run: bun run test
 
+      - name: Build the Node bundle
+        run: bun run build:cli
+
+      # Everything that can fail without npm goes before `npm publish`: the
+      # binaries expire a day after the build job, and a version on npm whose
+      # archives are missing has to be finished by a later run.
       - name: Download all binaries
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
 
-      - name: Restore binaries into platform packages
-        shell: bash
-        run: |
-          for dir in artifacts/cli-*; do
-            target="${dir##*/cli-}"
-            dest="packages/cli-${target}/bin"
-            mkdir -p "$dest"
-            cp -r "${dir}/." "$dest/"
-          done
-          # Artifact upload drops the mode bit; npm pack/publish reads it from
-          # disk, so re-mark the POSIX binaries (not knightcode.exe) executable.
-          chmod +x packages/cli-*/bin/knightcode 2>/dev/null || true
-          ls -la packages/cli-*/bin
-
-      - name: pack-test + publish
-        run: bun run ci:publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Push release tags
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" --tags
-
-      # Ship the same binaries npm got as downloadable release assets, with
-      # checksums, so `curl | tar` is a supported install path and anyone can
-      # verify what they downloaded. Each archive is the whole bin/ directory:
-      # the compiled binary resolves themes, assets and docs next to itself.
+      # Ship the standalone binaries as release assets, with checksums, so
+      # `curl | tar` is a supported install path for machines without Node and
+      # anyone can verify what they downloaded. `knightcode update` on such a
+      # binary downloads these same archives. Each archive is the whole output
+      # directory: the compiled binary resolves themes, assets and docs next to
+      # itself.
       - name: Package release assets
         shell: bash
         run: |
           set -euo pipefail
+          # Artifact upload drops the mode bit; re-mark the POSIX binaries
+          # (not knightcode.exe) executable before archiving.
+          chmod +x artifacts/release-*/knightcode 2>/dev/null || true
           mkdir -p release-assets
-          for dir in packages/cli-*/bin; do
-            target="${dir#packages/cli-}"
-            target="${target%/bin}"
+          for dir in artifacts/release-*; do
+            target="${dir##*/release-}"
             if [ "$target" = "win32-x64" ]; then
               (cd "$dir" && zip -qr "${GITHUB_WORKSPACE}/release-assets/knightcode-${target}.zip" .)
             else
@@ -267,7 +251,7 @@ jobs:
             fi
           done
           cd release-assets
-          # One archive per platform package, or the release is missing a binary
+          # One archive per build target, or the release is missing a binary
           # someone will only discover after it is public.
           count=$(ls -1 knightcode-* | wc -l)
           if [ "$count" -ne 5 ]; then
@@ -281,14 +265,26 @@ jobs:
           sha256sum -c SHA256SUMS
           ls -la
 
+      - name: pack-test + publish
+        run: bun run ci:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Push release tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" --tags
+
       # After npm publish, so the lock resolves the version that just shipped.
       # The JSON files are not knightcode-* archives, so they stay out of the
       # archive count and SHA256SUMS above.
       - name: Build installer lockfile
         run: bun run scripts/generate-installer-lock.ts --out release-assets
 
-      # One clean GitHub Release per version for the main package (not the 5
-      # platform packages). Body = the CHANGELOG.md section Changesets wrote.
+      # One GitHub Release per version. Body = the CHANGELOG.md section
+      # Changesets wrote.
       # Idempotent: a re-run uploads each installer file only when it is missing.
       - name: Create GitHub Release
         env:

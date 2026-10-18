@@ -12,14 +12,6 @@ export const INSTALLER_VERSION_RE =
   /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 export const STABLE_VERSION_RE = /^\d+\.\d+\.\d+$/
 
-export const PLATFORM_PACKAGES = [
-  "@knightcodeai/cli-linux-x64",
-  "@knightcodeai/cli-linux-arm64",
-  "@knightcodeai/cli-darwin-x64",
-  "@knightcodeai/cli-darwin-arm64",
-  "@knightcodeai/cli-win32-x64",
-] as const
-
 export type InstallerPackageJson = {
   name: typeof INSTALLER_PACKAGE_NAME
   version: string
@@ -74,15 +66,6 @@ export function validateInstallerLock(
     return `lockfile does not include ${CLI_PACKAGE}@${version}`
   }
   return null
-}
-
-// npm ci installs only the optional dependencies recorded in the lock. A lock
-// made on one OS still has to name every platform binary.
-export function missingPlatformPackages(lock: unknown): string[] {
-  const packages = (lock as LockFile).packages ?? {}
-  return PLATFORM_PACKAGES.filter(
-    (name) => packages[`node_modules/${name}`] === undefined
-  )
 }
 
 export function lockDownloadUrl(version: string): string {

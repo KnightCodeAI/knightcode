@@ -40,7 +40,7 @@ from harbor.models.agent.context import AgentContext
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LOCAL_BIN_DIR = Path(
     os.environ.get("KNIGHTCODE_BENCH_BIN_DIR")
-    or _REPO_ROOT / "packages" / "cli-linux-x64" / "bin"
+    or _REPO_ROOT / "dist" / "release" / "linux-x64"
 )
 
 _REMOTE_DIR = PurePosixPath("/opt/knightcode")

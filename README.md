@@ -36,7 +36,8 @@ tokens, measured.
 bun install
 bun run check-types          # tsc --noEmit across every package
 bun run start                # run from source
-bun run build:cli            # compile a single-file binary for this platform
+bun run build:cli            # build the Node bundle npm ships (packages/cli/dist)
+bun run build:binary         # compile the standalone release binary for this platform
 ```
 
 Source runs directly under Bun — there is no build step for development. The

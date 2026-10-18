@@ -7,8 +7,8 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { NPM_PACKAGE } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
-// The CLI ships platform binaries as optionalDependencies, so every major
-// package manager installs it the same way.
+// The CLI is a Node bundle with no install scripts, so every major package
+// manager installs it the same way.
 const MANAGERS = [
   { id: "npm", command: `npm install -g --ignore-scripts ${NPM_PACKAGE}` },
   { id: "pnpm", command: `pnpm add -g --ignore-scripts ${NPM_PACKAGE}` },

@@ -165,9 +165,14 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.17.2",
+      "version": "0.17.4",
       "bin": {
-        "knightcode": "./bin/knightcode",
+        "knightcode": "./dist/bundle/cli.js",
+      },
+      "dependencies": {
+        "@silvia-odwyer/photon-node": "0.3.4",
+        "jiti": "2.7.0",
+        "quickjs-wasi": "3.6.2",
       },
       "devDependencies": {
         "@knightcode/agent": "workspace:*",
@@ -178,7 +183,6 @@
         "@knightcode/remote": "workspace:*",
         "@knightcode/tools": "workspace:*",
         "@knightcode/tui": "workspace:*",
-        "@silvia-odwyer/photon-node": "0.3.4",
         "@types/cross-spawn": "6.0.6",
         "@types/hosted-git-info": "3.0.5",
         "@types/proper-lockfile": "4.1.4",
@@ -191,43 +195,14 @@
         "highlight.js": "10.7.3",
         "hosted-git-info": "9.0.3",
         "ignore": "7.0.8",
-        "jiti": "2.7.0",
         "marked": "18.0.11",
         "minimatch": "10.2.6",
         "proper-lockfile": "4.1.2",
-        "quickjs-wasi": "3.6.2",
         "semver": "7.8.5",
         "typebox": "1.3.27",
         "undici": "8.10.2",
         "yaml": "2.9.0",
       },
-      "optionalDependencies": {
-        "@knightcodeai/cli-darwin-arm64": "0.17.2",
-        "@knightcodeai/cli-darwin-x64": "0.17.2",
-        "@knightcodeai/cli-linux-arm64": "0.17.2",
-        "@knightcodeai/cli-linux-x64": "0.17.2",
-        "@knightcodeai/cli-win32-x64": "0.17.2",
-      },
-    },
-    "packages/cli-darwin-arm64": {
-      "name": "@knightcodeai/cli-darwin-arm64",
-      "version": "0.17.2",
-    },
-    "packages/cli-darwin-x64": {
-      "name": "@knightcodeai/cli-darwin-x64",
-      "version": "0.17.2",
-    },
-    "packages/cli-linux-arm64": {
-      "name": "@knightcodeai/cli-linux-arm64",
-      "version": "0.17.2",
-    },
-    "packages/cli-linux-x64": {
-      "name": "@knightcodeai/cli-linux-x64",
-      "version": "0.17.2",
-    },
-    "packages/cli-win32-x64": {
-      "name": "@knightcodeai/cli-win32-x64",
-      "version": "0.17.2",
     },
     "packages/codemode": {
       "name": "@knightcode/codemode",
@@ -293,7 +268,7 @@
     },
     "packages/tools": {
       "name": "@knightcode/tools",
-      "version": "0.1.22",
+      "version": "0.1.24",
       "dependencies": {
         "@knightcode/tui": "workspace:*",
         "@knightcodeai/cli": "workspace:*",
@@ -757,16 +732,6 @@
     "@knightcode/tui": ["@knightcode/tui@workspace:packages/tui"],
 
     "@knightcodeai/cli": ["@knightcodeai/cli@workspace:packages/cli"],
-
-    "@knightcodeai/cli-darwin-arm64": ["@knightcodeai/cli-darwin-arm64@workspace:packages/cli-darwin-arm64"],
-
-    "@knightcodeai/cli-darwin-x64": ["@knightcodeai/cli-darwin-x64@workspace:packages/cli-darwin-x64"],
-
-    "@knightcodeai/cli-linux-arm64": ["@knightcodeai/cli-linux-arm64@workspace:packages/cli-linux-arm64"],
-
-    "@knightcodeai/cli-linux-x64": ["@knightcodeai/cli-linux-x64@workspace:packages/cli-linux-x64"],
-
-    "@knightcodeai/cli-win32-x64": ["@knightcodeai/cli-win32-x64@workspace:packages/cli-win32-x64"],
 
     "@malept/cross-spawn-promise": ["@malept/cross-spawn-promise@2.0.0", "", { "dependencies": { "cross-spawn": "^7.0.1" } }, "sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg=="],
 

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { valid } from "semver";
-import { isBunBinary, PACKAGE_NAME } from "../config.ts";
+import { isBunBinary, isBundledNode, PACKAGE_NAME } from "../config.ts";
 import { waitForChildProcess } from "./child-process.ts";
 import { getActiveManagedInstallRoot, runManagedSelfUpdate } from "./managed-self-update.ts";
 import { UPDATE_EXIT_LOCKED, UPDATE_EXIT_UNSUPPORTED } from "./update-process.ts";
@@ -78,9 +78,9 @@ export class BackgroundUpdater {
 				});
 				release = { ...release, version };
 			} else {
-				// Development runs and a KNIGHTCODE_BIN_PATH override (often a local build)
-				// must never be replaced by a release.
-				if (!isBunBinary || process.env.KNIGHTCODE_BIN_PATH) {
+				// Only release builds update themselves; a source checkout must never be
+				// replaced by a release.
+				if (!isBunBinary && !isBundledNode) {
 					emit("available");
 					return;
 				}
@@ -88,8 +88,10 @@ export class BackgroundUpdater {
 				// The worker decides how this install updates. Its detection spawns package
 				// managers synchronously, which would freeze this TUI for about a second.
 				// It owns its lock, must finish even if the user exits, and never inherits
-				// terminal handles or writes into the TUI.
-				const worker = spawn(process.execPath, ["update", "--self"], {
+				// terminal handles or writes into the TUI. The Bun binary is its own entry
+				// point; the Node bundle runs as `node <entry>`.
+				const args = isBunBinary ? ["update", "--self"] : [process.argv[1]!, "update", "--self"];
+				const worker = spawn(process.execPath, args, {
 					stdio: "ignore",
 					detached: true,
 					windowsHide: true,
