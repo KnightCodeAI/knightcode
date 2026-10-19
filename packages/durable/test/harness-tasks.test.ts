@@ -1,5 +1,5 @@
 import type { Context } from "@knightcode/chord";
-import { withCancel } from "@knightcode/chord/context";
+import { withAbortSignal, withCancel } from "@knightcode/chord/context";
 import { createModels, Type } from "@knightcode/ai";
 import {
 	type Conversation,
@@ -79,7 +79,7 @@ async function markDurably(
 }
 
 function withSignal(signal: AbortSignal): Context {
-	return { ...context, abortSignal: signal };
+	return withAbortSignal(signal, context);
 }
 
 describe("task phases", () => {
