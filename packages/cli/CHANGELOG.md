@@ -1,5 +1,21 @@
 # @knightcodeai/cli
 
+## 0.18.2
+
+### Added
+
+- Added MiniMax-M3.1-Flash on the direct MiniMax providers. It uses adaptive thinking from its published effort levels, and thinking cannot be turned off. Older MiniMax M2, M2.1, M2.5, and M2.5-highspeed models stay hidden.
+
+- Added hyperlinks in the Rex terminal. Rex supports OSC 8 links and true color, and inline images stay off.
+
+### Fixed
+
+- Fixed request-size errors so HTTP 413 from any provider is treated as overflow. GitHub Copilot's "failed to parse request" response now compacts and retries instead of stopping the turn.
+
+- Fixed Windows shell discovery so PowerShell is found in its install directory when it is not on PATH, and an empty SystemRoot no longer hides taskkill or bash.
+
+- Fixed Windows shell checks so a runnable Microsoft Store alias is accepted. Node's existsSync rejects those aliases, so shell lookup now uses access.
+
 ## 0.18.1
 
 ### Fixed
