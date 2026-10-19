@@ -8,11 +8,16 @@ const sourceDirectory = resolve(packageDirectory, "src");
 const IMPORT_SPECIFIER = /(?:import|export)\s+(?:type\s+)?(?:[^;]*?\sfrom\s*)?["']([^"']+)["']/gu;
 
 describe("package boundary", () => {
-	test("does not depend on KnightCode packages or files outside Chord", async () => {
+	// Telemetry is the one allowed KnightCode package: a leaf without dependencies, needed for Context.telemetry.
+	const ALLOWED = new Set(["@knightcode/telemetry"]);
+
+	test("does not depend on KnightCode packages other than telemetry, or on files outside Chord", async () => {
 		const manifest = JSON.parse(await readFile(resolve(packageDirectory, "package.json"), "utf8")) as {
 			dependencies?: Record<string, string>;
 		};
-		expect(Object.keys(manifest.dependencies ?? {}).filter((name) => name.startsWith("@knightcode/"))).toEqual([]);
+		expect(
+			Object.keys(manifest.dependencies ?? {}).filter((name) => name.startsWith("@knightcode/") && !ALLOWED.has(name)),
+		).toEqual([]);
 
 		const paths = (await readdir(sourceDirectory, { recursive: true })).filter((path) => path.endsWith(".ts")).sort();
 		const violations: string[] = [];
@@ -21,7 +26,8 @@ describe("package boundary", () => {
 			const source = await readFile(file, "utf8");
 			for (const match of source.matchAll(IMPORT_SPECIFIER)) {
 				const specifier = match[1]!;
-				if (specifier.startsWith("@knightcode/")) violations.push(`${path}: ${specifier}`);
+				const pkg = specifier.split("/").slice(0, 2).join("/");
+				if (specifier.startsWith("@knightcode/") && !ALLOWED.has(pkg)) violations.push(`${path}: ${specifier}`);
 				if (specifier.startsWith(".") && !resolve(dirname(file), specifier).startsWith(`${sourceDirectory}${sep}`)) {
 					violations.push(`${path}: ${specifier}`);
 				}

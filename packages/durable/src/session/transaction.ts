@@ -1,5 +1,7 @@
 import { type Context, copyJson, type Draft, type JsonValue } from "@knightcode/chord";
+import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { type Change, type Op, type Prepared, type Tracker, track } from "@knightcode/chord/delta";
+import type { TelemetryCarrier } from "@knightcode/telemetry";
 import {
 	type AnyDocDefinition,
 	type AnyDocToken,
@@ -124,6 +126,9 @@ type TransactionTask = {
 	publicationConversationId?: ConversationId;
 };
 
+/** Internal run creation resolves submission carriers against staged records before reading storage. */
+export type TaskCreationOptions = TaskOptions & { readonly submissionIds?: readonly SubmissionId[] };
+
 /** Defaults a commit binds to: `tx.createTask()` conversation and the task attributed to appended entries. */
 export type TransactionScope = {
 	readonly conversationId?: ConversationId;
@@ -193,7 +198,7 @@ type DocumentPlan = {
  */
 export class Transaction implements Tx {
 	readonly #host: TransactionHost;
-	readonly #context: Context;
+	#context: Context;
 	readonly #scope: TransactionScope;
 	readonly #pendingOperations = new Set<Promise<unknown>>();
 	#sealed = false;
@@ -381,9 +386,23 @@ export class Transaction implements Tx {
 	createTask<I, S extends { phase: string }, R, H extends object>(
 		task: Task<I, S, R, H>,
 		input: I,
-		options: TaskOptions,
+		options: TaskCreationOptions,
 	): Promise<TaskId<R>> {
 		return this.#write(async () => {
+			if (options.submissionIds !== undefined) {
+				let trace: TaskOptions["trace"];
+				let links: TelemetryCarrier[] | undefined;
+				for (let index = 0; index < options.submissionIds.length; index++) {
+					const id = options.submissionIds[index]!;
+					const submission = this.#submissions.get(id) ?? (await this.#host.storage.submission(id, this.#context));
+					if (index === 0) trace = submission?.trace ?? "root";
+					else if (submission?.trace !== undefined) {
+						links ??= [];
+						links.push(submission.trace);
+					}
+				}
+				options = { ...options, trace, links };
+			}
 			const ownership = options.ownership;
 			let owner: AnyTaskRecord | undefined;
 			if (ownership.kind === "task") {
@@ -411,6 +430,11 @@ export class Transaction implements Tx {
 					kind: definition.name,
 					version: definition.version,
 					input,
+					trace:
+						options.trace === "root"
+							? undefined
+							: (options.trace ?? this.#context.telemetry.propagation?.inject(this.#context.telemetry)),
+					links: options.links,
 					...(owner === undefined ? {} : { owner: owner.id }),
 					background: options.background ?? false,
 					abortRequested: false,
@@ -662,6 +686,7 @@ export class Transaction implements Tx {
 		this.#sealed = true;
 		this.#abortChanges();
 		await Promise.allSettled(this.#pendingOperations);
+		this.#context = BACKGROUND_CONTEXT;
 	}
 
 	/**
@@ -673,6 +698,7 @@ export class Transaction implements Tx {
 		if (this.#pendingOperations.size > 0) {
 			this.#abortChanges();
 			await Promise.allSettled(this.#pendingOperations);
+			this.#context = BACKGROUND_CONTEXT;
 			throw new Error("Session commit callback settled before its pending Tx operations");
 		}
 		try {
@@ -684,6 +710,8 @@ export class Transaction implements Tx {
 		} catch (error) {
 			this.#abortChanges();
 			throw error;
+		} finally {
+			this.#context = BACKGROUND_CONTEXT;
 		}
 	}
 
