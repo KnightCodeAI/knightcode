@@ -6,6 +6,7 @@
     "moduleResolution": "NodeNext",
     "paths": {
       "@knightcode/telemetry": ["./packages/telemetry/src/index.ts"],
+      "@knightcode/telemetry/render": ["./packages/telemetry/src/render.ts"],
       "@knightcode/telemetry/testing": ["./packages/telemetry/src/testing/index.ts"],
       "@knightcode/ai": ["./packages/ai/src/index.ts"],
       "@knightcode/ai/oauth": ["./packages/ai/src/oauth.ts"],
@@ -31,6 +32,7 @@
       "@knightcode/chord/context": ["./packages/chord/src/context/index.ts"],
       "@knightcode/chord/delta": ["./packages/chord/src/delta/index.ts"],
       "@knightcode/chord/output": ["./packages/chord/src/output.ts"],
+      "@knightcode/chord/telemetry-sqlite": ["./packages/chord/src/telemetry-sqlite/index.ts"],
       "@knightcode/chord/sqlite": ["./packages/chord/src/sqlite/index.ts"],
       "@knightcode/chord/sqlite/node": ["./packages/chord/src/sqlite/node.ts"],
       "@knightcode/chord/sqlite/cloudflare": ["./packages/chord/src/sqlite/cloudflare.ts"],
