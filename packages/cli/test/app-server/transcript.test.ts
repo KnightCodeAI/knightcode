@@ -176,6 +176,20 @@ test("entryForItem finds the entry holding an item", () => {
 	expect(entryForItem([m, u, a], "nope")).toBeUndefined();
 });
 
+test("a turn's last item takes the turn's end along, so a fork there reads the turn as completed", () => {
+	const m = marker();
+	const u = user("hi");
+	const a = assistant([{ type: "text", text: "yo" }]);
+	const e = end("completed");
+	const next = [marker(), user("again")];
+	const entries = [m, u, a, e, ...next];
+	expect(entryForItem(entries, `${m.id}:0:0`)).toBe(e.id);
+	const forked = entries.slice(0, entries.indexOf(e) + 1);
+	expect(readTurns("t", forked)[0]).toMatchObject({ status: "completed" });
+	// An item that does not end its turn keeps its own entry.
+	expect(entryForItem(entries, `${m.id}:user:0`)).toBe(u.id);
+});
+
 test("turn and item times use the durable marker, messages and end", () => {
 	const m = marker();
 	const u = user("hi");

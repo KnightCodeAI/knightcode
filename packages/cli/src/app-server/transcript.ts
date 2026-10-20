@@ -269,5 +269,14 @@ export function entryForItem(entries: readonly SessionEntry[], itemId: string): 
 		if (has(mid)) high = mid;
 		else low = mid + 1;
 	}
+	// The last item of a marked turn takes the turn's end entry along: cut before it, a fork would read the turn as
+	// interrupted (readTurns). Entries in between that add no item (review comments) come along too.
+	const items = (length: number) => readTurns("", entries.slice(0, length)).reduce((n, t) => n + t.items.length, 0);
+	const count = items(low);
+	for (let next = low; next < entries.length; next++) {
+		const entry = entries[next];
+		if (isTurnEnd(entry)) return entry.id;
+		if (isTurnMarker(entry) || items(next + 1) > count) break;
+	}
 	return entries[low - 1].id;
 }
