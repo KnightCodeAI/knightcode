@@ -3820,6 +3820,9 @@
 					},
 					"commit": {
 						"type": "string"
+					},
+					"reapply": {
+						"type": "boolean"
 					}
 				},
 				"additionalProperties": false

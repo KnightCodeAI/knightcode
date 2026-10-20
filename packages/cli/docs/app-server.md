@@ -500,10 +500,12 @@ or no branch to compare with.
 
 ### `thread/diff/revert`
 
-Params: `{threadId, scope?, against?, commit?, path?, hunkId?, context?}`.
+Params: `{threadId, scope?, against?, commit?, path?, hunkId?, context?, reapply?}`.
 Result: `{paths}`. Reverse-applies one hunk, one file, or the whole scope to the
 working tree; `lastTurn` without a path undoes the turn, and only while every
-affected file is exactly as the turn left it. Hunks of renamed, added, deleted,
+affected file is exactly as the turn left it. With `reapply` (`lastTurn` only,
+no hunk), the turn's changes apply again instead, and only while every affected
+file is exactly as the turn found it. Hunks of renamed, added, deleted,
 binary or mode-changed files revert as whole files only. Refused while a turn
 runs in the checkout; no turn starts and no tool runs there until it ends.
 Errors: `turnInProgress`; `invalidParams` for `staged` and `committed` or a

@@ -676,6 +676,8 @@ export async function revertDiff(
 	if (scope === "staged") throw invalid("unstage with git/unstage");
 	if (scope === "committed") throw invalid("a commit is not reverted from here");
 	if (params.hunkId !== undefined && params.path === undefined) throw invalid("a hunk needs its path");
+	if (params.reapply && (scope !== "lastTurn" || params.hunkId !== undefined))
+		throw invalid("only the last turn's files are reapplied");
 	const trees = await scopeTrees(thread, repo, { scope, against: params.against, commit: params.commit });
 	if (trees.stale) throw invalid("the turn's snapshot is no longer in the repository");
 	if (!trees.from) throw invalid(`the ${scope} diff is empty`);
@@ -699,10 +701,15 @@ export async function revertDiff(
 					binary: true,
 					context,
 				});
-	// Undo only what is still exactly as the turn left it, so git's offset search can never pick another place.
-	if (scope === "lastTurn" && !sameEntries(await currentEntries(repo, paths), await entriesOf(repo, trees.to, paths)))
-		throw conflict("diffChanged", "files changed since the turn", { paths });
-	const check = await machineApply(repo.root, patch, { reverse: true, check: true });
+	// Undo only what is still exactly as the turn left it, and reapply only what is exactly as it found it, so git's
+	// offset search can never pick another place.
+	const reverse = !params.reapply;
+	if (
+		scope === "lastTurn" &&
+		!sameEntries(await currentEntries(repo, paths), await entriesOf(repo, reverse ? trees.to : trees.from, paths))
+	)
+		throw conflict("diffChanged", reverse ? "files changed since the turn" : "files changed since the undo", { paths });
+	const check = await machineApply(repo.root, patch, { reverse, check: true });
 	if (check.code !== 0) {
 		const failed = failedPaths(check.stderr);
 		throw conflict("patchFailed", "the change no longer applies", {
@@ -710,7 +717,7 @@ export async function revertDiff(
 			output: check.stderr,
 		});
 	}
-	const applied = await machineApply(repo.root, patch, { reverse: true });
+	const applied = await machineApply(repo.root, patch, { reverse });
 	if (applied.code !== 0)
 		throw conflict("patchFailed", "the change no longer applies", { paths, output: applied.stderr });
 	return { paths: target.map((e) => e.path) };

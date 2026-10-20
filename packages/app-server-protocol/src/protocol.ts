@@ -573,7 +573,15 @@ export const ClientRequests = {
 			against: Type.Optional(Str),
 		}),
 	},
-	"thread/diff/revert": { params: Obj({ ...DiffTarget, ...ScopeSelector }), result: Obj({ paths: Type.Array(Str) }) },
+	"thread/diff/revert": {
+		params: Obj({
+			...DiffTarget,
+			...ScopeSelector,
+			/** `lastTurn` only: apply the turn's changes again after an undo (Codex's Reapply). */
+			reapply: Type.Optional(Bool),
+		}),
+		result: Obj({ paths: Type.Array(Str) }),
+	},
 	"git/status": {
 		params: ThreadId,
 		result: Obj({

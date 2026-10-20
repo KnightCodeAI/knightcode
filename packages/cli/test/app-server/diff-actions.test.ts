@@ -121,6 +121,28 @@ test("undoing the last turn restores its files", async () => {
 	expect(existsSync(join(s.cwd, "made.txt"))).toBe(false);
 });
 
+test("reapplying the last turn needs every file as the undo left it, then restores the turn's files", async () => {
+	const s = await repoServer();
+	const thread = await local(s);
+	s.faux.setResponses(bashTurn("echo turn > a.txt && echo made > made.txt"));
+	await turn(s, thread.id);
+	await s.a.waitFor("turn/diff/updated");
+	await revert(s, thread.id, { scope: "lastTurn", path: "made.txt" });
+	await expect(revert(s, thread.id, { scope: "lastTurn", reapply: true })).rejects.toMatchObject({
+		data: { reason: "diffChanged" },
+	});
+	// Refused as a whole: the file that was undone is not brought back on its own.
+	expect(existsSync(join(s.cwd, "made.txt"))).toBe(false);
+	await revert(s, thread.id, { scope: "lastTurn", path: "a.txt" });
+	expect((await revert(s, thread.id, { scope: "lastTurn", reapply: true })).paths.sort()).toEqual([
+		"a.txt",
+		"made.txt",
+	]);
+	expect(text(s, "a.txt")).toBe("turn\n");
+	expect(text(s, "made.txt")).toBe("made\n");
+	await expect(revert(s, thread.id, { reapply: true })).rejects.toMatchObject({ code: "invalidParams" });
+});
+
 test("hunk actions on structural changes are invalidParams; the whole file reverts", async () => {
 	const s = await repoServer({ "a.txt": seven(), "b.txt": seven(), "t.txt": "t\n" });
 	const thread = await local(s);
