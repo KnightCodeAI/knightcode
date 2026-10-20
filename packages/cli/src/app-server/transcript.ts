@@ -5,9 +5,9 @@
  */
 
 import type { AssistantMessage } from "@knightcode/ai";
-import type { FileChange, Item, ToolOutput, Turn } from "@knightcode/app-server-protocol";
+import type { FileChange, Item, ToolOutput, Turn, TurnFile } from "@knightcode/app-server-protocol";
 import type { SessionEntry } from "../core/session-manager.ts";
-import { TURN_COMMENTS_ENTRY, type TurnComments } from "./diff.ts";
+import { TURN_COMMENTS_ENTRY, TURN_DIFF_ENTRY, type TurnComments, type TurnDiffRecord } from "./diff.ts";
 import {
 	classifyAssistantError,
 	isTurnEnd,
@@ -217,11 +217,17 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 	}
 	// Review comments apply only to the user item their start produced, never to "the next user message".
 	const reviews = new Map<string, TurnComments>();
-	for (const entry of entries)
-		if (entry.type === "custom" && entry.customType === TURN_COMMENTS_ENTRY) {
+	const changed = new Map<string, TurnFile[]>();
+	for (const entry of entries) {
+		if (entry.type !== "custom") continue;
+		if (entry.customType === TURN_COMMENTS_ENTRY) {
 			const review = entry.data as TurnComments;
 			reviews.set(review.itemId, review);
+		} else if (entry.customType === TURN_DIFF_ENTRY) {
+			const { turnId, files } = entry.data as TurnDiffRecord;
+			if (files.every((f) => typeof f === "object")) changed.set(turnId, files);
 		}
+	}
 	const result = turns.filter((t) => t.turn.items.length > 0);
 	result.forEach((t) => {
 		for (const item of t.turn.items) {
@@ -231,6 +237,8 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 				item.comments = review.comments;
 			}
 		}
+		const files = changed.get(t.turn.id);
+		if (files) t.turn.files = files;
 		const active = t.turn.id === activeTurnId;
 		if (t.marked) {
 			if (t.end) {

@@ -30,7 +30,9 @@ const entries = (s: RepoServer, threadId: string) =>
 	s.threads
 		.get(threadId)
 		.session.sessionManager.getBranch()
-		.flatMap((e) => (e.type === "custom" && e.customType === TURN_DIFF_ENTRY ? [e.data as { files: string[] }] : []));
+		.flatMap((e) =>
+			e.type === "custom" && e.customType === TURN_DIFF_ENTRY ? [e.data as { files: { path: string }[] }] : [],
+		);
 
 test("a bash write emits turn/diff/updated after turn/completed; the user's index is unchanged", async () => {
 	const s = await repoServer();
@@ -39,7 +41,11 @@ test("a bash write emits turn/diff/updated after turn/completed; the user's inde
 	s.faux.setResponses(write("echo hi > out.txt"));
 	const completed = await turn(s, thread.id, "write");
 	const diff = await s.a.waitFor("turn/diff/updated");
-	expect(diff).toEqual({ threadId: thread.id, turnId: completed.id, files: ["out.txt"] });
+	expect(diff).toEqual({
+		threadId: thread.id,
+		turnId: completed.id,
+		files: [{ path: "out.txt", additions: 1, deletions: 0 }],
+	});
 	const order = s.a.notifications.map((n) => n.method);
 	expect(order.indexOf("turn/diff/updated")).toBeGreaterThan(order.indexOf("turn/completed"));
 	expect(readFileSync(join(s.cwd, ".git", "index")).equals(index)).toBe(true);
@@ -53,7 +59,27 @@ test("a second edit to an already modified file is a second event", async () => 
 	await s.a.waitFor("turn/diff/updated");
 	s.faux.setResponses(write("echo second > a.txt"));
 	const second = await turn(s, thread.id);
-	expect(await s.a.waitFor("turn/diff/updated")).toMatchObject({ turnId: second.id, files: ["a.txt"] });
+	expect(await s.a.waitFor("turn/diff/updated")).toMatchObject({
+		turnId: second.id,
+		files: [{ path: "a.txt", additions: 1, deletions: 1 }],
+	});
+});
+
+test("a turn's totals are net: a file written then trimmed counts once, and read back on the turn", async () => {
+	const s = await repoServer();
+	const thread = await fullAccess(s);
+	s.faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("bash", { command: "printf 'a\\nb\\nc\\n' > n.txt" })], {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage([fauxToolCall("bash", { command: "printf 'a\\nb\\n' > n.txt" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("done")]),
+	]);
+	const done = await turn(s, thread.id);
+	const files = [{ path: "n.txt", additions: 2, deletions: 0 }];
+	expect(await s.a.waitFor("turn/diff/updated")).toMatchObject({ turnId: done.id, files });
+	const { turns } = await s.a.client.request("thread/read", { threadId: thread.id });
+	expect(turns.find((t) => t.id === done.id)).toMatchObject({ files });
 });
 
 test("a text-only turn then a writing turn: one event and one record, for the second turn", async () => {
@@ -109,9 +135,11 @@ test("queued inputs each get their own record and event, in turn order", async (
 		held.release();
 	}
 	for (let i = 0; i < 3; i++) await s.a.waitFor("turn/diff/updated");
-	const events = s.a.notifications.filter((n) => n.method === "turn/diff/updated").map((n) => n.params.files);
+	const events = s.a.notifications
+		.filter((n) => n.method === "turn/diff/updated")
+		.map((n) => (n.params.files as { path: string }[]).map((f) => f.path));
 	expect(events).toEqual([["f2.txt"], ["f3.txt"], ["f4.txt"]]);
-	expect(entries(s, thread.id).map((e) => e.files)).toEqual([["f2.txt"], ["f3.txt"], ["f4.txt"]]);
+	expect(entries(s, thread.id).map((e) => e.files.map((f) => f.path))).toEqual([["f2.txt"], ["f3.txt"], ["f4.txt"]]);
 });
 
 test("unloading while the after-snapshot is parked still records the turn", async () => {
@@ -139,7 +167,7 @@ test("unloading while the after-snapshot is parked still records the turn", asyn
 		release();
 	}
 	await s.a.client.request("thread/resume", { threadId: thread.id });
-	expect(entries(s, thread.id).map((e) => e.files)).toEqual([["x.txt"]]);
+	expect(entries(s, thread.id).map((e) => e.files.map((f) => f.path))).toEqual([["x.txt"]]);
 });
 
 test("unloading during a gated agent_settled queues the after-snapshot before the session is disposed", async () => {
@@ -170,7 +198,7 @@ test("unloading during a gated agent_settled queues the after-snapshot before th
 	}
 	expect(order).toEqual(["before", "after", "shutdown"]);
 	await s.a.client.request("thread/resume", { threadId: thread.id });
-	expect(entries(s, thread.id).map((e) => e.files)).toEqual([["x.txt"]]);
+	expect(entries(s, thread.id).map((e) => e.files.map((f) => f.path))).toEqual([["x.txt"]]);
 });
 
 test("outside git there is no event, and tools still run", async () => {

@@ -292,6 +292,10 @@ export const FileChange = Obj({
 });
 export type FileChange = Static<typeof FileChange>;
 
+/** A file a turn changed, with its line totals between the working tree before and after the turn (§6.2). */
+export const TurnFile = Obj({ path: Str, additions: Num, deletions: Num });
+export type TurnFile = Static<typeof TurnFile>;
+
 export const ToolCallStatus = Type.Union([
 	Type.Literal("pending"),
 	Type.Literal("running"),
@@ -359,6 +363,8 @@ export const Turn = Obj({
 	completedAt: Type.Optional(Num),
 	error: Type.Optional(TurnError),
 	items: Type.Array(Item),
+	/** What the turn changed in a git checkout, once recorded; live, `turn/diff/updated` brings it after `turn/completed`. */
+	files: Type.Optional(Type.Array(TurnFile)),
 });
 export type Turn = Static<typeof Turn>;
 
@@ -790,7 +796,7 @@ export const ServerNotifications = {
 	"thread/archived": Obj({ threadId: Str, archived: Bool }),
 	"thread/deleted": Obj({ threadId: Str }),
 	/** Files whose content changed while the turn ran; not only the turn's own edits (§6.2). */
-	"turn/diff/updated": Obj({ threadId: Str, turnId: Str, files: Type.Array(Str) }),
+	"turn/diff/updated": Obj({ threadId: Str, turnId: Str, files: Type.Array(TurnFile) }),
 	"thread/workspace/progress": Obj({
 		threadId: Str,
 		phase: Type.Union([Type.Literal("setup"), Type.Literal("cleanup")]),

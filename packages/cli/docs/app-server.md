@@ -305,7 +305,10 @@ Diffs come in Codex's Changes scopes: `lastTurn`, `uncommitted` (the default),
 `unstaged`, `staged`, `committed` and `branch`. Each hunk has a content-hash id;
 an action naming a hunk that changed since it was read answers `gitConflict`
 with `data.reason: "diffChanged"`. Files changed while a turn ran are reported
-by `turn/diff/updated {threadId, turnId, files}` after `turn/completed`. This
+by `turn/diff/updated {threadId, turnId, files}` after `turn/completed`, each
+file as `{path, additions, deletions}`: the net line totals between the working
+tree before and after the turn. A read-back turn carries the same list as
+`Turn.files`. This
 means "changed while the turn ran", not "changed by the turn": an edit another
 local thread or an editor made meanwhile is in the list too. A worktree thread
 is the only writer in its worktree, so its list is its own.

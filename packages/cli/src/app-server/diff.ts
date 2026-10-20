@@ -4,7 +4,15 @@
  */
 
 import { createHash } from "node:crypto";
-import type { DiffComment, DiffFile, DiffHunk, DiffScope, ParamsOf, ResultOf } from "@knightcode/app-server-protocol";
+import type {
+	DiffComment,
+	DiffFile,
+	DiffHunk,
+	DiffScope,
+	ParamsOf,
+	ResultOf,
+	TurnFile,
+} from "@knightcode/app-server-protocol";
 import type { SessionEntry } from "../core/session-manager.ts";
 import { AppServerError } from "./errors.ts";
 import {
@@ -33,7 +41,8 @@ export interface TurnDiffRecord {
 	turnId: string;
 	before: string;
 	after: string;
-	files: string[];
+	/** Records written before per-file totals list bare paths; readers skip those. */
+	files: TurnFile[];
 }
 
 /** Test gate only (Global Constraints): awaited after each snapshot. */
@@ -104,8 +113,17 @@ export class TurnChanges {
 			);
 			await turnChangeHooks.afterSnapshot("after");
 			if (after === start.tree) return;
-			const listed = await git(this.repo.root, ["diff", "--name-only", "-z", "--no-renames", start.tree, after]);
-			const record = { turnId, before: start.tree, after, files: listed.split("\0").filter(Boolean) };
+			const args = ["diff", "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", start.tree, after];
+			const listed = await git(this.repo.root, args);
+			// Each file is "<added>\t<deleted>\t<path>"; a binary file counts "-\t-", so 0 and 0.
+			const files = listed
+				.split("\0")
+				.filter(Boolean)
+				.map((line) => {
+					const [added, deleted, ...path] = line.split("\t");
+					return { path: path.join("\t"), additions: Number(added) || 0, deletions: Number(deleted) || 0 };
+				});
+			const record = { turnId, before: start.tree, after, files };
 			this.record(record);
 			this.notify(record);
 		});

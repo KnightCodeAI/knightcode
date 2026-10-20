@@ -1559,6 +1559,29 @@
 													}
 												]
 											}
+										},
+										"files": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"required": [
+													"path",
+													"additions",
+													"deletions"
+												],
+												"properties": {
+													"path": {
+														"type": "string"
+													},
+													"additions": {
+														"type": "number"
+													},
+													"deletions": {
+														"type": "number"
+													}
+												},
+												"additionalProperties": false
+											}
 										}
 									},
 									"additionalProperties": false
@@ -2140,6 +2163,29 @@
 													"additionalProperties": false
 												}
 											]
+										}
+									},
+									"files": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"path",
+												"additions",
+												"deletions"
+											],
+											"properties": {
+												"path": {
+													"type": "string"
+												},
+												"additions": {
+													"type": "number"
+												},
+												"deletions": {
+													"type": "number"
+												}
+											},
+											"additionalProperties": false
 										}
 									}
 								},
@@ -5261,6 +5307,29 @@
 													}
 												]
 											}
+										},
+										"files": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"required": [
+													"path",
+													"additions",
+													"deletions"
+												],
+												"properties": {
+													"path": {
+														"type": "string"
+													},
+													"additions": {
+														"type": "number"
+													},
+													"deletions": {
+														"type": "number"
+													}
+												},
+												"additionalProperties": false
+											}
 										}
 									},
 									"additionalProperties": false
@@ -5842,6 +5911,29 @@
 													"additionalProperties": false
 												}
 											]
+										}
+									},
+									"files": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"required": [
+												"path",
+												"additions",
+												"deletions"
+											],
+											"properties": {
+												"path": {
+													"type": "string"
+												},
+												"additions": {
+													"type": "number"
+												},
+												"deletions": {
+													"type": "number"
+												}
+											},
+											"additionalProperties": false
 										}
 									}
 								},
@@ -8577,7 +8669,24 @@
 				"files": {
 					"type": "array",
 					"items": {
-						"type": "string"
+						"type": "object",
+						"required": [
+							"path",
+							"additions",
+							"deletions"
+						],
+						"properties": {
+							"path": {
+								"type": "string"
+							},
+							"additions": {
+								"type": "number"
+							},
+							"deletions": {
+								"type": "number"
+							}
+						},
+						"additionalProperties": false
 					}
 				}
 			},
@@ -9181,6 +9290,29 @@
 										"additionalProperties": false
 									}
 								]
+							}
+						},
+						"files": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": [
+									"path",
+									"additions",
+									"deletions"
+								],
+								"properties": {
+									"path": {
+										"type": "string"
+									},
+									"additions": {
+										"type": "number"
+									},
+									"deletions": {
+										"type": "number"
+									}
+								},
+								"additionalProperties": false
 							}
 						}
 					},

@@ -278,7 +278,7 @@ const notificationParams: Record<string, unknown> = {
 	"thread/settings/updated": { thread },
 	"thread/archived": { threadId: "t1", archived: true },
 	"thread/deleted": { threadId: "t1" },
-	"turn/diff/updated": { threadId: "t1", turnId: "m1", files: ["a.txt"] },
+	"turn/diff/updated": { threadId: "t1", turnId: "m1", files: [{ path: "a.txt", additions: 1, deletions: 0 }] },
 	"thread/workspace/progress": { threadId: "t1", phase: "setup", output: "installing" },
 	"turn/started": { turn, requestId: "r1" },
 	"turn/completed": { turn: { id: "m1", threadId: "t1", status: "completed", startedAt: 1, completedAt: 2 } },

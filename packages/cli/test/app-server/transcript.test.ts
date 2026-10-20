@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { TURN_DIFF_ENTRY } from "../../src/app-server/diff.ts";
 import { DECLINED_REASON, entryForItem, readTurns } from "../../src/app-server/transcript.ts";
 import type { SessionEntry } from "../../src/core/session-manager.ts";
 import { TURN_END_TYPE, TURN_MARKER_TYPE } from "../../src/extensions/turn-marker.ts";
@@ -74,6 +75,18 @@ test("a write that created its file reads back as an add carrying its patch", ()
 	expect(readTurns("t", entries)[0].items.find((i) => i.id === "w")).toMatchObject({
 		fileChanges: [{ path: "a.ts", kind: "add", diff: "--- a.ts\n+++ a.ts\n@@ -0,0 +1 @@\n+x\n" }],
 	});
+});
+
+test("a turn reads back its recorded file totals; an older record of bare paths is skipped", () => {
+	const turnOf = (files: unknown[]) => {
+		const m = marker();
+		const record = { ...base(), type: "custom", customType: TURN_DIFF_ENTRY } as SessionEntry;
+		if (record.type === "custom") record.data = { turnId: m.id, before: "b", after: "a", files };
+		return readTurns("t", [m, user("go"), assistant([{ type: "text", text: "ok" }]), end("completed"), record])[0];
+	};
+	const files = [{ path: "a.ts", additions: 200, deletions: 0 }];
+	expect(turnOf(files).files).toEqual(files);
+	expect(turnOf(["a.ts"])).not.toHaveProperty("files");
 });
 
 test("tool calls sit at their blocks in block order; results never reorder them; a call with no result failed", () => {
