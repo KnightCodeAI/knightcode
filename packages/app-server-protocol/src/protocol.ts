@@ -473,6 +473,49 @@ export const Warning = Obj(WarningFields);
 export type Warning = Static<typeof Warning>;
 const SettingsScope = Type.Union([Type.Literal("global"), Type.Literal("project")]);
 
+export const McpExposure = Type.Union([
+	Type.Literal("codemode"),
+	Type.Literal("deferred"),
+	Type.Literal("direct"),
+	Type.Literal("hidden"),
+]);
+export type McpExposure = Static<typeof McpExposure>;
+const McpServerName = Type.String({ pattern: "^[A-Za-z0-9_-]+$", maxLength: 128 });
+/** A server from an `mcp.json`; `override` is the project file that changes a global server's state. */
+export const McpServerInfo = Obj({
+	name: Str,
+	scope: SettingsScope,
+	source: Str,
+	override: Type.Optional(Str),
+	transport: Type.Union([Type.Literal("stdio"), Type.Literal("http")]),
+	/** The command line of a stdio server, the URL of an HTTP one. */
+	target: Str,
+	description: Type.Optional(Str),
+	enabled: Bool,
+	exposure: McpExposure,
+});
+export type McpServerInfo = Static<typeof McpServerInfo>;
+
+export const ResourceType = Type.Union([
+	Type.Literal("extensions"),
+	Type.Literal("skills"),
+	Type.Literal("prompts"),
+	Type.Literal("themes"),
+]);
+export type ResourceType = Static<typeof ResourceType>;
+/** An extension, skill, prompt template or theme as `knightcode config` lists it. */
+export const Resource = Obj({
+	type: ResourceType,
+	path: Str,
+	name: Str,
+	enabled: Bool,
+	scope: Type.Union([Type.Literal("user"), Type.Literal("project"), Type.Literal("temporary")]),
+	origin: Type.Union([Type.Literal("package"), Type.Literal("top-level")]),
+	/** `auto` (discovered), `local` (named in settings), or a package source. Built-in extensions are never listed. */
+	source: Str,
+});
+export type Resource = Static<typeof Resource>;
+
 /** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
 const QueueEntry = Obj({ id: Str, text: Str });
 export const TurnQueue = Obj({ steering: Type.Array(Str), followUp: Type.Array(QueueEntry) });
@@ -753,8 +796,11 @@ export const ClientRequests = {
 		params: Obj({ cwd: Type.Optional(Str) }),
 		result: Obj({
 			settings: Type.Unknown(),
+			/** What an unset key means, in the shape of `settings`. */
+			defaults: Type.Unknown(),
 			origins: Type.Record(Str, SettingsScope),
 			versions: Obj({ global: Str, project: Type.Optional(Str) }),
+			paths: Obj({ global: Str, project: Type.Optional(Str) }),
 			errors: Type.Array(Warning),
 		}),
 	},
@@ -767,6 +813,59 @@ export const ClientRequests = {
 			expectedVersion: Type.Optional(Str),
 		}),
 		result: Obj({ version: Str }),
+	},
+	"tool/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			tools: Type.Array(Obj({ name: Str, description: Str, source: Str })),
+			/** The global `defaultTools` selection, resolved. */
+			defaultTools: Type.Array(Str),
+		}),
+	},
+	"tool/settings/read": {
+		params: Empty,
+		result: Obj({
+			tools: Type.Array(Obj({ name: Str, enabled: Bool, settings: Type.Record(Str, Type.Union([Str, Bool])) })),
+			classifiers: Type.Array(Obj({ provider: Str, id: Str, name: Str })),
+		}),
+	},
+	"tool/settings/write": {
+		params: Obj({ name: Str, key: Str, value: Type.Union([Str, Bool, Type.Null()]) }),
+		result: Empty,
+	},
+	"mcp/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			servers: Type.Array(McpServerInfo),
+			errors: Type.Array(Str),
+			paths: Obj({ global: Str, project: Type.Optional(Str) }),
+		}),
+	},
+	/** Changes the server where it is defined, or its project override when it has one, as `/mcp` does. */
+	"mcp/update": {
+		params: Obj({
+			cwd: Type.Optional(Str),
+			name: McpServerName,
+			enabled: Type.Optional(Bool),
+			exposure: Type.Optional(McpExposure),
+		}),
+		result: Empty,
+	},
+	"mcp/add": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: McpServerName, config: Type.Unknown() }),
+		result: Obj({ replaced: Bool }),
+	},
+	"mcp/remove": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: McpServerName }),
+		result: Obj({ removed: Bool }),
+	},
+	"resource/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({ resources: Type.Array(Resource) }),
+	},
+	"resource/set": {
+		params: Obj({ cwd: Type.Optional(Str), type: ResourceType, path: Str, enabled: Bool }),
+		result: Empty,
 	},
 	"project/trust/read": {
 		params: Obj({ cwd: Str }),

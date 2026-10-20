@@ -381,12 +381,13 @@ Errors: `threadNotFound`.
 
 ### `config/read`
 
-Params: optional `{cwd}`. Result: `{settings, origins, versions, errors}`.
+Params: optional `{cwd}`. Result: `{settings, defaults, origins, versions, paths, errors}`.
 Without cwd, only global settings are read. With cwd, trusted project settings
 merge over global settings; untrusted project files are not read. `origins`
 maps dotted leaf keys to `global` or `project`. `versions.global` and optional
 `versions.project` are SHA-256 hashes of raw file contents, or `"none"` for an
-absent or unread untrusted scope. Settings, origins, versions, and parse errors
+absent or unread untrusted scope. `defaults` is what an unset key means, in the
+shape of `settings`; `paths` names the global and, with cwd, the project file. Settings, origins, versions, and parse errors
 come from the same scope reads, not cached settings paired with fresh versions.
 Parse errors appear as structured `source: "settings"` warnings with an
 optional path and available one-based line/column; unaffected scopes still read.
@@ -415,6 +416,71 @@ malformed keys, and prototype-pollution segments (`__proto__`, `constructor`,
 
 ```json
 {"id":12,"method":"config/write","params":{"scope":"global","key":"theme","value":"dark","expectedVersion":"none"}}
+```
+
+### `tool/list`
+
+Params: optional `{cwd}`. Result: `{tools: [{name, description, source}],
+defaultTools}`. The tools a new thread in `cwd` would register (without cwd, a
+project-less one), from an in-memory session like `command/list`'s; hidden tools
+are left out, and MCP tools appear only once a thread connects. `defaultTools` is
+the global `defaultTools` setting resolved (`+name` and `-name` applied), or the
+built-in default `read`, `bash`, `edit`, `write`. Change it with `config/write`.
+
+```json
+{"id":26,"method":"tool/list","params":{}}
+```
+
+### `tool/settings/read` and `tool/settings/write`
+
+The KnightCode tools `/tools` manages, stored in `tools.json` in the agent
+directory. `tool/settings/read {}` returns `{tools: [{name, enabled, settings}],
+classifiers: [{provider, id, name}]}`: each tool's state (its default when the
+file does not set it) and its own settings, with values of keys ending in `Key`
+masked to their last four characters; `classifiers` are the classifier models
+with credentials, for the classifier gate's `model`. `tool/settings/write {name,
+key, value}` sets one setting; `enabled` takes a boolean, other keys a string,
+and `null` deletes the key. An unknown tool or a malformed key is
+`invalidParams`.
+
+```json
+{"id":27,"method":"tool/settings/write","params":{"name":"websearch","key":"provider","value":"brave"}}
+```
+
+### `mcp/list`, `mcp/update`, `mcp/add` and `mcp/remove`
+
+The servers of the global `mcp.json` and, for an explicitly trusted project, its
+`.knightcode/mcp.json` ([MCP](mcp.md)). `mcp/list {cwd?}` returns `{servers,
+errors, paths}`: each server's `name`, `scope`, defining file (`source`), the
+project file that overrides it (`override`), `transport` (`stdio` or `http`),
+`target` (command line or URL), `description`, `enabled` and `exposure`.
+`mcp/update {cwd?, name, enabled?, exposure?}` saves the change where `/mcp`
+would: in the project override when there is one, else in the defining file.
+`mcp/add {scope, cwd?, name, config}` validates `config` as an `mcpServers` entry
+and adds or replaces it (result `{replaced}`); `auth` is refused in a project
+file. `mcp/remove {scope, cwd?, name}` returns `{removed}`. Project writes need
+cwd and a trusted project (`invalidParams`, `data.reason: "untrusted"`).
+Connections, sign-in and status belong to the MCP extension in each thread
+(`/mcp`); loaded threads pick up file changes when they next load.
+
+```json
+{"id":28,"method":"mcp/add","params":{"scope":"global","name":"docs","config":{"url":"https://example.com/mcp"}}}
+```
+
+### `resource/list` and `resource/set`
+
+Extensions, skills, prompt templates and themes as `knightcode config` lists them.
+`resource/list {cwd?}` returns `{resources: [{type, path, name, enabled, scope,
+origin, source}]}` for what a thread in `cwd` (or with no project) would find,
+installing nothing. Built-in extensions are left out: they are always on, so
+`resource/set` refuses them like any unknown path. `resource/set {cwd?, type, path, enabled}` loads or
+skips one resource with a `+` or `-` pattern in the settings of the scope that
+defines it: a top-level resource in that scope's `extensions`, `skills`,
+`prompts` or `themes`, a package's in that package's filter. Project resources
+need a trusted project; an unknown path is `invalidParams`.
+
+```json
+{"id":29,"method":"resource/set","params":{"type":"skills","path":"/home/u/.knightcode/agent/skills/review/SKILL.md","enabled":false}}
 ```
 
 ### `project/trust/read`

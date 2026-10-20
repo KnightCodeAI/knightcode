@@ -40,7 +40,7 @@ import {
 	type SessionEntry,
 	sessionCwdMatches,
 } from "../core/session-manager.ts";
-import { SettingsManager } from "../core/settings-manager.ts";
+import { DEFAULT_TOOL_NAMES, SettingsManager } from "../core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { builtInExtensions } from "../extensions/index.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
@@ -1444,10 +1444,10 @@ export class ThreadManager {
 	}
 
 	/**
-	 * Commands for a project that has no thread yet: an in-memory session that is never bound, so no
-	 * extension starts and nothing is written. Extensions register their commands as they load.
+	 * What a new thread in a project would offer, before it has one: an in-memory session that is never
+	 * bound, so no extension starts and nothing is written. Extensions register commands and tools as they load.
 	 */
-	private commandsFor(cwdParam: string): Promise<ResultOf<"command/list">> {
+	private probe<T>(cwdParam: string, read: (session: AgentSession) => T): Promise<T> {
 		return this.track(async () => {
 			const cwd = resolvePath(cwdParam);
 			const stats = await stat(cwd).catch(() => undefined);
@@ -1459,7 +1459,7 @@ export class ThreadManager {
 					services,
 					sessionManager: SessionManager.inMemory(cwd),
 				}));
-				return { commands: commandsOf(session) };
+				return read(session);
 			} finally {
 				if (session) session.dispose();
 				else {
@@ -2028,7 +2028,18 @@ export class ThreadManager {
 			"command/list": async (params) =>
 				"threadId" in params
 					? { commands: commandsOf(this.get(params.threadId).session) }
-					: this.commandsFor(params.cwd),
+					: this.probe(params.cwd, (session) => ({ commands: commandsOf(session) })),
+			// Without a project, the agent directory stands in: it has no `.knightcode` of its own.
+			"tool/list": async ({ cwd }) => {
+				const tools = await this.probe(cwd ?? this.ctx.agentDir, (session) =>
+					session
+						.getAllTools()
+						.filter((tool) => tool.exposure !== "hidden")
+						.map((tool) => ({ name: tool.name, description: tool.description, source: tool.sourceInfo.source })),
+				);
+				await this.ctx.settings.reload();
+				return { tools, defaultTools: this.ctx.settings.getDefaultTools() ?? [...DEFAULT_TOOL_NAMES] };
+			},
 			"turn/start": async ({ threadId, text, images, requestId, clientMessageId, comments }, connection) => {
 				const reviewed = comments ? await this.review(threadId, connection.mode, comments, text) : undefined;
 				return this.startTurn(
