@@ -3,9 +3,26 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { app, type BrowserWindow, clipboard, dialog, nativeImage, shell } from "electron";
+import {
+	app,
+	type BrowserWindow,
+	clipboard,
+	dialog,
+	Menu,
+	type MenuItemConstructorOptions,
+	nativeImage,
+	shell,
+} from "electron";
 import { Compile } from "typebox/compile";
-import { type HostMethod, HostMethods, type HostRequest, type HostResponse } from "../shared/host-protocol.ts";
+import {
+	type HostMethod,
+	HostMethods,
+	type HostRequest,
+	type HostResponse,
+	type NativeMenuItem,
+	WINDOW_CHROME,
+} from "../shared/host-protocol.ts";
+import { closeFromShortcut } from "./close.ts";
 import { refuseToOpen } from "./open-path.ts";
 import { readProfile, signIn, signOut } from "./profile.ts";
 import type { ServerConnection } from "./server.ts";
@@ -15,11 +32,33 @@ const checks = Object.fromEntries(
 	Object.entries(HostMethods).map(([method, schema]) => [method, Compile(schema.params)]),
 ) as Record<HostMethod, ReturnType<typeof Compile>>;
 
-export async function handleHost(
-	request: HostRequest,
-	window: BrowserWindow,
-	deps: { state: StateFile; server: ServerConnection },
-): Promise<HostResponse> {
+/**
+ * The window's material behind a translucent sidebar: acrylic on Windows 11 22H2 (build 22621) and later, with a
+ * transparent background so it shows; vibrancy on macOS. Elsewhere, or when off, the window is opaque again.
+ */
+function setMaterial(window: BrowserWindow, translucent: boolean, background: string): boolean {
+	if (process.platform === "darwin") {
+		window.setVibrancy(translucent ? "sidebar" : null);
+		return translucent;
+	}
+	const build = Number(process.getSystemVersion().split(".")[2] ?? 0);
+	const supported = process.platform === "win32" && build >= 22621;
+	if (!supported) return false;
+	window.setBackgroundMaterial(translucent ? "acrylic" : "none");
+	window.setBackgroundColor(translucent ? "#00000000" : background);
+	return translucent;
+}
+
+/** What host methods reach beyond their window: the state file, the server, and opening another window on a route. */
+export interface HostDeps {
+	state: StateFile;
+	server: ServerConnection;
+	openWindow: (route?: string) => void;
+	/** Step the window's zoom (-1 out, 1 in, 0 back to 100%). */
+	zoom: (window: BrowserWindow, step: -1 | 0 | 1) => void;
+}
+
+export async function handleHost(request: HostRequest, window: BrowserWindow, deps: HostDeps): Promise<HostResponse> {
 	const check = Object.hasOwn(checks, request.host) ? checks[request.host] : undefined;
 	if (!check?.Check(request.params))
 		return { id: request.id, error: { code: "invalidParams", message: `invalid host request ${request.host}` } };
@@ -38,9 +77,11 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server }: { state: StateFile; server: ServerConnection },
+	{ state, server, openWindow, zoom }: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
+		case "host/menu/popup":
+			return popupMenu(params.items as NativeMenuItem[], window);
 		case "host/dialog/openFolder": {
 			const result = await dialog.showOpenDialog(window, {
 				title: (params.title as string | undefined) ?? "Add a project",
@@ -78,6 +119,9 @@ async function run(
 		case "host/window/setTitle":
 			window.setTitle(params.title as string);
 			return {};
+		case "host/window/open":
+			openWindow(params.threadId ? `knightcode://thread/${encodeURIComponent(params.threadId as string)}` : undefined);
+			return {};
 		case "host/state/read":
 			return state.read();
 		case "host/state/write":
@@ -106,10 +150,16 @@ async function run(
 			const image = nativeImage.createFromPath(params.path as string);
 			return image.isEmpty() ? {} : { dataUrl: image.resize({ height: 96 }).toDataURL() };
 		}
-		case "host/window/setTheme":
+		case "host/window/setTheme": {
+			const chrome = WINDOW_CHROME[params.dark ? "dark" : "light"];
 			if (process.platform === "win32")
-				window.setTitleBarOverlay({ color: "#00000000", symbolColor: params.dark ? "#ececec" : "#1a1c1f", height: 40 });
-			return {};
+				window.setTitleBarOverlay({
+					color: "#00000000",
+					symbolColor: chrome.symbol,
+					height: Math.round(WINDOW_CHROME.titleBarHeight * window.webContents.getZoomFactor()),
+				});
+			return { translucent: setMaterial(window, params.translucent === true, chrome.background) };
+		}
 		case "host/app/command": {
 			const contents = window.webContents;
 			switch (params.command as string) {
@@ -128,6 +178,9 @@ async function run(
 				case "paste":
 					contents.paste();
 					break;
+				case "delete":
+					contents.delete();
+					break;
 				case "selectAll":
 					contents.selectAll();
 					break;
@@ -138,13 +191,13 @@ async function run(
 					if (!app.isPackaged) contents.toggleDevTools();
 					break;
 				case "zoomIn":
-					contents.setZoomLevel(contents.getZoomLevel() + 0.5);
+					zoom(window, 1);
 					break;
 				case "zoomOut":
-					contents.setZoomLevel(contents.getZoomLevel() - 0.5);
+					zoom(window, -1);
 					break;
 				case "resetZoom":
-					contents.setZoomLevel(0);
+					zoom(window, 0);
 					break;
 				case "minimize":
 					window.minimize();
@@ -153,8 +206,16 @@ async function run(
 					if (window.isMaximized()) window.unmaximize();
 					else window.maximize();
 					break;
+				case "toggleFullScreen":
+					window.setFullScreen(!window.isFullScreen());
+					break;
 				case "close":
-					window.close();
+					closeFromShortcut(window, state);
+					break;
+				case "focus":
+					if (window.isMinimized()) window.restore();
+					window.show();
+					window.focus();
 					break;
 				case "quit":
 					app.quit();
@@ -173,4 +234,29 @@ async function run(
 				logsDir: app.getPath("logs"),
 			};
 	}
+}
+
+/** A native context menu at the pointer, as Codex shows for its rows; resolves with the chosen id once it closes. */
+function popupMenu(items: NativeMenuItem[], window: BrowserWindow): Promise<{ id?: string }> {
+	let chosen: string | undefined;
+	const build = (list: NativeMenuItem[]): MenuItemConstructorOptions[] =>
+		list.map((item) => {
+			if ("separator" in item) return { type: "separator" };
+			if ("submenu" in item) return { label: item.label, submenu: build(item.submenu) };
+			return {
+				label: item.label,
+				enabled: item.enabled ?? true,
+				...(item.accelerator ? { accelerator: item.accelerator, registerAccelerator: false } : {}),
+				click: () => {
+					chosen = item.id;
+				},
+			};
+		});
+	return new Promise((resolve) => {
+		// The menu closes before its click handler runs; let the click land first.
+		Menu.buildFromTemplate(build(items)).popup({
+			window,
+			callback: () => setTimeout(() => resolve(chosen ? { id: chosen } : {}), 0),
+		});
+	});
 }
