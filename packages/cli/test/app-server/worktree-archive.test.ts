@@ -195,7 +195,7 @@ test("the cleanup script runs before removal with the setup's two paths; a faili
 				{
 					name: "e",
 					cleanup: {
-						default: `echo "$KNIGHTCODE_SOURCE_TREE_PATH|$KNIGHTCODE_WORKTREE_PATH|$(test -d "$KNIGHTCODE_WORKTREE_PATH" && echo present)" > "${record}"${failing ? "; exit 4" : ""}`,
+						default: `echo cleaning; echo "$KNIGHTCODE_SOURCE_TREE_PATH|$KNIGHTCODE_WORKTREE_PATH|$(test -d "$KNIGHTCODE_WORKTREE_PATH" && echo present)" > "${record}"${failing ? "; exit 4" : ""}`,
 					},
 				},
 			],
@@ -209,6 +209,10 @@ test("the cleanup script runs before removal with the setup's two paths; a faili
 		expect(norm(worktree)).toBe(norm(path));
 		expect(present).toBe("present");
 		expect(existsSync(path)).toBe(false);
+		// The archiving client gets the cleanup's output, as a start gets its setup's.
+		const progress = s.a.notifications.filter((n) => n.method === "thread/workspace/progress");
+		expect(progress.every((n) => n.params.threadId === thread.id && n.params.phase === "cleanup")).toBe(true);
+		expect(progress.map((n) => n.params.output).join("")).toContain("cleaning");
 		if (failing) await s.a.waitFor("warning", (p) => String(p.message).includes("cleanup"));
 	}
 });

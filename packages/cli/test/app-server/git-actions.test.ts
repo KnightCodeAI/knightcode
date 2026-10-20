@@ -467,6 +467,19 @@ test("shutdown while gh hangs ends the request and leaves no process", async () 
 	}
 }, 40_000);
 
+test("shutdown while a post-checkout hook hangs ends a branch create", async () => {
+	const s = await repoServer();
+	const threadId = await local(s);
+	const hooks = mkdtempSync(join(tmpdir(), "kc-hooks-"));
+	const marker = join(hooks, "entered").replace(/\\/g, "/");
+	writeFileSync(join(hooks, "post-checkout"), `#!/bin/sh\necho entered > "${marker}"\nsleep 600\n`, { mode: 0o755 });
+	sh(s.cwd, "config", "core.hooksPath", hooks.replace(/\\/g, "/"));
+	const creating = call(s, "git/branch/create", { threadId, name: "feature" }).catch((e: unknown) => e);
+	await expect.poll(() => existsSync(marker), { timeout: 15_000 }).toBe(true);
+	await s.threads.closeAll();
+	expect(await creating).toBeInstanceOf(Error);
+}, 40_000);
+
 test("shutdown during a commit message request that never answers ends it, also through an ignoring router", async () => {
 	for (const virtual of [false, true]) {
 		const parked = gate();

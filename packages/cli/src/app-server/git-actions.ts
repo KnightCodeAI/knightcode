@@ -42,7 +42,7 @@ const COMMIT_DIFF_BYTES = 48 * 1024;
 const trimmed = (result: { stdout: Buffer }) => result.stdout.toString("utf8").trim();
 
 async function optional(repo: Repo, args: string[]): Promise<string | null> {
-	const result = await runGit(repo.root, args);
+	const result = await runGit(repo, args);
 	return result.code === 0 ? trimmed(result) : null;
 }
 
@@ -58,7 +58,7 @@ interface StatusRecord {
 
 async function statusRecords(repo: Repo, untracked: "normal" | "all") {
 	const fields = (
-		await git(repo.root, ["status", "--porcelain=v2", "--branch", "-z", `--untracked-files=${untracked}`])
+		await git(repo, ["status", "--porcelain=v2", "--branch", "-z", `--untracked-files=${untracked}`])
 	).split("\0");
 	const records: StatusRecord[] = [];
 	const branch: Record<string, string> = {};
@@ -132,15 +132,15 @@ export async function gitStage(
 ): Promise<ResultOf<"git/stage">> {
 	if (params.hunkId !== undefined && params.path === undefined) throw invalid("a hunk needs its path");
 	if (params.path === undefined) {
-		await git(repo.root, ["add", "-A"]);
+		await git(repo, ["add", "-A"]);
 		return { paths: [] };
 	}
 	if (params.hunkId === undefined) {
 		const paths = await recordPaths(repo, params.path);
 		// A staged rename's old name is in neither the index nor the working tree; naming it would fail the add.
-		const known = new Set((await git(repo.root, ["ls-files", "-z", "--", ...paths])).split("\0"));
+		const known = new Set((await git(repo, ["ls-files", "-z", "--", ...paths])).split("\0"));
 		const present = paths.filter((p) => known.has(p) || lstatSync(join(repo.root, p), { throwIfNoEntry: false }));
-		if (present.length > 0) await git(repo.root, ["add", "-A", "--", ...present]);
+		if (present.length > 0) await git(repo, ["add", "-A", "--", ...present]);
 		return { paths };
 	}
 	const trees = await scopeTrees(thread, repo, { scope: "unstaged" });
@@ -151,7 +151,7 @@ export async function gitStage(
 		// git cannot stage part of a file the index does not know: the hunk stages the whole file.
 		const { hunk } = await findHunk(repo, trees, entry, params.hunkId, context);
 		if (!hunk) throw conflict("diffChanged", `${entry.path} changed since it was read`, { paths: [entry.path] });
-		await git(repo.root, ["add", "-A", "--", entry.path]);
+		await git(repo, ["add", "-A", "--", entry.path]);
 		return { paths: [entry.path] };
 	}
 	const patch = await hunkPatch(repo, trees, entry, params.hunkId, context);
@@ -167,12 +167,12 @@ export async function gitUnstage(
 	if (params.hunkId !== undefined && params.path === undefined) throw invalid("a hunk needs its path");
 	if (params.path === undefined) {
 		// Path-limited: a pathless reset is a mixed reset that deletes MERGE_HEAD and rewrites ORIG_HEAD.
-		await git(repo.root, ["reset", "-q", "--", "."]);
+		await git(repo, ["reset", "-q", "--", "."]);
 		return { paths: [] };
 	}
 	if (params.hunkId === undefined) {
 		const paths = await recordPaths(repo, params.path);
-		await git(repo.root, ["reset", "-q", "--", ...paths]);
+		await git(repo, ["reset", "-q", "--", ...paths]);
 		return { paths };
 	}
 	const trees = await scopeTrees(thread, repo, { scope: "staged" });
@@ -184,9 +184,9 @@ export async function gitUnstage(
 }
 
 async function applyChecked(repo: Repo, patch: Buffer, mode: { cached: boolean; reverse?: boolean }, paths: string[]) {
-	const check = await machineApply(repo.root, patch, { ...mode, check: true });
+	const check = await machineApply(repo, patch, { ...mode, check: true });
 	if (check.code !== 0) throw conflict("patchFailed", "the change no longer applies", { paths, output: check.stderr });
-	const applied = await machineApply(repo.root, patch, mode);
+	const applied = await machineApply(repo, patch, mode);
 	if (applied.code !== 0)
 		throw conflict("patchFailed", "the change no longer applies", { paths, output: applied.stderr });
 }
@@ -233,7 +233,7 @@ export async function gitCommit(
 	params: ParamsOf<"git/commit">,
 	ctx: GitActionContext,
 ): Promise<ResultOf<"git/commit">> {
-	if (params.includeUnstaged !== false) await git(repo.root, ["add", "-A"], { signal: ctx.signal });
+	if (params.includeUnstaged !== false) await git(repo, ["add", "-A"], { signal: ctx.signal });
 	const capture = async () => ({
 		head: await optional(repo, ["rev-parse", "-q", "--verify", "HEAD"]),
 		ref: await optional(repo, ["symbolic-ref", "-q", "HEAD"]),
@@ -248,10 +248,10 @@ export async function gitCommit(
 	const now = await capture();
 	if (now.head !== before.head || now.ref !== before.ref || now.index !== before.index)
 		throw conflict("concurrentChange", "the checkout changed while the commit message was written");
-	const result = await runGit(repo.root, ["commit", "-q", "-F", "-"], { input: message, signal: ctx.signal });
+	const result = await runGit(repo, ["commit", "-q", "-F", "-"], { input: message, signal: ctx.signal });
 	if (result.code !== 0)
 		throw new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, { output: result.stderr });
-	return { commit: await git(repo.root, ["rev-parse", "HEAD"]), message };
+	return { commit: await git(repo, ["rev-parse", "HEAD"]), message };
 }
 
 export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<ResultOf<"git/push">> {
@@ -267,7 +267,7 @@ export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<Result
 		destination = upstreamMerge;
 		setUpstream = false;
 	} else {
-		const remotes = (await git(repo.root, ["remote"])).split("\n").filter(Boolean);
+		const remotes = (await git(repo, ["remote"])).split("\n").filter(Boolean);
 		const chosen = remotes.includes("origin") ? "origin" : remotes.length === 1 ? remotes[0] : undefined;
 		if (!chosen) throw invalid("no remote to push to");
 		remote = chosen;
@@ -283,7 +283,7 @@ export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<Result
 		remote,
 		`refs/heads/${branch}:${destination}`,
 	];
-	const result = await runGit(repo.root, args, { timeoutMs: 300_000, signal: ctx.signal });
+	const result = await runGit(repo, args, { timeoutMs: 300_000, signal: ctx.signal });
 	if (result.code !== 0) {
 		if (result.stderr.includes("[rejected]"))
 			throw conflict("pushRejected", "the remote rejected the push; pull first", { output: result.stderr });
@@ -294,7 +294,7 @@ export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<Result
 
 export async function gitBranches(repo: Repo): Promise<ResultOf<"git/branches">> {
 	const branches = (
-		await git(repo.root, ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads"])
+		await git(repo, ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads"])
 	)
 		.split("\n")
 		.filter(Boolean);
@@ -308,24 +308,24 @@ export async function gitBranches(repo: Repo): Promise<ResultOf<"git/branches">>
 }
 
 export async function gitBranchCreate(repo: Repo, name: string): Promise<ResultOf<"git/branch/create">> {
-	if (!validBranchName(name) || (await runGit(repo.root, ["check-ref-format", "--branch", name])).code !== 0)
+	if (!validBranchName(name) || (await runGit(repo, ["check-ref-format", "--branch", name])).code !== 0)
 		throw invalid(`not a valid branch name: ${name}`);
-	if ((await runGit(repo.root, ["rev-parse", "-q", "--verify", `refs/heads/${name}`])).code === 0)
+	if ((await runGit(repo, ["rev-parse", "-q", "--verify", `refs/heads/${name}`])).code === 0)
 		throw conflict("branchExists", `a branch named ${name} exists`);
-	await git(repo.root, ["switch", "-q", "-c", name]);
+	await git(repo, ["switch", "-q", "-c", name]);
 	return { branch: name };
 }
 
 export async function gitBranchSwitch(repo: Repo, name: string): Promise<ResultOf<"git/branch/switch">> {
 	const { branches } = await gitBranches(repo);
 	if (!branches.includes(name)) throw invalid(`no local branch ${name}`);
-	const written = (await git(repo.root, ["diff", "--name-only", "--no-renames", "-z", "HEAD", `refs/heads/${name}`]))
+	const written = (await git(repo, ["diff", "--name-only", "--no-renames", "-z", "HEAD", `refs/heads/${name}`]))
 		.split("\0")
 		.filter(Boolean);
 	const blocked = await pathsInTheWay(repo, written);
 	if (blocked.length > 0)
 		throw conflict("localChanges", "Stash or commit your local changes to switch branches.", { paths: blocked });
-	const result = await runGit(repo.root, ["switch", "-q", name]);
+	const result = await runGit(repo, ["switch", "-q", name]);
 	if (result.code !== 0)
 		throw conflict("localChanges", "Stash or commit your local changes to switch branches.", {
 			output: result.stderr,
@@ -342,7 +342,7 @@ export async function gitLog(thread: LoadedThread, repo: Repo, limit: number): P
 		if (fallback) base = (await optional(repo, ["merge-base", fallback, "HEAD"])) ?? undefined;
 	}
 	const fields = (
-		await git(repo.root, [
+		await git(repo, [
 			"log",
 			"-z",
 			"--format=%H%x00%s%x00%an%x00%ct",
@@ -367,12 +367,7 @@ export async function gitPullRequest(
 	const args = ["pr", "create", "--head", branch];
 	if (params.title === undefined && params.body === undefined) args.push("--fill");
 	else
-		args.push(
-			"--title",
-			params.title ?? (await git(repo.root, ["log", "-1", "--format=%s"])),
-			"--body",
-			params.body ?? "",
-		);
+		args.push("--title", params.title ?? (await git(repo, ["log", "-1", "--format=%s"])), "--body", params.body ?? "");
 	if (params.draft) args.push("--draft");
 	const [command, ...leading] = ctx.ghCommand ?? ["gh"];
 	const result = await runProcess(command, [...leading, ...args], {

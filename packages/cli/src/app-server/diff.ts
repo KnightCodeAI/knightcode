@@ -27,7 +27,6 @@ import {
 	machinePatch,
 	OutputTooLarge,
 	type Repo,
-	requireRepo,
 	runGit,
 	LARGE_UNTRACKED_BYTES,
 	snapshotTree,
@@ -184,18 +183,18 @@ export function lastTurnDiff(entries: readonly SessionEntry[]): TurnDiffRecord |
 }
 
 async function resolveCommit(repo: Repo, ref: string): Promise<string | undefined> {
-	const result = await runGit(repo.root, ["rev-parse", "--verify", "-q", "--end-of-options", `${ref}^{commit}`]);
+	const result = await runGit(repo, ["rev-parse", "--verify", "-q", "--end-of-options", `${ref}^{commit}`]);
 	return result.code === 0 ? result.stdout.toString("utf8").trim() : undefined;
 }
 
-const treeOf = (repo: Repo, commit: string) => git(repo.root, ["rev-parse", "--verify", `${commit}^{tree}`]);
+const treeOf = (repo: Repo, commit: string) => git(repo, ["rev-parse", "--verify", `${commit}^{tree}`]);
 
 /** The crate's default_worktree_base: the remote HEAD (origin first), then origin/main, origin/master, main, master. */
 export async function defaultBranch(repo: Repo): Promise<string | undefined> {
-	const remotes = (await git(repo.root, ["remote"])).split("\n").filter(Boolean);
+	const remotes = (await git(repo, ["remote"])).split("\n").filter(Boolean);
 	remotes.sort((a, b) => (a === "origin" ? -1 : b === "origin" ? 1 : 0));
 	for (const remote of remotes) {
-		const head = await runGit(repo.root, ["symbolic-ref", "-q", "--short", `refs/remotes/${remote}/HEAD`]);
+		const head = await runGit(repo, ["symbolic-ref", "-q", "--short", `refs/remotes/${remote}/HEAD`]);
 		if (head.code === 0) return head.stdout.toString("utf8").trim();
 	}
 	for (const candidate of ["origin/main", "origin/master", "main", "master"])
@@ -213,7 +212,7 @@ export async function scopeTrees(
 			const record = lastTurnDiff(thread.session.sessionManager.getBranch());
 			if (!record) return { from: "", to: "" };
 			for (const tree of [record.before, record.after]) {
-				const exists = await runGit(repo.root, ["cat-file", "-e", tree]);
+				const exists = await runGit(repo, ["cat-file", "-e", tree]);
 				if (exists.code !== 0) return { from: "", to: "", turnId: record.turnId, stale: true };
 			}
 			return { from: record.before, to: record.after, turnId: record.turnId };
@@ -240,14 +239,14 @@ export async function scopeTrees(
 			const workspace = thread.workspace;
 			if (against === undefined && workspace.mode === "worktree") against = workspace.baseRef;
 			if (against === undefined) {
-				const upstream = await runGit(repo.root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
+				const upstream = await runGit(repo, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
 				if (upstream.code === 0) against = upstream.stdout.toString("utf8").trim();
 			}
 			against ??= await defaultBranch(repo);
 			if (against === undefined) throw new AppServerError("invalidParams", "no branch to compare with: pass `against`");
 			const base = await resolveCommit(repo, against);
 			if (!base) throw new AppServerError("invalidParams", `no commit ${against}`);
-			const mergeBase = await runGit(repo.root, ["merge-base", base, "HEAD"]);
+			const mergeBase = await runGit(repo, ["merge-base", base, "HEAD"]);
 			if (mergeBase.code !== 0) throw new AppServerError("invalidParams", `no merge base with ${against}`);
 			const { tree, untrackedSkipped } = await workingTree(repo);
 			return {
@@ -270,17 +269,7 @@ export interface NameStatus {
 /** `git diff --name-status -z` between two trees, paired with machinePatch by the same rename detection and order. */
 export async function nameStatus(repo: Repo, from: string, to: string): Promise<NameStatus[]> {
 	const fields = (
-		await git(repo.root, [
-			"diff",
-			"--name-status",
-			"-z",
-			"-M",
-			"--no-ext-diff",
-			"--no-textconv",
-			"-O/dev/null",
-			from,
-			to,
-		])
+		await git(repo, ["diff", "--name-status", "-z", "-M", "--no-ext-diff", "--no-textconv", "-O/dev/null", from, to])
 	).split("\0");
 	const names: NameStatus[] = [];
 	for (let i = 0; i < fields.length && fields[i] !== "";) {
@@ -504,10 +493,10 @@ export async function readDiff(
 /** `thread/diff/read`. */
 export async function readThreadDiff(
 	thread: LoadedThread,
+	repo: Repo,
 	params: ParamsOf<"thread/diff/read">,
 	budgets: DiffBudgets,
 ): Promise<ResultOf<"thread/diff/read">> {
-	const repo = await requireRepo(thread.session.sessionManager.getCwd());
 	const scope = params.scope ?? "uncommitted";
 	const trees = await scopeTrees(thread, repo, { scope, against: params.against, commit: params.commit });
 	const { files, filesOmitted } = await readDiff(repo, trees, {
@@ -580,7 +569,7 @@ export async function composeReview(
 		const spec = `${tree}:${path}`;
 		let blob = blobs.get(spec);
 		if (!blob) {
-			blob = runGit(repo.root, ["cat-file", "blob", spec]).then((r) => {
+			blob = runGit(repo, ["cat-file", "blob", spec]).then((r) => {
 				if (r.code !== 0) throw invalid(`${comment.path} cannot be read on the ${comment.side} side`);
 				return r.stdout;
 			});
@@ -709,7 +698,7 @@ export async function revertDiff(
 		!sameEntries(await currentEntries(repo, paths), await entriesOf(repo, reverse ? trees.to : trees.from, paths))
 	)
 		throw conflict("diffChanged", reverse ? "files changed since the turn" : "files changed since the undo", { paths });
-	const check = await machineApply(repo.root, patch, { reverse, check: true });
+	const check = await machineApply(repo, patch, { reverse, check: true });
 	if (check.code !== 0) {
 		const failed = failedPaths(check.stderr);
 		throw conflict("patchFailed", "the change no longer applies", {
@@ -717,7 +706,7 @@ export async function revertDiff(
 			output: check.stderr,
 		});
 	}
-	const applied = await machineApply(repo.root, patch, { reverse });
+	const applied = await machineApply(repo, patch, { reverse });
 	if (applied.code !== 0)
 		throw conflict("patchFailed", "the change no longer applies", { paths, output: applied.stderr });
 	return { paths: target.map((e) => e.path) };

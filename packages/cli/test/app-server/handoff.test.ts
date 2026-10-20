@@ -221,6 +221,16 @@ test("a thread born in the main checkout reuses its worktree and resumes where i
 	expect(resumed.thread.cwd).toBe(path);
 });
 
+test("an unknown environment is invalidParams before any worktree is created", async () => {
+	const s = await repoServer();
+	const { thread } = await s.a.client.request("thread/start", { cwd: s.cwd });
+	await say(s, thread.id);
+	await expect(handoff(s, thread.id, "worktree", { environment: "does-not-exist" })).rejects.toMatchObject({
+		code: "invalidParams",
+	});
+	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toEqual([]);
+});
+
 test("a handed-off worktree thread resumes in the main checkout after a restart and lists as local", async () => {
 	const s = await repoServer();
 	const { thread } = await started(s);

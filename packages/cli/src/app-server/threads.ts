@@ -146,6 +146,12 @@ const repoHead = async (repo: Repo) => (await runGit(repo.root, ["rev-parse", "-
 const sameProject = (a: string, b: string) =>
 	samePath(canonicalizePath(resolvePath(a)), canonicalizePath(resolvePath(b)));
 
+/** A new worktree's environment must be one the project defines; a recorded one may since have been removed. */
+function requireEnvironment(projectCwd: string, name: string | undefined): void {
+	if (name !== undefined && !readEnvironments(projectCwd).some((e) => e.name === name))
+		throw new AppServerError("invalidParams", `no environment named "${name}"`);
+}
+
 const DEFAULT_IDLE_MS = 10 * 60_000;
 
 /** Test gate only (Global Constraints): awaited between a queued input's dequeue and its start's registration. */
@@ -327,6 +333,7 @@ export class ThreadManager {
 		manifest: Manifest,
 		reason: "archive" | "prune" | "user",
 		warnings: Warning[],
+		by?: Subscriber,
 	): Promise<DeleteResult | { deleted: false; reason: "inUse" }> {
 		const key = pathKey(manifest.path);
 		const running = this.deleting.get(key);
@@ -347,6 +354,7 @@ export class ThreadManager {
 						trusted: new ProjectTrustStore(this.ctx.agentDir).get(manifest.projectCwd) === true,
 						warnings,
 						signal: this.shutdown.signal,
+						progress: by && ((p) => by.notify("thread/workspace/progress", p)),
 						shellConfig: this.options.shellConfig,
 					}),
 				);
@@ -392,7 +400,7 @@ export class ThreadManager {
 	}
 
 	/** After an archive: delete the thread's worktree unless another thread still uses it (§6.1). */
-	private async archiveWorktree(threadId: string): Promise<ResultOf<"thread/archive">> {
+	private async archiveWorktree(threadId: string, by?: Subscriber): Promise<ResultOf<"thread/archive">> {
 		const file = await this.files.find(threadId);
 		const headerCwd = file ? readSessionHeaderForDiscovery(file)?.cwd : undefined;
 		const warnings: Warning[] = [];
@@ -407,7 +415,7 @@ export class ThreadManager {
 		const others = [...(this.worktreeUsers.get(pathKey(manifest.path)) ?? [])].filter((id) => id !== threadId);
 		const saved = (await this.threadsOf(manifest)).filter((t) => t.id !== threadId && !t.archived);
 		if (others.length > 0 || saved.length > 0) return { worktree: { deleted: false, reason: "inUse" } };
-		const result = await this.deleteManaged(manifest, "archive", warnings);
+		const result = await this.deleteManaged(manifest, "archive", warnings, by);
 		this.reportWarnings(warnings, threadId);
 		this.schedulePrune();
 		if (result.deleted)
@@ -510,7 +518,7 @@ export class ThreadManager {
 	): Promise<T> {
 		return this.track(() =>
 			this.withThread(threadId, mode, async (thread) => {
-				const repo = await requireRepo(thread.session.sessionManager.getCwd());
+				const repo = await requireRepo(thread.session.sessionManager.getCwd(), this.shutdown.signal);
 				const ctx = { signal: this.shutdown.signal, models: this.ctx.models, ghCommand: this.options.ghCommand };
 				return mutates ? withRepoLock(repo, () => fn(thread, repo, ctx)) : fn(thread, repo, ctx);
 			}),
@@ -537,6 +545,7 @@ export class ThreadManager {
 					"invalidParams",
 					`the thread already runs ${params.to === "local" ? "locally" : "in a worktree"}`,
 				);
+			requireEnvironment(thread.projectCwd, params.environment);
 			let manifest = placed.manifest;
 			this.preparing.add(thread.id);
 			let restored: string | undefined;
@@ -632,7 +641,7 @@ export class ThreadManager {
 	/** The text the model reads for an input with review comments; validated before the input is accepted. */
 	private async review(threadId: string, mode: "desktop" | "tui", comments: DiffComment[], text: string) {
 		const thread = await this.ensureLoaded(threadId, mode);
-		const repo = await requireRepo(thread.session.sessionManager.getCwd());
+		const repo = await requireRepo(thread.session.sessionManager.getCwd(), this.shutdown.signal);
 		return { prompt: await composeReview(thread, repo, comments, text), review: { comments, text } };
 	}
 
@@ -662,11 +671,7 @@ export class ThreadManager {
 			let thread: LoadedThread;
 			try {
 				if (workspace?.mode === "worktree") {
-					if (
-						workspace.environment !== undefined &&
-						!readEnvironments(projectCwd).some((e) => e.name === workspace.environment)
-					)
-						throw new AppServerError("invalidParams", `no environment named "${workspace.environment}"`);
+					requireEnvironment(projectCwd, workspace.environment);
 					const threadId = uuidv7();
 					this.preparing.add(threadId);
 					preparingId = threadId;
@@ -871,7 +876,7 @@ export class ThreadManager {
 		return thread.hold(() => fn(thread));
 	}
 
-	async archive(threadId: string, archived: boolean): Promise<ResultOf<"thread/archive">> {
+	async archive(threadId: string, archived: boolean, by?: Subscriber): Promise<ResultOf<"thread/archive">> {
 		this.assertOpen();
 		const live = this.threads.get(threadId);
 		if (live?.busy) throw new AppServerError("turnInProgress", "interrupt the turn first");
@@ -907,7 +912,7 @@ export class ThreadManager {
 		});
 		if (changed) this.ctx.broadcast("thread/archived", { threadId, archived });
 		// After the closing transition settled, so the deletion never waits on its own entry.
-		return archived ? this.archiveWorktree(threadId) : {};
+		return archived ? this.archiveWorktree(threadId, by) : {};
 	}
 
 	async delete(threadId: string): Promise<void> {
@@ -2070,7 +2075,7 @@ export class ThreadManager {
 			"thread/diff/revert": (params, connection) =>
 				this.track(() =>
 					this.ensureLoaded(params.threadId, connection.mode).then(async (thread) => {
-						const repo = await requireRepo(thread.session.sessionManager.getCwd());
+						const repo = await requireRepo(thread.session.sessionManager.getCwd(), this.shutdown.signal);
 						const release = await this.reserveCheckouts([repo.root], "revert");
 						try {
 							await revertHooks.afterReserve();
@@ -2105,8 +2110,8 @@ export class ThreadManager {
 			"thread/start": (params, connection) => this.start(params, connection),
 			"thread/handoff": (params, connection) => this.handoff(params, connection),
 			"thread/diff/read": (params, connection) =>
-				this.onCheckout(params.threadId, connection.mode, false, (thread) =>
-					readThreadDiff(thread, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS),
+				this.onCheckout(params.threadId, connection.mode, false, (thread, repo) =>
+					readThreadDiff(thread, repo, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS),
 				),
 			"git/status": ({ threadId }, connection) =>
 				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitStatus(repo)),
@@ -2127,7 +2132,7 @@ export class ThreadManager {
 			"git/branches": async (params, connection) =>
 				"threadId" in params
 					? this.onCheckout(params.threadId, connection.mode, false, (_thread, repo) => gitBranches(repo))
-					: gitBranches(await requireRepo(resolvePath(params.cwd))),
+					: gitBranches(await requireRepo(resolvePath(params.cwd), this.shutdown.signal)),
 			"git/branch/create": ({ threadId, name }, connection) =>
 				this.onCheckout(threadId, connection.mode, true, (_thread, repo) => gitBranchCreate(repo, name)),
 			"git/branch/switch": ({ threadId, name }, connection) =>
@@ -2151,7 +2156,7 @@ export class ThreadManager {
 			"thread/fork": ({ threadId, atItemId, workspace }, connection) =>
 				this.fork(threadId, atItemId, workspace, connection),
 			"thread/delete": ({ threadId }) => this.delete(threadId).then(() => ({})),
-			"thread/archive": ({ threadId }) => this.track(() => this.archive(threadId, true)),
+			"thread/archive": ({ threadId }, connection) => this.track(() => this.archive(threadId, true, connection)),
 			"thread/worktree/restore": ({ threadId }, connection) => this.restore(threadId, connection),
 			"worktree/list": async ({ cwd }) => {
 				const settings = this.worktrees();
@@ -2173,13 +2178,13 @@ export class ThreadManager {
 				}
 				return { worktrees };
 			},
-			"worktree/delete": ({ path }) =>
+			"worktree/delete": ({ path }, connection) =>
 				this.track(async () => {
 					const manifest = manifestFor(this.worktrees(), resolvePath(path));
 					if (!manifest || !samePath(manifest.path, canonicalizePath(resolvePath(path))))
 						throw new AppServerError("invalidParams", `not a managed worktree: ${path}`);
 					const warnings: Warning[] = [];
-					const result = await this.deleteManaged(manifest, "user", warnings);
+					const result = await this.deleteManaged(manifest, "user", warnings, connection);
 					this.reportWarnings(warnings);
 					if (result.deleted) return result.snapshot ? { snapshot: result.snapshot } : {};
 					if (result.reason === "inUse")

@@ -294,9 +294,11 @@ async function filterOverrides(cwd: string, signal?: AbortSignal): Promise<Recor
 	return env;
 }
 
-/** Never throws on a non-zero exit code. */
-export async function runGit(cwd: string, args: string[], options: GitOptions = {}): Promise<ProcessResult> {
+/** Never throws on a non-zero exit code. Given a Repo, git runs at its root under its signal. */
+export async function runGit(at: string | Repo, args: string[], options: GitOptions = {}): Promise<ProcessResult> {
 	const { internal, noFilters, ...rest } = options;
+	const cwd = typeof at === "string" ? at : at.root;
+	if (typeof at !== "string") rest.signal ??= at.signal;
 	const prefix = ["-c", "core.quotepath=false"];
 	if (internal) prefix.push("-c", `core.hooksPath=${WIN ? "NUL" : "/dev/null"}`, "-c", "core.fsmonitor=");
 	const env = noFilters ? { ...(await filterOverrides(cwd, rest.signal)), ...rest.env } : rest.env;
@@ -304,8 +306,8 @@ export async function runGit(cwd: string, args: string[], options: GitOptions = 
 }
 
 /** stdout as text with one trailing newline stripped; GitError on a non-zero exit. */
-export async function git(cwd: string, args: string[], options?: GitOptions): Promise<string> {
-	const result = await runGit(cwd, args, options);
+export async function git(at: string | Repo, args: string[], options?: GitOptions): Promise<string> {
+	const result = await runGit(at, args, options);
 	if (result.code !== 0) throw new GitError(args, result.code, result.stderr);
 	return result.stdout.toString("utf8").replace(/\n$/, "");
 }
@@ -319,19 +321,18 @@ export interface Repo {
 	commonDir: string;
 	/** cwd relative to root, "/"-separated, "" at the root. */
 	prefix: string;
+	/** Every command runGit or git runs on this Repo gets it: a request's repo carries the manager's shutdown. */
+	signal?: AbortSignal;
 }
 
 /** undefined outside a work tree. */
-export async function repoOf(cwd: string): Promise<Repo | undefined> {
+export async function repoOf(cwd: string, signal?: AbortSignal): Promise<Repo | undefined> {
 	if (!existsSync(cwd)) return undefined;
-	const result = await runGit(cwd, [
-		"rev-parse",
-		"--path-format=absolute",
-		"--show-toplevel",
-		"--git-dir",
-		"--git-common-dir",
-		"--show-prefix",
-	]);
+	const result = await runGit(
+		cwd,
+		["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir", "--show-prefix"],
+		{ signal },
+	);
 	if (result.code !== 0) return undefined;
 	const [root, gitDir, commonDir, prefix = ""] = result.stdout.toString("utf8").split("\n");
 	return {
@@ -339,11 +340,12 @@ export async function repoOf(cwd: string): Promise<Repo | undefined> {
 		gitDir: realpathSync.native(gitDir),
 		commonDir: realpathSync.native(commonDir),
 		prefix: prefix.replace(/\/$/, ""),
+		...(signal ? { signal } : {}),
 	};
 }
 
-export async function requireRepo(cwd: string): Promise<Repo> {
-	const repo = await repoOf(cwd);
+export async function requireRepo(cwd: string, signal?: AbortSignal): Promise<Repo> {
+	const repo = await repoOf(cwd, signal);
 	if (!repo) throw new AppServerError("notGitRepo", `${cwd} is not inside a git repository`);
 	return repo;
 }
@@ -379,7 +381,7 @@ export function emptyTree(repo: Repo): Promise<string> {
 	const key = lockKey(repo);
 	let tree = emptyTrees.get(key);
 	if (!tree) {
-		tree = git(repo.root, ["hash-object", "-t", "tree", "-w", "--stdin"], { input: "" });
+		tree = git(repo, ["hash-object", "-t", "tree", "-w", "--stdin"], { input: "" });
 		tree.catch(() => emptyTrees.delete(key));
 		emptyTrees.set(key, tree);
 	}
@@ -388,7 +390,7 @@ export function emptyTree(repo: Repo): Promise<string> {
 
 /** emptyTree(repo) on an unborn branch. */
 export async function headTree(repo: Repo): Promise<string> {
-	const result = await runGit(repo.root, ["rev-parse", "-q", "--verify", "HEAD^{tree}"]);
+	const result = await runGit(repo, ["rev-parse", "-q", "--verify", "HEAD^{tree}"]);
 	return result.code === 0 ? result.stdout.toString("utf8").trim() : emptyTree(repo);
 }
 
@@ -402,10 +404,10 @@ async function withTemporaryIndex<T>(
 	let keep = false;
 	try {
 		const index = join(dir, "index");
-		const real = await git(repo.root, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { signal });
+		const real = await git(repo, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { signal });
 		if (existsSync(real)) copyFileSync(real, index);
 		const run = (args: string[], input?: string) =>
-			git(repo.root, args, { internal: true, env: { GIT_INDEX_FILE: index }, input, signal });
+			git(repo, args, { internal: true, env: { GIT_INDEX_FILE: index }, input, signal });
 		const flagged = (await run(["ls-files", "-v", "-z"]))
 			.split("\0")
 			.filter((entry) => /^[a-z] /.test(entry))
@@ -465,7 +467,7 @@ export const LARGE_UNTRACKED_BYTES = 10 * 1024 * 1024;
 /** Stops at limit + 1. */
 export async function countUntracked(repo: Repo, limit: number, signal?: AbortSignal): Promise<number> {
 	let count = 0;
-	await runGit(repo.root, ["ls-files", "--others", "--exclude-standard", "-z"], {
+	await runGit(repo, ["ls-files", "--others", "--exclude-standard", "-z"], {
 		signal,
 		collectStdout: false,
 		onStdout: (chunk) => {
@@ -503,20 +505,20 @@ export async function machinePatch(
 		to,
 		...(options.paths ? ["--", ...options.paths] : []),
 	];
-	const result = await runGit(repo.root, args, { signal: options.signal, maxStdoutBytes: options.maxStdoutBytes });
+	const result = await runGit(repo, args, { signal: options.signal, maxStdoutBytes: options.maxStdoutBytes });
 	if (result.code !== 0) throw new GitError(args, result.code, result.stderr);
 	return result.stdout;
 }
 
 /** `git apply` of a machinePatch with every byte-changing or matching-relaxing option pinned off. */
 export async function machineApply(
-	cwd: string,
+	at: string | Repo,
 	patch: Buffer,
 	options: { reverse?: boolean; cached?: boolean; check?: boolean; env?: Record<string, string>; signal?: AbortSignal },
 ): Promise<ProcessResult> {
 	if (patch.length === 0) return { code: 0, stdout: Buffer.alloc(0), stderr: "" };
 	return runGit(
-		cwd,
+		at,
 		[
 			...["-c", "apply.whitespace=nowarn", "-c", "apply.ignoreWhitespace=no", "apply", "--whitespace=nowarn"],
 			...(options.reverse ? ["-R"] : []),
@@ -530,7 +532,7 @@ export async function machineApply(
 
 /** Paths whose old or new mode is a gitlink between two trees. */
 export async function submodulePaths(repo: Repo, from: string, to: string, paths?: string[]): Promise<string[]> {
-	const output = await git(repo.root, [
+	const output = await git(repo, [
 		...["-c", "diff.ignoreSubmodules=none", "diff", "--raw", "-z", "--no-renames", "--ignore-submodules=none"],
 		...["-O/dev/null", from, to],
 		...(paths ? ["--", ...paths] : []),
@@ -549,7 +551,7 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
 	const entries = new Map<string, string>();
 	if (paths.length === 0) return entries;
 	const wanted = new Set(paths);
-	for (const record of (await git(repo.root, ["ls-tree", "-z", tree, "--", ...paths])).split("\0")) {
+	for (const record of (await git(repo, ["ls-tree", "-z", tree, "--", ...paths])).split("\0")) {
 		const tab = record.indexOf("\t");
 		if (tab === -1) continue;
 		const [mode, type, oid] = record.slice(0, tab).split(" ");
@@ -582,7 +584,7 @@ export function operationIn(repo: Repo): "merge" | "rebase" | "cherryPick" | "re
  */
 export async function pathsInTheWay(repo: Repo, written: string[]): Promise<string[]> {
 	if (written.length === 0) return [];
-	const tracked = new Set((await git(repo.root, ["ls-files", "-z"])).split("\0").filter(Boolean));
+	const tracked = new Set((await git(repo, ["ls-files", "-z"])).split("\0").filter(Boolean));
 	const blocked = new Set<string>();
 	// ENOTDIR (a file where a directory would be) is "not there" for the path itself; its parent reports it.
 	const lstat = (path: string) => {
