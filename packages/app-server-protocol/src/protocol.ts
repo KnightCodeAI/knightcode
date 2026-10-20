@@ -831,6 +831,12 @@ export const ServerNotifications = {
 		output: Type.Union([Type.Array(ToolOutput), PayloadRef]),
 	}),
 	"serverRequest/cancelled": Obj({ id: RequestId }),
+	/** A notice for the user, such as "Downloaded model" (`ctx.ui.notify`, §8.1). */
+	"ui/notify": Obj({
+		threadId: Str,
+		message: Str,
+		level: Type.Union([Type.Literal("info"), Type.Literal("warning"), Type.Literal("error")]),
+	}),
 	"account/login/updated": LoginState,
 	"account/updated": Obj({ provider: Str, authenticated: Bool }),
 	warning: Obj({ ...WarningFields, threadId: Type.Optional(Str) }),
@@ -867,6 +873,56 @@ export const ServerRequests = {
 			Obj({ ...ApprovalCommon, inputRef: PayloadRef }),
 		]),
 		result: ApprovalResult,
+	},
+	/**
+	 * ask_user's questions, all at once so the user can move back and forth between them before answering. Answer
+	 * each question by its `id` with a chosen option's `label` (and an optional `note`) or the user's own text as
+	 * `other`; leave a skipped question out; answer `{}` to dismiss, which stops the turn.
+	 */
+	"item/toolCall/requestUserInput": {
+		params: Obj({
+			threadId: Str,
+			turnId: Str,
+			itemId: Str,
+			questions: Type.Array(
+				Obj({
+					id: Str,
+					question: Str,
+					options: Type.Array(Obj({ label: Str, description: Str })),
+				}),
+			),
+		}),
+		result: Obj({
+			answers: Type.Optional(
+				Type.Record(Str, Obj({ label: Type.Optional(Str), note: Type.Optional(Str), other: Type.Optional(Str) })),
+			),
+		}),
+	},
+	/**
+	 * A question for the user mid-turn, such as the classifier gate's or plan review's (`ctx.ui.select`, `confirm`,
+	 * `input`, `editor`; §8.1). Answer `value` for a select (one of `options`), an input or an editor, `confirmed`
+	 * for a confirm, and `{}` to cancel.
+	 */
+	"ui/dialog": {
+		params: Obj({
+			threadId: Str,
+			kind: Type.Union([
+				Type.Literal("select"),
+				Type.Literal("confirm"),
+				Type.Literal("input"),
+				Type.Literal("editor"),
+			]),
+			title: Str,
+			/** confirm: the question under the title. */
+			message: Type.Optional(Str),
+			/** select: the choices, in order. */
+			options: Type.Optional(Type.Array(Str)),
+			/** input: the empty field's hint. */
+			placeholder: Type.Optional(Str),
+			/** editor: the text it opens with. */
+			prefill: Type.Optional(Str),
+		}),
+		result: Obj({ value: Type.Optional(Str), confirmed: Type.Optional(Bool) }),
 	},
 } as const;
 

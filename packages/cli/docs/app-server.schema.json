@@ -10694,6 +10694,39 @@
 			},
 			"additionalProperties": false
 		},
+		"ui/notify": {
+			"type": "object",
+			"required": [
+				"threadId",
+				"message",
+				"level"
+			],
+			"properties": {
+				"threadId": {
+					"type": "string"
+				},
+				"message": {
+					"type": "string"
+				},
+				"level": {
+					"anyOf": [
+						{
+							"type": "string",
+							"const": "info"
+						},
+						{
+							"type": "string",
+							"const": "warning"
+						},
+						{
+							"type": "string",
+							"const": "error"
+						}
+					]
+				}
+			},
+			"additionalProperties": false
+		},
 		"account/login/updated": {
 			"anyOf": [
 				{
@@ -11112,6 +11145,160 @@
 						"additionalProperties": false
 					}
 				]
+			}
+		},
+		"item/toolCall/requestUserInput": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"turnId",
+					"itemId",
+					"questions"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"turnId": {
+						"type": "string"
+					},
+					"itemId": {
+						"type": "string"
+					},
+					"questions": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"id",
+								"question",
+								"options"
+							],
+							"properties": {
+								"id": {
+									"type": "string"
+								},
+								"question": {
+									"type": "string"
+								},
+								"options": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"label",
+											"description"
+										],
+										"properties": {
+											"label": {
+												"type": "string"
+											},
+											"description": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									}
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"answers": {
+						"type": "object",
+						"patternProperties": {
+							"^.*$": {
+								"type": "object",
+								"properties": {
+									"label": {
+										"type": "string"
+									},
+									"note": {
+										"type": "string"
+									},
+									"other": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							}
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"ui/dialog": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"kind",
+					"title"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"kind": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "select"
+							},
+							{
+								"type": "string",
+								"const": "confirm"
+							},
+							{
+								"type": "string",
+								"const": "input"
+							},
+							{
+								"type": "string",
+								"const": "editor"
+							}
+						]
+					},
+					"title": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					},
+					"options": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"placeholder": {
+						"type": "string"
+					},
+					"prefill": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"value": {
+						"type": "string"
+					},
+					"confirmed": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
 			}
 		}
 	}

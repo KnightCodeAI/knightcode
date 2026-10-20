@@ -307,6 +307,7 @@ const notificationParams: Record<string, unknown> = {
 		output: [{ type: "text", text: "x" }],
 	},
 	"serverRequest/cancelled": { id: 3 },
+	"ui/notify": { threadId: "t1", message: "Downloaded model", level: "info" },
 	"account/login/updated": login,
 	"account/updated": { provider: "anthropic", authenticated: true },
 	warning: { message: "bad settings", source: "settings", path: "/p/settings.json", line: 3, column: 5 },
@@ -322,9 +323,24 @@ const serverRequestParams: Record<string, unknown> = {
 		prefix: "echo",
 		decisions: ["accept", "acceptPrefixForSession", "decline"],
 	},
+	"ui/dialog": { threadId: "t1", kind: "select", title: "Which name?", options: ["helpers", "utils"] },
+	"item/toolCall/requestUserInput": {
+		threadId: "t1",
+		turnId: "m1",
+		itemId: "call_2",
+		questions: [
+			{
+				id: "name",
+				question: "Which name?",
+				options: [{ label: "helpers (Recommended)", description: "Shared helpers." }],
+			},
+		],
+	},
 };
 const serverRequestResults: Record<string, unknown> = {
 	"item/toolCall/requestApproval": { decision: "accept" },
+	"ui/dialog": { value: "helpers" },
+	"item/toolCall/requestUserInput": { answers: { name: { label: "helpers (Recommended)", note: "keep it short" } } },
 };
 
 function checkSchema(name: string, schema: TSchema, example: unknown): void {

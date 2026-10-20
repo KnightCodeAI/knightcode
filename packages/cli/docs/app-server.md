@@ -282,6 +282,32 @@ The most recent initiating subscriber is asked first. Disconnect or unsubscribe
 cancels that attempt and migrates it to another subscriber; no subscribers means
 cancel. `serverRequest/cancelled` withdraws an outstanding request.
 
+## Dialogs
+
+What KnightCode asks the user mid-turn reaches a desktop connection as a server
+request, asked the way approvals are; the thread reports `waitingOn: ["dialog"]`
+meanwhile.
+
+`item/toolCall/requestUserInput` carries `ask_user`'s questions, all at once,
+with the `itemId` of the call asking, so a client can move back and forth
+between them before answering. Each question has an `id`, its text and its
+options (`label`, `description`); a label ending in `(Recommended)` is the
+recommended one. Reply `{"answers": {"<id>": {"label": "..."}}}` with the
+chosen option's exact label and an optional `note`, or `{"other": "..."}` for
+the user's own answer; leave out a skipped question. `{}` dismisses the
+questions and stops the turn.
+
+`ui/dialog` carries the rest, such as the classifier gate's confirmation of a
+risky call and plan mode's review. `kind` says which: a select carries
+`options`, a confirm its `message`, an input its `placeholder`, an editor its
+`prefill`. Reply with `{"value": "..."}` for a select, input or editor,
+`{"confirmed": true}` for a confirm, or `{}` to cancel.
+
+Notices such as "Downloaded model" arrive as the notification `ui/notify` with
+a `level` of `info`, `warning` or `error`. Widgets, status, header, footer
+and custom components draw only in the terminal and do nothing here. Threads a
+terminal-mode connection loads have no dialogs yet.
+
 ## Workspaces, diffs and git
 
 A thread runs in a workspace: the user's checkout (`{mode: "local"}`), or a git

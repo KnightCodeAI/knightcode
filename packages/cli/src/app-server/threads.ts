@@ -84,6 +84,7 @@ import { type IndexedSession, listWithIndex, type ReadKind } from "./listing-ind
 import { PayloadStore } from "./payloads.ts";
 import { readTurns, entryForItem, textOf } from "./transcript.ts";
 import { type Commit, commitOnSend, type Handlers, type Subscriber } from "./server.ts";
+import { desktopDialogs } from "./dialogs.ts";
 import {
 	ARCHIVE_DIR,
 	parentIdOf,
@@ -1899,6 +1900,8 @@ export class ThreadManager {
 		const { session } = thread;
 		await session.bindExtensions({
 			mode,
+			// The terminal's own dialogs reach its threads through local handles (§7.3), not yet built.
+			...(mode === "desktop" ? { uiContext: desktopDialogs(thread) } : {}),
 			onError: (error) => {
 				console.error(`Extension ${error.extensionPath}: ${error.error}`);
 				const warning: Warning = { source: "extension", path: error.extensionPath, message: error.error };

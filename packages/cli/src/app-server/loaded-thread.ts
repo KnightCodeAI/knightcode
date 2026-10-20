@@ -42,7 +42,8 @@ export class LoadedThread {
 	readonly payloads: PayloadStore;
 	readonly forkedFromId: string | undefined;
 	private readonly broadcast: AppServerContext["broadcast"];
-	readonly openRequests = new Set<object>();
+	/** Server requests waiting on a subscriber, by what they wait for (`thread.status.waitingOn`). */
+	readonly openRequests = new Map<object, "approval" | "dialog">();
 	mapper!: ItemMapper;
 	/** Turn change detection; undefined outside a git repository (§6.2). */
 	changes: TurnChanges | undefined;
@@ -169,7 +170,7 @@ export class LoadedThread {
 	}
 
 	waitingOn(): ("approval" | "dialog")[] {
-		return this.openRequests.size > 0 ? ["approval"] : [];
+		return [...new Set(this.openRequests.values())];
 	}
 
 	status(): ThreadStatus {
