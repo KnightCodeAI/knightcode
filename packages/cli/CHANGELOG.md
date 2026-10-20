@@ -1,5 +1,27 @@
 # @knightcodeai/cli
 
+## 0.18.3
+
+### Added
+
+- Added inline images in Rex. Rex already had hyperlinks and true color, and it now sends images with the Kitty graphics protocol. Unicode placeholders stay unsupported.
+
+### Changed
+
+- Changed the extensions guide so a prompt's run and its turns are two diagrams, with the model-request and tool-execution hooks listed beside them.
+
+### Removed
+
+- Removed GPT-5.5 and GPT-5.3 Codex Spark from the Codex model list. A ChatGPT account cannot use them, so the model picker was offering models that always fail.
+
+### Fixed
+
+- Fixed bold and italic markdown next to CJK punctuation in the terminal and in exported HTML. The same punctuation next to Latin text still follows CommonMark flanking rules.
+
+- Fixed managed self-update rejecting a managed-install.json file that Windows PowerShell 5.1 saved with a UTF-8 BOM.
+
+- Fixed Responses requests that resent the tool list after a tool change and dropped the prompt cache. Models that accept additional tools now declare every tool in place, and a removal is announced in text so a later update can restate which tools are still unavailable.
+
 ## 0.18.2
 
 ### Added
