@@ -338,12 +338,12 @@ describe("detectCapabilities", () => {
 		});
 	});
 
-	// Rex reports TERM_PROGRAM=rex and supports OSC 8, but not full Kitty graphics.
-	it("enables hyperlinks without images for Rex", () => {
+	// Rex reports TERM_PROGRAM=rex. It supports OSC 8 and enough of the Kitty graphics protocol for inline images.
+	it("enables hyperlinks and Kitty images for Rex", () => {
 		withEnv({ TERM_PROGRAM: "rex", TERM: "xterm-256color", KITTY_WINDOW_ID: "1" }, () => {
 			const caps = detectCapabilities();
 			assert.strictEqual(caps.hyperlinks, true);
-			assert.strictEqual(caps.images, null);
+			assert.strictEqual(caps.images, "kitty");
 			assert.strictEqual(caps.trueColor, true);
 		});
 		withEnv({ TERM_PROGRAM: "rex", KNIGHTCODE_HYPERLINKS: "0" }, () => {
