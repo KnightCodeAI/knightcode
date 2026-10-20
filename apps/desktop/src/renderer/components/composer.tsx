@@ -1,404 +1,53 @@
 /**
- * The composer (desktop-shell.md section 9.4), shaped like Codex's: one rounded field with attach and
- * the approval mode at the bottom left, the model and Send at the bottom right. Send queues while a
- * turn runs (or steers, by preference); `@` finds files, `/` lists commands; pasted or picked images
- * go to the server as paths.
+ * The composer (desktop-shell.md section 9.4), shaped like Codex's (measured 2026-10-19): a 22px-cornered field on
+ * the composer fill with a faint inner ring; the text at 14px; + and the approval mode at the bottom left, the model
+ * and Send at the bottom right, all 28px. For a new thread a utility bar sits on its top edge with the project chip
+ * and the environment gear. Send queues while a turn runs (or steers, by preference); a queued message can be sent
+ * as a steer, deleted, or taken back into the field to edit (Codex's queue rows). `@` finds files, `/` lists commands,
+ * + offers attachments, all in one panel above the field; pasted, picked or dropped images go to the server as paths,
+ * and other dropped files become `@` mentions.
  */
 
 import type { ApprovalMode, ImageInput, ThinkingLevel, WorkspaceRequest } from "@knightcode/app-server-protocol";
 import {
 	ArrowUp,
 	Check,
-	ChevronDown,
-	ChevronLeft,
-	ChevronRight,
-	CircleAlert,
 	FileText,
 	Folder,
-	FolderOpen,
-	FolderPlus,
-	Hand,
 	ImagePlus,
 	Lightbulb,
+	MoreHorizontal,
+	Pencil,
 	Plus,
-	Search,
-	ShieldCheck,
 	Sparkles,
 	Square,
 	SquareSlash,
+	Trash2,
 	X,
-} from "lucide-react";
+} from "./icons.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
-import { basename, tokens } from "../format.ts";
+import { basename, mentionPath, tokens } from "../format.ts";
 import { matches, useBinding } from "../keys.ts";
 import {
-	addProject,
 	interrupt,
 	listCommands,
-	type ModelInfo,
 	removeQueued,
 	searchFiles,
 	selectPreferences,
-	selectProjects,
 	send,
+	startingThinking,
 	startThread,
 	steer,
 	toast,
 	updateSettings,
 	useStore,
 } from "../store.ts";
+import { Button, IconButton } from "./button.tsx";
+import { Tooltip } from "./tooltip.tsx";
+import { ApprovalPicker, ModelPicker, ProjectChip } from "./composer-pickers.tsx";
 import { CommentsChip, WorkspacePopover } from "./git.tsx";
-import { MenuCaption, MenuItem, Popover } from "./popover.tsx";
-
-const MODES: { mode: ApprovalMode; name: string; detail: string; icon: typeof Hand }[] = [
-	{ mode: "ask", name: "Ask for approval", detail: "Ask before running commands or editing files", icon: Hand },
-	{ mode: "autoEdit", name: "Auto-edit", detail: "Edit files freely, ask before running commands", icon: ShieldCheck },
-	{ mode: "fullAccess", name: "Full access", detail: "Run commands and edit files without asking", icon: CircleAlert },
-];
-
-const LEVEL_NAMES: Record<string, string> = {
-	off: "Off",
-	minimal: "Minimal",
-	low: "Low",
-	medium: "Medium",
-	high: "High",
-	xhigh: "Extra high",
-	max: "Max",
-};
-
-/** Full access asks once per thread (section 9.4). */
-const fullAccessConfirmed = new Set<string>();
-
-function ApprovalPicker({
-	mode,
-	threadKey,
-	onChange,
-}: {
-	mode: ApprovalMode;
-	threadKey: string;
-	onChange: (mode: ApprovalMode) => void;
-}) {
-	const { allowFullAccess } = useStore(selectPreferences);
-	const [confirming, setConfirming] = useState(false);
-	const current = MODES.find((m) => m.mode === mode) ?? MODES[0]!;
-	const Icon = current.icon;
-	return (
-		<Popover
-			trigger={(open) => (
-				<button
-					type="button"
-					className={`flex h-7 items-center gap-1.5 rounded-full px-2 text-[13px] hover:bg-row ${open ? "bg-row" : ""} ${mode === "fullAccess" ? "text-caution" : "text-muted hover:text-ink"}`}
-				>
-					<Icon size={16} /> <span className="@max-[520px]:hidden">{current.name}</span>
-				</button>
-			)}
-		>
-			{(close) =>
-				confirming ? (
-					<div className="w-[300px] p-2">
-						<div className="text-[13px] font-medium text-ink">Allow full access?</div>
-						<div className="mt-1 text-[12px] leading-4 text-desc">
-							KnightCode will run commands and edit files in this thread without asking.
-						</div>
-						<div className="mt-3 flex justify-end gap-1.5">
-							<button
-								type="button"
-								onClick={() => setConfirming(false)}
-								className="h-7 rounded-full border border-hairline px-3 text-[13px] text-ink hover:bg-row"
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								onClick={() => {
-									fullAccessConfirmed.add(threadKey);
-									setConfirming(false);
-									close();
-									onChange("fullAccess");
-								}}
-								className="h-7 rounded-full bg-caution px-3 text-[13px] font-medium text-on-accent hover:opacity-90"
-							>
-								Allow full access
-							</button>
-						</div>
-					</div>
-				) : (
-					<div className="w-[390px]">
-						<MenuCaption>How should KnightCode act?</MenuCaption>
-						{MODES.filter((m) => m.mode !== "fullAccess" || allowFullAccess || mode === "fullAccess").map(
-							({ mode: m, name, detail, icon: ModeIcon }) => (
-								<MenuItem
-									key={m}
-									icon={<ModeIcon size={16} />}
-									description={detail}
-									checked={m === mode}
-									danger={m === "fullAccess"}
-									onClick={() => {
-										if (m === "fullAccess" && mode !== "fullAccess" && !fullAccessConfirmed.has(threadKey)) {
-											setConfirming(true);
-											return;
-										}
-										close();
-										onChange(m);
-									}}
-								>
-									{name}
-								</MenuItem>
-							),
-						)}
-					</div>
-				)
-			}
-		</Popover>
-	);
-}
-
-function ModelPicker({
-	model,
-	thinking,
-	onModel,
-	onThinking,
-}: {
-	model: ModelInfo | undefined;
-	thinking: ThinkingLevel | undefined;
-	onModel: (model: ModelInfo) => void;
-	onThinking: (level: ThinkingLevel) => void;
-}) {
-	const levels = model?.thinkingLevels ?? [];
-	const effort = model && thinking && levels.length > 1 ? (LEVEL_NAMES[thinking] ?? thinking) : undefined;
-	return (
-		<Popover
-			align="right"
-			trigger={(open) => (
-				<button
-					type="button"
-					className={`flex h-7 items-center gap-1 rounded-full px-2.5 text-[13px] whitespace-nowrap hover:bg-row ${open ? "bg-row" : ""}`}
-				>
-					<span className="font-medium text-ink">{model ? model.name : "Choose a model"}</span>
-					{effort ? <span className="font-medium text-desc @max-[520px]:hidden">{effort}</span> : null}
-					<ChevronDown size={14} className="text-desc" />
-				</button>
-			)}
-		>
-			{(close) => (
-				<ModelMenu
-					model={model}
-					thinking={thinking}
-					onModel={(m) => {
-						close();
-						onModel(m);
-					}}
-					onThinking={onThinking}
-				/>
-			)}
-		</Popover>
-	);
-}
-
-/**
- * Codex's model picker: the effort slider first, the model list one step away behind the header. Lives inside
- * the popover, so it starts on the slider each time the menu opens.
- */
-function ModelMenu({
-	model,
-	thinking,
-	onModel,
-	onThinking,
-}: {
-	model: ModelInfo | undefined;
-	thinking: ThinkingLevel | undefined;
-	onModel: (model: ModelInfo) => void;
-	onThinking: (level: ThinkingLevel) => void;
-}) {
-	const levels = model?.thinkingLevels ?? [];
-	const [view, setView] = useState<"effort" | "list">(model && levels.length > 1 ? "effort" : "list");
-	if (view === "effort" && model) {
-		const level = thinking && levels.includes(thinking) ? thinking : levels[0]!;
-		return (
-			<div className="w-[254px]">
-				<button type="button" onClick={() => setView("list")} className="kc-row justify-center text-[14px] font-medium">
-					<span className="truncate text-ink">{model.name}</span>
-					<span className="-ml-1 text-desc">{LEVEL_NAMES[level] ?? level}</span>
-					<ChevronRight size={12} className="-ml-1 text-desc" />
-				</button>
-				<EffortSlider levels={levels} value={level} onChange={onThinking} />
-			</div>
-		);
-	}
-	return (
-		<ModelList
-			model={model}
-			onModel={onModel}
-			onBack={model && levels.length > 1 ? () => setView("effort") : undefined}
-		/>
-	);
-}
-
-/** Reasoning effort as Codex draws it: a pill track, a dot per level, a white knob over a native range input. */
-function EffortSlider({
-	levels,
-	value,
-	onChange,
-}: {
-	levels: readonly ThinkingLevel[];
-	value: ThinkingLevel;
-	onChange: (level: ThinkingLevel) => void;
-}) {
-	const index = Math.max(0, levels.indexOf(value));
-	const last = levels.length - 1;
-	// Positions run between the knob's centre at either end, 14px in from each side.
-	const at = (i: number) => `calc(14px + (100% - 28px) * ${i / last})`;
-	return (
-		<div className="relative mx-2 mt-1 mb-2 h-6">
-			<div className="absolute inset-0 rounded-full bg-track" />
-			<div
-				className="absolute inset-y-0 left-0 rounded-full bg-accent"
-				style={{ width: `calc(${at(index)} + 14px)` }}
-			/>
-			{levels.map((level, i) => (
-				<span
-					key={level}
-					className={`absolute top-[10px] size-1 -translate-x-1/2 rounded-full ${i <= index ? "bg-white/30" : "bg-desc"}`}
-					style={{ left: at(i) }}
-				/>
-			))}
-			<span
-				className="pointer-events-none absolute top-[-2px] size-7 -translate-x-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/0.3)] transition-[left] duration-150"
-				style={{ left: at(index) }}
-			/>
-			<input
-				type="range"
-				min={0}
-				max={last}
-				step={1}
-				value={index}
-				aria-label="Reasoning effort"
-				aria-valuetext={LEVEL_NAMES[value] ?? value}
-				onChange={(e) => onChange(levels[Number(e.target.value)]!)}
-				className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-			/>
-		</div>
-	);
-}
-
-function ModelList({
-	model,
-	onModel,
-	onBack,
-}: {
-	model: ModelInfo | undefined;
-	onModel: (model: ModelInfo) => void;
-	onBack: (() => void) | undefined;
-}) {
-	const models = useStore((s) => s.models);
-	const [query, setQuery] = useState("");
-	const list = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		list.current?.querySelector("[data-checked]")?.scrollIntoView({ block: "center" });
-	}, []);
-	const groups = useMemo(() => {
-		const q = query.toLowerCase();
-		const map = new Map<string, ModelInfo[]>();
-		for (const m of models) {
-			if (q && !`${m.name} ${m.id} ${m.providerName}`.toLowerCase().includes(q)) continue;
-			map.set(m.providerName, [...(map.get(m.providerName) ?? []), m]);
-		}
-		return [...map];
-	}, [models, query]);
-	return (
-		<div className="flex max-h-[min(420px,70vh)] w-[280px] flex-col">
-			<div className="flex items-center gap-1 px-2 pt-1 pb-1">
-				{onBack ? (
-					<button
-						type="button"
-						title="Back"
-						onClick={onBack}
-						className="-ml-1 rounded-full p-0.5 text-desc hover:text-ink"
-					>
-						<ChevronLeft size={14} />
-					</button>
-				) : null}
-				<span className="text-[13px] text-desc">Select model</span>
-			</div>
-			<label className="mx-1 mb-1 flex items-center gap-2 rounded-[15px] bg-row px-2 py-[5px] text-[13px]">
-				<Search size={14} className="shrink-0 text-desc" />
-				<input
-					autoFocus
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-					placeholder="Search models"
-					className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-desc focus-visible:outline-none"
-				/>
-			</label>
-			<div ref={list} className="min-h-0 overflow-y-auto">
-				{groups.length === 0 ? (
-					<div className="px-2 py-1.5 text-[13px] text-desc">
-						{models.length ? "No matching models" : "No models. Sign in to a provider in Settings."}
-					</div>
-				) : null}
-				{groups.map(([provider, list]) => (
-					<div key={provider}>
-						<div className="px-2 pt-2 pb-1 text-[12px] text-desc">{provider}</div>
-						{list.map((m) => (
-							<MenuItem
-								key={`${m.provider}/${m.id}`}
-								checked={model?.provider === m.provider && model.id === m.id}
-								onClick={() => onModel(m)}
-							>
-								<span title={`${tokens(m.contextWindow)} context`}>{m.name}</span>
-							</MenuItem>
-						))}
-					</div>
-				))}
-			</div>
-		</div>
-	);
-}
-
-function ProjectPicker({ cwd, onChange }: { cwd: string | undefined; onChange: (cwd: string) => void }) {
-	const projects = useStore(selectProjects);
-	return (
-		<Popover
-			trigger={() => (
-				<button
-					type="button"
-					className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-muted hover:bg-hover hover:text-ink"
-				>
-					<FolderOpen size={15} /> {cwd ? basename(cwd) : "Choose a project"} <ChevronDown size={13} />
-				</button>
-			)}
-		>
-			{(close) => (
-				<div className="w-72">
-					{projects.map((p) => (
-						<MenuItem
-							key={p.path}
-							checked={p.path === cwd}
-							onClick={() => {
-								close();
-								onChange(p.path);
-							}}
-						>
-							<div>{p.name ?? basename(p.path)}</div>
-							<div className="truncate text-[12px] text-faint">{p.path}</div>
-						</MenuItem>
-					))}
-					<MenuItem
-						onClick={() => {
-							close();
-							void addProject().then((path) => path && onChange(path));
-						}}
-					>
-						<span className="flex items-center gap-2 text-muted">
-							<FolderPlus size={14} /> Add a folder…
-						</span>
-					</MenuItem>
-				</div>
-			)}
-		</Popover>
-	);
-}
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu.tsx";
 
 /** A row in the panel above the composer: an insertion for `@` and `/`, or an action from the + menu. */
 interface Suggestion {
@@ -427,24 +76,79 @@ function ImageChip({ path, onRemove }: { path: string; onRemove: () => void }) {
 		void client.host("host/image/thumbnail", { path }).then(({ dataUrl }) => setSrc(dataUrl));
 	}, [path]);
 	return (
-		<span
-			title={basename(path)}
-			className="group relative size-14 overflow-hidden rounded-lg border border-line bg-hover"
-		>
-			{src ? (
-				<img src={src} alt={basename(path)} className="size-full object-cover" />
-			) : (
-				<ImagePlus size={16} className="m-auto mt-[19px] text-muted" />
+		<Tooltip content={basename(path)}>
+			<span className="group relative size-14 overflow-hidden rounded-lg border border-line bg-ghost-hover">
+				{src ? (
+					<img src={src} alt={basename(path)} className="size-full object-cover" />
+				) : (
+					<ImagePlus size={16} className="m-auto mt-[19px] text-secondary" />
+				)}
+				{/* Its label stays unspoken on hover: the thumbnail's own tooltip already shows. */}
+				<button
+					type="button"
+					aria-label="Remove image"
+					onClick={onRemove}
+					className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+				>
+					<X size={11} />
+				</button>
+			</span>
+		</Tooltip>
+	);
+}
+
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
+
+/**
+ * Codex's queued message row: its text on one line, then Steer (send it into the running turn now), Delete, and a …
+ * menu with Edit message (take it back into the field). A message already steering only shows its text.
+ */
+function QueuedRow({
+	text,
+	steering,
+	onSteer,
+	onDelete,
+	onEdit,
+}: {
+	text: string;
+	steering: boolean;
+	onSteer: () => void;
+	onDelete: () => void;
+	onEdit: () => void;
+}) {
+	return (
+		<div className="flex min-h-7 items-center gap-2 text-base text-secondary">
+			<Tooltip content={text} overflow>
+				<span className="min-w-0 flex-1 truncate leading-5">
+					{steering ? <span className="me-2 text-sm text-tertiary">Steering</span> : null}
+					{text}
+				</span>
+			</Tooltip>
+			{steering ? null : (
+				<div className="flex shrink-0 items-center gap-0.5">
+					<Tooltip content="Submit without interrupting the model">
+						<Button color="secondary" size="xs" pill onClick={onSteer} className="px-2">
+							Steer
+						</Button>
+					</Tooltip>
+					<IconButton label="Delete queued message" size="xs" round onClick={onDelete}>
+						<Trash2 size={14} />
+					</IconButton>
+					<Menu>
+						<MenuTrigger>
+							<IconButton label="Queued message actions" size="xs" round>
+								<MoreHorizontal size={14} />
+							</IconButton>
+						</MenuTrigger>
+						<MenuContent align="end" side="top" minWidth={0}>
+							<MenuItem icon={<Pencil />} onSelect={onEdit}>
+								Edit message
+							</MenuItem>
+						</MenuContent>
+					</Menu>
+				</div>
 			)}
-			<button
-				type="button"
-				title="Remove image"
-				onClick={onRemove}
-				className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-			>
-				<X size={11} />
-			</button>
-		</span>
+		</div>
 	);
 }
 
@@ -458,15 +162,21 @@ function tokenAt(text: string, caret: number): { kind: "@" | "/"; start: number;
 	return undefined;
 }
 
-export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: string }) {
+export function Composer({
+	threadId,
+	project,
+}: {
+	threadId?: string;
+	/** A new thread's project, owned by the home screen (its title names it too). */
+	project?: { cwd: string | undefined; onChange: (cwd: string) => void };
+}) {
 	const view = useStore((s) => (threadId ? s.held[threadId] : undefined));
 	const models = useStore((s) => s.models);
 	const defaultModel = useStore((s) => s.defaultModel);
-	const projects = useStore(selectProjects);
 	const prefs = useStore(selectPreferences);
 	const [text, setText] = useState("");
 	const [images, setImages] = useState<string[]>([]);
-	const [cwd, setCwd] = useState<string | undefined>(newCwd ?? projects[0]?.path);
+	const cwd = project?.cwd;
 	const [draftModel, setDraftModel] = useState<{ provider: string; id: string } | undefined>();
 	const [draftThinking, setDraftThinking] = useState<ThinkingLevel | undefined>();
 	const [draftMode, setDraftMode] = useState<ApprovalMode>("ask");
@@ -475,6 +185,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 		{ items: Suggestion[]; truncated: boolean; start: number } | undefined
 	>();
 	const [selected, setSelected] = useState(0);
+	const [dragging, setDragging] = useState(false);
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const searchId = useMemo(() => `composer-${crypto.randomUUID()}`, []);
 	const commands = useRef<{ name: string; description: string }[] | undefined>(undefined);
@@ -491,13 +202,6 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 		window.addEventListener("mousedown", onDown);
 		return () => window.removeEventListener("mousedown", onDown);
 	}, [suggestions]);
-
-	useEffect(() => {
-		if (newCwd) setCwd(newCwd);
-	}, [newCwd]);
-	useEffect(() => {
-		if (!cwd && projects[0]) setCwd(projects[0].path);
-	}, [cwd, projects]);
 	useEffect(() => {
 		ref.current?.focus();
 		commands.current = undefined;
@@ -524,7 +228,8 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 			: undefined);
 	const model = models.find((m) => m.provider === selector?.provider && m.id === selector.id);
 	// A new thread takes the user's default level from settings unless they pick one here.
-	const thinking = thread?.thinkingLevel ?? draftThinking;
+	const startLevel = useStore((s) => (model ? startingThinking(s, model) : undefined));
+	const thinking = thread?.thinkingLevel ?? draftThinking ?? startLevel;
 	const mode = thread?.approvalMode ?? draftMode;
 	const hasContent = text.trim().length > 0 || images.length > 0;
 	const canSend = hasContent && (threadId ? true : Boolean(cwd && model));
@@ -623,7 +328,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 			).catch((error: unknown) => {
 				setText(value);
 				setImages(images);
-				toast(error instanceof Error ? error.message : String(error));
+				toast(error instanceof Error ? error.message : String(error), "error");
 			});
 			return;
 		}
@@ -638,7 +343,7 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 		() => {
 			if (threadId) void interrupt(threadId);
 		},
-		running && text.length === 0 && !view?.approvals.length && !suggestions,
+		running && text.length === 0 && !view?.requests.length && !suggestions,
 	);
 
 	const attachFiles = async () => {
@@ -688,68 +393,128 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 				...view.queue.followUp.map((e) => ({ ...e, steer: false })),
 			]
 		: [];
+
+	/** Put text at the start of the field, ahead of anything already typed, and focus its end. */
+	const takeBack = (value: string) => {
+		const next = text.trim() ? `${value}\n\n${text}` : value;
+		setText(next);
+		requestAnimationFrame(() => {
+			ref.current?.focus();
+			ref.current?.setSelectionRange(next.length, next.length);
+		});
+	};
+
+	/** Dropped files: images attach, anything else becomes an `@` mention at the caret. */
+	const drop = (files: File[]) => {
+		const paths = files.map((file) => window.knightcode.pathForFile(file)).filter(Boolean);
+		const pictures = paths.filter((path) => IMAGE_FILE.test(path));
+		if (pictures.length) setImages((list) => [...list, ...pictures.filter((p) => !list.includes(p))]);
+		const mentions = paths.filter((path) => !IMAGE_FILE.test(path)).map((path) => `@${mentionPath(path, workdir)} `);
+		if (!mentions.length) return;
+		const caret = ref.current?.selectionStart ?? text.length;
+		const before = text.slice(0, caret);
+		const insert = (before && !/\s$/.test(before) ? " " : "") + mentions.join("");
+		setText(before + insert + text.slice(caret));
+		requestAnimationFrame(() => {
+			ref.current?.focus();
+			ref.current?.setSelectionRange(caret + insert.length, caret + insert.length);
+		});
+	};
+	const carriesFiles = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
 	const modKey = window.knightcode.platform === "darwin" ? "⌘" : "Ctrl";
 
 	return (
-		<div className="@container mx-auto w-full max-w-3xl px-4 pb-4">
-			{!threadId ? (
-				<div className="mb-1.5 flex items-center gap-1">
-					<ProjectPicker cwd={cwd} onChange={setCwd} />
-					<WorkspacePopover cwd={cwd} value={workspace} onChange={setWorkspace} />
-				</div>
-			) : null}
+		<div data-composer className="@container mx-auto w-full max-w-3xl px-4 pt-1.5 pb-4">
 			<div ref={boxRef} className="relative">
-				{suggestions ? (
-					<div className="absolute inset-x-0 bottom-full z-20 mb-1 flex max-h-80 flex-col overflow-hidden rounded-[20px] bg-panel p-1 shadow-[0_0_0_1px_var(--kc-hairline),var(--kc-menu-shadow)]">
-						<div ref={panelRef} className="min-h-0 overflow-y-auto">
-							{suggestions.items.map((s, i) => {
-								const Icon = SUGGESTION_ICONS[s.icon];
-								return (
-									<div key={s.key}>
-										{s.section && s.section !== suggestions.items[i - 1]?.section ? (
-											<div className="px-2 pt-1 pb-1 text-[13px] text-desc">{s.section}</div>
-										) : null}
-										<button
-											type="button"
-											data-active={i === selected}
-											onMouseDown={(e) => {
-												e.preventDefault();
-												accept(s);
-											}}
-											onMouseEnter={() => setSelected(i)}
-											className="kc-row text-ink"
-										>
-											<Icon size={16} className="shrink-0" />
-											<span className="shrink-0">{s.label}</span>
-											{s.detail ? <span className="min-w-0 truncate text-desc">{s.detail}</span> : null}
-										</button>
-									</div>
-								);
-							})}
-							{suggestions.truncated ? (
-								<div className="px-2 py-1 text-[12px] text-desc">Some files may be missing</div>
-							) : null}
+				{/* A new thread's utility bar, tucked under the composer's top edge (Codex's): the project and the
+				    environment. The suggestion panel takes its place while open. */}
+				{project ? (
+					<div
+						className={`relative mx-[13px] -mb-1 rounded-t-[20px] bg-composer-bar px-1 pb-1 ${suggestions ? "invisible" : ""}`}
+					>
+						<div role="group" aria-label="Composer utility bar" className="flex items-center gap-2 py-[5px] ps-0.5">
+							<ProjectChip cwd={cwd} onChange={project.onChange} />
+							<div className="flex-1" />
+							<WorkspacePopover cwd={cwd} value={workspace} onChange={setWorkspace} />
 						</div>
 					</div>
 				) : null}
-				<div className="rounded-[26px] bg-composer shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
+				<div
+					data-dragging={dragging || undefined}
+					onDragOver={(event) => {
+						if (!carriesFiles(event)) return;
+						event.preventDefault();
+						event.dataTransfer.dropEffect = "copy";
+						setDragging(true);
+					}}
+					onDragLeave={(event) => {
+						if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+					}}
+					onDrop={(event) => {
+						if (!carriesFiles(event)) return;
+						event.preventDefault();
+						setDragging(false);
+						drop([...event.dataTransfer.files]);
+					}}
+					className="relative rounded-composer bg-composer shadow-[var(--kc-composer-ring)]"
+				>
+					{/* The "/", "@" and "+" panel: as wide as the composer, 8px above it, as Codex's. */}
+					{suggestions ? (
+						<div className="kc-menu kc-menu-solid absolute inset-x-0 bottom-full mb-2 flex max-h-80 flex-col overflow-hidden">
+							<div ref={panelRef} className="min-h-0 overflow-y-auto">
+								{suggestions.items.map((s, i) => {
+									const Icon = SUGGESTION_ICONS[s.icon];
+									return (
+										<div key={s.key}>
+											{s.section && s.section !== suggestions.items[i - 1]?.section ? (
+												<div className="kc-menu-label">{s.section}</div>
+											) : null}
+											<button
+												type="button"
+												data-active={i === selected}
+												onMouseDown={(e) => {
+													e.preventDefault();
+													accept(s);
+												}}
+												onMouseEnter={() => setSelected(i)}
+												className="kc-row gap-2 text-ink"
+											>
+												<Icon size={16} className="shrink-0" />
+												<span className="shrink-0">{s.label}</span>
+												{s.detail ? <span className="min-w-0 truncate text-tertiary">{s.detail}</span> : null}
+											</button>
+										</div>
+									);
+								})}
+								{suggestions.truncated ? (
+									<div className="px-2 py-1 text-xs text-tertiary">Some files may be missing</div>
+								) : null}
+							</div>
+						</div>
+					) : null}
+					{dragging ? (
+						<div className="kc-drop-target pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-composer text-base font-semibold text-ink">
+							Drop files to attach
+						</div>
+					) : null}
 					{queued.length > 0 ? (
-						<div className="space-y-1 border-b border-line px-4 py-2.5">
+						<div className="flex flex-col gap-1 border-b border-line px-4 py-2">
 							{queued.map((q, i) => (
-								<div key={q.id ?? `s${i}`} className="flex items-center gap-2 text-muted">
-									<span className="text-[12px] text-faint">{q.steer ? "Steering" : "Queued"}</span>
-									<span className="min-w-0 flex-1 truncate">{q.text}</span>
-									{q.id ? (
-										<button
-											type="button"
-											title="Remove"
-											onClick={() => threadId && void removeQueued(threadId, q.id!)}
-											className="rounded p-0.5 hover:bg-hover hover:text-ink"
-										>
-											<X size={13} />
-										</button>
-									) : null}
-								</div>
+								<QueuedRow
+									key={q.id ?? `s${i}`}
+									text={q.text}
+									steering={q.steer}
+									onSteer={() => {
+										if (!threadId || !q.id) return;
+										void removeQueued(threadId, q.id).then(() => steer(threadId, q.text));
+									}}
+									onDelete={() => threadId && q.id && void removeQueued(threadId, q.id)}
+									onEdit={() => {
+										if (!threadId || !q.id) return;
+										void removeQueued(threadId, q.id);
+										takeBack(q.text);
+									}}
+								/>
 							))}
 						</div>
 					) : null}
@@ -769,87 +534,105 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 							))}
 						</div>
 					) : null}
-					<textarea
-						ref={ref}
-						value={text}
-						rows={1}
-						onChange={(e) => {
-							setText(e.target.value);
-							void refreshSuggestions(e.target.value, e.target.selectionStart);
-						}}
-						onPaste={(event) => {
-							if (![...event.clipboardData.items].some((item) => item.type.startsWith("image/"))) return;
-							event.preventDefault();
-							void client
-								.host("host/clipboard/readImage", {})
-								.then(({ path }) => {
-									if (path) setImages((list) => [...list, path]);
-								})
-								.catch((error: unknown) => toast(error instanceof Error ? error.message : String(error)));
-						}}
-						onKeyDown={(event) => {
-							if (event.nativeEvent.isComposing) return;
-							if (suggestions) {
-								if (matches(event, "desktop.picker.next")) {
-									event.preventDefault();
-									return setSelected((selected + 1) % suggestions.items.length);
-								}
-								if (matches(event, "desktop.picker.previous")) {
-									event.preventDefault();
-									return setSelected((selected - 1 + suggestions.items.length) % suggestions.items.length);
-								}
-								if (matches(event, "desktop.picker.accept")) {
-									event.preventDefault();
-									return accept(suggestions.items[selected]!);
-								}
-								if (matches(event, "desktop.picker.dismiss")) {
-									event.preventDefault();
-									return setSuggestions(undefined);
-								}
-							}
-							const sendKey = prefs.sendKey === "enter" ? "desktop.composer.send" : "desktop.composer.steer";
-							if (matches(event, sendKey)) {
+					<div className="px-2 pt-[14px]">
+						<textarea
+							ref={ref}
+							value={text}
+							rows={1}
+							aria-label="Message"
+							onChange={(e) => {
+								setText(e.target.value);
+								void refreshSuggestions(e.target.value, e.target.selectionStart);
+							}}
+							onPaste={(event) => {
+								if (![...event.clipboardData.items].some((item) => item.type.startsWith("image/"))) return;
 								event.preventDefault();
-								submit(false);
-							} else if (prefs.sendKey === "enter" && matches(event, "desktop.composer.steer")) {
-								event.preventDefault();
-								submit(true);
+								void client
+									.host("host/clipboard/readImage", {})
+									.then(({ path }) => {
+										if (path) setImages((list) => [...list, path]);
+									})
+									.catch((error: unknown) => toast(error instanceof Error ? error.message : String(error), "error"));
+							}}
+							onKeyDown={(event) => {
+								if (event.nativeEvent.isComposing) return;
+								if (suggestions) {
+									if (matches(event, "desktop.picker.next")) {
+										event.preventDefault();
+										return setSelected((selected + 1) % suggestions.items.length);
+									}
+									if (matches(event, "desktop.picker.previous")) {
+										event.preventDefault();
+										return setSelected((selected - 1 + suggestions.items.length) % suggestions.items.length);
+									}
+									if (matches(event, "desktop.picker.accept")) {
+										event.preventDefault();
+										return accept(suggestions.items[selected]!);
+									}
+									if (matches(event, "desktop.picker.dismiss")) {
+										event.preventDefault();
+										return setSuggestions(undefined);
+									}
+								}
+								const sendKey = prefs.sendKey === "enter" ? "desktop.composer.send" : "desktop.composer.steer";
+								if (matches(event, sendKey)) {
+									event.preventDefault();
+									submit(false);
+								} else if (prefs.sendKey === "enter" && matches(event, "desktop.composer.steer")) {
+									event.preventDefault();
+									submit(true);
+								}
+							}}
+							placeholder={
+								running
+									? prefs.whileRunning === "queue"
+										? `Queue a follow-up · ${modKey}+Enter to steer`
+										: `Steer the turn · ${modKey}+Enter to queue`
+									: threadId
+										? "Work with KnightCode"
+										: "Do anything"
 							}
-						}}
-						placeholder={
-							running
-								? prefs.whileRunning === "queue"
-									? `Queue a follow-up · ${modKey}+Enter to steer`
-									: `Steer the turn · ${modKey}+Enter to queue`
-								: threadId
-									? "Ask for a follow-up"
-									: "Ask KnightCode anything. @ for files"
-						}
-						className="selectable block max-h-[300px] w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[15px] leading-relaxed outline-none placeholder:text-faint focus-visible:outline-none"
-					/>
-					<div className="flex items-center gap-0.5 px-2.5 pb-2.5">
-						<button
-							type="button"
-							title="Add"
+							className="selectable block max-h-[300px] min-h-11 w-full resize-none bg-transparent px-3 text-base leading-5 outline-none placeholder:text-tertiary focus-visible:outline-none"
+						/>
+					</div>
+					<div className="flex items-center gap-[5px] px-2 pt-[5px] pb-[7px]">
+						<IconButton
+							label="Add files and more"
+							round
 							onMouseDown={(e) => e.preventDefault()}
 							onClick={() => void toggleAddMenu()}
-							className={`flex size-7 items-center justify-center rounded-full text-muted hover:bg-row hover:text-ink ${suggestions?.items[0]?.section === "Add" ? "bg-row text-ink" : ""}`}
+							aria-expanded={suggestions?.items[0]?.section === "Add"}
+							className="!text-ink"
 						>
-							<Plus size={18} />
-						</button>
+							<Plus size={16} />
+						</IconButton>
 						<ApprovalPicker
 							mode={mode}
 							threadKey={threadId ?? searchId}
 							onChange={(m) => (threadId ? void updateSettings(threadId, { approvalMode: m }) : setDraftMode(m))}
 						/>
 						<div className="flex-1" />
-						{view?.usage?.contextTokens && view.usage.contextWindow ? (
-							<span
-								className="mr-1 text-[12px] whitespace-nowrap text-faint @max-[520px]:hidden"
-								title={`${tokens(view.usage.contextTokens)} of ${tokens(view.usage.contextWindow)} tokens · $${view.usage.cost.toFixed(2)} this thread`}
+						{prefs.showContextUsage !== false && view?.usage?.contextTokens && view.usage.contextWindow ? (
+							<Tooltip
+								content={`${tokens(view.usage.contextTokens)} of ${tokens(view.usage.contextWindow)} tokens · $${view.usage.cost.toFixed(2)} this thread`}
 							>
-								{Math.round((view.usage.contextTokens / view.usage.contextWindow) * 100)}% used
-							</span>
+								<span
+									className="mr-1 flex text-tertiary"
+									aria-label={`${Math.round((view.usage.contextTokens / view.usage.contextWindow) * 100)}% of context used`}
+								>
+									<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.75}>
+										<circle cx="8" cy="8" r="5.5" strokeOpacity={0.3} />
+										<circle
+											cx="8"
+											cy="8"
+											r="5.5"
+											pathLength={100}
+											strokeDasharray={`${Math.min(100, (view.usage.contextTokens / view.usage.contextWindow) * 100)} 100`}
+											transform="rotate(-90 8 8)"
+										/>
+									</svg>
+								</span>
+							</Tooltip>
 						) : null}
 						<ModelPicker
 							model={model}
@@ -864,24 +647,30 @@ export function Composer({ threadId, newCwd }: { threadId?: string; newCwd?: str
 							}
 						/>
 						{running && !hasContent ? (
-							<button
-								type="button"
-								title="Stop"
-								onClick={() => threadId && void interrupt(threadId)}
-								className="ml-1 flex size-8 items-center justify-center rounded-full bg-ink text-surface hover:opacity-90"
-							>
-								<Square size={11} fill="currentColor" />
-							</button>
+							<Tooltip content="Stop">
+								<Button
+									variant="accent"
+									pill
+									uniform
+									aria-label="Stop"
+									onClick={() => threadId && void interrupt(threadId)}
+								>
+									<Square size={14} fill="currentColor" />
+								</Button>
+							</Tooltip>
 						) : (
-							<button
-								type="button"
-								title={running ? (prefs.whileRunning === "queue" ? "Queue" : "Steer") : "Send"}
-								disabled={!canSend}
-								onClick={() => submit(false)}
-								className="ml-1 flex size-8 items-center justify-center rounded-full bg-accent text-on-accent hover:bg-accent-hover disabled:bg-hover disabled:text-faint"
-							>
-								{running ? <Check size={15} strokeWidth={2.5} /> : <ArrowUp size={17} strokeWidth={2.5} />}
-							</button>
+							<Tooltip content={running ? (prefs.whileRunning === "queue" ? "Queue" : "Steer") : "Send"}>
+								<Button
+									variant="accent"
+									pill
+									uniform
+									aria-label={running ? (prefs.whileRunning === "queue" ? "Queue" : "Steer") : "Send"}
+									disabled={!canSend}
+									onClick={() => submit(false)}
+								>
+									{running ? <Check size={14} strokeWidth={1.7} /> : <ArrowUp size={16} strokeWidth={1.6} />}
+								</Button>
+							</Tooltip>
 						)}
 					</div>
 				</div>
