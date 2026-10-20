@@ -328,11 +328,22 @@ the first and exits. Arguments and `knightcode://` links:
 | Input | Effect |
 | --- | --- |
 | a folder path | add it as a project and open a new thread in it |
-| `knightcode://thread/<id>` | focus the window holding it, or open it in the primary window |
+| `knightcode://thread/<id>` | focus the window holding it, or open it in the window used last |
 | `knightcode://new?cwd=<path>` | new thread composer in that project |
 | `knightcode://settings/<page>` | open settings |
 
-Links that arrive before the primary window is ready are queued.
+Links that arrive before the primary window is ready are queued. An installed
+app registers the scheme at launch on Windows and Linux
+(`setAsDefaultProtocolClient`) and through Info.plist on macOS
+(`forge.config.ts`); a source checkout does not, as it would register the bare
+Electron binary. macOS delivers links to the running app as `open-url`. Main
+hands a link to the page as the `navigate` host event, and
+`renderer/routes.ts` turns it into a view; "Copy deeplink" (section 9.3) makes
+the thread links.
+
+"Open in new window" (section 9.3) opens another window on a thread through
+the same path: `host/window/open` creates a window whose route is the
+thread's link.
 
 ### 6.2 Window
 
@@ -369,8 +380,9 @@ webPreferences: {
 - CSP: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src
   'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self';
   connect-src 'self'; frame-src kc-ext:; worker-src 'self' blob:`.
-- `will-navigate` is prevented; `setWindowOpenHandler` denies, opening http
-  and https links with `shell.openExternal`.
+- `will-navigate` is prevented unless the target is the page's own URL (a
+  reload: Vite's, or the store's after a hot update); `setWindowOpenHandler`
+  denies, opening http and https links with `shell.openExternal`.
 - `session.setPermissionRequestHandler` denies everything except
   `clipboard-sanitized-write` and `notifications`.
 - Fuses: `RunAsNode` off, `EnableNodeOptionsEnvironmentVariable` off,
@@ -442,12 +454,18 @@ interface DesktopState {
 	projects: { path: string; name?: string; pinned: boolean; collapsed: boolean }[];
 	pinnedThreads: string[];
 	lastSeen: Record<string, string>;     // threadId -> last turn id the user saw completed
+	unread?: string[];                    // threads with an unseen outcome, or marked unread (section 9.2)
 	windows: { kind: "primary" | "thread"; bounds: Rectangle; maximized: boolean; tabs: TabState[] }[];
-	sidebar: { width: number; groupBy: "project" | "list"; sort: "updated" | "created" };
+	sidebar: { width: number; organize?: "project" | "list"; sort?: "updated" | "created" }; // section 9.2
 	panels: { rightWidth: number; bottomHeight: number };
 	preferences: DesktopPreferences;      // section 9.10
 }
 ```
+
+`DesktopPreferences` holds the theme mode, the send key, queue or steer, "Show
+Full access in the composer", `keybindings` (a binding id's keys replacing its
+defaults; `[]` unassigns it, section 10) and `appearance` (a customization per
+light and dark theme, section 11.3).
 
 A corrupt file is renamed `desktop-state.corrupt-<time>.json` and defaults
 apply; nothing in it is needed to recover a thread. Agent settings (models,
@@ -519,10 +537,20 @@ product name, a notifications bell and search; "Projects" and "Recents"
 sections; thread rows that reveal pin and archive on hover and show a hover
 card with the full title, project and age; an empty state of one icon and
 "What should we build?" above the composer. KnightCode takes the title bar,
-the hover actions and card, and the empty state. It has no icon rail: there
-is one product, and the sidebar footer reaches settings and the archive.
+the hover actions, and the empty state, and keeps a narrow rail with only Home
+and the profile menu (settings, help, sign-in); there is one product, so no
+other rail pages.
 
-All three side regions resize by dragging and collapse by keybinding. The
+All three side regions resize by dragging and collapse by keybinding. As in
+Codex, a drag stops at the region's minimum width (290 px for the sidebar,
+counting the rail; 320 px for the side panel and 200 px for the Changes file
+tree), and dragging on until the region would be under half of that minimum
+slides it shut; dragging back opens it again. The side panel also stops where
+it would leave the chat 352 px; dragged on until the chat would be under 160
+px, it takes the chat's place (full screen), which its Enter/Exit full screen
+button also toggles. Neighbours keep their room when nothing is dragged too:
+however the thread view narrows, the side panel leaves the chat 352 px, and the
+file tree never takes more than 60% of the Changes pane. The
 main area is a tab strip. In v1 a tab is one of: thread, changes, terminal,
 preview, file, settings, extension tab. A tab can be dragged into the right
 or bottom region, so a terminal can sit beside the transcript. Tabs and
@@ -531,39 +559,62 @@ their placement restore on relaunch; a tab that cannot be restored shows
 
 ### 9.2 Sidebar
 
-Top: "New thread" (opens the composer in the selected project), Search, then
-three sections:
+Laid out as Codex's (measured 2026-10-19): the product name and Search, "New
+thread", then four sections that fold from their headers (folds are
+remembered): Pinned and Needs attention (hidden when empty), Projects (each
+project folds too and lists its threads newest first, "Show more" after 10),
+and Recents (threads outside every project). Needs attention holds threads
+waiting on the user (approval or dialog) and `systemError` ones. The column
+resizes from its right edge (double-click resets it to 276 px) and hides with
+`desktop.sidebar.toggle`; width, folds and visibility live in desktop state.
+`renderer/sidebar-model.ts` works the sections out apart from the component, so
+the go-to-thread shortcuts and the command palette number threads as the
+sidebar shows them, and the other thread shortcuts (section 10) step through
+the same order.
 
-- Needs attention: threads whose status is `active` with
-  `waitingOn` approval or dialog, `systemError`, or finished since last seen
-  (section 7.3). Empty: "Nothing needs attention". Hidden when empty, unless
-  the user pinned the section open.
-- Pinned threads, reorderable.
-- Projects, each listing its threads newest first, with "Show more" after 10.
-  Group by project or one flat list, sort by updated or created.
+The … on the Projects and Recents headings is Codex's sidebar options menu:
+Organize sidebar › (By project, In one list) and Sort threads by › (Last
+updated, Created), both remembered (`sidebar.organize`, `sidebar.sort`). In
+one list hides Projects and lists every unpinned thread under Recents. Codex's
+"Manual order" (drag to reorder), the "Show › Projects" toggle and custom
+sections are not ported.
 
-Thread rows: name, relative time (hidden while hovered, where pin and
-archive take its place), a hover card after 500 ms with the full name,
-project, workspace and age, and one status mark: a spinner (active), an
-amber dot (waiting on you), a dot (unread), a red mark (failed or
-`systemError`), a branch glyph (worktree thread). Hover actions: pin, rename,
-archive. Context menu adds fork, open in new window, copy id, copy working
-directory, show in folder, mark unread.
+Resting the pointer on a row opens Codex's hover card beside it (Radix's
+delays): a thread's whole title and when it last changed, its project, its
+worktree, and its state (working, waiting on you, the system error); a
+project's name, folder, and thread and active counts.
 
-Read-back initializes the failed mark. Unread compares the terminal turn id
-with `DesktopState.lastSeen[threadId]` (section 7.3); an initial read with no
-saved id establishes a baseline, not an unread completion. A live completion
-while not viewing the thread sets unread, including its first live event;
-viewing records the id. Active/waiting marks take precedence over the prior
-outcome; `systemError` stays separate.
+Ctrl-click (Cmd-click on macOS) adds a thread to a selection and Shift-click
+selects a range from the last one toggled, in sidebar order; a plain click or
+Escape clears it. With more than one selected, a selected row's Archive and
+right-click menu archive the selection after Codex's confirmation ("Archive 3
+threads?").
 
-Project rows: name, path on hover, collapse; context menu: new thread, open in
-editor, show in folder, remove from sidebar ("Removes the project from the
-sidebar. Its threads stay on disk.").
+Thread rows are 30 px nav rows with no time (as Codex's): the title fades out
+when too long, and one status mark sits at the end: a spinner (active), an
+amber dot (waiting on you), a red dot (`systemError`), Codex's blue 8 px dot
+(unread), a branch glyph (worktree thread). Pin and Archive replace the mark
+on hover. Right-click opens a native menu with the thread's actions, the
+header menu's (section 9.3) without the ones that need the open thread, each
+with its shortcut.
 
-Archive: a screen reached from the sidebar footer listing
-`thread/list {archived: true}` with search, unarchive, and delete
-("Permanently delete <name>? This cannot be undone.").
+Unread: a `thread/turn/completed` for a thread not on screen marks it unread
+(`DesktopState.unread`); opening it clears the mark. "Mark as unread"
+(`desktop.thread.markUnread`) sets it by hand ("Mark as read" clears it, with
+no shortcut, as Codex's), and `desktop.thread.clearUnread` clears every mark.
+The `lastSeen` read-back baseline above is not built: marks come from live
+outcomes only.
+
+Project rows: name, fold, and on hover a … menu (New thread, Show in folder,
+Archive threads, Remove project) and "Start new thread in <project>"; the same
+items on right-click. Archive threads asks first, as Codex's "Archive chats"
+("Archive 4 threads?", or "Stop and archive …" when some run, which stops
+them), then says how it went in a toast. Remove asks first ("This only removes
+the project from the sidebar. Files on your computer and existing threads won't
+be deleted.").
+
+Archived threads are a settings page (section 9.10), as Codex keeps archived
+chats in its settings.
 
 Search filters names client-side in v1; full-text search is section 14.
 
@@ -572,12 +623,16 @@ Search filters names client-side in v1; full-text search is section 14.
 Header: thread name (click to rename), project and branch or worktree badge,
 model, the approval mode chip, extension status chips (section 8), a toggle
 for the right panel, and a menu. The menu groups its items with separators
-and shows each item's keybinding at the right: Rename, Pin; Fork ▸ (from the
-start, from the last turn), Compact; Copy ▸ (deeplink, working directory,
-transcript as Markdown), Open in new window, Open in ▸ (editors from section
-9.9); Archive. Prior art: Codex's thread menu (screenshot, 2026-10-13) has
-this shape, plus side chats, scheduled tasks and sharing, which are section
-14 or not planned.
+and shows each item's keybinding at the right (`renderer/components/
+thread-actions.tsx`): Rename, Pin, Mark as unread; Fork › (Fork thread, Fork
+thread in new worktree), Compact; Copy › (deeplink, Markdown, working
+directory, conversation path, thread id), Show in folder, Open in new window;
+Archive, Delete…. Delete asks first and deletes for good; as the server deletes
+only archived threads, a live one is stopped and archived first. Prior art:
+Codex's thread menu (measured 2026-10-19) has this shape, plus side chats,
+scheduled tasks, sharing, "Move to right pane" and Open in ›, which are
+section 14 or not planned; Codex lists Delete and "Copy conversation path" as
+commands only. The conversation path is the thread's `sessionFile`.
 
 Transcript, by item type:
 
@@ -603,7 +658,8 @@ them, each run of consecutive tool calls collapsed to one line ("Ran 3
 commands, read 4 files, edited 2 files") that expands to the rows of the table
 above. While a turn runs, the work section is expanded and the newest item is
 in view; it collapses when the turn completes. Under the final message: copy,
-fork from here, and the completion time.
+a … menu with Codex's "Branch in new thread" (a fork up to the end of that
+turn), and the completion time.
 
 Prior art, observed in Codex (screenshots, 2026-10-13): the same "Worked for"
 row and final answer below a divider, but the expanded row shows only the
@@ -675,15 +731,20 @@ follows that arrangement; it has no voice buttons in v1 (section 14).
 - `/` opens the command list from `command/list` (extension commands, prompt
   templates, skills); choosing inserts the command text.
 - `+` attaches images: file dialog, paste, or drop. Images go as `{path}`
-  so large screenshots never cross the window port as base64.
+  so large screenshots never cross the window port as base64. Files dragged
+  over the composer veil it with "Drop files to attach"; dropped images
+  attach and other files are inserted as `@` mentions at the caret, relative
+  to the project when inside it. The preload reads a dropped file's path
+  (`webUtils.getPathForFile`), as the page cannot.
 - While a turn runs, Send becomes Queue: the message waits on the server
   (`turn/queue/add`) and starts its own turn when this one ends. Mod+Enter
   sends it as a steer (`turn/steer`) into the running turn instead.
   Initialize queued messages from resume's required `queue` snapshot, then
   apply `turn/queue/updated` in order. Empty snapshots clear stale entries.
-  Queued messages show above the input with Edit,
-  "Steer now" and Remove (by queue id). Stop drops the queue; put the
-  queued texts back in the composer, as the terminal's Escape does. Edit and "Steer now" are a
+  Queued messages show above the input as Codex's rows: the text on one
+  line, Steer, Delete, and a … menu with Edit message, which puts the text
+  back in the field ahead of anything typed. Stop drops the queue; put the
+  queued texts back in the composer, as the terminal's Escape does. Edit and Steer are a
   `turn/queue/remove` followed by a new queued input or steer. Remove succeeds
   until the input starts its turn; `removed: false` means it already started,
   and its turn follows. A preference flips the default between
@@ -694,6 +755,8 @@ follows that arrangement; it has no voice buttons in v1 (section 14).
   `git/status`), click opens the changes pane.
 - Send key: Enter sends and Shift+Enter is a newline, or the reverse
   (preference).
+- The field is plain text, as Codex's with "Plain text composer" on; Codex's
+  rich mode (Markdown formatted while typing, on ProseMirror) is not ported.
 - Drafts persist per thread in the renderer's memory and across reloads in
   `sessionStorage`.
 
@@ -762,6 +825,10 @@ composer then shows its controls as icons only.
   that expand in either direction. A file tree on the right has a filter and
   per-file counts; selecting a file scrolls to it. The diff view is split or
   unified, automatically unified when the pane is narrow.
+- A large diff (Codex's limits: more than 128 files, 9,000 changed lines or
+  12 MiB of changed text) shows one file at a time under a "This diff is
+  large, showing one file at a time" banner with previous and next buttons;
+  selecting a file in the tree shows that file instead of scrolling.
 - Prior art: this layout follows Codex's Changes tab (screenshot,
   2026-10-13), including its untracked-files banner.
 - Per hunk and per file: stage, unstage, revert (`git/stage`, `git/unstage`,
@@ -819,36 +886,43 @@ order on Windows.
 
 ### 9.10 Settings
 
-Settings replace the sidebar and the main area while open (Mod+, or the
-sidebar footer; Esc or back returns): a navigation column with a search box
-and grouped page names, and the page on the right. A page is a column of
-cards; each card is a list of rows with a name and one line of description on
-the left and its control on the right. Prior art: Codex's settings
-(screenshots, 2026-10-13) have exactly this structure.
+As Codex's (measured 2026-10-19). While Settings is open the sidebar column
+lists the pages under a search pill, grouped Personal and Coding; the page
+fills the main area: a 28 px title in a 768 px column, then sections 40 px
+apart, each a heading over cards of rows (title and description on the left,
+the control on the right, 16 px-inset hairlines between rows). Mod+, opens it;
+back returns.
 
 | Page | Contents | Stored in |
 | --- | --- | --- |
-| General | default editor for "Open in" (section 9.9), integrated terminal shell, send key, queue or steer by default, confirm on quit, open links in preview or browser, notifications (turn complete: always, when unfocused, never) | desktop state |
-| Appearance | mode as three thumbnails (system, light, dark); theme picker with import and export; accent, background and foreground as colour fields; UI and code font and size; under "Advanced": contrast, reduce motion, translucent sidebar | desktop state |
-| Models & accounts | default model and thinking level, provider sign-in and sign-out (`account/*`) | settings.json |
-| Approvals | default approval mode for new desktop threads, sent as `approvalMode` on every `thread/start` (the server's own default for desktop threads is `ask`, architecture.md section 5.4); "Allow Full access" (off hides Full access from the composer for users who never want it one click away; the terminal is unaffected) | desktop state |
-| Worktrees (Phase B) | branch prefix, setup command, files to copy, keep archived worktrees | settings.json |
-| Keyboard shortcuts | search by name or by pressing the keys; each action lists every binding as a chip with edit and remove; add a binding; conflict warnings; "Mod+1-9 switch tabs" or "switch threads"; reset | keybindings.json |
-| Extensions | installed packages by resource type, enable, disable, remove, project trust per project | settings.json |
-| Archived threads | the archive screen | — |
-| About | versions, logs folder, `server/diagnostics` | — |
+| General | Permissions: "Show Full access in the composer". General: Confirm before closing a window (never, close shortcut only, always; main shows a native confirmation, the close button and Alt+F4 only with "always"), Automatically archive inactive threads (never, 1–90 days; idle, unpinned threads not on screen, checked hourly). Composer: Show context window usage, Send shortcut (Enter or Mod+Enter), Follow-up behavior (Queue or Steer). Notifications: Turn completion notifications (never, only when unfocused, always; clicking one opens the thread) | desktop state |
+| Appearance | Mode as three thumbnails (system, light, dark); the showing theme's customization: Theme (KnightCode or Custom) with Import and Copy theme, Accent (Codex's eight choices or a custom colour), Background, Foreground, Font (the installed fonts). Advanced: UI and code font sizes (window-wide); UI font style, content font and code font with their styles, translucent sidebar, contrast (per theme); diff markers (colour or +/−) and pointer cursors (window-wide) — section 11.3 | desktop state |
+| Models & accounts | default model (the composer's searchable model list), signed-in accounts with Sign out, add an account (`account/login/*`, prompts inline) | settings.json |
+| Archived threads | Delete all; search; a filter by kind (all, local, worktree) and order (updated, created, alphabetical); a filter by project (or no project); the threads grouped by project, each with Delete (confirmed) and Unarchive | — |
+| Keyboard shortcuts | every binding: each combination as a chip with Change (records the next key press) and Clear, "Unassigned" when it has none, Reset when it differs from the default; search by name | desktop state |
+| About | versions, logs folder | — |
+| Configuration (Coding) | a scope (User config or a sidebar project, with its trust switch); the agent keys `/settings` offers: default reasoning, auto-compact and its token budgets, steering, skill commands, image resizing and blocking, transport, HTTP idle timeout, cache warming and default project trust (user only), updates, install telemetry, the Anthropic extra-usage warning; reasoning per model (user only); a link to the file. A row set in the edited file has a reset | settings.json |
+| Tools (Coding) | `/tools`' KnightCode tools with their own settings (web search provider and Brave key, classifier model); the tools new threads start with (`defaultTools`); codemode mode and inline budget | tools.json, settings.json |
+| MCP servers (Coding) | a scope; each server's exposure, on/off and Remove (confirmed); Add server (name, command or URL, user or project file); links to the files. Sign-in and live status stay with `/mcp` | mcp.json |
+| Extensions & skills (Coding) | a scope; every extension, skill, prompt template and theme `knightcode config` lists except the built-in extensions (always on), each with a load switch | settings.json |
+| Worktrees (Coding) | tabs General (branch prefix, fetch before creating, delete old worktrees, auto-delete limit; managed worktrees by project with New thread in this worktree, Delete and the threads that used each) and Environments (each project's setup scripts) | settings.json |
 
-Pages backed by settings.json write with `config/write`, show where a value
-comes from (default, global, project), and show the `errors` that
-`config/read` returns (settings files that failed to parse) inline with the
-file and, when known, the line.
+Approvals is not a page: its one setting is General's Permissions row.
+Deviation from section 10: rebindings are kept in the desktop state, not in
+`keybindings.json`.
+
+Pages backed by settings.json write with `config/write`; Tools, MCP servers and
+Extensions & skills use `tool/*`, `mcp/*` and `resource/*` (app-server.md).
 
 ### 9.11 Command palette
 
-Mod+K or Mod+Shift+P: "Search threads or run a command". Groups: commands
-(every keybinding id with a description), recent threads, projects, settings
-pages, themes. Typing `>` restricts to commands, `@` to files in the active
-project.
+Mod+K or Mod+Shift+P, as Codex's command menu: a 520 px card a fifth of the
+way down the window, the search field, then groups. With no query: Threads
+(the nine Alt+1–9 reach, in sidebar order, each with its project and chip)
+and Quick actions (New thread, Open folder, Hide or Show sidebar, Settings,
+Keyboard shortcuts, each with its shortcut). With a query: matching threads,
+settings pages and actions. Rows are 31 px; the selected one is lit, the
+others sit at 75 %. Arrows move, Enter runs, Escape closes.
 
 ### 9.12 Onboarding and empty states
 
@@ -879,6 +953,13 @@ OS notification "<thread>: done" or
 unfocused (section 4.3). OS notifications fire only on live outcomes, never
 on startup/reconnect reads. No sounds in v1.
 
+Turn completion notifications are Chromium's `Notification` from the
+renderer, per Settings › General.
+
+Toasts, as Codex's: top centre under the title bar, at most three, 8 px
+apart, each with a mark and a close button, gone after 5 s. Errors are red,
+confirmations ("Committed …", "Copied theme") green, other notes neutral.
+
 ### 9.14 Copy
 
 Sentence case. Status rows use present and past forms of one verb and name the
@@ -898,34 +979,44 @@ macOS. User overrides come from the same `keybindings.json` the terminal reads
 (`keybindings.ts:344`), so one file configures both. No component checks a
 key directly; every handler is registered against an id.
 
+Defaults follow Codex's where both apps have the action. Punctuation and
+digit keys match the physical key (`KeyboardEvent.code`), so the layout and
+Shift do not change them. Settings › Keyboard shortcuts rebinds any id
+(section 9.10).
+
 | Id | Default |
 | --- | --- |
 | `desktop.palette` | mod+k, mod+shift+p |
-| `desktop.thread.new` | mod+n |
-| `desktop.project.open` | mod+o |
 | `desktop.settings` | mod+, |
 | `desktop.shortcuts` | mod+/ |
-| `desktop.sidebar.toggle` | mod+b |
-| `desktop.panel.right.toggle` | mod+alt+b |
-| `desktop.panel.bottom.toggle` | mod+j |
-| `desktop.terminal.new` | mod+\` |
-| `desktop.changes.open` | mod+shift+g |
-| `desktop.files.search` | mod+p |
-| `desktop.tab.close` | mod+w |
-| `desktop.tab.reopen` | mod+shift+t |
-| `desktop.thread.previous` / `next` | mod+shift+[ / mod+shift+] |
-| `desktop.thread.attention.next` | mod+alt+a |
-| `desktop.thread.goto.1` … `9` | mod+1 … mod+9 |
-| `desktop.thread.rename` | mod+alt+r |
+| `desktop.nav.back` / `forward` | mod+[, alt+← / mod+], alt+→ (and the mouse's back and forward buttons) |
+| `desktop.thread.new` | mod+n, mod+shift+o |
 | `desktop.thread.archive` | mod+shift+a |
+| `desktop.thread.rename` | mod+alt+r |
 | `desktop.thread.pin` | mod+alt+p |
-| `desktop.thread.find` | mod+f |
-| `desktop.model.picker` | mod+shift+m |
+| `desktop.thread.copyCwd` | mod+shift+c |
+| `desktop.thread.markUnread` | mod+shift+u |
+| `desktop.thread.clearUnread` | shift+escape |
+| `desktop.thread.find` | mod+f (View › Find; the bar searches the thread or, opening it, the Changes pane's diffs) |
+| `desktop.find.next` / `previous` | enter, f3 / shift+enter, shift+f3 |
+| `desktop.thread.goTo1` … `goTo9` | alt+1 … alt+9 (the Nth thread as the sidebar shows them) |
+| `desktop.thread.recent1` … `recent6` | mod+alt+1 … mod+alt+6, and mod+shift+9 / mod+shift+8 for 4 and 5 (the Nth most recently updated thread) |
+| `desktop.thread.next` / `previous` | mod+alt+], mod+alt+→ / mod+alt+[, mod+alt+← (the next or previous thread in sidebar order, wrapping) |
+| `desktop.thread.nextAttention` | mod+alt+a (the next thread waiting on you, failed or unread) |
+| `desktop.thread.copyDeeplink` | mod+alt+l |
+| `desktop.thread.copyPath` | mod+alt+shift+c (the session file) |
+| `desktop.thread.copyCode` | mod+shift+; (the last fenced code block in the thread's replies) |
+| `desktop.thread.fork` / `openWindow` / `delete` | unassigned, as in Codex |
+| `desktop.project.open` | mod+o |
+| `desktop.sidebar.toggle` | mod+b, mod+shift+s |
+| `desktop.panel.toggle` | mod+shift+g |
+| `desktop.view.zoomIn` / `zoomOut` / `zoomReset` | mod+shift+=, mod+=, mod+num+ / mod+-, mod+num- / mod+0 |
+| `desktop.view.fullScreen` | f11 |
+| `desktop.app.quit` | mod+q |
+| `desktop.window.close` | mod+w (File › Close Window; confirms per Settings › General) |
 | `desktop.turn.interrupt` | escape |
-| `desktop.composer.steer` | mod+enter |
+| `desktop.composer.send` / `newline` / `steer` | enter / shift+enter / mod+enter |
 | `desktop.approval.accept` / `decline` | enter / escape |
-| `desktop.preview.address` | mod+l |
-| `desktop.preview.annotate` | mod+shift+. |
 
 The shortcuts page lists every id, including those with no default.
 
@@ -956,9 +1047,10 @@ Prior art: Codex derives its whole palette from surface, ink, accent and a
 contrast number; four inputs give users a theme editor that cannot produce an
 unreadable combination by accident.
 
-The two built-in themes take `surface`, `ink` and `accent` from the terminal
-palettes (`dark.json`: text `#e7e2db`, accent `#ff8a3d`; `light.json`
-likewise), so the desktop and the terminal look like one product.
+The two built-in themes take `surface` and `ink` from the terminal palettes
+(`dark.json`: text `#e7e2db`; `light.json` likewise). The accent is the
+desktop's own orange, one family across themes: `#f97316` in dark and the
+deeper `#ea580c` in light, where white Send and Stop icons still read on it.
 
 ### 11.2 Tokens
 
@@ -977,6 +1069,36 @@ literals in `apps/desktop/src/renderer`:
 
 Defaults: UI 13 px, code 12 px, radius 8 px. Extension frames receive the
 resolved token values through the SDK (section 12.3).
+
+### 11.3 Customization (Settings › Appearance)
+
+Built ahead of theme files, as Codex's Appearance: per light and dark theme,
+an accent, a background, a foreground and a UI font. `renderer/appearance.ts`
+derives the palette from the background and foreground as 11.1 has it: each
+surface steps from the background toward the foreground (or toward black) by
+a fixed fraction and each text, border and ghost token is the foreground at a
+fixed alpha. The fractions are fitted to the built-in tokens, so the default
+colours derive the built-in palette (a test holds this); nothing is derived
+until something is customized. Contrast (0–100, 60 by default) scales the
+surface steps. The accent reaches every place Codex draws its own (traced in
+Codex 26.1013 by switching its accent): Send and Stop, focus rings and the
+selected theme card, switches and the contrast fill, the unread dot, info
+icons, links and pressed toolbar toggles (a lighter shade in dark, a darker one
+in light, over a 10 % tint), the user's bubble, the text selection, checked
+checkboxes (native ones through `accent-color`) and the composer's drop
+overlay. Menus, menu check marks, selected rows and the sidebar's running
+spinner stay neutral, as Codex's do. The
+built-in shades are derived from the default accent, KnightCode's orange, so
+the app is orange in those places until another accent is chosen (a test
+holds this too). Fonts: a family per slot (UI, content, code), and a face of it
+reached through an `@font-face` alias over `local(<PostScript name>)`. Copy
+theme puts `knightcode-theme-v1:{json}` on the clipboard and Import theme reads
+one. The translucent sidebar asks main for the system material (acrylic on
+Windows 11 22H2+, vibrancy on macOS); only when it takes does the page leave
+the sidebar see-through (65 % of its colour), painting the shell around the
+card with its spread shadow. It is off by default (Codex's is on). Not built:
+Codex's Reduce motion override (the system setting rules) and "Separate light
+and dark modes" (customizations are always per theme).
 
 ---
 
@@ -1076,7 +1198,10 @@ architecture.md section 4.6:
 - `config/write`, `config/read` origins and `errors` (section 9.10);
 - load `warnings` in `thread/start`, `thread/resume` and `thread/fork` results, and the `warning` notification (section 8);
 - `project/trust/read` and `project/trust/set` (section 9.12);
-- `thread/delete` (section 9.2);
+- `thread/delete` (sections 9.3, 9.10), which deletes archived threads only;
+- `thread/fork` with `atItemId` and a worktree `workspace` (section 9.3), a
+  fork at a turn's last item keeping the turn's end;
+- `sessionFile` on a loaded thread (section 9.3, Copy conversation path);
 - `server/diagnostics` (section 9.10);
 - `thread/unsubscribe` status (section 4.3);
 - `initialize` `platform` (section 9.9 paths, section 9.7 shells).
