@@ -214,3 +214,13 @@
 	margin-inline: 1ch;
 	border-top: 1px solid color-mix(in srgb, var(--diffs-fg) 18%, transparent);
 }
+
+/* Find in the thread's diffs scope (components/find-bar.tsx): the page's highlights don't style a shadow tree. */
+::highlight(kc-find) {
+	background-color: var(--kc-find-match);
+	color: var(--kc-text);
+}
+::highlight(kc-find-active) {
+	background-color: var(--kc-find-current);
+	color: var(--kc-text);
+}
