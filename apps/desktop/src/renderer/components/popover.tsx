@@ -1,93 +1,124 @@
-import { Check } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { matches } from "../keys.ts";
+/**
+ * Panels that open from a button but are not a list of choices: a picker with its own search field, a small form,
+ * the thread summary. They are Radix popovers drawn like Codex's menus (styles.css, .kc-menu), so they render at
+ * the top of the document, stay on screen and close on Escape or a press outside. Lists of choices are menus
+ * (menu.tsx); the rows below draw the same way for lists inside a panel or a sheet. HoverCard is the same surface
+ * opened by resting the pointer on something (Codex's sidebar cards).
+ */
 
-/** A button that opens a menu above or below it; clicking outside or Escape closes it. Styled after Codex's. */
+import { HoverCard as HoverCardPrimitive, Popover as PopoverPrimitive } from "radix-ui";
+import { type ReactElement, type ReactNode, type RefObject, useState } from "react";
+import { Check } from "./icons.tsx";
+import { keepMovedFocus, RowContent, rowProps } from "./menu.tsx";
+
 export function Popover({
 	trigger,
 	children,
-	align = "left",
 	side = "top",
+	align = "start",
+	anchor,
+	sideOffset = 1,
+	alignOffset = 0,
 	className = "",
 }: {
+	/** One element, usually a button; Radix gives it the handlers that open the panel. */
 	trigger: (open: boolean) => ReactNode;
 	children: (close: () => void) => ReactNode;
-	align?: "left" | "right";
-	/** "left" opens beside the enclosing menu, as Codex opens a summary's submenus; "right" beside the trigger, bottom-aligned (the rail's profile menu). */
-	side?: "top" | "bottom" | "left" | "right";
+	side?: "top" | "bottom";
+	align?: "start" | "center" | "end";
+	/** What the panel lines up with, when not the trigger (the thread summary lines up with the header). */
+	anchor?: RefObject<HTMLElement | null>;
+	sideOffset?: number;
+	alignOffset?: number;
 	className?: string;
 }) {
 	const [open, setOpen] = useState(false);
-	const ref = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		if (!open) return;
-		const onDown = (event: MouseEvent) => {
-			if (!ref.current?.contains(event.target as Node)) setOpen(false);
-		};
-		const onKey = (event: KeyboardEvent) => {
-			if (matches(event, "desktop.picker.dismiss")) {
-				event.stopPropagation();
-				setOpen(false);
-			}
-		};
-		window.addEventListener("mousedown", onDown);
-		window.addEventListener("keydown", onKey, true);
-		return () => {
-			window.removeEventListener("mousedown", onDown);
-			window.removeEventListener("keydown", onKey, true);
-		};
-	}, [open]);
 	return (
-		// A "left" menu anchors to the enclosing menu instead (the nearest positioned ancestor), so it sits beside it.
-		<div ref={ref} className={side === "left" ? undefined : "relative"}>
-			<div onClick={() => setOpen(!open)}>{trigger(open)}</div>
-			{open ? (
-				<div
-					className={`kc-menu absolute z-30 ${side === "left" ? "top-0 right-full me-3" : side === "right" ? "bottom-0 left-full ms-[5px]" : `min-w-56 ${side === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${align === "left" ? "left-0" : "right-0"}`} ${className}`}
+		<PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+			<PopoverPrimitive.Trigger asChild>{trigger(open)}</PopoverPrimitive.Trigger>
+			{/* After the trigger: on the first render the trigger anchors too, and the last anchor set wins. */}
+			{anchor ? <PopoverPrimitive.Anchor virtualRef={anchor as RefObject<HTMLElement>} /> : null}
+			<PopoverPrimitive.Portal>
+				<PopoverPrimitive.Content
+					side={side}
+					align={align}
+					sideOffset={sideOffset}
+					alignOffset={alignOffset}
+					collisionPadding={8}
+					// The panel takes the focus itself, not its first button (which would show a focus ring), unless
+					// a field inside has already taken it (a search box with autoFocus).
+					onOpenAutoFocus={(event) => {
+						event.preventDefault();
+						const panel = event.currentTarget as HTMLElement;
+						if (!panel.contains(document.activeElement)) panel.focus();
+					}}
+					onCloseAutoFocus={keepMovedFocus}
+					className={`kc-menu ${className}`}
 				>
 					{children(() => setOpen(false))}
-				</div>
-			) : null}
-		</div>
+				</PopoverPrimitive.Content>
+			</PopoverPrimitive.Portal>
+		</PopoverPrimitive.Root>
 	);
 }
 
-/** A menu's caption, as Codex heads its menus ("Select model", "How should … be approved?"). */
-export function MenuCaption({ children }: { children: ReactNode }) {
-	return <div className="px-2 pt-1 pb-1.5 text-[13px] leading-4 text-desc">{children}</div>;
+/**
+ * Details shown while the pointer rests on `children` (one element that takes a ref and pointer handlers), as Codex's
+ * sidebar rows show a thread's or project's card: beside it, aligned with its top, 2px off. Radix's delays apply.
+ */
+export function HoverCard({ content, children }: { content: ReactNode; children: ReactElement }) {
+	return (
+		<HoverCardPrimitive.Root>
+			<HoverCardPrimitive.Trigger asChild>{children}</HoverCardPrimitive.Trigger>
+			<HoverCardPrimitive.Portal>
+				<HoverCardPrimitive.Content
+					side="right"
+					align="start"
+					sideOffset={2}
+					collisionPadding={8}
+					className="kc-menu flex w-72 flex-col gap-2 p-3 text-sm text-secondary"
+				>
+					{content}
+				</HoverCardPrimitive.Content>
+			</HoverCardPrimitive.Portal>
+		</HoverCardPrimitive.Root>
+	);
 }
 
-export function MenuItem({
-	children,
-	onClick,
-	checked,
-	danger,
+/** A row in a panel or a sheet: a plain button drawn as a menu row, with a check when it is the current choice. */
+export function ListRow({
 	icon,
 	description,
+	hint,
+	checked,
+	danger,
+	onClick,
+	children,
 }: {
-	children: ReactNode;
-	onClick: () => void;
-	checked?: boolean;
-	/** Drawn in the caution colour, title and description both, as Codex draws Full access. */
-	danger?: boolean;
 	icon?: ReactNode;
 	description?: ReactNode;
+	hint?: ReactNode;
+	checked?: boolean;
+	danger?: boolean;
+	onClick: () => void;
+	children: ReactNode;
 }) {
 	return (
-		<button
-			type="button"
-			onClick={onClick}
-			data-checked={checked || undefined}
-			className={`kc-row ${danger ? "text-caution" : "text-ink"}`}
-		>
-			{icon ? <span className={`flex shrink-0 ${description ? "self-start pt-[3px]" : ""}`}>{icon}</span> : null}
-			<span className="min-w-0 flex-1">
-				<span className="block truncate">{children}</span>
-				{description ? (
-					<span className={`block text-[12px] leading-[14px] ${danger ? "" : "text-desc"}`}>{description}</span>
-				) : null}
-			</span>
-			{checked ? <Check size={15} className="ml-2 shrink-0" /> : null}
+		<button type="button" onClick={onClick} data-checked={checked || undefined} {...rowProps(danger)}>
+			<RowContent
+				icon={icon}
+				description={description}
+				hint={hint}
+				end={checked ? <Check size={16} className="ms-2 shrink-0" /> : null}
+			>
+				{children}
+			</RowContent>
 		</button>
 	);
 }
+
+/** A caption over a list in a panel ("Local branches"). */
+export const ListCaption = ({ children }: { children: ReactNode }) => <div className="kc-menu-label">{children}</div>;
+
+/** The rule between groups of rows in a panel or a sheet. */
+export const ListSeparator = () => <div role="separator" className="kc-menu-separator" />;

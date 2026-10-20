@@ -1,4 +1,4 @@
-import { File } from "lucide-react";
+import { File } from "./icons.tsx";
 
 /** Language badges for the common extensions, as Codex marks files in its Changes pane; a plain file otherwise. */
 const BADGES: Record<string, { label: string; bg: string; fg: string }> = {
@@ -21,12 +21,12 @@ const BADGES: Record<string, { label: string; bg: string; fg: string }> = {
 export function FileIcon({ path }: { path: string }) {
 	const extension = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
 	const badge = path.includes(".") ? BADGES[extension] : undefined;
-	if (!badge) return <File size={16} strokeWidth={1.75} className="shrink-0 text-desc" />;
+	if (!badge) return <File size={16} className="shrink-0 text-tertiary" />;
 	return (
 		<span
 			aria-hidden="true"
 			style={{ background: badge.bg, color: badge.fg }}
-			className="flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[7.5px] leading-none font-bold tracking-tight"
+			className="flex size-4 shrink-0 items-center justify-center rounded-2xs text-[7.5px] leading-none font-bold tracking-tight"
 		>
 			{badge.label}
 		</span>
