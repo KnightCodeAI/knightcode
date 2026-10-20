@@ -79,8 +79,15 @@ export function fileChangesOf(tool: string, input: unknown, isError: boolean, de
 	if (tool === "edit" || tool === "write") {
 		const path = typeof input === "object" && input !== null ? (input as { path?: unknown }).path : undefined;
 		if (typeof path !== "string") return [];
-		const patch = typeof details === "object" && details !== null ? (details as { patch?: unknown }).patch : undefined;
-		return [{ path, kind: "modify", ...(typeof patch === "string" && patch.length > 0 ? { diff: patch } : {}) }];
+		const { patch, created } =
+			typeof details === "object" && details !== null ? (details as { patch?: unknown; created?: unknown }) : {};
+		return [
+			{
+				path,
+				kind: created === true ? "add" : "modify",
+				...(typeof patch === "string" && patch.length > 0 ? { diff: patch } : {}),
+			},
+		];
 	}
 	return reportedChanges(details) ?? [];
 }

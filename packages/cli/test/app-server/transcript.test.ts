@@ -59,6 +59,23 @@ test("a marked turn keeps its steers, numbers items by ordinal and takes its sta
 	});
 });
 
+test("a write that created its file reads back as an add carrying its patch", () => {
+	const m = marker();
+	const result = toolResult("w", "write", "ok");
+	if (result.type !== "message" || result.message.role !== "toolResult") throw new Error("fixtures");
+	result.message.details = { patch: "--- a.ts\n+++ a.ts\n@@ -0,0 +1 @@\n+x\n", created: true };
+	const entries = [
+		m,
+		user("go"),
+		assistant([{ type: "toolCall", id: "w", name: "write", arguments: { path: "a.ts" } }], "toolUse"),
+		result,
+		end("completed"),
+	];
+	expect(readTurns("t", entries)[0].items.find((i) => i.id === "w")).toMatchObject({
+		fileChanges: [{ path: "a.ts", kind: "add", diff: "--- a.ts\n+++ a.ts\n@@ -0,0 +1 @@\n+x\n" }],
+	});
+});
+
 test("tool calls sit at their blocks in block order; results never reorder them; a call with no result failed", () => {
 	const m = marker();
 	const entries = [
