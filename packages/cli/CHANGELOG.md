@@ -1,5 +1,21 @@
 # @knightcodeai/cli
 
+## 0.18.4
+
+### Fixed
+
+- Fixed Ctrl+Z on macOS and Linux suspending a clipboard helper along with KnightCode. The helper now leaves KnightCode's process group, so a suspend signal sent to the group does not stop it.
+
+- Fixed codemode scripts failing as soon as both workers were busy. A script waits in arrival order for a free worker, the wait counts toward `timeout_ms` and abort, and the wait stops after 60 seconds. `KNIGHTCODE_CODEMODE_MAX_WORKERS` raises the process-wide limit of two.
+
+- Fixed extensions failing to import `@knightcode/ai/models`. The extension loader and the embedded module map now include that subpath, so `clampThinkingLevel` and the other model helpers resolve.
+
+- Fixed a second extension dialog replacing the one on screen and leaving the first dialog's promise pending. Select, confirm, input, editor, and inline custom dialogs now stack, and closing the visible dialog shows the previous one again.
+
+- Fixed the terminal staying in mouse, focus, bracketed-paste, Kitty-keyboard, and alternate-screen modes when the process exits without stopping the UI. A process exit handler writes those resets when `stop()` did not run.
+
+- Fixed Markdown tables disappearing after an unclosed display-math opener. An unclosed `$$` or `\[` no longer pairs across a table or stays pending over it, so the table renders.
+
 ## 0.18.3
 
 ### Added
