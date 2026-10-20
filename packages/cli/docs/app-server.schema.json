@@ -647,6 +647,9 @@
 										"const": "max"
 									}
 								]
+							},
+							"sessionFile": {
+								"type": "string"
 							}
 						},
 						"additionalProperties": false
@@ -967,6 +970,9 @@
 										"const": "max"
 									}
 								]
+							},
+							"sessionFile": {
+								"type": "string"
 							}
 						},
 						"additionalProperties": false
@@ -2581,6 +2587,9 @@
 										"const": "max"
 									}
 								]
+							},
+							"sessionFile": {
+								"type": "string"
 							}
 						},
 						"additionalProperties": false
@@ -2915,6 +2924,9 @@
 										"const": "max"
 									}
 								]
+							},
+							"sessionFile": {
+								"type": "string"
 							}
 						},
 						"additionalProperties": false
@@ -3231,6 +3243,9 @@
 										"const": "max"
 									}
 								]
+							},
+							"sessionFile": {
+								"type": "string"
 							}
 						},
 						"additionalProperties": false
@@ -4702,6 +4717,9 @@
 												"const": "max"
 											}
 										]
+									},
+									"sessionFile": {
+										"type": "string"
 									}
 								},
 								"additionalProperties": false
@@ -6530,6 +6548,9 @@
 										"const": "max"
 									}
 								]
+							},
+							"sessionFile": {
+								"type": "string"
 							}
 						},
 						"additionalProperties": false
@@ -8003,6 +8024,9 @@
 									"const": "max"
 								}
 							]
+						},
+						"sessionFile": {
+							"type": "string"
 						}
 					},
 					"additionalProperties": false
@@ -8261,6 +8285,9 @@
 									"const": "max"
 								}
 							]
+						},
+						"sessionFile": {
+							"type": "string"
 						}
 					},
 					"additionalProperties": false
@@ -8620,6 +8647,9 @@
 									"const": "max"
 								}
 							]
+						},
+						"sessionFile": {
+							"type": "string"
 						}
 					},
 					"additionalProperties": false

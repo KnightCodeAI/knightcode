@@ -282,6 +282,8 @@ export const Thread = Obj({
 	approvalMode: ApprovalMode,
 	model: Type.Optional(ModelRef),
 	thinkingLevel: ThinkingLevel,
+	/** The session file on disk (Codex's "Copy conversation path"); absent until the thread is first saved. */
+	sessionFile: Type.Optional(Str),
 });
 export type Thread = Static<typeof Thread>;
 

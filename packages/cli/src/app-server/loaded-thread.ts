@@ -209,6 +209,7 @@ export class LoadedThread {
 				? { model: { provider: model.provider, id: model.id, name: model.name, contextWindow: model.contextWindow } }
 				: {}),
 			thinkingLevel: session.thinkingLevel,
+			...(this.file ? { sessionFile: this.file } : {}),
 		};
 	}
 

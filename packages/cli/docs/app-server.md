@@ -72,9 +72,10 @@ send a subscriber-only `warning` with `threadId`.
 
 Threads and list summaries include `createdAt` (header creation time) and
 optional `forkedFromId` (the parent's header ID, not a UUID inferred from its
-filename). List summaries use file modification time for `updatedAt`; loaded
-threads use the latest entry time, falling back to the header. Their `status`
-is one of:
+filename). A loaded thread also carries `sessionFile`, the session file's path,
+once it has been saved. List summaries use file modification time for
+`updatedAt`; loaded threads use the latest entry time, falling back to the
+header. Their `status` is one of:
 
 - `{type: "notLoaded"}`
 - `{type: "idle"}`

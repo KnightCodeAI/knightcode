@@ -289,6 +289,7 @@ interface Thread {
 	approvalMode: ApprovalMode;
 	model?: ModelRef;
 	thinkingLevel: ThinkingLevel;
+	sessionFile?: string;       // the session file on disk; absent until the thread is first saved
 }
 
 type ThreadStatus =
