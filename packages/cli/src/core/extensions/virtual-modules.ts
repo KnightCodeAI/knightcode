@@ -1,5 +1,6 @@
 import * as bundledKnightAgent from "@knightcode/agent";
 import * as bundledKnightAiCompat from "@knightcode/ai/compat";
+import * as bundledKnightAiModels from "@knightcode/ai/models";
 import * as bundledKnightAiOauth from "@knightcode/ai/oauth";
 import * as bundledKnightAiProviders from "@knightcode/ai/providers/all";
 import * as bundledKnightTui from "@knightcode/tui";
@@ -24,6 +25,7 @@ export const VIRTUAL_MODULES: Record<string, unknown> = {
 	// strict superset of the core entrypoint).
 	"@knightcode/ai": bundledKnightAiCompat,
 	"@knightcode/ai/compat": bundledKnightAiCompat,
+	"@knightcode/ai/models": bundledKnightAiModels,
 	"@knightcode/ai/oauth": bundledKnightAiOauth,
 	"@knightcode/ai/providers/all": bundledKnightAiProviders,
 	"@knightcodeai/cli": bundledKnightCli,
