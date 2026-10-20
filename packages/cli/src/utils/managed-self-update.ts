@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import lockfile from "proper-lockfile";
 import { APP_NAME, getPackageDir, VERSION } from "../config.ts";
 import { canonicalizePath, getCwdRelativePath } from "./paths.ts";
+import { stripBom } from "./text.ts";
 import { getKnightcodeUserAgent } from "./user-agent.ts";
 import { fetchWithRetry } from "./management-http.ts";
 import { comparePackageVersions } from "./version-check.ts";
@@ -33,7 +34,7 @@ export function getActiveManagedInstallRoot(): string | undefined {
 
 	const markerPath = join(managedRoot, MANAGED_INSTALL_MARKER);
 	try {
-		const marker = JSON.parse(readFileSync(markerPath, "utf8")) as {
+		const marker = JSON.parse(stripBom(readFileSync(markerPath, "utf8"))) as {
 			kind?: unknown;
 			layout?: unknown;
 			schemaVersion?: unknown;
