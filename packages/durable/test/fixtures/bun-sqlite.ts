@@ -24,6 +24,14 @@ try {
 	} catch (error) {
 		rollbackError = (error as Error).message;
 	}
+	let exclusiveError: string | undefined;
+	try {
+		await db.exclusive(async (executor) => {
+			await executor.exec("BEGIN; INSERT INTO t (v) VALUES ('left open')");
+		});
+	} catch (error) {
+		exclusiveError = (error as Error).message;
+	}
 	const rows = await db.all<{ v: string }>("SELECT v FROM t ORDER BY id");
 	await db.close();
 
@@ -43,6 +51,7 @@ try {
 			missing: missing === undefined,
 			journal: journal?.journal_mode,
 			rollbackError,
+			exclusiveError,
 			rows: rows.map((row) => row.v),
 			prefixed,
 		}),
