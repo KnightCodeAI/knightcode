@@ -15,6 +15,7 @@ describe.skipIf(!hasBun)("Bun SQLite adapter", () => {
 			missing: true,
 			journal: "wal",
 			rollbackError: "boom",
+			exclusiveError: "SQLite exclusive operation left a transaction open; it was rolled back",
 			rows: ["a", "b"],
 			prefixed: true,
 		});
