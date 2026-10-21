@@ -77,7 +77,8 @@ beforeEach(() => {
 			expect(url).toContain(encodeURIComponent("@knightcodeai/cli@1.0.1"));
 			return url.endsWith("/SHA256SUMS")
 				? new Response(`${"0".repeat(64)}  other.zip\n${checksum}  ${asset}\n`)
-				: new Response(archive);
+				: // IndexedDB storage references the DOM lib, so BodyInit does not accept Node's Buffer.
+					new Response(new Uint8Array(archive));
 		}),
 	);
 	runProcess.mockReset().mockResolvedValue("1.0.1");
