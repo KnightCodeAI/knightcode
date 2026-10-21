@@ -92,6 +92,18 @@ test.skipIf(!bash)(
 	},
 );
 
+test("environment/list and environment/save refuse a cwd that is not a directory, creating nothing", async () => {
+	const s = await repoServer();
+	const missing = join(s.cwd, "no", "such", "dir");
+	await expect(s.a.client.request("environment/list", { cwd: missing })).rejects.toMatchObject({
+		code: "invalidParams",
+	});
+	await expect(
+		s.a.client.request("environment/save", { cwd: missing, environments: [{ name: "x" }] }),
+	).rejects.toMatchObject({ code: "invalidParams" });
+	expect(existsSync(join(s.cwd, "no"))).toBe(false);
+});
+
 test("no environment, no setup; an unknown environment is invalidParams before anything is created", async () => {
 	const s = await repoServer();
 	const marker = join(s.agentDir, "marker");

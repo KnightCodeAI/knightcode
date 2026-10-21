@@ -30,9 +30,12 @@ export function tempDir(prefix: string): string {
  * after `ms`; a child still running after that fails the cleanup rather than leaking.
  */
 export async function stopChild(child: ChildProcess, ms = 10_000): Promise<void> {
-	if (child.exitCode !== null || child.signalCode !== null) return;
+	const gone = () => child.exitCode !== null || child.signalCode !== null;
+	// The listener first: a child exiting between a check and the listener would otherwise go unseen.
 	const exited = new Promise<boolean>((resolve) => child.once("exit", () => resolve(true)));
+	if (gone()) return;
 	const within = async () => {
+		if (gone()) return true;
 		let timer: NodeJS.Timeout | undefined;
 		const done = await Promise.race([
 			exited,

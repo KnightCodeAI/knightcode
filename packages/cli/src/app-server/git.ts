@@ -6,7 +6,7 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, realpathSync, renameSync } from "node:fs";
+import { constants, copyFileSync, existsSync, lstatSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -267,6 +267,8 @@ export interface GitOptions extends Omit<ProcessOptions, "cwd"> {
 	internal?: boolean;
 	/** Worktree population (Tasks 2, 9, 10): every configured filter emptied and Git LFS smudging off, so no user code runs. */
 	noFilters?: boolean;
+	/** A checkout the server is building or discarding: its index writes stay cancellable at shutdown. */
+	killable?: boolean;
 }
 
 /** `GIT_CONFIG_COUNT` overrides that empty every configured filter driver; `-c` would split a name like `x=y`. */
@@ -307,10 +309,10 @@ function subcommand(args: string[]): string {
 
 /** Never throws on a non-zero exit code. */
 export async function runGit(cwd: string, args: string[], options: GitOptions = {}): Promise<ProcessResult> {
-	const { internal, noFilters, ...rest } = options;
+	const { internal, noFilters, killable, ...rest } = options;
 	// Killed, git leaves the real index's index.lock behind and every later git write fails until it is deleted;
 	// these short writes run to the end (shutdown waits for in-flight requests). A temporary index's lock is ours.
-	if (WRITES_INDEX.has(subcommand(args)) && rest.env?.GIT_INDEX_FILE === undefined) {
+	if (!killable && WRITES_INDEX.has(subcommand(args)) && rest.env?.GIT_INDEX_FILE === undefined) {
 		delete rest.signal;
 		// Nor by the default 2-minute timeout: a large checkout behind a virus scanner can take longer.
 		rest.timeoutMs ??= 600_000;
@@ -459,11 +461,27 @@ export async function saveIndex(repo: Repo, signal?: AbortSignal): Promise<strin
 }
 
 /** Put a saved index back, by rename as git replaces its own index; the caller holds the repository lock. */
-export async function restoreIndex(repo: Repo, saved: string, signal?: AbortSignal): Promise<void> {
-	const real = await git(repo.root, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { signal });
-	const next = `${real}.kc-restore`;
-	copyFileSync(saved, next);
-	renameSync(next, real);
+export async function restoreIndex(repo: Repo, saved: string): Promise<void> {
+	// No signal: this runs after a shutdown killed the commit, to put the user's index back.
+	const real = await git(repo.root, ["rev-parse", "--path-format=absolute", "--git-path", "index"]);
+	// Through git's own index.lock, so a git process writing the index at the same moment fails or makes us fail,
+	// rather than one silently undoing the other.
+	const lock = `${real}.lock`;
+	try {
+		copyFileSync(saved, lock, constants.COPYFILE_EXCL);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "EEXIST")
+			throw new AppServerError("gitConflict", "another git process is writing the index", {
+				reason: "concurrentChange",
+			});
+		throw error;
+	}
+	try {
+		renameSync(lock, real);
+	} catch (error) {
+		rmSync(lock, { force: true });
+		throw error;
+	}
 }
 
 export async function discardSavedIndex(saved: string | undefined): Promise<void> {
@@ -567,7 +585,14 @@ export async function machinePatch(
 export async function machineApply(
 	cwd: string,
 	patch: Buffer,
-	options: { reverse?: boolean; cached?: boolean; check?: boolean; env?: Record<string, string>; signal?: AbortSignal },
+	options: {
+		reverse?: boolean;
+		cached?: boolean;
+		check?: boolean;
+		env?: Record<string, string>;
+		signal?: AbortSignal;
+		killable?: boolean;
+	},
 ): Promise<ProcessResult> {
 	if (patch.length === 0) return { code: 0, stdout: Buffer.alloc(0), stderr: "" };
 	return runGit(
@@ -579,7 +604,7 @@ export async function machineApply(
 			...(options.check ? ["--check"] : []),
 			"-",
 		],
-		{ input: patch, env: options.env, signal: options.signal },
+		{ input: patch, env: options.env, signal: options.signal, killable: options.killable },
 	);
 }
 

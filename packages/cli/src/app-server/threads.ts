@@ -171,6 +171,13 @@ export interface ThreadManagerOptions {
 	ghCommand?: string[];
 }
 
+/** `cwd` when it is an existing directory, else invalidParams (as thread/start and command/list refuse one). */
+async function existingDirectory(cwd: string): Promise<string> {
+	const stats = await stat(resolvePath(cwd)).catch(() => undefined);
+	if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${cwd}`);
+	return cwd;
+}
+
 export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
 	return mode === "desktop" ? "ask" : "fullAccess";
 }
@@ -584,6 +591,12 @@ export class ThreadManager {
 					"invalidParams",
 					`the thread already runs ${params.to === "local" ? "locally" : "in a worktree"}`,
 				);
+			// As thread/start refuses one: an unknown name would be recorded and its setup silently skipped.
+			if (
+				params.environment !== undefined &&
+				!readEnvironments(thread.projectCwd).some((e) => e.name === params.environment)
+			)
+				throw new AppServerError("invalidParams", `no environment named "${params.environment}"`);
 			let manifest = placed.manifest;
 			this.preparing.add(thread.id);
 			let restored: string | undefined;
@@ -2248,16 +2261,19 @@ export class ThreadManager {
 			"git/log": ({ threadId, limit }, connection) =>
 				this.onCheckout(threadId, connection.mode, false, (thread, repo) => gitLog(thread, repo, limit ?? 50)),
 			"environment/list": async ({ cwd }) => {
-				const projectCwd = this.projectOf(cwd);
+				this.assertOpen();
+				const projectCwd = this.projectOf(await existingDirectory(cwd));
 				return {
 					environments: readEnvironments(projectCwd),
 					trusted: new ProjectTrustStore(this.ctx.agentDir).get(projectCwd) === true,
 				};
 			},
-			"environment/save": async ({ cwd, environments }) => {
-				saveEnvironments(this.projectOf(cwd), environments);
-				return {};
-			},
+			// A project that exists: a made-up cwd must not get a .knightcode directory created for it.
+			"environment/save": ({ cwd, environments }) =>
+				this.track(async () => {
+					saveEnvironments(this.projectOf(await existingDirectory(cwd)), environments);
+					return {};
+				}),
 			"thread/resume": ({ threadId, cursor }, connection) => this.resume(threadId, cursor, connection),
 			"thread/list": (params) => this.list(params),
 			"thread/read": ({ threadId, cursor }) => this.read(threadId, cursor),

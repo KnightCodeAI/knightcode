@@ -482,11 +482,12 @@ async function create(input: CreateInput, sourceRepo: Repo): Promise<{ manifest:
 		await git(path, ["--work-tree=.", "reset", "-q", "--hard", "--no-recurse-submodules", baseSha], {
 			internal: true,
 			noFilters: true,
+			killable: true,
 			signal,
 		});
 		if (patch && patch.length > 0) {
 			for (const check of [true, false]) {
-				const applied = await machineApply(path, patch, { check, signal });
+				const applied = await machineApply(path, patch, { check, signal, killable: true });
 				if (applied.code !== 0)
 					throw new AppServerError("gitConflict", "the local changes could not be carried into the worktree", {
 						reason: "patchFailed",
@@ -1442,7 +1443,8 @@ export async function restoreWorktreeLocked(input: DeleteInput): Promise<Manifes
 			});
 	}
 	const { path } = manifest;
-	const internal = { internal: true, signal: input.signal };
+	// A checkout being rebuilt, removed on failure: its index writes stay cancellable at shutdown.
+	const internal = { internal: true, signal: input.signal, killable: true };
 	let registered = false;
 	try {
 		await git(manifest.mainRoot, ["worktree", "add", "--detach", "--no-checkout", path, `${snapshot}^1`], internal);
