@@ -390,11 +390,15 @@ export class ThreadManager {
 		let count = kept.length;
 		for (const manifest of kept) {
 			if (count <= settings.keep) break;
+			// Only a worktree in use still counts toward `keep`: one that can never go (its project moved, not ours,
+			// nested repositories) must not make every prune delete one more healthy worktree in its place.
 			try {
-				if ((await this.deleteManaged(manifest, "prune", warnings)).deleted) count--;
+				const result = await this.deleteManaged(manifest, "prune", warnings);
+				if (result.deleted || result.reason !== "inUse") count--;
 			} catch (error) {
 				// One worktree whose project moved or whose git failed must not stop the rest; shutdown still does.
 				if (this.shutdown.signal.aborted) throw error;
+				count--;
 				warnings.push({
 					source: "server",
 					message: `${manifest.path} was not pruned: ${error instanceof Error ? error.message : String(error)}`,

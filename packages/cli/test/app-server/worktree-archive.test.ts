@@ -163,6 +163,27 @@ test("a resume that arrives while the deletion is past its fence waits and answe
 	expect(existsSync(path)).toBe(false);
 });
 
+test("a worktree prune can never delete does not count toward keep, so healthy ones are not pruned in its place", async () => {
+	const s = await repoServer();
+	const broken = await saved(s);
+	const healthy = await saved(s);
+	await s.threads.unload(broken.thread.id);
+	await s.threads.unload(healthy.thread.id);
+	// The oldest manifest's project is gone: it can never be deleted.
+	writeFileSync(
+		join(dirname(broken.path), "worktree.json"),
+		JSON.stringify({ ...manifestOf(broken.path), mainRoot: join(s.cwd, "moved-away"), lastUsedAt: 1 }),
+	);
+	writeFileSync(
+		join(dirname(healthy.path), "worktree.json"),
+		JSON.stringify({ ...manifestOf(healthy.path), lastUsedAt: 2 }),
+	);
+	settings(s, { keep: 2 });
+	const newest = await saved(s);
+	await s.a.waitFor("warning", (p) => String(p.message).includes("was not pruned"));
+	for (const path of [healthy.path, newest.path]) expect(existsSync(path)).toBe(true);
+});
+
 test("pruning past keep deletes the least recently used worktree, never a loaded one", async () => {
 	const s = await repoServer();
 	const old = await saved(s);

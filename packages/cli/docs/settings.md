@@ -143,10 +143,7 @@ committed:
   "environments": [
     {
       "name": "node",
-      "setup": {
-        "default": "cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci",
-        "windows": "Set-Location $env:KNIGHTCODE_WORKTREE_PATH; npm.cmd ci"
-      },
+      "setup": { "default": "cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci" },
       "cleanup": { "default": "rm -rf \"$KNIGHTCODE_WORKTREE_PATH/.cache\"" },
       "actions": [{ "name": "Test", "command": { "default": "npm test" } }]
     }
@@ -155,9 +152,11 @@ committed:
 ```
 
 Each script has `default`, `macos`, `linux` and `windows` variants; the
-platform's wins. The setup script runs when a worktree is created and the
-cleanup script before one is deleted, both in your shell (the `windows`
-variant above is for PowerShell) and at the project root, with
+platform's wins. Scripts run in bash on every platform (Git Bash on Windows, or
+the `shellPath` setting), so one `default` usually covers all three; a platform
+variant is for a command that differs. The setup script runs when a worktree is
+created and the cleanup script before one is deleted, both at the project root,
+with
 `KNIGHTCODE_SOURCE_TREE_PATH` (the checkout the worktree came from) and
 `KNIGHTCODE_WORKTREE_PATH` (the worktree) set. Since they start in the main
 checkout, work on the worktree through `KNIGHTCODE_WORKTREE_PATH`, as the
