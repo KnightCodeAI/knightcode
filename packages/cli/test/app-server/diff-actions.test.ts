@@ -74,6 +74,8 @@ async function revertAfterGate(s: RepoServer, threadId: string, parked: ReturnTy
 		await reverting;
 		return events;
 	} finally {
+		// A failed wait must not leave the snapshot parked: the server's cleanup would wait on it.
+		parked.open();
 		revertHooks.afterReserve = original;
 	}
 }
