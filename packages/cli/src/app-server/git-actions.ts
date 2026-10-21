@@ -250,13 +250,14 @@ export async function gitCommit(
 		if (original) await git(repo, ["add", "-A"], { signal: ctx.signal });
 		return { before: await capture(), base: await headTree(repo), original };
 	});
-	const restore = async () => {
-		if (!original || original === before.index) return;
-		await staging(async () => {
-			// Only an index still as this commit left it: anything staged since is the user's.
-			if ((await indexTree(repo, ctx.signal)) === before.index) await git(repo, ["read-tree", original]);
-		});
+	// Only an index still as this commit left it goes back: anything staged since is the user's.
+	const putBack = async () => {
+		if (original && original !== before.index && (await indexTree(repo, ctx.signal)) === before.index)
+			await git(repo, ["read-tree", original]);
 	};
+	// The repository lock only, not the checkout: a turn that started meanwhile must not stop the user's index
+	// coming back, and touches no file of it.
+	const restore = () => withRepoLock(repo, putBack);
 	if (before.index === base) {
 		await restore();
 		throw invalid("nothing to commit");
@@ -281,8 +282,7 @@ export async function gitCommit(
 			(original !== undefined && (await stagedAllTree(repo, ctx.signal)) !== before.index);
 		if (changed) {
 			// No commit comes of this: what the user had staged goes back (the checkout is already held here).
-			if (original !== undefined && original !== before.index && now.index === before.index)
-				await git(repo, ["read-tree", original]);
+			await putBack();
 			throw conflict("concurrentChange", "the checkout changed while the commit message was written");
 		}
 		const result = await runGit(repo, ["commit", "-q", "-F", "-"], {
@@ -293,8 +293,11 @@ export async function gitCommit(
 			// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound allows.
 			timeoutMs: 300_000,
 		});
-		if (result.code !== 0)
+		if (result.code !== 0) {
+			// A hook or signing refused it: no commit, so the user's staging goes back.
+			await putBack();
 			throw new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, { output: result.stderr });
+		}
 		// A commit-msg hook may have rewritten the message: answer with what was committed.
 		const commit = await git(repo, ["rev-parse", "HEAD"]);
 		return { commit, message: (await git(repo, ["log", "-1", "--format=%B", commit])).trimEnd() };

@@ -300,7 +300,7 @@ const WRITES_INDEX = new Set(["add", "reset", "apply", "update-index", "rm", "mv
 /** The git subcommand past leading options (`-c key=value` pairs, `--work-tree=.`). */
 function subcommand(args: string[]): string {
 	let i = 0;
-	while (i < args.length && args[i]!.startsWith("-")) i += args[i] === "-c" ? 2 : 1;
+	while (i < args.length && args[i]!.startsWith("-")) i += args[i] === "-c" || args[i] === "-C" ? 2 : 1;
 	return args[i] ?? "";
 }
 
@@ -310,7 +310,11 @@ export async function runGit(at: string | Repo, args: string[], options: GitOpti
 	const cwd = typeof at === "string" ? at : at.root;
 	// Killed, git leaves the real index's index.lock behind and every later git write fails until it is deleted;
 	// these short writes run to the end (shutdown waits for in-flight requests). A temporary index's lock is ours.
-	if (WRITES_INDEX.has(subcommand(args)) && rest.env?.GIT_INDEX_FILE === undefined) delete rest.signal;
+	if (WRITES_INDEX.has(subcommand(args)) && rest.env?.GIT_INDEX_FILE === undefined) {
+		delete rest.signal;
+		// Nor by the default 2-minute timeout: a large checkout behind a virus scanner can take longer.
+		rest.timeoutMs ??= 600_000;
+	}
 	// A caller's own signal adds to the repository's shutdown signal; it never replaces it.
 	else if (typeof at !== "string" && at.signal)
 		rest.signal = rest.signal && rest.signal !== at.signal ? AbortSignal.any([rest.signal, at.signal]) : at.signal;

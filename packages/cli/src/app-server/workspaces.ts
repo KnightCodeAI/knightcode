@@ -1132,6 +1132,8 @@ export async function nestedRepositories(root: string, tree: string): Promise<st
 	];
 	for (const [meta, path] of gitlinks)
 		if (path && meta.startsWith("160000") && existsSync(join(root, path, ".git"))) found.add(path);
+	// One budget for every ignored-directory walk of this check.
+	const budget = { left: IGNORED_WALK_LIMIT };
 	let level = [""];
 	while (level.length > 0) {
 		const next: string[] = [];
@@ -1164,7 +1166,7 @@ export async function nestedRepositories(root: string, tree: string): Promise<st
 				.map((d) => d.replace(/\/$/, "")),
 		);
 		level = next.filter((d) => !skip.has(d));
-		for (const dir of skip) ignoredRepositories(root, dir, found);
+		for (const dir of skip) ignoredRepositories(root, dir, found, budget);
 	}
 	return [...found].sort();
 }
@@ -1177,9 +1179,10 @@ const IGNORED_WALK_LIMIT = 50_000;
  * package managers never leave a checkout there, and walking it would make every prune slow.
  * ponytail: past IGNORED_WALK_LIMIT directories the walk stops; a deeper repository there is not seen.
  */
-function ignoredRepositories(root: string, start: string, found: Set<string>): void {
+function ignoredRepositories(root: string, start: string, found: Set<string>, budget: { left: number }): void {
+	if (basename(start) === "node_modules") return;
 	const stack = [start];
-	for (let visited = 0; stack.length > 0 && visited < IGNORED_WALK_LIMIT; visited++) {
+	for (; stack.length > 0 && budget.left > 0; budget.left--) {
 		const dir = stack.pop()!;
 		let entries: Dirent[];
 		try {
