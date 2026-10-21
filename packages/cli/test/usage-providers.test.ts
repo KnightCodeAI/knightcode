@@ -1,5 +1,4 @@
-import type { Credential, OAuthCredential } from "@knightcode/ai";
-import { getKnightcodeUserAgent } from "@knightcode/ai/utils/user-agent";
+import { formatUserAgent, type Credential, type OAuthCredential } from "@knightcode/ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
@@ -161,20 +160,20 @@ describe("usage provider adapters", () => {
 				? {
 						authorization: `Bearer ${token}`,
 						accept: "application/json",
-						"user-agent": getKnightcodeUserAgent(),
+						"user-agent": formatUserAgent(),
 						"anthropic-beta": "oauth-2025-04-20",
 					}
 				: id === "xai"
 					? {
 							authorization: `Bearer ${token}`,
 							accept: "application/json",
-							"user-agent": getKnightcodeUserAgent(),
+							"user-agent": formatUserAgent(),
 							"x-xai-token-auth": "xai-grok-cli",
 						}
 					: {
 							authorization: `Bearer ${token}`,
 							accept: "application/json",
-							"user-agent": getKnightcodeUserAgent(),
+							"user-agent": formatUserAgent(),
 							originator: "knightcode",
 							"chatgpt-account-id": "account-id",
 						},
