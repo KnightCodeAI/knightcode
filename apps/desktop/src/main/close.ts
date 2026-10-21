@@ -33,7 +33,8 @@ async function askToClose(window: BrowserWindow): Promise<void> {
 			noLink: true,
 		})
 		.finally(() => asking.delete(window));
-	if (response !== 0) return;
+	// A quit can destroy the window while the question shows.
+	if (response !== 0 || window.isDestroyed()) return;
 	confirmed.add(window);
 	window.close();
 }

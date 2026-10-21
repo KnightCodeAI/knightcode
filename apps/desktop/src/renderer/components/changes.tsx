@@ -310,8 +310,16 @@ function FileSection({
 	const comments = useStore((s) => s.comments[threadId]);
 	const [draft, setDraft] = useState<{ side: "old" | "new"; start: number; end: number } | undefined>();
 	const mine = useMemo(
-		() => (comments ?? []).filter((c) => c.path === file.path && scopeOf(c) === selector.scope),
-		[comments, file.path, selector.scope],
+		// The exact revision: a comment on commit A, or against main, is not drawn on commit B or another base.
+		() =>
+			(comments ?? []).filter(
+				(c) =>
+					c.path === file.path &&
+					scopeOf(c) === selector.scope &&
+					c.against === selector.against &&
+					c.commit === selector.commit,
+			),
+		[comments, file.path, selector.scope, selector.against, selector.commit],
 	);
 	const annotations: DiffLineAnnotation<Annotation>[] = [
 		...mine.map((comment) => ({
