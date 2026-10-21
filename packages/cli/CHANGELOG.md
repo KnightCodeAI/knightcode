@@ -1,5 +1,69 @@
 # @knightcodeai/cli
 
+## 0.18.4
+
+### Fixed
+
+- Fixed Ctrl+Z on macOS and Linux suspending a clipboard helper along with KnightCode. The helper now leaves KnightCode's process group, so a suspend signal sent to the group does not stop it.
+
+- Fixed codemode scripts failing as soon as both workers were busy. A script waits in arrival order for a free worker, the wait counts toward `timeout_ms` and abort, and the wait stops after 60 seconds. `KNIGHTCODE_CODEMODE_MAX_WORKERS` raises the process-wide limit of two.
+
+- Fixed extensions failing to import `@knightcode/ai/models`. The extension loader and the embedded module map now include that subpath, so `clampThinkingLevel` and the other model helpers resolve.
+
+- Fixed a second extension dialog replacing the one on screen and leaving the first dialog's promise pending. Select, confirm, input, editor, and inline custom dialogs now stack, and closing the visible dialog shows the previous one again.
+
+- Fixed the terminal staying in mouse, focus, bracketed-paste, Kitty-keyboard, and alternate-screen modes when the process exits without stopping the UI. A process exit handler writes those resets when `stop()` did not run.
+
+- Fixed Markdown tables disappearing after an unclosed display-math opener. An unclosed `$$` or `\[` no longer pairs across a table or stays pending over it, so the table renders.
+
+## 0.18.3
+
+### Added
+
+- Added inline images in Rex. Rex already had hyperlinks and true color, and it now sends images with the Kitty graphics protocol. Unicode placeholders stay unsupported.
+
+### Changed
+
+- Changed the extensions guide so a prompt's run and its turns are two diagrams, with the model-request and tool-execution hooks listed beside them.
+
+### Removed
+
+- Removed GPT-5.5 and GPT-5.3 Codex Spark from the Codex model list. A ChatGPT account cannot use them, so the model picker was offering models that always fail.
+
+### Fixed
+
+- Fixed bold and italic markdown next to CJK punctuation in the terminal and in exported HTML. The same punctuation next to Latin text still follows CommonMark flanking rules.
+
+- Fixed managed self-update rejecting a managed-install.json file that Windows PowerShell 5.1 saved with a UTF-8 BOM.
+
+- Fixed Responses requests that resent the tool list after a tool change and dropped the prompt cache. Models that accept additional tools now declare every tool in place, and a removal is announced in text so a later update can restate which tools are still unavailable.
+
+## 0.18.2
+
+### Added
+
+- Added MiniMax-M3.1-Flash on the direct MiniMax providers. It uses adaptive thinking from its published effort levels, and thinking cannot be turned off. Older MiniMax M2, M2.1, M2.5, and M2.5-highspeed models stay hidden.
+
+- Added hyperlinks in the Rex terminal. Rex supports OSC 8 links and true color, and inline images stay off.
+
+### Fixed
+
+- Fixed request-size errors so HTTP 413 from any provider is treated as overflow. GitHub Copilot's "failed to parse request" response now compacts and retries instead of stopping the turn.
+
+- Fixed Windows shell discovery so PowerShell is found in its install directory when it is not on PATH, and an empty SystemRoot no longer hides taskkill or bash.
+
+- Fixed Windows shell checks so a runnable Microsoft Store alias is accepted. Node's existsSync rejects those aliases, so shell lookup now uses access.
+
+## 0.18.1
+
+### Fixed
+
+- Fixed `knightcode` failing with an unrelated error on a Node.js older than it supports. It now exits with a message naming the required and the installed Node.js versions.
+
+- Fixed npm and pnpm self-updates installing a release that the running Node.js cannot start. The update now fails and the installed version keeps working.
+
+- Fixed `knightcode` crashing with `zlib.createZstdDecompress is not a function` on Node.js 23.0 through 23.7. It no longer asks servers for zstd-compressed responses that this Node.js cannot decode.
+
 ## 0.18.0
 
 ### Added

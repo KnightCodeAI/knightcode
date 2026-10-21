@@ -9,6 +9,7 @@ export const workspaceSourcePaths = {
 	mcpTesting: fileURLToPath(new URL("./packages/mcp/src/testing/index.ts", import.meta.url)),
 	aiIndex: fileURLToPath(new URL("./packages/ai/src/index.ts", import.meta.url)),
 	aiCompat: fileURLToPath(new URL("./packages/ai/src/compat.ts", import.meta.url)),
+	aiModels: fileURLToPath(new URL("./packages/ai/src/models.ts", import.meta.url)),
 	aiOAuth: fileURLToPath(new URL("./packages/ai/src/oauth.ts", import.meta.url)),
 	aiProviders: fileURLToPath(new URL("./packages/ai/src/providers", import.meta.url)),
 	aiSrc: fileURLToPath(new URL("./packages/ai/src", import.meta.url)),
@@ -39,6 +40,7 @@ export default defineConfig({
 			{ find: /^@knightcode\/mcp\/testing$/, replacement: workspaceSourcePaths.mcpTesting },
 			{ find: /^@knightcode\/ai$/, replacement: workspaceSourcePaths.aiIndex },
 			{ find: /^@knightcode\/ai\/compat$/, replacement: workspaceSourcePaths.aiCompat },
+			{ find: /^@knightcode\/ai\/models$/, replacement: workspaceSourcePaths.aiModels },
 			{ find: /^@knightcode\/ai\/oauth$/, replacement: workspaceSourcePaths.aiOAuth },
 			{
 				find: /^@knightcode\/ai\/providers\/(.+)$/,

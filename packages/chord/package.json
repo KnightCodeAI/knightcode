@@ -12,6 +12,7 @@
     "./output": "./src/output.ts",
     "./delta": "./src/delta/index.ts",
     "./node": "./src/node.ts",
+    "./telemetry-sqlite": "./src/telemetry-sqlite/index.ts",
     "./sqlite": "./src/sqlite/index.ts",
     "./sqlite/node": "./src/sqlite/node.ts",
     "./sqlite/cloudflare": "./src/sqlite/cloudflare.ts",
@@ -19,6 +20,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@knightcode/telemetry": "workspace:*",
     "typebox": "1.3.27"
   },
   "devDependencies": {
