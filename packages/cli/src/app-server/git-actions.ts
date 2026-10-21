@@ -329,7 +329,7 @@ export async function gitCommit(
 /** The error to answer when the user's staging could not be put back: its saved copy stays, named. */
 function keptStaging(error: unknown, saved: string): AppServerError {
 	const message = error instanceof Error ? error.message : String(error);
-	const note = `; your staging from before the commit is saved at ${saved} (copy it over .git/index to restore it)`;
+	const note = `; your staging from before the commit is saved at ${saved} (copy it over the file \`git rev-parse --git-path index\` names to restore it)`;
 	return error instanceof AppServerError
 		? new AppServerError(error.code, `${message}${note}`, {
 				...(typeof error.data === "object" && error.data !== null ? error.data : {}),

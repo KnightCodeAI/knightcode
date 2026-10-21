@@ -1039,8 +1039,8 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 			if (wtBranch) await runGit(worktree.root, ["switch", "-q", wtBranch], internal);
 			throw new AppServerError("internal", `could not check out ${target}: ${switched.stderr.trim()}`);
 		}
-		await workspaceHooks.beforeHandoffApply();
 		try {
+			await workspaceHooks.beforeHandoffApply();
 			await apply(main, `Handing off to ${main.root}`);
 		} catch (error) {
 			// apply checks before it writes, so nothing changed but the branches: put them back as they were, or a retry
