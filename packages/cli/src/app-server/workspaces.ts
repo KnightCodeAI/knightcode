@@ -601,6 +601,18 @@ async function ignoredOf(
 	return new Set(result.stdout.toString("utf8").split("\0").filter(Boolean));
 }
 
+/** Whether a directory on the way to `path` under `root` is a link or not a directory. */
+function throughLink(root: string, path: string): boolean {
+	let dir = root;
+	for (const part of path.split("/").slice(0, -1)) {
+		dir = join(dir, part);
+		const info = lstatSync(dir, { throwIfNoEntry: false });
+		if (!info) return false;
+		if (info.isSymbolicLink() || !info.isDirectory()) return true;
+	}
+	return false;
+}
+
 /**
  * Copies the ignored files `.worktreeinclude` lists (§6.1). Only files ignored in both checkouts, so a copy never
  * becomes an untracked file a commit or handoff would publish; nothing is ever created through a link.
@@ -619,11 +631,22 @@ export async function copyWorktreeInclude(
 	});
 	const candidates = listed.stdout.toString("utf8").split("\0").filter(Boolean);
 	const inSource = await ignoredOf(sourceRoot, candidates, [], signal);
-	const inWorktree = await ignoredOf(worktreeRoot, candidates, ["--no-index"], signal);
+	// git check-ignore fails outright on a path beyond a link; those are never copied, so it is not asked about them.
+	const linked = new Set(candidates.filter((path) => throughLink(worktreeRoot, path)));
+	const inWorktree = await ignoredOf(
+		worktreeRoot,
+		candidates.filter((path) => !linked.has(path)),
+		["--no-index"],
+		signal,
+	);
 	let files = 0;
 	let bytes = 0;
 	for (const path of candidates) {
 		if (!inSource.has(path)) continue;
+		if (linked.has(path)) {
+			warnings.push({ source: "server", message: `${path} was not copied: a directory on its way is a link` });
+			continue;
+		}
 		if (!inWorktree.has(path)) {
 			warnings.push({
 				source: "server",

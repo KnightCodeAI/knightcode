@@ -1,4 +1,13 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -57,6 +66,23 @@ test("a snapshot never writes the real index and sees a second edit to an alread
 	const second = await snapshotTree(repo, true);
 	expect(second).not.toBe(first);
 	expect(readFileSync(join(dir, ".git", "index")).equals(index)).toBe(true);
+});
+
+test("a snapshot sees a same-size edit that only the index's age marks as possibly changed", async () => {
+	const dir = repoDir();
+	// Whole-second timestamps, as git on Linux compares them; Git for Windows would see nanoseconds differ.
+	sh(dir, "config", "core.checkStat", "minimal");
+	const file = join(dir, "a.txt");
+	const index = join(dir, ".git", "index");
+	const past = new Date(Date.now() - 10_000);
+	utimesSync(file, past, past);
+	sh(dir, "add", "a.txt");
+	// The index written in the second the file was: git must compare that entry's content, not its stat.
+	utimesSync(index, past, past);
+	writeFileSync(file, "one\nTWO\nthree\n");
+	utimesSync(file, past, past);
+	const repo = (await repoOf(dir))!;
+	expect(await snapshotTree(repo, true)).not.toBe(await headTree(repo));
 });
 
 test("an assume-unchanged file's edit is still in the snapshot; the real flag stays set", async () => {

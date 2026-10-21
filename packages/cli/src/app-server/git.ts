@@ -6,7 +6,17 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
-import { constants, copyFileSync, existsSync, lstatSync, realpathSync, renameSync, rmSync } from "node:fs";
+import {
+	constants,
+	copyFileSync,
+	existsSync,
+	lstatSync,
+	realpathSync,
+	renameSync,
+	rmSync,
+	statSync,
+	utimesSync,
+} from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -419,6 +429,18 @@ export async function headTree(repo: Repo): Promise<string> {
 	return result.code === 0 ? result.stdout.toString("utf8").trim() : emptyTree(repo);
 }
 
+/**
+ * Copies an index file with its mtime. Git compares the content of an entry no older than the index (it may have
+ * changed in the second the index was written); a copy with a fresh mtime makes git trust such an entry's stat, and
+ * an edit that kept the file's size goes unseen. Windows' CopyFile keeps the mtime; POSIX copies do not.
+ */
+function copyIndex(from: string, to: string, mode?: number): void {
+	// Read first and rounded down: an index older than its content only makes git compare more entries.
+	const { atimeMs, mtimeMs } = statSync(from);
+	copyFileSync(from, to, mode);
+	utimesSync(to, atimeMs / 1000, Math.floor(mtimeMs) / 1000);
+}
+
 /** Runs `fn` with a temporary copy of the index whose assume-unchanged and materialized skip-worktree flags are cleared. */
 async function withTemporaryIndex<T>(
 	repo: Repo,
@@ -432,7 +454,7 @@ async function withTemporaryIndex<T>(
 	try {
 		const index = join(dir, "index");
 		const real = await git(repo, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { signal });
-		if (existsSync(real)) copyFileSync(real, index);
+		if (existsSync(real)) copyIndex(real, index);
 		const run = (args: string[], input?: string) =>
 			git(repo, args, { internal: true, env: { GIT_INDEX_FILE: index }, input, signal });
 		if (keepFlags) return await fn(run);
@@ -464,7 +486,7 @@ export async function saveIndex(repo: Repo, signal?: AbortSignal): Promise<strin
 	if (!existsSync(real)) return undefined;
 	// Beside the index, not in the temp directory: when it cannot go back it is the user's only copy of their staging.
 	const copy = `${real}.knightcode-saved-${Date.now()}`;
-	copyFileSync(real, copy);
+	copyIndex(real, copy);
 	return copy;
 }
 
@@ -478,7 +500,7 @@ export async function restoreIndex(repo: Repo, saved: string, orphanedLock = fal
 	// A commit killed in its hooks leaves the index.lock it took; while it existed no other git could take one.
 	if (orphanedLock) rmSync(lock, { force: true });
 	try {
-		copyFileSync(saved, lock, constants.COPYFILE_EXCL);
+		copyIndex(saved, lock, constants.COPYFILE_EXCL);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === "EEXIST")
 			throw new AppServerError("gitConflict", "another git process is writing the index", {
