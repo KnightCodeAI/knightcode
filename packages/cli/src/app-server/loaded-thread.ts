@@ -264,14 +264,18 @@ export class LoadedThread {
 			// The forced settle may have queued a last after-snapshot; its record is written before the manager closes.
 			await this.changes?.close();
 			this.unsubscribeSession();
-			await emitSessionShutdownEvent(this.session.extensionRunner, {
-				type: "session_shutdown",
-				reason,
-				targetSessionFile,
-			});
-			this.session.dispose();
-			this.state = "closed";
-			this.onClosed();
+			try {
+				await emitSessionShutdownEvent(this.session.extensionRunner, {
+					type: "session_shutdown",
+					reason,
+					targetSessionFile,
+				});
+				this.session.dispose();
+			} finally {
+				// A throwing shutdown hook or dispose must not leave the thread's worktree fenced for the process's life.
+				this.state = "closed";
+				this.onClosed();
+			}
 		}
 	}
 }

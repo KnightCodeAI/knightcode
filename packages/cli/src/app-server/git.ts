@@ -549,7 +549,9 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
 	const entries = new Map<string, string>();
 	if (paths.length === 0) return entries;
 	const wanted = new Set(paths);
-	for (const record of (await git(repo.root, ["ls-tree", "-z", tree, "--", ...paths])).split("\0")) {
+	// ponytail: past 200 paths the whole tree is listed and filtered, so no argv outgrows Windows' 32 KiB limit.
+	const args = paths.length > 200 ? ["ls-tree", "-r", "-z", tree] : ["ls-tree", "-z", tree, "--", ...paths];
+	for (const record of (await git(repo.root, args)).split("\0")) {
 		const tab = record.indexOf("\t");
 		if (tab === -1) continue;
 		const [mode, type, oid] = record.slice(0, tab).split(" ");
@@ -559,8 +561,19 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
 	return entries;
 }
 
+/**
+ * The working tree's entries for `paths` only: a temporary index stages just those paths, never hashing the rest of
+ * the checkout's untracked files. A path neither on disk nor in the index stays absent.
+ */
 export async function currentEntries(repo: Repo, paths: string[], signal?: AbortSignal): Promise<Map<string, string>> {
-	return entriesOf(repo, await snapshotTree(repo, true, signal), paths);
+	const tree = await withTemporaryIndex(repo, signal, async (run) => {
+		const indexed = new Set((await run(["ls-files", "-z"])).split("\0"));
+		const present = paths.filter((p) => indexed.has(p) || lstatSync(join(repo.root, p), { throwIfNoEntry: false }));
+		if (present.length > 0)
+			await run(["add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"], `${present.join("\0")}\0`);
+		return run(["write-tree"]);
+	});
+	return entriesOf(repo, tree, paths);
 }
 
 const OPERATIONS: [string, "merge" | "rebase" | "cherryPick" | "revert"][] = [

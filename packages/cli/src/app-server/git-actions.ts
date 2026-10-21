@@ -250,7 +250,9 @@ export async function gitCommit(
 	const message = params.message?.trim()
 		? params.message
 		: await generateMessage(thread, repo, base, before.index, ctx);
-	return withRepoLock(repo, async () => {
+	// The commit runs the user's hooks, which can rewrite the index and working tree (lint-staged): it holds the
+	// checkout as staging did.
+	return staging(async () => {
 		const now = await capture();
 		if (now.head !== before.head || now.ref !== before.ref || now.index !== before.index)
 			throw conflict("concurrentChange", "the checkout changed while the commit message was written");
@@ -277,6 +279,9 @@ export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<Result
 	let destination: string;
 	let setUpstream: boolean;
 	if (upstreamRemote && upstreamMerge && upstreamRemote !== ".") {
+		// As push.default=simple: a branch tracking another name (feature on origin/main) never pushes onto it.
+		if (upstreamMerge !== `refs/heads/${branch}`)
+			throw invalid(`${branch} tracks ${upstreamMerge.replace(/^refs\/heads\//, "")}; push it from a terminal`);
 		remote = upstreamRemote;
 		destination = upstreamMerge;
 		setUpstream = false;
