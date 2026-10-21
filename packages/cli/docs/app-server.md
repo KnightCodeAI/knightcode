@@ -72,9 +72,10 @@ send a subscriber-only `warning` with `threadId`.
 
 Threads and list summaries include `createdAt` (header creation time) and
 optional `forkedFromId` (the parent's header ID, not a UUID inferred from its
-filename). List summaries use file modification time for `updatedAt`; loaded
-threads use the latest entry time, falling back to the header. Their `status`
-is one of:
+filename). A loaded thread also carries `sessionFile`, the session file's path,
+once it has been saved. List summaries use file modification time for
+`updatedAt`; loaded threads use the latest entry time, falling back to the
+header. Their `status` is one of:
 
 - `{type: "notLoaded"}`
 - `{type: "idle"}`
@@ -159,9 +160,12 @@ lands in a later turn. A steer cannot be taken back once accepted.
 input starts a turn of its own once the thread is idle, oldest first; on an idle
 thread it starts at once. Until it starts it is removable with
 `turn/queue/remove`. A queued input that fails to start (no model, signed out) is
-dropped with an `error` notification. `turn/queue/updated` sends
-`{threadId, steering: [text], followUp: [{id, text}]}`: steers the agent has not
-delivered yet, and the queued inputs.
+dropped with an `error` notification carrying its `clientMessageId`, if it had
+one. `turn/queue/updated` sends
+`{threadId, steering: [text], followUp: [{id, text, attachments?}]}`: steers the
+agent has not delivered yet, and the queued inputs. `text` is the user's own (not
+a prompt composed with review comments); `attachments` counts the images and
+review comments an input carries that its text alone does not.
 
 `turn/interrupt` accepts optional `turnId`; a supplied stale ID returns
 `turnMismatch`, while omitting it retains interrupt-current behavior. It drops
@@ -281,6 +285,86 @@ The most recent initiating subscriber is asked first. Disconnect or unsubscribe
 cancels that attempt and migrates it to another subscriber; no subscribers means
 cancel. `serverRequest/cancelled` withdraws an outstanding request.
 
+## Dialogs
+
+What KnightCode asks the user mid-turn reaches a desktop connection as a server
+request, asked the way approvals are; the thread reports `waitingOn: ["dialog"]`
+meanwhile.
+
+`item/toolCall/requestUserInput` carries `ask_user`'s questions, all at once,
+with the `itemId` of the call asking, so a client can move back and forth
+between them before answering. Each question has an `id`, its text and its
+options (`label`, `description`); a label ending in `(Recommended)` is the
+recommended one. Reply `{"answers": {"<id>": {"label": "..."}}}` with the
+chosen option's exact label and an optional `note`, or `{"other": "..."}` for
+the user's own answer; leave out a skipped question. `{}` dismisses the
+questions and stops the turn.
+
+`ui/dialog` carries the rest, such as the classifier gate's confirmation of a
+risky call and plan mode's review. `kind` says which: a select carries
+`options`, a confirm its `message`, an input its `placeholder`, an editor its
+`prefill`. Reply with `{"value": "..."}` for a select, input or editor,
+`{"confirmed": true}` for a confirm, or `{}` to cancel.
+
+Notices such as "Downloaded model" arrive as the notification `ui/notify` with
+a `level` of `info`, `warning` or `error`. Widgets, status, header, footer
+and custom components draw only in the terminal and do nothing here. Threads a
+terminal-mode connection loads have no dialogs yet.
+
+## Workspaces, diffs and git
+
+A thread runs in a workspace: the user's checkout (`{mode: "local"}`), or a git
+worktree of its own (`{mode: "worktree"}`), as in the Codex desktop app.
+
+`thread/start {cwd, workspace: {mode: "worktree", baseRef?, carryLocalChanges?, environment?}}`
+creates a worktree on a **detached `HEAD`** at `baseRef` (default:
+the checkout's `HEAD`) under `<worktrees.root>/<4 hex digits>/<repository name>`
+and runs the thread there, in the same subdirectory the `cwd` had. No branch is
+created until `git/branch/create` or a handoff makes one. `carryLocalChanges`
+brings the checkout's uncommitted changes (untracked files included, ignored
+files not) along as uncommitted edits. Creation runs no hook, filter or user
+code, so a failed creation leaves nothing behind. A start whose `cwd` is inside
+a managed worktree is a new thread in that worktree.
+
+`thread/workspace/progress {threadId, phase, output}` streams the output of an
+environment's setup or cleanup script to the connection that asked. Every
+`Thread` carries `workspace`; `ThreadSummary.workspaceMode` marks worktree
+threads in listings.
+
+Diffs come in Codex's Changes scopes: `lastTurn`, `uncommitted` (the default),
+`unstaged`, `staged`, `committed` and `branch`. Each hunk has a content-hash id;
+an action naming a hunk that changed since it was read answers `gitConflict`
+with `data.reason: "diffChanged"`. Files changed while a turn ran are reported
+by `turn/diff/updated {threadId, turnId, files}` after `turn/completed`, each
+file as `{path, additions, deletions}`: the net line totals between the working
+tree before and after the turn. A read-back turn carries the same list as
+`Turn.files`. This
+means "changed while the turn ran", not "changed by the turn": an edit another
+local thread or an editor made meanwhile is in the list too. A worktree thread
+is the only writer in its worktree, so its list is its own.
+
+Review comments are drafts the client keeps. They travel with the next
+`turn/start` or `turn/queue/add` as `comments`; the server quotes the commented
+lines from the diff the user reviewed, and the user item shows the comments
+next to the typed text.
+
+**Reverting an added file deletes it**, an untracked one included. Clients
+confirm with the user before a revert that removes files.
+
+`thread/handoff` moves a chat and its uncommitted changes between its worktree
+and the main checkout. The destination must be clean: "Stash or commit your
+local changes to hand off." Archiving a thread deletes its worktree after a
+snapshot, kept as `refs/knightcode/snapshots/<bucket>/<time>`, and
+`thread/worktree/restore` rebuilds it. Past `worktrees.keep` worktrees, the
+least recently used are pruned the same way. Outside a git repository, diff and
+git methods answer `notGitRepo`.
+
+`gitConflict` errors carry `data.reason`: `diffChanged`, `patchFailed`,
+`concurrentChange`, `pushRejected`, `localChanges`, `operationInProgress`,
+`branchExists`, `recoveryRequired`, `worktreeDeleted`, `worktreeMissing`,
+`worktreeInUse` or `submodules`, with `paths`, `output` or
+`recoveryInstructions` where they apply.
+
 ## Method reference
 
 All methods require the handshake. Common errors are `notInitialized`,
@@ -300,12 +384,13 @@ Errors: `threadNotFound`.
 
 ### `config/read`
 
-Params: optional `{cwd}`. Result: `{settings, origins, versions, errors}`.
+Params: optional `{cwd}`. Result: `{settings, defaults, origins, versions, paths, errors}`.
 Without cwd, only global settings are read. With cwd, trusted project settings
 merge over global settings; untrusted project files are not read. `origins`
 maps dotted leaf keys to `global` or `project`. `versions.global` and optional
 `versions.project` are SHA-256 hashes of raw file contents, or `"none"` for an
-absent or unread untrusted scope. Settings, origins, versions, and parse errors
+absent or unread untrusted scope. `defaults` is what an unset key means, in the
+shape of `settings`; `paths` names the global and, with cwd, the project file. Settings, origins, versions, and parse errors
 come from the same scope reads, not cached settings paired with fresh versions.
 Parse errors appear as structured `source: "settings"` warnings with an
 optional path and available one-based line/column; unaffected scopes still read.
@@ -334,6 +419,71 @@ malformed keys, and prototype-pollution segments (`__proto__`, `constructor`,
 
 ```json
 {"id":12,"method":"config/write","params":{"scope":"global","key":"theme","value":"dark","expectedVersion":"none"}}
+```
+
+### `tool/list`
+
+Params: optional `{cwd}`. Result: `{tools: [{name, description, source}], defaultTools}`.
+The tools a new thread in `cwd` would register (without cwd, a
+project-less one), from an in-memory session like `command/list`'s; hidden tools
+are left out, and MCP tools appear only once a thread connects. `defaultTools` is
+the global `defaultTools` setting resolved (`+name` and `-name` applied), or the
+built-in default `read`, `bash`, `edit`, `write`. Change it with `config/write`.
+
+```json
+{"id":26,"method":"tool/list","params":{}}
+```
+
+### `tool/settings/read` and `tool/settings/write`
+
+The KnightCode tools `/tools` manages, stored in `tools.json` in the agent
+directory. `tool/settings/read {}` returns
+`{tools: [{name, enabled, settings}], classifiers: [{provider, id, name}]}`: each tool's state (its default when the
+file does not set it) and its own settings, with values of keys ending in `Key`
+masked to their last four characters; `classifiers` are the classifier models
+with credentials, for the classifier gate's `model`.
+`tool/settings/write {name, key, value}` sets one setting; `enabled` takes a boolean, other keys a string,
+and `null` deletes the key. An unknown tool or a malformed key is
+`invalidParams`.
+
+```json
+{"id":27,"method":"tool/settings/write","params":{"name":"websearch","key":"provider","value":"brave"}}
+```
+
+### `mcp/list`, `mcp/update`, `mcp/add` and `mcp/remove`
+
+The servers of the global `mcp.json` and, for an explicitly trusted project, its
+`.knightcode/mcp.json` ([MCP](mcp.md)). `mcp/list {cwd?}` returns
+`{servers, errors, paths}`: each server's `name`, `scope`, defining file (`source`), the
+project file that overrides it (`override`), `transport` (`stdio` or `http`),
+`target` (command line or URL), `description`, `enabled` and `exposure`.
+`mcp/update {cwd?, name, enabled?, exposure?}` saves the change where `/mcp`
+would: in the project override when there is one, else in the defining file.
+`mcp/add {scope, cwd?, name, config}` validates `config` as an `mcpServers` entry
+and adds or replaces it (result `{replaced}`); `auth` is refused in a project
+file. `mcp/remove {scope, cwd?, name}` returns `{removed}`. Project writes need
+cwd and a trusted project (`invalidParams`, `data.reason: "untrusted"`).
+Connections, sign-in and status belong to the MCP extension in each thread
+(`/mcp`); loaded threads pick up file changes when they next load.
+
+```json
+{"id":28,"method":"mcp/add","params":{"scope":"global","name":"docs","config":{"url":"https://example.com/mcp"}}}
+```
+
+### `resource/list` and `resource/set`
+
+Extensions, skills, prompt templates and themes as `knightcode config` lists them.
+`resource/list {cwd?}` returns
+`{resources: [{type, path, name, enabled, scope, origin, source}]}` for what a thread in `cwd` (or with no project) would find,
+installing nothing. Built-in extensions are left out: they are always on, so
+`resource/set` refuses them like any unknown path. `resource/set {cwd?, type, path, enabled}` loads or
+skips one resource with a `+` or `-` pattern in the settings of the scope that
+defines it: a top-level resource in that scope's `extensions`, `skills`,
+`prompts` or `themes`, a package's in that package's filter. Project resources
+need a trusted project; an unknown path is `invalidParams`.
+
+```json
+{"id":29,"method":"resource/set","params":{"type":"skills","path":"/home/u/.knightcode/agent/skills/review/SKILL.md","enabled":false}}
 ```
 
 ### `project/trust/read`
@@ -423,6 +573,136 @@ Diagnostics observe the shared server, not only this connection.
 
 ```json
 {"id":18,"method":"server/diagnostics","params":{}}
+```
+
+### `thread/diff/read`
+
+Params: `{threadId, scope?, against?, commit?, context?, ignoreWhitespace?}`.
+Result: `{scope, root, files, filesOmitted?, untrackedSkipped?, turnId?, stale?, against?}`.
+`files` are `{path, oldPath?, status, binary, additions, deletions, tooLarge?, hunks}`,
+their paths relative to the repository's `root` (not the thread's cwd, which can
+be a subdirectory of it); each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
+`"\"` prefix. `committed` needs `commit`; `branch` compares with `against`,
+else the worktree's base, the upstream or the default branch, and echoes it.
+More than 500 untracked files are counted in `untrackedSkipped` and left out.
+Files past the response budget come without hunks (`tooLarge`) or are only
+counted (`filesOmitted`). A hunk id hashes the file's header (its blob ids) and
+the hunk at the read's `context`: an action must pass the same `context` (a
+`context: 0` id matches no action), and after an action changes a file, read it
+again, as its other hunks' ids change too. A hunk id from an `ignoreWhitespace` read matches no
+action. Reads take no lock and never write the user's index.
+Errors: `threadNotFound`, `notGitRepo`; `invalidParams` for a missing `commit`
+or no branch to compare with.
+
+```json
+{"id":20,"method":"thread/diff/read","params":{"threadId":"THREAD_ID","scope":"uncommitted","context":3}}
+```
+
+### `thread/diff/revert`
+
+Params: `{threadId, scope?, against?, commit?, path?, hunkId?, context?, reapply?, turnId?}`.
+With `turnId` (`lastTurn` only), a last turn other than that one answers
+`gitConflict` `diffChanged`, so an Undo shown on one turn never reverts a newer one.
+Result: `{paths}`. Reverse-applies one hunk, one file, or the whole scope to the
+working tree; `lastTurn` without a path undoes the turn, and only while every
+affected file is exactly as the turn left it. With `reapply` (`lastTurn` only,
+no hunk), the turn's changes apply again instead, and only while every affected
+file is exactly as the turn found it. Hunks of renamed, added, deleted,
+binary or mode-changed files revert as whole files only. Refused while a turn
+runs in the checkout; no turn starts and no tool runs there until it ends.
+Errors: `turnInProgress`; `invalidParams` for `staged` and `committed` or a
+path outside the diff; `gitConflict` with `diffChanged` or `patchFailed`.
+
+```json
+{"id":21,"method":"thread/diff/revert","params":{"threadId":"THREAD_ID","path":"src/a.ts","hunkId":"HUNK_ID"}}
+```
+
+### `thread/handoff`
+
+Params: `{threadId, to: "local" | "worktree", branch?, environment?}`. Result:
+`{thread, branch?, warnings}`. To the main checkout: the worktree's `HEAD`
+becomes a branch checked out there (the worktree's own branch, else `branch`,
+else the previous handoff's branch fast-forwarded, else
+`<worktrees.branchPrefix><title>`), the uncommitted changes move, and the
+worktree stays, detached and clean. Back: the worktree is detached at the main
+checkout's `HEAD` and the changes move into it; a thread born in the main
+checkout gets a worktree. The changes are saved under `<agentDir>/handoff/`
+before anything moves and leave the source only after they landed. The thread
+is reloaded where it now runs: subscribers receive `thread/replaced` with the
+same id, and queued inputs follow it.
+Errors: `turnInProgress`; `invalidParams` for a thread with no message yet or
+already on that side; `gitConflict` with `localChanges`,
+`operationInProgress`, `branchExists`, `recoveryRequired` (with `data.patch`)
+or `worktreeDeleted`.
+
+```json
+{"id":22,"method":"thread/handoff","params":{"threadId":"THREAD_ID","to":"local"}}
+```
+
+### `thread/worktree/restore`
+
+Params: `{threadId}`. Result: `{thread}`. Rebuilds a deleted worktree at its
+old path from its snapshot: detached at the old `HEAD`, with the working files
+and the staged state as they were (ignored files were not kept). Then the
+thread loads there.
+Errors: `threadNotFound`; `invalidParams` when the worktree is not deleted;
+`gitConflict` with `worktreeMissing` (deleted without a snapshot: fork the chat
+into a new worktree instead) or `submodules`.
+
+```json
+{"id":23,"method":"thread/worktree/restore","params":{"threadId":"THREAD_ID"}}
+```
+
+### `worktree/list` and `worktree/delete`
+
+`worktree/list {cwd?}` →
+`{worktrees: [{path, projectCwd, head?, branch?, threadIds, lastUsedAt, deleted}]}`,
+the managed worktrees (of `cwd`'s project
+when given). `worktree/delete {path}` → `{snapshot?}` deletes one after its
+snapshot. A worktree a thread is loaded in, or one holding a nested repository
+(an initialized submodule or a repository inside it), is never deleted: archive
+and pruning skip it, and `worktree/delete` answers `gitConflict` with
+`worktreeInUse` or `submodules`. Only registrations in the managed layout are
+removed; the user's own worktrees are never touched.
+
+```json
+{"id":24,"method":"worktree/delete","params":{"path":"/home/u/.knightcode/agent/worktrees/ab12/project"}}
+```
+
+### `environment/list` and `environment/save`
+
+`environment/list {cwd}` → `{environments, trusted}` reads the project's
+`.knightcode/environments.json`; `environment/save {cwd, environments}` writes
+it (names unique, at most 50). An untrusted project's scripts never run. See
+[Settings](settings.md#worktrees).
+
+```json
+{"id":25,"method":"environment/save","params":{"cwd":"/p","environments":[{"name":"node","setup":{"default":"cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci"}}]}}
+```
+
+### `git/*`
+
+Each acts on the thread's own checkout: its worktree, or the user's checkout.
+`git/status` → branch, upstream, ahead/behind, staged/unstaged/untracked/
+conflicted counts and an operation in progress. `git/stage` and `git/unstage`
+take `{threadId, path?, hunkId?, context?}`: no path is everything; paths are
+literal. `git/commit {threadId, message?, includeUnstaged?}` stages everything
+first unless `includeUnstaged: false`; an empty message is written by the
+thread's model from the staged diff, outside the conversation, and the commit
+answers `concurrentChange` when the checkout changed meanwhile. The user's
+hooks run. `git/push` pushes the current branch with one explicit,
+non-forcing refspec and sets the upstream the first time.
+`git/pr/create {threadId, title?, body?, draft?}` runs `gh pr create` (`toolMissing` without
+`gh`). `git/branches`, `git/branch/create {name}` ("Create branch here"),
+`git/branch/switch {name}` (refused when it would overwrite local changes or an
+ignored file the branch tracks) and `git/log {limit?}` (the commits since the
+base, for the `committed` scope) complete the set.
+Errors: `notGitRepo`, `invalidParams`, `authRequired`, `toolMissing`;
+`gitConflict` with `diffChanged`, `patchFailed`, `concurrentChange`,
+`pushRejected`, `branchExists` or `localChanges`.
+
+```json
+{"id":26,"method":"git/commit","params":{"threadId":"THREAD_ID","includeUnstaged":true}}
 ```
 
 ## Ownership, unloading, and shutdown

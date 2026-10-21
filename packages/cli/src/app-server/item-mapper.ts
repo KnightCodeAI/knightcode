@@ -6,7 +6,7 @@
 
 import type { AssistantMessage } from "@knightcode/ai";
 import { calculateContextTokens } from "../core/compaction/index.ts";
-import type { Item, TokenUsage, Turn, TurnQueue, WireTurn } from "@knightcode/app-server-protocol";
+import type { DiffComment, Item, TokenUsage, Turn, TurnQueue, WireTurn } from "@knightcode/app-server-protocol";
 import type { AgentSession, AgentSessionEvent } from "../core/agent-session.ts";
 import { addUsageToTotals, type UsageTotals } from "../core/usage-totals.ts";
 import { getLatestCompactionEntry } from "../core/session-manager.ts";
@@ -20,6 +20,7 @@ import {
 	turnEndOf,
 } from "../extensions/turn-marker.ts";
 import type { AppServerContext } from "./context.ts";
+import { TURN_COMMENTS_ENTRY } from "./diff.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 import {
 	assistantTimes,
@@ -35,7 +36,12 @@ import {
 export function queueOf(thread: LoadedThread): TurnQueue {
 	return {
 		steering: [...thread.session.getSteeringMessages()],
-		followUp: thread.queued.map(({ id, text }) => ({ id, text })),
+		followUp: thread.queued.map(({ id, text, images, review }) => ({
+			id,
+			// The user's own text: a reviewed input's prompt is the composed one.
+			text: review?.text ?? text,
+			...(images?.length || review ? { attachments: (images?.length ?? 0) + (review?.comments.length ?? 0) } : {}),
+		})),
 	};
 }
 
@@ -114,18 +120,19 @@ interface Streaming {
 export class ItemMapper {
 	private readonly thread: LoadedThread;
 	private readonly broadcast: AppServerContext["broadcast"];
-	private readonly onSettled: () => void;
+	private readonly onSettled: (turnId?: string) => void;
 	private turn: Turn | undefined;
 	/** The running turn's counters, or the last turn's between runs (restored from the file on load). */
 	private counters: Counters | undefined;
 	private streaming: Streaming | undefined;
 	/** For the running turn's first user message. */
 	private clientMessageId: string | undefined;
+	private review: { comments: DiffComment[]; text: string } | undefined;
 	private calls = new Map<string, ToolCallItem>();
 	/** Top-level item id to its current index, for the snapshot's order. */
 	private positions = new Map<string, number>();
 
-	constructor(thread: LoadedThread, broadcast: AppServerContext["broadcast"], onSettled: () => void) {
+	constructor(thread: LoadedThread, broadcast: AppServerContext["broadcast"], onSettled: (turnId?: string) => void) {
 		this.thread = thread;
 		this.broadcast = broadcast;
 		this.onSettled = onSettled;
@@ -237,6 +244,8 @@ export class ItemMapper {
 				this.thread.pendingTurnRequestId = undefined;
 				this.clientMessageId = this.thread.pendingClientMessageId;
 				this.thread.pendingClientMessageId = undefined;
+				this.review = this.thread.pendingReview;
+				this.thread.pendingReview = undefined;
 				this.thread.notify("turn/started", { turn: { ...this.turn, items: [] }, ...(requestId ? { requestId } : {}) });
 				this.thread.acceptTurnStart?.();
 				return;
@@ -301,12 +310,23 @@ export class ItemMapper {
 						typeof message.content === "string" ? [{ type: "text" as const, text: message.content }] : message.content;
 					const clientMessageId = this.clientMessageId;
 					this.clientMessageId = undefined;
+					const review = this.review;
+					this.review = undefined;
+					const id = `${this.turn.id}:user:${counters.users++}`;
+					if (review) {
+						try {
+							this.manager.appendCustomEntry(TURN_COMMENTS_ENTRY, { itemId: id, ...review });
+						} catch (error) {
+							console.error(`app-server: could not record the review comments of ${id}: ${String(error)}`);
+						}
+					}
 					this.appendWhole(
 						{
 							type: "userMessage",
 							...(clientMessageId ? { clientMessageId } : {}),
-							id: `${this.turn.id}:user:${counters.users++}`,
-							text: textOf(content),
+							id,
+							text: review?.text ?? textOf(content),
+							...(review ? { comments: review.comments } : {}),
 							completedAt: message.timestamp,
 							images: content.flatMap((c) => (c.type === "image" ? [{ mimeType: c.mimeType, data: c.data }] : [])),
 						},
@@ -531,6 +551,6 @@ export class ItemMapper {
 		this.thread.notify("turn/completed", { turn: summary });
 		this.broadcast("thread/turn/completed", { turn: summary });
 		this.broadcast("thread/status/changed", { threadId: this.thread.id, status: { type: "idle" } });
-		this.onSettled();
+		this.onSettled(turn.id);
 	}
 }

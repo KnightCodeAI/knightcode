@@ -19,7 +19,8 @@ import {
 	session,
 	shell,
 } from "electron";
-import type { HostEvent, HostRequest } from "./shared/host-protocol.ts";
+import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-protocol.ts";
+import { markQuitting, onWindowClose } from "./main/close.ts";
 import { handleHost } from "./main/host.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
 import { Router } from "./main/router.ts";
@@ -34,7 +35,7 @@ const DEV_URL = MAIN_WINDOW_VITE_DEV_SERVER_URL;
 const ORIGIN = DEV_URL ? new URL(DEV_URL).origin : "app://desktop";
 const RENDERER_DIR = join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const CSP =
-	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
 	"font-src 'self'; connect-src 'self'; frame-src kc-ext:; worker-src 'self' blob:";
 
 protocol.registerSchemesAsPrivileged([
@@ -45,15 +46,47 @@ interface OpenWindow {
 	window: BrowserWindow;
 	port: MessagePortMain | undefined;
 	lastFocusedAt: number;
+	/** A `knightcode://` link to show once the page has its port (section 6.1). */
+	route: string | undefined;
 }
+
+const LINK_PREFIX = "knightcode://";
+/** The `knightcode://` link among a launch's arguments, if any. */
+const linkIn = (argv: string[]) => argv.find((arg) => arg.startsWith(LINK_PREFIX));
 
 const windows = new Map<number, OpenWindow>();
 let nextWindowId = 1;
 let serverState: { state: ServerState; message?: string } = { state: "starting" };
 let quitting = false;
 
+/** host/window/role: the focused window, else the one focused last, acts for all; and what the others hold. */
+function roleOf(id: number): { primary: boolean; heldElsewhere: string[] } {
+	const all = [...windows];
+	const primary = all.find(([, w]) => w.window.isFocused()) ?? all.sort(([, a], [, b]) => b.lastFocusedAt - a.lastFocusedAt)[0];
+	const heldElsewhere = new Set(all.filter(([other]) => other !== id).flatMap(([other]) => router.heldThreads(other)));
+	return { primary: primary?.[0] === id, heldElsewhere: [...heldElsewhere] };
+}
+
 function sendEvent(target: OpenWindow, event: HostEvent): void {
 	target.port?.postMessage(event);
+}
+
+/**
+ * Codex's window zoom: 10% steps from 50% to 300%, the caption buttons' overlay as tall as the zoomed title bar, and
+ * the level shown in the window that changed it. Chromium zooms by origin, so every window follows.
+ */
+function zoom(window: BrowserWindow, step: -1 | 0 | 1): void {
+	const contents = window.webContents;
+	const factor = step === 0 ? 1 : Math.min(3, Math.max(0.5, Math.round(contents.getZoomFactor() * 10 + step) / 10));
+	contents.setZoomFactor(factor);
+	for (const open of windows.values()) {
+		if (process.platform === "win32")
+			open.window.setTitleBarOverlay({
+				// The new factor for every window: one origin, and another window's own reading can lag.
+				height: Math.round(WINDOW_CHROME.titleBarHeight * factor),
+			});
+		if (open.window === window) sendEvent(open, { event: "zoom", factor });
+	}
 }
 
 const router = new Router({
@@ -92,7 +125,9 @@ function connectPort(id: number, open: OpenWindow): void {
 		const data = event.data as Message | HostRequest;
 		if (typeof data !== "object" || data === null) return;
 		if ("host" in data) {
-			void handleHost(data, open.window, { state, server }).then((response) => port1.postMessage(response));
+			void handleHost(data, open.window, { state, server, openWindow: createWindow, zoom, role: () => roleOf(id) }).then((response) =>
+				port1.postMessage(response),
+			);
 			return;
 		}
 		router.fromWindow(id, data);
@@ -100,9 +135,34 @@ function connectPort(id: number, open: OpenWindow): void {
 	port1.start();
 	open.window.webContents.postMessage("kc:port", null, [port2]);
 	sendEvent(open, { event: "server/state", ...serverState });
+	if (open.route) sendEvent(open, { event: "navigate", route: open.route });
+	open.route = undefined;
 }
 
-function createWindow(): BrowserWindow {
+/**
+ * Show a `knightcode://` link (section 6.1): a thread in the window already holding it, anything else (or a thread no
+ * window holds) in the window used last; a new window when none is open.
+ */
+function openLink(url: string): void {
+	const encoded = /^knightcode:\/\/thread\/([^/?#]+)/.exec(url)?.[1];
+	let threadId: string | undefined;
+	try {
+		threadId = encoded && decodeURIComponent(encoded);
+	} catch {
+		// A bad %-escape (any page can send the link): no window holds it; the renderer shows nothing for it.
+	}
+	const all = [...windows];
+	const holding = threadId ? all.find(([id]) => router.heldThreads(id).includes(threadId)) : undefined;
+	const target = holding ?? all.sort(([, a], [, b]) => b.lastFocusedAt - a.lastFocusedAt)[0];
+	if (!target) return void createWindow(url);
+	const [, open] = target;
+	if (open.window.isMinimized()) open.window.restore();
+	open.window.focus();
+	if (open.port) sendEvent(open, { event: "navigate", route: url });
+	else open.route = url;
+}
+
+function createWindow(route?: string): BrowserWindow {
 	const id = nextWindowId++;
 	const dark = nativeTheme.shouldUseDarkColors;
 	const window = new BrowserWindow({
@@ -112,13 +172,17 @@ function createWindow(): BrowserWindow {
 		minHeight: 480,
 		show: false,
 		title: "KnightCode",
-		backgroundColor: dark ? "#17140f" : "#fbf9f6",
+		backgroundColor: WINDOW_CHROME[dark ? "dark" : "light"].background,
 		...(process.platform === "darwin"
 			? { titleBarStyle: "hiddenInset" as const }
 			: process.platform === "win32"
 				? {
 						titleBarStyle: "hidden" as const,
-						titleBarOverlay: { color: "#00000000", symbolColor: dark ? "#e7e2db" : "#2b2620", height: 40 },
+						titleBarOverlay: {
+							color: "#00000000",
+							symbolColor: WINDOW_CHROME[dark ? "dark" : "light"].symbol,
+							height: WINDOW_CHROME.titleBarHeight,
+						},
 					}
 				: {}),
 		webPreferences: {
@@ -130,15 +194,19 @@ function createWindow(): BrowserWindow {
 			additionalArguments: [`--kc-origin=${ORIGIN}`, `--kc-window-id=${id}`],
 		},
 	});
-	const open: OpenWindow = { window, port: undefined, lastFocusedAt: Date.now() };
+	const open: OpenWindow = { window, port: undefined, lastFocusedAt: Date.now(), route };
 	windows.set(id, open);
 	window.on("focus", () => {
 		open.lastFocusedAt = Date.now();
 	});
+	window.on("close", (event) => onWindowClose(window, state, event));
 	window.once("ready-to-show", () => window.show());
 	// A reload gets a fresh port; the old one's holds are released and the page resumes what it shows.
 	window.webContents.on("did-finish-load", () => connectPort(id, open));
-	window.webContents.on("will-navigate", (event) => event.preventDefault());
+	// The page never leaves itself; a reload (Vite's, or the store's after a hot update) is a navigation to its own URL.
+	window.webContents.on("will-navigate", (event) => {
+		if (event.url !== window.webContents.getURL()) event.preventDefault();
+	});
 	window.webContents.setWindowOpenHandler(({ url }) => {
 		if (/^https?:/.test(url)) void shell.openExternal(url);
 		return { action: "deny" };
@@ -158,6 +226,11 @@ function createWindow(): BrowserWindow {
 	return window;
 }
 
+function zoomFocused(step: -1 | 0 | 1): void {
+	const window = BrowserWindow.getFocusedWindow();
+	if (window) zoom(window, step);
+}
+
 function buildMenu(): void {
 	const template: Electron.MenuItemConstructorOptions[] = [
 		...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
@@ -168,9 +241,10 @@ function buildMenu(): void {
 				{ role: "reload" },
 				...(app.isPackaged ? [] : [{ role: "toggleDevTools" as const }]),
 				{ type: "separator" },
-				{ role: "resetZoom" },
-				{ role: "zoomIn" },
-				{ role: "zoomOut" },
+				// The roles' accelerators, through zoom() so the steps and the banner match the renderer's.
+				{ label: "Actual Size", accelerator: "CmdOrCtrl+0", click: () => zoomFocused(0) },
+				{ label: "Zoom In", accelerator: "CmdOrCtrl+Plus", click: () => zoomFocused(1) },
+				{ label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => zoomFocused(-1) },
 			],
 		},
 		{ role: "windowMenu" },
@@ -182,7 +256,8 @@ async function start(): Promise<void> {
 	await app.whenReady();
 	protocol.handle("app", serveRenderer);
 	session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
-		callback(permission === "clipboard-sanitized-write" || permission === "notifications"),
+		// local-fonts: Settings › Appearance lists the installed fonts (queryLocalFonts).
+		callback(permission === "clipboard-sanitized-write" || permission === "notifications" || permission === "local-fonts"),
 	);
 	buildMenu();
 	server = new ServerConnection({
@@ -198,26 +273,47 @@ async function start(): Promise<void> {
 		onExit: () => router.serverRestarted(),
 	});
 	server.start();
-	createWindow();
+	// A source checkout would register the bare Electron binary as the link handler; only an installed app does.
+	if (app.isPackaged) app.setAsDefaultProtocolClient("knightcode");
+	createWindow(linkIn(process.argv) ?? pendingLink);
+	pendingLink = undefined;
 	app.on("activate", () => {
 		if (windows.size === 0) createWindow();
 	});
 }
 
+/** A link macOS delivered before start() opened the first window. */
+let pendingLink: string | undefined;
+
 if (!app.requestSingleInstanceLock()) {
 	app.quit();
 } else {
-	app.on("second-instance", () => {
+	app.on("second-instance", (_event, argv) => {
+		const link = linkIn(argv);
+		// Before start() made the first window: a link waits for it, and a plain launch is that window anyway.
+		if (!server) {
+			if (link) pendingLink = link;
+			return;
+		}
+		if (link) return openLink(link);
 		const first = windows.values().next().value as OpenWindow | undefined;
 		if (!first) return void createWindow();
 		if (first.window.isMinimized()) first.window.restore();
 		first.window.focus();
 	});
+	// macOS hands links to the running app as an event, not as arguments.
+	app.on("open-url", (event, url) => {
+		event.preventDefault();
+		// Before start() made the first window the link waits for it; after, openLink opens a window when none is
+		// left (macOS keeps the app running with every window closed).
+		if (server) openLink(url);
+		else pendingLink = url;
+	});
 	app.on("window-all-closed", () => {
 		if (process.platform !== "darwin") app.quit();
 	});
 	app.on("before-quit", (event) => {
-		if (quitting || !server) return;
+		if (quitting || !server) return markQuitting();
 		event.preventDefault();
 		const running = router.activeThreads();
 		if (running > 0) {
@@ -233,6 +329,7 @@ if (!app.requestSingleInstanceLock()) {
 			if (choice !== 0) return;
 		}
 		quitting = true;
+		markQuitting();
 		void server.stop().finally(() => app.quit());
 	});
 	void start();

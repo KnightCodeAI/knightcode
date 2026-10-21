@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { DESKTOP_KEYBINDINGS, matchesBinding } from "../../src/shared/keybindings.ts";
+import { comboFromEvent, DESKTOP_KEYBINDINGS, matchesBinding } from "../../src/shared/keybindings.ts";
 
 const key = (k: string, mods: Partial<Record<"ctrlKey" | "metaKey" | "shiftKey" | "altKey", boolean>> = {}) => ({
 	key: k,
@@ -33,6 +33,47 @@ test("off macOS ctrl names mod, and the Windows key blocks a match", () => {
 	expect(matchesBinding(key("Enter", { metaKey: true }), "desktop.composer.send", false)).toBe(false);
 });
 
+test("punctuation keys match the physical key, whatever Shift or the layout makes of it", () => {
+	// Ctrl+Shift+= types "+", and Ctrl+[ is "ü" on a German layout; both still mean their key.
+	expect(
+		matchesBinding({ ...key("+", { ctrlKey: true, shiftKey: true }), code: "Equal" }, "desktop.view.zoomIn", false),
+	).toBe(true);
+	expect(matchesBinding({ ...key("ü", { ctrlKey: true }), code: "BracketLeft" }, "desktop.nav.back", false)).toBe(true);
+	expect(matchesBinding({ ...key("[", { ctrlKey: true }), code: "BracketRight" }, "desktop.nav.back", false)).toBe(
+		false,
+	);
+	expect(matchesBinding(key("ArrowLeft", { altKey: true }), "desktop.nav.back", false)).toBe(true);
+});
+
+test("a recorded key press is the binding that matches it again", () => {
+	const presses = [
+		{ ...key("k", { ctrlKey: true, shiftKey: true }), code: "KeyK" },
+		{ ...key("+", { ctrlKey: true, shiftKey: true }), code: "Equal" },
+		{ ...key("1", { altKey: true }), code: "Digit1" },
+		{ ...key(" ", { ctrlKey: true }), code: "Space" },
+		{ ...key("F5"), code: "F5" },
+	];
+	expect(presses.map((p) => comboFromEvent(p, false))).toEqual([
+		"mod+shift+k",
+		"mod+shift+equal",
+		"alt+digit1",
+		"mod+space",
+		"f5",
+	]);
+	for (const press of presses)
+		expect(
+			matchesBinding(press, "desktop.palette", false, { "desktop.palette": [comboFromEvent(press, false)!] }),
+		).toBe(true);
+	// Cmd is mod on macOS, and Ctrl stays itself there.
+	expect(comboFromEvent({ ...key("k", { metaKey: true, ctrlKey: true }), code: "KeyK" }, true)).toBe("mod+ctrl+k");
+	// A lone modifier is not a shortcut yet.
+	expect(comboFromEvent({ ...key("Shift", { shiftKey: true }), code: "ShiftLeft" }, false)).toBeUndefined();
+});
+
+test("an empty override unassigns a binding", () => {
+	expect(matchesBinding(key("k", { ctrlKey: true }), "desktop.palette", false, { "desktop.palette": [] })).toBe(false);
+});
+
 test("overrides replace the defaults for one id", () => {
 	expect(matchesBinding(key("j", { ctrlKey: true }), "desktop.palette", false, { "desktop.palette": ["mod+j"] })).toBe(
 		true,
@@ -42,11 +83,26 @@ test("overrides replace the defaults for one id", () => {
 	);
 });
 
-test("every binding has a description and at least one key", () => {
+test("every binding has a description, and a key unless Codex leaves the action unassigned too", () => {
+	const unassigned = ["desktop.thread.fork", "desktop.thread.openWindow", "desktop.thread.delete"];
 	for (const [id, binding] of Object.entries(DESKTOP_KEYBINDINGS)) {
 		expect(binding.description, id).not.toBe("");
-		expect(binding.defaultKeys.length, id).toBeGreaterThan(0);
+		expect(binding.defaultKeys.length === 0, id).toBe(unassigned.includes(id));
 	}
+});
+
+test("Codex's thread navigation keys: Alt+digit is the sidebar slot, Ctrl+Alt+digit the recent one", () => {
+	type Mods = Parameters<typeof key>[1];
+	const physical = (k: string, code: string, mods: Mods) => ({ ...key(k, mods), code });
+	const ctrlAlt = { ctrlKey: true, altKey: true };
+	expect(matchesBinding(physical("2", "Digit2", { altKey: true }), "desktop.thread.goTo2", false)).toBe(true);
+	expect(matchesBinding(physical("2", "Digit2", ctrlAlt), "desktop.thread.goTo2", false)).toBe(false);
+	expect(matchesBinding(physical("2", "Digit2", ctrlAlt), "desktop.thread.recent2", false)).toBe(true);
+	const semicolon = physical(";", "Semicolon", { ctrlKey: true, shiftKey: true });
+	expect(matchesBinding(semicolon, "desktop.thread.copyCode", false)).toBe(true);
+	// Ctrl+[ goes back; with Alt it is the previous sidebar item.
+	expect(matchesBinding(physical("[", "BracketLeft", ctrlAlt), "desktop.nav.back", false)).toBe(false);
+	expect(matchesBinding(physical("[", "BracketLeft", ctrlAlt), "desktop.thread.previous", false)).toBe(true);
 });
 
 test("no renderer source compares keys directly; handlers go through the binding ids", () => {
@@ -62,4 +118,11 @@ test("no renderer source compares keys directly; handlers go through the binding
 	walk(root);
 	const offenders = files.filter((f) => /\b(?:e|event|ev)\.(?:key|code)\s*[!=]==/.test(readFileSync(f, "utf8")));
 	expect(offenders).toEqual([]);
+});
+
+test("Alt+letter bindings match the physical key: macOS Option and AltGr layouts change event.key", () => {
+	const optionR = { ...key("®", { metaKey: true, altKey: true }), code: "KeyR" };
+	expect(matchesBinding(optionR, "desktop.thread.rename", true)).toBe(true);
+	expect(comboFromEvent(optionR, true)).toBe("mod+alt+r");
+	expect(matchesBinding({ ...optionR, code: "KeyT" }, "desktop.thread.rename", true)).toBe(false);
 });

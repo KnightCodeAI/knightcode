@@ -10,7 +10,7 @@ import { stat } from "node:fs/promises";
 import { getSupportedThinkingLevels } from "@knightcode/ai";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { resolvePath } from "../utils/paths.ts";
-import { readSettings, writeSetting } from "./config.ts";
+import { projectReadable, readSettings, writeSetting } from "./config.ts";
 import { AppServerError } from "./errors.ts";
 import type { AppServerContext } from "./context.ts";
 import type { Handlers } from "./server.ts";
@@ -39,10 +39,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 		},
 		"config/read": async ({ cwd }) => {
 			const resolved = cwd === undefined ? undefined : resolvePath(cwd);
-			const trusted =
-				resolved !== undefined &&
-				(!hasTrustRequiringProjectResources(resolved) || new ProjectTrustStore(ctx.agentDir).get(resolved) === true);
-			return readSettings(ctx.agentDir, resolved, trusted);
+			return readSettings(ctx.agentDir, resolved, resolved !== undefined && projectReadable(ctx.agentDir, resolved));
 		},
 		"config/write": async ({ scope, cwd, key, value, expectedVersion }) => {
 			const resolved = cwd === undefined ? undefined : resolvePath(cwd);
