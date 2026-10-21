@@ -1060,6 +1060,8 @@ export class ThreadManager {
 				if (thread?.state === "ready") this.threads.set(threadId, thread);
 				throw error;
 			}
+			// A deleted thread never loads again to take back inputs a failed relocation left.
+			this.strandedQueues.delete(threadId);
 			if (thread) {
 				await thread.dispose();
 				this.ctx.broadcast("thread/status/changed", { threadId, status: { type: "notLoaded" } });

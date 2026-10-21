@@ -127,13 +127,17 @@ export function checkoutState(dir: string) {
 	const realIndex = sh(dir, "rev-parse", "--path-format=absolute", "--git-path", "index");
 	if (existsSync(realIndex)) copyFileSync(realIndex, temp);
 	const env = { GIT_INDEX_FILE: temp };
-	const flagged = shEnv(dir, env, "ls-files", "-v", "-z")
-		.split("\0")
-		.filter((e) => /^[a-z] /.test(e));
-	for (const entry of flagged) shEnv(dir, env, "update-index", "--no-assume-unchanged", "--", entry.slice(2));
-	shEnv(dir, env, "add", "-u"); // no pathspec: "." fails in a repository with no files
-	const trackedTree = shEnv(dir, env, "write-tree");
-	rmSync(dirname(temp), { recursive: true, force: true });
+	let trackedTree: string;
+	try {
+		const flagged = shEnv(dir, env, "ls-files", "-v", "-z")
+			.split("\0")
+			.filter((e) => /^[a-z] /.test(e));
+		for (const entry of flagged) shEnv(dir, env, "update-index", "--no-assume-unchanged", "--", entry.slice(2));
+		shEnv(dir, env, "add", "-u"); // no pathspec: "." fails in a repository with no files
+		trackedTree = shEnv(dir, env, "write-tree");
+	} finally {
+		rmSync(dirname(temp), { recursive: true, force: true });
+	}
 	return {
 		head: trySh(dir, "rev-parse", "-q", "--verify", "HEAD"), // null on an unborn branch
 		trackedTree,

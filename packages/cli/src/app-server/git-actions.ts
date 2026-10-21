@@ -284,6 +284,8 @@ export async function gitCommit(
 			let failure: unknown;
 			try {
 				if (all) await git(repo.root, ["add", "-A"], { signal: ctx.signal });
+				// A shutdown during the add: no commit is spawned, so no index.lock can be taken as the commit's own.
+				ctx.signal?.throwIfAborted();
 				result = await runGit(repo.root, ["commit", "-q", "-F", "-"], {
 					input: message,
 					// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
