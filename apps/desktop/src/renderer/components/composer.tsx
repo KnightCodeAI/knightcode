@@ -649,14 +649,12 @@ export function Composer({
 						<ModelPicker
 							model={model}
 							thinking={thinking}
-							onModel={(m) =>
-								threadId
-									? void updateSettings(threadId, { model: { provider: m.provider, id: m.id } })
-									: setDraftModel({ provider: m.provider, id: m.id })
-							}
-							onThinking={(level) =>
-								threadId ? void updateSettings(threadId, { thinkingLevel: level }) : setDraftThinking(level)
-							}
+							onChange={({ model: m, thinking: level }) => {
+								const choice = m && { provider: m.provider, id: m.id };
+								if (threadId) return void updateSettings(threadId, { model: choice, thinkingLevel: level });
+								if (choice) setDraftModel(choice);
+								if (level) setDraftThinking(level);
+							}}
 						/>
 						{running && !hasContent ? (
 							<Tooltip content="Stop">

@@ -20,10 +20,13 @@ export function Popover({
 	sideOffset = 1,
 	alignOffset = 0,
 	className = "",
+	onOpenChange,
 }: {
 	/** One element, usually a button; Radix gives it the handlers that open the panel. */
 	trigger: (open: boolean) => ReactNode;
 	children: (close: () => void) => ReactNode;
+	/** Told of every open and close, including `close()` from inside. */
+	onOpenChange?: (open: boolean) => void;
 	side?: "top" | "bottom";
 	align?: "start" | "center" | "end";
 	/** What the panel lines up with, when not the trigger (the thread summary lines up with the header). */
@@ -33,8 +36,12 @@ export function Popover({
 	className?: string;
 }) {
 	const [open, setOpen] = useState(false);
+	const change = (next: boolean) => {
+		setOpen(next);
+		onOpenChange?.(next);
+	};
 	return (
-		<PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+		<PopoverPrimitive.Root open={open} onOpenChange={change}>
 			<PopoverPrimitive.Trigger asChild>{trigger(open)}</PopoverPrimitive.Trigger>
 			{/* After the trigger: on the first render the trigger anchors too, and the last anchor set wins. */}
 			{anchor ? <PopoverPrimitive.Anchor virtualRef={anchor as RefObject<HTMLElement>} /> : null}
@@ -55,7 +62,7 @@ export function Popover({
 					onCloseAutoFocus={keepMovedFocus}
 					className={`kc-menu ${className}`}
 				>
-					{children(() => setOpen(false))}
+					{children(() => change(false))}
 				</PopoverPrimitive.Content>
 			</PopoverPrimitive.Portal>
 		</PopoverPrimitive.Root>

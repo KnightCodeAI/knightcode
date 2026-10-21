@@ -1017,7 +1017,6 @@ function DefaultModel() {
 			{(close) => (
 				<ModelList
 					model={model}
-					onBack={undefined}
 					onModel={(m) => {
 						close();
 						void setDefaultModel(m);
@@ -2089,7 +2088,6 @@ function ModelReasoning({ file }: { file: SettingsFile }) {
 					{(close) => (
 						<ModelList
 							model={undefined}
-							onBack={undefined}
 							onModel={(m) => {
 								close();
 								const level = (m.thinkingLevels as string[]).includes(fallback)

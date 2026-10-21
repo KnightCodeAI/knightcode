@@ -3,27 +3,19 @@
  *
  * - ApprovalPicker: "Change permissions", a 390px menu headed "How should KnightCode actions be approved?", each mode
  *   with an 18px icon, a description and a check; Full access in the caution colour and confirmed once per thread.
- * - ModelPicker: the model and its reasoning effort; the effort slider first, the model list one step away.
+ * - ModelPicker: the model and its reasoning effort, a draft until the panel closes; the effort slider first, the model
+ *   list one step away in the same panel (measured 2026-10-21 against Codex 26.1013).
  * - ProjectPicker: a 260px panel with a search field, the projects with a check on the current one, and adding one.
  */
 
 import type { ApprovalMode, ThinkingLevel } from "@knightcode/app-server-protocol";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Slider } from "radix-ui";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { basename, tokens } from "../format.ts";
 import { matches } from "../keys.ts";
 import { addProject, type ModelInfo, selectPreferences, selectProjects, useStore } from "../store.ts";
-import { Button, IconButton } from "./button.tsx";
-import {
-	ChevronDown,
-	ChevronLeft,
-	ChevronRight,
-	Folder,
-	FolderPlus,
-	Hand,
-	Search,
-	ShieldAlert,
-	ShieldTerminal,
-} from "./icons.tsx";
+import { Button } from "./button.tsx";
+import { ChevronDown, ChevronRight, Folder, FolderPlus, Hand, Search, ShieldAlert, ShieldTerminal } from "./icons.tsx";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./menu.tsx";
 import { ListRow, ListSeparator, Popover } from "./popover.tsx";
 import { Tooltip } from "./tooltip.tsx";
@@ -146,43 +138,102 @@ export function ApprovalPicker({
 	);
 }
 
+/** Levels in order, to carry a level over to a model that lacks it: the next one up, else its highest. */
+const LEVEL_ORDER = Object.keys(LEVEL_NAMES);
+const carryLevel = (level: ThinkingLevel, levels: readonly ThinkingLevel[]) =>
+	levels.includes(level)
+		? level
+		: (levels.find((l) => LEVEL_ORDER.indexOf(l) >= LEVEL_ORDER.indexOf(level)) ?? levels.at(-1));
+
+type ModelChoice = { model: ModelInfo | undefined; thinking: ThinkingLevel | undefined };
+
+/**
+ * Codex's model picker (26.1013, `_Menu_tovi5` in app-primary): the choice is a draft until the panel closes, then
+ * committed in one change. The panel opens on the effort slider under a "model Effort ›" header; the header turns to
+ * the model list, and picking a model returns to the slider. While the slider shows, the trigger reads "Select
+ * model" at its closed width, since the header names the model.
+ */
 export function ModelPicker({
 	model,
 	thinking,
-	onModel,
-	onThinking,
+	onChange,
 }: {
 	model: ModelInfo | undefined;
 	thinking: ThinkingLevel | undefined;
-	onModel: (model: ModelInfo) => void;
-	onThinking: (level: ThinkingLevel) => void;
+	/** What the panel changed, once, as it closes. */
+	onChange: (change: { model?: ModelInfo; thinking?: ThinkingLevel }) => void;
 }) {
-	const levels = model?.thinkingLevels ?? [];
-	const effort = model && thinking && levels.length > 1 ? levelName(thinking) : undefined;
+	const [draft, setDraft] = useState<ModelChoice>({ model, thinking });
+	// Read on close, which can follow a pick in the same event.
+	const latest = useRef(draft);
+	const update = (next: ModelChoice) => {
+		latest.current = next;
+		setDraft(next);
+	};
+	const [view, setView] = useState<"effort" | "list">("effort");
+	const button = useRef<HTMLButtonElement>(null);
+	const [minWidth, setMinWidth] = useState<number>();
+	const hasEffort = (m: ModelInfo | undefined) => (m?.thinkingLevels.length ?? 0) > 1;
+	const onOpenChange = (open: boolean) => {
+		if (open) {
+			setMinWidth(button.current?.offsetWidth);
+			update({ model, thinking });
+			setView(hasEffort(model) ? "effort" : "list");
+			return;
+		}
+		const d = latest.current;
+		const modelChanged = !!d.model && (d.model.provider !== model?.provider || d.model.id !== model?.id);
+		const thinkingChanged = !!d.thinking && (modelChanged || d.thinking !== thinking);
+		if (modelChanged || thinkingChanged)
+			onChange({ model: modelChanged ? d.model : undefined, thinking: thinkingChanged ? d.thinking : undefined });
+	};
 	return (
 		// Centred on the trigger 8px above it, as Codex's (its alignOffset is half the width difference).
 		<Popover
 			align="center"
 			sideOffset={8}
-			className="kc-pop-in"
-			trigger={(open) => (
-				<Button variant="ghost" color="secondary" pill aria-expanded={open} className="px-2 text-sm">
-					<span className="text-ink">{model ? model.name : "Choose a model"}</span>
-					{/* Kept at any width, as Codex's (it drops the permissions label first). */}
-					{effort ? <span>{effort}</span> : null}
-					<ChevronDown size={16} />
-				</Button>
-			)}
+			className="kc-pop-in w-[254px] p-0"
+			onOpenChange={onOpenChange}
+			trigger={(open) => {
+				const shown = open ? draft : { model, thinking };
+				const levels = shown.model?.thinkingLevels ?? [];
+				return (
+					<Button
+						ref={button}
+						variant="ghost"
+						color="secondary"
+						pill
+						aria-expanded={open}
+						className="justify-center px-2 text-sm"
+						style={open ? { minWidth } : undefined}
+					>
+						{open && view === "effort" ? (
+							<span>Select model</span>
+						) : (
+							<>
+								<span className="truncate text-ink">{shown.model ? shown.model.name : "Choose a model"}</span>
+								{/* Kept at any width, as Codex's (it drops the permissions label first). */}
+								{shown.thinking && levels.length > 1 ? <EffortLabel levels={levels} level={shown.thinking} /> : null}
+							</>
+						)}
+						<ChevronDown size={16} />
+					</Button>
+				);
+			}}
 		>
 			{(close) => (
 				<ModelMenu
-					model={model}
-					thinking={thinking}
+					view={view}
+					draft={draft}
+					onList={() => setView("list")}
+						onDone={close}
+					onThinking={(level) => update({ ...latest.current, thinking: level })}
 					onModel={(m) => {
-						close();
-						onModel(m);
+						const level = latest.current.thinking;
+						update({ model: m, thinking: level && carryLevel(level, m.thinkingLevels) });
+						if (hasEffort(m)) setView("effort");
+						else close();
 					}}
-					onThinking={onThinking}
 				/>
 			)}
 		</Popover>
@@ -190,87 +241,230 @@ export function ModelPicker({
 }
 
 /**
- * Codex's model picker: the effort slider first, the model list one step away behind the header. Lives inside
- * the popover, so it starts on the slider each time the menu opens.
+ * The trigger's effort word, Codex's (_ModelPickerTriggerEffort*): every level stacked in one cell, the current one
+ * faded in from a 4px blur and the others out, the cell's width easing to the current word on the 0.3 s spring.
  */
-function ModelMenu({
-	model,
-	thinking,
-	onModel,
-	onThinking,
-}: {
-	model: ModelInfo | undefined;
-	thinking: ThinkingLevel | undefined;
-	onModel: (model: ModelInfo) => void;
-	onThinking: (level: ThinkingLevel) => void;
-}) {
-	const levels = model?.thinkingLevels ?? [];
-	const [view, setView] = useState<"effort" | "list">(model && levels.length > 1 ? "effort" : "list");
-	if (view === "effort" && model) {
-		const level = thinking && levels.includes(thinking) ? thinking : levels[0]!;
-		return (
-			<div className="w-[254px]">
-				<button type="button" onClick={() => setView("list")} className="kc-row justify-center text-base font-medium">
-					<span className="truncate text-ink">{model.name}</span>
-					<span className="-ml-1 text-tertiary">{levelName(level)}</span>
-					<ChevronRight size={12} className="-ml-1 text-tertiary" />
-				</button>
-				<EffortSlider levels={levels} value={level} onChange={onThinking} />
-			</div>
-		);
-	}
+function EffortLabel({ levels, level }: { levels: readonly ThinkingLevel[]; level: ThinkingLevel }) {
+	const cell = useRef<HTMLSpanElement>(null);
+	const [width, setWidth] = useState<number>();
+	useLayoutEffect(() => {
+		const word = cell.current?.querySelector<HTMLElement>(`[data-level="${level}"]`);
+		if (word) setWidth(word.offsetWidth);
+	}, [level]);
 	return (
-		<ModelList
-			model={model}
-			onModel={onModel}
-			onBack={model && levels.length > 1 ? () => setView("effort") : undefined}
-		/>
+		<span className="kc-effort" style={{ width }}>
+			<span className="sr-only">{levelName(level)}</span>
+			<span ref={cell} aria-hidden className="kc-effort-cell">
+				{levels.map((l) => (
+					<span key={l} data-level={l} data-active={l === level || undefined}>
+						{levelName(l)}
+					</span>
+				))}
+			</span>
+		</span>
 	);
 }
 
-/** Reasoning effort as Codex draws it: a pill track, a dot per level, a white knob over a native range input. */
+/**
+ * The panel's two views, stacked as Codex's: the panel's height eases to the shown view's (0.32 s), the views'
+ * parts fade (0.2 s) and slide 10px, staggered (styles.css, .kc-mp). The hidden view stays mounted and inert.
+ */
+function ModelMenu({
+	view,
+	draft,
+	onList,
+	onDone,
+	onModel,
+	onThinking,
+}: {
+	view: "effort" | "list";
+	draft: ModelChoice;
+	onList: () => void;
+	onDone: () => void;
+	onModel: (model: ModelInfo) => void;
+	onThinking: (level: ThinkingLevel) => void;
+}) {
+	const effort = useRef<HTMLDivElement>(null);
+	const list = useRef<HTMLDivElement>(null);
+	const [height, setHeight] = useState<number>();
+	const [ready, setReady] = useState(false);
+	useLayoutEffect(() => {
+		const panel = (view === "effort" ? effort : list).current;
+		if (!panel) return;
+		setHeight(panel.offsetHeight);
+		const observer = new ResizeObserver(() => setHeight(panel.offsetHeight));
+		observer.observe(panel);
+		// Next frame: the list's height cap reads a variable Radix sets only once the panel is placed, and Radix's
+		// slider shows its thumb from its second render. The slider before any input: Radix renders a hidden form
+		// input beside its thumb.
+		const frame = requestAnimationFrame(() => {
+			(panel.querySelector<HTMLElement>("[role=slider]") ?? panel.querySelector("input"))?.focus({
+				preventScroll: true,
+			});
+			panel.querySelector("[data-checked]")?.scrollIntoView({ block: "center" });
+		});
+		return () => {
+			observer.disconnect();
+			cancelAnimationFrame(frame);
+		};
+	}, [view]);
+	// No transition into the first height.
+	useEffect(() => {
+		const frame = requestAnimationFrame(() => setReady(true));
+		return () => cancelAnimationFrame(frame);
+	}, []);
+	const { model } = draft;
+	const levels = model?.thinkingLevels ?? [];
+	const level = draft.thinking && levels.includes(draft.thinking) ? draft.thinking : levels[0];
+	const active = (v: typeof view) => String(view === v);
+	return (
+		<div className="kc-mp" data-ready={ready || undefined} style={{ height }}>
+			<div ref={effort} className="kc-mp-view" inert={view !== "effort"} aria-hidden={view !== "effort"}>
+				{model && level ? (
+					<>
+						<div className="kc-mp-part kc-mp-header" data-part="header" data-active={active("effort")}>
+							<button type="button" aria-label="Select model" onClick={onList} className="kc-mp-toggle group">
+								<span className="kc-mp-toggle-content">
+									<span className="truncate text-ink">{model.name}</span>
+									<span className="ms-0.5 shrink-0 text-tertiary">{levelName(level)}</span>
+									<ChevronRight size={12} className="shrink-0 text-tertiary" />
+								</span>
+							</button>
+						</div>
+						<div className="kc-mp-part py-1" data-part="slider" data-active={active("effort")}>
+							<EffortSlider levels={levels} value={level} onChange={onThinking} onDone={onDone} />
+						</div>
+					</>
+				) : null}
+			</div>
+			<div ref={list} className="kc-mp-view" inert={view !== "list"} aria-hidden={view !== "list"}>
+				<div className="kc-mp-part" data-part="list" data-active={active("list")}>
+					<ModelList
+						model={model}
+						onModel={onModel}
+						className="max-h-[min(316px,calc(var(--radix-popover-content-available-height)-4px))]"
+					/>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/** The knob's centre at `percent` along the track: 13px in at either end (Codex's 28px knob less 1px). */
+const knobAt = (percent: number) => `calc(${percent}% + ${13 - (percent / 50) * 13}px)`;
+/** The fill, a full-width span slid left to end under the knob's centre; empty at the first level, full at the last. */
+const fillAt = (percent: number, last: number) => {
+	const step = 100 / last;
+	const shift = (13 - (percent / 50) * 13) * Math.min(percent / step, (100 - percent) / step, 1);
+	return `translateX(calc(${percent - 100}% + ${shift}px))`;
+};
+/** Wheel travel per level, as Codex's; a pause over 160ms or a turn back starts the count again. */
+const WHEEL_STEP = 30;
+
+/**
+ * Reasoning effort as Codex draws it (ModelPickerPowerSliderImpl and _xwb5v, 26.1013), on the same Radix slider: a
+ * 24px pill track at 10% text, a 4px dot per level, a 28px white knob. Knob and fill move on one 0.3 s tween (0.15 s
+ * while dragging, under the closed hand); the knob springs to 32px while hovered or pressed; a dot doubles under the
+ * pointer and a press jumps to it; the wheel steps a level per 30px; Enter closes the panel. Styles: .kc-power.
+ */
 function EffortSlider({
 	levels,
 	value,
 	onChange,
+	onDone,
 }: {
 	levels: readonly ThinkingLevel[];
 	value: ThinkingLevel;
 	onChange: (level: ThinkingLevel) => void;
+	onDone: () => void;
 }) {
 	const index = Math.max(0, levels.indexOf(value));
-	const last = levels.length - 1;
-	// Positions run between the knob's centre at either end, 14px in from each side.
-	const at = (i: number) => `calc(14px + (100% - 28px) * ${i / last})`;
+	const last = Math.max(levels.length - 1, 1);
+	const percent = (i: number) => (i / last) * 100;
+	const [pressed, setPressed] = useState(false);
+	const [dragging, setDragging] = useState(false);
+	const [hovered, setHovered] = useState(false);
+	const root = useRef<HTMLSpanElement>(null);
+	// The wheel listener is attached once (it must not be passive to keep the panel from scrolling).
+	const latest = useRef({ index, levels, onChange });
+	latest.current = { index, levels, onChange };
+	useEffect(() => {
+		const element = root.current;
+		if (!element) return;
+		const wheel = { delta: 0, time: 0 };
+		const onWheel = (event: WheelEvent) => {
+			if (event.ctrlKey) return;
+			event.preventDefault();
+			const { index, levels, onChange } = latest.current;
+			const raw = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : -event.deltaY;
+			const delta = event.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? raw : Math.sign(raw) * WHEEL_STEP;
+			if (delta === 0) return;
+			if (event.timeStamp - wheel.time > 160 || Math.sign(delta) !== Math.sign(wheel.delta)) wheel.delta = 0;
+			wheel.time = event.timeStamp;
+			wheel.delta += delta;
+			if (Math.abs(wheel.delta) < WHEEL_STEP) return;
+			const direction = Math.sign(wheel.delta);
+			wheel.delta -= direction * WHEEL_STEP;
+			const next = Math.max(0, Math.min(index + direction, levels.length - 1));
+			if (next === index) wheel.delta = 0;
+			else onChange(levels[next]!);
+		};
+		element.addEventListener("wheel", onWheel, { passive: false });
+		return () => element.removeEventListener("wheel", onWheel);
+	}, []);
+	// Codex drops the hover with the press too: the knob settles until the pointer enters it again.
+	const release = () => {
+		setPressed(false);
+		setDragging(false);
+		setHovered(false);
+	};
 	return (
-		<div className="relative mx-2 mt-1 mb-2 h-6">
-			<div className="absolute inset-0 rounded-full bg-track" />
-			<div
-				className="absolute inset-y-0 left-0 rounded-full bg-accent"
-				style={{ width: `calc(${at(index)} + 14px)` }}
-			/>
-			{levels.map((level, i) => (
-				<span
-					key={level}
-					className={`absolute top-[10px] size-1 -translate-x-1/2 rounded-full ${i <= index ? "bg-white/30" : "bg-tertiary"}`}
-					style={{ left: at(i) }}
-				/>
-			))}
-			<span
-				className="pointer-events-none absolute top-[-2px] size-7 -translate-x-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/0.3)] transition-[left] duration-150"
-				style={{ left: at(index) }}
-			/>
-			<input
-				type="range"
+		<div className="kc-power">
+			<Slider.Root
+				ref={root}
+				className="kc-power-root"
+				data-dragging={dragging || undefined}
+				data-lifted={hovered || pressed || undefined}
 				min={0}
 				max={last}
 				step={1}
-				value={index}
-				aria-label="Reasoning effort"
-				aria-valuetext={levelName(value)}
-				onChange={(e) => onChange(levels[Number(e.target.value)]!)}
-				className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-			/>
+				value={[index]}
+				onValueChange={([i]) => i !== undefined && levels[i] && onChange(levels[i])}
+				onPointerDown={() => setPressed(true)}
+				onPointerMove={(event) => pressed && event.buttons !== 0 && setDragging(true)}
+				onPointerUp={release}
+				onPointerCancel={release}
+				onLostPointerCapture={release}
+			>
+				<Slider.Track className="kc-power-track">
+					<span className="kc-power-fill" style={{ transform: fillAt(percent(index), last) }} />
+					{levels.map((level, i) => (
+						<span
+							key={level}
+							className="kc-power-tick"
+							data-selected={i <= index}
+							style={{ left: knobAt(percent(i)) }}
+						/>
+					))}
+				</Slider.Track>
+				<div aria-hidden className="kc-power-rail">
+					<span className="kc-power-knob" style={{ left: knobAt(percent(index)) }}>
+						<span />
+					</span>
+				</div>
+				<Slider.Thumb
+					className="kc-power-thumb"
+					aria-label="Reasoning effort"
+					aria-valuetext={levelName(value)}
+					onPointerEnter={() => setHovered(true)}
+					onPointerLeave={() => setHovered(false)}
+					onKeyDown={(event) => {
+						if (!matches(event, "desktop.item.activate")) return;
+						event.preventDefault();
+						onDone();
+					}}
+				/>
+			</Slider.Root>
 		</div>
 	);
 }
@@ -312,14 +506,16 @@ export function PanelSearch({
 	);
 }
 
+/** The models under Codex's "Select model" caption, grouped by provider, with a search field for long lists. */
 export function ModelList({
 	model,
 	onModel,
-	onBack,
+	className = "max-h-[min(420px,70vh)] w-[280px]",
 }: {
 	model: ModelInfo | undefined;
 	onModel: (model: ModelInfo) => void;
-	onBack: (() => void) | undefined;
+	/** Size: a panel of its own by default. */
+	className?: string;
 }) {
 	const models = useStore((s) => s.models);
 	const [query, setQuery] = useState("");
@@ -338,15 +534,8 @@ export function ModelList({
 	}, [models, query]);
 	const first = groups[0]?.[1][0];
 	return (
-		<div className="flex max-h-[min(420px,70vh)] w-[280px] flex-col">
-			<div className="flex items-center gap-1 px-2 pt-1 pb-1">
-				{onBack ? (
-					<IconButton label="Back" size="3xs" round className="-ml-1" onClick={onBack}>
-						<ChevronLeft size={14} />
-					</IconButton>
-				) : null}
-				<span className="text-sm text-tertiary">Select model</span>
-			</div>
+		<div className={`flex flex-col ${className}`}>
+			<div className="px-2 py-1 text-sm text-tertiary">Select model</div>
 			<PanelSearch
 				value={query}
 				onChange={setQuery}

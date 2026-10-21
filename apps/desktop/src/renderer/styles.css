@@ -1148,6 +1148,274 @@ body {
 		animation: none;
 	}
 }
+
+/*
+ * Codex's model picker panel (_Menu_tovi5, 26.1013): two views stacked in one clip, the panel's height easing to the
+ * shown one's. A view's parts fade and slide 10px, away from the trigger as they leave; on arrival the header
+ * follows the slider by 16ms (or the list arrives after 40ms).
+ */
+.kc-mp {
+	position: relative;
+	overflow: clip;
+}
+.kc-mp[data-ready] {
+	transition: height 0.32s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.kc-mp-view {
+	display: flex;
+	flex-direction: column;
+	padding: 4px;
+}
+.kc-mp-view + .kc-mp-view {
+	position: absolute;
+	inset: 0 0 auto;
+}
+.kc-mp[data-ready] .kc-mp-part {
+	transition:
+		opacity 0.2s cubic-bezier(0.23, 1, 0.32, 1),
+		translate 0.32s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.kc-mp-part[data-active="false"] {
+	opacity: 0;
+	translate: 0 10px;
+}
+.kc-mp-part[data-part="list"][data-active="false"] {
+	translate: 0 -10px;
+}
+[data-side="top"] .kc-mp-part[data-active="false"] {
+	translate: 0 -10px;
+}
+[data-side="top"] .kc-mp-part[data-part="list"][data-active="false"] {
+	translate: 0 10px;
+}
+.kc-mp-part[data-active="true"] {
+	transition-delay: 40ms !important;
+}
+.kc-mp-part[data-part="header"][data-active="true"] {
+	transition-delay: 56ms !important;
+}
+.kc-mp-part[data-part="slider"][data-active="false"] {
+	transition-delay: 16ms !important;
+}
+/* The header: the model and its effort centred over the slider (a 16px spacer before balances the chevron). */
+.kc-mp-header {
+	display: flex;
+	min-height: 36px;
+	align-items: center;
+	justify-content: center;
+	padding-inline: 8px;
+}
+.kc-mp-header::before {
+	content: "";
+	width: 16px;
+	flex-shrink: 0;
+}
+.kc-mp-toggle {
+	display: flex;
+	min-width: 0;
+	min-height: 32px;
+	padding: 4px;
+	font-size: var(--text-base);
+	line-height: 20px;
+	font-weight: 500;
+	outline: none;
+}
+.kc-mp-toggle-content {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 2px;
+	border-radius: 6px;
+	padding: 2px 4px;
+}
+.kc-mp-toggle:is(:hover, :focus-visible) .kc-mp-toggle-content {
+	background: var(--kc-ghost-hover);
+}
+/* The trigger's effort word (components/composer-pickers.tsx, EffortLabel). */
+.kc-effort {
+	display: flex;
+	flex-shrink: 0;
+	justify-content: center;
+	overflow: hidden;
+	white-space: nowrap;
+	transition: width 0.3s var(--kc-ease-spring);
+}
+.kc-effort-cell {
+	display: grid;
+	flex-shrink: 0;
+}
+.kc-effort-cell > span {
+	grid-area: 1 / 1;
+	justify-self: center;
+	opacity: 0;
+	filter: blur(4px);
+	transition:
+		opacity 0.3s var(--kc-ease-spring),
+		filter 0.3s var(--kc-ease-spring);
+}
+.kc-effort-cell > span[data-active] {
+	opacity: 1;
+	filter: none;
+}
+/*
+ * The effort slider (components/composer-pickers.tsx, EffortSlider), Codex's _xwb5v. Knob and fill share one tween,
+ * 0.15 s while dragging. The arrow cursor, as Codex's Electron build sets its --cursor-interaction to default, unless
+ * Appearance › Use pointer cursors; the closed hand while dragging. The knob's scale runs Codex's springs as
+ * linear(): stiffness 420 damping 38 lifting, 220/26 settling.
+ */
+.kc-power {
+	position: relative;
+	display: flex;
+	height: 32px;
+	flex-direction: column;
+	justify-content: center;
+	margin-inline: 2px;
+	padding: 2px 6px;
+}
+.kc-power-root {
+	--kc-power-motion: 0.3s;
+	--kc-power-ease: cubic-bezier(0.23, 1, 0.32, 1);
+	/* Radix places its thumb once it has measured it: no tween for the first frame. */
+	--kc-power-thumb-motion: 0s;
+	position: relative;
+	display: flex;
+	width: 100%;
+	height: 28px;
+	align-items: center;
+	touch-action: none;
+	animation: kc-power-thumb-motion 0s 16ms forwards;
+}
+@keyframes kc-power-thumb-motion {
+	to {
+		--kc-power-thumb-motion: var(--kc-power-motion);
+	}
+}
+.kc-power-root[data-dragging] {
+	--kc-power-motion: 0.15s;
+}
+.kc-power-root[data-dragging],
+.kc-power-root[data-dragging] :is(.kc-power-tick, .kc-power-thumb) {
+	cursor: grabbing;
+}
+/* Radix's thumb wrapper. */
+.kc-power-root > span:not([data-orientation]) {
+	top: 50%;
+	translate: 0 -50%;
+	transition: left var(--kc-power-thumb-motion) var(--kc-power-ease);
+}
+.kc-power-track {
+	position: relative;
+	height: 24px;
+	flex-grow: 1;
+	overflow: hidden;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--color-ink) 10%, transparent);
+	box-shadow: inset 0 0 0 0.5px var(--color-line);
+}
+.kc-power-fill {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: 100%;
+	border-radius: 12px 0 0 12px;
+	background: var(--color-accent);
+	transition: transform var(--kc-power-motion) var(--kc-power-ease);
+}
+.kc-power-tick {
+	position: absolute;
+	top: 50%;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background-color: currentColor;
+	color: color-mix(in srgb, var(--color-tertiary) 50%, transparent);
+	transform: translate(-50%, -50%);
+	cursor: default;
+	transition:
+		background-color var(--kc-power-motion) var(--kc-power-ease),
+		filter 0.12s ease,
+		transform 0.12s ease;
+}
+.kc-power-tick[data-selected="true"] {
+	color: rgb(255 255 255 / 0.3);
+}
+.kc-power-tick::before {
+	content: "";
+	position: absolute;
+	inset: -6px;
+}
+.kc-power-tick:hover {
+	filter: brightness(0.85);
+	transform: translate(-50%, -50%) scale(2);
+}
+.kc-power-rail {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	z-index: 4;
+	width: 100%;
+	pointer-events: none;
+}
+.kc-power-knob {
+	position: absolute;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	transform: translate(-50%, -50%);
+	transition: left var(--kc-power-motion) var(--kc-power-ease);
+}
+.kc-power-knob > span {
+	position: absolute;
+	inset: 0;
+	border: 0.5px solid var(--color-line-strong);
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 0 2px rgb(0 0 0 / 0.1);
+	transition: scale 0.61s
+		linear(0, 0.084, 0.247, 0.429, 0.587, 0.719, 0.815, 0.885, 0.932, 0.963, 0.982, 0.993, 0.999, 1.002, 1.003, 1.003, 1.002, 1.002, 1.001, 1.001, 1);
+}
+.kc-power-root[data-lifted] .kc-power-knob > span {
+	scale: calc(32 / 28);
+	transition: scale 0.39s
+		linear(0, 0.069, 0.203, 0.361, 0.502, 0.629, 0.726, 0.803, 0.863, 0.907, 0.937, 0.959, 0.973, 0.984, 0.99, 0.994, 0.997, 0.998, 0.999, 1, 1);
+}
+.kc-power:has(.kc-power-thumb:focus-visible) .kc-power-knob > span {
+	outline: 2px solid var(--kc-focus);
+}
+/* The knob's hit target, 3px wider than it all round. */
+.kc-power-thumb {
+	position: relative;
+	display: block;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	outline: none;
+	cursor: default;
+}
+.kc-power-thumb::before {
+	content: "";
+	position: absolute;
+	inset: -3px;
+	border-radius: 50%;
+}
+:root[data-pointer-cursors] .kc-power-root:not([data-dragging]) :is(.kc-power-tick, .kc-power-thumb) {
+	cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-mp[data-ready],
+	.kc-mp[data-ready] .kc-mp-part,
+	.kc-effort,
+	.kc-effort-cell > span,
+	.kc-power-tick,
+	.kc-power-knob > span {
+		transition: none;
+	}
+	.kc-power-root,
+	.kc-power-root[data-dragging] {
+		--kc-power-motion: 0s;
+		animation: none;
+	}
+}
 [data-radix-popper-content-wrapper]:has(> .kc-slide-in) {
 	clip-path: inset(-12px -12px -100vh -100vw);
 }
