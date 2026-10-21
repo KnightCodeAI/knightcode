@@ -92,7 +92,8 @@ async function statusRecords(repo: Repo, untracked: "normal" | "all") {
 }
 
 export async function gitStatus(repo: Repo): Promise<ResultOf<"git/status">> {
-	const { records, branch } = await statusRecords(repo, "normal");
+	// Per file: "normal" reports a new directory as one untracked record however many files it holds.
+	const { records, branch } = await statusRecords(repo, "all");
 	const counts = { staged: 0, unstaged: 0, untracked: 0, conflicted: 0 };
 	for (const record of records) {
 		if (record.kind === "?") counts.untracked++;
@@ -242,14 +243,30 @@ export async function gitCommit(
 		index: await indexTree(repo, ctx.signal),
 	});
 	// The repository lock is held for the git steps only, never across the model call writing the message.
-	const { before, base } = await staging(async () => {
-		if (params.includeUnstaged !== false) await git(repo, ["add", "-A"], { signal: ctx.signal });
-		return { before: await capture(), base: await headTree(repo) };
+	const { before, base, original } = await staging(async () => {
+		// What the user had staged, put back if no commit comes of this.
+		const original = params.includeUnstaged !== false ? await indexTree(repo, ctx.signal) : undefined;
+		if (original) await git(repo, ["add", "-A"], { signal: ctx.signal });
+		return { before: await capture(), base: await headTree(repo), original };
 	});
-	if (before.index === base) throw invalid("nothing to commit");
-	const message = params.message?.trim()
-		? params.message
-		: await generateMessage(thread, repo, base, before.index, ctx);
+	const restore = async () => {
+		if (!original || original === before.index) return;
+		await staging(async () => {
+			// Only an index still as this commit left it: anything staged since is the user's.
+			if ((await indexTree(repo, ctx.signal)) === before.index) await git(repo, ["read-tree", original]);
+		});
+	};
+	if (before.index === base) {
+		await restore();
+		throw invalid("nothing to commit");
+	}
+	let message: string;
+	try {
+		message = params.message?.trim() ? params.message : await generateMessage(thread, repo, base, before.index, ctx);
+	} catch (error) {
+		await restore().catch(() => {});
+		throw error;
+	}
 	// The commit runs the user's hooks, which can rewrite the index and working tree (lint-staged): it holds the
 	// checkout as staging did.
 	return staging(async () => {

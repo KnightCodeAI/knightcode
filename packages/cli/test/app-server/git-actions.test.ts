@@ -256,6 +256,18 @@ test("a change during message generation answers concurrentChange and commits no
 	expect(log(s.cwd)).toBe("initial");
 });
 
+test("a failed commit message request puts back what the user had staged", async () => {
+	const s = await repoServer();
+	const threadId = await local(s);
+	write(s.cwd, "a.txt", "staged\n");
+	sh(s.cwd, "add", "a.txt");
+	write(s.cwd, "b.txt", "unstaged\n");
+	s.faux.setResponses([fauxAssistantMessage([fauxText("")], { stopReason: "error", errorMessage: "model down" })]);
+	await expect(call(s, "git/commit", { threadId })).rejects.toBeInstanceOf(Error);
+	expect(staged(s.cwd)).toBe("a.txt");
+	expect(log(s.cwd)).toBe("initial");
+});
+
 test("the repository lock is free while the message is written: a stage goes through and the commit sees it", async () => {
 	const s = await repoServer();
 	const threadId = await local(s);

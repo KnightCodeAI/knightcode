@@ -2191,8 +2191,11 @@ export class ThreadManager {
 				"threadId" in params
 					? this.onCheckout(params.threadId, connection.mode, false, (_thread, repo) => gitBranches(repo))
 					: this.track(async () => gitBranches(await requireRepo(resolvePath(params.cwd), this.shutdown.signal))),
+			// A new branch moves HEAD: a running turn's later commits would land on it.
 			"git/branch/create": ({ threadId, name }, connection) =>
-				this.onCheckout(threadId, connection.mode, true, (_thread, repo) => gitBranchCreate(repo, name)),
+				this.onCheckout(threadId, connection.mode, false, (_thread, repo) =>
+					this.holdingCheckout(repo, "branch create", () => gitBranchCreate(repo, name)),
+				),
 			// A switch rewrites the working tree: never under a running turn, whose diff would take the switch's files.
 			"git/branch/switch": ({ threadId, name }, connection) =>
 				this.track(() =>
