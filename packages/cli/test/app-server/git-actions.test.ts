@@ -441,6 +441,13 @@ test("push sets the upstream once, then pushes plainly; a non-fast-forward is pu
 	write(s.cwd, "a.txt", "diverged\n");
 	sh(s.cwd, "commit", "-q", "-am", "diverged");
 	await expect(call(s, "git/push", { threadId })).rejects.toMatchObject({ data: { reason: "pushRejected" } });
+	// A branch tracking another name never pushes onto it (push.default=simple's rule).
+	sh(s.cwd, "switch", "-q", "-c", "feature", "--track", "origin/main");
+	write(s.cwd, "f.txt", "feature\n");
+	sh(s.cwd, "add", "f.txt");
+	sh(s.cwd, "commit", "-q", "-m", "feature");
+	await expect(call(s, "git/push", { threadId })).rejects.toMatchObject({ code: "invalidParams" });
+	expect(sh(origin, "rev-parse", "main")).not.toBe(sh(s.cwd, "rev-parse", "HEAD"));
 });
 
 test("a configured force refspec and push.default=matching push only the thread's branch", async () => {

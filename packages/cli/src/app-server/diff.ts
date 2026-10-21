@@ -683,7 +683,8 @@ export async function revertDiff(
 	}
 	const paths = target.flatMap((e) => (e.oldPath ? [e.oldPath, e.path] : [e.path]));
 	if (paths.length === 0) return { paths: [] };
-	if ((await submodulePaths(repo, trees.from, trees.to, paths)).length > 0)
+	// The whole scope takes no pathspec: every changed path in one argv can pass Windows' command line limit.
+	if ((await submodulePaths(repo, trees.from, trees.to, params.path !== undefined ? paths : undefined)).length > 0)
 		throw invalid("submodule changes are not supported here; commit them in the submodule");
 	const context = params.context ?? 3;
 	const patch =
@@ -715,6 +716,9 @@ export async function revertDiff(
 		throw conflict("patchFailed", "the change no longer applies", { paths, output: applied.stderr });
 	// Uncommitted is HEAD to the working tree: a whole file goes back to HEAD in the index too, or its staged version
 	// would stay and a later commit would bring back what was reverted. A hunk leaves the index alone.
-	if (scope === "uncommitted" && params.hunkId === undefined) await git(repo, ["reset", "-q", "--", ...paths]);
+	if (scope === "uncommitted" && params.hunkId === undefined)
+		await git(repo, ["reset", "-q", "--pathspec-from-file=-", "--pathspec-file-nul"], {
+			input: `${paths.join("\0")}\0`,
+		});
 	return { paths: target.map((e) => e.path) };
 }

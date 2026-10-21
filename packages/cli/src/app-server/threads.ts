@@ -2182,8 +2182,9 @@ export class ThreadManager {
 				this.onCheckout(params.threadId, connection.mode, false, (thread, repo, ctx) =>
 					gitCommit(thread, repo, params, ctx, (step) => this.holdingCheckout(repo, "commit", step)),
 				),
+			// No repository lock across the network: a push touches neither the index nor the working tree.
 			"git/push": ({ threadId }, connection) =>
-				this.onCheckout(threadId, connection.mode, true, (_thread, repo, ctx) => gitPush(repo, ctx)),
+				this.onCheckout(threadId, connection.mode, false, (_thread, repo, ctx) => gitPush(repo, ctx)),
 			"git/pr/create": (params, connection) =>
 				this.onCheckout(params.threadId, connection.mode, false, (_thread, repo, ctx) =>
 					gitPullRequest(repo, params, ctx),
