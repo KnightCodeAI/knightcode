@@ -205,6 +205,9 @@ export function configureHandlers(ctx: AppServerContext): Handlers {
 			const { settings, resolved } = await resolveResources(ctx.agentDir, resolvedCwd);
 			const resource = resolved[type].find((candidate) => candidate.path === path);
 			if (!resource) throw new AppServerError("invalidParams", `no ${type} resource at ${path}`);
+			// Loaded from a command-line flag for one session: there is no settings entry to turn it on or off.
+			if (resource.metadata.scope === "temporary")
+				throw new AppServerError("invalidParams", `${path} is loaded for this session only`);
 			toggleResource(ctx.agentDir, resolvedCwd, settings, type, resource, enabled);
 			return {};
 		},
