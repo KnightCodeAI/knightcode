@@ -25,14 +25,26 @@ export function tempDir(prefix: string): string {
 	return dir;
 }
 
-/** Kill a child and wait (up to `ms`) for it to exit, so its files are closed before its directories go. */
+/**
+ * Kill a child and wait for it to exit, so its files are closed before its directories go: SIGTERM, then SIGKILL
+ * after `ms`; a child still running after that fails the cleanup rather than leaking.
+ */
 export async function stopChild(child: ChildProcess, ms = 10_000): Promise<void> {
 	if (child.exitCode !== null || child.signalCode !== null) return;
-	const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+	const exited = new Promise<boolean>((resolve) => child.once("exit", () => resolve(true)));
+	const within = async () => {
+		let timer: NodeJS.Timeout | undefined;
+		const done = await Promise.race([
+			exited,
+			new Promise<boolean>((resolve) => (timer = setTimeout(resolve, ms, false))),
+		]);
+		clearTimeout(timer);
+		return done;
+	};
 	child.kill();
-	let timer: NodeJS.Timeout | undefined;
-	await Promise.race([exited, new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)))]);
-	clearTimeout(timer);
+	if (await within()) return;
+	child.kill("SIGKILL");
+	if (!(await within())) throw new Error(`child ${child.pid} did not exit`);
 }
 
 /** Call from afterEach. */
