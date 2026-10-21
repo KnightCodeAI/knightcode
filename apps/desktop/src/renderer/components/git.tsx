@@ -38,7 +38,26 @@ import { Menu, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparat
 import { ListCaption, ListRow, ListSeparator, Popover } from "./popover.tsx";
 import { Switch } from "./switch.tsx";
 
-/** A branch name from a chat title, as the server slugs one for a handoff (`kc/<slug>`). */
+/**
+ * The branch a dialog suggests: the user's `worktrees.branchPrefix` (Settings › Worktrees, "kc/" by default) and the
+ * title's slug, as the server names one for a handoff. `edited` once the user typed their own.
+ */
+function useSuggestedBranch(title: string): { branch: string; setBranch: (name: string) => void; edited: boolean } {
+	const [typed, setTyped] = useState<string>();
+	const [prefix, setPrefix] = useState("kc/");
+	useEffect(() => {
+		void client
+			.request("config/read", {})
+			.then((r) => {
+				const worktrees = (r.settings as { worktrees?: { branchPrefix?: unknown } }).worktrees;
+				if (typeof worktrees?.branchPrefix === "string") setPrefix(worktrees.branchPrefix);
+			})
+			.catch(() => {});
+	}, []);
+	return { branch: typed ?? `${prefix}${slug(title)}`, setBranch: setTyped, edited: typed !== undefined };
+}
+
+/** A branch name from a chat title, as the server slugs one for a handoff (`<branchPrefix><slug>`). */
 export function slug(title: string): string {
 	return (
 		title
@@ -352,17 +371,23 @@ function useStatus(threadId: string) {
 export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () => void }) {
 	const status = useStatus(thread.id);
 	const totals = useUncommitted(thread.id);
-	const prefix = "kc/";
 	const [newBranch, setNewBranch] = useState(true);
-	const [branch, setBranch] = useState(`${prefix}${slug(thread.name)}`);
+	const { branch, setBranch } = useSuggestedBranch(thread.name);
 	const [message, setMessage] = useState("");
 	const [includeUnstaged, setIncludeUnstaged] = useState(true);
 	const [busy, setBusy] = useState(false);
-	const detached = status !== undefined && !status.branch;
+	// A branch made by an earlier try whose later step failed: a retry goes on from it instead of creating it again.
+	const [created, setCreated] = useState<string>();
+	const onBranch = status?.branch ?? created;
+	const detached = status !== undefined && !onBranch;
 	const run = async (push: boolean, commit: boolean) => {
+		if (busy) return;
 		setBusy(true);
 		try {
-			if (detached && newBranch) await client.request("git/branch/create", { threadId: thread.id, name: branch });
+			if (detached && newBranch) {
+				await client.request("git/branch/create", { threadId: thread.id, name: branch });
+				setCreated(branch);
+			}
 			if (commit) {
 				const result = await client.request("git/commit", {
 					threadId: thread.id,
@@ -405,7 +430,7 @@ export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () =
 				</Menu>
 			) : (
 				<div className="flex h-9 items-center gap-1 ps-2 text-base leading-[18px]">
-					<GitBranch size={15} /> <span className="ps-1">{status?.branch ?? "…"}</span>
+					<GitBranch size={15} /> <span className="ps-1">{onBranch ?? "…"}</span>
 				</div>
 			)}
 			{detached && newBranch ? (
@@ -421,7 +446,9 @@ export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () =
 				value={message}
 				onChange={(e) => setMessage(e.target.value)}
 				onKeyDown={(e) => {
-					if (matches(e, "desktop.composer.steer")) void run(false, true);
+					if (!matches(e, "desktop.composer.steer")) return;
+					e.preventDefault();
+					void run(false, true);
 				}}
 				placeholder="Commit message (leave blank to generate)…"
 				className="h-20 resize-none bg-transparent px-3 py-2 text-base text-ink outline-none placeholder:text-tertiary focus-visible:outline-none"
@@ -449,7 +476,7 @@ export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () =
 			<ActionRow
 				icon={<CloudUpload size={15} />}
 				label="Push"
-				disabled={busy || !status?.branch || (status.ahead === 0 && Boolean(status.upstream))}
+				disabled={busy || !onBranch || (status?.ahead === 0 && Boolean(status.upstream))}
 				onClick={() => void run(true, false)}
 			/>
 		</Dialog>
@@ -458,7 +485,7 @@ export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () =
 
 /** "Work here": Codex's dialog that turns a detached worktree into a branch. */
 export function CreateBranchDialog({ thread, onClose }: { thread: Thread; onClose: () => void }) {
-	const [name, setName] = useState(`kc/${slug(thread.name)}`);
+	const { branch: name, setBranch: setName } = useSuggestedBranch(thread.name);
 	const [error, setError] = useState<string>();
 	const create = async () => {
 		try {
@@ -568,7 +595,7 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 	const status = useStatus(thread.id);
 	const totals = useUncommitted(thread.id);
 	const [base, setBase] = useState<string>();
-	const [branch, setBranch] = useState(`kc/${slug(thread.name)}`);
+	const { branch, setBranch } = useSuggestedBranch(thread.name);
 	const [title, setTitle] = useState("");
 	const [body, setBody] = useState("");
 	const [commitFirst, setCommitFirst] = useState(true);
@@ -580,13 +607,23 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 			.then((r) => setBase(r.defaultBranch))
 			.catch(() => {});
 	}, [thread.id]);
-	const detached = status !== undefined && !status.branch;
+	// As in CommitSheet: a retry after a later step failed does not create the branch again.
+	const [created, setCreated] = useState<string>();
+	const onBranch = status?.branch ?? created;
+	const detached = status !== undefined && !onBranch;
 	const create = async (draft: boolean) => {
+		if (busy) return;
 		setBusy(true);
 		try {
-			if (detached) await client.request("git/branch/create", { threadId: thread.id, name: branch });
-			if (commitFirst && totals && totals.additions + totals.deletions > 0)
-				await client.request("git/commit", { threadId: thread.id, includeUnstaged: true });
+			if (detached) {
+				await client.request("git/branch/create", { threadId: thread.id, name: branch });
+				setCreated(branch);
+			}
+			// Totals still loading (or failed to load) must not skip the commit the box asks for.
+			if (commitFirst && (totals === undefined || totals.additions + totals.deletions > 0))
+				await client.request("git/commit", { threadId: thread.id, includeUnstaged: true }).catch((error: unknown) => {
+					if (!(error instanceof RequestError && error.message === "nothing to commit")) throw error;
+				});
 			await client.request("git/push", { threadId: thread.id });
 			const result = await client.request("git/pr/create", {
 				threadId: thread.id,
@@ -611,7 +648,7 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 	return (
 		<Dialog variant="card" title="Create pull request" onClose={onClose}>
 			<div className="px-3 pt-2 text-base leading-6 text-tertiary">
-				{detached ? "New branch" : (status?.branch ?? "…")} → {base ?? "…"}
+				{detached ? "New branch" : (onBranch ?? "…")} → {base ?? "…"}
 			</div>
 			{detached ? (
 				<input
@@ -631,6 +668,11 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 			<textarea
 				value={body}
 				onChange={(e) => setBody(e.target.value)}
+				onKeyDown={(e) => {
+					if (!matches(e, "desktop.composer.steer")) return;
+					e.preventDefault();
+					void create(false);
+				}}
 				placeholder="Description (leave empty to generate)"
 				className="h-20 resize-none bg-transparent px-3 py-2 text-base text-ink outline-none placeholder:text-tertiary focus-visible:outline-none"
 			/>
@@ -670,7 +712,7 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
  */
 export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: () => void }) {
 	const toLocal = thread.workspace.mode === "worktree";
-	const [branch, setBranch] = useState(`kc/${slug(thread.name)}`);
+	const { branch, setBranch, edited } = useSuggestedBranch(thread.name);
 	const [error, setError] = useState<string>();
 	const [busy, setBusy] = useState(false);
 	const status = useStatus(thread.id);
@@ -684,7 +726,8 @@ export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: ()
 		const result = await handoff(
 			thread.id,
 			toLocal ? "local" : "worktree",
-			toLocal && !status?.branch ? branch : undefined,
+			// Unedited, the server names it from its own settings.
+			toLocal && !status?.branch && edited ? branch : undefined,
 		);
 		setBusy(false);
 		if (result instanceof RequestError) {

@@ -16,7 +16,7 @@ export interface KeybindingDefinition {
 
 export const DESKTOP_KEYBINDINGS = {
 	"desktop.palette": { defaultKeys: ["mod+k", "mod+shift+p"], description: "Open the command palette" },
-	"desktop.settings": { defaultKeys: ["mod+,"], description: "Open settings" },
+	"desktop.settings": { defaultKeys: ["mod+comma"], description: "Open settings" },
 	"desktop.shortcuts": { defaultKeys: ["mod+slash"], description: "Show keyboard shortcuts" },
 	"desktop.nav.back": { defaultKeys: ["mod+bracketleft", "alt+arrowleft"], description: "Go back" },
 	"desktop.nav.forward": { defaultKeys: ["mod+bracketright", "alt+arrowright"], description: "Go forward" },
@@ -77,7 +77,7 @@ export const DESKTOP_KEYBINDINGS = {
 	"desktop.panel.toggle": { defaultKeys: ["mod+shift+g"], description: "Toggle the Changes panel" },
 	"desktop.view.zoomIn": { defaultKeys: ["mod+shift+equal", "mod+equal", "mod+numpadadd"], description: "Zoom in" },
 	"desktop.view.zoomOut": { defaultKeys: ["mod+minus", "mod+numpadsubtract"], description: "Zoom out" },
-	"desktop.view.zoomReset": { defaultKeys: ["mod+0"], description: "Actual size" },
+	"desktop.view.zoomReset": { defaultKeys: ["mod+digit0"], description: "Actual size" },
 	"desktop.view.fullScreen": { defaultKeys: ["f11"], description: "Toggle full screen" },
 	"desktop.app.quit": { defaultKeys: ["mod+q"], description: "Quit KnightCode" },
 	"desktop.window.close": { defaultKeys: ["mod+w"], description: "Close the window" },
@@ -138,8 +138,10 @@ export const CODE_KEYS = new Set([
 	"slash",
 	"semicolon",
 	"backquote",
+	"comma",
 	"numpadadd",
 	"numpadsubtract",
+	"digit0",
 	"digit1",
 	"digit2",
 	"digit3",

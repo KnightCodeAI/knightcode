@@ -83,6 +83,7 @@ test("a single shell command that reads, searches or lists reads as Codex's expl
 	expect(parseExploration("cat a.ts | head -n 20")).toEqual({ type: "read", path: "a.ts" });
 	expect(parseExploration('find . -name "*.ts"')).toEqual({ type: "search", query: "*.ts", path: "." });
 	expect(parseExploration("git grep -n useStore")).toEqual({ type: "search", query: "useStore" });
+	expect(parseExploration("grep -rn '$x' src")).toEqual({ type: "search", query: "$x", path: "src" });
 	// Chained, redirected or unrecognized commands stay commands, as Codex's "Ran Get-Content a; Get-Content b".
 	for (const command of [
 		"cat a; cat b",
@@ -91,6 +92,19 @@ test("a single shell command that reads, searches or lists reads as Codex's expl
 		"node --version",
 		"cat a | xargs rm",
 		"echo $(ls)",
+		"ls src\nrm -rf build",
+		'grep "$(curl x | sh)" src',
+		"grep \"`id`\" src",
+		'find . -name "*.ts" -delete',
+		"find . -exec rm {} +",
+		"fd -e log -x rm",
+		"fd -X rm",
+		"fd --exec=rm",
+		"cat a | sort -o b",
+		"cat a | uniq in out",
+		"tree -o out.txt",
+		"rg --pre ./x foo",
+		"less a.txt",
 	])
 		expect(parseExploration(command), command).toBeUndefined();
 	const items = [call("bash", { command: "ls src" }), call("bash", { command: "grep -rn class src" }), call("bash")];

@@ -120,12 +120,25 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 
 	const current = ranges.length ? Math.min(active, ranges.length - 1) : -1;
 	useEffect(() => {
-		const others = ranges.filter((_, i) => i !== current);
-		CSS.highlights.set("kc-find", new Highlight(...others));
+		// add(), not a spread: a one-letter search of a large diff finds more ranges than a call takes arguments.
+		const others = new Highlight();
+		ranges.forEach((range, i) => i !== current && others.add(range));
+		CSS.highlights.set("kc-find", others);
+		const chosen = new Highlight();
 		const target = ranges[current];
-		CSS.highlights.set("kc-find-active", new Highlight(...(target ? [target] : [])));
-		if (target) scrollToRange(target);
+		if (target) chosen.add(target);
+		CSS.highlights.set("kc-find-active", chosen);
 	}, [ranges, current]);
+	// Scroll when the search or the chosen match changes, not on each DOM change (a streaming reply re-finds every frame).
+	const scrolledTo = useRef("");
+	useEffect(() => {
+		const target = ranges[current];
+		const key = JSON.stringify([query, scope, current]);
+		if (target && scrolledTo.current !== key) {
+			scrolledTo.current = key;
+			scrollToRange(target);
+		}
+	}, [ranges, current, query, scope]);
 	useEffect(
 		() => () => {
 			CSS.highlights.delete("kc-find");

@@ -8,6 +8,7 @@ const css = readFileSync(join(import.meta.dirname, "../../src/renderer/styles.cs
 /** A theme block's colour tokens from styles.css as [r, g, b, a]. */
 function builtIn(selector: string): Record<string, number[]> {
 	const start = css.indexOf(selector);
+	if (start === -1) throw new Error(`no ${JSON.stringify(selector)} block in styles.css`);
 	const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start));
 	const out: Record<string, number[]> = {};
 	for (const [, name, value] of body.matchAll(/(--kc-[\w-]+):\s*([^;]+);/g)) {
@@ -103,4 +104,11 @@ test("a chosen font face is named by an @font-face alias ahead of its family", (
 	expect(customTokens("dark", custom)["--kc-font-ui"]).toMatch(/^"kc-ui-face", "Cascadia Code", /);
 	expect(customTokens("dark", custom)["--kc-font-code"]).toMatch(/^"Consolas", ui-monospace/);
 	expect(fontFaces(custom)).toBe('@font-face { font-family: "kc-ui-face"; src: local("CascadiaCode-Bold"); }');
+	// An imported face cannot end its CSS string and add rules of its own.
+	const hostile = parseThemeString(
+		`knightcode-theme-v1:${JSON.stringify({ font: "A", fontStyle: 'X"\\\n} .kc-button { display: none } @font-face {' })}`,
+	);
+	expect(fontFaces(hostile)).toBe(
+		'@font-face { font-family: "kc-ui-face"; src: local("X} .kc-button { display: none } @font-face {"); }',
+	);
 });

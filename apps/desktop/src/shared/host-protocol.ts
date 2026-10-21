@@ -187,6 +187,14 @@ export const HostMethods = {
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
 	/** Another window, showing a thread when one is named (Codex's "Open in new window"). */
 	"host/window/open": { params: Obj({ threadId: Type.Optional(Type.String()) }), result: Obj({}) },
+	/**
+	 * This window's part in what every window hears about: `primary` (the focused window, else the one focused last)
+	 * is the one that notifies, marks unread and auto-archives; `heldElsewhere` are the threads other windows hold.
+	 */
+	"host/window/role": {
+		params: Obj({}),
+		result: Obj({ primary: Type.Boolean(), heldElsewhere: Type.Array(Type.String()) }),
+	},
 	"host/state/read": { params: Obj({}), result: DesktopState },
 	"host/state/write": { params: Obj({ state: DesktopState }), result: Obj({}) },
 	"host/dialog/openFiles": {

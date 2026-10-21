@@ -56,6 +56,8 @@ export interface HostDeps {
 	openWindow: (route?: string) => void;
 	/** Step the window's zoom (-1 out, 1 in, 0 back to 100%). */
 	zoom: (window: BrowserWindow, step: -1 | 0 | 1) => void;
+	/** host/window/role for the requesting window. */
+	role: () => { primary: boolean; heldElsewhere: string[] };
 }
 
 export async function handleHost(request: HostRequest, window: BrowserWindow, deps: HostDeps): Promise<HostResponse> {
@@ -77,7 +79,7 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openWindow, zoom }: HostDeps,
+	{ state, server, openWindow, zoom, role }: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
 		case "host/menu/popup":
@@ -122,6 +124,8 @@ async function run(
 		case "host/window/open":
 			openWindow(params.threadId ? `knightcode://thread/${encodeURIComponent(params.threadId as string)}` : undefined);
 			return {};
+		case "host/window/role":
+			return role();
 		case "host/state/read":
 			return state.read();
 		case "host/state/write":

@@ -68,6 +68,7 @@ import { NavRow } from "./nav-row.tsx";
 import { HoverCard } from "./popover.tsx";
 import { Tooltip } from "./tooltip.tsx";
 import { DeleteThreadDialog, RenameThreadDialog, type ThreadActionItem, threadActions } from "./thread-actions.tsx";
+import { followDrag } from "../drag.ts";
 
 const NO_PINS: string[] = [];
 const NO_SECTIONS: string[] = [];
@@ -466,12 +467,7 @@ function ResizeHandle({ width }: { width: number }) {
 			}
 			if (open) setSidebarWidth(width + e.clientX - from);
 		};
-		const onUp = () => {
-			window.removeEventListener("pointermove", onMove);
-			window.removeEventListener("pointerup", onUp);
-		};
-		window.addEventListener("pointermove", onMove);
-		window.addEventListener("pointerup", onUp);
+		followDrag(onMove);
 	};
 	return (
 		<div

@@ -15,7 +15,17 @@ import { diffStats, isRunning, liveEntries, type ToolItem, workEntries } from ".
 import { client } from "../client.ts";
 import { clockTime, duration, messageTime } from "../format.ts";
 import { matches } from "../keys.ts";
-import { fork, resendEdited, setPanel, undoTurnEdits, useStore, type ViewItem, type ViewTurn } from "../store.ts";
+import {
+	errorText,
+	fork,
+	resendEdited,
+	setPanel,
+	toast,
+	undoTurnEdits,
+	useStore,
+	type ViewItem,
+	type ViewTurn,
+} from "../store.ts";
 import { ActiveRow, ActivityGroup, ActivityRow, ToolRow } from "./activity.tsx";
 import { Button, IconButton } from "./button.tsx";
 import { Tooltip } from "./tooltip.tsx";
@@ -74,16 +84,23 @@ function MessageActions({
 }
 
 function CopyMessage({ text, label = "Copy" }: { text: string; label?: string }) {
-	const [copied, setCopied] = useState(false);
+	const [copied, setCopied] = useState(0);
+	// Each copy restarts the 1.5 s "Copied" state; unmounting clears it.
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(0), 1500);
+		return () => clearTimeout(timer);
+	}, [copied]);
 	return (
 		<IconButton
 			label={copied ? "Copied" : label}
 			size="sm"
 			className="rounded-md"
 			onClick={() => {
-				void client.host("host/clipboard/writeText", { text });
-				setCopied(true);
-				setTimeout(() => setCopied(false), 1500);
+				client
+					.host("host/clipboard/writeText", { text })
+					.then(() => setCopied(Date.now()))
+					.catch((e: unknown) => toast(errorText(e), "error"));
 			}}
 		>
 			{copied ? <Check size={16} /> : <Copy size={16} />}
@@ -348,9 +365,11 @@ export function editedFiles(turn: ViewTurn): TurnFile[] {
 		if (item.type !== "toolCall" || item.status !== "completed") continue;
 		for (const change of item.fileChanges ?? []) {
 			const stats = diffStats(change.diff ?? "");
-			const prev = files.get(change.path) ?? { path: change.path, additions: 0, deletions: 0 };
-			files.set(change.path, {
-				path: change.path,
+			// Tool paths can be native Windows paths: one key and one separator for the same file either way.
+			const path = change.path.replaceAll("\\", "/");
+			const prev = files.get(path) ?? { path, additions: 0, deletions: 0 };
+			files.set(path, {
+				path,
 				additions: prev.additions + stats.additions,
 				deletions: prev.deletions + stats.deletions,
 			});

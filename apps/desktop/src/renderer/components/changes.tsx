@@ -60,6 +60,7 @@ import {
 	MenuSub,
 	MenuTrigger,
 } from "./menu.tsx";
+import { followDrag } from "../drag.ts";
 
 type Selector = { scope: DiffScope; against?: string; commit?: string };
 type Read = ResultOf<"thread/diff/read">;
@@ -180,12 +181,7 @@ function TreeResizeHandle({
 			}
 			if (open) onWidth(Math.max(TREE_MIN, Math.min(size, max)));
 		};
-		const onUp = () => {
-			window.removeEventListener("pointermove", onMove);
-			window.removeEventListener("pointerup", onUp);
-		};
-		window.addEventListener("pointermove", onMove);
-		window.addEventListener("pointerup", onUp);
+		followDrag(onMove);
 	};
 	return (
 		<div
@@ -293,7 +289,7 @@ type Annotation = { comment?: DiffComment };
 
 function FileSection({
 	threadId,
-	cwd,
+	root,
 	file,
 	selector,
 	options,
@@ -302,7 +298,8 @@ function FileSection({
 	onAction,
 }: {
 	threadId: string;
-	cwd: string;
+	/** The repository's root, which file paths are relative to. */
+	root: string;
 	file: DiffFile;
 	selector: Selector;
 	options: { wrap: boolean; split: boolean; wordDiffs: boolean };
@@ -332,11 +329,11 @@ function FileSection({
 				]
 			: []),
 	];
-	const full = `${cwd.replace(/[\\/]+$/, "")}/${file.path}`;
+	const full = `${root.replace(/[\\/]+$/, "")}/${file.path}`;
 	const scope = selector.scope;
-	// Stable across renders: @pierre/diffs restarts its render on any option change, and a restart while the
-	// highlighter is still loading leaves the file blank.
-	const themeType = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+	// The store's theme, which changes only when the theme does: @pierre/diffs restarts its render on any option
+	// change, and a restart while the highlighter is still loading leaves the file blank.
+	const themeType = useStore((s) => s.resolvedTheme) === "light" ? "light" : "dark";
 	// Appearance › Diff markers: Codex's colour bars, or the +/− of a classic diff.
 	const indicators = useStore((s) => selectPreferences(s).diffMarkers) === "plusMinus" ? "classic" : "bars";
 	const diffOptions = useMemo<FileDiffOptions<Annotation, undefined>>(
@@ -510,7 +507,10 @@ function FileSection({
  * for it, then drops the highlighted result for want of a cache entry. With the highlighter and its themes loaded first,
  * a file renders as plain text at once and picks up its highlighting when its language loads.
  */
-export const highlighterReady = preloadHighlighter({ themes: ["pierre-dark", "pierre-light"], langs: [] });
+// Settles either way: a highlighter that failed to load leaves diffs as plain text, never blank.
+export const highlighterReady = preloadHighlighter({ themes: ["pierre-dark", "pierre-light"], langs: [] }).catch(
+	(error: unknown) => console.error("diff highlighter failed to load", error),
+);
 
 /** The tree trims a plain space between decoration parts. */
 const NBSP = String.fromCodePoint(0xa0);
@@ -750,6 +750,17 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 	};
 
 	const copyApply = () => {
+		// The patch is rebuilt from hunks with plain headers: anything it cannot carry (binary, too large, omitted or
+		// skipped files, renames, type changes, a file with no hunks, whitespace-blind hunks) refuses a partial one.
+		if (
+			read?.filesOmitted ||
+			read?.untrackedSkipped ||
+			opts.ignoreWhitespace ||
+			files.some(
+				(f) => f.binary || f.tooLarge || f.status === "renamed" || f.status === "typeChanged" || f.hunks.length === 0,
+			)
+		)
+			return toast("These changes include files a git apply command cannot carry", "error");
 		const patch = files.map(patchOf).join("");
 		void client.host("host/clipboard/writeText", {
 			text: `git apply <<'KNIGHTCODE_PATCH'\n${patch}KNIGHTCODE_PATCH\n`,
@@ -1023,7 +1034,7 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 								<div key={file.path} data-file-section="">
 									<FileSection
 										threadId={threadId}
-										cwd={thread?.cwd ?? ""}
+										root={read?.root ?? ""}
 										file={file}
 										selector={selector}
 										options={opts}

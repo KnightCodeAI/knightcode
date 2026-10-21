@@ -66,10 +66,14 @@ function shellWords(command: string): string[] | undefined {
 	let quote: string | undefined;
 	for (const ch of command.trim()) {
 		if (quote) {
+			// Only single quotes are literal: `$(...)` and backticks still run inside double quotes.
+			if (quote === '"' && (ch === "$" || ch === "`")) return undefined;
 			if (ch === quote) quote = undefined;
 			else word += ch;
 			continue;
 		}
+		// Before the whitespace test, which would take a newline (a second command) for a space.
+		if (";&<>`$(){}\n".includes(ch)) return undefined;
 		if (ch === "'" || ch === '"') {
 			quote = ch;
 			quoted = true;
@@ -78,8 +82,7 @@ function shellWords(command: string): string[] | undefined {
 			if (ch === "|") words.push("|");
 			word = "";
 			quoted = false;
-		} else if (";&<>`$(){}\n".includes(ch)) return undefined;
-		else word += ch;
+		} else word += ch;
 	}
 	if (quote) return undefined;
 	if (word || quoted) words.push(word);
@@ -115,6 +118,15 @@ function exploration(words: string[]): Exploration | undefined {
 	for (const w of words) w === "|" ? segments.push([]) : segments.at(-1)!.push(w);
 	const [main = [], ...rest] = segments;
 	if (rest.some((s) => !FORMATTERS.has(baseName(s[0] ?? "").toLowerCase()))) return undefined;
+	// A formatter that writes a file (`sort -o out`, `uniq in out`) is not reshaping output only.
+	if (
+		rest.some(
+			([name = "", ...a]) =>
+				a.some((x) => /^(-o|--output)(=|$)/.test(x)) ||
+				(baseName(name).toLowerCase() === "uniq" && operands(a, ["-f", "-s", "-w"]).length > 1),
+		)
+	)
+		return undefined;
 	const [head = "", ...args] = main;
 	const program = baseName(head)
 		.replace(/\.exe$/i, "")
@@ -128,6 +140,8 @@ function exploration(words: string[]): Exploration | undefined {
 		case "tree":
 		case "get-childitem":
 		case "gci": {
+			// `tree -o file` writes its listing to a file.
+			if (program === "tree" && args.some((a) => a === "-o")) return undefined;
 			const path = operands(args, [
 				"-I",
 				"-w",
@@ -158,6 +172,8 @@ function exploration(words: string[]): Exploration | undefined {
 				"--context",
 				"--max-depth",
 			]);
+			// --pre runs a program on every file searched.
+			if (args.some((a) => /^--pre(-glob)?(=|$)/.test(a))) return undefined;
 			if (args.includes("--files")) return { type: "list", ...(found[0] ? { path: shortPath(found[0]) } : {}) };
 			return {
 				type: "search",
@@ -192,8 +208,12 @@ function exploration(words: string[]): Exploration | undefined {
 			return { type: "search", ...(query ? { query } : {}), ...(path ? { path: shortPath(path) } : {}) };
 		}
 		case "git":
+			// `git grep -O<cmd>` runs a program on the matches.
+			if (args.some((a) => /^(-O|--open-files-in-pager)/.test(a))) return undefined;
 			return args[0] === "grep" ? exploration(["grep", ...args.slice(1)]) : undefined;
 		case "fd": {
+			if (args.some((a) => ["-x", "-X", "--exec", "--exec-batch"].includes(a) || /^--exec(-batch)?=/.test(a)))
+				return undefined;
 			const found = operands(args, ["-t", "--type", "-e", "--extension", "-E", "--exclude", "--search-path"]);
 			const pathish = (s: string) => /[\\/]|^\.{1,2}$/.test(s);
 			if (found.length === 1 && pathish(found[0]!)) return { type: "list", path: shortPath(found[0]!) };
@@ -201,6 +221,9 @@ function exploration(words: string[]): Exploration | undefined {
 			return { type: "search", query: found[0]!, ...(found[1] ? { path: shortPath(found[1]) } : {}) };
 		}
 		case "find": {
+			// These delete, run commands or write files: not exploration.
+			const acting = ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"];
+			if (args.some((a) => acting.includes(a))) return undefined;
 			const path = args.find((a) => !a.startsWith("-") && !["!", "(", ")"].includes(a));
 			const name = args.findIndex((a) => ["-name", "-iname", "-path", "-regex"].includes(a));
 			const query = name === -1 ? undefined : args[name + 1];
@@ -211,8 +234,6 @@ function exploration(words: string[]): Exploration | undefined {
 		case "cat":
 		case "bat":
 		case "batcat":
-		case "less":
-		case "more":
 		case "type":
 		case "nl": {
 			const found = operands(args, ["--theme", "--language", "--style", "--line-range", "-p", "--pattern"]);

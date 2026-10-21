@@ -55,8 +55,14 @@ test("a relay that cannot say who it is still leaves the sign-in, without a phot
 
 test("an avatar from anywhere but GitHub is dropped", async () => {
 	signIn();
-	const profile = await readProfile(async () =>
-		Response.json({ login: "octocat", avatarUrl: "https://evil.test/a.png" }),
-	);
-	expect(profile).toEqual({ signedIn: true, login: "octocat" });
+	for (const avatarUrl of [
+		"https://evil.test/a.png",
+		"https://avatars.githubusercontent.com.evil.test/a.png",
+		"https://evilgithubusercontent.com/a.png",
+		"http://avatars.githubusercontent.com/a.png",
+		"javascript:alert(1)",
+	]) {
+		const profile = await readProfile(async () => Response.json({ login: "octocat", avatarUrl }));
+		expect(profile, avatarUrl).toEqual({ signedIn: true, login: "octocat" });
+	}
 });

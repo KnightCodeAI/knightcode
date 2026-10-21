@@ -74,6 +74,7 @@ export function NavRow({
 	expanded,
 	onActivate,
 	onContextMenu,
+	onKeyDown,
 	className = "",
 	...props
 }: Omit<ComponentProps<"div">, "onClick" | "children"> & {
@@ -104,6 +105,9 @@ export function NavRow({
 			onClick={onActivate}
 			onContextMenu={onContextMenu}
 			onKeyDown={(event) => {
+				// A caller's (or a Radix trigger's) handler runs first and can claim the key.
+				onKeyDown?.(event);
+				if (event.defaultPrevented) return;
 				// Enter on a nested action bubbles here; that button's own click handles it.
 				if (event.target !== event.currentTarget || !matches(event, "desktop.item.activate")) return;
 				event.preventDefault();

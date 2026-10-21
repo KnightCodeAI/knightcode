@@ -246,11 +246,13 @@
 	--kc-border: rgb(26 28 31 / 0.08);
 	--kc-border-strong: rgb(26 28 31 / 0.118);
 	--kc-border-subtle: rgb(26 28 31 / 0.047);
+	/* Declared here too: a light preview inside a dark window would inherit the dark one's resolved value. */
+	--kc-hairline: var(--kc-border);
 	--kc-focus: #ea580c;
 	--kc-switch-on: #ea580c;
 	--kc-selection: rgb(234 88 12 / 0.3);
-	--kc-accent: #ea580c;
-	--kc-accent-hover: #c2410c;
+	--kc-accent: #c2410c; /* #ea580c gives white text 3.6:1; orange-700 meets AA (section 16). */
+	--kc-accent-hover: #9a3412;
 	--kc-success: #00a240;
 	--kc-success-solid: #00a240;
 	--kc-toast-base: #ffffff;
@@ -1187,7 +1189,7 @@ body {
 }
 .kc-comment {
 	box-shadow:
-		0 0 0 0.5px rgb(255 255 255 / 0.157),
+		0 0 0 0.5px var(--kc-border-strong),
 		0 3px 7.5px rgb(0 0 0 / 0.04),
 		0 0 20px rgb(0 0 0 / 0.05);
 }
@@ -1694,13 +1696,14 @@ body {
 }
 
 /* Find in the thread (components/find-bar.tsx): every match, then the current one. */
+/* Both themes paint the same yellow and orange, so the text on them is dark in both (white on yellow is 1.4:1). */
 ::highlight(kc-find) {
 	background-color: var(--kc-find-match);
-	color: var(--kc-text);
+	color: #1a1c1f;
 }
 ::highlight(kc-find-active) {
 	background-color: var(--kc-find-current);
-	color: var(--kc-text);
+	color: #1a1c1f;
 }
 
 /*

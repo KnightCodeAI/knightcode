@@ -39,10 +39,12 @@ export const clockTime = (ms: number) =>
 export function dayLabel(ms: number, now = Date.now()): string {
 	const date = new Date(ms);
 	const today = new Date(now);
-	if (sameDay(date, today)) return "Today";
-	const yesterday = new Date(now - 86_400_000);
-	if (sameDay(date, yesterday)) return "Yesterday";
-	if (now - ms < 7 * 86_400_000) return date.toLocaleDateString(undefined, { weekday: "long" });
+	// Calendar days, not elapsed time: a week ago at a later hour is not "this Monday", and DST days are 23 or 25 hours.
+	const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+	const days = Math.round((midnight(today) - midnight(date)) / 86_400_000);
+	if (days === 0) return "Today";
+	if (days === 1) return "Yesterday";
+	if (days > 1 && days < 7) return date.toLocaleDateString(undefined, { weekday: "long" });
 	return date.toLocaleDateString(undefined, {
 		month: "short",
 		day: "numeric",
@@ -66,7 +68,16 @@ export function matchOffsets(text: string, query: string): number[] {
 	if (!needle) return [];
 	const haystack = text.toLowerCase();
 	const offsets: number[] = [];
-	for (let i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length)) offsets.push(i);
+	if (haystack.length === text.length) {
+		for (let i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length)) offsets.push(i);
+		return offsets;
+	}
+	// Lowercasing changed the length ("İ" becomes two code units): compare at the original text's own offsets.
+	for (let i = 0; i + query.length <= text.length; i++)
+		if (text.slice(i, i + query.length).toLowerCase() === needle) {
+			offsets.push(i);
+			i += query.length - 1;
+		}
 	return offsets;
 }
 
@@ -89,8 +100,23 @@ export function isLargeDiff(files: DiffFile[]): boolean {
 /** The body of the last fenced code block (``` or ~~~, as CommonMark fences them) across Markdown texts, in order. */
 export function lastCodeBlock(texts: string[]): string | undefined {
 	let last: string | undefined;
-	for (const text of texts)
-		for (const match of text.matchAll(/^ {0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^ {0,3}\1[ \t]*$/gm))
-			last = match[2]!.replace(/\n$/, "");
+	for (const text of texts) {
+		// A line scan, as CommonMark: a closing fence of the same character at least as long as the opener, CRLF
+		// lines, and an unclosed fence running to the end of the text.
+		let open: { fence: string; body: string[] } | undefined;
+		for (const line of text.split(/\r?\n/)) {
+			if (!open) {
+				const opener = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+				if (opener) open = { fence: opener, body: [] };
+				continue;
+			}
+			const closer = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line)?.[1];
+			if (closer && closer[0] === open.fence[0] && closer.length >= open.fence.length) {
+				last = open.body.join("\n");
+				open = undefined;
+			} else open.body.push(line);
+		}
+		if (open) last = open.body.join("\n");
+	}
 	return last;
 }

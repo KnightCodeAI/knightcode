@@ -166,7 +166,8 @@ const FONT_SLOTS = [
 	{ family: "codeFont", face: "codeFontStyle", token: "--kc-font-code", alias: "kc-code-face", fallback: CODE_FONTS },
 ] as const;
 
-const quoted = (name: string) => `"${name.replaceAll('"', "")}"`;
+// A CSS string ends early only at a quote, a backslash or a newline: an imported theme string must not add rules.
+const quoted = (name: string) => `"${name.replace(/[\u0000-\u001f\u007f"\\]/g, "")}"`;
 
 /** The CSS properties a customization sets on the window (none for an empty one). */
 export function customTokens(theme: ThemeName, custom: Customization | undefined): Record<string, string> {

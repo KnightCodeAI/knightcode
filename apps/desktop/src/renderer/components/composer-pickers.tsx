@@ -110,7 +110,14 @@ export function ApprovalPicker({
 				) : (
 					<>
 						<MenuLabel>How should KnightCode actions be approved?</MenuLabel>
-						<MenuRadioGroup value={mode} onValueChange={(m) => onChange(m as ApprovalMode)}>
+						<MenuRadioGroup
+							value={mode}
+							onValueChange={(m) => {
+								// Radix changes the value even when onSelect prevents default: unconfirmed full access waits here.
+								if (m === "fullAccess" && mode !== "fullAccess" && !fullAccessConfirmed.has(threadKey)) return;
+								onChange(m as ApprovalMode);
+							}}
+						>
 							{MODES.filter((m) => m.mode !== "fullAccess" || allowFullAccess || mode === "fullAccess").map(
 								({ mode: m, name, detail, icon: ModeIcon }) => (
 									<MenuRadioItem

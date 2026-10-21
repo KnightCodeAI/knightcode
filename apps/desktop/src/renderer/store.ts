@@ -261,7 +261,10 @@ export function setResolvedTheme(resolvedTheme: ThemeName): void {
 export function customize(theme: ThemeName, patch: Customization | undefined, replace = false): void {
 	const all = selectPreferences(state).appearance ?? {};
 	const merged = replace ? { ...patch } : { ...all[theme], ...patch };
-	const next = patch ? Object.fromEntries(Object.entries(merged).filter(([, v]) => v)) : {};
+	// 0 is a value (the Contrast slider's low end); undefined, false and "" go back to the built-in value.
+	const next = patch
+		? Object.fromEntries(Object.entries(merged).filter(([, v]) => v !== undefined && v !== false && v !== ""))
+		: {};
 	setPreference("appearance", { ...all, [theme]: next });
 }
 
@@ -323,7 +326,19 @@ function withTurn(view: ThreadView, turnId: string, fn: (turn: ViewTurn) => View
 // --- notifications ----------------------------------------------------------------------------
 
 function upsertSummary(thread: Thread): void {
-	const summary: ThreadSummary = { ...thread, workspaceMode: thread.workspace.mode };
+	const { id, cwd, projectCwd, name, status, archived, createdAt, forkedFromId, updatedAt } = thread;
+	const summary: ThreadSummary = {
+		id,
+		cwd,
+		projectCwd,
+		name,
+		status,
+		archived,
+		createdAt,
+		...(forkedFromId !== undefined ? { forkedFromId } : {}),
+		updatedAt,
+		workspaceMode: thread.workspace.mode,
+	};
 	set((s) => {
 		const threads = s.threads.filter((t) => t.id !== summary.id);
 		return { ...s, threads: [summary, ...threads].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
@@ -361,9 +376,18 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 		case "thread/turn/completed": {
 			const { threadId } = n.params.turn;
 			patchSummary(threadId, { updatedAt: new Date().toISOString() });
-			// An outcome the user did not see marks the thread unread until they open it.
-			if (!(state.view.kind === "thread" && state.view.id === threadId)) setUnread(threadId, true);
-			notifyTurn(n.params.turn);
+			// Every window hears this; one acts for all, so there is one notification and one unread mark.
+			const { turn } = n.params;
+			void client
+				.host("host/window/role", {})
+				.then(({ primary, heldElsewhere }) => {
+					if (!primary) return;
+					// An outcome the user did not see marks the thread unread until they open it.
+					const shown = (state.view.kind === "thread" && state.view.id === threadId) || heldElsewhere.includes(threadId);
+					if (!shown) setUnread(threadId, true);
+					notifyTurn(turn);
+				})
+				.catch(() => {});
 			return;
 		}
 		case "turn/diff/updated": {
@@ -383,6 +407,9 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 		case "thread/replaced": {
 			const { oldThreadId, thread } = n.params;
 			if (state.view.kind === "thread" && state.view.id === oldThreadId) navigate({ kind: "thread", id: thread.id });
+			// A handoff replaces a thread by itself with a new cwd and workspace. Only windows subscribed to the thread
+			// get this; the others re-list their sidebar when focused.
+			upsertSummary(thread);
 			// The server unloaded the old thread; holding it would resume it again after a restart.
 			set((s) => {
 				const { [oldThreadId]: _old, ...held } = s.held;
@@ -731,7 +758,12 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 	if (!view) return;
 	const comments = state.comments[threadId] ?? [];
 	const extra = comments.length ? { comments } : {};
-	const clearComments = () => set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [] } }));
+	// Only the drafts that went with this input; any added while it was in flight stay.
+	const clearComments = () =>
+		set((s) => ({
+			...s,
+			comments: { ...s.comments, [threadId]: (s.comments[threadId] ?? []).filter((c) => !comments.includes(c)) },
+		}));
 	const running = view.turns.some((t) => t.status === "inProgress");
 	if (running) {
 		await client
@@ -749,8 +781,9 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 			...(images?.length ? { images } : {}),
 			...extra,
 		});
-		clearComments();
-		if (result.status !== "started")
+		// A handled or cancelled start made no user message, so the server dropped the comments: keep the drafts.
+		if (result.status === "started") clearComments();
+		else
 			updateThread(threadId, (v) => ({
 				...v,
 				pending: v.pending.filter((p) => p.clientMessageId !== clientMessageId),
@@ -778,8 +811,14 @@ export async function interrupt(threadId: string): Promise<void> {
 		.catch((e: unknown) => toast(errorText(e), "error"));
 }
 
-export async function removeQueued(threadId: string, queueId: string): Promise<void> {
-	await client.request("turn/queue/remove", { threadId, queueId }).catch((e: unknown) => toast(errorText(e), "error"));
+/** False when the input already started its own turn (or the request failed): it is no longer the client's to resend. */
+export async function removeQueued(threadId: string, queueId: string): Promise<boolean> {
+	try {
+		return (await client.request("turn/queue/remove", { threadId, queueId })).removed;
+	} catch (e) {
+		toast(errorText(e), "error");
+		return false;
+	}
 }
 
 export function dismissPending(threadId: string, clientMessageId: string): void {
@@ -1044,11 +1083,24 @@ export function setUnread(threadId: string, unread: boolean): void {
 }
 
 /** Archive the threads idle past Settings › General's limit (archive-filter.ts, inactiveThreads); none when it is off. */
-export function autoArchive(now = Date.now()): void {
+// Archives in flight: each archived notification reruns autoArchive before the others are acknowledged.
+const autoArchiving = new Set<string>();
+export async function autoArchive(now = Date.now()): Promise<void> {
 	const days = selectPreferences(state).autoArchiveDays;
 	if (!days) return;
-	const keep = [...(state.desktop?.pinnedThreads ?? []), ...(state.view.kind === "thread" ? [state.view.id] : [])];
-	for (const t of inactiveThreads(state.threads, days, now, keep)) void archive(t.id);
+	// One window archives for all, and never a thread another window has open.
+	const { primary, heldElsewhere } = await client.host("host/window/role", {});
+	if (!primary) return;
+	const keep = [
+		...(state.desktop?.pinnedThreads ?? []),
+		...(state.view.kind === "thread" ? [state.view.id] : []),
+		...heldElsewhere,
+	];
+	for (const t of inactiveThreads(state.threads, days, now, keep)) {
+		if (autoArchiving.has(t.id)) continue;
+		autoArchiving.add(t.id);
+		void archive(t.id).finally(() => autoArchiving.delete(t.id));
+	}
 }
 
 /** Codex's "Clear all unreads". */
@@ -1201,7 +1253,8 @@ export async function resendEdited(threadId: string, turnId: string, text: strin
 			await send(thread.id, text);
 		} else {
 			const { thread } = view;
-			await startThread(thread.projectCwd, text, {
+			// The thread's own cwd: inside a managed worktree that starts the new thread in the same worktree.
+			await startThread(thread.cwd, text, {
 				...(thread.model ? { model: thread.model } : {}),
 				...(thread.thinkingLevel ? { thinkingLevel: thread.thinkingLevel } : {}),
 				approvalMode: thread.approvalMode,

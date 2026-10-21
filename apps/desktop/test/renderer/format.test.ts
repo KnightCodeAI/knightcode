@@ -23,6 +23,10 @@ test("date separators name the day as Codex does", () => {
 	);
 	// Another year names the year.
 	expect(dayLabel(at(9, 1, 10, 2025), now)).toContain("2025");
+	// Calendar days: a week ago at a later hour is under 7 x 24 hours old, yet not "this" weekday.
+	expect(dayLabel(at(9, 12, 16), now)).toBe(
+		new Date(at(9, 12, 16)).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+	);
 });
 
 test("a message's time is the clock today, the weekday and clock before that", () => {
@@ -38,6 +42,8 @@ test("find matches case-insensitively, without overlapping, and nothing for an e
 	expect(matchOffsets("aaaa", "aa")).toEqual([0, 2]);
 	expect(matchOffsets("anything", "")).toEqual([]);
 	expect(matchOffsets("short", "longer than text")).toEqual([]);
+	// "İ" lowercases to two code units: offsets still point into the original text.
+	expect(matchOffsets("İx git", "git")).toEqual([3]);
 });
 
 test("the last fenced code block across replies, inner fences and all", () => {
@@ -46,6 +52,10 @@ test("the last fenced code block across replies, inner fences and all", () => {
 	expect(lastCodeBlock([first, second])).toBe("const a = 1;\n```\nnot a close\n```");
 	expect(lastCodeBlock([first, "no code here"])).toBe("npm test");
 	expect(lastCodeBlock(["inline `code` only"])).toBeUndefined();
+	// CommonMark: a longer closing fence closes, CRLF lines count, an unclosed fence runs to the end.
+	expect(lastCodeBlock(["```\na\n````\nafter"])).toBe("a");
+	expect(lastCodeBlock(["```\r\nb\r\n```\r\n"])).toBe("b");
+	expect(lastCodeBlock(["```\nc\n```", "```\nstill streaming"])).toBe("still streaming");
 });
 
 test("a diff is large past Codex's 128 files, 9,000 changed lines or 12 MiB of changed text", () => {
@@ -68,8 +78,11 @@ test("a diff is large past Codex's 128 files, 9,000 changed lines or 12 MiB of c
 
 test("a dropped file is mentioned relative to the project it is in, else by its whole path", () => {
 	vi.stubGlobal("window", { knightcode: { platform: "win32" } });
-	expect(mentionPath("C:\\Work\\app\\src\\a.ts", "c:\\work\\app\\")).toBe("src\\a.ts");
-	expect(mentionPath("C:\\Work\\application\\a.ts", "C:\\Work\\app")).toBe("C:\\Work\\application\\a.ts");
-	expect(mentionPath("D:\\b.png", undefined)).toBe("D:\\b.png");
-	vi.unstubAllGlobals();
+	try {
+		expect(mentionPath("C:\\Work\\app\\src\\a.ts", "c:\\work\\app\\")).toBe("src\\a.ts");
+		expect(mentionPath("C:\\Work\\application\\a.ts", "C:\\Work\\app")).toBe("C:\\Work\\application\\a.ts");
+		expect(mentionPath("D:\\b.png", undefined)).toBe("D:\\b.png");
+	} finally {
+		vi.unstubAllGlobals();
+	}
 });

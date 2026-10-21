@@ -25,20 +25,23 @@ export const threadLink = (id: string) => `knightcode://thread/${encodeURICompon
 /** The view a link names: `thread/<id>`, `new?cwd=<path>`, `settings/<page>`; undefined for anything else. */
 export function viewOfLink(link: string): View | undefined {
 	let url: URL;
+	let segments: string[];
 	try {
 		url = new URL(link);
+		// In `knightcode://thread/x` the first segment parses as the host. A bad %-escape throws URIError.
+		segments = [url.host, ...url.pathname.split("/").filter(Boolean)].map(decodeURIComponent);
 	} catch {
 		return undefined;
 	}
 	if (url.protocol !== "knightcode:") return undefined;
-	// In `knightcode://thread/x` the first segment parses as the host.
-	const [first = "", ...rest] = [url.host, ...url.pathname.split("/").filter(Boolean)].map(decodeURIComponent);
-	if (first === "thread" && rest[0]) return { kind: "thread", id: rest[0] };
+	const [first = "", ...rest] = segments;
+	if (first === "thread" && rest.length === 1 && rest[0]) return { kind: "thread", id: rest[0] };
 	if (first === "new") {
 		const cwd = url.searchParams.get("cwd");
 		return cwd ? { kind: "new", cwd } : { kind: "new" };
 	}
 	if (first === "settings") {
+		if (rest.length > 1) return undefined;
 		const page = SETTINGS_PAGE_IDS.find((p) => p === (rest[0] ?? "general"));
 		return page ? { kind: "settings", page } : undefined;
 	}

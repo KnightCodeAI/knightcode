@@ -14,6 +14,15 @@ test("new-thread and settings links", () => {
 });
 
 test("anything else is ignored", () => {
-	for (const link of ["knightcode://settings/nope", "knightcode://thread", "https://thread/x", "not a url"])
+	for (const link of [
+		"knightcode://settings/nope",
+		"knightcode://settings/general/extra",
+		"knightcode://thread",
+		"knightcode://thread/",
+		"knightcode://thread/%E0%A4%A",
+		"knightcode://thread/a/b",
+		"https://thread/x",
+		"not a url",
+	])
 		expect(viewOfLink(link), link).toBeUndefined();
 });

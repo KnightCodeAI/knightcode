@@ -15,6 +15,8 @@ const KEY_NAMES: Record<string, string> = {
 	slash: "/",
 	semicolon: ";",
 	backquote: "`",
+	comma: ",",
+	digit0: "0",
 	numpadadd: "Num+",
 	numpadsubtract: "Num-",
 	f3: "F3",
@@ -83,11 +85,24 @@ export const bindingAccelerator = (id: KeybindingId): string | undefined =>
 		)
 		.join("+");
 
-export const matches = (event: KeyboardEvent | React.KeyboardEvent, id: KeybindingId) =>
-	matchesBinding(event, id, isMac(), overrides);
-
 export const isEditable = (target: EventTarget | null) =>
 	target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select"));
+
+/** A field, or a control whose own Enter or Space activation a window-level binding must not take over. */
+export const isControl = (target: EventTarget | null) =>
+	isEditable(target) ||
+	(target instanceof Element && target.closest("button, a[href], [role^='menuitem'], [role='option'], [role='tab']") !== null);
+
+export const matches = (event: KeyboardEvent | React.KeyboardEvent, id: KeybindingId) => {
+	// Enter that commits an IME candidate (Chinese, Japanese, Korean input) is not a shortcut, in any field.
+	const native = "nativeEvent" in event ? event.nativeEvent : event;
+	if (native.isComposing || native.keyCode === 229) return false;
+	// AltGr (Ctrl+Alt on Windows) types characters such as "ą" or "[" on many layouts: never a shortcut.
+	if (event.getModifierState("AltGraph")) return false;
+	if (!matchesBinding(event, id, isMac(), overrides)) return false;
+	// Option (with or without Shift) types characters on macOS: in a field it is text.
+	return !(isMac() && event.altKey && !event.metaKey && !event.ctrlKey && isEditable(event.target));
+};
 
 /**
  * A window-level handler for one binding id; the latest handler always runs. Keys a field already

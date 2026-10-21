@@ -8,7 +8,7 @@
 
 import { ChevronDown, FilePen, Hand, SquareTerminal } from "./icons.tsx";
 import { useEffect, useRef, useState } from "react";
-import { isEditable, matches, useBinding } from "../keys.ts";
+import { isControl, isEditable, matches, useBinding } from "../keys.ts";
 import { type Approval, answerApproval } from "../store.ts";
 import { Button, Kbd } from "./button.tsx";
 import { Tooltip } from "./tooltip.tsx";
@@ -51,10 +51,10 @@ export function ApprovalCard({ threadId, approval, cwd }: { threadId: string; ap
 			? `Allow KnightCode to ${params.tool === "write" ? "write" : "edit"} ${path.split(/[\\/]/).pop() || "this file"}?`
 			: `Allow KnightCode to use ${params.tool}?`;
 	// Enter and Escape answer the request wherever the focus is, as Codex binds Approve and Decline, except in a field
-	// (the instructions box handles its own keys).
+	// (the instructions box handles its own keys). Enter on a focused control (Deny, the chevron) is that control's.
 	useBinding(
 		"desktop.approval.accept",
-		(event) => (isEditable(event.target) ? false : answer("accept")),
+		(event) => (isControl(event.target) ? false : answer("accept")),
 		!explain && offered.has("accept"),
 	);
 	useBinding(

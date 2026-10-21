@@ -16,6 +16,7 @@ function parse(value: string): Rgba | undefined {
 
 function tokens(selector: string): Record<string, Rgba> {
 	const start = css.indexOf(selector);
+	if (start === -1) throw new Error(`no ${JSON.stringify(selector)} block in styles.css`);
 	const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start));
 	const entries = [...body.matchAll(/(--kc-[\w-]+):\s*([^;]+);/g)].map((m) => [m[1]!, parse(m[2]!.trim())] as const);
 	return Object.fromEntries(entries.filter((e): e is readonly [string, Rgba] => e[1] !== undefined));
@@ -37,7 +38,10 @@ function luminance([r, g, b]: Rgba): number {
 	return 0.2126 * lr! + 0.7152 * lg! + 0.0722 * lb!;
 }
 
-const contrast = (text: Rgba, surface: Rgba) => {
+const contrast = (text: Rgba | undefined, surface: Rgba | undefined) => {
+	// A token the parser skipped (an unsupported colour form) must fail here, not pass unchecked.
+	if (!text || !surface) throw new Error("a token the test checks is missing or not a plain colour");
+	if (surface[3] !== 1) throw new Error("a surface must be opaque to measure text on it");
 	const [hi, lo] = [luminance(over(text, surface)), luminance(surface)].sort((x, y) => y - x);
 	return (hi! + 0.05) / (lo! + 0.05);
 };

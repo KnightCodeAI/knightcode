@@ -15,7 +15,7 @@ import type {
 	ResultOf,
 	ThreadSummary,
 } from "@knightcode/app-server-protocol";
-import { type CSSProperties, Fragment, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type CSSProperties, Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { comboFromEvent, DESKTOP_KEYBINDINGS, type KeybindingId } from "../../shared/keybindings.ts";
 import { client } from "../client.ts";
 import {
@@ -691,9 +691,11 @@ function SizeField({
 	const [text, setText] = useState(String(value));
 	useEffect(() => setText(String(value)), [value]);
 	const commit = () => {
-		const n = Math.round(Number(text));
-		if (n >= min && n <= max) onChange(n);
-		else setText(String(value));
+		// Number("") is 0: a cleared field reverts rather than writing 0.
+		const n = text.trim() === "" ? Number.NaN : Math.round(Number(text));
+		if (n >= min && n <= max) {
+			if (n !== value) onChange(n);
+		} else setText(String(value));
 	};
 	return (
 		<span className="flex items-center gap-2 text-sm text-tertiary">
@@ -1266,23 +1268,40 @@ function WorktreeGeneral() {
 function Environments() {
 	const projects = useStore(selectProjects);
 	const [project, setProject] = useState(projects[0]?.path);
-	const [environments, setEnvironments] = useState<Environment[]>([]);
+	// Rows carry a stable key: the inputs are uncontrolled, so an index key would show a removed row's text in the next.
+	const [rows, setRows] = useState<{ key: number; env: Environment }[]>([]);
+	const nextKey = useRef(0);
+	const keyed = (env: Environment) => ({ key: nextKey.current++, env });
 	const [trusted, setTrusted] = useState(true);
+	// The project whose rows are showing: nothing saves until they loaded, so one project's scripts never land in another.
+	const [loadedFor, setLoadedFor] = useState<string>();
 	useEffect(() => {
+		setRows([]);
+		setLoadedFor(undefined);
 		if (!project) return;
+		let current = true;
 		void client
 			.request("environment/list", { cwd: project })
 			.then((r) => {
-				setEnvironments(r.environments);
+				if (!current) return;
+				setRows(r.environments.map(keyed));
 				setTrusted(r.trusted);
+				setLoadedFor(project);
 			})
 			.catch((e: unknown) => toast(errorText(e), "error"));
+		return () => {
+			current = false;
+		};
 	}, [project]);
-	const save = (next: Environment[]) => {
-		setEnvironments(next);
+	const save = (next: { key: number; env: Environment }[]) => {
+		if (!project || loadedFor !== project) return;
+		setRows(next);
 		if (project)
 			void client
-				.request("environment/save", { cwd: project, environments: next.filter((e) => e.name.trim()) })
+				.request("environment/save", {
+					cwd: project,
+					environments: next.map((r) => r.env).filter((e) => e.name.trim()),
+				})
 				.catch((e: unknown) => toast(errorText(e), "error"));
 	};
 	return (
@@ -1292,8 +1311,8 @@ function Environments() {
 				<Button
 					variant="soft"
 					toolbar
-					disabled={!project}
-					onClick={() => setEnvironments([...environments, { name: "" }])}
+					disabled={!project || loadedFor !== project}
+					onClick={() => setRows([...rows, keyed({ name: "" })])}
 				>
 					<Plus size={16} /> Add environment
 				</Button>
@@ -1310,9 +1329,9 @@ function Environments() {
 					options={projects.map((p) => ({ value: p.path, label: basename(p.path) }))}
 				/>
 			</Row>
-			{environments.map((env, i) => (
+			{rows.map(({ key, env }, i) => (
 				<div
-					key={`${project}:${i}`}
+					key={key}
 					className="relative flex flex-col gap-2 px-4 py-3 not-last:after:absolute not-last:after:inset-x-4 not-last:after:bottom-0 not-last:after:h-px not-last:after:bg-line"
 				>
 					<div className="flex gap-2">
@@ -1320,10 +1339,10 @@ function Environments() {
 							aria-label="Environment name"
 							defaultValue={env.name}
 							placeholder="Name"
-							onBlur={(e) => save(environments.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+							onBlur={(e) => save(rows.map((x, j) => (j === i ? { key: x.key, env: { ...x.env, name: e.target.value } } : x)))}
 							className="kc-input h-7 flex-1 border-line-strong px-2"
 						/>
-						<Button variant="soft" color="danger" toolbar onClick={() => save(environments.filter((_, j) => j !== i))}>
+						<Button variant="soft" color="danger" toolbar onClick={() => save(rows.filter((_, j) => j !== i))}>
 							Remove
 						</Button>
 					</div>
@@ -1332,7 +1351,11 @@ function Environments() {
 						defaultValue={env.setup?.default ?? ""}
 						placeholder="Setup script (runs in the new worktree)"
 						onBlur={(e) =>
-							save(environments.map((x, j) => (j === i ? { ...x, setup: { ...x.setup, default: e.target.value } } : x)))
+							save(
+								rows.map((x, j) =>
+									j === i ? { key: x.key, env: { ...x.env, setup: { ...x.env.setup, default: e.target.value } } } : x,
+								),
+							)
 						}
 						className="kc-input h-20 resize-y py-2 font-code text-xs leading-4 border-line-strong"
 					/>
@@ -1540,7 +1563,8 @@ function Archived({ title }: { title: string }) {
 			.catch((e: unknown) => toast(errorText(e), "error"));
 	}, []);
 	// Archiving elsewhere (the sidebar, another window) changes the live list; reread then.
-	const live = useStore((s) => s.threads);
+	// Ids only: a status or name change replaces the list, and must not reread the whole archive.
+	const live = useStore((s) => s.threads.map((t) => t.id).join("\n"));
 	useEffect(load, [load, live]);
 	const change = (patch: Partial<ArchiveFilter>) => setFilter((f) => ({ ...f, ...patch }));
 	const groups = filterArchived(threads ?? [], filter, projects, samePath, basename);
@@ -1615,7 +1639,9 @@ function Archived({ title }: { title: string }) {
 				</PageBar>
 				{threads === undefined ? <div className="kc-pulse text-tertiary">Loading…</div> : null}
 				{threads?.length === 0 ? <div className="text-secondary">No archived threads.</div> : null}
-				{threads?.length && !groups.length ? <div className="text-secondary">No archived threads match.</div> : null}
+				{threads !== undefined && threads.length > 0 && groups.length === 0 ? (
+					<div className="text-secondary">No archived threads match.</div>
+				) : null}
 				{groups.map(([name, list]) => (
 					<Card
 						key={name}
@@ -1699,16 +1725,23 @@ type SettingsFile = {
 
 /** One scope's settings, shared with the terminal: each write rereads, so rows show what landed. */
 function useSettingsFile(cwd: string | undefined, trusted?: boolean): SettingsFile | undefined {
-	const [read, setRead] = useState<ResultOf<"config/read">>();
+	// Each result keeps the scope it was read for, and only the newest request lands: after a scope switch, the old
+	// scope's values never show (or get written) under the new one.
+	const [loaded, setLoaded] = useState<{ cwd: string | undefined; read: ResultOf<"config/read"> }>();
+	const latest = useRef(0);
 	// A project's own file is read once it is trusted, so trusting it rereads.
 	const load = useCallback(() => {
+		const request = ++latest.current;
 		client
 			.request("config/read", cwd === undefined ? {} : { cwd })
-			.then(setRead)
+			.then((read) => {
+				if (request === latest.current) setLoaded({ cwd, read });
+			})
 			.catch((e: unknown) => toast(errorText(e), "error"));
 	}, [cwd, trusted]);
 	useEffect(load, [load]);
-	if (!read) return undefined;
+	if (!loaded || loaded.cwd !== cwd) return undefined;
+	const { read } = loaded;
 	const write = (key: string, value: unknown) =>
 		client
 			.request(

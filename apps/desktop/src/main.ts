@@ -20,7 +20,7 @@ import {
 	shell,
 } from "electron";
 import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-protocol.ts";
-import { onWindowClose } from "./main/close.ts";
+import { markQuitting, onWindowClose } from "./main/close.ts";
 import { handleHost } from "./main/host.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
 import { Router } from "./main/router.ts";
@@ -58,6 +58,14 @@ const windows = new Map<number, OpenWindow>();
 let nextWindowId = 1;
 let serverState: { state: ServerState; message?: string } = { state: "starting" };
 let quitting = false;
+
+/** host/window/role: the focused window, else the one focused last, acts for all; and what the others hold. */
+function roleOf(id: number): { primary: boolean; heldElsewhere: string[] } {
+	const all = [...windows];
+	const primary = all.find(([, w]) => w.window.isFocused()) ?? all.sort(([, a], [, b]) => b.lastFocusedAt - a.lastFocusedAt)[0];
+	const heldElsewhere = new Set(all.filter(([other]) => other !== id).flatMap(([other]) => router.heldThreads(other)));
+	return { primary: primary?.[0] === id, heldElsewhere: [...heldElsewhere] };
+}
 
 function sendEvent(target: OpenWindow, event: HostEvent): void {
 	target.port?.postMessage(event);
@@ -116,7 +124,7 @@ function connectPort(id: number, open: OpenWindow): void {
 		const data = event.data as Message | HostRequest;
 		if (typeof data !== "object" || data === null) return;
 		if ("host" in data) {
-			void handleHost(data, open.window, { state, server, openWindow: createWindow, zoom }).then((response) =>
+			void handleHost(data, open.window, { state, server, openWindow: createWindow, zoom, role: () => roleOf(id) }).then((response) =>
 				port1.postMessage(response),
 			);
 			return;
@@ -135,11 +143,15 @@ function connectPort(id: number, open: OpenWindow): void {
  * window holds) in the window used last; a new window when none is open.
  */
 function openLink(url: string): void {
-	const threadId = /^knightcode:\/\/thread\/([^/?#]+)/.exec(url)?.[1];
+	const encoded = /^knightcode:\/\/thread\/([^/?#]+)/.exec(url)?.[1];
+	let threadId: string | undefined;
+	try {
+		threadId = encoded && decodeURIComponent(encoded);
+	} catch {
+		// A bad %-escape (any page can send the link): no window holds it; the renderer shows nothing for it.
+	}
 	const all = [...windows];
-	const holding = threadId
-		? all.find(([id]) => router.heldThreads(id).includes(decodeURIComponent(threadId)))
-		: undefined;
+	const holding = threadId ? all.find(([id]) => router.heldThreads(id).includes(threadId)) : undefined;
 	const target = holding ?? all.sort(([, a], [, b]) => b.lastFocusedAt - a.lastFocusedAt)[0];
 	if (!target) return void createWindow(url);
 	const [, open] = target;
@@ -268,7 +280,7 @@ async function start(): Promise<void> {
 	});
 }
 
-/** A link macOS delivered before the first window existed. */
+/** A link macOS delivered before start() opened the first window. */
 let pendingLink: string | undefined;
 
 if (!app.requestSingleInstanceLock()) {
@@ -285,14 +297,16 @@ if (!app.requestSingleInstanceLock()) {
 	// macOS hands links to the running app as an event, not as arguments.
 	app.on("open-url", (event, url) => {
 		event.preventDefault();
-		if (windows.size > 0) openLink(url);
+		// Before start() made the first window the link waits for it; after, openLink opens a window when none is
+		// left (macOS keeps the app running with every window closed).
+		if (server) openLink(url);
 		else pendingLink = url;
 	});
 	app.on("window-all-closed", () => {
 		if (process.platform !== "darwin") app.quit();
 	});
 	app.on("before-quit", (event) => {
-		if (quitting || !server) return;
+		if (quitting || !server) return markQuitting();
 		event.preventDefault();
 		const running = router.activeThreads();
 		if (running > 0) {
@@ -308,6 +322,7 @@ if (!app.requestSingleInstanceLock()) {
 			if (choice !== 0) return;
 		}
 		quitting = true;
+		markQuitting();
 		void server.stop().finally(() => app.quit());
 	});
 	void start();

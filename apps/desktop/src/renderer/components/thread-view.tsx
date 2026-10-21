@@ -47,6 +47,7 @@ import { TurnView, UserBubble } from "./items.tsx";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "./menu.tsx";
 import { boundActions, DeleteThreadDialog, RenameThreadDialog, threadActions } from "./thread-actions.tsx";
 import { Tooltip } from "./tooltip.tsx";
+import { followDrag } from "../drag.ts";
 
 const NO_PINS: string[] = [];
 
@@ -151,12 +152,7 @@ function PanelResizeHandle() {
 			const full = size > max && workspace - size < PANEL_MIN / 2;
 			setPanel(open && !full ? { open, full, width: Math.min(Math.max(size, PANEL_MIN), max) } : { open, full });
 		};
-		const onUp = () => {
-			window.removeEventListener("pointermove", onMove);
-			window.removeEventListener("pointerup", onUp);
-		};
-		window.addEventListener("pointermove", onMove);
-		window.addEventListener("pointerup", onUp);
+		followDrag(onMove);
 	};
 	return (
 		<div

@@ -50,17 +50,25 @@ test("after an app server restart the window resumes every thread it held", asyn
 });
 
 test("deleting a thread still in the sidebar archives it first, as the server deletes only archived threads", async () => {
-	fake.results["thread/list"] = () => ({ threads: [{ id: "live", status: { type: "idle" } }] });
-	fake.results["thread/archive"] = () => ({});
-	fake.results["thread/delete"] = () => ({});
-	await refreshThreads();
-	fake.requests.length = 0;
-	await deleteThread("live");
-	// One from Settings › Archived is no longer in the sidebar's list.
-	await deleteThread("archived");
-	expect(fake.requests.map((r) => `${r.method} ${(r.params as { threadId: string }).threadId}`)).toEqual([
-		"thread/archive live",
-		"thread/delete live",
-		"thread/delete archived",
-	]);
+	const saved = { ...fake.results };
+	try {
+		fake.results["thread/list"] = () => ({ threads: [{ id: "live", status: { type: "idle" } }] });
+		fake.results["thread/archive"] = () => ({});
+		fake.results["thread/delete"] = () => ({});
+		await refreshThreads();
+		// One from Settings › Archived is no longer in the sidebar's list.
+		expect(getState().threads.map((t) => t.id)).toEqual(["live"]);
+		fake.requests.length = 0;
+		await deleteThread("live");
+		await deleteThread("archived");
+		expect(fake.requests.map((r) => `${r.method} ${(r.params as { threadId: string }).threadId}`)).toEqual([
+			"thread/archive live",
+			"thread/delete live",
+			"thread/delete archived",
+		]);
+	} finally {
+		for (const key of Object.keys(fake.results)) if (!(key in saved)) delete fake.results[key];
+		Object.assign(fake.results, saved);
+		await refreshThreads();
+	}
 });

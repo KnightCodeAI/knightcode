@@ -1050,7 +1050,9 @@ unreadable combination by accident.
 The two built-in themes take `surface` and `ink` from the terminal palettes
 (`dark.json`: text `#e7e2db`; `light.json` likewise). The accent is the
 desktop's own orange, one family across themes: `#f97316` in dark and the
-deeper `#ea580c` in light, where white Send and Stop icons still read on it.
+deeper `#ea580c` in light, the base its tints (focus, switch, selection) derive
+from. Filled light controls use `#c2410c` (orange-700): white text on `#ea580c`
+is only 3.6:1, below AA (section 16).
 
 ### 11.2 Tokens
 

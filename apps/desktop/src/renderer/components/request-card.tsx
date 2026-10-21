@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { dialogOption, dialogTitle } from "../activity.ts";
-import { isEditable, matches, useBinding } from "../keys.ts";
+import { isControl, isEditable, matches, useBinding } from "../keys.ts";
 import { answerDialog, answerQuestions, type Dialog, type UserInput } from "../store.ts";
 import { Button, IconButton, Kbd } from "./button.tsx";
 import { ArrowRight, ChevronLeft, ChevronRight, Pencil, ShieldAlert, X } from "./icons.tsx";
@@ -52,7 +52,8 @@ function QuestionPanel({
 	const ref = useRef<HTMLDivElement>(null);
 	useTakeFocus(ref);
 	const [highlight, setHighlight] = useState(chosen ?? 0);
-	const keys = (event: KeyboardEvent) => !isEditable(event.target) && options.length > 0;
+	// Enter on a focused control (an option, Dismiss, Skip) is that control's own.
+	const keys = (event: KeyboardEvent) => !isControl(event.target) && options.length > 0;
 	useBinding("desktop.picker.next", (e) => (keys(e) ? setHighlight((h) => (h + 1) % options.length) : false));
 	useBinding("desktop.picker.previous", (e) =>
 		keys(e) ? setHighlight((h) => (h - 1 + options.length) % options.length) : false,
@@ -258,7 +259,8 @@ function ConfirmCard({ threadId, dialog }: { threadId: string; dialog: Dialog })
 	const ref = useRef<HTMLDivElement>(null);
 	useTakeFocus(ref);
 	const answer = (confirmed: boolean) => answerDialog(threadId, dialog, { confirmed });
-	useBinding("desktop.approval.accept", (e) => (isEditable(e.target) ? false : answer(true)));
+	// Enter on a focused No must not answer Yes.
+	useBinding("desktop.approval.accept", (e) => (isControl(e.target) ? false : answer(true)));
 	useBinding("desktop.approval.decline", (e) => (isEditable(e.target) ? false : answer(false)));
 	return (
 		<div ref={ref} tabIndex={-1} className="mx-auto w-full max-w-3xl px-4 pb-4 outline-none">

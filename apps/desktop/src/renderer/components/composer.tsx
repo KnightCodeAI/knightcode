@@ -207,8 +207,9 @@ export function Composer({
 		commands.current = undefined;
 	}, [threadId]);
 	useEffect(() => {
-		// A new thread's commands come from its project.
+		// A new thread's commands come from its project, and so do a worktree's base branch and environment.
 		commands.current = undefined;
+		setWorkspace((w) => (w.mode === "worktree" ? { mode: "worktree" } : w));
 	}, [cwd]);
 	useEffect(() => {
 		const el = ref.current;
@@ -396,11 +397,12 @@ export function Composer({
 
 	/** Put text at the start of the field, ahead of anything already typed, and focus its end. */
 	const takeBack = (value: string) => {
-		const next = text.trim() ? `${value}\n\n${text}` : value;
-		setText(next);
+		// The latest text, not this render's: the caller may have awaited a round trip while the user typed.
+		setText((current) => (current.trim() ? `${value}\n\n${current}` : value));
 		requestAnimationFrame(() => {
-			ref.current?.focus();
-			ref.current?.setSelectionRange(next.length, next.length);
+			const field = ref.current;
+			field?.focus();
+			field?.setSelectionRange(field.value.length, field.value.length);
 		});
 	};
 
@@ -506,13 +508,14 @@ export function Composer({
 									steering={q.steer}
 									onSteer={() => {
 										if (!threadId || !q.id) return;
-										void removeQueued(threadId, q.id).then(() => steer(threadId, q.text));
+										void removeQueued(threadId, q.id).then((removed) => (removed ? steer(threadId, q.text) : undefined));
 									}}
 									onDelete={() => threadId && q.id && void removeQueued(threadId, q.id)}
 									onEdit={() => {
 										if (!threadId || !q.id) return;
-										void removeQueued(threadId, q.id);
-										takeBack(q.text);
+										void removeQueued(threadId, q.id).then((removed) => {
+											if (removed) takeBack(q.text);
+										});
 									}}
 								/>
 							))}

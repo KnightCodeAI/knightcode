@@ -240,9 +240,9 @@ function useAutoArchive(): void {
 	const days = useStore(selectPreferences).autoArchiveDays;
 	const count = useStore((s) => s.threads.length);
 	useEffect(() => {
-		autoArchive();
+		void autoArchive().catch(() => {});
 		if (!days) return;
-		const timer = setInterval(() => autoArchive(), 3_600_000);
+		const timer = setInterval(() => void autoArchive().catch(() => {}), 3_600_000);
 		return () => clearInterval(timer);
 	}, [days, count]);
 }
