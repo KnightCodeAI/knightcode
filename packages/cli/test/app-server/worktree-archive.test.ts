@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -6,7 +6,7 @@ import { workspaceHooks } from "../../src/app-server/workspaces.ts";
 import { makeRepo, sh, write } from "./fixtures/git-repo.ts";
 import { createGate } from "./fixtures/gate-extension.ts";
 import { type RepoServer, repoServer, say, worktreeThread } from "./fixtures/worktree-server.ts";
-import { cleanupServers, startServer, tempDir } from "./harness.ts";
+import { cleanupServers, startServer, stopChild, tempDir } from "./harness.ts";
 
 afterEach(cleanupServers);
 
@@ -231,6 +231,40 @@ test("worktree/list shows each worktree with its threads; worktree/delete refuse
 	});
 });
 
+test("a thread of the worktree open in another process fences it from deletion until it closes", async () => {
+	const s = await repoServer();
+	const { thread, path } = await saved(s);
+	// Archived here, with the worktree kept: only the other process's lock still holds it.
+	settings(s, { autoDelete: false });
+	await archive(s, thread.id);
+	settings(s, {});
+	const file = readdirSync(s.sessionDir, { recursive: true, encoding: "utf8" }).find(
+		(name) => name.endsWith(".jsonl") && name.includes(thread.id),
+	);
+	if (!file) throw new Error("no session file");
+	const holder = spawn(
+		process.execPath,
+		[join(import.meta.dirname, "../fixtures/hold-session-lock.ts"), join(s.sessionDir, file)],
+		{
+			stdio: ["pipe", "pipe", "inherit"],
+		},
+	);
+	try {
+		await new Promise<void>((resolve) => holder.stdout!.once("data", () => resolve()));
+		await expect(s.a.client.request("worktree/delete", { path })).rejects.toMatchObject({
+			data: { reason: "worktreeInUse" },
+		});
+		expect(existsSync(path)).toBe(true);
+	} finally {
+		// Closing stdin releases the lock and exits; stopChild only if it does not.
+		const exited = new Promise<void>((resolve) => holder.once("exit", () => resolve()));
+		holder.stdin!.end();
+		await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 10_000))]);
+		await stopChild(holder);
+	}
+	expect(await s.a.client.request("worktree/delete", { path })).toMatchObject({ snapshot: expect.any(String) });
+});
+
 test("the user's own worktrees and stale registrations survive every deletion and prune", async () => {
 	const s = await repoServer();
 	const own = join(tempDir("kc-own-"), "own");
@@ -272,11 +306,13 @@ test("a malformed manifest makes the thread local and removes nothing", async ()
 });
 
 test("nested repositories are never deleted: archive skips, worktree/delete refuses, their work stays", async () => {
-	const kinds = ["submodule", "rm-cached", "never-added", "init-inside"] as const;
+	const kinds = ["submodule", "rm-cached", "never-added", "init-inside", "ignored"] as const;
 	for (const kind of kinds) {
 		const s = await repoServer({ "inner/keep.txt": "k\n" });
 		const { thread, path } = await saved(s);
-		const nested = join(path, kind === "init-inside" ? "inner" : "nested");
+		// "ignored": a repository inside an ignored directory, which the snapshot leaves out.
+		const nested = join(path, kind === "init-inside" ? "inner" : kind === "ignored" ? "vendor/deep/nested" : "nested");
+		if (kind === "ignored") write(path, ".gitignore", "vendor/\n");
 		if (kind === "submodule" || kind === "rm-cached") {
 			const library = tempDir("kc-lib-");
 			makeRepo(library, { "lib.txt": "lib\n" });
