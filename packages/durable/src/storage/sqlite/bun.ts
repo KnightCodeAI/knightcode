@@ -24,7 +24,6 @@ interface BunDatabase {
 	exec(sql: string): unknown;
 	prepare(sql: string): BunStatement;
 	close(): void;
-	readonly inTransaction: boolean;
 }
 
 type BunDatabaseConstructor = new (path: string) => BunDatabase;
@@ -56,9 +55,6 @@ function toSyncConnection(database: BunDatabase): SyncSqliteConnection {
 			// bun:sqlite defers closing while prepared statements are alive, which keeps the file locked.
 			for (const statement of statements.splice(0)) statement.finalize();
 			database.close();
-		},
-		get isTransaction() {
-			return database.inTransaction;
 		},
 	};
 }
