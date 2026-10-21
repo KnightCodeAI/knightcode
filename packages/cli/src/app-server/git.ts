@@ -668,23 +668,29 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
  * the checkout's untracked files. A path neither on disk nor in the index stays absent.
  */
 export async function currentEntries(repo: Repo, paths: string[], signal?: AbortSignal): Promise<Map<string, string>> {
-	const tree = await withTemporaryIndex(repo, signal, async (run) => {
-		// From an empty index: only these paths take part, so an unrelated unmerged entry cannot fail write-tree.
-		await run(["read-tree", "--empty"]);
-		// A parent replaced by a file (ENOTDIR) means the path is gone.
-		const onDisk = (p: string) => {
-			try {
-				return lstatSync(join(repo.root, p), { throwIfNoEntry: false }) !== undefined;
-			} catch {
-				return false;
-			}
-		};
-		const present = paths.filter(onDisk);
-		// --force: a path ignored since the turn is still compared by what is on disk.
-		if (present.length > 0)
-			await run(["add", "-A", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"], `${present.join("\0")}\0`);
-		return run(["write-tree"]);
-	});
+	const tree = await withTemporaryIndex(
+		repo,
+		signal,
+		async (run) => {
+			// From an empty index: only these paths take part, so an unrelated unmerged entry cannot fail write-tree.
+			await run(["read-tree", "--empty"]);
+			// A parent replaced by a file (ENOTDIR) means the path is gone.
+			const onDisk = (p: string) => {
+				try {
+					return lstatSync(join(repo.root, p), { throwIfNoEntry: false }) !== undefined;
+				} catch {
+					return false;
+				}
+			};
+			const present = paths.filter(onDisk);
+			// --force: a path ignored since the turn is still compared by what is on disk.
+			if (present.length > 0)
+				await run(["add", "-A", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"], `${present.join("\0")}\0`);
+			return run(["write-tree"]);
+			// Flags kept as copied: the index is emptied first, so clearing them would scan it for nothing.
+		},
+		true,
+	);
 	return entriesOf(repo, tree, paths);
 }
 

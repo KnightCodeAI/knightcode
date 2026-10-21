@@ -284,6 +284,8 @@ export async function gitCommit(
 			let failure: unknown;
 			try {
 				if (all) await git(repo, ["add", "-A"], { signal: ctx.signal });
+				// A shutdown during the add: no commit is spawned, so no index.lock can be taken as the commit's own.
+				ctx.signal?.throwIfAborted();
 				result = await runGit(repo, ["commit", "-q", "-F", "-"], {
 					input: message,
 					// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
@@ -302,10 +304,12 @@ export async function gitCommit(
 			}
 			if (failure === undefined) {
 				// A commit-msg hook may have rewritten the message: answer with what was committed.
-				const commit = await git(repo, ["rev-parse", "HEAD"]);
+				// Without a signal: the commit exists, so a shutdown now must not answer it as failed.
+				const done = { ...repo, signal: undefined };
+				const commit = await git(done, ["rev-parse", "HEAD"]);
 				return {
 					commit,
-					message: (await git(repo, ["log", "-1", "--no-show-signature", "--format=%B", commit])).trimEnd(),
+					message: (await git(done, ["log", "-1", "--no-show-signature", "--format=%B", commit])).trimEnd(),
 				};
 			}
 			// No commit: the staging goes back, but never onto a HEAD that moved (it would stage a revert of that
