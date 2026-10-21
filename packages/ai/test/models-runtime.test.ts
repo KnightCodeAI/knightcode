@@ -910,6 +910,26 @@ describe("Models runtime", () => {
 		expect(await credentials.read("p1")).toBeUndefined();
 	});
 
+	it("trims login answers and refuses an empty API key", async () => {
+		const credentials = new InMemoryCredentialStore();
+		const apiKey = envKeyAuth(undefined);
+		apiKey.login = async (interaction) => ({
+			type: "api_key",
+			key: await interaction.prompt({ type: "secret", message: "key" }),
+		});
+		const models = createModels({ credentials });
+		models.setProvider(testProvider({ id: "p1", auth: { apiKey } }));
+		const answering = (answer: string) => ({ prompt: async () => answer, notify: () => {} });
+
+		expect(await models.login("p1", "api_key", answering("  sk-pasted\n"))).toEqual({
+			type: "api_key",
+			key: "sk-pasted",
+		});
+		await models.logout("p1");
+		await expect(models.login("p1", "api_key", answering("  "))).rejects.toThrow("API key entered");
+		expect(await credentials.read("p1")).toBeUndefined();
+	});
+
 	it("a stored credential without a matching handler blocks ambient fallback", async () => {
 		const credentials = new InMemoryCredentialStore();
 		const models = createModels({ credentials });
