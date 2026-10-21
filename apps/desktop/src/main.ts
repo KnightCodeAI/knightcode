@@ -82,7 +82,8 @@ function zoom(window: BrowserWindow, step: -1 | 0 | 1): void {
 	for (const open of windows.values()) {
 		if (process.platform === "win32")
 			open.window.setTitleBarOverlay({
-				height: Math.round(WINDOW_CHROME.titleBarHeight * open.window.webContents.getZoomFactor()),
+				// The new factor for every window: one origin, and another window's own reading can lag.
+				height: Math.round(WINDOW_CHROME.titleBarHeight * factor),
 			});
 		if (open.window === window) sendEvent(open, { event: "zoom", factor });
 	}
