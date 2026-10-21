@@ -926,7 +926,8 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 		throw new AppServerError("invalidParams", "submodule changes are not supported here; commit them in the submodule");
 	const staged = nulList(await git(source.root, ["diff", "--cached", "--name-only", "--no-renames", "-z"], { signal }));
 	const patch = await movingPatch(source, head, working, signal);
-	const stagedPatch = await movingPatch(source, head, await indexTree(source, signal), signal);
+	const sourceIndex = await indexTree(source, signal);
+	const stagedPatch = await movingPatch(source, head, sourceIndex, signal);
 	const changed = nulList(
 		await git(source.root, ["diff", "--name-only", "--no-renames", "-z", head, working], { signal }),
 	);
@@ -962,8 +963,15 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 	const removeFromSource = async () => {
 		const paths = [...new Set([...changed, ...staged])];
 		const reversed = await machineApply(source.root, patch, { reverse: true, signal });
+		// Staging that changed since it was saved (another git process) is not reset away: it stays, with a warning.
+		const restaged = (await indexTree(source, signal)) !== sourceIndex;
+		if (restaged)
+			warnings.push({
+				source: "server",
+				message: `The staging in ${source.root} changed during the handoff, so it was left as it is; the changes moved are saved in ${patchPath}.`,
+			});
 		const reset =
-			paths.length === 0
+			paths.length === 0 || restaged
 				? { code: 0 }
 				: await runGit(source.root, ["reset", "-q", "--pathspec-from-file=-", "--pathspec-file-nul"], {
 						input: paths.join("\0"),
@@ -1018,7 +1026,12 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 		// git checks a branch out in one place only.
 		if (wtBranch) await git(worktree.root, ["checkout", "-q", "--detach"], internal);
 		const previousTarget = existing ? await git(main.root, ["rev-parse", `refs/heads/${target}`]) : undefined;
-		const switched = await runGit(main.root, ["switch", "-q", existing ? "-C" : "-c", target, sourceHead], internal);
+		// --no-overwrite-ignore: an ignored file written since pathsInTheWay checked stops the switch, not lost to it.
+		const switched = await runGit(
+			main.root,
+			["switch", "-q", "--no-overwrite-ignore", existing ? "-C" : "-c", target, sourceHead],
+			internal,
+		);
 		if (switched.code !== 0) {
 			await runGit(main.root, ["switch", "-q", ...(mainRef ? [mainRef] : ["--detach", mainHead])], internal);
 			if (wtBranch) await runGit(worktree.root, ["switch", "-q", wtBranch], internal);
