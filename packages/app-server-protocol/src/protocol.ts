@@ -187,7 +187,12 @@ const ScopeSelector = {
 	commit: Type.Optional(Str),
 };
 export const DiffHunk = Obj({
-	/** sha256 of path, header and lines: a hunk that changed gets a new id. */
+	/**
+	 * sha256 of the path, the file's extended header lines (with the full blob ids of `index <old>..<new>`), the hunk
+	 * header and lines, so it also depends on the read's `context`: an action must pass the context of the read that
+	 * gave the id (a `context: 0` id matches no action), and after an action that changes the file every other hunk id
+	 * of it changes too, so read again.
+	 */
 	id: Str,
 	header: Str,
 	oldStart: Num,

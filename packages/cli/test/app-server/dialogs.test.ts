@@ -116,15 +116,24 @@ test("a cancelled dialog reads as nothing chosen, and the thread waits on a dial
 	]);
 	const { a, thread } = await probeTurn(server);
 	const sidebar = await server.connect("desktop");
+	// Each wait's outcome is recorded: a dialog never reported as waited on fails here, not as a dismissed dialog.
+	const waits: boolean[] = [];
 	a.client.onRequest("ui/dialog", async () => {
-		await sidebar.waitFor("thread/status/changed", (p) =>
-			((p.status as { waitingOn?: string[] }).waitingOn ?? []).includes("dialog"),
-		);
+		const seen = await sidebar
+			.waitFor("thread/status/changed", (p) =>
+				((p.status as { waitingOn?: string[] }).waitingOn ?? []).includes("dialog"),
+			)
+			.then(
+				() => true,
+				() => false,
+			);
+		waits.push(seen);
 		return {};
 	});
 	await a.client.request("turn/start", { threadId: thread.id, text: "go" });
 	await a.waitFor("turn/completed");
 	expect(await probeOutput(a, thread.id)).toEqual([null, false]);
+	expect(waits).toEqual([true, true]);
 });
 
 test("notify reaches subscribers as ui/notify", async () => {
