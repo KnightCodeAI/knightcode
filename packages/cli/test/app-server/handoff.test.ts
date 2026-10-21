@@ -265,6 +265,25 @@ test("a handoff refused for a busy main checkout or a merge creates no worktree"
 	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toEqual([]);
 });
 
+test("a handoff that fails after creating its worktree removes it, so retries do not stack worktrees", async () => {
+	const s = await repoServer();
+	const { thread } = await s.a.client.request("thread/start", { cwd: s.cwd });
+	await say(s, thread.id);
+	write(s.cwd, "a.txt", "local edit\n");
+	const original = workspaceHooks.beforeHandoffApply;
+	workspaceHooks.beforeHandoffApply = async () => {
+		throw new Error("refused late");
+	};
+	try {
+		for (let i = 0; i < 2; i++) await expect(handoff(s, thread.id, "worktree")).rejects.toBeInstanceOf(Error);
+	} finally {
+		workspaceHooks.beforeHandoffApply = original;
+	}
+	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toEqual([]);
+	// The changes never left the main checkout.
+	expect(readFileSync(join(s.cwd, "a.txt"), "utf8")).toBe("local edit\n");
+});
+
 test("a second handoff of a thread while one runs is turnInProgress and builds no second worktree", async () => {
 	const s = await repoServer();
 	const { thread } = await s.a.client.request("thread/start", { cwd: s.cwd });

@@ -256,6 +256,16 @@ test("a change during message generation answers concurrentChange and commits no
 	expect(log(s.cwd)).toBe("initial");
 });
 
+test("an assume-unchanged file edited locally does not stop a commit of everything else", async () => {
+	const s = await repoServer({ "a.txt": "a\n", "local.cfg": "base\n" });
+	const threadId = await local(s);
+	sh(s.cwd, "update-index", "--assume-unchanged", "local.cfg");
+	write(s.cwd, "local.cfg", "my machine\n");
+	write(s.cwd, "a.txt", "edited\n");
+	expect((await call(s, "git/commit", { threadId, message: "edit a" })).message).toBe("edit a");
+	expect(sh(s.cwd, "show", "--name-only", "--format=", "HEAD")).toBe("a.txt");
+});
+
 test("with includeUnstaged, a working file edited while the message is written answers concurrentChange", async () => {
 	const s = await repoServer();
 	const threadId = await local(s);

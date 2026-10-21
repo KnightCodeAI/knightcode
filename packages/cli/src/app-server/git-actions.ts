@@ -20,7 +20,7 @@ import {
 	type Repo,
 	runGit,
 	runProcess,
-	snapshotTree,
+	stagedAllTree,
 	withRepoLock,
 } from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
@@ -278,7 +278,7 @@ export async function gitCommit(
 			now.head !== before.head ||
 			now.ref !== before.ref ||
 			now.index !== before.index ||
-			(original !== undefined && (await snapshotTree(repo, true, ctx.signal)) !== before.index);
+			(original !== undefined && (await stagedAllTree(repo, ctx.signal)) !== before.index);
 		if (changed) {
 			// No commit comes of this: what the user had staged goes back (the checkout is already held here).
 			if (original !== undefined && original !== before.index && now.index === before.index)
