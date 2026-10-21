@@ -1,12 +1,19 @@
 // scripts/build-bundle.ts — run with `bun run build:cli`.
 //
 // Builds the Node.js distribution that npm and the installer ship: an esbuild
-// bundle of the CLI in packages/cli/dist/, run by the user's own Node (>=22.19).
-// The Bun-compiled binaries (scripts/build.ts) are only release downloads.
+// bundle of the CLI in packages/cli/dist/, run by the user's own Node (engines.node
+// in packages/cli/package.json). The Bun-compiled binaries (scripts/build.ts) are
+// only release downloads.
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { build, type BuildOptions, type Metafile, type Plugin } from "esbuild";
+import pkg from "../packages/cli/package.json";
+
+// npm installs the package on an older Node with only a warning, so the launcher enforces this.
+const minimumNodeMatch = /^>=(\d+)\.(\d+)\.(\d+)$/.exec(pkg.engines.node);
+if (!minimumNodeMatch) throw new Error(`engines.node must be ">=X.Y.Z", got "${pkg.engines.node}"`);
+const MINIMUM_NODE = minimumNodeMatch.slice(1).map(Number);
 
 const ROOT = join(import.meta.dir, "..");
 const CLI = join(ROOT, "packages/cli");
@@ -67,7 +74,7 @@ function commonOptions(): BuildOptions {
 		platform: "node",
 		plugins: [lazyJitiPlugin],
 		sourcemap: false,
-		target: "node22.19",
+		target: `node${MINIMUM_NODE.join(".")}`,
 	};
 }
 
@@ -171,12 +178,28 @@ for (const [outputPath, output] of Object.entries(codemodeWorker.metafile.output
 const metafiles = [main.metafile, lazy.metafile, codemodeWorker.metafile];
 validateExternalImports(metafiles);
 
-// The launcher stays tiny so Node's compile cache covers the large runtime file.
+// The launcher stays tiny so Node's compile cache covers the large runtime file. It checks the
+// Node version before loading the runtime, which on an older Node fails with an error that does
+// not say why: Node 22.9 lacks worker_threads.markAsUncloneable, which undici 8 calls on load,
+// and Node 20 lacks fs.globSync, which the runtime imports. Old Node must be able to parse the
+// launcher itself: a named import of a missing export fails to link, and an exit code rather
+// than process.exit() lets a Windows pipe flush the message.
 const launcher = `#!/usr/bin/env node
-import { createRequire, enableCompileCache } from "node:module";
+import module from "node:module";
 
-enableCompileCache?.();
-createRequire(import.meta.url)("./cli-runtime.js");
+const required = [${MINIMUM_NODE.join(", ")}];
+const current = process.versions.node.split(".").map(Number);
+const differs = required.findIndex((part, index) => current[index] !== part);
+if (differs !== -1 && current[differs] < required[differs]) {
+	process.stderr.write(
+		"KnightCode requires Node.js ${MINIMUM_NODE.join(".")} or newer, but " + process.execPath + " is Node.js " + process.versions.node + ".\\n" +
+			"Update Node.js from https://nodejs.org, or use a standalone binary from https://github.com/KnightCodeAI/knightcode/releases.\\n",
+	);
+	process.exitCode = 1;
+} else {
+	if (module.enableCompileCache) module.enableCompileCache();
+	module.createRequire(import.meta.url)("./cli-runtime.js");
+}
 `;
 writeFileSync(join(BUNDLE, "cli.js"), launcher);
 chmodSync(join(BUNDLE, "cli.js"), 0o755);

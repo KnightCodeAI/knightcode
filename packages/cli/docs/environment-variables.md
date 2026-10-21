@@ -86,6 +86,7 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable automatic version checks and downloads; explicit `knightcode update` still works |
 | `KNIGHTCODE_DISABLE_AUTO_UPDATE` | Set to `1` to disable automatic update downloads while retaining update notices, overriding the user-level [`autoUpdate` setting](settings.md#disable-automatic-updates); explicit `knightcode update` still works |
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
+| `KNIGHTCODE_CODEMODE_MAX_WORKERS` | Maximum codemode workers alive at once across all sessions in the process; default `2`. Each worker's script may use up to 256 MB. Raise it when one process runs several sessions, such as in-process subagents. Further scripts wait for a free worker. See [Codemode](codemode.md) |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
 | `KNIGHTCODE_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
 | `KNIGHTCODE_BUG_ENDPOINT` | Override the origin `/bug` uploads go to; default is `https://remote.knightcode.dev` |

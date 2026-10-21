@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import * as zlib from "node:zlib";
 import * as undici from "undici";
 
 export const DEFAULT_HTTP_IDLE_TIMEOUT_MS = 300_000;
@@ -61,6 +62,24 @@ function withUndiciErrorListener<T extends undici.Dispatcher>(dispatcher: T): T 
 	return dispatcher;
 }
 
+// undici's fetch asks for zstd on every HTTPS request and decodes it with zlib.createZstdDecompress,
+// which Node has only from 22.15 and 23.8. On an older Node the first zstd response (Cloudflare sends
+// them) throws inside undici's parser and crashes KnightCode, so do not ask for zstd there.
+export const omitZstdAcceptEncoding: undici.Dispatcher.DispatcherComposeInterceptor =
+	(dispatch) => (options, handler) => {
+		const { headers } = options;
+		// fetch passes its headers as a plain object.
+		if (headers && !Array.isArray(headers) && !(Symbol.iterator in headers)) {
+			const name = Object.keys(headers).find((key) => key.toLowerCase() === "accept-encoding");
+			const value = name === undefined ? undefined : headers[name];
+			if (name !== undefined && typeof value === "string") {
+				const codings = value.split(",").filter((coding) => coding.split(";")[0]!.trim().toLowerCase() !== "zstd");
+				return dispatch({ ...options, headers: { ...headers, [name]: codings.join(",") || "identity" } }, handler);
+			}
+		}
+		return dispatch(options, handler);
+	};
+
 function createUndiciClient(origin: string | URL, options: object): undici.Dispatcher {
 	return withUndiciErrorListener(new undici.Client(origin, options as undici.Client.Options));
 }
@@ -97,7 +116,7 @@ export function configureHttpDispatcher(timeoutMs: number = DEFAULT_HTTP_IDLE_TI
 			factory: createUndiciOriginDispatcher,
 		}),
 	);
-	undici.setGlobalDispatcher(dispatcher);
+	undici.setGlobalDispatcher("createZstdDecompress" in zlib ? dispatcher : dispatcher.compose(omitZstdAcceptEncoding));
 	// Keep fetch and the dispatcher on the same undici implementation. Node 26.0's
 	// bundled fetch can otherwise consume compressed responses through npm undici's
 	// dispatcher without decompressing them, causing response.json() failures.
