@@ -258,6 +258,8 @@ export async function gitCommit(
 			throw conflict("concurrentChange", "the checkout changed while the commit message was written");
 		const result = await runGit(repo.root, ["commit", "-q", "-F", "-"], {
 			input: message,
+			// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
+			env: { GIT_LITERAL_PATHSPECS: "0" },
 			signal: ctx.signal,
 			// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound allows.
 			timeoutMs: 300_000,
@@ -302,7 +304,12 @@ export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<Result
 		remote,
 		`refs/heads/${branch}:${destination}`,
 	];
-	const result = await runGit(repo.root, args, { timeoutMs: 300_000, signal: ctx.signal });
+	// pre-push hooks run here: their pathspecs are not literal.
+	const result = await runGit(repo.root, args, {
+		timeoutMs: 300_000,
+		signal: ctx.signal,
+		env: { GIT_LITERAL_PATHSPECS: "0" },
+	});
 	if (result.code !== 0) {
 		if (result.stderr.includes("[rejected]"))
 			throw conflict("pushRejected", "the remote rejected the push; pull first", { output: result.stderr });
@@ -396,6 +403,7 @@ export async function gitPullRequest(
 	const [command, ...leading] = ctx.ghCommand ?? ["gh"];
 	const result = await runProcess(command, [...leading, ...args], {
 		cwd: repo.root,
+		env: { GIT_LITERAL_PATHSPECS: "0" },
 		timeoutMs: 120_000,
 		signal: ctx.signal,
 	});

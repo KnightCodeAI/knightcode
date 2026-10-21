@@ -175,6 +175,11 @@ test("a failed apply answers recoveryRequired naming the saved patch; the worktr
 		workspaceHooks.beforeHandoffApply = original;
 	}
 	expect(checkoutState(path)).toEqual(before);
+	// The main checkout is back on its branch and the new one is gone, so a retry is not branchExists.
+	expect(sh(s.cwd, "branch", "--show-current")).toBe("main");
+	expect(sh(s.cwd, "branch", "--list", "kc/*")).toBe("");
+	sh(s.cwd, "checkout", "-q", "--", "a.txt");
+	expect((await handoff(s, thread.id, "local")).branch).toMatch(/^kc\//);
 });
 
 test("round trip: local, back to the worktree, local again fast-forwards the branch", async () => {

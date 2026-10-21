@@ -568,9 +568,18 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
 export async function currentEntries(repo: Repo, paths: string[], signal?: AbortSignal): Promise<Map<string, string>> {
 	const tree = await withTemporaryIndex(repo, signal, async (run) => {
 		const indexed = new Set((await run(["ls-files", "-z"])).split("\0"));
-		const present = paths.filter((p) => indexed.has(p) || lstatSync(join(repo.root, p), { throwIfNoEntry: false }));
+		// A parent replaced by a file (ENOTDIR) means the path is gone.
+		const onDisk = (p: string) => {
+			try {
+				return lstatSync(join(repo.root, p), { throwIfNoEntry: false }) !== undefined;
+			} catch {
+				return false;
+			}
+		};
+		const present = paths.filter((p) => indexed.has(p) || onDisk(p));
+		// --force: a path ignored since the turn is still compared by what is on disk.
 		if (present.length > 0)
-			await run(["add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"], `${present.join("\0")}\0`);
+			await run(["add", "-A", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"], `${present.join("\0")}\0`);
 		return run(["write-tree"]);
 	});
 	return entriesOf(repo, tree, paths);

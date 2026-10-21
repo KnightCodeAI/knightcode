@@ -142,6 +142,23 @@ test("undoing the last turn restores its files", async () => {
 	expect(existsSync(join(s.cwd, "made.txt"))).toBe(false);
 });
 
+test("undo after the user replaced a turn's directory with a file, or ignored its file, is diffChanged", async () => {
+	const s = await repoServer();
+	const thread = await local(s);
+	s.faux.setResponses(bashTurn("mkdir dir && echo made > dir/a.txt && echo log > made.log"));
+	await turn(s, thread.id);
+	await s.a.waitFor("turn/diff/updated");
+	rmSync(join(s.cwd, "dir"), { recursive: true });
+	write(s.cwd, "dir", "a file now\n");
+	await expect(revert(s, thread.id, { scope: "lastTurn", path: "dir/a.txt" })).rejects.toMatchObject({
+		data: { reason: "diffChanged" },
+	});
+	// Ignored since the turn: compared by what is on disk, so unchanged it still undoes.
+	write(s.cwd, ".gitignore", "*.log\n");
+	expect((await revert(s, thread.id, { scope: "lastTurn", path: "made.log" })).paths).toEqual(["made.log"]);
+	expect(existsSync(join(s.cwd, "made.log"))).toBe(false);
+});
+
 test("hunk actions on structural changes are invalidParams; the whole file reverts", async () => {
 	const s = await repoServer({ "a.txt": seven(), "b.txt": seven(), "t.txt": "t\n" });
 	const thread = await local(s);
