@@ -926,7 +926,8 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 		throw new AppServerError("invalidParams", "submodule changes are not supported here; commit them in the submodule");
 	const staged = nulList(await git(source.root, ["diff", "--cached", "--name-only", "--no-renames", "-z"], { signal }));
 	const patch = await movingPatch(source, head, working, signal);
-	const stagedPatch = await movingPatch(source, head, await indexTree(source, signal), signal);
+	const sourceIndex = await indexTree(source, signal);
+	const stagedPatch = await movingPatch(source, head, sourceIndex, signal);
 	const changed = nulList(
 		await git(source.root, ["diff", "--name-only", "--no-renames", "-z", head, working], { signal }),
 	);
@@ -962,8 +963,15 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 	const removeFromSource = async () => {
 		const paths = [...new Set([...changed, ...staged])];
 		const reversed = await machineApply(source.root, patch, { reverse: true, signal });
+		// Staging that changed since it was saved (another git process) is not reset away: it stays, with a warning.
+		const restaged = (await indexTree(source, signal)) !== sourceIndex;
+		if (restaged)
+			warnings.push({
+				source: "server",
+				message: `The staging in ${source.root} changed during the handoff, so it was left as it is; the changes moved are saved in ${patchPath}.`,
+			});
 		const reset =
-			paths.length === 0
+			paths.length === 0 || restaged
 				? { code: 0 }
 				: await runGit(source.root, ["reset", "-q", "--pathspec-from-file=-", "--pathspec-file-nul"], {
 						input: paths.join("\0"),
@@ -1018,7 +1026,12 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 		// git checks a branch out in one place only.
 		if (wtBranch) await git(worktree.root, ["checkout", "-q", "--detach"], internal);
 		const previousTarget = existing ? await git(main.root, ["rev-parse", `refs/heads/${target}`]) : undefined;
-		const switched = await runGit(main.root, ["switch", "-q", existing ? "-C" : "-c", target, sourceHead], internal);
+		// --no-overwrite-ignore: an ignored file written since pathsInTheWay checked stops the switch, not lost to it.
+		const switched = await runGit(
+			main.root,
+			["switch", "-q", "--no-overwrite-ignore", existing ? "-C" : "-c", target, sourceHead],
+			internal,
+		);
 		if (switched.code !== 0) {
 			await runGit(main.root, ["switch", "-q", ...(mainRef ? [mainRef] : ["--detach", mainHead])], internal);
 			if (wtBranch) await runGit(worktree.root, ["switch", "-q", wtBranch], internal);
@@ -1124,7 +1137,7 @@ export async function registrationOf(manifest: Manifest): Promise<Registration> 
  * are walked too, with the filesystem alone: the snapshot leaves them out, so a repository there (its local commits)
  * would go with the checkout.
  */
-export async function nestedRepositories(root: string, tree: string): Promise<string[]> {
+export async function nestedRepositories(root: string, tree: string, unchecked: string[] = []): Promise<string[]> {
 	const found = new Set<string>();
 	const gitlinks = [
 		...(await git(root, ["ls-tree", "-r", "-z", tree])).split("\0").map((r) => r.split("\t")),
@@ -1166,10 +1179,13 @@ export async function nestedRepositories(root: string, tree: string): Promise<st
 				.map((d) => d.replace(/\/$/, "")),
 		);
 		level = next.filter((d) => !skip.has(d));
-		for (const dir of skip) ignoredRepositories(root, dir, found, budget);
+		for (const dir of skip) ignoredRepositories(root, dir, found, budget, unchecked);
 	}
 	return [...found].sort();
 }
+
+/** Build and package caches no tool leaves a checkout in, never walked (node_modules, cargo's target, ...). */
+const SKIPPED_CACHES = new Set(["node_modules", "target", ".gradle", ".next", "__pycache__"]);
 
 /** Directories an ignored-subtree walk visits at most per deletion check. */
 const IGNORED_WALK_LIMIT = 50_000;
@@ -1179,13 +1195,19 @@ const IGNORED_WALK_LIMIT = 50_000;
  * package managers never leave a checkout there, and walking it would make every prune slow.
  * Past IGNORED_WALK_LIMIT directories the rest goes unchecked, and `start` is reported so the deletion is refused.
  */
-function ignoredRepositories(root: string, start: string, found: Set<string>, budget: { left: number }): void {
-	if (basename(start) === "node_modules") return;
+function ignoredRepositories(
+	root: string,
+	start: string,
+	found: Set<string>,
+	budget: { left: number },
+	unchecked: string[],
+): void {
+	if (SKIPPED_CACHES.has(basename(start))) return;
 	const stack = [start];
 	for (; stack.length > 0; budget.left--) {
-		// Out of budget with directories left: unchecked, so reported as nested and the deletion refused.
+		// Out of budget with directories left: unchecked, which refuses the deletion with its own warning.
 		if (budget.left <= 0) {
-			found.add(start);
+			unchecked.push(start);
 			return;
 		}
 		const dir = stack.pop()!;
@@ -1197,7 +1219,7 @@ function ignoredRepositories(root: string, start: string, found: Set<string>, bu
 		}
 		for (const entry of entries) {
 			if (entry.name === ".git") found.add(dir);
-			else if (entry.isDirectory() && !entry.isSymbolicLink() && entry.name !== "node_modules")
+			else if (entry.isDirectory() && !entry.isSymbolicLink() && !SKIPPED_CACHES.has(entry.name))
 				stack.push(`${dir}/${entry.name}`);
 		}
 	}
@@ -1344,8 +1366,16 @@ export async function deleteWorktreeLocked(input: DeleteInput): Promise<DeleteRe
 	if (manifest.deleted?.removalFailed && repairPartlyRemoved(manifest, input.warnings) === "unsafe")
 		return { deleted: true, snapshot: manifest.deleted.snapshot };
 	const state = await workingState(manifest.path, input.signal);
-	const nested = await nestedRepositories(manifest.path, state.tree);
+	const unchecked: string[] = [];
+	const nested = await nestedRepositories(manifest.path, state.tree, unchecked);
 	if (nested.length > 0) return { deleted: false, reason: "submodules", paths: nested };
+	if (unchecked.length > 0) {
+		input.warnings.push({
+			source: "server",
+			message: `${manifest.path} was kept: ${unchecked.join(", ")} hold more than ${IGNORED_WALK_LIMIT} directories to check for nested repositories. Delete them or the worktree yourself.`,
+		});
+		return { deleted: false, reason: "submodules", paths: unchecked };
+	}
 	const bucket = basename(dirname(manifest.path));
 	if (!manifest.deleted) {
 		const at = Date.now();
