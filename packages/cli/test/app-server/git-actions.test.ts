@@ -410,6 +410,22 @@ test("a branch switch while a turn runs in the checkout is turnInProgress", asyn
 	expect(sh(s.cwd, "branch", "--show-current")).toBe("main");
 });
 
+test("the staged scope of a conflicted merge answers operationInProgress, not internal", async () => {
+	const s = await repoServer({ "a.txt": "a\n" });
+	sh(s.cwd, "checkout", "-q", "-b", "side");
+	write(s.cwd, "a.txt", "side\n");
+	sh(s.cwd, "commit", "-q", "-am", "side");
+	sh(s.cwd, "checkout", "-q", "main");
+	write(s.cwd, "a.txt", "main\n");
+	sh(s.cwd, "commit", "-q", "-am", "main");
+	expect(() => sh(s.cwd, "merge", "-q", "side")).toThrow();
+	const threadId = await local(s);
+	await expect(call(s, "thread/diff/read", { threadId, scope: "staged" })).rejects.toMatchObject({
+		code: "gitConflict",
+		data: { reason: "operationInProgress" },
+	});
+});
+
 test("during a merge, unstage all keeps the merge, and the commit is a merge commit", async () => {
 	const s = await repoServer({ "a.txt": "a\n" });
 	sh(s.cwd, "checkout", "-q", "-b", "side");

@@ -2173,14 +2173,14 @@ export class ThreadManager {
 					: this.probe(params.cwd, (session) => ({ commands: commandsOf(session) })),
 			// Without a project, the agent directory stands in: it has no `.knightcode` of its own.
 			"tool/list": async ({ cwd }) => {
-				const tools = await this.probe(cwd ?? this.ctx.agentDir, (session) =>
-					session
+				// The defaults from the probe's own settings: a trusted project's override counts.
+				return this.probe(cwd ?? this.ctx.agentDir, (session) => ({
+					tools: session
 						.getAllTools()
 						.filter((tool) => tool.exposure !== "hidden")
 						.map((tool) => ({ name: tool.name, description: tool.description, source: tool.sourceInfo.source })),
-				);
-				await this.ctx.settings.reload();
-				return { tools, defaultTools: this.ctx.settings.getDefaultTools() ?? [...DEFAULT_TOOL_NAMES] };
+					defaultTools: session.settingsManager.getDefaultTools() ?? [...DEFAULT_TOOL_NAMES],
+				}));
 			},
 			"turn/start": async ({ threadId, text, images, requestId, clientMessageId, comments }, connection) => {
 				const reviewed = comments ? await this.review(threadId, connection.mode, comments, text) : undefined;

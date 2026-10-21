@@ -462,7 +462,8 @@ async function withTemporaryIndex<T>(
 export async function saveIndex(repo: Repo, signal?: AbortSignal): Promise<string | undefined> {
 	const real = await git(repo, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { signal });
 	if (!existsSync(real)) return undefined;
-	const copy = join(await mkdtemp(join(tmpdir(), "kc-saved-index-")), "index");
+	// Beside the index, not in the temp directory: when it cannot go back it is the user's only copy of their staging.
+	const copy = `${real}.knightcode-saved-${Date.now()}`;
 	copyFileSync(real, copy);
 	return copy;
 }
@@ -494,7 +495,7 @@ export async function restoreIndex(repo: Repo, saved: string, orphanedLock = fal
 }
 
 export async function discardSavedIndex(saved: string | undefined): Promise<void> {
-	if (saved) await rm(dirname(saved), { recursive: true, force: true });
+	if (saved) await rm(saved, { force: true });
 }
 
 /** The tree `git add -A` would stage now, in a temporary copy of the index: flags kept, the real index untouched. */
@@ -511,7 +512,18 @@ export function stagedAllTree(repo: Repo, signal?: AbortSignal): Promise<string>
 }
 
 export function indexTree(repo: Repo, signal?: AbortSignal): Promise<string> {
-	return withTemporaryIndex(repo, signal, (run) => run(["write-tree"]));
+	return withTemporaryIndex(repo, signal, async (run) => {
+		try {
+			return await run(["write-tree"]);
+		} catch (error) {
+			// Unmerged entries (a conflicted merge, rebase or cherry-pick) have no tree to write.
+			if (await run(["ls-files", "-u"]))
+				throw new AppServerError("gitConflict", "resolve the conflicted files first", {
+					reason: "operationInProgress",
+				});
+			throw error;
+		}
+	});
 }
 
 /**

@@ -303,7 +303,10 @@ export async function gitCommit(
 			if (failure === undefined) {
 				// A commit-msg hook may have rewritten the message: answer with what was committed.
 				const commit = await git(repo, ["rev-parse", "HEAD"]);
-				return { commit, message: (await git(repo, ["log", "-1", "--format=%B", commit])).trimEnd() };
+				return {
+					commit,
+					message: (await git(repo, ["log", "-1", "--no-show-signature", "--format=%B", commit])).trimEnd(),
+				};
 			}
 			// No commit: the staging goes back, but never onto a HEAD that moved (it would stage a revert of that
 			// commit). Without any signal: this also runs after a shutdown killed the commit.
@@ -443,6 +446,7 @@ export async function gitLog(thread: LoadedThread, repo: Repo, limit: number): P
 		await git(repo, [
 			"log",
 			"-z",
+			"--no-show-signature",
 			"--format=%H%x00%s%x00%an%x00%ct",
 			"-n",
 			String(limit),
@@ -465,7 +469,12 @@ export async function gitPullRequest(
 	const args = ["pr", "create", "--head", branch];
 	if (params.title === undefined && params.body === undefined) args.push("--fill");
 	else
-		args.push("--title", params.title ?? (await git(repo, ["log", "-1", "--format=%s"])), "--body", params.body ?? "");
+		args.push(
+			"--title",
+			params.title ?? (await git(repo, ["log", "-1", "--no-show-signature", "--format=%s"])),
+			"--body",
+			params.body ?? "",
+		);
 	if (params.draft) args.push("--draft");
 	const [command, ...leading] = ctx.ghCommand ?? ["gh"];
 	const result = await runProcess(command, [...leading, ...args], {
