@@ -3774,6 +3774,9 @@
 					},
 					"commit": {
 						"type": "string"
+					},
+					"turnId": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false
@@ -10727,6 +10730,9 @@
 					"type": "string"
 				},
 				"threadId": {
+					"type": "string"
+				},
+				"clientMessageId": {
 					"type": "string"
 				}
 			},

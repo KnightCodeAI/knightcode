@@ -632,8 +632,9 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
 	const entries = new Map<string, string>();
 	if (paths.length === 0) return entries;
 	const wanted = new Set(paths);
-	// ponytail: past 200 paths the whole tree is listed and filtered, so no argv outgrows Windows' 32 KiB limit.
-	const args = paths.length > 200 ? ["ls-tree", "-r", "-z", tree] : ["ls-tree", "-z", tree, "--", ...paths];
+	// Past 16 KiB of paths the whole tree is listed and filtered, so no argv nears Windows' 32 KiB command line.
+	const size = paths.reduce((n, p) => n + Buffer.byteLength(p) + 3, 0);
+	const args = size > 16 * 1024 ? ["ls-tree", "-r", "-z", tree] : ["ls-tree", "-z", tree, "--", ...paths];
 	for (const record of (await git(repo.root, args)).split("\0")) {
 		const tab = record.indexOf("\t");
 		if (tab === -1) continue;

@@ -159,9 +159,11 @@ lands in a later turn. A steer cannot be taken back once accepted.
 input starts a turn of its own once the thread is idle, oldest first; on an idle
 thread it starts at once. Until it starts it is removable with
 `turn/queue/remove`. A queued input that fails to start (no model, signed out) is
-dropped with an `error` notification. `turn/queue/updated` sends
+dropped with an `error` notification carrying its `clientMessageId`, if it had
+one. `turn/queue/updated` sends
 `{threadId, steering: [text], followUp: [{id, text}]}`: steers the agent has not
-delivered yet, and the queued inputs.
+delivered yet, and the queued inputs. `text` is the user's own (not a prompt
+composed with review comments).
 
 `turn/interrupt` accepts optional `turnId`; a supplied stale ID returns
 `turnMismatch`, while omitting it retains interrupt-current behavior. It drops
@@ -500,7 +502,9 @@ or no branch to compare with.
 
 ### `thread/diff/revert`
 
-Params: `{threadId, scope?, against?, commit?, path?, hunkId?, context?}`.
+Params: `{threadId, scope?, against?, commit?, path?, hunkId?, context?, turnId?}`.
+With `turnId` (`lastTurn` only), a last turn other than that one answers
+`gitConflict` `diffChanged`, so an Undo shown on one turn never reverts a newer one.
 Result: `{paths}`. Reverse-applies one hunk, one file, or the whole scope to the
 working tree; `lastTurn` without a path undoes the turn, and only while every
 affected file is exactly as the turn left it. Hunks of renamed, added, deleted,

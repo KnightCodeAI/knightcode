@@ -678,8 +678,21 @@ export class ThreadManager {
 						),
 					);
 					moved = true;
-					// Phase C, still holding both checkouts: no turn starts in either in between.
-					const next = await this.relocate(thread, by);
+					// Phase C, still holding both checkouts: no turn starts in either in between. The changes have moved
+					// by now: a failed reload says so, so a client resumes the thread rather than retrying the handoff.
+					const next = await this.relocate(thread, by).catch((error: unknown) => {
+						const where = placeThread(this.worktrees(), thread.id, headerCwd).cwd;
+						const data = {
+							...(error instanceof AppServerError && typeof error.data === "object" && error.data !== null
+								? error.data
+								: {}),
+							handedOff: true,
+							cwd: where,
+							...(result.branch ? { branch: result.branch } : {}),
+						};
+						const message = `the changes were handed off to ${where}, but the thread did not reload: ${error instanceof Error ? error.message : String(error)}`;
+						throw new AppServerError(error instanceof AppServerError ? error.code : "internal", message, data);
+					});
 					return { thread: next.toThread(), ...(result.branch ? { branch: result.branch } : {}), warnings };
 				} finally {
 					release();
@@ -1681,6 +1694,7 @@ export class ThreadManager {
 				thread.notify("error", {
 					threadId: thread.id,
 					message: `A queued message could not start: ${error instanceof Error ? error.message : String(error)}`,
+					...(next.clientMessageId ? { clientMessageId: next.clientMessageId } : {}),
 				});
 			})
 			.finally(() => {

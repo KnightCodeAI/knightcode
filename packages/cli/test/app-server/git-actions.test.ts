@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import type { ClientMethod, ParamsOf } from "@knightcode/app-server-protocol";
 import { afterEach, expect, test } from "vitest";
@@ -282,7 +282,7 @@ test("an assume-unchanged file edited locally does not stop a commit of everythi
 	expect(sh(s.cwd, "show", "--name-only", "--format=", "HEAD")).toBe("a.txt");
 });
 
-test("a commit made meanwhile is not turned into a staged revert; the old staging is kept and named", async () => {
+test("the real index is not staged while the message is written: a terminal commit meanwhile takes only what the user staged", async () => {
 	const s = await repoServer();
 	const threadId = await local(s);
 	write(s.cwd, "a.txt", "staged\n");
@@ -301,11 +301,9 @@ test("a commit made meanwhile is not turned into a staged revert; the old stagin
 	// The user commits in a terminal while the message is written.
 	sh(s.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "mine");
 	parked.open();
-	const error = (await committing) as { code: string; data: { reason: string; savedIndex: string } };
-	expect(error).toMatchObject({ code: "gitConflict", data: { reason: "concurrentChange" } });
-	expect(staged(s.cwd)).toBe("");
-	expect(existsSync(error.data.savedIndex)).toBe(true);
-	rmSync(dirname(error.data.savedIndex), { recursive: true, force: true });
+	expect(await committing).toMatchObject({ code: "gitConflict", data: { reason: "concurrentChange" } });
+	expect(sh(s.cwd, "show", "--name-only", "--format=", "HEAD")).toBe("a.txt");
+	expect(sh(s.cwd, "status", "--porcelain")).toBe("?? b.txt");
 });
 
 test("with includeUnstaged, a working file edited while the message is written answers concurrentChange", async () => {
@@ -477,6 +475,15 @@ test("branch switch refuses to overwrite a local edit, then switches when clean"
 	expect(await call(s, "git/branch/switch", { threadId, name: "other" })).toEqual({ branch: "other" });
 	await expect(call(s, "git/branch/switch", { threadId, name: "nope" })).rejects.toMatchObject({
 		code: "invalidParams",
+	});
+});
+
+test("switching to a branch another worktree has checked out says so, not to stash", async () => {
+	const s = await repoServer();
+	const { thread } = await worktreeThread(s);
+	await expect(call(s, "git/branch/switch", { threadId: thread.id, name: "main" })).rejects.toMatchObject({
+		code: "invalidParams",
+		message: expect.stringContaining("another worktree"),
 	});
 });
 

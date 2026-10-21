@@ -36,7 +36,8 @@ import {
 export function queueOf(thread: LoadedThread): TurnQueue {
 	return {
 		steering: [...thread.session.getSteeringMessages()],
-		followUp: thread.queued.map(({ id, text }) => ({ id, text })),
+		// The user's own text: a reviewed input's prompt is the composed one with every quoted line.
+		followUp: thread.queued.map(({ id, text, review }) => ({ id, text: review?.text ?? text })),
 	};
 }
 

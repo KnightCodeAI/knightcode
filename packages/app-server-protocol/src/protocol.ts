@@ -572,7 +572,15 @@ export const ClientRequests = {
 			against: Type.Optional(Str),
 		}),
 	},
-	"thread/diff/revert": { params: Obj({ ...DiffTarget, ...ScopeSelector }), result: Obj({ paths: Type.Array(Str) }) },
+	"thread/diff/revert": {
+		params: Obj({
+			...DiffTarget,
+			...ScopeSelector,
+			/** `lastTurn` only: the turn the client means; a newer last turn answers gitConflict `diffChanged`. */
+			turnId: Type.Optional(Str),
+		}),
+		result: Obj({ paths: Type.Array(Str) }),
+	},
 	"git/status": {
 		params: ThreadId,
 		result: Obj({
@@ -822,7 +830,8 @@ export const ServerNotifications = {
 	"account/login/updated": LoginState,
 	"account/updated": Obj({ provider: Str, authenticated: Bool }),
 	warning: Obj({ ...WarningFields, threadId: Type.Optional(Str) }),
-	error: Obj({ message: Str, threadId: Type.Optional(Str) }),
+	/** `clientMessageId`: the queued input that could not start, when it had one. */
+	error: Obj({ message: Str, threadId: Type.Optional(Str), clientMessageId: Type.Optional(Str) }),
 } as const;
 
 const ApprovalDecisionKind = Type.Union([
