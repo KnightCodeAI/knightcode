@@ -525,10 +525,24 @@ function Appearance() {
 	const [fonts, setFonts] = useState<LocalFont[]>([]);
 	useEffect(() => {
 		// The installed fonts, as Codex lists them (Chromium's Local Font Access); the system font alone if refused.
-		window
-			.queryLocalFonts()
-			.then(setFonts)
-			.catch(() => setFonts([]));
+		// The query can need a user gesture, so a refused one is tried again on the next press (opening a picker).
+		let cancelled = false;
+		const load = () =>
+			window.queryLocalFonts().then(
+				(found) => {
+					if (!cancelled) setFonts(found);
+					return true;
+				},
+				() => false,
+			);
+		const retry = () => void load();
+		void load().then((ok) => {
+			if (!ok && !cancelled) window.addEventListener("pointerdown", retry, { once: true, capture: true });
+		});
+		return () => {
+			cancelled = true;
+			window.removeEventListener("pointerdown", retry, { capture: true });
+		};
 	}, []);
 	const accent = custom.accent ?? base.accent;
 	const named = ACCENTS.find((a) => a.hex === custom.accent);
