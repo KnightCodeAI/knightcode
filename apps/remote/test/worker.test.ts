@@ -189,6 +189,17 @@ describe("authorisation boundary", () => {
 		expect(await response.json()).toEqual({ login: "octocat", avatarUrl: "https://avatars/octocat.png" });
 	});
 
+	it("describes the account behind a CLI token, and refuses a revoked one", async () => {
+		const account = await upsertAccount(env.DB, "github", "14", "octocat", "https://avatars/octocat.png");
+		const token = await issueCliToken(env.DB, account.id, "laptop");
+		const me = () =>
+			SELF.fetch("https://remote.knightcode.dev/api/me", { headers: { authorization: `Bearer ${token}` } });
+
+		expect(await (await me()).json()).toEqual({ login: "octocat", avatarUrl: "https://avatars/octocat.png" });
+		await env.DB.prepare("UPDATE cli_tokens SET revoked_at = ?").bind(Date.now()).run();
+		expect((await me()).status).toBe(401);
+	});
+
 	it("refuses to stop a room owned by another account", async () => {
 		const owner = await upsertAccount(env.DB, "github", "7", "owner", null);
 		const other = await upsertAccount(env.DB, "github", "8", "other", null);

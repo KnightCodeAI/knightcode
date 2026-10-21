@@ -12,6 +12,7 @@ import { flushRawStdout, takeOverStdout, writeRawStdoutReporting } from "../core
 import { SettingsManager } from "../core/settings-manager.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { accountHandlers } from "./accounts.ts";
+import { configureHandlers } from "./configure.ts";
 import { type AppServerContext, createAppServerContext } from "./context.ts";
 import { modelHandlers } from "./models.ts";
 import { AppServer, type Handlers } from "./server.ts";
@@ -22,7 +23,7 @@ import { ThreadManager } from "./threads.ts";
 const SHUTDOWN_DEADLINE_MS = 10_000;
 
 export function appServerHandlers(ctx: AppServerContext, threads: ThreadManager): Handlers {
-	return { ...threads.handlers(), ...accountHandlers(ctx), ...modelHandlers(ctx) };
+	return { ...threads.handlers(), ...accountHandlers(ctx), ...modelHandlers(ctx), ...configureHandlers(ctx) };
 }
 
 export async function runAppServer(args: string[]): Promise<void> {

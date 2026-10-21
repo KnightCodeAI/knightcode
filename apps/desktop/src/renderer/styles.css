@@ -1,125 +1,378 @@
 @import "tailwindcss";
 
 /*
- * Tokens (desktop-shell.md section 11.2). Neutral greys sampled from the Codex desktop app
- * (2026-10-15), KnightCode's orange as the accent. Components use only these properties.
+ * Tokens (desktop-shell.md section 11.2), after the Codex desktop app's own (resolved in both themes 2026-10-19):
+ * text in three strengths (primary, 65%, 50%) and an 85% one for navigation rows; surfaces; translucent ghost layers
+ * for hover and press; translucent borders in three strengths. KnightCode's orange stays the accent. Components use
+ * only these properties, through the Tailwind names in @theme below.
  * ponytail: hand-picked per theme; section 11.1's OKLCH derivation from surface/ink/accent comes with themes.
  */
+/* Any element can take a theme (the Appearance page previews both); the window takes it on <html>. */
 :root,
-:root[data-theme="dark"] {
+[data-theme="dark"] {
+	/* The window behind the cards (title bar, rail), the sidebar, and the main card, sampled from Codex. */
 	--kc-bg-shell: #202020;
 	--kc-bg-sidebar: #1b1b1b;
 	--kc-bg-surface: #181818;
-	--kc-bg-elevated: #262626;
-	--kc-bg-composer: #2f2f2f;
-	--kc-bg-hover: #262626;
-	--kc-bg-selected: #2d2d2d;
-	--kc-text: #ececec;
-	--kc-text-muted: #acacac;
-	--kc-text-faint: #7c7c7c;
-	--kc-text-on-accent: #1a120c;
-	--kc-border: #2b2b2b;
-	--kc-border-strong: #3a3a3a;
-	--kc-focus: #ff8a3d;
-	--kc-accent: #ff8a3d;
-	--kc-accent-hover: #ff9d5c;
-	--kc-success: #4ec27a;
-	--kc-warning: #e9b949;
-	--kc-danger: #f0605a;
-	--kc-diff-add-bg: #16301f;
-	--kc-diff-add-text: #4ec27a;
-	--kc-diff-del-bg: #3a1a1a;
-	--kc-diff-del-text: #f0605a;
-	--kc-user-bubble: #2f2f2f;
-	/* Menus and composer panels, measured from Codex's (2026-10-15). */
-	--kc-bg-menu: rgb(45 45 45 / 0.9);
+	--kc-bg-surface-secondary: #141414;
+	--kc-bg-surface-tertiary: #282828;
+	/* Floating surfaces: toasts and callouts (translucent), and opaque panels, menus' fallback and cards. */
+	--kc-bg-elevated: rgb(54 54 54 / 0.96);
 	--kc-bg-panel: #2d2d2d;
-	--kc-bg-row: rgb(255 255 255 / 0.08);
-	--kc-hairline: rgb(255 255 255 / 0.082);
-	--kc-text-desc: rgb(255 255 255 / 0.5);
-	--kc-text-head: rgb(255 255 255 / 0.65);
-	--kc-caution: #ff8549;
+	/* Settings' grouped rows and the archived threads' cards (Codex's "panel"). */
+	--kc-bg-section: #232323;
+	--kc-bg-composer: #363636;
+	--kc-bg-composer-bar: #282828;
+	/* The edited-files card: the control fill at half strength, its rows a darker band. */
+	--kc-card-soft: rgb(45 45 45 / 0.5);
+	--kc-card-row: rgb(30 30 30 / 0.7);
+	/* The composer's faint inner edge (Codex: inset 0 0 1px 0 white at 20%). */
+	--kc-composer-ring: inset 0 0 1px 0 rgb(255 255 255 / 0.2);
+	--kc-bg-menu: rgb(45 45 45 / 0.9);
+	--kc-bg-tooltip: #2d2d2d;
+	--kc-text-tooltip: #ffffff;
+	/* Ghost layers: a row or button under the pointer, then pressed; soft fills for outline buttons and fields. */
+	--kc-ghost-hover: rgb(255 255 255 / 0.08);
+	--kc-ghost-active: rgb(255 255 255 / 0.16);
+	--kc-soft: rgb(255 255 255 / 0.03);
+	--kc-soft-alt: rgb(255 255 255 / 0.05);
 	--kc-track: rgb(255 255 255 / 0.1);
-	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.3);
-	--kc-font-ui: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-	--kc-font-code: "Cascadia Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-	--kc-size-ui: 14px;
-	--kc-size-code: 12.5px;
+	/* Codex's button fills (components/button.tsx): solid, soft and outline, each with hover and press. */
+	--kc-solid: #ffffff;
+	--kc-solid-hover: #ededed;
+	--kc-solid-active: #dcdcdc;
+	--kc-text-on-solid: #2d2d2d;
+	--kc-soft-hover: rgb(255 255 255 / 0.16);
+	--kc-soft-active: rgb(255 255 255 / 0.2);
+	--kc-outline-hover: rgb(255 255 255 / 0.3);
+	--kc-outline-fill-hover: rgb(255 255 255 / 0.04);
+	--kc-outline-fill-active: rgb(255 255 255 / 0.06);
+	--kc-danger-solid: #e02e2a;
+	--kc-danger-solid-hover: #ba2623;
+	--kc-danger-ghost: rgb(250 66 62 / 0.16);
+	--kc-danger-outline: rgb(250 66 62 / 0.4);
+	--kc-danger-soft: color-mix(in srgb, var(--kc-danger-text) 10%, transparent);
+	/* Dialogs dim the window by 13%; their fields sit on Codex's near-opaque control fill. */
+	--kc-overlay: rgb(0 0 0 / 0.133);
+	--kc-field: rgb(45 45 45 / 0.96);
+	--kc-text: #ffffff;
+	--kc-text-secondary: rgb(255 255 255 / 0.65);
+	--kc-text-tertiary: rgb(255 255 255 / 0.498);
+	/* Codex draws sidebar rows a step under full strength. */
+	--kc-text-nav: rgb(255 255 255 / 0.85);
+	/* A turn's activity rows ("Ran commands") sit at 60%; command output and paths at 70%. */
+	--kc-text-activity: rgb(255 255 255 / 0.6);
+	--kc-text-output: rgb(255 255 255 / 0.7);
+	--kc-text-inverse: #0d0d0d;
+	--kc-text-on-accent: #1a120c;
+	--kc-border: rgb(255 255 255 / 0.082);
+	--kc-border-strong: rgb(255 255 255 / 0.157);
+	--kc-border-subtle: rgb(255 255 255 / 0.043);
+	/*
+	 * The accent (KnightCode's orange by default) wherever Codex draws its own: focus, a switch that is on, info, links,
+	 * the user's bubble and the selection. Derived from --kc-accent as appearance.ts (customTokens) derives a chosen one.
+	 */
+	--kc-focus: #f97316;
+	--kc-switch-on: #f97316;
+	--kc-selection: rgb(251 170 113 / 0.4);
+	/* A switch's and a slider's knob, white in both themes (Codex's). */
+	--kc-knob: #ffffff;
+	--kc-accent: #f97316;
+	--kc-accent-hover: #fa893b;
+	--kc-success: #40c977;
+	/* Codex's strong green (filled and toast success), the same in both themes. */
+	--kc-success-solid: #00a240;
+	/* Toasts tint their kind's strong colour into this (Codex: 17% over black, 17% over white in light). */
+	--kc-toast-base: #000000;
+	/* Find's matches, Codex's chart yellow, the current one its orange (both themes). */
+	--kc-find-match: #ffd240;
+	--kc-find-current: #fb6a22;
+	--kc-warning: #e9b949;
+	--kc-danger: #fa423e;
+	--kc-danger-text: rgb(255 103 100);
+	/* Codex's "warning" orange, which it draws Full access in. */
+	--kc-caution: #ff8549;
+	--kc-diff-add-bg: #16301f;
+	--kc-diff-add-text: #40c977;
+	--kc-diff-del-bg: #3a1a1a;
+	--kc-diff-del-text: #ff6764;
+	--kc-git-added: #40c977;
+	--kc-git-deleted: #fa423e;
+	--kc-info: rgb(251 170 113);
+	--kc-info-bg: rgb(47 33 24);
+	/* Links in replies, in the accent's lighter shade. */
+	--kc-link: rgb(251 170 113);
+	/* Inline code's chip, Codex's: a tint of white (or of ink in light). */
+	--kc-code-chip: rgb(255 255 255 / 0.107);
+	/* Code blocks' syntax colours, Codex's (--color-codex-syntax-*, resolved 2026-10-19). */
+	--kc-syntax-comment: #b9b9b9;
+	--kc-syntax-keyword: #f8a6c8;
+	--kc-syntax-literal: #f1a275;
+	--kc-syntax-string: #83d197;
+	--kc-syntax-variable: #b897f4;
+	--kc-syntax-attribute: #f9dc78;
+	--kc-syntax-name: #63a8f8;
+	--kc-syntax-error: #ff8583;
+	/* The user's message, in a deep shade of the accent (Codex tints it with its accent). */
+	--kc-user-bubble: rgb(120 55 11);
+	/* The initials avatar (the rail profile, review comments), Codex's grey. */
+	--kc-avatar-bg: #5d5d5d;
+	--kc-user-bubble-text: rgb(255 248 243);
+	/* Menus, measured from Codex's (2026-10-15/18): the ring is its border token, the app menus are opaque. */
+	--kc-hairline: var(--kc-border);
+	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.12);
+	--kc-app-menu-bg: #1f1f1f;
+	--kc-app-menu-hint: rgb(255 255 255 / 0.75);
+	--kc-app-menu-rule: rgb(255 255 255 / 0.157);
+	--kc-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	--kc-font-code: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+	/* Appearance › Advanced: the UI size over Codex's 14px (scales the type scale below) and the code size. */
+	--kc-ui-scale: 1;
+	--kc-size-ui: calc(14px * var(--kc-ui-scale));
+	--kc-size-code: 12px;
+	/* The transcript's font (Appearance › Content font); the UI font unless customized. */
+	--kc-font-content: var(--kc-font-ui);
 	--kc-radius: 10px;
+	/* Codex's control transitions (colour, opacity, its ::before layer). */
+	--kc-duration-fast: 0.15s;
+	/* Codex rounds rows, menus, buttons and tooltips on a superellipse; the composer stays round. */
+	--kc-corner-shape: superellipse(1.5);
+	/* Codex's layout spring (Motion: 0.3 s, bounce 0.1; stiffness 799, damping 50.9), sampled every 15 ms. */
+	--kc-ease-spring: linear(
+		0,
+		0.07,
+		0.218,
+		0.383,
+		0.537,
+		0.666,
+		0.768,
+		0.844,
+		0.899,
+		0.937,
+		0.962,
+		0.979,
+		0.989,
+		0.995,
+		0.999,
+		1.001,
+		1.001,
+		1.002,
+		1.001,
+		1.001,
+		1
+	);
+	/* Codex's panel slide (the thread summary), its Motion curve as it hands it to the browser. */
+	--kc-ease-panel: linear(
+		0,
+		0.0389,
+		0.1279,
+		0.2379,
+		0.3514,
+		0.4589,
+		0.5555,
+		0.6393,
+		0.7103,
+		0.7693,
+		0.8177,
+		0.8568,
+		0.8881,
+		0.9131,
+		0.9328,
+		0.9482,
+		0.9602,
+		0.9696,
+		0.9768,
+		0.9824,
+		0.9866,
+		0.9899,
+		0.9924,
+		0.9943,
+		0.9957,
+		0.9968,
+		0.9976,
+		0.9982,
+		0.9987,
+		1
+	);
 	color-scheme: dark;
 }
 
-:root[data-theme="light"] {
+[data-theme="light"] {
 	--kc-bg-shell: #f3f3f3;
 	--kc-bg-sidebar: #f7f7f7;
 	--kc-bg-surface: #ffffff;
-	--kc-bg-elevated: #ffffff;
-	--kc-bg-composer: #f3f3f3;
-	--kc-bg-hover: #ececec;
-	--kc-bg-selected: #e6e6e6;
-	--kc-text: #1a1c1f;
-	--kc-text-muted: #5d5f63;
-	--kc-text-faint: #8e9094;
-	--kc-text-on-accent: #ffffff;
-	--kc-border: #e5e5e5;
-	--kc-border-strong: #d4d4d4;
-	--kc-focus: #c24f00;
-	--kc-accent: #c24f00;
-	--kc-accent-hover: #d65a00;
-	--kc-success: #1f8a4c;
-	--kc-warning: #9a6a00;
-	--kc-danger: #c93a32;
-	--kc-diff-add-bg: #e3f5e9;
-	--kc-diff-add-text: #1f8a4c;
-	--kc-diff-del-bg: #fce8e7;
-	--kc-diff-del-text: #c93a32;
-	--kc-user-bubble: #f0f0f0;
-	--kc-bg-menu: rgb(255 255 255 / 0.92);
+	--kc-bg-surface-secondary: #f6f6f6;
+	--kc-bg-surface-tertiary: #ffffff;
+	--kc-bg-elevated: rgb(255 255 255 / 0.96);
 	--kc-bg-panel: #ffffff;
-	--kc-bg-row: rgb(0 0 0 / 0.05);
-	--kc-hairline: rgb(0 0 0 / 0.1);
-	--kc-text-desc: rgb(0 0 0 / 0.5);
-	--kc-text-head: rgb(0 0 0 / 0.62);
-	--kc-caution: #c2410c;
-	--kc-track: rgb(0 0 0 / 0.08);
+	--kc-bg-section: #ffffff;
+	--kc-bg-composer: #ffffff;
+	--kc-bg-composer-bar: #f6f6f6;
+	--kc-card-soft: rgb(255 255 255 / 0.5);
+	--kc-card-row: rgb(246 246 246 / 0.7);
+	--kc-composer-ring: inset 0 0 0 1px rgb(26 28 31 / 0.1);
+	--kc-bg-menu: rgb(255 255 255 / 0.92);
+	--kc-bg-tooltip: #1a1c1f;
+	--kc-text-tooltip: #ffffff;
+	--kc-ghost-hover: rgb(26 28 31 / 0.055);
+	--kc-ghost-active: rgb(26 28 31 / 0.12);
+	--kc-soft: rgb(26 28 31 / 0.02);
+	--kc-soft-alt: rgb(26 28 31 / 0.047);
+	--kc-track: rgb(26 28 31 / 0.08);
+	--kc-solid: #1a1c1f;
+	--kc-solid-hover: #303030;
+	--kc-solid-active: #414141;
+	--kc-text-on-solid: #ffffff;
+	--kc-soft-hover: rgb(26 28 31 / 0.12);
+	--kc-soft-active: rgb(26 28 31 / 0.16);
+	--kc-outline-hover: rgb(26 28 31 / 0.2);
+	--kc-outline-fill-hover: rgb(26 28 31 / 0.02);
+	--kc-outline-fill-active: rgb(26 28 31 / 0.04);
+	--kc-danger-solid: #e02e2a;
+	--kc-danger-solid-hover: #ba2623;
+	--kc-danger-ghost: rgb(250 66 62 / 0.16);
+	--kc-danger-outline: rgb(224 46 42 / 0.15);
+	--kc-danger-soft: color-mix(in srgb, var(--kc-danger-text) 10%, transparent);
+	--kc-overlay: rgb(0 0 0 / 0.133);
+	--kc-field: rgb(255 255 255 / 0.96);
+	--kc-text: #1a1c1f;
+	--kc-text-secondary: rgb(26 28 31 / 0.65);
+	--kc-text-tertiary: rgb(26 28 31 / 0.494);
+	--kc-text-nav: rgb(26 28 31 / 0.85);
+	--kc-text-activity: rgb(26 28 31 / 0.6);
+	--kc-text-output: rgb(26 28 31 / 0.7);
+	--kc-text-inverse: #ffffff;
+	--kc-text-on-accent: #ffffff;
+	--kc-border: rgb(26 28 31 / 0.08);
+	--kc-border-strong: rgb(26 28 31 / 0.118);
+	--kc-border-subtle: rgb(26 28 31 / 0.047);
+	/* Declared here too: a light preview inside a dark window would inherit the dark one's resolved value. */
+	--kc-hairline: var(--kc-border);
+	--kc-focus: #ea580c;
+	--kc-switch-on: #ea580c;
+	--kc-selection: rgb(234 88 12 / 0.3);
+	--kc-accent: #c2410c; /* #ea580c gives white text 3.6:1; orange-700 meets AA (section 16). */
+	--kc-accent-hover: #9a3412;
+	--kc-success: #00a240;
+	--kc-success-solid: #00a240;
+	--kc-toast-base: #ffffff;
+	--kc-warning: #9a6a00;
+	--kc-danger: #e02e2a;
+	--kc-danger-text: #e02e2a;
+	--kc-caution: #c2410c; /* Codex: #e25507 (3.8:1 on white); kept darker for AA (section 16). */
+	--kc-diff-add-bg: #e3f5e9;
+	--kc-diff-add-text: #00a240;
+	--kc-diff-del-bg: #fce8e7;
+	--kc-diff-del-text: #e02e2a;
+	--kc-git-added: #00a240;
+	--kc-git-deleted: #e02e2a;
+	--kc-info: rgb(187 70 10);
+	--kc-info-bg: rgb(253 238 231);
+	--kc-link: rgb(187 70 10);
+	--kc-code-chip: rgb(26 28 31 / 0.07);
+	--kc-syntax-comment: #4f4f4f;
+	--kc-syntax-keyword: #ab4f7a;
+	--kc-syntax-literal: #ac4f23;
+	--kc-syntax-string: #3a843f;
+	--kc-syntax-variable: #643cae;
+	--kc-syntax-attribute: #b8802b;
+	--kc-syntax-name: #1f4e94;
+	--kc-syntax-error: #ba2623;
+	--kc-user-bubble: rgb(252 235 226);
+	--kc-user-bubble-text: rgb(66 25 3);
 	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.12);
+	--kc-app-menu-bg: #ffffff;
+	--kc-app-menu-hint: rgb(0 0 0 / 0.6);
+	--kc-app-menu-rule: rgb(0 0 0 / 0.12);
 	color-scheme: light;
 }
 
 @theme inline {
 	--color-shell: var(--kc-bg-shell);
 	--color-sidebar: var(--kc-bg-sidebar);
-	--color-composer: var(--kc-bg-composer);
 	--color-surface: var(--kc-bg-surface);
+	--color-surface-secondary: var(--kc-bg-surface-secondary);
+	--color-surface-tertiary: var(--kc-bg-surface-tertiary);
 	--color-elevated: var(--kc-bg-elevated);
-	--color-hover: var(--kc-bg-hover);
-	--color-selected: var(--kc-bg-selected);
+	--color-panel: var(--kc-bg-panel);
+	--color-section: var(--kc-bg-section);
+	--color-composer: var(--kc-bg-composer);
+	--color-composer-bar: var(--kc-bg-composer-bar);
+	--color-card-soft: var(--kc-card-soft);
+	--color-card-row: var(--kc-card-row);
+	--color-menu: var(--kc-bg-menu);
+	--color-overlay: var(--kc-overlay);
+	--color-field: var(--kc-field);
+	--color-tooltip: var(--kc-bg-tooltip);
+	--color-ghost-hover: var(--kc-ghost-hover);
+	--color-ghost-active: var(--kc-ghost-active);
+	--color-soft: var(--kc-soft);
+	--color-soft-alt: var(--kc-soft-alt);
+	--color-track: var(--kc-track);
 	--color-ink: var(--kc-text);
-	--color-muted: var(--kc-text-muted);
-	--color-faint: var(--kc-text-faint);
+	--color-secondary: var(--kc-text-secondary);
+	--color-tertiary: var(--kc-text-tertiary);
+	--color-nav: var(--kc-text-nav);
+	--color-activity: var(--kc-text-activity);
+	--color-output: var(--kc-text-output);
+	--color-inverse: var(--kc-text-inverse);
 	--color-on-accent: var(--kc-text-on-accent);
 	--color-line: var(--kc-border);
 	--color-line-strong: var(--kc-border-strong);
+	--color-line-subtle: var(--kc-border-subtle);
 	--color-accent: var(--kc-accent);
 	--color-accent-hover: var(--kc-accent-hover);
 	--color-success: var(--kc-success);
 	--color-warning: var(--kc-warning);
 	--color-danger: var(--kc-danger);
+	--color-danger-text: var(--kc-danger-text);
+	--color-danger-soft: var(--kc-danger-soft);
+	--color-caution: var(--kc-caution);
 	--color-add-bg: var(--kc-diff-add-bg);
 	--color-add: var(--kc-diff-add-text);
 	--color-del-bg: var(--kc-diff-del-bg);
 	--color-del: var(--kc-diff-del-text);
+	--color-git-added: var(--kc-git-added);
+	--color-git-deleted: var(--kc-git-deleted);
+	--color-info: var(--kc-info);
+	--color-info-bg: var(--kc-info-bg);
 	--color-bubble: var(--kc-user-bubble);
-	--color-menu: var(--kc-bg-menu);
-	--color-panel: var(--kc-bg-panel);
-	--color-row: var(--kc-bg-row);
-	--color-hairline: var(--kc-hairline);
-	--color-desc: var(--kc-text-desc);
-	--color-head: var(--kc-text-head);
-	--color-caution: var(--kc-caution);
-	--color-track: var(--kc-track);
+	--color-bubble-text: var(--kc-user-bubble-text);
+	--color-avatar: var(--kc-avatar-bg);
 	--font-ui: var(--kc-font-ui);
 	--font-code: var(--kc-font-code);
+	--font-content: var(--kc-font-content);
+	/* Code in the transcript and the Changes pane, at Appearance's code size (12px on 20px by default). */
+	--text-code: var(--kc-size-code);
+	--text-code--line-height: calc(var(--kc-size-code) * 5 / 3);
+	/* Codex's type scale (measured 2026-10-19), so a size class copied from Codex draws the same text. */
+	--text-xs: calc(12px * var(--kc-ui-scale));
+	--text-xs--line-height: calc(16px * var(--kc-ui-scale));
+	--text-sm: calc(13px * var(--kc-ui-scale));
+	--text-sm--line-height: calc(18.5714px * var(--kc-ui-scale));
+	--text-base: calc(14px * var(--kc-ui-scale));
+	--text-base--line-height: calc(21px * var(--kc-ui-scale));
+	--text-lg: calc(16px * var(--kc-ui-scale));
+	--text-lg--line-height: calc(24.8889px * var(--kc-ui-scale));
+	--text-xl: calc(28px * var(--kc-ui-scale));
+	--text-xl--line-height: calc(39.2px * var(--kc-ui-scale));
+	/*
+	 * Corners on Codex's scale (measured 2026-10-18): Tailwind's steps times 1.25, so rounded-lg is 12.5px as in
+	 * Codex and a class copied from Codex draws the same corner. The composer and the user's message share 22px;
+	 * Codex's toolbar icon buttons use 9.375px.
+	 */
+	--radius-2xs: 2.5px;
+	--radius-xs: 5px;
+	--radius-sm: 7.5px;
+	--radius-md: 10px;
+	--radius-lg: 12.5px;
+	--radius-xl: 15px;
+	--radius-2xl: 20px;
+	--radius-3xl: 25px;
+	--radius-4xl: 30px;
+	--radius-composer: 22px;
+	--radius-button: 9.375px;
+	--ease-spring: var(--kc-ease-spring);
 }
 
 html,
@@ -158,6 +411,13 @@ body {
 		outline: 2px solid var(--kc-focus);
 		outline-offset: 1px;
 	}
+	::selection {
+		background-color: var(--kc-selection);
+	}
+	/* Native checkboxes and radios (a reply's task list) in the accent, as Codex's checked boxes. */
+	input {
+		accent-color: var(--kc-switch-on);
+	}
 }
 
 ::-webkit-scrollbar {
@@ -174,40 +434,1360 @@ body {
 	background: transparent;
 }
 
-/* A dropdown's surface: translucent, blurred, 20px corners, a hairline ring. */
+/*
+ * A dropdown's surface, measured from Codex's menus (2026-10-18): translucent, blurred, 20px corners, a half-pixel
+ * hairline ring and a soft drop shadow. Rows are sized by .kc-row; groups are split by an inset 1px rule; a
+ * row's shortcut or submenu chevron sits at its end in 12px, half-strength text.
+ */
 @layer components {
-	.kc-menu {
+	/*
+	 * A tooltip (popover.tsx, Tooltip), Codex's (_Tooltip): 13px on 18px lines, 5px 12px in, a 20px superellipse,
+	 * the control fill with a 5% text-coloured edge and Codex's tooltip shadow; above dialogs, never animated.
+	 */
+	.kc-tooltip {
+		z-index: 60;
+		max-width: min(320px, var(--radix-tooltip-content-available-width));
+		padding: 5px 12px;
+		border: 1px solid color-mix(in oklab, var(--kc-text-tooltip) 5%, transparent);
 		border-radius: 20px;
+		corner-shape: var(--kc-corner-shape);
+		background: var(--kc-bg-tooltip);
+		box-shadow: 0 8px 18px rgb(15 23 42 / 0.2);
+		color: var(--kc-text-tooltip);
+		font-size: 13px;
+		line-height: 18px;
+		letter-spacing: -0.15px;
+		overflow-wrap: break-word;
+		text-align: center;
+		white-space: normal;
+	}
+	/*
+	 * Every dropdown's surface: menus, panels, hover cards and the composer's panel (measured 2026-10-20, all 20px on
+	 * Codex's superellipse). Change a dropdown's corner here, never at the call site.
+	 */
+	.kc-menu {
+		z-index: 50;
+		margin: 1px;
+		border-radius: var(--radius-2xl);
+		corner-shape: var(--kc-corner-shape);
 		padding: 4px;
 		background: var(--kc-bg-menu);
 		backdrop-filter: blur(8px);
 		box-shadow:
-			0 0 0 1px var(--kc-hairline),
+			0 0 0 0.5px var(--kc-hairline),
 			var(--kc-menu-shadow);
+		outline: none;
 	}
-	/* A row in a menu or composer panel: 13px text, 15px corners, the highlight shared by hover and keys. */
+	/*
+	 * An opaque surface, flush with its offset (no margin): Codex's environment panel and its "/" panel above the
+	 * composer.
+	 */
+	.kc-menu.kc-menu-solid {
+		margin: 0;
+		background: var(--kc-bg-panel);
+		backdrop-filter: none;
+	}
+	.kc-menu-separator {
+		padding: 4px 8px;
+	}
+	.kc-menu-separator::before {
+		content: "";
+		display: block;
+		height: 1px;
+		background: var(--kc-hairline);
+	}
+	.kc-row-hint {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		margin-inline-start: 12px;
+		font-size: 12px;
+		color: var(--kc-text-tertiary);
+	}
+	/*
+	 * The title bar's File, Edit, View and Help menus, which Codex draws like the system's: an opaque panel with
+	 * 7.5px corners and no ring, 12px rows inset 16px, shortcuts at three-quarter strength, and full-width
+	 * half-pixel rules with room around them.
+	 */
+	.kc-menu.kc-app-menu {
+		border-radius: var(--radius-sm);
+		corner-shape: round;
+		padding: 4px 0;
+		background: var(--kc-app-menu-bg);
+		backdrop-filter: none;
+		box-shadow: 0 4px 12px rgb(0 0 0 / 0.42);
+	}
+	.kc-app-menu .kc-row {
+		width: calc(100% - 8px);
+		height: 28px;
+		margin: 0 4px;
+		border-radius: var(--radius-sm);
+		corner-shape: round;
+		padding: 5px 16px;
+		font-size: 12px;
+		line-height: 18px;
+	}
+	.kc-app-menu .kc-row-hint {
+		color: var(--kc-app-menu-hint);
+	}
+	.kc-app-menu .kc-menu-separator {
+		padding: 8px 0;
+	}
+	.kc-app-menu .kc-menu-separator::before {
+		height: 0.5px;
+		background: var(--kc-app-menu-rule);
+	}
+	/*
+	 * A row in a menu, a panel or the composer's panel: 13px text, 15px corners, one highlight for the pointer and
+	 * the keys (Radix marks the row it moves to data-highlighted), dimmed when it can't be chosen. In a menu the
+	 * icon sits 6px from its label, as in Codex.
+	 */
 	.kc-row {
 		display: flex;
 		width: 100%;
 		align-items: center;
 		gap: 8px;
-		border-radius: 15px;
+		border-radius: var(--radius-xl);
+		corner-shape: var(--kc-corner-shape);
 		padding: 5px 8px;
 		text-align: left;
 		font-size: 13px;
 		line-height: 18.5px;
+		outline: none;
+		cursor: default;
+		user-select: none;
 	}
-	.kc-row:hover,
-	.kc-row[data-active="true"] {
-		background: var(--kc-bg-row);
+	.kc-menu .kc-row {
+		gap: 6px;
+	}
+	/* A submenu's row stays lit while its submenu is open. */
+	.kc-row:not(:disabled, [data-disabled]):is(
+			:hover,
+			:focus-visible,
+			[data-highlighted],
+			[data-active="true"],
+			[data-state="open"]
+		) {
+		background: var(--kc-ghost-hover);
+	}
+	.kc-row:is(:disabled, [data-disabled]) {
+		color: var(--kc-text-tertiary);
+	}
+	/* One line under the label, cut short with an ellipsis (a project's path, a commit's author). */
+	.kc-row-description {
+		display: block;
+		overflow: hidden;
+		font-size: 12px;
+		line-height: 14px;
+		color: var(--kc-text-tertiary);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.kc-row[data-danger] .kc-row-description {
+		color: inherit;
+	}
+	/* A caption heading a menu or a list ("How should KnightCode act?", "Local branches"). */
+	.kc-menu-label {
+		padding: 4px 8px 6px;
+		font-size: 13px;
+		line-height: 16px;
+		color: var(--kc-text-tertiary);
 	}
 }
 
-.markdown > :first-child {
-	margin-top: 0;
+/* Codex's commit and pull request cards (components/dialog.tsx, variant "card"). */
+.kc-card {
+	background: var(--kc-bg-panel);
+	border: 1px solid var(--kc-hairline);
+	box-shadow: 0 16px 32px -8px rgb(0 0 0 / 0.19);
 }
-.markdown > :last-child {
-	margin-bottom: 0;
+/*
+ * Codex's dialogs (rename, remove project, handoff; measured 2026-10-19): the control fill at 90% over a 24px blur,
+ * 25px corners, a half-pixel ring and a small shadow, over a window dimmed 13%. They appear and go without motion.
+ */
+.kc-dialog {
+	background: var(--kc-bg-menu);
+	backdrop-filter: blur(24px);
+	box-shadow:
+		0 0 0 0.5px var(--kc-hairline),
+		0 4px 8px -2px rgb(0 0 0 / 0.1);
+}
+/*
+ * A text field in a dialog or a form: 36px, Codex's control fill, a hairline that turns the focus blue. In the
+ * components layer so a caller's utilities (a 28px height, a stronger hairline, a width) win; the focus colour stays
+ * outside it so it wins over them in turn.
+ */
+@layer components {
+	.kc-input {
+		height: 36px;
+		width: 100%;
+		border: 1px solid var(--kc-border);
+		border-radius: 10px;
+		background: var(--kc-field);
+		padding: 0 10px;
+		font-size: 13px;
+		color: var(--kc-text);
+		outline: none;
+	}
+	.kc-input::placeholder {
+		color: var(--kc-text-tertiary);
+	}
+}
+.kc-input:focus {
+	border-color: var(--kc-focus);
+}
+
+/*
+ * Buttons (components/button.tsx), built as Codex builds its own (measured 2026-10-19). A button's fill is a layer
+ * behind its content (::before) so it can fade and change without moving the label; nothing scales on press. Sizes
+ * come from Codex's control scale: height, side gutter, text, icon, gap and corner per size. Squircle corners
+ * (Codex's toolbar and rail buttons) are 1.25 times the size's radius on a superellipse.
+ *
+ * - ghost: no fill at rest; on hover the layer fades in (8%) and the text brightens; pressed the layer deepens (16%).
+ *   An open menu's trigger keeps the layer at 60%, a selected button at full.
+ * - solid: a filled button (white in dark, near-black in light) that darkens on hover and press.
+ * - soft: a translucent fill that deepens on hover and press.
+ * - outline: a hairline ring that strengthens on hover, with a faint fill.
+ * - surface: the faintest fill under a faint ring.
+ * - accent: KnightCode's orange, for the composer's Send and Stop.
+ */
+@layer components {
+	.kc-button {
+		--button-size: 28px;
+		--button-gutter: 10px;
+		--button-font-size: 13px;
+		--button-gap: 4px;
+		--button-radius: 7.5px;
+		--button-fill: transparent;
+		--button-fill-hover: var(--kc-ghost-hover);
+		--button-fill-active: var(--kc-ghost-active);
+		--button-ring: transparent;
+		--button-ring-hover: transparent;
+		--button-text: var(--kc-text);
+		--button-text-hover: var(--button-text);
+		position: relative;
+		isolation: isolate;
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		gap: var(--button-gap);
+		height: var(--button-size);
+		padding: 0 var(--button-gutter);
+		border-radius: var(--button-radius);
+		color: var(--button-text);
+		font-size: var(--button-font-size);
+		line-height: 1;
+		white-space: nowrap;
+		cursor: default;
+		user-select: none;
+		outline: none;
+		transition:
+			opacity var(--kc-duration-fast) ease,
+			color var(--kc-duration-fast) ease;
+	}
+	.kc-button::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		border-radius: inherit;
+		corner-shape: inherit;
+		background-color: var(--button-fill);
+		box-shadow: inset 0 0 0 1px var(--button-ring);
+		transition:
+			opacity var(--kc-duration-fast) ease,
+			background-color var(--kc-duration-fast) ease,
+			box-shadow var(--kc-duration-fast) ease;
+	}
+	.kc-button:focus-visible::before {
+		outline: 2px solid var(--kc-focus);
+		outline-offset: -1px;
+	}
+	.kc-button > svg {
+		flex-shrink: 0;
+	}
+	.kc-button[data-size="3xs"] {
+		--button-size: 20px;
+		--button-gutter: 6px;
+		--button-font-size: 12px;
+		--button-gap: 3px;
+	}
+	.kc-button[data-size="2xs"] {
+		--button-size: 22px;
+		--button-gutter: 6px;
+		--button-font-size: 12px;
+		--button-gap: 3px;
+	}
+	.kc-button[data-size="xs"] {
+		--button-size: 24px;
+		--button-gutter: 8px;
+	}
+	.kc-button[data-size="sm"] {
+		--button-size: 26px;
+		--button-gutter: 8px;
+	}
+	.kc-button[data-size="lg"] {
+		--button-size: 32px;
+		--button-gutter: 12px;
+		--button-font-size: 14px;
+		--button-gap: 6px;
+		--button-radius: 10px;
+	}
+	.kc-button[data-size="xl"] {
+		--button-size: 36px;
+		--button-gutter: 12px;
+		--button-gap: 6px;
+		--button-radius: 10px;
+	}
+	.kc-button[data-size="2xl"] {
+		--button-size: 40px;
+		--button-gutter: 14px;
+		--button-gap: 6px;
+		--button-radius: 12.5px;
+	}
+	.kc-button[data-pill] {
+		--button-radius: 9999px;
+		padding: 0 calc(var(--button-gutter) * 1.33);
+	}
+	/* Codex's toolbar controls (settings' buttons and selects): 10px corners, so 12.5px squircles, and 8px in. */
+	.kc-button[data-toolbar] {
+		--button-radius: 10px;
+		--button-gutter: 8px;
+		line-height: 18px;
+	}
+	.kc-button[data-squircle] {
+		border-radius: calc(var(--button-radius) * 1.25);
+		corner-shape: var(--kc-corner-shape);
+	}
+	.kc-button[data-uniform] {
+		width: var(--button-size);
+		padding: 0;
+	}
+	.kc-button[data-block] {
+		width: 100%;
+	}
+
+	/* Colours. Secondary ghosts are the icon buttons: half strength at rest, 85% on hover ("strong": full). */
+	.kc-button[data-variant="ghost"][data-color="secondary"] {
+		--button-text: var(--kc-text-tertiary);
+		--button-text-hover: var(--kc-text-nav);
+	}
+	.kc-button[data-variant="ghost"][data-color="secondary"][data-strong] {
+		--button-text-hover: var(--kc-text);
+	}
+	.kc-button[data-variant="ghost"][data-color="danger"] {
+		--button-text: var(--kc-danger-solid);
+		--button-fill-hover: var(--kc-danger-ghost);
+		--button-fill-active: var(--kc-danger-ghost);
+	}
+	.kc-button[data-variant="solid"] {
+		--button-fill: var(--kc-solid);
+		--button-fill-hover: var(--kc-solid-hover);
+		--button-fill-active: var(--kc-solid-active);
+		--button-text: var(--kc-text-on-solid);
+	}
+	/* The composer's Send and Stop: Codex fills them with its primary blue; KnightCode's primary is its orange. */
+	.kc-button[data-variant="accent"] {
+		--button-fill: var(--kc-accent);
+		--button-fill-hover: var(--kc-accent-hover);
+		--button-fill-active: var(--kc-accent-hover);
+		--button-text: var(--kc-text-on-accent);
+	}
+	.kc-button[data-variant="solid"][data-color="danger"] {
+		--button-fill: var(--kc-danger-solid);
+		--button-fill-hover: var(--kc-danger-solid-hover);
+		--button-fill-active: var(--kc-danger-solid-hover);
+		--button-text: #ffffff;
+	}
+	/* Codex's toolbar button (Unarchive, Change): the text colour at 5%, at 10% on hover and press. */
+	.kc-button[data-variant="soft"] {
+		--button-fill: color-mix(in srgb, var(--kc-text) 5%, transparent);
+		--button-fill-hover: color-mix(in srgb, var(--kc-text) 10%, transparent);
+		--button-fill-active: color-mix(in srgb, var(--kc-text) 10%, transparent);
+	}
+	/* Codex's select button (a setting's value that opens a menu): a 3% fill under a hairline ring. */
+	.kc-button[data-variant="field"] {
+		--button-fill: var(--kc-soft);
+		--button-ring: var(--kc-border);
+		--button-ring-hover: var(--kc-border-strong);
+		--button-fill-hover: var(--kc-ghost-hover);
+	}
+	/* Codex's destructive confirm ("Remove project"): the danger text on a 10% tint of it. */
+	.kc-button[data-variant="soft"][data-color="danger"] {
+		--button-fill: var(--kc-danger-soft);
+		--button-fill-hover: var(--kc-danger-ghost);
+		--button-fill-active: var(--kc-danger-ghost);
+		--button-text: var(--kc-danger-text);
+	}
+	.kc-button[data-variant="outline"] {
+		--button-ring: var(--kc-border-strong);
+		--button-ring-hover: var(--kc-outline-hover);
+		--button-fill-hover: var(--kc-outline-fill-hover);
+		--button-fill-active: var(--kc-outline-fill-active);
+	}
+	.kc-button[data-variant="outline"][data-color="danger"] {
+		--button-text: var(--kc-danger-solid);
+		--button-ring: var(--kc-danger-outline);
+		--button-ring-hover: var(--kc-danger-solid);
+	}
+	.kc-button[data-variant="surface"] {
+		--button-fill: var(--kc-soft-alt);
+		--button-ring: var(--kc-border);
+		--button-ring-hover: var(--kc-border);
+		--button-fill-hover: var(--kc-soft-hover);
+		--button-fill-active: var(--kc-soft-active);
+	}
+
+	/* Ghosts fade their layer in; the others swap fills. */
+	.kc-button[data-variant="ghost"]::before {
+		background-color: var(--button-fill-hover);
+		opacity: 0;
+	}
+	@media (hover: hover) {
+		.kc-button:not(:disabled):hover {
+			color: var(--button-text-hover);
+		}
+		.kc-button[data-variant="ghost"]:not(:disabled):hover::before {
+			opacity: 1;
+		}
+		.kc-button:not([data-variant="ghost"]):not(:disabled):hover::before {
+			background-color: var(--button-fill-hover);
+			box-shadow: inset 0 0 0 1px var(--button-ring-hover);
+		}
+	}
+	.kc-button:not(:disabled):active::before {
+		background-color: var(--button-fill-active);
+		opacity: 1;
+	}
+	.kc-button:is([aria-expanded="true"], [data-state="open"]) {
+		color: var(--button-text-hover);
+	}
+	.kc-button[data-variant="ghost"]:is([aria-expanded="true"], [data-state="open"])::before {
+		opacity: 0.6;
+	}
+	.kc-button:not([data-variant="ghost"]):is([aria-expanded="true"], [data-state="open"])::before {
+		background-color: var(--button-fill-hover);
+	}
+	.kc-button:is([aria-current="page"], [aria-pressed="true"], [data-selected]) {
+		color: var(--kc-text);
+	}
+	.kc-button:is([aria-current="page"], [aria-pressed="true"], [data-selected])::before {
+		opacity: 1;
+	}
+	/* A pressed toggle in a toolbar (the Changes file tree, word wrap) turns Codex's blue. */
+	.kc-button[data-toggle][aria-pressed="true"] {
+		color: var(--kc-info);
+	}
+	.kc-button[data-toggle][aria-pressed="true"]::before {
+		background-color: var(--kc-info-bg);
+	}
+	.kc-button:disabled {
+		cursor: not-allowed;
+	}
+	.kc-button[data-variant="ghost"]:disabled {
+		opacity: 0.4;
+	}
+	.kc-button:not([data-variant="ghost"]):disabled {
+		--button-fill: var(--kc-soft-alt);
+		--button-ring: transparent;
+		--button-text: var(--kc-text-tertiary);
+	}
+}
+
+/*
+ * A navigation row (components/nav-row.tsx): the sidebar's New thread, project and thread rows and the settings
+ * pages, as Codex draws its own (measured 2026-10-19). 30px tall, 12.5px superellipse corners, 8px in, a 24px icon
+ * slot, 14px labels a step under full strength; the ghost layer lights it under the pointer and while it is the
+ * current page. Actions at its end show while it is hovered or holds the focus, in place of its status.
+ */
+@layer components {
+	.kc-nav-row {
+		position: relative;
+		display: flex;
+		width: 100%;
+		height: 30px;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 8px;
+		border-radius: 12.5px;
+		corner-shape: var(--kc-corner-shape);
+		padding: 5px 5px 5px 8px;
+		color: var(--kc-text-nav);
+		font-size: 14px;
+		line-height: 20px;
+		text-align: start;
+		cursor: default;
+		outline: none;
+	}
+	.kc-nav-row:is(:hover, [aria-current="page"], [data-selected], [data-state="open"], :has([data-state="open"])) {
+		background: var(--kc-ghost-hover);
+	}
+	.kc-nav-row:focus-visible {
+		outline: 2px solid var(--kc-focus);
+		outline-offset: -2px;
+	}
+	.kc-nav-row-icon {
+		display: flex;
+		width: 24px;
+		height: 24px;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		margin-inline-start: -4px;
+		margin-inline-end: -4px;
+	}
+	/*
+	 * The row's status (a worktree mark, a spinner) gives way to its actions on hover. At rest the actions float out of
+	 * the flow; on hover they join it, so the label shrinks and fades before them (Codex reserves the same room).
+	 */
+	.kc-nav-row-status,
+	.kc-nav-row-actions {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 8px;
+	}
+	.kc-nav-row-actions {
+		position: absolute;
+		inset-block: 0;
+		inset-inline-end: 6px;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.kc-nav-row:is(:hover, :focus-within, :has([data-state="open"])) .kc-nav-row-actions {
+		position: static;
+		margin-inline-end: 1px;
+		opacity: 1;
+		pointer-events: auto;
+	}
+	.kc-nav-row:is(:hover, :focus-within, :has([data-state="open"])):has(.kc-nav-row-actions) .kc-nav-row-status {
+		display: none;
+	}
+	/*
+	 * Codex's marquee (components/nav-row.tsx): a label too long for its row fades out over its last 1.14em instead of
+	 * ending in an ellipsis; while the row is hovered it scrolls to its end and stays there, its right fade pushed off
+	 * over the last quarter so the end reads whole. The clip reaches 0.57em left of the label, so the text scrolls out
+	 * under a left fade that sits outside it at rest.
+	 */
+	.kc-marquee {
+		--kc-marquee-left-fade: 0.571429em;
+		--kc-marquee-right-fade: 1.14286em;
+		display: block;
+		min-width: 0;
+		width: 100%;
+		white-space: nowrap;
+	}
+	.kc-marquee-clip {
+		display: block;
+		width: calc(100% + var(--kc-marquee-left-fade));
+		margin-inline-start: calc(-1 * var(--kc-marquee-left-fade));
+		overflow: hidden;
+	}
+	.kc-marquee-track {
+		display: inline-flex;
+		min-width: max-content;
+		padding-inline-start: var(--kc-marquee-left-fade);
+	}
+	.kc-marquee[data-overflowing] .kc-marquee-clip {
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			#000 var(--kc-marquee-left-fade),
+			#000 calc(100% - var(--kc-marquee-right-fade)),
+			transparent
+		);
+		mask-size: 100% 100%;
+		mask-repeat: no-repeat;
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.kc-nav-row:hover .kc-marquee[data-overflowing] .kc-marquee-clip {
+			animation: kc-marquee-fade var(--kc-marquee-duration) linear forwards;
+		}
+		.kc-nav-row:hover .kc-marquee[data-overflowing] .kc-marquee-track {
+			animation: kc-marquee-scroll var(--kc-marquee-duration) var(--kc-marquee-timing) forwards;
+			will-change: transform;
+		}
+	}
+	@keyframes kc-marquee-scroll {
+		to {
+			transform: translateX(calc(-1 * var(--kc-marquee-distance)));
+		}
+	}
+	@keyframes kc-marquee-fade {
+		75% {
+			mask-size: 100% 100%;
+		}
+		to {
+			mask-size: calc(100% + var(--kc-marquee-right-fade)) 100%;
+		}
+	}
+	/* The transcript fades in over its top 1.25rem under the header, as Codex's scroll areas do (its 2rem top padding
+	 * keeps the first line clear at the start). It runs under the composer, which overlaps its bottom 1rem (the
+	 * composer's box starts 0.375rem into that, below its top padding), and fades out over the 2.375rem above the box so
+	 * nothing shows past its edge, as in Codex. The transcript's 3rem bottom padding keeps the last line clear once
+	 * scrolled to the end.
+	 * A mask covers the scrollbar too, so a second, solid layer keeps the 10px scrollbar strip (::-webkit-scrollbar's
+	 * width) out of the fade, and the track stops 1rem short so the thumb ends above the composer instead of beside it. */
+	.kc-fade-y {
+		mask-image:
+			linear-gradient(to bottom, transparent, #000 1.25rem, #000 calc(100% - 3rem), transparent calc(100% - 0.625rem)),
+			linear-gradient(#000, #000);
+		mask-size:
+			calc(100% - 10px) 100%,
+			10px 100%;
+		mask-position:
+			left top,
+			right top;
+		mask-repeat: no-repeat;
+	}
+	.kc-fade-y::-webkit-scrollbar-track {
+		margin-bottom: 1rem;
+	}
+}
+
+/*
+ * The sidebar opens and closes as Codex's does (measured 2026-10-18): its column eases between the sidebar's own
+ * width and nothing on Codex's spring (0.3 s, bounce 0.1; Motion's curve sampled into linear()), fading with it,
+ * while the sidebar keeps its width inside so nothing reflows. Reduced motion snaps, as Codex does.
+ */
+.kc-sidebar-slot {
+	interpolate-size: allow-keywords;
+	width: 0;
+	opacity: 0;
+	overflow: hidden;
+	transition:
+		width 0.3s var(--kc-ease-spring),
+		opacity 0.3s var(--kc-ease-spring);
+}
+.kc-sidebar-slot[data-open] {
+	width: auto;
+	opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-sidebar-slot {
+		transition: none;
+	}
+}
+/*
+ * The side panel (Changes) opens and closes the same way, from the right: its column eases between the panel's width
+ * and nothing while the panel keeps its width inside (what overhangs is clipped by the app card). It mounts when
+ * opened, sliding in only then, and unmounts when its closing transition ends; reduced motion keeps a 1 ms
+ * transition so that end still fires.
+ */
+.kc-panel-slot {
+	interpolate-size: allow-keywords;
+	width: 0;
+	/* Not clipped (the resize handle overhangs its left edge), so the flex minimum would hold it at the panel's width. */
+	min-width: 0;
+	transition: width 0.3s var(--kc-ease-spring);
+}
+.kc-panel-slot[data-open] {
+	width: auto;
+}
+@starting-style {
+	.kc-panel-slot[data-enter][data-open] {
+		width: 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-panel-slot {
+		transition-duration: 1ms;
+	}
+}
+/*
+ * The Changes file tree opens and closes the same way, fading with its width as Codex's does (its progress drives both).
+ * Clipped, so the tree's overhang never widens the pane. It never takes more than 60% of the pane, however narrow the
+ * pane gets, so the diff keeps the rest (Codex's max-width; TREE_MAX_SHARE in components/changes.tsx).
+ */
+.kc-tree-slot {
+	interpolate-size: allow-keywords;
+	width: 0;
+	min-width: 0;
+	max-width: 60%;
+	opacity: 0;
+	overflow: clip;
+	transition:
+		width 0.3s var(--kc-ease-spring),
+		opacity 0.3s var(--kc-ease-spring);
+}
+.kc-tree-slot[data-open] {
+	width: auto;
+	opacity: 1;
+}
+@starting-style {
+	.kc-tree-slot[data-enter][data-open] {
+		width: 0;
+		opacity: 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-tree-slot {
+		transition-duration: 1ms;
+	}
+}
+
+/*
+ * A panel that slides in from its own right edge and back out (Codex's thread summary, measured 2026-10-19): it moves
+ * its full width and fades over 0.3 s, clipped past its right edge (leaving room for the shadow) so it appears to
+ * come out from under that edge. Radix keeps it mounted until the closing animation ends.
+ */
+/* Codex's model picker (_ModelPickerDropdownContent): fades and grows from 98% toward its trigger, 0.32 s after 30 ms. */
+.kc-pop-in[data-state="open"] {
+	transform-origin: var(--radix-popover-content-transform-origin);
+	animation: kc-pop-in 0.32s cubic-bezier(0.23, 1, 0.32, 1) 30ms both;
+}
+@keyframes kc-pop-in {
+	from {
+		opacity: 0;
+		scale: 0.98;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-pop-in[data-state="open"] {
+		animation: none;
+	}
+}
+
+/*
+ * Codex's model picker panel (_Menu_tovi5, 26.1013): two views stacked in one clip, the panel's height easing to the
+ * shown one's. A view's parts fade and slide 10px, away from the trigger as they leave; on arrival the header
+ * follows the slider by 16ms (or the list arrives after 40ms).
+ */
+.kc-mp {
+	position: relative;
+	overflow: clip;
+}
+.kc-mp[data-ready] {
+	transition: height 0.32s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.kc-mp-view {
+	display: flex;
+	flex-direction: column;
+	padding: 4px;
+}
+.kc-mp-view + .kc-mp-view {
+	position: absolute;
+	inset: 0 0 auto;
+}
+.kc-mp[data-ready] .kc-mp-part {
+	transition:
+		opacity 0.2s cubic-bezier(0.23, 1, 0.32, 1),
+		translate 0.32s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.kc-mp-part[data-active="false"] {
+	opacity: 0;
+	translate: 0 10px;
+}
+.kc-mp-part[data-part="list"][data-active="false"] {
+	translate: 0 -10px;
+}
+[data-side="top"] .kc-mp-part[data-active="false"] {
+	translate: 0 -10px;
+}
+[data-side="top"] .kc-mp-part[data-part="list"][data-active="false"] {
+	translate: 0 10px;
+}
+.kc-mp-part[data-active="true"] {
+	transition-delay: 40ms !important;
+}
+.kc-mp-part[data-part="header"][data-active="true"] {
+	transition-delay: 56ms !important;
+}
+.kc-mp-part[data-part="slider"][data-active="false"] {
+	transition-delay: 16ms !important;
+}
+/* The header: the model and its effort centred over the slider (a 16px spacer before balances the chevron). */
+.kc-mp-header {
+	display: flex;
+	min-height: 36px;
+	align-items: center;
+	justify-content: center;
+	padding-inline: 8px;
+}
+.kc-mp-header::before {
+	content: "";
+	width: 16px;
+	flex-shrink: 0;
+}
+.kc-mp-toggle {
+	display: flex;
+	min-width: 0;
+	min-height: 32px;
+	padding: 4px;
+	font-size: var(--text-base);
+	line-height: 20px;
+	font-weight: 500;
+	outline: none;
+}
+.kc-mp-toggle-content {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 2px;
+	border-radius: 6px;
+	padding: 2px 4px;
+}
+.kc-mp-toggle:is(:hover, :focus-visible) .kc-mp-toggle-content {
+	background: var(--kc-ghost-hover);
+}
+/* The trigger's effort word (components/composer-pickers.tsx, EffortLabel). */
+.kc-effort {
+	display: flex;
+	flex-shrink: 0;
+	justify-content: center;
+	overflow: hidden;
+	white-space: nowrap;
+	transition: width 0.3s var(--kc-ease-spring);
+}
+.kc-effort-cell {
+	display: grid;
+	flex-shrink: 0;
+}
+.kc-effort-cell > span {
+	grid-area: 1 / 1;
+	justify-self: center;
+	opacity: 0;
+	filter: blur(4px);
+	transition:
+		opacity 0.3s var(--kc-ease-spring),
+		filter 0.3s var(--kc-ease-spring);
+}
+.kc-effort-cell > span[data-active] {
+	opacity: 1;
+	filter: none;
+}
+/*
+ * The effort slider (components/composer-pickers.tsx, EffortSlider), Codex's _xwb5v. Knob and fill share one tween,
+ * 0.15 s while dragging. The arrow cursor, as Codex's Electron build sets its --cursor-interaction to default, unless
+ * Appearance › Use pointer cursors; the closed hand while dragging. The knob's scale runs Codex's springs as
+ * linear(): stiffness 420 damping 38 lifting, 220/26 settling.
+ */
+.kc-power {
+	position: relative;
+	display: flex;
+	height: 32px;
+	flex-direction: column;
+	justify-content: center;
+	margin-inline: 2px;
+	padding: 2px 6px;
+}
+.kc-power-root {
+	--kc-power-motion: 0.3s;
+	--kc-power-ease: cubic-bezier(0.23, 1, 0.32, 1);
+	/* Radix places its thumb once it has measured it: no tween for the first frame. */
+	--kc-power-thumb-motion: 0s;
+	position: relative;
+	display: flex;
+	width: 100%;
+	height: 28px;
+	align-items: center;
+	touch-action: none;
+	animation: kc-power-thumb-motion 0s 16ms forwards;
+}
+@keyframes kc-power-thumb-motion {
+	to {
+		--kc-power-thumb-motion: var(--kc-power-motion);
+	}
+}
+.kc-power-root[data-dragging] {
+	--kc-power-motion: 0.15s;
+}
+.kc-power-root[data-dragging],
+.kc-power-root[data-dragging] :is(.kc-power-tick, .kc-power-thumb) {
+	cursor: grabbing;
+}
+/* Radix's thumb wrapper. */
+.kc-power-root > span:not([data-orientation]) {
+	top: 50%;
+	translate: 0 -50%;
+	transition: left var(--kc-power-thumb-motion) var(--kc-power-ease);
+}
+.kc-power-track {
+	position: relative;
+	height: 24px;
+	flex-grow: 1;
+	overflow: hidden;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--color-ink) 10%, transparent);
+	box-shadow: inset 0 0 0 0.5px var(--color-line);
+}
+.kc-power-fill {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: 100%;
+	border-radius: 12px 0 0 12px;
+	background: var(--color-accent);
+	transition: transform var(--kc-power-motion) var(--kc-power-ease);
+}
+.kc-power-tick {
+	position: absolute;
+	top: 50%;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background-color: currentColor;
+	color: color-mix(in srgb, var(--color-tertiary) 50%, transparent);
+	transform: translate(-50%, -50%);
+	cursor: default;
+	transition:
+		background-color var(--kc-power-motion) var(--kc-power-ease),
+		filter 0.12s ease,
+		transform 0.12s ease;
+}
+.kc-power-tick[data-selected="true"] {
+	color: rgb(255 255 255 / 0.3);
+}
+.kc-power-tick::before {
+	content: "";
+	position: absolute;
+	inset: -6px;
+}
+.kc-power-tick:hover {
+	filter: brightness(0.85);
+	transform: translate(-50%, -50%) scale(2);
+}
+.kc-power-rail {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	z-index: 4;
+	width: 100%;
+	pointer-events: none;
+}
+.kc-power-knob {
+	position: absolute;
+	top: 50%;
+	width: 28px;
+	height: 28px;
+	transform: translate(-50%, -50%);
+	transition: left var(--kc-power-motion) var(--kc-power-ease);
+}
+.kc-power-knob > span {
+	position: absolute;
+	inset: 0;
+	border: 0.5px solid var(--color-line-strong);
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 0 2px rgb(0 0 0 / 0.1);
+	transition: scale 0.61s
+		linear(0, 0.084, 0.247, 0.429, 0.587, 0.719, 0.815, 0.885, 0.932, 0.963, 0.982, 0.993, 0.999, 1.002, 1.003, 1.003, 1.002, 1.002, 1.001, 1.001, 1);
+}
+.kc-power-root[data-lifted] .kc-power-knob > span {
+	scale: calc(32 / 28);
+	transition: scale 0.39s
+		linear(0, 0.069, 0.203, 0.361, 0.502, 0.629, 0.726, 0.803, 0.863, 0.907, 0.937, 0.959, 0.973, 0.984, 0.99, 0.994, 0.997, 0.998, 0.999, 1, 1);
+}
+.kc-power:has(.kc-power-thumb:focus-visible) .kc-power-knob > span {
+	outline: 2px solid var(--kc-focus);
+}
+/* The knob's hit target, 3px wider than it all round. */
+.kc-power-thumb {
+	position: relative;
+	display: block;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	outline: none;
+	cursor: default;
+}
+.kc-power-thumb::before {
+	content: "";
+	position: absolute;
+	inset: -3px;
+	border-radius: 50%;
+}
+:root[data-pointer-cursors] .kc-power-root:not([data-dragging]) :is(.kc-power-tick, .kc-power-thumb) {
+	cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-mp[data-ready],
+	.kc-mp[data-ready] .kc-mp-part,
+	.kc-effort,
+	.kc-effort-cell > span,
+	.kc-power-tick,
+	.kc-power-knob > span {
+		transition: none;
+	}
+	.kc-power-root,
+	.kc-power-root[data-dragging] {
+		--kc-power-motion: 0s;
+		animation: none;
+	}
+}
+[data-radix-popper-content-wrapper]:has(> .kc-slide-in) {
+	clip-path: inset(-12px -12px -100vh -100vw);
+}
+.kc-slide-in[data-state="open"] {
+	animation: kc-slide-in 0.3s var(--kc-ease-panel);
+}
+.kc-slide-in[data-state="closed"] {
+	animation: kc-slide-out 0.3s var(--kc-ease-panel) forwards;
+}
+@keyframes kc-slide-in {
+	from {
+		opacity: 0;
+		translate: 100%;
+	}
+}
+@keyframes kc-slide-out {
+	to {
+		opacity: 0;
+		translate: 100%;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-slide-in {
+		animation: none !important;
+	}
+}
+
+/* Codex's control capsule (Changes header): a pill on a blurred surface, a half-pixel ring, a soft shadow. */
+.kc-capsule {
+	background: color-mix(in srgb, var(--kc-bg-surface) 80%, var(--kc-text) 4%);
+	backdrop-filter: blur(24px);
+	box-shadow:
+		0 0 0 0.5px var(--kc-hairline),
+		0 8px 16px -4px rgb(0 0 0 / 0.12);
+}
+/* A backdrop filter inside the capsule's own cannot blur the page, so its menus are opaque instead. */
+.kc-capsule .kc-menu {
+	background: var(--kc-bg-panel);
+}
+.kc-comment {
+	box-shadow:
+		0 0 0 0.5px var(--kc-border-strong),
+		0 3px 7.5px rgb(0 0 0 / 0.04),
+		0 0 20px rgb(0 0 0 / 0.05);
+}
+/*
+ * The Changes file tree (@pierre/trees) in the pane's colors: 13px rows, the ghost hover as the selection. Spacing is
+ * Codex's (base-file-tree): 3px item padding, no margins, level gap or inline padding, a 5px row gap.
+ */
+.kc-tree {
+	--trees-item-padding-x-override: 3px;
+	--trees-item-margin-x-override: 0px;
+	--trees-level-gap-override: 0px;
+	--trees-padding-inline-override: 0px;
+	--trees-scrollbar-gutter-override: 0px;
+	--trees-item-row-gap-override: 5px;
+	--trees-bg-override: transparent;
+	--trees-fg-override: var(--kc-text);
+	--trees-fg-muted-override: var(--kc-text-tertiary);
+	--trees-font-family-override: var(--kc-font-ui);
+	--trees-font-size-override: 13px;
+	--trees-font-weight-regular-override: 400;
+	--trees-selected-bg-override: var(--kc-ghost-hover);
+	--trees-selected-fg-override: var(--kc-text);
+	--trees-selected-focused-border-color-override: transparent;
+	--trees-border-radius-override: 10px;
+}
+/* Variables the diff overrides (diff-overrides.css) read inside @pierre/diffs' shadow root. */
+.kc-changes,
+.kc-inline-diff {
+	--color-surface: var(--kc-bg-surface);
+	--color-text: var(--kc-text);
+	--color-text-info: var(--kc-link);
+	--color-background-primary-ghost-hover: var(--kc-ghost-hover);
+	--color-surface-secondary: var(--kc-bg-surface-secondary);
+	--kc-diff-description: var(--kc-text-tertiary);
+	--diffs-addition-base: var(--kc-git-added);
+	--diffs-deletion-base: var(--kc-git-deleted);
+	--diffs-font-family: ui-monospace, "SFMono-Regular", "SF Mono", menlo, consolas, "Liberation Mono", monospace;
+	--diffs-font-size: var(--kc-size-code);
+	--diffs-line-height: calc(var(--kc-size-code) * 1.8);
+	--diffs-mixer: light-dark(#000, #fff);
+}
+/* An edit's diff in the transcript sits on Codex's tertiary surface (#282828), not the pane's. */
+.kc-inline-diff {
+	--color-surface: var(--kc-bg-surface-tertiary);
+}
+
+/*
+ * Codex's vertical-scroll-fade-mask: an edge fades over --kc-fade-edge only while content is scrolled past it, driven
+ * by the element's own scroll position. A list anchored to its end (flex-col-reverse) runs the animation in reverse.
+ */
+@property --kc-fade-top {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+@property --kc-fade-bottom {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+.kc-scroll-fade {
+	--kc-fade-edge: 1.5rem;
+	mask-image: linear-gradient(
+		to bottom,
+		transparent,
+		#000 var(--kc-fade-top),
+		#000 calc(100% - var(--kc-fade-bottom)),
+		transparent
+	);
+	animation: kc-scroll-fade linear both;
+	animation-timeline: scroll(self);
+}
+@keyframes kc-scroll-fade {
+	0% {
+		--kc-fade-top: 0px;
+		--kc-fade-bottom: var(--kc-fade-edge);
+	}
+	8%,
+	92% {
+		--kc-fade-top: var(--kc-fade-edge);
+		--kc-fade-bottom: var(--kc-fade-edge);
+	}
+	100% {
+		--kc-fade-top: var(--kc-fade-edge);
+		--kc-fade-bottom: 0px;
+	}
+}
+
+/*
+ * Rendered Markdown (components/markdown.tsx), on Codex's rules (measured 2026-10-19): 14px text on a 1.625 line,
+ * every space a multiple of a quarter of the font size (3.5px). Headings 1.5, 1.25 and 1.125 times the text; lists
+ * indented 22.75px with 5.25px before each item; a blockquote's rounded bar; a hairline rule; tables at 0.875em with
+ * a strong rule under the header; inline code on the ghost fill; links in the link blue at medium weight.
+ */
+@layer components {
+	.kc-markdown {
+		--md-size: calc(14px * var(--kc-ui-scale));
+		--md-space: calc(var(--md-size) / 4);
+		font-family: var(--kc-font-content);
+		font-size: var(--md-size);
+		line-height: calc(var(--md-size) * 1.625);
+		color: var(--kc-text);
+		overflow-wrap: anywhere;
+	}
+	.kc-markdown > :first-child {
+		margin-top: 0;
+	}
+	.kc-markdown > :last-child {
+		margin-bottom: 0;
+	}
+	.kc-markdown p {
+		margin: 0 0 var(--md-space);
+	}
+	.kc-markdown > p:not(:first-child) {
+		margin-top: calc(var(--md-space) * 2);
+	}
+	.kc-markdown > p + p {
+		margin-block: calc(var(--md-space) * 4);
+	}
+	.kc-markdown :is(h1, h2, h3, h4, h5, h6) {
+		font-weight: 600;
+	}
+	.kc-markdown h1 {
+		margin: calc(var(--md-space) * 4) 0 calc(var(--md-space) * 2);
+		font-size: calc(var(--md-size) * 1.5);
+		line-height: calc(var(--md-space) * 8);
+	}
+	.kc-markdown h2 {
+		margin: calc(var(--md-space) * 4) 0 var(--md-space);
+		font-size: calc(var(--md-size) * 1.25);
+		line-height: calc(var(--md-space) * 7);
+	}
+	.kc-markdown h3 {
+		margin: calc(var(--md-space) * 4) 0 var(--md-space);
+		font-size: calc(var(--md-size) * 1.125);
+		line-height: calc(var(--md-space) * 7);
+	}
+	.kc-markdown h4 {
+		margin: calc(var(--md-space) * 4) 0 0;
+		line-height: calc(var(--md-space) * 6);
+	}
+	.kc-markdown :is(h5, h6) {
+		margin: 0;
+	}
+	.kc-markdown > :is(h1, h2, h3) + p,
+	.kc-markdown > p + :is(ul, ol) {
+		margin-top: 0;
+	}
+	.kc-markdown > :is(ul, ol) + :is(h1, h2, h3, h4) {
+		margin-top: calc(var(--md-space) * 4);
+	}
+	.kc-markdown :is(ul, ol) {
+		margin: 0 0 var(--md-space);
+		padding-inline-start: calc(var(--md-space) * 6.5);
+	}
+	.kc-markdown ul {
+		list-style: disc;
+	}
+	.kc-markdown ol {
+		list-style: decimal;
+	}
+	.kc-markdown li {
+		padding-inline-start: calc(var(--md-space) * 1.5);
+	}
+	.kc-markdown li > :is(ul, ol) {
+		margin-bottom: 0;
+	}
+	.kc-markdown li > p {
+		margin: 0;
+	}
+	.kc-markdown li > p + p {
+		margin-top: calc(var(--md-space) * 4);
+	}
+	.kc-markdown blockquote {
+		position: relative;
+		margin: 0 0 calc(var(--md-space) * 2);
+		padding-block: calc(var(--md-space) * 2);
+		padding-inline-start: calc(var(--md-space) * 6);
+		line-height: calc(var(--md-space) * 6);
+	}
+	.kc-markdown blockquote::after {
+		content: "";
+		position: absolute;
+		inset-inline-start: 0;
+		top: calc(var(--md-space) * 2);
+		bottom: calc(var(--md-space) * 2);
+		width: var(--md-space);
+		border-radius: calc(var(--md-space) / 2);
+		background: var(--kc-border-strong);
+	}
+	.kc-markdown blockquote > p {
+		margin: 0;
+	}
+	.kc-markdown hr {
+		margin: calc(var(--md-space) * 7) 0;
+		border: 0;
+		border-top: 1px solid var(--kc-border-strong);
+	}
+	.kc-markdown .kc-md-table {
+		margin-top: calc(var(--md-space) * 4);
+		overflow-x: auto;
+	}
+	.kc-markdown table {
+		border-collapse: collapse;
+		font-size: max(12px, calc(var(--md-size) * 0.875));
+		font-variant-numeric: tabular-nums;
+		text-align: left;
+	}
+	.kc-markdown :is(th, td) {
+		vertical-align: top;
+		padding-inline-end: calc(var(--md-space) * 6);
+	}
+	.kc-markdown th {
+		border-bottom: 1px solid var(--kc-border-strong);
+		padding-block: calc(var(--md-space) * 2);
+		font-weight: 600;
+		line-height: calc(var(--md-space) * 4);
+	}
+	.kc-markdown th:last-child {
+		padding-inline-end: calc(var(--md-space) * 10);
+	}
+	.kc-markdown td {
+		padding-block: calc(var(--md-space) * 2.5);
+	}
+	.kc-markdown td:last-child {
+		padding-inline-end: 0;
+	}
+	.kc-markdown tr:not(:last-child) td {
+		border-bottom: 1px solid var(--kc-border-subtle);
+	}
+	.kc-markdown tbody tr:last-child td {
+		padding-bottom: calc(var(--md-space) * 6);
+	}
+	.kc-markdown[data-tone="user"] {
+		color: inherit;
+	}
+	.kc-markdown[data-tone="user"] p {
+		margin-block: 0;
+	}
+	.kc-markdown :not(pre) > code {
+		border-radius: 6px;
+		background: var(--kc-code-chip);
+		padding: 1px 6px;
+		font-family: var(--kc-font-code);
+		font-size: 0.92em;
+	}
+	.kc-markdown a {
+		color: var(--kc-link);
+		font-weight: 500;
+		text-decoration: none;
+	}
+	.kc-markdown a:hover {
+		text-decoration: underline;
+	}
+	.kc-markdown strong {
+		font-weight: 600;
+	}
+	.kc-markdown input[type="checkbox"] {
+		margin-inline-end: 6px;
+		vertical-align: middle;
+	}
+	/* A code block: Codex's card with its language and buttons on top. */
+	.kc-markdown .kc-md-code {
+		margin: calc(var(--md-space) * 4) 0;
+	}
+	/* highlight.js's classes (components/markdown.tsx) in Codex's grouping and palette. */
+	.kc-md-code :is(.hljs-comment, .hljs-quote) {
+		color: var(--kc-syntax-comment);
+		font-style: italic;
+	}
+	.kc-md-code :is(.hljs-doctag, .hljs-keyword, .hljs-formula, .hljs-operator) {
+		color: var(--kc-syntax-keyword);
+	}
+	.kc-md-code :is(.hljs-built_in, .hljs-class .hljs-title, .hljs-literal, .hljs-number) {
+		color: var(--kc-syntax-literal);
+	}
+	.kc-md-code :is(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-meta-string) {
+		color: var(--kc-syntax-string);
+	}
+	.kc-md-code
+		:is(.hljs-variable, .hljs-template-variable, .hljs-type, .hljs-title, .hljs-selector-class, .hljs-selector-pseudo) {
+		color: var(--kc-syntax-variable);
+	}
+	.kc-md-code :is(.hljs-attr, .hljs-attribute, .hljs-section, .hljs-selector-attr) {
+		color: var(--kc-syntax-attribute);
+	}
+	.kc-md-code
+		:is(.hljs-name, .hljs-selector-tag, .hljs-symbol, .hljs-bullet, .hljs-link, .hljs-meta, .hljs-selector-id) {
+		color: var(--kc-syntax-name);
+	}
+	.kc-md-code .hljs-deletion {
+		color: var(--kc-syntax-error);
+	}
+	.kc-md-code .hljs-emphasis {
+		font-style: italic;
+	}
+	.kc-md-code .hljs-strong {
+		font-weight: 700;
+	}
+	.kc-md-code .hljs-link {
+		text-decoration: underline;
+	}
+}
+
+/*
+ * Icons (components/icons.tsx) hold still on hover, as Codex's do. A filled icon (its selected or open form)
+ * draws and fills the parts tagged data-fill and drops the parts tagged data-empty; an unfilled one does the
+ * opposite. A drawn check strokes itself in when it appears.
+ */
+.ki [data-fill],
+.ki[data-filled] [data-empty] {
+	display: none;
+}
+.ki[data-filled] [data-fill] {
+	display: inline;
+	fill: currentColor;
+}
+@media (prefers-reduced-motion: no-preference) {
+	.ki [data-m="draw"] {
+		stroke-dasharray: 1;
+		animation: ki-draw 0.35s cubic-bezier(0.65, 0, 0.35, 1) both;
+	}
+}
+@keyframes ki-draw {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
 }
 
 @keyframes kc-pulse {
@@ -226,4 +1806,245 @@ body {
 	.kc-pulse {
 		animation: none;
 	}
+}
+
+/* Codex's "Thinking": the word at low strength with a brighter band sweeping across it; still under reduced motion. */
+.kc-shimmer {
+	background: linear-gradient(
+			90deg,
+			var(--kc-text-activity) 0%,
+			var(--kc-text-activity) 35%,
+			var(--kc-text) 50%,
+			var(--kc-text-activity) 65%,
+			var(--kc-text-activity) 100%
+		)
+		0 0 / 300% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: kc-shimmer 2s linear infinite;
+}
+@keyframes kc-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: 0 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-shimmer {
+		animation: none;
+		color: var(--kc-text-activity);
+		background: none;
+	}
+}
+
+/* Switches (components/switch.tsx), Codex's: a pill track and a white knob that slides with an ease-out. */
+.kc-switch {
+	position: relative;
+	display: inline-flex;
+	flex-shrink: 0;
+	width: 32px;
+	height: 20px;
+	border-radius: 9999px;
+	background: var(--kc-track);
+	transition: background-color var(--kc-duration-fast) ease;
+}
+.kc-switch[data-state="checked"] {
+	background: var(--kc-switch-on);
+}
+.kc-switch:disabled {
+	opacity: 0.6;
+}
+.kc-switch-thumb {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	border-radius: 9999px;
+	background: var(--kc-knob);
+	transition: translate var(--kc-duration-fast) cubic-bezier(0, 0, 0.2, 1);
+}
+.kc-switch-thumb[data-state="checked"] {
+	translate: 12px 0;
+}
+.kc-switch[data-size="sm"] {
+	width: 28px;
+	height: 16px;
+}
+.kc-switch[data-size="sm"][data-state="checked"] {
+	background: var(--kc-text);
+}
+.kc-switch[data-size="sm"] .kc-switch-thumb {
+	width: 12px;
+	height: 12px;
+}
+.kc-switch[data-size="sm"] .kc-switch-thumb[data-state="checked"] {
+	background: var(--kc-bg-panel);
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-switch,
+	.kc-switch-thumb {
+		transition: none;
+	}
+}
+
+/*
+ * Toasts (app.tsx), after Codex's (measured 2026-10-19): top centre under the title bar, 8px apart, at most three; a
+ * 15px-cornered note, 8px by 12px in, in 14px medium text with a 16px mark and a 24px close button. Each kind tints
+ * its colour 17% into black (white in light) under a 20% hairline of it and writes in it; a plain note is a panel.
+ * They drop in from above over Codex's 400ms (Sonner's), and simply appear under reduced motion.
+ */
+.kc-toast {
+	--toast-tone: var(--kc-text);
+	--toast-strong: var(--kc-bg-panel);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	border-radius: 15px;
+	padding: 8px 12px;
+	border: 1px solid var(--kc-border);
+	background: var(--kc-bg-panel);
+	color: var(--toast-tone);
+	font-size: 14px;
+	line-height: 21px;
+	font-weight: 500;
+	box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+	pointer-events: auto;
+	animation: kc-toast-in 0.4s ease;
+}
+.kc-toast:is([data-kind="success"], [data-kind="error"]) {
+	border-color: color-mix(in srgb, var(--toast-strong) 20%, transparent);
+	background: color-mix(in srgb, var(--toast-strong) 17%, var(--kc-toast-base));
+}
+.kc-toast[data-kind="success"] {
+	--toast-tone: var(--kc-success);
+	--toast-strong: var(--kc-success-solid);
+}
+.kc-toast[data-kind="error"] {
+	--toast-tone: var(--kc-danger-text);
+	--toast-strong: var(--kc-danger-solid);
+}
+@keyframes kc-toast-in {
+	from {
+		opacity: 0;
+		transform: translateY(-100%);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-toast {
+		animation: none;
+	}
+}
+
+/* The zoom banner (app.tsx, ZoomBanner) drops in as Codex's does. */
+.kc-zoom-banner {
+	animation: kc-zoom-banner-in 0.15s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+@keyframes kc-zoom-banner-in {
+	from {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.98);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.kc-zoom-banner {
+		animation: none;
+	}
+}
+
+/* Files dragged over the composer (components/composer.tsx): the field veiled in an accent tint (Codex's drop overlay), a
+ * dashed ring in the focus colour. */
+.kc-drop-target {
+	background: color-mix(in srgb, color-mix(in srgb, var(--kc-focus) 20%, var(--kc-bg-composer)) 92%, transparent);
+	outline: 1.5px dashed var(--kc-focus);
+	outline-offset: -1.5px;
+}
+
+/* Find in the thread (components/find-bar.tsx): every match, then the current one. */
+/* Both themes paint the same yellow and orange, so the text on them is dark in both (white on yellow is 1.4:1). */
+::highlight(kc-find) {
+	background-color: var(--kc-find-match);
+	color: #1a1c1f;
+}
+::highlight(kc-find-active) {
+	background-color: var(--kc-find-current);
+	color: #1a1c1f;
+}
+
+/*
+ * Appearance › Translucent sidebar (app.tsx; main puts the system's material behind the window): only the sidebar
+ * sees through, at its colour's 65% as Codex's. The window and body go clear, the card's spread shadow paints the
+ * shell around it (its rounded corners too) within the body row, and the rail sits above that spread.
+ */
+:root[data-translucent] body,
+:root[data-translucent] .kc-app {
+	background: transparent;
+}
+:root[data-translucent] .kc-app-body {
+	overflow: hidden;
+}
+:root[data-translucent] .kc-app-card {
+	box-shadow: 0 0 0 100vmax var(--kc-bg-shell);
+}
+:root[data-translucent] .kc-app-body > :not(.kc-app-card) {
+	position: relative;
+	z-index: 1;
+}
+:root[data-translucent] .kc-sidebar {
+	background: color-mix(in srgb, var(--kc-bg-sidebar) 65%, transparent);
+}
+
+/* Appearance › Use pointer cursors: the hand over anything that acts. */
+:root[data-pointer-cursors]
+	:is(
+		button,
+		[role="button"],
+		[role="menuitem"],
+		[role="menuitemradio"],
+		[role="option"],
+		[role="tab"],
+		[role="switch"],
+		a,
+		summary,
+		select,
+		label:has(input[type="radio"], input[type="checkbox"], input[type="color"])
+	):not(:disabled, [aria-disabled="true"]) {
+	cursor: pointer;
+}
+
+/*
+ * A range (Appearance › Contrast), as Codex's: a 2px track in the track colour, filled in its blue up to the value
+ * (--kc-range-fill, set by the page), and a 16px white knob.
+ */
+.kc-range {
+	appearance: none;
+	height: 16px;
+	background: transparent;
+	cursor: default;
+}
+.kc-range::-webkit-slider-runnable-track {
+	height: 2px;
+	border-radius: 9999px;
+	background: linear-gradient(
+		to right,
+		var(--kc-switch-on) var(--kc-range-fill, 50%),
+		var(--kc-track) var(--kc-range-fill, 50%)
+	);
+}
+.kc-range::-webkit-slider-thumb {
+	appearance: none;
+	width: 16px;
+	height: 16px;
+	margin-top: -7px;
+	border-radius: 9999px;
+	background: var(--kc-knob);
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+}
+.kc-range:focus-visible {
+	outline: 2px solid var(--kc-focus);
+	outline-offset: 2px;
+	border-radius: 9999px;
 }

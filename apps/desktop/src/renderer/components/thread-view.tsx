@@ -1,81 +1,222 @@
 /**
- * One thread (desktop-shell.md section 9.3): a header with the thread menu, the transcript that sticks
- * to the bottom while streaming, older history on demand, approvals and the composer.
+ * One thread (desktop-shell.md section 9.3), laid out as Codex's (measured 2026-10-19): a 52px header with the
+ * project icon, the title, Chat actions and Toggle summary; the transcript, which sticks to the bottom while streaming
+ * and offers Scroll to bottom when it does not; older history on demand; approvals and dialogs in the composer's place; and the
+ * side panel, resizable from its left edge, with its tab strip.
  */
 
-import { ArrowDown, CircleAlert, Folder, MoreHorizontal } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { client } from "../client.ts";
-import { basename } from "../format.ts";
-import { matches, useBinding } from "../keys.ts";
 import {
-	archive,
-	compact,
+	ArrowDown,
+	CircleAlert,
+	FileDiff,
+	Folder,
+	GitBranchPlus,
+	Maximize,
+	Minimize,
+	MoreHorizontal,
+	PanelRight,
+	SquarePlus,
+	X,
+} from "./icons.tsx";
+import type React from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { basename, clockTime, dayLabel, SEPARATOR_GAP_MS } from "../format.ts";
+import { bindingLabel, matches, useBinding, useBindings } from "../keys.ts";
+import {
+	copyLastCodeBlock,
 	dismissPending,
 	fork,
 	loadEarlier,
 	openThread,
-	pinThread,
 	rename,
+	restoreWorktree,
+	selectUnread,
 	send,
-	transcriptMarkdown,
+	setFinding,
+	setPanel,
 	useStore,
 } from "../store.ts";
 import { ApprovalCard } from "./approval.tsx";
+import { DialogCard, QuestionsCard } from "./request-card.tsx";
+import { Button, IconButton } from "./button.tsx";
+import { ChangesPane } from "./changes.tsx";
+import { FindBar } from "./find-bar.tsx";
+import { ThreadSummary } from "./git.tsx";
 import { Composer } from "./composer.tsx";
 import { TurnView, UserBubble } from "./items.tsx";
-import { MenuItem, Popover } from "./popover.tsx";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "./menu.tsx";
+import { boundActions, DeleteThreadDialog, RenameThreadDialog, threadActions } from "./thread-actions.tsx";
+import { Tooltip } from "./tooltip.tsx";
+import { followDrag } from "../drag.ts";
 
 const NO_PINS: string[] = [];
 
-function ThreadMenu({ id, cwd, onRename }: { id: string; cwd: string; onRename: () => void }) {
-	const pinned = useStore((s) => (s.desktop?.pinnedThreads ?? NO_PINS).includes(id));
-	const copy = (text: string) => void client.host("host/clipboard/writeText", { text });
-	const Separator = () => <div className="my-1 border-t border-line" />;
+/** Codex's separator between turns far apart: "Yesterday 11:53 AM", 13px, the day in medium weight. */
+function DateSeparator({ at }: { at: number }) {
+	const day = dayLabel(at);
 	return (
-		<Popover
-			side="bottom"
-			align="right"
-			trigger={(open) => (
-				<button
-					type="button"
-					title="Thread menu"
-					className={`no-drag flex size-8 items-center justify-center rounded-lg ${open ? "bg-hover text-ink" : "text-muted hover:bg-hover hover:text-ink"}`}
-				>
-					<MoreHorizontal size={17} />
-				</button>
-			)}
-		>
-			{(close) => {
-				const item = (label: string, run: () => void, danger = false) => (
-					<MenuItem
-						danger={danger}
-						onClick={() => {
-							close();
-							run();
-						}}
-					>
-						{label}
-					</MenuItem>
-				);
-				return (
-					<div className="w-60">
-						{item("Rename", onRename)}
-						{item(pinned ? "Unpin" : "Pin", () => pinThread(id, !pinned))}
-						<Separator />
-						{item("Fork", () => void fork(id))}
-						{item("Compact context", () => void compact(id))}
-						<Separator />
-						{item("Copy transcript as Markdown", () => copy(transcriptMarkdown(id)))}
-						{item("Copy working directory", () => copy(cwd))}
-						{item("Copy thread id", () => copy(id))}
-						{item("Show in folder", () => void client.host("host/shell/showInFolder", { path: cwd }))}
-						<Separator />
-						{item("Archive", () => void archive(id), true)}
-					</div>
-				);
+		<div role="separator" aria-label={`${day} ${clockTime(at)}`} className="flex justify-center py-4">
+			<time className="text-sm leading-5 text-tertiary" dateTime={new Date(at).toISOString()}>
+				<span className="font-medium">{day}</span> {clockTime(at)}
+			</time>
+		</div>
+	);
+}
+
+/** Codex's "Chat actions" menu: an icon on every row, the copies gathered under one Copy submenu (thread-actions.tsx). */
+function ThreadMenu({ thread }: { thread: { id: string; cwd: string; name: string; sessionFile?: string } }) {
+	const { id } = thread;
+	const pinned = useStore((s) => (s.desktop?.pinnedThreads ?? NO_PINS).includes(id));
+	const unread = useStore((s) => selectUnread(s).includes(id));
+	const [dialog, setDialog] = useState<"rename" | "delete">();
+	const items = threadActions(thread, {
+		pinned,
+		unread,
+		open: true,
+		onRename: () => setDialog("rename"),
+		onDelete: () => setDialog("delete"),
+	});
+	// The open thread's shortcuts run the same actions as its menu, and Codex's "Copy last code block", which no menu
+	// lists.
+	useBindings([...boundActions(items), { binding: "desktop.thread.copyCode", run: () => copyLastCodeBlock(id) }]);
+	return (
+		<>
+			<Menu>
+				<MenuTrigger>
+					<IconButton label="Chat actions" className="no-drag">
+						<MoreHorizontal size={16} />
+					</IconButton>
+				</MenuTrigger>
+				<MenuContent align="end">
+					{items.map((item, i) => {
+						if (item === "-") return <MenuSeparator key={i} />;
+						const Icon = item.icon;
+						if ("items" in item)
+							return (
+								<MenuSub key={item.label} icon={Icon ? <Icon /> : undefined} label={item.label}>
+									{item.items.map((sub) => (
+										<MenuItem
+											key={sub.label}
+											hint={sub.binding ? bindingLabel(sub.binding) : undefined}
+											danger={sub.danger}
+											onSelect={sub.run}
+										>
+											{sub.label}
+										</MenuItem>
+									))}
+								</MenuSub>
+							);
+						return (
+							<MenuItem
+								key={item.label}
+								icon={Icon ? <Icon /> : undefined}
+								hint={item.binding ? bindingLabel(item.binding) : undefined}
+								danger={item.danger}
+								onSelect={item.run}
+							>
+								{item.label}
+							</MenuItem>
+						);
+					})}
+				</MenuContent>
+			</Menu>
+			{dialog === "rename" ? <RenameThreadDialog threadId={id} onClose={() => setDialog(undefined)} /> : null}
+			{dialog === "delete" ? <DeleteThreadDialog thread={thread} onClose={() => setDialog(undefined)} /> : null}
+		</>
+	);
+}
+
+const PANEL_MIN = 320;
+/** The room Codex keeps for the chat beside the side panel. */
+const CHAT_MIN = 352;
+
+/**
+ * The side panel's left edge: a 16px handle centred on it that drags the panel's width (Codex's, from its bundle,
+ * 2026-10-20). The width stays between 320px and what leaves the chat 352px. Dragged under half the minimum the panel
+ * slides shut; dragged past its maximum until the chat would be under half the minimum, the panel takes the chat's
+ * place (full screen). Dragging back undoes either.
+ */
+function PanelResizeHandle() {
+	const width = useStore((s) => s.panel.width);
+	const start = (event: React.PointerEvent) => {
+		event.preventDefault();
+		const from = event.clientX;
+		const panel = event.currentTarget.parentElement!;
+		const initial = panel.getBoundingClientRect().width;
+		// The thread view, past the panel's slot.
+		const workspace = panel.parentElement!.parentElement!.getBoundingClientRect().width;
+		const max = Math.max(PANEL_MIN, workspace - CHAT_MIN);
+		const onMove = (e: PointerEvent) => {
+			const size = initial - (e.clientX - from);
+			const open = size >= PANEL_MIN / 2;
+			const full = size > max && workspace - size < PANEL_MIN / 2;
+			setPanel(open && !full ? { open, full, width: Math.min(Math.max(size, PANEL_MIN), max) } : { open, full });
+		};
+		followDrag(onMove);
+	};
+	return (
+		<div
+			onPointerDown={start}
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="Resize workspace panes"
+			aria-valuenow={width || undefined}
+			aria-valuemin={PANEL_MIN}
+			className="absolute inset-y-0 -left-2 z-10 w-4 cursor-col-resize"
+		/>
+	);
+}
+
+/** The right region (desktop-shell.md section 9.6): Codex's tab strip over the Changes pane. */
+function SidePanel({ id }: { id: string }) {
+	const width = useStore((s) => s.panel.width);
+	const full = useStore((s) => s.panel.full ?? false);
+	return (
+		<aside
+			// 54% of the thread view (its container) until dragged, and all of it in full screen. However the thread view
+			// narrows (a smaller window, the sidebar opening), it leaves the chat 352px, as a drag does.
+			style={{
+				width: full ? "100cqw" : `min(${width ? `${width}px` : "54cqw"}, max(${PANEL_MIN}px, 100cqw - ${CHAT_MIN}px))`,
+				minWidth: PANEL_MIN,
 			}}
-		</Popover>
+			className={`relative flex h-full shrink-0 flex-col bg-surface ${full ? "" : "border-l border-line"}`}
+		>
+			{/* As in Codex, a full-screen panel resizes only while a drag that made it so is still going. */}
+			{full ? null : <PanelResizeHandle />}
+			{/* Codex's tab strip: one "Changes" tab (other tabs come with the terminal and files panes). */}
+			<div className="flex h-[52px] shrink-0 items-center gap-1.5 ps-2 pe-3">
+				<div className="relative flex h-8 w-[238px] min-w-0 items-center rounded-md border border-line-strong bg-ghost-hover">
+					<span
+						role="tab"
+						aria-selected="true"
+						className="flex min-w-0 flex-1 items-center gap-2 ps-2.5 text-sm text-ink"
+					>
+						<FileDiff size={16} className="shrink-0" />
+						<span className="truncate">Changes</span>
+					</span>
+					<IconButton
+						label="Close Changes tab"
+						size="3xs"
+						className="me-1.5 rounded-md"
+						onClick={() => setPanel({ open: false })}
+					>
+						<X size={14} />
+					</IconButton>
+				</div>
+				<div className="flex-1" />
+				<IconButton
+					label={full ? "Exit full screen" : "Enter full screen"}
+					aria-pressed={full}
+					onClick={() => setPanel({ full: !full })}
+				>
+					{full ? <Minimize size={16} /> : <Maximize size={16} />}
+				</IconButton>
+				<IconButton label="Hide tabs" aria-pressed="true" onClick={() => setPanel({ open: false })}>
+					<PanelRight size={16} filled />
+				</IconButton>
+			</div>
+			<ChangesPane threadId={id} />
+		</aside>
 	);
 }
 
@@ -83,7 +224,15 @@ export function ThreadView({ id }: { id: string }) {
 	const view = useStore((s) => s.held[id]);
 	const failure = useStore((s) => s.opening[id]);
 	const summary = useStore((s) => s.threads.find((t) => t.id === id));
+	const panelOpen = useStore((s) => s.panel.open);
+	const panelFull = useStore((s) => s.panel.open && (s.panel.full ?? false));
+	// The side panel stays mounted while it slides shut (styles.css, .kc-panel-slot), and slides open only when opened
+	// here, not when a thread opens with the panel already up.
+	const [panelShown, setPanelShown] = useState<"open" | "opened" | false>(panelOpen && "open");
+	if (panelOpen && !panelShown) setPanelShown("opened");
+	const progress = useStore((s) => s.progress[id]);
 	const scroller = useRef<HTMLDivElement>(null);
+	const header = useRef<HTMLElement>(null);
 	const [pinned, setPinned] = useState(true);
 	const [renaming, setRenaming] = useState<string | undefined>();
 	const [loadingEarlier, setLoadingEarlier] = useState(false);
@@ -96,7 +245,11 @@ export function ThreadView({ id }: { id: string }) {
 		const el = scroller.current;
 		if (el && pinned) el.scrollTop = el.scrollHeight;
 	});
-	useBinding("desktop.thread.archive", () => void archive(id));
+	useBinding("desktop.panel.toggle", () => setPanel({ open: !panelOpen }));
+	const finding = useStore((s) => s.finding);
+	useBinding("desktop.thread.find", () => setFinding(true), !finding);
+	// A find belongs to the thread it searched.
+	useEffect(() => () => setFinding(false), [id]);
 
 	const name = view?.thread.name || summary?.name || "Untitled";
 	const cwd = view?.thread.cwd ?? summary?.cwd ?? "";
@@ -106,118 +259,205 @@ export function ThreadView({ id }: { id: string }) {
 		if (value && value !== name) void rename(id, value);
 	};
 
+	// The approval or dialog the server waits on longest takes the composer's place.
+	const asking = view?.requests[0];
+	const workspace = view?.thread.workspace;
+	const project = basename(view?.thread.projectCwd ?? summary?.projectCwd ?? cwd);
+	const deleted = (failure?.data as { reason?: string } | undefined)?.reason === "worktreeDeleted";
 	return (
-		<div className="flex h-full min-w-0 flex-1 flex-col">
-			<header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-5">
-				<Folder size={16} className="shrink-0 text-muted" />
-				{renaming !== undefined ? (
-					<input
-						autoFocus
-						value={renaming}
-						onChange={(e) => setRenaming(e.target.value)}
-						onBlur={commitRename}
-						onKeyDown={(e) => {
-							if (matches(e, "desktop.item.activate")) commitRename();
-							if (matches(e, "desktop.picker.dismiss")) {
-								e.preventDefault();
-								setRenaming(undefined);
-							}
-						}}
-						className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2 py-1 font-medium outline-none"
-					/>
-				) : (
-					<button
-						type="button"
-						onDoubleClick={() => setRenaming(name)}
-						title={`${name}\n${cwd}`}
-						className="min-w-0 truncate text-left text-[15px] font-medium"
-					>
-						{name}
-					</button>
-				)}
-				{cwd && renaming === undefined ? (
-					<span className="hidden min-w-0 shrink truncate text-[13px] text-faint lg:block" title={cwd}>
-						{basename(cwd)}
-					</span>
-				) : null}
-				<div className="flex-1" />
-				<ThreadMenu id={id} cwd={cwd} onRename={() => setRenaming(name)} />
-			</header>
-			<div
-				ref={scroller}
-				onScroll={(e) => {
-					const el = e.currentTarget;
-					setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
-				}}
-				className="relative min-h-0 flex-1 overflow-y-auto"
-			>
-				<div className="mx-auto max-w-3xl space-y-8 px-6 pt-6 pb-10">
-					{view?.nextCursor ? (
-						<div className="flex justify-center">
+		<div className="@container flex h-full min-w-0 flex-1">
+			{/* Hidden, not unmounted, while the side panel is full screen, so the transcript and a draft stay put. */}
+			<div className={`h-full min-w-0 flex-1 flex-col ${panelFull ? "hidden" : "flex"}`}>
+				<header ref={header} className="flex h-[52px] shrink-0 items-center gap-2 ps-3.5 pe-1.5">
+					<Tooltip content={cwd} side="bottom" align="start">
+						<span
+							role="img"
+							aria-label={workspace?.mode === "worktree" ? `Worktree of ${project}` : `Project: ${project}`}
+							className="flex size-7 shrink-0 items-center justify-center text-tertiary"
+						>
+							{workspace?.mode === "worktree" ? <GitBranchPlus size={16} /> : <Folder size={16} />}
+						</span>
+					</Tooltip>
+					{renaming !== undefined ? (
+						<input
+							autoFocus
+							aria-label="Thread title"
+							value={renaming}
+							onChange={(e) => setRenaming(e.target.value)}
+							onBlur={commitRename}
+							onKeyDown={(e) => {
+								if (matches(e, "desktop.item.activate")) commitRename();
+								if (matches(e, "desktop.picker.dismiss")) {
+									e.preventDefault();
+									setRenaming(undefined);
+								}
+							}}
+							className="kc-input h-7 min-w-0 flex-1 text-base font-medium"
+						/>
+					) : (
+						<Tooltip content={name} side="bottom" align="start" overflow>
 							<button
 								type="button"
-								disabled={loadingEarlier}
-								onClick={() => {
-									setLoadingEarlier(true);
-									setPinned(false);
-									void loadEarlier(id).finally(() => setLoadingEarlier(false));
-								}}
-								className="rounded-full border border-line px-3 py-1 text-[13px] text-muted hover:bg-hover hover:text-ink"
+								onDoubleClick={() => setRenaming(name)}
+								className="min-w-0 truncate px-1.5 text-start text-base leading-6 font-medium text-ink"
 							>
-								{loadingEarlier ? "Loading…" : "Load earlier messages"}
+								{name}
 							</button>
-						</div>
-					) : null}
-					{failure ? (
-						<div className="flex items-center gap-2 rounded-[var(--kc-radius)] border border-danger/30 bg-del-bg px-3 py-2 text-danger">
-							<CircleAlert size={14} /> {failure.message}
-							<button type="button" className="ml-auto underline" onClick={() => void openThread(id)}>
-								Retry
-							</button>
-							{failure.code === "threadLockedElsewhere" ? (
-								<button type="button" className="underline" onClick={() => void fork(id)}>
-									Fork it
-								</button>
-							) : null}
-						</div>
-					) : null}
-					{!view && !failure ? <div className="kc-pulse text-faint">Loading…</div> : null}
-					{view?.turns.map((turn) => (
-						<TurnView key={turn.id} turn={turn} retry={turn.status === "inProgress" ? view.retry : undefined} />
-					))}
-					{view?.pending.map((p) => (
-						<UserBubble
-							key={p.clientMessageId}
-							text={p.text}
-							pending={!p.failed}
-							failed={p.failed}
-							onRetry={() => {
-								dismissPending(id, p.clientMessageId);
-								void send(id, p.text, p.images);
-							}}
-							onDismiss={() => dismissPending(id, p.clientMessageId)}
-						/>
-					))}
+						</Tooltip>
+					)}
+					<div className="flex-1" />
+					<div className="flex items-center gap-1.5">
+						<ThreadMenu thread={{ id, cwd, name, sessionFile: view?.thread.sessionFile }} />
+						{view ? <ThreadSummary thread={view.thread} anchor={header} /> : null}
+						{panelOpen ? null : (
+							<>
+								<div className="mx-px h-4 w-px bg-line" />
+								<IconButton label="Show tabs" className="no-drag" onClick={() => setPanel({ open: true })}>
+									<SquarePlus size={16} />
+								</IconButton>
+							</>
+						)}
+					</div>
+				</header>
+				{finding ? <FindBar root={scroller} onClose={() => setFinding(false)} /> : null}
+				<div
+					ref={scroller}
+					onScroll={(e) => {
+						const el = e.currentTarget;
+						setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+					}}
+					className="kc-fade-y relative min-h-0 flex-1 overflow-y-auto"
+				>
+					<div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 pt-8 pb-12">
+						{view?.nextCursor ? (
+							<div className="flex justify-center">
+								<Button
+									variant="ghost"
+									color="secondary"
+									size="sm"
+									pill
+									disabled={loadingEarlier}
+									onClick={() => {
+										setLoadingEarlier(true);
+										setPinned(false);
+										void loadEarlier(id).finally(() => setLoadingEarlier(false));
+									}}
+								>
+									{loadingEarlier ? "Loading…" : "Load earlier messages"}
+								</Button>
+							</div>
+						) : null}
+						{failure ? (
+							<div className="flex items-center gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-text">
+								<CircleAlert size={14} className="shrink-0" />
+								<span className="min-w-0 flex-1">
+									{deleted ? "The worktree of this thread was deleted. Restore it to continue." : failure.message}
+								</span>
+								{failure.code === "threadLockedElsewhere" ? (
+									<Button variant="ghost" color="danger" size="sm" onClick={() => void fork(id)}>
+										Fork it
+									</Button>
+								) : null}
+								<Button
+									variant="soft"
+									color="danger"
+									size="sm"
+									onClick={() => void (deleted ? restoreWorktree(id) : openThread(id))}
+								>
+									{deleted ? "Restore" : "Retry"}
+								</Button>
+							</div>
+						) : null}
+						{!view && !failure ? <div className="kc-pulse text-sm text-tertiary">Loading…</div> : null}
+						{workspace?.mode === "worktree" && workspace.setupFailed ? (
+							<div className="flex items-center gap-2 rounded-lg bg-soft-alt px-3 py-2 text-sm text-secondary">
+								<CircleAlert size={14} className="shrink-0" /> The environment's setup script failed; the worktree is
+								ready without it.
+							</div>
+						) : null}
+						{progress && view?.turns.length === 0 ? (
+							<pre className="max-h-48 overflow-auto rounded-lg bg-surface-secondary px-3 py-2 font-code text-code text-secondary">
+								{progress}
+							</pre>
+						) : null}
+						{view?.turns.map((turn, i) => {
+							const before = view.turns[i - 1];
+							const separate = before
+								? turn.startedAt - before.startedAt >= SEPARATOR_GAP_MS
+								: dayLabel(turn.startedAt) !== "Today";
+							return (
+								<Fragment key={turn.id}>
+									{separate ? <DateSeparator at={turn.startedAt} /> : null}
+									<TurnView
+										turn={turn}
+										threadId={id}
+										latest={i === view.turns.length - 1}
+										retry={turn.status === "inProgress" ? view.retry : undefined}
+									/>
+								</Fragment>
+							);
+						})}
+						{view?.pending.map((p) => (
+							<UserBubble
+								key={p.clientMessageId}
+								text={p.text}
+								pending={!p.failed}
+								failed={p.failed}
+								onRetry={() => {
+									dismissPending(id, p.clientMessageId);
+									void send(id, p.text, p.images);
+								}}
+								onDismiss={() => dismissPending(id, p.clientMessageId)}
+							/>
+						))}
+					</div>
 				</div>
-			</div>
-			{!pinned ? (
+				{/* Codex's Scroll to bottom: a 32px round button over the composer, faded out while pinned. The negative
+				    margin pulls it and the composer 1rem over the transcript's faded tail. */}
+				<div className="relative -mt-4">
+					<Tooltip content="Scroll to bottom">
+						<Button
+							variant="outline"
+							size="lg"
+							uniform
+							pill
+							aria-label="Scroll to bottom"
+							tabIndex={pinned ? -1 : 0}
+							onClick={() => setPinned(true)}
+							className={`absolute -top-14 left-1/2 -translate-x-1/2 bg-surface text-secondary transition-opacity duration-150 ${pinned ? "pointer-events-none opacity-0" : "opacity-100"}`}
+						>
+							<ArrowDown size={20} className="text-ink" />
+						</Button>
+					</Tooltip>
+				</div>
+				{/* A request takes the composer's place, as in Codex; the composer stays mounted so a draft survives. */}
+				{/* Positioned so it paints over the transcript it overlaps. */}
 				<div className="relative">
-					<button
-						type="button"
-						onClick={() => setPinned(true)}
-						className="absolute -top-12 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-line-strong bg-elevated px-3 py-1 text-[12px] text-muted shadow hover:text-ink"
-					>
-						<ArrowDown size={12} /> Jump to latest
-					</button>
+					{asking?.method === "item/toolCall/requestApproval" ? (
+						<ApprovalCard key={String(asking.id)} threadId={id} approval={asking} cwd={cwd} />
+					) : asking?.method === "ui/dialog" ? (
+						<DialogCard key={String(asking.id)} threadId={id} dialog={asking} />
+					) : asking?.method === "item/toolCall/requestUserInput" ? (
+						<QuestionsCard key={String(asking.id)} threadId={id} request={asking} />
+					) : null}
+					<div className={asking ? "hidden" : undefined}>
+						<Composer threadId={id} />
+					</div>
+				</div>
+			</div>
+			{panelShown && view ? (
+				<div
+					className="kc-panel-slot flex shrink-0"
+					data-open={panelOpen || undefined}
+					data-enter={panelShown === "opened" || undefined}
+					inert={!panelOpen}
+					onTransitionEnd={(e) => {
+						if (e.target === e.currentTarget && !panelOpen) setPanelShown(false);
+					}}
+				>
+					<SidePanel id={id} />
 				</div>
 			) : null}
-			{/* A request takes the composer's place, as in Codex; the composer stays mounted so a draft survives. */}
-			{view?.approvals[0] ? (
-				<ApprovalCard key={String(view.approvals[0].id)} threadId={id} approval={view.approvals[0]} cwd={cwd} />
-			) : null}
-			<div className={view?.approvals[0] ? "hidden" : undefined}>
-				<Composer threadId={id} />
-			</div>
 		</div>
 	);
 }
