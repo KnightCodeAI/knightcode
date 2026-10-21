@@ -25,6 +25,9 @@ const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
 	// Sign in with ChatGPT: the subscription's shared usage limit, which resets
 	// after hours rather than seconds.
 	"subscription_sharing_usage_limit_exceeded",
+	// Sign in with ChatGPT on a ChatGPT Business plan: a usage limit set by the
+	// workspace admin. Only the admin can raise it.
+	"subscription_sharing_workplace_individual_usage_limit_exceeded",
 ]);
 
 const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
@@ -92,6 +95,9 @@ const RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
 	"stream ended before message_stop",
 	"stream ended before a terminal response event",
 	"http2 request did not get a response",
+	// Codex CLI mid-stream disconnect, relayed by proxies that wrap the Codex CLI,
+	// e.g. "stream disconnected before completion: stream closed before response.completed".
+	"stream disconnected before completion",
 	// Node ERR_HTTP2_STREAM_CANCEL: the HTTP/2 session died before the request was
 	// sent, e.g. after the Bedrock SDK's 5-minute session timeout.
 	"pending stream has been canceled",
