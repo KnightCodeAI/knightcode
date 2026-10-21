@@ -268,7 +268,7 @@ export async function gitCommit(
 		const putBack = async (hookOwned = false) => {
 			if (!original || original === before.index) return;
 			if (!hookOwned && (await indexTree(repo, ctx.signal)) !== before.index) return;
-			if (saved) await restoreIndex(repo, saved, ctx.signal);
+			if (saved) await restoreIndex(repo, saved);
 			else await git(repo, ["read-tree", original]);
 		};
 		// The repository lock only, not the checkout: a turn that started meanwhile must not stop the user's index
@@ -305,6 +305,7 @@ export async function gitCommit(
 					await putBack();
 					throw conflict("concurrentChange", "the checkout changed while the commit message was written");
 				}
+				// Killed (shutdown, timeout): no commit either. The signal is spent, so the saved copy goes back directly.
 				const result = await runGit(repo, ["commit", "-q", "-F", "-"], {
 					input: message,
 					// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
@@ -312,6 +313,11 @@ export async function gitCommit(
 					signal: ctx.signal,
 					// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound allows.
 					timeoutMs: 300_000,
+				}).catch(async (error: unknown) => {
+					if (original !== before.index)
+						if (saved) await restoreIndex(repo, saved).catch(() => {});
+						else if (original) await git(repo, ["read-tree", original]).catch(() => {});
+					throw error;
 				});
 				if (result.code !== 0) {
 					// A hook or signing refused it: no commit, so the user's staging goes back.
