@@ -610,6 +610,8 @@ export const ClientRequests = {
 		}),
 		result: Obj({
 			scope: DiffScope,
+			/** The repository's root: `files` paths are relative to it, not to the thread's cwd. */
+			root: Str,
 			files: Type.Array(DiffFile),
 			filesOmitted: Type.Optional(Num),
 			untrackedSkipped: Type.Optional(Num),

@@ -298,7 +298,9 @@ async function filterOverrides(cwd: string, signal?: AbortSignal): Promise<Recor
 export async function runGit(at: string | Repo, args: string[], options: GitOptions = {}): Promise<ProcessResult> {
 	const { internal, noFilters, ...rest } = options;
 	const cwd = typeof at === "string" ? at : at.root;
-	if (typeof at !== "string") rest.signal ??= at.signal;
+	// A caller's own signal adds to the repository's shutdown signal; it never replaces it.
+	if (typeof at !== "string" && at.signal)
+		rest.signal = rest.signal && rest.signal !== at.signal ? AbortSignal.any([rest.signal, at.signal]) : at.signal;
 	const prefix = ["-c", "core.quotepath=false"];
 	if (internal) prefix.push("-c", `core.hooksPath=${WIN ? "NUL" : "/dev/null"}`, "-c", "core.fsmonitor=");
 	const env = noFilters ? { ...(await filterOverrides(cwd, rest.signal)), ...rest.env } : rest.env;

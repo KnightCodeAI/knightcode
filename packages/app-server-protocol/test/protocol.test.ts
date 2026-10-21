@@ -49,7 +49,7 @@ const comment = { scope: "uncommitted", path: "a.txt", side: "new", startLine: 2
 const environment = {
 	name: "dev",
 	setup: { default: "bun install", windows: "bun install --no-save" },
-	cleanup: { default: "rm -rf node_modules" },
+	cleanup: { default: 'rm -rf "$KNIGHTCODE_WORKTREE_PATH/.cache"' },
 	actions: [{ name: "Test", icon: "play", command: { default: "bun test" } }],
 };
 const diffFile = {
@@ -202,7 +202,14 @@ const requestResults: Record<string, unknown> = {
 	"worktree/delete": { snapshot: "4567cdef" },
 	"environment/list": { environments: [environment], trusted: true },
 	"environment/save": {},
-	"thread/diff/read": { scope: "lastTurn", files: [diffFile], filesOmitted: 0, untrackedSkipped: 0, turnId: "m1" },
+	"thread/diff/read": {
+		scope: "lastTurn",
+		root: "/repo",
+		files: [diffFile],
+		filesOmitted: 0,
+		untrackedSkipped: 0,
+		turnId: "m1",
+	},
 	"thread/diff/revert": { paths: ["a.txt"] },
 	"git/status": {
 		branch: "main",

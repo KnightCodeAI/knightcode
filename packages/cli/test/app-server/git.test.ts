@@ -1,13 +1,4 @@
-import {
-	chmodSync,
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readFileSync,
-	realpathSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -25,15 +16,17 @@ import {
 } from "../../src/app-server/git.ts";
 import { readDiff } from "../../src/app-server/diff.ts";
 import { checkoutState, makeRepo, sh, write } from "./fixtures/git-repo.ts";
+import { cleanupServers, tempDir } from "./harness.ts";
 
 const saved = { ...process.env };
-afterEach(() => {
+afterEach(async () => {
 	for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
 	Object.assign(process.env, saved);
+	await cleanupServers();
 });
 
 function repoDir() {
-	const dir = mkdtempSync(join(tmpdir(), "kc-git-"));
+	const dir = tempDir("kc-git-");
 	makeRepo(dir);
 	return dir;
 }
@@ -108,13 +101,13 @@ test("pathspecs are literal", async () => {
 });
 
 test("outside a work tree repoOf is undefined; a subdirectory has a prefix; a linked worktree shares the common dir", async () => {
-	expect(await repoOf(mkdtempSync(join(tmpdir(), "kc-nogit-")))).toBeUndefined();
+	expect(await repoOf(tempDir("kc-nogit-"))).toBeUndefined();
 	const dir = repoDir();
 	write(dir, "pkg/x.txt", "x");
 	sh(dir, "add", "-A");
 	sh(dir, "commit", "-q", "-m", "pkg");
 	expect((await repoOf(join(dir, "pkg")))?.prefix).toBe("pkg");
-	const linked = join(mkdtempSync(join(tmpdir(), "kc-wt-")), "w");
+	const linked = join(tempDir("kc-wt-"), "w");
 	sh(dir, "worktree", "add", "-q", linked);
 	const [main, wt] = [(await repoOf(dir))!, (await repoOf(linked))!];
 	expect(wt.commonDir).toBe(main.commonDir);
@@ -140,7 +133,7 @@ test("withRepoLock runs one operation per repository at a time, in order", async
 });
 
 test("aborting a process ends the call within its bound; POSIX confirms the whole group gone", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "kc-proc-"));
+	const dir = tempDir("kc-proc-");
 	const pidFile = join(dir, "child.pid");
 	const [command, args] =
 		process.platform === "win32"
@@ -180,14 +173,14 @@ test("the fixture ignores an inherited object directory and global hooks", async
 	const other = repoDir();
 	const objects = () => sh(other, "count-objects", "-v");
 	const before = objects();
-	const hooks = mkdtempSync(join(tmpdir(), "kc-hooks-"));
+	const hooks = tempDir("kc-hooks-");
 	const marker = join(hooks, "marker");
 	writeFileSync(join(hooks, "post-commit"), `#!/bin/sh\necho ran > '${marker.replace(/\\/g, "/")}'\n`, { mode: 0o755 });
 	const globalConfig = join(hooks, "gitconfig");
 	writeFileSync(globalConfig, `[core]\n\thooksPath = ${hooks.replace(/\\/g, "/")}\n`);
 	process.env.GIT_OBJECT_DIRECTORY = join(other, ".git", "objects");
 	process.env.GIT_CONFIG_GLOBAL = globalConfig;
-	const dir = mkdtempSync(join(tmpdir(), "kc-git-"));
+	const dir = tempDir("kc-git-");
 	makeRepo(dir);
 	expect(objects()).toBe(before);
 	expect(existsSync(marker)).toBe(false);
@@ -195,7 +188,7 @@ test("the fixture ignores an inherited object directory and global hooks", async
 });
 
 test("checkoutState handles a fresh repository and an unborn branch with a staged file", () => {
-	const dir = mkdtempSync(join(tmpdir(), "kc-git-"));
+	const dir = tempDir("kc-git-");
 	sh(dir, "init", "-q", "-b", "main");
 	const fresh = checkoutState(dir);
 	expect(fresh.head).toBeNull();
@@ -253,7 +246,7 @@ test("an empty patch applies as a no-op without starting git", async () => {
 });
 
 test("stderr is kept as a bounded tail", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "kc-proc-"));
+	const dir = tempDir("kc-proc-");
 	const result = await runProcess(
 		process.execPath,
 		["-e", "process.stderr.write('x'.repeat(5 * 1024 * 1024) + 'END')"],
@@ -278,7 +271,7 @@ test("stdout past maxStdoutBytes kills the process and throws OutputTooLarge", a
 }, 30_000);
 
 test("a descendant that outlives its parent: POSIX kills and confirms it; Windows reports unconfirmed within the bound", async () => {
-	const dir = mkdtempSync(join(tmpdir(), "kc-proc-"));
+	const dir = tempDir("kc-proc-");
 	const pidFile = join(dir, "grandchild.pid");
 	// The grandchild inherits the child's stdout, so the child's `close` never fires on its own.
 	const child = [
@@ -313,7 +306,7 @@ test("a descendant that outlives its parent: POSIX kills and confirms it; Window
 
 test("hostile diff environment and config do not change machine patches", async () => {
 	const lines = (changed: string) => ["1", "2", "3", changed, "5", "6", "7", ""].join("\n");
-	const dir = mkdtempSync(join(tmpdir(), "kc-git-"));
+	const dir = tempDir("kc-git-");
 	makeRepo(dir, { "a.txt": lines("4"), "b.txt": lines("4") });
 	mkdirSync(join(dir, "cfg"));
 	writeFileSync(join(dir, "cfg", "order"), "b.txt\na.txt\n");

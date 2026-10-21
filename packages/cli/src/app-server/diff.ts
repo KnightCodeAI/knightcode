@@ -205,7 +205,7 @@ export async function defaultBranch(repo: Repo): Promise<string | undefined> {
 export async function scopeTrees(
 	thread: LoadedThread,
 	repo: Repo,
-	selector: { scope: DiffScope; against?: string; commit?: string },
+	selector: { scope: DiffScope; against?: string; commit?: string; signal?: AbortSignal },
 ): Promise<ScopeTrees> {
 	switch (selector.scope) {
 		case "lastTurn": {
@@ -218,11 +218,11 @@ export async function scopeTrees(
 			return { from: record.before, to: record.after, turnId: record.turnId };
 		}
 		case "uncommitted": {
-			const { tree, untrackedSkipped } = await workingTree(repo);
+			const { tree, untrackedSkipped } = await workingTree(repo, selector.signal);
 			return { from: await headTree(repo), to: tree, untrackedSkipped };
 		}
 		case "unstaged": {
-			const { tree, untrackedSkipped } = await workingTree(repo);
+			const { tree, untrackedSkipped } = await workingTree(repo, selector.signal);
 			return { from: await indexTree(repo), to: tree, untrackedSkipped };
 		}
 		case "staged":
@@ -248,7 +248,7 @@ export async function scopeTrees(
 			if (!base) throw new AppServerError("invalidParams", `no commit ${against}`);
 			const mergeBase = await runGit(repo, ["merge-base", base, "HEAD"]);
 			if (mergeBase.code !== 0) throw new AppServerError("invalidParams", `no merge base with ${against}`);
-			const { tree, untrackedSkipped } = await workingTree(repo);
+			const { tree, untrackedSkipped } = await workingTree(repo, selector.signal);
 			return {
 				from: await treeOf(repo, mergeBase.stdout.toString("utf8").trim()),
 				to: tree,
@@ -496,16 +496,19 @@ export async function readThreadDiff(
 	repo: Repo,
 	params: ParamsOf<"thread/diff/read">,
 	budgets: DiffBudgets,
+	signal?: AbortSignal,
 ): Promise<ResultOf<"thread/diff/read">> {
 	const scope = params.scope ?? "uncommitted";
-	const trees = await scopeTrees(thread, repo, { scope, against: params.against, commit: params.commit });
+	const trees = await scopeTrees(thread, repo, { scope, against: params.against, commit: params.commit, signal });
 	const { files, filesOmitted } = await readDiff(repo, trees, {
 		context: params.context ?? 3,
 		ignoreWhitespace: params.ignoreWhitespace,
 		budgets,
+		signal,
 	});
 	return {
 		scope,
+		root: repo.root,
 		files,
 		...(filesOmitted ? { filesOmitted } : {}),
 		...(trees.untrackedSkipped ? { untrackedSkipped: trees.untrackedSkipped } : {}),
@@ -599,7 +602,8 @@ export async function composeReview(
 			`\`${comment.path}\` ${range} (${comment.side}):\n\`\`\`\n${quoted.join("\n")}\n\`\`\`\n${comment.body}`,
 		);
 	}
-	const composed = `Review comments on the changes:\n\n${blocks.join("\n\n")}\n\n${text}`;
+	// The user's text leads: titles (listings, resume pickers) take the first line of the first message.
+	const composed = `${text ? `${text}\n\n` : ""}Review comments on the changes:\n\n${blocks.join("\n\n")}`;
 	if (Buffer.byteLength(composed) > COMPOSED_MAX_BYTES) throw invalid("the review comments quote more than 256 KiB");
 	return composed;
 }
@@ -709,5 +713,8 @@ export async function revertDiff(
 	const applied = await machineApply(repo, patch, { reverse });
 	if (applied.code !== 0)
 		throw conflict("patchFailed", "the change no longer applies", { paths, output: applied.stderr });
+	// Uncommitted is HEAD to the working tree: a whole file goes back to HEAD in the index too, or its staged version
+	// would stay and a later commit would bring back what was reverted. A hunk leaves the index alone.
+	if (scope === "uncommitted" && params.hunkId === undefined) await git(repo, ["reset", "-q", "--", ...paths]);
 	return { paths: target.map((e) => e.path) };
 }

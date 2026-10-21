@@ -8,7 +8,7 @@ import { type NameStatus, splitPatch } from "../../src/app-server/diff.ts";
 import { attachJsonlLineReader } from "../../src/modes/rpc/jsonl.ts";
 import { makeRepo, sh, write } from "./fixtures/git-repo.ts";
 import { type RepoServer, repoServer, worktreeThread } from "./fixtures/worktree-server.ts";
-import { cleanupServers, startServer } from "./harness.ts";
+import { cleanupServers, startServer, stopChild, tempDir } from "./harness.ts";
 
 afterEach(cleanupServers);
 
@@ -71,7 +71,7 @@ test("a worktree thread's branch diff ignores commits made in the main checkout"
 
 test("branch compares a local thread with its upstream, with an explicit branch, and refuses with neither", async () => {
 	const s = await repoServer();
-	const origin = join(mkdtempSync(join(tmpdir(), "kc-origin-")), "o.git");
+	const origin = join(tempDir("kc-origin-"), "o.git");
 	sh(s.cwd, "clone", "-q", "--bare", s.cwd, origin);
 	sh(s.cwd, "remote", "add", "origin", origin);
 	sh(s.cwd, "fetch", "-q", "origin");
@@ -186,7 +186,7 @@ test("a worktree that carried local changes shows them before its first turn", a
 test("lastTurn with no recorded turn is empty", async () => {
 	const s = await repoServer();
 	const thread = await localThread(s);
-	expect(await read(s, thread.id, { scope: "lastTurn" })).toEqual({ scope: "lastTurn", files: [] });
+	expect(await read(s, thread.id, { scope: "lastTurn" })).toEqual({ scope: "lastTurn", root: s.root, files: [] });
 });
 
 test("outside git a diff read answers notGitRepo", async () => {
@@ -332,7 +332,7 @@ test("a diff past the serialized budget over real stdio keeps whole early files 
 		send({ id: 4, method: "thread/diff/read", params: { threadId, scope: "staged" } });
 		expect((await reply(4)).result).toMatchObject({ files: [] });
 	} finally {
-		child.kill();
+		await stopChild(child);
 		rmSync(agentDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 		rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 	}

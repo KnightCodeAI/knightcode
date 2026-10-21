@@ -1,11 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { fauxAssistantMessage, fauxText } from "@knightcode/ai";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { workspaceHooks } from "../../src/app-server/workspaces.ts";
 import { checkoutState, makeRepo, sh, write } from "./fixtures/git-repo.ts";
-import { cleanupServers, startServer } from "./harness.ts";
+import { cleanupServers, startServer, tempDir } from "./harness.ts";
 import { repoServer, say, worktreeThread } from "./fixtures/worktree-server.ts";
 
 afterEach(cleanupServers);
@@ -92,7 +93,7 @@ test("creation runs no filter or hook, and a failure inside it rolls back comple
 		"b.md": "doc\n",
 		".gitattributes": "*.txt filter=x\n*.md filter=x=y\n",
 	});
-	const markers = mkdtempSync(join(tmpdir(), "kc-markers-"));
+	const markers = tempDir("kc-markers-");
 	const marker = (name: string) => join(markers, name).replace(/\\/g, "/");
 	sh(s.cwd, "config", "filter.x.smudge", `sh -c 'echo x >> "${marker("x")}"; cat'`);
 	sh(s.cwd, "config", "filter.x=y.smudge", `sh -c 'echo xy >> "${marker("xy")}"; cat'`);
@@ -134,6 +135,17 @@ test("carryLocalChanges brings the checkout's edits and untracked files as uncom
 	});
 });
 
+test("carried changes over 64 MiB as a patch are invalidParams saying why, and create nothing", async () => {
+	const s = await repoServer();
+	// Random bytes: the binary patch deflates them, so only incompressible content passes the cap.
+	writeFileSync(join(s.cwd, "big.bin"), randomBytes(66 * 1024 * 1024));
+	await expect(worktreeThread(s, { carryLocalChanges: true })).rejects.toMatchObject({
+		code: "invalidParams",
+		message: expect.stringContaining("64 MiB"),
+	});
+	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toEqual([]);
+}, 60_000);
+
 test("an unknown model answers invalidParams and keeps the created worktree", async () => {
 	const s = await repoServer();
 	const error = await s.a.client
@@ -173,14 +185,14 @@ test("the worktree inherits the project's trust decision", async () => {
 
 test("worktrees.root moves new worktrees; fetchBeforeCreate brings an upstream commit in", async () => {
 	const s = await repoServer();
-	const root = realpathSync.native(mkdtempSync(join(tmpdir(), "kc-root-")));
+	const root = realpathSync.native(tempDir("kc-root-"));
 	writeFileSync(join(s.agentDir, "settings.json"), JSON.stringify({ worktrees: { root, fetchBeforeCreate: true } }));
-	const origin = join(mkdtempSync(join(tmpdir(), "kc-origin-")), "origin.git");
+	const origin = join(tempDir("kc-origin-"), "origin.git");
 	sh(s.cwd, "clone", "-q", "--bare", s.cwd, origin);
 	sh(s.cwd, "remote", "add", "origin", origin);
 	sh(s.cwd, "fetch", "-q", "origin");
 	sh(s.cwd, "branch", "-q", "--set-upstream-to=origin/main", "main");
-	const other = join(mkdtempSync(join(tmpdir(), "kc-other-")), "c");
+	const other = join(tempDir("kc-other-"), "c");
 	sh(s.cwd, "clone", "-q", origin, other);
 	const push = (name: string) => {
 		for (const [key, value] of [
@@ -196,6 +208,8 @@ test("worktrees.root moves new worktrees; fetchBeforeCreate brings an upstream c
 		return sh(other, "rev-parse", "HEAD");
 	};
 	const first = push("first.txt");
+	// The fetch's ref lookup takes a revision, never an option.
+	await expect(worktreeThread(s, { baseRef: "--git-dir=/elsewhere" })).rejects.toMatchObject({ code: "invalidParams" });
 	const remote = await worktreeThread(s, { baseRef: "origin/main" });
 	expect(sh(remote.thread.cwd, "rev-parse", "HEAD")).toBe(first);
 	expect(remote.workspace.path.startsWith(root)).toBe(true);

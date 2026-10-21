@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, realpathSync, renameSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import { afterEach, expect, test } from "vitest";
@@ -96,6 +96,16 @@ test("a main checkout with local changes refuses; an unrelated ignored file does
 	write(s.cwd, "debug.log", "keep me\n");
 	await handoff(s, thread.id, "local");
 	expect(readFileSync(join(s.cwd, "debug.log"), "utf8")).toBe("keep me\n");
+});
+
+test("a staged rename in the main checkout names both its paths", async () => {
+	const s = await repoServer({ "a.txt": "a\n" });
+	const { thread, path } = await started(s);
+	write(path, "a.txt", "worktree\n");
+	sh(s.cwd, "mv", "a.txt", "moved.txt");
+	await expect(handoff(s, thread.id, "local")).rejects.toMatchObject({
+		data: { reason: "localChanges", paths: ["moved.txt", "a.txt"] },
+	});
 });
 
 test("an ignored file the handoff would overwrite refuses, naming it", async () => {
@@ -229,6 +239,45 @@ test("an unknown environment is invalidParams before any worktree is created", a
 		code: "invalidParams",
 	});
 	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toEqual([]);
+});
+
+test("a handoff refused for a busy main checkout or a merge creates no worktree", async () => {
+	const held = createHeldTurn();
+	const s = await repoServer(undefined, { extraExtensions: [{ name: "held", factory: held.extension }] });
+	const { thread } = await s.a.client.request("thread/start", { cwd: s.cwd });
+	await say(s, thread.id);
+	const { thread: busy } = await s.a.client.request("thread/start", { cwd: s.cwd, approvalMode: "fullAccess" });
+	s.faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("hold", {})], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("ok")]),
+	]);
+	await s.a.client.request("turn/start", { threadId: busy.id, text: "hold" });
+	await held.entered;
+	try {
+		// Twice: a retry must not leave a second worktree either.
+		for (let i = 0; i < 2; i++)
+			await expect(handoff(s, thread.id, "worktree")).rejects.toMatchObject({ code: "turnInProgress" });
+	} finally {
+		held.release();
+	}
+	await s.a.waitFor("turn/completed");
+	// git refuses to write a pseudoref; the file is what marks a merge in progress.
+	writeFileSync(
+		sh(s.cwd, "rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD"),
+		sh(s.cwd, "rev-parse", "HEAD"),
+	);
+	await expect(handoff(s, thread.id, "worktree")).rejects.toMatchObject({ data: { reason: "operationInProgress" } });
+	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toEqual([]);
+});
+
+test("a second handoff of a thread while one runs is turnInProgress and builds no second worktree", async () => {
+	const s = await repoServer();
+	const { thread } = await s.a.client.request("thread/start", { cwd: s.cwd });
+	await say(s, thread.id);
+	const first = handoff(s, thread.id, "worktree");
+	await expect(handoff(s, thread.id, "worktree")).rejects.toMatchObject({ code: "turnInProgress" });
+	await first;
+	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toHaveLength(1);
 });
 
 test("a handed-off worktree thread resumes in the main checkout after a restart and lists as local", async () => {

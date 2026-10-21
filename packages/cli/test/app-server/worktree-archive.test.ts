@@ -1,13 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { workspaceHooks } from "../../src/app-server/workspaces.ts";
 import { makeRepo, sh, write } from "./fixtures/git-repo.ts";
 import { createGate } from "./fixtures/gate-extension.ts";
 import { type RepoServer, repoServer, say, worktreeThread } from "./fixtures/worktree-server.ts";
-import { cleanupServers, startServer } from "./harness.ts";
+import { cleanupServers, startServer, tempDir } from "./harness.ts";
 
 afterEach(cleanupServers);
 
@@ -238,9 +237,9 @@ test("worktree/list shows each worktree with its threads; worktree/delete refuse
 
 test("the user's own worktrees and stale registrations survive every deletion and prune", async () => {
 	const s = await repoServer();
-	const own = join(mkdtempSync(join(tmpdir(), "kc-own-")), "own");
+	const own = join(tempDir("kc-own-"), "own");
 	sh(s.cwd, "worktree", "add", "-q", "--detach", own);
-	const stale = join(mkdtempSync(join(tmpdir(), "kc-stale-")), "stale");
+	const stale = join(tempDir("kc-stale-"), "stale");
 	sh(s.cwd, "worktree", "add", "-q", "--detach", stale);
 	rmSync(stale, { recursive: true, force: true });
 	settings(s, { keep: 1 });
@@ -258,7 +257,7 @@ test("a manifest whose path became another repository's worktree is notManaged a
 	const { thread, path } = await saved(s);
 	await s.threads.unload(thread.id);
 	sh(s.cwd, "worktree", "remove", "--force", path);
-	const other = mkdtempSync(join(tmpdir(), "kc-other-"));
+	const other = tempDir("kc-other-");
 	makeRepo(other);
 	sh(other, "worktree", "add", "-q", "--detach", path);
 	expect((await archive(s, thread.id)).worktree).toEqual({ deleted: false, reason: "notManaged" });
@@ -283,7 +282,7 @@ test("nested repositories are never deleted: archive skips, worktree/delete refu
 		const { thread, path } = await saved(s);
 		const nested = join(path, kind === "init-inside" ? "inner" : "nested");
 		if (kind === "submodule" || kind === "rm-cached") {
-			const library = mkdtempSync(join(tmpdir(), "kc-lib-"));
+			const library = tempDir("kc-lib-");
 			makeRepo(library, { "lib.txt": "lib\n" });
 			sh(path, "-c", "protocol.file.allow=always", "submodule", "add", "-q", library, "nested");
 			write(nested, "lib.txt", "edited inside\n");

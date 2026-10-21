@@ -112,7 +112,16 @@ test("a declined tool call snapshots nothing", async () => {
 	s.a.client.onRequest("item/toolCall/requestApproval", async () => ({ decision: "decline" }));
 	const { thread } = await s.a.client.request("thread/start", { cwd: s.cwd, approvalMode: "ask" });
 	s.faux.setResponses(write("echo x > x.txt"));
-	await turn(s, thread.id);
+	// Nothing is written either way, so only the snapshot phases tell whether one ran.
+	const phases: string[] = [];
+	const original = turnChangeHooks.afterSnapshot;
+	turnChangeHooks.afterSnapshot = async (phase) => void phases.push(phase);
+	try {
+		await turn(s, thread.id);
+	} finally {
+		turnChangeHooks.afterSnapshot = original;
+	}
+	expect(phases).toEqual([]);
 	expect(entries(s, thread.id)).toEqual([]);
 });
 

@@ -575,9 +575,10 @@ Diagnostics observe the shared server, not only this connection.
 ### `thread/diff/read`
 
 Params: `{threadId, scope?, against?, commit?, context?, ignoreWhitespace?}`.
-Result: `{scope, files, filesOmitted?, untrackedSkipped?, turnId?, stale?,
+Result: `{scope, root, files, filesOmitted?, untrackedSkipped?, turnId?, stale?,
 against?}`. `files` are `{path, oldPath?, status, binary, additions, deletions,
-tooLarge?, hunks}`; each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
+tooLarge?, hunks}`, their paths relative to the repository's `root` (not the
+thread's cwd, which can be a subdirectory of it); each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
 `"\"` prefix. `committed` needs `commit`; `branch` compares with `against`,
 else the worktree's base, the upstream or the default branch, and echoes it.
 More than 500 untracked files are counted in `untrackedSkipped` and left out.
@@ -667,7 +668,7 @@ it (names unique, at most 50). An untrusted project's scripts never run. See
 [Settings](settings.md#worktrees).
 
 ```json
-{"id":25,"method":"environment/save","params":{"cwd":"/p","environments":[{"name":"node","setup":{"default":"npm ci"}}]}}
+{"id":25,"method":"environment/save","params":{"cwd":"/p","environments":[{"name":"node","setup":{"default":"cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci"}}]}}
 ```
 
 ### `git/*`

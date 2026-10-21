@@ -224,8 +224,15 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 			const review = entry.data as TurnComments;
 			reviews.set(review.itemId, review);
 		} else if (entry.customType === TURN_DIFF_ENTRY) {
-			const { turnId, files } = entry.data as TurnDiffRecord;
-			if (files.every((f) => typeof f === "object")) changed.set(turnId, files);
+			// Older records hold bare paths; a malformed one is skipped rather than failing the whole thread.
+			const { turnId, files } = (entry.data ?? {}) as Partial<TurnDiffRecord>;
+			const valid = (f: unknown): f is TurnFile =>
+				typeof f === "object" &&
+				f !== null &&
+				typeof (f as TurnFile).path === "string" &&
+				typeof (f as TurnFile).additions === "number" &&
+				typeof (f as TurnFile).deletions === "number";
+			if (typeof turnId === "string" && Array.isArray(files) && files.every(valid)) changed.set(turnId, files);
 		}
 	}
 	const result = turns.filter((t) => t.turn.items.length > 0);

@@ -49,7 +49,11 @@ export function desktopDialogs(thread: LoadedThread): ExtensionUIContext & Quest
 					{ signal },
 				)
 			)?.answers,
-		select: async (title, options, opts) => (await ask({ kind: "select", title, options }, opts))?.value,
+		// Only an offered option is a choice: anything else (a stale or buggy client) is a cancel.
+		select: async (title, options, opts) => {
+			const value = (await ask({ kind: "select", title, options }, opts))?.value;
+			return value !== undefined && options.includes(value) ? value : undefined;
+		},
 		confirm: async (title, message, opts) => (await ask({ kind: "confirm", title, message }, opts))?.confirmed === true,
 		input: async (title, placeholder, opts) =>
 			(await ask({ kind: "input", title, ...(placeholder ? { placeholder } : {}) }, opts))?.value,

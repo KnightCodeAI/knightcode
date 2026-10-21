@@ -19,7 +19,7 @@ import { attachJsonlLineReader } from "../../src/modes/rpc/jsonl.ts";
 import { getShellConfig } from "../../src/utils/shell.ts";
 import { makeRepo, sh, write } from "./fixtures/git-repo.ts";
 import { type RepoServer, repoServer, worktreeThread } from "./fixtures/worktree-server.ts";
-import { cleanupServers } from "./harness.ts";
+import { cleanupServers, stopChild, tempDir } from "./harness.ts";
 
 afterEach(cleanupServers);
 
@@ -125,7 +125,7 @@ test(".worktreeinclude skips a file the base commit would not ignore", async () 
 });
 
 test(".worktreeinclude never creates or writes anything through a link in the destination", async () => {
-	const outside = mkdtempSync(join(tmpdir(), "kc-outside-"));
+	const outside = tempDir("kc-outside-");
 	writeFileSync(join(outside, "keep.txt"), "keep");
 	const s = await repoServer({
 		".gitignore": "local.env\n",
@@ -201,7 +201,7 @@ test.skipIf(!bash)(
 );
 
 test.skipIf(!bash)("a setup through a stdin-transport shell runs the script", async () => {
-	const marker = mkdtempSync(join(tmpdir(), "kc-stdin-"));
+	const marker = tempDir("kc-stdin-");
 	const s = await repoServer(undefined, {
 		shellConfig: { shell: bash!.shell, args: ["-s"], commandTransport: "stdin" },
 	});
@@ -308,7 +308,7 @@ test.skipIf(!bash)(
 			expect(answer.error).toMatchObject({ code: "shuttingDown", data: { worktree: expect.any(String) } });
 			expect(await exited).toBe(0);
 		} finally {
-			child.kill();
+			await stopChild(child);
 			rmSync(agentDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 			rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 		}

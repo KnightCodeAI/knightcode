@@ -3630,6 +3630,7 @@
 				"type": "object",
 				"required": [
 					"scope",
+					"root",
 					"files"
 				],
 				"properties": {
@@ -3660,6 +3661,9 @@
 								"const": "branch"
 							}
 						]
+					},
+					"root": {
+						"type": "string"
 					},
 					"files": {
 						"type": "array",

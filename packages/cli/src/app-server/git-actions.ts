@@ -20,6 +20,7 @@ import {
 	type Repo,
 	runGit,
 	runProcess,
+	withRepoLock,
 } from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 import { validBranchName } from "./workspaces.ts";
@@ -232,26 +233,39 @@ export async function gitCommit(
 	repo: Repo,
 	params: ParamsOf<"git/commit">,
 	ctx: GitActionContext,
+	/** Runs the staging step; the caller holds the checkout for it (no turn starts while `git add` reads the files). */
+	staging: <T>(step: () => Promise<T>) => Promise<T> = (step) => withRepoLock(repo, step),
 ): Promise<ResultOf<"git/commit">> {
-	if (params.includeUnstaged !== false) await git(repo, ["add", "-A"], { signal: ctx.signal });
 	const capture = async () => ({
 		head: await optional(repo, ["rev-parse", "-q", "--verify", "HEAD"]),
 		ref: await optional(repo, ["symbolic-ref", "-q", "HEAD"]),
 		index: await indexTree(repo, ctx.signal),
 	});
-	const before = await capture();
-	const base = await headTree(repo);
+	// The repository lock is held for the git steps only, never across the model call writing the message.
+	const { before, base } = await staging(async () => {
+		if (params.includeUnstaged !== false) await git(repo, ["add", "-A"], { signal: ctx.signal });
+		return { before: await capture(), base: await headTree(repo) };
+	});
 	if (before.index === base) throw invalid("nothing to commit");
 	const message = params.message?.trim()
 		? params.message
 		: await generateMessage(thread, repo, base, before.index, ctx);
-	const now = await capture();
-	if (now.head !== before.head || now.ref !== before.ref || now.index !== before.index)
-		throw conflict("concurrentChange", "the checkout changed while the commit message was written");
-	const result = await runGit(repo, ["commit", "-q", "-F", "-"], { input: message, signal: ctx.signal });
-	if (result.code !== 0)
-		throw new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, { output: result.stderr });
-	return { commit: await git(repo, ["rev-parse", "HEAD"]), message };
+	return withRepoLock(repo, async () => {
+		const now = await capture();
+		if (now.head !== before.head || now.ref !== before.ref || now.index !== before.index)
+			throw conflict("concurrentChange", "the checkout changed while the commit message was written");
+		const result = await runGit(repo, ["commit", "-q", "-F", "-"], {
+			input: message,
+			signal: ctx.signal,
+			// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound allows.
+			timeoutMs: 300_000,
+		});
+		if (result.code !== 0)
+			throw new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, { output: result.stderr });
+		// A commit-msg hook may have rewritten the message: answer with what was committed.
+		const commit = await git(repo, ["rev-parse", "HEAD"]);
+		return { commit, message: (await git(repo, ["log", "-1", "--format=%B", commit])).trimEnd() };
+	});
 }
 
 export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<ResultOf<"git/push">> {
