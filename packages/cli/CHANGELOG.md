@@ -1,5 +1,59 @@
 # @knightcodeai/cli
 
+## 0.19.0
+
+### Added
+
+- Added worktree threads to the app server: `thread/start` and `thread/fork` can run a thread in a detached git worktree, with per-project environments whose setup and cleanup scripts run for each worktree.
+
+- Added scoped thread diffs to the app server (`thread/diff/read` and `thread/diff/revert`, with review comments on `turn/start`) and `turn/diff/updated` notifications for the files a turn changed.
+
+- Added git actions to the app server: status, stage, unstage, commit with a generated message, push, branches, log and pull requests.
+
+- Added `thread/handoff` to the app server, which moves a thread and its uncommitted changes between its worktree and the main checkout.
+
+- Added `reapply` to the app server's `thread/diff/revert`, which applies the last turn's changes again after they were undone.
+
+- Added `item/toolCall/requestUserInput`, `ui/dialog` and `ui/notify` to the app server, so `ask_user`'s questions, the classifier gate's confirmation and plan review reach desktop clients instead of being skipped or blocked.
+
+- Added app server methods to configure tools, MCP servers and resources from a client: `tool/list`, `tool/settings/read` and `tool/settings/write` (the `/tools` settings), `mcp/list`, `mcp/update`, `mcp/add` and `mcp/remove`, and `resource/list` and `resource/set` (as `knightcode config`, without the always-on built-in extensions).
+
+### Changed
+
+- Changed provider requests to send a detailed User-Agent of the form knightcode/<version>, and, when install telemetry is on, attribution headers that name KnightCode on OpenRouter, NVIDIA, and OpenCode.
+
+- Changed the GitHub Copilot default model to GPT-6.1 Sol, as Copilot no longer offers GPT-5.4.
+
+- Changed the app server's `turn/diff/updated` to list each file with its net line totals for the turn, and read-back turns now carry the same list as `Turn.files`.
+
+- Changed the app server's `config/read` result to also return the default values and the settings files' paths.
+
+- Changed the default GitHub Copilot model to gpt-6.1-sol. Retired Copilot and Together models no longer get special context or reasoning overrides.
+
+### Fixed
+
+- Fixed session restore and tree navigation leaving out extension tools the transcript never recorded. Tools removed before a compaction stay inactive.
+
+- Fixed MCP configuration files that start with a UTF-8 BOM failing to load or save.
+
+- Fixed compaction of a split turn dropping custom summary instructions from the turn-prefix summary.
+
+- Fixed an empty API key being saved as a signed-in account.
+
+- Fixed files created or rewritten by the `write` tool reporting no diff to app server clients, so their edit summaries showed +0 -0.
+
+- Fixed Sign in with ChatGPT failing in the desktop app and other app server clients with "requires a device ID (UUID) for this installation".
+
+- Fixed pasted API keys, account IDs and redirect URLs keeping stray spaces or newlines.
+
+- Fixed a thread forked at the end of a turn reading that turn as interrupted in the app server.
+
+- Fixed mid-stream disconnects reported as "stream disconnected before completion" being treated as final. Those disconnects are retried.
+
+- Fixed ChatGPT Business workspace usage limits being retried. The error now tells you to ask a workspace admin to raise the limit.
+
+- Fixed file autocomplete treating regex metacharacters in the query as patterns. Characters such as [ and ( now match literally.
+
 ## 0.18.4
 
 ### Fixed
