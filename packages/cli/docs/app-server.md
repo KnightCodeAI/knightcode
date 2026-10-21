@@ -288,8 +288,8 @@ cancel. `serverRequest/cancelled` withdraws an outstanding request.
 A thread runs in a workspace: the user's checkout (`{mode: "local"}`), or a git
 worktree of its own (`{mode: "worktree"}`), as in the Codex desktop app.
 
-`thread/start {cwd, workspace: {mode: "worktree", baseRef?, carryLocalChanges?,
-environment?}}` creates a worktree on a **detached `HEAD`** at `baseRef` (default:
+`thread/start {cwd, workspace: {mode: "worktree", baseRef?, carryLocalChanges?, environment?}}`
+creates a worktree on a **detached `HEAD`** at `baseRef` (default:
 the checkout's `HEAD`) under `<worktrees.root>/<4 hex digits>/<repository name>`
 and runs the thread there, in the same subdirectory the `cwd` had. No branch is
 created until `git/branch/create` or a handoff makes one. `carryLocalChanges`
@@ -481,9 +481,9 @@ Diagnostics observe the shared server, not only this connection.
 ### `thread/diff/read`
 
 Params: `{threadId, scope?, against?, commit?, context?, ignoreWhitespace?}`.
-Result: `{scope, files, filesOmitted?, untrackedSkipped?, turnId?, stale?,
-against?}`. `files` are `{path, oldPath?, status, binary, additions, deletions,
-tooLarge?, hunks}`; each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
+Result: `{scope, files, filesOmitted?, untrackedSkipped?, turnId?, stale?, against?}`.
+`files` are `{path, oldPath?, status, binary, additions, deletions, tooLarge?, hunks}`;
+each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
 `"\"` prefix. `committed` needs `commit`; `branch` compares with `against`,
 else the worktree's base, the upstream or the default branch, and echoes it.
 More than 500 untracked files are counted in `untrackedSkipped` and left out.
@@ -555,8 +555,9 @@ into a new worktree instead) or `submodules`.
 
 ### `worktree/list` and `worktree/delete`
 
-`worktree/list {cwd?}` → `{worktrees: [{path, projectCwd, head?, branch?,
-threadIds, lastUsedAt, deleted}]}`, the managed worktrees (of `cwd`'s project
+`worktree/list {cwd?}` →
+`{worktrees: [{path, projectCwd, head?, branch?, threadIds, lastUsedAt, deleted}]}`,
+the managed worktrees (of `cwd`'s project
 when given). `worktree/delete {path}` → `{snapshot?}` deletes one after its
 snapshot. A worktree a thread is loaded in, or one holding a nested repository
 (an initialized submodule or a repository inside it), is never deleted: archive
@@ -590,8 +591,8 @@ first unless `includeUnstaged: false`; an empty message is written by the
 thread's model from the staged diff, outside the conversation, and the commit
 answers `concurrentChange` when the checkout changed meanwhile. The user's
 hooks run. `git/push` pushes the current branch with one explicit,
-non-forcing refspec and sets the upstream the first time. `git/pr/create
-{threadId, title?, body?, draft?}` runs `gh pr create` (`toolMissing` without
+non-forcing refspec and sets the upstream the first time.
+`git/pr/create {threadId, title?, body?, draft?}` runs `gh pr create` (`toolMissing` without
 `gh`). `git/branches`, `git/branch/create {name}` ("Create branch here"),
 `git/branch/switch {name}` (refused when it would overwrite local changes or an
 ignored file the branch tracks) and `git/log {limit?}` (the commits since the
