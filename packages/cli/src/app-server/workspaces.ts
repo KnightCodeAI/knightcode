@@ -498,10 +498,14 @@ async function create(input: CreateInput, sourceRepo: Repo): Promise<{ manifest:
 	} catch (error) {
 		if (error instanceof ProcessKillUnconfirmed)
 			throw new ProcessKillUnconfirmed(`${error.message}; the incomplete worktree is left at ${bucket}`);
-		// Nothing but git ran in the checkout, so it can go entirely (fresh signal: the original may be aborted).
-		if (registered)
-			await runGit(sourceRepo.root, ["worktree", "remove", "--force", path], { internal: true }).catch(() => {});
-		rmSync(bucket, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+		// Nothing but git ran in the checkout, so it can go entirely (fresh signal: the original may be aborted). Only a
+		// checkout git removed: one it could not remove (something holds or wrote to it) stays for recovery.
+		const removed = registered
+			? await runGit(sourceRepo.root, ["worktree", "remove", "--force", path], { internal: true }).catch(
+					() => undefined,
+				)
+			: { code: 0 };
+		if (removed?.code === 0) rmSync(bucket, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 		throw error;
 	}
 }
