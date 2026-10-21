@@ -1,11 +1,12 @@
 /**
  * One way to run git and other tools (§6): a scrubbed environment, literal pathspecs, argument arrays, a process
  * group per child with an observable kill, a per-repository mutation queue, temporary-index snapshots and the one
- * machine-patch helper every applied patch comes from. Nothing here ever writes the user's real index.
+ * machine-patch helper every applied patch comes from. Nothing here writes the user's real index but restoreIndex,
+ * which puts back the copy saveIndex took.
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, realpathSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, realpathSync, renameSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -450,6 +451,27 @@ async function withTemporaryIndex<T>(
 	} finally {
 		if (!keep) await rm(dir, { recursive: true, force: true });
 	}
+}
+
+/** A copy of the real index file, entries and flags (assume-unchanged, skip-worktree, intent-to-add) alike. */
+export async function saveIndex(repo: Repo, signal?: AbortSignal): Promise<string | undefined> {
+	const real = await git(repo, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { signal });
+	if (!existsSync(real)) return undefined;
+	const copy = join(await mkdtemp(join(tmpdir(), "kc-saved-index-")), "index");
+	copyFileSync(real, copy);
+	return copy;
+}
+
+/** Put a saved index back, by rename as git replaces its own index; the caller holds the repository lock. */
+export async function restoreIndex(repo: Repo, saved: string, signal?: AbortSignal): Promise<void> {
+	const real = await git(repo, ["rev-parse", "--path-format=absolute", "--git-path", "index"], { signal });
+	const next = `${real}.kc-restore`;
+	copyFileSync(saved, next);
+	renameSync(next, real);
+}
+
+export async function discardSavedIndex(saved: string | undefined): Promise<void> {
+	if (saved) await rm(dirname(saved), { recursive: true, force: true });
 }
 
 /** The tree `git add -A` would stage now, in a temporary copy of the index: flags kept, the real index untouched. */

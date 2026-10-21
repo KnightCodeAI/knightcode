@@ -680,6 +680,12 @@ export class ThreadManager {
 				// A handoff refused after it created a worktree takes that worktree back (only git and the setup script
 				// wrote there), so retries do not stack one per attempt; one git cannot remove is kept and named.
 				if (fresh && !moved) {
+					// Only while it holds no work: a failure after the changes were applied there (a manifest write
+					// that failed) leaves them nowhere else but the saved patch.
+					const status = await runGit(fresh.path, ["status", "--porcelain", "-z"], { internal: true }).catch(
+						() => undefined,
+					);
+					if (status?.code !== 0 || status.stdout.length > 0) throw keptWorktree(error, fresh);
 					const removed = await runGit(fresh.mainRoot, ["worktree", "remove", "--force", fresh.path], {
 						internal: true,
 					}).catch(() => undefined);

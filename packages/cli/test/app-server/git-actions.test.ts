@@ -256,16 +256,20 @@ test("a change during message generation answers concurrentChange and commits no
 	expect(log(s.cwd)).toBe("initial");
 });
 
-test("a commit a hook refuses puts back what the user had staged", async () => {
-	const s = await repoServer();
+test("a commit a hook refuses puts back what the user had staged, entry flags and all", async () => {
+	const s = await repoServer({ "flag.txt": "base\n" });
 	writeFileSync(join(s.cwd, ".git", "hooks", "pre-commit"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
 	const threadId = await local(s);
 	write(s.cwd, "a.txt", "staged\n");
 	sh(s.cwd, "add", "a.txt");
 	write(s.cwd, "b.txt", "unstaged\n");
+	// A flag on an entry survives too: the saved index comes back, not a tree rebuilt without flags.
+	sh(s.cwd, "update-index", "--assume-unchanged", "flag.txt");
+	write(s.cwd, "flag.txt", "my machine\n");
 	await expect(call(s, "git/commit", { threadId, message: "x" })).rejects.toMatchObject({ code: "internal" });
 	expect(staged(s.cwd)).toBe("a.txt");
 	expect(log(s.cwd)).toBe("initial");
+	expect(sh(s.cwd, "ls-files", "-v", "flag.txt")).toBe("h flag.txt");
 });
 
 test("an assume-unchanged file edited locally does not stop a commit of everything else", async () => {

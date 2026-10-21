@@ -159,6 +159,19 @@ test("undo after the user replaced a turn's directory with a file, or ignored it
 	expect(existsSync(join(s.cwd, "made.log"))).toBe(false);
 });
 
+test("after a turn that changed nothing, the last turn has no files and undo leaves the earlier turn alone", async () => {
+	const s = await repoServer();
+	const thread = await local(s);
+	s.faux.setResponses(bashTurn("echo made > made.txt"));
+	await turn(s, thread.id);
+	await s.a.waitFor("turn/diff/updated");
+	s.faux.setResponses([fauxAssistantMessage([fauxText("just talk")])]);
+	await turn(s, thread.id);
+	expect((await read(s, thread.id, { scope: "lastTurn" })).files).toEqual([]);
+	await expect(revert(s, thread.id, { scope: "lastTurn" })).rejects.toMatchObject({ code: "invalidParams" });
+	expect(existsSync(join(s.cwd, "made.txt"))).toBe(true);
+});
+
 test("reapplying the last turn needs every file as the undo left it, then restores the turn's files", async () => {
 	const s = await repoServer();
 	const thread = await local(s);
