@@ -26,6 +26,7 @@ import {
 	submodulePaths,
 } from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
+import { TURN_MARKER_TYPE } from "../extensions/turn-marker.ts";
 
 /** The custom entry a turn's change detection writes (Task 6): the working tree's content before and after the turn. */
 export const TURN_DIFF_ENTRY = "knightcode.turnDiff";
@@ -158,9 +159,14 @@ export async function workingTree(
 
 /** The newest turn change record on the thread's branch. */
 export function lastTurnDiff(entries: readonly SessionEntry[]): TurnDiffRecord | undefined {
+	// The latest turn's record only: after a turn that changed nothing, the one before it is not "the last turn".
+	// A turn's id is its marker entry's id (item-mapper.ts); a thread with no markers keeps its newest record.
+	const latest = entries.findLast((e) => e.type === "custom" && e.customType === TURN_MARKER_TYPE)?.id;
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i];
-		if (entry.type === "custom" && entry.customType === TURN_DIFF_ENTRY) return entry.data as TurnDiffRecord;
+		if (entry.type !== "custom" || entry.customType !== TURN_DIFF_ENTRY) continue;
+		const record = entry.data as TurnDiffRecord;
+		return latest === undefined || record.turnId === latest ? record : undefined;
 	}
 	return undefined;
 }

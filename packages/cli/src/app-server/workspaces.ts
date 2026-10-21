@@ -1177,12 +1177,17 @@ const IGNORED_WALK_LIMIT = 50_000;
 /**
  * Every `.git` under an ignored directory, by the filesystem alone (no git calls per level). node_modules is skipped:
  * package managers never leave a checkout there, and walking it would make every prune slow.
- * ponytail: past IGNORED_WALK_LIMIT directories the walk stops; a deeper repository there is not seen.
+ * Past IGNORED_WALK_LIMIT directories the rest goes unchecked, and `start` is reported so the deletion is refused.
  */
 function ignoredRepositories(root: string, start: string, found: Set<string>, budget: { left: number }): void {
 	if (basename(start) === "node_modules") return;
 	const stack = [start];
-	for (; stack.length > 0 && budget.left > 0; budget.left--) {
+	for (; stack.length > 0; budget.left--) {
+		// Out of budget with directories left: unchecked, so reported as nested and the deletion refused.
+		if (budget.left <= 0) {
+			found.add(start);
+			return;
+		}
 		const dir = stack.pop()!;
 		let entries: Dirent[];
 		try {

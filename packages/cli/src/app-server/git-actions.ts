@@ -20,6 +20,9 @@ import {
 	type Repo,
 	runGit,
 	runProcess,
+	discardSavedIndex,
+	restoreIndex,
+	saveIndex,
 	stagedAllTree,
 	withRepoLock,
 } from "./git.ts";
@@ -244,64 +247,83 @@ export async function gitCommit(
 		index: await indexTree(repo, ctx.signal),
 	});
 	// The repository lock is held for the git steps only, never across the model call writing the message.
-	const { before, base, original } = await staging(async () => {
-		// What the user had staged, put back if no commit comes of this.
+	const { before, base, original, saved } = await staging(async () => {
+		// What the user had staged, put back exactly (flags and all) if no commit comes of this.
 		const original = params.includeUnstaged !== false ? await indexTree(repo, ctx.signal) : undefined;
+		const saved = original ? await saveIndex(repo, ctx.signal) : undefined;
 		if (original) await git(repo.root, ["add", "-A"], { signal: ctx.signal });
-		return { before: await capture(), base: await headTree(repo), original };
+		return { before: await capture(), base: await headTree(repo), original, saved };
 	});
-	// Only an index still as this commit left it goes back: anything staged since is the user's.
-	const putBack = async () => {
-		if (original && original !== before.index && (await indexTree(repo, ctx.signal)) === before.index)
-			await git(repo.root, ["read-tree", original]);
-	};
-	// The repository lock only, not the checkout: a turn that started meanwhile must not stop the user's index
-	// coming back, and touches no file of it.
-	const restore = () => withRepoLock(repo, putBack);
-	if (before.index === base) {
-		await restore();
-		throw invalid("nothing to commit");
-	}
-	let message: string;
 	try {
-		message = params.message?.trim() ? params.message : await generateMessage(thread, repo, base, before.index, ctx);
-	} catch (error) {
-		await restore().catch(() => {});
-		throw error;
+		// Only an index still as this commit left it goes back: anything staged since is the user's.
+		// `hookOwned`: a refused commit whose hooks may have rewritten the index; with the checkout and repository lock
+		// held nothing else changed it, so the saved index comes back whatever it now holds.
+		const putBack = async (hookOwned = false) => {
+			if (!original || original === before.index) return;
+			if (!hookOwned && (await indexTree(repo, ctx.signal)) !== before.index) return;
+			if (saved) await restoreIndex(repo, saved, ctx.signal);
+			else await git(repo.root, ["read-tree", original]);
+		};
+		// The repository lock only, not the checkout: a turn that started meanwhile must not stop the user's index
+		// coming back, and touches no file of it.
+		const restore = () => withRepoLock(repo, putBack);
+		if (before.index === base) {
+			await restore();
+			throw invalid("nothing to commit");
+		}
+		let message: string;
+		try {
+			message = params.message?.trim() ? params.message : await generateMessage(thread, repo, base, before.index, ctx);
+		} catch (error) {
+			await restore().catch(() => {});
+			throw error;
+		}
+		// The commit runs the user's hooks, which can rewrite the index and working tree (lint-staged): it holds the
+		// checkout as staging did. A turn that started while the message was written refuses that hold before the step
+		// runs: the user's staging then goes back too.
+		let entered = false;
+		try {
+			return await staging(async () => {
+				entered = true;
+				const now = await capture();
+				// With includeUnstaged, the working tree too: an edit made while the message was written would otherwise
+				// be left out of a commit that was asked to take everything (staged into a temporary index).
+				const changed =
+					now.head !== before.head ||
+					now.ref !== before.ref ||
+					now.index !== before.index ||
+					(original !== undefined && (await stagedAllTree(repo, ctx.signal)) !== before.index);
+				if (changed) {
+					// No commit comes of this: what the user had staged goes back (the checkout is already held here).
+					await putBack();
+					throw conflict("concurrentChange", "the checkout changed while the commit message was written");
+				}
+				const result = await runGit(repo.root, ["commit", "-q", "-F", "-"], {
+					input: message,
+					// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
+					env: { GIT_LITERAL_PATHSPECS: "0" },
+					signal: ctx.signal,
+					// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound allows.
+					timeoutMs: 300_000,
+				});
+				if (result.code !== 0) {
+					// A hook or signing refused it: no commit, so the user's staging goes back.
+					await putBack(true);
+					throw new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, {
+						output: result.stderr,
+					});
+				}
+				// A commit-msg hook may have rewritten the message: answer with what was committed.
+				const commit = await git(repo.root, ["rev-parse", "HEAD"]);
+				return { commit, message: (await git(repo.root, ["log", "-1", "--format=%B", commit])).trimEnd() };
+			});
+		} catch (error) {
+			if (!entered) await restore().catch(() => {});
+			throw error;
+		}
+	} finally {
+		await discardSavedIndex(saved);
 	}
-	// The commit runs the user's hooks, which can rewrite the index and working tree (lint-staged): it holds the
-	// checkout as staging did.
-	return staging(async () => {
-		const now = await capture();
-		// With includeUnstaged, the working tree too: an edit made while the message was written would otherwise be
-		// left out of a commit that was asked to take everything (staged into a temporary index, never the user's).
-		const changed =
-			now.head !== before.head ||
-			now.ref !== before.ref ||
-			now.index !== before.index ||
-			(original !== undefined && (await stagedAllTree(repo, ctx.signal)) !== before.index);
-		if (changed) {
-			// No commit comes of this: what the user had staged goes back (the checkout is already held here).
-			await putBack();
-			throw conflict("concurrentChange", "the checkout changed while the commit message was written");
-		}
-		const result = await runGit(repo.root, ["commit", "-q", "-F", "-"], {
-			input: message,
-			// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
-			env: { GIT_LITERAL_PATHSPECS: "0" },
-			signal: ctx.signal,
-			// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound allows.
-			timeoutMs: 300_000,
-		});
-		if (result.code !== 0) {
-			// A hook or signing refused it: no commit, so the user's staging goes back.
-			await putBack();
-			throw new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, { output: result.stderr });
-		}
-		// A commit-msg hook may have rewritten the message: answer with what was committed.
-		const commit = await git(repo.root, ["rev-parse", "HEAD"]);
-		return { commit, message: (await git(repo.root, ["log", "-1", "--format=%B", commit])).trimEnd() };
-	});
 }
 
 export async function gitPush(repo: Repo, ctx: GitActionContext): Promise<ResultOf<"git/push">> {
