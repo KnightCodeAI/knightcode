@@ -1050,7 +1050,10 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 								<div className="px-4 pt-2 pb-1 text-[12px] text-tertiary">Files that changed while this turn ran</div>
 							) : null}
 							{(highlighter ? (large ? (current ? [current] : []) : shown) : []).map((file) => (
-								<div key={file.path} data-file-section="">
+								<div
+									key={`${selector.scope}:${selector.against ?? ""}:${selector.commit ?? ""}:${file.path}`}
+									data-file-section=""
+								>
 									<FileSection
 										threadId={threadId}
 										root={read?.root ?? ""}

@@ -313,7 +313,9 @@ export function App() {
 						{view.kind === "settings" ? <SettingsNav page={view.page} /> : <Sidebar />}
 					</div>
 					<main className={`flex min-w-0 flex-1 bg-surface ${sidebarOpen ? "border-l border-line" : ""}`}>
-						<ViewBoundary key={view.kind === "thread" ? view.id : view.kind}>
+						<ViewBoundary
+							key={view.kind === "thread" ? view.id : view.kind === "settings" ? `settings:${view.page}` : view.kind}
+						>
 							{view.kind === "thread" ? (
 								<ThreadView key={view.id} id={view.id} />
 							) : view.kind === "settings" ? (

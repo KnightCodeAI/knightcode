@@ -468,6 +468,7 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 			updateThread(threadId, (v) => {
 				const next = withTurn(v, turnId, (t) => ({ ...t, items: placeItem(t.items, item) }));
 				if (item.type !== "userMessage" || !item.clientMessageId) return next;
+				queuedComments.delete(item.clientMessageId);
 				return { ...next, pending: next.pending.filter((p) => p.clientMessageId !== item.clientMessageId) };
 			});
 			return;
@@ -521,9 +522,19 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 			toast(n.params.message, n.params.level === "error" ? "error" : "info");
 			return;
 		case "warning":
-		case "error":
+		case "error": {
 			toast(n.params.message, n.method === "error" ? "error" : "info");
+			const failed = "clientMessageId" in n.params ? n.params.clientMessageId : undefined;
+			const kept = failed ? queuedComments.get(failed) : undefined;
+			if (failed && kept) {
+				queuedComments.delete(failed);
+				set((s) => ({
+					...s,
+					comments: { ...s.comments, [kept.threadId]: [...(s.comments[kept.threadId] ?? []), ...kept.comments] },
+				}));
+			}
 			return;
+		}
 		case "account/login/updated":
 			set((s) => ({ ...s, logins: { ...s.logins, [n.params.loginId]: n.params } }));
 			if (n.params.status === "complete") void Promise.all([refreshAccounts(), refreshModels()]);
@@ -750,6 +761,9 @@ export async function startThread(
 
 const newClientId = () => crypto.randomUUID();
 
+/** Review comments of queued inputs, by the input's clientMessageId, until it starts or fails to. */
+const queuedComments = new Map<string, { threadId: string; comments: DiffComment[] }>();
+
 /** The composer is already cleared: keep a failed queue or steer as a failed bubble with Retry, not a toast. */
 const failedSend = (threadId: string, text: string, images: ImageInput[] | undefined) => (error: unknown) =>
 	updateThread(threadId, (v) => ({
@@ -771,9 +785,20 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 		}));
 	const running = view.turns.some((t) => t.status === "inProgress");
 	if (running) {
+		// The comments are kept by the input's id until it starts: one that cannot start gives them back as drafts.
+		const queuedId = newClientId();
 		await client
-			.request("turn/queue/add", { threadId, text, ...(images?.length ? { images } : {}), ...extra })
-			.then(clearComments, failedSend(threadId, text, images));
+			.request("turn/queue/add", {
+				threadId,
+				text,
+				clientMessageId: queuedId,
+				...(images?.length ? { images } : {}),
+				...extra,
+			})
+			.then(() => {
+				if (comments.length) queuedComments.set(queuedId, { threadId, comments });
+				clearComments();
+			}, failedSend(threadId, text, images));
 		return;
 	}
 	const clientMessageId = newClientId();
@@ -1241,6 +1266,7 @@ export async function undoTurnEdits(threadId: string, turnId: string, reapply = 
 		const { paths } = await client.request("thread/diff/revert", {
 			threadId,
 			scope: "lastTurn",
+			turnId,
 			...(reapply ? { reapply } : {}),
 		});
 		set((s) => {
@@ -1269,9 +1295,17 @@ export async function resendEdited(
 	text: string,
 	images?: ImageInput[],
 ): Promise<void> {
+	// The first loaded turn may not be the thread's first: load what is before it, so the fork keeps that history.
+	while (state.held[threadId]?.nextCursor && state.held[threadId]!.turns[0]?.id === turnId) {
+		const loaded = state.held[threadId]!.turns.length;
+		await loadEarlier(threadId);
+		// A failed load (it toasts) adds nothing: stop rather than ask again forever.
+		if ((state.held[threadId]?.turns.length ?? loaded) === loaded) break;
+	}
 	const view = state.held[threadId];
 	if (!view) return;
 	const at = view.turns.findIndex((t) => t.id === turnId);
+	if (at === 0 && view.nextCursor) return toast("Could not load the earlier messages to edit this one", "error");
 	const before = view.turns[at - 1]?.items.filter((i) => i.index !== undefined).at(-1);
 	try {
 		if (before) {
