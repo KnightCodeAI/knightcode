@@ -119,3 +119,10 @@ test("no renderer source compares keys directly; handlers go through the binding
 	const offenders = files.filter((f) => /\b(?:e|event|ev)\.(?:key|code)\s*[!=]==/.test(readFileSync(f, "utf8")));
 	expect(offenders).toEqual([]);
 });
+
+test("Alt+letter bindings match the physical key: macOS Option and AltGr layouts change event.key", () => {
+	const optionR = { ...key("®", { metaKey: true, altKey: true }), code: "KeyR" };
+	expect(matchesBinding(optionR, "desktop.thread.rename", true)).toBe(true);
+	expect(comboFromEvent(optionR, true)).toBe("mod+alt+r");
+	expect(matchesBinding({ ...optionR, code: "KeyT" }, "desktop.thread.rename", true)).toBe(false);
+});

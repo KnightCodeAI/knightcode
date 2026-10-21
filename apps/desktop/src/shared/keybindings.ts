@@ -163,6 +163,8 @@ function matchesKeys(event: KeyLike, keys: string, mac: boolean): boolean {
 	const meta = mac ? wants.has("mod") : wants.has("meta");
 	if (ctrl !== event.ctrlKey || meta !== event.metaKey) return false;
 	if (CODE_KEYS.has(key)) return event.code?.toLowerCase() === key;
+	// With Alt, macOS's Option and AltGr layouts type a character (⌥R is "®"): letters match their physical key.
+	if (wants.has("alt") && /^[a-z]$/.test(key)) return event.code?.toLowerCase() === `key${key}`;
 	return keyName(event.key) === key;
 }
 
@@ -184,7 +186,7 @@ export function comboFromEvent(event: KeyLike, mac: boolean): string | undefined
 		!mac && event.metaKey ? "meta" : undefined,
 		event.altKey ? "alt" : undefined,
 		event.shiftKey ? "shift" : undefined,
-		CODE_KEYS.has(code) ? code : keyName(event.key),
+		CODE_KEYS.has(code) ? code : event.altKey && /^key[a-z]$/.test(code) ? code.slice(3) : keyName(event.key),
 	];
 	return parts.filter(Boolean).join("+");
 }

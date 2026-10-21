@@ -101,6 +101,8 @@ test("a single shell command that reads, searches or lists reads as Codex's expl
 		"fd -X rm",
 		"fd --exec=rm",
 		"cat a | sort -o b",
+		"cat a | sort -oout",
+		'ag --pager "sh -c x" foo',
 		"cat a | uniq in out",
 		"tree -o out.txt",
 		"rg --pre ./x foo",

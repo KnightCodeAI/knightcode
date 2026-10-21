@@ -762,7 +762,7 @@ export async function startThread(
 const newClientId = () => crypto.randomUUID();
 
 /** Review comments of queued inputs, by the input's clientMessageId, until it starts or fails to. */
-const queuedComments = new Map<string, { threadId: string; queueId: string; comments: DiffComment[] }>();
+const queuedComments = new Map<string, { threadId: string; queueId?: string; comments: DiffComment[] }>();
 
 /** Give queued inputs' comments back as drafts: those of one removed input, or all of a thread whose queue was dropped. */
 function restoreQueuedComments(threadId: string, queueId?: string): void {
@@ -796,6 +796,8 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 	if (running) {
 		// The comments are kept by the input's id until it starts: one that cannot start gives them back as drafts.
 		const queuedId = newClientId();
+		// Before the request: the input can start (and drop its entry) before the answer arrives.
+		if (comments.length) queuedComments.set(queuedId, { threadId, comments });
 		await client
 			.request("turn/queue/add", {
 				threadId,
@@ -804,10 +806,17 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 				...(images?.length ? { images } : {}),
 				...extra,
 			})
-			.then(({ queueId }) => {
-				if (comments.length) queuedComments.set(queuedId, { threadId, queueId, comments });
-				clearComments();
-			}, failedSend(threadId, text, images));
+			.then(
+				({ queueId }) => {
+					const kept = queuedComments.get(queuedId);
+					if (kept) kept.queueId = queueId;
+					clearComments();
+				},
+				(error: unknown) => {
+					queuedComments.delete(queuedId);
+					failedSend(threadId, text, images)(error);
+				},
+			);
 		return;
 	}
 	const clientMessageId = newClientId();
@@ -947,8 +956,15 @@ export function openInNewWindow(threadId: string): void {
 	void client.host("host/window/open", { threadId }).catch((e: unknown) => toast(errorText(e), "error"));
 }
 
-export async function copyText(text: string): Promise<void> {
-	await client.host("host/clipboard/writeText", { text }).catch((e: unknown) => toast(errorText(e), "error"));
+/** False when the write failed (its error is toasted). */
+export async function copyText(text: string): Promise<boolean> {
+	return client.host("host/clipboard/writeText", { text }).then(
+		() => true,
+		(e: unknown) => {
+			toast(errorText(e), "error");
+			return false;
+		},
+	);
 }
 
 /** Codex's "Copy last code block": the last fenced block in the thread's replies (lastCodeBlock in format.ts). */
@@ -956,7 +972,7 @@ export function copyLastCodeBlock(threadId: string): void {
 	const replies = (state.held[threadId]?.turns ?? []).flatMap((t) => t.items).filter((i) => i.type === "agentMessage");
 	const code = lastCodeBlock(replies.map((i) => i.text));
 	if (code === undefined) return toast("No code block in this thread");
-	void copyText(code).then(() => toast("Copied the code block", "success"));
+	void copyText(code).then((ok) => ok && toast("Copied the code block", "success"));
 }
 
 export async function rename(threadId: string, name: string): Promise<void> {

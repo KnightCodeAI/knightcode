@@ -122,7 +122,7 @@ function exploration(words: string[]): Exploration | undefined {
 	if (
 		rest.some(
 			([name = "", ...a]) =>
-				a.some((x) => /^(-o|--output)(=|$)/.test(x)) ||
+				a.some((x) => /^(-o|--output(=|$))/.test(x)) ||
 				(baseName(name).toLowerCase() === "uniq" && operands(a, ["-f", "-s", "-w"]).length > 1),
 		)
 	)
@@ -189,6 +189,8 @@ function exploration(words: string[]): Exploration | undefined {
 		case "findstr":
 		case "select-string":
 		case "sls": {
+			// ag's and ack's --pager runs a program.
+			if (args.some((a) => /^--pager(=|$)/.test(a))) return undefined;
 			const pattern = args[args.findIndex((a) => ["-e", "--regexp", "-Pattern"].includes(a)) + 1];
 			const named = args.findIndex((a) => a === "-e" || a === "--regexp" || a === "-Pattern");
 			const found = operands(named === -1 ? args : args.filter((_, i) => i !== named && i !== named + 1), [
