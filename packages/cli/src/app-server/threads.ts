@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { mkdir, stat, unlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import type {
 	ApprovalMode,
 	DiffComment,
@@ -100,6 +100,7 @@ import {
 	type DeleteResult,
 	deleteWorktreeLocked,
 	handoffChanges,
+	inside,
 	keptWorktree,
 	readManifestFile,
 	registrationOf,
@@ -307,10 +308,7 @@ export class ThreadManager {
 	/** Ids of the threads that belong to a worktree: its owner, its placements, and every saved thread inside it. */
 	private async threadsOf(manifest: Manifest): Promise<{ id: string; archived: boolean }[]> {
 		const ids = new Map<string, boolean>();
-		const inside = (cwd: string) => {
-			const rel = relative(manifest.path, canonicalizePath(cwd));
-			return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-		};
+		const within = (cwd: string) => inside(manifest.path, canonicalizePath(cwd));
 		const live = liveDirFor(this.ctx, manifest.projectCwd);
 		for (const [dir, archived] of [
 			[live, false],
@@ -320,7 +318,7 @@ export class ThreadManager {
 			for (const session of await listWithIndex(dir))
 				if (
 					session.messageCount > 0 &&
-					(session.id === manifest.ownerThreadId || manifest.placement[session.id] !== undefined || inside(session.cwd))
+					(session.id === manifest.ownerThreadId || manifest.placement[session.id] !== undefined || within(session.cwd))
 				)
 					ids.set(session.id, archived);
 		}

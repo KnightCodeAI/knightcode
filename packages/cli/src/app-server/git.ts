@@ -297,13 +297,20 @@ async function filterOverrides(cwd: string, signal?: AbortSignal): Promise<Recor
 /** Commands that take the real index's lock; commit and switch stay killable for their hooks. */
 const WRITES_INDEX = new Set(["add", "reset", "apply", "update-index", "rm", "mv", "read-tree"]);
 
+/** The git subcommand past leading options (`-c key=value` pairs, `--work-tree=.`). */
+function subcommand(args: string[]): string {
+	let i = 0;
+	while (i < args.length && args[i]!.startsWith("-")) i += args[i] === "-c" ? 2 : 1;
+	return args[i] ?? "";
+}
+
 /** Never throws on a non-zero exit code. Given a Repo, git runs at its root under its signal. */
 export async function runGit(at: string | Repo, args: string[], options: GitOptions = {}): Promise<ProcessResult> {
 	const { internal, noFilters, ...rest } = options;
 	const cwd = typeof at === "string" ? at : at.root;
 	// Killed, git leaves the real index's index.lock behind and every later git write fails until it is deleted;
 	// these short writes run to the end (shutdown waits for in-flight requests). A temporary index's lock is ours.
-	if (WRITES_INDEX.has(args[0]!) && rest.env?.GIT_INDEX_FILE === undefined) delete rest.signal;
+	if (WRITES_INDEX.has(subcommand(args)) && rest.env?.GIT_INDEX_FILE === undefined) delete rest.signal;
 	// A caller's own signal adds to the repository's shutdown signal; it never replaces it.
 	else if (typeof at !== "string" && at.signal)
 		rest.signal = rest.signal && rest.signal !== at.signal ? AbortSignal.any([rest.signal, at.signal]) : at.signal;

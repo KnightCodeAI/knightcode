@@ -209,6 +209,8 @@ export async function scopeTrees(
 ): Promise<ScopeTrees> {
 	switch (selector.scope) {
 		case "lastTurn": {
+			// turn/completed goes out before the after-snapshot is recorded: a read right after it waits for the record.
+			await thread.changes?.idle();
 			const record = lastTurnDiff(thread.session.sessionManager.getBranch());
 			if (!record) return { from: "", to: "" };
 			for (const tree of [record.before, record.after]) {

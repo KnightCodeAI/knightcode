@@ -142,9 +142,10 @@ export const workspaceHooks = {
 
 const WIN = process.platform === "win32";
 export const samePath = (a: string, b: string) => (WIN ? a.toLowerCase() === b.toLowerCase() : a === b);
-const inside = (parent: string, child: string) => {
+/** `child` is `parent` or under it; a name that only begins with ".." (`..cache`) is inside. */
+export const inside = (parent: string, child: string) => {
 	const rel = relative(parent, child);
-	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+	return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 };
 
 /**
@@ -234,7 +235,7 @@ export function manifestFor(settings: WorktreeSettings, cwd: string): Manifest |
 	if (!root) return undefined;
 	const path = canonical(cwd);
 	const rel = relative(root, path);
-	if (rel.startsWith("..") || isAbsolute(rel)) return undefined;
+	if (!inside(root, path)) return undefined;
 	const segments = rel.split(sep).filter(Boolean);
 	if (segments.length < 2 || !BUCKET.test(segments[0])) return undefined;
 	const manifest = readManifest(join(root, segments[0], "worktree.json"));
