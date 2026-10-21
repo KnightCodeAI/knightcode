@@ -18,11 +18,6 @@ describe("Baseten models", () => {
 		expect(getModel("baseten", "zai-org/GLM-5.2-Fast").input).toEqual(["text"]);
 	});
 
-	it("keeps both GLM 5.2 endpoints text-only", () => {
-		expect(getModel("baseten", "zai-org/GLM-5.2").input).toEqual(["text"]);
-		expect(getModel("baseten", "zai-org/GLM-5.2-Fast").input).toEqual(["text"]);
-	});
-
 	it("sends Baseten chat_template_args with reasoning effort", async () => {
 		const model = getModel("baseten", "zai-org/GLM-5.2");
 		let payload: Record<string, unknown> | undefined;
