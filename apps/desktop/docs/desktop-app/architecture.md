@@ -289,6 +289,7 @@ interface Thread {
 	approvalMode: ApprovalMode;
 	model?: ModelRef;
 	thinkingLevel: ThinkingLevel;
+	sessionFile?: string;       // the session file on disk; absent until the thread is first saved
 }
 
 type ThreadStatus =
@@ -1745,7 +1746,7 @@ than overwrite.
 | Method | Behaviour |
 | --- | --- |
 | `thread/diff/read {threadId, scope?, against?, commit?, context?, ignoreWhitespace?}` | `scope`, Codex's Changes sources: `lastTurn` (the last turn that changed files, before to after), `uncommitted` (`HEAD` to working tree; the default), `unstaged` (index to working tree), `staged` (`HEAD` to index), `committed` (one `commit`, from `git/log`), `branch` (the merge base with `against` to working tree; `against` defaults to the worktree's `baseRef`, else the upstream, else the default branch). `ignoreWhitespace` is Codex's "Hide white space". Files, hunks with content-hash ids, line ranges, binary flag; `context` lines around each hunk (a large value gives whole files). With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call. The serialized response stays within a fixed budget: files past it come without hunks (`tooLarge`), or are only counted (`filesOmitted`) |
-| `thread/diff/revert {threadId, scope?, against?, path?, hunkId?, context?}` | reverse-applies one hunk, one file, or the whole scope to the working tree; `lastTurn` without a path undoes the turn. A hunk that changed since it was read answers `gitConflict` `diffChanged`. Refused while a turn runs |
+| `thread/diff/revert {threadId, scope?, against?, path?, hunkId?, context?, reapply?, turnId?}` | reverse-applies one hunk, one file, or the whole scope to the working tree; `lastTurn` without a path undoes the turn, and `reapply` applies it again (Codex's Reapply). With `turnId` (`lastTurn` only) a newer last turn answers `gitConflict` `diffChanged`. A hunk that changed since it was read answers `gitConflict` `diffChanged`. Refused while a turn runs |
 | `turn/start`, `turn/queue/add` with `comments` | review comments are drafts the client keeps (Codex: "Local comment on line R2", a "1 comment" chip) and sends with the next input; the server quotes each comment's lines from its scope's trees into the text the model reads, and the user item shows the comments, not that text |
 
 `turn/diff/updated {threadId, turnId, files}` follows `turn/completed` when
@@ -2057,6 +2058,16 @@ cancellation lives in `threads.ts` and the start-guard extension.
   settings and `thread/workspace/progress` (section 6.1).
 - Docs: `app-server.md`.
 - Changeset: `Added`.
+
+Status (2026-10-18): done, on `feat/app-server-worktrees` (Tasks 0-11 of
+`phase-b-plan.md`). Modules: `git.ts`, `workspaces.ts`, `diff.ts`,
+`git-actions.ts`; tests `test/app-server/{git,worktrees,worktree-setup,
+worktree-fork,diff,turn-diff,diff-actions,git-actions,handoff,
+worktree-archive}.test.ts`. Departures from the plan are recorded with their
+reasons in the commit history; the notable one is that `git worktree remove`
+deletes the administration directory even when removing the checkout fails, so
+a leftover directory is removed only when empty and otherwise left in place
+with a warning.
 
 ### Phase C — extension UI over the protocol
 
@@ -2657,6 +2668,29 @@ schema; section 4.6 (Phase A2) supersedes it before any client ships. Raw measur
 implementation ledger's evidence directory. Owned scratch installations/downloads
 and temporary measurement scripts are removed after validation. This does not
 claim completion of worktrees, git/diffs or desktop UI in later phases.
+
+### Phase B validation — 2026-10-18
+
+Windows 11 build 26200, Bun 1.3, Git for Windows 2.47.1. `test/app-server/`:
+45 files, 431 tests passed, 5 skipped (POSIX-only symlink, mode and tab-name
+cases). WSL2 could not run on the measuring machine (virtualization is off), so
+the Linux run is the CI job's; macOS is not measured.
+
+On this repository (2,344 tracked files, 12,339 untracked ones in a 2.1 GB
+directory the user keeps beside the code), five runs each: a turn snapshot
+took 197-251 ms and an `uncommitted` `thread/diff/read` 643-668 ms. More than
+500 untracked files make both tracked-only, so the untracked directory is not
+hashed. Forced to include untracked files, the snapshot took 10.5-23.8 s, so
+turn snapshots and diff reads also leave out untracked files over 10 MiB, as
+Codex's turn snapshots do; deletion and handoff snapshots never do.
+
+Codex parity walk (Task 11 step 4) ran through the in-process client, since the
+desktop panes come in S2: worktree start with an environment, the six Changes
+scopes, a comment sent with a turn, a commit with a generated message, a fork
+into a new worktree, a handoff refused while the main checkout was dirty and
+done once clean, archive and restore. Each behaved as the "Codex parity" table
+of `phase-b-plan.md` says; the tests named in section 10's Phase B note pin
+every step.
 
 ## 14. Stop condition
 

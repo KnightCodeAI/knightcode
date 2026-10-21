@@ -27,6 +27,7 @@ const thread: ThreadSummary = {
 	createdAt: "2026-10-11T00:00:00.000Z",
 	archived: false,
 	updatedAt: "2026-10-11",
+	workspaceMode: "local",
 };
 const entries: SessionEntry[] = [];
 function add(index: number, text = "hello") {

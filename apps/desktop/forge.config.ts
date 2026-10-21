@@ -10,7 +10,13 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
 // Packaging, signing and the bundled knightcode binary are phase S4 (desktop-shell.md section 15).
 const config: ForgeConfig = {
-	packagerConfig: { asar: true, name: "KnightCode", executableName: "knightcode-desktop" },
+	packagerConfig: {
+		asar: true,
+		name: "KnightCode",
+		executableName: "knightcode-desktop",
+		// macOS learns the link scheme from Info.plist; Windows and Linux register it at launch (src/main.ts).
+		protocols: [{ name: "KnightCode", schemes: ["knightcode"] }],
+	},
 	makers: [new MakerSquirrel({}), new MakerZIP({}, ["darwin"]), new MakerDMG({}), new MakerDeb({}), new MakerRpm({})],
 	plugins: [
 		new VitePlugin({
