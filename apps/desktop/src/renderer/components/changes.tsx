@@ -250,7 +250,11 @@ function CommentCard({
 							onChange={(e) => setText(e.target.value)}
 							onKeyDown={(e) => {
 								if (matches(e, "desktop.composer.steer") && text.trim()) onSave?.(text.trim());
-								if (matches(e, "desktop.picker.dismiss")) onCancel?.();
+								// Handled here: the window's Escape would also stop a running turn.
+								if (matches(e, "desktop.picker.dismiss")) {
+									e.preventDefault();
+									onCancel?.();
+								}
 							}}
 							placeholder="Add a comment…"
 							className="block w-full resize-none bg-transparent text-[14px] leading-[22.75px] text-ink outline-none placeholder:text-tertiary focus-visible:outline-none"
@@ -1111,6 +1115,12 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 										ref={filterRef}
 										value={filter}
 										onChange={(e) => setFilter(e.target.value)}
+										// Escape clears the filter, and never reaches the window's stop-the-turn binding.
+										onKeyDown={(e) => {
+											if (!matches(e, "desktop.picker.dismiss")) return;
+											e.preventDefault();
+											setFilter("");
+										}}
 										placeholder="Filter files…"
 										className="w-full bg-transparent pe-1.5 text-ink outline-none placeholder:text-tertiary focus-visible:outline-none"
 									/>

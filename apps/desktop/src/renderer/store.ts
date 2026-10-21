@@ -1349,7 +1349,8 @@ export async function resendEdited(
 				thread.cwd,
 				text,
 				{
-				...(thread.model ? { model: thread.model } : {}),
+				// thread/start takes only {provider, id}: the full ModelRef fails its parameter check.
+				...(thread.model ? { model: { provider: thread.model.provider, id: thread.model.id } } : {}),
 				...(thread.thinkingLevel ? { thinkingLevel: thread.thinkingLevel } : {}),
 					approvalMode: thread.approvalMode,
 				},
