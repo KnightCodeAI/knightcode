@@ -20,6 +20,7 @@ import {
 	writeFileSync,
 	type Dirent,
 } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
@@ -1180,7 +1181,7 @@ export async function nestedRepositories(root: string, tree: string, unchecked: 
 				.map((d) => d.replace(/\/$/, "")),
 		);
 		level = next.filter((d) => !skip.has(d));
-		for (const dir of skip) ignoredRepositories(root, dir, found, budget, unchecked);
+		for (const dir of skip) await ignoredRepositories(root, dir, found, budget, unchecked);
 	}
 	return [...found].sort();
 }
@@ -1196,13 +1197,13 @@ const IGNORED_WALK_LIMIT = 50_000;
  * package managers never leave a checkout there, and walking it would make every prune slow.
  * Past IGNORED_WALK_LIMIT directories the rest goes unchecked, and `start` is reported so the deletion is refused.
  */
-function ignoredRepositories(
+async function ignoredRepositories(
 	root: string,
 	start: string,
 	found: Set<string>,
 	budget: { left: number },
 	unchecked: string[],
-): void {
+): Promise<void> {
 	if (SKIPPED_CACHES.has(basename(start))) return;
 	const stack = [start];
 	for (; stack.length > 0; budget.left--) {
@@ -1214,7 +1215,8 @@ function ignoredRepositories(
 		const dir = stack.pop()!;
 		let entries: Dirent[];
 		try {
-			entries = readdirSync(join(root, dir), { withFileTypes: true });
+			// Awaited: a large ignored tree must not stall every other thread's requests.
+			entries = await readdir(join(root, dir), { withFileTypes: true });
 		} catch {
 			continue;
 		}
