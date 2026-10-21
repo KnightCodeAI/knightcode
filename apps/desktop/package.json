@@ -26,6 +26,7 @@
 		"@electron-forge/plugin-vite": "8.0.1",
 		"@electron/fuses": "2.1.3",
 		"@knightcode/app-server-protocol": "workspace:*",
+		"@knightcode/remote": "workspace:*",
 		"@tailwindcss/postcss": "4.3.3",
 		"@types/react": "19.2.7",
 		"@types/react-dom": "19.2.4",

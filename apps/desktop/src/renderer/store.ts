@@ -762,7 +762,16 @@ export async function startThread(
 const newClientId = () => crypto.randomUUID();
 
 /** Review comments of queued inputs, by the input's clientMessageId, until it starts or fails to. */
-const queuedComments = new Map<string, { threadId: string; comments: DiffComment[] }>();
+const queuedComments = new Map<string, { threadId: string; queueId: string; comments: DiffComment[] }>();
+
+/** Give queued inputs' comments back as drafts: those of one removed input, or all of a thread whose queue was dropped. */
+function restoreQueuedComments(threadId: string, queueId?: string): void {
+	for (const [id, kept] of queuedComments) {
+		if (kept.threadId !== threadId || (queueId !== undefined && kept.queueId !== queueId)) continue;
+		queuedComments.delete(id);
+		set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [...(s.comments[threadId] ?? []), ...kept.comments] } }));
+	}
+}
 
 /** The composer is already cleared: keep a failed queue or steer as a failed bubble with Retry, not a toast. */
 const failedSend = (threadId: string, text: string, images: ImageInput[] | undefined) => (error: unknown) =>
@@ -795,8 +804,8 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 				...(images?.length ? { images } : {}),
 				...extra,
 			})
-			.then(() => {
-				if (comments.length) queuedComments.set(queuedId, { threadId, comments });
+			.then(({ queueId }) => {
+				if (comments.length) queuedComments.set(queuedId, { threadId, queueId, comments });
 				clearComments();
 			}, failedSend(threadId, text, images));
 		return;
@@ -836,15 +845,19 @@ export async function steer(threadId: string, text: string, images?: ImageInput[
 
 export async function interrupt(threadId: string): Promise<void> {
 	const turn = state.held[threadId]?.turns.findLast((t) => t.status === "inProgress");
-	await client
-		.request("turn/interrupt", turn ? { threadId, turnId: turn.id } : { threadId })
-		.catch((e: unknown) => toast(errorText(e), "error"));
+	await client.request("turn/interrupt", turn ? { threadId, turnId: turn.id } : { threadId }).then(
+		// The server drops the queue on a stop: its inputs' comments come back as drafts.
+		() => restoreQueuedComments(threadId),
+		(e: unknown) => toast(errorText(e), "error"),
+	);
 }
 
 /** False when the input already started its own turn (or the request failed): it is no longer the client's to resend. */
 export async function removeQueued(threadId: string, queueId: string): Promise<boolean> {
 	try {
-		return (await client.request("turn/queue/remove", { threadId, queueId })).removed;
+		const { removed } = await client.request("turn/queue/remove", { threadId, queueId });
+		if (removed) restoreQueuedComments(threadId, queueId);
+		return removed;
 	} catch (e) {
 		toast(errorText(e), "error");
 		return false;
@@ -890,7 +903,7 @@ export async function updateSettings(
 
 export async function archive(threadId: string): Promise<void> {
 	try {
-		await client.request("thread/archive", { threadId });
+		await stopAndArchive(threadId);
 	} catch (e) {
 		// Refused: the thread stays open where the user is.
 		toast(errorText(e), "error");

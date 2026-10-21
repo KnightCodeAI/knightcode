@@ -751,6 +751,8 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 					threadId,
 					scope: selector.scope,
 					...(selector.against ? { against: selector.against } : {}),
+					// The turn shown: one that ended since is not reverted in its place.
+					...(selector.scope === "lastTurn" && read?.turnId ? { turnId: read.turnId } : {}),
 					path: file.path,
 				});
 			} else await client.request(action === "stage" ? "git/stage" : "git/unstage", { threadId, path: file.path });
