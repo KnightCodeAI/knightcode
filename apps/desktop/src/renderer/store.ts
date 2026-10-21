@@ -81,6 +81,8 @@ export type Accounts = ResultOf<"account/list">;
 
 export interface State {
 	server: { state: "starting" | "ready" | "restarting" | "failed"; message?: string };
+	/** Turns whose edits were undone (by turn id), so their card offers Reapply after it remounts. */
+	undoneTurns: Record<string, true>;
 	desktop: DesktopState | undefined;
 	threads: ThreadSummary[];
 	view: View;
@@ -117,6 +119,7 @@ export interface State {
 
 let state: State = {
 	server: { state: "starting" },
+	undoneTurns: {},
 	desktop: undefined,
 	threads: [],
 	view: { kind: "new" },
@@ -861,14 +864,27 @@ export async function updateSettings(
 }
 
 export async function archive(threadId: string): Promise<void> {
-	await client.request("thread/archive", { threadId }).catch((e: unknown) => toast(errorText(e), "error"));
+	try {
+		await client.request("thread/archive", { threadId });
+	} catch (e) {
+		// Refused: the thread stays open where the user is.
+		toast(errorText(e), "error");
+		return;
+	}
 	if (state.view.kind === "thread" && state.view.id === threadId) showNew();
 }
 
 /** Archive a thread, stopping it first if it runs (the server archives only idle threads). */
 async function stopAndArchive(threadId: string): Promise<void> {
-	if (state.threads.find((t) => t.id === threadId)?.status.type === "active")
+	if (state.threads.find((t) => t.id === threadId)?.status.type === "active") {
 		await client.request("turn/interrupt", { threadId });
+		// The interrupt answers before the turn ends, and the server archives only idle threads: wait (10 s at most).
+		const deadline = Date.now() + 10_000;
+		while (state.threads.find((t) => t.id === threadId)?.status.type === "active") {
+			if (Date.now() > deadline) throw new Error("the turn did not stop");
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+	}
 	await client.request("thread/archive", { threadId });
 }
 
@@ -1220,12 +1236,16 @@ export async function restoreWorktree(threadId: string): Promise<void> {
  * The edited-files card's Undo and Reapply: the whole Last Turn in one request, which the server checks for every
  * file before it changes any, so a file edited since never leaves the others half undone. True when it went.
  */
-export async function undoTurnEdits(threadId: string, reapply = false): Promise<boolean> {
+export async function undoTurnEdits(threadId: string, turnId: string, reapply = false): Promise<boolean> {
 	try {
 		const { paths } = await client.request("thread/diff/revert", {
 			threadId,
 			scope: "lastTurn",
 			...(reapply ? { reapply } : {}),
+		});
+		set((s) => {
+			const { [turnId]: _was, ...undoneTurns } = s.undoneTurns;
+			return { ...s, undoneTurns: reapply ? undoneTurns : { ...undoneTurns, [turnId]: true } };
 		});
 		const what = paths.length === 1 ? paths[0] : `${paths.length} files`;
 		toast(`${reapply ? "Reapplied" : "Undid"} the changes to ${what}`, "success");

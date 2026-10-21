@@ -255,7 +255,8 @@ async function start(): Promise<void> {
 	await app.whenReady();
 	protocol.handle("app", serveRenderer);
 	session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
-		callback(permission === "clipboard-sanitized-write" || permission === "notifications"),
+		// local-fonts: Settings › Appearance lists the installed fonts (queryLocalFonts).
+		callback(permission === "clipboard-sanitized-write" || permission === "notifications" || permission === "local-fonts"),
 	);
 	buildMenu();
 	server = new ServerConnection({

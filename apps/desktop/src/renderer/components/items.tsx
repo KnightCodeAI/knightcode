@@ -382,19 +382,27 @@ export function editedFiles(turn: ViewTurn): TurnFile[] {
  * Codex's "Edited N files" card: totals, Undo or Reapply and View changes, then a row per file. `undoable` only for
  * the latest turn once its change record arrived: until then the server's Last Turn is still the turn before.
  */
-function EditedFilesCard({ threadId, files, undoable }: { threadId: string; files: TurnFile[]; undoable: boolean }) {
+function EditedFilesCard({
+	threadId,
+	turnId,
+	files,
+	undoable,
+}: {
+	threadId: string;
+	turnId: string;
+	files: TurnFile[];
+	undoable: boolean;
+}) {
 	const added = files.reduce((n, f) => n + f.additions, 0);
 	const removed = files.reduce((n, f) => n + f.deletions, 0);
 	const view = () => setPanel({ open: true, scope: "lastTurn" });
 	// As Codex's: Undo turns into Reapply and back, held while a request runs, with a spinner in place of its icon.
-	const [undone, setUndone] = useState(false);
+	// In the store, so leaving the thread and coming back still offers Reapply.
+	const undone = useStore((s) => s.undoneTurns[turnId] === true);
 	const [pending, setPending] = useState(false);
 	const toggle = () => {
 		setPending(true);
-		void undoTurnEdits(threadId, undone).then((ok) => {
-			setPending(false);
-			if (ok) setUndone(!undone);
-		});
+		void undoTurnEdits(threadId, turnId, undone).then(() => setPending(false));
 	};
 	return (
 		<div className="overflow-hidden rounded-lg bg-card-soft shadow-[0_0_0_0.5px_var(--kc-border-strong)]">
@@ -534,14 +542,16 @@ export function TurnView({
 					{final?.type === "agentMessage" ? (
 						<div className="group/message flex flex-col gap-2">
 							<Markdown text={final.text} />
-							{files.length > 0 ? <EditedFilesCard threadId={threadId} files={files} undoable={undoable} /> : null}
+							{files.length > 0 ? (
+								<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
+							) : null}
 							<MessageActions time={turn.completedAt} shown={latest}>
 								<CopyMessage text={final.text} />
 								{forkPoint ? <ReplyMenu threadId={threadId} atItemId={forkPoint.id} /> : null}
 							</MessageActions>
 						</div>
 					) : files.length > 0 ? (
-						<EditedFilesCard threadId={threadId} files={files} undoable={undoable} />
+						<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
 					) : null}
 					{compactedAfter ? <CompactionDivider /> : null}
 					{turn.status === "interrupted" ? (

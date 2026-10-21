@@ -2457,13 +2457,19 @@ function AddMcpServerDialog({
 function McpServers() {
 	const [cwd, setCwd] = useState<string>();
 	const [trusted, setTrusted] = useProjectTrust(cwd);
-	const [list, setList] = useState<ResultOf<"mcp/list">>();
+	// Tagged with its scope, newest request only: another project's list never shows (or gets acted on) under this one.
+	const [loaded, setLoaded] = useState<{ cwd: string | undefined; list: ResultOf<"mcp/list"> }>();
+	const latest = useRef(0);
+	const list = loaded && loaded.cwd === cwd ? loaded.list : undefined;
 	const [adding, setAdding] = useState(false);
 	const [removing, setRemoving] = useState<ResultOf<"mcp/list">["servers"][number]>();
 	const load = useCallback(() => {
+		const request = ++latest.current;
 		client
 			.request("mcp/list", cwd === undefined ? {} : { cwd })
-			.then(setList)
+			.then((result) => {
+				if (request === latest.current) setLoaded({ cwd, list: result });
+			})
 			.catch((e: unknown) => toast(errorText(e), "error"));
 	}, [cwd, trusted]);
 	useEffect(load, [load]);
@@ -2586,11 +2592,17 @@ function resourceOrigin(resource: Resource): string {
 function Extensions() {
 	const [cwd, setCwd] = useState<string>();
 	const [trusted, setTrusted] = useProjectTrust(cwd);
-	const [list, setList] = useState<ResultOf<"resource/list">>();
+	// Tagged with its scope, newest request only: another project's list never shows (or gets acted on) under this one.
+	const [loaded, setLoaded] = useState<{ cwd: string | undefined; list: ResultOf<"resource/list"> }>();
+	const latest = useRef(0);
+	const list = loaded && loaded.cwd === cwd ? loaded.list : undefined;
 	const load = useCallback(() => {
+		const request = ++latest.current;
 		client
 			.request("resource/list", cwd === undefined ? {} : { cwd })
-			.then(setList)
+			.then((result) => {
+				if (request === latest.current) setLoaded({ cwd, list: result });
+			})
 			.catch((e: unknown) => toast(errorText(e), "error"));
 	}, [cwd, trusted]);
 	useEffect(load, [load]);
