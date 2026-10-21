@@ -143,8 +143,11 @@ committed:
   "environments": [
     {
       "name": "node",
-      "setup": { "default": "npm ci", "windows": "npm.cmd ci" },
-      "cleanup": { "default": "rm -rf node_modules" },
+      "setup": {
+        "default": "cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci",
+        "windows": "Set-Location $env:KNIGHTCODE_WORKTREE_PATH; npm.cmd ci"
+      },
+      "cleanup": { "default": "rm -rf \"$KNIGHTCODE_WORKTREE_PATH/.cache\"" },
       "actions": [{ "name": "Test", "command": { "default": "npm test" } }]
     }
   ]
@@ -153,9 +156,12 @@ committed:
 
 Each script has `default`, `macos`, `linux` and `windows` variants; the
 platform's wins. The setup script runs when a worktree is created and the
-cleanup script before one is deleted, both at the project root, with
+cleanup script before one is deleted, both in your shell (the `windows`
+variant above is for PowerShell) and at the project root, with
 `KNIGHTCODE_SOURCE_TREE_PATH` (the checkout the worktree came from) and
-`KNIGHTCODE_WORKTREE_PATH` (the worktree) set. A failing setup keeps the
+`KNIGHTCODE_WORKTREE_PATH` (the worktree) set. Since they start in the main
+checkout, work on the worktree through `KNIGHTCODE_WORKTREE_PATH`, as the
+example does: a bare `npm ci` would install into the main checkout. A failing setup keeps the
 worktree and marks it `setupFailed`; a failing cleanup is a warning. An
 untrusted project's scripts never run. `actions` are for the desktop app's
 toolbar.

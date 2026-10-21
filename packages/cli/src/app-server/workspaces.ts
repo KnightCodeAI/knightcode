@@ -42,6 +42,7 @@ import {
 	machineApply,
 	machinePatch,
 	operationIn,
+	OutputTooLarge,
 	pathsInTheWay,
 	ProcessKilled,
 	ProcessKillUnconfirmed,
@@ -54,6 +55,22 @@ import {
 	submodulePaths,
 	withRepoLock,
 } from "./git.ts";
+
+/** A binary patch of changes to move; past runProcess's 64 MiB output cap the refusal says what to do. */
+async function movingPatch(
+	repo: Repo,
+	from: string,
+	to: string,
+	signal?: AbortSignal,
+	tooLarge = "the uncommitted changes are over 64 MiB as a patch: commit them, or add large untracked files to .gitignore",
+): Promise<Buffer> {
+	try {
+		return await machinePatch(repo, from, to, { binary: true, signal });
+	} catch (error) {
+		if (!(error instanceof OutputTooLarge)) throw error;
+		throw new AppServerError("invalidParams", tooLarge);
+	}
+}
 
 const Deleted = Type.Object(
 	{
@@ -286,6 +303,8 @@ export function placeThread(
 	settings: WorktreeSettings,
 	threadId: string,
 	headerCwd: string,
+	/** allManifests(settings), read once by a caller placing many threads. */
+	all?: Manifest[],
 ): { cwd: string; workspace: Workspace; manifest?: Manifest } {
 	const own = manifestFor(settings, headerCwd);
 	if (own) {
@@ -297,7 +316,9 @@ export function placeThread(
 			};
 		return { cwd: headerCwd, workspace: worktreeWorkspace(own), manifest: own };
 	}
-	const placing = manifestPlacing(settings, threadId);
+	const placing = all
+		? all.find((manifest) => manifest.placement[threadId] !== undefined)
+		: manifestPlacing(settings, threadId);
 	if (placing?.placement[threadId] === "worktree")
 		return {
 			cwd: join(placing.path, relative(placing.mainRoot, canonical(headerCwd))),
@@ -327,6 +348,9 @@ export interface CreateInput {
 
 /** Fetch the remote the base comes from, when it has one; a failure is a warning (fetchBeforeCreate). */
 async function fetchBase(repo: Repo, baseRef: string | undefined, signal: AbortSignal, warnings: Warning[]) {
+	// A revision, never an option ("--git-dir=..."): no ref name starts with "-", and without --verify rev-parse
+	// echoes --end-of-options back (git 2.47), so refuse it here.
+	if (baseRef?.startsWith("-")) throw new AppServerError("invalidParams", `no commit ${baseRef}`);
 	const full = (await runGit(repo.root, ["rev-parse", "--symbolic-full-name", baseRef ?? "HEAD"], { signal })).stdout
 		.toString("utf8")
 		.trim();
@@ -406,7 +430,13 @@ async function create(input: CreateInput, sourceRepo: Repo): Promise<{ manifest:
 	}
 	let patch: Buffer | undefined;
 	if (input.snapshot)
-		patch = await machinePatch(sourceRepo, `${baseSha}^{tree}`, `${input.snapshot}^{tree}`, { binary: true, signal });
+		patch = await movingPatch(
+			sourceRepo,
+			`${baseSha}^{tree}`,
+			`${input.snapshot}^{tree}`,
+			signal,
+			"the deleted worktree's snapshot is over 64 MiB as a patch: restore the worktree instead of forking it",
+		);
 	else if (input.carryLocalChanges) {
 		const from = await headTree(sourceRepo);
 		const to = await snapshotTree(sourceRepo, true, signal);
@@ -415,7 +445,7 @@ async function create(input: CreateInput, sourceRepo: Repo): Promise<{ manifest:
 				"invalidParams",
 				"submodule changes are not supported here; commit them in the submodule",
 			);
-		patch = await machinePatch(sourceRepo, from, to, { binary: true, signal });
+		patch = await movingPatch(sourceRepo, from, to, signal);
 	}
 
 	const bucket = allocateBucket(input.settings);
@@ -863,11 +893,16 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 	}
 	if (!(await optionalGit(main.root, ["rev-parse", "-q", "--verify", "HEAD"])))
 		throw new AppServerError("invalidParams", `commit something in ${main.root} first`);
-	const dirty = nulList(
+	const records = nulList(
 		await git(dest.root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"], { signal }),
-	)
-		.filter((record) => record.length > 3)
-		.map((record) => record.slice(3));
+	);
+	const dirty: string[] = [];
+	for (let i = 0; i < records.length; i++) {
+		dirty.push(records[i].slice(3));
+		// A rename or copy record (in either column: a worktree rename of an intent-to-add file is " R") is followed by
+		// its source path, which has no status prefix.
+		if (/[RC]/.test(records[i].slice(0, 2))) dirty.push(records[++i]);
+	}
 	if (dirty.length > 0)
 		throw conflict("localChanges", "Stash or commit your local changes to hand off.", {
 			paths: dirty,
@@ -880,8 +915,8 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 	if ((await submodulePaths(source, head, working)).length > 0)
 		throw new AppServerError("invalidParams", "submodule changes are not supported here; commit them in the submodule");
 	const staged = nulList(await git(source.root, ["diff", "--cached", "--name-only", "--no-renames", "-z"], { signal }));
-	const patch = await machinePatch(source, head, working, { binary: true, signal });
-	const stagedPatch = await machinePatch(source, head, await indexTree(source, signal), { binary: true, signal });
+	const patch = await movingPatch(source, head, working, signal);
+	const stagedPatch = await movingPatch(source, head, await indexTree(source, signal), signal);
 	const changed = nulList(
 		await git(source.root, ["diff", "--name-only", "--no-renames", "-z", head, working], { signal }),
 	);
@@ -928,6 +963,13 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 			warnings.push({
 				source: "server",
 				message: `The changes were moved, but could not be removed from ${source.root}: ${paths.join(", ")}`,
+			});
+		// The working version is what moves; a staged edit the working tree had undone moves nowhere, so say where it is.
+		const stagedOnly = staged.filter((path) => !changed.includes(path));
+		if (stagedOnly.length > 0)
+			warnings.push({
+				source: "server",
+				message: `Staged changes the working tree had undone were not moved (${stagedOnly.join(", ")}); they are saved in ${patchPath.replace(/\.patch$/, ".staged.patch")}.`,
 			});
 	};
 	const kept = async (ref: string, sha: string, where: string) => {
@@ -1168,7 +1210,14 @@ async function removeCheckout(input: DeleteInput, manifest: Manifest): Promise<D
 		signal: input.signal,
 	});
 	if (removed.code === 0) {
-		rmSync(manifest.path, { recursive: true, force: true });
+		// git removed the checkout; something that recreated the path since (an editor) keeps what it wrote.
+		const left = existsSync(manifest.path) ? readdirSync(manifest.path) : [];
+		if (left.length === 0) rmSync(manifest.path, { recursive: true, force: true });
+		else
+			input.warnings.push({
+				source: "server",
+				message: `${manifest.path} was written to while it was removed; the files there were left in place.`,
+			});
 		delete deleted.removalFailed;
 		delete deleted.afterFailure;
 		writeManifest(input.settings, manifest);
@@ -1263,10 +1312,15 @@ export async function restoreWorktreeLocked(input: DeleteInput): Promise<Manifes
 	if (manifest.deleted.removalFailed) {
 		const finished = await deleteWorktreeLocked(input);
 		if (!finished.deleted)
-			throw new AppServerError("gitConflict", "nested repositories are in the way", {
-				reason: finished.reason,
-				paths: finished.paths,
-			});
+			throw finished.reason === "submodules"
+				? new AppServerError("gitConflict", "nested repositories are in the way", {
+						reason: "submodules",
+						paths: finished.paths,
+					})
+				: new AppServerError("gitConflict", `${manifest.path} is no longer this project's worktree`, {
+						reason: "worktreeInUse",
+						worktree: manifest.path,
+					});
 		manifest = readManifestFile(manifest.path) ?? manifest;
 		if (manifest.deleted?.removalFailed)
 			throw new AppServerError("gitConflict", `${manifest.path} could not be removed to restore it`, {

@@ -49,7 +49,7 @@ const comment = { scope: "uncommitted", path: "a.txt", side: "new", startLine: 2
 const environment = {
 	name: "dev",
 	setup: { default: "bun install", windows: "bun install --no-save" },
-	cleanup: { default: "rm -rf node_modules" },
+	cleanup: { default: 'rm -rf "$KNIGHTCODE_WORKTREE_PATH/.cache"' },
 	actions: [{ name: "Test", icon: "play", command: { default: "bun test" } }],
 };
 const diffFile = {

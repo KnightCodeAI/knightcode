@@ -569,7 +569,7 @@ it (names unique, at most 50). An untrusted project's scripts never run. See
 [Settings](settings.md#worktrees).
 
 ```json
-{"id":25,"method":"environment/save","params":{"cwd":"/p","environments":[{"name":"node","setup":{"default":"npm ci"}}]}}
+{"id":25,"method":"environment/save","params":{"cwd":"/p","environments":[{"name":"node","setup":{"default":"cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci"}}]}}
 ```
 
 ### `git/*`

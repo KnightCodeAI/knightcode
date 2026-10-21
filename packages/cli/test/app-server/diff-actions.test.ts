@@ -22,7 +22,7 @@ import { attachJsonlLineReader } from "../../src/modes/rpc/jsonl.ts";
 import { makeRepo, sh, write } from "./fixtures/git-repo.ts";
 import { createHeldTurn } from "./fixtures/held-turn-extension.ts";
 import { type RepoServer, repoServer } from "./fixtures/worktree-server.ts";
-import { cleanupServers } from "./harness.ts";
+import { cleanupServers, stopChild } from "./harness.ts";
 
 afterEach(cleanupServers);
 
@@ -55,14 +55,28 @@ function gate() {
 	const reached = new Promise<void>((resolve) => (entered = resolve));
 	return { opened, reached, open, enter: () => entered() };
 }
-const settledState = async (promise: Promise<unknown>) =>
-	Promise.race([
-		promise.then(
-			() => "settled",
-			() => "settled",
-		),
-		new Promise((r) => setTimeout(() => r("pending"), 300)),
-	]);
+/**
+ * Start a revert and prove it waits for the parked after-snapshot: once it holds the checkout reservation (taken
+ * before the wait), open the gate; the revert's afterReserve must come after the opening.
+ */
+async function revertAfterGate(s: RepoServer, threadId: string, parked: ReturnType<typeof gate>): Promise<string[]> {
+	const events: string[] = [];
+	const original = revertHooks.afterReserve;
+	revertHooks.afterReserve = async () => {
+		events.push("reserved");
+	};
+	try {
+		const reverting = revert(s, threadId, { path: "a.txt" });
+		const reserved = (s.threads as unknown as { reservedCheckouts: Map<string, string> }).reservedCheckouts;
+		await expect.poll(() => reserved.size, { timeout: 15_000 }).toBe(1);
+		events.push("opened");
+		parked.open();
+		await reverting;
+		return events;
+	} finally {
+		revertHooks.afterReserve = original;
+	}
+}
 
 test("reverting one of two hunks keeps the other", async () => {
 	const s = await repoServer({ "a.txt": seven() });
@@ -85,6 +99,13 @@ test("reverting a file restores it; reverting an untracked added file deletes it
 	expect(text(s, "a.txt")).toBe("one\ntwo\nthree\n");
 	await revert(s, thread.id, { path: "new.txt" });
 	expect(existsSync(join(s.cwd, "new.txt"))).toBe(false);
+	// Staged changes go too: nothing is left in the index for a later commit to bring back.
+	write(s.cwd, "a.txt", "staged\n");
+	write(s.cwd, "added.txt", "added\n");
+	sh(s.cwd, "add", "a.txt", "added.txt");
+	await revert(s, thread.id, { path: "a.txt" });
+	await revert(s, thread.id, { path: "added.txt" });
+	expect(sh(s.cwd, "status", "--porcelain")).toBe("");
 });
 
 test("a stale hunk id answers diffChanged and changes nothing", async () => {
@@ -193,20 +214,17 @@ test("a revert through a sibling waits for an unloading thread's parked after-sn
 		await parked.opened;
 	};
 	let unloading: Promise<void> | undefined;
-	let reverting: Promise<unknown> | undefined;
 	try {
 		s.faux.setResponses(bashTurn("echo x > x.txt"));
 		await turn(s, thread.id);
 		await parked.reached;
 		unloading = s.threads.unload(thread.id);
-		reverting = revert(s, sibling.id, { path: "a.txt" });
-		expect(await settledState(reverting)).toBe("pending");
+		expect(await revertAfterGate(s, sibling.id, parked)).toEqual(["opened", "reserved"]);
 	} finally {
 		parked.open();
 		turnChangeHooks.afterSnapshot = original;
 	}
 	await unloading;
-	await reverting;
 	expect(text(s, "a.txt")).toBe("one\ntwo\nthree\n");
 	await s.a.client.request("thread/resume", { threadId: thread.id });
 	const last = await read(s, thread.id, { scope: "lastTurn" });
@@ -224,18 +242,15 @@ test("a revert right after turn/completed waits for that turn's after-snapshot",
 		parked.enter();
 		await parked.opened;
 	};
-	let reverting: Promise<unknown> | undefined;
 	try {
 		s.faux.setResponses(bashTurn("echo x > x.txt"));
 		await turn(s, thread.id);
 		await parked.reached;
-		reverting = revert(s, thread.id, { path: "a.txt" });
-		expect(await settledState(reverting)).toBe("pending");
+		expect(await revertAfterGate(s, thread.id, parked)).toEqual(["opened", "reserved"]);
 	} finally {
 		parked.open();
 		turnChangeHooks.afterSnapshot = original;
 	}
-	await reverting;
 	const last = await read(s, thread.id, { scope: "lastTurn" });
 	expect(last.files.map((f) => f.path)).toEqual(["x.txt"]);
 });
@@ -309,6 +324,8 @@ test("a comment on staged quotes the index version, not the working file", async
 	await turn(s, thread.id, "fix", {
 		comments: [comment({ scope: "staged", path: "a.txt", side: "new", startLine: 2, endLine: 2 })],
 	});
+	// The user's text leads, so a title taken from the first line is theirs.
+	expect(seen[0]).toContain('"text":"fix\\n\\nReview comments on the changes:');
 	expect(seen[0]).toContain("STAGED");
 	expect(seen[0]).not.toContain("WORKING");
 	expect(seen[0]).toContain("`a.txt` line 2 (new)");
@@ -535,7 +552,7 @@ test("over real stdio, comments past the quote budget are refused and the connec
 		send({ id: 4, method: "turn/queue/add", params: { threadId, text: "y", comments: many } });
 		expect((await reply(4)).result).toMatchObject({ queueId: expect.any(String) });
 	} finally {
-		child.kill();
+		await stopChild(child);
 		rmSync(agentDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 		rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 	}

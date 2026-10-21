@@ -2,4 +2,4 @@
 "@knightcodeai/cli": minor
 ---
 
-Added worktree threads, environments, scoped diffs, turn change notifications, git actions and handoff between worktrees and the main checkout to the app server.
+Added worktree threads to the app server: `thread/start` and `thread/fork` can run a thread in a detached git worktree, with per-project environments whose setup and cleanup scripts run for each worktree.

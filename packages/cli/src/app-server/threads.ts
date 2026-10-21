@@ -55,7 +55,7 @@ import {
 	TURN_DIFF_ENTRY,
 	TurnChanges,
 } from "./diff.ts";
-import { type Repo, repoOf, requireRepo, runGit, withRepoLock } from "./git.ts";
+import { operationIn, type Repo, repoOf, requireRepo, runGit, withRepoLock } from "./git.ts";
 import {
 	type GitActionContext,
 	gitBranchCreate,
@@ -216,6 +216,8 @@ export class ThreadManager {
 	private readonly reservedCheckouts = new Map<string, string>();
 	/** Thread ids and manifest paths whose worktree is being prepared or restored: fenced against deletion. */
 	private readonly preparing = new Set<string>();
+	/** Threads with a thread/handoff in progress. */
+	private readonly handingOff = new Set<string>();
 	/** Manifest path → ids of threads loaded or loading in that worktree. */
 	private readonly worktreeUsers = new Map<string, Set<string>>();
 	/** Manifest path → the deletion in progress there. */
@@ -376,7 +378,16 @@ export class ThreadManager {
 		let count = kept.length;
 		for (const manifest of kept) {
 			if (count <= settings.keep) break;
-			if ((await this.deleteManaged(manifest, "prune", warnings)).deleted) count--;
+			try {
+				if ((await this.deleteManaged(manifest, "prune", warnings)).deleted) count--;
+			} catch (error) {
+				// One worktree whose project moved or whose git failed must not stop the rest; shutdown still does.
+				if (this.shutdown.signal.aborted) throw error;
+				warnings.push({
+					source: "server",
+					message: `${manifest.path} was not pruned: ${error instanceof Error ? error.message : String(error)}`,
+				});
+			}
 		}
 		this.reportWarnings(warnings);
 	}
@@ -404,9 +415,21 @@ export class ThreadManager {
 				worktree: { deleted: true, ...(manifest.deleted.snapshot ? { snapshot: manifest.deleted.snapshot } : {}) },
 			};
 		const others = [...(this.worktreeUsers.get(pathKey(manifest.path)) ?? [])].filter((id) => id !== threadId);
-		const saved = (await this.threadsOf(manifest)).filter((t) => t.id !== threadId && !t.archived);
-		if (others.length > 0 || saved.length > 0) return { worktree: { deleted: false, reason: "inUse" } };
-		const result = await this.deleteManaged(manifest, "archive", warnings);
+		let result: Awaited<ReturnType<typeof this.deleteManaged>>;
+		try {
+			const saved = (await this.threadsOf(manifest)).filter((t) => t.id !== threadId && !t.archived);
+			if (others.length > 0 || saved.length > 0) return { worktree: { deleted: false, reason: "inUse" } };
+			result = await this.deleteManaged(manifest, "archive", warnings);
+		} catch (error) {
+			// The thread is archived already: a worktree that could not go is a warning, not a failed archive.
+			if (this.shutdown.signal.aborted) throw error;
+			warnings.push({
+				source: "server",
+				message: `${manifest.path} was not deleted: ${error instanceof Error ? error.message : String(error)}`,
+			});
+			this.reportWarnings(warnings, threadId);
+			return { worktree: { deleted: false } };
+		}
 		this.reportWarnings(warnings, threadId);
 		this.schedulePrune();
 		if (result.deleted)
@@ -468,18 +491,24 @@ export class ThreadManager {
 		return thread.checkoutRoot !== undefined && this.reservedCheckouts.has(thread.checkoutRoot);
 	}
 
-	/**
-	 * Take the checkouts for `what`, synchronously with the check that nothing runs in them. Then wait for closing
-	 * threads and every in-flight turn snapshot there, so a turn that just completed has its record first.
-	 */
-	async reserveCheckouts(roots: string[], what: string): Promise<() => void> {
-		const held = new Set(roots);
+	/** Refuse unless the checkouts are unreserved and no turn runs in them; the threads inside them. */
+	private assertCheckoutsFree(held: ReadonlySet<string>): LoadedThread[] {
 		for (const root of held)
 			if (this.reservedCheckouts.has(root))
 				throw new AppServerError("turnInProgress", `the checkout is busy: ${this.reservedCheckouts.get(root)}`);
 		const inside = [...this.threads.values()].filter((t) => t.checkoutRoot !== undefined && held.has(t.checkoutRoot));
 		if (inside.some((t) => this.running(t)))
 			throw new AppServerError("turnInProgress", "a turn is running in this checkout; interrupt it first");
+		return inside;
+	}
+
+	/**
+	 * Take the checkouts for `what`, synchronously with the check that nothing runs in them. Then wait for closing
+	 * threads and every in-flight turn snapshot there, so a turn that just completed has its record first.
+	 */
+	async reserveCheckouts(roots: string[], what: string): Promise<() => void> {
+		const held = new Set(roots);
+		const inside = this.assertCheckoutsFree(held);
 		for (const root of held) this.reservedCheckouts.set(root, what);
 		const release = () => {
 			for (const root of held) if (this.reservedCheckouts.get(root) === what) this.reservedCheckouts.delete(root);
@@ -495,6 +524,16 @@ export class ThreadManager {
 			throw error;
 		}
 		return release;
+	}
+
+	/** `step` with the checkout reserved and the repository lock held (reservation first, as revert takes them). */
+	private async holdingCheckout<T>(repo: Repo, what: string, step: () => Promise<T>): Promise<T> {
+		const release = await this.reserveCheckouts([repo.root], what);
+		try {
+			return await withRepoLock(repo, step);
+		} finally {
+			release();
+		}
 	}
 
 	/**
@@ -521,6 +560,10 @@ export class ThreadManager {
 	 * destination worktree, B moves the changes with both checkouts reserved, C reloads the thread where it now runs.
 	 */
 	handoff(params: ParamsOf<"thread/handoff">, by: Subscriber): Promise<ResultOf<"thread/handoff">> {
+		// One handoff per thread at a time: a second would build a second worktree that the first's leaves orphaned.
+		if (this.handingOff.has(params.threadId))
+			return Promise.reject(new AppServerError("turnInProgress", "this thread is already being handed off"));
+		this.handingOff.add(params.threadId);
 		return this.track(async () => {
 			const thread = await this.ensureLoaded(params.threadId, by.mode);
 			if (!thread.file || !existsSync(thread.file))
@@ -549,6 +592,14 @@ export class ThreadManager {
 					const main = await requireRepo(cwd);
 					if (!(await repoHead(main)))
 						throw new AppServerError("invalidParams", `commit something in ${main.root} first`);
+					// Phase B's cheap refusals first: a handoff refused after this point leaves a worktree behind.
+					this.assertCheckoutsFree(new Set([main.root]));
+					if (operationIn(main))
+						throw new AppServerError(
+							"gitConflict",
+							`finish the merge, rebase, cherry-pick or revert in ${main.root} first`,
+							{ reason: "operationInProgress" },
+						);
 					const created = await createWorktree({
 						settings,
 						projectCwd: thread.projectCwd,
@@ -610,7 +661,7 @@ export class ThreadManager {
 				this.preparing.delete(thread.id);
 				if (restored) this.preparing.delete(restored);
 			}
-		});
+		}).finally(() => this.handingOff.delete(params.threadId));
 	}
 
 	/** Reload a thread where its manifest now places it, carrying its queue and subscribers as a replacement does. */
@@ -786,9 +837,10 @@ export class ThreadManager {
 				this.listingBytesScanned += bytes;
 			};
 			const settings = this.worktrees();
+			const manifests = allManifests(settings);
 			let sessions: IndexedSession[] = [];
 			const placed = (info: IndexedSession) => {
-				const place = placeThread(settings, info.id, info.cwd);
+				const place = placeThread(settings, info.id, info.cwd, manifests);
 				return { info, place, projectCwd: place.manifest?.projectCwd ?? info.cwd };
 			};
 			let entries: ReturnType<typeof placed>[];
@@ -2091,18 +2143,25 @@ export class ThreadManager {
 			"thread/start": (params, connection) => this.start(params, connection),
 			"thread/handoff": (params, connection) => this.handoff(params, connection),
 			"thread/diff/read": (params, connection) =>
-				this.onCheckout(params.threadId, connection.mode, false, (thread) =>
-					readThreadDiff(thread, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS),
+				this.onCheckout(params.threadId, connection.mode, false, (thread, _repo, ctx) =>
+					readThreadDiff(thread, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS, ctx.signal),
 				),
 			"git/status": ({ threadId }, connection) =>
 				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitStatus(repo)),
+			// Index changes hold the checkout, as a revert does: no turn runs (a tool may be halfway through a file) and none
+			// starts until the git step is done. The reservation comes before the repository lock, in the revert's order.
 			"git/stage": (params, connection) =>
-				this.onCheckout(params.threadId, connection.mode, true, (thread, repo) => gitStage(thread, repo, params)),
+				this.onCheckout(params.threadId, connection.mode, false, (thread, repo) =>
+					this.holdingCheckout(repo, "stage", () => gitStage(thread, repo, params)),
+				),
 			"git/unstage": (params, connection) =>
-				this.onCheckout(params.threadId, connection.mode, true, (thread, repo) => gitUnstage(thread, repo, params)),
+				this.onCheckout(params.threadId, connection.mode, false, (thread, repo) =>
+					this.holdingCheckout(repo, "unstage", () => gitUnstage(thread, repo, params)),
+				),
+			// gitCommit holds the checkout for its staging step only, never across the model call writing the message.
 			"git/commit": (params, connection) =>
-				this.onCheckout(params.threadId, connection.mode, true, (thread, repo, ctx) =>
-					gitCommit(thread, repo, params, ctx),
+				this.onCheckout(params.threadId, connection.mode, false, (thread, repo, ctx) =>
+					gitCommit(thread, repo, params, ctx, (step) => this.holdingCheckout(repo, "commit", step)),
 				),
 			"git/push": ({ threadId }, connection) =>
 				this.onCheckout(threadId, connection.mode, true, (_thread, repo, ctx) => gitPush(repo, ctx)),
@@ -2114,8 +2173,19 @@ export class ThreadManager {
 				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitBranches(repo)),
 			"git/branch/create": ({ threadId, name }, connection) =>
 				this.onCheckout(threadId, connection.mode, true, (_thread, repo) => gitBranchCreate(repo, name)),
+			// A switch rewrites the working tree: never under a running turn, whose diff would take the switch's files.
 			"git/branch/switch": ({ threadId, name }, connection) =>
-				this.onCheckout(threadId, connection.mode, true, (_thread, repo) => gitBranchSwitch(repo, name)),
+				this.track(() =>
+					this.ensureLoaded(threadId, connection.mode).then(async (thread) => {
+						const repo = await requireRepo(thread.session.sessionManager.getCwd());
+						const release = await this.reserveCheckouts([repo.root], "branch switch");
+						try {
+							return await withRepoLock(repo, () => gitBranchSwitch(repo, name));
+						} finally {
+							release();
+						}
+					}),
+				),
 			"git/log": ({ threadId, limit }, connection) =>
 				this.onCheckout(threadId, connection.mode, false, (thread, repo) => gitLog(thread, repo, limit ?? 50)),
 			"environment/list": async ({ cwd }) => {
