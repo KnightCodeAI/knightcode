@@ -118,32 +118,51 @@ export function createLoginRegistry(ctx: AppServerContext, options: LoginRegistr
 			record.timer = setTimeout(() => abandon(record, "login timed out"), options.pendingTtlMs ?? 10 * 60_000);
 			record.timer.unref();
 			void ctx.models
-				.login(provider, type, {
-					signal: record.controller.signal,
-					notify(event: AuthEvent) {
-						if (record.status !== "pending") return;
-						record.events.push(event);
-						report(record);
-					},
-					prompt(prompt: AuthPrompt) {
-						if (record.status !== "pending" || prompt.signal?.aborted)
-							return Promise.reject(new Error("login cancelled"));
-						return new Promise<string>((resolve, reject) => {
-							record.pending = {
-								id: randomUUID(),
-								prompt: {
-									type: prompt.type,
-									message: prompt.message,
-									placeholder: "placeholder" in prompt ? prompt.placeholder : undefined,
-									options: "options" in prompt ? [...prompt.options] : undefined,
-								},
-								resolve,
-								reject,
-							};
+				.login(
+					provider,
+					type,
+					{
+						signal: record.controller.signal,
+						notify(event: AuthEvent) {
+							if (record.status !== "pending") return;
+							record.events.push(event);
 							report(record);
-						});
+						},
+						prompt(prompt: AuthPrompt) {
+							if (record.status !== "pending" || prompt.signal?.aborted)
+								return Promise.reject(new Error("login cancelled"));
+							return new Promise<string>((resolve, reject) => {
+								const pending: NonNullable<LoginRecord["pending"]> = {
+									id: randomUUID(),
+									prompt: {
+										type: prompt.type,
+										message: prompt.message,
+										placeholder: "placeholder" in prompt ? prompt.placeholder : undefined,
+										options: "options" in prompt ? [...prompt.options] : undefined,
+									},
+									resolve,
+									reject,
+								};
+								record.pending = pending;
+								// The provider withdraws a prompt it no longer needs, e.g. the paste-the-redirect box once
+								// the browser callback arrives; stop offering it to the client.
+								prompt.signal?.addEventListener(
+									"abort",
+									() => {
+										if (record.pending !== pending) return;
+										record.pending = undefined;
+										reject(new Error("login cancelled"));
+										report(record);
+									},
+									{ once: true },
+								);
+								report(record);
+							});
+						},
 					},
-				})
+					// Sign in with ChatGPT registers this installation by its device ID, shared with the terminal UI.
+					{ getDeviceId: () => ctx.settings.getOrCreateDeviceId() },
+				)
 				.then(() => {
 					if (settle(record, "complete")) ctx.broadcast("account/updated", { provider, authenticated: true });
 				})

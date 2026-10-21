@@ -12,6 +12,7 @@ const summaries = (): ThreadSummary[] =>
 		createdAt: "2026-10-11T00:00:00.000Z",
 		archived: false,
 		updatedAt: "2026-10-11T00:00:00.000Z",
+		workspaceMode: "local",
 	}));
 afterEach(() => vi.useRealTimers());
 test("continuations use an immutable scan and never rescan after appends or edits", async () => {

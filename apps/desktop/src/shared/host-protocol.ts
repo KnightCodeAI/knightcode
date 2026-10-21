@@ -12,6 +12,24 @@ function Obj<P extends Record<string, TSchema>>(properties: P) {
 export const Project = Obj({ path: Type.String(), name: Type.Optional(Type.String()), collapsed: Type.Boolean() });
 export type Project = Static<typeof Project>;
 
+const Str = Type.String();
+const Customization = Obj({
+	accent: Type.Optional(Str),
+	background: Type.Optional(Str),
+	foreground: Type.Optional(Str),
+	/** Font families; a style is the PostScript name of one of the family's faces (Appearance › Advanced). */
+	font: Type.Optional(Str),
+	fontStyle: Type.Optional(Str),
+	contentFont: Type.Optional(Str),
+	contentFontStyle: Type.Optional(Str),
+	codeFont: Type.Optional(Str),
+	codeFontStyle: Type.Optional(Str),
+	/** 0-100, Codex's 60 by default: how far surfaces step from the background. */
+	contrast: Type.Optional(Type.Number()),
+	/** The sidebar over the system's material (acrylic on Windows, vibrancy on macOS). */
+	translucentSidebar: Type.Optional(Type.Boolean()),
+});
+
 /** Desktop preferences (section 9.10). Agent behaviour stays in settings.json. */
 export const Preferences = Obj({
 	theme: Type.Union([Type.Literal("system"), Type.Literal("light"), Type.Literal("dark")]),
@@ -20,6 +38,25 @@ export const Preferences = Obj({
 	/** What Send does while a turn runs; the other is on Mod+Enter. */
 	whileRunning: Type.Union([Type.Literal("queue"), Type.Literal("steer")]),
 	allowFullAccess: Type.Boolean(),
+	/** Settings › Appearance per theme: hex accent, background and foreground, and a UI font (renderer/appearance.ts). */
+	appearance: Type.Optional(Obj({ dark: Type.Optional(Customization), light: Type.Optional(Customization) })),
+	/** General › Composer: the context window usage beside the model (on unless false). */
+	showContextUsage: Type.Optional(Type.Boolean()),
+	/** General: confirm closing a window: never, only on the close shortcut (the default), or always. */
+	confirmClose: Type.Optional(Type.Union([Type.Literal("never"), Type.Literal("shortcut"), Type.Literal("always")])),
+	/** General: an OS notification when a turn ends: never, only while the window is unfocused (the default), always. */
+	turnNotifications: Type.Optional(
+		Type.Union([Type.Literal("never"), Type.Literal("unfocused"), Type.Literal("always")]),
+	),
+	/** General: archive threads idle this many days; absent or 0 never. */
+	autoArchiveDays: Type.Optional(Type.Number()),
+	/** Appearance › Advanced: base sizes in px (UI 14 and code 12 by default), diff markers, pointer cursors. */
+	uiFontSize: Type.Optional(Type.Number()),
+	codeFontSize: Type.Optional(Type.Number()),
+	diffMarkers: Type.Optional(Type.Union([Type.Literal("color"), Type.Literal("plusMinus")])),
+	pointerCursors: Type.Optional(Type.Boolean()),
+	/** Rebound shortcuts (Settings › Keyboard shortcuts): a binding id's keys, replacing its defaults; [] unassigns it. */
+	keybindings: Type.Optional(Type.Record(Type.String(), Type.Array(Type.String()))),
 });
 export type Preferences = Static<typeof Preferences>;
 
@@ -36,20 +73,55 @@ export const DesktopState = Obj({
 	projects: Type.Array(Project),
 	pinnedThreads: Type.Array(Type.String()),
 	lastSeen: Type.Record(Type.String(), Type.String()),
-	sidebar: Obj({ width: Type.Number(), collapsed: Type.Boolean() }),
+	/** Threads with an unseen outcome (a turn that ended elsewhere) or marked unread (Codex's "Mark as unread"). */
+	unread: Type.Optional(Type.Array(Type.String())),
+	sidebar: Obj({
+		width: Type.Number(),
+		/** The sidebar is hidden (the title bar's toggle). */
+		collapsed: Type.Boolean(),
+		/** Folded sections ("projects", "recents", "pinned", "attention"). */
+		collapsedSections: Type.Optional(Type.Array(Type.String())),
+		/** Codex's "Organize sidebar": threads under their projects (the default), or every thread in one list. */
+		organize: Type.Optional(Type.Union([Type.Literal("project"), Type.Literal("list")])),
+		/** Codex's "Sort chats by": newest activity first (the default), or newest thread first. */
+		sort: Type.Optional(Type.Union([Type.Literal("updated"), Type.Literal("created")])),
+	}),
 	// Optional so a file written before preferences existed still loads.
 	preferences: Type.Optional(Preferences),
 });
 export type DesktopState = Static<typeof DesktopState>;
+
+/**
+ * The sidebar's width: Codex's default, and the range dragging its edge keeps it in. The minimum is Codex's 290 less
+ * the 52px rail, which Codex counts as part of its sidebar.
+ */
+export const SIDEBAR_WIDTH = { default: 276, min: 238, max: 480 } as const;
 
 export const DEFAULT_STATE: DesktopState = {
 	version: 1,
 	projects: [],
 	pinnedThreads: [],
 	lastSeen: {},
-	sidebar: { width: 300, collapsed: false },
+	// Codex's sidebar width.
+	sidebar: { width: SIDEBAR_WIDTH.default, collapsed: false },
 	preferences: DEFAULT_PREFERENCES,
 };
+
+export const Profile = Type.Union([
+	Obj({ signedIn: Type.Literal(false) }),
+	Obj({ signedIn: Type.Literal(true), login: Type.Optional(Type.String()), avatarUrl: Type.Optional(Type.String()) }),
+]);
+export type Profile = Static<typeof Profile>;
+
+/**
+ * The window chrome both processes draw (desktop-shell.md section 9.1): Codex's 36px title bar, the colour of the
+ * native caption buttons' symbols, and the shell colour the window shows before the page paints.
+ */
+export const WINDOW_CHROME = {
+	titleBarHeight: 36,
+	dark: { symbol: "#ffffff", background: "#202020" },
+	light: { symbol: "#1a1c1f", background: "#f3f3f3" },
+} as const;
 
 /** Menu and window commands main runs on the sender's webContents. */
 export const APP_COMMANDS = [
@@ -58,6 +130,7 @@ export const APP_COMMANDS = [
 	"cut",
 	"copy",
 	"paste",
+	"delete",
 	"selectAll",
 	"reload",
 	"toggleDevTools",
@@ -67,20 +140,61 @@ export const APP_COMMANDS = [
 	"quit",
 	"minimize",
 	"toggleMaximize",
+	"toggleFullScreen",
 	"close",
+	/** Bring the window forward (a clicked notification). */
+	"focus",
 ] as const;
 export type AppCommandName = (typeof APP_COMMANDS)[number];
 export const AppCommand = Type.Unsafe<AppCommandName>(Type.Union(APP_COMMANDS.map((c) => Type.Literal(c))));
 
+/** A native context menu's entries (host/menu/popup), one level of submenus deep, as Codex's row menus are. */
+const MenuAction = Obj({
+	id: Type.String(),
+	label: Type.String(),
+	/** Shown at the row's end, in Electron's accelerator syntax ("CmdOrCtrl+Shift+A"); never registered. */
+	accelerator: Type.Optional(Type.String()),
+	enabled: Type.Optional(Type.Boolean()),
+});
+const MenuRule = Obj({ separator: Type.Literal(true) });
+export const NativeMenuItem = Type.Union([
+	MenuAction,
+	MenuRule,
+	Obj({ label: Type.String(), submenu: Type.Array(Type.Union([MenuAction, MenuRule])) }),
+]);
+export type NativeMenuItem = Static<typeof NativeMenuItem>;
+
 export const HostMethods = {
+	/** Show a native context menu at the pointer; resolves with the chosen item's id once it closes. */
+	"host/menu/popup": {
+		params: Obj({ items: Type.Array(NativeMenuItem) }),
+		result: Obj({ id: Type.Optional(Type.String()) }),
+	},
 	"host/dialog/openFolder": {
 		params: Obj({ title: Type.Optional(Type.String()) }),
 		result: Obj({ path: Type.Optional(Type.String()) }),
 	},
 	"host/shell/openExternal": { params: Obj({ url: Type.String() }), result: Obj({}) },
 	"host/shell/showInFolder": { params: Obj({ path: Type.String() }), result: Obj({}) },
+	/** Open a file in the system's default app ("Open in editor"); program and script files are refused. */
+	"host/shell/openPath": { params: Obj({ path: Type.String() }), result: Obj({}) },
+	/** The rail's profile: the GitHub account of the KnightCode Remote sign-in the CLI shares. */
+	"host/profile/read": { params: Obj({}), result: Profile },
+	/** GitHub's device flow in the browser; resolves once the sign-in is approved. */
+	"host/profile/signIn": { params: Obj({}), result: Profile },
+	"host/profile/signOut": { params: Obj({}), result: Obj({}) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
+	/** Another window, showing a thread when one is named (Codex's "Open in new window"). */
+	"host/window/open": { params: Obj({ threadId: Type.Optional(Type.String()) }), result: Obj({}) },
+	/**
+	 * This window's part in what every window hears about: `primary` (the focused window, else the one focused last)
+	 * is the one that notifies, marks unread and auto-archives; `heldElsewhere` are the threads other windows hold.
+	 */
+	"host/window/role": {
+		params: Obj({}),
+		result: Obj({ primary: Type.Boolean(), heldElsewhere: Type.Array(Type.String()) }),
+	},
 	"host/state/read": { params: Obj({}), result: DesktopState },
 	"host/state/write": { params: Obj({ state: DesktopState }), result: Obj({}) },
 	"host/dialog/openFiles": {
@@ -92,7 +206,14 @@ export const HostMethods = {
 		params: Obj({ path: Type.String() }),
 		result: Obj({ dataUrl: Type.Optional(Type.String()) }),
 	},
-	"host/window/setTheme": { params: Obj({ dark: Type.Boolean() }), result: Obj({}) },
+	/**
+	 * The caption buttons' colours, and the sidebar's material when `translucent` (Appearance › Translucent sidebar):
+	 * acrylic on Windows 11 22H2 and later, vibrancy on macOS. `translucent` in the result says whether it took.
+	 */
+	"host/window/setTheme": {
+		params: Obj({ dark: Type.Boolean(), translucent: Type.Optional(Type.Boolean()) }),
+		result: Obj({ translucent: Type.Boolean() }),
+	},
 	"host/app/command": { params: Obj({ command: AppCommand }), result: Obj({}) },
 	"host/server/restart": { params: Obj({}), result: Obj({}) },
 	"host/app/info": {
@@ -120,9 +241,14 @@ export type HostResponse = { id: number; result: unknown } | { id: number; error
 /** Main-originated events that are not protocol notifications. */
 export type HostEvent =
 	| { event: "server/state"; state: "starting" | "ready" | "restarting" | "failed"; message?: string }
-	| { event: "navigate"; route: string };
+	/** A `knightcode://` link to show (section 6.1). */
+	| { event: "navigate"; route: string }
+	/** The window's zoom changed (View › Zoom In, Zoom Out, Actual Size); 1 is 100%. */
+	| { event: "zoom"; factor: number };
 
 export interface WindowGlobals {
 	platform: NodeJS.Platform;
 	windowId: number;
+	/** A dropped file's path on disk; empty for one that has none (dragged out of another app's memory). */
+	pathForFile: (file: File) => string;
 }

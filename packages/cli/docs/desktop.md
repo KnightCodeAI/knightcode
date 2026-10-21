@@ -2,9 +2,10 @@
 
 The KnightCode desktop app is an Electron window over the [app server](app-server.md). It
 runs one `knightcode app-server` process and every window talks to it, so the desktop and
-the terminal share sessions, settings, credentials and extensions. Nothing about the agent
-is configured in the app itself: models, approval defaults and extensions come from your
-`settings.json`, the same file the terminal reads.
+the terminal share sessions, settings, credentials and extensions. The agent's
+configuration lives in the files the terminal reads (`settings.json`, `mcp.json` and
+`tools.json`); the app's Settings edit those same files, so a change made in either place
+shows in both.
 
 The app is in development and not yet published. Phase S1 (threads, transcript, composer,
 approvals) is usable from a source checkout.
@@ -48,7 +49,21 @@ on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on
   a card with the decisions the server offers; Enter allows once, Escape denies, and Deny
   can tell KnightCode why. Full access asks once per thread, and Settings can hide it.
 - Settings: send key, queue or steer, theme (System, Light, Dark), default model, signing
-  in to and out of providers, keyboard shortcuts, versions and logs.
+  in to and out of providers, keyboard shortcuts, versions and logs. Under Coding:
+  - Configuration: the agent's `settings.json` keys `/settings` offers (reasoning, compaction,
+    steering, images, transport and timeouts, cache warming, project trust, updates), and
+    per-model reasoning, for the user or for one trusted project. A row set in the file being
+    edited has a reset button. Keys without a row are one click away in the file.
+  - Tools: the KnightCode tools `/tools` manages (web fetch, web search with its provider and
+    Brave key, ask user, scratchpad, classifier gate with its model), the tools new threads
+    start with (`defaultTools`), and codemode.
+  - MCP servers: add, remove, turn on or off and set the exposure of the servers in the user's
+    or a trusted project's `mcp.json`, as `/mcp` and `knightcode mcp` do. Signing in to a
+    server and its live status stay with `/mcp` in a thread.
+  - Extensions & skills: load or skip each extension, skill, prompt template and theme you
+    added, as `knightcode config` does. Built-in extensions are always on and not listed.
+
+  Changes apply to threads that start or resume afterwards.
 - Archived threads: search, unarchive, or delete for good.
 - Command palette (Ctrl+K): actions and threads in one search.
 - Quitting while threads run asks first.

@@ -119,6 +119,59 @@ See [Compaction Reference](compaction.md) for trigger, summarization, and valida
 
 See [Themes](themes.md) and [Terminal Setup](terminal-setup.md) for format and platform details.
 
+## Worktrees
+
+Worktree settings belong to the user: they are read from the agent-directory
+settings file only, never from a project's.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `worktrees.root` | string | `<agent dir>/worktrees` | Absolute directory that holds managed worktrees as `<root>/<4 hex digits>/<repository name>`. Worktrees made under an earlier root are no longer managed. |
+| `worktrees.autoDelete` | boolean | `true` | Archiving a thread deletes its worktree, and the least recently used worktrees past `worktrees.keep` are pruned. Each deletion first keeps a snapshot under `refs/knightcode/snapshots/`. |
+| `worktrees.keep` | number | `15` | Managed worktrees kept before pruning starts. |
+| `worktrees.fetchBeforeCreate` | boolean | `false` | Fetch the base's remote before each new worktree. |
+| `worktrees.branchPrefix` | string | `"kc/"` | Prefix of the branch a handoff to the main checkout creates. |
+
+### Environments
+
+A project's environments live in `.knightcode/environments.json`, which can be
+committed:
+
+```json
+{
+  "version": 1,
+  "environments": [
+    {
+      "name": "node",
+      "setup": { "default": "cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci" },
+      "cleanup": { "default": "rm -rf \"$KNIGHTCODE_WORKTREE_PATH/.cache\"" },
+      "actions": [{ "name": "Test", "command": { "default": "npm test" } }]
+    }
+  ]
+}
+```
+
+Each script has `default`, `macos`, `linux` and `windows` variants; the
+platform's wins. Scripts run in bash on every platform (Git Bash on Windows, or
+the `shellPath` setting), so one `default` usually covers all three; a platform
+variant is for a command that differs. The setup script runs when a worktree is
+created and the cleanup script before one is deleted, both at the project root,
+with
+`KNIGHTCODE_SOURCE_TREE_PATH` (the checkout the worktree came from) and
+`KNIGHTCODE_WORKTREE_PATH` (the worktree) set. Since they start in the main
+checkout, work on the worktree through `KNIGHTCODE_WORKTREE_PATH`, as the
+example does: a bare `npm ci` would install into the main checkout. A failing setup keeps the
+worktree and marks it `setupFailed`; a failing cleanup is a warning. An
+untrusted project's scripts never run. `actions` are for the desktop app's
+toolbar.
+
+### `.worktreeinclude`
+
+Ignored files are not copied into a new worktree unless the repository root's
+`.worktreeinclude` (gitignore syntax) lists them, such as `.env`. A file is
+copied only if the worktree ignores it too, so it can never be committed or
+handed off by accident, and nothing is created through a symlink or junction.
+
 ## Network and retries
 
 | Setting | Type | Default | Description |
