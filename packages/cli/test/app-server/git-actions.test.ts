@@ -256,6 +256,28 @@ test("a change during message generation answers concurrentChange and commits no
 	expect(log(s.cwd)).toBe("initial");
 });
 
+test("with includeUnstaged, a working file edited while the message is written answers concurrentChange", async () => {
+	const s = await repoServer();
+	const threadId = await local(s);
+	write(s.cwd, "a.txt", "edited\n");
+	const parked = gate();
+	s.faux.setResponses([
+		async () => {
+			parked.enter();
+			await parked.opened;
+			return fauxAssistantMessage([fauxText("late")]);
+		},
+	]);
+	const committing = call(s, "git/commit", { threadId }).catch((e: unknown) => e);
+	await parked.reached;
+	write(s.cwd, "a.txt", "edited again\n");
+	parked.open();
+	expect(await committing).toMatchObject({ code: "gitConflict", data: { reason: "concurrentChange" } });
+	expect(log(s.cwd)).toBe("initial");
+	// Nothing was staged before: the refusal puts that back.
+	expect(staged(s.cwd)).toBe("");
+});
+
 test("a failed commit message request puts back what the user had staged", async () => {
 	const s = await repoServer();
 	const threadId = await local(s);

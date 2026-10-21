@@ -1115,8 +1115,10 @@ export async function registrationOf(manifest: Manifest): Promise<Registration> 
 }
 
 /**
- * Nested repositories a snapshot would record as a gitlink only: gitlinks with a `.git` in the snapshot tree or the
- * real index, and any `.git` below the root found by a walk that never follows links nor enters ignored directories.
+ * Nested repositories a snapshot would record as a gitlink only, or not at all: gitlinks with a `.git` in the snapshot
+ * tree or the real index, and any `.git` below the root found by a walk that never follows links. Ignored directories
+ * are walked too, with the filesystem alone: the snapshot leaves them out, so a repository there (its local commits)
+ * would go with the checkout.
  */
 export async function nestedRepositories(root: string, tree: string): Promise<string[]> {
 	const found = new Set<string>();
@@ -1158,8 +1160,35 @@ export async function nestedRepositories(root: string, tree: string): Promise<st
 				.map((d) => d.replace(/\/$/, "")),
 		);
 		level = next.filter((d) => !skip.has(d));
+		for (const dir of skip) ignoredRepositories(root, dir, found);
 	}
 	return [...found].sort();
+}
+
+/** Directories an ignored-subtree walk visits at most per deletion check. */
+const IGNORED_WALK_LIMIT = 50_000;
+
+/**
+ * Every `.git` under an ignored directory, by the filesystem alone (no git calls per level). node_modules is skipped:
+ * package managers never leave a checkout there, and walking it would make every prune slow.
+ * ponytail: past IGNORED_WALK_LIMIT directories the walk stops; a deeper repository there is not seen.
+ */
+function ignoredRepositories(root: string, start: string, found: Set<string>): void {
+	const stack = [start];
+	for (let visited = 0; stack.length > 0 && visited < IGNORED_WALK_LIMIT; visited++) {
+		const dir = stack.pop()!;
+		let entries: Dirent[];
+		try {
+			entries = readdirSync(join(root, dir), { withFileTypes: true });
+		} catch {
+			continue;
+		}
+		for (const entry of entries) {
+			if (entry.name === ".git") found.add(dir);
+			else if (entry.isDirectory() && !entry.isSymbolicLink() && entry.name !== "node_modules")
+				stack.push(`${dir}/${entry.name}`);
+		}
+	}
 }
 
 export interface DeleteInput {

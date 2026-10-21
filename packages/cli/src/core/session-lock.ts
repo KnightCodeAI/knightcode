@@ -99,6 +99,22 @@ function keyOf(sessionFile: string): string {
 
 const ownerFile = (sessionFile: string) => `${sessionFile}.lock-owner`;
 
+/** Another process holds a live (not stale) lock on the file; this process's own locks do not count. */
+export function sessionLockedElsewhere(sessionFile: string): boolean {
+	let file: string;
+	try {
+		file = canonicalSessionPath(sessionFile);
+	} catch {
+		return false;
+	}
+	if (held.has(keyOf(file))) return false;
+	try {
+		return lockfile.checkSync(file, { realpath: false, stale: defaultTiming.staleMs });
+	} catch {
+		return false;
+	}
+}
+
 function tokenOnDisk(sessionFile: string): string | undefined {
 	try {
 		return fs.readFileSync(ownerFile(sessionFile), "utf8");

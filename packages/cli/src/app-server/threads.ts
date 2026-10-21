@@ -32,6 +32,7 @@ import {
 	type SessionLock,
 	SessionHardLinkedError,
 	SessionLockedError,
+	sessionLockedElsewhere,
 } from "../core/session-lock.ts";
 import {
 	loadEntriesFromFile,
@@ -226,6 +227,8 @@ export class ThreadManager {
 	private readonly preparing = new Set<string>();
 	/** Threads with a thread/handoff in progress. */
 	private readonly handingOff = new Set<string>();
+	/** Queued inputs of a thread whose reload after a handoff failed, kept for its next load. */
+	private readonly strandedQueues = new Map<string, LoadedThread["queued"]>();
 	/** Manifest path → ids of threads loaded or loading in that worktree. */
 	private readonly worktreeUsers = new Map<string, Set<string>>();
 	/** Manifest path → the deletion in progress there. */
@@ -306,8 +309,8 @@ export class ThreadManager {
 	}
 
 	/** Ids of the threads that belong to a worktree: its owner, its placements, and every saved thread inside it. */
-	private async threadsOf(manifest: Manifest): Promise<{ id: string; archived: boolean }[]> {
-		const ids = new Map<string, boolean>();
+	private async threadsOf(manifest: Manifest): Promise<{ id: string; archived: boolean; file: string }[]> {
+		const ids = new Map<string, { archived: boolean; file: string }>();
 		const within = (cwd: string) => inside(manifest.path, canonicalizePath(cwd));
 		const live = liveDirFor(this.ctx, manifest.projectCwd);
 		for (const [dir, archived] of [
@@ -320,9 +323,9 @@ export class ThreadManager {
 					session.messageCount > 0 &&
 					(session.id === manifest.ownerThreadId || manifest.placement[session.id] !== undefined || within(session.cwd))
 				)
-					ids.set(session.id, archived);
+					ids.set(session.id, { archived, file: session.path });
 		}
-		return [...ids].map(([id, archived]) => ({ id, archived }));
+		return [...ids].map(([id, { archived, file }]) => ({ id, archived, file }));
 	}
 
 	/**
@@ -345,6 +348,9 @@ export class ThreadManager {
 				await workspaceHooks.afterUserCheck();
 				// ponytail: waits for every closing thread, not only those in the worktree; closings are short.
 				await Promise.allSettled([...this.closing.values()]);
+				// A thread of this worktree open in another process (the terminal beside the desktop app) fences it too.
+				if ((await this.threadsOf(manifest)).some((t) => sessionLockedElsewhere(t.file)))
+					return { deleted: false, reason: "inUse" } as const;
 				const repo = await requireRepo(manifest.mainRoot);
 				return await withRepoLock(repo, () =>
 					deleteWorktreeLocked({
@@ -678,7 +684,14 @@ export class ThreadManager {
 		const subscribers = [...thread.subscribers];
 		const last = thread.lastTurnSubscriber;
 		await this.unload(thread.id, "resume", undefined, { waitForQueue: false });
-		const next = await this.ensureLoaded(thread.id, by.mode);
+		let next: LoadedThread;
+		try {
+			next = await this.ensureLoaded(thread.id, by.mode);
+		} catch (error) {
+			// The old thread is gone and the new one did not load: the inputs wait for the thread's next load.
+			this.strandedQueues.set(thread.id, [...(this.strandedQueues.get(thread.id) ?? []), ...queued]);
+			throw error;
+		}
 		for (const subscriber of subscribers) this.subscribe(next, subscriber);
 		next.queued.push(...queued);
 		next.lastTurnSubscriber = last ?? next.lastTurnSubscriber;
@@ -1444,6 +1457,12 @@ export class ThreadManager {
 			// A shutdown that began during the load must not leave this thread behind.
 			this.assertOpen();
 			this.threads.set(thread.id, thread);
+			// Inputs a failed relocation left without a thread come back in its queue (they run at its next idle).
+			const stranded = this.strandedQueues.get(thread.id);
+			if (stranded) {
+				this.strandedQueues.delete(thread.id);
+				thread.queued.push(...stranded);
+			}
 			if (this.systemErrors.delete(thread.id)) thread.broadcastStatus();
 			if (thread.file) this.files.remember(thread.id, thread.file);
 			// No model is fine: an extension provider may register later, and turn/start answers authRequired (§5.2).

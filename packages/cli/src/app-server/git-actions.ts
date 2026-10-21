@@ -20,6 +20,7 @@ import {
 	type Repo,
 	runGit,
 	runProcess,
+	snapshotTree,
 	withRepoLock,
 } from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
@@ -271,8 +272,19 @@ export async function gitCommit(
 	// checkout as staging did.
 	return staging(async () => {
 		const now = await capture();
-		if (now.head !== before.head || now.ref !== before.ref || now.index !== before.index)
+		// With includeUnstaged, the working tree too: an edit made while the message was written would otherwise be
+		// left out of a commit that was asked to take everything (staged into a temporary index, never the user's).
+		const changed =
+			now.head !== before.head ||
+			now.ref !== before.ref ||
+			now.index !== before.index ||
+			(original !== undefined && (await snapshotTree(repo, true, ctx.signal)) !== before.index);
+		if (changed) {
+			// No commit comes of this: what the user had staged goes back (the checkout is already held here).
+			if (original !== undefined && original !== before.index && now.index === before.index)
+				await git(repo, ["read-tree", original]);
 			throw conflict("concurrentChange", "the checkout changed while the commit message was written");
+		}
 		const result = await runGit(repo, ["commit", "-q", "-F", "-"], {
 			input: message,
 			// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
