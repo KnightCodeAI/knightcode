@@ -260,23 +260,30 @@ export class LoadedThread {
 			await this.session.abort();
 			if (waitForQueue) await this.drain();
 		} finally {
-			// A gated settlement hook can outlive abort() while the runtime already reports idle.
-			// Finish the mapped turn before detaching, so accepted starts keep their completion obligation.
-			if (this.mapper?.currentTurnId()) this.mapper.settled(true);
-			// The forced settle may have queued a last after-snapshot; its record is written before the manager closes.
-			await this.changes?.close();
-			this.unsubscribeSession();
+			// Each step runs even when one before it throws: a leaked session keeps its file lock, cache leases and
+			// virtual-model routes, and a missed onClosed leaves the thread's worktree fenced for the process's life.
 			try {
-				await emitSessionShutdownEvent(this.session.extensionRunner, {
-					type: "session_shutdown",
-					reason,
-					targetSessionFile,
-				});
-				this.session.dispose();
+				// A gated settlement hook can outlive abort() while the runtime already reports idle.
+				// Finish the mapped turn before detaching, so accepted starts keep their completion obligation.
+				if (this.mapper?.currentTurnId()) this.mapper.settled(true);
+				// The forced settle may have queued a last after-snapshot; its record is written before the manager closes.
+				await this.changes?.close();
 			} finally {
-				// A throwing shutdown hook or dispose must not leave the thread's worktree fenced for the process's life.
-				this.state = "closed";
-				this.onClosed();
+				this.unsubscribeSession();
+				try {
+					await emitSessionShutdownEvent(this.session.extensionRunner, {
+						type: "session_shutdown",
+						reason,
+						targetSessionFile,
+					});
+				} finally {
+					try {
+						this.session.dispose();
+					} finally {
+						this.state = "closed";
+						this.onClosed();
+					}
+				}
 			}
 		}
 	}
