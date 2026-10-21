@@ -312,7 +312,10 @@ export async function runGit(cwd: string, args: string[], options: GitOptions = 
 	const { internal, noFilters, killable, ...rest } = options;
 	// Killed, git leaves the real index's index.lock behind and every later git write fails until it is deleted;
 	// these short writes run to the end (shutdown waits for in-flight requests). A temporary index's lock is ours.
-	if (!killable && WRITES_INDEX.has(subcommand(args)) && rest.env?.GIT_INDEX_FILE === undefined) {
+	// The server's own switch or checkout runs no hooks (internal), so nothing there needs killing either.
+	const sub = subcommand(args);
+	const writes = WRITES_INDEX.has(sub) || (internal === true && (sub === "switch" || sub === "checkout"));
+	if (!killable && writes && rest.env?.GIT_INDEX_FILE === undefined) {
 		delete rest.signal;
 		// Nor by the default 2-minute timeout: a large checkout behind a virus scanner can take longer.
 		rest.timeoutMs ??= 600_000;
@@ -647,7 +650,8 @@ export async function entriesOf(repo: Repo, tree: string, paths: string[]): Prom
  */
 export async function currentEntries(repo: Repo, paths: string[], signal?: AbortSignal): Promise<Map<string, string>> {
 	const tree = await withTemporaryIndex(repo, signal, async (run) => {
-		const indexed = new Set((await run(["ls-files", "-z"])).split("\0"));
+		// From an empty index: only these paths take part, so an unrelated unmerged entry cannot fail write-tree.
+		await run(["read-tree", "--empty"]);
 		// A parent replaced by a file (ENOTDIR) means the path is gone.
 		const onDisk = (p: string) => {
 			try {
@@ -656,7 +660,7 @@ export async function currentEntries(repo: Repo, paths: string[], signal?: Abort
 				return false;
 			}
 		};
-		const present = paths.filter((p) => indexed.has(p) || onDisk(p));
+		const present = paths.filter(onDisk);
 		// --force: a path ignored since the turn is still compared by what is on disk.
 		if (present.length > 0)
 			await run(["add", "-A", "--force", "--pathspec-from-file=-", "--pathspec-file-nul"], `${present.join("\0")}\0`);

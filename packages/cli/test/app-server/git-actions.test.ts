@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import type { ClientMethod, ParamsOf } from "@knightcode/app-server-protocol";
 import { afterEach, expect, test } from "vitest";
@@ -280,6 +280,32 @@ test("an assume-unchanged file edited locally does not stop a commit of everythi
 	write(s.cwd, "a.txt", "edited\n");
 	expect((await call(s, "git/commit", { threadId, message: "edit a" })).message).toBe("edit a");
 	expect(sh(s.cwd, "show", "--name-only", "--format=", "HEAD")).toBe("a.txt");
+});
+
+test("a commit made meanwhile is not turned into a staged revert; the old staging is kept and named", async () => {
+	const s = await repoServer();
+	const threadId = await local(s);
+	write(s.cwd, "a.txt", "staged\n");
+	sh(s.cwd, "add", "a.txt");
+	write(s.cwd, "b.txt", "unstaged\n");
+	const parked = gate();
+	s.faux.setResponses([
+		async () => {
+			parked.enter();
+			await parked.opened;
+			return fauxAssistantMessage([fauxText("late")]);
+		},
+	]);
+	const committing = call(s, "git/commit", { threadId }).catch((e: unknown) => e);
+	await parked.reached;
+	// The user commits in a terminal while the message is written.
+	sh(s.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "mine");
+	parked.open();
+	const error = (await committing) as { code: string; data: { reason: string; savedIndex: string } };
+	expect(error).toMatchObject({ code: "gitConflict", data: { reason: "concurrentChange" } });
+	expect(staged(s.cwd)).toBe("");
+	expect(existsSync(error.data.savedIndex)).toBe(true);
+	rmSync(dirname(error.data.savedIndex), { recursive: true, force: true });
 });
 
 test("with includeUnstaged, a working file edited while the message is written answers concurrentChange", async () => {

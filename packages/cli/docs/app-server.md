@@ -486,7 +486,10 @@ tooLarge?, hunks}`; each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
 else the worktree's base, the upstream or the default branch, and echoes it.
 More than 500 untracked files are counted in `untrackedSkipped` and left out.
 Files past the response budget come without hunks (`tooLarge`) or are only
-counted (`filesOmitted`). A hunk id from an `ignoreWhitespace` read matches no
+counted (`filesOmitted`). A hunk id hashes the file's header (its blob ids) and
+the hunk at the read's `context`: an action must pass the same `context` (a
+`context: 0` id matches no action), and after an action changes a file, read it
+again, as its other hunks' ids change too. A hunk id from an `ignoreWhitespace` read matches no
 action. Reads take no lock and never write the user's index.
 Errors: `threadNotFound`, `notGitRepo`; `invalidParams` for a missing `commit`
 or no branch to compare with.
