@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import { stripBom } from "../../utils/text.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
-import { generateDiffString, normalizeToLF } from "./edit-diff.ts";
+import { generateDiffString, generateUnifiedPatch, normalizeToLF } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
 import { writeRenderers } from "./renderers/write.ts";
@@ -25,6 +25,10 @@ export type WriteToolInput = Static<typeof writeSchema>;
 export interface WriteToolDetails {
 	/** Display diff against the previous contents, when the write replaced a file that differed. */
 	diff?: string;
+	/** Standard unified patch of the change; a new file patches against empty contents. */
+	patch?: string;
+	/** The write created the file. */
+	created?: boolean;
 }
 
 /** Larger files are written without a display diff. */
@@ -40,10 +44,10 @@ export interface WriteOperations {
 	/** Create directory recursively */
 	mkdir: (dir: string) => Promise<void>;
 	/**
-	 * Read the current contents for the display diff, or undefined when there is nothing to diff against
-	 * (missing, unreadable, or too large). Without it, overwrites show no diff.
+	 * Read the current contents for the diff: null when the file does not exist, undefined when there is
+	 * nothing to diff against (unreadable or too large). Without it, writes show no diff.
 	 */
-	readFile?: (absolutePath: string) => Promise<string | undefined>;
+	readFile?: (absolutePath: string) => Promise<string | null | undefined>;
 }
 
 const defaultWriteOperations: WriteOperations = {
@@ -53,14 +57,18 @@ const defaultWriteOperations: WriteOperations = {
 	readFile: (path) =>
 		fsStat(path)
 			.then((stats) => (stats.size > MAX_DIFF_CHARS ? undefined : fsReadFile(path, "utf-8")))
-			.catch(() => undefined),
+			.catch((error: NodeJS.ErrnoException) => (error.code === "ENOENT" ? null : undefined)),
 };
 
-function overwriteDiff(previous: string | undefined, content: string): string | undefined {
-	if (previous === undefined || previous.length + content.length > MAX_DIFF_CHARS) return undefined;
-	const before = normalizeToLF(stripBom(previous));
+/** The display diff (overwrites only) and the unified patch against the previous contents. */
+function writeDetails(path: string, previous: string | null | undefined, content: string): WriteToolDetails {
+	const created = previous === null ? { created: true } : {};
+	if (previous === undefined || (previous ?? "").length + content.length > MAX_DIFF_CHARS) return created;
+	const before = normalizeToLF(stripBom(previous ?? ""));
 	const after = normalizeToLF(stripBom(content));
-	return before === after ? undefined : generateDiffString(before, after).diff;
+	if (before === after) return created;
+	const patch = generateUnifiedPatch(path, before, after);
+	return previous === null ? { patch, created: true } : { diff: generateDiffString(before, after).diff, patch };
 }
 
 export interface WriteToolOptions {
@@ -111,10 +119,10 @@ export function createWriteToolDefinition(
 				await ops.writeFile(absolutePath, content);
 				throwIfAborted();
 
-				const diff = overwriteDiff(previous, content);
+				const details = writeDetails(path, previous, content);
 				return {
 					content: [{ type: "text", text: `Successfully wrote to ${path}` }],
-					details: diff ? { diff } : undefined,
+					details: Object.keys(details).length > 0 ? details : undefined,
 				};
 			});
 		},

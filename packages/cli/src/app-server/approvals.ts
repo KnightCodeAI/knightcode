@@ -8,7 +8,13 @@
  */
 
 import { isAbsolute, relative, sep } from "node:path";
-import { type ApprovalResult, ApprovalMode, type ServerRequestParams } from "@knightcode/app-server-protocol";
+import {
+	type ApprovalResult,
+	ApprovalMode,
+	type ServerRequestMethod,
+	type ServerRequestParams,
+	type ServerRequestResult,
+} from "@knightcode/app-server-protocol";
 import { Compile } from "typebox/compile";
 import type { InlineExtension } from "../core/extensions/types.ts";
 import type { SessionEntry } from "../core/session-manager.ts";
@@ -62,54 +68,47 @@ export function readApprovalMode(entries: readonly SessionEntry[]): ApprovalMode
 /**
  * Ask the subscriber that most recently started a turn, then the others. A
  * subscriber that disconnects or unsubscribes passes the question on; with
- * nobody left the answer is cancel (§4.5). Each attempt is recorded in
- * `thread.asks` with its target, so `withdrawFrom` can take it back.
+ * nobody left, or on abort, the answer is undefined (§4.5). Each attempt is
+ * recorded in `thread.asks` with its target, so `withdrawFrom` can take it back.
  */
-export async function askApproval(
+export async function askSubscribers<M extends ServerRequestMethod>(
 	thread: LoadedThread,
-	params: ServerRequestParams<"item/toolCall/requestApproval">,
+	method: M,
+	params: ServerRequestParams<M>,
 	signal: AbortSignal,
-): Promise<ApprovalResult> {
+): Promise<ServerRequestResult<M> | undefined> {
 	const token = {};
-	thread.openRequests.add(token);
+	thread.openRequests.set(token, method === "item/toolCall/requestApproval" ? "approval" : "dialog");
 	if (thread.openRequests.size === 1) thread.broadcastStatus();
 	try {
-		return await askEachSubscriber(thread, params, signal);
+		const tried = new Set<unknown>();
+		for (;;) {
+			const candidates = [thread.lastTurnSubscriber, ...thread.subscribers].filter(
+				(s): s is NonNullable<typeof s> => s !== undefined && thread.subscribers.has(s) && !tried.has(s),
+			);
+			const target = candidates[0];
+			if (!target || signal.aborted) return undefined;
+			tried.add(target);
+			// The attempt's own controller: aborted by the request's signal, or by withdrawFrom(target).
+			const attempt = new AbortController();
+			const forward = () => attempt.abort(signal.reason);
+			signal.addEventListener("abort", forward, { once: true });
+			const ask = { target, controller: attempt };
+			thread.asks.add(ask);
+			try {
+				return await target.request(method, params, attempt.signal);
+			} catch (error) {
+				if (signal.aborted) return undefined;
+				if (error instanceof SubscriberGone) continue;
+				throw error;
+			} finally {
+				thread.asks.delete(ask);
+				signal.removeEventListener("abort", forward);
+			}
+		}
 	} finally {
 		thread.openRequests.delete(token);
 		if (thread.openRequests.size === 0) thread.broadcastStatus();
-	}
-}
-
-async function askEachSubscriber(
-	thread: LoadedThread,
-	params: ServerRequestParams<"item/toolCall/requestApproval">,
-	signal: AbortSignal,
-): Promise<ApprovalResult> {
-	const tried = new Set<unknown>();
-	for (;;) {
-		const candidates = [thread.lastTurnSubscriber, ...thread.subscribers].filter(
-			(s): s is NonNullable<typeof s> => s !== undefined && thread.subscribers.has(s) && !tried.has(s),
-		);
-		const target = candidates[0];
-		if (!target || signal.aborted) return { decision: "cancel" };
-		tried.add(target);
-		// The attempt's own controller: aborted by the request's signal, or by withdrawFrom(target).
-		const attempt = new AbortController();
-		const forward = () => attempt.abort(signal.reason);
-		signal.addEventListener("abort", forward, { once: true });
-		const ask = { target, controller: attempt };
-		thread.asks.add(ask);
-		try {
-			return await target.request("item/toolCall/requestApproval", params, attempt.signal);
-		} catch (error) {
-			if (signal.aborted) return { decision: "cancel" };
-			if (error instanceof SubscriberGone) continue;
-			throw error;
-		} finally {
-			thread.asks.delete(ask);
-			signal.removeEventListener("abort", forward);
-		}
 	}
 }
 
@@ -145,8 +144,9 @@ export function createApprovalExtension(holder: { thread?: LoadedThread }): Inli
 				thread.pending.add(controller);
 				let result: ApprovalResult;
 				try {
-					result = await askApproval(
+					result = (await askSubscribers(
 						thread,
+						"item/toolCall/requestApproval",
 						{
 							threadId: thread.id,
 							turnId: thread.mapper.currentTurnId() ?? "",
@@ -159,7 +159,7 @@ export function createApprovalExtension(holder: { thread?: LoadedThread }): Inli
 							...(event.parentToolCallId ? { parentItemId: event.parentToolCallId } : {}),
 						},
 						controller.signal,
-					);
+					)) ?? { decision: "cancel" };
 				} finally {
 					thread.pending.delete(controller);
 					ctx.signal?.removeEventListener("abort", onAbort);

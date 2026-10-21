@@ -266,7 +266,10 @@ describe("Coding Agent Tools", () => {
 			const result = await writeTool.execute("test-call-3", { path: testFile, content });
 
 			expect(getTextOutput(result)).toBe(`Successfully wrote to ${testFile}`);
-			expect(result.details).toBeUndefined();
+			// A new file has no display diff, but its patch counts every line as added.
+			expect(result.details?.diff).toBeUndefined();
+			expect(result.details?.created).toBe(true);
+			expect(applyPatch("", result.details?.patch ?? "")).toBe(content);
 		});
 
 		it("returns a display diff when overwriting a file that differs", async () => {
@@ -275,6 +278,8 @@ describe("Coding Agent Tools", () => {
 
 			const result = await writeTool.execute("test-call-3b", { path: testFile, content: "one\nTWO\nthree\n" });
 			expect(result.details?.diff).toBe(" 1 one\n-2 two\n+2 TWO\n 3 three");
+			expect(result.details?.created).toBeUndefined();
+			expect(applyPatch("one\ntwo\nthree\n", result.details?.patch ?? "")).toBe("one\nTWO\nthree\n");
 
 			const unchanged = await writeTool.execute("test-call-3c", { path: testFile, content: "one\nTWO\nthree\n" });
 			expect(unchanged.details).toBeUndefined();

@@ -781,8 +781,17 @@ class ModelsImpl implements MutableModels {
 		if (!method?.login) {
 			throw new ModelsError("auth", `${provider.name} does not support ${type} login`);
 		}
-		const loginOperation: Promise<Credential> = method.login({ ...interaction, signal }, options);
+		// Pasted keys, IDs and redirect URLs often carry a stray space or newline; no login answer is whitespace-sensitive.
+		const prompt: AuthInteraction["prompt"] = async (request) => {
+			const answer = await interaction.prompt(request);
+			return request.type === "select" ? answer : answer.trim();
+		};
+		const loginOperation: Promise<Credential> = method.login({ ...interaction, prompt, signal }, options);
 		const credential = await raceWithAbortSignal(loginOperation, signal);
+		// Optional keys come back undefined; an empty one means nothing was entered and would show as signed in.
+		if (credential.type === "api_key" && credential.key === "") {
+			throw new ModelsError("auth", `No ${provider.name} API key entered`);
+		}
 		let mutationStarted = false;
 		let markMutationStarted: (() => void) | undefined;
 		const started = new Promise<void>((resolve) => {

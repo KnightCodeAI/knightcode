@@ -288,7 +288,8 @@ export default function uiExtension(knightcode: ExtensionAPI): void {
 
 	const refreshChangedFiles = async (cwd: string) => {
 		const result = await knightcode
-			.exec("git", ["status", "--porcelain"], { cwd, timeout: 5000 })
+			// Without it status refreshes the index under index.lock, failing the user's own git commands meanwhile.
+			.exec("git", ["--no-optional-locks", "status", "--porcelain"], { cwd, timeout: 5000 })
 			.catch(() => undefined);
 		changedFiles = result?.code === 0 ? result.stdout.split("\n").filter((line) => line.trim()).length : undefined;
 		requestRender?.();

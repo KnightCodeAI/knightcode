@@ -189,6 +189,31 @@ describe("execute", () => {
 		expect(answers).toEqual({});
 	});
 
+	test("a UI with a questions panel (the desktop's) gets every question at once, with the call's id", async () => {
+		const select = vi.fn(async () => undefined);
+		const askQuestions = vi.fn(async () => ({
+			database: { label: "Postgres", note: "already running" },
+			auth: { other: "device code" },
+		}));
+		const { ctx } = fakeCtx(true, "rpc", { select });
+		Object.assign(ctx.ui, { askQuestions });
+		const result = await run(ctx, [db, auth]);
+		expect(askQuestions).toHaveBeenCalledWith([db, auth], { toolCallId: "call-1", signal: undefined });
+		expect(select).not.toHaveBeenCalled();
+		expect(result.content[0]).toEqual({
+			type: "text",
+			text: "database: Postgres; note: already running\nauth: Other: device code",
+		});
+	});
+
+	test("dismissing the questions panel interrupts the run", async () => {
+		const { ctx, abort } = fakeCtx(true, "rpc");
+		Object.assign(ctx.ui, { askQuestions: async () => undefined });
+		const result = await run(ctx, [db]);
+		expect(result.details?.status).toBe("interrupted");
+		expect(abort).toHaveBeenCalledOnce();
+	});
+
 	test("RPC: cancelling a dialog interrupts the run", async () => {
 		const { ctx, abort } = fakeCtx(true, "rpc", { select: async () => undefined });
 		const result = await run(ctx, [db]);

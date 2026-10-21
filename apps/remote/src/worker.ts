@@ -154,9 +154,12 @@ export default {
 		}
 
 		if (path === "/api/me") {
-			if (!accountId) return new Response("Unauthorized", { status: 401 });
+			// The desktop app shows the signed-in account from the CLI's token, which it holds instead of a cookie.
+			const token = bearer(request);
+			const account = accountId ?? (token ? await accountForCliToken(env.DB, token) : undefined);
+			if (!account) return new Response("Unauthorized", { status: 401 });
 			const row = await env.DB.prepare("SELECT login, avatar_url FROM accounts WHERE id = ?")
-				.bind(accountId)
+				.bind(account)
 				.first<{ login: string; avatar_url: string | null }>();
 			return Response.json({ login: row?.login ?? "", avatarUrl: row?.avatar_url ?? null });
 		}
