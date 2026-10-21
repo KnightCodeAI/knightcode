@@ -1524,6 +1524,11 @@ export class ThreadManager {
 			if (stranded) {
 				this.strandedQueues.delete(thread.id);
 				thread.queued.push(...stranded);
+				// Once the caller has subscribed: announce them, and the oldest starts as on an idle thread.
+				setImmediate(() => {
+					this.notifyQueue(thread);
+					this.afterActivity(thread);
+				});
 			}
 			if (this.systemErrors.delete(thread.id)) thread.broadcastStatus();
 			if (thread.file) this.files.remember(thread.id, thread.file);

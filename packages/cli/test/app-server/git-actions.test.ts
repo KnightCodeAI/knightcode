@@ -272,6 +272,25 @@ test("a commit a hook refuses puts back what the user had staged, entry flags an
 	expect(sh(s.cwd, "ls-files", "-v", "flag.txt")).toBe("h flag.txt");
 });
 
+test("a commit killed in its pre-commit hook drops git's orphaned index.lock and puts the staging back", async () => {
+	const s = await repoServer();
+	const hooks = tempDir("kc-hooks-");
+	const marker = join(hooks, "entered").replace(/\\/g, "/");
+	writeFileSync(join(hooks, "pre-commit"), `#!/bin/sh\necho entered > "${marker}"\nsleep 600\n`, { mode: 0o755 });
+	sh(s.cwd, "config", "core.hooksPath", hooks.replace(/\\/g, "/"));
+	const threadId = await local(s);
+	write(s.cwd, "a.txt", "staged\n");
+	sh(s.cwd, "add", "a.txt");
+	write(s.cwd, "b.txt", "unstaged\n");
+	const committing = call(s, "git/commit", { threadId, message: "x" }).catch((e: unknown) => e);
+	await expect.poll(() => existsSync(marker), { timeout: 15_000 }).toBe(true);
+	await s.threads.closeAll();
+	expect(await committing).toBeInstanceOf(Error);
+	expect(existsSync(join(s.cwd, ".git", "index.lock"))).toBe(false);
+	expect(staged(s.cwd)).toBe("a.txt");
+	expect(log(s.cwd)).toBe("initial");
+}, 40_000);
+
 test("an assume-unchanged file edited locally does not stop a commit of everything else", async () => {
 	const s = await repoServer({ "a.txt": "a\n", "local.cfg": "base\n" });
 	const threadId = await local(s);

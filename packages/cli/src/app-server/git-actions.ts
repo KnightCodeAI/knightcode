@@ -22,6 +22,7 @@ import {
 	runGit,
 	runProcess,
 	discardSavedIndex,
+	ProcessKilled,
 	restoreIndex,
 	saveIndex,
 	stagedAllTree,
@@ -309,7 +310,7 @@ export async function gitCommit(
 			const head = await optional(repo, ["rev-parse", "-q", "--verify", "HEAD"]);
 			if (saved && head === before.head) {
 				try {
-					await restoreIndex(repo, saved);
+					await restoreIndex(repo, saved, failure instanceof ProcessKilled);
 				} catch {
 					keep = true;
 					throw keptStaging(failure, saved);

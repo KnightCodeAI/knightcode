@@ -464,12 +464,14 @@ export async function saveIndex(repo: Repo, signal?: AbortSignal): Promise<strin
 }
 
 /** Put a saved index back, by rename as git replaces its own index; the caller holds the repository lock. */
-export async function restoreIndex(repo: Repo, saved: string): Promise<void> {
+export async function restoreIndex(repo: Repo, saved: string, orphanedLock = false): Promise<void> {
 	// No signal: this runs after a shutdown killed the commit, to put the user's index back.
 	const real = await git(repo.root, ["rev-parse", "--path-format=absolute", "--git-path", "index"]);
 	// Through git's own index.lock, so a git process writing the index at the same moment fails or makes us fail,
 	// rather than one silently undoing the other.
 	const lock = `${real}.lock`;
+	// A commit killed in its hooks leaves the index.lock it took; while it existed no other git could take one.
+	if (orphanedLock) rmSync(lock, { force: true });
 	try {
 		copyFileSync(saved, lock, constants.COPYFILE_EXCL);
 	} catch (error) {
