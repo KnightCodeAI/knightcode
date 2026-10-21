@@ -249,11 +249,13 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 			// A handoff replaces a thread by itself with a new cwd and workspace. Only windows subscribed to the thread
 			// get this; the others re-list their sidebar when focused.
 			upsertSummary(thread);
-			// The server unloaded the old thread; holding it would resume it again after a restart.
-			set((s) => {
-				const { [oldThreadId]: _old, ...held } = s.held;
-				return { ...s, held };
-			});
+			// The server unloaded the old thread; holding it would resume it again after a restart. A handoff keeps the
+			// id: its view stays, so the resume keeps its pending messages and approvals.
+			if (oldThreadId !== thread.id)
+				set((s) => {
+					const { [oldThreadId]: _old, ...held } = s.held;
+					return { ...s, held };
+				});
 			// Not awaited: resumeThread waits for the event chain this handler runs on.
 			void resumeThread(thread.id);
 			return;
