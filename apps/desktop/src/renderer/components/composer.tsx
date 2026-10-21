@@ -588,9 +588,10 @@ export function Composer({
 							}}
 							placeholder={
 								running
-									? prefs.whileRunning === "queue"
-										? `Queue a follow-up · ${modKey}+Enter to steer`
-										: `Steer the turn · ${modKey}+Enter to queue`
+									? // Mod+Enter does the other only when Enter sends; with Mod+Enter as the send key it has none.
+										prefs.whileRunning === "queue"
+										? `Queue a follow-up${prefs.sendKey === "enter" ? ` · ${modKey}+Enter to steer` : ""}`
+										: `Steer the turn${prefs.sendKey === "enter" ? ` · ${modKey}+Enter to queue` : ""}`
 									: threadId
 										? "Work with KnightCode"
 										: "Do anything"
