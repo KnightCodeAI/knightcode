@@ -1,12 +1,18 @@
 /**
  * GFM rendered from marked's tokens straight to React: no HTML string, so raw HTML in a reply
- * shows as text (desktop-shell.md section 6.3).
+ * shows as text (desktop-shell.md section 6.3). The look is Codex's, in styles.css (.kc-markdown); code blocks are
+ * Codex's card with the language, word wrap and copy, coloured as Codex colours them: highlight.js through lowlight,
+ * whose syntax tree renders as React spans (no HTML here either), in Codex's palette (styles.css, .hljs-*).
  */
 
-import { Check, Copy } from "lucide-react";
+import type { RootContent } from "hast";
+import { all, createLowlight } from "lowlight";
 import { lexer, type Token, type Tokens } from "marked";
-import { type ReactNode, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useMemo, useState } from "react";
 import { client } from "../client.ts";
+import { IconButton } from "./button.tsx";
+import { Check, Code, Copy, WrapText } from "./icons.tsx";
+import { Tooltip } from "./tooltip.tsx";
 
 function openLink(href: string): void {
 	void client.host("host/shell/openExternal", { url: href }).catch(() => {});
@@ -17,36 +23,27 @@ function inline(tokens: Token[] | undefined, fallback = ""): ReactNode[] {
 	return tokens.map((token, i) => {
 		switch (token.type) {
 			case "strong":
-				return (
-					<strong key={i} className="font-semibold">
-						{inline((token as Tokens.Strong).tokens)}
-					</strong>
-				);
+				return <strong key={i}>{inline((token as Tokens.Strong).tokens)}</strong>;
 			case "em":
 				return <em key={i}>{inline((token as Tokens.Em).tokens)}</em>;
 			case "del":
 				return <del key={i}>{inline((token as Tokens.Del).tokens)}</del>;
 			case "codespan":
-				return (
-					<code key={i} className="rounded bg-hover px-1 py-px font-code text-[0.92em]">
-						{(token as Tokens.Codespan).text}
-					</code>
-				);
+				return <code key={i}>{unescape((token as Tokens.Codespan).text)}</code>;
 			case "link": {
 				const link = token as Tokens.Link;
 				return (
-					<a
-						key={i}
-						href={link.href}
-						title={link.href}
-						className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
-						onClick={(event) => {
-							event.preventDefault();
-							openLink(link.href);
-						}}
-					>
-						{inline(link.tokens)}
-					</a>
+					<Tooltip key={i} content={link.href}>
+						<a
+							href={link.href}
+							onClick={(event) => {
+								event.preventDefault();
+								openLink(link.href);
+							}}
+						>
+							{inline(link.tokens)}
+						</a>
+					</Tooltip>
 				);
 			}
 			case "br":
@@ -69,27 +66,95 @@ const unescape = (text: string) =>
 		(_, e: string) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" })[e]!,
 	);
 
+/** A fence's language as Codex names it in the code block header. */
+const LANGUAGES: Record<string, string> = {
+	js: "JavaScript",
+	javascript: "JavaScript",
+	jsx: "JavaScript",
+	ts: "TypeScript",
+	typescript: "TypeScript",
+	tsx: "TypeScript",
+	py: "Python",
+	python: "Python",
+	rs: "Rust",
+	rust: "Rust",
+	go: "Go",
+	json: "JSON",
+	md: "Markdown",
+	markdown: "Markdown",
+	css: "CSS",
+	html: "HTML",
+	sh: "Shell",
+	bash: "Bash",
+	shell: "Shell",
+	powershell: "PowerShell",
+	ps1: "PowerShell",
+	yaml: "YAML",
+	yml: "YAML",
+	diff: "Diff",
+};
+
+/** Every highlight.js language and its aliases, as Codex registers them. */
+const lowlight = createLowlight(all);
+
+/** A highlighted tree as React: each token a span with its hljs class, text as text. */
+function syntax(nodes: RootContent[]): ReactNode[] {
+	return nodes.map((node, i) => {
+		if (node.type === "text") return node.value;
+		if (node.type !== "element") return null;
+		const className = node.properties.className;
+		return (
+			<span key={i} className={Array.isArray(className) ? className.join(" ") : undefined}>
+				{syntax(node.children)}
+			</span>
+		);
+	});
+}
+
+/**
+ * Codex's code block: a 20px-cornered card, a 20px code mark and the language at 13px medium, word wrap and copy as
+ * 36px round buttons.
+ */
 function CodeBlock({ code, lang }: { code: string; lang?: string }) {
 	const [copied, setCopied] = useState(false);
+	const [wrap, setWrap] = useState(false);
+	const known = lang ? LANGUAGES[lang.toLowerCase()] : undefined;
+	// A fence without a language, or one highlight.js lacks, stays plain.
+	const highlighted = useMemo(() => {
+		const name = lang?.toLowerCase();
+		return name && lowlight.registered(name) ? syntax(lowlight.highlight(name, code).children) : undefined;
+	}, [code, lang]);
 	return (
-		<div className="group/code my-3 overflow-hidden rounded-[var(--kc-radius)] border border-line bg-shell">
-			<div className="flex h-7 items-center justify-between border-b border-line px-3 text-[11px] text-faint">
-				<span>{lang || "text"}</span>
-				<button
-					type="button"
-					className="flex items-center gap-1 opacity-0 transition-opacity group-hover/code:opacity-100 hover:text-ink"
+		<div className="kc-md-code overflow-hidden rounded-2xl border border-line-subtle bg-surface">
+			<div className="flex h-12 items-center gap-2 ps-5 pe-1.5">
+				<Code size={20} className="shrink-0" />
+				<span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{known ?? (lang || "Text")}</span>
+				<IconButton
+					label={wrap ? "Disable word wrap" : "Enable word wrap"}
+					size="xl"
+					round
+					aria-pressed={wrap}
+					onClick={() => setWrap(!wrap)}
+				>
+					<WrapText size={16} />
+				</IconButton>
+				<IconButton
+					label={copied ? "Copied" : "Copy code"}
+					size="xl"
+					round
 					onClick={() => {
 						void client.host("host/clipboard/writeText", { text: code });
 						setCopied(true);
 						setTimeout(() => setCopied(false), 1500);
 					}}
 				>
-					{copied ? <Check size={12} /> : <Copy size={12} />}
-					{copied ? "Copied" : "Copy"}
-				</button>
+					{copied ? <Check size={16} /> : <Copy size={16} />}
+				</IconButton>
 			</div>
-			<pre className="selectable overflow-x-auto p-3 font-code text-[length:var(--kc-size-code)] leading-relaxed">
-				<code>{code}</code>
+			<pre
+				className={`selectable px-5 pb-3 font-code text-code ${wrap ? "break-words whitespace-pre-wrap" : "overflow-x-auto"}`}
+			>
+				<code>{highlighted ?? code}</code>
 			</pre>
 		</div>
 	);
@@ -100,42 +165,37 @@ function blocks(tokens: Token[]): ReactNode[] {
 		switch (token.type) {
 			case "heading": {
 				const heading = token as Tokens.Heading;
-				const size = ["text-xl", "text-lg", "text-base", "text-sm", "text-sm", "text-sm"][heading.depth - 1];
-				return (
-					<p key={i} className={`mt-5 mb-2 font-semibold ${size}`}>
-						{inline(heading.tokens)}
-					</p>
-				);
+				const Tag = `h${Math.min(heading.depth, 6)}` as "h1";
+				return <Tag key={i}>{inline(heading.tokens)}</Tag>;
 			}
 			case "paragraph":
-				return (
-					<p key={i} className="my-2.5">
-						{inline((token as Tokens.Paragraph).tokens)}
-					</p>
-				);
+				return <p key={i}>{inline((token as Tokens.Paragraph).tokens)}</p>;
 			case "code": {
 				const code = token as Tokens.Code;
 				return <CodeBlock key={i} code={code.text} lang={code.lang} />;
 			}
 			case "blockquote":
-				return (
-					<blockquote key={i} className="my-3 border-l-2 border-line-strong pl-3 text-muted">
-						{blocks((token as Tokens.Blockquote).tokens)}
-					</blockquote>
-				);
+				return <blockquote key={i}>{blocks((token as Tokens.Blockquote).tokens)}</blockquote>;
 			case "list": {
 				const list = token as Tokens.List;
 				const Tag = list.ordered ? "ol" : "ul";
 				return (
-					<Tag key={i} className={`my-2.5 pl-5 ${list.ordered ? "list-decimal" : "list-disc"} marker:text-faint`}>
+					<Tag
+						key={i}
+						start={list.ordered && typeof list.start === "number" && list.start !== 1 ? list.start : undefined}
+					>
 						{list.items.map((item, j) => (
-							<li key={j} className="my-1 pl-1">
-								{item.task ? (
-									<input type="checkbox" checked={item.checked} readOnly className="mr-1.5 align-middle" />
-								) : null}
+							<li key={j}>
+								{item.task ? <input type="checkbox" checked={item.checked} readOnly /> : null}
 								{item.loose
 									? blocks(item.tokens)
-									: inline(item.tokens.flatMap((t) => ("tokens" in t && t.type === "text" ? (t.tokens ?? [t]) : [t])))}
+									: item.tokens.map((t, k) =>
+											t.type === "list" ? (
+												<Fragment key={k}>{blocks([t])}</Fragment>
+											) : (
+												<span key={k}>{inline("tokens" in t && t.type === "text" ? (t.tokens ?? [t]) : [t])}</span>
+											),
+										)}
 							</li>
 						))}
 					</Tag>
@@ -144,12 +204,12 @@ function blocks(tokens: Token[]): ReactNode[] {
 			case "table": {
 				const table = token as Tokens.Table;
 				return (
-					<div key={i} className="my-3 overflow-x-auto">
-						<table className="border-collapse text-left">
+					<div key={i} className="kc-md-table">
+						<table>
 							<thead>
 								<tr>
 									{table.header.map((cell, j) => (
-										<th key={j} className="border border-line px-2.5 py-1.5 font-semibold">
+										<th key={j} align={cell.align ?? undefined}>
 											{inline(cell.tokens)}
 										</th>
 									))}
@@ -159,7 +219,7 @@ function blocks(tokens: Token[]): ReactNode[] {
 								{table.rows.map((row, j) => (
 									<tr key={j}>
 										{row.map((cell, k) => (
-											<td key={k} className="border border-line px-2.5 py-1.5">
+											<td key={k} align={cell.align ?? undefined}>
 												{inline(cell.tokens)}
 											</td>
 										))}
@@ -171,16 +231,14 @@ function blocks(tokens: Token[]): ReactNode[] {
 				);
 			}
 			case "hr":
-				return <hr key={i} className="my-4 border-line" />;
+				return <hr key={i} />;
 			case "space":
 				return null;
 			default:
 				return "tokens" in token && token.tokens ? (
-					<p key={i} className="my-2.5">
-						{inline(token.tokens)}
-					</p>
+					<p key={i}>{inline(token.tokens)}</p>
 				) : (
-					<p key={i} className="my-2.5 whitespace-pre-wrap">
+					<p key={i} className="whitespace-pre-wrap">
 						{"raw" in token ? token.raw : ""}
 					</p>
 				);
@@ -188,7 +246,12 @@ function blocks(tokens: Token[]): ReactNode[] {
 	});
 }
 
-export function Markdown({ text }: { text: string }) {
+/**  is the user's own message in its bubble: no space around its paragraphs, its colours inherited. */
+export function Markdown({ text, tone }: { text: string; tone?: "user" }) {
 	const tokens = useMemo(() => lexer(text, { gfm: true }), [text]);
-	return <div className="markdown selectable leading-relaxed">{blocks(tokens)}</div>;
+	return (
+		<div className="kc-markdown selectable" data-tone={tone}>
+			{blocks(tokens)}
+		</div>
+	);
 }

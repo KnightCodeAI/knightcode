@@ -100,6 +100,20 @@ export async function askWithDialogs(
 	return answers;
 }
 
+/**
+ * A UI that shows all of a call's questions at once, with back and forward between them: the desktop app's
+ * (packages/cli/src/app-server/dialogs.ts). Resolves undefined when the user dismisses it.
+ */
+export interface QuestionsUI {
+	askQuestions(
+		questions: AskQuestion[],
+		options: { toolCallId: string; signal?: AbortSignal },
+	): Promise<AskAnswers | undefined>;
+}
+
+const questionsUI = (ui: object): QuestionsUI | undefined =>
+	typeof (ui as Partial<QuestionsUI>).askQuestions === "function" ? (ui as QuestionsUI) : undefined;
+
 function result(questions: AskQuestion[], answers: AskAnswers, status: AskUserDetails["status"]) {
 	const text =
 		status === "no_user"
@@ -120,19 +134,22 @@ export const askUserTool: ToolDefinition<typeof askUserSchema, AskUserDetails> =
 	// Interactive: codemode scripts must not open dialogs, and two pickers cannot share the editor slot.
 	exposure: "model-only",
 	executionMode: "sequential",
-	async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+	async execute(toolCallId, params, signal, _onUpdate, ctx) {
 		const { questions } = params;
 		const invalid = validateQuestions(questions);
 		if (invalid) throw new Error(invalid);
 		if (!ctx.hasUI) return result(questions, {}, "no_user");
 
+		const panel = questionsUI(ctx.ui);
 		const answers = signal?.aborted
 			? undefined
 			: ctx.mode === "tui"
 				? await ctx.ui.custom<AskAnswers | undefined>(
 						(tui, theme, keybindings, done) => new AskPicker(questions, tui, theme, keybindings, done, signal),
 					)
-				: await askWithDialogs(questions, ctx.ui, signal);
+				: panel
+					? await panel.askQuestions(questions, { toolCallId, signal })
+					: await askWithDialogs(questions, ctx.ui, signal);
 		if (!answers) {
 			// Same as pressing Esc at the prompt: the run stops, and this result records why. terminate
 			// also skips the aborted model call that would otherwise follow a batch with only this tool.

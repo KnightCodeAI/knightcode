@@ -5,8 +5,9 @@
  */
 
 import type { AssistantMessage } from "@knightcode/ai";
-import type { FileChange, Item, ToolOutput, Turn } from "@knightcode/app-server-protocol";
+import type { FileChange, Item, ToolOutput, Turn, TurnFile } from "@knightcode/app-server-protocol";
 import type { SessionEntry } from "../core/session-manager.ts";
+import { TURN_COMMENTS_ENTRY, TURN_DIFF_ENTRY, type TurnComments, type TurnDiffRecord } from "./diff.ts";
 import {
 	classifyAssistantError,
 	isTurnEnd,
@@ -78,8 +79,15 @@ export function fileChangesOf(tool: string, input: unknown, isError: boolean, de
 	if (tool === "edit" || tool === "write") {
 		const path = typeof input === "object" && input !== null ? (input as { path?: unknown }).path : undefined;
 		if (typeof path !== "string") return [];
-		const patch = typeof details === "object" && details !== null ? (details as { patch?: unknown }).patch : undefined;
-		return [{ path, kind: "modify", ...(typeof patch === "string" && patch.length > 0 ? { diff: patch } : {}) }];
+		const { patch, created } =
+			typeof details === "object" && details !== null ? (details as { patch?: unknown; created?: unknown }) : {};
+		return [
+			{
+				path,
+				kind: created === true ? "add" : "modify",
+				...(typeof patch === "string" && patch.length > 0 ? { diff: patch } : {}),
+			},
+		];
 	}
 	return reportedChanges(details) ?? [];
 }
@@ -207,8 +215,37 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 			}
 		}
 	}
+	// Review comments apply only to the user item their start produced, never to "the next user message".
+	const reviews = new Map<string, TurnComments>();
+	const changed = new Map<string, TurnFile[]>();
+	for (const entry of entries) {
+		if (entry.type !== "custom") continue;
+		if (entry.customType === TURN_COMMENTS_ENTRY) {
+			const review = entry.data as TurnComments;
+			reviews.set(review.itemId, review);
+		} else if (entry.customType === TURN_DIFF_ENTRY) {
+			// Older records hold bare paths; a malformed one is skipped rather than failing the whole thread.
+			const { turnId, files } = (entry.data ?? {}) as Partial<TurnDiffRecord>;
+			const valid = (f: unknown): f is TurnFile =>
+				typeof f === "object" &&
+				f !== null &&
+				typeof (f as TurnFile).path === "string" &&
+				typeof (f as TurnFile).additions === "number" &&
+				typeof (f as TurnFile).deletions === "number";
+			if (typeof turnId === "string" && Array.isArray(files) && files.every(valid)) changed.set(turnId, files);
+		}
+	}
 	const result = turns.filter((t) => t.turn.items.length > 0);
 	result.forEach((t) => {
+		for (const item of t.turn.items) {
+			const review = item.type === "userMessage" ? reviews.get(item.id) : undefined;
+			if (review && item.type === "userMessage") {
+				item.text = review.text;
+				item.comments = review.comments;
+			}
+		}
+		const files = changed.get(t.turn.id);
+		if (files) t.turn.files = files;
 		const active = t.turn.id === activeTurnId;
 		if (t.marked) {
 			if (t.end) {
@@ -246,6 +283,15 @@ export function entryForItem(entries: readonly SessionEntry[], itemId: string): 
 		const mid = (low + high) >> 1;
 		if (has(mid)) high = mid;
 		else low = mid + 1;
+	}
+	// The last item of a marked turn takes the turn's end entry along: cut before it, a fork would read the turn as
+	// interrupted (readTurns). Entries in between that add no item (review comments) come along too.
+	const items = (length: number) => readTurns("", entries.slice(0, length)).reduce((n, t) => n + t.items.length, 0);
+	const count = items(low);
+	for (let next = low; next < entries.length; next++) {
+		const entry = entries[next];
+		if (isTurnEnd(entry)) return entry.id;
+		if (isTurnMarker(entry) || items(next + 1) > count) break;
 	}
 	return entries[low - 1].id;
 }

@@ -2,16 +2,19 @@
 
 import type {
 	ApprovalMode,
+	DiffComment,
 	ImageRef,
 	NotificationMethod,
 	NotificationParams,
 	Thread,
 	ThreadStatus,
 	Warning,
+	Workspace,
 } from "@knightcode/app-server-protocol";
 import type { AgentSession } from "../core/agent-session.ts";
 import { emitSessionShutdownEvent } from "../core/extensions/runner.ts";
 import { AppServerError, SubscriberGone } from "./errors.ts";
+import type { TurnChanges } from "./diff.ts";
 import type { ItemMapper } from "./item-mapper.ts";
 import type { PayloadStore } from "./payloads.ts";
 import type { Subscriber } from "./server.ts";
@@ -39,16 +42,30 @@ export class LoadedThread {
 	readonly payloads: PayloadStore;
 	readonly forkedFromId: string | undefined;
 	private readonly broadcast: AppServerContext["broadcast"];
-	readonly openRequests = new Set<object>();
+	/** Server requests waiting on a subscriber, by what they wait for (`thread.status.waitingOn`). */
+	readonly openRequests = new Map<object, "approval" | "dialog">();
 	mapper!: ItemMapper;
+	/** Turn change detection; undefined outside a git repository (§6.2). */
+	changes: TurnChanges | undefined;
 	pendingTurnRequestId?: string;
 	/** The starting turn's clientMessageId; the mapper puts it on the turn's first user message. */
 	pendingClientMessageId?: string;
+	/** The starting turn's review comments and typed text; the mapper records them on its first user message. */
+	pendingReview?: { comments: DiffComment[]; text: string };
+	/** The checkout root this thread runs in, when it is a git repository (§6.1 reservations). */
+	checkoutRoot: string | undefined;
 	/**
 	 * Inputs waiting for the thread to go idle, each its own turn, in order (§4.6). They live here, not in
 	 * the agent's queue, so removing one never races the loop that would deliver it.
 	 */
-	readonly queued: { id: string; text: string; images?: ImageRef[]; clientMessageId?: string; by: Subscriber }[] = [];
+	readonly queued: {
+		id: string;
+		text: string;
+		images?: ImageRef[];
+		clientMessageId?: string;
+		review?: { comments: DiffComment[]; text: string };
+		by: Subscriber;
+	}[] = [];
 	/** A queued input is starting; no second one starts until it has. */
 	draining = false;
 	/** Admission completes only after the mapper created a durable turn identity. */
@@ -67,6 +84,10 @@ export class LoadedThread {
 	}
 	readonly session: AgentSession;
 	readonly projectCwd: string;
+	/** Runs once the thread is disposed (the manager's worktree-user registry). */
+	onClosed: () => void = () => {};
+	/** Derived from the session cwd and the worktree manifest on every read, so a manifest update shows at once. */
+	resolveWorkspace: () => Workspace = () => ({ mode: "local" });
 	readonly subscribers = new Set<Subscriber>();
 	lastTurnSubscriber: Subscriber | undefined;
 	approvalMode: ApprovalMode;
@@ -112,6 +133,10 @@ export class LoadedThread {
 		this.onActivityEnd = onActivityEnd;
 	}
 
+	get workspace(): Workspace {
+		return this.resolveWorkspace();
+	}
+
 	get file(): string | undefined {
 		return this.session.sessionManager.getSessionFile();
 	}
@@ -145,7 +170,7 @@ export class LoadedThread {
 	}
 
 	waitingOn(): ("approval" | "dialog")[] {
-		return this.openRequests.size > 0 ? ["approval"] : [];
+		return [...new Set(this.openRequests.values())];
 	}
 
 	status(): ThreadStatus {
@@ -179,12 +204,13 @@ export class LoadedThread {
 			archived: this.file !== undefined && isArchivedPath(this.file),
 			updatedAt:
 				session.sessionManager.getLeafEntry()?.timestamp ?? session.sessionManager.getHeader()?.timestamp ?? "",
-			workspace: { mode: "local" },
+			workspace: this.workspace,
 			approvalMode: this.approvalMode,
 			...(model
 				? { model: { provider: model.provider, id: model.id, name: model.name, contextWindow: model.contextWindow } }
 				: {}),
 			thinkingLevel: session.thinkingLevel,
+			...(this.file ? { sessionFile: this.file } : {}),
 		};
 	}
 
@@ -234,17 +260,31 @@ export class LoadedThread {
 			await this.session.abort();
 			if (waitForQueue) await this.drain();
 		} finally {
-			// A gated settlement hook can outlive abort() while the runtime already reports idle.
-			// Finish the mapped turn before detaching, so accepted starts keep their completion obligation.
-			if (this.mapper?.currentTurnId()) this.mapper.settled(true);
-			this.unsubscribeSession();
-			await emitSessionShutdownEvent(this.session.extensionRunner, {
-				type: "session_shutdown",
-				reason,
-				targetSessionFile,
-			});
-			this.session.dispose();
-			this.state = "closed";
+			// Each step runs even when one before it throws: a leaked session keeps its file lock, cache leases and
+			// virtual-model routes, and a missed onClosed leaves the thread's worktree fenced for the process's life.
+			try {
+				// A gated settlement hook can outlive abort() while the runtime already reports idle.
+				// Finish the mapped turn before detaching, so accepted starts keep their completion obligation.
+				if (this.mapper?.currentTurnId()) this.mapper.settled(true);
+				// The forced settle may have queued a last after-snapshot; its record is written before the manager closes.
+				await this.changes?.close();
+			} finally {
+				this.unsubscribeSession();
+				try {
+					await emitSessionShutdownEvent(this.session.extensionRunner, {
+						type: "session_shutdown",
+						reason,
+						targetSessionFile,
+					});
+				} finally {
+					try {
+						this.session.dispose();
+					} finally {
+						this.state = "closed";
+						this.onClosed();
+					}
+				}
+			}
 		}
 	}
 }
