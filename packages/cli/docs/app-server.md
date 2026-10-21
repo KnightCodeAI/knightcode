@@ -161,8 +161,10 @@ input starts a turn of its own once the thread is idle, oldest first; on an idle
 thread it starts at once. Until it starts it is removable with
 `turn/queue/remove`. A queued input that fails to start (no model, signed out) is
 dropped with an `error` notification. `turn/queue/updated` sends
-`{threadId, steering: [text], followUp: [{id, text}]}`: steers the agent has not
-delivered yet, and the queued inputs.
+`{threadId, steering: [text], followUp: [{id, text, attachments?}]}`: steers the
+agent has not delivered yet, and the queued inputs. `text` is the user's own (not
+a prompt composed with review comments); `attachments` counts the images and
+review comments an input carries that its text alone does not.
 
 `turn/interrupt` accepts optional `turnId`; a supplied stale ID returns
 `turnMismatch`, while omitting it retains interrupt-current behavior. It drops

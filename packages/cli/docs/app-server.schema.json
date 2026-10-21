@@ -1004,6 +1004,9 @@
 										},
 										"text": {
 											"type": "string"
+										},
+										"attachments": {
+											"type": "number"
 										}
 									},
 									"additionalProperties": false
@@ -10156,6 +10159,9 @@
 							},
 							"text": {
 								"type": "string"
+							},
+							"attachments": {
+								"type": "number"
 							}
 						},
 						"additionalProperties": false

@@ -16,6 +16,7 @@ import {
 	machineApply,
 	machinePatch,
 	operationIn,
+	OutputTooLarge,
 	pathsInTheWay,
 	type Repo,
 	runGit,
@@ -201,9 +202,16 @@ async function applyChecked(repo: Repo, patch: Buffer, mode: { cached: boolean; 
 async function generateMessage(thread: LoadedThread, repo: Repo, from: string, to: string, ctx: GitActionContext) {
 	const model = thread.session.model;
 	if (!model) throw new AppServerError("authRequired", "no model selected to write the commit message");
-	let diff = (await machinePatch(repo, from, to, { signal: ctx.signal })).toString("utf8");
-	if (Buffer.byteLength(diff) > COMMIT_DIFF_BYTES)
-		diff = `${Buffer.from(diff).subarray(0, COMMIT_DIFF_BYTES).toString("utf8")}\n[… the diff was cut at 48 KiB]`;
+	// Read a bounded amount: a staged diff over that (a regenerated lockfile) gives the model git's stat instead.
+	let bytes: Buffer;
+	try {
+		bytes = await machinePatch(repo, from, to, { signal: ctx.signal, maxStdoutBytes: 4 * 1024 * 1024 });
+	} catch (error) {
+		if (!(error instanceof OutputTooLarge)) throw error;
+		bytes = Buffer.from(await git(repo, ["diff", "--stat", from, to], { signal: ctx.signal }));
+	}
+	let diff = bytes.subarray(0, COMMIT_DIFF_BYTES).toString("utf8");
+	if (bytes.length > COMMIT_DIFF_BYTES) diff += "\n[… the diff was cut at 48 KiB]";
 	const signal = AbortSignal.any([ctx.signal, AbortSignal.timeout(120_000)]);
 	const request = ctx.models.completeSimple(
 		model,
@@ -265,11 +273,13 @@ export async function gitCommit(
 		// Only an index still as this commit left it goes back: anything staged since is the user's.
 		// `hookOwned`: a refused commit whose hooks may have rewritten the index; with the checkout and repository lock
 		// held nothing else changed it, so the saved index comes back whatever it now holds.
+		// Without any signal: restores also run after shutdown aborted the request's (and the repository's) signal.
+		const quiet: Repo = { ...repo, signal: undefined };
 		const putBack = async (hookOwned = false) => {
 			if (!original || original === before.index) return;
-			if (!hookOwned && (await indexTree(repo, ctx.signal)) !== before.index) return;
+			if (!hookOwned && (await indexTree(quiet)) !== before.index) return;
 			if (saved) await restoreIndex(repo, saved);
-			else await git(repo, ["read-tree", original]);
+			else await git(quiet, ["read-tree", original]);
 		};
 		// The repository lock only, not the checkout: a turn that started meanwhile must not stop the user's index
 		// coming back, and touches no file of it.
@@ -288,10 +298,8 @@ export async function gitCommit(
 		// The commit runs the user's hooks, which can rewrite the index and working tree (lint-staged): it holds the
 		// checkout as staging did. A turn that started while the message was written refuses that hold before the step
 		// runs: the user's staging then goes back too.
-		let entered = false;
 		try {
 			return await staging(async () => {
-				entered = true;
 				const now = await capture();
 				// With includeUnstaged, the working tree too: an edit made while the message was written would otherwise
 				// be left out of a commit that was asked to take everything (staged into a temporary index).
@@ -331,7 +339,9 @@ export async function gitCommit(
 				return { commit, message: (await git(repo, ["log", "-1", "--format=%B", commit])).trimEnd() };
 			});
 		} catch (error) {
-			if (!entered) await restore().catch(() => {});
+			// Whatever failed (a shutdown during capture, a refused hold): no commit, so the staging goes back. A path
+			// that already put it back left an index that is no longer this commit's, so this one does nothing.
+			await restore().catch(() => {});
 			throw error;
 		}
 	} finally {

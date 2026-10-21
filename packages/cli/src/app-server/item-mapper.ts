@@ -36,7 +36,12 @@ import {
 export function queueOf(thread: LoadedThread): TurnQueue {
 	return {
 		steering: [...thread.session.getSteeringMessages()],
-		followUp: thread.queued.map(({ id, text }) => ({ id, text })),
+		followUp: thread.queued.map(({ id, text, images, review }) => ({
+			id,
+			// The user's own text: a reviewed input's prompt is the composed one.
+			text: review?.text ?? text,
+			...(images?.length || review ? { attachments: (images?.length ?? 0) + (review?.comments.length ?? 0) } : {}),
+		})),
 	};
 }
 

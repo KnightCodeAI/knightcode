@@ -517,7 +517,8 @@ export const Resource = Obj({
 export type Resource = Static<typeof Resource>;
 
 /** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
-const QueueEntry = Obj({ id: Str, text: Str });
+/** `attachments`: images and review comments the input carries, which its text alone does not. */
+const QueueEntry = Obj({ id: Str, text: Str, attachments: Type.Optional(Num) });
 export const TurnQueue = Obj({ steering: Type.Array(Str), followUp: Type.Array(QueueEntry) });
 export type TurnQueue = Static<typeof TurnQueue>;
 
