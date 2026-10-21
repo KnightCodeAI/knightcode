@@ -720,7 +720,12 @@ export async function runEnvironmentScript(
 		const result = await runProcess(config.shell, stdin ? config.args : [...config.args, run.script], {
 			cwd: run.projectCwd,
 			input: stdin ? run.script : undefined,
-			env: { KNIGHTCODE_SOURCE_TREE_PATH: run.sourceCwd, KNIGHTCODE_WORKTREE_PATH: run.worktreeCwd },
+			// The user's script globs its own pathspecs: the server's literal-pathspec setting is not for it.
+			env: {
+				KNIGHTCODE_SOURCE_TREE_PATH: run.sourceCwd,
+				KNIGHTCODE_WORKTREE_PATH: run.worktreeCwd,
+				GIT_LITERAL_PATHSPECS: "0",
+			},
 			timeoutMs: run.timeoutMs,
 			signal: run.signal,
 			collectStdout: false,
@@ -1003,6 +1008,7 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 			await kept(`refs/knightcode/kept/main/${Date.now()}`, mainHead, main.root);
 		// git checks a branch out in one place only.
 		if (wtBranch) await git(worktree.root, ["checkout", "-q", "--detach"], internal);
+		const previousTarget = existing ? await git(main.root, ["rev-parse", `refs/heads/${target}`]) : undefined;
 		const switched = await runGit(main.root, ["switch", "-q", existing ? "-C" : "-c", target, sourceHead], internal);
 		if (switched.code !== 0) {
 			await runGit(main.root, ["switch", "-q", ...(mainRef ? [mainRef] : ["--detach", mainHead])], internal);
@@ -1010,7 +1016,21 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 			throw new AppServerError("internal", `could not check out ${target}: ${switched.stderr.trim()}`);
 		}
 		await workspaceHooks.beforeHandoffApply();
-		await apply(main, `${target} is checked out in ${main.root}`);
+		try {
+			await apply(main, `Handing off to ${main.root}`);
+		} catch (error) {
+			// apply checks before it writes, so nothing changed but the branches: put them back as they were, or a retry
+			// would find its own branch in the way (branchExists).
+			if (mainRef === target)
+				await runGit(main.root, ["switch", "-q", "-C", target, previousTarget ?? mainHead], internal);
+			else {
+				await runGit(main.root, ["switch", "-q", ...(mainRef ? [mainRef] : ["--detach", mainHead])], internal);
+				if (previousTarget) await runGit(main.root, ["update-ref", `refs/heads/${target}`, previousTarget], internal);
+				else await runGit(main.root, ["branch", "-q", "-D", target], internal);
+			}
+			if (wtBranch) await runGit(worktree.root, ["switch", "-q", wtBranch], internal);
+			throw error;
+		}
 		await removeFromSource();
 		manifest.placement[input.threadId] = "local";
 		manifest.handoffBranch = target;
@@ -1165,12 +1185,22 @@ async function snapshotCommit(worktree: string, state: Awaited<ReturnType<typeof
 	const options = { internal: true, env: GIT_IDENTITY };
 	const index = await git(
 		worktree,
-		["commit-tree", state.index, "-p", state.head, "-m", `KnightCode worktree index: ${reason}`],
+		["commit-tree", "--no-gpg-sign", state.index, "-p", state.head, "-m", `KnightCode worktree index: ${reason}`],
 		options,
 	);
 	return git(
 		worktree,
-		["commit-tree", state.tree, "-p", state.head, "-p", index, "-m", `KnightCode worktree snapshot: ${reason}`],
+		[
+			"commit-tree",
+			"--no-gpg-sign",
+			state.tree,
+			"-p",
+			state.head,
+			"-p",
+			index,
+			"-m",
+			`KnightCode worktree snapshot: ${reason}`,
+		],
 		options,
 	);
 }
