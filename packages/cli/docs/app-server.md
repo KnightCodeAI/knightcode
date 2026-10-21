@@ -316,8 +316,8 @@ terminal-mode connection loads have no dialogs yet.
 A thread runs in a workspace: the user's checkout (`{mode: "local"}`), or a git
 worktree of its own (`{mode: "worktree"}`), as in the Codex desktop app.
 
-`thread/start {cwd, workspace: {mode: "worktree", baseRef?, carryLocalChanges?,
-environment?}}` creates a worktree on a **detached `HEAD`** at `baseRef` (default:
+`thread/start {cwd, workspace: {mode: "worktree", baseRef?, carryLocalChanges?, environment?}}`
+creates a worktree on a **detached `HEAD`** at `baseRef` (default:
 the checkout's `HEAD`) under `<worktrees.root>/<4 hex digits>/<repository name>`
 and runs the thread there, in the same subdirectory the `cwd` had. No branch is
 created until `git/branch/create` or a handoff makes one. `carryLocalChanges`
@@ -423,8 +423,8 @@ malformed keys, and prototype-pollution segments (`__proto__`, `constructor`,
 
 ### `tool/list`
 
-Params: optional `{cwd}`. Result: `{tools: [{name, description, source}],
-defaultTools}`. The tools a new thread in `cwd` would register (without cwd, a
+Params: optional `{cwd}`. Result: `{tools: [{name, description, source}], defaultTools}`.
+The tools a new thread in `cwd` would register (without cwd, a
 project-less one), from an in-memory session like `command/list`'s; hidden tools
 are left out, and MCP tools appear only once a thread connects. `defaultTools` is
 the global `defaultTools` setting resolved (`+name` and `-name` applied), or the
@@ -437,12 +437,12 @@ built-in default `read`, `bash`, `edit`, `write`. Change it with `config/write`.
 ### `tool/settings/read` and `tool/settings/write`
 
 The KnightCode tools `/tools` manages, stored in `tools.json` in the agent
-directory. `tool/settings/read {}` returns `{tools: [{name, enabled, settings}],
-classifiers: [{provider, id, name}]}`: each tool's state (its default when the
+directory. `tool/settings/read {}` returns
+`{tools: [{name, enabled, settings}], classifiers: [{provider, id, name}]}`: each tool's state (its default when the
 file does not set it) and its own settings, with values of keys ending in `Key`
 masked to their last four characters; `classifiers` are the classifier models
-with credentials, for the classifier gate's `model`. `tool/settings/write {name,
-key, value}` sets one setting; `enabled` takes a boolean, other keys a string,
+with credentials, for the classifier gate's `model`.
+`tool/settings/write {name, key, value}` sets one setting; `enabled` takes a boolean, other keys a string,
 and `null` deletes the key. An unknown tool or a malformed key is
 `invalidParams`.
 
@@ -453,8 +453,8 @@ and `null` deletes the key. An unknown tool or a malformed key is
 ### `mcp/list`, `mcp/update`, `mcp/add` and `mcp/remove`
 
 The servers of the global `mcp.json` and, for an explicitly trusted project, its
-`.knightcode/mcp.json` ([MCP](mcp.md)). `mcp/list {cwd?}` returns `{servers,
-errors, paths}`: each server's `name`, `scope`, defining file (`source`), the
+`.knightcode/mcp.json` ([MCP](mcp.md)). `mcp/list {cwd?}` returns
+`{servers, errors, paths}`: each server's `name`, `scope`, defining file (`source`), the
 project file that overrides it (`override`), `transport` (`stdio` or `http`),
 `target` (command line or URL), `description`, `enabled` and `exposure`.
 `mcp/update {cwd?, name, enabled?, exposure?}` saves the change where `/mcp`
@@ -473,8 +473,8 @@ Connections, sign-in and status belong to the MCP extension in each thread
 ### `resource/list` and `resource/set`
 
 Extensions, skills, prompt templates and themes as `knightcode config` lists them.
-`resource/list {cwd?}` returns `{resources: [{type, path, name, enabled, scope,
-origin, source}]}` for what a thread in `cwd` (or with no project) would find,
+`resource/list {cwd?}` returns
+`{resources: [{type, path, name, enabled, scope, origin, source}]}` for what a thread in `cwd` (or with no project) would find,
 installing nothing. Built-in extensions are left out: they are always on, so
 `resource/set` refuses them like any unknown path. `resource/set {cwd?, type, path, enabled}` loads or
 skips one resource with a `+` or `-` pattern in the settings of the scope that
@@ -578,10 +578,10 @@ Diagnostics observe the shared server, not only this connection.
 ### `thread/diff/read`
 
 Params: `{threadId, scope?, against?, commit?, context?, ignoreWhitespace?}`.
-Result: `{scope, root, files, filesOmitted?, untrackedSkipped?, turnId?, stale?,
-against?}`. `files` are `{path, oldPath?, status, binary, additions, deletions,
-tooLarge?, hunks}`, their paths relative to the repository's `root` (not the
-thread's cwd, which can be a subdirectory of it); each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
+Result: `{scope, root, files, filesOmitted?, untrackedSkipped?, turnId?, stale?, against?}`.
+`files` are `{path, oldPath?, status, binary, additions, deletions, tooLarge?, hunks}`,
+their paths relative to the repository's `root` (not the thread's cwd, which can
+be a subdirectory of it); each hunk keeps its lines with their `" "`, `"+"`, `"-"` or
 `"\"` prefix. `committed` needs `commit`; `branch` compares with `against`,
 else the worktree's base, the upstream or the default branch, and echoes it.
 More than 500 untracked files are counted in `untrackedSkipped` and left out.
@@ -655,8 +655,9 @@ into a new worktree instead) or `submodules`.
 
 ### `worktree/list` and `worktree/delete`
 
-`worktree/list {cwd?}` → `{worktrees: [{path, projectCwd, head?, branch?,
-threadIds, lastUsedAt, deleted}]}`, the managed worktrees (of `cwd`'s project
+`worktree/list {cwd?}` →
+`{worktrees: [{path, projectCwd, head?, branch?, threadIds, lastUsedAt, deleted}]}`,
+the managed worktrees (of `cwd`'s project
 when given). `worktree/delete {path}` → `{snapshot?}` deletes one after its
 snapshot. A worktree a thread is loaded in, or one holding a nested repository
 (an initialized submodule or a repository inside it), is never deleted: archive
@@ -690,8 +691,8 @@ first unless `includeUnstaged: false`; an empty message is written by the
 thread's model from the staged diff, outside the conversation, and the commit
 answers `concurrentChange` when the checkout changed meanwhile. The user's
 hooks run. `git/push` pushes the current branch with one explicit,
-non-forcing refspec and sets the upstream the first time. `git/pr/create
-{threadId, title?, body?, draft?}` runs `gh pr create` (`toolMissing` without
+non-forcing refspec and sets the upstream the first time.
+`git/pr/create {threadId, title?, body?, draft?}` runs `gh pr create` (`toolMissing` without
 `gh`). `git/branches`, `git/branch/create {name}` ("Create branch here"),
 `git/branch/switch {name}` (refused when it would overwrite local changes or an
 ignored file the branch tracks) and `git/log {limit?}` (the commits since the
