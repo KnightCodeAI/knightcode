@@ -561,6 +561,9 @@ function ChangesTree({
 	onSelect: (path: string) => void;
 }) {
 	const byPath = new Map(files.map((f) => [f.path, f]));
+	// The model is made once per mount: it calls the latest handler through a ref, never the mount render's.
+	const select = useRef(onSelect);
+	select.current = onSelect;
 	const { model } = useFileTree({
 		paths: files.map((f) => f.path),
 		initialExpansion: "open",
@@ -571,7 +574,7 @@ function ChangesTree({
 		unsafeCSS: TREE_CSS,
 		onSelectionChange: (paths) => {
 			const path = paths[0];
-			if (path && byPath.has(path)) onSelect(path);
+			if (path && byPath.has(path)) select.current(path);
 		},
 		renderRowDecoration: ({ item }) => {
 			const file = byPath.get(item.path);
