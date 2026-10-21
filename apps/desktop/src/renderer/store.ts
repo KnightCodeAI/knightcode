@@ -194,7 +194,19 @@ function withTurn(view: ThreadView, turnId: string, fn: (turn: ViewTurn) => View
 // --- notifications ----------------------------------------------------------------------------
 
 function upsertSummary(thread: Thread): void {
-	const summary: ThreadSummary = { ...thread, workspaceMode: thread.workspace.mode };
+	const { id, cwd, projectCwd, name, status, archived, createdAt, forkedFromId, updatedAt } = thread;
+	const summary: ThreadSummary = {
+		id,
+		cwd,
+		projectCwd,
+		name,
+		status,
+		archived,
+		createdAt,
+		...(forkedFromId !== undefined ? { forkedFromId } : {}),
+		updatedAt,
+		workspaceMode: thread.workspace.mode,
+	};
 	set((s) => {
 		const threads = s.threads.filter((t) => t.id !== summary.id);
 		return { ...s, threads: [summary, ...threads].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
@@ -234,6 +246,9 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 		case "thread/replaced": {
 			const { oldThreadId, thread } = n.params;
 			if (state.view.kind === "thread" && state.view.id === oldThreadId) navigate({ kind: "thread", id: thread.id });
+			// A handoff replaces a thread by itself with a new cwd and workspace. Only windows subscribed to the thread
+			// get this; the others re-list their sidebar when focused.
+			upsertSummary(thread);
 			// The server unloaded the old thread; holding it would resume it again after a restart.
 			set((s) => {
 				const { [oldThreadId]: _old, ...held } = s.held;
