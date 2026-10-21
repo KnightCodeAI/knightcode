@@ -224,7 +224,8 @@ test("small test budgets list what fits and count the rest", async () => {
 	expect(result.filesOmitted).toBeGreaterThan(0);
 	expect(result.files.length + result.filesOmitted!).toBe(2000);
 	expect(result.files.some((f) => f.tooLarge)).toBe(true);
-});
+	// 2,000 files to commit and snapshot: past the default timeout on a loaded Windows machine.
+}, 90_000);
 
 test("splitPatch pairs quoted paths, renames, a two-section type change, no-newline markers and empty files", () => {
 	const patch = [

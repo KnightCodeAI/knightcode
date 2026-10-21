@@ -414,6 +414,8 @@ async function withTemporaryIndex<T>(
 	repo: Repo,
 	signal: AbortSignal | undefined,
 	fn: (run: (args: string[], input?: string) => Promise<string>) => Promise<T>,
+	/** Keep assume-unchanged and skip-worktree flags: stage as the user's own `git add -A` would. */
+	keepFlags = false,
 ): Promise<T> {
 	const dir = await mkdtemp(join(tmpdir(), "kc-index-"));
 	let keep = false;
@@ -423,6 +425,7 @@ async function withTemporaryIndex<T>(
 		if (existsSync(real)) copyFileSync(real, index);
 		const run = (args: string[], input?: string) =>
 			git(repo, args, { internal: true, env: { GIT_INDEX_FILE: index }, input, signal });
+		if (keepFlags) return await fn(run);
 		const flagged = (await run(["ls-files", "-v", "-z"]))
 			.split("\0")
 			.filter((entry) => /^[a-z] /.test(entry))
@@ -443,6 +446,19 @@ async function withTemporaryIndex<T>(
 	} finally {
 		if (!keep) await rm(dir, { recursive: true, force: true });
 	}
+}
+
+/** The tree `git add -A` would stage now, in a temporary copy of the index: flags kept, the real index untouched. */
+export function stagedAllTree(repo: Repo, signal?: AbortSignal): Promise<string> {
+	return withTemporaryIndex(
+		repo,
+		signal,
+		async (run) => {
+			await run(["add", "-A"]);
+			return run(["write-tree"]);
+		},
+		true,
+	);
 }
 
 export function indexTree(repo: Repo, signal?: AbortSignal): Promise<string> {

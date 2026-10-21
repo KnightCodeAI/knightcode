@@ -989,7 +989,11 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 			message: `Commit ${sha.slice(0, 7)} in ${where} is on no branch; it was kept as ${ref}.`,
 		});
 	};
-	const manifest = { ...input.manifest, placement: { ...input.manifest.placement } };
+	// As it is now, not as Phase A saw it: another chat's handoff of this worktree may have written since.
+	const current = readManifestFile(input.manifest.path) ?? input.manifest;
+	if (current.deleted)
+		throw conflict("worktreeDeleted", "the worktree of this chat was deleted", { worktree: current.path });
+	const manifest = { ...current, placement: { ...current.placement } };
 
 	if (input.to === "local") {
 		const wtBranch = await optionalGit(worktree.root, ["symbolic-ref", "-q", "--short", "HEAD"]);
@@ -1339,7 +1343,15 @@ export async function deleteWorktreeLocked(input: DeleteInput): Promise<DeleteRe
 		const at = Date.now();
 		const snapshot = await snapshotCommit(manifest.path, state, input.reason);
 		await git(manifest.path, ["update-ref", `refs/knightcode/snapshots/${bucket}/${at}`, snapshot], { internal: true });
-		manifest.deleted = { snapshot, reason: input.reason, at };
+		// An unfinished removal until removeCheckout succeeds (it clears both fields): a crash or shutdown during the
+		// cleanup script leaves a record the next deletion finishes, without a second snapshot of the same state.
+		manifest.deleted = {
+			snapshot,
+			reason: input.reason,
+			at,
+			removalFailed: true,
+			afterFailure: { head: state.head, index: state.index, tree: state.tree },
+		};
 		writeManifest(input.settings, manifest);
 		await runCleanup({ ...input, manifest, threadId: manifest.ownerThreadId });
 	} else {

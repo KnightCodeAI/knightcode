@@ -6,7 +6,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { mkdir, stat, unlink } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import type {
@@ -596,6 +596,9 @@ export class ThreadManager {
 			let manifest = placed.manifest;
 			this.preparing.add(thread.id);
 			let restored: string | undefined;
+			// The worktree this handoff created, until the changes moved into it.
+			let fresh: Manifest | undefined;
+			let moved = false;
 			try {
 				// Phase A: a thread born in the main checkout gets its worktree, at the main checkout's HEAD.
 				if (manifest?.deleted) {
@@ -624,6 +627,7 @@ export class ThreadManager {
 						signal: this.shutdown.signal,
 						warnings,
 					});
+					fresh = created.manifest;
 					manifest = await prepareWorktree({
 						settings,
 						manifest: created.manifest,
@@ -647,7 +651,7 @@ export class ThreadManager {
 				const release = await this.reserveCheckouts([main.root, worktree.root], "handoff");
 				try {
 					const bound = manifest;
-					const moved = await thread.exclusive(() =>
+					const result = await thread.exclusive(() =>
 						withRepoLock(main, () =>
 							handoffChanges({
 								settings,
@@ -665,12 +669,24 @@ export class ThreadManager {
 							}),
 						),
 					);
+					moved = true;
 					// Phase C, still holding both checkouts: no turn starts in either in between.
 					const next = await this.relocate(thread, by);
-					return { thread: next.toThread(), ...(moved.branch ? { branch: moved.branch } : {}), warnings };
+					return { thread: next.toThread(), ...(result.branch ? { branch: result.branch } : {}), warnings };
 				} finally {
 					release();
 				}
+			} catch (error) {
+				// A handoff refused after it created a worktree takes that worktree back (only git and the setup script
+				// wrote there), so retries do not stack one per attempt; one git cannot remove is kept and named.
+				if (fresh && !moved) {
+					const removed = await runGit(fresh.mainRoot, ["worktree", "remove", "--force", fresh.path], {
+						internal: true,
+					}).catch(() => undefined);
+					if (removed?.code !== 0) throw keptWorktree(error, fresh);
+					rmSync(dirname(fresh.path), { recursive: true, force: true });
+				}
+				throw error;
 			} finally {
 				this.preparing.delete(thread.id);
 				if (restored) this.preparing.delete(restored);
