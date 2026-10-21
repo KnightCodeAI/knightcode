@@ -8,32 +8,52 @@ import { useSyncExternalStore } from "react";
 import type {
 	ApprovalMode,
 	ApprovalResult,
+	DiffComment,
+	DiffScope,
 	ImageInput,
 	Item,
 	LoginState,
 	PayloadRef,
-	RequestId,
 	ResultOf,
-	ServerRequestParams,
+	ServerRequestResult,
 	ThinkingLevel,
 	Thread,
 	ThreadSummary,
 	TokenUsage,
 	Turn,
 	TurnQueue,
+	TurnSummary,
 	WireItem,
 	WireTurn,
+	WorkspaceRequest,
 } from "@knightcode/app-server-protocol";
-import { DEFAULT_PREFERENCES, type DesktopState, type Preferences } from "../shared/host-protocol.ts";
+import { DEFAULT_PREFERENCES, type DesktopState, type Preferences, SIDEBAR_WIDTH } from "../shared/host-protocol.ts";
+import { DESKTOP_KEYBINDINGS, type KeybindingId } from "../shared/keybindings.ts";
 import { type AnyNotification, type AnyServerRequest, client, RequestError } from "./client.ts";
+
+export { RequestError };
+import type { Customization, ThemeName } from "./appearance.ts";
+import { inactiveThreads } from "./archive-filter.ts";
+import { lastCodeBlock, samePath } from "./format.ts";
+import { type SettingsPage, viewOfLink } from "./routes.ts";
+import {
+	DEFAULT_SIDEBAR_OPTIONS,
+	nextNeedingAttention,
+	recentThreads,
+	type SidebarOptions,
+	sidebarModel,
+	stepThread,
+	threadSlots,
+} from "./sidebar-model.ts";
 import { placeItem, toView, type ViewItem, type ViewTurn } from "./turns.ts";
 
 export type ModelInfo = ResultOf<"model/list">["models"][number];
 export type { ViewItem, ViewTurn };
-export interface Approval {
-	id: RequestId;
-	params: ServerRequestParams<"item/toolCall/requestApproval">;
-}
+/** A question the server waits on: an approval, or a dialog (ask_user, the classifier gate, plan review). */
+export type ServerAsk = AnyServerRequest;
+export type Approval = Extract<ServerAsk, { method: "item/toolCall/requestApproval" }>;
+export type Dialog = Extract<ServerAsk, { method: "ui/dialog" }>;
+export type UserInput = Extract<ServerAsk, { method: "item/toolCall/requestUserInput" }>;
 export interface PendingMessage {
 	clientMessageId: string;
 	text: string;
@@ -45,7 +65,8 @@ export interface ThreadView {
 	turns: ViewTurn[];
 	queue: TurnQueue;
 	usage?: TokenUsage;
-	approvals: Approval[];
+	/** Approvals and dialogs in the order they came; the first takes the composer's place. */
+	requests: ServerAsk[];
 	retry?: { attempt: number; maxAttempts: number; delayMs: number; error: string; at: number };
 	pending: PendingMessage[];
 	/** Older history: a thread/read cursor, absent once the first turn is loaded. */
@@ -53,35 +74,52 @@ export interface ThreadView {
 	notice?: string;
 }
 
-export type SettingsPage = "general" | "appearance" | "models" | "approvals" | "shortcuts" | "about";
+export type { SettingsPage };
 export type View =
-	| { kind: "thread"; id: string }
-	| { kind: "new"; cwd?: string }
-	| { kind: "settings"; page: SettingsPage }
-	| { kind: "archive" };
+	{ kind: "thread"; id: string } | { kind: "new"; cwd?: string } | { kind: "settings"; page: SettingsPage };
 export type Accounts = ResultOf<"account/list">;
 
 export interface State {
 	server: { state: "starting" | "ready" | "restarting" | "failed"; message?: string };
+	/** Turns whose edits were undone (by turn id), so their card offers Reapply after it remounts. */
+	undoneTurns: Record<string, true>;
 	desktop: DesktopState | undefined;
 	threads: ThreadSummary[];
 	view: View;
 	held: Record<string, ThreadView>;
-	/** Why the last resume failed; `code` is the server's error code, when it sent one. */
-	opening: Record<string, { message: string; code?: string } | undefined>;
+	/** Why the last resume failed; `code` and `data` are the server's, when it sent them. */
+	opening: Record<string, { message: string; code?: string; data?: unknown } | undefined>;
 	models: ModelInfo[];
 	defaultModel: string | null;
-	toasts: { id: number; text: string }[];
+	/** The reasoning level a new thread starts with (settings.json: per model, else the default, else medium). */
+	thinkingDefaults: { level?: ThinkingLevel; perModel: Record<string, ThinkingLevel> };
+	toasts: Toast[];
 	/** Back/forward over views (the title bar arrows). */
 	history: { stack: View[]; index: number };
 	accounts: Accounts | undefined;
 	logins: Record<string, LoginState>;
 	sidebarOpen: boolean;
 	paletteOpen: boolean;
+	/** The open thread's find bar (View › Find, Ctrl+F). */
+	finding: boolean;
+	/** The theme the window shows: the preference, or the system's when it is "system". */
+	resolvedTheme: ThemeName;
+	/**
+	 * The right region (desktop-shell.md section 9.6): open, its width in px, a diff scope asked for, and whether it
+	 * fills the thread view in place of the chat (Codex's full screen).
+	 */
+	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
+	/** Review comments drafted on the diff, per thread; they go with the next message (Codex's "1 comment"). */
+	comments: Record<string, DiffComment[]>;
+	/** Bumped by turn/diff/updated, so an open Changes pane reloads. */
+	diffVersion: Record<string, number>;
+	/** The latest output of a worktree's setup script, per thread. */
+	progress: Record<string, string>;
 }
 
 let state: State = {
 	server: { state: "starting" },
+	undoneTurns: {},
 	desktop: undefined,
 	threads: [],
 	view: { kind: "new" },
@@ -89,12 +127,19 @@ let state: State = {
 	opening: {},
 	models: [],
 	defaultModel: null,
+	thinkingDefaults: { perModel: {} },
 	toasts: [],
 	history: { stack: [{ kind: "new" }], index: 0 },
 	accounts: undefined,
 	logins: {},
 	sidebarOpen: true,
 	paletteOpen: false,
+	finding: false,
+	resolvedTheme: "dark",
+	panel: { open: false, width: 0 },
+	comments: {},
+	diffVersion: {},
+	progress: {},
 };
 const listeners = new Set<() => void>();
 
@@ -120,6 +165,30 @@ const NO_PROJECTS: DesktopState["projects"] = [];
 export const selectProjects = (s: State) => s.desktop?.projects ?? NO_PROJECTS;
 export const selectPreferences = (s: State): Preferences => s.desktop?.preferences ?? DEFAULT_PREFERENCES;
 
+/** Codex's sidebar options (Organize sidebar, Sort chats by), the defaults for what is unset. A new object per read. */
+export const sidebarOptionsOf = (s: State): SidebarOptions => ({
+	organize: s.desktop?.sidebar.organize ?? DEFAULT_SIDEBAR_OPTIONS.organize,
+	sort: s.desktop?.sidebar.sort ?? DEFAULT_SIDEBAR_OPTIONS.sort,
+});
+
+/** The threads Alt+1-9 reach, as the sidebar lists them (sidebar-model.ts). Call it outside render: a new array each time. */
+export const threadSlotsOf = (s: State): ThreadSummary[] =>
+	threadSlots(
+		sidebarModel(s.threads, selectProjects(s), s.desktop?.pinnedThreads ?? [], "", samePath, sidebarOptionsOf(s)),
+		s.desktop?.sidebar.collapsedSections ?? [],
+	);
+
+const openId = () => (state.view.kind === "thread" ? state.view.id : undefined);
+const openIf = (thread: ThreadSummary | undefined) => thread && void openThread(thread.id);
+
+/** Codex's thread navigation: the Nth sidebar slot, the Nth most recent, the next or previous sidebar item. */
+export const openSlot = (slot: number) => openIf(threadSlotsOf(state)[slot]);
+export const openRecent = (slot: number) => openIf(recentThreads(state.threads, slot + 1)[slot]);
+export const openNextInSidebar = (delta: 1 | -1) => openIf(stepThread(threadSlotsOf(state), openId(), delta));
+/** Codex's "Next chat needing attention": waiting on the user, failed or unread. */
+export const openNextNeedingAttention = () =>
+	openIf(nextNeedingAttention(threadSlotsOf(state), state.threads, selectUnread(state), openId()));
+
 const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Show a view and record it for back/forward. */
@@ -139,12 +208,67 @@ export function goBack(delta: -1 | 1): void {
 	if (next.kind === "thread" && !state.held[next.id]) void resumeThread(next.id);
 }
 
+/** Show or hide the sidebar; the choice is remembered across launches (desktop state, `sidebar.collapsed`). */
 export function setSidebarOpen(open: boolean): void {
 	set((s) => ({ ...s, sidebarOpen: open }));
+	updateDesktop((d) => ({ ...d, sidebar: { ...d.sidebar, collapsed: !open } }));
+}
+
+export function setSidebarWidth(width: number): void {
+	const clamped = Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
+	updateDesktop((d) => ({ ...d, sidebar: { ...d.sidebar, width: clamped } }));
+}
+
+export function setSidebarOption<K extends keyof SidebarOptions>(key: K, value: SidebarOptions[K]): void {
+	updateDesktop((d) => ({ ...d, sidebar: { ...d.sidebar, [key]: value } }));
+}
+
+/** Fold or unfold a sidebar section ("projects", "recents", ...), remembered across launches. */
+export function toggleSection(section: string): void {
+	updateDesktop((d) => {
+		const folded = d.sidebar.collapsedSections ?? [];
+		const next = folded.includes(section) ? folded.filter((s) => s !== section) : [...folded, section];
+		return { ...d, sidebar: { ...d.sidebar, collapsedSections: next } };
+	});
+}
+
+/** Fold or unfold a project's threads in the sidebar, remembered across launches. */
+export function toggleProject(path: string): void {
+	updateDesktop((d) => ({
+		...d,
+		projects: d.projects.map((p) => (p.path === path ? { ...p, collapsed: !p.collapsed } : p)),
+	}));
+}
+
+/** Take a project out of the sidebar; its folder and threads stay where they are. */
+export function removeProject(path: string): void {
+	updateDesktop((d) => ({ ...d, projects: d.projects.filter((p) => p.path !== path) }));
 }
 
 export function setPaletteOpen(open: boolean): void {
 	set((s) => ({ ...s, paletteOpen: open }));
+}
+
+export function setFinding(finding: boolean): void {
+	set((s) => ({ ...s, finding }));
+}
+
+export function setResolvedTheme(resolvedTheme: ThemeName): void {
+	if (state.resolvedTheme !== resolvedTheme) set((s) => ({ ...s, resolvedTheme }));
+}
+
+/**
+ * Change a theme's customization (Settings › Appearance): merge `patch`, or with `replace` start over from it; an
+ * undefined field, or no patch at all, goes back to the built-in value.
+ */
+export function customize(theme: ThemeName, patch: Customization | undefined, replace = false): void {
+	const all = selectPreferences(state).appearance ?? {};
+	const merged = replace ? { ...patch } : { ...all[theme], ...patch };
+	// 0 is a value (the Contrast slider's low end); undefined, false and "" go back to the built-in value.
+	const next = patch
+		? Object.fromEntries(Object.entries(merged).filter(([, v]) => v !== undefined && v !== false && v !== ""))
+		: {};
+	setPreference("appearance", { ...all, [theme]: next });
 }
 
 function updateThread(id: string, fn: (view: ThreadView) => ThreadView): void {
@@ -152,13 +276,24 @@ function updateThread(id: string, fn: (view: ThreadView) => ThreadView): void {
 }
 
 let toastId = 0;
-export function toast(text: string): void {
-	const id = ++toastId;
-	set((s) => ({ ...s, toasts: [...s.toasts, { id, text }] }));
-	setTimeout(() => set((s) => ({ ...s, toasts: s.toasts.filter((t) => t.id !== id) })), 5000);
+/** A note over the window: an error, a confirmation ("Committed …"), or anything else. */
+export interface Toast {
+	id: number;
+	text: string;
+	kind: "error" | "success" | "info";
 }
 
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+export function toast(text: string, kind: Toast["kind"] = "info"): void {
+	const id = ++toastId;
+	set((s) => ({ ...s, toasts: [...s.toasts, { id, text, kind }] }));
+	setTimeout(() => dismissToast(id), 5000);
+}
+
+export function dismissToast(id: number): void {
+	set((s) => ({ ...s, toasts: s.toasts.filter((t) => t.id !== id) }));
+}
+
+export const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // --- payloads ---------------------------------------------------------------------------------
 
@@ -193,7 +328,20 @@ function withTurn(view: ThreadView, turnId: string, fn: (turn: ViewTurn) => View
 
 // --- notifications ----------------------------------------------------------------------------
 
-function upsertSummary(summary: ThreadSummary): void {
+function upsertSummary(thread: Thread): void {
+	const { id, cwd, projectCwd, name, status, archived, createdAt, forkedFromId, updatedAt } = thread;
+	const summary: ThreadSummary = {
+		id,
+		cwd,
+		projectCwd,
+		name,
+		status,
+		archived,
+		createdAt,
+		...(forkedFromId !== undefined ? { forkedFromId } : {}),
+		updatedAt,
+		workspaceMode: thread.workspace.mode,
+	};
 	set((s) => {
 		const threads = s.threads.filter((t) => t.id !== summary.id);
 		return { ...s, threads: [summary, ...threads].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) };
@@ -226,18 +374,52 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 			return;
 		case "thread/deleted":
 			set((s) => ({ ...s, threads: s.threads.filter((t) => t.id !== n.params.threadId) }));
+			if (openId() === n.params.threadId) showNew();
 			return;
-		case "thread/turn/completed":
-			patchSummary(n.params.turn.threadId, { updatedAt: new Date().toISOString() });
+		case "thread/turn/completed": {
+			const { threadId } = n.params.turn;
+			patchSummary(threadId, { updatedAt: new Date().toISOString() });
+			// Every window hears this; one acts for all, so there is one notification and one unread mark.
+			const { turn } = n.params;
+			void client
+				.host("host/window/role", {})
+				.then(({ primary, heldElsewhere }) => {
+					if (!primary) return;
+					// An outcome the user did not see marks the thread unread until they open it.
+					const shown = (state.view.kind === "thread" && state.view.id === threadId) || heldElsewhere.includes(threadId);
+					if (!shown) setUnread(threadId, true);
+					notifyTurn(turn);
+				})
+				.catch(() => {});
 			return;
+		}
+		case "turn/diff/updated": {
+			const { threadId, turnId, files } = n.params;
+			updateThread(threadId, (v) => withTurn(v, turnId, (t) => ({ ...t, files })));
+			refreshDiff(threadId);
+			return;
+		}
+		case "thread/workspace/progress": {
+			const { threadId, output } = n.params;
+			set((s) => ({
+				...s,
+				progress: { ...s.progress, [threadId]: ((s.progress[threadId] ?? "") + output).slice(-4096) },
+			}));
+			return;
+		}
 		case "thread/replaced": {
 			const { oldThreadId, thread } = n.params;
 			if (state.view.kind === "thread" && state.view.id === oldThreadId) navigate({ kind: "thread", id: thread.id });
-			// The server unloaded the old thread; holding it would resume it again after a restart.
-			set((s) => {
-				const { [oldThreadId]: _old, ...held } = s.held;
-				return { ...s, held };
-			});
+			// A handoff replaces a thread by itself with a new cwd and workspace. Only windows subscribed to the thread
+			// get this; the others re-list their sidebar when focused.
+			upsertSummary(thread);
+			// The server unloaded the old thread; holding it would resume it again after a restart. A handoff keeps the
+			// id: its view stays, so the resume keeps its pending messages and approvals.
+			if (oldThreadId !== thread.id)
+				set((s) => {
+					const { [oldThreadId]: _old, ...held } = s.held;
+					return { ...s, held };
+				});
 			// Not awaited: resumeThread waits for the event chain this handler runs on.
 			void resumeThread(thread.id);
 			return;
@@ -286,6 +468,7 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 			updateThread(threadId, (v) => {
 				const next = withTurn(v, turnId, (t) => ({ ...t, items: placeItem(t.items, item) }));
 				if (item.type !== "userMessage" || !item.clientMessageId) return next;
+				queuedComments.delete(item.clientMessageId);
 				return { ...next, pending: next.pending.filter((p) => p.clientMessageId !== item.clientMessageId) };
 			});
 			return;
@@ -329,16 +512,29 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 				const held = Object.fromEntries(
 					Object.entries(s.held).map(([id, v]) => [
 						id,
-						{ ...v, approvals: v.approvals.filter((a) => a.id !== n.params.id) },
+						{ ...v, requests: v.requests.filter((r) => r.id !== n.params.id) },
 					]),
 				);
 				return { ...s, held };
 			});
 			return;
-		case "warning":
-		case "error":
-			toast(n.params.message);
+		case "ui/notify":
+			toast(n.params.message, n.params.level === "error" ? "error" : "info");
 			return;
+		case "warning":
+		case "error": {
+			toast(n.params.message, n.method === "error" ? "error" : "info");
+			const failed = "clientMessageId" in n.params ? n.params.clientMessageId : undefined;
+			const kept = failed ? queuedComments.get(failed) : undefined;
+			if (failed && kept) {
+				queuedComments.delete(failed);
+				set((s) => ({
+					...s,
+					comments: { ...s.comments, [kept.threadId]: [...(s.comments[kept.threadId] ?? []), ...kept.comments] },
+				}));
+			}
+			return;
+		}
 		case "account/login/updated":
 			set((s) => ({ ...s, logins: { ...s.logins, [n.params.loginId]: n.params } }));
 			if (n.params.status === "complete") void Promise.all([refreshAccounts(), refreshModels()]);
@@ -352,11 +548,7 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 }
 
 function applyServerRequest(request: AnyServerRequest): void {
-	if (request.method !== "item/toolCall/requestApproval") return;
-	updateThread(request.params.threadId, (v) => ({
-		...v,
-		approvals: [...v.approvals, { id: request.id, params: request.params }],
-	}));
+	updateThread(request.params.threadId, (v) => ({ ...v, requests: [...v.requests, request] }));
 }
 
 /**
@@ -380,12 +572,27 @@ function enqueue(params: unknown, apply: () => Promise<void> | void): void {
 }
 client.onNotification((n) => enqueue(n.params, () => applyNotification(n)));
 client.onServerRequest((r) => enqueue(r.params, () => applyServerRequest(r)));
+/** A link main handed over before the server was ready; shown once it is. */
+let pendingRoute: string | undefined;
+
 client.onHostEvent((event) => {
+	if (event.event === "navigate") {
+		if (state.server.state === "ready" && state.desktop) showLink(event.route);
+		else pendingRoute = event.route;
+		return;
+	}
 	if (event.event !== "server/state") return;
 	const wasReady = state.server.state === "ready";
 	set((s) => ({ ...s, server: { state: event.state, message: event.message } }));
 	if (event.state === "ready" && !wasReady) void connected();
 });
+
+/** Show what a `knightcode://` link names (routes.ts); others are ignored. */
+function showLink(route: string): void {
+	const view = viewOfLink(route);
+	if (view?.kind === "thread") void openThread(view.id);
+	else if (view) navigate(view);
+}
 // Threads started elsewhere (the terminal, another window) send no notification here; coming back to the
 // window is when they matter.
 window.addEventListener("focus", () => {
@@ -396,13 +603,16 @@ window.addEventListener("focus", () => {
 
 async function connected(): Promise<void> {
 	try {
+		const first = !state.desktop;
 		const desktop = state.desktop ?? (await client.host("host/state/read", {}));
-		set((s) => ({ ...s, desktop }));
+		set((s) => ({ ...s, desktop, ...(first ? { sidebarOpen: !desktop.sidebar.collapsed } : {}) }));
 		await Promise.all([refreshThreads(), refreshModels(), refreshAccounts()]);
 		// After a restart the new server has no subscriptions: resume what this window shows.
 		for (const id of Object.keys(state.held)) void resumeThread(id);
+		if (pendingRoute) showLink(pendingRoute);
+		pendingRoute = undefined;
 	} catch (error) {
-		toast(errorText(error));
+		toast(errorText(error), "error");
 	}
 }
 
@@ -418,9 +628,24 @@ export async function refreshThreads(): Promise<void> {
 }
 
 export async function refreshModels(): Promise<void> {
-	const { models, default: defaultModel } = await client.request("model/list", {});
-	set((s) => ({ ...s, models, defaultModel }));
+	const [{ models, default: defaultModel }, config] = await Promise.all([
+		client.request("model/list", {}),
+		client.request("config/read", {}).catch(() => undefined),
+	]);
+	const settings = (config?.settings ?? {}) as {
+		defaultThinkingLevel?: ThinkingLevel;
+		modelThinkingLevels?: Record<string, ThinkingLevel>;
+	};
+	const thinkingDefaults = {
+		...(settings.defaultThinkingLevel ? { level: settings.defaultThinkingLevel } : {}),
+		perModel: settings.modelThinkingLevels ?? {},
+	};
+	set((s) => ({ ...s, models, defaultModel, thinkingDefaults }));
 }
+
+/** The level a new thread on  starts with, as the server resolves it (model-resolver.ts). */
+export const startingThinking = (s: State, model: { provider: string; id: string }): ThinkingLevel =>
+	s.thinkingDefaults.perModel[`${model.provider}/${model.id}`] ?? s.thinkingDefaults.level ?? "medium";
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 export function updateDesktop(fn: (d: DesktopState) => DesktopState): void {
@@ -429,7 +654,7 @@ export function updateDesktop(fn: (d: DesktopState) => DesktopState): void {
 	set((s) => ({ ...s, desktop }));
 	clearTimeout(saveTimer);
 	saveTimer = setTimeout(
-		() => void client.host("host/state/write", { state: desktop }).catch((e: unknown) => toast(errorText(e))),
+		() => void client.host("host/state/write", { state: desktop }).catch((e: unknown) => toast(errorText(e), "error")),
 		500,
 	);
 }
@@ -449,6 +674,7 @@ export async function addProject(): Promise<string | undefined> {
 
 export async function openThread(id: string): Promise<void> {
 	navigate({ kind: "thread", id });
+	setUnread(id, false);
 	await resumeThread(id);
 }
 
@@ -484,7 +710,7 @@ async function resumeThread(id: string): Promise<void> {
 					turns: turns.map(toView),
 					queue: result.queue,
 					usage: result.usage,
-					approvals: s.held[id]?.approvals ?? [],
+					requests: s.held[id]?.requests ?? [],
 					pending: s.held[id]?.pending ?? [],
 					...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
 				},
@@ -494,9 +720,13 @@ async function resumeThread(id: string): Promise<void> {
 		await drain();
 	} catch (error) {
 		const code = error instanceof RequestError ? error.code : undefined;
+		const data = error instanceof RequestError ? error.data : undefined;
 		const message =
 			code === "threadLockedElsewhere" ? "This thread is open in another KnightCode process." : errorText(error);
-		set((s) => ({ ...s, opening: { ...s.opening, [id]: { message, ...(code ? { code } : {}) } } }));
+		set((s) => ({
+			...s,
+			opening: { ...s.opening, [id]: { message, ...(code ? { code } : {}), ...(data ? { data } : {}) } },
+		}));
 		// No snapshot replaced the held view, which saw every event up to the buffer: apply the buffer so it
 		// stays current. With no held view the events have nothing to update.
 		await drain();
@@ -508,7 +738,12 @@ async function resumeThread(id: string): Promise<void> {
 export async function startThread(
 	cwd: string,
 	text: string,
-	options: { model?: { provider: string; id: string }; thinkingLevel?: ThinkingLevel; approvalMode?: ApprovalMode },
+	options: {
+		model?: { provider: string; id: string };
+		thinkingLevel?: ThinkingLevel;
+		approvalMode?: ApprovalMode;
+		workspace?: WorkspaceRequest;
+	},
 	images?: ImageInput[],
 ): Promise<void> {
 	const { thread, warnings } = await client.request("thread/start", { cwd, ...options });
@@ -518,13 +753,25 @@ export async function startThread(
 		...s,
 		held: {
 			...s.held,
-			[thread.id]: { thread, turns: [], queue: { steering: [], followUp: [] }, approvals: [], pending: [] },
+			[thread.id]: { thread, turns: [], queue: { steering: [], followUp: [] }, requests: [], pending: [] },
 		},
 	}));
 	await send(thread.id, text, images);
 }
 
 const newClientId = () => crypto.randomUUID();
+
+/** Review comments of queued inputs, by the input's clientMessageId, until it starts or fails to. */
+const queuedComments = new Map<string, { threadId: string; queueId?: string; comments: DiffComment[] }>();
+
+/** Give queued inputs' comments back as drafts: those of one removed input, or all of a thread whose queue was dropped. */
+function restoreQueuedComments(threadId: string, queueId?: string): void {
+	for (const [id, kept] of queuedComments) {
+		if (kept.threadId !== threadId || (queueId !== undefined && kept.queueId !== queueId)) continue;
+		queuedComments.delete(id);
+		set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [...(s.comments[threadId] ?? []), ...kept.comments] } }));
+	}
+}
 
 /** The composer is already cleared: keep a failed queue or steer as a failed bubble with Retry, not a toast. */
 const failedSend = (threadId: string, text: string, images: ImageInput[] | undefined) => (error: unknown) =>
@@ -533,15 +780,43 @@ const failedSend = (threadId: string, text: string, images: ImageInput[] | undef
 		pending: [...v.pending, { clientMessageId: newClientId(), text, images, failed: errorText(error) }],
 	}));
 
-/** Start a turn on an idle thread, queue on a running one (section 9.4). */
+/** Start a turn on an idle thread, queue on a running one (section 9.4). Drafted review comments go along. */
 export async function send(threadId: string, text: string, images?: ImageInput[]): Promise<void> {
 	const view = state.held[threadId];
 	if (!view) return;
+	const comments = state.comments[threadId] ?? [];
+	const extra = comments.length ? { comments } : {};
+	// Only the drafts that went with this input; any added while it was in flight stay.
+	const clearComments = () =>
+		set((s) => ({
+			...s,
+			comments: { ...s.comments, [threadId]: (s.comments[threadId] ?? []).filter((c) => !comments.includes(c)) },
+		}));
 	const running = view.turns.some((t) => t.status === "inProgress");
 	if (running) {
+		// The comments are kept by the input's id until it starts: one that cannot start gives them back as drafts.
+		const queuedId = newClientId();
+		// Before the request: the input can start (and drop its entry) before the answer arrives.
+		if (comments.length) queuedComments.set(queuedId, { threadId, comments });
 		await client
-			.request("turn/queue/add", { threadId, text, ...(images?.length ? { images } : {}) })
-			.catch(failedSend(threadId, text, images));
+			.request("turn/queue/add", {
+				threadId,
+				text,
+				clientMessageId: queuedId,
+				...(images?.length ? { images } : {}),
+				...extra,
+			})
+			.then(
+				({ queueId }) => {
+					const kept = queuedComments.get(queuedId);
+					if (kept) kept.queueId = queueId;
+					clearComments();
+				},
+				(error: unknown) => {
+					queuedComments.delete(queuedId);
+					failedSend(threadId, text, images)(error);
+				},
+			);
 		return;
 	}
 	const clientMessageId = newClientId();
@@ -552,8 +827,11 @@ export async function send(threadId: string, text: string, images?: ImageInput[]
 			text,
 			clientMessageId,
 			...(images?.length ? { images } : {}),
+			...extra,
 		});
-		if (result.status !== "started")
+		// A handled or cancelled start made no user message, so the server dropped the comments: keep the drafts.
+		if (result.status === "started") clearComments();
+		else
 			updateThread(threadId, (v) => ({
 				...v,
 				pending: v.pending.filter((p) => p.clientMessageId !== clientMessageId),
@@ -576,13 +854,23 @@ export async function steer(threadId: string, text: string, images?: ImageInput[
 
 export async function interrupt(threadId: string): Promise<void> {
 	const turn = state.held[threadId]?.turns.findLast((t) => t.status === "inProgress");
-	await client
-		.request("turn/interrupt", turn ? { threadId, turnId: turn.id } : { threadId })
-		.catch((e: unknown) => toast(errorText(e)));
+	await client.request("turn/interrupt", turn ? { threadId, turnId: turn.id } : { threadId }).then(
+		// The server drops the queue on a stop: its inputs' comments come back as drafts.
+		() => restoreQueuedComments(threadId),
+		(e: unknown) => toast(errorText(e), "error"),
+	);
 }
 
-export async function removeQueued(threadId: string, queueId: string): Promise<void> {
-	await client.request("turn/queue/remove", { threadId, queueId }).catch((e: unknown) => toast(errorText(e)));
+/** False when the input already started its own turn (or the request failed): it is no longer the client's to resend. */
+export async function removeQueued(threadId: string, queueId: string): Promise<boolean> {
+	try {
+		const { removed } = await client.request("turn/queue/remove", { threadId, queueId });
+		if (removed) restoreQueuedComments(threadId, queueId);
+		return removed;
+	} catch (e) {
+		toast(errorText(e), "error");
+		return false;
+	}
 }
 
 export function dismissPending(threadId: string, clientMessageId: string): void {
@@ -591,7 +879,23 @@ export function dismissPending(threadId: string, clientMessageId: string): void 
 
 export function answerApproval(threadId: string, approval: Approval, result: ApprovalResult): void {
 	client.respond<"item/toolCall/requestApproval">(approval.id, result);
-	updateThread(threadId, (v) => ({ ...v, approvals: v.approvals.filter((a) => a.id !== approval.id) }));
+	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== approval.id) }));
+}
+
+/** Answer a dialog: `value` for a select, input or editor, `confirmed` for a confirm, nothing to cancel. */
+export function answerDialog(threadId: string, dialog: Dialog, result: ServerRequestResult<"ui/dialog">): void {
+	client.respond<"ui/dialog">(dialog.id, result);
+	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== dialog.id) }));
+}
+
+/** Answer ask_user's questions: each by its id, skipped ones left out; `{}` dismisses them and stops the turn. */
+export function answerQuestions(
+	threadId: string,
+	request: UserInput,
+	result: ServerRequestResult<"item/toolCall/requestUserInput">,
+): void {
+	client.respond<"item/toolCall/requestUserInput">(request.id, result);
+	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== request.id) }));
 }
 
 export async function updateSettings(
@@ -602,21 +906,81 @@ export async function updateSettings(
 		const { thread } = await client.request("thread/settings/update", { threadId, ...settings });
 		updateThread(threadId, (v) => ({ ...v, thread }));
 	} catch (error) {
-		toast(errorText(error));
+		toast(errorText(error), "error");
 	}
 }
 
 export async function archive(threadId: string): Promise<void> {
-	await client.request("thread/archive", { threadId }).catch((e: unknown) => toast(errorText(e)));
+	try {
+		await stopAndArchive(threadId);
+	} catch (e) {
+		// Refused: the thread stays open where the user is.
+		toast(errorText(e), "error");
+		return;
+	}
 	if (state.view.kind === "thread" && state.view.id === threadId) showNew();
 }
 
+/** Archive a thread, stopping it first if it runs (the server archives only idle threads). */
+async function stopAndArchive(threadId: string): Promise<void> {
+	if (state.threads.find((t) => t.id === threadId)?.status.type === "active") {
+		await client.request("turn/interrupt", { threadId });
+		// The interrupt answers before the turn ends, and the server archives only idle threads: wait (10 s at most).
+		const deadline = Date.now() + 10_000;
+		while (state.threads.find((t) => t.id === threadId)?.status.type === "active") {
+			if (Date.now() > deadline) throw new Error("the turn did not stop");
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+	}
+	await client.request("thread/archive", { threadId });
+}
+
+/**
+ * Archive several threads (Codex's "Archive chats" on a project, and a sidebar selection), stopping any that run
+ * first, then say how it went: "Archived 3 threads", or how many failed. `where` names the project, if one.
+ */
+export async function archiveThreads(ids: string[], where?: string): Promise<void> {
+	const results = await Promise.allSettled(ids.map(stopAndArchive));
+	const failed = results.filter((r) => r.status === "rejected").length;
+	const archived = ids.length - failed;
+	const threads = (n: number) => `${n} ${n === 1 ? "thread" : "threads"}`;
+	const place = where ? ` in ${where}` : "";
+	if (!failed) toast(`Archived ${threads(archived)}`, "success");
+	else if (archived) toast(`Archived ${threads(archived)}${place}; ${failed} failed`, "error");
+	else toast(`Failed to archive the threads${place}`, "error");
+	if (ids.includes(openId() ?? "")) showNew();
+}
+
+/** Codex's "Open in new window": the thread in a window of its own. */
+export function openInNewWindow(threadId: string): void {
+	void client.host("host/window/open", { threadId }).catch((e: unknown) => toast(errorText(e), "error"));
+}
+
+/** False when the write failed (its error is toasted). */
+export async function copyText(text: string): Promise<boolean> {
+	return client.host("host/clipboard/writeText", { text }).then(
+		() => true,
+		(e: unknown) => {
+			toast(errorText(e), "error");
+			return false;
+		},
+	);
+}
+
+/** Codex's "Copy last code block": the last fenced block in the thread's replies (lastCodeBlock in format.ts). */
+export function copyLastCodeBlock(threadId: string): void {
+	const replies = (state.held[threadId]?.turns ?? []).flatMap((t) => t.items).filter((i) => i.type === "agentMessage");
+	const code = lastCodeBlock(replies.map((i) => i.text));
+	if (code === undefined) return toast("No code block in this thread");
+	void copyText(code).then((ok) => ok && toast("Copied the code block", "success"));
+}
+
 export async function rename(threadId: string, name: string): Promise<void> {
-	await client.request("thread/name/set", { threadId, name }).catch((e: unknown) => toast(errorText(e)));
+	await client.request("thread/name/set", { threadId, name }).catch((e: unknown) => toast(errorText(e), "error"));
 }
 
 export async function compact(threadId: string): Promise<void> {
-	await client.request("thread/compact", { threadId }).catch((e: unknown) => toast(errorText(e)));
+	await client.request("thread/compact", { threadId }).catch((e: unknown) => toast(errorText(e), "error"));
 }
 
 // --- history, accounts, archive, pickers -----------------------------------------------------
@@ -638,7 +1002,7 @@ export async function loadEarlier(threadId: string): Promise<void> {
 			};
 		});
 	} catch (error) {
-		toast(errorText(error));
+		toast(errorText(error), "error");
 	}
 }
 
@@ -647,7 +1011,7 @@ export async function refreshAccounts(): Promise<void> {
 		const accounts = await client.request("account/list", {});
 		set((s) => ({ ...s, accounts }));
 	} catch (error) {
-		toast(errorText(error));
+		toast(errorText(error), "error");
 	}
 }
 
@@ -656,13 +1020,13 @@ export async function startLogin(provider: string, type: "oauth" | "api_key"): P
 		const { loginId } = await client.request("account/login/start", { provider, type });
 		return loginId;
 	} catch (error) {
-		toast(errorText(error));
+		toast(errorText(error), "error");
 		return undefined;
 	}
 }
 
 export async function answerLogin(loginId: string, value: string): Promise<void> {
-	await client.request("account/login/answer", { loginId, value }).catch((e: unknown) => toast(errorText(e)));
+	await client.request("account/login/answer", { loginId, value }).catch((e: unknown) => toast(errorText(e), "error"));
 }
 
 export async function cancelLogin(loginId: string): Promise<void> {
@@ -674,7 +1038,7 @@ export async function cancelLogin(loginId: string): Promise<void> {
 }
 
 export async function logout(provider: string): Promise<void> {
-	await client.request("account/logout", { provider }).catch((e: unknown) => toast(errorText(e)));
+	await client.request("account/logout", { provider }).catch((e: unknown) => toast(errorText(e), "error"));
 	await Promise.all([refreshAccounts(), refreshModels()]);
 }
 
@@ -685,12 +1049,21 @@ export async function setDefaultModel(model: ModelInfo): Promise<void> {
 		await client.request("config/write", { scope: "global", key: "defaultModel", value: model.id });
 		await refreshModels();
 	} catch (error) {
-		toast(errorText(error));
+		toast(errorText(error), "error");
 	}
 }
 
 export function setPreference<K extends keyof Preferences>(key: K, value: Preferences[K]): void {
 	updateDesktop((d) => ({ ...d, preferences: { ...(d.preferences ?? DEFAULT_PREFERENCES), [key]: value } }));
+}
+
+/** Rebind a shortcut (Settings › Keyboard shortcuts); undefined, or its defaults, drop the rebinding. */
+export function setKeybinding(id: KeybindingId, keys: string[] | undefined): void {
+	const next = { ...(selectPreferences(state).keybindings ?? {}) };
+	const defaults: readonly string[] = DESKTOP_KEYBINDINGS[id].defaultKeys;
+	if (!keys || (keys.length === defaults.length && keys.every((k, i) => k === defaults[i]))) delete next[id];
+	else next[id] = keys;
+	setPreference("keybindings", next);
 }
 
 export async function listArchived(): Promise<ThreadSummary[]> {
@@ -705,20 +1078,31 @@ export async function listArchived(): Promise<ThreadSummary[]> {
 }
 
 export async function unarchive(threadId: string): Promise<void> {
-	await client.request("thread/unarchive", { threadId }).catch((e: unknown) => toast(errorText(e)));
+	await client.request("thread/unarchive", { threadId }).catch((e: unknown) => toast(errorText(e), "error"));
 }
 
+/** Delete a thread for good. The server deletes only archived threads, so a live one (in the sidebar) is archived first. */
 export async function deleteThread(threadId: string): Promise<void> {
-	await client.request("thread/delete", { threadId }).catch((e: unknown) => toast(errorText(e)));
+	try {
+		if (state.threads.some((t) => t.id === threadId)) await stopAndArchive(threadId);
+		await client.request("thread/delete", { threadId });
+	} catch (error) {
+		toast(errorText(error), "error");
+	}
 }
 
-export async function fork(threadId: string, atItemId?: string): Promise<void> {
+/** A copy of the thread, up to `atItemId` when given (Codex's "Branch in new chat"), in a new worktree on request. */
+export async function fork(threadId: string, atItemId?: string, inWorktree = false): Promise<void> {
 	try {
-		const { thread } = await client.request("thread/fork", atItemId ? { threadId, atItemId } : { threadId });
+		const { thread } = await client.request("thread/fork", {
+			threadId,
+			...(atItemId ? { atItemId } : {}),
+			...(inWorktree ? { workspace: { mode: "worktree" as const } } : {}),
+		});
 		upsertSummary(thread);
 		await openThread(thread.id);
 	} catch (error) {
-		toast(errorText(error));
+		toast(errorText(error), "error");
 	}
 }
 
@@ -736,6 +1120,64 @@ export async function listCommands(
 /** One searchId per composer, so each keystroke supersedes the last search (section 9.4). */
 export function searchFiles(cwd: string, query: string, searchId: string) {
 	return client.request("file/search", { cwd, query, searchId, limit: 30 });
+}
+
+/**
+ * Codex's "Turn completion notifications" (Settings › General): an OS notification when a turn ends, always or only
+ * while the window is unfocused; clicking it brings the window forward on the thread.
+ */
+function notifyTurn(turn: TurnSummary): void {
+	const when = selectPreferences(state).turnNotifications ?? "unfocused";
+	if (when === "never" || turn.status === "inProgress" || (when === "unfocused" && document.hasFocus())) return;
+	const name = state.threads.find((t) => t.id === turn.threadId)?.name || "KnightCode";
+	const body =
+		turn.status === "failed"
+			? "The turn failed"
+			: turn.status === "interrupted"
+				? "The turn was stopped"
+				: "KnightCode finished a turn";
+	const notification = new Notification(name, { body });
+	notification.onclick = () => {
+		void client.host("host/app/command", { command: "focus" });
+		void openThread(turn.threadId);
+	};
+}
+
+const NO_UNREAD: string[] = [];
+export const selectUnread = (s: State): string[] => s.desktop?.unread ?? NO_UNREAD;
+
+export function setUnread(threadId: string, unread: boolean): void {
+	if (selectUnread(state).includes(threadId) === unread) return;
+	updateDesktop((d) => {
+		const rest = (d.unread ?? []).filter((id) => id !== threadId);
+		return { ...d, unread: unread ? [...rest, threadId] : rest };
+	});
+}
+
+/** Archive the threads idle past Settings › General's limit (archive-filter.ts, inactiveThreads); none when it is off. */
+// Archives in flight: each archived notification reruns autoArchive before the others are acknowledged.
+const autoArchiving = new Set<string>();
+export async function autoArchive(now = Date.now()): Promise<void> {
+	const days = selectPreferences(state).autoArchiveDays;
+	if (!days) return;
+	// One window archives for all, and never a thread another window has open.
+	const { primary, heldElsewhere } = await client.host("host/window/role", {});
+	if (!primary) return;
+	const keep = [
+		...(state.desktop?.pinnedThreads ?? []),
+		...(state.view.kind === "thread" ? [state.view.id] : []),
+		...heldElsewhere,
+	];
+	for (const t of inactiveThreads(state.threads, days, now, keep)) {
+		if (autoArchiving.has(t.id)) continue;
+		autoArchiving.add(t.id);
+		void archive(t.id).finally(() => autoArchiving.delete(t.id));
+	}
+}
+
+/** Codex's "Clear all unreads". */
+export function clearUnread(): void {
+	if (selectUnread(state).length) updateDesktop((d) => ({ ...d, unread: [] }));
 }
 
 export function pinThread(threadId: string, pinned: boolean): void {
@@ -793,3 +1235,133 @@ function toolLine(item: Extract<Item, { type: "toolCall" }>): string {
 		}
 	}
 }
+
+// --- workspaces, diffs and git (desktop-shell.md section 9.6) ---------------------------------
+
+/** Reload an open Changes pane after something other than a turn changed the checkout (a commit, a switch). */
+export function refreshDiff(threadId: string): void {
+	set((s) => ({ ...s, diffVersion: { ...s.diffVersion, [threadId]: (s.diffVersion[threadId] ?? 0) + 1 } }));
+}
+
+/** Change the side panel; closing it also leaves full screen, so it reopens beside the chat. */
+export function setPanel(panel: Partial<State["panel"]>): void {
+	set((s) => ({ ...s, panel: { ...s.panel, ...panel, ...(panel.open === false ? { full: false } : {}) } }));
+}
+
+export function addComment(threadId: string, comment: DiffComment): void {
+	set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [...(s.comments[threadId] ?? []), comment] } }));
+}
+
+export function removeComment(threadId: string, comment: DiffComment): void {
+	set((s) => ({
+		...s,
+		comments: { ...s.comments, [threadId]: (s.comments[threadId] ?? []).filter((c) => c !== comment) },
+	}));
+}
+
+/** Move the chat and its uncommitted changes between its worktree and the main checkout. */
+export async function handoff(
+	threadId: string,
+	to: "local" | "worktree",
+	branch?: string,
+): Promise<{ branch?: string } | RequestError> {
+	try {
+		const result = await client.request("thread/handoff", { threadId, to, ...(branch ? { branch } : {}) });
+		for (const warning of result.warnings) toast(warning.message);
+		updateThread(threadId, (v) => ({ ...v, thread: result.thread }));
+		upsertSummary(result.thread);
+		return { ...(result.branch ? { branch: result.branch } : {}) };
+	} catch (error) {
+		return error instanceof RequestError ? error : new RequestError("internal", errorText(error));
+	}
+}
+
+/** Rebuild a deleted worktree from its snapshot, then open the thread in it. */
+export async function restoreWorktree(threadId: string): Promise<void> {
+	try {
+		await client.request("thread/worktree/restore", { threadId });
+		await resumeThread(threadId);
+	} catch (error) {
+		toast(errorText(error), "error");
+	}
+}
+
+/**
+ * The edited-files card's Undo and Reapply: the whole Last Turn in one request, which the server checks for every
+ * file before it changes any, so a file edited since never leaves the others half undone. True when it went.
+ */
+export async function undoTurnEdits(threadId: string, turnId: string, reapply = false): Promise<boolean> {
+	try {
+		const { paths } = await client.request("thread/diff/revert", {
+			threadId,
+			scope: "lastTurn",
+			turnId,
+			...(reapply ? { reapply } : {}),
+		});
+		set((s) => {
+			const { [turnId]: _was, ...undoneTurns } = s.undoneTurns;
+			return { ...s, undoneTurns: reapply ? undoneTurns : { ...undoneTurns, [turnId]: true } };
+		});
+		const what = paths.length === 1 ? paths[0] : `${paths.length} files`;
+		toast(`${reapply ? "Reapplied" : "Undid"} the changes to ${what}`, "success");
+		return true;
+	} catch (error) {
+		toast(errorText(error), "error");
+		return false;
+	} finally {
+		refreshDiff(threadId);
+	}
+}
+
+/**
+ * Codex's "Edit message", which the protocol cannot do in place: the thread forks just before the message (its
+ * previous turn's last item) and the edited text goes to the fork. The first message starts a fresh thread instead.
+ */
+/** `images`: the edited message's own, which go with the replacement. */
+export async function resendEdited(
+	threadId: string,
+	turnId: string,
+	text: string,
+	images?: ImageInput[],
+): Promise<void> {
+	// The first loaded turn may not be the thread's first: load what is before it, so the fork keeps that history.
+	while (state.held[threadId]?.nextCursor && state.held[threadId]!.turns[0]?.id === turnId) {
+		const loaded = state.held[threadId]!.turns.length;
+		await loadEarlier(threadId);
+		// A failed load (it toasts) adds nothing: stop rather than ask again forever.
+		if ((state.held[threadId]?.turns.length ?? loaded) === loaded) break;
+	}
+	const view = state.held[threadId];
+	if (!view) return;
+	const at = view.turns.findIndex((t) => t.id === turnId);
+	if (at === 0 && view.nextCursor) return toast("Could not load the earlier messages to edit this one", "error");
+	const before = view.turns[at - 1]?.items.filter((i) => i.index !== undefined).at(-1);
+	try {
+		if (before) {
+			const { thread } = await client.request("thread/fork", { threadId, atItemId: before.id });
+			upsertSummary(thread);
+			await openThread(thread.id);
+			await send(thread.id, text, images);
+		} else {
+			const { thread } = view;
+			// The thread's own cwd: inside a managed worktree that starts the new thread in the same worktree.
+			await startThread(
+				thread.cwd,
+				text,
+				{
+				// thread/start takes only {provider, id}: the full ModelRef fails its parameter check.
+				...(thread.model ? { model: { provider: thread.model.provider, id: thread.model.id } } : {}),
+				...(thread.thinkingLevel ? { thinkingLevel: thread.thinkingLevel } : {}),
+					approvalMode: thread.approvalMode,
+				},
+				images,
+			);
+		}
+	} catch (error) {
+		toast(errorText(error), "error");
+	}
+}
+
+// The store holds the session (the server's state, held threads, the client's listeners). A hot update would start a
+// second, empty store beside the live client, which never hears "ready" again, so an edit reloads the page instead.
+import.meta.hot?.accept(() => window.location.reload());

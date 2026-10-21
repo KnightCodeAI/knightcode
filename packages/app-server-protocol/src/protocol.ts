@@ -111,8 +111,153 @@ export const ThreadStatus = Type.Union([
 	Obj({ type: Type.Literal("systemError"), message: Str }),
 ]);
 export type ThreadStatus = Static<typeof ThreadStatus>;
-/** Phase A has local workspaces only; Phase B adds worktrees. */
-export const Workspace = Obj({ mode: Type.Literal("local") });
+/** What a thread/start asks for (§6.1). */
+export const WorkspaceRequest = Type.Union([
+	Obj({ mode: Type.Literal("local") }),
+	Obj({
+		mode: Type.Literal("worktree"),
+		/** Branch or commit to start from; default the project checkout's HEAD (Codex's "What branch should this chat start from?"). */
+		baseRef: Type.Optional(Str),
+		/** Bring the project checkout's uncommitted changes along, as uncommitted edits. Not with baseRef. */
+		carryLocalChanges: Type.Optional(Bool),
+		/** A name from the project's .knightcode/environments.json; absent = "Work without environment". */
+		environment: Type.Optional(Str),
+	}),
+]);
+export type WorkspaceRequest = Static<typeof WorkspaceRequest>;
+export const Workspace = Type.Union([
+	Obj({
+		mode: Type.Literal("local"),
+		/** The worktree a handed-off thread came from; a handoff back returns it there. */
+		worktree: Type.Optional(Str),
+	}),
+	Obj({
+		mode: Type.Literal("worktree"),
+		/** The worktree's root; the thread's cwd is this or the same subdirectory the project cwd had. */
+		path: Str,
+		/** The commit the worktree started from (a SHA). */
+		baseRef: Str,
+		/** The thread that created the worktree. */
+		ownerThreadId: Str,
+		environment: Type.Optional(Str),
+		setupFailed: Type.Optional(Bool),
+		/** The worktree was deleted; thread/worktree/restore brings it back. */
+		deleted: Type.Optional(Bool),
+	}),
+]);
+export type Workspace = Static<typeof Workspace>;
+const WorkspaceMode = Type.Union([Type.Literal("local"), Type.Literal("worktree")]);
+
+const PlatformScript = Obj({
+	default: Type.Optional(Str),
+	macos: Type.Optional(Str),
+	linux: Type.Optional(Str),
+	windows: Type.Optional(Str),
+});
+export type PlatformScript = Static<typeof PlatformScript>;
+export const Environment = Obj({
+	name: Type.String({ minLength: 1, maxLength: 100 }),
+	setup: Type.Optional(PlatformScript),
+	cleanup: Type.Optional(PlatformScript),
+	/** Shown in the desktop's toolbar and run in its terminal (desktop shell S2); the server only stores them. */
+	actions: Type.Optional(
+		Type.Array(
+			Obj({ name: Type.String({ minLength: 1, maxLength: 100 }), icon: Type.Optional(Str), command: PlatformScript }),
+			{ maxItems: 50 },
+		),
+	),
+});
+export type Environment = Static<typeof Environment>;
+
+export const DiffScope = Type.Union([
+	Type.Literal("lastTurn"),
+	Type.Literal("uncommitted"),
+	Type.Literal("unstaged"),
+	Type.Literal("staged"),
+	Type.Literal("committed"),
+	Type.Literal("branch"),
+]);
+export type DiffScope = Static<typeof DiffScope>;
+/** Which diff a hunk, a revert or a comment refers to. */
+const ScopeSelector = {
+	scope: Type.Optional(DiffScope),
+	/** `branch`: the branch to compare with (Codex's "HEAD → Select branch"). */
+	against: Type.Optional(Str),
+	/** `committed`: the commit to show, from git/log. */
+	commit: Type.Optional(Str),
+};
+export const DiffHunk = Obj({
+	/**
+	 * sha256 of the path, the file's extended header lines (with the full blob ids of `index <old>..<new>`), the hunk
+	 * header and lines, so it also depends on the read's `context`: an action must pass the context of the read that
+	 * gave the id (a `context: 0` id matches no action), and after an action that changes the file every other hunk id
+	 * of it changes too, so read again.
+	 */
+	id: Str,
+	header: Str,
+	oldStart: Num,
+	oldLines: Num,
+	newStart: Num,
+	newLines: Num,
+	/** Each line keeps its prefix: " ", "+", "-", or "\\" for "No newline at end of file". */
+	lines: Type.Array(Str),
+});
+export type DiffHunk = Static<typeof DiffHunk>;
+export const DiffFile = Obj({
+	path: Str,
+	oldPath: Type.Optional(Str),
+	status: Type.Union([
+		Type.Literal("added"),
+		Type.Literal("modified"),
+		Type.Literal("deleted"),
+		Type.Literal("renamed"),
+		Type.Literal("typeChanged"),
+	]),
+	binary: Bool,
+	additions: Num,
+	deletions: Num,
+	/** Hunks left out: the file's patch is over 512 KiB, or the read's raw or serialized budget ran out. */
+	tooLarge: Type.Optional(Bool),
+	hunks: Type.Array(DiffHunk),
+});
+export type DiffFile = Static<typeof DiffFile>;
+export const DiffComment = Obj({
+	...ScopeSelector,
+	path: Str,
+	/** Codex's L/R: the old or the new side of the diff. */
+	side: Type.Union([Type.Literal("old"), Type.Literal("new")]),
+	startLine: Type.Integer({ minimum: 1 }),
+	endLine: Type.Integer({ minimum: 1 }),
+	body: Type.String({ minLength: 1, maxLength: 8000 }),
+});
+export type DiffComment = Static<typeof DiffComment>;
+const Comments = Type.Optional(Type.Array(DiffComment, { minItems: 1, maxItems: 50 }));
+const ReadContext = Type.Integer({ minimum: 0, maximum: 1_000_000 });
+const ActionContext = Type.Integer({ minimum: 1, maximum: 1_000_000 });
+const DiffTarget = {
+	threadId: Str,
+	path: Type.Optional(Str),
+	hunkId: Type.Optional(Str),
+	context: Type.Optional(ActionContext),
+};
+const BranchName = Type.String({ maxLength: 200 });
+
+/** `data.reason` of a gitConflict error. */
+export const GitConflictReason = Type.Union([
+	Type.Literal("diffChanged"),
+	Type.Literal("patchFailed"),
+	Type.Literal("concurrentChange"),
+	Type.Literal("pushRejected"),
+	Type.Literal("localChanges"),
+	Type.Literal("operationInProgress"),
+	Type.Literal("branchExists"),
+	Type.Literal("recoveryRequired"),
+	Type.Literal("worktreeDeleted"),
+	Type.Literal("worktreeMissing"),
+	Type.Literal("worktreeInUse"),
+	Type.Literal("submodules"),
+]);
+export type GitConflictReason = Static<typeof GitConflictReason>;
 
 export const ThreadSummary = Obj({
 	id: Str,
@@ -124,6 +269,7 @@ export const ThreadSummary = Obj({
 	createdAt: Str,
 	forkedFromId: Type.Optional(Str),
 	updatedAt: Str,
+	workspaceMode: WorkspaceMode,
 });
 export type ThreadSummary = Static<typeof ThreadSummary>;
 
@@ -141,6 +287,8 @@ export const Thread = Obj({
 	approvalMode: ApprovalMode,
 	model: Type.Optional(ModelRef),
 	thinkingLevel: ThinkingLevel,
+	/** The session file on disk (Codex's "Copy conversation path"); absent until the thread is first saved. */
+	sessionFile: Type.Optional(Str),
 });
 export type Thread = Static<typeof Thread>;
 
@@ -150,6 +298,10 @@ export const FileChange = Obj({
 	diff: Type.Optional(Str),
 });
 export type FileChange = Static<typeof FileChange>;
+
+/** A file a turn changed, with its line totals between the working tree before and after the turn (§6.2). */
+export const TurnFile = Obj({ path: Str, additions: Num, deletions: Num });
+export type TurnFile = Static<typeof TurnFile>;
 
 export const ToolCallStatus = Type.Union([
 	Type.Literal("pending"),
@@ -169,6 +321,8 @@ export const Item = Type.Union([
 		text: Str,
 		images: Type.Array(ImageRef),
 		clientMessageId: Type.Optional(ClientMessageId),
+		/** Review comments sent with the input; the model read them quoted into its text. */
+		comments: Type.Optional(Type.Array(DiffComment)),
 		...Times,
 	}),
 	Obj({ type: Type.Literal("agentMessage"), id: Str, text: Str, ...Times }),
@@ -216,6 +370,8 @@ export const Turn = Obj({
 	completedAt: Type.Optional(Num),
 	error: Type.Optional(TurnError),
 	items: Type.Array(Item),
+	/** What the turn changed in a git checkout, once recorded; live, `turn/diff/updated` brings it after `turn/completed`. */
+	files: Type.Optional(Type.Array(TurnFile)),
 });
 export type Turn = Static<typeof Turn>;
 
@@ -322,8 +478,52 @@ export const Warning = Obj(WarningFields);
 export type Warning = Static<typeof Warning>;
 const SettingsScope = Type.Union([Type.Literal("global"), Type.Literal("project")]);
 
+export const McpExposure = Type.Union([
+	Type.Literal("codemode"),
+	Type.Literal("deferred"),
+	Type.Literal("direct"),
+	Type.Literal("hidden"),
+]);
+export type McpExposure = Static<typeof McpExposure>;
+const McpServerName = Type.String({ pattern: "^[A-Za-z0-9_-]+$", maxLength: 128 });
+/** A server from an `mcp.json`; `override` is the project file that changes a global server's state. */
+export const McpServerInfo = Obj({
+	name: Str,
+	scope: SettingsScope,
+	source: Str,
+	override: Type.Optional(Str),
+	transport: Type.Union([Type.Literal("stdio"), Type.Literal("http")]),
+	/** The command line of a stdio server, the URL of an HTTP one. */
+	target: Str,
+	description: Type.Optional(Str),
+	enabled: Bool,
+	exposure: McpExposure,
+});
+export type McpServerInfo = Static<typeof McpServerInfo>;
+
+export const ResourceType = Type.Union([
+	Type.Literal("extensions"),
+	Type.Literal("skills"),
+	Type.Literal("prompts"),
+	Type.Literal("themes"),
+]);
+export type ResourceType = Static<typeof ResourceType>;
+/** An extension, skill, prompt template or theme as `knightcode config` lists it. */
+export const Resource = Obj({
+	type: ResourceType,
+	path: Str,
+	name: Str,
+	enabled: Bool,
+	scope: Type.Union([Type.Literal("user"), Type.Literal("project"), Type.Literal("temporary")]),
+	origin: Type.Union([Type.Literal("package"), Type.Literal("top-level")]),
+	/** `auto` (discovered), `local` (named in settings), or a package source. Built-in extensions are never listed. */
+	source: Str,
+});
+export type Resource = Static<typeof Resource>;
+
 /** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
-const QueueEntry = Obj({ id: Str, text: Str });
+/** `attachments`: images and review comments the input carries, which its text alone does not. */
+const QueueEntry = Obj({ id: Str, text: Str, attachments: Type.Optional(Num) });
 export const TurnQueue = Obj({ steering: Type.Array(Str), followUp: Type.Array(QueueEntry) });
 export type TurnQueue = Static<typeof TurnQueue>;
 
@@ -344,7 +544,7 @@ export const ClientRequests = {
 	"thread/start": {
 		params: Obj({
 			cwd: Str,
-			workspace: Type.Optional(Workspace),
+			workspace: Type.Optional(WorkspaceRequest),
 			approvalMode: Type.Optional(ApprovalMode),
 			model: Type.Optional(ModelSelector),
 			thinkingLevel: Type.Optional(ThinkingLevel),
@@ -364,8 +564,125 @@ export const ClientRequests = {
 		}),
 	},
 	"thread/fork": {
-		params: Obj({ threadId: Str, atItemId: Type.Optional(Str) }),
+		params: Obj({
+			threadId: Str,
+			atItemId: Type.Optional(Str),
+			/** Absent: the fork shares the source's workspace. */
+			workspace: Type.Optional(Obj({ mode: Type.Literal("worktree") })),
+		}),
 		result: Obj({ thread: Thread, warnings: Type.Array(Warning) }),
+	},
+	"thread/handoff": {
+		params: Obj({
+			threadId: Str,
+			to: Type.Union([Type.Literal("local"), Type.Literal("worktree")]),
+			branch: Type.Optional(BranchName),
+			environment: Type.Optional(Str),
+		}),
+		result: Obj({ thread: Thread, branch: Type.Optional(Str), warnings: Type.Array(Warning) }),
+	},
+	"thread/worktree/restore": { params: ThreadId, result: Obj({ thread: Thread }) },
+	"worktree/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			worktrees: Type.Array(
+				Obj({
+					path: Str,
+					projectCwd: Str,
+					head: Type.Optional(Str),
+					branch: Type.Optional(Str),
+					threadIds: Type.Array(Str),
+					lastUsedAt: Num,
+					deleted: Bool,
+				}),
+			),
+		}),
+	},
+	"worktree/delete": { params: Obj({ path: Str }), result: Obj({ snapshot: Type.Optional(Str) }) },
+	"environment/list": {
+		params: Obj({ cwd: Str }),
+		result: Obj({ environments: Type.Array(Environment), trusted: Bool }),
+	},
+	"environment/save": {
+		params: Obj({ cwd: Str, environments: Type.Array(Environment, { maxItems: 50 }) }),
+		result: Empty,
+	},
+	"thread/diff/read": {
+		params: Obj({
+			threadId: Str,
+			...ScopeSelector,
+			context: Type.Optional(ReadContext),
+			ignoreWhitespace: Type.Optional(Bool),
+		}),
+		result: Obj({
+			scope: DiffScope,
+			/** The repository's root: `files` paths are relative to it, not to the thread's cwd. */
+			root: Str,
+			files: Type.Array(DiffFile),
+			filesOmitted: Type.Optional(Num),
+			untrackedSkipped: Type.Optional(Num),
+			turnId: Type.Optional(Str),
+			stale: Type.Optional(Bool),
+			against: Type.Optional(Str),
+		}),
+	},
+	"thread/diff/revert": {
+		params: Obj({
+			...DiffTarget,
+			...ScopeSelector,
+			/** `lastTurn` only: apply the turn's changes again after an undo (Codex's Reapply). */
+			reapply: Type.Optional(Bool),
+			/** `lastTurn` only: the turn the client means; a newer last turn answers gitConflict `diffChanged`. */
+			turnId: Type.Optional(Str),
+		}),
+		result: Obj({ paths: Type.Array(Str) }),
+	},
+	"git/status": {
+		params: ThreadId,
+		result: Obj({
+			branch: Type.Optional(Str),
+			head: Type.Optional(Str),
+			upstream: Type.Optional(Str),
+			ahead: Num,
+			behind: Num,
+			staged: Num,
+			unstaged: Num,
+			untracked: Num,
+			conflicted: Num,
+			operation: Type.Optional(
+				Type.Union([Type.Literal("merge"), Type.Literal("rebase"), Type.Literal("cherryPick"), Type.Literal("revert")]),
+			),
+		}),
+	},
+	"git/stage": { params: Obj(DiffTarget), result: Obj({ paths: Type.Array(Str) }) },
+	"git/unstage": { params: Obj(DiffTarget), result: Obj({ paths: Type.Array(Str) }) },
+	"git/commit": {
+		params: Obj({
+			threadId: Str,
+			message: Type.Optional(Type.String({ maxLength: 20000 })),
+			/** Codex's "Include unstaged changes"; default true. */
+			includeUnstaged: Type.Optional(Bool),
+		}),
+		result: Obj({ commit: Str, message: Str }),
+	},
+	"git/push": { params: ThreadId, result: Obj({ remote: Str, branch: Str, setUpstream: Bool }) },
+	"git/pr/create": {
+		params: Obj({ threadId: Str, title: Type.Optional(Str), body: Type.Optional(Str), draft: Type.Optional(Bool) }),
+		result: Obj({ url: Str }),
+	},
+	"git/branch/create": { params: Obj({ threadId: Str, name: BranchName }), result: Obj({ branch: Str }) },
+	"git/branch/switch": { params: Obj({ threadId: Str, name: BranchName }), result: Obj({ branch: Str }) },
+	"git/branches": {
+		/** A project cwd lists branches before any thread exists (the new-chat branch picker). */
+		params: Type.Union([ThreadId, Obj({ cwd: Str })]),
+		result: Obj({ current: Type.Optional(Str), defaultBranch: Type.Optional(Str), branches: Type.Array(Str) }),
+	},
+	"git/log": {
+		params: Obj({ threadId: Str, limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })) }),
+		result: Obj({
+			base: Type.Optional(Str),
+			commits: Type.Array(Obj({ sha: Str, subject: Str, author: Str, time: Num })),
+		}),
 	},
 	"thread/list": {
 		params: Obj({ cwd: Type.Optional(Str), cursor: Type.Optional(Str), archived: Type.Optional(Bool) }),
@@ -387,7 +704,25 @@ export const ClientRequests = {
 		result: Obj({ status: Type.Union([Type.Literal("unsubscribed"), Type.Literal("notSubscribed")]) }),
 	},
 	"thread/delete": { params: ThreadId, result: Empty },
-	"thread/archive": { params: ThreadId, result: Empty },
+	"thread/archive": {
+		params: ThreadId,
+		result: Obj({
+			worktree: Type.Optional(
+				Obj({
+					deleted: Bool,
+					snapshot: Type.Optional(Str),
+					reason: Type.Optional(
+						Type.Union([
+							Type.Literal("autoDeleteOff"),
+							Type.Literal("inUse"),
+							Type.Literal("notManaged"),
+							Type.Literal("submodules"),
+						]),
+					),
+				}),
+			),
+		}),
+	},
 	"thread/unarchive": { params: ThreadId, result: Empty },
 	"thread/name/set": { params: Obj({ threadId: Str, name: Str }), result: Empty },
 	"thread/settings/update": {
@@ -407,6 +742,7 @@ export const ClientRequests = {
 			images: Type.Optional(Type.Array(ImageInput)),
 			clientMessageId: Type.Optional(ClientMessageId),
 			requestId: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+			comments: Comments,
 		}),
 		result: TurnStartResult,
 	},
@@ -428,6 +764,7 @@ export const ClientRequests = {
 			text: Str,
 			images: Type.Optional(Type.Array(ImageInput)),
 			clientMessageId: Type.Optional(ClientMessageId),
+			comments: Comments,
 		}),
 		result: Obj({ queueId: Str }),
 	},
@@ -469,8 +806,11 @@ export const ClientRequests = {
 		params: Obj({ cwd: Type.Optional(Str) }),
 		result: Obj({
 			settings: Type.Unknown(),
+			/** What an unset key means, in the shape of `settings`. */
+			defaults: Type.Unknown(),
 			origins: Type.Record(Str, SettingsScope),
 			versions: Obj({ global: Str, project: Type.Optional(Str) }),
+			paths: Obj({ global: Str, project: Type.Optional(Str) }),
 			errors: Type.Array(Warning),
 		}),
 	},
@@ -483,6 +823,59 @@ export const ClientRequests = {
 			expectedVersion: Type.Optional(Str),
 		}),
 		result: Obj({ version: Str }),
+	},
+	"tool/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			tools: Type.Array(Obj({ name: Str, description: Str, source: Str })),
+			/** The global `defaultTools` selection, resolved. */
+			defaultTools: Type.Array(Str),
+		}),
+	},
+	"tool/settings/read": {
+		params: Empty,
+		result: Obj({
+			tools: Type.Array(Obj({ name: Str, enabled: Bool, settings: Type.Record(Str, Type.Union([Str, Bool])) })),
+			classifiers: Type.Array(Obj({ provider: Str, id: Str, name: Str })),
+		}),
+	},
+	"tool/settings/write": {
+		params: Obj({ name: Str, key: Str, value: Type.Union([Str, Bool, Type.Null()]) }),
+		result: Empty,
+	},
+	"mcp/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			servers: Type.Array(McpServerInfo),
+			errors: Type.Array(Str),
+			paths: Obj({ global: Str, project: Type.Optional(Str) }),
+		}),
+	},
+	/** Changes the server where it is defined, or its project override when it has one, as `/mcp` does. */
+	"mcp/update": {
+		params: Obj({
+			cwd: Type.Optional(Str),
+			name: McpServerName,
+			enabled: Type.Optional(Bool),
+			exposure: Type.Optional(McpExposure),
+		}),
+		result: Empty,
+	},
+	"mcp/add": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: McpServerName, config: Type.Unknown() }),
+		result: Obj({ replaced: Bool }),
+	},
+	"mcp/remove": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: McpServerName }),
+		result: Obj({ removed: Bool }),
+	},
+	"resource/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({ resources: Type.Array(Resource) }),
+	},
+	"resource/set": {
+		params: Obj({ cwd: Type.Optional(Str), type: ResourceType, path: Str, enabled: Bool }),
+		result: Empty,
 	},
 	"project/trust/read": {
 		params: Obj({ cwd: Str }),
@@ -521,6 +914,13 @@ export const ServerNotifications = {
 	"thread/settings/updated": Obj({ thread: Thread }),
 	"thread/archived": Obj({ threadId: Str, archived: Bool }),
 	"thread/deleted": Obj({ threadId: Str }),
+	/** Files whose content changed while the turn ran; not only the turn's own edits (§6.2). */
+	"turn/diff/updated": Obj({ threadId: Str, turnId: Str, files: Type.Array(TurnFile) }),
+	"thread/workspace/progress": Obj({
+		threadId: Str,
+		phase: Type.Union([Type.Literal("setup"), Type.Literal("cleanup")]),
+		output: Str,
+	}),
 	"thread/turn/completed": Obj({ turn: TurnSummary }),
 	"turn/started": Obj({ turn: Turn, requestId: Type.Optional(Str) }),
 	"turn/completed": Obj({ turn: TurnSummary }),
@@ -540,10 +940,17 @@ export const ServerNotifications = {
 		output: Type.Union([Type.Array(ToolOutput), PayloadRef]),
 	}),
 	"serverRequest/cancelled": Obj({ id: RequestId }),
+	/** A notice for the user, such as "Downloaded model" (`ctx.ui.notify`, §8.1). */
+	"ui/notify": Obj({
+		threadId: Str,
+		message: Str,
+		level: Type.Union([Type.Literal("info"), Type.Literal("warning"), Type.Literal("error")]),
+	}),
 	"account/login/updated": LoginState,
 	"account/updated": Obj({ provider: Str, authenticated: Bool }),
 	warning: Obj({ ...WarningFields, threadId: Type.Optional(Str) }),
-	error: Obj({ message: Str, threadId: Type.Optional(Str) }),
+	/** `clientMessageId`: the queued input that could not start, when it had one. */
+	error: Obj({ message: Str, threadId: Type.Optional(Str), clientMessageId: Type.Optional(Str) }),
 } as const;
 
 const ApprovalDecisionKind = Type.Union([
@@ -576,6 +983,56 @@ export const ServerRequests = {
 			Obj({ ...ApprovalCommon, inputRef: PayloadRef }),
 		]),
 		result: ApprovalResult,
+	},
+	/**
+	 * ask_user's questions, all at once so the user can move back and forth between them before answering. Answer
+	 * each question by its `id` with a chosen option's `label` (and an optional `note`) or the user's own text as
+	 * `other`; leave a skipped question out; answer `{}` to dismiss, which stops the turn.
+	 */
+	"item/toolCall/requestUserInput": {
+		params: Obj({
+			threadId: Str,
+			turnId: Str,
+			itemId: Str,
+			questions: Type.Array(
+				Obj({
+					id: Str,
+					question: Str,
+					options: Type.Array(Obj({ label: Str, description: Str })),
+				}),
+			),
+		}),
+		result: Obj({
+			answers: Type.Optional(
+				Type.Record(Str, Obj({ label: Type.Optional(Str), note: Type.Optional(Str), other: Type.Optional(Str) })),
+			),
+		}),
+	},
+	/**
+	 * A question for the user mid-turn, such as the classifier gate's or plan review's (`ctx.ui.select`, `confirm`,
+	 * `input`, `editor`; §8.1). Answer `value` for a select (one of `options`), an input or an editor, `confirmed`
+	 * for a confirm, and `{}` to cancel.
+	 */
+	"ui/dialog": {
+		params: Obj({
+			threadId: Str,
+			kind: Type.Union([
+				Type.Literal("select"),
+				Type.Literal("confirm"),
+				Type.Literal("input"),
+				Type.Literal("editor"),
+			]),
+			title: Str,
+			/** confirm: the question under the title. */
+			message: Type.Optional(Str),
+			/** select: the choices, in order. */
+			options: Type.Optional(Type.Array(Str)),
+			/** input: the empty field's hint. */
+			placeholder: Type.Optional(Str),
+			/** editor: the text it opens with. */
+			prefill: Type.Optional(Str),
+		}),
+		result: Obj({ value: Type.Optional(Str), confirmed: Type.Optional(Bool) }),
 	},
 } as const;
 

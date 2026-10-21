@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { TURN_DIFF_ENTRY } from "../../src/app-server/diff.ts";
 import { DECLINED_REASON, entryForItem, readTurns } from "../../src/app-server/transcript.ts";
 import type { SessionEntry } from "../../src/core/session-manager.ts";
 import { TURN_END_TYPE, TURN_MARKER_TYPE } from "../../src/extensions/turn-marker.ts";
@@ -57,6 +58,35 @@ test("a marked turn keeps its steers, numbers items by ordinal and takes its sta
 		output: [{ type: "text", text: "ok" }],
 		fileChanges: [{ path: "a.ts", kind: "modify" }],
 	});
+});
+
+test("a write that created its file reads back as an add carrying its patch", () => {
+	const m = marker();
+	const result = toolResult("w", "write", "ok");
+	if (result.type !== "message" || result.message.role !== "toolResult") throw new Error("fixtures");
+	result.message.details = { patch: "--- a.ts\n+++ a.ts\n@@ -0,0 +1 @@\n+x\n", created: true };
+	const entries = [
+		m,
+		user("go"),
+		assistant([{ type: "toolCall", id: "w", name: "write", arguments: { path: "a.ts" } }], "toolUse"),
+		result,
+		end("completed"),
+	];
+	expect(readTurns("t", entries)[0].items.find((i) => i.id === "w")).toMatchObject({
+		fileChanges: [{ path: "a.ts", kind: "add", diff: "--- a.ts\n+++ a.ts\n@@ -0,0 +1 @@\n+x\n" }],
+	});
+});
+
+test("a turn reads back its recorded file totals; an older record of bare paths is skipped", () => {
+	const turnOf = (files: unknown[]) => {
+		const m = marker();
+		const record = { ...base(), type: "custom", customType: TURN_DIFF_ENTRY } as SessionEntry;
+		if (record.type === "custom") record.data = { turnId: m.id, before: "b", after: "a", files };
+		return readTurns("t", [m, user("go"), assistant([{ type: "text", text: "ok" }]), end("completed"), record])[0];
+	};
+	const files = [{ path: "a.ts", additions: 200, deletions: 0 }];
+	expect(turnOf(files).files).toEqual(files);
+	expect(turnOf(["a.ts"])).not.toHaveProperty("files");
 });
 
 test("tool calls sit at their blocks in block order; results never reorder them; a call with no result failed", () => {
@@ -157,6 +187,20 @@ test("entryForItem finds the entry holding an item", () => {
 	expect(entryForItem([m, u, a], `${m.id}:user:0`)).toBe(u.id);
 	expect(entryForItem([m, u, a], `${m.id}:0:0`)).toBe(a.id);
 	expect(entryForItem([m, u, a], "nope")).toBeUndefined();
+});
+
+test("a turn's last item takes the turn's end along, so a fork there reads the turn as completed", () => {
+	const m = marker();
+	const u = user("hi");
+	const a = assistant([{ type: "text", text: "yo" }]);
+	const e = end("completed");
+	const next = [marker(), user("again")];
+	const entries = [m, u, a, e, ...next];
+	expect(entryForItem(entries, `${m.id}:0:0`)).toBe(e.id);
+	const forked = entries.slice(0, entries.indexOf(e) + 1);
+	expect(readTurns("t", forked)[0]).toMatchObject({ status: "completed" });
+	// An item that does not end its turn keeps its own entry.
+	expect(entryForItem(entries, `${m.id}:user:0`)).toBe(u.id);
 });
 
 test("turn and item times use the durable marker, messages and end", () => {

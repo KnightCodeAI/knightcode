@@ -15,6 +15,8 @@ import {
 	SettingsManager,
 	type SettingsScope,
 } from "../core/settings-manager.ts";
+import { SETTINGS_DEFAULTS } from "../core/settings-defaults.ts";
+import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { resolvePath } from "../utils/paths.ts";
 
 const versionOf = (content: string | undefined) =>
@@ -61,28 +63,36 @@ function managerOver(contents: Partial<Record<SettingsScope, string>>): Settings
 	return SettingsManager.fromStorage(memory);
 }
 
+/** Whether a project's own files are read: it has nothing that needs trust, or the user trusted it. */
+export function projectReadable(agentDir: string, cwd: string): boolean {
+	return !hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(agentDir).get(cwd) === true;
+}
+
 /** An untrusted project's file is not read: it reports no settings and version "none". */
 export function readSettings(agentDir: string, cwd: string | undefined, projectTrusted: boolean) {
 	const storage = new FileSettingsStorage(cwd ?? process.cwd(), agentDir);
 	const contents: Partial<Record<SettingsScope, string>> = { global: readContent(storage, "global") };
 	if (cwd !== undefined && projectTrusted) contents.project = readContent(storage, "project");
 	const manager = managerOver(contents);
+	const paths = {
+		global: join(resolvePath(agentDir), "settings.json"),
+		...(cwd !== undefined ? { project: join(resolvePath(cwd), CONFIG_DIR_NAME, "settings.json") } : {}),
+	};
 	const errors = manager.drainErrors().map(({ scope, error }): Warning => ({
 		source: "settings",
-		path:
-			scope === "global"
-				? join(resolvePath(agentDir), "settings.json")
-				: join(resolvePath(cwd!), CONFIG_DIR_NAME, "settings.json"),
+		path: paths[scope],
 		message: error.message,
 		...positionOf(contents[scope] ?? "", error),
 	}));
 	return {
 		settings: manager.getSettings(),
+		defaults: SETTINGS_DEFAULTS,
 		origins: originsOf(manager.getGlobalSettings(), manager.getProjectSettings()),
 		versions: {
 			global: versionOf(contents.global),
 			...(cwd !== undefined ? { project: versionOf(contents.project) } : {}),
 		},
+		paths,
 		errors,
 	};
 }

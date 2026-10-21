@@ -1,6 +1,7 @@
 import type { ResultOf, Turn } from "@knightcode/app-server-protocol";
 import { fauxProvider } from "@knightcode/ai";
 import { InMemoryCredentialStore } from "@knightcode/ai/auth/credential-store";
+import type { ChildProcess } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,10 +16,47 @@ import { ThreadManager, type ThreadManagerOptions } from "../../src/app-server/t
 let counter = 0;
 const cleanups: Array<() => Promise<void>> = [];
 
+const tempDirs: string[] = [];
+
+/** A temporary directory that cleanupServers removes once every server has closed. */
+export function tempDir(prefix: string): string {
+	const dir = mkdtempSync(join(tmpdir(), prefix));
+	tempDirs.push(dir);
+	return dir;
+}
+
+/**
+ * Kill a child and wait for it to exit, so its files are closed before its directories go: SIGTERM, then SIGKILL
+ * after `ms`; a child still running after that fails the cleanup rather than leaking.
+ */
+export async function stopChild(child: ChildProcess, ms = 10_000): Promise<void> {
+	const gone = () => child.exitCode !== null || child.signalCode !== null;
+	// The listener first: a child exiting between a check and the listener would otherwise go unseen.
+	const exited = new Promise<boolean>((resolve) => child.once("exit", () => resolve(true)));
+	if (gone()) return;
+	const within = async () => {
+		if (gone()) return true;
+		let timer: NodeJS.Timeout | undefined;
+		const done = await Promise.race([
+			exited,
+			new Promise<boolean>((resolve) => (timer = setTimeout(resolve, ms, false))),
+		]);
+		clearTimeout(timer);
+		return done;
+	};
+	child.kill();
+	if (await within()) return;
+	child.kill("SIGKILL");
+	if (!(await within())) throw new Error(`child ${child.pid} did not exit`);
+}
+
 /** Call from afterEach. */
 export async function cleanupServers(): Promise<void> {
 	const errors: unknown[] = [];
-	for (const cleanup of cleanups.splice(0)) {
+	const removals = tempDirs
+		.splice(0)
+		.map((dir) => () => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+	for (const cleanup of [...cleanups.splice(0), ...removals]) {
 		try {
 			await cleanup();
 		} catch (error) {
@@ -44,7 +82,8 @@ export interface TestClient {
 
 export interface StartServerOptions extends ThreadManagerOptions {
 	tokensPerSecond?: number;
-	sessionDir?: string;
+	/** null: no explicit session dir, so threads use the per-project default layout under the temp agentDir. */
+	sessionDir?: string | null;
 	agentDir?: string;
 }
 
@@ -58,7 +97,11 @@ export async function startServer(options: StartServerOptions = {}) {
 	};
 	const cwd = temp("knightcode-as-cwd-");
 	const agentDir = options.agentDir ?? temp("knightcode-as-agent-");
-	const sessionDir = options.sessionDir ?? temp("knightcode-as-sessions-");
+	// "" is what a server without one reports (below), so a restart passing it back keeps the default layout.
+	const sessionDir =
+		options.sessionDir === null || options.sessionDir === ""
+			? undefined
+			: (options.sessionDir ?? temp("knightcode-as-sessions-"));
 	const faux = fauxProvider({
 		provider: `faux-as-${counter++}`,
 		tokensPerSecond: options.tokensPerSecond,
@@ -147,7 +190,8 @@ export async function startServer(options: StartServerOptions = {}) {
 			},
 		};
 	};
-	return { ctx, threads, faux, cwd, sessionDir, agentDir, connect };
+	// "" in the default layout: the caller asked for no session dir and has none to read.
+	return { ctx, threads, faux, cwd, sessionDir: sessionDir ?? "", agentDir, connect };
 }
 
 /** Resolves when `stream` prints a line equal to `text`. */
