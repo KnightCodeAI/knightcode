@@ -777,10 +777,14 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 		const patch = files.map(patchOf).join("");
 		// A bash heredoc, or on Windows a PowerShell here-string written to a temp file: PowerShell's pipe to a native
 		// command turns the patch's LF lines into CRLF, which git apply rejects (probed in pwsh 7 and PowerShell 5.1).
-		// A patch line that would end either early (a "KNIGHTCODE_PATCH" line, a line starting '@) gets no command.
+		// A patch line that would end either early (a "KNIGHTCODE_PATCH" line, a line starting '@) gets no command, nor
+		// one with CRLF lines: a pasted command cannot keep their CRs apart from its own line ends.
 		const windows = window.knightcode.platform === "win32";
-		if (patch.split("\n").some((line) => (windows ? line.startsWith("'@") : line === "KNIGHTCODE_PATCH")))
-			return toast("These changes contain a line that would end the command early", "error");
+		if (
+			patch.includes("\r") ||
+			patch.split("\n").some((line) => (windows ? line.startsWith("'@") : line === "KNIGHTCODE_PATCH"))
+		)
+			return toast("These changes contain lines a pasted git apply command cannot carry", "error");
 		void client.host("host/clipboard/writeText", {
 			text: windows
 				? `$p = Join-Path ([IO.Path]::GetTempPath()) 'knightcode.patch'; [IO.File]::WriteAllText($p, (@'\n${patch}'@ -replace "\`r") + "\`n"); git apply $p\n`
