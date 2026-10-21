@@ -3845,6 +3845,9 @@
 					},
 					"reapply": {
 						"type": "boolean"
+					},
+					"turnId": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false
@@ -11536,6 +11539,9 @@
 					"type": "string"
 				},
 				"threadId": {
+					"type": "string"
+				},
+				"clientMessageId": {
 					"type": "string"
 				}
 			},

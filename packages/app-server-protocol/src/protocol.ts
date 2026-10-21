@@ -632,6 +632,8 @@ export const ClientRequests = {
 			...ScopeSelector,
 			/** `lastTurn` only: apply the turn's changes again after an undo (Codex's Reapply). */
 			reapply: Type.Optional(Bool),
+			/** `lastTurn` only: the turn the client means; a newer last turn answers gitConflict `diffChanged`. */
+			turnId: Type.Optional(Str),
 		}),
 		result: Obj({ paths: Type.Array(Str) }),
 	},
@@ -947,7 +949,8 @@ export const ServerNotifications = {
 	"account/login/updated": LoginState,
 	"account/updated": Obj({ provider: Str, authenticated: Bool }),
 	warning: Obj({ ...WarningFields, threadId: Type.Optional(Str) }),
-	error: Obj({ message: Str, threadId: Type.Optional(Str) }),
+	/** `clientMessageId`: the queued input that could not start, when it had one. */
+	error: Obj({ message: Str, threadId: Type.Optional(Str), clientMessageId: Type.Optional(Str) }),
 } as const;
 
 const ApprovalDecisionKind = Type.Union([

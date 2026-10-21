@@ -254,116 +254,75 @@ export async function gitCommit(
 		ref: await optional(repo, ["symbolic-ref", "-q", "HEAD"]),
 		index: await indexTree(repo, ctx.signal),
 	});
-	// The repository lock is held for the git steps only, never across the model call writing the message.
-	const { before, base, original, saved } = await staging(async () => {
-		// What the user had staged, put back exactly (flags and all) if no commit comes of this.
-		const original = params.includeUnstaged !== false ? await indexTree(repo, ctx.signal) : undefined;
-		const saved = original ? await saveIndex(repo, ctx.signal) : undefined;
-		try {
-			if (original) await git(repo, ["add", "-A"], { signal: ctx.signal });
-			return { before: await capture(), base: await headTree(repo), original, saved };
-		} catch (error) {
-			// Failed (or shut down) after the user's index was replaced: it goes back, or its copy is kept and named.
-			if (!saved) throw error;
-			try {
-				await restoreIndex(repo, saved);
-			} catch {
-				throw keptStaging(error, saved);
-			}
-			await discardSavedIndex(saved);
-			throw error;
-		}
+	// The real index is never touched while the model writes the message: what the commit would take is built in a
+	// temporary index (as `git add -A` would stage it), and the real index is written only inside the commit's hold.
+	const all = params.includeUnstaged !== false;
+	const { before, base, target } = await staging(async () => {
+		const before = await capture();
+		const target = all ? await stagedAllTree(repo, ctx.signal) : before.index;
+		return { before, base: await headTree(repo), target };
 	});
-	// Without any signal: restores also run after shutdown aborted the request's (and the repository's) signal.
-	const quiet: Repo = { ...repo, signal: undefined };
-	// The user's staging is owed back until a commit is made or it is put back.
-	let owed = original !== undefined && original !== before.index;
-	// Puts the staging back, only onto the HEAD it was saved at (after a commit made meanwhile, it would stage a revert
-	// of that commit) and only over the index this commit left (anything else there is the user's newer staging);
-	// `hookOwned`: after a refused commit whose hooks may have rewritten the index, with the checkout held.
-	const putBack = async (hookOwned = false) => {
-		if (!owed) return;
-		if ((await optional(quiet, ["rev-parse", "-q", "--verify", "HEAD"])) !== before.head) return;
-		if (!hookOwned && (await indexTree(quiet)) !== before.index) return;
-		if (saved) await restoreIndex(repo, saved);
-		else await git(quiet, ["read-tree", original!]);
-		owed = false;
-	};
-	// The repository lock only, not the checkout: a turn that started meanwhile must not stop the user's index
-	// coming back, and touches no file of it. A staging that could not go back is kept and named in the error.
-	const settle = async (error: unknown, hookOwned = false): Promise<never> => {
-		await withRepoLock(repo, () => putBack(hookOwned)).catch(() => {});
-		throw owed && saved ? keptStaging(error, saved) : error;
-	};
-	try {
-		if (before.index === base) return await settle(invalid("nothing to commit"));
-		let message: string;
+	if (target === base) throw invalid("nothing to commit");
+	const message = params.message?.trim() ? params.message : await generateMessage(thread, repo, base, target, ctx);
+	// The commit runs the user's hooks, which can rewrite the index and working tree (lint-staged): it holds the
+	// checkout, so no turn runs or starts meanwhile.
+	return staging(async () => {
+		const now = await capture();
+		if (
+			now.head !== before.head ||
+			now.ref !== before.ref ||
+			now.index !== before.index ||
+			(all && (await stagedAllTree(repo, ctx.signal)) !== target)
+		)
+			throw conflict("concurrentChange", "the checkout changed while the commit message was written");
+		// What the user had staged, put back exactly (flags and all) if no commit comes of this.
+		const saved = all ? await saveIndex(repo, ctx.signal) : undefined;
+		let keep = false;
 		try {
-			message = params.message?.trim() ? params.message : await generateMessage(thread, repo, base, before.index, ctx);
-		} catch (error) {
-			return await settle(error);
-		}
-		// The commit runs the user's hooks, which can rewrite the index and working tree (lint-staged): it holds the
-		// checkout as staging did. A turn that started while the message was written refuses that hold before the step
-		// runs: the user's staging then goes back too.
-		let refused: { error: unknown; hookOwned: boolean } | undefined;
-		try {
-			const done = await staging(async () => {
-				const now = await capture();
-				// With includeUnstaged, the working tree too: an edit made while the message was written would otherwise
-				// be left out of a commit that was asked to take everything (staged into a temporary index).
-				const changed =
-					now.head !== before.head ||
-					now.ref !== before.ref ||
-					now.index !== before.index ||
-					(original !== undefined && (await stagedAllTree(repo, ctx.signal)) !== before.index);
-				if (changed) {
-					refused = {
-						error: conflict("concurrentChange", "the checkout changed while the commit message was written"),
-						hookOwned: false,
-					};
-					return undefined;
-				}
-				let result: Awaited<ReturnType<typeof runGit>>;
-				try {
-					result = await runGit(repo, ["commit", "-q", "-F", "-"], {
-						input: message,
-						// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
-						env: { GIT_LITERAL_PATHSPECS: "0" },
-						signal: ctx.signal,
-						// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound
-						// allows.
-						timeoutMs: 300_000,
+			let result: Awaited<ReturnType<typeof runGit>> | undefined;
+			let failure: unknown;
+			try {
+				if (all) await git(repo, ["add", "-A"], { signal: ctx.signal });
+				result = await runGit(repo, ["commit", "-q", "-F", "-"], {
+					input: message,
+					// Hooks run here and glob their own pathspecs (git diff --cached -- '*.py'): not literal for them.
+					env: { GIT_LITERAL_PATHSPECS: "0" },
+					signal: ctx.signal,
+					// The user's hooks and signing run here: a pre-commit test suite can take minutes, as push's bound allows.
+					timeoutMs: 300_000,
+				});
+				if (result.code !== 0)
+					failure = new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, {
+						output: result.stderr,
 					});
-				} catch (error) {
-					// Killed (shutdown, timeout): its hooks may have touched the index; HEAD tells whether it committed.
-					refused = { error, hookOwned: true };
-					return undefined;
-				}
-				if (result.code !== 0) {
-					// A hook or signing refused it: no commit, so the user's staging goes back.
-					refused = {
-						error: new AppServerError("internal", `git commit failed: ${result.stderr.trim()}`, {
-							output: result.stderr,
-						}),
-						hookOwned: true,
-					};
-					return undefined;
-				}
-				owed = false;
+			} catch (error) {
+				// Killed (shutdown, timeout) or the add failed: no commit unless HEAD says otherwise.
+				failure = error;
+			}
+			if (failure === undefined) {
 				// A commit-msg hook may have rewritten the message: answer with what was committed.
 				const commit = await git(repo, ["rev-parse", "HEAD"]);
 				return { commit, message: (await git(repo, ["log", "-1", "--format=%B", commit])).trimEnd() };
-			});
-			if (done) return done;
-		} catch (error) {
-			// Whatever else failed (a shutdown during capture, a refused hold): no commit, so the staging goes back.
-			return await settle(error);
+			}
+			// No commit: the staging goes back, but never onto a HEAD that moved (it would stage a revert of that
+			// commit). Without any signal: this also runs after a shutdown killed the commit.
+			const head = await optional({ ...repo, signal: undefined }, ["rev-parse", "-q", "--verify", "HEAD"]);
+			if (saved && head === before.head) {
+				try {
+					await restoreIndex(repo, saved);
+				} catch {
+					keep = true;
+					throw keptStaging(failure, saved);
+				}
+			} else if (saved) {
+				keep = true;
+				throw keptStaging(failure, saved);
+			}
+			throw failure;
+		} finally {
+			if (!keep) await discardSavedIndex(saved);
 		}
-		return await settle(refused!.error, refused!.hookOwned);
-	} finally {
-		if (!owed) await discardSavedIndex(saved);
-	}
+	});
 }
 
 /** The error to answer when the user's staging could not be put back: its saved copy stays, named. */
@@ -458,10 +417,16 @@ export async function gitBranchSwitch(repo: Repo, name: string): Promise<ResultO
 	if (blocked.length > 0)
 		throw conflict("localChanges", "Stash or commit your local changes to switch branches.", { paths: blocked });
 	const result = await runGit(repo, ["switch", "-q", name]);
-	if (result.code !== 0)
-		throw conflict("localChanges", "Stash or commit your local changes to switch branches.", {
-			output: result.stderr,
-		});
+	if (result.code !== 0) {
+		// Each refusal as what it is: a stash does not help with a branch another worktree has checked out.
+		if (/already (used by worktree|checked out) at/.test(result.stderr))
+			throw invalid(`${name} is checked out in another worktree`);
+		if (/would be overwritten|commit your changes or stash/i.test(result.stderr))
+			throw conflict("localChanges", "Stash or commit your local changes to switch branches.", {
+				output: result.stderr,
+			});
+		throw new AppServerError("internal", `git switch failed: ${result.stderr.trim()}`, { output: result.stderr });
+	}
 	return { branch: name };
 }
 

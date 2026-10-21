@@ -681,6 +681,9 @@ export async function revertDiff(
 		throw invalid("only the last turn's files are reapplied");
 	const trees = await scopeTrees(thread, repo, { scope, against: params.against, commit: params.commit });
 	if (trees.stale) throw invalid("the turn's snapshot is no longer in the repository");
+	// The card the user clicked names its turn: a turn that ended since (another window) is not undone in its place.
+	if (scope === "lastTurn" && params.turnId !== undefined && trees.turnId !== params.turnId)
+		throw conflict("diffChanged", "the last turn is no longer the one shown", { paths: [] });
 	if (!trees.from) throw invalid(`the ${scope} diff is empty`);
 	const names = await nameStatus(repo, trees.from, trees.to);
 	let target = names;
