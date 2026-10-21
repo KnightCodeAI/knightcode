@@ -250,7 +250,12 @@ test("a thread of the worktree open in another process fences it from deletion u
 		},
 	);
 	try {
-		await new Promise<void>((resolve) => holder.stdout!.once("data", () => resolve()));
+		// A holder that fails before taking the lock fails the test now, not at the runner's timeout.
+		await new Promise<void>((resolve, reject) => {
+			holder.stdout!.once("data", () => resolve());
+			holder.once("error", reject);
+			holder.once("exit", (code) => reject(new Error(`lock holder exited with ${code} before taking the lock`)));
+		});
 		await expect(s.a.client.request("worktree/delete", { path })).rejects.toMatchObject({
 			data: { reason: "worktreeInUse" },
 		});
@@ -259,7 +264,9 @@ test("a thread of the worktree open in another process fences it from deletion u
 		// Closing stdin releases the lock and exits; stopChild only if it does not.
 		const exited = new Promise<void>((resolve) => holder.once("exit", () => resolve()));
 		holder.stdin!.end();
-		await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 10_000))]);
+		let timer: NodeJS.Timeout | undefined;
+		await Promise.race([exited, new Promise((resolve) => (timer = setTimeout(resolve, 10_000)))]);
+		clearTimeout(timer);
 		await stopChild(holder);
 	}
 	expect(await s.a.client.request("worktree/delete", { path })).toMatchObject({ snapshot: expect.any(String) });

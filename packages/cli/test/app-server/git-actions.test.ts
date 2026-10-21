@@ -256,6 +256,18 @@ test("a change during message generation answers concurrentChange and commits no
 	expect(log(s.cwd)).toBe("initial");
 });
 
+test("a commit a hook refuses puts back what the user had staged", async () => {
+	const s = await repoServer();
+	writeFileSync(join(s.cwd, ".git", "hooks", "pre-commit"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+	const threadId = await local(s);
+	write(s.cwd, "a.txt", "staged\n");
+	sh(s.cwd, "add", "a.txt");
+	write(s.cwd, "b.txt", "unstaged\n");
+	await expect(call(s, "git/commit", { threadId, message: "x" })).rejects.toMatchObject({ code: "internal" });
+	expect(staged(s.cwd)).toBe("a.txt");
+	expect(log(s.cwd)).toBe("initial");
+});
+
 test("an assume-unchanged file edited locally does not stop a commit of everything else", async () => {
 	const s = await repoServer({ "a.txt": "a\n", "local.cfg": "base\n" });
 	const threadId = await local(s);
