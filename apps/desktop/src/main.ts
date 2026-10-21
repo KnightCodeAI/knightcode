@@ -289,6 +289,11 @@ if (!app.requestSingleInstanceLock()) {
 } else {
 	app.on("second-instance", (_event, argv) => {
 		const link = linkIn(argv);
+		// Before start() made the first window: a link waits for it, and a plain launch is that window anyway.
+		if (!server) {
+			if (link) pendingLink = link;
+			return;
+		}
 		if (link) return openLink(link);
 		const first = windows.values().next().value as OpenWindow | undefined;
 		if (!first) return void createWindow();

@@ -1262,7 +1262,13 @@ export async function undoTurnEdits(threadId: string, turnId: string, reapply = 
  * Codex's "Edit message", which the protocol cannot do in place: the thread forks just before the message (its
  * previous turn's last item) and the edited text goes to the fork. The first message starts a fresh thread instead.
  */
-export async function resendEdited(threadId: string, turnId: string, text: string): Promise<void> {
+/** `images`: the edited message's own, which go with the replacement. */
+export async function resendEdited(
+	threadId: string,
+	turnId: string,
+	text: string,
+	images?: ImageInput[],
+): Promise<void> {
 	const view = state.held[threadId];
 	if (!view) return;
 	const at = view.turns.findIndex((t) => t.id === turnId);
@@ -1272,15 +1278,20 @@ export async function resendEdited(threadId: string, turnId: string, text: strin
 			const { thread } = await client.request("thread/fork", { threadId, atItemId: before.id });
 			upsertSummary(thread);
 			await openThread(thread.id);
-			await send(thread.id, text);
+			await send(thread.id, text, images);
 		} else {
 			const { thread } = view;
 			// The thread's own cwd: inside a managed worktree that starts the new thread in the same worktree.
-			await startThread(thread.cwd, text, {
+			await startThread(
+				thread.cwd,
+				text,
+				{
 				...(thread.model ? { model: thread.model } : {}),
 				...(thread.thinkingLevel ? { thinkingLevel: thread.thinkingLevel } : {}),
-				approvalMode: thread.approvalMode,
-			});
+					approvalMode: thread.approvalMode,
+				},
+				images,
+			);
 		}
 	} catch (error) {
 		toast(errorText(error), "error");

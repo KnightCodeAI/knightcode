@@ -106,12 +106,15 @@ const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i;
 function QueuedRow({
 	text,
 	steering,
+	attachments,
 	onSteer,
 	onDelete,
 	onEdit,
 }: {
 	text: string;
 	steering: boolean;
+	/** Images or review comments: steering or editing would carry the text only, so only Delete is offered. */
+	attachments?: number;
 	onSteer: () => void;
 	onDelete: () => void;
 	onEdit: () => void;
@@ -126,14 +129,17 @@ function QueuedRow({
 			</Tooltip>
 			{steering ? null : (
 				<div className="flex shrink-0 items-center gap-0.5">
-					<Tooltip content="Submit without interrupting the model">
+					{attachments ? null : (
+						<Tooltip content="Submit without interrupting the model">
 						<Button color="secondary" size="xs" pill onClick={onSteer} className="px-2">
 							Steer
 						</Button>
 					</Tooltip>
+					)}
 					<IconButton label="Delete queued message" size="xs" round onClick={onDelete}>
 						<Trash2 size={14} />
 					</IconButton>
+					{attachments ? null : (
 					<Menu>
 						<MenuTrigger>
 							<IconButton label="Queued message actions" size="xs" round>
@@ -146,6 +152,7 @@ function QueuedRow({
 							</MenuItem>
 						</MenuContent>
 					</Menu>
+					)}
 				</div>
 			)}
 		</div>
@@ -506,6 +513,7 @@ export function Composer({
 									key={q.id ?? `s${i}`}
 									text={q.text}
 									steering={q.steer}
+									attachments={"attachments" in q ? q.attachments : undefined}
 									onSteer={() => {
 										if (!threadId || !q.id) return;
 										void removeQueued(threadId, q.id).then((removed) => (removed ? steer(threadId, q.text) : undefined));

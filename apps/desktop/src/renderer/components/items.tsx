@@ -511,7 +511,7 @@ export function TurnView({
 					text={first.text}
 					images={first.images}
 					time={turn.startedAt}
-					onEdit={latest && idle ? (text) => void resendEdited(threadId, turn.id, text) : undefined}
+					onEdit={latest && idle ? (text) => void resendEdited(threadId, turn.id, text, first.images) : undefined}
 				/>
 			) : null}
 			{running ? (

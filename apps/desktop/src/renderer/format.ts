@@ -85,14 +85,17 @@ export function matchOffsets(text: string, query: string): number[] {
  * Whether a diff is too large to render whole, by Codex's limits: more than 128 files, 9,000 changed lines or 12 MiB of
  * changed text. The Changes pane then shows one file at a time.
  */
+const utf8 = new TextEncoder();
+
 export function isLargeDiff(files: DiffFile[]): boolean {
 	if (files.length > 128) return true;
 	let lines = 0;
 	let bytes = 0;
 	for (const file of files) {
 		lines += file.additions + file.deletions;
+		// UTF-8 bytes, as the limit is: an emoji is 4 bytes but 2 UTF-16 units.
 		for (const hunk of file.hunks)
-			for (const line of hunk.lines) if (line[0] === "+" || line[0] === "-") bytes += line.length - 1;
+			for (const line of hunk.lines) if (line[0] === "+" || line[0] === "-") bytes += utf8.encode(line).length - 1;
 	}
 	return lines > 9_000 || bytes > 12 * 1024 * 1024;
 }
