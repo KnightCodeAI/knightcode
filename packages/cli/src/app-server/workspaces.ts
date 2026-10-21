@@ -1119,9 +1119,10 @@ export async function registrationOf(manifest: Manifest): Promise<Registration> 
 	if (!existsSync(manifest.path)) return { status: "gone" };
 	let adminDir: string;
 	try {
-		adminDir = /^gitdir: (.+)$/m.exec(readFileSync(dotGit, "utf8"))?.[1]?.trim() ?? "";
+		// Relative links (worktree.useRelativePaths) are relative to the directory that holds them.
+		adminDir = resolve(manifest.path, /^gitdir: (.+)$/m.exec(readFileSync(dotGit, "utf8"))?.[1]?.trim() ?? "");
 		const back = readFileSync(join(adminDir, "gitdir"), "utf8").trim();
-		if (gitPath(resolve(back)) !== gitPath(dotGit)) return { status: "notManaged" };
+		if (gitPath(resolve(adminDir, back)) !== gitPath(dotGit)) return { status: "notManaged" };
 		if (!samePath(realpathSync.native(join(adminDir, "..", "..")), manifest.commonDir)) return { status: "notManaged" };
 	} catch {
 		return { status: "notManaged" };
@@ -1286,7 +1287,10 @@ function repairPartlyRemoved(manifest: Manifest, warnings: Warning[]): "gone" | 
 	if (existsSync(dotGit)) return "ok";
 	const adminDir = manifest.deleted?.adminDir;
 	try {
-		if (adminDir && gitPath(resolve(readFileSync(join(adminDir, "gitdir"), "utf8").trim())) === gitPath(dotGit)) {
+		if (
+			adminDir &&
+			gitPath(resolve(adminDir, readFileSync(join(adminDir, "gitdir"), "utf8").trim())) === gitPath(dotGit)
+		) {
 			writeFileSync(dotGit, `gitdir: ${adminDir}\n`);
 			return "ok";
 		}
