@@ -251,8 +251,15 @@ export async function gitCommit(
 		// What the user had staged, put back exactly (flags and all) if no commit comes of this.
 		const original = params.includeUnstaged !== false ? await indexTree(repo, ctx.signal) : undefined;
 		const saved = original ? await saveIndex(repo, ctx.signal) : undefined;
-		if (original) await git(repo, ["add", "-A"], { signal: ctx.signal });
-		return { before: await capture(), base: await headTree(repo), original, saved };
+		try {
+			if (original) await git(repo, ["add", "-A"], { signal: ctx.signal });
+			return { before: await capture(), base: await headTree(repo), original, saved };
+		} catch (error) {
+			// Failed (or shut down) after the user's index was replaced: it goes back, and the copy goes.
+			if (saved) await restoreIndex(repo, saved).catch(() => {});
+			await discardSavedIndex(saved);
+			throw error;
+		}
 	});
 	try {
 		// Only an index still as this commit left it goes back: anything staged since is the user's.

@@ -110,6 +110,7 @@ import {
 	manifestFor,
 	placeThread,
 	prepareWorktree,
+	runCleanup,
 	readEnvironments,
 	saveEnvironments,
 	samePath,
@@ -680,6 +681,21 @@ export class ThreadManager {
 				// A handoff refused after it created a worktree takes that worktree back (only git and the setup script
 				// wrote there), so retries do not stack one per attempt; one git cannot remove is kept and named.
 				if (fresh && !moved) {
+					// What setup started there (containers, servers) is stopped as a deletion would.
+					const freshManifest = fresh;
+					await runCleanup({
+						manifest: freshManifest,
+						threadId: thread.id,
+						trusted: new ProjectTrustStore(this.ctx.agentDir).get(freshManifest.projectCwd) === true,
+						warnings,
+						signal: this.shutdown.signal,
+						shellConfig: this.options.shellConfig,
+					}).catch((cleanupError: unknown) =>
+						warnings.push({
+							source: "server",
+							message: `The cleanup script failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+						}),
+					);
 					// Only while it holds no work: a failure after the changes were applied there (a manifest write
 					// that failed) leaves them nowhere else but the saved patch.
 					const status = await runGit(fresh.path, ["status", "--porcelain", "-z"], { internal: true }).catch(

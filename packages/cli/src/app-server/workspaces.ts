@@ -1124,7 +1124,7 @@ export async function registrationOf(manifest: Manifest): Promise<Registration> 
  * are walked too, with the filesystem alone: the snapshot leaves them out, so a repository there (its local commits)
  * would go with the checkout.
  */
-export async function nestedRepositories(root: string, tree: string): Promise<string[]> {
+export async function nestedRepositories(root: string, tree: string, unchecked: string[] = []): Promise<string[]> {
 	const found = new Set<string>();
 	const gitlinks = [
 		...(await git(root, ["ls-tree", "-r", "-z", tree])).split("\0").map((r) => r.split("\t")),
@@ -1166,10 +1166,13 @@ export async function nestedRepositories(root: string, tree: string): Promise<st
 				.map((d) => d.replace(/\/$/, "")),
 		);
 		level = next.filter((d) => !skip.has(d));
-		for (const dir of skip) ignoredRepositories(root, dir, found, budget);
+		for (const dir of skip) ignoredRepositories(root, dir, found, budget, unchecked);
 	}
 	return [...found].sort();
 }
+
+/** Build and package caches no tool leaves a checkout in, never walked (node_modules, cargo's target, ...). */
+const SKIPPED_CACHES = new Set(["node_modules", "target", ".gradle", ".next", "__pycache__"]);
 
 /** Directories an ignored-subtree walk visits at most per deletion check. */
 const IGNORED_WALK_LIMIT = 50_000;
@@ -1179,13 +1182,19 @@ const IGNORED_WALK_LIMIT = 50_000;
  * package managers never leave a checkout there, and walking it would make every prune slow.
  * Past IGNORED_WALK_LIMIT directories the rest goes unchecked, and `start` is reported so the deletion is refused.
  */
-function ignoredRepositories(root: string, start: string, found: Set<string>, budget: { left: number }): void {
-	if (basename(start) === "node_modules") return;
+function ignoredRepositories(
+	root: string,
+	start: string,
+	found: Set<string>,
+	budget: { left: number },
+	unchecked: string[],
+): void {
+	if (SKIPPED_CACHES.has(basename(start))) return;
 	const stack = [start];
 	for (; stack.length > 0; budget.left--) {
-		// Out of budget with directories left: unchecked, so reported as nested and the deletion refused.
+		// Out of budget with directories left: unchecked, which refuses the deletion with its own warning.
 		if (budget.left <= 0) {
-			found.add(start);
+			unchecked.push(start);
 			return;
 		}
 		const dir = stack.pop()!;
@@ -1197,7 +1206,7 @@ function ignoredRepositories(root: string, start: string, found: Set<string>, bu
 		}
 		for (const entry of entries) {
 			if (entry.name === ".git") found.add(dir);
-			else if (entry.isDirectory() && !entry.isSymbolicLink() && entry.name !== "node_modules")
+			else if (entry.isDirectory() && !entry.isSymbolicLink() && !SKIPPED_CACHES.has(entry.name))
 				stack.push(`${dir}/${entry.name}`);
 		}
 	}
@@ -1344,8 +1353,16 @@ export async function deleteWorktreeLocked(input: DeleteInput): Promise<DeleteRe
 	if (manifest.deleted?.removalFailed && repairPartlyRemoved(manifest, input.warnings) === "unsafe")
 		return { deleted: true, snapshot: manifest.deleted.snapshot };
 	const state = await workingState(manifest.path, input.signal);
-	const nested = await nestedRepositories(manifest.path, state.tree);
+	const unchecked: string[] = [];
+	const nested = await nestedRepositories(manifest.path, state.tree, unchecked);
 	if (nested.length > 0) return { deleted: false, reason: "submodules", paths: nested };
+	if (unchecked.length > 0) {
+		input.warnings.push({
+			source: "server",
+			message: `${manifest.path} was kept: ${unchecked.join(", ")} hold more than ${IGNORED_WALK_LIMIT} directories to check for nested repositories. Delete them or the worktree yourself.`,
+		});
+		return { deleted: false, reason: "submodules", paths: unchecked };
+	}
 	const bucket = basename(dirname(manifest.path));
 	if (!manifest.deleted) {
 		const at = Date.now();
