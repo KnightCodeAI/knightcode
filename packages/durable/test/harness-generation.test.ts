@@ -3,6 +3,7 @@ import {
 	fauxAssistantMessage,
 	type Message,
 	type Models,
+	KNIGHTCODE_ATTRIBUTION,
 	type SimpleStreamOptions,
 	type SystemMessage,
 } from "@knightcode/ai";
@@ -394,6 +395,25 @@ describe("generation", () => {
 		expect(seen[1]).toMatchObject({ timeoutMs: 99, sessionId });
 		expect(seen[1]!.headers).toBeUndefined();
 		await harness.close(context);
+	});
+
+	it("attributes model requests to KnightCode by default and merges the Harness identity over it", async () => {
+		const seen: (SimpleStreamOptions["identity"] | undefined)[] = [];
+		const capture = (_context: unknown, options?: SimpleStreamOptions) => {
+			seen.push(options?.identity);
+			return fauxAssistantMessage("ok");
+		};
+		const acme = { name: "acme", url: "https://acme.example" };
+		for (const identity of [undefined, { userAgent: "short" as const, attribution: acme }]) {
+			const setup = chatSetup();
+			setup.identity = identity;
+			setup.faux.setResponses([capture]);
+			const { harness, root } = await openChat(new MemoryStorage(), setup);
+			harness.resume();
+			await (await root.submit({ type: "input", content: "hi" }, context)).wait(context);
+			await harness.close(context);
+		}
+		expect(seen).toEqual([{ attribution: KNIGHTCODE_ATTRIBUTION }, { attribution: acme, userAgent: "short" }]);
 	});
 
 	// Concurrent conversations must not swap the session id forwarded on their requests.

@@ -1,4 +1,4 @@
-import { getKnightcodeUserAgent } from "@knightcode/ai/utils/user-agent";
+import { formatUserAgent } from "@knightcode/ai";
 import type { ModelRegistry } from "../../core/model-registry.ts";
 import { raceWithAbortSignal } from "../../utils/abort.ts";
 
@@ -278,7 +278,7 @@ export async function fetchSubscriptionUsage(
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${auth.auth.apiKey}`,
 			Accept: "application/json",
-			"User-Agent": getKnightcodeUserAgent(),
+			"User-Agent": formatUserAgent(),
 		};
 		if (providerId === "anthropic") headers["anthropic-beta"] = "oauth-2025-04-20";
 		else if (providerId === "openai-codex") {
