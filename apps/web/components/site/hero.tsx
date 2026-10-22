@@ -132,6 +132,30 @@ export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
             <span>Linux</span>
             <span>Windows</span>
           </motion.div>
+
+          <motion.a
+            variants={item}
+            href={`${SITE.productHunt}?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-knightcode`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-8 transition-transform duration-200 ease-out active:scale-[0.98]"
+          >
+            {/* Plain img: next/image refuses remote SVGs without
+                dangerouslyAllowSVG. Lazy loading keeps the hidden theme's
+                badge from being fetched at all. */}
+            {(["light", "dark"] as const).map((theme) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={theme}
+                src={`https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=${SITE.productHuntPostId}&theme=${theme}`}
+                alt={`${SITE.name} on Product Hunt`}
+                width={250}
+                height={54}
+                loading="lazy"
+                className={theme === "light" ? "dark:hidden" : "hidden dark:block"}
+              />
+            ))}
+          </motion.a>
         </motion.div>
 
         {twoColumn && (

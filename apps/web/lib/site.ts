@@ -26,6 +26,8 @@ export const SITE = {
   demoVideoId: "kykgXa7sm1g",
   demoVideoUrl: "https://youtu.be/kykgXa7sm1g",
   youtube: "https://www.youtube.com/@Raghav1428",
+  productHunt: "https://www.producthunt.com/products/knightcode",
+  productHuntPostId: "1289535",
 } as const
 
 export const NAV_LINKS = [
