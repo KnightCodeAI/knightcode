@@ -1,5 +1,41 @@
 # @knightcodeai/cli
 
+## 0.20.0
+
+### Added
+
+- Added image input for classifier models on TypeSafe, Cloudflare Workers AI and OpenRouter, with Clef Omni and Jev 1.14 on Workers AI. A classifier model that lists image input now judges `images`, and a provider-level `compat` in `models.json` (`imageInput`, `sendImageOptInHeader`) tells a custom provider which request format its classifiers expect.
+
+- Added declarative views for extensions: `ctx.ui.setWidget(key, view)` and `details.view` on tool results and extension messages, drawn in the terminal and by app server clients, which also receive extension status, titles, working messages and widgets, and send widget button and field events back through `ctx.ui.onViewEvent`.
+
+- Added `messageId` and `timestamp` to the context a Markdown transformer receives, set to the session entry's id and ISO timestamp when a user or assistant message is rendered from the saved session. Messages rendered live leave both undefined.
+
+- Added a `totalFromProvider` flag to usage cost that records whether the total is the cost billed by the provider or an estimate from catalog rates, so session totals can tell the two apart.
+
+### Fixed
+
+- Fixed Claude rejecting a request with a 400 when a system prompt update was followed by an assistant reply that sends no content, such as another model's empty or reasoning-only reply. The update now waits for the next assistant message that is actually sent.
+
+- Fixed a resumed session failing every request after a response was cut off mid tool call: recovery dropped the truncated tool call but kept its tool result, and providers reject a tool result without its call. Both are now omitted together.
+
+- Fixed the grep tool honouring `RIPGREP_CONFIG_PATH`: a user ripgrep config such as `--fixed-strings` silently turned regex searches literal and returned incomplete results. The tool now runs ripgrep with `--no-config`.
+
+- Fixed the HTML export header's total cost to add up each message's recorded total, so a total billed by the provider is shown rather than a sum of catalog estimates. Sessions recorded before totals were stored still fall back to the sum of the parts.
+
+- Fixed the HTML export of a very long session failing with "Maximum call stack size exceeded". The session tree is now walked iteratively, so its depth no longer depends on the JavaScript call stack.
+
+- Fixed the HTML export ignoring the system messages stored in a session. The first system message on a branch now renders as the system prompt and tool list, and later ones as updates that name the changed prompt sections and the tools added or removed. `knightcode --export` now shows the prompt and tools as well; sessions without system messages still fall back to the exporting agent's current prompt and tools.
+
+- Fixed the Gondolin example's grep tool reporting a wrong match count when context lines were requested. It now returns the number of matches it found, as the built-in grep does, so the tool row no longer counts context lines, or the "No matches found" line, as matches.
+
+- Fixed the Gondolin example extension depending on a package name that does not exist on npm, so `npm install` in its directory failed. It now depends on the published Gondolin package, version 0.14.0, which drops node-forge and moves to a patched undici, clearing the advisories both had. The containerization docs link the Gondolin project and state its new Node.js 22.19 minimum.
+
+- Fixed cancelling a shell command on macOS sometimes letting the next command in a sequence such as `a; b` start. The process group is now stopped before it is killed, which narrows the window in which a killed child can wake its shell.
+
+- Fixed updates of installer-managed installs being stopped by security scanners that block npm's `--min-release-age=0` flag. The managed update runs `npm ci` against a release lockfile that pins every package, so the flag never had an effect and is no longer passed. Global npm, pnpm and bun self-updates keep their age-gate overrides.
+
+- Fixed OpenRouter session costs to use the total OpenRouter bills, including upstream inference for bring-your-own-key requests, instead of an estimate from catalog rates. When OpenRouter reports no valid accounting, the catalog estimate is still used.
+
 ## 0.19.0
 
 ### Added
