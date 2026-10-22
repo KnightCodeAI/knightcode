@@ -7,20 +7,20 @@
  * isolated to the VM.
  *
  * Setup:
- *   cd packages/coding-agent/examples/extensions/gondolin
+ *   cd packages/cli/examples/extensions/gondolin
  *   npm install --ignore-scripts
  *
  * Usage:
  *   cd /path/to/project
- *   knightcode -e /path/to/knightcode/packages/coding-agent/examples/extensions/gondolin
+ *   knightcode -e /path/to/knightcode/packages/cli/examples/extensions/gondolin
  *
  * Requirements:
- *   - Node.js >= 23.6.0 for @KnightCodeAI/gondolin
+ *   - Node.js >= 22.19.0 for @earendil-works/gondolin
  *   - QEMU installed (for example, `brew install qemu` on macOS)
  */
 
 import path from "node:path";
-import { RealFSProvider, VM } from "@KnightCodeAI/gondolin";
+import { RealFSProvider, VM } from "@earendil-works/gondolin";
 import type { ExtensionAPI, ExtensionContext } from "@knightcodeai/cli";
 import {
 	type BashOperations,
@@ -249,7 +249,6 @@ async function executeGondolinGrep(
 	const contextLines = params.context && params.context > 0 ? params.context : 0;
 	const effectiveLimit = Math.max(1, params.limit ?? DEFAULT_GREP_LIMIT);
 	const outputLines: string[] = [];
-	const details: GrepToolDetails = {};
 	let matchCount = 0;
 	let matchLimitReached = false;
 	let linesTruncated = false;
@@ -285,12 +284,14 @@ async function executeGondolinGrep(
 		signal,
 	);
 
-	if (matchCount === 0) return { content: [{ type: "text", text: "No matches found" }], details: undefined };
+	if (matchCount === 0) return { content: [{ type: "text", text: "No matches found" }], details: { matchCount: 0 } };
 
 	const rawOutput = outputLines.join("\n");
 	const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 	const notices: string[] = [];
 	let output = truncation.content;
+	// The renderer counts output lines when this is missing, and context lines are not matches.
+	const details: GrepToolDetails = { matchCount };
 
 	if (matchLimitReached) {
 		details.matchLimitReached = effectiveLimit;
@@ -306,10 +307,7 @@ async function executeGondolinGrep(
 	}
 	if (notices.length > 0) output += `\n\n[${notices.join(". ")}]`;
 
-	return {
-		content: [{ type: "text", text: output }],
-		details: Object.keys(details).length > 0 ? details : undefined,
-	};
+	return { content: [{ type: "text", text: output }], details };
 }
 
 function sanitizeEnv(env: NodeJS.ProcessEnv | undefined): Record<string, string> | undefined {
