@@ -7,20 +7,20 @@
  * isolated to the VM.
  *
  * Setup:
- *   cd packages/coding-agent/examples/extensions/gondolin
+ *   cd packages/cli/examples/extensions/gondolin
  *   npm install --ignore-scripts
  *
  * Usage:
  *   cd /path/to/project
- *   knightcode -e /path/to/knightcode/packages/coding-agent/examples/extensions/gondolin
+ *   knightcode -e /path/to/knightcode/packages/cli/examples/extensions/gondolin
  *
  * Requirements:
- *   - Node.js >= 23.6.0 for @KnightCodeAI/gondolin
+ *   - Node.js >= 22.19.0 for @earendil-works/gondolin
  *   - QEMU installed (for example, `brew install qemu` on macOS)
  */
 
 import path from "node:path";
-import { RealFSProvider, VM } from "@KnightCodeAI/gondolin";
+import { RealFSProvider, VM } from "@earendil-works/gondolin";
 import type { ExtensionAPI, ExtensionContext } from "@knightcodeai/cli";
 import {
 	type BashOperations,
