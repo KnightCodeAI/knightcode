@@ -1,6 +1,6 @@
-// Expose a document through Chord.
+// Serialize asynchronous document work with a watch.
 // Run from packages/durable:
-//   node --conditions=source --experimental-strip-types test/examples/04-chord-state.ts
+//   node --conditions=source --experimental-strip-types test/examples/04-watches.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { createSession, defineDoc, MemoryStorage } from "../../src/index.ts";
 
@@ -22,17 +22,21 @@ const chat = await session.commit(async (tx) => {
 	return conversation;
 }, context);
 
-// documentState() never creates a document. It returns a hydrated read-only
-// Chord state bound to the current concrete incarnation.
-const notesState = await session.documentState(Notes, chat.id, context);
-if (notesState === undefined) throw new Error("notes are absent");
-const stopNotes = notesState.subscribe((value, _deliveryContext, delivery) => {
-	console.log("Chord notes:", delivery.kind, delivery.sequence, value);
+// A watch starts from one stable acquisition revision. Slow callbacks never
+// overlap; exact committed frames buffer, with a full-value reset after 100.
+const notesWatch = await session.watchDoc(Notes, chat.id, context);
+if (notesWatch === undefined) throw new Error("notes are absent");
+console.log("watch baseline:", notesWatch.value);
+const delivered = new Promise<void>((resolve) => {
+	notesWatch.start(async (value, _ops, _deliveryContext) => {
+		console.log("watch update:", value);
+		resolve();
+	});
 });
 await session.commit(async (tx) => {
-	(await tx.doc(Notes, chat.id)).text = "published through Chord";
+	(await tx.doc(Notes, chat.id)).text = "observed asynchronously";
 }, context);
-stopNotes();
-notesState.dispose();
+await delivered;
+await notesWatch.stop();
 
 await session.close(context);

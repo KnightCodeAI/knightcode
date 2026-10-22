@@ -1,7 +1,7 @@
 // Late join: a client attaches while a run is already underway. It gets the current state first, the conversation
 // view or the snapshot event, and then only what changes after that.
 // Run from packages/durable:
-//   node --conditions=source --experimental-strip-types test/examples/21-late-join.ts
+//   node --conditions=source --experimental-strip-types test/examples/20-late-join.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { Type } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";
@@ -56,14 +56,14 @@ const submission = await root.submit({ type: "input", content: "Count to ten, th
 await pause(500);
 
 // Structural client: the view holds the committed transcript and documents, including the running tool's output.
-const view = await root.viewState(context);
+const view = await root.watch(context);
 const live = view.value.docs["knightcode.live"] as LiveState;
 console.log(
 	"view entries:",
 	view.value.entries.map((entry) => entry.kind),
 );
 console.log("view tool slot:", live.tools?.[0]?.status, JSON.stringify(live.tools?.[0]?.output));
-view.subscribe((value) => {
+view.start(async (value) => {
 	const slot = (value.docs["knightcode.live"] as LiveState).tools?.[0];
 	if (slot?.status === "running") console.log("view output now:", JSON.stringify(slot.output));
 });
@@ -96,5 +96,5 @@ await submission.wait(context);
 await harness.waitForIdle(context);
 await pause(0);
 await stream.stop();
-view.dispose();
+await view.stop();
 await harness.close(context);
