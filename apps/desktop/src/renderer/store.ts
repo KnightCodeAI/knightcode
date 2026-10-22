@@ -23,6 +23,7 @@ import type {
 	Turn,
 	TurnQueue,
 	TurnSummary,
+	UiSnapshot,
 	WireItem,
 	WireTurn,
 	WorkspaceRequest,
@@ -65,6 +66,8 @@ export interface ThreadView {
 	turns: ViewTurn[];
 	queue: TurnQueue;
 	usage?: TokenUsage;
+	/** Extension statuses, title, working row and widgets (app-server.md "Dialogs and extension UI"). */
+	ui: UiSnapshot;
 	/** Approvals and dialogs in the order they came; the first takes the composer's place. */
 	requests: ServerAsk[];
 	retry?: { attempt: number; maxAttempts: number; delayMs: number; error: string; at: number };
@@ -521,6 +524,22 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 		case "ui/notify":
 			toast(n.params.message, n.params.level === "error" ? "error" : "info");
 			return;
+		case "ui/state": {
+			// The whole state: an absent title or working message is a cleared one.
+			const { threadId, ...fields } = n.params;
+			updateThread(threadId, (v) => ({ ...v, ui: { ...fields, widgets: v.ui.widgets } }));
+			return;
+		}
+		case "ui/widget": {
+			// Set again moves the key last, as the server orders them; neither lines nor a view removes it.
+			const { threadId, ...widget } = n.params;
+			updateThread(threadId, (v) => {
+				const widgets = v.ui.widgets.filter((w) => w.key !== widget.key);
+				if ("lines" in widget || "view" in widget) widgets.push(widget);
+				return { ...v, ui: { ...v.ui, widgets } };
+			});
+			return;
+		}
 		case "warning":
 		case "error": {
 			toast(n.params.message, n.method === "error" ? "error" : "info");
@@ -710,6 +729,7 @@ async function resumeThread(id: string): Promise<void> {
 					turns: turns.map(toView),
 					queue: result.queue,
 					usage: result.usage,
+					ui: result.ui,
 					requests: s.held[id]?.requests ?? [],
 					pending: s.held[id]?.pending ?? [],
 					...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
@@ -746,17 +766,24 @@ export async function startThread(
 	},
 	images?: ImageInput[],
 ): Promise<void> {
-	const { thread, warnings } = await client.request("thread/start", { cwd, ...options });
+	const { thread, warnings, ui } = await client.request("thread/start", { cwd, ...options });
 	for (const warning of warnings) toast(warning.message);
 	navigate({ kind: "thread", id: thread.id });
 	set((s) => ({
 		...s,
 		held: {
 			...s.held,
-			[thread.id]: { thread, turns: [], queue: { steering: [], followUp: [] }, requests: [], pending: [] },
+			[thread.id]: { thread, turns: [], queue: { steering: [], followUp: [] }, ui, requests: [], pending: [] },
 		},
 	}));
 	await send(thread.id, text, images);
+}
+
+/** A press of a widget's button, or a change of its field; the extension answers by setting the widget again. */
+export function sendViewEvent(threadId: string, widgetKey: string, id: string, value?: string | boolean): void {
+	void client
+		.request("ui/event", { threadId, widgetKey, id, ...(value === undefined ? {} : { value }) })
+		.catch((error: unknown) => toast(errorText(error), "error"));
 }
 
 const newClientId = () => crypto.randomUUID();

@@ -32,6 +32,7 @@ import {
 	restoreWorktree,
 	selectUnread,
 	send,
+	sendViewEvent,
 	setFinding,
 	setPanel,
 	useStore,
@@ -47,6 +48,7 @@ import { TurnView, UserBubble } from "./items.tsx";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "./menu.tsx";
 import { boundActions, DeleteThreadDialog, RenameThreadDialog, threadActions } from "./thread-actions.tsx";
 import { Tooltip } from "./tooltip.tsx";
+import { WidgetPanel } from "./view.tsx";
 import { followDrag } from "../drag.ts";
 
 const NO_PINS: string[] = [];
@@ -259,6 +261,15 @@ export function ThreadView({ id }: { id: string }) {
 		if (value && value !== name) void rename(id, value);
 	};
 
+	// An extension's title names the window while this thread is open in it; the thread's own name stays the user's.
+	const extensionTitle = view?.ui.title;
+	useEffect(() => {
+		document.title = extensionTitle ?? "KnightCode";
+		return () => {
+			document.title = "KnightCode";
+		};
+	}, [extensionTitle]);
+
 	// The approval or dialog the server waits on longest takes the composer's place.
 	const asking = view?.requests[0];
 	const workspace = view?.thread.workspace;
@@ -306,6 +317,13 @@ export function ThreadView({ id }: { id: string }) {
 						</Tooltip>
 					)}
 					<div className="flex-1" />
+					{view?.ui.statuses.map((status) => (
+						<Tooltip key={status.key} content={status.text} side="bottom">
+							<span className="max-w-[200px] shrink truncate rounded-md border border-line px-2 text-sm text-secondary">
+								{status.text}
+							</span>
+						</Tooltip>
+					))}
 					<div className="flex items-center gap-1.5">
 						<ThreadMenu thread={{ id, cwd, name, sessionFile: view?.thread.sessionFile }} />
 						{view ? <ThreadSummary thread={view.thread} anchor={header} /> : null}
@@ -430,6 +448,13 @@ export function ThreadView({ id }: { id: string }) {
 						</Button>
 					</Tooltip>
 				</div>
+				{/* Extension widgets, above the request or composer so they stay in sight while an approval is asked. */}
+				{view ? (
+					<WidgetPanel
+						widgets={view.ui.widgets}
+						onEvent={(key, control, value) => sendViewEvent(id, key, control, value)}
+					/>
+				) : null}
 				{/* A request takes the composer's place, as in Codex; the composer stays mounted so a draft survives. */}
 				{/* Positioned so it paints over the transcript it overlaps. */}
 				<div className="relative">

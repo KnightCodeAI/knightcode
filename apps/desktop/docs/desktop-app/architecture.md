@@ -1870,14 +1870,40 @@ translated by hand from then on. Accepted 2026-10-10.
 
 | `ExtensionUIContext` | Protocol | Desktop | Terminal |
 | --- | --- | --- | --- |
-| `select`, `confirm`, `input`, `editor` | request `ui/dialog` | native dialog | as today |
+| `select`, `confirm`, `input`, `editor` | request `ui/dialog` | in-window dialog | as today |
 | `notify` | notification `ui/notify` | toast | as today |
-| `setStatus`, `setTitle`, `setWorkingMessage`, `setWorkingVisible`, `setHiddenThinkingLabel` | notification `ui/state` | status bar, title, working text | as today |
+| `setStatus`, `setTitle`, `setWorkingMessage`, `setWorkingVisible` | notification `ui/state`, carrying the whole state | status chips in the thread header, the window title, the text and visibility of the row shown while the model works | as today |
+| `setHiddenThinkingLabel` | none | none: desktop reasoning rows have no hidden state | as today |
 | `setWidget(key, string[])` | notification `ui/widget` with lines | panel above the composer | as today |
-| `setWidget(key, view)` (new) | notification `ui/widget` with a view | native rendering | `ViewComponent` |
-| factory forms, `custom`, `onTerminalInput`, `setWorkingIndicator` | `ui/local` (section 7.3) | logged once per extension: "terminal-only UI" | as today |
+| `setWidget(key, view)` (new) | notification `ui/widget` with a view | the same panel, rendering the `View` | `ViewComponent` |
+| widget factories, `custom`, `setHeader`, `setFooter`, `onTerminalInput`, `setWorkingIndicator` | `ui/local` (section 7.3, Phase D) | one stderr line per method per thread load: "draws only in the terminal" | as today |
 
-All `ui/*` messages carry `threadId` and the extension's name.
+All `ui/*` messages carry `threadId`, and statuses and widgets are keyed by
+their key alone, as in the terminal and RPC mode: no message names the
+extension, and the extension runner keeps its one shared UI context.
+Rejected: a per-extension UI context in the runner. It changes core extension
+code, and neither existing client needs it. Two extensions using one key
+overwrite each other, as they already do in the terminal; the docs say to
+prefix keys.
+
+A client learns a thread's UI from the result that opens it: `thread/start`,
+`thread/resume` and `thread/fork` return `ui: UiSnapshot` (statuses, title,
+working message, working visibility, widgets), read in the synchronous step
+that writes the response, as resume's `queue` is (section 4.5). `ui/state`
+and `ui/widget` carry the changes after it, and a reload clears the state.
+Rejected: replaying the state as notifications when a connection subscribes.
+They would leave before the response that subscribes it, and the desktop's
+main process routes a thread's notifications only to windows whose holding
+response has passed, so a second window, or a new thread's window, would
+never see them.
+
+The server strips ANSI escapes from status text, title, working message and
+widget lines, and cuts the first three to 200 code points. A thread holds at
+most 50 statuses and 16 widgets, keys are 1 to 128 characters, and each
+widget's lines or view is at most 16 KiB; a resume page counts `ui` within its
+1 MiB budget (section 5.9). A refused status or widget gives one warning per
+key per load, as a `warning` notification, or as a load warning in the
+opening result when it happened while the thread loaded.
 
 ### 8.2 Declarative views
 
@@ -1894,17 +1920,36 @@ type View =
 	    value: string | boolean; options?: string[] };
 ```
 
-A `button` press or `field` change is a client notification `ui/event
-{threadId, extension, widgetKey, id, value?}`; the extension receives it
-through a new `ctx.ui.onViewEvent(handler)`. No arbitrary HTML, no scripts, no
-URLs that load: a view is data.
+No arbitrary HTML, no scripts, no URLs that load: a view is data. The schema
+lives in `packages/app-server-protocol/src/view.ts` with `checkView`, the one
+check every path uses. It copies the value through JSON and checks the copy:
+a size budget (64 KiB in an item, 16 KiB in a widget), at most 8 levels of
+stacks and lists, the schema (unknown members rejected), unique `button` and
+`field` ids, table rows as wide as the columns, a field value that fits its
+kind and options. The server checks every view an extension hands it, and
+stores and sends only the checked copy.
+
+A `button` press or `field` change in a widget is the client request
+`ui/event {threadId, widgetKey, id, value?}` → `{}`. Every handler the
+thread's extensions registered with `ctx.ui.onViewEvent(handler)` receives
+it and checks `widgetKey`. `onViewEvent` is optional on `ExtensionUIContext`
+and present only where widgets are interactive (the desktop app), so RPC
+mode's context does not change. A press on a widget or control that is gone
+answers `{}` and delivers nothing; a value that does not fit answers
+`invalidParams`. Rejected: a client notification. The desktop's main process
+drops notifications from windows and the server dispatches none but
+`initialized`, so both would need new paths, and a failure would be silent.
 
 `packages/cli/src/modes/interactive/components/view-component.ts` renders a
 `View` with existing TUI components, so one extension draws in both clients.
 
-A tool result may set `details.view`; the item carries it as `view`, and the
-desktop transcript renders it in place of raw output, as terminal tool
-renderers do today.
+A tool result or an extension message may set `details.view`; the item
+carries it as `view`, on the live and the read-back path, and the desktop
+transcript renders it in place of raw output or markdown, as terminal tool
+renderers do today. An invalid view is left out. Controls are live only in
+widgets: views in the transcript and every view in the terminal draw their
+buttons and fields without sending events, since a result read back from
+yesterday has no running code waiting for the press.
 
 ### 8.3 Docs the agent reads
 
@@ -2071,13 +2116,32 @@ with a warning.
 
 ### Phase C — extension UI over the protocol
 
-- `protocol.ts`: `ui/*` messages; `view.ts`.
-- `packages/cli/src/core/extensions/types.ts`: `setWidget` overload taking a
-  `View`, `onViewEvent`.
-- `packages/cli/src/modes/interactive/components/view-component.ts`.
-- `docs/desktop.md`, `declarative-views.md`, `examples/extensions/desktop-view.ts`,
-  `system-prompt.ts:167` entry.
-- Changeset: `Added`.
+Plan: [phase-c-plan.md](./phase-c-plan.md). Delivered as one PR on
+`feat/extension-ui-views`. Done already (338589ff8): `ui/dialog`, `ui/notify`
+and `ask_user`'s `item/toolCall/requestUserInput`.
+
+- `packages/app-server-protocol/src/view.ts` (new): `View`, its limits,
+  `checkView`. `protocol.ts`: `ui/state`, `ui/widget`, the `ui/event`
+  request, `UiSnapshot` in the `thread/start`, `thread/resume` and
+  `thread/fork` results, `view` on `toolCall` and `extensionMessage` items.
+- `packages/cli/src/core/extensions/types.ts`: the `setWidget` overload taking
+  a `View`, `ViewEvent`, optional `onViewEvent`; type-only, with exports. The
+  runner and RPC mode do not change.
+- `packages/cli/src/app-server/`: `dialogs.ts` (each thread's extension UI
+  state, its notifications, terminal-only reports, `ui/event` dispatch),
+  `loaded-thread.ts`, `threads.ts` (results, `ui/event`, the clear before a
+  reload), `history-pages.ts` (`ui` in the page budget), `transcript.ts` and
+  `item-mapper.ts` (`details.view` on both paths).
+- `packages/cli/src/modes/interactive/components/view-component.ts`; views in
+  `interactive-mode.ts` widgets, `tool-execution.ts` and `custom-message.ts`.
+- `apps/desktop/src/renderer/`: the `ui` slice in `store.ts`,
+  `components/view.tsx`, status chips and the window title in
+  `thread-view.tsx`, the working row and extension message views in
+  `items.tsx`, tool row views in `activity.tsx`.
+- `docs/desktop.md`, `declarative-views.md`, `app-server.md`,
+  `extensions.md`, `examples/extensions/desktop-view.ts`,
+  `system-prompt.ts:167` entry with a test pinning its length.
+- Changeset: `Added`, for `@knightcodeai/cli`; the desktop app takes none.
 
 ### Phase D — terminal CLI migration
 

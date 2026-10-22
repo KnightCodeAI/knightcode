@@ -26,6 +26,7 @@ import {
 	questionsAndAnswers,
 	rowLabel,
 	summaryKind,
+	toolBody,
 	type ToolItem,
 } from "../activity.ts";
 import { client } from "../client.ts";
@@ -48,6 +49,7 @@ import {
 	Wrench,
 } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
+import { ViewNode } from "./view.tsx";
 
 const ICONS: Record<Kind, typeof Wrench> = {
 	command: SquareTerminal,
@@ -366,14 +368,20 @@ function QuestionsBody({ item }: { item: ToolItem }) {
 }
 
 function ToolBody({ item, cwd, nested }: { item: ToolItem; cwd: string; nested: ToolItem[] }) {
-	const kind = kindOf(item.tool);
+	const shown = toolBody(item);
 	let body: ReactNode;
-	if (kind === "command") {
+	if (shown === "view" && item.view)
+		body = (
+			<div className="mt-1.5 rounded-lg border border-line px-4 py-3">
+				<ViewNode view={item.view} />
+			</div>
+		);
+	else if (shown === "command") {
 		const { output, end } = commandResult(item);
 		body = <TerminalCard title="Shell" command={String(inputOf(item).command ?? "")} output={output} end={end} />;
-	} else if (kind === "edit" && patchOf(item)) body = <DiffCard item={item} cwd={cwd} />;
-	else if (kind === "question") body = <QuestionsBody item={item} />;
-	else if (kind === "plan")
+	} else if (shown === "edit") body = <DiffCard item={item} cwd={cwd} />;
+	else if (shown === "question") body = <QuestionsBody item={item} />;
+	else if (shown === "plan")
 		body = (
 			<div className="mt-1.5 rounded-lg border border-line px-4 py-3">
 				<Markdown text={String(inputOf(item).markdown ?? "")} />
