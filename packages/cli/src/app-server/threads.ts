@@ -2402,7 +2402,8 @@ export class ThreadManager {
 			"thread/unsubscribe": async ({ threadId }, connection) => ({
 				status: this.unsubscribe(threadId, connection) ? "unsubscribed" : "notSubscribed",
 			}),
-			// An unloaded thread has no widgets to press: `get` answers threadNotFound.
+			// An unloaded thread has no widgets to press: `get` answers threadNotFound, also while it closes (every
+			// close takes it out of `threads` first), so a closing session's handlers hear nothing.
 			"ui/event": async ({ threadId, ...event }) => {
 				const thread = this.get(threadId);
 				thread.ui.dispatch(thread, event);

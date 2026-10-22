@@ -29,6 +29,8 @@ type ViewHandler = (event: ViewEvent) => void | Promise<void>;
 const MAX_WIDGETS = 16;
 const MAX_STATUSES = 50;
 const MAX_KEY_LENGTH = 128;
+/** Refusals reported per load: an extension inventing a new invalid key each time cannot grow the log or warnings. */
+const MAX_REPORTED = 64;
 
 /** A loaded thread's extension UI as it stands, and what was already reported about it in this load. */
 export class ExtensionUiState {
@@ -186,10 +188,13 @@ export function desktopDialogs(thread: LoadedThread): ExtensionUIContext & Quest
 		request("ui/dialog", { threadId: thread.id, ...dialog }, opts);
 	const { ui } = thread;
 	const sendState = () => thread.notify("ui/state", { threadId: thread.id, ...ui.state() });
-	/** One warning per key per load, delivered as extension errors are: live, or with the load's warnings. */
+	/**
+	 * One warning per key per load, delivered as extension errors are: live, or with the load's warnings. At most
+	 * MAX_REPORTED in a load.
+	 */
 	const refuse = (kind: "status" | "widget", key: unknown, reason: string) => {
 		const name = String(key).slice(0, MAX_KEY_LENGTH);
-		if (ui.reported.has(`${kind}:${name}`)) return;
+		if (ui.reported.has(`${kind}:${name}`) || ui.reported.size >= MAX_REPORTED) return;
 		ui.reported.add(`${kind}:${name}`);
 		const message = `${kind === "status" ? "Status" : "Widget"} "${name}" was not shown: ${reason}`;
 		console.error(`app-server: thread ${thread.id}: ${message}`);

@@ -160,6 +160,17 @@ test("a refused widget or status sends nothing and warns once per key", async ()
 	expect(after.ui).toEqual(before.ui);
 });
 
+test("an extension inventing invalid keys gets a bounded number of warnings per load", async () => {
+	const { open } = await uiServer({
+		start: (ctx) => {
+			for (let i = 0; i < 500; i++) ctx.ui.setWidget(`bad-${i}`, { type: "script" } as unknown as View);
+		},
+	});
+	vi.spyOn(console, "error").mockImplementation(() => {});
+	const { warnings: loaded } = await open();
+	expect(loaded.filter((w) => w.message.includes("was not shown"))).toHaveLength(64);
+});
+
 test("a widget refused while the thread loads is a load warning of thread/start", async () => {
 	const { open } = await uiServer({
 		start: (ctx) => ctx.ui.setWidget("loading", { type: "table", columns: ["a", "b", "c"], rows: [["1", "2"]] }),
@@ -445,6 +456,34 @@ test("a press while the reload is held in a new extension's factory reaches no h
 	gate.open();
 	await reloading;
 	await a.client.request("thread/list", {});
+	expect(seen).toEqual([]);
+});
+
+test("ui/event for a thread that is closing answers threadNotFound and reaches no handler", async () => {
+	const seen: unknown[] = [];
+	let releaseShutdown!: () => void;
+	let shuttingDown!: () => void;
+	const inShutdown = new Promise<void>((resolve) => (shuttingDown = resolve));
+	const { server, open } = await uiServer({
+		start: (ctx) => {
+			ctx.ui.setWidget("a", controls);
+			ctx.ui.onViewEvent?.((event) => {
+				seen.push(event);
+			});
+		},
+		shutdown: () => {
+			shuttingDown();
+			return new Promise<void>((resolve) => (releaseShutdown = resolve));
+		},
+	});
+	const { a, thread } = await open();
+	const unloading = server.threads.unload(thread.id);
+	await inShutdown;
+	await expect(
+		a.client.request("ui/event", { threadId: thread.id, widgetKey: "a", id: "reset" }),
+	).rejects.toMatchObject({ code: "threadNotFound" });
+	releaseShutdown();
+	await unloading;
 	expect(seen).toEqual([]);
 });
 
