@@ -58,6 +58,8 @@ function TextField({ field, onEvent }: { field: Field; onEvent?: OnEvent }) {
 }
 
 function FieldNode({ field, onEvent }: { field: Field; onEvent?: OnEvent }) {
+	// Radix opens a menu on pointerdown, and a label forwards only a click: the label opens the select itself.
+	const [open, setOpen] = useState(false);
 	let control: ReactNode;
 	if (field.kind === "toggle")
 		control = (
@@ -71,7 +73,7 @@ function FieldNode({ field, onEvent }: { field: Field; onEvent?: OnEvent }) {
 		);
 	else if (field.kind === "select")
 		control = (
-			<Menu>
+			<Menu open={open} onOpenChange={setOpen}>
 				<MenuTrigger disabled={!onEvent}>
 					<Button variant="field" size="sm" aria-label={field.label} disabled={!onEvent} className="max-w-64 px-2.5">
 						<span className="truncate text-ink">{String(field.value)}</span>
@@ -91,7 +93,15 @@ function FieldNode({ field, onEvent }: { field: Field; onEvent?: OnEvent }) {
 		);
 	else control = <TextField field={field} onEvent={onEvent} />;
 	return (
-		<label className="flex min-w-0 items-center gap-2 text-base text-secondary">
+		<label
+			className="flex min-w-0 items-center gap-2 text-base text-secondary"
+			onClick={(e) => {
+				// Not the trigger (Radix has it), and not an option: a click in the menu's portal bubbles here too.
+				const target = e.target as Element;
+				if (field.kind === "select" && onEvent && e.currentTarget.contains(target) && !target.closest("button"))
+					setOpen(true);
+			}}
+		>
 			<span className="shrink-0">{field.label}</span>
 			{control}
 		</label>

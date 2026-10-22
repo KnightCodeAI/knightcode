@@ -274,6 +274,8 @@ export function customize(theme: ThemeName, patch: Customization | undefined, re
 	setPreference("appearance", { ...all, [theme]: next });
 }
 
+const EMPTY_UI: UiSnapshot = { statuses: [], workingVisible: true, widgets: [] };
+
 function updateThread(id: string, fn: (view: ThreadView) => ThreadView): void {
 	set((s) => (s.held[id] ? { ...s, held: { ...s.held, [id]: fn(s.held[id]!) } } : s));
 }
@@ -621,6 +623,12 @@ window.addEventListener("focus", () => {
 // --- actions ----------------------------------------------------------------------------------
 
 async function connected(): Promise<void> {
+	// The extension UI died with the old server: dropped before anything here can fail, each resume below brings the
+	// new one, and a failed resume leaves no widget to press.
+	set((s) => ({
+		...s,
+		held: Object.fromEntries(Object.entries(s.held).map(([id, v]) => [id, { ...v, ui: EMPTY_UI }])),
+	}));
 	try {
 		const first = !state.desktop;
 		const desktop = state.desktop ?? (await client.host("host/state/read", {}));

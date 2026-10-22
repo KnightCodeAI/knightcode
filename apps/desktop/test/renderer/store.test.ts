@@ -58,6 +58,28 @@ test("after an app server restart the window resumes every thread it held", asyn
 	await vi.waitFor(() => expect(resumed()).toEqual([{ threadId: "t1" }, { threadId: "t2" }]));
 });
 
+test("after a restart a thread whose resume fails keeps no extension UI from the old server", async () => {
+	const widget = { key: "w", placement: "aboveEditor" as const, lines: ["old"] };
+	fake.serverState("ready");
+	await openThread("t3");
+	fake.notify("ui/widget", { threadId: "t3", ...widget });
+	fake.notify("ui/state", { threadId: "t3", statuses: [{ key: "s", text: "old" }], title: "Old", workingVisible: true });
+	await vi.waitFor(() => expect(getState().held.t3?.ui.widgets).toEqual([widget]));
+	const saved = fake.results["thread/resume"]!;
+	try {
+		// The killed server's lock is still live, so the new server cannot open the thread yet.
+		fake.results["thread/resume"] = () => {
+			throw Object.assign(new Error("locked"), { code: "threadLockedElsewhere" });
+		};
+		fake.serverState("restarting");
+		fake.serverState("ready");
+		await vi.waitFor(() => expect(getState().opening.t3).toBeDefined());
+		expect(getState().held.t3?.ui).toEqual({ statuses: [], workingVisible: true, widgets: [] });
+	} finally {
+		fake.results["thread/resume"] = saved;
+	}
+});
+
 test("deleting a thread still in the sidebar archives it first, as the server deletes only archived threads", async () => {
 	const saved = { ...fake.results };
 	try {
