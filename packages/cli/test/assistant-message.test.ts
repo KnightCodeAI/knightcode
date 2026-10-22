@@ -206,6 +206,35 @@ describe("AssistantMessageComponent", () => {
 		expect(calls).toEqual(["formula", "suffix"]);
 	});
 
+	test("passes persisted entry identity to text and thinking transformers", () => {
+		initTheme("dark");
+		const captured: Array<{ messageType: string; messageId?: string; timestamp?: string }> = [];
+		const message = createAssistantMessage([
+			{ type: "thinking", thinking: "plan" },
+			{ type: "text", text: "answer" },
+		]);
+		new AssistantMessageComponent(
+			message,
+			false,
+			undefined,
+			"Thinking...",
+			1,
+			[
+				(markdown, { messageType, messageId, timestamp }) => {
+					captured.push({ messageType, messageId, timestamp });
+					return markdown;
+				},
+			],
+			"entry-abc",
+			"2025-01-15T10:30:00.000Z",
+		).render(80);
+
+		expect(captured).toEqual([
+			{ messageType: "assistant-thinking", messageId: "entry-abc", timestamp: "2025-01-15T10:30:00.000Z" },
+			{ messageType: "assistant", messageId: "entry-abc", timestamp: "2025-01-15T10:30:00.000Z" },
+		]);
+	});
+
 	test("identifies partial assistant Markdown as streaming", () => {
 		initTheme("dark");
 		const streamingStates: boolean[] = [];

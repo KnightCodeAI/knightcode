@@ -64,6 +64,16 @@ describe("managed update staging", () => {
 		expect(readdirSync(join(root, "staging"))).toEqual([]);
 	});
 
+	it("installs the pinned release lockfile without an age-gate override", async () => {
+		// The lockfile pins every package, so the override never applied; security scanners still blocked the flag.
+		await expect(runManagedSelfUpdate(root, "1.0.1", { quiet: true })).resolves.toBe("1.0.1");
+		const npmCalls = runProcess.mock.calls.filter(([command]) => command === "npm");
+		expect(npmCalls).toHaveLength(1);
+		const args = npmCalls[0][1] as string[];
+		expect(args[0]).toBe("ci");
+		expect(args.some((arg) => arg.startsWith("--min-release-age"))).toBe(false);
+	});
+
 	it.each(["downloaded", "cached"])("prunes unused versions after activating a %s release", async (release) => {
 		for (const entry of ["0.9.0", "0.9.1-beta.1", "0.9.1+build.1", "notes"]) {
 			mkdirSync(join(root, "releases", entry));
