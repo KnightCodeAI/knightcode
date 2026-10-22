@@ -1351,7 +1351,8 @@ describe("tool rounds", () => {
 		class Failing extends ControlledStorage {
 			override async commit(
 				writes: Parameters<MemoryStorage["commit"]>[0],
-				ctx: Parameters<MemoryStorage["commit"]>[1],
+				adopt: Parameters<MemoryStorage["commit"]>[1],
+				ctx: Parameters<MemoryStorage["commit"]>[2],
 			) {
 				const finalizes = writes.some(
 					(write) => write.type === "task" && write.value.id === reject && write.value.state.status === "terminal",
@@ -1360,7 +1361,7 @@ describe("tool rounds", () => {
 					reject = undefined;
 					throw failure;
 				}
-				return super.commit(writes, ctx);
+				return super.commit(writes, adopt, ctx);
 			}
 		}
 		const storage = new Failing();
@@ -1625,7 +1626,8 @@ describe("conversation abort and boundaries", () => {
 		class Failing extends ControlledStorage {
 			override async commit(
 				writes: Parameters<MemoryStorage["commit"]>[0],
-				ctx: Parameters<MemoryStorage["commit"]>[1],
+				adopt: Parameters<MemoryStorage["commit"]>[1],
+				ctx: Parameters<MemoryStorage["commit"]>[2],
 			) {
 				const finalizes = writes.some(
 					(write) => write.type === "task" && write.value.id === reject && write.value.state.status === "terminal",
@@ -1634,7 +1636,7 @@ describe("conversation abort and boundaries", () => {
 					reject = undefined;
 					throw failure;
 				}
-				return super.commit(writes, ctx);
+				return super.commit(writes, adopt, ctx);
 			}
 		}
 		const storage = new Failing();

@@ -103,7 +103,7 @@ describe("recovery at open", () => {
 			...rest,
 			state: { status: "completing", outcome: { status: "completed", result: null } },
 		} as const;
-		await raw.commit([{ type: "task", value: completing }], context);
+		await raw.commit([{ type: "task", value: completing }], () => {}, context);
 		await raw.close(context);
 
 		// That pass's commit fails, as on a platform reset.
@@ -157,7 +157,9 @@ describe("tasks that cannot run", () => {
 			kind: "blocked",
 			reason: "restart_limit",
 		});
-		const graph = await harness.taskGraph(context);
+		const graph = await harness.watchTaskGraph(context);
+		// A started watch keeps its value current.
+		graph.start(async () => {});
 		expect(graph.value.tasks[String(id)]?.blocked).toBe("restart_limit");
 		// Parked work needs no process: nothing is active.
 		await eventually(() => !harness.wake().active);
@@ -171,7 +173,7 @@ describe("tasks that cannot run", () => {
 		await harness.retryTask(id, context);
 		expect((await harness.waitForTask(id, context)).state.outcome.status).toBe("completed");
 		expect(state.started).toBe(4);
-		graph.dispose();
+		await graph.stop();
 		await harness.close(context);
 	});
 
@@ -277,7 +279,9 @@ describe("tasks that cannot run", () => {
 		await eventually(() => state.started === 1);
 		opened.kill(); // a crash: a close would not count
 		opened = await openWith(path, registry, settings);
-		const graph = await opened.harness.taskGraph(context);
+		const graph = await opened.harness.watchTaskGraph(context);
+		// A started watch keeps its value current.
+		graph.start(async () => {});
 		opened.harness.resume();
 		await eventually(() => graph.value.tasks[String(id)]?.blocked === "restart_limit");
 		// Let a scheduling pass leave the parked task out.
@@ -288,7 +292,7 @@ describe("tasks that cannot run", () => {
 		opened.harness.resume();
 		expect((await opened.harness.waitForTask(id, context)).state.outcome.status).toBe("completed");
 		expect(state.started).toBe(2);
-		graph.dispose();
+		await graph.stop();
 		await opened.harness.close(context);
 	});
 
@@ -427,13 +431,15 @@ describe("tasks that cannot run", () => {
 		const second = createRegistry();
 		second.install(defineExtension({ name: "v2", tasks: [V2] }));
 		opened = await openWith(path, second);
-		const graph = await opened.harness.taskGraph(context);
+		const graph = await opened.harness.watchTaskGraph(context);
+		// A started watch keeps its value current.
+		graph.start(async () => {});
 		opened.harness.resume();
 		await eventually(() => graph.value.tasks[String(id)]?.blocked === "migration_failed");
 		await eventually(() => !opened.harness.wake().active);
 		expect(opened.harness.wake()).toEqual({ active: false });
 		await eventually(() => opened.wakes.at(-1)?.active === false);
-		graph.dispose();
+		await graph.stop();
 		await opened.harness.close(context);
 	});
 
@@ -458,11 +464,13 @@ describe("tasks that cannot run", () => {
 		await opened.harness.close(context);
 		// The next open marks it `restart`; without its definition, it waits for one to clean up.
 		opened = await openWith(path, createRegistry());
-		const graph = await opened.harness.taskGraph(context);
+		const graph = await opened.harness.watchTaskGraph(context);
+		// A started watch keeps its value current.
+		graph.start(async () => {});
 		opened.harness.resume();
 		await eventually(async () => (await opened.harness.getTask(id, context))?.abortReason === "restart");
 		await eventually(() => graph.value.tasks[String(id)]?.blocked === "missing_task");
-		graph.dispose();
+		await graph.stop();
 		await opened.harness.close(context);
 	});
 
@@ -477,7 +485,9 @@ describe("tasks that cannot run", () => {
 		const registry = createRegistry();
 		const path = await sqlitePath();
 		const { harness, wakes } = await openWith(path, registry);
-		const graph = await harness.taskGraph(context);
+		const graph = await harness.watchTaskGraph(context);
+		// A started watch keeps its value current.
+		graph.start(async () => {});
 		const root = await harness.root(context);
 		const id = await root.commit(
 			(tx) => tx.createTask(Missing, null, { ownership: { kind: "conversation" } }),
@@ -491,7 +501,7 @@ describe("tasks that cannot run", () => {
 		await eventually(() => graph.value.tasks[String(id)]?.blocked === undefined);
 		await eventually(() => wakes.some((wake) => wake.active));
 		expect((await harness.waitForTask(id, context)).state.outcome.status).toBe("completed");
-		graph.dispose();
+		await graph.stop();
 		await harness.close(context);
 	});
 });

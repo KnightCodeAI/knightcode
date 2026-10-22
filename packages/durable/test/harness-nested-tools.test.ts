@@ -115,11 +115,11 @@ describe("nested tool calls", () => {
 		// Per document written, the keys of the nested calls it holds.
 		const written: { kind: string; key: string | undefined }[] = [];
 		const commit = storage.commit.bind(storage);
-		storage.commit = (writes, commitContext) => {
+		storage.commit = (writes, adopt, commitContext) => {
 			for (const write of writes) {
 				if (write.type === "document.create") written.push({ kind: write.record.kind, key: write.record.key });
 			}
-			return commit(writes, commitContext);
+			return commit(writes, adopt, commitContext);
 		};
 		const { harness, root } = await openChat(storage, setup);
 		await (await root.submit({ type: "input", content: "go" }, context)).wait(context);
@@ -1293,7 +1293,11 @@ describe("tool task version 1 records", () => {
 		const record = (await storage.task(id, context))!;
 		const { kind: _kind, ...input } = record.input as Extract<ToolTaskInput, { kind: "model" }>;
 		const state = { ...record.state, checkpoint } as typeof record.state;
-		await storage.commit([{ type: "task", value: { ...record, version: 1, input, state } as typeof record }], context);
+		await storage.commit(
+			[{ type: "task", value: { ...record, version: 1, input, state } as typeof record }],
+			() => {},
+			context,
+		);
 		await storage.close(context);
 		return { path, id };
 	}
