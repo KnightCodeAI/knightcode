@@ -68,6 +68,32 @@ on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on
 - Command palette (Ctrl+K): actions and threads in one search.
 - Quitting while threads run asks first.
 
+## Extensions
+
+Extensions load in desktop threads as they do in the terminal (`ctx.mode` is
+`"desktop"`). What they show appears in the app:
+
+- Dialogs (`select`, `confirm`, `input`, `editor`) and `ask_user`'s questions take
+  the composer's place; notices (`notify`) show as toasts.
+- Statuses (`setStatus`) are chips in the thread's header, with the full text on
+  hover.
+- `setTitle` names the window while the thread is open; the thread's own name stays.
+- `setWorkingMessage` replaces the "Thinking" text while a turn waits on the model,
+  and `setWorkingVisible(false)` hides it.
+- Widgets (`setWidget`) show in a panel above the composer, lines in a monospace
+  font, at most 10 per widget. A widget can be a
+  [declarative view](declarative-views.md) whose buttons and fields work: a press
+  reaches the extension's `ctx.ui.onViewEvent` handler.
+- A tool result or an extension message with a view in `details.view` shows the view
+  in its row.
+
+Terminal-only UI does not draw: widget factories, `custom()` components, header
+and footer components, raw terminal input, the working indicator and editor access
+(`setEditorText`, `getEditorText`, `pasteToEditor`, custom editors and autocomplete).
+The app server notes each such call once per thread in `app-server.log`. A widget or
+status the server refuses (an invalid view, too large, too many) shows a warning
+once. The protocol side is in [app-server.md](app-server.md#dialogs-and-extension-ui).
+
 ## Keyboard shortcuts
 
 | Action | Default |

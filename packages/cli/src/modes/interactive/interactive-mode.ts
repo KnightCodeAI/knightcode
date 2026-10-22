@@ -9,6 +9,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@knightcode/agent";
 import type { AuthEvent, AuthPrompt } from "@knightcode/ai";
+import { checkView, WIDGET_MAX_BYTES } from "@knightcode/app-server-protocol";
 import {
 	type AssistantMessage,
 	type ImageContent,
@@ -36,6 +37,7 @@ import {
 	Container,
 	fuzzyFilter,
 	getCapabilities,
+	Gutter,
 	hyperlink,
 	Markdown,
 	matchesKey,
@@ -88,6 +90,7 @@ import type {
 	MarkdownTransformer,
 	ProjectTrustContext,
 	UserBashEventResult,
+	View,
 	WorkingIndicatorOptions,
 } from "../../core/extensions/index.ts";
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
@@ -151,6 +154,7 @@ import { CompactionSummaryMessageComponent } from "./components/compaction-summa
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomEntryComponent } from "./components/custom-entry.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
+import { ViewComponent } from "./components/view-component.ts";
 import { DynamicBorder } from "./components/dynamic-border.ts";
 import { playArmin3d } from "./components/easter-egg-3d.lazy.ts";
 import { ExtensionEditorComponent } from "./components/extension-editor.ts";
@@ -2416,7 +2420,7 @@ export class InteractiveMode {
 	 */
 	private setExtensionWidget(
 		key: string,
-		content: string[] | ((tui: TUI, thm: Theme) => Component & { dispose?(): void }) | undefined,
+		content: string[] | ((tui: TUI, thm: Theme) => Component & { dispose?(): void }) | View | undefined,
 		options?: ExtensionWidgetOptions,
 	): void {
 		const placement = options?.placement ?? "aboveEditor";
@@ -2446,9 +2450,15 @@ export class InteractiveMode {
 				container.addChild(new ThemedText(() => theme.fg("muted", "... (widget truncated)"), 1, 0));
 			}
 			component = container;
-		} else {
-			// Factory function - create component
+		} else if (typeof content === "function") {
 			component = content(this.ui, theme);
+		} else {
+			// A declarative view, checked as the app server checks it; the author sees why one is refused.
+			const checked = checkView(content, WIDGET_MAX_BYTES);
+			component =
+				"view" in checked
+					? new Gutter(new ViewComponent(checked.view), " ", " ")
+					: new ThemedText(() => theme.fg("warning", `(invalid view: ${checked.error})`), 1, 0);
 		}
 
 		const targetMap = placement === "belowEditor" ? this.extensionWidgetsBelow : this.extensionWidgetsAbove;

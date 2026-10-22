@@ -92,6 +92,8 @@ export {
 	type TurnEndEvent,
 	type TurnEndEventResult,
 	type TurnStartEvent,
+	type View,
+	type ViewEvent,
 	type WorkingIndicatorOptions,
 } from "./extensions/index.ts";
 export { createSyntheticSourceInfo } from "./source-info.ts";

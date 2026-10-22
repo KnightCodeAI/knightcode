@@ -30,6 +30,7 @@ import {
 	outputOf,
 	textOf,
 	toolCallStatus,
+	viewOf,
 } from "./transcript.ts";
 
 /** Steers the agent has not delivered yet, and the server's own queued inputs. */
@@ -286,11 +287,13 @@ export class ItemMapper {
 				if (!counters) return;
 				if (message.role === "custom") {
 					// Inside a run or between runs: an idle extension message belongs to the last turn, as on read-back.
+					const view = viewOf(message.details);
 					const item: Item = {
 						type: "extensionMessage",
 						id: `${counters.id}:custom:${counters.customs++}`,
 						extension: message.customType,
 						text: textOf(message.content),
+						...(view ? { view } : {}),
 					};
 					const index = counters.items++;
 					const turnId = counters.id;
@@ -344,6 +347,8 @@ export class ItemMapper {
 					call.completedAt = message.timestamp;
 					const changes = fileChangesOf(call.tool, call.input, message.isError, message.details);
 					if (changes.length > 0) call.fileChanges = changes;
+					const view = viewOf(message.details);
+					if (view) call.view = view;
 					this.completed(call, this.positions.get(call.id));
 				}
 				return;
@@ -389,6 +394,9 @@ export class ItemMapper {
 				const blocks = Array.isArray(content) ? content : [];
 				item.status = toolCallStatus(event.isError, blocks);
 				item.output = outputOf(blocks);
+				// A nested call stays live only (§4.2): its view travels on this item and nowhere else.
+				const view = viewOf((event.result as { details?: unknown })?.details);
+				if (view) item.view = view;
 				item.completedAt = Date.now();
 				this.completed(item, undefined);
 				return;

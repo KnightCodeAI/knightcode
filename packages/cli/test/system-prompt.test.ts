@@ -120,6 +120,14 @@ describe("buildSystemPrompt", () => {
 			);
 			expect(prompt).toContain("environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md)");
 		});
+
+		test("names the desktop docs in the docs list, and the line costs only what that entry adds", () => {
+			const prompt = buildSystemPrompt({ contextFiles: [], skills: [], cwd: process.cwd() });
+			const line = prompt.split("\n").find((l) => l.startsWith("- When asked about:"));
+			expect(line).toMatch(/, desktop app and its extensions \(docs\/desktop\.md\)$/);
+			// Every byte here is paid on every request (AGENTS.md, "The Core Constraint"): 556 before the desktop entry.
+			expect(line).toHaveLength(606);
+		});
 	});
 
 	describe("custom tool snippets", () => {

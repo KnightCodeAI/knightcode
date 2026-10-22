@@ -246,3 +246,13 @@ test("closing stdin mid-turn unloads everything and exits 0 within the deadline"
 	expect(await exited).toBe(0);
 	expect(Date.now() - started).toBeLessThan(15_000);
 }, 60_000);
+
+test("ui/event is reachable over stdio", async () => {
+	const s = spawnServer();
+	const threadId = await handshakeAndThread(s);
+	s.send({ id: 5, method: "ui/event", params: { threadId, widgetKey: "none", id: "reset" } });
+	expect(await s.waitFor((m) => m.id === 5)).toEqual({ id: 5, result: {} });
+	const exited = exitCode(s.child);
+	s.child.stdin!.end();
+	expect(await exited).toBe(0);
+}, 60_000);

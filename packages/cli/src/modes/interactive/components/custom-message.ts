@@ -1,4 +1,5 @@
 import type { TextContent } from "@knightcode/ai";
+import { checkView } from "@knightcode/app-server-protocol";
 import type { Component, TuiMouseEvent } from "@knightcode/tui";
 import { Container, Markdown, type MarkdownTheme, Spacer } from "@knightcode/tui";
 import type { MessageRenderer } from "../../../core/extensions/types.ts";
@@ -6,6 +7,7 @@ import type { CustomMessage } from "../../../core/messages.ts";
 import { formatToolCall } from "../../../core/tools/render-utils.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { callBlock, paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
+import { ViewComponent } from "./view-component.ts";
 
 /**
  * Component that renders a custom message entry from extensions. Without a custom renderer it is drawn like a
@@ -109,11 +111,14 @@ export class CustomMessageComponent extends Container {
 				.join("\n");
 		}
 
+		const checked = checkView((this.message.details as { view?: unknown } | undefined)?.view);
 		this.defaultComponent = callBlock(
 			formatToolCall(theme, this.message.customType),
-			new Markdown(text, 0, 0, this.markdownTheme, {
-				color: (text: string) => theme.fg("toolOutput", text),
-			}),
+			"view" in checked
+				? new ViewComponent(checked.view)
+				: new Markdown(text, 0, 0, this.markdownTheme, {
+						color: (text: string) => theme.fg("toolOutput", text),
+					}),
 		);
 		this.addChild(this.defaultComponent);
 	}

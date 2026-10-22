@@ -1,3 +1,4 @@
+import { checkView } from "@knightcode/app-server-protocol";
 import {
 	type Component,
 	Container,
@@ -21,6 +22,7 @@ import { BLOCK_INDENT, BULLET, RESULT_GUTTER, RESULT_INDENT } from "../glyphs.ts
 import { theme } from "../theme/theme.ts";
 import { paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
 import { keyHint } from "./keybinding-hints.ts";
+import { ViewComponent } from "./view-component.ts";
 
 /** What this component needs from a tool: how to draw it, without executing it. */
 export type { ToolRenderers };
@@ -154,6 +156,9 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private createResultFallback(): Component | undefined {
+		// A view in the result's details replaces the raw output; a tool's own renderResult still wins (D14).
+		const checked = checkView(this.result?.details?.view);
+		if ("view" in checked) return new ViewComponent(checked.view);
 		const output = this.getTextOutput();
 		if (!output) {
 			return undefined;

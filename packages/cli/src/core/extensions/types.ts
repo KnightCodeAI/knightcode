@@ -102,6 +102,9 @@ import type {
 } from "../tools/index.ts";
 import type { ModelRoute, ModelRouteRequest, VirtualModelDefinition } from "../virtual-models.ts";
 
+import type { View } from "@knightcode/app-server-protocol";
+
+export type { View };
 export type { ExecOptions, ExecResult } from "../exec.ts";
 export type { BuildSystemPromptOptions, NormalizedBuildSystemPromptOptions } from "../system-prompt.ts";
 export type { AgentToolResult, AgentToolUpdateCallback, ToolExecutionMode };
@@ -126,6 +129,16 @@ export type WidgetPlacement = "aboveEditor" | "belowEditor";
 export interface ExtensionWidgetOptions {
 	/** Where the widget is rendered. Defaults to "aboveEditor". */
 	placement?: WidgetPlacement;
+}
+
+/** A press of a button, or a change of a field, in a widget view. */
+export interface ViewEvent {
+	/** The key the widget was set with. */
+	widgetKey: string;
+	/** The button's or field's id. */
+	id: string;
+	/** A field's new value: a string for text and select, a boolean for toggle. Absent for a button. */
+	value?: string | boolean;
 }
 
 /** Raw terminal input listener for extensions. */
@@ -192,6 +205,14 @@ export interface ExtensionUIContext {
 		content: ((tui: TUI, theme: Theme) => Component & { dispose?(): void }) | undefined,
 		options?: ExtensionWidgetOptions,
 	): void;
+	/** Set a widget drawn from a declarative view (docs/declarative-views.md). */
+	setWidget(key: string, content: View | undefined, options?: ExtensionWidgetOptions): void;
+
+	/**
+	 * Receive presses and changes from widget views. Every handler gets every event of the thread: check `widgetKey`.
+	 * Present only where widgets are interactive (the desktop app). Returns a function that removes the handler.
+	 */
+	onViewEvent?(handler: (event: ViewEvent) => void | Promise<void>): () => void;
 
 	/** Set a custom footer component, or undefined to restore the built-in footer.
 	 *

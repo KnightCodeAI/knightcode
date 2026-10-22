@@ -5,7 +5,15 @@
  */
 
 import type { AssistantMessage } from "@knightcode/ai";
-import type { FileChange, Item, ToolOutput, Turn, TurnFile } from "@knightcode/app-server-protocol";
+import {
+	checkView,
+	type FileChange,
+	type Item,
+	type ToolOutput,
+	type Turn,
+	type TurnFile,
+	type View,
+} from "@knightcode/app-server-protocol";
 import type { SessionEntry } from "../core/session-manager.ts";
 import { TURN_COMMENTS_ENTRY, TURN_DIFF_ENTRY, type TurnComments, type TurnDiffRecord } from "./diff.ts";
 import {
@@ -42,6 +50,19 @@ export function outputOf(content: Content): ToolOutput[] {
 				? [{ type: "image", mimeType: c.mimeType ?? "", data: c.data ?? "" }]
 				: [],
 	);
+}
+
+/**
+ * `details.view` of a tool result or custom message when it is an acceptable view (D13): the checked copy, so a live
+ * item never shares an object the extension can still change. An invalid view is dropped without a warning, so
+ * reading an old transcript never toasts; the raw output or text shows instead.
+ */
+export function viewOf(details: unknown): View | undefined {
+	const view = typeof details === "object" && details !== null ? (details as { view?: unknown }).view : undefined;
+	// Most results carry no view; readTurns runs often (a fork's bisect reads the branch many times).
+	if (view === undefined) return undefined;
+	const checked = checkView(view);
+	return "view" in checked ? checked.view : undefined;
 }
 
 /** A call the approval gate blocked has an error result carrying exactly the decline reason. */
@@ -146,11 +167,13 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 				completedAt: entryTime(entry),
 			});
 		} else if (entry.type === "custom_message") {
+			const view = viewOf(entry.details);
 			t.turn.items.push({
 				type: "extensionMessage",
 				id: `${t.turn.id}:custom:${t.customs++}`,
 				extension: entry.customType,
 				text: textOf(entry.content as string | Content),
+				...(view ? { view } : {}),
 				completedAt: entryTime(entry),
 			});
 		} else if (entry.type === "message") {
@@ -211,6 +234,8 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 					// Part of the call item, so a result never adds or moves an item (§4.2).
 					const changes = fileChangesOf(call.tool, call.input, message.isError, message.details);
 					if (changes.length > 0) call.fileChanges = changes;
+					const view = viewOf(message.details);
+					if (view) call.view = view;
 				}
 			}
 		}
