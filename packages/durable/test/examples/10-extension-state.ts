@@ -1,6 +1,6 @@
 // An extension that keeps its own per-conversation document.
 // Run from packages/durable:
-//   node --conditions=source --experimental-strip-types test/examples/11-extension-state.ts
+//   node --conditions=source --experimental-strip-types test/examples/10-extension-state.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { Type } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";

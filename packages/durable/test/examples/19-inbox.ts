@@ -1,6 +1,6 @@
 // The inbox: what happens to submissions while a conversation is busy.
 // Run from packages/durable:
-//   node --conditions=source --experimental-strip-types test/examples/20-inbox.ts
+//   node --conditions=source --experimental-strip-types test/examples/19-inbox.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import type { FauxResponseStep } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";

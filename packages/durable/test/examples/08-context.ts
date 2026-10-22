@@ -1,6 +1,6 @@
 // Transcript history and model context.
 // Run from packages/durable:
-//   node --conditions=source --experimental-strip-types test/examples/09-context.ts
+//   node --conditions=source --experimental-strip-types test/examples/08-context.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import type { AssistantMessage, Message, StopReason, ToolResultMessage } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";

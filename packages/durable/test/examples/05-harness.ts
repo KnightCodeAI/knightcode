@@ -1,6 +1,6 @@
 // Open a Harness with a registry of extensions.
 // Run from packages/durable:
-//   node --conditions=source --experimental-strip-types test/examples/06-harness.ts
+//   node --conditions=source --experimental-strip-types test/examples/05-harness.ts
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { Type } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";
