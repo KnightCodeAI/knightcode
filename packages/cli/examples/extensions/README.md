@@ -32,6 +32,7 @@ cp permission-gate.ts ~/.knightcode/agent/extensions/
 |-----------|-------------|
 | `todo.ts` | Todo list tool + `/todos` command with custom rendering and state persistence |
 | `hello.ts` | Minimal custom tool example |
+| `desktop-view.ts` | Declarative views: a widget with a live toggle and button (`ctx.ui.onViewEvent`), and a tool result drawn as a table |
 | `question.ts` | Demonstrates `ctx.ui.select()` for asking the user questions with custom UI |
 | `questionnaire.ts` | Multi-question input with tab bar navigation between questions |
 | `tool-override.ts` | Override built-in tools (e.g., add logging/access control to `read`) |

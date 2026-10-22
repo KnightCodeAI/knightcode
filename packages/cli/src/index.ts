@@ -197,6 +197,8 @@ export type {
 	UIPromptStartEvent,
 	UserBashEvent,
 	UserBashEventResult,
+	View,
+	ViewEvent,
 	WidgetPlacement,
 	WorkingIndicatorOptions,
 	WriteToolCallEvent,

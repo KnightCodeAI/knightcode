@@ -1,5 +1,5 @@
 /** Anchored history pages: appends do not shift continuations, and active snapshots are separate. */
-import type { ResultOf, Thread, ThreadSummary, WireTurn } from "@knightcode/app-server-protocol";
+import type { ResultOf, Thread, ThreadSummary, UiSnapshot, WireTurn } from "@knightcode/app-server-protocol";
 import type { SessionEntry } from "../core/session-manager.ts";
 import { AppServerError } from "./errors.ts";
 import type { PayloadStore } from "./payloads.ts";
@@ -47,10 +47,17 @@ function encode(value: Cursor): string {
 }
 
 export function pageHistory(
-	input: { thread: Thread | ThreadSummary; entries: readonly SessionEntry[]; cursor?: string; runningTurn?: WireTurn },
+	input: {
+		thread: Thread | ThreadSummary;
+		entries: readonly SessionEntry[];
+		cursor?: string;
+		runningTurn?: WireTurn;
+		/** A resume's extension UI, sent beside the page and counted in its budget. */
+		ui?: UiSnapshot;
+	},
 	payloads: PayloadStore,
 ): HistoryPage {
-	const { thread, entries, runningTurn } = input;
+	const { thread, entries, runningTurn, ui } = input;
 	const cursor = input.cursor === undefined ? undefined : decode(input.cursor);
 	if (cursor && cursor.threadId !== thread.id) invalid();
 	const tip = cursor ? entries.findIndex((entry) => entry.id === cursor.branchTipId) : entries.length - 1;
@@ -61,7 +68,7 @@ export function pageHistory(
 	if (before < 0) invalid();
 	const page: HistoryPage = { turns: [], ...(runningTurn === undefined ? {} : { runningTurn }) };
 	// Sized incrementally: each turn adds its JSON and a separating comma, a cursor adds its member.
-	let bytes = Buffer.byteLength(JSON.stringify({ thread, ...page })) + HISTORY_ENVELOPE_RESERVE_BYTES;
+	let bytes = Buffer.byteLength(JSON.stringify({ thread, ui, ...page })) + HISTORY_ENVELOPE_RESERVE_BYTES;
 	if (bytes > MAX_HISTORY_RESPONSE_BYTES)
 		throw new AppServerError("internal", "Thread metadata or active snapshot exceeds the history response limit");
 	for (let i = before - 1; i >= 0 && page.turns.length < MAX_HISTORY_TURNS; i--) {

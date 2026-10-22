@@ -44,6 +44,7 @@ import {
 	Undo,
 } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
+import { ViewNode } from "./view.tsx";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu.tsx";
 
 function Reasoning({ text, streaming, took }: { text: string; streaming: boolean; took?: number }) {
@@ -288,7 +289,7 @@ function WorkItems({
 			rows.push(
 				<div key={item.id}>
 					<div className="mb-1 text-xs font-medium text-accent">{item.extension}</div>
-					<Markdown text={item.text} />
+					{item.view ? <ViewNode view={item.view} /> : <Markdown text={item.text} />}
 				</div>,
 			);
 		else if (item.type === "userMessage") rows.push(<UserBubble key={item.id} text={item.text} images={item.images} />);
@@ -488,6 +489,10 @@ export function TurnView({
 	const running = turn.status === "inProgress";
 	const idle = useStore((s) => !s.held[threadId]?.turns.some((t) => t.status === "inProgress"));
 	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
+	// An extension may hide the waiting row or name what it waits on (setWorkingVisible, setWorkingMessage).
+	const workingVisible = useStore((s) => s.held[threadId]?.ui.workingVisible !== false);
+	const workingMessage = useStore((s) => s.held[threadId]?.ui.workingMessage);
+	const working = { visible: workingVisible, message: workingMessage };
 	const [open, setOpen] = useState(false);
 	const first = turn.items.find((i) => i.type === "userMessage");
 	const rest = turn.items.filter((i) => i !== first);
@@ -522,9 +527,9 @@ export function TurnView({
 						<div className="flex items-center gap-2 text-base text-warning">
 							<CircleAlert size={14} /> Retrying (attempt {retry.attempt} of {retry.maxAttempts}): {retry.error}
 						</div>
-					) : !streamingId && !work.some((i) => i.type === "toolCall" && isRunning(i)) ? (
-						// Waiting on the model, not on a tool: Codex's shimmering "Thinking".
-						<span className="kc-shimmer w-fit text-base">Thinking</span>
+					) : !streamingId && !work.some((i) => i.type === "toolCall" && isRunning(i)) && working.visible ? (
+						// Waiting on the model, not on a tool: Codex's shimmering "Thinking", or an extension's working text.
+						<span className="kc-shimmer w-fit text-base">{working.message ?? "Thinking"}</span>
 					) : null}
 				</>
 			) : (

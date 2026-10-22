@@ -4,12 +4,14 @@ import {
 	commandResult,
 	dialogOption,
 	dialogTitle,
+	expandable,
 	liveEntries,
 	parseExploration,
 	questionsAndAnswers,
 	rowLabel,
 	summaryKind,
 	type ToolItem,
+	toolBody,
 	workEntries,
 } from "../../src/renderer/activity.ts";
 import type { ViewItem } from "../../src/renderer/turns.ts";
@@ -185,4 +187,14 @@ test("a select's title and options split as plan review and ask_user write them"
 		recommended: true,
 	});
 	expect(dialogOption("Implement")).toEqual({ label: "Implement", recommended: false });
+});
+
+test("a tool's view wins over the cards picked by its name", () => {
+	const view = { type: "table" as const, columns: ["a"], rows: [["1"]] };
+	expect(toolBody(call("bash", { command: "ls" }, { view }))).toBe("view");
+	expect(toolBody(call("bash", { command: "ls" }))).toBe("command");
+	expect(toolBody(call("check", {}, { view }))).toBe("view");
+	expect(toolBody(call("check"))).toBe("output");
+	expect(expandable(call("read", { path: "a.ts" }, { view }))).toBe(true);
+	expect(expandable(call("read", { path: "a.ts" }))).toBe(false);
 });

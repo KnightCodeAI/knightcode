@@ -14,6 +14,7 @@ import type {
 import type { AgentSession } from "../core/agent-session.ts";
 import { emitSessionShutdownEvent } from "../core/extensions/runner.ts";
 import { AppServerError, SubscriberGone } from "./errors.ts";
+import { ExtensionUiState } from "./dialogs.ts";
 import type { TurnChanges } from "./diff.ts";
 import type { ItemMapper } from "./item-mapper.ts";
 import type { PayloadStore } from "./payloads.ts";
@@ -93,6 +94,8 @@ export class LoadedThread {
 	approvalMode: ApprovalMode;
 	readonly allowed = new Set<string>();
 	readonly loadWarnings: Warning[] = [];
+	/** What the thread's extensions show: statuses, title, working row, widgets (§8.1). */
+	readonly ui = new ExtensionUiState();
 	readonly allowedPrefixes = new Map<"bash" | "powershell", Set<string>>();
 	/** Abort controllers of server requests in flight for this thread. */
 	readonly pending = new Set<AbortController>();

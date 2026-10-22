@@ -486,18 +486,22 @@ The desktop renders them as follows:
 | `ui/dialog` confirm | modal with the two buttons named by the extension |
 | `ui/dialog` input / editor | modal with a one-line field / a multi-line editor |
 | `ui/notify` | toast, 5 s, errors stay until dismissed |
-| `ui/state` status | chip in the thread header, keyed by extension and key |
-| `ui/state` title, working message | thread tab title; the "Working…" row text |
-| `ui/widget` lines | panel above the composer, monospace |
-| `ui/widget` view | panel above the composer rendering the `View` |
-| tool result `details.view` | rendered in place of raw output in the tool row |
+| `ui/state` status | chip in the thread header, keyed by its key alone (architecture.md section 8.1), sorted by key as the terminal footer sorts them |
+| `ui/state` title | the window title while the thread is open in that window |
+| `ui/state` working message, working visibility | the text of the row shown under a running turn while the model works ("Thinking" by default); `workingVisible: false` hides that row |
+| `ui/widget` lines | panel above the composer, monospace, at most 10 lines per widget as in the terminal |
+| `ui/widget` view | the same panel rendering the `View`; its buttons and fields send `ui/event` |
+| `ui` in a `thread/start`, `thread/resume` or `thread/fork` result | installed as the thread's UI, then changed by `ui/state` and `ui/widget` |
+| tool result or extension message `details.view` | rendered in place of raw output or markdown in the transcript, with its buttons and fields disabled |
 | load `warnings` in a `thread/start`, `thread/resume` or `thread/fork` result | a dismissible banner at the top of the thread, one line per warning, with the file and line when known; dismissed per window |
 | `warning` notification | a toast; with a `threadId`, it also adds to that thread's banner |
 
 `View` rendering uses the same components as the rest of the UI: `text` tones
 map to theme tokens, `markdown` uses the transcript renderer, `table` is a
-plain table, `button` and `field` emit `ui/event`. Modals are in-window, not
-OS dialogs, so they follow the theme and keybindings.
+plain table, and in a widget `button` and `field` send `ui/event`. Widgets
+show in one panel, `aboveEditor` ones first; the protocol keeps `placement`
+for the terminal. Modals are in-window, not OS dialogs, so they follow the
+theme and keybindings.
 
 Prior art: Codex lets plugins ship arbitrary HTML apps in a sandboxed frame,
 declared on MCP tools. Agent extensions here stay declarative (architecture.md

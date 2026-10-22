@@ -206,6 +206,8 @@ export type {
 	// Events - User Bash
 	UserBashEvent,
 	UserBashEventResult,
+	View,
+	ViewEvent,
 	WidgetPlacement,
 	WorkingIndicatorOptions,
 	WriteToolCallEvent,

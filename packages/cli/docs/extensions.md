@@ -387,8 +387,10 @@ Use `ctx.ui.custom()` only when the interaction needs its own rendering and inpu
 See [Terminal UI](tui.md) for component, focus, overlay, theme, and performance guidance.
 
 Extensions load in interactive, RPC, JSON, print, and desktop modes.
-Desktop mode currently has no extension UI (`hasUI` is false); terminal
-components remain unavailable even when desktop dialogs are added.
+Desktop mode draws dialogs, notices, statuses, titles, working text and widgets,
+including [declarative views](declarative-views.md) with live buttons and
+fields; terminal components (widget factories, `custom()`, header, footer) do not
+draw there. See [Desktop App](desktop.md#extensions).
 Interactive mode provides the complete terminal UI. The [DOOM overlay example](../examples/extensions/doom-overlay/) uses a custom overlay component to render a game frame by frame:
 
 <p align="center"><img src="images/doom-extension.png" alt="The DOOM overlay example running over a KnightCode session" width="750"></p>

@@ -20,6 +20,7 @@ import type {
 	WireTurn,
 	ImageRef,
 	TurnStartResult,
+	UiSnapshot,
 	Warning,
 } from "@knightcode/app-server-protocol";
 import { uuidv7 } from "@knightcode/ai";
@@ -189,8 +190,8 @@ export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
 	return mode === "desktop" ? "ask" : "fullAccess";
 }
 
-// ponytail: a fixed list of built-in commands that do nothing outside the terminal (they need a picker or a
-// terminal panel). Replace with command metadata or desktop dialogs when extension UI reaches the desktop (Phase C).
+// ponytail: a fixed list of built-in commands that do nothing outside the terminal: they open custom() components,
+// which the desktop does not draw (Phase C, D6). Replace with command metadata if desktop versions are built.
 const TERMINAL_ONLY_COMMANDS = new Set(["usage", "llama", "undo"]);
 
 function commandsOf(session: AgentSession): ResultOf<"command/list">["commands"] {
@@ -779,7 +780,7 @@ export class ThreadManager {
 		return manifestFor(this.worktrees(), resolved)?.projectCwd ?? resolved;
 	}
 
-	start(params: ParamsOf<"thread/start">, by: Subscriber): Promise<ResultOf<"thread/start">> {
+	start(params: ParamsOf<"thread/start">, by: Subscriber): Promise<Commit<ResultOf<"thread/start">>> {
 		return this.track(async () => {
 			const cwd = resolvePath(params.cwd);
 			const stats = await stat(cwd).catch(() => undefined);
@@ -850,7 +851,13 @@ export class ThreadManager {
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });
-			return { thread: summary, warnings: [...warnings, ...thread.loadWarnings] };
+			// `ui` is read as the response is written: a change an extension makes before the send is in it, and
+			// one after it arrives as a notification after the response (D2).
+			return commitOnSend(() => ({
+				thread: summary,
+				warnings: [...warnings, ...thread.loadWarnings],
+				ui: thread.ui.snapshot(),
+			}));
 		});
 	}
 
@@ -865,15 +872,18 @@ export class ThreadManager {
 			// An unload or archive may have taken the thread between the load and this answer (§5.6).
 			if (thread.state !== "ready") throw new AppServerError("threadNotFound", `thread was closed: ${threadId}`);
 			const summary = thread.toThread();
+			const ui = thread.ui.snapshot();
 			const history = this.history(
 				summary,
 				thread.session.sessionManager.getBranch(),
 				cursor,
 				thread.mapper?.wireSnapshot(),
+				ui,
 			);
 			this.subscribe(thread, by);
 			return {
 				thread: summary,
+				ui,
 				...history,
 				queue: queueOf(thread),
 				usage: usageOf(thread.session),
@@ -897,8 +907,9 @@ export class ThreadManager {
 		entries: readonly SessionEntry[],
 		cursor?: string,
 		runningTurn?: WireTurn,
+		ui?: UiSnapshot,
 	): HistoryPage {
-		return pageHistory({ thread, entries, cursor, runningTurn }, this.payloads);
+		return pageHistory({ thread, entries, cursor, runningTurn, ui }, this.payloads);
 	}
 
 	/** Read-only active-branch reconstruction: no live lock and no transcript repair. */
@@ -1103,7 +1114,7 @@ export class ThreadManager {
 		atItemId: string | undefined,
 		workspace: ParamsOf<"thread/fork">["workspace"],
 		by: Subscriber,
-	): Promise<ResultOf<"thread/fork">> {
+	): Promise<Commit<ResultOf<"thread/fork">>> {
 		return this.track(async () => {
 			const live = this.threads.get(threadId);
 			const source = live?.file ?? (await this.files.find(threadId));
@@ -1197,7 +1208,13 @@ export class ThreadManager {
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });
-			return { thread: summary, warnings: [...warnings, ...thread.loadWarnings] };
+			// `ui` is read as the response is written: a change an extension makes before the send is in it, and
+			// one after it arrives as a notification after the response (D2).
+			return commitOnSend(() => ({
+				thread: summary,
+				warnings: [...warnings, ...thread.loadWarnings],
+				ui: thread.ui.snapshot(),
+			}));
 		});
 	}
 
@@ -2055,7 +2072,19 @@ export class ThreadManager {
 			commandContextActions: {
 				waitForIdle: () => session.waitForIdle(),
 				navigateTree: (targetId, options) => session.navigateTree(targetId, options),
-				reload: () => session.reload(),
+				reload: async () => {
+					// The old runner is invalidated early in reload (agent-session.ts:3898) and settings and resources
+					// load after it, so a press in between must not reach its handlers: they are dropped at once.
+					thread.ui.handlers.clear();
+					try {
+						// After the outgoing extensions' session_shutdown, before the new ones' session_start (D16).
+						await session.reload({ beforeSessionStart: () => thread.ui.clear(thread) });
+					} catch (error) {
+						// A failed reload never reaches beforeSessionStart; the old extensions are gone, so is their UI.
+						thread.ui.clear(thread);
+						throw error;
+					}
+				},
 				newSession: async (options) => {
 					const signal = thread.dispatching?.signal;
 					if (
@@ -2373,6 +2402,13 @@ export class ThreadManager {
 			"thread/unsubscribe": async ({ threadId }, connection) => ({
 				status: this.unsubscribe(threadId, connection) ? "unsubscribed" : "notSubscribed",
 			}),
+			// An unloaded thread has no widgets to press: `get` answers threadNotFound, also while it closes (every
+			// close takes it out of `threads` first), so a closing session's handlers hear nothing.
+			"ui/event": async ({ threadId, ...event }) => {
+				const thread = this.get(threadId);
+				thread.ui.dispatch(thread, event);
+				return {};
+			},
 		};
 	}
 }

@@ -439,7 +439,25 @@ export function rowLabel(item: ToolItem, cwd: string, open = false): RowLabel {
 /** Whether a row opens: reads, searches, listings and web searches show their output only when they failed. */
 export function expandable(item: ToolItem): boolean {
 	const kind = kindOfItem(item);
-	return (kind !== "explore" && kind !== "web") || item.status === "failed" || item.status === "declined";
+	return (
+		item.view !== undefined ||
+		(kind !== "explore" && kind !== "web") ||
+		item.status === "failed" ||
+		item.status === "declined"
+	);
+}
+
+/**
+ * What an open row shows. A tool's view wins over the cards picked by name: an extension may override a built-in
+ * such as `bash`, and the name alone cannot tell.
+ */
+export function toolBody(item: ToolItem): "view" | "command" | "edit" | "question" | "plan" | "output" {
+	if (item.view) return "view";
+	const kind = kindOf(item.tool);
+	if (kind === "command") return "command";
+	if (kind === "edit" && patchOf(item)) return "edit";
+	if (kind === "question" || kind === "plan") return kind;
+	return "output";
 }
 
 // --- grouping and the live view ---------------------------------------------------------------------------------

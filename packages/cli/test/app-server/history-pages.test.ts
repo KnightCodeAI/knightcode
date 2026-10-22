@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ThreadSummary, WireTurn } from "@knightcode/app-server-protocol";
+import type { ThreadSummary, UiSnapshot, WireTurn } from "@knightcode/app-server-protocol";
 import { afterAll, expect, test } from "vitest";
 import {
 	pageHistory,
@@ -95,6 +95,22 @@ test("a byte-limited page takes as many inline turns as fit, and no more", () =>
 	// The next older turn would not have fit.
 	expect(bytes + 60_000).toBeGreaterThan(MAX_HISTORY_RESPONSE_BYTES);
 	expect(page.turns.at(-1)?.id).toBe("m29");
+});
+
+test("a resume's extension UI counts in the page budget", () => {
+	entries.length = 0;
+	for (let i = 0; i < 30; i++) add(i, "x".repeat(60_000));
+	const ui: UiSnapshot = {
+		statuses: [],
+		workingVisible: true,
+		widgets: [{ key: "big", placement: "aboveEditor", lines: ["y".repeat(300 * 1024)] }],
+	};
+	const without = pageHistory({ thread, entries }, store);
+	const page = pageHistory({ thread, entries, ui }, store);
+	expect(page.turns.length).toBeLessThan(without.turns.length);
+	expect(
+		Buffer.byteLength(JSON.stringify({ thread, ui, ...page })) + HISTORY_ENVELOPE_RESERVE_BYTES,
+	).toBeLessThanOrEqual(MAX_HISTORY_RESPONSE_BYTES);
 });
 
 test("a rejected turn's payload reference is released", () => {

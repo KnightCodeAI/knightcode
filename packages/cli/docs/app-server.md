@@ -63,7 +63,8 @@ Start a thread with its project directory:
 ```
 
 Wait for each response. `thread/start` and `thread/fork` return
-`{thread, warnings}`. A fork is named after its source with ` (fork)` appended. `thread/resume` also returns warnings; render them from the
+`{thread, warnings, ui}` (`ui` is the thread's extension UI, see
+[Dialogs and extension UI](#dialogs-and-extension-ui)). A fork is named after its source with ` (fork)` appended. `thread/resume` also returns warnings; render them from the
 response, because they can occur before subscription. A warning has
 `{message, source, path?, line?, column?}`, where `source` is `settings`,
 `extension`, `trust`, or `server`. Malformed settings, refused extension loads,
@@ -205,9 +206,9 @@ Desktop OS notifications are for live outcomes, not initial history.
 `thread/resume` returns history and subscribes in the same synchronous send step.
 Its separate `runningTurn` is a current snapshot, even when an old history cursor
 is supplied. Its required `queue` and `usage` are also live send-time snapshots,
-not values from handler entry or the history cursor. Buffer queue/usage events
-while awaiting the response, install the snapshots (an empty queue clears stale
-state), then replay the buffered events. Invalid cursors subscribe nobody.
+not values from handler entry or the history cursor; so is `ui`. Buffer
+queue/usage/`ui/*` events while awaiting the response, install the snapshots (an
+empty queue clears stale state), then replay the buffered events. Invalid cursors subscribe nobody.
 Install `runningTurn` before applying buffered deltas. `thread/replaced` moves
 subscriptions to the new thread; captured old extension contexts become stale.
 `thread/unsubscribe` returns `{status: "unsubscribed" | "notSubscribed"}`.
@@ -285,7 +286,7 @@ The most recent initiating subscriber is asked first. Disconnect or unsubscribe
 cancels that attempt and migrates it to another subscriber; no subscribers means
 cancel. `serverRequest/cancelled` withdraws an outstanding request.
 
-## Dialogs
+## Dialogs and extension UI
 
 What KnightCode asks the user mid-turn reaches a desktop connection as a server
 request, asked the way approvals are; the thread reports `waitingOn: ["dialog"]`
@@ -307,9 +308,40 @@ risky call and plan mode's review. `kind` says which: a select carries
 `{"confirmed": true}` for a confirm, or `{}` to cancel.
 
 Notices such as "Downloaded model" arrive as the notification `ui/notify` with
-a `level` of `info`, `warning` or `error`. Widgets, status, header, footer
-and custom components draw only in the terminal and do nothing here. Threads a
-terminal-mode connection loads have no dialogs yet.
+a `level` of `info`, `warning` or `error`.
+
+What an extension shows beside the transcript is the thread's extension UI:
+
+- The `ui` of the `thread/start`, `thread/resume` and `thread/fork` results is
+  all of it as it stands when the response is written:
+  `{statuses: [{key, text}], title?, workingMessage?, workingVisible, widgets}`.
+  Statuses are sorted by key. Each widget is `{key, placement, lines}` or
+  `{key, placement, view}`, `placement` being `aboveEditor` or `belowEditor`;
+  those above come first, each group in the order they were last set.
+- `ui/state` carries every field but the widgets, whole, whenever one changes.
+  An absent `title` or `workingMessage` is a cleared one.
+  `workingVisible: false` asks the client to hide its waiting indicator, and
+  `workingMessage` replaces its text.
+- `ui/widget` carries one widget set or replaced (it moves to the end of its
+  placement), or `{threadId, key}` alone when it is removed.
+
+Install `ui` from the result, then apply the notifications, buffered across a
+resume as `queue` is. A `/reload` clears everything the old extensions showed,
+with one `ui/state` and a removal per widget, before the new ones start. The
+server strips ANSI escapes and keeps text on one line, at most 200 code points;
+widget lines keep their spacing. A [view](declarative-views.md) is data, never
+HTML; the server checked it before sending.
+
+A button or field in a widget's view answers with the request `ui/event`
+(below), which reaches every handler the thread's extensions registered with
+`ctx.ui.onViewEvent`. Views on `toolCall` and `extensionMessage` items (their
+optional `view`) are for display only.
+
+Widget factories, `custom()` components, header and footer components, raw
+terminal input and the working indicator draw only in the terminal: the server
+writes one line to its log per method per thread load and draws nothing. Editor
+access (`setEditorText`, `getEditorText`, `pasteToEditor`) does nothing.
+Threads a terminal-mode connection loads have no dialogs or extension UI yet.
 
 ## Workspaces, diffs and git
 
@@ -544,6 +576,24 @@ and nothing is written. Built-in commands that only work in the terminal
 {"id":17,"method":"command/list","params":{"cwd":"/path/to/project"}}
 ```
 
+### `ui/event`
+
+Params: `{threadId, widgetKey, id, value?}`. Result: `{}`. A press of the button
+`id`, or a change of the field `id`, in the widget `widgetKey`'s view: `value` is
+a string for a text or select field, a boolean for a toggle, and absent for a
+button. Every handler of the thread gets `{widgetKey, id, value?}`; a handler
+that fails becomes a `warning`. The extension answers by setting the widget
+again: a field shows the view's value, not what was typed. A press of a widget or
+control that is gone answers `{}` and reaches nobody.
+
+Errors: `threadNotFound` when the thread is not loaded, and `invalidParams` when
+the value does not fit the control (a toggle's string, a select value outside its
+options, a button with a value).
+
+```json
+{"id":18,"method":"ui/event","params":{"threadId":"THREAD_ID","widgetKey":"checks","id":"verbose","value":true}}
+```
+
 ### `thread/delete`
 
 Params: `{threadId}`. Result: `{}`. Permanently removes an archived transcript;
@@ -741,6 +791,14 @@ Limits count UTF-8 bytes:
 - 1 MiB per history/list response, including envelope reserve.
 - 64 KiB per inline turn/item; larger values use references.
 - 48 KiB per payload chunk before base64 encoding.
+- 64 KiB per view in a tool result or an extension message, as serialized JSON;
+  a larger or invalid view is dropped and the raw output or text shows.
+- 16 KiB per widget (its lines or view), 16 widgets and 50 statuses per thread;
+  status and widget keys of 1 to 128 characters; status text, title and working
+  message cut to 200 code points. A refused widget or status gives one
+  `warning` per key per load (a load warning when it happened while the thread
+  loaded).
+- Views nest stacks and lists at most 8 levels deep.
 
 The in-repository `AppServerClient` supports typed `request`, `onNotification`,
 `onRequest`, `readPayload`, `resolveTurn`, and `resolveItem` calls. Its
