@@ -614,4 +614,29 @@ describe("checkView", () => {
 		}
 		expect(refused(new Shaped())).toMatch(/not a valid view/);
 	});
+
+	test("removes escape sequences and control characters from every string, keeping tabs and newlines", () => {
+		const dirty = "\u001b[31mred\u001b[0m \u001b]0;title\u0007\u001b[2J\u001b[10Aa\rb\u009b31m\u0000\tc\nd";
+		const result = checkView({
+			type: "stack",
+			children: [
+				{ type: "text", text: dirty },
+				{ type: "table", columns: [dirty], rows: [[dirty]] },
+				{ type: "field", id: "s", kind: "select", label: dirty, value: dirty, options: [dirty] },
+			],
+		});
+		const clean = "red ab\tc\nd";
+		expect(result).toEqual({
+			view: {
+				type: "stack",
+				children: [
+					{ type: "text", text: clean },
+					{ type: "table", columns: [clean], rows: [[clean]] },
+					{ type: "field", id: "s", kind: "select", label: clean, value: clean, options: [clean] },
+				],
+			},
+		});
+		// An id made only of escapes is empty once cleaned, so the schema refuses it.
+		expect(refused({ type: "button", id: "\u001b[0m", label: "x" })).toMatch(/not a valid view/);
+	});
 });

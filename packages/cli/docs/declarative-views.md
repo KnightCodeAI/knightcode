@@ -49,6 +49,10 @@ The view is copied through JSON when it is used, so a getter, a `toJSON` or a
 change you make to the object later does not change what was drawn. Call
 `setWidget` again to change a widget.
 
+Terminal escape sequences and control characters other than tab and newline
+are removed from every string of the copy, so colour a view with `tone`, not
+ANSI codes.
+
 A thread shows at most 16 widgets and 50 statuses, with keys of 1 to 128
 characters. Status text, the title and the working message are cut to 200
 characters and kept on one line.

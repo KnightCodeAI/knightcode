@@ -65,6 +65,14 @@ export const VIEW_MAX_DEPTH = 8;
 
 const validator = Compile(View);
 
+/**
+ * What a terminal acts on instead of drawing: OSC sequences up to their terminator, CSI sequences to their final
+ * byte, and control characters other than tab and newline. Views carry `tone`, not escapes; both clients draw the
+ * same text.
+ */
+const ESCAPES =
+	/\u001B\][\s\S]*?(?:\u0007|\u001B\\|\u009C|$)|[\u001B\u009B][[\]()#;?]*(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]|[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
+
 /** Deeper than VIEW_MAX_DEPTH. Bounded recursion: it stops one level past the limit. */
 function tooDeep(value: unknown, level: number): boolean {
 	if (level > VIEW_MAX_DEPTH) return true;
@@ -113,7 +121,10 @@ function ruleError(view: View, ids: Set<string>): string | undefined {
 	}
 }
 
-/** A copy of `value`, made through JSON and checked against every rule, or why it was refused. Never throws. */
+/**
+ * A copy of `value`, made through JSON with escapes removed from its strings and checked against every rule, or why
+ * it was refused. Never throws.
+ */
 export function checkView(value: unknown, maxBytes = VIEW_MAX_BYTES): { view: View } | { error: string } {
 	let json: string | undefined;
 	try {
@@ -124,7 +135,9 @@ export function checkView(value: unknown, maxBytes = VIEW_MAX_BYTES): { view: Vi
 	if (typeof json !== "string") return { error: "the view has no JSON form" };
 	const bytes = new TextEncoder().encode(json).length;
 	if (bytes > maxBytes) return { error: `the view is ${bytes} bytes, over ${maxBytes} bytes` };
-	const copy: unknown = JSON.parse(json);
+	const copy: unknown = JSON.parse(json, (_key, value) =>
+		typeof value === "string" ? value.replace(ESCAPES, "") : value,
+	);
 	if (tooDeep(copy, 1)) return { error: `the view nests more than ${VIEW_MAX_DEPTH} levels of stacks and lists` };
 	if (!validator.Check(copy)) {
 		const [first] = validator.Errors(copy);
