@@ -249,7 +249,6 @@ async function executeGondolinGrep(
 	const contextLines = params.context && params.context > 0 ? params.context : 0;
 	const effectiveLimit = Math.max(1, params.limit ?? DEFAULT_GREP_LIMIT);
 	const outputLines: string[] = [];
-	const details: GrepToolDetails = {};
 	let matchCount = 0;
 	let matchLimitReached = false;
 	let linesTruncated = false;
@@ -285,12 +284,14 @@ async function executeGondolinGrep(
 		signal,
 	);
 
-	if (matchCount === 0) return { content: [{ type: "text", text: "No matches found" }], details: undefined };
+	if (matchCount === 0) return { content: [{ type: "text", text: "No matches found" }], details: { matchCount: 0 } };
 
 	const rawOutput = outputLines.join("\n");
 	const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 	const notices: string[] = [];
 	let output = truncation.content;
+	// The renderer counts output lines when this is missing, and context lines are not matches.
+	const details: GrepToolDetails = { matchCount };
 
 	if (matchLimitReached) {
 		details.matchLimitReached = effectiveLimit;
@@ -306,10 +307,7 @@ async function executeGondolinGrep(
 	}
 	if (notices.length > 0) output += `\n\n[${notices.join(". ")}]`;
 
-	return {
-		content: [{ type: "text", text: output }],
-		details: Object.keys(details).length > 0 ? details : undefined,
-	};
+	return { content: [{ type: "text", text: output }], details };
 }
 
 function sanitizeEnv(env: NodeJS.ProcessEnv | undefined): Record<string, string> | undefined {
