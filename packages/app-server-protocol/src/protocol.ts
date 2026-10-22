@@ -8,6 +8,7 @@
  */
 
 import { type Static, type TSchema, Type } from "typebox";
+import { View } from "./view.ts";
 
 function Obj<P extends Record<string, TSchema>>(properties: P) {
 	return Type.Object(properties, { additionalProperties: false });
@@ -338,9 +339,19 @@ export const Item = Type.Union([
 		parentItemId: Type.Optional(Str),
 		/** Set on completion for `edit` and `write`; part of the call, so it has no position of its own (§4.2). */
 		fileChanges: Type.Optional(Type.Array(FileChange)),
+		/** The result's `details.view` (§8.2), drawn in place of the raw output. */
+		view: Type.Optional(View),
 	}),
 	Obj({ type: Type.Literal("compaction"), id: Str, summary: Str, ...Times }),
-	Obj({ type: Type.Literal("extensionMessage"), id: Str, extension: Str, text: Str, ...Times }),
+	Obj({
+		type: Type.Literal("extensionMessage"),
+		id: Str,
+		extension: Str,
+		text: Str,
+		/** The message's `details.view` (§8.2), drawn in place of the text. */
+		view: Type.Optional(View),
+		...Times,
+	}),
 ]);
 export type Item = Static<typeof Item>;
 
@@ -527,6 +538,25 @@ const QueueEntry = Obj({ id: Str, text: Str, attachments: Type.Optional(Num) });
 export const TurnQueue = Obj({ steering: Type.Array(Str), followUp: Type.Array(QueueEntry) });
 export type TurnQueue = Static<typeof TurnQueue>;
 
+const WidgetPlacement = Type.Union([Type.Literal("aboveEditor"), Type.Literal("belowEditor")]);
+/** A status or widget key; the server refuses longer ones (§8.1). */
+const UiKey = Type.String({ minLength: 1, maxLength: 128 });
+/** Sorted by key, as the terminal footer shows them. */
+const UiStateFields = {
+	statuses: Type.Array(Obj({ key: UiKey, text: Str })),
+	title: Type.Optional(Str),
+	workingMessage: Type.Optional(Str),
+	workingVisible: Bool,
+};
+export const Widget = Type.Union([
+	Obj({ key: UiKey, placement: WidgetPlacement, lines: Type.Array(Str) }),
+	Obj({ key: UiKey, placement: WidgetPlacement, view: View }),
+]);
+export type Widget = Static<typeof Widget>;
+/** A thread's extension UI as it stands; `widgets` in display order within each placement. */
+export const UiSnapshot = Obj({ ...UiStateFields, widgets: Type.Array(Widget) });
+export type UiSnapshot = Static<typeof UiSnapshot>;
+
 export const ClientRequests = {
 	initialize: {
 		params: Obj({
@@ -549,12 +579,13 @@ export const ClientRequests = {
 			model: Type.Optional(ModelSelector),
 			thinkingLevel: Type.Optional(ThinkingLevel),
 		}),
-		result: Obj({ thread: Thread, warnings: Type.Array(Warning) }),
+		result: Obj({ thread: Thread, warnings: Type.Array(Warning), ui: UiSnapshot }),
 	},
 	"thread/resume": {
 		params: Obj({ threadId: Str, cursor: Type.Optional(Str) }),
 		result: Obj({
 			thread: Thread,
+			ui: UiSnapshot,
 			queue: TurnQueue,
 			usage: TokenUsage,
 			warnings: Type.Array(Warning),
@@ -570,7 +601,7 @@ export const ClientRequests = {
 			/** Absent: the fork shares the source's workspace. */
 			workspace: Type.Optional(Obj({ mode: Type.Literal("worktree") })),
 		}),
-		result: Obj({ thread: Thread, warnings: Type.Array(Warning) }),
+		result: Obj({ thread: Thread, warnings: Type.Array(Warning), ui: UiSnapshot }),
 	},
 	"thread/handoff": {
 		params: Obj({
@@ -895,6 +926,17 @@ export const ClientRequests = {
 	"account/login/answer": { params: Obj({ loginId: Str, value: Str }), result: Empty },
 	"account/login/cancel": { params: Obj({ loginId: Str }), result: Empty },
 	"account/logout": { params: Obj({ provider: Str }), result: Empty },
+	/** A press of a button, or a change of a field, in a widget view (§8.2). */
+	"ui/event": {
+		params: Obj({
+			threadId: Str,
+			widgetKey: UiKey,
+			id: Str,
+			/** A field's new value; absent for a button. Unbounded here: a select option or text value may be long. */
+			value: Type.Optional(Type.Union([Str, Bool])),
+		}),
+		result: Empty,
+	},
 } as const;
 
 export const ClientNotifications = { initialized: Empty } as const;
@@ -946,6 +988,14 @@ export const ServerNotifications = {
 		message: Str,
 		level: Type.Union([Type.Literal("info"), Type.Literal("warning"), Type.Literal("error")]),
 	}),
+	/** A thread's extension statuses, title and working row, whole (§8.1). */
+	"ui/state": Obj({ threadId: Str, ...UiStateFields }),
+	/** A widget set or replaced; neither `lines` nor `view`: removed. */
+	"ui/widget": Type.Union([
+		Obj({ threadId: Str, key: UiKey, placement: WidgetPlacement, lines: Type.Array(Str) }),
+		Obj({ threadId: Str, key: UiKey, placement: WidgetPlacement, view: View }),
+		Obj({ threadId: Str, key: UiKey }),
+	]),
 	"account/login/updated": LoginState,
 	"account/updated": Obj({ provider: Str, authenticated: Bool }),
 	warning: Obj({ ...WarningFields, threadId: Type.Optional(Str) }),

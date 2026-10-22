@@ -5,13 +5,20 @@ import type { Static, TSchema } from "typebox";
 import { Compile } from "typebox/compile";
 import { describe, expect, test } from "vitest";
 import {
+	checkView,
 	ClientNotifications,
 	ClientRequests,
+	Item,
 	schemaDocument,
 	ServerNotifications,
 	GitConflictReason,
 	ServerRequests,
 	type ThinkingLevel,
+	UiSnapshot,
+	type View,
+	View as ViewSchema,
+	VIEW_MAX_DEPTH,
+	WIDGET_MAX_BYTES,
 } from "../src/index.ts";
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
@@ -74,6 +81,17 @@ const turn = { id: "m1", threadId: "t1", status: "completed", startedAt: 1, comp
 const item = { type: "agentMessage", id: "m1:0:0", text: "hi", startedAt: 1, completedAt: 2 };
 const usage = { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 15, contextWindow: 1000 };
 const login = { status: "pending", loginId: "l1", events: [] };
+const table = { type: "table", columns: ["test", "result"], rows: [["parser", "failed"]] };
+const ui = {
+	statuses: [{ key: "tests", text: "✓ 42 passed" }],
+	title: "watching",
+	workingMessage: "Running tests",
+	workingVisible: true,
+	widgets: [
+		{ key: "tests", placement: "aboveEditor", lines: ["2 failing"] },
+		{ key: "checks", placement: "belowEditor", view: { type: "button", id: "reset", label: "Reset" } },
+	],
+};
 
 // One valid example per message. A message without an example fails the coverage test below.
 const requestParams: Record<string, unknown> = {
@@ -156,6 +174,7 @@ const requestParams: Record<string, unknown> = {
 	"account/login/answer": { loginId: "l1", value: "code" },
 	"account/login/cancel": { loginId: "l1" },
 	"account/logout": { provider: "anthropic" },
+	"ui/event": { threadId: "t1", widgetKey: "checks", id: "verbose", value: true },
 };
 const requestResults: Record<string, unknown> = {
 	initialize: {
@@ -174,16 +193,17 @@ const requestResults: Record<string, unknown> = {
 		listingFilesOpened: 0,
 		listingBytesScanned: 0,
 	},
-	"thread/start": { thread, warnings: [] },
+	"thread/start": { thread, warnings: [], ui },
 	"thread/resume": {
 		thread,
+		ui,
 		turns: [turn],
 		queue: { steering: [], followUp: [] },
 		usage,
 		warnings: [],
 		nextCursor: "opaque-history-anchor",
 	},
-	"thread/fork": { thread: worktreeThread, warnings: [] },
+	"thread/fork": { thread: worktreeThread, warnings: [], ui },
 	"thread/handoff": { thread, branch: "kc/fix-it", warnings: [] },
 	"thread/worktree/restore": { thread: worktreeThread },
 	"worktree/list": {
@@ -325,6 +345,7 @@ const requestResults: Record<string, unknown> = {
 	"account/login/answer": {},
 	"account/login/cancel": {},
 	"account/logout": {},
+	"ui/event": {},
 };
 const notificationParams: Record<string, unknown> = {
 	initialized: {},
@@ -365,6 +386,14 @@ const notificationParams: Record<string, unknown> = {
 	},
 	"serverRequest/cancelled": { id: 3 },
 	"ui/notify": { threadId: "t1", message: "Downloaded model", level: "info" },
+	"ui/state": {
+		threadId: "t1",
+		statuses: [{ key: "tests", text: "✓ 42 passed" }],
+		title: "watching",
+		workingMessage: "Running tests",
+		workingVisible: false,
+	},
+	"ui/widget": { threadId: "t1", key: "tests", placement: "aboveEditor", lines: ["2 failing"] },
 	"account/login/updated": login,
 	"account/updated": { provider: "anthropic", authenticated: true },
 	warning: { message: "bad settings", source: "settings", path: "/p/settings.json", line: 3, column: 5 },
@@ -482,8 +511,107 @@ describe("app server protocol", () => {
 		);
 	});
 
+	test("extension UI messages accept every shape and reject malformed ones", () => {
+		const widget = Compile(ServerNotifications["ui/widget"]);
+		expect(widget.Check({ threadId: "t1", key: "a", placement: "belowEditor", view: table })).toBe(true);
+		expect(widget.Check({ threadId: "t1", key: "a" })).toBe(true);
+		expect(widget.Check({ threadId: "t1", key: "a", placement: "aboveEditor", lines: ["x"], view: table })).toBe(false);
+		expect(widget.Check({ threadId: "t1", key: "", placement: "aboveEditor", lines: [] })).toBe(false);
+		const event = Compile(ClientRequests["ui/event"].params);
+		expect(event.Check({ threadId: "t1", widgetKey: "checks", id: "reset" })).toBe(true);
+		expect(event.Check({ threadId: "t1", id: "reset" })).toBe(false);
+		expect(Compile(UiSnapshot).Check({ ...ui, widgets: [{ key: "a", placement: "aboveEditor" }] })).toBe(false);
+		const items = Compile(Item);
+		const toolCall = { type: "toolCall", id: "c1", tool: "check", input: {}, status: "completed", output: [] };
+		expect(items.Check({ ...toolCall, view: table })).toBe(true);
+		expect(items.Check({ ...toolCall, view: { type: "script", text: "x" } })).toBe(false);
+		const message = { type: "extensionMessage", id: "e1", extension: "checks", text: "done" };
+		expect(items.Check({ ...message, view: { type: "markdown", markdown: "**done**" } })).toBe(true);
+		expect(items.Check({ ...message, view: { type: "text", text: "x", html: "<b>x</b>" } })).toBe(false);
+		expect(items.Check({ ...message, view: { type: "button", label: "Go" } })).toBe(false);
+	});
+
 	test("the generated JSON Schema is up to date", () => {
 		const path = join(import.meta.dirname, "../../cli/docs/app-server.schema.json");
 		expect(readFileSync(path, "utf8")).toBe(`${JSON.stringify(schemaDocument(), null, "\t")}\n`);
+	});
+});
+
+describe("checkView", () => {
+	const every: View = {
+		type: "stack",
+		children: [
+			{ type: "text", text: "hi", tone: "success" },
+			{ type: "markdown", markdown: "**b**" },
+			{
+				type: "stack",
+				direction: "horizontal",
+				children: [
+					{ type: "list", items: [{ type: "text", text: "one" }] },
+					{ type: "table", columns: ["a", "b"], rows: [["1", "2"]] },
+					{ type: "progress", value: 150, max: 100, label: "tests" },
+				],
+			},
+			{ type: "button", id: "go", label: "Go" },
+			{ type: "field", id: "name", kind: "text", label: "Name", value: "x" },
+			{ type: "field", id: "on", kind: "toggle", label: "On", value: true },
+			{ type: "field", id: "pick", kind: "select", label: "Pick", value: "b", options: ["a", "b"] },
+		],
+	};
+	const refused = (value: unknown, maxBytes?: number) => {
+		const result = checkView(value, maxBytes);
+		expect("error" in result, JSON.stringify(result).slice(0, 200)).toBe(true);
+		return "error" in result ? result.error : "";
+	};
+	const nest = (depth: number): unknown => {
+		let view: unknown = { type: "text", text: "x" };
+		for (let i = 1; i < depth; i++) view = { type: "stack", children: [view] };
+		return view;
+	};
+
+	test("accepts every node type nested and returns a copy", () => {
+		const result = checkView(every);
+		expect(result).toEqual({ view: every });
+		expect("view" in result && result.view).not.toBe(every);
+		expect(Compile(ViewSchema).Check(every)).toBe(true);
+	});
+
+	test("refuses what cannot be copied without throwing", () => {
+		const cyclic: { type: string; items: unknown[] } = { type: "list", items: [] };
+		cyclic.items.push(cyclic);
+		expect(refused(cyclic)).toMatch(/JSON/);
+		let deep: unknown = { type: "text", text: "x" };
+		for (let i = 0; i < 200_000; i++) deep = { type: "list", items: [deep] };
+		expect(refused(deep)).toMatch(/JSON/);
+		expect(refused(undefined)).toMatch(/JSON/);
+		expect(refused(() => {})).toMatch(/JSON/);
+	});
+
+	test("refuses each rule with its own message", () => {
+		const big = (bytes: number) => ({ type: "markdown", markdown: "x".repeat(bytes) });
+		expect(refused(big(70 * 1024))).toMatch(/65536 bytes/);
+		expect(refused(big(17 * 1024), WIDGET_MAX_BYTES)).toMatch(/16384 bytes/);
+		expect(checkView(nest(VIEW_MAX_DEPTH))).toHaveProperty("view");
+		expect(refused(nest(VIEW_MAX_DEPTH + 1))).toMatch(/levels/);
+		expect(refused({ type: "text", text: "x", html: "<b>" })).toMatch(/not a valid view/);
+		const field = { type: "field", id: "a", kind: "text", label: "A", value: "" };
+		expect(refused({ type: "stack", children: [field, field] })).toMatch(/"a" is used twice/);
+		expect(refused({ type: "table", columns: ["a", "b", "c"], rows: [["1", "2"]] })).toMatch(/2 cells for 3 columns/);
+		expect(refused({ ...field, kind: "toggle", value: "on" })).toMatch(/toggle/);
+		expect(refused({ ...field, kind: "text", value: true })).toMatch(/string/);
+		expect(refused({ ...field, kind: "select", value: "c", options: ["a", "b"] })).toMatch(/not one of its options/);
+		expect(refused({ ...field, kind: "select", value: "a" })).toMatch(/options/);
+		expect(refused({ ...field, kind: "text", options: ["a"] })).toMatch(/options/);
+	});
+
+	test("checks the JSON copy, not the object", () => {
+		class Shaped {
+			type = "text";
+			text = "x";
+			toJSON() {
+				return { type: "stack", children: null };
+			}
+		}
+		expect(refused(new Shaped())).toMatch(/not a valid view/);
 	});
 });
