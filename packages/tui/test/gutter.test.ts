@@ -4,6 +4,7 @@ import { Gutter } from "../src/components/gutter.ts";
 import { Text } from "../src/components/text.ts";
 import { encodeKitty } from "../src/terminal-image.ts";
 import type { Component } from "../src/tui.ts";
+import { visibleWidth } from "../src/utils.ts";
 
 function trimmed(lines: string[]): string[] {
 	return lines.map((line) => line.trimEnd());
@@ -20,6 +21,21 @@ describe("Gutter", () => {
 		const lines = gutter.render(10);
 		assert.deepStrictEqual(trimmed(lines), ["  ⎿  abcde", "     fghij"]);
 		for (const line of lines) assert.strictEqual(line.length, 10);
+	});
+
+	it("never renders wider than the width when the prefix leaves no room", () => {
+		// Nested list bullets in a narrow terminal: each level takes two columns.
+		let component: Component = new Text("deep leaf text", 0, 0);
+		for (let i = 0; i < 7; i++) component = new Gutter(component, "• ", "  ");
+		for (const width of [1, 2, 5, 10, 13, 14, 15, 20]) {
+			for (const line of component.render(width)) assert.ok(visibleWidth(line) <= width, `${width}: ${line}`);
+		}
+		// With room left, nothing is cut: the child wraps as before.
+		assert.deepStrictEqual(trimmed(component.render(20)), [
+			"• • • • • • • deep",
+			"              leaf",
+			"              text",
+		]);
 	});
 
 	it("renders nothing when the child renders nothing", () => {

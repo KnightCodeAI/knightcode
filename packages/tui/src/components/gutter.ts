@@ -1,6 +1,6 @@
 import { isImageLine } from "../terminal-image.ts";
 import { type Component, dispatchMouseEvent, type TuiMouseDispatchResult, type TuiMouseEvent } from "../tui.ts";
-import { visibleWidth } from "../utils.ts";
+import { truncateToWidth, visibleWidth } from "../utils.ts";
 
 /**
  * Gutter component - prefixes every line of a single child with a left gutter.
@@ -58,6 +58,8 @@ export class Gutter implements Component {
 
 	render(width: number): string[] {
 		const contentWidth = Math.max(1, width - this.gutterWidth);
+		// No room left beside the prefix: the child still gets one column, so cut each line back to the width.
+		const squeezed = this.gutterWidth + contentWidth > width;
 		const childLines = this.child.render(contentWidth);
 		if (childLines.length === 0) {
 			return [];
@@ -70,7 +72,8 @@ export class Gutter implements Component {
 				lines.push(line);
 				continue;
 			}
-			lines.push((i === 0 ? this.firstPrefix : this.restPrefix) + line);
+			const prefixed = (i === 0 ? this.firstPrefix : this.restPrefix) + line;
+			lines.push(squeezed ? truncateToWidth(prefixed, width, "") : prefixed);
 		}
 		return lines;
 	}
