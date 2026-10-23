@@ -201,7 +201,8 @@ export class McpAppBridge {
 			locale: navigator.language,
 			timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 			platform: "desktop",
-			toolInfo: { id: this.item.id, tool: { name: this.item.tool } },
+			// An MCP Tool needs an input schema; the server's own is not at hand here, so the spec's minimal one.
+			toolInfo: { id: this.item.id, tool: { name: this.item.tool, inputSchema: { type: "object" } } },
 		};
 	}
 
