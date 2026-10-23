@@ -94,6 +94,13 @@ jobs:
 
       # Ad hoc signed until a Developer ID exists (forge.config.ts); a broken
       # signature would only surface as Gatekeeper's "damaged" on a user's Mac.
+      - name: Trial check, the packaged spawn-helper is executable
+        if: matrix.platform == 'darwin'
+        run: |
+          helper=$(find apps/desktop/out -path '*app.asar.unpacked/node_modules/node-pty/prebuilds/*/spawn-helper' | head -1)
+          ls -l "$helper"
+          test -x "$helper"
+
       - name: Verify the signature
         if: matrix.platform == 'darwin'
         run: codesign --verify --deep --strict --verbose=2 "apps/desktop/out/KnightCode-darwin-${{ matrix.arch }}/KnightCode.app"
