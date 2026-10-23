@@ -7,6 +7,7 @@
 
 import { spawn } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join } from "node:path";
 
 export type TargetKind = "editor" | "terminal" | "fileManager" | "systemDefault";
@@ -236,14 +237,31 @@ const LINUX_TERMINALS: [string, (folder: string) => string[]][] = [
 
 const pathKey = (env: NodeJS.ProcessEnv) => Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
 
-/** A command on PATH: with Windows' PATHEXT for a bare name. */
-export function onPath(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string | undefined {
-	const dirs = (env[pathKey(env)] ?? "").split(platform === "win32" ? ";" : ":").filter(Boolean);
+const pathDirs = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv) =>
+	(env[pathKey(env)] ?? "").split(platform === "win32" ? ";" : ":").filter(Boolean);
+
+/** Names in each PATH directory (lowercased on Windows); a folder that cannot be read lists nothing. */
+type PathIndex = Map<string, Set<string>>;
+
+/**
+ * Each PATH directory read once, without blocking main: detection looks up dozens of names, each across every
+ * directory and PATHEXT extension, which as single lstat calls took 0.7 s on a 74-entry PATH.
+ */
+async function pathIndex(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Promise<PathIndex> {
+	const dirs = pathDirs(platform, env);
+	const lists = await Promise.all(dirs.map((dir) => readdir(dir).catch((): string[] => [])));
+	return new Map(dirs.map((dir, i) => [dir, new Set(platform === "win32" ? lists[i]!.map((n) => n.toLowerCase()) : lists[i])]));
+}
+
+/** A command on PATH: with Windows' PATHEXT for a bare name. `index` skips the names a directory does not hold. */
+export function onPath(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv, index?: PathIndex): string | undefined {
 	const extensions =
 		platform === "win32" && !extname(name) ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
-	for (const dir of dirs)
+	for (const dir of pathDirs(platform, env))
 		for (const extension of extensions) {
-			const candidate = join(dir, `${name}${extension.toLowerCase()}`);
+			const file = `${name}${extension.toLowerCase()}`;
+			if (index && !index.get(dir)?.has(platform === "win32" ? file.toLowerCase() : file)) continue;
+			const candidate = join(dir, file);
 			// lstat: an app execution alias (WindowsApps\wt.exe) is a reparse point that stat and existsSync refuse.
 			const entry = lstatSync(candidate, { throwIfNoEntry: false });
 			if (entry && !entry.isDirectory()) return candidate;
@@ -306,6 +324,7 @@ export async function detectTargets(platform: NodeJS.Platform, env: NodeJS.Proce
 	];
 	const toolbox = join(home, ".local", "share", "JetBrains", "Toolbox", "scripts");
 
+	const index = await pathIndex(platform, env);
 	const targets: OpenInTarget[] = [];
 	const add = (spec: Spec, command: string, args: OpenInTarget["args"], iconPath?: string) =>
 		targets.push({ id: spec.id, name: spec.name, kind: spec.kind ?? "editor", command, args, ...(iconPath ? { iconPath } : {}) });
@@ -326,14 +345,14 @@ export async function detectTargets(platform: NodeJS.Platform, env: NodeJS.Proce
 			targets.push({ id: spec.id, name, kind: spec.kind, command: "", args: () => [] });
 		} else if (platform === "linux" && spec.id === "terminal") {
 			for (const [name, flags] of LINUX_TERMINALS) {
-				const command = onPath(name, platform, env);
+				const command = onPath(name, platform, env, index);
 				if (!command) continue;
 				add(spec, command, (p) => flags(folderOf(p)));
 				break;
 			}
 		} else if (platform === "win32") {
 			if (spec.requires && !existsSync(join(env.SystemRoot ?? "C:\\Windows", "System32", spec.requires))) continue;
-			const fromPath = spec.path?.map((n) => onPath(n, platform, env)).find(Boolean);
+			const fromPath = spec.path?.map((n) => onPath(n, platform, env, index)).find(Boolean);
 			const program =
 				(fromPath && realProgram(fromPath, spec.exe)) ??
 				spec.win?.flatMap((parts) => installRoots.map((root) => under(root, parts))).find(Boolean);
@@ -358,14 +377,14 @@ export async function detectTargets(platform: NodeJS.Platform, env: NodeJS.Proce
 		} else {
 			if (spec.kind === "terminal") continue; // Linux terminals come from LINUX_TERMINALS
 			const command =
-				spec.path?.map((n) => onPath(n, platform, env)).find(Boolean) ??
+				spec.path?.map((n) => onPath(n, platform, env, index)).find(Boolean) ??
 				spec.path?.map((n) => join(toolbox, n)).find((p) => existsSync(p));
 			const entry = spec.desktop
 				?.flatMap((name) => dataDirs.map((dir) => join(dir, "applications", name)))
 				.find((p) => existsSync(p));
 			if (command) run(command);
 			else if (entry) {
-				const gio = onPath("gio", platform, env);
+				const gio = onPath("gio", platform, env, index);
 				// gio passes its arguments as files: only the path:line:column form survives that, not a flag.
 				if (gio) add(spec, gio, (p, l, c) => ["launch", entry, ...(goto === colon ? goto(p, l, c) : [p])]);
 			}
