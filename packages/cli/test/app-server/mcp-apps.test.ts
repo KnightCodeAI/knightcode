@@ -140,6 +140,7 @@ test("a tool's result over 4 MiB answers that it ran, without the result", async
 	const bus: EventBus = {
 		emit: (_channel, data) => {
 			const request = data as McpAppRequest;
+			request.heard();
 			if (request.op !== "readResource") request.reply({ result: answers[request.op] });
 		},
 		on: () => () => {},
@@ -147,4 +148,13 @@ test("a tool's result over 4 MiB answers that it ran, without the result", async
 	expect(await callAppTool(bus, "fullAccess", { threadId: "t", server: "s", name: "big" })).toEqual({
 		content: [{ type: "text", text: "The tool ran; its result was over 4 MiB serialized and was left out." }],
 	});
+});
+
+test("a thread whose MCP extension is off answers mcpUnavailable at once, not after the 60 s wait", async () => {
+	const bus: EventBus = { emit: () => {}, on: () => () => {} };
+	const started = Date.now();
+	await expect(callAppTool(bus, "fullAccess", { threadId: "t", server: "s", name: "x" })).rejects.toMatchObject({
+		code: "mcpUnavailable",
+	});
+	expect(Date.now() - started).toBeLessThan(1000);
 });
