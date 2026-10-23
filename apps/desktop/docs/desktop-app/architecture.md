@@ -1793,8 +1793,9 @@ so a change another local thread in the same checkout made during the
 overlap, or one the user made in an editor, is in the list too. So
 `turn/diff/updated` means "files that changed while this turn ran", and the
 protocol and the desktop UI say so. Exact per-turn attribution needs
-isolation: a worktree thread is the only writer in its worktree, so its
-`files` are its own (apart from edits the user makes in that worktree). Two
+isolation: a worktree thread's `files` are its own (apart from edits the
+user makes in that worktree), unless a second thread was started inside the
+same worktree, whose edits during the overlap it can include. Two
 local threads in one checkout cannot be told apart, and Phase B does not
 try; `fileChanges` on tool calls remains the exact record of what the
 `edit` and `write` tools did.

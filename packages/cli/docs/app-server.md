@@ -372,8 +372,9 @@ file as `{path, additions, deletions}`: the net line totals between the working
 tree before and after the turn. A read-back turn carries the same list as
 `Turn.files`. This
 means "changed while the turn ran", not "changed by the turn": an edit another
-local thread or an editor made meanwhile is in the list too. A worktree thread
-is the only writer in its worktree, so its list is its own. Untracked files
+local thread or an editor made meanwhile is in the list too. A worktree
+thread's list is its own unless another thread runs in the same worktree (a
+start whose `cwd` is inside it), whose edits it can include. Untracked files
 count up to 500; past that, those under a folder holding 200 or more untracked
 files are left out, and if more than 500 still remain before or after the
 turn, only tracked files count.
