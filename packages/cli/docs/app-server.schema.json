@@ -170,6 +170,10 @@
 									},
 									{
 										"type": "string",
+										"const": "fileChanged"
+									},
+									{
+										"type": "string",
 										"const": "internal"
 									}
 								]
@@ -6158,7 +6162,8 @@
 					"path",
 					"size",
 					"binary",
-					"tooLarge"
+					"tooLarge",
+					"mtimeMs"
 				],
 				"properties": {
 					"path": {
@@ -6175,6 +6180,109 @@
 					},
 					"text": {
 						"type": "string"
+					},
+					"mtimeMs": {
+						"type": "number"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"file/list": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"root",
+					"entries",
+					"truncated"
+				],
+				"properties": {
+					"root": {
+						"type": "string"
+					},
+					"entries": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"path",
+								"type"
+							],
+							"properties": {
+								"path": {
+									"type": "string"
+								},
+								"type": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "file"
+										},
+										{
+											"type": "string",
+											"const": "directory"
+										}
+									]
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"truncated": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"file/write": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"path",
+					"text"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"text": {
+						"type": "string",
+						"maxLength": 8388608
+					},
+					"expectedMtimeMs": {
+						"type": "number"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"mtimeMs"
+				],
+				"properties": {
+					"mtimeMs": {
+						"type": "number"
 					}
 				},
 				"additionalProperties": false
