@@ -53,43 +53,62 @@ afterEach(() => {
 });
 
 describe("/tasks view", () => {
-	it("lists running commands first, opens live output, and stops the selected one", async () => {
+	async function twoShells() {
 		const manager = new BackgroundShellManager();
 		const { operations, exits, emits } = controlledOperations();
 		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
 		await bash.execute("c1", { command: "npm test", run_in_background: true });
 		exits[0]?.(1);
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await Promise.all(manager.list().map((shell) => manager.waitForExit(shell.id, 1000)));
 		await bash.execute("c2", { command: "npm run dev", run_in_background: true });
 		emits[1]?.("\x1b[32mready\x1b[0m on http://localhost:3000\n");
+		return { manager, bash, exits, emits };
+	}
 
+	it("lists running commands first, opens their details, and stops the selected one", async () => {
+		const { manager } = await twoShells();
 		let closed = false;
 		const view = new BackgroundTasksComponent(manager, fakeTui(), () => {
 			closed = true;
 		});
 		try {
 			const list = screen(view);
-			expect(list).toContain("Background terminals");
-			expect(list).toContain("1 running · 1 ended");
+			expect(list).toContain("Background tasks");
+			expect(list).toContain("1 active shell");
+			expect(list).toContain("❯ npm run dev (running)");
+			expect(list).toContain("  npm test (error)");
 			expect(list.indexOf("npm run dev")).toBeLessThan(list.indexOf("npm test"));
-			expect(list).toContain("ready on http://localhost:3000");
-			expect(list).toContain("exit 1");
+			expect(list).toContain("↑/↓ to select · Enter to view · x to stop · ←/Esc to close");
+
+			// The cursor stops at the ends rather than wrapping.
+			view.handleInput("\x1b[A");
+			expect(screen(view)).toContain("❯ npm run dev");
+			view.handleInput("\x1b[B");
+			expect(screen(view)).toContain("❯ npm test");
+			expect(screen(view)).not.toContain("x to stop");
+			view.handleInput("\x1b[B");
+			expect(screen(view)).toContain("❯ npm test");
+			view.handleInput("\x1b[A");
 
 			view.handleInput("\r");
 			const detail = screen(view);
-			expect(detail).toContain("Background terminal");
-			expect(detail).toContain("Output: ");
-			expect(detail).toContain("ready on http://localhost:3000");
-			expect(detail).toContain("x stop");
+			expect(detail).toContain("Shell details");
+			expect(detail).toMatch(/Status:\s+running/);
+			expect(detail).toMatch(/Command:\s+npm run dev/);
+			expect(detail).toContain("Output:");
+			expect(detail).toContain("╭");
+			expect(detail).toContain("│ ready on http://localhost:3000");
+			expect(detail).toContain("Showing 1 line");
+			expect(detail).toContain("← to go back · Esc/Enter/Space to close · x to stop");
 
 			view.handleInput("x");
 			const [running] = manager.list().filter((shell) => shell.command === "npm run dev");
 			expect(running?.stoppedBy).toBe("user");
-			expect(screen(view)).toContain("stopping");
+			expect(screen(view)).toMatch(/Status:\s+stopping/);
 
-			view.handleInput("\x1b");
+			view.handleInput("\x1b[D");
 			expect(closed).toBe(false);
-			expect(screen(view)).toContain("1 running · 1 ended");
+			expect(screen(view)).toContain("Background tasks");
 			view.handleInput("\x1b");
 			expect(closed).toBe(true);
 		} finally {
@@ -98,45 +117,69 @@ describe("/tasks view", () => {
 		}
 	});
 
-	it("shows a row above the footer only while commands run", async () => {
+	it("opens on the details of the only command, and going back closes it", async () => {
+		const manager = new BackgroundShellManager();
+		const { operations } = controlledOperations();
+		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
+		await bash.execute("c1", { command: "npm run dev", run_in_background: true });
+		let closed = false;
+		const view = new BackgroundTasksComponent(manager, fakeTui(), () => {
+			closed = true;
+		});
+		try {
+			const detail = screen(view);
+			expect(detail).toContain("Shell details");
+			expect(detail).toContain("No output available");
+			view.handleInput("\x1b[D");
+			expect(closed).toBe(true);
+		} finally {
+			view.dispose();
+			manager.dispose();
+		}
+	});
+
+	it("shows the shells pill only while commands run, inverted when selected", async () => {
 		const manager = new BackgroundShellManager();
 		const { operations, exits } = controlledOperations();
 		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
-		const indicator = new BackgroundShellsIndicator(() => manager);
-		expect(indicator.render(80)).toEqual([]);
+		const pill = new BackgroundShellsIndicator(() => manager);
+		expect(pill.render(80)).toEqual([]);
 
 		await bash.execute("c1", { command: "npm run dev", run_in_background: true });
 		await bash.execute("c2", { command: "npm run watch", run_in_background: true });
-		expect(screen(indicator, 80)).toBe("● 2 background terminals running · /tasks to view");
+		expect(screen(pill, 80)).toBe("2 shells · ↓ to view");
+		pill.selected = true;
+		expect(pill.render(80)[0]).toContain("\x1b[7m");
+		expect(screen(pill, 80)).toBe("2 shells · Enter to view");
+		pill.selected = false;
 
 		exits[0]?.(0);
 		await Promise.all(manager.list().map((shell) => manager.waitForExit(shell.id, 50)));
-		expect(screen(indicator, 80)).toBe("● 1 background terminal running · /tasks to view");
+		expect(screen(pill, 80)).toBe("1 shell · ↓ to view");
 		manager.dispose();
 	});
 
-	it("says how commands get there when there are none", () => {
+	it("says so when nothing runs", () => {
 		const view = new BackgroundTasksComponent(new BackgroundShellManager(), fakeTui(), () => {});
 		try {
-			expect(screen(view)).toContain("No background commands in this session");
+			expect(screen(view)).toContain("No tasks currently running");
+			expect(screen(view)).toContain("←/Esc to close");
 		} finally {
 			view.dispose();
 		}
 	});
 
 	it("never renders a line wider than the terminal", async () => {
-		const manager = new BackgroundShellManager();
-		const { operations, emits } = controlledOperations();
-		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
-		await bash.execute("c1", { command: `echo ${"x".repeat(300)}`, run_in_background: true });
-		emits[0]?.(`${"y".repeat(500)}\n`);
+		const { manager, bash, emits } = await twoShells();
+		await bash.execute("c3", { command: `echo ${"x".repeat(300)}`, run_in_background: true });
+		emits[2]?.(`${"y".repeat(500)}\n`);
 		const view = new BackgroundTasksComponent(manager, fakeTui(), () => {});
 		try {
 			for (const width of [20, 60]) {
 				expect(view.render(width).every((line) => stripAnsi(line).length <= width)).toBe(true);
 				view.handleInput("\r");
 				expect(view.render(width).every((line) => stripAnsi(line).length <= width)).toBe(true);
-				view.handleInput("\x1b");
+				view.handleInput("\x1b[D");
 			}
 		} finally {
 			view.dispose();
@@ -213,7 +256,7 @@ describe("background shell transcript", () => {
 			context,
 		);
 		const text = screen(component as { render(width: number): string[] });
-		expect(text).toContain("Moved to the background · ID 3fa9c21e · /tasks to view");
+		expect(text).toContain("Running in the background (↓ to manage)");
 		expect(text).not.toContain("The user moved");
 	});
 });

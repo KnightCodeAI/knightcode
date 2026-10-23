@@ -90,16 +90,17 @@ KnightCode runs a command in the background when it takes long or never exits, s
 
 Press `Ctrl+B` while a command runs in the foreground to move it to the background. The same process keeps running; nothing starts again. The key works only while a command runs; otherwise `Ctrl+B` moves the cursor as usual.
 
-The footer counts the running background commands. Run `/tasks` to list them with their status and runtime:
+While commands run, a pill above the footer counts them: `1 shell`, `3 shells`. Press `Down` in an empty editor to select it and `Enter` to open the **Background tasks** list, or click it; `Esc` or `Up` returns to the editor. `/tasks` opens the same list. With a single command it opens on that command's details.
 
-| Key | In `/tasks` |
-|-----|-------------|
-| `Up`/`Down` | Choose a command |
-| `Enter` | Show its output as it arrives |
-| `x` | Stop it |
-| `Esc` | Go back, then close |
+| Key | In the list | In a command's details |
+|-----|-------------|------------------------|
+| `Up`/`Down` | Choose a command | |
+| `Enter` | Show its details | Close |
+| `x` | Stop the chosen command | Stop it |
+| `Left` | Close | Back to the list |
+| `Esc` | Close | Close |
 
-A command's full output is written to a file whose path the transcript and `/tasks` show, and KnightCode reads that file when it needs the output sooner. KnightCode stops a command with the `task_stop` tool, which is on whenever `bash` or `powershell` is.
+A command's details show its status and exit code, runtime, command, and the last 10 lines of its output as it arrives. Its full output is written to a file, and KnightCode reads that file when it needs the output sooner. KnightCode stops a command with the `task_stop` tool, which is on whenever `bash` or `powershell` is.
 
 A background command ends when it exits, when KnightCode or you stop it, or when the session ends: quitting, `/new`, `/resume`, and `/fork` stop it, while `/reload` keeps it. Resuming or forking a session does not start its commands again; with your next message KnightCode is told that they were stopped. A `timeout` given with the command still stops it in the background. A command that writes more than 1 GiB of output is stopped, and at most 32 run at once.
 

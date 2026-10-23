@@ -95,15 +95,8 @@ function rebuildBashResultRenderComponent(
 
 	const background = result.details?.background;
 	if (background && !options.isPartial) {
-		// The text is for the model; the reader needs only where the command went.
-		const status = background.movedByUser ? "Moved to the background" : "Running in the background";
-		component.addChild(
-			new Text(
-				`${theme.fg("toolOutput", status)} ${theme.fg("muted", `· ID ${background.taskId} · /tasks to view`)}`,
-				0,
-				0,
-			),
-		);
+		// The text is for the model; the reader needs only where the command went and how to reach it.
+		component.addChild(new Text(theme.fg("dim", "Running in the background (↓ to manage)"), 0, 0));
 		return;
 	}
 
@@ -168,12 +161,8 @@ function rebuildBashResultRenderComponent(
 		component.addChild(new Text(theme.fg("warning", `[${warnings.join(". ")}]`), 0, 0));
 	}
 
-	if (timerText) {
-		const hint = backgroundHintVisible
-			? ` ${theme.fg("dim", "·")} ${keyHint("app.tools.background", "to run in background")}`
-			: "";
-		component.addChild(new Text(`\n${theme.fg("muted", timerText)}${hint}`, 0, 0));
-	}
+	if (timerText) component.addChild(new Text(`\n${theme.fg("muted", timerText)}`, 0, 0));
+	if (backgroundHintVisible) component.addChild(new Text(keyHint("app.tools.background", "to background"), 0, 0));
 }
 
 /** Shell renderers are shared by bash and powershell, which differ only in the name they display. */

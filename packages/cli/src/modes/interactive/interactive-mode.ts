@@ -41,6 +41,7 @@ import {
 	hyperlink,
 	Markdown,
 	matchesKey,
+	MouseRegion,
 	Spacer,
 	setCapabilityOverrides,
 	setKeybindings,
@@ -478,6 +479,13 @@ export class InteractiveMode {
 	private footer: FooterComponent;
 	private footerContainer: Container;
 	private readonly backgroundShellsIndicator = new BackgroundShellsIndicator(() => this.session.backgroundShells);
+	/** The pill as mounted: a click opens `/tasks`. */
+	private readonly backgroundShellsRow = new MouseRegion(this.backgroundShellsIndicator, (event) => {
+		if (event.type !== "click" || event.button !== "left") return undefined;
+		this.backgroundShellsIndicator.selected = false;
+		this.showBackgroundTasks();
+		return { handled: true };
+	});
 	private footerDataProvider: FooterDataProvider;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
@@ -669,7 +677,7 @@ export class InteractiveMode {
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footerContainer = new Container();
-		this.footerContainer.addChild(this.backgroundShellsIndicator);
+		this.footerContainer.addChild(this.backgroundShellsRow);
 		this.footerContainer.addChild(this.footer);
 
 		// Load hide thinking block setting
@@ -2562,7 +2570,7 @@ export class InteractiveMode {
 		}
 
 		this.footerContainer.clear();
-		this.footerContainer.addChild(this.backgroundShellsIndicator);
+		this.footerContainer.addChild(this.backgroundShellsRow);
 		if (factory) {
 			// Create and add custom footer, passing the data provider
 			this.customFooter = factory(this.ui, theme, this.footerDataProvider);
@@ -2916,6 +2924,9 @@ export class InteractiveMode {
 				if (!customEditor.onExtensionShortcut) {
 					customEditor.onExtensionShortcut = (data: string) => this.defaultEditor.onExtensionShortcut?.(data);
 				}
+				if (!customEditor.onKeyIntercept) {
+					customEditor.onKeyIntercept = (data: string) => this.defaultEditor.onKeyIntercept?.(data) ?? false;
+				}
 				// Copy action handlers (clear, suspend, model switching, etc.)
 				for (const [action, handler] of this.defaultEditor.actionHandlers) {
 					(customEditor.actionHandlers as Map<string, () => void>).set(action, handler);
@@ -3097,6 +3108,7 @@ export class InteractiveMode {
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
 		// Without a foreground shell command the key belongs to the editor (Ctrl+B moves the cursor).
 		this.defaultEditor.onAction("app.tools.background", () => this.session.backgroundShells.promoteForeground() > 0);
+		this.defaultEditor.onKeyIntercept = (data) => this.handleBackgroundShellsPillKey(data);
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => void this.handleOpenExternalEditor());
 		this.defaultEditor.onAction(
@@ -5529,6 +5541,28 @@ export class InteractiveMode {
 				},
 			};
 		});
+	}
+
+	/**
+	 * Keyboard focus on the background commands pill. Down from an empty prompt moves focus to it,
+	 * Enter opens `/tasks`, and Escape or Up give focus back; any other key goes on to the prompt.
+	 */
+	private handleBackgroundShellsPillKey(data: string): boolean {
+		const pill = this.backgroundShellsIndicator;
+		if (!pill.selected) {
+			if (!this.keybindings.matches(data, "tui.editor.cursorDown") || this.editor.getText() !== "") return false;
+			if (this.session.backgroundShells.runningCount() === 0) return false;
+			pill.selected = true;
+			this.ui.requestRender();
+			return true;
+		}
+		pill.selected = false;
+		this.ui.requestRender();
+		if (this.keybindings.matches(data, "tui.select.confirm")) {
+			this.showBackgroundTasks();
+			return true;
+		}
+		return this.keybindings.matches(data, "tui.select.cancel") || this.keybindings.matches(data, "tui.editor.cursorUp");
 	}
 
 	private showBackgroundTasks(): void {

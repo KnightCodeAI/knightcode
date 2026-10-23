@@ -23,6 +23,8 @@ export class CustomEditor extends Editor {
 	public onPasteImage?: () => void;
 	/** Handler for extension-registered shortcuts. Returns true if handled. */
 	public onExtensionShortcut?: (data: string) => boolean;
+	/** Sees every key first, for focus that leaves the editor (the footer pill). Returns true if handled. */
+	public onKeyIntercept?: (data: string) => boolean;
 
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: CustomEditorOptions) {
 		super(tui, theme, options);
@@ -87,6 +89,7 @@ export class CustomEditor extends Editor {
 	}
 
 	handleInput(data: string): void {
+		if (this.onKeyIntercept?.(data)) return;
 		// Check extension-registered shortcuts first
 		if (this.onExtensionShortcut?.(data)) {
 			return;
