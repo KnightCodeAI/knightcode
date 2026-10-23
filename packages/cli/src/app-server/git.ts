@@ -595,8 +595,10 @@ async function eachUntracked(
 	signal: AbortSignal | undefined,
 	visit: (path: string) => boolean | void,
 ): Promise<void> {
+	const args = ["ls-files", "--others", "--exclude-standard", "-z"];
 	let pending = Buffer.alloc(0);
-	await runGit(repo, ["ls-files", "--others", "--exclude-standard", "-z"], {
+	let stopped = false;
+	const result = await runGit(repo, args, {
 		signal,
 		collectStdout: false,
 		onStdout: (chunk) => {
@@ -604,13 +606,18 @@ async function eachUntracked(
 			const data = pending.length > 0 ? Buffer.concat([pending, chunk]) : chunk;
 			let start = 0;
 			for (let end = data.indexOf(0); end !== -1; end = data.indexOf(0, start)) {
-				if (visit(data.toString("utf8", start, end)) === false) return false;
+				if (visit(data.toString("utf8", start, end)) === false) {
+					stopped = true;
+					return false;
+				}
 				start = end + 1;
 			}
 			pending = Buffer.from(data.subarray(start));
 			return true;
 		},
 	});
+	// A listing cut short by a failure would read as files the turn deleted.
+	if (!stopped && result.code !== 0) throw new GitError(args, result.code, result.stderr);
 }
 
 /** A turn snapshot: the tracked files' tree, the tree with untracked files too unless too many, the folders left out. */
