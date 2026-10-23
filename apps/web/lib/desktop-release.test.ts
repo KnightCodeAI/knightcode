@@ -75,7 +75,8 @@ describe("desktop update feed", () => {
       files: ["KnightCodeDesktop-0.2.0-full.nupkg"],
     })
     const text =
-      "A1B2 KnightCodeDesktop-0.2.0-full.nupkg 1234\r\nC3D4 KnightCodeDesktop-0.2.0-delta.nupkg 99\r\n"
+      // Squirrel writes it with a byte order mark.
+      "﻿A1B2 KnightCodeDesktop-0.2.0-full.nupkg 1234\r\nC3D4 KnightCodeDesktop-0.2.0-delta.nupkg 99\r\n"
     expect(squirrelReleases(text, r)).toBe(
       `A1B2 ${DOWNLOAD}/desktop-v0.2.0/KnightCodeDesktop-0.2.0-full.nupkg 1234`
     )
