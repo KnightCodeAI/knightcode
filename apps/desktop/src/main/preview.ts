@@ -1,6 +1,7 @@
 /**
  * Preview guests (desktop-shell.md sections 6.3 and 9.8): the `<webview>` a window's preview tab holds. Main decides
- * what attaches (only a thread's preview partition, only an http, https or blank page, never with a preload or Node),
+ * what attaches (only a thread's preview partition, only an http, https or blank page, never with a preload, Node or
+ * web security off),
  * what a guest may do (no permissions; downloads through a save dialog; links that open windows load in place;
  * navigations and redirects only to http and https), and which keys a focused guest hands to the app.
  */
@@ -61,6 +62,8 @@ export function guardWebviews(contents: WebContents, onKey: (binding: Keybinding
 		preferences.nodeIntegrationInSubFrames = false;
 		preferences.contextIsolation = true;
 		preferences.sandbox = true;
+		preferences.webSecurity = true;
+		preferences.allowRunningInsecureContent = false;
 		if (!PREVIEW_PARTITION.test(params.partition ?? "") || !isPreviewUrl(params.src ?? "about:blank")) {
 			event.preventDefault();
 			return;
