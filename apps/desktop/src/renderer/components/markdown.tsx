@@ -11,20 +11,15 @@ import { lexer, type Token, type Tokens } from "marked";
 import { Fragment, type ReactNode, useMemo, useState } from "react";
 import { isLocalUrl } from "../../shared/preview-url.ts";
 import { client } from "../client.ts";
+import { getState, openPreview } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { Check, Code, Copy, WrapText } from "./icons.tsx";
 import { Tooltip } from "./tooltip.tsx";
 
-/**
- * A link opens in the browser; one to a local server (a dev server the agent started) in the open thread's preview.
- * The store loads on demand: the renderer here stays usable without it (view.tsx draws extension views with it).
- */
+/** A link opens in the browser; one to a local server (a dev server the agent started) in the open thread's preview. */
 function openLink(href: string): void {
-	const external = () => void client.host("host/shell/openExternal", { url: href }).catch(() => {});
-	if (!isLocalUrl(href)) return external();
-	void import("../store.ts").then(({ getState, openPreview }) =>
-		getState().view.kind === "thread" ? openPreview(undefined, href) : external(),
-	);
+	if (isLocalUrl(href) && getState().view.kind === "thread") return openPreview(undefined, href);
+	void client.host("host/shell/openExternal", { url: href }).catch(() => {});
 }
 
 function inline(tokens: Token[] | undefined, fallback = ""): ReactNode[] {
