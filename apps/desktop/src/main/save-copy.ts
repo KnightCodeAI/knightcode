@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { open, readFile, rename, rm, stat } from "node:fs/promises";
+import { chmod, constants, copyFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 /** The name the dialog proposes: the last segment with Windows' reserved characters replaced (Codex's xe). */
@@ -14,10 +14,10 @@ export function proposedName(path: string): string {
 }
 
 /**
- * The bytes written beside `destination` under a unique name, then renamed over it, keeping an existing file's mode
- * (Codex's aJ): a failed write leaves the destination as it was.
+ * `source` copied beside `destination` under a unique name, then renamed over it, keeping an existing file's mode
+ * (Codex's aJ): a failed copy leaves the destination as it was. Copied, not read: a file of any size, none in memory.
  */
-export async function writeWhole(destination: string, bytes: Buffer): Promise<void> {
+export async function writeWhole(destination: string, source: string): Promise<void> {
 	const mode = await stat(destination).then(
 		(s) => s.mode & 0o777,
 		(error: NodeJS.ErrnoException) => {
@@ -26,14 +26,11 @@ export async function writeWhole(destination: string, bytes: Buffer): Promise<vo
 		},
 	);
 	const temporary = join(dirname(destination), `${basename(destination).slice(0, 64)}.${randomUUID()}.download`);
-	const handle = await open(temporary, "wx", mode === undefined ? 0o666 : 0o600);
 	try {
-		await handle.writeFile(bytes);
-		if (mode !== undefined) await handle.chmod(mode);
-		await handle.close();
+		await copyFile(source, temporary, constants.COPYFILE_EXCL);
+		if (mode !== undefined) await chmod(temporary, mode);
 		await rename(temporary, destination);
 	} finally {
-		await handle.close().catch(() => {});
 		await rm(temporary, { force: true });
 	}
 }
@@ -45,6 +42,6 @@ export async function saveCopy(
 ): Promise<string | undefined> {
 	const destination = await choose(proposedName(path));
 	if (!destination) return undefined;
-	if (resolve(destination) !== resolve(path)) await writeWhole(destination, await readFile(path));
+	if (resolve(destination) !== resolve(path)) await writeWhole(destination, path);
 	return destination;
 }
