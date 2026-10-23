@@ -9,7 +9,7 @@ import type { ForgeConfig } from "@electron-forge/shared-types";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { cpSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 /**
  * node-pty runs in main outside the bundle (main.ts requires it at runtime), and the Vite build leaves node_modules
@@ -20,7 +20,8 @@ import { dirname, join } from "node:path";
 function copyNodePty(buildPath: string, platform: string, arch: string): void {
 	const from = dirname(createRequire(__filename).resolve("node-pty/package.json"));
 	const to = join(buildPath, "node_modules/node-pty");
-	const runtime = (path: string) => !/\.(pdb|lib|exp|ilk|obj|iobj|ipdb|map)$|\.test\.js$|[\\/]obj[\\/]/i.test(path);
+	const runtime = (path: string) =>
+		!/\.(pdb|lib|exp|ilk|obj|iobj|ipdb|map)$|\.test\.js$|(^|[\\/])obj([\\/]|$)/i.test(relative(from, path));
 	cpSync(join(from, "package.json"), join(to, "package.json"));
 	cpSync(join(from, "lib"), join(to, "lib"), { recursive: true, filter: runtime });
 	const prebuilt = join(from, "prebuilds", `${platform}-${arch}`);
