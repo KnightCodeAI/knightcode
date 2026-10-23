@@ -1206,6 +1206,18 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		 * hide and whose visibility includes the app.
 		 */
 		const answerApp = async (request: McpAppRequest): Promise<McpAppAnswer> => {
+			const starting = findServer(request.server);
+			// A thread just opened: its apps ask while its servers still connect (startConnection, at session start).
+			if (starting && isEnabled(starting) && starting.ready) {
+				let timer: NodeJS.Timeout | undefined;
+				await Promise.race([
+					waitForServers([starting], session.signal),
+					new Promise<void>((resolve) => {
+						timer = setTimeout(resolve, startupWaitMs);
+					}),
+				]);
+				clearTimeout(timer);
+			}
 			const server = findServer(request.server);
 			const connection = server && isEnabled(server) ? server.connection : undefined;
 			// A dropped transport reconnects on the next request (getClient), as the model's calls do.

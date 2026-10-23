@@ -129,6 +129,8 @@ export function McpAppView({
 	const [height, setHeight] = useState(160);
 	const [ask, setAsk] = useState<{ ask: Ask; answer: (yes: boolean) => void }>();
 	const [version, setVersion] = useState("");
+	const versionRef = useRef(version);
+	versionRef.current = version;
 	useEffect(() => void client.host("host/app/info", {}).then((info) => setVersion(info.appVersion), () => {}), []);
 
 	useEffect(() => {
@@ -164,7 +166,9 @@ export function McpAppView({
 		};
 		const host: BridgeHost = {
 			threadId,
-			appVersion: version,
+			get appVersion() {
+				return versionRef.current;
+			},
 			theme: () => themeRef.current,
 			displayMode: () => mode,
 			csp: loaded.csp,

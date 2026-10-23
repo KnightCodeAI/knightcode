@@ -27,7 +27,8 @@ function copyNodePty(buildPath: string, platform: string, arch: string): void {
 	const prebuilt = join(from, "prebuilds", `${platform}-${arch}`);
 	const built = join(from, "build", "Release");
 	if (existsSync(prebuilt)) cpSync(prebuilt, join(to, "prebuilds", `${platform}-${arch}`), { recursive: true, filter: runtime });
-	else if (existsSync(built)) cpSync(built, join(to, "build", "Release"), { recursive: true, filter: runtime });
+	else if (platform === process.platform && arch === process.arch && existsSync(built))
+		cpSync(built, join(to, "build", "Release"), { recursive: true, filter: runtime });
 	else throw new Error(`node-pty has no binary for ${platform}-${arch}: no prebuild, and no node-gyp build in ${built}`);
 }
 

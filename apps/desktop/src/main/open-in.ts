@@ -455,10 +455,13 @@ export interface OpenInDeps {
 
 const CACHE_MS = 60_000;
 
-/** Never through a shell (a path is data, not a command line); detached, so the editor outlives the app. */
+/**
+ * Never through a shell (a path is data, not a command line); detached, so the editor outlives the app. Not
+ * `windowsHide`: a program that honours the start-up show state, and a terminal's own console, would open hidden.
+ */
 function launch(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, args, { detached: true, env, stdio: "ignore", windowsHide: true });
+		const child = spawn(command, args, { detached: true, env, stdio: "ignore" });
 		child.once("error", reject);
 		child.once("spawn", () => {
 			child.unref();

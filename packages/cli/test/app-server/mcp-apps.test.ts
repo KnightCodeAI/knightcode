@@ -182,3 +182,16 @@ test("a tool call waits for the tool, however long it runs; a resource read give
 		vi.useRealTimers();
 	}
 });
+
+test("an app that loads while its thread's server still connects waits for it", async () => {
+	const server = await appServer();
+	const a = await server.connect("desktop");
+	const { thread } = await a.client.request("thread/start", { cwd: server.cwd, approvalMode: "fullAccess" });
+	// At once, as a reopened thread's app cards ask: the counter server is still starting.
+	const read = await a.client.request("mcp/app/readResource", {
+		threadId: thread.id,
+		server: "counter",
+		uri: "ui://counter/app.html",
+	});
+	expect(read.contents).toHaveLength(1);
+}, 60_000);
