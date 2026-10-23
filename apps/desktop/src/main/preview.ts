@@ -91,6 +91,9 @@ export function guardWebviews(contents: WebContents, onKey: (binding: Keybinding
 			};
 			const binding = OVER_PREVIEW.find((id) => matchesBinding(key, id, mac, overrides));
 			if (!binding) return;
+			// Off macOS a bare Ctrl+letter is the page's (its own Ctrl+K or Ctrl+B), except the preview's own Ctrl+T and Ctrl+L.
+			const bare = !mac && input.control && !input.shift && !input.alt && !input.meta && /^Key[A-Z]$/.test(input.code);
+			if (bare && !binding.startsWith("desktop.preview.")) return;
 			event.preventDefault();
 			onKey(binding);
 		});

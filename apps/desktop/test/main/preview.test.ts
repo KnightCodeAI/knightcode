@@ -113,7 +113,9 @@ test("an app binding pressed in a focused guest runs in its window, other keys s
 	};
 	expect(press("t", "KeyT", true)).toBe(true);
 	expect(press("a", "KeyA", false)).toBe(false);
-	expect(keys).toEqual(["desktop.preview.open"]);
+	// The palette's Mod+K: off macOS Ctrl+K stays with the page, which may use it itself.
+	expect(press("k", "KeyK", true)).toBe(mac);
+	expect(keys).toEqual(mac ? ["desktop.preview.open", "desktop.palette"] : ["desktop.preview.open"]);
 });
 
 test("capture refuses a guest another window hosts", async () => {

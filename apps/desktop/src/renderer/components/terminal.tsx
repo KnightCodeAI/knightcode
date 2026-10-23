@@ -50,7 +50,13 @@ const OVER_TERMINAL: KeybindingId[] = [
 	"desktop.panel.toggle",
 	"desktop.thread.new",
 ];
-const overTerminal = (event: KeyboardEvent) => OVER_TERMINAL.some((id) => matches(event, id));
+/**
+ * Off macOS (where bindings use Cmd) a bare Ctrl+letter is the shell's: readline's Ctrl+K, Ctrl+B, Ctrl+N and Ctrl+J,
+ * tmux's Ctrl+B. Codex's terminal leaves them to the shell too; the Shift chords and Ctrl+` still reach the window.
+ */
+const shellOwns = (event: KeyboardEvent) =>
+	!isMac() && event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && /^Key[A-Z]$/.test(event.code);
+const overTerminal = (event: KeyboardEvent) => !shellOwns(event) && OVER_TERMINAL.some((id) => matches(event, id));
 
 /** Codex's palette: the theme's tokens resolved to colours xterm reads (a probe element resolves `var()`). */
 function terminalTheme(host: HTMLElement) {
