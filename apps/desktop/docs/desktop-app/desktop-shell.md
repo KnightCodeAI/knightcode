@@ -854,21 +854,31 @@ composer then shows its controls as icons only.
 
 ### 9.7 Terminal
 
-- Bottom region, spanning the thread and the side panel, as Codex's: at
-  least 160px, shut when dragged under 80px. Mod+\` opens a terminal in the
-  active thread's cwd, Mod+J toggles the region. Its tab strip names each
-  terminal by its shell and cwd, with + to add one and a chevron to collapse
-  the region.
+- Bottom region, spanning the thread and the side panel, as Codex's bottom
+  panel (26.1016, measured): 280px until dragged, at least 160px, shut when
+  dragged under 80px, a 16px handle on its top edge, a 40px strip of the side
+  panel's tabs (each named by its shell and cwd), + and a shell menu, and a
+  chevron that hides the region; closing the last terminal hides it too.
+  Ctrl+\` (Control on macOS too, Codex's Open Terminal) opens a terminal in
+  the thread's cwd; Mod+J toggles the region.
 - xterm.js in the renderer; `node-pty` in main (`host/terminal/*`), as Codex
-  26.1013 runs it. Colours from the `--kc-ansi-*` and `--kc-terminal-*`
-  tokens.
+  runs it. Colours from the `--kc-terminal-*` and `--kc-ansi-*` tokens, which
+  follow Codex's palette: the ANSI slots are the theme's accents (black and
+  bright black the tertiary and secondary text, cyan the blue), so light and
+  dark both follow the theme. Codex's padding (8px over, 16px before, 12px
+  under) and copy and paste: copy only with a selection, so Ctrl+C without
+  one still interrupts the shell; keys the shell gets never reach window
+  bindings.
 - Shell: the preference, else `pwsh`, then `powershell`, then `%COMSPEC%` on
   Windows; `$SHELL`, then `/bin/bash`, then `/bin/sh` elsewhere. Git Bash and
   WSL are offered in the menu on Windows when found.
 - Each terminal belongs to a thread (its cwd) and survives window reloads:
   main keeps 64 KiB of scrollback and replays it on reattach. Terminals end
   when their thread is archived or deleted, or the app quits.
-- A terminal whose cwd is outside the thread's workspace says so in its tab.
+- A terminal whose cwd is outside the thread's workspace says so, with
+  Codex's Dismiss and Open new terminal; one whose shell ended offers Restart.
+
+Status (2026-10-23): built in S3.
 
 ### 9.8 Preview
 
@@ -891,6 +901,20 @@ thread's tabs; cleared when the thread is deleted), guarded by main (section
 The `<webview>` is part of the DOM, so menus and modals stack over it with no
 help from main. Prior art: Codex's in-app browser is a `<webview>` on a
 `persist:codex-browser-app-route:` partition.
+
+As built (S3, Codex 26.1016 measured): the side panel's + (Mod+T, Codex's Open
+Browser Tab) opens a tab on Codex's new tab page (the address bar over the
+tools, Changes and Terminal); the toolbar is back, forward and reload in one
+capsule, the 32px address capsule, then Annotate (Mod+Shift+., Codex's
+annotation mode) and Open in browser. A bare `localhost:3000` gets `http://`,
+a dotted host `https://`. `window.open` from a page loads an http(s) page in
+the same tab (the webview has `allowpopups` so the request reaches main, which
+never opens a window). A failed load shows the error over the page. A focused
+page's key presses never reach the renderer, so main matches them in
+`before-input-event` against the user's own bindings (`host/keys/set`) and
+hands the ones allowed over a preview (its own, the palette, sidebar, panel
+and terminal toggles, new thread) back as `key` events. A link to a local
+server in a message opens in the thread's preview.
 
 ### 9.9 Files and open-in
 
@@ -1204,6 +1228,15 @@ naming the server and the tool before retrying with `confirmed`. An app
 calls only its own server's tools, and only those whose `_meta.ui.visibility`
 includes `"app"`.
 
+Status (2026-10-23): built in S3. An app draws between its turn's work and the
+reply, so it stays in sight when the work folds, at a position that holds while
+the turn runs and after (the frame is never made again). Full screen is a side
+panel tab with a fresh instance of the app (given the call's input and result),
+and the inline card says it is shown there. The confirmations are Codex's:
+"Send follow-up?" / "An app wants to send this prompt" for `ui/message`, and a
+card naming the tool for a call that may change things. The style variables
+map our tokens the way Codex's `mcp-app-host-styles` maps its own.
+
 ---
 
 ## 13. Protocol needs
@@ -1316,7 +1349,7 @@ changes pane give it a place.
   expansion, the handoff dry run.
 - S3: the terminal (node-pty in main, xterm.js), the preview (`<webview>`),
   MCP Apps. View rendering and the extension settings pages are done (Phase
-  C, S1).
+  C, S1). Built (sections 9.7, 9.8, 12).
 - S4: makers, the bundled `knightcode` binary and `knightcode.version` under
   `resources/knightcode/`, signing hooks (unsigned in v1), the update feed,
   the release workflow, end-to-end tests, the memory figures.

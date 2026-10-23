@@ -502,6 +502,34 @@ Connections, sign-in and status belong to the MCP extension in each thread
 {"id":28,"method":"mcp/add","params":{"scope":"global","name":"docs","config":{"url":"https://example.com/mcp"}}}
 ```
 
+### `mcp/app/readResource` and `mcp/app/callTool`
+
+MCP Apps ([MCP](mcp.md#mcp-apps)): a client that draws apps sends `desktop` as
+its mode; the thread's MCP servers then hear the client supports
+`io.modelcontextprotocol/ui`. A call to a tool with an app carries
+`mcpApp: {server, resourceUri, result?, resultOmitted?}` on its `toolCall`
+item, live and read back: `result` is the server's whole `CallToolResult`
+(with `_meta` and `structuredContent`), or `resultOmitted: true` past 256 KiB
+serialized, when the app gets the item's text output instead.
+
+`mcp/app/readResource {threadId, server, uri}` returns the server's
+`ReadResourceResult` `{contents, _meta?}`, the app's HTML first.
+`mcp/app/callTool {threadId, server, name, arguments?, confirmed?}` returns its
+`CallToolResult` `{content, structuredContent?, isError?, _meta?}`. Both reach
+only the named server, through the thread's MCP extension, and only while it is
+connected (`mcpUnavailable` otherwise); a call reaches only a tool whose
+`_meta.ui.visibility` includes `"app"` and that the configuration does not hide
+(`invalidParams` otherwise). Outside `fullAccess`, a tool not annotated
+`readOnlyHint` answers `approvalRequired` (`data: {server, tool}`) until sent
+again with `confirmed: true` after the user agreed. Arguments over 1 MiB and
+results over 4 MiB, serialized, answer `invalidParams`. A call during a turn runs
+at once; the server gives the MCP extension 60 seconds to answer (`internal`
+after that).
+
+```json
+{"id":29,"method":"mcp/app/callTool","params":{"threadId":"THREAD_ID","server":"counter","name":"increment","arguments":{"by":1},"confirmed":true}}
+```
+
 ### `resource/list` and `resource/set`
 
 Extensions, skills, prompt templates and themes as `knightcode config` lists them.

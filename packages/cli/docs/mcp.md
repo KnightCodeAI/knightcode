@@ -243,9 +243,23 @@ When a connected server offers [resources](https://modelcontextprotocol.io/speci
 
 These tools reach every enabled, non-hidden server with resources. Their exposure is the widest exposure among those servers: `direct`, then `codemode` or `deferred`. Resource links in tool results identify `read_mcp_resource` and the server.
 
-Resources for MCP Apps, identified by `ui://` URIs or `text/html;profile=mcp-app`, are omitted because KnightCode does not render them. Resource icons are also omitted.
+Resources for MCP Apps, identified by `ui://` URIs or `text/html;profile=mcp-app`, are omitted from these tools: the desktop app draws them (see [MCP Apps](#mcp-apps)). Resource icons are also omitted.
 
 Reading and listing resources is retried once after a transient HTTP error (408, 429, or 5xx). Tool calls are not retried because the server may already have performed them.
+
+## MCP Apps
+
+A server can give a tool an interactive view with the MCP Apps extension (`io.modelcontextprotocol/ui`, Stable 2026-01-26): the tool names a `ui://` resource in `_meta.ui.resourceUri`, and the resource is an HTML document of type `text/html;profile=mcp-app`. The [desktop app](desktop.md) draws it in the tool's row. The terminal draws no apps, so KnightCode tells servers it supports them only in the desktop, and elsewhere servers answer with their text fallback.
+
+In the desktop:
+
+- A tool with an app is declared to the model whatever the server's exposure, and it cannot be called from codemode scripts: a call drawn as an app must be the model's own, which the session keeps. A tool you configured as `hidden` stays hidden and draws no app.
+- A tool whose `_meta.ui.visibility` leaves out `"model"` is not declared to the model. Its app can still call it.
+- An app calls only tools of its own server whose visibility includes `"app"`. In Full access its calls run. In Ask and Auto-edit, a call to a tool not annotated `readOnlyHint` asks you first, naming the server and the tool.
+- An app can send a follow-up message to the thread after you confirm it, open http and https links in your browser, and ask to be shown full screen in the side panel. It cannot update the model's context.
+- The app runs in a sandboxed frame on its own origin, with no permissions (no camera, microphone, location or clipboard). It reaches the network only through the domains its resource declares in `_meta.ui.csp`; a declaration that is not a list of host sources is refused and the app does not load.
+
+[`examples/mcp-app/server.mjs`](../examples/mcp-app/server.mjs) is a small stdio server with a counter app: one tool that shows the app, one only the app may call, and one read-only tool.
 
 ## Permissions
 
