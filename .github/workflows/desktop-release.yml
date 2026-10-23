@@ -166,6 +166,7 @@ jobs:
       # answers initialize and the window's page reaches main (src/main.ts).
       - name: Smoke test
         if: matrix.smoke
+        timeout-minutes: 3
         working-directory: apps/desktop/out
         env:
           KNIGHTCODE_DESKTOP_SMOKE: "1"

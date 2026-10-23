@@ -423,7 +423,8 @@ function smokeExit(code: number): void {
 	if (quitting) return;
 	console.log(`smoke: ${code === 0 ? "passed" : `failed (server ${serverState.state})`}`);
 	quitting = true;
-	void server.stop().finally(() => app.exit(code));
+	// The deadline can pass before start() made the server (a login shell that never answers).
+	void (server ? server.stop() : Promise.resolve()).finally(() => app.exit(code));
 }
 
 /** A link macOS delivered before start() opened the first window. */
