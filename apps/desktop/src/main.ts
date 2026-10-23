@@ -3,6 +3,7 @@
  * one MessagePort each, and the host methods a sandboxed renderer cannot run itself.
  */
 
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Message } from "@knightcode/app-server-protocol";
@@ -28,6 +29,7 @@ import { Router } from "./main/router.ts";
 import { resolveServerCommand, ServerConnection, type ServerState } from "./main/server.ts";
 import { loginShellEnv } from "./main/shell-env.ts";
 import { StateFile } from "./main/state.ts";
+import { type SpawnPty, Terminals } from "./main/terminals.ts";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -98,6 +100,7 @@ const router = new Router({
 const state = new StateFile(app.getPath("userData"));
 let server: ServerConnection;
 let openIn: OpenIn;
+let terminals: Terminals;
 
 /** Serves only the built renderer directory; `..` never escapes it (section 6.3). */
 function serveRenderer(request: Request): Promise<Response> | Response {
@@ -115,6 +118,8 @@ function serveRenderer(request: Request): Promise<Response> | Response {
 function connectPort(id: number, open: OpenWindow): void {
 	open.port?.close();
 	router.detach(id);
+	// The reloaded page attaches to the terminals it shows again, getting their output so far first.
+	terminals.detachWindow(id);
 	const { port1, port2 } = new MessageChannelMain();
 	open.port = port1;
 	router.attach({
@@ -131,6 +136,8 @@ function connectPort(id: number, open: OpenWindow): void {
 				state,
 				server,
 				openIn,
+				terminals,
+				windowId: id,
 				openWindow: createWindow,
 				zoom,
 				role: () => roleOf(id),
@@ -227,10 +234,20 @@ function createWindow(route?: string): BrowserWindow {
 	window.on("closed", () => {
 		open.port?.close();
 		router.detach(id);
+		terminals.detachWindow(id);
 		windows.delete(id);
 	});
 	void (DEV_URL ? window.loadURL(DEV_URL) : window.loadURL("app://desktop/index.html"));
 	return window;
+}
+
+/** A thread's terminals end with it: when it is archived or deleted (section 9.7). */
+function endTerminals(message: Message): void {
+	if (!("method" in message) || "id" in message) return;
+	const params = message.params as { threadId?: string; archived?: boolean } | undefined;
+	if (!params?.threadId) return;
+	if ((message.method === "thread/archived" && params.archived) || message.method === "thread/deleted")
+		terminals.killThread(params.threadId);
 }
 
 function zoomFocused(step: -1 | 0 | 1): void {
@@ -270,12 +287,25 @@ async function start(): Promise<void> {
 	const env = await loginShellEnv();
 	// Editors launch with the user's own PATH, as the server's tools run with it.
 	openIn = openInService(env);
+	terminals = new Terminals({
+		platform: process.platform,
+		env,
+		// Loaded as Codex loads it, outside the bundle: a native module the main build leaves in node_modules.
+		spawn: () => (createRequire(__filename)("node-pty") as { spawn: SpawnPty }).spawn,
+		post: (windowId, event) => {
+			const open = windows.get(windowId);
+			if (open) sendEvent(open, event);
+		},
+	});
 	server = new ServerConnection({
 		command: resolveServerCommand(app.isPackaged, app.getAppPath(), process.resourcesPath),
 		env,
 		logsDir: app.getPath("logs"),
 		clientVersion: app.getVersion(),
-		onMessage: (message) => router.fromServer(message),
+		onMessage: (message) => {
+			router.fromServer(message);
+			endTerminals(message);
+		},
 		onState: (next, message) => {
 			serverState = { state: next, message };
 			for (const open of windows.values()) sendEvent(open, { event: "server/state", state: next, message });
@@ -340,7 +370,10 @@ if (!app.requestSingleInstanceLock()) {
 		}
 		quitting = true;
 		markQuitting();
-		void server.stop().finally(() => app.quit());
+		void server.stop().finally(() => {
+			terminals.killAll();
+			app.quit();
+		});
 	});
 	void start();
 }

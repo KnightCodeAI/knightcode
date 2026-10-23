@@ -237,7 +237,7 @@ const LINUX_TERMINALS: [string, (folder: string) => string[]][] = [
 const pathKey = (env: NodeJS.ProcessEnv) => Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
 
 /** A command on PATH: with Windows' PATHEXT for a bare name. */
-function onPath(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string | undefined {
+export function onPath(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string | undefined {
 	const dirs = (env[pathKey(env)] ?? "").split(platform === "win32" ? ";" : ":").filter(Boolean);
 	const extensions =
 		platform === "win32" && !extname(name) ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];

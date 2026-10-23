@@ -30,6 +30,8 @@ import {
 	fork,
 	keepTab,
 	loadEarlier,
+	loadTerminals,
+	newTerminal,
 	NO_TABS,
 	openThread,
 	type PanelTab,
@@ -40,9 +42,12 @@ import {
 	sendViewEvent,
 	setFinding,
 	setPanel,
+	toggleTerminal,
 	useStore,
 } from "../store.ts";
 import { FileTab } from "./file-tab.tsx";
+import { StripSlot, StripTab } from "./strip-tab.tsx";
+import { BottomRegion } from "./terminal.tsx";
 import { FileIcon } from "./file-icon.tsx";
 import { ApprovalCard } from "./approval.tsx";
 import { DialogCard, QuestionsCard } from "./request-card.tsx";
@@ -176,40 +181,17 @@ function PanelResizeHandle() {
 	);
 }
 
-/**
- * A tab in the strip, as Codex's (26.1016, measured): a slot of up to 240px, 32px tall; the chosen one on a ghost fill with a
- * hairline ring and a 1px shadow, the others at half strength; a 16px icon 4px from the 13px title, which a preview
- * tab sets in italics; the close button 20px, shown on the chosen tab and on hover.
- */
 function TabButton({ threadId, tab, index, active }: { threadId: string; tab: PanelTab; index: number; active: boolean }) {
-	const title = tab.kind === "changes" ? "Changes" : basename(tab.path);
 	return (
-		<div role="presentation" className="group/tab relative flex h-8 min-w-0 flex-1 items-center">
-			<div
-				className={`pointer-events-none absolute inset-0 rounded-[10px] border ${active ? "border-line-strong bg-ghost-hover shadow-[0_1px_2px_-1px_rgb(0_0_0/0.25)]" : "border-transparent group-hover/tab:bg-ghost-hover"}`}
-			/>
-			<button
-				type="button"
-				role="tab"
-				aria-selected={active}
-				onClick={() => activateTab(threadId, index)}
-				onDoubleClick={() => keepTab(threadId, index)}
-				className={`relative z-10 flex h-full min-w-0 flex-1 items-center gap-1 rounded-[10px] ps-2.5 pe-[27px] text-[13px] leading-[18.5px] ${active ? "text-ink" : "text-tertiary"}`}
-			>
-				{tab.kind === "changes" ? <FileDiff size={16} className="shrink-0" /> : <FileIcon path={tab.path} />}
-				<span className={`min-w-0 flex-1 truncate text-start ${tab.kind === "file" && tab.preview ? "italic" : ""}`}>
-					{title}
-				</span>
-			</button>
-			<IconButton
-				label={`Close ${title} tab`}
-				size="3xs"
-				className={`absolute end-[7px] z-10 rounded-[10px] ${active ? "" : "opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100"}`}
-				onClick={() => closeTab(threadId, index)}
-			>
-				<X size={14} />
-			</IconButton>
-		</div>
+		<StripTab
+			icon={tab.kind === "changes" ? <FileDiff size={16} className="shrink-0" /> : <FileIcon path={tab.path} />}
+			title={tab.kind === "changes" ? "Changes" : basename(tab.path)}
+			italic={tab.kind === "file" && tab.preview}
+			active={active}
+			onSelect={() => activateTab(threadId, index)}
+			onKeep={() => keepTab(threadId, index)}
+			onClose={() => closeTab(threadId, index)}
+		/>
 	);
 }
 
@@ -253,15 +235,12 @@ function SidePanel({ id }: { id: string }) {
 					className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]"
 				>
 					{tabs.map((tab, i) => (
-						// 240px each while they fit, sharing the strip when they do not (Codex's), scrolling past 120px.
-						<div
+						<StripSlot
 							key={tab.kind === "file" ? tab.path : "changes"}
-							className="flex max-w-[240px] min-w-[120px] flex-[1_1_240px] items-center pe-0.5"
+							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
 							<TabButton threadId={id} tab={tab} index={i} active={i === active} />
-							{/* Codex's divider between two tabs at rest. */}
-							<div className={`ms-0.5 h-3 w-px shrink-0 bg-line ${i === active || i + 1 === active || i === tabs.length - 1 ? "invisible" : ""}`} />
-						</div>
+						</StripSlot>
 					))}
 				</div>
 				<IconButton
@@ -312,6 +291,11 @@ export function ThreadView({ id }: { id: string }) {
 		if (el && pinned) el.scrollTop = el.scrollHeight;
 	});
 	useBinding("desktop.panel.toggle", () => setPanel({ open: !panelOpen }));
+	const bottomOpen = useStore((s) => s.bottom.open);
+	// Terminals main still runs for this thread (a reload, a second window) come back as its tabs.
+	useEffect(() => {
+		void loadTerminals(id).catch(() => {});
+	}, [id]);
 	const finding = useStore((s) => s.finding);
 	useBinding("desktop.thread.find", () => setFinding(true), !finding);
 	// A find belongs to the thread it searched.
@@ -319,6 +303,8 @@ export function ThreadView({ id }: { id: string }) {
 
 	const name = view?.thread.name || summary?.name || "Untitled";
 	const cwd = view?.thread.cwd ?? summary?.cwd ?? "";
+	useBinding("desktop.terminal.toggle", () => toggleTerminal(id, cwd), Boolean(view));
+	useBinding("desktop.terminal.new", () => void newTerminal(id, cwd), Boolean(view));
 	const commitRename = () => {
 		const value = renaming?.trim();
 		setRenaming(undefined);
@@ -340,213 +326,217 @@ export function ThreadView({ id }: { id: string }) {
 	const project = basename(view?.thread.projectCwd ?? summary?.projectCwd ?? cwd);
 	const deleted = (failure?.data as { reason?: string } | undefined)?.reason === "worktreeDeleted";
 	return (
-		<div className="@container flex h-full min-w-0 flex-1">
-			{/* Hidden, not unmounted, while the side panel is full screen, so the transcript and a draft stay put. */}
-			<div className={`h-full min-w-0 flex-1 flex-col ${panelFull ? "hidden" : "flex"}`}>
-				<header ref={header} className="flex h-[52px] shrink-0 items-center gap-2 ps-3.5 pe-1.5">
-					<Tooltip content={cwd} side="bottom" align="start">
-						<span
-							role="img"
-							aria-label={workspace?.mode === "worktree" ? `Worktree of ${project}` : `Project: ${project}`}
-							className="flex size-7 shrink-0 items-center justify-center text-tertiary"
-						>
-							{workspace?.mode === "worktree" ? <GitBranchPlus size={16} /> : <Folder size={16} />}
-						</span>
-					</Tooltip>
-					{renaming !== undefined ? (
-						<input
-							autoFocus
-							aria-label="Thread title"
-							value={renaming}
-							onChange={(e) => setRenaming(e.target.value)}
-							onBlur={commitRename}
-							onKeyDown={(e) => {
-								if (matches(e, "desktop.item.activate")) commitRename();
-								if (matches(e, "desktop.picker.dismiss")) {
-									e.preventDefault();
-									setRenaming(undefined);
-								}
-							}}
-							className="kc-input h-7 min-w-0 flex-1 text-base font-medium"
-						/>
-					) : (
-						<Tooltip content={name} side="bottom" align="start" overflow>
-							<button
-								type="button"
-								onDoubleClick={() => setRenaming(name)}
-								className="min-w-0 truncate px-1.5 text-start text-base leading-6 font-medium text-ink"
+		// The bottom region (terminals) spans the chat and the side panel, under both, as Codex's bottom panel.
+		<div className="flex h-full min-w-0 flex-1 flex-col">
+			<div className="@container flex min-h-0 min-w-0 flex-1">
+				{/* Hidden, not unmounted, while the side panel is full screen, so the transcript and a draft stay put. */}
+				<div className={`h-full min-w-0 flex-1 flex-col ${panelFull ? "hidden" : "flex"}`}>
+					<header ref={header} className="flex h-[52px] shrink-0 items-center gap-2 ps-3.5 pe-1.5">
+						<Tooltip content={cwd} side="bottom" align="start">
+							<span
+								role="img"
+								aria-label={workspace?.mode === "worktree" ? `Worktree of ${project}` : `Project: ${project}`}
+								className="flex size-7 shrink-0 items-center justify-center text-tertiary"
 							>
-								{name}
-							</button>
-						</Tooltip>
-					)}
-					<div className="flex-1" />
-					{view?.ui.statuses.map((status) => (
-						<Tooltip key={status.key} content={status.text} side="bottom">
-							<span className="max-w-[200px] shrink truncate rounded-md border border-line px-2 text-sm text-secondary">
-								{status.text}
+								{workspace?.mode === "worktree" ? <GitBranchPlus size={16} /> : <Folder size={16} />}
 							</span>
 						</Tooltip>
-					))}
-					<div className="flex items-center gap-1.5">
-						<ThreadMenu thread={{ id, cwd, name, sessionFile: view?.thread.sessionFile }} />
-						{view ? <ThreadSummary thread={view.thread} anchor={header} /> : null}
-						{panelOpen ? null : (
-							<>
-								<div className="mx-px h-4 w-px bg-line" />
-								<IconButton label="Show tabs" className="no-drag" onClick={() => setPanel({ open: true })}>
-									<SquarePlus size={16} />
-								</IconButton>
-							</>
-						)}
-					</div>
-				</header>
-				{finding ? <FindBar root={scroller} onClose={() => setFinding(false)} /> : null}
-				<div
-					ref={scroller}
-					onScroll={(e) => {
-						const el = e.currentTarget;
-						setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
-					}}
-					className="kc-fade-y relative min-h-0 flex-1 overflow-y-auto"
-				>
-					<div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 pt-8 pb-12">
-						{view?.nextCursor ? (
-							<div className="flex justify-center">
-								<Button
-									variant="ghost"
-									color="secondary"
-									size="sm"
-									pill
-									disabled={loadingEarlier}
-									onClick={() => {
-										setLoadingEarlier(true);
-										setPinned(false);
-										void loadEarlier(id).finally(() => setLoadingEarlier(false));
-									}}
-								>
-									{loadingEarlier ? "Loading…" : "Load earlier messages"}
-								</Button>
-							</div>
-						) : null}
-						{failure ? (
-							<div className="flex items-center gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-text">
-								<CircleAlert size={14} className="shrink-0" />
-								<span className="min-w-0 flex-1">
-									{deleted ? "The worktree of this thread was deleted. Restore it to continue." : failure.message}
-								</span>
-								{failure.code === "threadLockedElsewhere" ? (
-									<Button variant="ghost" color="danger" size="sm" onClick={() => void fork(id)}>
-										Fork it
-									</Button>
-								) : null}
-								<Button
-									variant="soft"
-									color="danger"
-									size="sm"
-									onClick={() => void (deleted ? restoreWorktree(id) : openThread(id))}
-								>
-									{deleted ? "Restore" : "Retry"}
-								</Button>
-							</div>
-						) : null}
-						{!view && !failure ? <div className="kc-pulse text-sm text-tertiary">Loading…</div> : null}
-						{workspace?.mode === "worktree" && workspace.setupFailed ? (
-							<div className="flex items-center gap-2 rounded-lg bg-soft-alt px-3 py-2 text-sm text-secondary">
-								<CircleAlert size={14} className="shrink-0" /> The environment's setup script failed; the worktree is
-								ready without it.
-							</div>
-						) : null}
-						{progress && view?.turns.length === 0 ? (
-							<pre className="max-h-48 overflow-auto rounded-lg bg-surface-secondary px-3 py-2 font-code text-code text-secondary">
-								{progress}
-							</pre>
-						) : null}
-						{view?.turns.map((turn, i) => {
-							const before = view.turns[i - 1];
-							const separate = before
-								? turn.startedAt - before.startedAt >= SEPARATOR_GAP_MS
-								: dayLabel(turn.startedAt) !== "Today";
-							return (
-								<Fragment key={turn.id}>
-									{separate ? <DateSeparator at={turn.startedAt} /> : null}
-									<TurnView
-										turn={turn}
-										threadId={id}
-										latest={i === view.turns.length - 1}
-										retry={turn.status === "inProgress" ? view.retry : undefined}
-									/>
-								</Fragment>
-							);
-						})}
-						{view?.pending.map((p) => (
-							<UserBubble
-								key={p.clientMessageId}
-								text={p.text}
-								pending={!p.failed}
-								failed={p.failed}
-								onRetry={() => {
-									dismissPending(id, p.clientMessageId);
-									void send(id, p.text, p.images);
+						{renaming !== undefined ? (
+							<input
+								autoFocus
+								aria-label="Thread title"
+								value={renaming}
+								onChange={(e) => setRenaming(e.target.value)}
+								onBlur={commitRename}
+								onKeyDown={(e) => {
+									if (matches(e, "desktop.item.activate")) commitRename();
+									if (matches(e, "desktop.picker.dismiss")) {
+										e.preventDefault();
+										setRenaming(undefined);
+									}
 								}}
-								onDismiss={() => dismissPending(id, p.clientMessageId)}
+								className="kc-input h-7 min-w-0 flex-1 text-base font-medium"
 							/>
+						) : (
+							<Tooltip content={name} side="bottom" align="start" overflow>
+								<button
+									type="button"
+									onDoubleClick={() => setRenaming(name)}
+									className="min-w-0 truncate px-1.5 text-start text-base leading-6 font-medium text-ink"
+								>
+									{name}
+								</button>
+							</Tooltip>
+						)}
+						<div className="flex-1" />
+						{view?.ui.statuses.map((status) => (
+							<Tooltip key={status.key} content={status.text} side="bottom">
+								<span className="max-w-[200px] shrink truncate rounded-md border border-line px-2 text-sm text-secondary">
+									{status.text}
+								</span>
+							</Tooltip>
 						))}
+						<div className="flex items-center gap-1.5">
+							<ThreadMenu thread={{ id, cwd, name, sessionFile: view?.thread.sessionFile }} />
+							{view ? <ThreadSummary thread={view.thread} anchor={header} /> : null}
+							{panelOpen ? null : (
+								<>
+									<div className="mx-px h-4 w-px bg-line" />
+									<IconButton label="Show tabs" className="no-drag" onClick={() => setPanel({ open: true })}>
+										<SquarePlus size={16} />
+									</IconButton>
+								</>
+							)}
+						</div>
+					</header>
+					{finding ? <FindBar root={scroller} onClose={() => setFinding(false)} /> : null}
+					<div
+						ref={scroller}
+						onScroll={(e) => {
+							const el = e.currentTarget;
+							setPinned(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+						}}
+						className="kc-fade-y relative min-h-0 flex-1 overflow-y-auto"
+					>
+						<div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 pt-8 pb-12">
+							{view?.nextCursor ? (
+								<div className="flex justify-center">
+									<Button
+										variant="ghost"
+										color="secondary"
+										size="sm"
+										pill
+										disabled={loadingEarlier}
+										onClick={() => {
+											setLoadingEarlier(true);
+											setPinned(false);
+											void loadEarlier(id).finally(() => setLoadingEarlier(false));
+										}}
+									>
+										{loadingEarlier ? "Loading…" : "Load earlier messages"}
+									</Button>
+								</div>
+							) : null}
+							{failure ? (
+								<div className="flex items-center gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-text">
+									<CircleAlert size={14} className="shrink-0" />
+									<span className="min-w-0 flex-1">
+										{deleted ? "The worktree of this thread was deleted. Restore it to continue." : failure.message}
+									</span>
+									{failure.code === "threadLockedElsewhere" ? (
+										<Button variant="ghost" color="danger" size="sm" onClick={() => void fork(id)}>
+											Fork it
+										</Button>
+									) : null}
+									<Button
+										variant="soft"
+										color="danger"
+										size="sm"
+										onClick={() => void (deleted ? restoreWorktree(id) : openThread(id))}
+									>
+										{deleted ? "Restore" : "Retry"}
+									</Button>
+								</div>
+							) : null}
+							{!view && !failure ? <div className="kc-pulse text-sm text-tertiary">Loading…</div> : null}
+							{workspace?.mode === "worktree" && workspace.setupFailed ? (
+								<div className="flex items-center gap-2 rounded-lg bg-soft-alt px-3 py-2 text-sm text-secondary">
+									<CircleAlert size={14} className="shrink-0" /> The environment's setup script failed; the worktree is
+									ready without it.
+								</div>
+							) : null}
+							{progress && view?.turns.length === 0 ? (
+								<pre className="max-h-48 overflow-auto rounded-lg bg-surface-secondary px-3 py-2 font-code text-code text-secondary">
+									{progress}
+								</pre>
+							) : null}
+							{view?.turns.map((turn, i) => {
+								const before = view.turns[i - 1];
+								const separate = before
+									? turn.startedAt - before.startedAt >= SEPARATOR_GAP_MS
+									: dayLabel(turn.startedAt) !== "Today";
+								return (
+									<Fragment key={turn.id}>
+										{separate ? <DateSeparator at={turn.startedAt} /> : null}
+										<TurnView
+											turn={turn}
+											threadId={id}
+											latest={i === view.turns.length - 1}
+											retry={turn.status === "inProgress" ? view.retry : undefined}
+										/>
+									</Fragment>
+								);
+							})}
+							{view?.pending.map((p) => (
+								<UserBubble
+									key={p.clientMessageId}
+									text={p.text}
+									pending={!p.failed}
+									failed={p.failed}
+									onRetry={() => {
+										dismissPending(id, p.clientMessageId);
+										void send(id, p.text, p.images);
+									}}
+									onDismiss={() => dismissPending(id, p.clientMessageId)}
+								/>
+							))}
+						</div>
 					</div>
-				</div>
-				{/* Codex's Scroll to bottom: a 32px round button over the composer, faded out while pinned. The negative
-				    margin pulls it and the composer 1rem over the transcript's faded tail. */}
-				<div className="relative -mt-4">
-					<Tooltip content="Scroll to bottom">
-						<Button
-							variant="outline"
-							size="lg"
-							uniform
-							pill
-							aria-label="Scroll to bottom"
-							tabIndex={pinned ? -1 : 0}
-							onClick={() => setPinned(true)}
-							className={`absolute -top-14 left-1/2 -translate-x-1/2 bg-surface text-secondary transition-opacity duration-150 ${pinned ? "pointer-events-none opacity-0" : "opacity-100"}`}
-						>
-							<ArrowDown size={20} className="text-ink" />
-						</Button>
-					</Tooltip>
-				</div>
-				{/* Extension widgets, above the request or composer so they stay in sight while an approval is asked. */}
-				{view ? (
-					<WidgetPanel
-						widgets={view.ui.widgets}
-						onEvent={(key, control, value) => sendViewEvent(id, key, control, value)}
-					/>
-				) : null}
-				{/* A request takes the composer's place, as in Codex; the composer stays mounted so a draft survives. */}
-				{/* Positioned so it paints over the transcript it overlaps. */}
-				<div className="relative">
-					{asking?.method === "item/toolCall/requestApproval" ? (
-						<ApprovalCard key={String(asking.id)} threadId={id} approval={asking} cwd={cwd} />
-					) : asking?.method === "ui/dialog" ? (
-						<DialogCard key={String(asking.id)} threadId={id} dialog={asking} />
-					) : asking?.method === "item/toolCall/requestUserInput" ? (
-						<QuestionsCard key={String(asking.id)} threadId={id} request={asking} />
+					{/* Codex's Scroll to bottom: a 32px round button over the composer, faded out while pinned. The negative
+					    margin pulls it and the composer 1rem over the transcript's faded tail. */}
+					<div className="relative -mt-4">
+						<Tooltip content="Scroll to bottom">
+							<Button
+								variant="outline"
+								size="lg"
+								uniform
+								pill
+								aria-label="Scroll to bottom"
+								tabIndex={pinned ? -1 : 0}
+								onClick={() => setPinned(true)}
+								className={`absolute -top-14 left-1/2 -translate-x-1/2 bg-surface text-secondary transition-opacity duration-150 ${pinned ? "pointer-events-none opacity-0" : "opacity-100"}`}
+							>
+								<ArrowDown size={20} className="text-ink" />
+							</Button>
+						</Tooltip>
+					</div>
+					{/* Extension widgets, above the request or composer so they stay in sight while an approval is asked. */}
+					{view ? (
+						<WidgetPanel
+							widgets={view.ui.widgets}
+							onEvent={(key, control, value) => sendViewEvent(id, key, control, value)}
+						/>
 					) : null}
-					<div className={asking ? "hidden" : undefined}>
-						<Composer threadId={id} />
+					{/* A request takes the composer's place, as in Codex; the composer stays mounted so a draft survives. */}
+					{/* Positioned so it paints over the transcript it overlaps. */}
+					<div className="relative">
+						{asking?.method === "item/toolCall/requestApproval" ? (
+							<ApprovalCard key={String(asking.id)} threadId={id} approval={asking} cwd={cwd} />
+						) : asking?.method === "ui/dialog" ? (
+							<DialogCard key={String(asking.id)} threadId={id} dialog={asking} />
+						) : asking?.method === "item/toolCall/requestUserInput" ? (
+							<QuestionsCard key={String(asking.id)} threadId={id} request={asking} />
+						) : null}
+						<div className={asking ? "hidden" : undefined}>
+							<Composer threadId={id} />
+						</div>
 					</div>
 				</div>
+				{panelShown && view ? (
+					<div
+						className="kc-panel-slot flex shrink-0"
+						data-open={panelOpen || undefined}
+						data-enter={panelShown === "opened" || undefined}
+						inert={!panelOpen}
+						onTransitionEnd={(e) => {
+							if (e.target === e.currentTarget && !panelOpen) setPanelShown(false);
+						}}
+					>
+						<SidePanel id={id} />
+					</div>
+				) : null}
 			</div>
-			{panelShown && view ? (
-				<div
-					className="kc-panel-slot flex shrink-0"
-					data-open={panelOpen || undefined}
-					data-enter={panelShown === "opened" || undefined}
-					inert={!panelOpen}
-					onTransitionEnd={(e) => {
-						if (e.target === e.currentTarget && !panelOpen) setPanelShown(false);
-					}}
-				>
-					<SidePanel id={id} />
-				</div>
-			) : null}
+			{bottomOpen && view ? <BottomRegion threadId={id} cwd={cwd} /> : null}
 		</div>
 	);
 }
