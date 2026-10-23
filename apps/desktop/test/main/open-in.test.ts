@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -140,6 +140,23 @@ test("Windows: Codex's targets and lookups, and none it does not have", async ()
 	// Windows Terminal through its Start menu shortcut's target.
 	expect(target("terminal").command).toBe(join(root, "WindowsTerminal/wt.exe"));
 });
+
+test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+	"a probe that throws (an unreadable folder) leaves out its target, not the list",
+	async () => {
+		const root = layout(["Applications/Zed.app/Contents/MacOS/zed"]);
+		// Every lookup under ~/Applications now fails with EACCES instead of answering "not there".
+		chmodSync(join(root, "Applications"), 0);
+		try {
+			const ids = (await detectTargets("darwin", { HOME: root })).map((t) => t.id);
+			expect(ids).toContain("systemDefault");
+			expect(ids).toContain("fileManager");
+			expect(ids).not.toContain("zed");
+		} finally {
+			chmodSync(join(root, "Applications"), 0o755);
+		}
+	},
+);
 
 test("macOS: a file opened in a terminal runs the user's editor there, at the line", async () => {
 	const root = layout(["Applications/iTerm.app/Contents/Info.plist", "project/src/a.ts"]);
