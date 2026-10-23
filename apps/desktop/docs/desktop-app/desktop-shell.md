@@ -860,7 +860,9 @@ composer then shows its controls as icons only.
   panel's tabs (each named by its shell and cwd), + and a shell menu, and a
   chevron that hides the region; closing the last terminal hides it too.
   Ctrl+\` (Control on macOS too, Codex's Open Terminal) opens a terminal in
-  the thread's cwd; Mod+J toggles the region.
+  the thread's cwd; Mod+J toggles the region. Whether it shows is each
+  thread's own, and only with that thread's terminals, as Codex keeps its
+  bottom panel per conversation.
 - xterm.js in the renderer; `node-pty` in main (`host/terminal/*`), as Codex
   runs it. Colours from the `--kc-terminal-*` and `--kc-ansi-*` tokens, which
   follow Codex's palette: the ANSI slots are the theme's accents (black and

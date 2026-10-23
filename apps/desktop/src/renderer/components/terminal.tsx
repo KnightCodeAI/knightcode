@@ -22,6 +22,7 @@ import {
 	restartTerminal,
 	selectPreferences,
 	setBottom,
+	setTerminalsOpen,
 	type TerminalTab,
 	updateTerminal,
 	useStore,
@@ -269,7 +270,7 @@ function TerminalNotice({ threadId, index, tab, cwd }: { threadId: string; index
  * The region's top edge: a 16px handle centred on it (Codex's) that drags the height between 160px and what leaves the
  * thread 160px; dragged under 80px the region shuts.
  */
-function ResizeHandle({ height }: { height: number }) {
+function ResizeHandle({ threadId, height }: { threadId: string; height: number }) {
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientY;
@@ -278,8 +279,8 @@ function ResizeHandle({ height }: { height: number }) {
 		const max = Math.max(MIN_HEIGHT, region.parentElement!.getBoundingClientRect().height - ABOVE_MIN);
 		followDrag((e: PointerEvent) => {
 			const size = initial - (e.clientY - from);
-			if (size < MIN_HEIGHT / 2) setBottom({ open: false });
-			else setBottom({ open: true, height: Math.min(Math.max(size, MIN_HEIGHT), max) });
+			setTerminalsOpen(threadId, size >= MIN_HEIGHT / 2);
+			if (size >= MIN_HEIGHT / 2) setBottom({ height: Math.min(Math.max(size, MIN_HEIGHT), max) });
 		});
 	};
 	return (
@@ -315,7 +316,7 @@ export function BottomRegion({ threadId, cwd }: { threadId: string; cwd: string 
 			style={{ height: `min(${height}px, max(${MIN_HEIGHT}px, 100% - ${ABOVE_MIN}px))` }}
 			className="relative flex shrink-0 flex-col border-t border-line bg-[var(--kc-terminal-bg)]"
 		>
-			<ResizeHandle height={height} />
+			<ResizeHandle threadId={threadId} height={height} />
 			<div className="flex h-10 shrink-0 items-center gap-1.5 ps-2 pe-1.5">
 				<div role="tablist" aria-label="Terminals" className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
 					{tabs.map((tab, i) => (
@@ -352,7 +353,7 @@ export function BottomRegion({ threadId, cwd }: { threadId: string; cwd: string 
 					</Menu>
 				) : null}
 				<div className="flex-1" />
-				<IconButton label="Hide the terminal" onClick={() => setBottom({ open: false })}>
+				<IconButton label="Hide the terminal" onClick={() => setTerminalsOpen(threadId, false)}>
 					<ChevronDown size={16} />
 				</IconButton>
 			</div>

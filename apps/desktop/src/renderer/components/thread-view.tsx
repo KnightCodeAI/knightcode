@@ -354,7 +354,7 @@ export function ThreadView({ id }: { id: string }) {
 		if (el && pinned) el.scrollTop = el.scrollHeight;
 	});
 	useBinding("desktop.panel.toggle", () => setPanel({ open: !panelOpen }));
-	const bottomOpen = useStore((s) => s.bottom.open);
+	const bottomOpen = useStore((s) => s.terminals[id]?.open ?? false);
 	// Terminals main still runs for this thread (a reload, a second window) come back as its tabs.
 	useEffect(() => {
 		void loadTerminals(id).catch(() => {});
