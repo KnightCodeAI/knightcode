@@ -140,6 +140,51 @@ jobs:
           retention-days: 3
 
 
+  install-smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-26]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      actions: read
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-darwin-arm64
+          path: new
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-darwin-arm64
+          path: old
+          run-id: 39988126130
+          github-token: ${{ github.token }}
+      - name: Install each build from its dmg and start it
+        env:
+          KNIGHTCODE_DESKTOP_SMOKE: "1"
+        run: |
+          sw_vers
+          for build in old new; do
+            dmg=$(find "$build" -name '*.dmg' | head -1)
+            mount=$(mktemp -d)
+            hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg" >/dev/null
+            rm -rf /Applications/KnightCode.app
+            cp -R "$mount/KnightCode.app" /Applications/
+            hdiutil detach "$mount" >/dev/null
+            echo "== $build $(codesign -dv /Applications/KnightCode.app 2>&1 | grep -E '^CodeDirectory')"
+            set +e
+            KNIGHTCODE_CODING_AGENT_DIR="$RUNNER_TEMP/agent-$build" /Applications/KnightCode.app/Contents/MacOS/knightcode-desktop "--user-data-dir=$RUNNER_TEMP/data-$build" > "$RUNNER_TEMP/$build.log" 2>&1
+            code=$?
+            set -e
+            grep -E "smoke|Library not loaded|Team ID" "$RUNNER_TEMP/$build.log" | head -5 || true
+            echo "== $build exit $code"
+            echo "$build=$code" >> "$RUNNER_TEMP/codes"
+          done
+          grep -q '^new=0$' "$RUNNER_TEMP/codes"
+
   desktop:
     strategy:
       fail-fast: false
