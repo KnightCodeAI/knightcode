@@ -74,6 +74,14 @@ type Selector = { scope: DiffScope; against?: string; commit?: string };
 type Read = ResultOf<"thread/diff/read">;
 const NONE: ReadonlySet<string> = new Set();
 
+/** A file's first changed line on the new side, past its first hunk's context, as tool rows open files. */
+function firstChange(file: DiffFile): number | undefined {
+	const hunk = file.hunks[0];
+	if (!hunk) return undefined;
+	const context = hunk.lines.findIndex((line) => !line.startsWith(" "));
+	return Math.max(1, hunk.newStart + Math.max(0, context));
+}
+
 const SCOPES: { scope: DiffScope; label: string }[] = [
 	{ scope: "lastTurn", label: "Last Turn" },
 	{ scope: "uncommitted", label: "Uncommitted" },
@@ -462,7 +470,7 @@ function FileSection({
 							size="3xs"
 							round
 							disabled={file.status === "deleted"}
-							onClick={() => openFileTab(threadId, full, file.hunks[0]?.newStart || undefined)}
+							onClick={() => openFileTab(threadId, full, firstChange(file))}
 						>
 							<ExternalLink size={16} />
 						</IconButton>
@@ -478,13 +486,13 @@ function FileSection({
 								</MenuItem>
 								<MenuItem
 									disabled={file.status === "deleted"}
-									onSelect={() => openFileTab(threadId, full, file.hunks[0]?.newStart || undefined)}
+									onSelect={() => openFileTab(threadId, full, firstChange(file))}
 								>
 									Open file
 								</MenuItem>
 								<MenuItem
 									disabled={!editor || file.status === "deleted"}
-									onSelect={() => editor && openIn(editor.id, full, file.hunks[0]?.newStart || undefined)}
+									onSelect={() => editor && openIn(editor.id, full, firstChange(file))}
 								>
 									{editor ? `Open in ${editor.name}` : "Open in editor"}
 								</MenuItem>

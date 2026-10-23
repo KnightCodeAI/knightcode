@@ -121,10 +121,26 @@ test.skipIf(process.platform === "win32")("Linux: a command on PATH, then the fi
 	expect(terminals[0]!.args(root)).toEqual(["--working-directory", root]);
 });
 
+test.skipIf(process.platform === "win32")("Linux: an editor found only by its desktop entry launches through gio", async () => {
+	const root = layout(["bin/gio", "share/applications/cursor.desktop", "share/applications/dev.zed.Zed.desktop"]);
+	const targets = await detectTargets("linux", { PATH: join(root, "bin"), HOME: root, XDG_DATA_HOME: join(root, "share") });
+	const entry = (name: string) => join(root, "share/applications", name);
+	const cursor = targets.find((t) => t.id === "cursor")!;
+	expect(cursor.command).toBe(join(root, "bin/gio"));
+	// gio hands its arguments over as files: a flag such as --goto would arrive as a file name.
+	expect(cursor.args("/p/a.ts", 3, 1)).toEqual(["launch", entry("cursor.desktop"), "/p/a.ts"]);
+	expect(targets.find((t) => t.id === "zed")!.args("/p/a.ts", 3, 1)).toEqual([
+		"launch",
+		entry("dev.zed.Zed.desktop"),
+		"/p/a.ts:3:1",
+	]);
+});
+
 function service(root: string, launched: [string, string[]][], shown: string[] = []) {
 	let now = 0;
 	const reads: string[][] = [];
 	let failNext = false;
+	let launchEnv: NodeJS.ProcessEnv | undefined;
 	const openIn = new OpenIn({
 		platform: "win32",
 		env: windowsEnv(root, ["apps"]),
@@ -138,20 +154,31 @@ function service(root: string, launched: [string, string[]][], shown: string[] =
 		},
 		reveal: async (path) => void shown.push(`reveal ${path}`),
 		openDefault: async (path) => void shown.push(`default ${path}`),
-		launch: async (command, args) => void launched.push([command, args]),
+		launch: async (command, args, env) => {
+			launched.push([command, args]);
+			launchEnv = env;
+		},
 		now: () => now,
 	});
-	return { openIn, reads, advance: (ms: number) => (now += ms), failIcons: () => (failNext = true) };
+	return {
+		openIn,
+		reads,
+		advance: (ms: number) => (now += ms),
+		failIcons: () => (failNext = true),
+		launchEnv: () => launchEnv,
+	};
 }
 
 test("open launches a listed target, hands the shell entries to the shell, and refuses the rest", async () => {
 	const root = layout(["Local/Programs/Microsoft VS Code/Code.exe"]);
 	const launched: [string, string[]][] = [];
 	const shown: string[] = [];
-	const { openIn } = service(root, launched, shown);
+	const { openIn, launchEnv } = service(root, launched, shown);
 	const file = join(root, "a.ts");
 	await openIn.open("vscode", file, 4, 2);
 	expect(launched).toEqual([[join(root, "Local/Programs/Microsoft VS Code/Code.exe"), ["--goto", `${file}:4:2`]]]);
+	// With the environment detection used (the login shell's), not main's own.
+	expect(launchEnv()?.PATH).toBe(windowsEnv(root, ["apps"]).PATH);
 	await openIn.open("fileManager", file);
 	await openIn.open("systemDefault", file);
 	expect(shown).toEqual([`reveal ${file}`, `default ${file}`]);

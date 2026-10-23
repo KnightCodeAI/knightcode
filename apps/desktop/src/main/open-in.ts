@@ -365,7 +365,8 @@ export async function detectTargets(platform: NodeJS.Platform, env: NodeJS.Proce
 			if (command) run(command);
 			else if (entry) {
 				const gio = onPath("gio", platform, env);
-				if (gio) add(spec, gio, (p, l, c) => ["launch", entry, ...goto(p, l, c).slice(-1)]);
+				// gio passes its arguments as files: only the path:line:column form survives that, not a flag.
+				if (gio) add(spec, gio, (p, l, c) => ["launch", entry, ...(goto === colon ? goto(p, l, c) : [p])]);
 			}
 		}
 	}
@@ -447,16 +448,16 @@ export interface OpenInDeps {
 	reveal: (path: string) => Promise<void>;
 	/** The system's default app for the file. */
 	openDefault: (path: string) => Promise<void>;
-	launch?: (command: string, args: string[]) => Promise<void>;
+	launch?: (command: string, args: string[], env: NodeJS.ProcessEnv) => Promise<void>;
 	now?: () => number;
 }
 
 const CACHE_MS = 60_000;
 
 /** Never through a shell (a path is data, not a command line); detached, so the editor outlives the app. */
-function launch(command: string, args: string[]): Promise<void> {
+function launch(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true });
+		const child = spawn(command, args, { detached: true, env, stdio: "ignore", windowsHide: true });
 		child.once("error", reject);
 		child.once("spawn", () => {
 			child.unref();
@@ -529,6 +530,7 @@ export class OpenIn {
 		if (!target) throw new InvalidParams(`no app "${targetId}" to open in`);
 		if (target.kind === "fileManager") return this.deps.reveal(path);
 		if (target.kind === "systemDefault") return this.deps.openDefault(path);
-		await (this.deps.launch ?? launch)(target.command, target.args(path, line, column));
+		// The environment detection used: a Dock- or launcher-started app's own PATH is shorter than the user's.
+		await (this.deps.launch ?? launch)(target.command, target.args(path, line, column), this.deps.env);
 	}
 }

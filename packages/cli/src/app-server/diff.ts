@@ -523,7 +523,8 @@ export async function readThreadDiff(
 		...(trees.turnId !== undefined ? { turnId: trees.turnId } : {}),
 		...(trees.stale ? { stale: true } : {}),
 		...(trees.against !== undefined ? { against: trees.against } : {}),
-		...(trees.from ? { fromTree: trees.from, toTree: trees.to } : {}),
+		// Whitespace-blind hunks do not line up with the trees' own text, so such a read names none.
+		...(trees.from && !params.ignoreWhitespace ? { fromTree: trees.from, toTree: trees.to } : {}),
 	};
 }
 

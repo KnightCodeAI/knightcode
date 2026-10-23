@@ -127,6 +127,11 @@ test("thread/diff/file gives each scope's sides, and the read's hunks turn its o
 		expectConsistent(await sidesOf(s, thread.id, scope));
 	expectConsistent(await sidesOf(s, thread.id, "committed", { commit }));
 	expectConsistent(await sidesOf(s, thread.id, "branch", { against: base }));
+	// Whitespace-blind hunks would not turn one side into the other, so that read names no trees.
+	const blind = await s.a.client.request("thread/diff/read", { threadId: thread.id, ignoreWhitespace: true });
+	expect(blind.files.length).toBeGreaterThan(0);
+	expect(blind).not.toHaveProperty("fromTree");
+	expect(blind).not.toHaveProperty("toTree");
 });
 
 test("thread/diff/file gives the last turn's sides", async () => {
