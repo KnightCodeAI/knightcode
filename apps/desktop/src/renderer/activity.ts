@@ -343,7 +343,21 @@ export interface RowLabel {
 	text: string;
 	path?: string;
 	target?: string;
+	/** Where the file tab opens: a read's first line, an edit's first change. */
+	line?: number;
 	stats?: { additions: number; deletions: number };
+}
+
+/** The first line of the new side a unified patch changes, past its first hunk's context lines. */
+export function firstChangedLine(patch: string | undefined): number | undefined {
+	let line: number | undefined;
+	for (const text of patch?.split("\n") ?? []) {
+		const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(text);
+		if (hunk) line = Number(hunk[1]);
+		else if (line !== undefined && (text.startsWith("+") || text.startsWith("-"))) break;
+		else if (line !== undefined && text.startsWith(" ")) line++;
+	}
+	return line === undefined ? undefined : Math.max(1, line);
 }
 
 /** Codex's exploration rows: "Read name", "Searched for query in path", "Listed files in path". */
@@ -369,8 +383,10 @@ export function rowLabel(item: ToolItem, cwd: string, open = false): RowLabel {
 	const path = rawPath ? shortPath(displayPath(rawPath, cwd)) : undefined;
 	const verb = (done: string, doing: string) => (running ? doing : done);
 	switch (item.tool) {
-		case "read":
-			return explorationLabel({ type: "read", path: rawPath }, running);
+		case "read": {
+			const offset = typeof input.offset === "number" && input.offset >= 1 ? Math.floor(input.offset) : undefined;
+			return { ...explorationLabel({ type: "read", path: rawPath }, running), ...(offset ? { line: offset } : {}) };
+		}
 		case "grep":
 		case "find":
 			return explorationLabel(
@@ -405,10 +421,12 @@ export function rowLabel(item: ToolItem, cwd: string, open = false): RowLabel {
 									? "Deleted"
 									: "Edited";
 			const patch = patchOf(item);
+			const line = firstChangedLine(patch);
 			return {
 				text,
 				path: baseName(editPath(item)),
 				target: editPath(item),
+				...(line ? { line } : {}),
 				...(patch ? { stats: diffStats(patch) } : {}),
 			};
 		}

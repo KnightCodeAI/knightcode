@@ -26,11 +26,22 @@ import {
 	Settings,
 	SquareTerminal,
 } from "./icons.tsx";
-import { type ReactNode, type RefObject, useEffect, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
 import { client } from "../client.ts";
 import { basename } from "../format.ts";
 import { matches } from "../keys.ts";
-import { errorText, handoff, navigate, RequestError, refreshDiff, setPanel, toast, useStore } from "../store.ts";
+import { latestCheck } from "../latest.ts";
+import {
+	checkHandoff,
+	errorText,
+	handoff,
+	navigate,
+	RequestError,
+	refreshDiff,
+	showChanges,
+	toast,
+	useStore,
+} from "../store.ts";
 import { Button, IconButton, Kbd } from "./button.tsx";
 import { Totals } from "./changes.tsx";
 import { Dialog } from "./dialog.tsx";
@@ -706,33 +717,54 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 	);
 }
 
+/** A handoff refusal as the dialog says it: the server's own words, and the paths in the way when it names them. */
+function refusalText(error: RequestError): { message: string; paths?: string[] } {
+	const data = error.data as { recoveryInstructions?: string[]; paths?: string[] } | undefined;
+	return { message: data?.recoveryInstructions?.[0] ?? error.message, ...(data?.paths?.length ? { paths: data.paths } : {}) };
+}
+
 /**
  * Codex's "Bring changes back to local checkout" (and its reverse): the branch the main checkout gets, where the
- * changes go, and the server's refusal ("Stash or commit your local changes to hand off") verbatim.
+ * changes go, and the server's refusal ("Stash or commit your local changes to hand off") verbatim. As Codex's, it
+ * checks before the user confirms: a dry run on open and 250 ms after each branch edit keeps "Bring changes back"
+ * off while it runs or refuses. The confirm still sends the real handoff, whose own refusal shows the same way.
  */
 export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: () => void }) {
 	const toLocal = thread.workspace.mode === "worktree";
+	const to = toLocal ? "local" : "worktree";
 	const { branch, setBranch, edited } = useSuggestedBranch(thread.name);
-	const [error, setError] = useState<string>();
+	const [error, setError] = useState<{ message: string; paths?: string[] }>();
 	const [busy, setBusy] = useState(false);
 	const status = useStatus(thread.id);
 	useEffect(() => {
 		if (status?.branch) setBranch(status.branch);
 	}, [status?.branch]);
 	const main = toLocal ? thread.projectCwd : thread.cwd;
+	// Unedited, the server names it from its own settings.
+	const sent = toLocal && !status?.branch && edited ? branch : undefined;
+	const key = sent ?? "";
+	const [verdict, setVerdict] = useState<{ key: string; refusal?: RequestError }>();
+	const checker = useMemo(
+		() =>
+			latestCheck(
+				250,
+				(next) => checkHandoff(thread.id, to, next || undefined),
+				(checked, refusal) => setVerdict({ key: checked, ...(refusal ? { refusal } : {}) }),
+			),
+		[thread.id, to],
+	);
+	useEffect(() => checker.set(key), [checker, key]);
+	useEffect(() => () => checker.stop(), [checker]);
+	const checking = verdict?.key !== key;
+	const refused = !checking && verdict?.refusal ? refusalText(verdict.refusal) : undefined;
+	const shown = error ?? refused;
 	const go = async () => {
 		setBusy(true);
 		setError(undefined);
-		const result = await handoff(
-			thread.id,
-			toLocal ? "local" : "worktree",
-			// Unedited, the server names it from its own settings.
-			toLocal && !status?.branch && edited ? branch : undefined,
-		);
+		const result = await handoff(thread.id, to, sent);
 		setBusy(false);
 		if (result instanceof RequestError) {
-			const data = result.data as { recoveryInstructions?: string[]; paths?: string[] } | undefined;
-			setError(data?.recoveryInstructions?.[0] ?? result.message);
+			setError(refusalText(result));
 			return;
 		}
 		if (result.branch) toast(`Checked out ${result.branch} in ${basename(main)}`, "success");
@@ -773,18 +805,28 @@ export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: ()
 				{basename(thread.projectCwd)}
 			</div>
 			<p className="mt-2 text-xs leading-5 text-tertiary">{main.replaceAll("\\", "/")}</p>
-			{/* Codex's 44px full-width confirm, dimmed while its refusal shows. */}
+			{/* Codex's 44px full-width confirm, off while its check runs or refuses. */}
 			<Button
 				variant="solid"
 				pill
 				block
-				disabled={busy}
+				disabled={busy || checking || refused !== undefined}
 				onClick={() => void go()}
-				className={`mt-5 h-11 text-base font-medium ${error ? "opacity-50" : ""}`}
+				className="mt-5 h-11 text-base font-medium"
 			>
 				{busy ? "Moving changes…" : toLocal ? "Bring changes back" : "Move to worktree"}
 			</Button>
-			{error ? <p className="mt-3 text-center text-base leading-6 text-danger-text">{error}</p> : null}
+			{shown ? (
+				<div className="mt-3 text-center text-base leading-6 text-danger-text">
+					<p>{shown.message}</p>
+					{shown.paths ? (
+						<p className="mt-1 truncate text-sm text-tertiary">
+							{shown.paths.slice(0, 3).join(", ")}
+							{shown.paths.length > 3 ? ` and ${shown.paths.length - 3} more` : ""}
+						</p>
+					) : null}
+				</div>
+			) : null}
 		</Dialog>
 	);
 }
@@ -842,7 +884,7 @@ function SummaryBody({
 					type="button"
 					onClick={() => {
 						closeSummary();
-						setPanel({ open: true });
+						showChanges(thread.id);
 					}}
 					className="flex h-full min-w-0 flex-1 items-center gap-2.5 ps-3 text-base text-ink"
 				>
@@ -930,7 +972,7 @@ export function CommentsChip({ threadId }: { threadId: string }) {
 	return (
 		<button
 			type="button"
-			onClick={() => setPanel({ open: true })}
+			onClick={() => showChanges(threadId)}
 			className="inline-flex max-w-[320px] items-center gap-1 rounded-md border border-line bg-panel px-2 py-1.5 text-sm text-ink"
 		>
 			<FileDiff size={14} className="text-tertiary" />

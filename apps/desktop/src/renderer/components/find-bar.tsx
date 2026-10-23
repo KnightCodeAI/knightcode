@@ -10,7 +10,7 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { matchOffsets } from "../format.ts";
 import { matches, useBinding } from "../keys.ts";
-import { setPanel, useStore } from "../store.ts";
+import { showChanges, useStore } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { ArrowDown, ArrowUp, FileDiff, MessageSquare, Search, X } from "./icons.tsx";
 
@@ -114,7 +114,7 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 	useEffect(() => setActive(0), [query, scope]);
 	const choose = (next: "thread" | "diffs") => {
 		setScope(next);
-		if (next === "diffs") setPanel({ open: true });
+		if (next === "diffs") showChanges();
 		input.current?.focus();
 	};
 

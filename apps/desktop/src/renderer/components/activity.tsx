@@ -16,6 +16,7 @@ import {
 	type CommandEnd,
 	diffStats,
 	expandable,
+	firstChangedLine,
 	inputOf,
 	isRunning,
 	type Kind,
@@ -32,7 +33,7 @@ import {
 import { client } from "../client.ts";
 import diffOverrides from "../diff-overrides.css?raw";
 import { matches } from "../keys.ts";
-import { errorText, selectPreferences, toast, useStore } from "../store.ts";
+import { openFileInView, selectPreferences, useStore } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { highlighterReady, Totals } from "./changes.tsx";
 import {
@@ -71,17 +72,13 @@ export function KindIcon({ kind, tool }: { kind: Kind; tool?: string }) {
 const fullPath = (path: string, cwd: string) =>
 	/^([a-zA-Z]:)?[\\/]/.test(path) ? path : `${cwd.replace(/[\\/]+$/, "")}/${path}`;
 
-/** A file named in a row: Codex's link, at half strength and underlined, opening the file. */
-function FileLink({ path, cwd, children }: { path: string; cwd: string; children: ReactNode }) {
+/** A file named in a row: Codex's link, at half strength and underlined, opening the file in a side panel tab. */
+function FileLink({ path, cwd, line, children }: { path: string; cwd: string; line?: number; children: ReactNode }) {
 	return (
 		<button
 			type="button"
 			className="pointer-events-auto min-w-0 truncate text-tertiary underline decoration-current/40 underline-offset-2 hover:text-ink"
-			onClick={() =>
-				void client
-					.host("host/shell/openPath", { path: fullPath(path, cwd) })
-					.catch((e: unknown) => toast(errorText(e), "error"))
-			}
+			onClick={() => openFileInView(fullPath(path, cwd), line)}
 		>
 			{children}
 		</button>
@@ -143,7 +140,7 @@ function Label({ item, cwd, open }: { item: ToolItem; cwd: string; open: boolean
 			{label.path ? (
 				<>
 					&nbsp;
-					<FileLink path={label.target ?? label.path} cwd={cwd}>
+					<FileLink path={label.target ?? label.path} cwd={cwd} line={label.line}>
 						{label.path}
 					</FileLink>
 				</>
@@ -308,11 +305,7 @@ function DiffCard({ item, cwd }: { item: ToolItem; cwd: string }) {
 					<button
 						type="button"
 						className="min-w-0 truncate hover:text-ink"
-						onClick={() =>
-							void client
-								.host("host/shell/openPath", { path: fullPath(change.path, cwd) })
-								.catch((e: unknown) => toast(errorText(e), "error"))
-						}
+						onClick={() => openFileInView(fullPath(change.path, cwd), firstChangedLine(patch))}
 					>
 						{baseName(change.path)}
 					</button>
