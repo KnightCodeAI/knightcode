@@ -267,7 +267,7 @@ over the wire.
 
 ```ts
 // S2b
-"host/openIn/list": { params: Obj({}), result: Obj({ targets: Type.Array(Obj({ id: Str, name: Str, icon: Type.Optional(Str) })) }) }, // desktop-shell.md 4.4; icon a data URL
+"host/openIn/list": { params: Obj({}), result: Obj({ targets: Type.Array(Obj({ id: Str, name: Str, kind: TargetKind, icon: Type.Optional(Str) })) }) }, // desktop-shell.md 4.4; kind is editor, terminal, fileManager or systemDefault; icon a data URL
 "host/openIn/open": {
 	params: Obj({ targetId: Str, path: Str, line: Type.Optional(Num), column: Type.Optional(Num) }),
 	result: Obj({}),
@@ -321,7 +321,7 @@ where `UpdateState = { status: "idle" | "checking" | "available" | "downloading"
 
 ```ts
 // src/main/open-in.ts
-export interface OpenInTarget { id: string; name: string; icon?: string; command: string; args(path: string, line?: number, column?: number): string[] }
+export interface OpenInTarget { id: string; name: string; kind: TargetKind; iconPath?: string; command: string; args(path: string, line?: number, column?: number): string[] }
 export function detectTargets(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Promise<OpenInTarget[]>;
 
 // src/main/terminals.ts

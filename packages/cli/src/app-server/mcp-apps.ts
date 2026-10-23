@@ -24,7 +24,10 @@ import { AppServerError } from "./errors.ts";
 
 export const MCP_APP_ARGUMENTS_MAX_BYTES = 1024 * 1024;
 export const MCP_APP_RESULT_MAX_BYTES = 4 * 1024 * 1024;
-/** How long an answer from the MCP extension may take; a tool's own timeout is usually shorter. */
+/**
+ * How long a resource read or a tool lookup may take. A tool call has no such timer: the MCP extension bounds it with
+ * the server's own timeout, which progress extends, and failing it early would invite the app to run the tool again.
+ */
 const ANSWER_TIMEOUT_MS = 60_000;
 
 /** Where a thread's MCP extension is reached: its session's event bus, captured by the inline extension below. */
@@ -49,10 +52,13 @@ const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value) ?? "");
 function ask(bus: EventBus | undefined, request: McpAppQuery): Promise<unknown> {
 	if (!bus) return Promise.reject(new AppServerError("mcpUnavailable", "MCP is not running in this thread"));
 	return new Promise((resolve, reject) => {
-		const timer = setTimeout(
-			() => reject(new AppServerError("internal", "the thread's MCP extension did not answer within 60 s")),
-			ANSWER_TIMEOUT_MS,
-		);
+		const timer =
+			request.op === "callTool"
+				? undefined
+				: setTimeout(
+						() => reject(new AppServerError("internal", "the thread's MCP extension did not answer within 60 s")),
+						ANSWER_TIMEOUT_MS,
+					);
 		const reply = (answer: McpAppAnswer) => {
 			clearTimeout(timer);
 			if ("error" in answer) reject(new AppServerError(answer.error.code, answer.error.message));

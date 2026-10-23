@@ -8,7 +8,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, dialog, session, type WebContents } from "electron";
+import { session, type WebContents } from "electron";
 import { DESKTOP_KEYBINDINGS, type KeybindingId, matchesBinding } from "../shared/keybindings.ts";
 import { isPreviewUrl, PREVIEW_PARTITION, previewPartition } from "../shared/preview-url.ts";
 
@@ -41,13 +41,10 @@ function configureSession(partition: string): void {
 	const preview = session.fromPartition(partition);
 	preview.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
 	preview.setPermissionCheckHandler(() => false);
-	preview.on("will-download", (_event, item, contents) => {
-		const host = contents.hostWebContents ?? contents;
-		const window = BrowserWindow.fromWebContents(host);
-		const options = { defaultPath: item.getFilename() };
-		const path = window ? dialog.showSaveDialogSync(window, options) : dialog.showSaveDialogSync(options);
-		if (path) item.setSavePath(path);
-		else item.cancel();
+	// With no save path set Electron asks where with its own save dialog, which does not block main (a synchronous one
+	// would stall every window's traffic while open), and cancels the download when it is dismissed.
+	preview.on("will-download", (_event, item) => {
+		item.setSaveDialogOptions({ defaultPath: item.getFilename() });
 	});
 }
 
