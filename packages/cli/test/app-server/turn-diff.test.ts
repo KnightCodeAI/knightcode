@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { TURN_DIFF_ENTRY, turnChangeHooks } from "../../src/app-server/diff.ts";
 import type { ExtensionAPI } from "../../src/index.ts";
+import { write as put } from "./fixtures/git-repo.ts";
 import { createHeldTurn } from "./fixtures/held-turn-extension.ts";
 import { type RepoServer, repoServer } from "./fixtures/worktree-server.ts";
 import { cleanupServers, startServer } from "./harness.ts";
@@ -92,6 +93,38 @@ test("a text-only turn then a writing turn: one event and one record, for the se
 	expect(await s.a.waitFor("turn/diff/updated")).toMatchObject({ turnId: second.id });
 	expect(s.a.notifications.filter((n) => n.method === "turn/diff/updated")).toHaveLength(1);
 	expect(entries(s, thread.id)).toHaveLength(1);
+});
+
+const untracked = (s: RepoServer, folders: string[], each: number) => {
+	for (const folder of folders) for (let i = 0; i < each; i++) put(s.cwd, `${folder}/${i}.txt`, String(i));
+};
+
+test("a file written beside a folder of 200 or more untracked files is recorded, the folder is not", async () => {
+	const s = await repoServer();
+	untracked(s, ["frames"], 501);
+	const thread = await fullAccess(s);
+	s.faux.setResponses(write("echo hi > out.txt"));
+	await turn(s, thread.id);
+	expect((await s.a.waitFor("turn/diff/updated")).files).toEqual([{ path: "out.txt", additions: 1, deletions: 0 }]);
+});
+
+test("files a turn deletes from a skipped folder do not leave the rest reading as added", async () => {
+	const s = await repoServer();
+	untracked(s, ["frames", "dataset"], 251);
+	const thread = await fullAccess(s);
+	// Leaves 140 files in frames: under the 200 that skipped the folder before the turn.
+	s.faux.setResponses(write("rm frames/1*.txt && echo hi > out.txt"));
+	await turn(s, thread.id);
+	expect((await s.a.waitFor("turn/diff/updated")).files).toEqual([{ path: "out.txt", additions: 1, deletions: 0 }]);
+});
+
+test("more than 500 untracked files outside large folders: the turn records tracked files only", async () => {
+	const s = await repoServer();
+	untracked(s, ["one", "two", "three"], 167);
+	const thread = await fullAccess(s);
+	s.faux.setResponses(write("echo edited > a.txt && echo hi > out.txt"));
+	await turn(s, thread.id);
+	expect((await s.a.waitFor("turn/diff/updated")).files).toEqual([{ path: "a.txt", additions: 1, deletions: 3 }]);
 });
 
 test("lastTurn reads back after unload and resume", async () => {

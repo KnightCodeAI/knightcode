@@ -1774,6 +1774,17 @@ a reload. That
 names every file whose content changed during the turn, including a second
 edit to a file that was already dirty.
 
+Untracked files in the snapshots: all of them up to 500 (each over 10 MiB
+left out). Past 500, an untracked folder that holds 200 or more untracked
+files itself is left out with everything under it (Codex's ghost snapshots'
+rule), and the after-snapshot leaves out the same folders as the before one,
+so a turn that empties one below 200 does not read as adding the rest. If more
+than 500 untracked files remain outside such folders, the snapshots are
+tracked-only. On this repository (12,345 untracked files, 12,198 in seven
+frame folders) that keeps a new file in the checkout's root in the record:
+the listing takes about 125 ms and the 147 remaining files about 250 ms to
+hash. The diff reads keep the plain rule below: tracked changes only past 500.
+
 What it does not do is attribute: a snapshot covers the whole working tree,
 so a change another local thread in the same checkout made during the
 overlap, or one the user made in an editor, is in the list too. So

@@ -551,22 +551,26 @@ export function indexTree(repo: Repo, signal?: AbortSignal): Promise<string> {
 /**
  * The working tree's content as a tree: tracked files, plus untracked not ignored ones when `untracked`. With
  * `maxUntrackedBytes`, larger untracked files are left out, as Codex's turn snapshots leave out files over 10 MiB:
- * hashing them on every turn would stall it. Deletion and handoff snapshots never pass a limit.
+ * hashing them on every turn would stall it; so are the untracked files under a `skip` folder. Deletion and handoff
+ * snapshots never pass a limit.
  */
 export function snapshotTree(
 	repo: Repo,
 	untracked: boolean,
 	signal?: AbortSignal,
 	maxUntrackedBytes?: number,
+	skip: readonly string[] = [],
 ): Promise<string> {
 	return withTemporaryIndex(repo, signal, async (run) => {
 		// No pathspec: at the root it is the whole tree, and "." fails in a repository with no files at all.
 		if (!untracked || maxUntrackedBytes === undefined) await run(["add", untracked ? "-A" : "-u"]);
 		else {
 			await run(["add", "-u"]);
+			const skipped = new Set(skip);
 			const small = (await run(["ls-files", "--others", "--exclude-standard", "-z"])).split("\0").filter((path) => {
+				if (path === "" || underAny(path, skipped)) return false;
 				const info = lstatSync(join(repo.root, path), { throwIfNoEntry: false });
-				return path !== "" && info !== undefined && info.size <= maxUntrackedBytes;
+				return info !== undefined && info.size <= maxUntrackedBytes;
 			});
 			if (small.length > 0)
 				await run(["add", "--pathspec-from-file=-", "--pathspec-file-nul"], `${small.join("\0")}\0`);
@@ -577,6 +581,41 @@ export function snapshotTree(
 
 /** Untracked files over this size are left out of turn snapshots and diff reads (Codex's default). */
 export const LARGE_UNTRACKED_BYTES = 10 * 1024 * 1024;
+
+/** A folder holding this many untracked files itself is left out of turn snapshots (Codex's ghost snapshots' rule). */
+export const LARGE_UNTRACKED_FOLDER_FILES = 200;
+
+/** Whether `path` lies under one of the folders, each written with its trailing slash. */
+function underAny(path: string, folders: ReadonlySet<string>): boolean {
+	if (folders.size === 0) return false;
+	for (let i = path.indexOf("/"); i !== -1; i = path.indexOf("/", i + 1))
+		if (folders.has(path.slice(0, i + 1))) return true;
+	return false;
+}
+
+/**
+ * For a turn snapshot, past `limit` untracked, not ignored files: the folders that hold at least
+ * LARGE_UNTRACKED_FOLDER_FILES of them themselves (with a trailing slash; never the root), and how many untracked files
+ * lie outside them. Within `limit`: no folder, and every file.
+ */
+export async function untrackedFolders(
+	repo: Repo,
+	limit: number,
+	signal?: AbortSignal,
+): Promise<{ skip: string[]; rest: number }> {
+	const files = (await git(repo, ["ls-files", "--others", "--exclude-standard", "-z"], { signal }))
+		.split("\0")
+		.filter(Boolean);
+	if (files.length <= limit) return { skip: [], rest: files.length };
+	const counts = new Map<string, number>();
+	for (const file of files) {
+		const cut = file.lastIndexOf("/");
+		if (cut !== -1) counts.set(file.slice(0, cut + 1), (counts.get(file.slice(0, cut + 1)) ?? 0) + 1);
+	}
+	const skip = [...counts].filter(([, n]) => n >= LARGE_UNTRACKED_FOLDER_FILES).map(([folder]) => folder);
+	const skipped = new Set(skip);
+	return { skip, rest: files.filter((file) => !underAny(file, skipped)).length };
+}
 
 /** Stops at limit + 1. */
 export async function countUntracked(repo: Repo, limit: number, signal?: AbortSignal): Promise<number> {
