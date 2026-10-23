@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { detectTargets, InvalidParams, OpenIn, windowsIcons } from "../../src/main/open-in.ts";
+import { detectTargets, editorScript, InvalidParams, OpenIn, shellWords, windowsIcons } from "../../src/main/open-in.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -88,7 +88,6 @@ test("each target builds its own go-to-line syntax", async () => {
 		"Local/Programs/Microsoft VS Code/Code.exe",
 		"Local/Programs/Zed/Zed.exe",
 		"Program Files/JetBrains/IntelliJ IDEA 2025.1/bin/idea64.exe",
-		"Program Files/Notepad++/notepad++.exe",
 		"apps/wt.exe",
 	]);
 	const targets = await detectTargets("win32", windowsEnv(root, ["apps"]));
@@ -97,9 +96,72 @@ test("each target builds its own go-to-line syntax", async () => {
 	expect(args("vscode")).toEqual([root]);
 	expect(args("zed", 12)).toEqual([`${root}:12:7`]);
 	expect(args("intellij", 12)).toEqual(["--line", "12", "--column", "7", root]);
-	expect(args("notepadPlusPlus", 12)).toEqual(["-n12", "-c7", root]);
 	// A terminal starts in the folder; Windows Terminal escapes its command separator.
 	expect(args("terminal", 12)).toEqual(["-d", root.replaceAll(";", "\\;")]);
+});
+
+test("Windows: Codex's targets and lookups, and none it does not have", async () => {
+	const root = layout([
+		"Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe",
+		// GitHub Desktop installs under %LOCALAPPDATA% itself, not Programs.
+		"Local/GitHubDesktop/GitHubDesktop.exe",
+		"cmder/Cmder.exe",
+		// Antigravity's shim stands for the program above its bin.
+		"Local/Programs/Antigravity/Antigravity.exe",
+		"Local/Programs/Antigravity/bin/antigravity.cmd",
+		// Codex looks for none of these on Windows: its renamed build, Windsurf, Emacs, Notepad++.
+		"Local/Programs/Antigravity IDE/Antigravity IDE.exe",
+		"Local/Programs/Windsurf/Windsurf.exe",
+		"tools/emacs.exe",
+		"Program Files/Notepad++/notepad++.exe",
+		"ProgramData/Microsoft/Windows/Start Menu/Programs/Windows Terminal.lnk",
+		"WindowsTerminal/wt.exe",
+	]);
+	const env = { ...windowsEnv(root, ["Local/Programs/Antigravity/bin", "tools"]), CMDER_ROOT: join(root, "cmder") };
+	const shortcuts = new Map([
+		[join(root, "ProgramData/Microsoft/Windows/Start Menu/Programs/Windows Terminal.lnk"), join(root, "WindowsTerminal/wt.exe")],
+	]);
+	const targets = await detectTargets("win32", env, { readShortcut: (lnk) => shortcuts.get(lnk) });
+	expect(targets.map((t) => t.id)).toEqual([
+		"visualStudio",
+		"antigravity",
+		"githubDesktop",
+		"systemDefault",
+		"fileManager",
+		"terminal",
+		"cmder",
+	]);
+	const target = (id: string) => targets.find((t) => t.id === id)!;
+	expect(target("visualStudio").command).toBe(join(root, "Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe"));
+	expect(target("antigravity").command).toBe(join(root, "Local/Programs/Antigravity/Antigravity.exe"));
+	expect(target("githubDesktop").command).toBe(join(root, "Local/GitHubDesktop/GitHubDesktop.exe"));
+	expect(target("githubDesktop").args(join(root, "cmder/Cmder.exe"))).toEqual([join(root, "cmder")]);
+	expect(target("cmder").args(root)).toEqual(["/START", root]);
+	// Windows Terminal through its Start menu shortcut's target.
+	expect(target("terminal").command).toBe(join(root, "WindowsTerminal/wt.exe"));
+});
+
+test("macOS: a file opened in a terminal runs the user's editor there, at the line", async () => {
+	const root = layout(["Applications/iTerm.app/Contents/Info.plist", "project/src/a.ts"]);
+	const file = join(root, "project/src/a.ts");
+	const targets = await detectTargets("darwin", { HOME: root, EDITOR: "nvim", SHELL: "/bin/zsh" });
+	const iterm = targets.find((t) => t.id === "iterm2")!;
+	expect(iterm.iconPath).toBe(join(root, "Applications", "iTerm.app"));
+	// A folder opens the app there; a file, iTerm's script running nvim at line 3.
+	expect(iterm.launch!(join(root, "project"))).toEqual({ command: "/usr/bin/open", args: ["-a", "iTerm", join(root, "project")] });
+	const plan = iterm.launch!(file, 3, 2);
+	expect(plan.command).toBe("/usr/bin/osascript");
+	expect(plan.args[1]).toContain('tell application "iTerm"');
+	expect(plan.args[1]).toContain("nvim '+call cursor(3,2)'");
+});
+
+test("the editor script quotes its words and puts the line flag before a --", () => {
+	expect(shellWords(`emacsclient -t --alternate-editor="" -- `)).toEqual(["emacsclient", "-t", "--alternate-editor=", "--"]);
+	expect(shellWords(`vim "unclosed`)).toBeUndefined();
+	expect(editorScript("nano", "/p/my file.ts", 4, 2)).toBe("cd /p && nano +4,2 '/p/my file.ts'");
+	expect(editorScript("less", "/p/a.ts", 9)).toBe("cd /p && less +9g /p/a.ts");
+	expect(editorScript("code -w --", "/p/a.ts", 9)).toBe("cd /p && code -w -- /p/a.ts");
+	expect(editorScript("/usr/bin/nvim -- ", "/p/a.ts", 2, 5)).toBe("cd /p && /usr/bin/nvim '+call cursor(2,5)' -- /p/a.ts");
 });
 
 // A Windows folder ("C:\...") cannot sit in a ":"-separated PATH.
@@ -127,13 +189,26 @@ test.skipIf(process.platform === "win32")("Linux: an editor found only by its de
 	const entry = (name: string) => join(root, "share/applications", name);
 	const cursor = targets.find((t) => t.id === "cursor")!;
 	expect(cursor.command).toBe(join(root, "bin/gio"));
-	// gio hands its arguments over as files: a flag such as --goto would arrive as a file name.
+	// gio hands its arguments over as files, so Codex gives it the path alone, never a line.
 	expect(cursor.args("/p/a.ts", 3, 1)).toEqual(["launch", entry("cursor.desktop"), "/p/a.ts"]);
 	expect(targets.find((t) => t.id === "zed")!.args("/p/a.ts", 3, 1)).toEqual([
 		"launch",
 		entry("dev.zed.Zed.desktop"),
-		"/p/a.ts:3:1",
+		"/p/a.ts",
 	]);
+});
+
+test.skipIf(process.platform === "win32")("Linux: x-terminal-emulator starts a shell in the folder; Kitty runs the editor on a file", async () => {
+	const root = layout(["bin/x-terminal-emulator", "bin/kitty", "bin/vim", "p/a.ts"]);
+	const targets = await detectTargets("linux", { PATH: join(root, "bin"), HOME: root, SHELL: "/bin/bash" });
+	const terminal = targets.find((t) => t.id === "terminal")!;
+	expect(terminal.command).toBe(join(root, "bin/x-terminal-emulator"));
+	expect(terminal.args(join(root, "p"))).toEqual(["-e", "/bin/bash", "-lc", `cd ${join(root, "p")} && exec /bin/bash`]);
+	const kitty = targets.find((t) => t.id === "kitty")!;
+	expect(kitty.launch!(join(root, "p/a.ts"), 4, 1)).toEqual({
+		command: join(root, "bin/kitty"),
+		args: ["--directory", join(root, "p"), "/bin/bash", "-lc", `cd ${join(root, "p")} && ${join(root, "bin/vim")} '+call cursor(4,1)' ${join(root, "p/a.ts")}`],
+	});
 });
 
 function service(root: string, launched: [string, string[]][], shown: string[] = []) {
