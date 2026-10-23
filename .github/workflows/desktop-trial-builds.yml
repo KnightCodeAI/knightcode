@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - target: win32-x64
@@ -76,6 +76,15 @@ jobs:
 
       - name: Stage the app server
         run: bun run apps/desktop/scripts/stage-server.ts --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
+
+      # The dmg maker's native modules build in their install scripts, which Bun runs only for
+      # trusted packages; built here instead, as forge.config.ts copies Squirrel's 7-Zip.
+      - name: Build the dmg maker's native modules
+        if: matrix.platform == 'darwin'
+        run: |
+          for module in macos-alias fs-xattr; do
+            (cd "node_modules/$module" && npx --yes node-gyp@11.5.0 rebuild)
+          done
 
       - name: Make
         working-directory: apps/desktop
