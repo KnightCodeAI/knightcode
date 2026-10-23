@@ -699,8 +699,9 @@ export const ClientRequests = {
 	},
 	/**
 	 * An MCP App calls a tool of its own server whose visibility includes "app" (`tools/call`). Outside Full access a
-	 * tool that is not read-only answers `approvalRequired` until sent `confirmed`. Arguments over 1 MiB, or a result
-	 * over 4 MiB, serialized, answer `invalidParams`. The result is the server's `CallToolResult`.
+	 * tool that is not read-only answers `approvalRequired` until sent `confirmed`. Arguments over 1 MiB, serialized,
+	 * answer `invalidParams`. The result is the server's `CallToolResult`; one over 4 MiB serialized is replaced by a
+	 * text block saying the tool ran (it did, so it is not an error).
 	 */
 	"mcp/app/callTool": {
 		params: Obj({
