@@ -241,10 +241,14 @@ test.runIf(process.platform === "win32")(
 	},
 );
 
-test("macOS: a bundle in ~/Applications opens as itself when the home folder's name holds .app", async () => {
-	const root = layout(["anna.applegate/Applications/Cursor.app/Contents/Resources/app/bin/cursor"]);
-	const home = join(root, "anna.applegate");
-	const cursor = (await detectTargets("darwin", { HOME: home })).find((t) => t.id === "cursor");
-	expect(cursor?.command).toBe(join(home, "Applications", "Cursor.app/Contents/Resources/app/bin/cursor"));
-	expect(cursor?.iconPath).toBe(join(home, "Applications", "Cursor.app"));
-});
+// /Applications is searched first: on a Mac an installed Cursor would answer instead of the fixture.
+test.skipIf(process.platform === "darwin")(
+	"macOS: a bundle in ~/Applications opens as itself when the home folder's name holds .app",
+	async () => {
+		const root = layout(["anna.applegate/Applications/Cursor.app/Contents/Resources/app/bin/cursor"]);
+		const home = join(root, "anna.applegate");
+		const cursor = (await detectTargets("darwin", { HOME: home })).find((t) => t.id === "cursor");
+		expect(cursor?.command).toBe(join(home, "Applications", "Cursor.app/Contents/Resources/app/bin/cursor"));
+		expect(cursor?.iconPath).toBe(join(home, "Applications", "Cursor.app"));
+	},
+);
