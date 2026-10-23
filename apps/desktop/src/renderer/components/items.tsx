@@ -19,7 +19,7 @@ import {
 	errorText,
 	fork,
 	resendEdited,
-	setPanel,
+	showChanges,
 	toast,
 	undoTurnEdits,
 	useStore,
@@ -396,7 +396,7 @@ function EditedFilesCard({
 }) {
 	const added = files.reduce((n, f) => n + f.additions, 0);
 	const removed = files.reduce((n, f) => n + f.deletions, 0);
-	const view = () => setPanel({ open: true, scope: "lastTurn" });
+	const view = () => showChanges(threadId, "lastTurn");
 	// As Codex's: Undo turns into Reapply and back, held while a request runs, with a spinner in place of its icon.
 	// In the store, so leaving the thread and coming back still offers Reapply.
 	const undone = useStore((s) => s.undoneTurns[turnId] === true);

@@ -5,7 +5,13 @@
  */
 
 import type { DiffComment, DiffFile, DiffScope, ResultOf } from "@knightcode/app-server-protocol";
-import { type FileDiffOptions, isHighlighterLoaded, preloadHighlighter, type SelectedLineRange } from "@pierre/diffs";
+import {
+	type FileDiffContentsLoader,
+	type FileDiffOptions,
+	isHighlighterLoaded,
+	preloadHighlighter,
+	type SelectedLineRange,
+} from "@pierre/diffs";
 import { type DiffLineAnnotation, PatchDiff } from "@pierre/diffs/react";
 import { prepareFileTreeInput } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
@@ -40,12 +46,14 @@ import {
 	addComment,
 	errorText,
 	getState,
+	openFileTab,
 	removeComment,
 	selectPreferences,
 	setPanel,
 	toast,
 	useStore,
 } from "../store.ts";
+import { openIn, useOpenInTargets, usePreferredTarget } from "./open-in.tsx";
 import { Button, type ButtonProps, IconButton } from "./button.tsx";
 import { Tooltip } from "./tooltip.tsx";
 import { FileIcon } from "./file-icon.tsx";
@@ -64,6 +72,15 @@ import { followDrag } from "../drag.ts";
 
 type Selector = { scope: DiffScope; against?: string; commit?: string };
 type Read = ResultOf<"thread/diff/read">;
+const NONE: ReadonlySet<string> = new Set();
+
+/** A file's first changed line on the new side, past its first hunk's context, as tool rows open files. */
+function firstChange(file: DiffFile): number | undefined {
+	const hunk = file.hunks[0];
+	if (!hunk) return undefined;
+	const context = hunk.lines.findIndex((line) => !line.startsWith(" "));
+	return Math.max(1, hunk.newStart + Math.max(0, context));
+}
 
 const SCOPES: { scope: DiffScope; label: string }[] = [
 	{ scope: "lastTurn", label: "Last Turn" },
@@ -291,6 +308,39 @@ function CommentCard({
 
 type Annotation = { comment?: DiffComment };
 
+/**
+ * The loader @pierre/diffs calls when a hunk separator is expanded: both sides of the file from the trees of the read
+ * that drew it (thread/diff/file), so they always match its hunks. A side the server will not give (binary, over 2
+ * MiB, gone) makes the file unexpandable for that read: `onUnavailable` drops the loader, and with it the controls.
+ */
+export function diffLoader(
+	threadId: string,
+	trees: { from: string; to: string },
+	file: Pick<DiffFile, "path" | "oldPath">,
+	onUnavailable: () => void,
+): FileDiffContentsLoader {
+	return async () => {
+		try {
+			const sides = await client.request("thread/diff/file", {
+				threadId,
+				fromTree: trees.from,
+				toTree: trees.to,
+				path: file.path,
+				...(file.oldPath ? { oldPath: file.oldPath } : {}),
+			});
+			if (sides.binary || sides.tooLarge || sides.old === undefined || sides.new === undefined)
+				throw new Error(`${file.path} cannot be expanded`);
+			return {
+				oldFile: { name: file.oldPath ?? file.path, contents: sides.old },
+				newFile: { name: file.path, contents: sides.new },
+			};
+		} catch (error) {
+			onUnavailable();
+			throw error;
+		}
+	};
+}
+
 function FileSection({
 	threadId,
 	root,
@@ -300,6 +350,8 @@ function FileSection({
 	collapsed,
 	onCollapse,
 	onAction,
+	trees,
+	onUnavailable,
 }: {
 	threadId: string;
 	/** The repository's root, which file paths are relative to. */
@@ -310,7 +362,13 @@ function FileSection({
 	collapsed: boolean;
 	onCollapse: () => void;
 	onAction: (action: "stage" | "unstage" | "revert", file: DiffFile) => void;
+	/** The read's trees while this file can expand; absent, its separators draw no expand control. */
+	trees?: { from: string; to: string };
+	/** Bound to the read: marks this file unexpandable for it. */
+	onUnavailable: () => void;
 }) {
+	const project = useStore((s) => s.held[threadId]?.thread.projectCwd ?? "");
+	const editor = usePreferredTarget(useOpenInTargets(), project);
 	const comments = useStore((s) => s.comments[threadId]);
 	const [draft, setDraft] = useState<{ side: "old" | "new"; start: number; end: number } | undefined>();
 	const mine = useMemo(
@@ -360,6 +418,8 @@ function FileSection({
 			disableFileHeader: true,
 			enableGutterUtility: true,
 			unsafeCSS: diffOverrides,
+			// Made once per read (its trees), so a failure always reports against the read that drew the file.
+			...(trees ? { loadDiffFiles: diffLoader(threadId, trees, file, onUnavailable) } : {}),
 			onGutterUtilityClick: (range: SelectedLineRange) =>
 				setDraft({
 					side: range.side === "deletions" ? "old" : "new",
@@ -367,7 +427,8 @@ function FileSection({
 					end: Math.max(range.start, range.end ?? range.start),
 				}),
 		}),
-		[themeType, indicators, options.split, options.wrap, options.wordDiffs],
+		// The file's identity, not the object: a refresh hands over equal files.
+		[themeType, indicators, options.split, options.wrap, options.wordDiffs, threadId, trees?.from, trees?.to, file.path, file.oldPath],
 	);
 	return (
 		<div className="group/file-diff flex flex-col pb-0.5">
@@ -403,15 +464,13 @@ function FileSection({
 					</div>
 					<div className="ms-auto flex shrink-0 items-center gap-1">
 						<Totals additions={file.additions} deletions={file.deletions} className="ms-1 me-1 text-[14px]" />
+						{/* Codex's "Open file in a tab", at the file's first change. */}
 						<IconButton
-							label="Open in"
+							label="Open file in a tab"
 							size="3xs"
 							round
-							onClick={() =>
-								void client
-									.host("host/shell/openPath", { path: full })
-									.catch((e: unknown) => toast(errorText(e), "error"))
-							}
+							disabled={file.status === "deleted"}
+							onClick={() => openFileTab(threadId, full, firstChange(file))}
 						>
 							<ExternalLink size={16} />
 						</IconButton>
@@ -426,13 +485,16 @@ function FileSection({
 									Copy path
 								</MenuItem>
 								<MenuItem
-									onSelect={() =>
-										void client
-											.host("host/shell/openPath", { path: full })
-											.catch((e: unknown) => toast(errorText(e), "error"))
-									}
+									disabled={file.status === "deleted"}
+									onSelect={() => openFileTab(threadId, full, firstChange(file))}
 								>
-									Open in editor
+									Open file
+								</MenuItem>
+								<MenuItem
+									disabled={!editor || file.status === "deleted"}
+									onSelect={() => editor && openIn(editor.id, full, firstChange(file))}
+								>
+									{editor ? `Open in ${editor.name}` : "Open in editor"}
 								</MenuItem>
 								<MenuItem onSelect={onCollapse}>{collapsed ? "Expand file" : "Collapse file"}</MenuItem>
 								{scope === "committed" ? null : <MenuSeparator />}
@@ -464,6 +526,9 @@ function FileSection({
 				</div>
 			) : (
 				<PatchDiff<Annotation>
+					// One per read: PatchDiff keeps its parsed (and once expanded, hydrated) file by patch text alone, and a
+					// later read can carry the same patch between other trees.
+					key={trees ? `${trees.from}:${trees.to}` : "fixed"}
 					patch={patchOf(file)}
 					disableWorkerPool
 					options={diffOptions}
@@ -726,6 +791,20 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 
 	const files = read?.files ?? [];
 	const shown = filter ? files.filter((f) => f.path.toLowerCase().includes(filter.toLowerCase())) : files;
+	// Files whose sides the server would not give for these trees; a read of other trees starts with none. Keyed by the
+	// trees, not the read: a reload of an unchanged checkout is a new read whose files' loaders are still the old ones.
+	const treesKey = read?.fromTree && read.toTree ? `${read.fromTree}:${read.toTree}` : undefined;
+	const [unexpandable, setUnexpandable] = useState<{ trees?: string; paths: ReadonlySet<string> }>({
+		paths: new Set(),
+	});
+	const blocked = treesKey && unexpandable.trees === treesKey ? unexpandable.paths : NONE;
+	const markUnexpandable = (trees: string, path: string) =>
+		setUnexpandable((u) => ({ trees, paths: new Set([...(u.trees === trees ? u.paths : []), path]) }));
+	// Expansion needs the read's trees, and whitespace-blind hunks do not line up with the files' own text.
+	const treesOf = (file: DiffFile) =>
+		read?.fromTree && read.toTree && !opts.ignoreWhitespace && !blocked.has(file.path)
+			? { from: read.fromTree, to: read.toTree }
+			: undefined;
 	// A large diff shows one file at a time (Codex's): the one picked, while the filter keeps it, else the first. The
 	// arrows step through the files in the tree's order (folders first), not the server's.
 	const large = useMemo(() => isLargeDiff(read?.files ?? []), [read]);
@@ -1080,6 +1159,8 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 											})
 										}
 										onAction={(action, f) => void act(action, f)}
+										trees={treesOf(file)}
+										onUnavailable={() => treesKey && markUnexpandable(treesKey, file.path)}
 									/>
 								</div>
 							))}

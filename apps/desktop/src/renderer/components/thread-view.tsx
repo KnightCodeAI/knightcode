@@ -23,11 +23,16 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { basename, clockTime, dayLabel, SEPARATOR_GAP_MS } from "../format.ts";
 import { bindingLabel, matches, useBinding, useBindings } from "../keys.ts";
 import {
+	activateTab,
+	closeTab,
 	copyLastCodeBlock,
 	dismissPending,
 	fork,
+	keepTab,
 	loadEarlier,
+	NO_TABS,
 	openThread,
+	type PanelTab,
 	rename,
 	restoreWorktree,
 	selectUnread,
@@ -37,6 +42,8 @@ import {
 	setPanel,
 	useStore,
 } from "../store.ts";
+import { FileTab } from "./file-tab.tsx";
+import { FileIcon } from "./file-icon.tsx";
 import { ApprovalCard } from "./approval.tsx";
 import { DialogCard, QuestionsCard } from "./request-card.tsx";
 import { Button, IconButton } from "./button.tsx";
@@ -169,10 +176,62 @@ function PanelResizeHandle() {
 	);
 }
 
-/** The right region (desktop-shell.md section 9.6): Codex's tab strip over the Changes pane. */
+/**
+ * A tab in the strip, as Codex's (26.1016, measured): a slot of up to 240px, 32px tall; the chosen one on a ghost fill with a
+ * hairline ring and a 1px shadow, the others at half strength; a 16px icon 4px from the 13px title, which a preview
+ * tab sets in italics; the close button 20px, shown on the chosen tab and on hover.
+ */
+function TabButton({ threadId, tab, index, active }: { threadId: string; tab: PanelTab; index: number; active: boolean }) {
+	const title = tab.kind === "changes" ? "Changes" : basename(tab.path);
+	return (
+		<div role="presentation" className="group/tab relative flex h-8 min-w-0 flex-1 items-center">
+			<div
+				className={`pointer-events-none absolute inset-0 rounded-[10px] border ${active ? "border-line-strong bg-ghost-hover shadow-[0_1px_2px_-1px_rgb(0_0_0/0.25)]" : "border-transparent group-hover/tab:bg-ghost-hover"}`}
+			/>
+			<button
+				type="button"
+				role="tab"
+				aria-selected={active}
+				onClick={() => activateTab(threadId, index)}
+				onDoubleClick={() => keepTab(threadId, index)}
+				className={`relative z-10 flex h-full min-w-0 flex-1 items-center gap-1 rounded-[10px] ps-2.5 pe-[27px] text-[13px] leading-[18.5px] ${active ? "text-ink" : "text-tertiary"}`}
+			>
+				{tab.kind === "changes" ? <FileDiff size={16} className="shrink-0" /> : <FileIcon path={tab.path} />}
+				<span className={`min-w-0 flex-1 truncate text-start ${tab.kind === "file" && tab.preview ? "italic" : ""}`}>
+					{title}
+				</span>
+			</button>
+			<IconButton
+				label={`Close ${title} tab`}
+				size="3xs"
+				className={`absolute end-[7px] z-10 rounded-[10px] ${active ? "" : "opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100"}`}
+				onClick={() => closeTab(threadId, index)}
+			>
+				<X size={14} />
+			</IconButton>
+		</div>
+	);
+}
+
+/** The right region (desktop-shell.md section 9.6): Codex's tab strip over the chosen tab. */
 function SidePanel({ id }: { id: string }) {
 	const width = useStore((s) => s.panel.width);
 	const full = useStore((s) => s.panel.full ?? false);
+	const { tabs, active } = useStore((s) => s.tabs[id] ?? NO_TABS);
+	const shown = tabs[active];
+	const strip = useRef<HTMLDivElement>(null);
+	// A strip wider than the panel scrolls the chosen tab, close button included, into sight.
+	useEffect(() => {
+		strip.current?.querySelector("[aria-selected=true]")?.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
+	}, [active, tabs.length]);
+	useBinding(
+		"desktop.panel.closeTab",
+		() => {
+			if (active === 0) return false;
+			closeTab(id, active);
+		},
+		active !== 0,
+	);
 	return (
 		<aside
 			// 54% of the thread view (its container) until dragged, and all of it in full screen. However the thread view
@@ -185,27 +244,26 @@ function SidePanel({ id }: { id: string }) {
 		>
 			{/* As in Codex, a full-screen panel resizes only while a drag that made it so is still going. */}
 			{full ? null : <PanelResizeHandle />}
-			{/* Codex's tab strip: one "Changes" tab (other tabs come with the terminal and files panes). */}
 			<div className="flex h-[52px] shrink-0 items-center gap-1.5 ps-2 pe-3">
-				<div className="relative flex h-8 w-[238px] min-w-0 items-center rounded-md border border-line-strong bg-ghost-hover">
-					<span
-						role="tab"
-						aria-selected="true"
-						className="flex min-w-0 flex-1 items-center gap-2 ps-2.5 text-sm text-ink"
-					>
-						<FileDiff size={16} className="shrink-0" />
-						<span className="truncate">Changes</span>
-					</span>
-					<IconButton
-						label="Close Changes tab"
-						size="3xs"
-						className="me-1.5 rounded-md"
-						onClick={() => setPanel({ open: false })}
-					>
-						<X size={14} />
-					</IconButton>
+				{/* Wider than the panel, the strip scrolls sideways. */}
+				<div
+					ref={strip}
+					role="tablist"
+					aria-label="Chat tabs"
+					className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]"
+				>
+					{tabs.map((tab, i) => (
+						// 240px each while they fit, sharing the strip when they do not (Codex's), scrolling past 120px.
+						<div
+							key={tab.kind === "file" ? tab.path : "changes"}
+							className="flex max-w-[240px] min-w-[120px] flex-[1_1_240px] items-center pe-0.5"
+						>
+							<TabButton threadId={id} tab={tab} index={i} active={i === active} />
+							{/* Codex's divider between two tabs at rest. */}
+							<div className={`ms-0.5 h-3 w-px shrink-0 bg-line ${i === active || i + 1 === active || i === tabs.length - 1 ? "invisible" : ""}`} />
+						</div>
+					))}
 				</div>
-				<div className="flex-1" />
 				<IconButton
 					label={full ? "Exit full screen" : "Enter full screen"}
 					aria-pressed={full}
@@ -217,7 +275,13 @@ function SidePanel({ id }: { id: string }) {
 					<PanelRight size={16} filled />
 				</IconButton>
 			</div>
-			<ChangesPane threadId={id} />
+			{/* Changes stays mounted behind a file tab, keeping its scope, scroll and drafts. */}
+			<div className={active === 0 ? "contents" : "hidden"}>
+				<ChangesPane threadId={id} />
+			</div>
+			{shown?.kind === "file" ? (
+				<FileTab key={shown.path} threadId={id} path={shown.path} line={shown.line} used={shown.used} />
+			) : null}
 		</aside>
 	);
 }

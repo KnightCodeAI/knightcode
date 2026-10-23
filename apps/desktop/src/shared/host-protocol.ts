@@ -57,6 +57,10 @@ export const Preferences = Obj({
 	pointerCursors: Type.Optional(Type.Boolean()),
 	/** Rebound shortcuts (Settings › Keyboard shortcuts): a binding id's keys, replacing its defaults; [] unassigns it. */
 	keybindings: Type.Optional(Type.Record(Type.String(), Type.Array(Type.String()))),
+	/** The "Open" button's app (Codex's openInTargetPreferences): the last one picked, and per project folder. */
+	openIn: Type.Optional(
+		Obj({ global: Type.Optional(Type.String()), perPath: Type.Optional(Type.Record(Type.String(), Type.String())) }),
+	),
 });
 export type Preferences = Static<typeof Preferences>;
 
@@ -183,6 +187,40 @@ export const HostMethods = {
 	/** GitHub's device flow in the browser; resolves once the sign-in is approved. */
 	"host/profile/signIn": { params: Obj({}), result: Profile },
 	"host/profile/signOut": { params: Obj({}), result: Obj({}) },
+	/**
+	 * The apps a file or folder opens in (section 9.9): editors and terminals found on this machine, then the file
+	 * manager and the default app, in Codex's order. `icon` is a data URL of the app's own icon, when it has one.
+	 */
+	"host/openIn/list": {
+		params: Obj({}),
+		result: Obj({
+			targets: Type.Array(
+				Obj({
+					id: Type.String(),
+					name: Type.String(),
+					kind: Type.Union([
+						Type.Literal("editor"),
+						Type.Literal("terminal"),
+						Type.Literal("fileManager"),
+						Type.Literal("systemDefault"),
+					]),
+					icon: Type.Optional(Type.String()),
+				}),
+			),
+		}),
+	},
+	/** Open an absolute path in a listed app, at a line when the app takes one. */
+	"host/openIn/open": {
+		params: Obj({
+			targetId: Type.String(),
+			path: Type.String(),
+			line: Type.Optional(Type.Integer({ minimum: 1 })),
+			column: Type.Optional(Type.Integer({ minimum: 1 })),
+		}),
+		result: Obj({}),
+	},
+	/** Codex's "Save as…": a copy of an absolute path where the user picks; `path` is where it went, none if cancelled. */
+	"host/file/saveCopy": { params: Obj({ path: Type.String() }), result: Obj({ path: Type.Optional(Type.String()) }) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
 	/** Another window, showing a thread when one is named (Codex's "Open in new window"). */
@@ -228,6 +266,7 @@ export const HostMethods = {
 } as const;
 
 export type HostMethod = keyof typeof HostMethods;
+export type OpenInTargetInfo = Static<(typeof HostMethods)["host/openIn/list"]["result"]>["targets"][number];
 export type HostParams<M extends HostMethod> = Static<(typeof HostMethods)[M]["params"]>;
 export type HostResult<M extends HostMethod> = Static<(typeof HostMethods)[M]["result"]>;
 

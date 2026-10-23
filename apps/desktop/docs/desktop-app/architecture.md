@@ -627,6 +627,7 @@ Phase A:
 | `project/trust/read` | `{cwd}` → `{trusted: boolean \| null, needsTrust: boolean}`; `null` when the user has not decided |
 | `project/trust/set` | `{cwd, trusted}` → `{}`; records the decision in `ProjectTrustStore`, as the terminal's prompt does (`main.ts:854-891`); loaded threads in that project see it on their next load |
 | `file/search` | `{cwd, query, limit?, searchId?}` → `{files: {path, score, indices}[], truncated}`; fuzzy match over the files the `find` tool lists for `cwd` (gitignore respected), at most `limit` (default 50). A newer request with the same `searchId` makes the older one answer at once with no files, even while the listing is still running, and a listing nobody waits for any more is stopped. At most 2 listings run at once; listings are cached per cwd for 10 s, at most 8 cwds, and read at most 32 MiB of output. `truncated` is true when the 32 MiB output cap or 200,000-path cap was reached (cached) or `fd` failed after printing some files (served, not cached); `fd` failing with no output answers `internal` with its error output, never cached. The listing process is killed after 15 s and on shutdown; `fd` missing answers `toolMissing` |
+| `file/read` | `{threadId, path, maxBytes?}` → `{path, size, binary, tooLarge, text?}`; the desktop's read-only file tab (v1-completion-plan.md, S2b). `path` resolves against the thread's cwd as a tool's does; text only when the file has no NUL in its first 8 KiB and fits `maxBytes` (1 byte to 8 MiB, default 2 MiB) |
 | `server/diagnostics` | `{}` → `{rssBytes, heapBytes, loadedThreads, loadingThreads, payloadFiles, payloadBytes, inactiveFactories, uptimeMs, listingFilesOpened, listingBytesScanned}`; the figures section 13 measures, observable in a shipped app. The two listing counters are running totals of the transcripts and parent headers the listing opened and the transcript bytes it scanned (section 5.10) |
 | `account/list` | `{}` → `{accounts}` |
 | `account/login/start` | `{provider, type: "oauth" \| "api_key"}` → `{loginId}`; progress as `account/login/updated` (a provider can offer both) |
@@ -1667,7 +1668,7 @@ interface WorktreesSettings { // the `worktrees` member of the global settings f
 
 #### Handoff
 
-`thread/handoff {threadId, to: "local" | "worktree", branch?, environment?}`
+`thread/handoff {threadId, to: "local" | "worktree", branch?, environment?, dryRun?}`
 moves a chat and its uncommitted changes between its worktree and the main
 checkout (Codex's "Hand off", whose dialog reads "Check out branch … in a
 local workspace and detach it from worktree."). Each chat keeps its worktree,
@@ -1699,6 +1700,14 @@ so a handoff back returns it there.
 The handoff runs no hooks and creates no commit: it moves the user's own work.
 A chat with no message yet has no session file to reload and is not handed
 off.
+
+`dryRun` runs steps 1 and 3's checks (the reservations it only checks, the
+branch choice with its name check) and answers with the same refusal, or with
+the thread and the branch the main checkout would get. It writes nothing, not
+even a manifest or a worktree, and holds no reservation, so a real handoff is
+never kept waiting by one. Codex's handoff dialog checks before the user
+confirms; the desktop's does the same with this, on open and 250 ms after each
+branch edit.
 
 #### Deleting and restoring worktrees
 
@@ -1745,7 +1754,8 @@ than overwrite.
 
 | Method | Behaviour |
 | --- | --- |
-| `thread/diff/read {threadId, scope?, against?, commit?, context?, ignoreWhitespace?}` | `scope`, Codex's Changes sources: `lastTurn` (the last turn that changed files, before to after), `uncommitted` (`HEAD` to working tree; the default), `unstaged` (index to working tree), `staged` (`HEAD` to index), `committed` (one `commit`, from `git/log`), `branch` (the merge base with `against` to working tree; `against` defaults to the worktree's `baseRef`, else the upstream, else the default branch). `ignoreWhitespace` is Codex's "Hide white space". Files, hunks with content-hash ids, line ranges, binary flag; `context` lines around each hunk (a large value gives whole files). With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call. The serialized response stays within a fixed budget: files past it come without hunks (`tooLarge`), or are only counted (`filesOmitted`) |
+| `thread/diff/read {threadId, scope?, against?, commit?, context?, ignoreWhitespace?}` | `scope`, Codex's Changes sources: `lastTurn` (the last turn that changed files, before to after), `uncommitted` (`HEAD` to working tree; the default), `unstaged` (index to working tree), `staged` (`HEAD` to index), `committed` (one `commit`, from `git/log`), `branch` (the merge base with `against` to working tree; `against` defaults to the worktree's `baseRef`, else the upstream, else the default branch). `ignoreWhitespace` is Codex's "Hide white space". Files, hunks with content-hash ids, line ranges, binary flag; `context` lines around each hunk (a large value gives whole files). With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call. The serialized response stays within a fixed budget: files past it come without hunks (`tooLarge`), or are only counted (`filesOmitted`). Without `ignoreWhitespace` it names the two trees it compared, `fromTree` and `toTree` (snapshots for the working tree and the index), for `thread/diff/file` |
+| `thread/diff/file {threadId, fromTree, toTree, path, oldPath?}` | `{old?, new?, binary, tooLarge}`: one file's two sides from a read's trees (`git cat-file blob <tree>:<path>`), so the Changes pane expands the unchanged lines between hunks against exactly what the read compared. A tree must be a full object id naming a tree in the repository; a side above 2 MiB gives `tooLarge` and no text, a NUL in the first 8 KiB `binary` |
 | `thread/diff/revert {threadId, scope?, against?, path?, hunkId?, context?, reapply?, turnId?}` | reverse-applies one hunk, one file, or the whole scope to the working tree; `lastTurn` without a path undoes the turn, and `reapply` applies it again (Codex's Reapply). With `turnId` (`lastTurn` only) a newer last turn answers `gitConflict` `diffChanged`. A hunk that changed since it was read answers `gitConflict` `diffChanged`. Refused while a turn runs |
 | `turn/start`, `turn/queue/add` with `comments` | review comments are drafts the client keeps (Codex: "Local comment on line R2", a "1 comment" chip) and sends with the next input; the server quotes each comment's lines from its scope's trees into the text the model reads, and the user item shows the comments, not that text |
 
@@ -1815,52 +1825,69 @@ shell strings, so quoting is identical on Windows.
 ### 7.1 Slices
 
 `InteractiveMode` gets an `AppServerClient` over the in-process transport.
-Each slice replaces direct session access with protocol calls and leaves the
-CLI working:
+Each slice moves one group of actions (everything that changes a session)
+from direct session calls to protocol calls and leaves the CLI working; reads
+and live events stay in-process through local handles (section 7.3):
 
-1. Turn lifecycle and transcript: `prompt`, `steer`, `followUp`, `abort`,
-   and rendering from items instead of session events.
+1. Turn lifecycle: `prompt`, `steer`, `followUp`, `abort`, queue clearing.
+   The TUI keeps rendering from the session's own events.
 2. Model, thinking level, scoped models, settings.
 3. Session tree: navigate, fork, clone, compact, rename, export, import,
    new, resume.
-4. `!` bash, slash commands, prompt templates, context usage, retry, cache
-   warming.
-5. Extension UI (section 8).
+4. `!` bash, slash commands, prompt templates, retry, cache warming.
+5. The remaining actions extensions run through their command context.
 
-Print mode moves in slice 1.
+Print mode and `--mode json` do not move: they stay on the direct session,
+identical to the reference engine, as RPC mode does (user, 2026-10-23).
+
+The TUI reaches the server through a session facade, `RemoteSession`
+(`modes/interactive/remote-session.ts`), that `InteractiveMode` uses where it
+used `AgentSession`, so the TUI's renderers and components do not change
+(v1-completion-plan.md D11 and Phase D).
 
 Done means: `rg -n "AgentSession\b|AgentSessionRuntime\b"
-packages/cli/src/modes/interactive packages/cli/src/modes/print-mode.ts`
-matches imports of protocol types only.
+packages/cli/src/modes/interactive` matches only `remote-session.ts`.
 
 ### 7.2 Methods the terminal adds
 
 Added as their slice needs them, each documented in section 4.4's table when
-it lands: `thread/tree/read`, `thread/tree/navigate`, `thread/clone`,
-`thread/export`, `thread/import`, `thread/settings/update` fields for scoped
-models, steering mode, follow-up mode, auto-compaction, auto-retry and cache
-warming, `turn/queue/clear`, `turn/retry/abort`, `shell/exec` and
-`shell/abort` for `!` commands. Context usage and session stats come from
-`thread/tokenUsage/updated` and the `usage` of `thread/resume`,
-not from separate reads.
+it lands: `thread/tree/navigate`, `thread/clone`, `thread/export`,
+`thread/import`, `thread/settings/update` fields for scoped models, steering
+mode, follow-up mode, auto-compaction, auto-retry and cache warming,
+`turn/queue/clear`, `turn/retry/abort`, `shell/exec` and `shell/abort` for
+`!` commands. The TUI reads the tree, context usage and the complete session
+statistics (`getSessionStats()`, message and tool counts included) through
+local handles, not through `TokenUsage`, which has no counts.
 
 ### 7.3 Local handles
 
-`ExtensionUIContext` calls that take a component factory (`setWidget` with a
-factory, `setHeader`, `setFooter`, `custom`, `onTerminalInput`) cannot cross
-a process boundary. When the connection's `initialize` declared
-`capabilities.localHandles`, the server sends them as `ui/local` requests
-carrying an opaque `localHandle`; `in-process.ts` resolves the handle to the
-live factory, and the TUI renders it as today. On stdio, these calls behave as
-RPC mode's do (`rpc-mode.ts:160-240`). This is the only difference between
-the two transports, and `in-process.ts` is the only file that resolves a
-handle.
+Some things cannot cross a process boundary: component factories
+(`setWidget` with a factory, `setHeader`, `setFooter`, `custom`,
+`onTerminalInput`), synchronous UI reads (`getEditorText()`), and the
+session's live objects. When the connection's `initialize` declared
+`capabilities.localHandles`, which only the in-process transport accepts,
+the connection gets local handles (amended 2026-10-23, v1-completion-plan.md
+D11):
+
+- the thread's own `AgentSessionEvent` objects, as `AgentSession.subscribe`
+  delivers them;
+- read-only views of the thread's `SessionManager`, its session statistics
+  and context usage, and the model, resource and extension reads the TUI
+  draws from;
+- its own `ExtensionUIContext`, bound as the UI of every thread it holds,
+  so factories, dialogs and synchronous members work as today.
+
+Every action still goes through protocol methods. On stdio, extension UI
+behaves as section 8 says and as RPC mode's does (`rpc-mode.ts:160-240`).
+These handles are the only difference between the two transports.
 
 ### 7.4 Divergence
 
-After Phase D, `interactive-mode.ts` drives an `AppServerClient` instead of a
-session. Changes to interactive mode written against the old shape are
-translated by hand from then on. Accepted 2026-10-10.
+After Phase D, `interactive-mode.ts` drives a `RemoteSession` over an
+`AppServerClient` instead of a session. Because the facade hands it the
+session's own events and reads, a resync of interactive mode stays mechanical except
+for the hunks each Phase D slice lists in its PR; those are translated by
+hand. Accepted 2026-10-10, narrowed 2026-10-23.
 
 ---
 
@@ -1876,7 +1903,7 @@ translated by hand from then on. Accepted 2026-10-10.
 | `setHiddenThinkingLabel` | none | none: desktop reasoning rows have no hidden state | as today |
 | `setWidget(key, string[])` | notification `ui/widget` with lines | panel above the composer | as today |
 | `setWidget(key, view)` (new) | notification `ui/widget` with a view | the same panel, rendering the `View` | `ViewComponent` |
-| widget factories, `custom`, `setHeader`, `setFooter`, `onTerminalInput`, `setWorkingIndicator` | `ui/local` (section 7.3, Phase D) | one stderr line per method per thread load: "draws only in the terminal" | as today |
+| widget factories, `custom`, `setHeader`, `setFooter`, `onTerminalInput`, `setWorkingIndicator` | an in-process local handle: the TUI's own `ExtensionUIContext` (section 7.3, Phase D); no wire message | one stderr line per method per thread load: "draws only in the terminal" | as today |
 
 All `ui/*` messages carry `threadId`, and statuses and widgets are keyed by
 their key alone, as in the terminal and RPC mode: no message names the
@@ -1960,12 +1987,14 @@ which file answers which topic (`system-prompt.ts:167`). Added docs:
 - `docs/app-server.md` — protocol reference, linking
   `docs/app-server.schema.json` (generated).
 - `docs/declarative-views.md` — the `View` vocabulary and `onViewEvent`.
-- `docs/desktop-extensions.md` — the GUI extension SDK (written with the
-  desktop spec; this spec reserves the name).
+- `docs/mcp.md` "MCP Apps" — third-party UI in the desktop (desktop-shell.md
+  section 12; the GUI extension SDK this line first reserved
+  `docs/desktop-extensions.md` for is dropped, 2026-10-23).
 - `examples/extensions/desktop-view.ts` — a widget and a tool result using a
   view.
 
-Line 167 gains one entry, `desktop app and its extensions (docs/desktop.md)`.
+Line 167 gained one entry, `desktop app and its extensions (docs/desktop.md)`
+(delivered in Phase C).
 Required tests pin its token cost.
 
 ---
@@ -1974,7 +2003,7 @@ Required tests pin its token cost.
 
 The Electron shell and UI are specified in
 [desktop-shell.md](./desktop-shell.md), which answers each requirement below
-(its sections 5.1, 4, 5.3, 12.4, 12.1, 12.1, 11, 10 and 9.8 in order). That
+(its sections 5.1, 4, 5.3, 2 and 12, 11, 10 and 9.8 in order). That
 specification must:
 
 - Bundle the platform `knightcode` binary outside `app.asar` in the app's
@@ -1986,17 +2015,16 @@ specification must:
 - Restart the app server with backoff when it exits, then `thread/resume`
   every thread on screen. A turn that was running reads back `interrupted`:
   its marker has no end entry (section 4.2).
-- Treat the integrated terminal, the diff review pane and the web view as GUI
-  extensions built on the same public SDK that third-party GUI extensions use.
-- Let one KnightCode package carry an agent extension and a GUI extension:
-  a `desktop` resource type beside `extensions`, `skills`, `prompts` and
-  `themes` in `package-manager.ts:208-210`.
-- Gate project-local GUI extensions with the existing project trust.
-- Theme through CSS tokens loaded from theme files; no colours in components.
+- Build the integrated terminal, the diff review pane and the web view
+  natively, as Codex does, and take third-party UI from MCP Apps, never as
+  HTML from agent extensions (amended 2026-10-23: the GUI extension SDK, its
+  `desktop` package resource type and its trust gate are dropped;
+  v1-completion-plan.md D1-D2).
+- Theme through CSS tokens; no colours in components.
 - Bind keys through a configurable keybinding table; no hardcoded key checks.
 - Leave agent control of the web view to a later specification, but host the
-  view in a `WebContentsView` whose `webContents.debugger` can be attached
-  later.
+  view where `webContents.debugger` can be attached later: the preview
+  `<webview>`'s guest webContents, which main reaches by id.
 
 ---
 
@@ -2145,10 +2173,13 @@ and `ask_user`'s `item/toolCall/requestUserInput`.
 
 ### Phase D — terminal CLI migration
 
-- `packages/cli/src/modes/interactive/`, `print-mode.ts`: slices 1-5 of
-  section 7.1, one or more PRs per slice.
+Plan: [v1-completion-plan.md](./v1-completion-plan.md), Tasks D0-D6; after
+the desktop phases S2b, S3 and S4 ship.
+
+- `packages/cli/src/modes/interactive/` (`remote-session.ts` new): slices 1-5
+  of section 7.1, one or more PRs per slice. `print-mode.ts` does not change.
 - `packages/cli/src/app-server/in-process.ts`: local handles.
-- Protocol additions of section 7.2.
+- Protocol additions of section 7.2; the local handles of section 7.3.
 - Changeset per slice only where behaviour visible to users changes.
 
 ---
@@ -2472,8 +2503,9 @@ From the repo root:
 - `rg -n "exec\(|execSync\(|shell: true" packages/cli/src/app-server` → no
   matches.
 - After Phase D: `rg -n "AgentSession\b|AgentSessionRuntime\b"
-  packages/cli/src/modes/interactive packages/cli/src/modes/print-mode.ts`
-  → type imports from the protocol only.
+  packages/cli/src/modes/interactive` → only
+  `modes/interactive/remote-session.ts` (print mode keeps its runtime,
+  section 7.1).
 - Memory: record baseline, ten loaded threads in one cwd, ten distinct cwds,
   each after representative histories/media/tools; then unsubscribe/unload
   all, force GC in a measurement harness, and record retained heap and working
@@ -2769,6 +2801,7 @@ The app server is complete when:
   changes.
 - Extensions show dialogs, notifications, status, line widgets and view
   widgets over both transports, and factory UI in the terminal.
-- The terminal CLI and print mode construct no `AgentSession` of their own.
+- Interactive mode constructs no `AgentSession` of its own; print, JSON and
+  RPC modes keep theirs (section 7.1).
 - The required tests pass, `bun run check-types` is clean, and every
   validation grep matches as stated.

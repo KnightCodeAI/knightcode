@@ -75,6 +75,7 @@ export const DESKTOP_KEYBINDINGS = {
 	"desktop.project.open": { defaultKeys: ["mod+o"], description: "Add a project folder" },
 	"desktop.sidebar.toggle": { defaultKeys: ["mod+b", "mod+shift+s"], description: "Toggle the sidebar" },
 	"desktop.panel.toggle": { defaultKeys: ["mod+shift+g"], description: "Toggle the Changes panel" },
+	"desktop.panel.closeTab": { defaultKeys: ["mod+shift+w"], description: "Close the side panel's file tab" },
 	"desktop.view.zoomIn": { defaultKeys: ["mod+shift+equal", "mod+equal", "mod+numpadadd"], description: "Zoom in" },
 	"desktop.view.zoomOut": { defaultKeys: ["mod+minus", "mod+numpadsubtract"], description: "Zoom out" },
 	"desktop.view.zoomReset": { defaultKeys: ["mod+digit0"], description: "Actual size" },
