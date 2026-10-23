@@ -126,6 +126,8 @@ function connectPort(id: number, open: OpenWindow): void {
 	router.detach(id);
 	// The reloaded page attaches to the terminals it shows again, getting their output so far first.
 	terminals.detachWindow(id);
+	// A reload drops the page without its apps' cleanup; the new page serves the ones it shows again.
+	mcpApps.releaseWindow(id);
 	const { port1, port2 } = new MessageChannelMain();
 	open.port = port1;
 	router.attach({
