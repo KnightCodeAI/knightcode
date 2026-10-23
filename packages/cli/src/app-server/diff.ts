@@ -31,6 +31,7 @@ import {
 	LARGE_UNTRACKED_BYTES,
 	snapshotTree,
 	submodulePaths,
+	untrackedFolders,
 } from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 import { TURN_MARKER_TYPE } from "../extensions/turn-marker.ts";
@@ -60,7 +61,7 @@ export class TurnChanges {
 	private readonly record: (record: TurnDiffRecord) => void;
 	private readonly notify: (record: TurnDiffRecord) => void;
 	private chain: Promise<void> = Promise.resolve();
-	private before: Promise<{ tree: string; untracked: boolean } | undefined> | undefined;
+	private before: Promise<{ tree: string; untracked: boolean; skip: string[] } | undefined> | undefined;
 	private closed = false;
 
 	constructor(repo: Repo, record: (r: TurnDiffRecord) => void, notify: (r: TurnDiffRecord) => void) {
@@ -84,20 +85,22 @@ export class TurnChanges {
 	beforeTool(): Promise<void> {
 		if (this.closed) return Promise.resolve();
 		this.before ??= this.enqueue(async () => {
-			const untracked = (await countUntracked(this.repo, UNTRACKED_LIMIT)) <= UNTRACKED_LIMIT;
-			const tree = await snapshotTree(
-				this.repo,
-				untracked,
-				AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
-				LARGE_UNTRACKED_BYTES,
-			);
+			const signal = AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS);
+			// Every untracked file counts up to 500. Past that, not those under a folder of 200 or more of them (frames, a
+			// dataset); and past 500 even then, tracked files only, as a missing .gitignore entry would stall every turn.
+			const { skip, rest } = await untrackedFolders(this.repo, UNTRACKED_LIMIT, signal);
+			const untracked = rest <= UNTRACKED_LIMIT;
+			const tree = await snapshotTree(this.repo, untracked, signal, LARGE_UNTRACKED_BYTES, skip);
 			await turnChangeHooks.afterSnapshot("before");
-			return { tree, untracked };
+			return { tree, untracked, skip };
 		});
 		return this.before.then(() => {});
 	}
 
-	/** After settle: queue the after-snapshot (same untracked mode as before) on the thread's chain. */
+	/**
+	 * After settle: queue the after-snapshot on the thread's chain, with the before-snapshot's untracked mode and skipped
+	 * folders: a skipped folder emptied below 200 files by the turn must not read as files the turn added.
+	 */
 	settled(turnId: string | undefined): void {
 		const before = this.before;
 		if (this.closed || !before || turnId === undefined) return;
@@ -110,6 +113,7 @@ export class TurnChanges {
 				start.untracked,
 				AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
 				LARGE_UNTRACKED_BYTES,
+				start.skip,
 			);
 			await turnChangeHooks.afterSnapshot("after");
 			if (after === start.tree) return;
