@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Item } from "@knightcode/app-server-protocol";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import { afterEach, expect, test, vi } from "vitest";
-import { callAppTool, MCP_APP_RESULT_MAX_BYTES } from "../../src/app-server/mcp-apps.ts";
+import { callAppTool, MCP_APP_RESULT_MAX_BYTES, readAppResource } from "../../src/app-server/mcp-apps.ts";
 import type { EventBus } from "../../src/core/event-bus.ts";
 import type { McpAppRequest } from "../../src/core/mcp-servers.ts";
 import { cleanupServers, startServer } from "./harness.ts";
@@ -157,4 +157,28 @@ test("a thread whose MCP extension is off answers mcpUnavailable at once, not af
 		code: "mcpUnavailable",
 	});
 	expect(Date.now() - started).toBeLessThan(1000);
+});
+
+test("a tool call waits for the tool, however long it runs; a resource read gives up after 60 s", async () => {
+	vi.useFakeTimers();
+	try {
+		const bus: EventBus = {
+			emit: (_channel, data) => {
+				const request = data as McpAppRequest;
+				request.heard();
+				if (request.op === "describe") request.reply({ result: { readOnly: true, visibility: ["app"] } });
+				// A long tool, answering after its own (longer) timeout's worth of progress; reads never answer.
+				if (request.op === "callTool") setTimeout(() => request.reply({ result: { content: [] } }), 90_000);
+			},
+			on: () => () => {},
+		};
+		const call = callAppTool(bus, "fullAccess", { threadId: "t", server: "s", name: "slow" });
+		const read = readAppResource(bus, { threadId: "t", server: "s", uri: "ui://s/app.html" });
+		const readFailed = expect(read).rejects.toMatchObject({ code: "internal" });
+		await vi.advanceTimersByTimeAsync(90_000);
+		await readFailed;
+		expect(await call).toEqual({ content: [] });
+	} finally {
+		vi.useRealTimers();
+	}
 });

@@ -525,8 +525,8 @@ again with `confirmed: true` after the user agreed. Arguments over 1 MiB and a
 resource over 4 MiB, serialized, answer `invalidParams`; a tool's result over
 4 MiB is left out of an answer whose text says the tool ran, since it did. A call
 during a turn runs
-at once; the server gives the MCP extension 60 seconds to answer (`internal`
-after that).
+at once; the server gives the MCP extension 60 seconds to answer a resource read
+(`internal` after that), and a tool call as long as the server's own `timeout`.
 
 ```json
 {"id":29,"method":"mcp/app/callTool","params":{"threadId":"THREAD_ID","server":"counter","name":"increment","arguments":{"by":1},"confirmed":true}}
