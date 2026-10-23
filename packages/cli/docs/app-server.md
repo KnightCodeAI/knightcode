@@ -521,8 +521,10 @@ connected (`mcpUnavailable` otherwise); a call reaches only a tool whose
 `_meta.ui.visibility` includes `"app"` and that the configuration does not hide
 (`invalidParams` otherwise). Outside `fullAccess`, a tool not annotated
 `readOnlyHint` answers `approvalRequired` (`data: {server, tool}`) until sent
-again with `confirmed: true` after the user agreed. Arguments over 1 MiB and
-results over 4 MiB, serialized, answer `invalidParams`. A call during a turn runs
+again with `confirmed: true` after the user agreed. Arguments over 1 MiB and a
+resource over 4 MiB, serialized, answer `invalidParams`; a tool's result over
+4 MiB is left out of an answer whose text says the tool ran, since it did. A call
+during a turn runs
 at once; the server gives the MCP extension 60 seconds to answer (`internal`
 after that).
 

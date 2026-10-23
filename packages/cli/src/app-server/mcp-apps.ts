@@ -4,7 +4,8 @@
  * extension, over the session's event bus (MCP_APPS_CHANNEL), so the calls take the same path as the model's.
  *
  * Both are bounded well under the stdio transport's limits (a 64 MiB output line aborts the connection, an input line
- * past it is dropped unanswered): arguments to 1 MiB and results to 4 MiB, serialized. Outside Full access a tool that
+ * past it is dropped unanswered): arguments to 1 MiB and results to 4 MiB, serialized; a tool's larger result is left
+ * out of an answer that says it ran, since it did. Outside Full access a tool that
  * does not say it only reads answers `approvalRequired` until the client confirms with the user. A call during a turn
  * runs at once; it does not wait for the turn.
  */
@@ -99,7 +100,12 @@ export async function callAppTool(
 		isError?: boolean;
 		_meta?: Record<string, unknown>;
 	};
-	bounded(result);
+	// It ran: an error here would read as a failure, and the app might run it again.
+	if (size(result) > MCP_APP_RESULT_MAX_BYTES)
+		return {
+			content: [{ type: "text", text: "The tool ran; its result was over 4 MiB serialized and was left out." }],
+			...(result.isError ? { isError: true } : {}),
+		};
 	return {
 		content: result.content ?? [],
 		...(result.structuredContent !== undefined ? { structuredContent: result.structuredContent } : {}),
