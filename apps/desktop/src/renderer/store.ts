@@ -686,6 +686,11 @@ export function checkForUpdates(): void {
 	);
 }
 
+/** macOS: the newer release's page, where it is downloaded. */
+export function openUpdatePage(url: string): void {
+	void client.host("host/shell/openExternal", { url }).catch((error: unknown) => toast(errorText(error), "error"));
+}
+
 /** Quit and install a downloaded update; main asks first when threads are running. */
 export function installUpdate(): void {
 	void client.host("host/update/install", {}).catch((error: unknown) => toast(errorText(error), "error"));

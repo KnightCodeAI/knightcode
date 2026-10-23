@@ -58,6 +58,7 @@ import {
 	startLogin,
 	toast,
 	installUpdate,
+	openUpdatePage,
 	unarchive,
 	useStore,
 } from "../store.ts";
@@ -2706,7 +2707,7 @@ function Updates() {
 				<Button
 					variant="soft"
 					toolbar
-					onClick={() => void client.host("host/shell/openExternal", { url: update.url }).catch(() => {})}
+					onClick={() => openUpdatePage(update.url)}
 				>
 					Download
 				</Button>
