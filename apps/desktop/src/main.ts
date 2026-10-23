@@ -281,8 +281,12 @@ function zoomFocused(step: -1 | 0 | 1): void {
  * Codex's update question when threads are running, then the quit question's path without asking again: the server
  * stopped and the terminals ended before Squirrel quits the app to install.
  */
+let installing = false;
+
 async function installUpdate(parent: BrowserWindow): Promise<void> {
-	if (updates.state.state !== "ready") return;
+	// A second press (another window's pill, About's button) while the question is open or the server stops.
+	if (installing || quitting || updates.state.state !== "ready") return;
+	installing = true;
 	const running = router.activeThreads();
 	if (running > 0) {
 		const { response } = await dialog.showMessageBox(parent, {
@@ -293,7 +297,10 @@ async function installUpdate(parent: BrowserWindow): Promise<void> {
 			message: "Update KnightCode now?",
 			detail: `KnightCode will quit to install the update, which will interrupt ${running} running ${running === 1 ? "thread" : "threads"}.`,
 		});
-		if (response !== 0) return;
+		if (response !== 0) {
+			installing = false;
+			return;
+		}
 	}
 	quitting = true;
 	markQuitting();
