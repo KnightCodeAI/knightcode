@@ -183,7 +183,7 @@ function UpdatePill() {
 					? openUpdatePage(update.url)
 					: installUpdate()
 			}
-			className="no-drag me-2 flex h-5 shrink-0 items-center gap-1 rounded-full bg-[#339cff] px-2.5 text-[10px] leading-3 font-semibold text-white shadow-sm enabled:hover:bg-[color-mix(in_srgb,#339cff_92%,black_8%)] enabled:active:bg-[#339cff]/80"
+			className="no-drag me-2 flex h-5 shrink-0 items-center gap-1 rounded-full bg-[var(--kc-update)] px-2.5 text-[10px] leading-3 font-semibold text-white shadow-sm enabled:hover:bg-[color-mix(in_srgb,var(--kc-update)_92%,black_8%)] enabled:active:bg-[color-mix(in_srgb,var(--kc-update)_80%,transparent)]"
 		>
 			<Download size={12} className="shrink-0" />
 			{update.state === "downloading" ? "Downloading" : "Update"}

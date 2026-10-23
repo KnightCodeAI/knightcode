@@ -77,6 +77,8 @@
 	--kc-selection: rgb(251 170 113 / 0.4);
 	/* A switch's and a slider's knob, white in both themes (Codex's). */
 	--kc-knob: #ffffff;
+	/* The title bar's update pill: Codex's accent blue (--blue-300), in both themes. */
+	--kc-update: #339cff;
 	--kc-accent: #f97316;
 	--kc-accent-hover: #fa893b;
 	--kc-success: #40c977;
