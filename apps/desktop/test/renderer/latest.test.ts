@@ -66,3 +66,33 @@ test("keystrokes within the delay make one check; a slow check of an old name ne
 	await vi.advanceTimersByTimeAsync(500);
 	expect(gate.asked).toEqual(["main", "main-2"]);
 });
+
+test("a refresh checks the same name again, and only its answer counts", async () => {
+	vi.useFakeTimers();
+	const asked: string[] = [];
+	const answers: ((refused: boolean) => void)[] = [];
+	const verdicts: [string, boolean][] = [];
+	const checker = latestCheck(
+		250,
+		(key) =>
+			new Promise<boolean>((resolve) => {
+				asked.push(key);
+				answers.push(resolve);
+			}),
+		(key, refused) => verdicts.push([key, refused]),
+	);
+	checker.set("main");
+	await vi.advanceTimersByTimeAsync(250);
+	checker.refresh();
+	await vi.advanceTimersByTimeAsync(250);
+	expect(asked).toEqual(["main", "main"]);
+	// The refresh's answer (the changes were stashed meanwhile), then the first check's late refusal: dropped.
+	answers[1]!(false);
+	answers[0]!(true);
+	await vi.advanceTimersByTimeAsync(0);
+	expect(verdicts).toEqual([["main", false]]);
+	checker.stop();
+	checker.refresh();
+	await vi.advanceTimersByTimeAsync(500);
+	expect(asked).toHaveLength(2);
+});

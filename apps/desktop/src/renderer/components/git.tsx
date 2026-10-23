@@ -754,7 +754,18 @@ export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: ()
 		[thread.id, to],
 	);
 	useEffect(() => checker.set(key), [checker, key]);
-	useEffect(() => () => checker.stop(), [checker]);
+	// A refusal can clear without an edit (the turn ended, the changes were stashed in a terminal): back in the
+	// window, the dialog checks again.
+	useEffect(() => {
+		const onFocus = () => checker.refresh();
+		window.addEventListener("focus", onFocus);
+		return () => {
+			window.removeEventListener("focus", onFocus);
+			checker.stop();
+		};
+	}, [checker]);
+	// A failed handoff's message is about the branch it was sent with; an edit's own check takes over.
+	useEffect(() => setError(undefined), [key]);
 	const checking = verdict?.key !== key;
 	const refused = !checking && verdict?.refusal ? refusalText(verdict.refusal) : undefined;
 	const shown = error ?? refused;
