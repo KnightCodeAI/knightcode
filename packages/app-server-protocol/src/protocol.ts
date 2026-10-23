@@ -41,6 +41,10 @@ export const ErrorCode = Type.Union([
 	Type.Literal("configConflict"),
 	Type.Literal("threadNotArchived"),
 	Type.Literal("shuttingDown"),
+	/** An MCP App's call to a tool that is not read-only, outside Full access: confirm, then send it `confirmed`. */
+	Type.Literal("approvalRequired"),
+	/** The MCP server an app belongs to is not connected (or MCP is off in the thread). */
+	Type.Literal("mcpUnavailable"),
 	Type.Literal("internal"),
 ]);
 export type ErrorCode = Static<typeof ErrorCode>;
@@ -315,6 +319,18 @@ export type ToolCallStatus = Static<typeof ToolCallStatus>;
 
 const Times = { startedAt: Type.Optional(Num), completedAt: Type.Optional(Num) };
 
+/**
+ * A tool call's MCP App: the server, the `ui://` resource that draws it, and the server's whole `CallToolResult`
+ * (with `_meta` and `structuredContent`) for the app, or `resultOmitted` when it was over 256 KiB serialized.
+ */
+export const McpApp = Obj({
+	server: Str,
+	resourceUri: Str,
+	result: Type.Optional(Type.Unknown()),
+	resultOmitted: Type.Optional(Bool),
+});
+export type McpApp = Static<typeof McpApp>;
+
 export const Item = Type.Union([
 	Obj({
 		type: Type.Literal("userMessage"),
@@ -341,6 +357,8 @@ export const Item = Type.Union([
 		fileChanges: Type.Optional(Type.Array(FileChange)),
 		/** The result's `details.view` (§8.2), drawn in place of the raw output. */
 		view: Type.Optional(View),
+		/** An MCP tool that declares an app (MCP Apps): the client draws its `ui://` resource with the result. */
+		mcpApp: Type.Optional(McpApp),
 	}),
 	Obj({ type: Type.Literal("compaction"), id: Str, summary: Str, ...Times }),
 	Obj({
@@ -670,6 +688,34 @@ export const ClientRequests = {
 		params: Obj({ threadId: Str, fromTree: Str, toTree: Str, path: Str, oldPath: Type.Optional(Str) }),
 		/** An absent side: the file was added or deleted. A side over 2 MiB answers `tooLarge` with neither. */
 		result: Obj({ old: Type.Optional(Str), new: Type.Optional(Str), binary: Bool, tooLarge: Bool }),
+	},
+	/**
+	 * An MCP App reads a resource of its own server (MCP Apps: `resources/read`), its HTML first. The result is the
+	 * server's `ReadResourceResult`; one over 4 MiB serialized answers `invalidParams`.
+	 */
+	"mcp/app/readResource": {
+		params: Obj({ threadId: Str, server: Str, uri: Str }),
+		result: Obj({ contents: Type.Array(Type.Unknown()), _meta: Type.Optional(Type.Record(Str, Type.Unknown())) }),
+	},
+	/**
+	 * An MCP App calls a tool of its own server whose visibility includes "app" (`tools/call`). Outside Full access a
+	 * tool that is not read-only answers `approvalRequired` until sent `confirmed`. Arguments over 1 MiB, or a result
+	 * over 4 MiB, serialized, answer `invalidParams`. The result is the server's `CallToolResult`.
+	 */
+	"mcp/app/callTool": {
+		params: Obj({
+			threadId: Str,
+			server: Str,
+			name: Str,
+			arguments: Type.Optional(Type.Record(Str, Type.Unknown())),
+			confirmed: Type.Optional(Bool),
+		}),
+		result: Obj({
+			content: Type.Array(Type.Unknown()),
+			structuredContent: Type.Optional(Type.Unknown()),
+			isError: Type.Optional(Bool),
+			_meta: Type.Optional(Type.Record(Str, Type.Unknown())),
+		}),
 	},
 	/** A file's text, for a file tab: any file the agent could name, not only the workspace's. */
 	"file/read": {
