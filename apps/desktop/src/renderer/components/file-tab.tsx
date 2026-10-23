@@ -31,7 +31,7 @@ export function crumbs(path: string, cwd: string): string[] {
 	return file.split("/").filter(Boolean);
 }
 
-function Breadcrumb({ segments }: { segments: string[] }) {
+export function Breadcrumb({ segments }: { segments: string[] }) {
 	return (
 		<div className="kc-capsule flex h-8 min-w-0 shrink items-center rounded-full p-0.5">
 			<nav aria-label="File path" className="flex h-full min-w-0 items-center overflow-hidden px-2">

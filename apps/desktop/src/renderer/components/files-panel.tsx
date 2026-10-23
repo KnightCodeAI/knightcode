@@ -10,10 +10,12 @@ import type { FileTreeSortEntry, GitStatus } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
+import { basename } from "../format.ts";
 import { matches } from "../keys.ts";
 import { setPanel, showChanges, useStore } from "../store.ts";
 import { Folders, List, Search, X } from "./icons.tsx";
 import { IconButton } from "./button.tsx";
+import { Breadcrumb } from "./file-tab.tsx";
 
 const CHANGED = "Changed files";
 const ALL = "All files";
@@ -49,10 +51,54 @@ const STATUS: Record<DiffFile["status"], GitStatus> = {
 	typeChanged: "modified",
 };
 
-/** Codex's section rows: a chevron and the label, no folder icon, the label in the row's own colour. */
+/**
+ * Codex's git badges in place of the status letter: a rounded square in the status colour, a dot for a change, a plus
+ * for an addition, a minus for a deletion.
+ */
 const FILES_TREE_CSS = `
-	[data-type='item'][aria-level='1'] [data-item-section='icon'] {
+	[data-item-type='file'] [data-item-section='git'] > span {
+		position: relative;
+		display: inline-block;
+		box-sizing: border-box;
+		width: 13px;
+		height: 13px;
+		border: 1.25px solid currentColor;
+		border-radius: 3.5px;
+		font-size: 0;
+		vertical-align: middle;
+	}
+	[data-item-type='file'] [data-item-section='git'] > span::before,
+	[data-item-type='file'] [data-item-section='git'] > span::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		margin: auto;
+		background: currentColor;
+	}
+	[data-item-type='file'][data-item-git-status='modified'] [data-item-section='git'] > span::before,
+	[data-item-type='file'][data-item-git-status='renamed'] [data-item-section='git'] > span::before {
+		width: 4px;
+		height: 4px;
+		border-radius: 50%;
+	}
+	[data-item-type='file'][data-item-git-status='added'] [data-item-section='git'] > span::before,
+	[data-item-type='file'][data-item-git-status='untracked'] [data-item-section='git'] > span::before,
+	[data-item-type='file'][data-item-git-status='deleted'] [data-item-section='git'] > span::before {
+		width: 7px;
+		height: 1.25px;
+	}
+	[data-item-type='file'][data-item-git-status='added'] [data-item-section='git'] > span::after,
+	[data-item-type='file'][data-item-git-status='untracked'] [data-item-section='git'] > span::after {
+		width: 1.25px;
+		height: 7px;
+	}
+	[data-item-type='file'][data-item-git-status='modified'] [data-item-section='git'] > span::after,
+	[data-item-type='file'][data-item-git-status='renamed'] [data-item-section='git'] > span::after,
+	[data-item-type='file'][data-item-git-status='deleted'] [data-item-section='git'] > span::after {
 		display: none;
+	}
+	:host {
+		--trees-level-gap-override: 2px;
 	}
 	[data-file-tree-sticky-row='true'] {
 		background-color: var(--kc-bg-surface);
@@ -225,7 +271,8 @@ function SectionedTree({
 			return [...segments.slice(0, -1).map((_, i) => `${CHANGED}/${segments.slice(0, i + 1).join("/")}/`), `${CHANGED}/${f.path}`];
 		});
 		sync(`${CHANGED}/`, paths);
-		for (const path of paths) if (path.endsWith("/")) (model.getItem(path) as { expand?: () => void } | null)?.expand?.();
+		for (const path of [`${CHANGED}/`, ...paths])
+			if (path.endsWith("/")) (model.getItem(path) as { expand?: () => void } | null)?.expand?.();
 		model.setGitStatus(files.map((f) => ({ path: `${CHANGED}/${f.path}`, status: STATUS[f.status] ?? "modified" })));
 	}, [changed, model]);
 
@@ -249,6 +296,9 @@ function SectionedTree({
 			];
 			for (const op of operations) op.type === "add" ? known.current.add(op.path) : known.current.delete(op.path);
 			if (operations.length) model.batch(operations);
+			// The section was empty when the tree was made, so its initial expansion did not hold: open it now, as
+			// Codex shows All files open.
+			if (!folder) (model.getItem(`${ALL}/`) as { expand?: () => void } | null)?.expand?.();
 		};
 		void list("");
 		// A folder opened in the tree is listed the first time; the model says which are open.
@@ -391,7 +441,10 @@ export function FilesTab({
 	const shown = useStore((s) => s.panel.fileTree !== false);
 	return (
 		<div className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Open file">
-			<header className="relative z-20 flex shrink-0 items-center justify-end gap-1.5 p-2">
+			<header className="relative z-20 flex shrink-0 items-center gap-1.5 p-2">
+				{/* The workspace's own crumb, as a file tab's breadcrumb starts with it. */}
+				{cwd ? <Breadcrumb segments={[basename(cwd)]} /> : null}
+				<div className="flex-1" />
 				<div className="kc-capsule inline-flex h-8 shrink-0 items-center rounded-full p-0.5">
 					<TreeToggle />
 				</div>
