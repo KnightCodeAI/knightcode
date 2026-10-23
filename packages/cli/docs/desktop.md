@@ -64,6 +64,14 @@ on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on
     added, as `knightcode config` does. Built-in extensions are always on and not listed.
 
   Changes apply to threads that start or resume afterwards.
+- Side panel: Changes shows the thread's diff; the separators between hunks expand to
+  the unchanged lines around them. A file named in a tool row or in Changes opens in a
+  read-only tab beside it, at the line the tool read or changed. A tab opened in passing
+  is italic and the next one replaces it; double-click it, or open the same file again,
+  to keep it. Each thread keeps its own tabs, at most 12 files.
+- Open in: a file tab's Open button sends the file, at its line, to an editor, terminal
+  or IDE found on your machine, or to the system's default app or file manager. The app
+  remembers the last choice, per project and overall.
 - Archived threads: search, unarchive, or delete for good.
 - Command palette (Ctrl+K): actions and threads in one search.
 - Quitting while threads run asks first.
@@ -105,6 +113,7 @@ once. The protocol side is in [app-server.md](app-server.md#dialogs-and-extensio
 | Toggle the sidebar | Ctrl+B |
 | Back / forward | Alt+Left / Alt+Right |
 | Archive the thread | Ctrl+Shift+A |
+| Close the side panel's file tab | Ctrl+Shift+W |
 | Send | Enter |
 | New line | Shift+Enter |
 | Steer the running turn | Ctrl+Enter |
