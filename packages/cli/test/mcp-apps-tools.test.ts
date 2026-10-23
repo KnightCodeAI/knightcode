@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 import {
 	convertMcpResult,
 	createMcpToolDefinition,
-	MCP_APP_RESULT_MAX_BYTES,
+	MCP_APP_INLINE_RESULT_MAX_BYTES,
 	mcpAppOf,
 	visibilityOf,
 } from "../src/extensions/mcp/tools.ts";
@@ -62,7 +62,7 @@ test("the result's details carry the app with the server's whole result, or say 
 		resourceUri: "ui://s/app.html",
 		result: small,
 	});
-	const big = { content: [{ type: "text" as const, text: "x".repeat(MCP_APP_RESULT_MAX_BYTES) }] };
+	const big = { content: [{ type: "text" as const, text: "x".repeat(MCP_APP_INLINE_RESULT_MAX_BYTES) }] };
 	expect((await convertMcpResult("s", "show", big, { app, saveOutput: async () => "/tmp/x" })).details?.mcpApp).toEqual(
 		{
 			server: "s",

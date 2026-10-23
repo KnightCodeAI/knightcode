@@ -60,13 +60,13 @@ export interface McpToolDetails {
 	fullOutputPath?: string;
 	/**
 	 * The tool's MCP App, for a client that draws it: the server's whole result (with `_meta` and
-	 * `structuredContent`), or `resultOmitted` past {@link MCP_APP_RESULT_MAX_BYTES} serialized.
+	 * `structuredContent`), or `resultOmitted` past {@link MCP_APP_INLINE_RESULT_MAX_BYTES} serialized.
 	 */
 	mcpApp?: { server: string; resourceUri: string; result?: CallToolResult; resultOmitted?: true };
 }
 
 /** An app's result is sent to it whole up to this size serialized; past it, the app gets the text output. */
-export const MCP_APP_RESULT_MAX_BYTES = 256 * 1024;
+export const MCP_APP_INLINE_RESULT_MAX_BYTES = 256 * 1024;
 
 /** A tool's MCP App: the `ui://` resource that draws it, and who may call the tool. */
 export interface McpAppTool {
@@ -318,7 +318,7 @@ export async function convertMcpResult(
 	const mcpApp = options.app && {
 		server,
 		resourceUri: options.app.resourceUri,
-		...(Buffer.byteLength(JSON.stringify(result)) <= MCP_APP_RESULT_MAX_BYTES
+		...(Buffer.byteLength(JSON.stringify(result)) <= MCP_APP_INLINE_RESULT_MAX_BYTES
 			? { result }
 			: { resultOmitted: true as const }),
 	};
