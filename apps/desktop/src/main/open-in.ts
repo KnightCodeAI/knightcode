@@ -349,7 +349,8 @@ export async function detectTargets(platform: NodeJS.Platform, env: NodeJS.Proce
 				?.flatMap((rel) => (rel.startsWith("/") ? [rel] : applications.map((dir) => join(dir, rel))))
 				.find((candidate) => existsSync(candidate));
 			if (!bundle) continue;
-			const app = bundle.slice(0, bundle.indexOf(".app") + 4);
+			// The bundle itself: ".app" followed by a separator or the end, not a home folder such as /Users/anna.applegate.
+			const app = /^.+?\.app(?=[\\/]|$)/.exec(bundle)?.[0] ?? bundle;
 			// An app with no command line of its own opens through Launch Services.
 			if (bundle.endsWith(".app"))
 				add(spec, "/usr/bin/open", (p) => ["-a", app, spec.kind === "terminal" ? folderOf(p) : p], app);

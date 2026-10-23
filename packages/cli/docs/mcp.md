@@ -255,7 +255,7 @@ In the desktop:
 
 - A tool with an app is declared to the model whatever the server's exposure, and it cannot be called from codemode scripts: a call drawn as an app must be the model's own, which the session keeps. A tool you configured as `hidden` stays hidden and draws no app.
 - A tool whose `_meta.ui.visibility` leaves out `"model"` is not declared to the model, whatever its exposure and whether or not it has an app of its own. An app can still call it.
-- An app calls only tools of its own server whose visibility includes `"app"`. In Full access its calls run. In Ask and Auto-edit, a call to a tool not annotated `readOnlyHint` asks you first, naming the server and the tool.
+- An app calls only tools of its own server whose visibility includes `"app"`. In Full access its calls run. In Ask and Auto-edit, a call to a tool not annotated `readOnlyHint` asks you first, naming the server and the tool. An app's calls do not go through the session's tool pipeline, so extension `tool_call` and `tool_result` handlers, permission gates included, do not see them.
 - An app can send a follow-up message to the thread after you confirm it, open http and https links in your browser, and ask to be shown full screen in the side panel. It cannot update the model's context.
 - The app runs in a sandboxed frame on its own origin, with no permissions (no camera, microphone, location or clipboard). It reaches the network only through the domains its resource declares in `_meta.ui.csp`; a declaration that is not a list of host sources is refused and the app does not load.
 
@@ -263,7 +263,7 @@ In the desktop:
 
 ## Permissions
 
-Every MCP call passes through KnightCode's tool pipeline. Extension `tool_call` and `tool_result` handlers, including permission gates, therefore apply to MCP tools. Calls made from codemode scripts carry the codemode call ID as `parentToolCallId`.
+Every MCP call the model makes passes through KnightCode's tool pipeline. Extension `tool_call` and `tool_result` handlers, including permission gates, therefore apply to MCP tools; an [MCP App](#mcp-apps)'s own calls are the exception. Calls made from codemode scripts carry the codemode call ID as `parentToolCallId`.
 
 `knightcode.getAllTools()` reports the annotations declared by each server: `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`. Permission extensions can use these hints to decide which calls require confirmation (see [Tool exposure](extensions.md#tool-exposure)). Resource tools are marked read-only.
 
