@@ -70,6 +70,15 @@ export function squirrelReleases(
 // macOS: the newer release for an app at `current`, if it carries a build for
 // `arch` (Forge's zip, KnightCode-darwin-<arch>-<version>.zip, or its dmg,
 // KnightCode-<version>-<arch>.dmg); null when there is nothing to offer.
+// Whether a release carries a Mac build for `arch`: Forge's zip
+// (KnightCode-darwin-<arch>-<version>.zip) or its dmg (KnightCode-<version>-<arch>.dmg).
+export function hasMacBuild(release: DesktopRelease, arch: string): boolean {
+  return release.assets.some(
+    ({ name }) =>
+      name.includes(`darwin-${arch}-`) || name.endsWith(`-${arch}.dmg`)
+  )
+}
+
 export function macUpdate(
   latest: LatestDesktopRelease,
   current: string,
@@ -77,11 +86,7 @@ export function macUpdate(
 ): { version: string; url: string; notes: string; pub_date: string } | null {
   if (!STABLE_VERSION_RE.test(current)) return null
   if (compareStable(latest.version, current) <= 0) return null
-  const built = latest.release.assets.some(
-    ({ name }) =>
-      name.includes(`darwin-${arch}-`) || name.endsWith(`-${arch}.dmg`)
-  )
-  if (!built) return null
+  if (!hasMacBuild(latest.release, arch)) return null
   return {
     version: latest.version,
     url: latest.release.html_url,
@@ -90,26 +95,42 @@ export function macUpdate(
   }
 }
 
+const PAGE_SIZE = 100
+// CLI releases share the repository and outnumber desktop ones.
+const MAX_PAGES = 10
+
+// Newest first, as GitHub lists them: pages are read until one holds a
+// published desktop release, so CLI releases cannot push it out of reach.
 export async function fetchDesktopReleases(
   fetchImpl: typeof fetch = fetch
 ): Promise<DesktopRelease[] | null> {
+  const releases: DesktopRelease[] = []
   try {
-    const res = await fetchImpl(
-      `https://api.github.com/repos/${CLI_REPOSITORY}/releases?per_page=100`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "User-Agent": "knightcode-website",
-          ...(process.env.GITHUB_TOKEN
-            ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-            : {}),
-        },
-        next: { revalidate: DESKTOP_RELEASE_REVALIDATE_SECONDS },
-      }
-    )
-    if (!res.ok) return null
-    const releases = (await res.json()) as unknown
-    return Array.isArray(releases) ? (releases as DesktopRelease[]) : null
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await fetchImpl(
+        `https://api.github.com/repos/${CLI_REPOSITORY}/releases?per_page=${PAGE_SIZE}&page=${page}`,
+        {
+          headers: {
+            Accept: "application/vnd.github+json",
+            "User-Agent": "knightcode-website",
+            ...(process.env.GITHUB_TOKEN
+              ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
+              : {}),
+          },
+          next: { revalidate: DESKTOP_RELEASE_REVALIDATE_SECONDS },
+        }
+      )
+      if (!res.ok) return null
+      const batch = (await res.json()) as unknown
+      if (!Array.isArray(batch)) return null
+      releases.push(...(batch as DesktopRelease[]))
+      if (
+        batch.length < PAGE_SIZE ||
+        latestDesktopRelease(batch as DesktopRelease[])
+      )
+        break
+    }
+    return releases
   } catch {
     return null
   }

@@ -1,6 +1,7 @@
 import {
   DESKTOP_RELEASE_REVALIDATE_SECONDS,
   fetchDesktopReleases,
+  hasMacBuild,
   latestDesktopRelease,
   macUpdate,
 } from "@/lib/desktop-release"
@@ -19,7 +20,10 @@ export async function GET(
 
   const releases = await fetchDesktopReleases()
   if (!releases) return new Response(null, { status: 502 })
-  const latest = latestDesktopRelease(releases)
+  // The newest release built for this Mac: one missing its build must not hide an older one that has it.
+  const latest = latestDesktopRelease(
+    releases.filter((release) => hasMacBuild(release, arch))
+  )
   const update = latest && macUpdate(latest, version, arch)
   const cache = {
     "cache-control": `public, s-maxage=${DESKTOP_RELEASE_REVALIDATE_SECONDS}, stale-while-revalidate=3600`,

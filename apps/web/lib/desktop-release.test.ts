@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import {
   type DesktopRelease,
+  fetchDesktopReleases,
   latestDesktopRelease,
   macUpdate,
   squirrelReleases,
@@ -121,6 +122,11 @@ describe("desktop update feed", () => {
           params("darwin-x64", "0.2.0")
         )
         expect(current.status).toBe(204)
+        const intelOnly = await getMac(
+          new Request("http://localhost"),
+          params("darwin-arm64", "0.1.0")
+        )
+        expect(intelOnly.status).toBe(204)
         const windows = await getMac(
           new Request("http://localhost"),
           params("win32-x64", "0.1.0")
@@ -158,6 +164,41 @@ describe("desktop update feed", () => {
           params("win32-x64", "0.1.0")
         )
         expect(res.status).toBe(404)
+      }
+    )
+  })
+
+  it("reads past pages of CLI releases to the newest desktop release, and no further", async () => {
+    const pages: number[] = []
+    const cli = Array.from({ length: 100 }, (_, i) =>
+      release(`@knightcodeai/cli@0.${300 - i}.0`)
+    )
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const page = Number(new URL(requestUrl(input)).searchParams.get("page"))
+      pages.push(page)
+      return Response.json(
+        page === 1 ? cli : page === 2 ? [release("desktop-v0.3.0")] : []
+      )
+    }) as typeof fetch
+    const releases = await fetchDesktopReleases(fetchImpl)
+    expect(latestDesktopRelease(releases ?? [])?.version).toBe("0.3.0")
+    expect(pages).toEqual([1, 2])
+  })
+
+  it("offers a Mac the newest release with its build, past a newer one without it", async () => {
+    const releases = [
+      release("desktop-v0.3.0", { files: ["KnightCode-0.3.0-x64.dmg"] }),
+      release("desktop-v0.2.0", { files: ["KnightCode-0.2.0-arm64.dmg"] }),
+    ]
+    await withFetch(
+      () => Response.json(releases),
+      async () => {
+        const res = await getMac(
+          new Request("http://localhost"),
+          params("darwin-arm64", "0.1.0")
+        )
+        expect(res.status).toBe(200)
+        expect((await res.json()).version).toBe("0.2.0")
       }
     )
   })
