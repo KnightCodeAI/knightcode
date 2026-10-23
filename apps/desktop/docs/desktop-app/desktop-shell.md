@@ -870,7 +870,11 @@ composer then shows its controls as icons only.
   dark both follow the theme. Codex's padding (8px over, 16px before, 12px
   under) and copy and paste: copy only with a selection, so Ctrl+C without
   one still interrupts the shell; keys the shell gets never reach window
-  bindings.
+  bindings. Off macOS a bare Ctrl+letter is the shell's (readline's Ctrl+K,
+  Ctrl+B, Ctrl+N, Ctrl+J; tmux's Ctrl+B), as in Codex's terminal; Ctrl+\`,
+  Ctrl+PageUp/PageDown and the Shift chords still reach the window. A preview's
+  page keeps a bare Ctrl+letter the same way, except the preview's own Ctrl+T and
+  Ctrl+L.
 - Shell: the preference, else `pwsh`, then `powershell`, then `%COMSPEC%` on
   Windows; `$SHELL`, then `/bin/bash`, then `/bin/sh` elsewhere. Git Bash and
   WSL are offered in the menu on Windows when found.
