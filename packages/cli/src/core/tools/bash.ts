@@ -13,6 +13,7 @@ import {
 	trackDetachedChildPid,
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
+import { type BackgroundShellManager, markBoundTool, markUnboundTool } from "../background-shells.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { BASH_UPDATE_THROTTLE_MS, createShellRenderers } from "./renderers/bash.ts";
@@ -37,10 +38,27 @@ function resolveTimeoutMs(timeout: number | undefined): number | undefined {
 	return timeoutMs;
 }
 
+const commandParameter = Type.String({ description: "Shell command to execute" });
+const timeoutParameter = Type.Optional(
+	Type.Number({ description: "Timeout in seconds (optional, no default timeout)" }),
+);
+
+const foregroundBashSchema = Type.Object({ command: commandParameter, timeout: timeoutParameter });
+
+/** The schema with background support, declared when the tool has a background shell manager. */
 const bashSchema = Type.Object({
-	command: Type.String({ description: "Shell command to execute" }),
-	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+	command: commandParameter,
+	timeout: timeoutParameter,
+	run_in_background: Type.Optional(
+		Type.Boolean({ description: "Run in the background: return at once with a task ID and output file" }),
+	),
 });
+
+const BACKGROUND_DESCRIPTION =
+	" Set run_in_background for commands that run long or never exit (dev servers, watchers, long builds and test runs): the call returns at once with a task ID and an output file, the command keeps running across turns, and you are notified when it exits. Do not poll or sleep waiting for it; read the output file only when you need its output sooner. Stop it with task_stop. No `&` needed. A timeout still stops the command in the background.";
+
+const BACKGROUND_STARTED_HINT =
+	"You will be notified when it exits. Do not poll the file or sleep while waiting; read it only if you need its output before then.";
 
 export const bashToolSystemPromptContribution = {
 	snippet: "Execute bash commands (ls, grep, find, etc.)",
@@ -56,8 +74,13 @@ export type BashToolInput = Static<typeof bashSchema>;
 const bashOutputSchema = Type.Object({
 	output: Type.String({ description: "Combined stdout and stderr, possibly truncated" }),
 	truncated: Type.Boolean(),
-	full_output_path: Type.Optional(Type.String({ description: "Full output, when truncated" })),
-	exit_code: Type.Number(),
+	full_output_path: Type.Optional(
+		Type.String({ description: "Full output, when truncated or when the command runs in the background" }),
+	),
+	exit_code: Type.Optional(Type.Number({ description: "Absent when the command runs in the background" })),
+	background_task_id: Type.Optional(
+		Type.String({ description: "Set when the command runs in the background; pass it to task_stop" }),
+	),
 	wall_time_seconds: Type.Number(),
 });
 
@@ -66,6 +89,14 @@ export type BashToolOutput = Static<typeof bashOutputSchema>;
 export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	/** Set on a result whose command keeps running in the background. */
+	background?: {
+		taskId: string;
+		/** Whether the user moved a running foreground command there, rather than the model starting it there. */
+		movedByUser: boolean;
+	};
+	/** Set on progress updates while the user can move the command to the background. */
+	backgroundable?: boolean;
 }
 
 /**
@@ -222,6 +253,11 @@ export interface BashToolOptions {
 	exposeSessionEnvironment?: boolean;
 	/** Hook to adjust command, cwd, or env before execution */
 	spawnHook?: BashSpawnHook;
+	/**
+	 * Owner of commands that keep running after the call returns. With it the tool accepts
+	 * `run_in_background`, and a running foreground command can be moved to the background.
+	 */
+	backgroundShells?: BackgroundShellManager;
 }
 
 export type BashRenderState = {
@@ -251,22 +287,40 @@ export function createShellToolDefinition(
 	const commandPrefix = options?.commandPrefix;
 	const exposeSessionEnvironment = options?.exposeSessionEnvironment ?? true;
 	const spawnHook = options?.spawnHook;
-	return {
+	const backgroundShells = options?.backgroundShells;
+	const definition: ToolDefinition<typeof bashSchema, BashToolDetails | undefined, BashRenderState> = {
 		name: config.name,
 		label: config.label,
-		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
+		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.${backgroundShells ? BACKGROUND_DESCRIPTION : ""}`,
 		promptSnippet: config.promptSnippet,
 		promptGuidelines: exposeSessionEnvironment && config.promptGuidelines ? [...config.promptGuidelines] : undefined,
-		parameters: bashSchema,
+		// Without a manager nothing could own a background command, so the parameter is not offered.
+		parameters: backgroundShells ? bashSchema : (foregroundBashSchema as typeof bashSchema),
 		outputSchema: bashOutputSchema,
 		constrainedSampling: { type: "json_schema", strict: "prefer" },
 		async execute(
-			_toolCallId,
-			{ command, timeout }: { command: string; timeout?: number },
+			toolCallId,
+			{ command, timeout, run_in_background }: BashToolInput,
 			signal?: AbortSignal,
 			onUpdate?,
 			ctx?: ExtensionContext,
 		) {
+			// Strict schemas send omitted optional arguments as null.
+			const timeoutSeconds = timeout ?? undefined;
+			if (signal?.aborted) throw new Error("Command aborted");
+			const runInBackground = backgroundShells !== undefined && run_in_background === true;
+			if (runInBackground) {
+				// The call returns before the process could reject a bad timeout, so check it here.
+				resolveTimeoutMs(timeoutSeconds);
+				backgroundShells.assertCanStart();
+			}
+			// Only a call the model made directly moves on Ctrl+B. A nested call (id `<parent id>/<n>`)
+			// returns to the tool or script that made it, which expects the command's result.
+			const promotable =
+				backgroundShells !== undefined &&
+				!runInBackground &&
+				typeof toolCallId === "string" &&
+				!toolCallId.includes("/");
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(
 				resolvedCommand,
@@ -280,6 +334,7 @@ export function createShellToolDefinition(
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
 			let lastUpdateAt = 0;
+			const startedAt = performance.now();
 
 			const emitOutputUpdate = () => {
 				if (!onUpdate || !updateDirty) return;
@@ -291,6 +346,7 @@ export function createShellToolDefinition(
 					details: {
 						truncation: snapshot.truncation.truncated ? snapshot.truncation : undefined,
 						fullOutputPath: snapshot.fullOutputPath,
+						backgroundable: promotable || undefined,
 					},
 				});
 			};
@@ -317,15 +373,15 @@ export function createShellToolDefinition(
 				}, delay);
 			};
 
-			if (onUpdate) {
-				onUpdate({ content: [], details: undefined });
-			}
-
-			const handleData = (data: Buffer) => {
+			// The process's output goes wherever `sink` points: to this call while it waits, or to the
+			// background shell that owns the process once it moves there.
+			let sink = (data: Buffer) => {
 				if (!acceptingOutput) return;
 				output.append(data);
 				scheduleOutputUpdate();
 			};
+			// Aborting this kills the process. The call's signal is forwarded only while the call owns it.
+			const processAbort = new AbortController();
 
 			const finishOutput = async () => {
 				acceptingOutput = false;
@@ -358,19 +414,92 @@ export function createShellToolDefinition(
 			};
 
 			const appendStatus = (text: string, status: string) => `${text ? `${text}\n\n` : ""}${status}`;
-			const startedAt = performance.now();
+
+			/** Hand the running process to the background shell manager and describe that to the model. */
+			const moveToBackground = (manager: BackgroundShellManager, done: Promise<{ exitCode: number | null }>) => {
+				acceptingOutput = false;
+				clearUpdateTimer();
+				const shell = manager.adopt({
+					toolName: config.name,
+					command,
+					cwd: spawnContext.cwd,
+					timeoutSeconds,
+					output,
+					done,
+					abort: processAbort,
+				});
+				sink = shell.append;
+				const movedByUser = !runInBackground;
+				const text = movedByUser
+					? `The user moved this command to the background, where it keeps running with ID: ${shell.id}. Its output so far and from now on is written to: ${shell.outputPath}\nYou will be notified when it exits.`
+					: `Command running in background with ID: ${shell.id}. Output is being written to: ${shell.outputPath}\n${BACKGROUND_STARTED_HINT}`;
+				const structuredContent: BashToolOutput = {
+					output: "",
+					truncated: false,
+					full_output_path: shell.outputPath,
+					background_task_id: shell.id,
+					wall_time_seconds: Math.round((performance.now() - startedAt) / 100) / 10,
+				};
+				return {
+					content: [{ type: "text" as const, text }],
+					details: {
+						fullOutputPath: shell.outputPath,
+						background: { taskId: shell.id, movedByUser },
+					} satisfies BashToolDetails,
+					structuredContent,
+				};
+			};
+
+			if (onUpdate) {
+				onUpdate({
+					content: [],
+					details: promotable ? { backgroundable: true } : undefined,
+				});
+			}
+
+			const done = ops.exec(spawnContext.command, spawnContext.cwd, {
+				onData: (data) => sink(data),
+				signal: processAbort.signal,
+				timeout: timeoutSeconds,
+				env: spawnContext.env,
+			});
+			if (runInBackground) return moveToBackground(backgroundShells, done);
+
+			const forwardAbort = () => processAbort.abort();
+			if (signal?.aborted) forwardAbort();
+			else signal?.addEventListener("abort", forwardAbort, { once: true });
+			let exited = false;
+			let promote: (() => void) | undefined;
+			const promoted = new Promise<"promoted">((resolve) => {
+				promote = () => resolve("promoted");
+			});
+			const unregisterForeground = (promotable ? backgroundShells : undefined)?.registerForeground(() => {
+				// Once the process has exited the call is finishing on its own; there is nothing to move.
+				if (exited || signal?.aborted) return false;
+				promote?.();
+				return true;
+			});
 
 			try {
-				let exitCode: number | null;
-				try {
-					const result = await ops.exec(spawnContext.command, spawnContext.cwd, {
-						onData: handleData,
-						signal,
-						timeout,
-						env: spawnContext.env,
-					});
-					exitCode = result.exitCode;
-				} catch (err) {
+				const settled = done.then(
+					(result) => {
+						exited = true;
+						return { exitCode: result.exitCode };
+					},
+					(error: unknown) => {
+						exited = true;
+						return { error };
+					},
+				);
+				const outcome = await Promise.race([settled, promoted]);
+				if (outcome === "promoted") {
+					signal?.removeEventListener("abort", forwardAbort);
+					// Only a registered manager can promote.
+					return moveToBackground(backgroundShells as BackgroundShellManager, done);
+				}
+
+				if ("error" in outcome) {
+					const err = outcome.error;
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
 					if (err instanceof Error && err.message === "aborted") {
@@ -383,6 +512,7 @@ export function createShellToolDefinition(
 					throw err;
 				}
 
+				const exitCode = outcome.exitCode;
 				const snapshot = await finishOutput();
 				const { text: outputText, details } = formatOutput(snapshot);
 				if (exitCode === null) {
@@ -407,11 +537,21 @@ export function createShellToolDefinition(
 				}
 				return { content: [{ type: "text", text: outputText }], details, structuredContent };
 			} finally {
+				unregisterForeground?.();
+				signal?.removeEventListener("abort", forwardAbort);
 				clearUpdateTimer();
 			}
 		},
 		...createShellRenderers(config.displayName),
 	};
+	// A session gives a copy of this definition its own manager (see bindBackgroundShells).
+	if (backgroundShells) markBoundTool(definition, backgroundShells);
+	else {
+		markUnboundTool(definition, (manager) =>
+			createShellToolDefinition(cwd, config, { ...options, backgroundShells: manager }),
+		);
+	}
+	return definition;
 }
 
 const bashToolConfig: ShellToolConfig = {

@@ -41,6 +41,7 @@ You can send more input while KnightCode is working:
 | Adjust the current task | Type a message and press `Enter` |
 | Add work after the current task | Type a message and press `Alt+Enter` |
 | Return queued messages to the editor | Press `Alt+Up` |
+| Let a long command run on while KnightCode continues | Press `Ctrl+B` (see [Background commands](#background-commands)) |
 | Stop the current task | Press `Escape` |
 
 A message sent with `Enter` waits until the current response and its tool calls finish, then guides the next response. A follow-up sent with `Alt+Enter` waits until KnightCode finishes the current task. Aborting returns queued messages to the editor.
@@ -82,6 +83,27 @@ Prefix a command with `!` to run it and include its output in the conversation:
 ```
 
 Use `!!` when you want to run a command without sending its output to the model.
+
+## Background commands
+
+KnightCode runs a command in the background when it takes long or never exits, such as a dev server, a file watcher, or a long build or test run. The tool call returns at once and the command keeps running while KnightCode works, across turns. When the command exits, KnightCode is told how it ended, with the last lines of its output, and carries on from there; you see the same notice in the transcript.
+
+Press `Ctrl+B` while a command runs in the foreground to move it to the background. The same process keeps running; nothing starts again. The key works only while a command runs; otherwise `Ctrl+B` moves the cursor as usual.
+
+The footer counts the running background commands. Run `/tasks` to list them with their status and runtime:
+
+| Key | In `/tasks` |
+|-----|-------------|
+| `Up`/`Down` | Choose a command |
+| `Enter` | Show its output as it arrives |
+| `x` | Stop it |
+| `Esc` | Go back, then close |
+
+A command's full output is written to a file whose path the transcript and `/tasks` show, and KnightCode reads that file when it needs the output sooner. KnightCode stops a command with the `task_stop` tool, which is on whenever `bash` or `powershell` is.
+
+A background command ends when it exits, when KnightCode or you stop it, or when the session ends: quitting, `/new`, `/resume`, and `/fork` stop it, while `/reload` keeps it. Resuming or forking a session does not start its commands again; with your next message KnightCode is told that they were stopped. A `timeout` given with the command still stops it in the background. A command that writes more than 1 GiB of output is stopped, and at most 32 run at once.
+
+A background command has no input: one that asks a question reads end-of-file. If you press `Escape` to stop KnightCode, a command that ends afterwards is recorded in the conversation without starting KnightCode again; the next message you send re-arms that. In print and JSON modes KnightCode does not exit while a command it started in the background is running, so it can act on how the command ended.
 
 ## Web Tools
 

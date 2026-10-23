@@ -24,6 +24,7 @@ type FakeSession = {
 	subscribe: ReturnType<typeof vi.fn>;
 	prompt: ReturnType<typeof vi.fn>;
 	reload: ReturnType<typeof vi.fn>;
+	waitForBackgroundShells: ReturnType<typeof vi.fn>;
 };
 
 type FakeRuntimeHost = {
@@ -77,6 +78,7 @@ function createRuntimeHost(assistantMessage: AssistantMessage): FakeRuntimeHost 
 		subscribe: vi.fn(() => () => {}),
 		prompt: vi.fn(async () => {}),
 		reload: vi.fn(async () => {}),
+		waitForBackgroundShells: vi.fn(async () => {}),
 	};
 
 	return {
@@ -166,6 +168,41 @@ describe("runPrintMode", () => {
 			}
 		},
 	);
+
+	it("stays until a background command ends and prints the response that acts on it", async () => {
+		const h = await createHarness();
+		const services = await createAgentSessionServices({
+			cwd: h.tempDir,
+			agentDir: h.tempDir,
+			modelRuntime: h.session.modelRuntime,
+			settingsManager: h.settingsManager,
+			resourceLoaderOptions: { noExtensions: true, noSkills: true, noContextFiles: true },
+		});
+		const runtime = new AgentSessionRuntime(h.session, services, async () => {
+			throw new Error("replacement not expected");
+		});
+		const chunks: string[] = [];
+		vi.spyOn(process.stdout, "write").mockImplementation((chunk, encodingOrCallback, callback) => {
+			chunks.push(String(chunk));
+			const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+			done?.();
+			return true;
+		});
+		h.setResponses([
+			fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 0.3; echo built", run_in_background: true }), {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("building"),
+			fauxAssistantMessage("the build finished"),
+		]);
+		try {
+			expect(await runPrintMode(runtime, { mode: "text", initialMessage: "build it" })).toBe(0);
+			expect(chunks.join("")).toBe("the build finished\n");
+			expect(h.faux.state.callCount).toBe(3);
+		} finally {
+			h.cleanup();
+		}
+	});
 
 	it("reports fatal plan startup without requesting a provider or printing a plan", async () => {
 		const h = await createHarness({ extensionFactories: [planMode], allowedToolNames: [] });

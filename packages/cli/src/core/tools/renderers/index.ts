@@ -14,6 +14,7 @@ import { findRenderers } from "./find.ts";
 import { grepRenderers } from "./grep.ts";
 import { lsRenderers } from "./ls.ts";
 import { readRenderers } from "./read.ts";
+import { taskStopRenderers } from "./task-stop.ts";
 import { writeRenderers } from "./write.ts";
 
 export type { ToolRenderers };
@@ -25,6 +26,7 @@ export {
 	grepRenderers,
 	lsRenderers,
 	readRenderers,
+	taskStopRenderers,
 	writeRenderers,
 };
 
@@ -34,6 +36,7 @@ export function createAllToolRenderers(): Record<ToolName, ToolRenderers> {
 		read: readRenderers,
 		bash: createShellRenderers("Bash"),
 		powershell: createShellRenderers("PowerShell"),
+		task_stop: taskStopRenderers,
 		edit: editRenderers,
 		write: writeRenderers,
 		grep: grepRenderers,

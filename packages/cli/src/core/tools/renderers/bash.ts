@@ -25,6 +25,8 @@ import { DEFAULT_MAX_BYTES, formatSize } from "../truncate.ts";
 
 const BASH_PREVIEW_LINES = 5;
 export const BASH_UPDATE_THROTTLE_MS = 100;
+/** A command running this long shows how to move it to the background; quicker ones finish before it helps. */
+const BACKGROUND_HINT_AFTER_MS = 2000;
 type BashResultRenderState = {
 	cachedWidth: number | undefined;
 	cachedLines: string[] | undefined;
@@ -86,9 +88,24 @@ function rebuildBashResultRenderComponent(
 	options: ToolRenderResultOptions,
 	showImages: boolean,
 	timerText: string | undefined,
+	backgroundHintVisible = false,
 ): void {
 	const state = component.state;
 	component.clear();
+
+	const background = result.details?.background;
+	if (background && !options.isPartial) {
+		// The text is for the model; the reader needs only where the command went.
+		const status = background.movedByUser ? "Moved to the background" : "Running in the background";
+		component.addChild(
+			new Text(
+				`${theme.fg("toolOutput", status)} ${theme.fg("muted", `· ID ${background.taskId} · /tasks to view`)}`,
+				0,
+				0,
+			),
+		);
+		return;
+	}
 
 	let output = getTextOutput(result as any, showImages).trim();
 	const truncation = result.details?.truncation;
@@ -151,7 +168,12 @@ function rebuildBashResultRenderComponent(
 		component.addChild(new Text(theme.fg("warning", `[${warnings.join(". ")}]`), 0, 0));
 	}
 
-	if (timerText) component.addChild(new Text(`\n${theme.fg("muted", timerText)}`, 0, 0));
+	if (timerText) {
+		const hint = backgroundHintVisible
+			? ` ${theme.fg("dim", "·")} ${keyHint("app.tools.background", "to run in background")}`
+			: "";
+		component.addChild(new Text(`\n${theme.fg("muted", timerText)}${hint}`, 0, 0));
+	}
 }
 
 /** Shell renderers are shared by bash and powershell, which differ only in the name they display. */
@@ -170,9 +192,22 @@ export function createShellRenderers(
 		},
 		renderResult(result, options, _theme, context) {
 			const timerText = toolTimerText(context, options.isPartial);
+			const startedAt = (context.state as { startedAt?: number }).startedAt;
+			const backgroundHintVisible =
+				options.isPartial &&
+				(result.details as BashToolDetails | undefined)?.backgroundable === true &&
+				startedAt !== undefined &&
+				Date.now() - startedAt >= BACKGROUND_HINT_AFTER_MS;
 			const component =
 				(context.lastComponent as BashResultRenderComponent | undefined) ?? new BashResultRenderComponent();
-			rebuildBashResultRenderComponent(component, result as any, options, context.showImages, timerText);
+			rebuildBashResultRenderComponent(
+				component,
+				result as any,
+				options,
+				context.showImages,
+				timerText,
+				backgroundHintVisible,
+			);
 			component.invalidate();
 			return component;
 		},

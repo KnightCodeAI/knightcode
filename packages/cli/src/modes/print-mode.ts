@@ -136,6 +136,10 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			await session.prompt(message);
 		}
 
+		// The model was told it would hear when its background commands end, so stay until they have
+		// and it has acted on them. Exiting sooner would kill them unseen.
+		await session.waitForBackgroundShells();
+
 		if (mode === "text") {
 			const state = session.state;
 			const lastMessage = state.messages[state.messages.length - 1];

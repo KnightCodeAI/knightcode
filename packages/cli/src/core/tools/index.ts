@@ -54,6 +54,13 @@ export {
 	type PowerShellToolOptions,
 } from "./powershell.ts";
 export {
+	createTaskStopTool,
+	createTaskStopToolDefinition,
+	type TaskStopToolDetails,
+	type TaskStopToolInput,
+	type TaskStopToolOptions,
+} from "./task-stop.ts";
+export {
 	createReadTool,
 	createReadToolDefinition,
 	type ReadOperations,
@@ -80,6 +87,7 @@ export {
 } from "./write.ts";
 
 import type { AgentTool } from "@knightcode/agent";
+import type { BackgroundShellManager } from "../background-shells.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
@@ -88,15 +96,17 @@ import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { createPowerShellTool, createPowerShellToolDefinition, type PowerShellToolOptions } from "./powershell.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
+import { createTaskStopTool, createTaskStopToolDefinition } from "./task-stop.ts";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "powershell" | "edit" | "write" | "grep" | "find" | "ls";
+export type ToolName = "read" | "bash" | "powershell" | "task_stop" | "edit" | "write" | "grep" | "find" | "ls";
 export const allToolNames: Set<ToolName> = new Set([
 	"read",
 	"bash",
 	"powershell",
+	"task_stop",
 	"edit",
 	"write",
 	"grep",
@@ -113,6 +123,22 @@ export interface ToolsOptions {
 	grep?: GrepToolOptions;
 	find?: FindToolOptions;
 	ls?: LsToolOptions;
+	/**
+	 * Owner of background shell commands, shared by bash, powershell, and task_stop. Without it the
+	 * shell tools run in the foreground only and task_stop has nothing to stop.
+	 */
+	backgroundShells?: BackgroundShellManager;
+}
+
+function shellOptions<T extends object>(
+	options: T | undefined,
+	backgroundShells: BackgroundShellManager | undefined,
+): T | undefined {
+	return backgroundShells ? ({ backgroundShells, ...options } as T) : options;
+}
+
+function taskStopOptions(options: ToolsOptions | undefined) {
+	return { backgroundShells: options?.backgroundShells };
 }
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
@@ -120,9 +146,11 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 		case "read":
 			return createReadToolDefinition(cwd, options?.read);
 		case "bash":
-			return createBashToolDefinition(cwd, options?.bash);
+			return createBashToolDefinition(cwd, shellOptions(options?.bash, options?.backgroundShells));
 		case "powershell":
-			return createPowerShellToolDefinition(cwd, options?.powershell);
+			return createPowerShellToolDefinition(cwd, shellOptions(options?.powershell, options?.backgroundShells));
+		case "task_stop":
+			return createTaskStopToolDefinition(taskStopOptions(options));
 		case "edit":
 			return createEditToolDefinition(cwd, options?.edit);
 		case "write":
@@ -143,9 +171,11 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 		case "read":
 			return createReadTool(cwd, options?.read);
 		case "bash":
-			return createBashTool(cwd, options?.bash);
+			return createBashTool(cwd, shellOptions(options?.bash, options?.backgroundShells));
 		case "powershell":
-			return createPowerShellTool(cwd, options?.powershell);
+			return createPowerShellTool(cwd, shellOptions(options?.powershell, options?.backgroundShells));
+		case "task_stop":
+			return createTaskStopTool(taskStopOptions(options));
 		case "edit":
 			return createEditTool(cwd, options?.edit);
 		case "write":
@@ -164,7 +194,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 export function createCodingToolDefinitions(cwd: string, options?: ToolsOptions): ToolDef[] {
 	return [
 		createReadToolDefinition(cwd, options?.read),
-		createBashToolDefinition(cwd, options?.bash),
+		createBashToolDefinition(cwd, shellOptions(options?.bash, options?.backgroundShells)),
+		...(options?.backgroundShells ? [createTaskStopToolDefinition(taskStopOptions(options))] : []),
 		createEditToolDefinition(cwd, options?.edit),
 		createWriteToolDefinition(cwd, options?.write),
 	];
@@ -182,8 +213,9 @@ export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOption
 export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<ToolName, ToolDef> {
 	return {
 		read: createReadToolDefinition(cwd, options?.read),
-		bash: createBashToolDefinition(cwd, options?.bash),
-		powershell: createPowerShellToolDefinition(cwd, options?.powershell),
+		bash: createBashToolDefinition(cwd, shellOptions(options?.bash, options?.backgroundShells)),
+		powershell: createPowerShellToolDefinition(cwd, shellOptions(options?.powershell, options?.backgroundShells)),
+		task_stop: createTaskStopToolDefinition(taskStopOptions(options)),
 		edit: createEditToolDefinition(cwd, options?.edit),
 		write: createWriteToolDefinition(cwd, options?.write),
 		grep: createGrepToolDefinition(cwd, options?.grep),
@@ -195,7 +227,8 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
 	return [
 		createReadTool(cwd, options?.read),
-		createBashTool(cwd, options?.bash),
+		createBashTool(cwd, shellOptions(options?.bash, options?.backgroundShells)),
+		...(options?.backgroundShells ? [createTaskStopTool(taskStopOptions(options))] : []),
 		createEditTool(cwd, options?.edit),
 		createWriteTool(cwd, options?.write),
 	];
@@ -213,8 +246,9 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {
 	return {
 		read: createReadTool(cwd, options?.read),
-		bash: createBashTool(cwd, options?.bash),
-		powershell: createPowerShellTool(cwd, options?.powershell),
+		bash: createBashTool(cwd, shellOptions(options?.bash, options?.backgroundShells)),
+		powershell: createPowerShellTool(cwd, shellOptions(options?.powershell, options?.backgroundShells)),
+		task_stop: createTaskStopTool(taskStopOptions(options)),
 		edit: createEditTool(cwd, options?.edit),
 		write: createWriteTool(cwd, options?.write),
 		grep: createGrepTool(cwd, options?.grep),

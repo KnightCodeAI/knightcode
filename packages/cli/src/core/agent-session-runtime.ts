@@ -165,6 +165,9 @@ export class AgentSessionRuntime {
 	}
 
 	private async teardownCurrent(reason: SessionShutdownEvent["reason"], targetSessionFile?: string): Promise<void> {
+		// The outgoing session is disposed below; a background command ending meanwhile must not start
+		// a run in it. Disposal ends the hold with the session.
+		this.session.holdBackgroundWake();
 		// Settle any active response first so the aborted turn (including tool
 		// results) is persisted to the outgoing session before it is replaced.
 		await this.session.abort();
@@ -434,6 +437,7 @@ export class AgentSessionRuntime {
 	}
 
 	async dispose(): Promise<void> {
+		this.session.holdBackgroundWake();
 		await emitSessionShutdownEvent(this.session.extensionRunner, {
 			type: "session_shutdown",
 			reason: "quit",

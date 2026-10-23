@@ -14,7 +14,8 @@ import { foldPlanState, type PlanSnapshot, type PlanTransition, transitionPlan }
 
 const INSPECT = ["read", "grep", "find", "ls", "webfetch", "websearch"];
 const SHELLS = ["bash", "powershell"];
-const ALLOWED = new Set([...INSPECT, ...SHELLS, "ask_user", "submit_plan"]);
+// task_stop only stops commands the shells started, such as a test run in the background.
+const ALLOWED = new Set([...INSPECT, ...SHELLS, "task_stop", "ask_user", "submit_plan"]);
 const LOADOUT = ["ask_user", "submit_plan", "read", "grep", "find", "ls"];
 // Planning benefits from research: on from entry unless the user turned them off in /tools. Like the
 // rest of the loadout they stay on afterwards, so leaving planning never rewrites the tool list.
