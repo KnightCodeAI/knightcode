@@ -158,7 +158,7 @@ export interface State {
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
 	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
 	tabs: Record<string, ThreadTabs>;
-	/** The bottom region (section 9.7): open, and its height in px (0 until dragged: Codex's 280). */
+	/** The bottom region's height in px (section 9.7), 0 until dragged (Codex's 280); each thread has it open or not. */
 	bottom: { height: number };
 	/** Each thread's terminals, in tab order, and the one shown. */
 	terminals: Record<string, ThreadTerminals>;
