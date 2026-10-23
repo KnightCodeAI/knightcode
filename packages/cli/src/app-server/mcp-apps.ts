@@ -58,7 +58,10 @@ function ask(bus: EventBus | undefined, request: McpAppQuery): Promise<unknown> 
 			if ("error" in answer) reject(new AppServerError(answer.error.code, answer.error.message));
 			else resolve(answer.result);
 		};
-		bus.emit(MCP_APPS_CHANNEL, { ...request, reply } as McpAppRequest);
+		let heard = false;
+		bus.emit(MCP_APPS_CHANNEL, { ...request, heard: () => (heard = true), reply } as McpAppRequest);
+		// The MCP extension is off in this thread (disabledBuiltinExtensions): nothing will answer.
+		if (!heard) reply({ error: { code: "mcpUnavailable", message: "MCP is not running in this thread" } });
 	});
 }
 

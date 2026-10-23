@@ -1225,6 +1225,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		};
 		knightcode.events.on(MCP_APPS_CHANNEL, (data) => {
 			const request = data as McpAppRequest;
+			request.heard();
 			void answerApp(request).then(request.reply, (error: unknown) =>
 				request.reply({ error: { code: "internal", message: errorMessage(error) } }),
 			);

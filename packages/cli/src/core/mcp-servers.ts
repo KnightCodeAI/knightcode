@@ -55,7 +55,8 @@ export type McpAppQuery = { server: string } & (
 	| { op: "callTool"; name: string; arguments: Record<string, unknown> }
 	| { op: "describe"; name: string }
 );
-export type McpAppRequest = McpAppQuery & { reply: (answer: McpAppAnswer) => void };
+/** `heard` is called synchronously by the listener, so a thread without one answers at once rather than timing out. */
+export type McpAppRequest = McpAppQuery & { heard: () => void; reply: (answer: McpAppAnswer) => void };
 /** A tool as `describe` answers: whether it says it only reads, and who may call it. */
 export interface McpAppToolInfo {
 	readOnly: boolean;
