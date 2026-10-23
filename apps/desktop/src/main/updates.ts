@@ -12,6 +12,7 @@ import type { UpdateState } from "../shared/host-protocol.ts";
 
 const FEED = "https://knightcode.dev/api/desktop/update";
 const EVERY_MS = 4 * 60 * 60 * 1000;
+const RELEASES = "https://github.com/KnightCodeAI/knightcode/releases/";
 
 /**
  * Squirrel runs the app with `--squirrel-*` after it installs, updates or removes it, and waits for it to quit:
@@ -90,7 +91,10 @@ export class Updates {
 			if (response.status === 204) this.set({ state: "idle", checkedAt: Date.now() });
 			else if (!response.ok) throw new Error(`The update feed answered ${response.status}.`);
 			else {
-				const { version, url } = (await response.json()) as { version: string; url: string };
+				const { version, url } = (await response.json()) as { version?: unknown; url?: unknown };
+				// The page is opened in the browser: only a release page of this repository, for a real version.
+				if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version) || typeof url !== "string" || !url.startsWith(RELEASES))
+					throw new Error("The update feed answered something that is not a release.");
 				this.set({ state: "available", version, url });
 			}
 		} catch (error) {
