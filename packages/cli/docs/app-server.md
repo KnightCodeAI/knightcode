@@ -628,7 +628,7 @@ Diagnostics observe the shared server, not only this connection.
 ### `thread/diff/read`
 
 Params: `{threadId, scope?, against?, commit?, context?, ignoreWhitespace?}`.
-Result: `{scope, root, files, filesOmitted?, untrackedSkipped?, turnId?, stale?, against?}`.
+Result: `{scope, root, files, filesOmitted?, untrackedSkipped?, turnId?, stale?, against?, fromTree?, toTree?}`.
 `files` are `{path, oldPath?, status, binary, additions, deletions, tooLarge?, hunks}`,
 their paths relative to the repository's `root` (not the thread's cwd, which can
 be a subdirectory of it); each hunk keeps its lines with their `" "`, `"+"`, `"-"` or

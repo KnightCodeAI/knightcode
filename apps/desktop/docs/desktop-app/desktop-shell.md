@@ -245,7 +245,7 @@ or invalid params answers `invalidParams`.
 | `host/dialog/openFiles` | `{filters?, multiple?}` → `{paths}`; used for image attachments, sent as `{path}` images (architecture.md section 4.2) |
 | `host/shell/openExternal` | `{url}` → `{}`; http, https and mailto only |
 | `host/shell/showInFolder` | `{path}` → `{}` |
-| `host/openIn/list` | `{}` → `{targets: {id, name, icon}[]}` (section 9.9) |
+| `host/openIn/list` | `{}` → `{targets: {id, name, kind, icon?}[]}`; `kind` is `editor`, `terminal`, `fileManager` or `systemDefault` (section 9.9) |
 | `host/openIn/open` | `{targetId, path, line?, column?}` → `{}` |
 | `host/clipboard/writeText` | `{text}` → `{}` |
 | `host/clipboard/readImage` | `{}` → `{path?}`; writes a pasted image to a private temp file |
