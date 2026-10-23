@@ -165,25 +165,42 @@ jobs:
       - name: Install each build from its dmg and start it
         env:
           KNIGHTCODE_DESKTOP_SMOKE: "1"
+          ELECTRON_ENABLE_LOGGING: "1"
         run: |
           sw_vers
-          for build in old new; do
+          n=0
+          # The new build on a clean machine first, then the old one at the same path, then the new one again.
+          for build in new old new; do
+            n=$((n + 1))
             dmg=$(find "$build" -name '*.dmg' | head -1)
             mount=$(mktemp -d)
             hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg" >/dev/null
             rm -rf /Applications/KnightCode.app
             cp -R "$mount/KnightCode.app" /Applications/
             hdiutil detach "$mount" >/dev/null
-            echo "== $build $(codesign -dv /Applications/KnightCode.app 2>&1 | grep -E '^CodeDirectory')"
-            set +e
-            KNIGHTCODE_CODING_AGENT_DIR="$RUNNER_TEMP/agent-$build" /Applications/KnightCode.app/Contents/MacOS/knightcode-desktop "--user-data-dir=$RUNNER_TEMP/data-$build" > "$RUNNER_TEMP/$build.log" 2>&1
-            code=$?
-            set -e
-            grep -E "smoke|Library not loaded|Team ID" "$RUNNER_TEMP/$build.log" | head -5 || true
-            echo "== $build exit $code"
-            echo "$build=$code" >> "$RUNNER_TEMP/codes"
+            echo "== $n $build $(codesign -dv /Applications/KnightCode.app 2>&1 | grep -E '^CodeDirectory')"
+            log="$RUNNER_TEMP/$n-$build.log"
+            started=$(date '+%Y-%m-%d %H:%M:%S')
+            KNIGHTCODE_CODING_AGENT_DIR="$RUNNER_TEMP/agent-$n" /Applications/KnightCode.app/Contents/MacOS/knightcode-desktop "--user-data-dir=$RUNNER_TEMP/data-$n" > "$log" 2>&1 &
+            pid=$!
+            for i in $(seq 90); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+            if kill -0 "$pid" 2>/dev/null; then
+              echo "== $n $build HUNG after 90 s"
+              ps -axo pid,ppid,stat,etime,command | grep -i -E "knightcode|KnightCode" | grep -v grep | cut -c1-220
+              sample "$pid" 2 -file "$RUNNER_TEMP/$n-sample.txt" >/dev/null 2>&1 || true
+              head -60 "$RUNNER_TEMP/$n-sample.txt" 2>/dev/null || true
+              log show --start "$started" --style compact --predicate 'process == "knightcode-desktop" OR process == "amfid" OR process == "syspolicyd" OR eventMessage CONTAINS[c] "knightcode"' 2>/dev/null | tail -40 || true
+              pkill -9 -f "KnightCode.app" || true
+              code=hung
+            else
+              wait "$pid"; code=$?
+            fi
+            echo "-- log tail"; tail -25 "$log" | cut -c1-240
+            echo "== $n $build exit $code"
+            echo "$n-$build=$code" >> "$RUNNER_TEMP/codes"
           done
-          grep -q '^new=0$' "$RUNNER_TEMP/codes"
+          cat "$RUNNER_TEMP/codes"
+          grep -q '^1-new=0$' "$RUNNER_TEMP/codes"
 
   desktop:
     strategy:
