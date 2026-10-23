@@ -45,6 +45,15 @@ export function squirrelEvent(): boolean {
 	return false;
 }
 
+/**
+ * Squirrel's errors carry Update.exe's whole .NET stack ("Command failed: 4294967295 System.AggregateException: ...
+ * ---> System.Net.WebException: The remote server returned an error: (404) Not Found. at ..."): its innermost message.
+ */
+export function squirrelMessage(message: string): string {
+	const innermost = message.split(" at ")[0]!.split("---> ").at(-1)!;
+	return innermost.replace(/^(Command failed: -?\d+ )?[\w.]+Exception: /, "").trim() || message;
+}
+
 export class Updates {
 	state: UpdateState;
 	private readonly onState: (state: UpdateState) => void;
@@ -66,7 +75,9 @@ export class Updates {
 			autoUpdater.on("update-downloaded", (_event, _notes, name) =>
 				this.set({ state: "ready", ...(name ? { version: name } : {}) }),
 			);
-			autoUpdater.on("error", (error) => this.set({ state: "idle", checkedAt: Date.now(), error: error.message }));
+			autoUpdater.on("error", (error) =>
+				this.set({ state: "idle", checkedAt: Date.now(), error: squirrelMessage(error.message) }),
+			);
 		}
 		// Update.exe still holds the install on the first launch after it; the next check is the interval's or the user's.
 		if (!process.argv.includes("--squirrel-firstrun")) void this.check();
