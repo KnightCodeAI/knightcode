@@ -247,6 +247,7 @@ or invalid params answers `invalidParams`.
 | `host/shell/showInFolder` | `{path}` → `{}` |
 | `host/openIn/list` | `{}` → `{targets: {id, name, kind, icon?}[]}`; `kind` is `editor`, `terminal`, `fileManager` or `systemDefault` (section 9.9) |
 | `host/openIn/open` | `{targetId, path, line?, column?}` → `{}` |
+| `host/file/saveCopy` | `{path}` → `{path?}`; `path` must be absolute; the result is where the copy went, absent when the dialog was cancelled (section 9.9) |
 | `host/clipboard/writeText` | `{text}` → `{}` |
 | `host/clipboard/readImage` | `{}` → `{path?}`; writes a pasted image to a private temp file |
 | `host/window/open` | `{route}` → `{windowId}` |
