@@ -76,6 +76,21 @@ test("status counts staged, unstaged, untracked and ahead of upstream", async ()
 	});
 });
 
+test("origin names the checkout's root, origin's URL over another remote's, and the branch; detached has none", async () => {
+	const s = await repoServer({ "a.txt": "a\n" });
+	const threadId = await local(s);
+	expect(await call(s, "git/origin", { threadId })).toEqual({ root: s.root, branch: "main" });
+	sh(s.cwd, "remote", "add", "fork", "https://github.com/someone/fork.git");
+	sh(s.cwd, "remote", "add", "origin", "git@github.com:owner/repo.git");
+	expect(await call(s, "git/origin", { threadId })).toEqual({
+		root: s.root,
+		url: "git@github.com:owner/repo.git",
+		branch: "main",
+	});
+	sh(s.cwd, "checkout", "-q", "--detach");
+	expect(await call(s, "git/origin", { threadId })).toEqual({ root: s.root, url: "git@github.com:owner/repo.git" });
+});
+
 test("stage and unstage one hunk", async () => {
 	const s = await repoServer({ "a.txt": seven() });
 	const threadId = await local(s);

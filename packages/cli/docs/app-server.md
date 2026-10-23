@@ -804,7 +804,9 @@ it (names unique, at most 50). An untrusted project's scripts never run. See
 
 Each acts on the thread's own checkout: its worktree, or the user's checkout.
 `git/status` → branch, upstream, ahead/behind, staged/unstaged/untracked/
-conflicted counts and an operation in progress. `git/stage` and `git/unstage`
+conflicted counts and an operation in progress. `git/origin` → the checkout's
+`root`, the `url` of its origin remote (else its first remote) and the `branch`
+checked out, each absent when there is none. `git/stage` and `git/unstage`
 take `{threadId, path?, hunkId?, context?}`: no path is everything; paths are
 literal. `git/commit {threadId, message?, includeUnstaged?}` stages everything
 first unless `includeUnstaged: false`; an empty message is written by the

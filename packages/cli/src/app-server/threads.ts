@@ -69,6 +69,7 @@ import {
 	gitPullRequest,
 	gitPush,
 	gitStage,
+	gitOrigin,
 	gitStatus,
 	gitUnstage,
 } from "./git-actions.ts";
@@ -2340,6 +2341,8 @@ export class ThreadManager {
 				),
 			"git/status": ({ threadId }, connection) =>
 				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitStatus(repo)),
+			"git/origin": ({ threadId }, connection) =>
+				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitOrigin(repo)),
 			// Index changes hold the checkout, as a revert does: no turn runs (a tool may be halfway through a file) and none
 			// starts until the git step is done. The reservation comes before the repository lock, in the revert's order.
 			"git/stage": (params, connection) =>

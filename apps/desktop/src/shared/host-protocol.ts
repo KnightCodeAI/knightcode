@@ -281,6 +281,8 @@ export const HostMethods = {
 		result: Obj({}),
 	},
 	"host/terminal/kill": { params: Obj({ terminalId: Type.String() }), result: Obj({}) },
+	/** Codex's "Save as…": a copy of an absolute path where the user picks; `path` is where it went, none if cancelled. */
+	"host/file/saveCopy": { params: Obj({ path: Type.String() }), result: Obj({ path: Type.Optional(Type.String()) }) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
 	/**
 	 * Annotate (section 9.8): a region of a preview's page, in its CSS pixels, saved as a PNG beside pasted images. Only

@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import {
 	app,
 	type BrowserWindow,
@@ -29,6 +29,7 @@ import { InvalidParams, OpenIn, windowsIcons } from "./open-in.ts";
 import { refuseToOpen } from "./open-path.ts";
 import { setKeyOverrides } from "./preview.ts";
 import { readProfile, signIn, signOut } from "./profile.ts";
+import { saveCopy } from "./save-copy.ts";
 import type { ServerConnection } from "./server.ts";
 import type { StateFile } from "./state.ts";
 import type { Terminals } from "./terminals.ts";
@@ -68,6 +69,14 @@ export function openInService(env: NodeJS.ProcessEnv): OpenIn {
 				if (image && !image.isEmpty()) icons.set(path, image.toDataURL());
 			}
 			return icons;
+		},
+		// Codex follows a terminal's Start menu shortcut to its program (its WVe); an unreadable one is no target.
+		readShortcut: (lnk) => {
+			try {
+				return shell.readShortcutLink(lnk).target || undefined;
+			} catch {
+				return undefined;
+			}
 		},
 		reveal: async (path) => {
 			// A file is shown selected in its folder; a folder, or the nearest one still there, is opened (Codex's cZ).
@@ -171,6 +180,19 @@ async function run(
 				params.column as number | undefined,
 			);
 			return {};
+		case "host/file/saveCopy": {
+			const path = params.path as string;
+			if (!isAbsolute(path)) throw new InvalidParams(`not an absolute path: ${path}`);
+			const saved = await saveCopy(path, async (proposed) => {
+				const result = window
+					? await dialog.showSaveDialog(window, { defaultPath: proposed })
+					: await dialog.showSaveDialog({ defaultPath: proposed });
+				return result.canceled ? undefined : result.filePath;
+			});
+			// The Dock's Downloads stack bounces, as for a finished download (Codex's notify-download-complete).
+			if (saved && process.platform === "darwin") app.dock?.downloadFinished(saved);
+			return saved ? { path: saved } : {};
+		}
 		case "host/menu/popup":
 			return popupMenu(params.items as NativeMenuItem[], window);
 		case "host/dialog/openFolder": {
