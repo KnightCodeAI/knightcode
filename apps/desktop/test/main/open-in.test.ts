@@ -224,17 +224,22 @@ test("icons are read in one batch, each program once, and a failed read is tried
 	expect(reads[0]).toContain(join(root, "Local/Programs/Microsoft VS Code/Code.exe"));
 });
 
-test.runIf(process.platform === "win32")("Windows: icons come from the programs, also under a non-ASCII path", async () => {
-	const root = layout([]);
-	const folder = join(root, "prögrams");
-	mkdirSync(folder);
-	const copy = join(folder, "cmd.exe");
-	copyFileSync(join(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe"), copy);
-	const missing = join(root, "missing.exe");
-	const icons = await windowsIcons([copy, missing], process.env);
-	expect(icons.get(copy)).toMatch(/^data:image\/png;base64,iVBORw0KGgo/);
-	expect(icons.has(missing)).toBe(false);
-}, 30_000);
+// A fresh CI runner's first PowerShell took 5 s in one run and past the 15 s limit in another; the second is warm.
+test.runIf(process.platform === "win32")(
+	"Windows: icons come from the programs, also under a non-ASCII path",
+	{ timeout: 30_000, retry: 1 },
+	async () => {
+		const root = layout([]);
+		const folder = join(root, "prögrams");
+		mkdirSync(folder);
+		const copy = join(folder, "cmd.exe");
+		copyFileSync(join(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe"), copy);
+		const missing = join(root, "missing.exe");
+		const icons = await windowsIcons([copy, missing], process.env);
+		expect(icons.get(copy)).toMatch(/^data:image\/png;base64,iVBORw0KGgo/);
+		expect(icons.has(missing)).toBe(false);
+	},
+);
 
 test("macOS: a bundle in ~/Applications opens as itself when the home folder's name holds .app", async () => {
 	const root = layout(["anna.applegate/Applications/Cursor.app/Contents/Resources/app/bin/cursor"]);
