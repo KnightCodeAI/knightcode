@@ -4,6 +4,9 @@ import { join } from "node:path";
 import type { Item } from "@knightcode/app-server-protocol";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import { afterEach, expect, test, vi } from "vitest";
+import { callAppTool, MCP_APP_RESULT_MAX_BYTES } from "../../src/app-server/mcp-apps.ts";
+import type { EventBus } from "../../src/core/event-bus.ts";
+import type { McpAppRequest } from "../../src/core/mcp-servers.ts";
 import { cleanupServers, startServer } from "./harness.ts";
 
 const SERVER = join(import.meta.dirname, "../../examples/mcp-app/server.mjs");
@@ -109,8 +112,8 @@ test("an app reaches only its own connected server, within the size bounds", asy
 	).rejects.toMatchObject({ code: "invalidParams", message: expect.stringContaining("arguments too large") });
 }, 60_000);
 
-test("a tool only apps may call is not declared to the model", async () => {
-	const server = await appServer();
+test("a tool only apps may call is not declared to the model, even with direct exposure", async () => {
+	const server = await appServer("direct");
 	const a = await server.connect("desktop");
 	const { thread } = await a.client.request("thread/start", { cwd: server.cwd, approvalMode: "fullAccess" });
 	server.faux.setResponses([
@@ -128,3 +131,20 @@ test("a tool only apps may call is not declared to the model", async () => {
 		await a.client.request("mcp/app/callTool", { threadId: thread.id, server: "counter", name: "read_count" }),
 	).toMatchObject({ structuredContent: { count: 0 } });
 }, 60_000);
+
+test("a tool's result over 4 MiB answers that it ran, without the result", async () => {
+	const answers = {
+		describe: { readOnly: false, visibility: ["model", "app"] },
+		callTool: { content: [{ type: "text", text: "x".repeat(MCP_APP_RESULT_MAX_BYTES) }] },
+	};
+	const bus: EventBus = {
+		emit: (_channel, data) => {
+			const request = data as McpAppRequest;
+			if (request.op !== "readResource") request.reply({ result: answers[request.op] });
+		},
+		on: () => () => {},
+	};
+	expect(await callAppTool(bus, "fullAccess", { threadId: "t", server: "s", name: "big" })).toEqual({
+		content: [{ type: "text", text: "The tool ran; its result was over 4 MiB serialized and was left out." }],
+	});
+});
