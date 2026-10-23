@@ -83,7 +83,10 @@ export class Updates {
 		}
 		this.set({ state: "checking" });
 		try {
-			const response = await net.fetch(`${FEED}/darwin-${process.arch}/${app.getVersion()}`);
+			// A request that never answers would leave the state checking, and every later check would wait on it.
+			const response = await net.fetch(`${FEED}/darwin-${process.arch}/${app.getVersion()}`, {
+				signal: AbortSignal.timeout(30_000),
+			});
 			if (response.status === 204) this.set({ state: "idle", checkedAt: Date.now() });
 			else if (!response.ok) throw new Error(`The update feed answered ${response.status}.`);
 			else {
