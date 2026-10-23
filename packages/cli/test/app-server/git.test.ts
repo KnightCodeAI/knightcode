@@ -21,6 +21,7 @@ import {
 	repoOf,
 	runProcess,
 	snapshotTree,
+	turnSnapshot,
 	withRepoLock,
 } from "../../src/app-server/git.ts";
 import { readDiff } from "../../src/app-server/diff.ts";
@@ -54,6 +55,20 @@ test("inherited GIT_DIR and GIT_INDEX_FILE, in any letter case on Windows, do no
 	expect(repo?.root).toBe(realpathSync.native(dir));
 	write(dir, "new.txt", "x");
 	expect(sh(dir, "ls-tree", "--name-only", await snapshotTree(repo!, true)).split("\n")).toContain("new.txt");
+});
+
+test("a turn snapshot past 500 untracked files leaves out a folder of 200 or more, read over several chunks", async () => {
+	const dir = repoDir();
+	const repo = (await repoOf(dir))!;
+	// 501 long names: about 80 KB of listing, so paths straddle the pipe's chunks.
+	for (let i = 0; i < 501; i++) write(dir, `frames/${"f".repeat(150)}${i}.txt`, "x");
+	write(dir, "small/kept.txt", "k");
+	write(dir, "a.txt", "edited\n");
+	const trees = await turnSnapshot(repo, 500);
+	expect(trees.skip).toEqual(["frames/"]);
+	expect(sh(dir, "ls-tree", "-r", "--name-only", trees.all!).split("\n")).toEqual(["a.txt", "small/kept.txt"]);
+	expect(sh(dir, "ls-tree", "-r", "--name-only", trees.tracked).split("\n")).toEqual(["a.txt"]);
+	expect(sh(dir, "show", `${trees.all}:a.txt`)).toBe("edited");
 });
 
 test("a snapshot never writes the real index and sees a second edit to an already modified file", async () => {

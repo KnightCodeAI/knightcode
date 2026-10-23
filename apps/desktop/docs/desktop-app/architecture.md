@@ -1778,9 +1778,12 @@ Untracked files in the snapshots: all of them up to 500 (each over 10 MiB
 left out). Past 500, an untracked folder that holds 200 or more untracked
 files itself is left out with everything under it (Codex's ghost snapshots'
 rule), and the after-snapshot leaves out the same folders as the before one,
-so a turn that empties one below 200 does not read as adding the rest. If more
-than 500 untracked files remain outside such folders, the snapshots are
-tracked-only. On this repository (12,345 untracked files, 12,198 in seven
+so a turn that empties one below 200 does not read as adding the rest. Each
+snapshot also writes the tracked files' tree; when more than 500 untracked
+files remain outside such folders on either side (a turn that installs
+dependencies with no `.gitignore` entry), the two tracked trees are compared,
+so the turn's tracked edits are still recorded. The listing is streamed,
+never collected. On this repository (12,345 untracked files, 12,198 in seven
 frame folders) that keeps a new file in the checkout's root in the record:
 the listing takes about 125 ms and the 147 remaining files about 250 ms to
 hash. The diff reads keep the plain rule below: tracked changes only past 500.
