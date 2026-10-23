@@ -214,6 +214,8 @@ jobs:
           mkdir assets
           find artifacts -type f \( -name RELEASES -o -name '*.nupkg' -o -name '*.exe' -o -name '*.zip' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} assets/ \;
           cd assets
+          # GitHub stores "KnightCode-1.0.0 Setup.exe" as "KnightCode-1.0.0.Setup.exe"; SHA256SUMS names what it serves.
+          for file in *\ *; do [ -e "$file" ] && mv -- "$file" "${file// /.}"; done
           sha256sum -- * > ../SHA256SUMS
           mv ../SHA256SUMS .
           sha256sum -c SHA256SUMS
