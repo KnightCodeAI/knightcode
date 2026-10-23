@@ -31,6 +31,18 @@ function copyNodePty(buildPath: string, platform: string, arch: string): void {
 	else throw new Error(`node-pty has no binary for ${platform}-${arch}: no prebuild, and no node-gyp build in ${built}`);
 }
 
+/**
+ * electron-winstaller copies the host's 7-Zip to vendor/7z.exe in an install script, which Bun does not run for a
+ * package it does not trust, and Squirrel cannot zip the app without it. The same copy, here.
+ */
+function select7zip(): void {
+	const vendor = join(dirname(createRequire(__filename).resolve("electron-winstaller/package.json")), "vendor");
+	for (const ext of ["exe", "dll"]) {
+		const to = join(vendor, `7z.${ext}`);
+		if (!existsSync(to)) cpSync(join(vendor, `7z-${process.arch}.${ext}`), to);
+	}
+}
+
 const SERVER = join(__dirname, "resources/knightcode");
 
 /** The app server scripts/stage-server.ts staged must be this checkout's CLI, built for the target being packaged. */
@@ -78,6 +90,9 @@ const linux = {
 const config: ForgeConfig = {
 	hooks: {
 		prePackage: async (_config, platform, arch) => checkStagedServer(platform, arch),
+		preMake: async () => {
+			if (process.platform === "win32") select7zip();
+		},
 		packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) =>
 			copyNodePty(buildPath, platform, arch),
 	},
