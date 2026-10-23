@@ -29,6 +29,7 @@ import {
 	fileChangesOf,
 	outputOf,
 	textOf,
+	mcpAppOf,
 	toolCallStatus,
 	viewOf,
 } from "./transcript.ts";
@@ -349,6 +350,8 @@ export class ItemMapper {
 					if (changes.length > 0) call.fileChanges = changes;
 					const view = viewOf(message.details);
 					if (view) call.view = view;
+					const app = mcpAppOf(message.details);
+					if (app) call.mcpApp = app;
 					this.completed(call, this.positions.get(call.id));
 				}
 				return;
@@ -395,8 +398,11 @@ export class ItemMapper {
 				item.status = toolCallStatus(event.isError, blocks);
 				item.output = outputOf(blocks);
 				// A nested call stays live only (§4.2): its view travels on this item and nowhere else.
-				const view = viewOf((event.result as { details?: unknown })?.details);
+				const details = (event.result as { details?: unknown })?.details;
+				const view = viewOf(details);
 				if (view) item.view = view;
+				const app = mcpAppOf(details);
+				if (app) item.mcpApp = app;
 				item.completedAt = Date.now();
 				this.completed(item, undefined);
 				return;

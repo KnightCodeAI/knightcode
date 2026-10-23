@@ -77,6 +77,7 @@ import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
 import { FileSearch } from "./file-search.ts";
 import { readFile } from "./files.ts";
+import { callAppTool, createMcpAppsExtension, type McpAppsHolder, readAppResource } from "./mcp-apps.ts";
 import { APPROVAL_MODE_ENTRY, createApprovalExtension, readApprovalMode } from "./approvals.ts";
 import { ItemMapper, queueOf, usageOf } from "./item-mapper.ts";
 import { readImageInput } from "./image-input.ts";
@@ -1497,7 +1498,7 @@ export class ThreadManager {
 		let services: Awaited<ReturnType<typeof createAgentSessionServices>> | undefined;
 		let session: AgentSession | undefined;
 		try {
-			const holder: { thread?: LoadedThread } = {};
+			const holder: { thread?: LoadedThread } & McpAppsHolder = {};
 			services = await this.servicesFor(cwd, projectCwd, holder);
 			({ session } = await createAgentSessionFromServices({
 				services,
@@ -1519,6 +1520,8 @@ export class ThreadManager {
 			);
 			created = thread;
 			holder.thread = thread;
+			// The bus as the latest load of the session's extensions left it (a /reload loads them again).
+			thread.mcpApps = () => holder.mcpApps;
 			thread.resolveWorkspace = () => placeThread(settings, id, headerCwd).workspace;
 			touchManifest(settings, cwd);
 			const repo = await repoOf(cwd);
@@ -1606,7 +1609,7 @@ export class ThreadManager {
 	}
 
 	/** The services a thread's session is built from; `holder.thread` is set once the thread exists. */
-	private servicesFor(cwd: string, projectCwd: string, holder: { thread?: LoadedThread }) {
+	private servicesFor(cwd: string, projectCwd: string, holder: { thread?: LoadedThread } & McpAppsHolder) {
 		// A worktree's trust is its project's: keyed by the worktree path, every new worktree would ask again (§6.1).
 		const projectTrusted =
 			!hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(this.ctx.agentDir).get(projectCwd) === true;
@@ -1666,8 +1669,9 @@ export class ThreadManager {
 	}
 
 	/** Per-thread bridge for model changes, which are extension-only events. */
-	private threadExtensions(holder: { thread?: LoadedThread }): InlineExtension[] {
+	private threadExtensions(holder: { thread?: LoadedThread } & McpAppsHolder): InlineExtension[] {
 		return [
+			createMcpAppsExtension(holder),
 			{
 				name: "app-server-bridge",
 				hidden: true,
@@ -2322,6 +2326,16 @@ export class ThreadManager {
 				this.track(() =>
 					this.withThread(threadId, connection.mode, (thread) =>
 						readFile(thread.session.sessionManager.getCwd(), path, maxBytes),
+					),
+				),
+			"mcp/app/readResource": (params, connection) =>
+				this.track(() =>
+					this.withThread(params.threadId, connection.mode, (thread) => readAppResource(thread.mcpApps(), params)),
+				),
+			"mcp/app/callTool": (params, connection) =>
+				this.track(() =>
+					this.withThread(params.threadId, connection.mode, (thread) =>
+						callAppTool(thread.mcpApps(), thread.approvalMode, params),
 					),
 				),
 			"git/status": ({ threadId }, connection) =>

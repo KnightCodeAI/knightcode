@@ -9,6 +9,7 @@ import {
 	checkView,
 	type FileChange,
 	type Item,
+	type McpApp,
 	type ToolOutput,
 	type Turn,
 	type TurnFile,
@@ -63,6 +64,23 @@ export function viewOf(details: unknown): View | undefined {
 	if (view === undefined) return undefined;
 	const checked = checkView(view);
 	return "view" in checked ? checked.view : undefined;
+}
+
+/**
+ * `details.mcpApp` of an MCP tool's result (MCP Apps): a `ui://` resource of a named server, with the server's result
+ * or `resultOmitted`. Anything else is not an app; the raw output shows instead.
+ */
+export function mcpAppOf(details: unknown): McpApp | undefined {
+	const app = typeof details === "object" && details !== null ? (details as { mcpApp?: unknown }).mcpApp : undefined;
+	if (typeof app !== "object" || app === null) return undefined;
+	const { server, resourceUri, result, resultOmitted } = app as Record<string, unknown>;
+	if (typeof server !== "string" || typeof resourceUri !== "string" || !resourceUri.startsWith("ui://"))
+		return undefined;
+	return {
+		server,
+		resourceUri,
+		...(resultOmitted === true ? { resultOmitted: true } : result !== undefined ? { result } : {}),
+	};
 }
 
 /** A call the approval gate blocked has an error result carrying exactly the decline reason. */
@@ -236,6 +254,8 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 					if (changes.length > 0) call.fileChanges = changes;
 					const view = viewOf(message.details);
 					if (view) call.view = view;
+					const app = mcpAppOf(message.details);
+					if (app) call.mcpApp = app;
 				}
 			}
 		}

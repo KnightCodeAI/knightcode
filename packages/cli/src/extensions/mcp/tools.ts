@@ -58,6 +58,43 @@ export interface McpToolDetails {
 	tool: string;
 	/** Temp file with the full text output, when the model-facing text was truncated. */
 	fullOutputPath?: string;
+	/**
+	 * The tool's MCP App, for a client that draws it: the server's whole result (with `_meta` and
+	 * `structuredContent`), or `resultOmitted` past {@link MCP_APP_RESULT_MAX_BYTES} serialized.
+	 */
+	mcpApp?: { server: string; resourceUri: string; result?: CallToolResult; resultOmitted?: true };
+}
+
+/** An app's result is sent to it whole up to this size serialized; past it, the app gets the text output. */
+export const MCP_APP_RESULT_MAX_BYTES = 256 * 1024;
+
+/** A tool's MCP App: the `ui://` resource that draws it, and who may call the tool. */
+export interface McpAppTool {
+	resourceUri: string;
+	visibility: ("model" | "app")[];
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * The app a tool declares (MCP Apps): `_meta.ui.resourceUri`, or the deprecated `_meta["ui/resourceUri"]`, naming a
+ * `ui://` resource. `_meta.ui.visibility` says who may call it, the model and the app by default.
+ */
+export function mcpAppOf(tool: McpTool): McpAppTool | undefined {
+	const meta = tool._meta ?? {};
+	const ui = isRecord(meta.ui) ? meta.ui : {};
+	const uri = typeof ui.resourceUri === "string" ? ui.resourceUri : meta["ui/resourceUri"];
+	if (typeof uri !== "string" || !uri.startsWith("ui://")) return undefined;
+	return { resourceUri: uri, visibility: visibilityOf(tool) };
+}
+
+/** Who may call a tool (MCP Apps `_meta.ui.visibility`): the model and apps unless it says otherwise. */
+export function visibilityOf(tool: McpTool): ("model" | "app")[] {
+	const ui = isRecord(tool._meta?.ui) ? tool._meta.ui : {};
+	return Array.isArray(ui.visibility)
+		? ui.visibility.filter((who): who is "model" | "app" => who === "model" || who === "app")
+		: ["model", "app"];
 }
 
 /**
@@ -204,6 +241,8 @@ export interface ConvertMcpResultOptions {
 	saveOutput?: McpOutputSaver;
 	/** Whether the server's resources can be read with `read_mcp_resource`, which resource links then name. */
 	readableResources?: boolean;
+	/** The tool's app, when the client draws apps: the result's details carry it. */
+	app?: McpAppTool;
 }
 
 /** File extension for a saved binary resource: the one its URI ends in, else `.bin`. */
@@ -276,9 +315,16 @@ export async function convertMcpResult(
 	}
 	const { content, fullOutputPath } = await limitMcpContent(converted, options.saveOutput);
 	const { _meta: _ignored, ...scriptResult } = result;
+	const mcpApp = options.app && {
+		server,
+		resourceUri: options.app.resourceUri,
+		...(Buffer.byteLength(JSON.stringify(result)) <= MCP_APP_RESULT_MAX_BYTES
+			? { result }
+			: { resultOmitted: true as const }),
+	};
 	return {
 		content,
-		details: { server, tool, ...(fullOutputPath ? { fullOutputPath } : {}) },
+		details: { server, tool, ...(fullOutputPath ? { fullOutputPath } : {}), ...(mcpApp ? { mcpApp } : {}) },
 		structuredContent: scriptResult as unknown as JsonValue,
 		...(result.isError ? { isError: true } : {}),
 	};
@@ -318,8 +364,18 @@ export function createMcpToolDefinition(options: {
 	getClient: () => Promise<McpToolCaller>;
 	/** Whether `read_mcp_resource` can read the server's resources. */
 	readableResources?: () => boolean;
+	/**
+	 * The tool's app, when the client draws apps. A call drawn as an app must be the model's own, which the transcript
+	 * keeps (a codemode script's calls are not kept), so the tool is declared to the model and never callable from
+	 * other tools (`model-only`); one whose visibility leaves the model out is not declared at all (the spec's MUST),
+	 * though its app can still call it. A tool the configuration hides stays hidden.
+	 */
+	app?: McpAppTool;
 }): ToolDefinition<TSchema, McpToolDetails> {
-	const { server, tool } = options;
+	const { server, tool, app } = options;
+	const configured = toToolExposure(options.exposure);
+	const exposure =
+		!app || configured === "hidden" ? configured : app.visibility.includes("model") ? "model-only" : "hidden";
 	const title = tool.title ?? tool.annotations?.title;
 	const annotations = toToolAnnotations(tool);
 	const label = `${server}/${tool.name}`;
@@ -329,7 +385,7 @@ export function createMcpToolDefinition(options: {
 		description: tool.description?.trim() || title || `MCP tool ${tool.name} from server ${server}`,
 		parameters: toParameters(tool.inputSchema),
 		outputSchema: createMcpResultSchema(tool.outputSchema),
-		exposure: toToolExposure(options.exposure),
+		exposure,
 		namespace: options.namespace,
 		...(annotations ? { annotations } : {}),
 		...createMcpToolRenderers(label),
@@ -344,7 +400,10 @@ export function createMcpToolDefinition(options: {
 					onUpdate?.({ content: [{ type: "text", text }], details: { server, tool: tool.name } });
 				},
 			});
-			return convertMcpResult(server, tool.name, result, { readableResources: options.readableResources?.() });
+			return convertMcpResult(server, tool.name, result, {
+				readableResources: options.readableResources?.(),
+				...(app ? { app } : {}),
+			});
 		},
 	};
 }
