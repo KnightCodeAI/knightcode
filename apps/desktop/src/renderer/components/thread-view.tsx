@@ -11,10 +11,12 @@ import {
 	FileDiff,
 	Folder,
 	GitBranchPlus,
+	Globe,
 	Maximize,
 	Minimize,
 	MoreHorizontal,
 	PanelRight,
+	Plus,
 	SquarePlus,
 	X,
 } from "./icons.tsx";
@@ -32,6 +34,7 @@ import {
 	loadEarlier,
 	loadTerminals,
 	newTerminal,
+	openPreview,
 	NO_TABS,
 	openThread,
 	type PanelTab,
@@ -48,6 +51,7 @@ import {
 import { FileTab } from "./file-tab.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
 import { BottomRegion } from "./terminal.tsx";
+import { PreviewTab, previewTitle } from "./preview.tsx";
 import { FileIcon } from "./file-icon.tsx";
 import { ApprovalCard } from "./approval.tsx";
 import { DialogCard, QuestionsCard } from "./request-card.tsx";
@@ -184,8 +188,16 @@ function PanelResizeHandle() {
 function TabButton({ threadId, tab, index, active }: { threadId: string; tab: PanelTab; index: number; active: boolean }) {
 	return (
 		<StripTab
-			icon={tab.kind === "changes" ? <FileDiff size={16} className="shrink-0" /> : <FileIcon path={tab.path} />}
-			title={tab.kind === "changes" ? "Changes" : basename(tab.path)}
+			icon={
+				tab.kind === "changes" ? (
+					<FileDiff size={16} className="shrink-0" />
+				) : tab.kind === "preview" ? (
+					<Globe size={16} className="shrink-0" />
+				) : (
+					<FileIcon path={tab.path} />
+				)
+			}
+			title={tab.kind === "changes" ? "Changes" : tab.kind === "preview" ? previewTitle(tab) : basename(tab.path)}
 			italic={tab.kind === "file" && tab.preview}
 			active={active}
 			onSelect={() => activateTab(threadId, index)}
@@ -232,17 +244,22 @@ function SidePanel({ id }: { id: string }) {
 					ref={strip}
 					role="tablist"
 					aria-label="Chat tabs"
-					className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]"
+					className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]"
 				>
 					{tabs.map((tab, i) => (
 						<StripSlot
-							key={tab.kind === "file" ? tab.path : "changes"}
+							key={tab.kind === "file" ? tab.path : tab.kind === "preview" ? tab.id : "changes"}
 							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
 							<TabButton threadId={id} tab={tab} index={i} active={i === active} />
 						</StripSlot>
 					))}
 				</div>
+				{/* Codex's New tab, right after the tabs: a preview on its new tab page. */}
+				<IconButton label="New tab" onClick={() => openPreview(id)}>
+					<Plus size={16} />
+				</IconButton>
+				<div className="flex-1" />
 				<IconButton
 					label={full ? "Exit full screen" : "Enter full screen"}
 					aria-pressed={full}
@@ -261,6 +278,10 @@ function SidePanel({ id }: { id: string }) {
 			{shown?.kind === "file" ? (
 				<FileTab key={shown.path} threadId={id} path={shown.path} line={shown.line} used={shown.used} />
 			) : null}
+			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
+			{tabs.map((tab, i) =>
+				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
+			)}
 		</aside>
 	);
 }
@@ -305,6 +326,7 @@ export function ThreadView({ id }: { id: string }) {
 	const cwd = view?.thread.cwd ?? summary?.cwd ?? "";
 	useBinding("desktop.terminal.toggle", () => toggleTerminal(id, cwd), Boolean(view));
 	useBinding("desktop.terminal.new", () => void newTerminal(id, cwd), Boolean(view));
+	useBinding("desktop.preview.open", () => openPreview(id), Boolean(view));
 	const commitRename = () => {
 		const value = renaming?.trim();
 		setRenaming(undefined);

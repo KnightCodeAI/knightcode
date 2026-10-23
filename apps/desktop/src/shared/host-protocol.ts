@@ -266,6 +266,27 @@ export const HostMethods = {
 	},
 	"host/terminal/kill": { params: Obj({ terminalId: Type.String() }), result: Obj({}) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
+	/**
+	 * Annotate (section 9.8): a region of a preview's page, in its CSS pixels, saved as a PNG beside pasted images. Only
+	 * a guest of the asking window is captured.
+	 */
+	"host/preview/capture": {
+		params: Obj({
+			webContentsId: Type.Integer(),
+			rect: Obj({
+				x: Type.Integer({ minimum: 0 }),
+				y: Type.Integer({ minimum: 0 }),
+				width: Type.Integer({ minimum: 1 }),
+				height: Type.Integer({ minimum: 1 }),
+			}),
+		}),
+		result: Obj({ path: Type.String() }),
+	},
+	/** The user's rebindings, so main knows which keys a focused preview hands to the app (section 9.8). */
+	"host/keys/set": {
+		params: Obj({ overrides: Type.Record(Type.String(), Type.Array(Type.String())) }),
+		result: Obj({}),
+	},
 	/** The clipboard's text, for a paste into a terminal (a page cannot read the clipboard). */
 	"host/clipboard/readText": { params: Obj({}), result: Obj({ text: Type.String() }) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
@@ -332,7 +353,9 @@ export type HostEvent =
 	| { event: "zoom"; factor: number }
 	/** A terminal's output since the last, at most every 16 ms (section 9.7). */
 	| { event: "terminal/data"; terminalId: string; data: string }
-	| { event: "terminal/exit"; terminalId: string; exitCode: number };
+	| { event: "terminal/exit"; terminalId: string; exitCode: number }
+	/** An app binding pressed while a preview's page had focus, to run as if pressed in the window (section 9.8). */
+	| { event: "key"; binding: string };
 
 export interface WindowGlobals {
 	platform: NodeJS.Platform;

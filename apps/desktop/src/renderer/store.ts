@@ -89,7 +89,9 @@ export interface ThreadView {
  */
 export type PanelTab =
 	| { kind: "changes" }
-	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number };
+	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number }
+	/** A web page (section 9.8), or its new tab page while `url` is empty; `id` keys it, as two can show one URL. */
+	| { kind: "preview"; id: string; url: string; title?: string };
 export interface ThreadTabs {
 	tabs: PanelTab[];
 	active: number;
@@ -156,6 +158,8 @@ export interface State {
 	bottom: { open: boolean; height: number };
 	/** Each thread's terminals, in tab order, and the one shown. */
 	terminals: Record<string, ThreadTerminals>;
+	/** Images (and text) for a thread's composer from outside it: a preview's annotation (section 9.8). */
+	attachments: Record<string, { images: string[]; text: string }>;
 	/** Review comments drafted on the diff, per thread; they go with the next message (Codex's "1 comment"). */
 	comments: Record<string, DiffComment[]>;
 	/** Bumped by turn/diff/updated, so an open Changes pane reloads. */
@@ -187,6 +191,7 @@ let state: State = {
 	tabs: {},
 	bottom: { open: false, height: 0 },
 	terminals: {},
+	attachments: {},
 	comments: {},
 	diffVersion: {},
 	progress: {},
@@ -1514,6 +1519,43 @@ export function keepTab(threadId: string, index: number): void {
 }
 
 /** Close a tab; Changes cannot close, so closing it closes the panel. The tab on its left takes its place. */
+let previewCount = 0;
+
+/** A preview tab (Codex's browser tab) after the others: on `url`, or on its new tab page. */
+export function openPreview(threadId = openId(), url = ""): void {
+	if (!threadId) return;
+	const tab: PanelTab = { kind: "preview", id: `preview-${++previewCount}`, url };
+	updateTabs(threadId, (t) => ({ tabs: [...t.tabs, tab], active: t.tabs.length }), true);
+}
+
+/** What a preview tab now shows: the page it navigated to, and its title. */
+export function updatePreview(threadId: string, id: string, patch: { url?: string; title?: string }): void {
+	updateTabs(threadId, (t) => ({
+		...t,
+		tabs: t.tabs.map((tab) => (tab.kind === "preview" && tab.id === id ? { ...tab, ...patch } : tab)),
+	}));
+}
+
+/** Hand an image (and a line of text) to the thread's composer, which takes it as if pasted. */
+export function composerAttach(threadId: string, path: string, text = ""): void {
+	set((s) => {
+		const had = s.attachments[threadId] ?? { images: [], text: "" };
+		const next = { images: [...had.images, path], text: [had.text, text].filter(Boolean).join("\n") };
+		return { ...s, attachments: { ...s.attachments, [threadId]: next } };
+	});
+}
+
+/** The composer's side of composerAttach: what is waiting for it, once. */
+export function takeAttachments(threadId: string): { images: string[]; text: string } | undefined {
+	const waiting = state.attachments[threadId];
+	if (!waiting) return undefined;
+	set((s) => {
+		const { [threadId]: _, ...rest } = s.attachments;
+		return { ...s, attachments: rest };
+	});
+	return waiting;
+}
+
 export function closeTab(threadId: string, index: number): void {
 	if (index === 0) return setPanel({ open: false });
 	updateTabs(threadId, ({ tabs, active }) => ({

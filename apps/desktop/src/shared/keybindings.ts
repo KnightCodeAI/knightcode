@@ -86,6 +86,10 @@ export const DESKTOP_KEYBINDINGS = {
 		defaultKeys: ["mod+c", "ctrl+shift+c", "ctrl+insert"],
 		description: "Copy the terminal's selection",
 	},
+	// Codex's Open Browser Tab, Focus Browser Address Bar and annotation mode.
+	"desktop.preview.open": { defaultKeys: ["mod+t"], description: "Open a preview tab" },
+	"desktop.preview.address": { defaultKeys: ["mod+l"], description: "Focus the preview's address bar" },
+	"desktop.preview.annotate": { defaultKeys: ["mod+shift+period"], description: "Annotate the preview" },
 	"desktop.terminal.paste": { defaultKeys: ["mod+v", "ctrl+shift+v", "shift+insert"], description: "Paste into the terminal" },
 	"desktop.view.zoomIn": { defaultKeys: ["mod+shift+equal", "mod+equal", "mod+numpadadd"], description: "Zoom in" },
 	"desktop.view.zoomOut": { defaultKeys: ["mod+minus", "mod+numpadsubtract"], description: "Zoom out" },
@@ -151,6 +155,7 @@ export const CODE_KEYS = new Set([
 	"semicolon",
 	"backquote",
 	"comma",
+	"period",
 	"numpadadd",
 	"numpadsubtract",
 	"digit0",

@@ -24,6 +24,7 @@ import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-p
 import { markQuitting, onWindowClose } from "./main/close.ts";
 import { handleHost, openInService } from "./main/host.ts";
 import type { OpenIn } from "./main/open-in.ts";
+import { clearPreview, guardWebviews } from "./main/preview.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
 import { Router } from "./main/router.ts";
 import { resolveServerCommand, ServerConnection, type ServerState } from "./main/server.ts";
@@ -204,6 +205,8 @@ function createWindow(route?: string): BrowserWindow {
 			contextIsolation: true,
 			nodeIntegration: false,
 			webSecurity: true,
+			// Preview tabs (section 9.8); main/preview.ts decides what each one may attach and do.
+			webviewTag: true,
 			preload: join(__dirname, "preload.cjs"),
 			additionalArguments: [`--kc-origin=${ORIGIN}`, `--kc-window-id=${id}`],
 		},
@@ -213,6 +216,7 @@ function createWindow(route?: string): BrowserWindow {
 	window.on("focus", () => {
 		open.lastFocusedAt = Date.now();
 	});
+	guardWebviews(window.webContents, (binding) => sendEvent(open, { event: "key", binding }));
 	window.on("close", (event) => onWindowClose(window, state, event));
 	window.once("ready-to-show", () => window.show());
 	// A reload gets a fresh port; the old one's holds are released and the page resumes what it shows.
@@ -241,13 +245,17 @@ function createWindow(route?: string): BrowserWindow {
 	return window;
 }
 
-/** A thread's terminals end with it: when it is archived or deleted (section 9.7). */
-function endTerminals(message: Message): void {
+/**
+ * What a thread holds in main ends with it: its terminals when it is archived or deleted (section 9.7), its preview
+ * storage when it is deleted (section 9.8).
+ */
+function endThread(message: Message): void {
 	if (!("method" in message) || "id" in message) return;
 	const params = message.params as { threadId?: string; archived?: boolean } | undefined;
 	if (!params?.threadId) return;
 	if ((message.method === "thread/archived" && params.archived) || message.method === "thread/deleted")
 		terminals.killThread(params.threadId);
+	if (message.method === "thread/deleted") void clearPreview(app.getPath("userData"), params.threadId).catch(() => {});
 }
 
 function zoomFocused(step: -1 | 0 | 1): void {
@@ -304,7 +312,7 @@ async function start(): Promise<void> {
 		clientVersion: app.getVersion(),
 		onMessage: (message) => {
 			router.fromServer(message);
-			endTerminals(message);
+			endThread(message);
 		},
 		onState: (next, message) => {
 			serverState = { state: next, message };
