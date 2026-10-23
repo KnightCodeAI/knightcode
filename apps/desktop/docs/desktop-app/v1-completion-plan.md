@@ -1,6 +1,6 @@
 # Desktop v1 completion (S2b, S3, S4, D): implementation plan
 
-Status (2026-10-23): draft v7, reviewed (see Review history). Nothing implemented.
+Status (2026-10-23): draft v7, reviewed (see Review history). S2b implemented.
 Written on `main` at
 `5730595a1` (Phase C merged, #408). Each phase lands as its own PR from its
 own branch off `main`; Phase D as one PR per slice. No commits are authorized

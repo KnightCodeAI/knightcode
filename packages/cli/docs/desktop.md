@@ -67,8 +67,8 @@ on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on
 - Side panel: Changes shows the thread's diff; the separators between hunks expand to
   the unchanged lines around them. A file named in a tool row or in Changes opens in a
   read-only tab beside it, at the line the tool read or changed. A tab opened in passing
-  is italic and the next one replaces it; double-click it, or open the same file again,
-  to keep it. Each thread keeps its own tabs, at most 12 files.
+  is italic and the next one replaces it; double-click it to keep it. Each thread keeps
+  its own tabs, at most 12 files.
 - Open in: a file tab's Open button sends the file, at its line, to an editor, terminal
   or IDE found on your machine, or to the system's default app or file manager. The app
   remembers the last choice, per project and overall.

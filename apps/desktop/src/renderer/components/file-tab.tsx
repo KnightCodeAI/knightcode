@@ -91,9 +91,10 @@ export function FileTab({ threadId, path, line, used }: { threadId: string; path
 
 	const read = loaded?.path === path ? loaded.read : undefined;
 	const error = loaded?.path === path ? loaded.error : undefined;
+	// The same object while the text is the same, so a reload of an unchanged file redraws nothing.
 	const file = useMemo(
 		() => (read?.text !== undefined ? { name: basename(read.path), contents: read.text } : undefined),
-		[read],
+		[read?.path, read?.text],
 	);
 	const options = useMemo<FileOptions<undefined, undefined>>(
 		() => ({
@@ -105,16 +106,21 @@ export function FileTab({ threadId, path, line, used }: { threadId: string; path
 		}),
 		[themeType],
 	);
-	// The line it was opened at, each time it is opened there (`used` changes): scrolled to the middle.
+	// The line it was opened at, each time it is opened there (`used` changes): scrolled to the middle once, so a
+	// reload after an edit leaves the user's own scrolling alone.
+	const scrolled = useRef("");
 	useEffect(() => {
-		if (!line || !file || !highlighter) return;
+		const key = `${path}:${line}:${used}`;
+		if (!line || !file || !highlighter || scrolled.current === key) return;
 		const frame = requestAnimationFrame(() => {
 			const host = body.current?.querySelector("diffs-container") ?? body.current?.firstElementChild;
 			const row = host?.shadowRoot?.querySelector(`[data-line="${line}"]`) ?? host?.querySelector(`[data-line="${line}"]`);
-			row?.scrollIntoView({ block: "center" });
+			if (!row) return;
+			row.scrollIntoView({ block: "center" });
+			scrolled.current = key;
 		});
 		return () => cancelAnimationFrame(frame);
-	}, [line, used, file, highlighter]);
+	}, [path, line, used, file, highlighter]);
 
 	const cwd = thread?.cwd ?? "";
 	return (

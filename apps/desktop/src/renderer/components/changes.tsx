@@ -783,11 +783,15 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 
 	const files = read?.files ?? [];
 	const shown = filter ? files.filter((f) => f.path.toLowerCase().includes(filter.toLowerCase())) : files;
-	// Files whose sides the server would not give for this read; a new read starts with none.
-	const [unexpandable, setUnexpandable] = useState<{ read?: Read; paths: ReadonlySet<string> }>({ paths: new Set() });
-	const blocked = unexpandable.read === read ? unexpandable.paths : NONE;
-	const markUnexpandable = (of: Read, path: string) =>
-		setUnexpandable((u) => ({ read: of, paths: new Set([...(u.read === of ? u.paths : []), path]) }));
+	// Files whose sides the server would not give for these trees; a read of other trees starts with none. Keyed by the
+	// trees, not the read: a reload of an unchanged checkout is a new read whose files' loaders are still the old ones.
+	const treesKey = read?.fromTree && read.toTree ? `${read.fromTree}:${read.toTree}` : undefined;
+	const [unexpandable, setUnexpandable] = useState<{ trees?: string; paths: ReadonlySet<string> }>({
+		paths: new Set(),
+	});
+	const blocked = treesKey && unexpandable.trees === treesKey ? unexpandable.paths : NONE;
+	const markUnexpandable = (trees: string, path: string) =>
+		setUnexpandable((u) => ({ trees, paths: new Set([...(u.trees === trees ? u.paths : []), path]) }));
 	// Expansion needs the read's trees, and whitespace-blind hunks do not line up with the files' own text.
 	const treesOf = (file: DiffFile) =>
 		read?.fromTree && read.toTree && !opts.ignoreWhitespace && !blocked.has(file.path)
@@ -1148,7 +1152,7 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 										}
 										onAction={(action, f) => void act(action, f)}
 										trees={treesOf(file)}
-										onUnavailable={() => read && markUnexpandable(read, file.path)}
+										onUnavailable={() => treesKey && markUnexpandable(treesKey, file.path)}
 									/>
 								</div>
 							))}
