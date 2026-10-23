@@ -21,7 +21,8 @@ import {
 } from "electron";
 import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-protocol.ts";
 import { markQuitting, onWindowClose } from "./main/close.ts";
-import { handleHost } from "./main/host.ts";
+import { handleHost, openInService } from "./main/host.ts";
+import type { OpenIn } from "./main/open-in.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
 import { Router } from "./main/router.ts";
 import { resolveServerCommand, ServerConnection, type ServerState } from "./main/server.ts";
@@ -96,6 +97,7 @@ const router = new Router({
 
 const state = new StateFile(app.getPath("userData"));
 let server: ServerConnection;
+let openIn: OpenIn;
 
 /** Serves only the built renderer directory; `..` never escapes it (section 6.3). */
 function serveRenderer(request: Request): Promise<Response> | Response {
@@ -125,9 +127,14 @@ function connectPort(id: number, open: OpenWindow): void {
 		const data = event.data as Message | HostRequest;
 		if (typeof data !== "object" || data === null) return;
 		if ("host" in data) {
-			void handleHost(data, open.window, { state, server, openWindow: createWindow, zoom, role: () => roleOf(id) }).then((response) =>
-				port1.postMessage(response),
-			);
+			void handleHost(data, open.window, {
+				state,
+				server,
+				openIn,
+				openWindow: createWindow,
+				zoom,
+				role: () => roleOf(id),
+			}).then((response) => port1.postMessage(response));
 			return;
 		}
 		router.fromWindow(id, data);
@@ -260,9 +267,12 @@ async function start(): Promise<void> {
 		callback(permission === "clipboard-sanitized-write" || permission === "notifications" || permission === "local-fonts"),
 	);
 	buildMenu();
+	const env = await loginShellEnv();
+	// Editors launch with the user's own PATH, as the server's tools run with it.
+	openIn = openInService(env);
 	server = new ServerConnection({
 		command: resolveServerCommand(app.isPackaged, app.getAppPath(), process.resourcesPath),
-		env: await loginShellEnv(),
+		env,
 		logsDir: app.getPath("logs"),
 		clientVersion: app.getVersion(),
 		onMessage: (message) => router.fromServer(message),

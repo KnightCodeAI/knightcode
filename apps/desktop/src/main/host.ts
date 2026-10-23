@@ -1,8 +1,8 @@
 /** Host methods: what a sandboxed renderer cannot do itself (desktop-shell.md section 4.4). */
 
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
 	app,
 	type BrowserWindow,
@@ -23,6 +23,7 @@ import {
 	WINDOW_CHROME,
 } from "../shared/host-protocol.ts";
 import { closeFromShortcut } from "./close.ts";
+import { InvalidParams, OpenIn, windowsIcons } from "./open-in.ts";
 import { refuseToOpen } from "./open-path.ts";
 import { readProfile, signIn, signOut } from "./profile.ts";
 import type { ServerConnection } from "./server.ts";
@@ -49,10 +50,42 @@ function setMaterial(window: BrowserWindow, translucent: boolean, background: st
 	return translucent;
 }
 
+/** "Open in" over Electron: app icons, the file manager, the default app behind refuseToOpen. */
+export function openInService(env: NodeJS.ProcessEnv): OpenIn {
+	return new OpenIn({
+		platform: process.platform,
+		env,
+		icons: async (paths) => {
+			if (process.platform === "win32") return windowsIcons(paths, env);
+			const icons = new Map<string, string>();
+			for (const path of paths) {
+				const image = await app.getFileIcon(path, { size: "normal" }).catch(() => undefined);
+				if (image && !image.isEmpty()) icons.set(path, image.toDataURL());
+			}
+			return icons;
+		},
+		reveal: async (path) => {
+			// A file is shown selected in its folder; a folder, or the nearest one still there, is opened (Codex's cZ).
+			let at = path;
+			while (!existsSync(at) && dirname(at) !== at) at = dirname(at);
+			if (statSync(at).isFile()) return shell.showItemInFolder(at);
+			const failure = await shell.openPath(at);
+			if (failure) throw new Error(failure);
+		},
+		openDefault: async (path) => {
+			const refused = refuseToOpen(path);
+			if (refused) throw new Error(refused);
+			const failure = await shell.openPath(path);
+			if (failure) throw new Error(failure);
+		},
+	});
+}
+
 /** What host methods reach beyond their window: the state file, the server, and opening another window on a route. */
 export interface HostDeps {
 	state: StateFile;
 	server: ServerConnection;
+	openIn: OpenIn;
 	openWindow: (route?: string) => void;
 	/** Step the window's zoom (-1 out, 1 in, 0 back to 100%). */
 	zoom: (window: BrowserWindow, step: -1 | 0 | 1) => void;
@@ -70,7 +103,10 @@ export async function handleHost(request: HostRequest, window: BrowserWindow, de
 	} catch (error) {
 		return {
 			id: request.id,
-			error: { code: "internal", message: error instanceof Error ? error.message : String(error) },
+			error: {
+				code: error instanceof InvalidParams ? error.code : "internal",
+				message: error instanceof Error ? error.message : String(error),
+			},
 		};
 	}
 }
@@ -79,9 +115,19 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openWindow, zoom, role }: HostDeps,
+	{ state, server, openIn, openWindow, zoom, role }: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
+		case "host/openIn/list":
+			return { targets: await openIn.list() };
+		case "host/openIn/open":
+			await openIn.open(
+				params.targetId as string,
+				params.path as string,
+				params.line as number | undefined,
+				params.column as number | undefined,
+			);
+			return {};
 		case "host/menu/popup":
 			return popupMenu(params.items as NativeMenuItem[], window);
 		case "host/dialog/openFolder": {
