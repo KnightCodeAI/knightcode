@@ -445,10 +445,10 @@ Branch `feat/desktop-files-open-in`, one PR.
   out of the list.
 - `host/openIn/list` and `host/openIn/open` in `host.ts`; the `targetId` must
   be one `detectTargets` returned (`invalidParams` otherwise).
-- Preferences gain `openIn?: string` (the last choice). The thread header
-  gets Codex's "Open" split button (the last editor, a chevron listing the
-  rest) opening the thread's cwd; the Changes pane's file menu and file tabs
-  open the file at its line.
+- Preferences gain `openIn?: string` (the last choice). Codex 26.1016 has no
+  Open button in the thread header: a file tab's toolbar carries its "Open"
+  split button (the last editor, a chevron listing the rest), and it and the
+  Changes pane's file menu open the file at its line.
 
 #### Task S2b.3: side panel tabs and file tabs
 
