@@ -1,5 +1,41 @@
 # @knightcodeai/cli
 
+## 0.21.0
+
+### Added
+
+- Added a confirmation step to device-code sign-in. The dialog shows the code and waits for Enter before opening the browser and copying the code to the clipboard, so a code already on the clipboard is not replaced silently. Providers can turn either action off with `openBrowserOnConfirm` and `copyCodeOnConfirm` on the device-code event.
+
+### Fixed
+
+- Fixed KnightCode Messages replies dropping the concrete model a provider reports.
+
+- Fixed Anthropic requests rejected when an organization caps effort below the cached top-level level.
+
+- Fixed the command reference, settings, and MCP pages so they match the current flags, anchors, and timeout values.
+
+- Fixed command output corrupted when a multi-byte character is split across two chunks.
+
+- Fixed fd and rg setup on unsupported CPU architectures, so KnightCode warns instead of downloading an x86-64 binary.
+
+- Fixed the todo example crashing the terminal when a tool call fails validation.
+
+- Fixed startup when a configured package cannot be installed, so KnightCode skips that package, warns, and continues.
+
+- Fixed `exec` from extensions swallowing the reason a command could not start. A missing binary or a bad working directory used to return an empty `stderr` with exit code 1; the spawn error message is now in `stderr`.
+
+- Fixed fuzzy search ranking scattered matches above exact ones. Typing `opus` in the model selector now lists Claude Opus models before names that merely contain those letters, and the session search ranks name and text hits above scattered characters, ignores where a match sits in long message text, and no longer matches scattered characters in session ids.
+
+- Fixed standalone binaries built with a Bun release that broke abort, HTTPS, file tools, image resize, and session resume.
+
+- Fixed fullscreen double-click selection so +, \, ~, _, and . stay part of the word.
+
+- Fixed deeply nested blockquotes growing without bound and crashing the terminal.
+
+### Security
+
+- Security Rejected MCP authorization endpoints that are not http or https before sign-in opens them.
+
 ## 0.20.0
 
 ### Added
