@@ -934,19 +934,37 @@ each, shrinking to 120px, then scrolling); a tab opened in passing is italic
 and the next one replaces it, a double-click keeps it, and past 12 file tabs
 the least recently used goes. Mod+Shift+W closes the active one.
 
-"Open in…" lists what `host/openIn/list` finds, in Codex's order (editors,
-the default app and file manager, terminals, IDEs), each with its program's
-icon, and remembers the choice per project and overall. Detection on Windows:
-the PATH command (`code`, `cursor`, `zed`, `windsurf`, …), resolved from its
-shim to the program beside or above it, else `%LOCALAPPDATA%\Programs`,
-`Program Files` and `Program Files (x86)`, newest version first; Windows
-Terminal through its app alias, and WSL and Git Bash as terminals opened in
-the file's folder. On macOS the app bundles in `/Applications` and
-`~/Applications`; on Linux PATH, JetBrains Toolbox scripts and `.desktop`
-files, and the first terminal Codex knows. Launch with each editor's own
-go-to-line syntax (`--goto path:line:column`, `path:line:column`, `--line`).
+"Open in…" lists what `host/openIn/list` finds, each with its program's icon,
+and remembers the choice per project and overall. The targets, their order and
+their lookups are Codex's (26.1016 main bundle, its `HVe` list), one for one:
+VS Code, VS Code Insiders, Visual Studio, Cursor, Devin Desktop, BBEdit, Emacs,
+Sublime Text, Zed, Windsurf, Antigravity, GitHub Desktop, the default app, the
+file manager, Terminal, Git Bash, Cmder, WSL, iTerm2, Kitty, Ghostty, Warp,
+Xcode, the eight JetBrains IDEs and TextMate, each only on the platforms Codex
+has it there (no Windows Emacs or Windsurf). Windows: the PATH command, a shim
+resolved to the program beside or above its `bin`, then `%LOCALAPPDATA%\Programs`,
+`Program Files` and `Program Files (x86)` (newest folder first for JetBrains),
+GitHub Desktop in `%LOCALAPPDATA%` itself, Visual Studio by year and edition
+then `vswhere`, Windows Terminal through its app alias or Start menu shortcut,
+Cmder through `%CMDER_ROOT%`. macOS: fixed `/Applications` paths (also under
+`~/Applications`), app bundles by name prefix, JetBrains Toolbox's apps, `xed`
+for Xcode. Linux: PATH, JetBrains Toolbox scripts, then `.desktop` entries
+through `gio launch`, which takes the path alone. Each editor gets its own
+go-to-line syntax (`--goto path:line:column`, `path:line:column`, `--line`,
+`+line:column`, TextMate's `txmt://` URL); a terminal opens at the folder, and
+on macOS and Linux a file opens in `$VISUAL`, `$EDITOR` or the first of nvim,
+vim, nano and less inside the terminal, at the line (osascript for Terminal and
+iTerm2, `open -na` for Kitty and Ghostty, each Linux terminal's own run flag).
+One departure: Codex runs a Windows `.cmd` shim through cmd.exe with the path as
+an argument, which cmd.exe would parse (`&`, `%`); here a shim stands for the
+program above it or is left out. The menu ends with "Open in folder", "Open in
+GitHub" when the checkout's origin is on github.com and a branch is checked out
+(`git/origin`; the file at the branch and line), and "Save as…"
+(`host/file/saveCopy`: the save dialog with the file's name, written whole).
 Icons on Windows come from one PowerShell extraction per listing, since
-Electron's `getFileIcon` gives many programs the generic icon.
+Electron's `getFileIcon` gives many programs the generic icon. Detection runs
+at most once a minute; vswhere and xcode-select run as child processes, so main
+waits on neither (about 30-45 ms of main's time on this machine, 255 ms in all).
 
 Status (2026-10-23): built in S2b with the handoff dialog's dry run.
 

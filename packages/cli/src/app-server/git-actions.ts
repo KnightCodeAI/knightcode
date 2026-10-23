@@ -124,6 +124,17 @@ export async function gitStatus(repo: Repo): Promise<ResultOf<"git/status">> {
 	};
 }
 
+/** Where the desktop's "Open in GitHub" points: origin (else the first remote) and the branch, none when detached. */
+export async function gitOrigin(repo: Repo): Promise<ResultOf<"git/origin">> {
+	const remotes = (await git(repo, ["remote"])).split("\n").filter(Boolean);
+	const remote = remotes.includes("origin") ? "origin" : remotes[0];
+	const url = remote ? await runGit(repo, ["remote", "get-url", "--", remote]) : undefined;
+	const head = await runGit(repo, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+	const found = url?.code === 0 ? url.stdout.toString("utf8").trim() : "";
+	const branch = head.code === 0 ? head.stdout.toString("utf8").trim() : "";
+	return { root: repo.root, ...(found ? { url: found } : {}), ...(branch ? { branch } : {}) };
+}
+
 /** The paths a stage or unstage by path acts on: a rename or copy record is one change of both its paths. */
 async function recordPaths(repo: Repo, path: string): Promise<string[]> {
 	const { records } = await statusRecords(repo, "all");

@@ -1,12 +1,14 @@
 /**
  * Codex's "Open" split button (26.1016, a file tab's toolbar, measured over CDP): the preferred app's icon and
- * "Open", then a chevron listing every app found (host/openIn/list, in Codex's order) with "Open in folder" last.
- * Choosing an app remembers it for the project and as the default (Codex's openInTargetPreferences).
+ * "Open", then a chevron listing every app found (host/openIn/list, in Codex's order), then "Open in folder", "Open
+ * in GitHub" when the checkout's origin is on GitHub, and "Save as…". Choosing an app remembers it for the project and
+ * as the default (Codex's openInTargetPreferences).
  */
 
 import { useEffect, useState } from "react";
 import type { OpenInTargetInfo } from "../../shared/host-protocol.ts";
 import { client } from "../client.ts";
+import { githubLink } from "../github.ts";
 import { errorText, getState, selectPreferences, setPreference, toast, useStore } from "../store.ts";
 import { AppWindow, ChevronDown } from "./icons.tsx";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./menu.tsx";
@@ -67,10 +69,34 @@ export function TargetIcon({ target }: { target: OpenInTargetInfo }) {
 	return <AppWindow size={18} className="shrink-0 text-secondary" />;
 }
 
-export function OpenInButton({ path, line, project }: { path: string; line?: number; project: string }) {
+/** Codex's "Save as…": a copy where the user picks, Codex's own message when it fails. */
+function saveCopy(path: string): void {
+	void client.host("host/file/saveCopy", { path }).catch(() => toast("Could not download artifact", "error"));
+}
+
+export function OpenInButton({
+	path,
+	line,
+	project,
+	threadId,
+}: {
+	path: string;
+	line?: number;
+	project: string;
+	threadId?: string;
+}) {
 	const targets = useOpenInTargets();
 	const preferred = usePreferredTarget(targets, project);
 	const folder = targets?.find((t) => t.kind === "fileManager");
+	const [github, setGithub] = useState<string>();
+	// Asked each time the menu opens, as Codex's menu asks on render: a push or a branch switch shows at once.
+	const onOpenChange = (open: boolean) => {
+		if (!open || !threadId) return;
+		void client.request("git/origin", { threadId }).then(
+			(origin) => setGithub(githubLink(origin, path, line)),
+			() => setGithub(undefined),
+		);
+	};
 	return (
 		<div className="kc-capsule inline-flex h-8 shrink-0 items-center rounded-full p-0.5">
 			<Tooltip content={preferred ? `Open in ${preferred.name}` : "Open"}>
@@ -85,7 +111,7 @@ export function OpenInButton({ path, line, project }: { path: string; line?: num
 					<span className="whitespace-nowrap">Open</span>
 				</button>
 			</Tooltip>
-			<Menu>
+			<Menu onOpenChange={onOpenChange}>
 				<MenuTrigger>
 					<button
 						type="button"
@@ -120,6 +146,10 @@ export function OpenInButton({ path, line, project }: { path: string; line?: num
 							<MenuItem onSelect={() => openIn(folder.id, path)}>Open in folder</MenuItem>
 						</>
 					) : null}
+					{github ? (
+						<MenuItem onSelect={() => void client.host("host/shell/openExternal", { url: github })}>Open in GitHub</MenuItem>
+					) : null}
+					<MenuItem onSelect={() => saveCopy(path)}>Save as…</MenuItem>
 				</MenuContent>
 			</Menu>
 		</div>
