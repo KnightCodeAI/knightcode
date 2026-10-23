@@ -154,7 +154,14 @@ export function McpAppView({
 		frame.src = loaded.url;
 		frame.style.cssText = "display: block; width: 100%; height: 100%; border: 0; background: transparent;";
 		element.appendChild(frame);
-		const confirm = (next: Ask) => new Promise<boolean>((answer) => setAsk({ ask: next, answer }));
+		// One question at a time: a later request waits for the answer to the one shown, so the dialog never changes
+		// under the user and no request is left unanswered.
+		let asking: Promise<unknown> = Promise.resolve();
+		const confirm = (next: Ask) => {
+			const turn = asking.then(() => new Promise<boolean>((answer) => setAsk({ ask: next, answer })));
+			asking = turn;
+			return turn;
+		};
 		const host: BridgeHost = {
 			threadId,
 			appVersion: version,
