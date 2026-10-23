@@ -718,6 +718,9 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 }
 
 /** A handoff refusal as the dialog says it: the server's own words, and the paths in the way when it names them. */
+/** The codes a handoff refusal answers with (workspaces.ts planHandoff, threads.ts). */
+const REFUSALS = ["gitConflict", "invalidParams", "turnInProgress"];
+
 function refusalText(error: RequestError): { message: string; paths?: string[] } {
 	const data = error.data as { recoveryInstructions?: string[]; paths?: string[] } | undefined;
 	return { message: data?.recoveryInstructions?.[0] ?? error.message, ...(data?.paths?.length ? { paths: data.paths } : {}) };
@@ -767,7 +770,10 @@ export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: ()
 	// A failed handoff's message is about the branch it was sent with; an edit's own check takes over.
 	useEffect(() => setError(undefined), [key]);
 	const checking = verdict?.key !== key;
-	const refused = !checking && verdict?.refusal ? refusalText(verdict.refusal) : undefined;
+	// Only the server's own refusals block: a check that failed (a server restart, an internal error) leaves the
+	// confirm on, and the real handoff reports its own refusal.
+	const blocking = verdict?.refusal && REFUSALS.includes(verdict.refusal.code) ? verdict.refusal : undefined;
+	const refused = !checking && blocking ? refusalText(blocking) : undefined;
 	const shown = error ?? refused;
 	const go = async () => {
 		setBusy(true);
