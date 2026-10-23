@@ -7,7 +7,7 @@ import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
-import { cpSync, existsSync } from "node:fs";
+import { cpSync, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 
@@ -31,9 +31,53 @@ function copyNodePty(buildPath: string, platform: string, arch: string): void {
 	else throw new Error(`node-pty has no binary for ${platform}-${arch}: no prebuild, and no node-gyp build in ${built}`);
 }
 
-// Signing and the bundled knightcode binary are phase S4 (desktop-shell.md section 15).
+const SERVER = join(__dirname, "resources/knightcode");
+
+/** The app server scripts/stage-server.ts staged must be this checkout's CLI, built for the target being packaged. */
+function checkStagedServer(platform: string, arch: string): void {
+	const read = (path: string) => (existsSync(path) ? readFileSync(path, "utf8").trim() : undefined);
+	const staged = read(join(SERVER, "knightcode.version"));
+	const { version } = JSON.parse(readFileSync(join(__dirname, "../../packages/cli/package.json"), "utf8")) as {
+		version: string;
+	};
+	const target = read(join(SERVER, "knightcode.target"));
+	const stage = `bun run scripts/stage-server.ts --platform=${platform} --arch=${arch}`;
+	if (!staged) throw new Error(`No app server staged in ${SERVER}. Run: ${stage}`);
+	if (staged !== version) throw new Error(`The staged app server is ${staged}, the CLI is ${version}. Run: ${stage}`);
+	if (target !== `${platform}-${arch}`) throw new Error(`The staged app server is for ${target}. Run: ${stage}`);
+}
+
+const env = (name: string) => process.env[name]?.trim() || undefined;
+
+// Ad hoc until a Developer ID exists. identityValidation: false stops osx-sign looking "-" up as a keychain identity,
+// and continueOnError: false makes a signing failure fail the build instead of a warning.
+const appleIdentity = env("APPLE_SIGNING_IDENTITY");
+const osxSign = appleIdentity
+	? { identity: appleIdentity, continueOnError: false }
+	: { identity: "-", identityValidation: false, continueOnError: false };
+const appleId = env("APPLE_ID");
+const applePassword = env("APPLE_APP_SPECIFIC_PASSWORD");
+const appleTeam = env("APPLE_TEAM_ID");
+const osxNotarize =
+	appleId && applePassword && appleTeam ? { appleId, appleIdPassword: applePassword, teamId: appleTeam } : undefined;
+const certificateFile = env("WINDOWS_SIGN_CERTIFICATE_FILE");
+const windowsSign = certificateFile
+	? { certificateFile, certificatePassword: env("WINDOWS_SIGN_CERTIFICATE_PASSWORD") }
+	: undefined;
+
+const linux = {
+	name: "knightcode-desktop",
+	productName: "KnightCode",
+	bin: "knightcode-desktop",
+	icon: join(__dirname, "assets/icon.png"),
+	categories: ["Development" as const],
+	homepage: "https://knightcode.dev",
+	mimeType: ["x-scheme-handler/knightcode"],
+};
+
 const config: ForgeConfig = {
 	hooks: {
+		prePackage: async (_config, platform, arch) => checkStagedServer(platform, arch),
 		packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) =>
 			copyNodePty(buildPath, platform, arch),
 	},
@@ -42,10 +86,33 @@ const config: ForgeConfig = {
 		asar: { unpack: "**/node_modules/node-pty/**" },
 		name: "KnightCode",
 		executableName: "knightcode-desktop",
+		appBundleId: "dev.knightcode.desktop",
+		// .ico on Windows, .icns on macOS; Linux takes the .png through its makers.
+		icon: join(__dirname, "assets/icon"),
+		// The app server main runs (server.ts resolveServerCommand), at resources/knightcode.
+		extraResource: [SERVER],
 		// macOS learns the link scheme from Info.plist; Windows and Linux register it at launch (src/main.ts).
 		protocols: [{ name: "KnightCode", schemes: ["knightcode"] }],
+		osxSign,
+		...(osxNotarize ? { osxNotarize } : {}),
+		...(windowsSign ? { windowsSign } : {}),
 	},
-	makers: [new MakerSquirrel({}), new MakerZIP({}, ["darwin"]), new MakerDMG({}), new MakerDeb({}), new MakerRpm({})],
+	makers: [
+		new MakerSquirrel({
+			// The install directory (%LOCALAPPDATA%\KnightCodeDesktop) and the update package's id. Not "KnightCode":
+			// that directory holds the discontinued IDE's data, and Squirrel's uninstall deletes the whole directory.
+			name: "KnightCodeDesktop",
+			title: "KnightCode",
+			setupIcon: join(__dirname, "assets/icon.ico"),
+			// Programs and Features shows this URL's icon, Squirrel's default otherwise.
+			iconUrl: "https://knightcode.dev/favicon.ico",
+			...(windowsSign ? { windowsSign } : {}),
+		}),
+		new MakerZIP({}, ["darwin"]),
+		new MakerDMG({ icon: join(__dirname, "assets/icon.icns"), format: "ULFO" }),
+		new MakerDeb({ options: { ...linux, maintainer: "KnightCode" } }),
+		new MakerRpm({ options: { ...linux, license: "MIT" } }),
+	],
 	plugins: [
 		new VitePlugin({
 			build: [

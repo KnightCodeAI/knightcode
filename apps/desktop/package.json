@@ -4,6 +4,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"description": "The KnightCode desktop app",
+	"author": "KnightCode",
 	"main": ".vite/build/main.cjs",
 	"scripts": {
 		"prestart": "bun scripts/link-electron.ts",
