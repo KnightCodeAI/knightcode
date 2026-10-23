@@ -1,8 +1,10 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DiffFile, DiffScope } from "@knightcode/app-server-protocol";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import { afterEach, expect, test } from "vitest";
+import { readFile } from "../../src/app-server/files.ts";
 import { sh, write } from "./fixtures/git-repo.ts";
 import { type RepoServer, repoServer, worktreeThread } from "./fixtures/worktree-server.ts";
 import { cleanupServers } from "./harness.ts";
@@ -203,3 +205,22 @@ test("a worktree thread's read gives trees its own checkout can read", async () 
 	write(thread.cwd, "a.txt", ten({ 7: "seven" }));
 	expectConsistent(await sidesOf(s, thread.id, "uncommitted"));
 });
+
+// chmod cannot make a file unreadable on Windows, and root reads it anyway.
+test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+	"file/read of a file it may not open answers invalidParams naming the path",
+	async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kc-file-read-"));
+		try {
+			const file = join(dir, "secret.txt");
+			writeFileSync(file, "no\n");
+			chmodSync(file, 0o000);
+			await expect(readFile(dir, "secret.txt")).rejects.toMatchObject({
+				code: "invalidParams",
+				message: expect.stringContaining("cannot read secret.txt"),
+			});
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	},
+);

@@ -24,7 +24,13 @@ export async function readFile(
 	if (!info.isFile()) throw new AppServerError("invalidParams", `not a file: ${path}`);
 	// Up to maxBytes + 1, whatever the size was at stat (the file may grow): the byte past the limit says it is too large.
 	const buffer = Buffer.allocUnsafe(maxBytes + 1);
-	const handle = await open(absolute, "r");
+	// Seen by stat but not readable (permissions, or removed since): a refusal for that path, as stat's are.
+	const handle = await open(absolute, "r").catch((error: unknown) => {
+		throw new AppServerError(
+			"invalidParams",
+			`cannot read ${path}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	});
 	let length = 0;
 	try {
 		for (;;) {
