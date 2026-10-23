@@ -32,6 +32,7 @@ import { resolveServerCommand, ServerConnection, type ServerState } from "./main
 import { loginShellEnv } from "./main/shell-env.ts";
 import { StateFile } from "./main/state.ts";
 import { type SpawnPty, Terminals } from "./main/terminals.ts";
+import { squirrelEvent, Updates } from "./main/updates.ts";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -107,6 +108,7 @@ const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
 let openIn: OpenIn;
 let terminals: Terminals;
+let updates: Updates;
 
 /** Serves only the built renderer directory; `..` never escapes it (section 6.3). */
 function serveRenderer(request: Request): Promise<Response> | Response {
@@ -139,6 +141,7 @@ function connectPort(id: number, open: OpenWindow): void {
 	port1.on("message", (event) => {
 		const data = event.data as Message | HostRequest;
 		if (typeof data !== "object" || data === null) return;
+		smokeStep("page");
 		if ("host" in data) {
 			void handleHost(data, open.window, {
 				state,
@@ -150,6 +153,8 @@ function connectPort(id: number, open: OpenWindow): void {
 				openWindow: createWindow,
 				zoom,
 				role: () => roleOf(id),
+				updates,
+				installUpdate,
 			}).then((response) => port1.postMessage(response));
 			return;
 		}
@@ -272,9 +277,63 @@ function zoomFocused(step: -1 | 0 | 1): void {
 	if (window) zoom(window, step);
 }
 
+/**
+ * Codex's update question when threads are running, then the quit question's path without asking again: the server
+ * stopped and the terminals ended before Squirrel quits the app to install.
+ */
+let installing = false;
+
+async function installUpdate(parent: BrowserWindow): Promise<void> {
+	// A second press (another window's pill, About's button) while the question is open or the server stops.
+	if (installing || quitting || updates.state.state !== "ready") return;
+	installing = true;
+	const running = router.activeThreads();
+	if (running > 0) {
+		const { response } = await dialog.showMessageBox(parent, {
+			type: "question",
+			buttons: ["Update", "Cancel"],
+			defaultId: 0,
+			cancelId: 1,
+			message: "Update KnightCode now?",
+			detail: `KnightCode will quit to install the update, which will interrupt ${running} running ${running === 1 ? "thread" : "threads"}.`,
+		});
+		if (response !== 0) {
+			installing = false;
+			return;
+		}
+	}
+	quitting = true;
+	markQuitting();
+	await server.stop();
+	terminals.killAll();
+	updates.install();
+}
+
 function buildMenu(): void {
+	// The macOS app menu with Codex's Check for Updates… under About; the other platforms' is in the title bar.
+	const appMenu: Electron.MenuItemConstructorOptions = {
+		role: "appMenu",
+		submenu: [
+			{ role: "about" },
+			{
+				label: "Check for Updates…",
+				click: () => {
+					openLink("knightcode://settings/about");
+					void updates.check();
+				},
+			},
+			{ type: "separator" },
+			{ role: "services" },
+			{ type: "separator" },
+			{ role: "hide" },
+			{ role: "hideOthers" },
+			{ role: "unhide" },
+			{ type: "separator" },
+			{ role: "quit" },
+		],
+	};
 	const template: Electron.MenuItemConstructorOptions[] = [
-		...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
+		...(process.platform === "darwin" ? [appMenu] : []),
 		{ role: "editMenu" },
 		{
 			label: "View",
@@ -295,6 +354,7 @@ function buildMenu(): void {
 
 async function start(): Promise<void> {
 	await app.whenReady();
+	if (smoke) setTimeout(() => smokeExit(1), 60_000);
 	protocol.handle("app", serveRenderer);
 	protocol.handle(MCP_APP_SCHEME, (request) => mcpApps.handle(request));
 	session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
@@ -326,11 +386,17 @@ async function start(): Promise<void> {
 		},
 		onState: (next, message) => {
 			serverState = { state: next, message };
+			if (next === "ready") smokeStep("server");
+			else if (smoke && next !== "starting") smokeExit(1);
 			for (const open of windows.values()) sendEvent(open, { event: "server/state", state: next, message });
 		},
 		onExit: () => router.serverRestarted(),
 	});
 	server.start();
+	updates = new Updates((update) => {
+		for (const open of windows.values()) sendEvent(open, { event: "update", update });
+	});
+	updates.start();
 	// A source checkout would register the bare Electron binary as the link handler; only an installed app does.
 	if (app.isPackaged) app.setAsDefaultProtocolClient("knightcode");
 	createWindow(linkIn(process.argv) ?? pendingLink);
@@ -340,10 +406,33 @@ async function start(): Promise<void> {
 	});
 }
 
+/**
+ * KNIGHTCODE_DESKTOP_SMOKE=1, the release workflow's smoke test of a packaged build: exit 0 once the app server has
+ * answered initialize and a window's page has spoken to main over its port (the renderer loaded and ran); 1 when the
+ * server fails or exits, or after 60 s.
+ */
+const smoke = process.env.KNIGHTCODE_DESKTOP_SMOKE === "1" ? { server: false, page: false } : undefined;
+
+function smokeStep(step: "server" | "page"): void {
+	if (!smoke) return;
+	smoke[step] = true;
+	if (smoke.server && smoke.page) smokeExit(0);
+}
+
+function smokeExit(code: number): void {
+	if (quitting) return;
+	console.log(`smoke: ${code === 0 ? "passed" : `failed (server ${serverState.state})`}`);
+	quitting = true;
+	// The deadline can pass before start() made the server (a login shell that never answers).
+	void (server ? server.stop() : Promise.resolve()).finally(() => app.exit(code));
+}
+
 /** A link macOS delivered before start() opened the first window. */
 let pendingLink: string | undefined;
 
-if (!app.requestSingleInstanceLock()) {
+if (squirrelEvent()) {
+	// Squirrel's install, update or removal run: it quits once the shortcuts are done.
+} else if (!app.requestSingleInstanceLock()) {
 	app.quit();
 } else {
 	app.on("second-instance", (_event, argv) => {

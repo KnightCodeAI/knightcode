@@ -7,8 +7,40 @@ configuration lives in the files the terminal reads (`settings.json`, `mcp.json`
 `tools.json`); the app's Settings edit those same files, so a change made in either place
 shows in both.
 
-The app is in development and not yet published. Phase S1 (threads, transcript, composer,
-approvals) is usable from a source checkout.
+Installers come from the GitHub releases tagged `desktop-v<version>`; none is published yet,
+so for now the app runs from a source checkout.
+
+## Installing
+
+Each installer carries its own `knightcode` binary as the app server, so nothing needs to be
+on `PATH`. None is signed by a recognised publisher yet:
+
+- Windows: run `KnightCode-<version>.Setup.exe`. It installs for your user only, into
+  `%LOCALAPPDATA%\KnightCodeDesktop`, with Start menu and desktop shortcuts; remove it from
+  Settings › Apps. SmartScreen says "Windows protected your PC" the first time: choose
+  More info, then Run anyway.
+- macOS: open the `.dmg` for your Mac (`arm64` for Apple silicon, `x64` for Intel) and drag
+  KnightCode to Applications. The app is signed ad hoc, not notarized, so the first launch
+  is refused: open System Settings › Privacy & Security and choose Open Anyway, or run
+  `xattr -dr com.apple.quarantine /Applications/KnightCode.app` once.
+- Linux: install the `.deb` (`sudo apt install ./knightcode-desktop_<version>_amd64.deb`) or
+  the `.rpm` (`sudo dnf install ./knightcode-desktop-<version>-1.x86_64.rpm`).
+
+Check a download against the release's `SHA256SUMS`.
+
+## Updates
+
+- Windows: the app checks at launch and every 4 hours, and downloads a newer version in
+  the background. An Update button then shows at the right of the title bar, and Settings ›
+  About offers Restart to update; if threads are running it asks first, since quitting
+  interrupts them. Help › Check for Updates… checks now.
+- macOS: the app checks the same way and shows Update when a newer version exists, which
+  opens the release page to download it (it cannot install itself while it is signed ad
+  hoc). KnightCode › Check for Updates… checks now.
+- Linux: install the newer `.deb` or `.rpm` over the old one.
+
+Settings › About shows the app's and the app server's versions and when the app last
+checked.
 
 ## Running from source
 
@@ -25,7 +57,22 @@ quoting, so a path containing spaces (`C:\Program Files\...`) cannot be named; p
 on `PATH` and give the bare name. A packaged build ignores it and runs only its bundled binary.
 
 Server output goes to `app-server.log` in the app's logs folder (`%APPDATA%\KnightCode\logs`
-on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on Linux).
+on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on Linux). At
+5 MiB it moves to `app-server.log.1`, the older ones to `.2` up to `.4`, so at most five files
+are kept. Settings › About › Show logs opens the folder.
+
+To build the installers for this machine, stage the app server and make them; the
+installers land in `apps/desktop/out/make/`:
+
+```sh
+bun run apps/desktop/scripts/stage-server.ts   # builds knightcode for this platform
+cd apps/desktop && bun run make
+```
+
+The end-to-end tests launch the production build that packaging leaves in
+`apps/desktop/.vite/`, against an app server whose model is scripted
+(`packages/cli/test/fixtures/faux-app-server.ts`): run `bun run package`, then
+`bun run test:e2e`.
 
 ## What works
 

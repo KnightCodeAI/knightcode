@@ -34,6 +34,7 @@ import {
 	type Preferences,
 	SIDEBAR_WIDTH,
 	type TerminalInfo,
+	type UpdateState,
 } from "../shared/host-protocol.ts";
 import { DESKTOP_KEYBINDINGS, type KeybindingId } from "../shared/keybindings.ts";
 import { type AnyNotification, type AnyServerRequest, client, RequestError } from "./client.ts";
@@ -151,6 +152,8 @@ export interface State {
 	finding: boolean;
 	/** The theme the window shows: the preference, or the system's when it is "system". */
 	resolvedTheme: ThemeName;
+	/** Where updating stands (main/updates.ts): the title bar's pill and Settings › About. */
+	update: UpdateState;
 	/**
 	 * The right region (desktop-shell.md section 9.6): open, its width in px, a diff scope asked for, and whether it
 	 * fills the thread view in place of the chat (Codex's full screen).
@@ -191,6 +194,7 @@ let state: State = {
 	paletteOpen: false,
 	finding: false,
 	resolvedTheme: "dark",
+	update: { state: "unavailable" },
 	panel: { open: false, width: 0 },
 	tabs: {},
 	bottom: { height: 0 },
@@ -663,6 +667,7 @@ client.onHostEvent((event) => {
 				}));
 		return;
 	}
+	if (event.event === "update") return set((s) => ({ ...s, update: event.update }));
 	if (event.event === "navigate") {
 		if (state.server.state === "ready" && state.desktop) showLink(event.route);
 		else pendingRoute = event.route;
@@ -673,6 +678,23 @@ client.onHostEvent((event) => {
 	set((s) => ({ ...s, server: { state: event.state, message: event.message } }));
 	if (event.state === "ready" && !wasReady) void connected();
 });
+
+export function checkForUpdates(): void {
+	void client.host("host/update/check", {}).then(
+		(update) => set((s) => ({ ...s, update })),
+		(error: unknown) => toast(errorText(error), "error"),
+	);
+}
+
+/** macOS: the newer release's page, where it is downloaded. */
+export function openUpdatePage(url: string): void {
+	void client.host("host/shell/openExternal", { url }).catch((error: unknown) => toast(errorText(error), "error"));
+}
+
+/** Quit and install a downloaded update; main asks first when threads are running. */
+export function installUpdate(): void {
+	void client.host("host/update/install", {}).catch((error: unknown) => toast(errorText(error), "error"));
+}
 
 /** Show what a `knightcode://` link names (routes.ts); others are ignored. */
 function showLink(route: string): void {
@@ -699,7 +721,16 @@ async function connected(): Promise<void> {
 		const first = !state.desktop;
 		const desktop = state.desktop ?? (await client.host("host/state/read", {}));
 		set((s) => ({ ...s, desktop, ...(first ? { sidebarOpen: !desktop.sidebar.collapsed } : {}) }));
-		await Promise.all([refreshThreads(), refreshModels(), refreshAccounts()]);
+		await Promise.all([
+			refreshThreads(),
+			refreshModels(),
+			refreshAccounts(),
+			// Informational: its failure must not stop the resumes below.
+			client
+				.host("host/update/state", {})
+				.then((update) => set((s) => ({ ...s, update })))
+				.catch((error: unknown) => console.error(error)),
+		]);
 		// After a restart the new server has no subscriptions: resume what this window shows.
 		for (const id of Object.keys(state.held)) void resumeThread(id);
 		if (pendingRoute) showLink(pendingRoute);
@@ -771,8 +802,19 @@ export async function openThread(id: string): Promise<void> {
 	await resumeThread(id);
 }
 
+/**
+ * The resume issued last for each thread. Two can overlap (a restart's resume and an open's), and answer in either
+ * order: only the last one's answer applies, whether a snapshot or an error, and an older one's is dropped. Nothing is
+ * unsubscribed for it: main holds a thread once per window, not per request, so the hold is the newer resume's too.
+ */
+const latestResume = new Map<string, number>();
+let resumes = 0;
+
 /** Subscribe to a thread and load its history without changing the view. */
 async function resumeThread(id: string): Promise<void> {
+	const issued = ++resumes;
+	latestResume.set(id, issued);
+	const superseded = () => latestResume.get(id) !== issued;
 	set((s) => ({ ...s, opening: { ...s.opening, [id]: undefined } }));
 	const buffer: (() => Promise<void> | void)[] = [];
 	// Events arriving during the replay join the buffer, so order holds until it drains.
@@ -787,6 +829,7 @@ async function resumeThread(id: string): Promise<void> {
 	};
 	try {
 		const result = await client.request("thread/resume", { threadId: id });
+		if (superseded()) return;
 		// Each port message is its own task, so nothing newer than the response has arrived yet.
 		resuming.set(id, buffer);
 		// Older events still queued are in the snapshot; let them land first so it overwrites them.
@@ -794,6 +837,8 @@ async function resumeThread(id: string): Promise<void> {
 		const turns = await Promise.all(result.turns.map(resolveTurn));
 		const running = result.runningTurn ? await resolveTurn(result.runningTurn) : undefined;
 		if (running && !turns.some((t) => t.id === running.id)) turns.push(running);
+		// What this one buffered predates the newer resume's answer, whose snapshot has it.
+		if (superseded()) return;
 		set((s) => ({
 			...s,
 			held: {
@@ -813,6 +858,7 @@ async function resumeThread(id: string): Promise<void> {
 		for (const warning of result.warnings) toast(warning.message);
 		await drain();
 	} catch (error) {
+		if (superseded()) return;
 		const code = error instanceof RequestError ? error.code : undefined;
 		const data = error instanceof RequestError ? error.data : undefined;
 		const message =
