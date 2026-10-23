@@ -61,6 +61,8 @@ export const Preferences = Obj({
 	openIn: Type.Optional(
 		Obj({ global: Type.Optional(Type.String()), perPath: Type.Optional(Type.Record(Type.String(), Type.String())) }),
 	),
+	/** The shell a new terminal runs (section 9.7): the last one picked from the terminal's + menu. */
+	terminalShell: Type.Optional(Type.String()),
 });
 export type Preferences = Static<typeof Preferences>;
 
@@ -168,6 +170,18 @@ export const NativeMenuItem = Type.Union([
 ]);
 export type NativeMenuItem = Static<typeof NativeMenuItem>;
 
+const TerminalSize = Type.Integer({ minimum: 1, maximum: 1000 });
+const TerminalInfo = Obj({
+	terminalId: Type.String(),
+	threadId: Type.String(),
+	cwd: Type.String(),
+	shellId: Type.String(),
+	shellName: Type.String(),
+	/** Present once its shell has ended. */
+	exitCode: Type.Optional(Type.Integer()),
+});
+export type TerminalInfo = Static<typeof TerminalInfo>;
+
 export const HostMethods = {
 	/** Show a native context menu at the pointer; resolves with the chosen item's id once it closes. */
 	"host/menu/popup": {
@@ -219,7 +233,41 @@ export const HostMethods = {
 		}),
 		result: Obj({}),
 	},
+	/** The shells a terminal can run (section 9.7), the default first. */
+	"host/terminal/shells": {
+		params: Obj({}),
+		result: Obj({ shells: Type.Array(Obj({ id: Type.String(), name: Type.String() })) }),
+	},
+	/** A terminal for a thread in a folder; its output arrives as `terminal/data` events in the asking window. */
+	"host/terminal/create": {
+		params: Obj({
+			threadId: Type.String(),
+			cwd: Type.String(),
+			shellId: Type.Optional(Type.String()),
+			cols: TerminalSize,
+			rows: TerminalSize,
+		}),
+		result: TerminalInfo,
+	},
+	"host/terminal/list": { params: Obj({ threadId: Type.String() }), result: Obj({ terminals: Type.Array(TerminalInfo) }) },
+	/** Show a running (or ended) terminal in this window: its last 64 KiB of output, then its events. */
+	"host/terminal/attach": {
+		params: Obj({ terminalId: Type.String() }),
+		result: Obj({ scrollback: Type.String(), exitCode: Type.Optional(Type.Integer()) }),
+	},
+	/** Keystrokes and pastes, at most 1 MiB at a time. */
+	"host/terminal/write": {
+		params: Obj({ terminalId: Type.String(), data: Type.String({ maxLength: 1024 * 1024 }) }),
+		result: Obj({}),
+	},
+	"host/terminal/resize": {
+		params: Obj({ terminalId: Type.String(), cols: TerminalSize, rows: TerminalSize }),
+		result: Obj({}),
+	},
+	"host/terminal/kill": { params: Obj({ terminalId: Type.String() }), result: Obj({}) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
+	/** The clipboard's text, for a paste into a terminal (a page cannot read the clipboard). */
+	"host/clipboard/readText": { params: Obj({}), result: Obj({ text: Type.String() }) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
 	/** Another window, showing a thread when one is named (Codex's "Open in new window"). */
 	"host/window/open": { params: Obj({ threadId: Type.Optional(Type.String()) }), result: Obj({}) },
@@ -281,7 +329,10 @@ export type HostEvent =
 	/** A `knightcode://` link to show (section 6.1). */
 	| { event: "navigate"; route: string }
 	/** The window's zoom changed (View › Zoom In, Zoom Out, Actual Size); 1 is 100%. */
-	| { event: "zoom"; factor: number };
+	| { event: "zoom"; factor: number }
+	/** A terminal's output since the last, at most every 16 ms (section 9.7). */
+	| { event: "terminal/data"; terminalId: string; data: string }
+	| { event: "terminal/exit"; terminalId: string; exitCode: number };
 
 export interface WindowGlobals {
 	platform: NodeJS.Platform;

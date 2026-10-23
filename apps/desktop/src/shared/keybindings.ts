@@ -76,6 +76,17 @@ export const DESKTOP_KEYBINDINGS = {
 	"desktop.sidebar.toggle": { defaultKeys: ["mod+b", "mod+shift+s"], description: "Toggle the sidebar" },
 	"desktop.panel.toggle": { defaultKeys: ["mod+shift+g"], description: "Toggle the Changes panel" },
 	"desktop.panel.closeTab": { defaultKeys: ["mod+shift+w"], description: "Close the side panel's file tab" },
+	// Codex's Toggle Bottom Panel and Open Terminal (Control+` on macOS too).
+	"desktop.terminal.toggle": { defaultKeys: ["mod+j"], description: "Toggle the terminal" },
+	"desktop.terminal.new": { defaultKeys: ["ctrl+backquote"], description: "Open a new terminal" },
+	"desktop.terminal.next": { defaultKeys: ["ctrl+pagedown"], description: "Next terminal" },
+	"desktop.terminal.previous": { defaultKeys: ["ctrl+pageup"], description: "Previous terminal" },
+	// In a terminal with a selection; Codex's set (Ctrl+C copies only when something is selected).
+	"desktop.terminal.copy": {
+		defaultKeys: ["mod+c", "ctrl+shift+c", "ctrl+insert"],
+		description: "Copy the terminal's selection",
+	},
+	"desktop.terminal.paste": { defaultKeys: ["mod+v", "ctrl+shift+v", "shift+insert"], description: "Paste into the terminal" },
 	"desktop.view.zoomIn": { defaultKeys: ["mod+shift+equal", "mod+equal", "mod+numpadadd"], description: "Zoom in" },
 	"desktop.view.zoomOut": { defaultKeys: ["mod+minus", "mod+numpadsubtract"], description: "Zoom out" },
 	"desktop.view.zoomReset": { defaultKeys: ["mod+digit0"], description: "Actual size" },

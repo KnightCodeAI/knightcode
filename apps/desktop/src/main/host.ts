@@ -28,6 +28,7 @@ import { refuseToOpen } from "./open-path.ts";
 import { readProfile, signIn, signOut } from "./profile.ts";
 import type { ServerConnection } from "./server.ts";
 import type { StateFile } from "./state.ts";
+import type { Terminals } from "./terminals.ts";
 
 const checks = Object.fromEntries(
 	Object.entries(HostMethods).map(([method, schema]) => [method, Compile(schema.params)]),
@@ -86,6 +87,9 @@ export interface HostDeps {
 	state: StateFile;
 	server: ServerConnection;
 	openIn: OpenIn;
+	terminals: Terminals;
+	/** The requesting window's id, which terminal events are posted to. */
+	windowId: number;
 	openWindow: (route?: string) => void;
 	/** Step the window's zoom (-1 out, 1 in, 0 back to 100%). */
 	zoom: (window: BrowserWindow, step: -1 | 0 | 1) => void;
@@ -115,9 +119,26 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openIn, openWindow, zoom, role }: HostDeps,
+	{ state, server, openIn, terminals, windowId, openWindow, zoom, role }: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
+		case "host/terminal/shells":
+			return { shells: terminals.shells().map(({ id, name }) => ({ id, name })) };
+		case "host/terminal/create":
+			return terminals.create(params as Parameters<Terminals["create"]>[0], windowId);
+		case "host/terminal/list":
+			return { terminals: terminals.list(params.threadId as string) };
+		case "host/terminal/attach":
+			return terminals.attach(params.terminalId as string, windowId);
+		case "host/terminal/write":
+			terminals.write(params.terminalId as string, params.data as string);
+			return {};
+		case "host/terminal/resize":
+			terminals.resize(params.terminalId as string, params.cols as number, params.rows as number);
+			return {};
+		case "host/terminal/kill":
+			terminals.kill(params.terminalId as string);
+			return {};
 		case "host/openIn/list":
 			return { targets: await openIn.list() };
 		case "host/openIn/open":
@@ -164,6 +185,8 @@ async function run(
 		case "host/clipboard/writeText":
 			await clipboard.writeText(params.text as string);
 			return {};
+		case "host/clipboard/readText":
+			return { text: clipboard.readText() };
 		case "host/window/setTitle":
 			window.setTitle(params.title as string);
 			return {};

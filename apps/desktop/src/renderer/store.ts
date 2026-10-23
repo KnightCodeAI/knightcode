@@ -28,7 +28,13 @@ import type {
 	WireTurn,
 	WorkspaceRequest,
 } from "@knightcode/app-server-protocol";
-import { DEFAULT_PREFERENCES, type DesktopState, type Preferences, SIDEBAR_WIDTH } from "../shared/host-protocol.ts";
+import {
+	DEFAULT_PREFERENCES,
+	type DesktopState,
+	type Preferences,
+	SIDEBAR_WIDTH,
+	type TerminalInfo,
+} from "../shared/host-protocol.ts";
 import { DESKTOP_KEYBINDINGS, type KeybindingId } from "../shared/keybindings.ts";
 import { type AnyNotification, type AnyServerRequest, client, RequestError } from "./client.ts";
 
@@ -90,6 +96,25 @@ export interface ThreadTabs {
 }
 export const NO_TABS: ThreadTabs = { tabs: [{ kind: "changes" }], active: 0 };
 
+/** A terminal in the bottom region (desktop-shell.md section 9.7): main runs it; the tab names it. */
+export interface TerminalTab {
+	terminalId: string;
+	shellId: string;
+	shellName: string;
+	cwd: string;
+	/** Its shell ended with this code; the tab offers Restart. */
+	exitCode?: number;
+	/** The shell's own title (OSC 0 or 2), once it sets one. */
+	title?: string;
+	/** The "outside this chat's workspace" notice was dismissed. */
+	dismissed?: boolean;
+}
+export interface ThreadTerminals {
+	tabs: TerminalTab[];
+	active: number;
+}
+export const NO_TERMINALS: ThreadTerminals = { tabs: [], active: 0 };
+
 export type { SettingsPage };
 export type View =
 	{ kind: "thread"; id: string } | { kind: "new"; cwd?: string } | { kind: "settings"; page: SettingsPage };
@@ -127,6 +152,10 @@ export interface State {
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
 	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
 	tabs: Record<string, ThreadTabs>;
+	/** The bottom region (section 9.7): open, and its height in px (0 until dragged: Codex's 280). */
+	bottom: { open: boolean; height: number };
+	/** Each thread's terminals, in tab order, and the one shown. */
+	terminals: Record<string, ThreadTerminals>;
 	/** Review comments drafted on the diff, per thread; they go with the next message (Codex's "1 comment"). */
 	comments: Record<string, DiffComment[]>;
 	/** Bumped by turn/diff/updated, so an open Changes pane reloads. */
@@ -156,6 +185,8 @@ let state: State = {
 	resolvedTheme: "dark",
 	panel: { open: false, width: 0 },
 	tabs: {},
+	bottom: { open: false, height: 0 },
+	terminals: {},
 	comments: {},
 	diffVersion: {},
 	progress: {},
@@ -613,6 +644,16 @@ client.onServerRequest((r) => enqueue(r.params, () => applyServerRequest(r)));
 let pendingRoute: string | undefined;
 
 client.onHostEvent((event) => {
+	if (event.event === "terminal/exit") {
+		const { terminalId, exitCode } = event;
+		for (const [threadId, terminals] of Object.entries(state.terminals))
+			if (terminals.tabs.some((t) => t.terminalId === terminalId))
+				updateTerminals(threadId, (t) => ({
+					...t,
+					tabs: t.tabs.map((tab) => (tab.terminalId === terminalId ? { ...tab, exitCode } : tab)),
+				}));
+		return;
+	}
 	if (event.event === "navigate") {
 		if (state.server.state === "ready" && state.desktop) showLink(event.route);
 		else pendingRoute = event.route;
@@ -1297,6 +1338,101 @@ export function refreshDiff(threadId: string): void {
 /** Change the side panel; closing it also leaves full screen, so it reopens beside the chat. */
 export function setPanel(panel: Partial<State["panel"]>): void {
 	set((s) => ({ ...s, panel: { ...s.panel, ...panel, ...(panel.open === false ? { full: false } : {}) } }));
+}
+
+export function setBottom(bottom: Partial<State["bottom"]>): void {
+	set((s) => ({ ...s, bottom: { ...s.bottom, ...bottom } }));
+}
+
+function updateTerminals(threadId: string, fn: (terminals: ThreadTerminals) => ThreadTerminals): void {
+	set((s) => ({ ...s, terminals: { ...s.terminals, [threadId]: fn(s.terminals[threadId] ?? NO_TERMINALS) } }));
+}
+
+const tabOf = (info: TerminalInfo): TerminalTab => ({
+	terminalId: info.terminalId,
+	shellId: info.shellId,
+	shellName: info.shellName,
+	cwd: info.cwd,
+	...(info.exitCode !== undefined ? { exitCode: info.exitCode } : {}),
+});
+
+/** The terminals main still runs for a thread (after a reload, or in a second window), as its tabs. */
+export async function loadTerminals(threadId: string): Promise<void> {
+	const { terminals } = await client.host("host/terminal/list", { threadId });
+	updateTerminals(threadId, (t) => {
+		const known = new Map(t.tabs.map((tab) => [tab.terminalId, tab]));
+		const tabs = terminals.map((info) => ({ ...known.get(info.terminalId), ...tabOf(info) }));
+		return { tabs, active: Math.min(t.active, Math.max(0, tabs.length - 1)) };
+	});
+}
+
+/**
+ * A new terminal for the thread in its folder (Codex's Open Terminal), shown in the bottom region. A shell picked from
+ * the + menu becomes the one new terminals run.
+ */
+export async function newTerminal(threadId: string, cwd: string, shellId?: string): Promise<void> {
+	if (shellId) setPreference("terminalShell", shellId);
+	const shell = shellId ?? selectPreferences(state).terminalShell;
+	try {
+		// 80 by 24 until the xterm's fit resizes it to what is drawn.
+		const info = await client.host("host/terminal/create", {
+			threadId,
+			cwd,
+			cols: 80,
+			rows: 24,
+			...(shell ? { shellId: shell } : {}),
+		});
+		updateTerminals(threadId, (t) => ({ tabs: [...t.tabs, tabOf(info)], active: t.tabs.length }));
+		setBottom({ open: true });
+	} catch (error) {
+		toast(`Could not open a terminal: ${error instanceof Error ? error.message : String(error)}`, "error");
+	}
+}
+
+/** Mod+J: show or hide the region; showing it with no terminal opens one, as Codex's does. */
+export function toggleTerminal(threadId: string, cwd: string): void {
+	if (state.bottom.open) return setBottom({ open: false });
+	if ((state.terminals[threadId]?.tabs.length ?? 0) === 0) void newTerminal(threadId, cwd);
+	else setBottom({ open: true });
+}
+
+export function activateTerminal(threadId: string, index: number): void {
+	updateTerminals(threadId, (t) => ({ ...t, active: Math.max(0, Math.min(index, t.tabs.length - 1)) }));
+}
+
+export function updateTerminal(threadId: string, terminalId: string, patch: Partial<TerminalTab>): void {
+	updateTerminals(threadId, (t) => ({
+		...t,
+		tabs: t.tabs.map((tab) => (tab.terminalId === terminalId ? { ...tab, ...patch } : tab)),
+	}));
+}
+
+/** Close a terminal (its shell ends); the last one closing hides the region, as Codex's does. */
+export function closeTerminal(threadId: string, index: number): void {
+	const tab = state.terminals[threadId]?.tabs[index];
+	if (!tab) return;
+	void client.host("host/terminal/kill", { terminalId: tab.terminalId }).catch(() => {});
+	updateTerminals(threadId, (t) => {
+		const tabs = t.tabs.filter((_, i) => i !== index);
+		return { tabs, active: Math.max(0, t.active >= index ? t.active - 1 : t.active) };
+	});
+	if ((state.terminals[threadId]?.tabs.length ?? 0) === 0) setBottom({ open: false });
+}
+
+/** An ended terminal's Restart: a fresh shell of the same kind, in the same folder and tab. */
+export async function restartTerminal(threadId: string, index: number): Promise<void> {
+	const tab = state.terminals[threadId]?.tabs[index];
+	if (!tab) return;
+	void client.host("host/terminal/kill", { terminalId: tab.terminalId }).catch(() => {});
+	try {
+		const info = await client.host("host/terminal/create", { threadId, cwd: tab.cwd, shellId: tab.shellId, cols: 80, rows: 24 });
+		updateTerminals(threadId, (t) => ({
+			...t,
+			tabs: t.tabs.map((other) => (other.terminalId === tab.terminalId ? tabOf(info) : other)),
+		}));
+	} catch (error) {
+		toast(`Could not restart the terminal: ${error instanceof Error ? error.message : String(error)}`, "error");
+	}
 }
 
 /** Files a thread keeps open at once (desktop-shell.md section 9.6); a 13th closes the least recently used. */
