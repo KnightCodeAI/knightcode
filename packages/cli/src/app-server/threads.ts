@@ -51,6 +51,7 @@ import {
 	composeReview,
 	DEFAULT_DIFF_BUDGETS,
 	type DiffBudgets,
+	readDiffFile,
 	readThreadDiff,
 	revertDiff,
 	revertHooks,
@@ -75,6 +76,7 @@ import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
 import { FileSearch } from "./file-search.ts";
+import { readFile } from "./files.ts";
 import { APPROVAL_MODE_ENTRY, createApprovalExtension, readApprovalMode } from "./approvals.ts";
 import { ItemMapper, queueOf, usageOf } from "./item-mapper.ts";
 import { readImageInput } from "./image-input.ts";
@@ -104,6 +106,7 @@ import {
 	handoffChanges,
 	inside,
 	keptWorktree,
+	planHandoff,
 	readManifestFile,
 	registrationOf,
 	restoreWorktreeLocked,
@@ -589,23 +592,11 @@ export class ThreadManager {
 		// One handoff per thread at a time: a second would build a second worktree that the first's leaves orphaned.
 		if (this.handingOff.has(params.threadId))
 			return Promise.reject(new AppServerError("turnInProgress", "this thread is already being handed off"));
+		// A dry run takes nothing, so a real handoff confirmed while one is still answering is not refused.
+		if (params.dryRun) return this.track(() => this.checkHandoff(params, by));
 		this.handingOff.add(params.threadId);
 		return this.track(async () => {
-			const thread = await this.ensureLoaded(params.threadId, by.mode);
-			if (!thread.file || !existsSync(thread.file))
-				throw new AppServerError("invalidParams", "send a message before handing off");
-			const warnings: Warning[] = [];
-			const settings = this.worktrees(warnings);
-			const sessionManager = thread.session.sessionManager;
-			const cwd = sessionManager.getCwd();
-			const headerCwd = sessionManager.getHeader()?.cwd ?? cwd;
-			const placed = placeThread(settings, thread.id, headerCwd);
-			if ((params.to === "local") !== (placed.workspace.mode === "worktree"))
-				throw new AppServerError(
-					"invalidParams",
-					`the thread already runs ${params.to === "local" ? "locally" : "in a worktree"}`,
-				);
-			requireEnvironment(thread.projectCwd, params.environment);
+			const { thread, warnings, settings, cwd, headerCwd, placed } = await this.handoffTarget(params, by);
 			let manifest = placed.manifest;
 			this.preparing.add(thread.id);
 			let restored: string | undefined;
@@ -739,6 +730,50 @@ export class ThreadManager {
 				if (restored) this.preparing.delete(restored);
 			}
 		}).finally(() => this.handingOff.delete(params.threadId));
+	}
+
+	/** What every handoff checks first: a saved thread, the direction, the environment. */
+	private async handoffTarget(params: ParamsOf<"thread/handoff">, by: Subscriber) {
+		const thread = await this.ensureLoaded(params.threadId, by.mode);
+		if (!thread.file || !existsSync(thread.file))
+			throw new AppServerError("invalidParams", "send a message before handing off");
+		const warnings: Warning[] = [];
+		const settings = this.worktrees(warnings);
+		const sessionManager = thread.session.sessionManager;
+		const cwd = sessionManager.getCwd();
+		const headerCwd = sessionManager.getHeader()?.cwd ?? cwd;
+		const placed = placeThread(settings, thread.id, headerCwd);
+		if ((params.to === "local") !== (placed.workspace.mode === "worktree"))
+			throw new AppServerError(
+				"invalidParams",
+				`the thread already runs ${params.to === "local" ? "locally" : "in a worktree"}`,
+			);
+		requireEnvironment(thread.projectCwd, params.environment);
+		return { thread, warnings, settings, cwd, headerCwd, placed };
+	}
+
+	/**
+	 * `thread/handoff` with `dryRun`: every refusal the real call would make before its first write, and nothing
+	 * written. A worktree the real call would still create or restore is not there to check: only what does not depend
+	 * on it is (a setup script that leaves files behind still fails the real call, after its own checks).
+	 */
+	private async checkHandoff(params: ParamsOf<"thread/handoff">, by: Subscriber): Promise<ResultOf<"thread/handoff">> {
+		const { thread, settings, cwd, placed } = await this.handoffTarget(params, by);
+		const manifest = placed.manifest?.deleted ? undefined : placed.manifest;
+		const main = await requireRepo(manifest?.mainRoot ?? cwd);
+		const worktree = manifest && (await requireRepo(manifest.path));
+		this.assertCheckoutsFree(new Set([main.root, ...(worktree ? [worktree.root] : [])]));
+		const plan = await planHandoff({
+			settings,
+			manifest,
+			title: thread.toThread().name,
+			to: params.to,
+			branch: params.branch,
+			main,
+			worktree,
+			signal: this.shutdown.signal,
+		});
+		return { thread: thread.toThread(), ...(plan.branch ? { branch: plan.branch.target } : {}), warnings: [] };
 	}
 
 	/** Reload a thread where its manifest now places it, carrying its queue and subscribers as a replacement does. */
@@ -2280,6 +2315,14 @@ export class ThreadManager {
 			"thread/diff/read": (params, connection) =>
 				this.onCheckout(params.threadId, connection.mode, false, (thread, repo, ctx) =>
 					readThreadDiff(thread, repo, params, this.options.diffBudgets ?? DEFAULT_DIFF_BUDGETS, ctx.signal),
+				),
+			"thread/diff/file": (params, connection) =>
+				this.onCheckout(params.threadId, connection.mode, false, (_thread, repo) => readDiffFile(repo, params)),
+			"file/read": ({ threadId, path, maxBytes }, connection) =>
+				this.track(() =>
+					this.withThread(threadId, connection.mode, (thread) =>
+						readFile(thread.session.sessionManager.getCwd(), path, maxBytes),
+					),
 				),
 			"git/status": ({ threadId }, connection) =>
 				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitStatus(repo)),

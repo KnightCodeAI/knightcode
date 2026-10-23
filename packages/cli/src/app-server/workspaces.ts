@@ -913,36 +913,68 @@ export interface HandoffInput {
 	signal: AbortSignal;
 }
 
+export interface PlanInput {
+	settings: WorktreeSettings;
+	/** Absent for a local thread whose worktree a real handoff would create first (a dry run only). */
+	manifest?: Manifest;
+	title: string;
+	to: "local" | "worktree";
+	branch?: string;
+	main: Repo;
+	/** Absent with `manifest`. */
+	worktree?: Repo;
+	signal: AbortSignal;
+}
+
+/** What the move needs, read before its first write. */
+export interface HandoffPlan {
+	source: Repo;
+	dest: Repo | undefined;
+	sourceHead: string;
+	head: string;
+	working: string;
+	staged: string[];
+	patch: Buffer;
+	sourceIndex: string;
+	stagedPatch: Buffer;
+	changed: string[];
+	/** The manifest as it is now, its placement a copy to change. */
+	manifest: Manifest | undefined;
+	/** To local: the branch the main checkout gets. */
+	branch?: { wtBranch: string | null; target: string; previous: string | undefined; reuse: boolean; existing: boolean };
+}
+
 /**
- * Phase B of `thread/handoff` (§6.1): moves the uncommitted changes between the worktree and the main checkout, as
- * Codex's "Hand off" does: the destination must be clean, the changes are saved to a patch first, applied in the
- * destination and only then removed from the source. Runs no hooks and creates no commit.
+ * Every refusal of a handoff that only reads (§6.1): an operation in progress, a missing HEAD, local changes in the
+ * destination, submodules, ignored files in the way, a moved-away manifest, the branch. Without a destination (one a
+ * real handoff would still create) only what does not depend on it is checked.
  */
-export async function handoffChanges(input: HandoffInput): Promise<{ manifest: Manifest; branch?: string }> {
-	const { main, worktree, signal, warnings } = input;
-	const internal = { internal: true, signal };
-	const [source, dest] = input.to === "local" ? [worktree, main] : [main, worktree];
-	for (const repo of [main, worktree]) {
+export async function planHandoff(input: PlanInput): Promise<HandoffPlan> {
+	const { main, worktree, signal } = input;
+	const [source, dest] = input.to === "local" ? [worktree!, main] : [main, worktree];
+	for (const repo of worktree ? [main, worktree] : [main]) {
 		if (operationIn(repo) || (await git(repo.root, ["ls-files", "-u"], { signal })) !== "")
 			throw conflict("operationInProgress", `finish the merge, rebase, cherry-pick or revert in ${repo.root} first`);
 	}
 	if (!(await optionalGit(main.root, ["rev-parse", "-q", "--verify", "HEAD"])))
 		throw new AppServerError("invalidParams", `commit something in ${main.root} first`);
-	const records = nulList(
-		await git(dest.root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"], { signal }),
-	);
-	const dirty: string[] = [];
-	for (let i = 0; i < records.length; i++) {
-		dirty.push(records[i].slice(3));
-		// A rename or copy record (in either column: a worktree rename of an intent-to-add file is " R") is followed by
-		// its source path, which has no status prefix.
-		if (/[RC]/.test(records[i].slice(0, 2))) dirty.push(records[++i]);
+	if (dest) {
+		const records = nulList(
+			await git(dest.root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"], { signal }),
+		);
+		const dirty: string[] = [];
+		for (let i = 0; i < records.length; i++) {
+			dirty.push(records[i].slice(3));
+			// A rename or copy record (in either column: a worktree rename of an intent-to-add file is " R") is followed
+			// by its source path, which has no status prefix.
+			if (/[RC]/.test(records[i].slice(0, 2))) dirty.push(records[++i]);
+		}
+		if (dirty.length > 0)
+			throw conflict("localChanges", "Stash or commit your local changes to hand off.", {
+				paths: dirty,
+				recoveryInstructions: ["Stash or commit your local changes to hand off."],
+			});
 	}
-	if (dirty.length > 0)
-		throw conflict("localChanges", "Stash or commit your local changes to hand off.", {
-			paths: dirty,
-			recoveryInstructions: ["Stash or commit your local changes to hand off."],
-		});
 
 	const sourceHead = await git(source.root, ["rev-parse", "HEAD"], { signal });
 	const head = await headTree(source);
@@ -956,16 +988,68 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 	const changed = nulList(
 		await git(source.root, ["diff", "--name-only", "--no-renames", "-z", head, working], { signal }),
 	);
-	const destHead = await git(dest.root, ["rev-parse", "HEAD"], { signal });
-	const moved = nulList(
-		await git(dest.root, ["diff", "--name-only", "--no-renames", "-z", destHead, sourceHead], { signal }),
-	);
-	const inTheWay = await pathsInTheWay(dest, [...moved, ...changed]);
-	if (inTheWay.length > 0)
-		throw conflict("localChanges", "These ignored files would be overwritten by the handoff.", {
-			paths: inTheWay,
-			recoveryInstructions: ["These ignored files would be overwritten by the handoff. Move them away first."],
-		});
+	if (dest) {
+		const destHead = await git(dest.root, ["rev-parse", "HEAD"], { signal });
+		const moved = nulList(
+			await git(dest.root, ["diff", "--name-only", "--no-renames", "-z", destHead, sourceHead], { signal }),
+		);
+		const inTheWay = await pathsInTheWay(dest, [...moved, ...changed]);
+		if (inTheWay.length > 0)
+			throw conflict("localChanges", "These ignored files would be overwritten by the handoff.", {
+				paths: inTheWay,
+				recoveryInstructions: ["These ignored files would be overwritten by the handoff. Move them away first."],
+			});
+	}
+	// As it is now, not as Phase A saw it: another chat's handoff of this worktree may have written since.
+	const current = input.manifest && (readManifestFile(input.manifest.path) ?? input.manifest);
+	if (current?.deleted)
+		throw conflict("worktreeDeleted", "the worktree of this chat was deleted", { worktree: current.path });
+	const manifest = current && { ...current, placement: { ...current.placement } };
+	const plan: HandoffPlan = {
+		source,
+		dest,
+		sourceHead,
+		head,
+		working,
+		staged,
+		patch,
+		sourceIndex,
+		stagedPatch,
+		changed,
+		manifest,
+	};
+	if (input.to !== "local") return plan;
+
+	const wtBranch = await optionalGit(source.root, ["symbolic-ref", "-q", "--short", "HEAD"]);
+	const exists = async (name: string) =>
+		(await runGit(main.root, ["rev-parse", "-q", "--verify", `refs/heads/${name}`])).code === 0;
+	const previous = manifest?.handoffBranch;
+	const reusable =
+		previous !== undefined &&
+		(await exists(previous)) &&
+		(await isAncestor(main.root, `refs/heads/${previous}`, sourceHead));
+	const target =
+		wtBranch ?? input.branch ?? (reusable ? previous : `${input.settings.branchPrefix}${branchSlug(input.title)}`);
+	if (!validBranchName(target) || (await runGit(main.root, ["check-ref-format", "--branch", target])).code !== 0)
+		throw new AppServerError("invalidParams", `not a valid branch name: ${target}`);
+	const reuse = target === previous && reusable;
+	const existing = await exists(target);
+	if (existing && target !== wtBranch && !reuse) throw conflict("branchExists", `a branch named ${target} exists`);
+	return { ...plan, branch: { wtBranch, target, previous, reuse, existing } };
+}
+
+/**
+ * Phase B of `thread/handoff` (§6.1): moves the uncommitted changes between the worktree and the main checkout, as
+ * Codex's "Hand off" does: the destination must be clean, the changes are saved to a patch first, applied in the
+ * destination and only then removed from the source. Runs no hooks and creates no commit.
+ */
+export async function handoffChanges(input: HandoffInput): Promise<{ manifest: Manifest; branch?: string }> {
+	const { main, worktree, signal, warnings } = input;
+	const internal = { internal: true, signal };
+	const plan = await planHandoff(input);
+	const { sourceHead, patch, sourceIndex, stagedPatch, changed, staged } = plan;
+	const source = plan.source;
+	const manifest = plan.manifest!;
 	const saved = join(input.agentDir, "handoff");
 	mkdirSync(saved, { recursive: true });
 	const patchPath = join(saved, `${input.threadId}-${Date.now()}.patch`);
@@ -1022,28 +1106,8 @@ export async function handoffChanges(input: HandoffInput): Promise<{ manifest: M
 			message: `Commit ${sha.slice(0, 7)} in ${where} is on no branch; it was kept as ${ref}.`,
 		});
 	};
-	// As it is now, not as Phase A saw it: another chat's handoff of this worktree may have written since.
-	const current = readManifestFile(input.manifest.path) ?? input.manifest;
-	if (current.deleted)
-		throw conflict("worktreeDeleted", "the worktree of this chat was deleted", { worktree: current.path });
-	const manifest = { ...current, placement: { ...current.placement } };
-
-	if (input.to === "local") {
-		const wtBranch = await optionalGit(worktree.root, ["symbolic-ref", "-q", "--short", "HEAD"]);
-		const exists = async (name: string) =>
-			(await runGit(main.root, ["rev-parse", "-q", "--verify", `refs/heads/${name}`])).code === 0;
-		const previous = manifest.handoffBranch;
-		const reusable =
-			previous !== undefined &&
-			(await exists(previous)) &&
-			(await isAncestor(main.root, `refs/heads/${previous}`, sourceHead));
-		const target =
-			wtBranch ?? input.branch ?? (reusable ? previous : `${input.settings.branchPrefix}${branchSlug(input.title)}`);
-		if (!validBranchName(target) || (await runGit(main.root, ["check-ref-format", "--branch", target])).code !== 0)
-			throw new AppServerError("invalidParams", `not a valid branch name: ${target}`);
-		const reuse = target === previous && reusable;
-		const existing = await exists(target);
-		if (existing && target !== wtBranch && !reuse) throw conflict("branchExists", `a branch named ${target} exists`);
+	if (plan.branch) {
+		const { wtBranch, target, existing } = plan.branch;
 		const mainRef = await optionalGit(main.root, ["symbolic-ref", "-q", "--short", "HEAD"]);
 		const mainHead = await git(main.root, ["rev-parse", "HEAD"], { signal });
 		if (!mainRef && !(await isAncestor(main.root, mainHead, sourceHead)))

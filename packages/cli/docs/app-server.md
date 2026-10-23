@@ -640,12 +640,45 @@ counted (`filesOmitted`). A hunk id hashes the file's header (its blob ids) and
 the hunk at the read's `context`: an action must pass the same `context` (a
 `context: 0` id matches no action), and after an action changes a file, read it
 again, as its other hunks' ids change too. A hunk id from an `ignoreWhitespace` read matches no
-action. Reads take no lock and never write the user's index.
+action. Reads take no lock and never write the user's index. Unless
+`ignoreWhitespace` is set, the result also names the two trees it compared,
+`fromTree` and `toTree`, for `thread/diff/file`.
 Errors: `threadNotFound`, `notGitRepo`; `invalidParams` for a missing `commit`
 or no branch to compare with.
 
 ```json
 {"id":20,"method":"thread/diff/read","params":{"threadId":"THREAD_ID","scope":"uncommitted","context":3}}
+```
+
+### `thread/diff/file`
+
+Params: `{threadId, fromTree, toTree, path, oldPath?}`. Result:
+`{old?, new?, binary, tooLarge}`. Both sides of one file from a
+`thread/diff/read` result, by the trees it named, so a client can show the
+unchanged lines between its hunks. `old` is the file in `fromTree` at `oldPath`
+(else `path`), `new` the file in `toTree` at `path`; a side the file is absent
+from is left out. Neither side comes when the file is binary (a NUL in its first
+8 KiB) or either side is larger than 2 MiB. The trees stay readable after the
+working tree moves on, so the sides always match the read's hunks.
+Errors: `threadNotFound`, `notGitRepo`; `invalidParams` when a tree is not a
+full object id of a tree in the repository, or the file is in neither tree.
+
+```json
+{"id":24,"method":"thread/diff/file","params":{"threadId":"THREAD_ID","fromTree":"FROM_TREE","toTree":"TO_TREE","path":"src/a.ts"}}
+```
+
+### `file/read`
+
+Params: `{threadId, path, maxBytes?}`. Result: `{path, size, binary, tooLarge,
+text?}`. A file's text, `path` resolved against the thread's cwd like a tool's
+path. `maxBytes` is 1 byte to 8 MiB (default 2 MiB). `text` comes only when the
+file is neither binary (a NUL in its first 8 KiB) nor larger than `maxBytes`;
+`size` is its length in bytes.
+Errors: `threadNotFound`; `invalidParams` when there is no such file or the path
+is not a file.
+
+```json
+{"id":25,"method":"file/read","params":{"threadId":"THREAD_ID","path":"src/a.ts"}}
 ```
 
 ### `thread/diff/revert`
@@ -669,7 +702,7 @@ path outside the diff; `gitConflict` with `diffChanged` or `patchFailed`.
 
 ### `thread/handoff`
 
-Params: `{threadId, to: "local" | "worktree", branch?, environment?}`. Result:
+Params: `{threadId, to: "local" | "worktree", branch?, environment?, dryRun?}`. Result:
 `{thread, branch?, warnings}`. To the main checkout: the worktree's `HEAD`
 becomes a branch checked out there (the worktree's own branch, else `branch`,
 else the previous handoff's branch fast-forwarded, else
@@ -680,6 +713,10 @@ checkout gets a worktree. The changes are saved under `<agentDir>/handoff/`
 before anything moves and leave the source only after they landed. The thread
 is reloaded where it now runs: subscribers receive `thread/replaced` with the
 same id, and queued inputs follow it.
+With `dryRun`, the server runs every check the handoff would and answers with
+the same refusal, or with the unchanged thread and the branch the main checkout
+would get; it writes nothing, creates no worktree, and never holds up a real
+handoff.
 Errors: `turnInProgress`; `invalidParams` for a thread with no message yet or
 already on that side; `gitConflict` with `localChanges`,
 `operationInProgress`, `branchExists`, `recoveryRequired` (with `data.patch`)

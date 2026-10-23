@@ -1,9 +1,9 @@
-import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import { afterEach, expect, test } from "vitest";
 import { workspaceHooks } from "../../src/app-server/workspaces.ts";
-import { checkoutState, sh, write } from "./fixtures/git-repo.ts";
+import { checkoutState, makeRepo, sh, write } from "./fixtures/git-repo.ts";
 import { createHeldTurn } from "./fixtures/held-turn-extension.ts";
 import { type RepoServer, repoServer, say, worktreeThread } from "./fixtures/worktree-server.ts";
 import { cleanupServers, startServer } from "./harness.ts";
@@ -392,6 +392,135 @@ test("a detached main checkout's own commit is kept under a ref with a warning",
 	const { warnings } = await handoff(s, thread.id, "local");
 	expect(sh(s.cwd, "for-each-ref", "--format=%(objectname)", "refs/knightcode/kept/main/").split("\n")).toContain(own);
 	expect(warnings.some((w) => w.source === "server" && w.message.includes(own.slice(0, 7)))).toBe(true);
+});
+
+/** The dry run's refusal, then the real call's: they must be the same error. */
+async function sameRefusal(s: RepoServer, threadId: string, to: "local" | "worktree", extra: object = {}) {
+	const failure = (e: { code: string; message: string; data?: unknown }) => ({
+		code: e.code,
+		message: e.message,
+		data: e.data,
+	});
+	const dry = await handoff(s, threadId, to, { ...extra, dryRun: true }).then(() => undefined, failure);
+	const real = await handoff(s, threadId, to, extra).then(() => undefined, failure);
+	expect(dry).toBeDefined();
+	expect(dry).toEqual(real);
+	return dry!;
+}
+
+test("a dry run answers the real handoff's refusal for each check that needs no new worktree", async () => {
+	const dirty = await repoServer();
+	const a = await started(dirty);
+	write(a.path, "a.txt", "worktree\n");
+	write(dirty.cwd, "a.txt", "main edit\n");
+	expect((await sameRefusal(dirty, a.thread.id, "local")).data).toMatchObject({ reason: "localChanges" });
+
+	const ignored = await repoServer({ ".gitignore": ".env\n" });
+	const b = await started(ignored);
+	write(b.path, ".env", "tracked by the worktree\n");
+	sh(b.path, "add", "-f", ".env");
+	sh(b.path, "commit", "-q", "-m", "track it");
+	write(ignored.cwd, ".env", "ignored here\n");
+	expect((await sameRefusal(ignored, b.thread.id, "local")).data).toMatchObject({
+		reason: "localChanges",
+		paths: [".env"],
+	});
+
+	const branches = await repoServer();
+	sh(branches.cwd, "branch", "custom");
+	const c = await started(branches);
+	expect((await sameRefusal(branches, c.thread.id, "local", { branch: "custom" })).data).toMatchObject({
+		reason: "branchExists",
+	});
+	expect((await sameRefusal(branches, c.thread.id, "local", { branch: "bad..name" })).code).toBe("invalidParams");
+
+	const merging = await repoServer();
+	const d = await started(merging);
+	sh(merging.cwd, "checkout", "-q", "-b", "side");
+	commitIn(merging.cwd, "side.txt", "s\n");
+	sh(merging.cwd, "checkout", "-q", "main");
+	commitIn(merging.cwd, "main.txt", "m\n");
+	sh(merging.cwd, "merge", "-q", "--no-commit", "--no-ff", "side");
+	expect((await sameRefusal(merging, d.thread.id, "local")).data).toMatchObject({ reason: "operationInProgress" });
+
+	const nested = await repoServer();
+	const e = await started(nested);
+	mkdirSync(join(e.path, "sub"));
+	makeRepo(join(e.path, "sub"));
+	sh(e.path, "add", "sub");
+	expect((await sameRefusal(nested, e.thread.id, "local")).message).toMatch(/submodule/);
+});
+
+test("a dry run of a local thread in a repository with no commit refuses as the real call does", async () => {
+	const s = await startServer();
+	sh(s.cwd, "init", "-q", "-b", "main");
+	const a = await s.connect("desktop");
+	const { thread } = await a.client.request("thread/start", { cwd: s.cwd });
+	s.faux.setResponses([fauxAssistantMessage([fauxText("ok")])]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "hi" });
+	await a.waitFor("turn/completed");
+	const dry = await a.client
+		.request("thread/handoff", { threadId: thread.id, to: "worktree", dryRun: true })
+		.catch((error: unknown) => error);
+	const real = await a.client
+		.request("thread/handoff", { threadId: thread.id, to: "worktree" })
+		.catch((e: unknown) => e);
+	expect(dry).toMatchObject({ code: "invalidParams", message: (real as Error).message });
+});
+
+test("a clean dry run answers with the branch it would make and writes nothing; the real handoff then moves", async () => {
+	const s = await repoServer();
+	const { thread, path } = await started(s);
+	write(path, "a.txt", "worktree edit\n");
+	write(path, "n.txt", "new\n");
+	const before = {
+		main: checkoutState(s.cwd),
+		worktree: checkoutState(path),
+		worktrees: sh(s.cwd, "worktree", "list", "--porcelain"),
+		agentDir: readdirSync(s.agentDir).sort(),
+		root: readdirSync(join(s.agentDir, "worktrees")).sort(),
+		manifest: readFileSync(join(path, "..", "worktree.json"), "utf8"),
+		read: await s.a.client.request("thread/read", { threadId: thread.id }),
+	};
+	const dry = await handoff(s, thread.id, "local", { dryRun: true });
+	expect(dry.branch).toMatch(/^kc\/[a-z0-9-]+$/);
+	expect(dry.thread).toMatchObject({ id: thread.id, workspace: { mode: "worktree", path } });
+	expect({
+		main: checkoutState(s.cwd),
+		worktree: checkoutState(path),
+		worktrees: sh(s.cwd, "worktree", "list", "--porcelain"),
+		agentDir: readdirSync(s.agentDir).sort(),
+		root: readdirSync(join(s.agentDir, "worktrees")).sort(),
+		manifest: readFileSync(join(path, "..", "worktree.json"), "utf8"),
+		read: await s.a.client.request("thread/read", { threadId: thread.id }),
+	}).toEqual(before);
+	expect(existsSync(join(s.agentDir, "handoff"))).toBe(false);
+	expect((await handoff(s, thread.id, "local")).branch).toBe(dry.branch);
+});
+
+test("a dry run of a thread born in the main checkout creates no worktree", async () => {
+	const s = await repoServer();
+	const { thread } = await s.a.client.request("thread/start", { cwd: s.cwd });
+	await say(s, thread.id);
+	write(s.cwd, "a.txt", "local edit\n");
+	const before = checkoutState(s.cwd);
+	const dry = await handoff(s, thread.id, "worktree", { dryRun: true });
+	expect(dry).toMatchObject({ thread: { id: thread.id, workspace: { mode: "local" } }, warnings: [] });
+	expect(dry.branch).toBeUndefined();
+	expect(checkoutState(s.cwd)).toEqual(before);
+	expect((await s.a.client.request("worktree/list", { cwd: s.cwd })).worktrees).toEqual([]);
+	expect(existsSync(join(s.agentDir, "worktrees"))).toBe(false);
+});
+
+test("a dry run does not hold the thread: a real handoff right after it goes ahead", async () => {
+	const s = await repoServer();
+	const { thread } = await started(s);
+	// The dry run may see the move under way and refuse; it must never be what refuses the move.
+	const [, real] = await Promise.allSettled([
+		handoff(s, thread.id, "local", { dryRun: true }),
+		handoff(s, thread.id, "local"),
+	]);
+	expect(real).toMatchObject({ status: "fulfilled", value: { thread: { workspace: { mode: "local" } } } });
 });
 
 test.skipIf(!POSIX)("a path with a tab in its name moves intact", async () => {

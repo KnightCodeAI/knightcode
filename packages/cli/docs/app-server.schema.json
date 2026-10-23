@@ -4814,6 +4814,9 @@
 					},
 					"environment": {
 						"type": "string"
+					},
+					"dryRun": {
+						"type": "boolean"
 					}
 				},
 				"additionalProperties": false
@@ -5921,6 +5924,113 @@
 						"type": "boolean"
 					},
 					"against": {
+						"type": "string"
+					},
+					"fromTree": {
+						"type": "string"
+					},
+					"toTree": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"thread/diff/file": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"fromTree",
+					"toTree",
+					"path"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"fromTree": {
+						"type": "string"
+					},
+					"toTree": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"oldPath": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"binary",
+					"tooLarge"
+				],
+				"properties": {
+					"old": {
+						"type": "string"
+					},
+					"new": {
+						"type": "string"
+					},
+					"binary": {
+						"type": "boolean"
+					},
+					"tooLarge": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"file/read": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"path"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"maxBytes": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 8388608
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"path",
+					"size",
+					"binary",
+					"tooLarge"
+				],
+				"properties": {
+					"path": {
+						"type": "string"
+					},
+					"size": {
+						"type": "number"
+					},
+					"binary": {
+						"type": "boolean"
+					},
+					"tooLarge": {
+						"type": "boolean"
+					},
+					"text": {
 						"type": "string"
 					}
 				},

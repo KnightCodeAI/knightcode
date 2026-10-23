@@ -609,6 +609,8 @@ export const ClientRequests = {
 			to: Type.Union([Type.Literal("local"), Type.Literal("worktree")]),
 			branch: Type.Optional(BranchName),
 			environment: Type.Optional(Str),
+			/** Run every refusal the move would, write nothing: the answer is the real call's error, or the thread as it is. */
+			dryRun: Type.Optional(Bool),
 		}),
 		result: Obj({ thread: Thread, branch: Type.Optional(Str), warnings: Type.Array(Warning) }),
 	},
@@ -655,6 +657,38 @@ export const ClientRequests = {
 			turnId: Type.Optional(Str),
 			stale: Type.Optional(Bool),
 			against: Type.Optional(Str),
+			/** The two trees the read compared; thread/diff/file reads a file's sides from them. Absent with no diff. */
+			fromTree: Type.Optional(Str),
+			toTree: Type.Optional(Str),
+		}),
+	},
+	/**
+	 * Both sides of one file of a diff already read: the trees come from that read's result, so the contents always
+	 * match its hunks, whatever changed on disk since. Trees and blobs are immutable git objects.
+	 */
+	"thread/diff/file": {
+		params: Obj({ threadId: Str, fromTree: Str, toTree: Str, path: Str, oldPath: Type.Optional(Str) }),
+		/** An absent side: the file was added or deleted. A side over 2 MiB answers `tooLarge` with neither. */
+		result: Obj({ old: Type.Optional(Str), new: Type.Optional(Str), binary: Bool, tooLarge: Bool }),
+	},
+	/** A file's text, for a file tab: any file the agent could name, not only the workspace's. */
+	"file/read": {
+		params: Obj({
+			threadId: Str,
+			/** Relative to the thread's cwd, or absolute. */
+			path: Str,
+			/** Default 2 MiB. */
+			maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 8 * 1024 * 1024 })),
+		}),
+		result: Obj({
+			/** Absolute. */
+			path: Str,
+			size: Num,
+			/** A NUL byte in the first 8 KiB. */
+			binary: Bool,
+			/** Over maxBytes: `text` is absent. */
+			tooLarge: Bool,
+			text: Type.Optional(Str),
 		}),
 	},
 	"thread/diff/revert": {
