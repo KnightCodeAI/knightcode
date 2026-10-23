@@ -254,7 +254,7 @@ A server can give a tool an interactive view with the MCP Apps extension (`io.mo
 In the desktop:
 
 - A tool with an app is declared to the model whatever the server's exposure, and it cannot be called from codemode scripts: a call drawn as an app must be the model's own, which the session keeps. A tool you configured as `hidden` stays hidden and draws no app.
-- A tool whose `_meta.ui.visibility` leaves out `"model"` is not declared to the model. Its app can still call it.
+- A tool whose `_meta.ui.visibility` leaves out `"model"` is not declared to the model, whatever its exposure and whether or not it has an app of its own. An app can still call it.
 - An app calls only tools of its own server whose visibility includes `"app"`. In Full access its calls run. In Ask and Auto-edit, a call to a tool not annotated `readOnlyHint` asks you first, naming the server and the tool.
 - An app can send a follow-up message to the thread after you confirm it, open http and https links in your browser, and ask to be shown full screen in the side panel. It cannot update the model's context.
 - The app runs in a sandboxed frame on its own origin, with no permissions (no camera, microphone, location or clipboard). It reaches the network only through the domains its resource declares in `_meta.ui.csp`; a declaration that is not a list of host sources is refused and the app does not load.

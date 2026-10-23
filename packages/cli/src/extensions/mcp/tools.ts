@@ -365,17 +365,23 @@ export function createMcpToolDefinition(options: {
 	/** Whether `read_mcp_resource` can read the server's resources. */
 	readableResources?: () => boolean;
 	/**
-	 * The tool's app, when the client draws apps. A call drawn as an app must be the model's own, which the transcript
-	 * keeps (a codemode script's calls are not kept), so the tool is declared to the model and never callable from
-	 * other tools (`model-only`); one whose visibility leaves the model out is not declared at all (the spec's MUST),
-	 * though its app can still call it. A tool the configuration hides stays hidden.
+	 * When the client draws apps: who may call the tool (`_meta.ui.visibility`), and its app if it has one. A tool whose
+	 * visibility leaves out the model is not declared to it (the spec's MUST), with or without an app of its own, though
+	 * an app can still call it. A call drawn as an app must be the model's own, which the transcript keeps (a codemode
+	 * script's calls are not kept), so an app's tool is declared to the model and never callable from other tools
+	 * (`model-only`). A tool the configuration hides stays hidden.
 	 */
+	visibility?: ("model" | "app")[];
 	app?: McpAppTool;
 }): ToolDefinition<TSchema, McpToolDetails> {
 	const { server, tool, app } = options;
 	const configured = toToolExposure(options.exposure);
 	const exposure =
-		!app || configured === "hidden" ? configured : app.visibility.includes("model") ? "model-only" : "hidden";
+		configured === "hidden" || (options.visibility && !options.visibility.includes("model"))
+			? "hidden"
+			: app
+				? "model-only"
+				: configured;
 	const title = tool.title ?? tool.annotations?.title;
 	const annotations = toToolAnnotations(tool);
 	const label = `${server}/${tool.name}`;

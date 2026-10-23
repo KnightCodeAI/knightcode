@@ -35,7 +35,7 @@ function exposureOf(meta: Record<string, unknown>, configured: "codemode" | "dir
 		namespace: { name: "mcp__s" },
 		timeoutMs: 1000,
 		getClient: async () => ({ callTool: async () => ({ content: [] }) }),
-		...(drawsApps ? { app: mcpAppOf(tool(meta)) } : {}),
+		...(drawsApps ? { app: mcpAppOf(tool(meta)), visibility: visibilityOf(tool(meta)) } : {}),
 	});
 	return definition.exposure;
 }
@@ -46,8 +46,11 @@ test("an app tool is declared to the model only, a model-less one not at all, a 
 	expect(exposureOf(app, "direct")).toBe("model-only");
 	expect(exposureOf(app, "hidden")).toBe("hidden");
 	expect(exposureOf({ ui: { ...app.ui, visibility: ["app"] } }, "direct")).toBe("hidden");
-	// Outside the desktop, and for tools without an app, the configuration decides.
+	// An app's helper: app-only without an app of its own.
+	expect(exposureOf({ ui: { visibility: ["app"] } }, "direct")).toBe("hidden");
+	// Outside the desktop, and for tools without an app the model may call, the configuration decides.
 	expect(exposureOf(app, "codemode", false)).toBe("deferred");
+	expect(exposureOf({ ui: { visibility: ["app"] } }, "direct", false)).toBe("direct");
 	expect(exposureOf({}, "direct")).toBe("direct");
 });
 

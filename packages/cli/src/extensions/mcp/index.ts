@@ -451,7 +451,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 					tool,
 					name: assignName(tool.name, `${server}\0${tool.name}`),
 					exposure: getMcpToolExposure(entry.config, tool.name),
-					...(drawsApps() ? { app: mcpAppOf(tool) } : {}),
+					...(drawsApps() ? { app: mcpAppOf(tool), visibility: visibilityOf(tool) } : {}),
 					namespace,
 					timeoutMs: connection.timeoutMs,
 					getClient: async () => {
