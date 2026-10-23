@@ -12,9 +12,19 @@ import { useEffect, useRef, useState } from "react";
 import { previewAddress, previewPartition } from "../../shared/preview-url.ts";
 import { client } from "../client.ts";
 import { bindingLabel, matches, useBinding } from "../keys.ts";
-import { composerAttach, newTerminal, type PanelTab, showChanges, toast, updatePreview, useStore } from "../store.ts";
+import {
+	composerAttach,
+	getState,
+	newTerminal,
+	openFilesTab,
+	type PanelTab,
+	showChanges,
+	toast,
+	updatePreview,
+	useStore,
+} from "../store.ts";
 import { IconButton, Kbd } from "./button.tsx";
-import { ArrowLeft, ArrowRight, ArrowUpRight, FileDiff, Pencil, RefreshCw, SquareTerminal, X } from "./icons.tsx";
+import { ArrowLeft, ArrowRight, ArrowUpRight, File, FileDiff, Pencil, RefreshCw, SquareTerminal, X } from "./icons.tsx";
 
 type Preview = Extract<PanelTab, { kind: "preview" }>;
 
@@ -125,7 +135,7 @@ function AnnotateLayer({
 }
 
 /** Codex's new tab page under the bar: the tools a tab can open, with their keys. */
-function NewTabPage({ threadId, cwd }: { threadId: string; cwd: string }) {
+function NewTabPage({ threadId, cwd, tabId }: { threadId: string; cwd: string; tabId: string }) {
 	const tools = [
 		{ label: "Changes", icon: <FileDiff size={16} />, keys: bindingLabel("desktop.panel.toggle"), run: () => showChanges(threadId) },
 		{
@@ -133,6 +143,17 @@ function NewTabPage({ threadId, cwd }: { threadId: string; cwd: string }) {
 			icon: <SquareTerminal size={16} />,
 			keys: bindingLabel("desktop.terminal.new"),
 			run: () => void newTerminal(threadId, cwd),
+		},
+		// Codex's Files: the "Open file" tab in place of this new tab page.
+		{
+			label: "Files",
+			icon: <File size={16} />,
+			keys: bindingLabel("desktop.files.open"),
+			run: () =>
+				openFilesTab(
+					threadId,
+					getState().tabs[threadId]?.tabs.findIndex((t) => t.kind === "preview" && t.id === tabId),
+				),
 		},
 	];
 	return (
@@ -316,7 +337,7 @@ export function PreviewTab({ threadId, tab, active }: { threadId: string; tab: P
 					) : null}
 				</div>
 			) : (
-				<NewTabPage threadId={threadId} cwd={cwd} />
+				<NewTabPage threadId={threadId} cwd={cwd} tabId={tab.id} />
 			)}
 		</div>
 	);

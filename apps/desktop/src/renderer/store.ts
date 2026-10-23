@@ -94,7 +94,9 @@ export type PanelTab =
 	/** A web page (section 9.8), or its new tab page while `url` is empty; `id` keys it, as two can show one URL. */
 	| { kind: "preview"; id: string; url: string; title?: string }
 	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
-	| { kind: "mcpApp"; itemId: string };
+	| { kind: "mcpApp"; itemId: string }
+	/** Codex's "Open file" tab: the workspace tree beside an empty file view, one per thread. */
+	| { kind: "files" };
 export interface ThreadTabs {
 	tabs: PanelTab[];
 	active: number;
@@ -158,7 +160,8 @@ export interface State {
 	 * The right region (desktop-shell.md section 9.6): open, its width in px, a diff scope asked for, and whether it
 	 * fills the thread view in place of the chat (Codex's full screen).
 	 */
-	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
+	/** `fileTree`: the file tabs' tree shown (Codex's Toggle file tree), unless false. */
+	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean; fileTree?: boolean };
 	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
 	tabs: Record<string, ThreadTabs>;
 	/** The bottom region's height in px (section 9.7), 0 until dragged (Codex's 280); each thread has it open or not. */
@@ -1519,9 +1522,10 @@ export function showChanges(threadId = openId(), scope?: DiffScope): void {
 
 /**
  * Open a file in the thread's side panel, scrolled to `line`: its tab if it has one, else in place of the preview tab,
- * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS.
+ * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS. `keep` (a double click in
+ * the file tree) makes it a kept tab.
  */
-export function openFileTab(threadId: string, path: string, line?: number): void {
+export function openFileTab(threadId: string, path: string, line?: number, keep = false): void {
 	const used = ++tabClock;
 	updateTabs(
 		threadId,
@@ -1529,9 +1533,11 @@ export function openFileTab(threadId: string, path: string, line?: number): void
 			const next = [...tabs];
 			const key = tabKey(path);
 			let at = next.findIndex((t) => t.kind === "file" && tabKey(t.path) === key);
-			if (at !== -1) next[at] = { ...(next[at] as Extract<PanelTab, { kind: "file" }>), line, used };
-			else {
-				const tab: PanelTab = { kind: "file", path, line, preview: true, used };
+			if (at !== -1) {
+				const open = next[at] as Extract<PanelTab, { kind: "file" }>;
+				next[at] = { ...open, line, used, preview: keep ? false : open.preview };
+			} else {
+				const tab: PanelTab = { kind: "file", path, line, preview: !keep, used };
 				at = next.findIndex((t) => t.kind === "file" && t.preview);
 				if (at !== -1) next[at] = tab;
 				else at = next.push(tab) - 1;
@@ -1544,6 +1550,28 @@ export function openFileTab(threadId: string, path: string, line?: number): void
 				if (oldest.i < at) at--;
 			}
 			return { tabs: next, active: at };
+		},
+		true,
+	);
+}
+
+/**
+ * Codex's Files: the thread's one "Open file" tab, focused if it is open, else in place of the new tab page it was
+ * chosen from (`replace`, a preview tab's index), else after the other tabs.
+ */
+export function openFilesTab(threadId = openId(), replace?: number): void {
+	if (!threadId) return;
+	updateTabs(
+		threadId,
+		({ tabs }) => {
+			const open = tabs.findIndex((t) => t.kind === "files");
+			if (open !== -1) return { tabs, active: open };
+			if (replace !== undefined && tabs[replace]?.kind === "preview") {
+				const next = [...tabs];
+				next[replace] = { kind: "files" };
+				return { tabs: next, active: replace };
+			}
+			return { tabs: [...tabs, { kind: "files" }], active: tabs.length };
 		},
 		true,
 	);

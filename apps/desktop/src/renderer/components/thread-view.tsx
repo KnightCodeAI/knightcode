@@ -9,6 +9,7 @@ import {
 	AppWindow,
 	ArrowDown,
 	CircleAlert,
+	File,
 	FileDiff,
 	Folder,
 	GitBranchPlus,
@@ -35,6 +36,8 @@ import {
 	loadEarlier,
 	loadTerminals,
 	newTerminal,
+	openFileTab,
+	openFilesTab,
 	openPreview,
 	NO_TABS,
 	openThread,
@@ -51,6 +54,7 @@ import {
 	useStore,
 } from "../store.ts";
 import { FileTab } from "./file-tab.tsx";
+import { FilesTab } from "./files-panel.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
 import { BottomRegion } from "./terminal.tsx";
 import { PreviewTab, previewTitle } from "./preview.tsx";
@@ -207,6 +211,8 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 					<Globe size={16} className="shrink-0" />
 				) : tab.kind === "mcpApp" ? (
 					<AppWindow size={16} className="shrink-0" />
+				) : tab.kind === "files" ? (
+					<File size={16} className="shrink-0" />
 				) : (
 					<FileIcon path={tab.path} />
 				)
@@ -218,7 +224,9 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 						? previewTitle(tab)
 						: tab.kind === "mcpApp"
 							? (app?.mcpApp.server ?? "App")
-							: basename(tab.path)
+							: tab.kind === "files"
+								? "Open file"
+								: basename(tab.path)
 			}
 			italic={tab.kind === "file" && tab.preview}
 			active={active}
@@ -288,7 +296,9 @@ function SidePanel({ id }: { id: string }) {
 										? tab.id
 										: tab.kind === "mcpApp"
 											? `app:${tab.itemId}`
-											: "changes"
+											: tab.kind === "files"
+												? "files"
+												: "changes"
 							}
 							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
@@ -320,6 +330,9 @@ function SidePanel({ id }: { id: string }) {
 				<FileTab key={shown.path} threadId={id} path={shown.path} line={shown.line} used={shown.used} />
 			) : null}
 			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
+			{shown?.kind === "files" ? (
+				<FilesTab threadId={id} onOpen={(path, keep) => openFileTab(id, path, undefined, keep)} />
+			) : null}
 			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
 			{tabs.map((tab, i) =>
 				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
@@ -354,6 +367,11 @@ export function ThreadView({ id }: { id: string }) {
 		if (el && pinned) el.scrollTop = el.scrollHeight;
 	});
 	useBinding("desktop.panel.toggle", () => setPanel({ open: !panelOpen }));
+	useBinding("desktop.files.open", () => {
+		openFilesTab(id);
+		// An "Open file" tab already showing keeps its tree: focus its filter again.
+		requestAnimationFrame(() => document.getElementById("kc-files-filter")?.focus());
+	});
 	const bottomOpen = useStore((s) => s.terminals[id]?.open ?? false);
 	// Terminals main still runs for this thread (a reload, a second window) come back as its tabs.
 	useEffect(() => {
