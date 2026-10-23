@@ -113,11 +113,13 @@ export interface TerminalTab {
 	/** The "outside this chat's workspace" notice was dismissed. */
 	dismissed?: boolean;
 }
+/** A thread's terminals, and whether its bottom region shows them: Codex keeps that per conversation, open only with tabs. */
 export interface ThreadTerminals {
 	tabs: TerminalTab[];
 	active: number;
+	open: boolean;
 }
-export const NO_TERMINALS: ThreadTerminals = { tabs: [], active: 0 };
+export const NO_TERMINALS: ThreadTerminals = { tabs: [], active: 0, open: false };
 
 export type { SettingsPage };
 export type View =
@@ -157,7 +159,7 @@ export interface State {
 	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
 	tabs: Record<string, ThreadTabs>;
 	/** The bottom region (section 9.7): open, and its height in px (0 until dragged: Codex's 280). */
-	bottom: { open: boolean; height: number };
+	bottom: { height: number };
 	/** Each thread's terminals, in tab order, and the one shown. */
 	terminals: Record<string, ThreadTerminals>;
 	/** Images (and text) for a thread's composer from outside it: a preview's annotation (section 9.8). */
@@ -191,7 +193,7 @@ let state: State = {
 	resolvedTheme: "dark",
 	panel: { open: false, width: 0 },
 	tabs: {},
-	bottom: { open: false, height: 0 },
+	bottom: { height: 0 },
 	terminals: {},
 	attachments: {},
 	comments: {},
@@ -1369,7 +1371,7 @@ export async function loadTerminals(threadId: string): Promise<void> {
 	updateTerminals(threadId, (t) => {
 		const known = new Map(t.tabs.map((tab) => [tab.terminalId, tab]));
 		const tabs = terminals.map((info) => ({ ...known.get(info.terminalId), ...tabOf(info) }));
-		return { tabs, active: Math.min(t.active, Math.max(0, tabs.length - 1)) };
+		return { tabs, active: Math.min(t.active, Math.max(0, tabs.length - 1)), open: t.open && tabs.length > 0 };
 	});
 }
 
@@ -1389,18 +1391,22 @@ export async function newTerminal(threadId: string, cwd: string, shellId?: strin
 			rows: 24,
 			...(shell ? { shellId: shell } : {}),
 		});
-		updateTerminals(threadId, (t) => ({ tabs: [...t.tabs, tabOf(info)], active: t.tabs.length }));
-		setBottom({ open: true });
+		updateTerminals(threadId, (t) => ({ tabs: [...t.tabs, tabOf(info)], active: t.tabs.length, open: true }));
 	} catch (error) {
 		toast(`Could not open a terminal: ${error instanceof Error ? error.message : String(error)}`, "error");
 	}
 }
 
-/** Mod+J: show or hide the region; showing it with no terminal opens one, as Codex's does. */
+/** Mod+J: show or hide the thread's region; showing it with no terminal opens one, as Codex's does. */
 export function toggleTerminal(threadId: string, cwd: string): void {
-	if (state.bottom.open) return setBottom({ open: false });
-	if ((state.terminals[threadId]?.tabs.length ?? 0) === 0) void newTerminal(threadId, cwd);
-	else setBottom({ open: true });
+	const { tabs, open } = state.terminals[threadId] ?? NO_TERMINALS;
+	if (open) setTerminalsOpen(threadId, false);
+	else if (tabs.length === 0) void newTerminal(threadId, cwd);
+	else setTerminalsOpen(threadId, true);
+}
+
+export function setTerminalsOpen(threadId: string, open: boolean): void {
+	updateTerminals(threadId, (t) => ({ ...t, open: open && t.tabs.length > 0 }));
 }
 
 export function activateTerminal(threadId: string, index: number): void {
@@ -1421,9 +1427,8 @@ export function closeTerminal(threadId: string, index: number): void {
 	void client.host("host/terminal/kill", { terminalId: tab.terminalId }).catch(() => {});
 	updateTerminals(threadId, (t) => {
 		const tabs = t.tabs.filter((_, i) => i !== index);
-		return { tabs, active: Math.max(0, t.active >= index ? t.active - 1 : t.active) };
+		return { tabs, active: Math.max(0, t.active >= index ? t.active - 1 : t.active), open: t.open && tabs.length > 0 };
 	});
-	if ((state.terminals[threadId]?.tabs.length ?? 0) === 0) setBottom({ open: false });
 }
 
 /** An ended terminal's Restart: a fresh shell of the same kind, in the same folder and tab. */
