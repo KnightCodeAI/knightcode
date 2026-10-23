@@ -620,37 +620,42 @@ async function eachUntracked(
 	if (!stopped && result.code !== 0) throw new GitError(args, result.code, result.stderr);
 }
 
-/** A turn snapshot: the tracked files' tree, the tree with untracked files too unless too many, the folders left out. */
+/**
+ * A turn snapshot: the tracked files' tree, the tree with untracked files too unless too many, the folders left out,
+ * and the folders the untracked files it kept are in.
+ */
 export interface TurnTrees {
 	tracked: string;
 	all?: string;
 	skip: string[];
+	folders: string[];
 }
 
 /**
  * Every untracked, not ignored file counts up to `limit`. Past it, none under a folder holding
- * LARGE_UNTRACKED_FOLDER_FILES of them itself (Codex's ghost snapshots' rule), or under `skip` when given (the
- * before-snapshot's folders, for the after one); if more than `limit` still remain, there is no `all` tree. Files over
+ * LARGE_UNTRACKED_FOLDER_FILES of them itself (Codex's ghost snapshots' rule). The after-snapshot (`before` given)
+ * leaves out the before one's folders, and a large folder only if no untracked file kept before was under it (one the
+ * turn made), so both leave out the same files. More than `limit` still remaining: no `all` tree. Files over
  * LARGE_UNTRACKED_BYTES are left out. Both trees come from one temporary index, `tracked` before the untracked adds.
  */
 export async function turnSnapshot(
 	repo: Repo,
 	limit: number,
 	signal?: AbortSignal,
-	skip?: readonly string[],
+	before?: TurnTrees,
 ): Promise<TurnTrees> {
-	let folders = skip ? [...skip] : [];
-	if (!skip) {
-		let total = 0;
-		const counts = new Map<string, number>();
-		await eachUntracked(repo, signal, (path) => {
-			total++;
-			const folder = path.slice(0, path.lastIndexOf("/") + 1);
-			if (folder !== "") counts.set(folder, (counts.get(folder) ?? 0) + 1);
-		});
-		if (total > limit) folders = [...counts].filter(([, n]) => n >= LARGE_UNTRACKED_FOLDER_FILES).map(([f]) => f);
-	}
-	const skipped = new Set(folders);
+	let total = 0;
+	const counts = new Map<string, number>();
+	await eachUntracked(repo, signal, (path) => {
+		total++;
+		const folder = path.slice(0, path.lastIndexOf("/") + 1);
+		if (folder !== "") counts.set(folder, (counts.get(folder) ?? 0) + 1);
+	});
+	const large = total > limit ? [...counts].filter(([, n]) => n >= LARGE_UNTRACKED_FOLDER_FILES).map(([f]) => f) : [];
+	const skip = before
+		? [...before.skip, ...large.filter((f) => !before.folders.some((kept) => kept.startsWith(f)))]
+		: large;
+	const skipped = new Set(skip);
 	const kept: string[] = [];
 	let over = false;
 	await eachUntracked(repo, signal, (path) => {
@@ -661,16 +666,17 @@ export async function turnSnapshot(
 		}
 		kept.push(path);
 	});
+	const folders = [...new Set(kept.map((path) => path.slice(0, path.lastIndexOf("/") + 1)).filter(Boolean))];
 	return withTemporaryIndex(repo, signal, async (run) => {
 		await run(["add", "-u"]);
 		const tracked = await run(["write-tree"]);
-		if (over) return { tracked, skip: folders };
+		if (over) return { tracked, skip, folders };
 		const small = kept.filter((path) => {
 			const info = lstatSync(join(repo.root, path), { throwIfNoEntry: false });
 			return info !== undefined && info.size <= LARGE_UNTRACKED_BYTES;
 		});
 		if (small.length > 0) await run(["add", "--pathspec-from-file=-", "--pathspec-file-nul"], `${small.join("\0")}\0`);
-		return { tracked, all: await run(["write-tree"]), skip: folders };
+		return { tracked, all: await run(["write-tree"]), skip, folders };
 	});
 }
 

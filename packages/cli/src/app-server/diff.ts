@@ -95,8 +95,9 @@ export class TurnChanges {
 
 	/**
 	 * After settle: queue the after-snapshot on the thread's chain, leaving out the before-snapshot's folders (a skipped
-	 * folder the turn empties below 200 files must not read as files it added). Compared with their untracked files when
-	 * both have them, else tracked-only: a turn that leaves more than 500 behind still records its tracked edits.
+	 * folder the turn empties below 200 files must not read as files it added) and any large folder the turn made.
+	 * Compared with their untracked files when both have them, else tracked-only: a turn that leaves more than 500
+	 * behind still records its tracked edits.
 	 */
 	settled(turnId: string | undefined): void {
 		const before = this.before;
@@ -105,7 +106,7 @@ export class TurnChanges {
 		void this.enqueue(async () => {
 			const start = await before;
 			if (!start) return;
-			const end = await turnSnapshot(this.repo, UNTRACKED_LIMIT, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS), start.skip);
+			const end = await turnSnapshot(this.repo, UNTRACKED_LIMIT, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS), start);
 			await turnChangeHooks.afterSnapshot("after");
 			const [from, after] =
 				start.all !== undefined && end.all !== undefined ? [start.all, end.all] : [start.tracked, end.tracked];
