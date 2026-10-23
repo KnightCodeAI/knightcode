@@ -6,6 +6,7 @@
  */
 
 import {
+	AppWindow,
 	ArrowDown,
 	CircleAlert,
 	FileDiff,
@@ -45,6 +46,7 @@ import {
 	sendViewEvent,
 	setFinding,
 	setPanel,
+	type State,
 	toggleTerminal,
 	useStore,
 } from "../store.ts";
@@ -52,6 +54,7 @@ import { FileTab } from "./file-tab.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
 import { BottomRegion } from "./terminal.tsx";
 import { PreviewTab, previewTitle } from "./preview.tsx";
+import { type AppItem, McpAppView } from "./mcp-app.tsx";
 import { FileIcon } from "./file-icon.tsx";
 import { ApprovalCard } from "./approval.tsx";
 import { DialogCard, QuestionsCard } from "./request-card.tsx";
@@ -185,7 +188,16 @@ function PanelResizeHandle() {
 	);
 }
 
+/** The call a full-screen app tab belongs to, from the thread's turns. */
+function appItemOf(threadId: string, itemId: string) {
+	return (s: State) =>
+		s.held[threadId]?.turns
+			.flatMap((t) => t.items)
+			.find((i): i is AppItem => i.id === itemId && i.type === "toolCall" && i.mcpApp !== undefined);
+}
+
 function TabButton({ threadId, tab, index, active }: { threadId: string; tab: PanelTab; index: number; active: boolean }) {
+	const app = useStore(tab.kind === "mcpApp" ? appItemOf(threadId, tab.itemId) : () => undefined);
 	return (
 		<StripTab
 			icon={
@@ -193,17 +205,38 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 					<FileDiff size={16} className="shrink-0" />
 				) : tab.kind === "preview" ? (
 					<Globe size={16} className="shrink-0" />
+				) : tab.kind === "mcpApp" ? (
+					<AppWindow size={16} className="shrink-0" />
 				) : (
 					<FileIcon path={tab.path} />
 				)
 			}
-			title={tab.kind === "changes" ? "Changes" : tab.kind === "preview" ? previewTitle(tab) : basename(tab.path)}
+			title={
+				tab.kind === "changes"
+					? "Changes"
+					: tab.kind === "preview"
+						? previewTitle(tab)
+						: tab.kind === "mcpApp"
+							? (app?.mcpApp.server ?? "App")
+							: basename(tab.path)
+			}
 			italic={tab.kind === "file" && tab.preview}
 			active={active}
 			onSelect={() => activateTab(threadId, index)}
 			onKeep={() => keepTab(threadId, index)}
 			onClose={() => closeTab(threadId, index)}
 		/>
+	);
+}
+
+/** An app full screen (section 12.2): the call's app filling the panel; gone with its call. */
+function AppTab({ threadId, itemId }: { threadId: string; itemId: string }) {
+	const item = useStore(appItemOf(threadId, itemId));
+	if (!item) return <div className="p-4 text-sm text-tertiary">This app's call is no longer in the thread.</div>;
+	return (
+		<div className="flex min-h-0 flex-1 flex-col p-2">
+			<McpAppView threadId={threadId} item={item} mode="fullscreen" />
+		</div>
 	);
 }
 
@@ -248,7 +281,15 @@ function SidePanel({ id }: { id: string }) {
 				>
 					{tabs.map((tab, i) => (
 						<StripSlot
-							key={tab.kind === "file" ? tab.path : tab.kind === "preview" ? tab.id : "changes"}
+							key={
+								tab.kind === "file"
+									? tab.path
+									: tab.kind === "preview"
+										? tab.id
+										: tab.kind === "mcpApp"
+											? `app:${tab.itemId}`
+											: "changes"
+							}
 							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
 							<TabButton threadId={id} tab={tab} index={i} active={i === active} />
@@ -278,6 +319,7 @@ function SidePanel({ id }: { id: string }) {
 			{shown?.kind === "file" ? (
 				<FileTab key={shown.path} threadId={id} path={shown.path} line={shown.line} used={shown.used} />
 			) : null}
+			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
 			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
 			{tabs.map((tab, i) =>
 				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,

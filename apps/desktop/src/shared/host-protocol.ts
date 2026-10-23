@@ -282,6 +282,25 @@ export const HostMethods = {
 		}),
 		result: Obj({ path: Type.String() }),
 	},
+	/**
+	 * An MCP App's document (section 12.2), served on its own `kc-mcp-app://` origin with a policy from the domains its
+	 * resource declared; a declaration that is not a list of host sources answers `invalidParams`.
+	 */
+	"host/mcpApp/serve": {
+		params: Obj({
+			html: Type.String({ maxLength: 4 * 1024 * 1024 }),
+			csp: Type.Optional(
+				Obj({
+					connectDomains: Type.Optional(Type.Unknown()),
+					resourceDomains: Type.Optional(Type.Unknown()),
+					frameDomains: Type.Optional(Type.Unknown()),
+					baseUriDomains: Type.Optional(Type.Unknown()),
+				}),
+			),
+		}),
+		result: Obj({ id: Type.String(), url: Type.String() }),
+	},
+	"host/mcpApp/release": { params: Obj({ id: Type.String() }), result: Obj({}) },
 	/** The user's rebindings, so main knows which keys a focused preview hands to the app (section 9.8). */
 	"host/keys/set": {
 		params: Obj({ overrides: Type.Record(Type.String(), Type.Array(Type.String())) }),

@@ -24,6 +24,7 @@ import {
 	WINDOW_CHROME,
 } from "../shared/host-protocol.ts";
 import { closeFromShortcut } from "./close.ts";
+import type { DeclaredCsp, McpApps } from "./mcp-apps.ts";
 import { InvalidParams, OpenIn, windowsIcons } from "./open-in.ts";
 import { refuseToOpen } from "./open-path.ts";
 import { setKeyOverrides } from "./preview.ts";
@@ -99,6 +100,7 @@ export interface HostDeps {
 	server: ServerConnection;
 	openIn: OpenIn;
 	terminals: Terminals;
+	mcpApps: McpApps;
 	/** The requesting window's id, which terminal events are posted to. */
 	windowId: number;
 	openWindow: (route?: string) => void;
@@ -130,9 +132,14 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openIn, terminals, windowId, openWindow, zoom, role }: HostDeps,
+	{ state, server, openIn, terminals, mcpApps, windowId, openWindow, zoom, role }: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
+		case "host/mcpApp/serve":
+			return mcpApps.serve(params.html as string, params.csp as DeclaredCsp | undefined, windowId);
+		case "host/mcpApp/release":
+			mcpApps.release(params.id as string);
+			return {};
 		case "host/terminal/shells":
 			return { shells: terminals.shells().map(({ id, name }) => ({ id, name })) };
 		case "host/terminal/create":
