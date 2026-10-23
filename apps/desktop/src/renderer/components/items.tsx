@@ -44,6 +44,7 @@ import {
 	Undo,
 } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
+import { type AppItem, McpAppCard } from "./mcp-app.tsx";
 import { ViewNode } from "./view.tsx";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu.tsx";
 
@@ -506,6 +507,9 @@ export function TurnView({
 	const streamingId =
 		running && last && (last.type === "reasoning" || last.type === "agentMessage") ? last.id : undefined;
 	const files = running ? [] : editedFiles(turn);
+	const apps = turn.items.filter(
+		(i): i is AppItem => i.type === "toolCall" && i.mcpApp !== undefined && i.parentItemId === undefined,
+	);
 	const undoable = latest && turn.files !== undefined;
 	// A fork point must be saved, as only indexed items are.
 	const forkPoint = turn.items.findLast((i) => i.index !== undefined);
@@ -532,17 +536,22 @@ export function TurnView({
 						<span className="kc-shimmer w-fit text-base">{working.message ?? "Thinking"}</span>
 					) : null}
 				</>
-			) : (
+			) : work.length > 0 && !final ? (
+				// No reply to fold the work under (Codex's turn that only asked questions).
+				<WorkItems items={work} cwd={cwd} />
+			) : work.length > 0 ? (
+				<div className="flex flex-col gap-4">
+					<WorkedFor turn={turn} open={open} onToggle={() => setOpen(!open)} />
+					{open ? <WorkItems items={work} cwd={cwd} /> : null}
+				</div>
+			) : null}
+			{/* MCP Apps stay in sight when the work folds, and in one place while the turn runs and after, so the frame
+			    is never made again (mcp-app.tsx). */}
+			{apps.map((item) => (
+				<McpAppCard key={item.id} threadId={threadId} item={item} />
+			))}
+			{running ? null : (
 				<>
-					{work.length > 0 && !final ? (
-						// No reply to fold the work under (Codex's turn that only asked questions).
-						<WorkItems items={work} cwd={cwd} />
-					) : work.length > 0 ? (
-						<div className="flex flex-col gap-4">
-							<WorkedFor turn={turn} open={open} onToggle={() => setOpen(!open)} />
-							{open ? <WorkItems items={work} cwd={cwd} /> : null}
-						</div>
-					) : null}
 					{compactedBefore ? <CompactionDivider /> : null}
 					{final?.type === "agentMessage" ? (
 						<div className="group/message flex flex-col gap-2">

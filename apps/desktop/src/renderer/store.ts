@@ -91,7 +91,9 @@ export type PanelTab =
 	| { kind: "changes" }
 	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number }
 	/** A web page (section 9.8), or its new tab page while `url` is empty; `id` keys it, as two can show one URL. */
-	| { kind: "preview"; id: string; url: string; title?: string };
+	| { kind: "preview"; id: string; url: string; title?: string }
+	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
+	| { kind: "mcpApp"; itemId: string };
 export interface ThreadTabs {
 	tabs: PanelTab[];
 	active: number;
@@ -1534,6 +1536,24 @@ export function updatePreview(threadId: string, id: string, patch: { url?: strin
 		...t,
 		tabs: t.tabs.map((tab) => (tab.kind === "preview" && tab.id === id ? { ...tab, ...patch } : tab)),
 	}));
+}
+
+/** An app full screen: its own side panel tab (once), shown. */
+export function openAppTab(threadId: string, itemId: string): void {
+	updateTabs(
+		threadId,
+		(t) => {
+			const at = t.tabs.findIndex((tab) => tab.kind === "mcpApp" && tab.itemId === itemId);
+			return at !== -1 ? { ...t, active: at } : { tabs: [...t.tabs, { kind: "mcpApp", itemId }], active: t.tabs.length };
+		},
+		true,
+	);
+}
+
+/** Back inline: the app's tab closes. */
+export function closeAppTab(threadId: string, itemId: string): void {
+	const at = (state.tabs[threadId]?.tabs ?? []).findIndex((tab) => tab.kind === "mcpApp" && tab.itemId === itemId);
+	if (at > 0) closeTab(threadId, at);
 }
 
 /** Hand an image (and a line of text) to the thread's composer, which takes it as if pasted. */

@@ -24,6 +24,7 @@ import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-p
 import { markQuitting, onWindowClose } from "./main/close.ts";
 import { handleHost, openInService } from "./main/host.ts";
 import type { OpenIn } from "./main/open-in.ts";
+import { MCP_APP_SCHEME, McpApps } from "./main/mcp-apps.ts";
 import { clearPreview, guardWebviews } from "./main/preview.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
 import { Router } from "./main/router.ts";
@@ -40,10 +41,12 @@ const ORIGIN = DEV_URL ? new URL(DEV_URL).origin : "app://desktop";
 const RENDERER_DIR = join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const CSP =
 	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
-	"font-src 'self'; connect-src 'self'; frame-src kc-ext:; worker-src 'self' blob:";
+	"font-src 'self'; connect-src 'self'; frame-src kc-mcp-app:; worker-src 'self' blob:";
 
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	// MCP Apps' documents, one origin per app instance (main/mcp-apps.ts).
+	{ scheme: MCP_APP_SCHEME, privileges: { standard: true, secure: true } },
 ]);
 
 interface OpenWindow {
@@ -99,6 +102,8 @@ const router = new Router({
 });
 
 const state = new StateFile(app.getPath("userData"));
+// An app's frame may sit only in this app's own windows.
+const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
 let openIn: OpenIn;
 let terminals: Terminals;
@@ -138,6 +143,7 @@ function connectPort(id: number, open: OpenWindow): void {
 				server,
 				openIn,
 				terminals,
+				mcpApps,
 				windowId: id,
 				openWindow: createWindow,
 				zoom,
@@ -239,6 +245,7 @@ function createWindow(route?: string): BrowserWindow {
 		open.port?.close();
 		router.detach(id);
 		terminals.detachWindow(id);
+		mcpApps.releaseWindow(id);
 		windows.delete(id);
 	});
 	void (DEV_URL ? window.loadURL(DEV_URL) : window.loadURL("app://desktop/index.html"));
@@ -287,6 +294,7 @@ function buildMenu(): void {
 async function start(): Promise<void> {
 	await app.whenReady();
 	protocol.handle("app", serveRenderer);
+	protocol.handle(MCP_APP_SCHEME, (request) => mcpApps.handle(request));
 	session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
 		// local-fonts: Settings › Appearance lists the installed fonts (queryLocalFonts).
 		callback(permission === "clipboard-sanitized-write" || permission === "notifications" || permission === "local-fonts"),
