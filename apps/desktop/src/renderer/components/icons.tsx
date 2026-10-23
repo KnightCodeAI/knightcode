@@ -84,6 +84,7 @@ export const ChevronDown = icon("ChevronDown", <path d="m4 6.5 4 3.75 4-3.75" />
 
 export const ArrowUp = icon("ArrowUp", <path d="M8 13.25V2.75M3.5 7.25 8 2.75l4.5 4.5" />);
 export const ArrowDown = icon("ArrowDown", <path d="M8 2.75v10.5M3.5 8.75 8 13.25l4.5-4.5" />);
+export const Download = icon("Download", <path d="M8 2.75v7.5M4.75 7 8 10.25 11.25 7M3 13.25h10" />);
 export const ArrowLeft = icon("ArrowLeft", <path d="M13.25 8H2.75M7.25 3.5 2.75 8l4.5 4.5" />);
 export const ArrowRight = icon("ArrowRight", <path d="M2.75 8h10.5M8.75 3.5 13.25 8l-4.5 4.5" />);
 export const ArrowUpRight = icon("ArrowUpRight", <path d="m4.5 11.5 7-7m-6 0h6v6" />);

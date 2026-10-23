@@ -34,6 +34,7 @@ import {
 	type Preferences,
 	SIDEBAR_WIDTH,
 	type TerminalInfo,
+	type UpdateState,
 } from "../shared/host-protocol.ts";
 import { DESKTOP_KEYBINDINGS, type KeybindingId } from "../shared/keybindings.ts";
 import { type AnyNotification, type AnyServerRequest, client, RequestError } from "./client.ts";
@@ -151,6 +152,8 @@ export interface State {
 	finding: boolean;
 	/** The theme the window shows: the preference, or the system's when it is "system". */
 	resolvedTheme: ThemeName;
+	/** Where updating stands (main/updates.ts): the title bar's pill and Settings › About. */
+	update: UpdateState;
 	/**
 	 * The right region (desktop-shell.md section 9.6): open, its width in px, a diff scope asked for, and whether it
 	 * fills the thread view in place of the chat (Codex's full screen).
@@ -191,6 +194,7 @@ let state: State = {
 	paletteOpen: false,
 	finding: false,
 	resolvedTheme: "dark",
+	update: { state: "unavailable" },
 	panel: { open: false, width: 0 },
 	tabs: {},
 	bottom: { height: 0 },
@@ -663,6 +667,7 @@ client.onHostEvent((event) => {
 				}));
 		return;
 	}
+	if (event.event === "update") return set((s) => ({ ...s, update: event.update }));
 	if (event.event === "navigate") {
 		if (state.server.state === "ready" && state.desktop) showLink(event.route);
 		else pendingRoute = event.route;
@@ -673,6 +678,18 @@ client.onHostEvent((event) => {
 	set((s) => ({ ...s, server: { state: event.state, message: event.message } }));
 	if (event.state === "ready" && !wasReady) void connected();
 });
+
+export function checkForUpdates(): void {
+	void client.host("host/update/check", {}).then(
+		(update) => set((s) => ({ ...s, update })),
+		(error: unknown) => toast(errorText(error), "error"),
+	);
+}
+
+/** Quit and install a downloaded update; main asks first when threads are running. */
+export function installUpdate(): void {
+	void client.host("host/update/install", {}).catch((error: unknown) => toast(errorText(error), "error"));
+}
 
 /** Show what a `knightcode://` link names (routes.ts); others are ignored. */
 function showLink(route: string): void {
@@ -699,7 +716,12 @@ async function connected(): Promise<void> {
 		const first = !state.desktop;
 		const desktop = state.desktop ?? (await client.host("host/state/read", {}));
 		set((s) => ({ ...s, desktop, ...(first ? { sidebarOpen: !desktop.sidebar.collapsed } : {}) }));
-		await Promise.all([refreshThreads(), refreshModels(), refreshAccounts()]);
+		await Promise.all([
+			refreshThreads(),
+			refreshModels(),
+			refreshAccounts(),
+			client.host("host/update/state", {}).then((update) => set((s) => ({ ...s, update }))),
+		]);
 		// After a restart the new server has no subscriptions: resume what this window shows.
 		for (const id of Object.keys(state.held)) void resumeThread(id);
 		if (pendingRoute) showLink(pendingRoute);

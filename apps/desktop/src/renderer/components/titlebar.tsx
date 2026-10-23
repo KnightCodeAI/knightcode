@@ -6,13 +6,15 @@
  * archived threads) sit where they fit.
  */
 
-import { ArrowLeft, ArrowRight, PanelLeft } from "./icons.tsx";
+import { ArrowLeft, ArrowRight, Download, PanelLeft } from "./icons.tsx";
 import { client } from "../client.ts";
 import { bindingLabel, isMac } from "../keys.ts";
 import { type AppCommandName, WINDOW_CHROME } from "../../shared/host-protocol.ts";
 import {
 	addProject,
+	checkForUpdates,
 	goBack,
+	installUpdate,
 	navigate,
 	setFinding,
 	setPaletteOpen,
@@ -137,10 +139,55 @@ function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; ite
 					run: () => navigate({ kind: "settings", page: "shortcuts" }),
 				},
 				"-",
+				// Codex's: last but About, and not on Linux, whose package manager updates the app.
+				...(window.knightcode.platform === "linux"
+					? []
+					: [
+							{
+								label: "Check for Updates…",
+								run: () => {
+									navigate({ kind: "settings", page: "about" });
+									checkForUpdates();
+								},
+							},
+						]),
 				{ label: "About KnightCode", run: () => navigate({ kind: "settings", page: "about" }) },
 			],
 		},
 	];
+}
+
+/**
+ * Codex's update pill at the bar's end (measured from its bundle): 20px high, 10px semibold white on the accent blue,
+ * shown only while there is something to do. Windows: "Downloading", then "Update", which quits and installs.
+ * macOS: "Update" opens the newer release's page.
+ */
+function UpdatePill() {
+	const update = useStore((s) => s.update);
+	if (update.state !== "downloading" && update.state !== "ready" && update.state !== "available") return null;
+	const tooltip =
+		update.state === "downloading"
+			? "Downloading an update"
+			: update.state === "ready"
+				? "Restart to update"
+				: `KnightCode ${update.version} is available`;
+	return (
+		<button
+			type="button"
+			title={tooltip}
+			aria-label={tooltip}
+			disabled={update.state === "downloading"}
+			onClick={() =>
+				update.state === "available"
+					? void client.host("host/shell/openExternal", { url: update.url }).catch(() => {})
+					: installUpdate()
+			}
+			className="no-drag me-2 flex h-5 shrink-0 items-center gap-1 rounded-full bg-[#339cff] px-2.5 text-[10px] leading-3 font-semibold text-white shadow-sm enabled:hover:bg-[color-mix(in_srgb,#339cff_92%,black_8%)] enabled:active:bg-[#339cff]/80"
+		>
+			<Download size={12} className="shrink-0" />
+			{update.state === "downloading" ? "Downloading" : "Update"}
+		</button>
+	);
 }
 
 export function TitleBar() {
@@ -179,6 +226,8 @@ export function TitleBar() {
 					))}
 				</div>
 			)}
+			<div className="flex-1" />
+			<UpdatePill />
 		</div>
 	);
 }

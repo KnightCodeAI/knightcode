@@ -5,6 +5,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { app, autoUpdater, net } from "electron";
 import type { UpdateState } from "../shared/host-protocol.ts";
@@ -16,9 +17,12 @@ const EVERY_MS = 4 * 60 * 60 * 1000;
  * Squirrel runs the app with `--squirrel-*` after it installs, updates or removes it, and waits for it to quit:
  * shortcuts made or removed, the link scheme dropped on removal. True when this launch is one of those.
  */
+/** Squirrel's Update.exe, beside the version directories of an installed app; absent from an unpacked build. */
+const updateExe = () => join(dirname(process.execPath), "..", "Update.exe");
+
 export function squirrelEvent(): boolean {
 	if (process.platform !== "win32") return false;
-	const update = join(dirname(process.execPath), "..", "Update.exe");
+	const update = updateExe();
 	const exe = basename(process.execPath);
 	const run = (args: string[]) =>
 		spawn(update, args, { detached: true })
@@ -46,7 +50,9 @@ export class Updates {
 
 	constructor(onState: (state: UpdateState) => void) {
 		this.onState = onState;
-		this.state = app.isPackaged && process.platform !== "linux" ? { state: "idle" } : { state: "unavailable" };
+		const installed =
+			app.isPackaged && (process.platform === "darwin" || (process.platform === "win32" && existsSync(updateExe())));
+		this.state = installed ? { state: "idle" } : { state: "unavailable" };
 	}
 
 	start(): void {
