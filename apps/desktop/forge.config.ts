@@ -63,11 +63,13 @@ function checkStagedServer(platform: string, arch: string): void {
 const env = (name: string) => process.env[name]?.trim() || undefined;
 
 // Ad hoc until a Developer ID exists. identityValidation: false stops osx-sign looking "-" up as a keychain identity,
-// and continueOnError: false makes a signing failure fail the build instead of a warning.
+// and continueOnError: false makes a signing failure fail the build instead of a warning. No hardened runtime ad hoc:
+// its library validation refuses the separately signed Electron Framework on macOS 26 and later ("different Team
+// IDs", the app never starts), and only notarization, which needs the Developer ID, requires it.
 const appleIdentity = env("APPLE_SIGNING_IDENTITY");
 const osxSign = appleIdentity
 	? { identity: appleIdentity, continueOnError: false }
-	: { identity: "-", identityValidation: false, continueOnError: false };
+	: { identity: "-", identityValidation: false, continueOnError: false, optionsForFile: () => ({ hardenedRuntime: false }) };
 const appleId = env("APPLE_ID");
 const applePassword = env("APPLE_APP_SPECIFIC_PASSWORD");
 const appleTeam = env("APPLE_TEAM_ID");
