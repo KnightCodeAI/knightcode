@@ -127,6 +127,16 @@ test("more than 500 untracked files outside large folders: the turn records trac
 	expect((await s.a.waitFor("turn/diff/updated")).files).toEqual([{ path: "a.txt", additions: 1, deletions: 3 }]);
 });
 
+test("a turn that leaves more than 500 untracked files behind still records its tracked edit", async () => {
+	const s = await repoServer();
+	const thread = await fullAccess(s);
+	s.faux.setResponses(
+		write("echo edited > a.txt && mkdir deps && for i in $(seq 1 501); do echo $i > deps/$i.txt; done"),
+	);
+	await turn(s, thread.id);
+	expect((await s.a.waitFor("turn/diff/updated")).files).toEqual([{ path: "a.txt", additions: 1, deletions: 3 }]);
+});
+
 test("lastTurn reads back after unload and resume", async () => {
 	const s = await repoServer();
 	const thread = await fullAccess(s);
