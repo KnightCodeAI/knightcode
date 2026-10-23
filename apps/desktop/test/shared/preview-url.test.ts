@@ -20,6 +20,8 @@ test("the address bar adds the scheme a local or dotted address needs, and refus
 	expect(previewAddress(" 127.0.0.1:5173/app ")).toBe("http://127.0.0.1:5173/app");
 	expect(previewAddress("[::1]:8080")).toBe("http://[::1]:8080/");
 	expect(previewAddress("example.com/docs")).toBe("https://example.com/docs");
+	expect(previewAddress("example.com:8080/docs")).toBe("https://example.com:8080/docs");
+	expect(previewAddress("staging.example.com:8443")).toBe("https://staging.example.com:8443/");
 	expect(previewAddress("https://example.com")).toBe("https://example.com/");
 	for (const typed of ["", "hello world", "javascript:alert(1)", "file:///C:/x", "about:blank", "word"])
 		expect(previewAddress(typed)).toBeUndefined();
