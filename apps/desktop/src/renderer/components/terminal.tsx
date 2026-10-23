@@ -158,9 +158,11 @@ function TerminalView({ threadId, tab, active }: { threadId: string; tab: Termin
 			if (attached && event.event === "terminal/data" && event.terminalId === terminalId) xterm.write(event.data);
 		});
 		void client.host("host/terminal/attach", { terminalId }).then(
-			({ scrollback }) => {
+			({ scrollback, exitCode }) => {
 				xterm.write(scrollback);
 				attached = true;
+				// It ended while no window of this page was attached (after a reload), so its exit event went nowhere.
+				if (exitCode !== undefined) updateTerminal(threadId, terminalId, { exitCode });
 			},
 			() => {},
 		);
