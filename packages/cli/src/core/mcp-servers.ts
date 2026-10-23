@@ -35,6 +35,34 @@ const MCP_RESOURCE_TOOLS: ReadonlySet<string> = new Set([
 	READ_MCP_RESOURCE_TOOL,
 ]);
 
+/**
+ * MCP Apps (the `io.modelcontextprotocol/ui` extension): a client that draws apps advertises this id with the app
+ * MIME type in `initialize`, and a tool names its app with a `ui://` resource in `_meta.ui.resourceUri`.
+ */
+export const MCP_APPS_EXTENSION = "io.modelcontextprotocol/ui";
+export const MCP_APP_MIME_TYPE = "text/html;profile=mcp-app";
+
+/**
+ * The session event-bus channel an app's requests travel on, from the app server to the MCP extension, which
+ * answers through `reply`: read a resource or call a tool of the app's own server, or describe one of its tools
+ * (what the approval gate needs).
+ */
+export const MCP_APPS_CHANNEL = "mcp-apps";
+export type McpAppAnswer =
+	{ result: unknown } | { error: { code: "mcpUnavailable" | "invalidParams" | "internal"; message: string } };
+export type McpAppQuery = { server: string } & (
+	| { op: "readResource"; uri: string }
+	| { op: "callTool"; name: string; arguments: Record<string, unknown> }
+	| { op: "describe"; name: string }
+);
+/** `heard` is called synchronously by the listener, so a thread without one answers at once rather than timing out. */
+export type McpAppRequest = McpAppQuery & { heard: () => void; reply: (answer: McpAppAnswer) => void };
+/** A tool as `describe` answers: whether it says it only reads, and who may call it. */
+export interface McpAppToolInfo {
+	readOnly: boolean;
+	visibility: ("model" | "app")[];
+}
+
 /** Whether a tool comes from MCP: a server tool (`mcp__<server>__<tool>`) or a resource tool. */
 export function isMcpToolName(name: string): boolean {
 	return name.startsWith("mcp__") || MCP_RESOURCE_TOOLS.has(name);

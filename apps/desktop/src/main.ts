@@ -3,6 +3,7 @@
  * one MessagePort each, and the host methods a sandboxed renderer cannot run itself.
  */
 
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Message } from "@knightcode/app-server-protocol";
@@ -23,11 +24,14 @@ import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-p
 import { markQuitting, onWindowClose } from "./main/close.ts";
 import { handleHost, openInService } from "./main/host.ts";
 import type { OpenIn } from "./main/open-in.ts";
+import { MCP_APP_SCHEME, McpApps } from "./main/mcp-apps.ts";
+import { clearPreview, guardWebviews } from "./main/preview.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
 import { Router } from "./main/router.ts";
 import { resolveServerCommand, ServerConnection, type ServerState } from "./main/server.ts";
 import { loginShellEnv } from "./main/shell-env.ts";
 import { StateFile } from "./main/state.ts";
+import { type SpawnPty, Terminals } from "./main/terminals.ts";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -37,10 +41,12 @@ const ORIGIN = DEV_URL ? new URL(DEV_URL).origin : "app://desktop";
 const RENDERER_DIR = join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const CSP =
 	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
-	"font-src 'self'; connect-src 'self'; frame-src kc-ext:; worker-src 'self' blob:";
+	"font-src 'self'; connect-src 'self'; frame-src kc-mcp-app:; worker-src 'self' blob:";
 
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	// MCP Apps' documents, one origin per app instance (main/mcp-apps.ts).
+	{ scheme: MCP_APP_SCHEME, privileges: { standard: true, secure: true } },
 ]);
 
 interface OpenWindow {
@@ -96,8 +102,11 @@ const router = new Router({
 });
 
 const state = new StateFile(app.getPath("userData"));
+// An app's frame may sit only in this app's own windows.
+const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
 let openIn: OpenIn;
+let terminals: Terminals;
 
 /** Serves only the built renderer directory; `..` never escapes it (section 6.3). */
 function serveRenderer(request: Request): Promise<Response> | Response {
@@ -115,6 +124,10 @@ function serveRenderer(request: Request): Promise<Response> | Response {
 function connectPort(id: number, open: OpenWindow): void {
 	open.port?.close();
 	router.detach(id);
+	// The reloaded page attaches to the terminals it shows again, getting their output so far first.
+	terminals.detachWindow(id);
+	// A reload drops the page without its apps' cleanup; the new page serves the ones it shows again.
+	mcpApps.releaseWindow(id);
 	const { port1, port2 } = new MessageChannelMain();
 	open.port = port1;
 	router.attach({
@@ -131,6 +144,9 @@ function connectPort(id: number, open: OpenWindow): void {
 				state,
 				server,
 				openIn,
+				terminals,
+				mcpApps,
+				windowId: id,
 				openWindow: createWindow,
 				zoom,
 				role: () => roleOf(id),
@@ -197,6 +213,8 @@ function createWindow(route?: string): BrowserWindow {
 			contextIsolation: true,
 			nodeIntegration: false,
 			webSecurity: true,
+			// Preview tabs (section 9.8); main/preview.ts decides what each one may attach and do.
+			webviewTag: true,
 			preload: join(__dirname, "preload.cjs"),
 			additionalArguments: [`--kc-origin=${ORIGIN}`, `--kc-window-id=${id}`],
 		},
@@ -206,6 +224,7 @@ function createWindow(route?: string): BrowserWindow {
 	window.on("focus", () => {
 		open.lastFocusedAt = Date.now();
 	});
+	guardWebviews(window.webContents, (binding) => sendEvent(open, { event: "key", binding }));
 	window.on("close", (event) => onWindowClose(window, state, event));
 	window.once("ready-to-show", () => window.show());
 	// A reload gets a fresh port; the old one's holds are released and the page resumes what it shows.
@@ -227,10 +246,25 @@ function createWindow(route?: string): BrowserWindow {
 	window.on("closed", () => {
 		open.port?.close();
 		router.detach(id);
+		terminals.detachWindow(id);
+		mcpApps.releaseWindow(id);
 		windows.delete(id);
 	});
 	void (DEV_URL ? window.loadURL(DEV_URL) : window.loadURL("app://desktop/index.html"));
 	return window;
+}
+
+/**
+ * What a thread holds in main ends with it: its terminals when it is archived or deleted (section 9.7), its preview
+ * storage when it is deleted (section 9.8).
+ */
+function endThread(message: Message): void {
+	if (!("method" in message) || "id" in message) return;
+	const params = message.params as { threadId?: string; archived?: boolean } | undefined;
+	if (!params?.threadId) return;
+	if ((message.method === "thread/archived" && params.archived) || message.method === "thread/deleted")
+		terminals.killThread(params.threadId);
+	if (message.method === "thread/deleted") void clearPreview(app.getPath("userData"), params.threadId).catch(() => {});
 }
 
 function zoomFocused(step: -1 | 0 | 1): void {
@@ -262,6 +296,7 @@ function buildMenu(): void {
 async function start(): Promise<void> {
 	await app.whenReady();
 	protocol.handle("app", serveRenderer);
+	protocol.handle(MCP_APP_SCHEME, (request) => mcpApps.handle(request));
 	session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
 		// local-fonts: Settings › Appearance lists the installed fonts (queryLocalFonts).
 		callback(permission === "clipboard-sanitized-write" || permission === "notifications" || permission === "local-fonts"),
@@ -270,12 +305,25 @@ async function start(): Promise<void> {
 	const env = await loginShellEnv();
 	// Editors launch with the user's own PATH, as the server's tools run with it.
 	openIn = openInService(env);
+	terminals = new Terminals({
+		platform: process.platform,
+		env,
+		// Loaded as Codex loads it, outside the bundle: a native module the main build leaves in node_modules.
+		spawn: () => (createRequire(__filename)("node-pty") as { spawn: SpawnPty }).spawn,
+		post: (windowId, event) => {
+			const open = windows.get(windowId);
+			if (open) sendEvent(open, event);
+		},
+	});
 	server = new ServerConnection({
 		command: resolveServerCommand(app.isPackaged, app.getAppPath(), process.resourcesPath),
 		env,
 		logsDir: app.getPath("logs"),
 		clientVersion: app.getVersion(),
-		onMessage: (message) => router.fromServer(message),
+		onMessage: (message) => {
+			router.fromServer(message);
+			endThread(message);
+		},
 		onState: (next, message) => {
 			serverState = { state: next, message };
 			for (const open of windows.values()) sendEvent(open, { event: "server/state", state: next, message });
@@ -340,7 +388,10 @@ if (!app.requestSingleInstanceLock()) {
 		}
 		quitting = true;
 		markQuitting();
-		void server.stop().finally(() => app.quit());
+		void server.stop().finally(() => {
+			terminals.killAll();
+			app.quit();
+		});
 	});
 	void start();
 }

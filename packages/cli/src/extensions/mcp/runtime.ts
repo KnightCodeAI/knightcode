@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import {
 	type AuthProvider,
 	type CallToolResult,
+	type ClientCapabilities,
 	JSON_RPC_ERROR_CODES,
 	type ListResourcesResult,
 	type ListResourceTemplatesResult,
@@ -162,6 +163,7 @@ export class McpServerConnection implements McpToolCaller, McpResourceServer {
 	private readonly onTools: (connection: McpServerConnection) => void;
 	private readonly onChange: ((connection: McpServerConnection) => void) | undefined;
 	private readonly log: McpServerLog | undefined;
+	private readonly capabilities: ClientCapabilities | undefined;
 
 	constructor(options: {
 		entry: McpServerEntry;
@@ -175,6 +177,8 @@ export class McpServerConnection implements McpToolCaller, McpResourceServer {
 		onChange?: (connection: McpServerConnection) => void;
 		/** Receives the server's log messages (`notifications/message`). */
 		log?: McpServerLog;
+		/** What the client advertises in `initialize` (MCP Apps, in a client that draws them). */
+		capabilities?: ClientCapabilities;
 	}) {
 		this.entry = options.entry;
 		this.cwd = options.cwd;
@@ -182,6 +186,7 @@ export class McpServerConnection implements McpToolCaller, McpResourceServer {
 		this.onTools = options.onTools;
 		this.onChange = options.onChange;
 		this.log = options.log;
+		this.capabilities = options.capabilities;
 		const url = this.oauthUrl;
 		const provider = "url" in this.entry.config ? this.entry.config.auth?.provider : undefined;
 		this.authProvider = url
@@ -361,6 +366,7 @@ export class McpServerConnection implements McpToolCaller, McpResourceServer {
 			version: VERSION,
 			requestTimeoutMs: this.timeoutMs,
 			roots: [{ uri: pathToFileURL(this.cwd).href, name: basename(this.cwd) }],
+			...(this.capabilities ? { capabilities: this.capabilities } : {}),
 		});
 		const log = this.log;
 		if (log) client.onNotification("notifications/message", (params) => log.write(this.entry.name, params));

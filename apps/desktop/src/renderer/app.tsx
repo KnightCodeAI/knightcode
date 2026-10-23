@@ -11,7 +11,7 @@ import { Sidebar } from "./components/sidebar.tsx";
 import { ThreadView } from "./components/thread-view.tsx";
 import { runAppCommand, TitleBar } from "./components/titlebar.tsx";
 import { GO_TO_RECENT, GO_TO_THREAD } from "../shared/keybindings.ts";
-import { isEditable, isMac, setBindingOverrides, useBinding, useBindings } from "./keys.ts";
+import { isEditable, isMac, runBinding, setBindingOverrides, useBinding, useBindings } from "./keys.ts";
 import {
 	addProject,
 	autoArchive,
@@ -271,7 +271,13 @@ export function App() {
 	const sidebarOpen = useStore((s) => s.sidebarOpen);
 	const paletteOpen = useStore((s) => s.paletteOpen);
 	// Before anything below reads a binding (keys.ts): the user's rebound shortcuts.
-	setBindingOverrides(useStore(selectPreferences).keybindings);
+	const keybindings = useStore(selectPreferences).keybindings;
+	setBindingOverrides(keybindings);
+	// Main matches them too, for keys pressed in a preview's page, and hands those back as key events.
+	useEffect(() => {
+		void client.host("host/keys/set", { overrides: keybindings ?? {} }).catch(() => {});
+	}, [keybindings]);
+	useEffect(() => client.onHostEvent((event) => event.event === "key" && runBinding(event.binding)), []);
 	useTheme();
 	useMouseHistory();
 	useBinding("desktop.thread.new", () => showNew());

@@ -118,6 +118,14 @@ const requestParams: Record<string, unknown> = {
 	"thread/diff/read": { threadId: "t1", scope: "branch", against: "main", context: 3, ignoreWhitespace: true },
 	"thread/diff/file": { threadId: "t1", fromTree: "4b825dc6", toTree: "9a1b2c3d", path: "b.txt", oldPath: "a.txt" },
 	"file/read": { threadId: "t1", path: "src/a.ts", maxBytes: 1024 },
+	"mcp/app/readResource": { threadId: "t1", server: "weather", uri: "ui://weather/forecast.html" },
+	"mcp/app/callTool": {
+		threadId: "t1",
+		server: "weather",
+		name: "refresh",
+		arguments: { city: "Oslo" },
+		confirmed: true,
+	},
 	"thread/diff/revert": { threadId: "t1", scope: "uncommitted", path: "a.txt", hunkId: "h1", context: 3 },
 	"git/status": { threadId: "t1" },
 	"git/origin": { threadId: "t1" },
@@ -237,6 +245,10 @@ const requestResults: Record<string, unknown> = {
 	},
 	"thread/diff/file": { old: "one\n", new: "two\n", binary: false, tooLarge: false },
 	"file/read": { path: "/p/src/a.ts", size: 4, binary: false, tooLarge: false, text: "x=1\n" },
+	"mcp/app/readResource": {
+		contents: [{ uri: "ui://weather/forecast.html", mimeType: "text/html;profile=mcp-app", text: "<p>x</p>" }],
+	},
+	"mcp/app/callTool": { content: [{ type: "text", text: "12 C" }], structuredContent: { celsius: 12 } },
 	"thread/diff/revert": { paths: ["a.txt"] },
 	"git/status": {
 		branch: "main",
@@ -552,6 +564,10 @@ describe("app server protocol", () => {
 		const toolCall = { type: "toolCall", id: "c1", tool: "check", input: {}, status: "completed", output: [] };
 		expect(items.Check({ ...toolCall, view: table })).toBe(true);
 		expect(items.Check({ ...toolCall, view: { type: "script", text: "x" } })).toBe(false);
+		const app = { server: "weather", resourceUri: "ui://weather/forecast.html" };
+		expect(items.Check({ ...toolCall, mcpApp: { ...app, result: { content: [] } } })).toBe(true);
+		expect(items.Check({ ...toolCall, mcpApp: { ...app, resultOmitted: true } })).toBe(true);
+		expect(items.Check({ ...toolCall, mcpApp: { server: "weather" } })).toBe(false);
 		const message = { type: "extensionMessage", id: "e1", extension: "checks", text: "done" };
 		expect(items.Check({ ...message, view: { type: "markdown", markdown: "**done**" } })).toBe(true);
 		expect(items.Check({ ...message, view: { type: "text", text: "x", html: "<b>x</b>" } })).toBe(false);

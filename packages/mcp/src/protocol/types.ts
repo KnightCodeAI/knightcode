@@ -25,6 +25,8 @@ export interface ClientCapabilities {
 	roots?: { listChanged?: boolean };
 	sampling?: Record<string, unknown>;
 	elicitation?: Record<string, unknown>;
+	/** Protocol extensions the client supports, by id (MCP Apps: `io.modelcontextprotocol/ui`). */
+	extensions?: Record<string, unknown>;
 }
 
 export interface ServerCapabilities {

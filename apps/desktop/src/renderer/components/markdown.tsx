@@ -9,12 +9,16 @@ import type { RootContent } from "hast";
 import { all, createLowlight } from "lowlight";
 import { lexer, type Token, type Tokens } from "marked";
 import { Fragment, type ReactNode, useMemo, useState } from "react";
+import { isLocalUrl } from "../../shared/preview-url.ts";
 import { client } from "../client.ts";
+import { getState, openPreview } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { Check, Code, Copy, WrapText } from "./icons.tsx";
 import { Tooltip } from "./tooltip.tsx";
 
+/** A link opens in the browser; one to a local server (a dev server the agent started) in the open thread's preview. */
 function openLink(href: string): void {
+	if (isLocalUrl(href) && getState().view.kind === "thread") return openPreview(undefined, href);
 	void client.host("host/shell/openExternal", { url: href }).catch(() => {});
 }
 
