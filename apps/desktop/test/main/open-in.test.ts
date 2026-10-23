@@ -141,7 +141,8 @@ test("Windows: Codex's targets and lookups, and none it does not have", async ()
 	expect(target("terminal").command).toBe(join(root, "WindowsTerminal/wt.exe"));
 });
 
-test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+// Not on a Mac: /Applications is searched first, and a real Zed there would answer instead of the fixture.
+test.skipIf(process.platform === "win32" || process.platform === "darwin" || process.getuid?.() === 0)(
 	"a probe that throws (an unreadable folder) leaves out its target, not the list",
 	async () => {
 		const root = layout(["Applications/Zed.app/Contents/MacOS/zed"]);
@@ -158,7 +159,8 @@ test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
 	},
 );
 
-test("macOS: a file opened in a terminal runs the user's editor there, at the line", async () => {
+// /Applications is searched first: on a Mac a real iTerm there would answer instead of the fixture.
+test.skipIf(process.platform === "darwin")("macOS: a file opened in a terminal runs the user's editor there, at the line", async () => {
 	const root = layout(["Applications/iTerm.app/Contents/Info.plist", "project/src/a.ts"]);
 	const file = join(root, "project/src/a.ts");
 	const targets = await detectTargets("darwin", { HOME: root, EDITOR: "nvim", SHELL: "/bin/zsh" });
