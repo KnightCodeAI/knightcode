@@ -236,6 +236,11 @@ jobs:
           gh api "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/${tag}" -f sha="$SHA" >/dev/null
           flags=(--draft --latest=false --target "$SHA" --title "KnightCode desktop ${VERSION}")
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$tag" --repo "${{ github.repository }}" "${flags[@]}" \
+          # A failed create or upload must not leave the tag, which would block running this version again.
+          if ! gh release create "$tag" --repo "${{ github.repository }}" "${flags[@]}" \
             --notes "Windows: run the Setup.exe. macOS: open the .dmg for your Mac (Apple silicon arm64, Intel x64). Linux: the .deb or .rpm. Check downloads against SHA256SUMS. Install notes: https://knightcode.dev/docs" \
-            assets/*
+            assets/*; then
+            gh release delete "$tag" --repo "${{ github.repository }}" --yes 2>/dev/null || true
+            gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${tag}" || true
+            exit 1
+          fi
