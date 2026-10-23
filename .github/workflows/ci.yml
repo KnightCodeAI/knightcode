@@ -170,3 +170,27 @@ jobs:
         env:
           KNIGHTCODE_REAL_PTY: "1"
         run: bun run test
+
+      # The end-to-end tests launch the production Vite build that packaging
+      # leaves in apps/desktop/.vite, against a faux-model app server.
+      - name: Package
+        run: |
+          bun run apps/desktop/scripts/stage-server.ts
+          cd apps/desktop && bun run package
+
+      - name: Install a virtual display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: End-to-end tests
+        working-directory: apps/desktop
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a bun run test:e2e; else bun run test:e2e; fi
+
+      - name: Upload the end-to-end traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-e2e-${{ matrix.runner }}
+          path: apps/desktop/test-results/
+          retention-days: 7

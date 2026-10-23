@@ -14,7 +14,8 @@
 		"premake": "bun scripts/link-electron.ts",
 		"make": "electron-forge make",
 		"check-types": "tsc --noEmit -p tsconfig.json",
-		"test": "vitest --run"
+		"test": "vitest --run",
+		"test:e2e": "playwright test"
 	},
 	"devDependencies": {
 		"@electron-forge/cli": "8.0.1",
