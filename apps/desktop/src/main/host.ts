@@ -12,6 +12,7 @@ import {
 	type MenuItemConstructorOptions,
 	nativeImage,
 	shell,
+	webContents,
 } from "electron";
 import { Compile } from "typebox/compile";
 import {
@@ -25,6 +26,7 @@ import {
 import { closeFromShortcut } from "./close.ts";
 import { InvalidParams, OpenIn, windowsIcons } from "./open-in.ts";
 import { refuseToOpen } from "./open-path.ts";
+import { setKeyOverrides } from "./preview.ts";
 import { readProfile, signIn, signOut } from "./profile.ts";
 import type { ServerConnection } from "./server.ts";
 import type { StateFile } from "./state.ts";
@@ -80,6 +82,15 @@ export function openInService(env: NodeJS.ProcessEnv): OpenIn {
 			if (failure) throw new Error(failure);
 		},
 	});
+}
+
+/** A private PNG beside pasted images, which the app server reads by path. */
+function savePng(png: Buffer): string {
+	const dir = join(app.getPath("temp"), "knightcode-desktop-paste");
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
+	const path = join(dir, `${randomUUID()}.png`);
+	writeFileSync(path, png, { mode: 0o600 });
+	return path;
 }
 
 /** What host methods reach beyond their window: the state file, the server, and opening another window on a route. */
@@ -212,12 +223,19 @@ async function run(
 			const item = (await clipboard.read()).find((i) => i.types.includes("image/png"));
 			if (!item) return {};
 			const blob = await item.getType("image/png");
-			const dir = join(app.getPath("temp"), "knightcode-desktop-paste");
-			mkdirSync(dir, { recursive: true, mode: 0o700 });
-			const path = join(dir, `${randomUUID()}.png`);
-			writeFileSync(path, Buffer.from(await blob.arrayBuffer()), { mode: 0o600 });
-			return { path };
+			return { path: savePng(Buffer.from(await blob.arrayBuffer())) };
 		}
+		case "host/preview/capture": {
+			const guest = webContents.fromId(params.webContentsId as number);
+			if (!guest || guest.hostWebContents !== window.webContents)
+				throw new InvalidParams("not a preview of this window");
+			const image = await guest.capturePage(params.rect as Electron.Rectangle);
+			if (image.isEmpty()) throw new Error("the page drew nothing there");
+			return { path: savePng(image.toPNG()) };
+		}
+		case "host/keys/set":
+			setKeyOverrides(params.overrides as Record<string, string[]>);
+			return {};
 		case "host/image/thumbnail": {
 			// The renderer cannot read files; a small data URL is enough for an attachment chip.
 			const image = nativeImage.createFromPath(params.path as string);
