@@ -272,6 +272,8 @@ over the wire.
 	params: Obj({ targetId: Str, path: Str, line: Type.Optional(Num), column: Type.Optional(Num) }),
 	result: Obj({}),
 },
+// The Open menu's "Save as…": an absolute path copied where the user picks; `path` absent when cancelled.
+"host/file/saveCopy": { params: Obj({ path: Str }), result: Obj({ path: Type.Optional(Str) }) },
 // S3: terminal
 "host/terminal/shells": { params: Obj({}), result: Obj({ shells: Type.Array(Obj({ id: Str, name: Str })), default: Str }) },
 "host/terminal/create": {
