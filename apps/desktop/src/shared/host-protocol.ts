@@ -219,6 +219,8 @@ export const HostMethods = {
 		}),
 		result: Obj({}),
 	},
+	/** Codex's "Save as…": a copy of an absolute path where the user picks; `path` is where it went, none if cancelled. */
+	"host/file/saveCopy": { params: Obj({ path: Type.String() }), result: Obj({ path: Type.Optional(Type.String()) }) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
 	/** Another window, showing a thread when one is named (Codex's "Open in new window"). */

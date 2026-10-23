@@ -719,6 +719,8 @@ export const ClientRequests = {
 			),
 		}),
 	},
+	/** The checkout's root, its origin remote's URL (else its first remote's) and the branch checked out, if any. */
+	"git/origin": { params: ThreadId, result: Obj({ root: Str, url: Type.Optional(Str), branch: Type.Optional(Str) }) },
 	"git/stage": { params: Obj(DiffTarget), result: Obj({ paths: Type.Array(Str) }) },
 	"git/unstage": { params: Obj(DiffTarget), result: Obj({ paths: Type.Array(Str) }) },
 	"git/commit": {

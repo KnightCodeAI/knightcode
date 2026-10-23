@@ -6192,6 +6192,38 @@
 				"additionalProperties": false
 			}
 		},
+		"git/origin": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"root"
+				],
+				"properties": {
+					"root": {
+						"type": "string"
+					},
+					"url": {
+						"type": "string"
+					},
+					"branch": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
 		"git/stage": {
 			"params": {
 				"type": "object",

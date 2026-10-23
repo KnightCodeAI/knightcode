@@ -115,8 +115,11 @@ export function FileTab({ threadId, path, line, used }: { threadId: string; path
 		const frame = requestAnimationFrame(() => {
 			const host = body.current?.querySelector("diffs-container") ?? body.current?.firstElementChild;
 			const row = host?.shadowRoot?.querySelector(`[data-line="${line}"]`) ?? host?.querySelector(`[data-line="${line}"]`);
-			if (!row) return;
-			row.scrollIntoView({ block: "center" });
+			const scroller = body.current;
+			if (!row || !scroller) return;
+			// Vertically only: scrollIntoView would also scroll the code sideways under its sticky line numbers.
+			const top = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+			scroller.scrollTop += top - (scroller.clientHeight - row.getBoundingClientRect().height) / 2;
 			scrolled.current = key;
 		});
 		return () => cancelAnimationFrame(frame);
@@ -128,7 +131,7 @@ export function FileTab({ threadId, path, line, used }: { threadId: string; path
 			<header className="relative z-20 flex shrink-0 items-center gap-1.5 p-2">
 				<Breadcrumb segments={crumbs(read?.path ?? path, cwd)} />
 				<div className="flex-1" />
-				<OpenInButton path={read?.path ?? path} line={line} project={thread?.projectCwd ?? cwd} />
+				<OpenInButton path={read?.path ?? path} line={line} project={thread?.projectCwd ?? cwd} threadId={threadId} />
 			</header>
 			<div ref={body} className="min-h-0 flex-1 overflow-auto border-t border-line">
 				{error ? (
