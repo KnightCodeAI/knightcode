@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 const fake = vi.hoisted(() => {
 	Object.assign(globalThis, { window: { addEventListener: () => {} } });
 	const requests: Array<{ method: string; params: unknown }> = [];
+	const failing = { updateState: false };
 	let onHostEvent: (event: unknown) => void = () => {};
 	let onNotification: (n: unknown) => void = () => {};
 	let onServerRequest: (r: unknown) => void = () => {};
@@ -25,7 +26,10 @@ const fake = vi.hoisted(() => {
 			requests.push({ method, params });
 			return Promise.resolve(results[method]!(params));
 		},
-		host: () => Promise.resolve({ projects: [], preferences: {}, sidebar: { width: 276, collapsed: false } }),
+		host: (method: string) =>
+			method === "host/update/state" && failing.updateState
+				? Promise.reject(new Error("no update state"))
+				: Promise.resolve({ projects: [], preferences: {}, sidebar: { width: 276, collapsed: false } }),
 		onNotification: (handler: typeof onNotification) => (onNotification = handler),
 		onServerRequest: (handler: typeof onServerRequest) => (onServerRequest = handler),
 		onHostEvent: (handler: typeof onHostEvent) => (onHostEvent = handler),
@@ -34,6 +38,7 @@ const fake = vi.hoisted(() => {
 		client,
 		requests,
 		results,
+		failing,
 		serverState: (state: string) => onHostEvent({ event: "server/state", state }),
 		notify: (method: string, params: unknown) => onNotification({ method, params }),
 		serverRequest: (id: string, method: string, params: unknown) => onServerRequest({ id, method, params }),
@@ -252,5 +257,19 @@ test("an older resume's failure does not mark a thread the later resume opened",
 		expect(getState().opening["overlap-3"]).toBeUndefined();
 	} finally {
 		fake.results["thread/resume"] = saved;
+	}
+});
+
+test("after a restart a failed update state read does not stop the window resuming its threads", async () => {
+	fake.serverState("ready");
+	await openThread("t-update");
+	fake.requests.length = 0;
+	fake.failing.updateState = true;
+	try {
+		fake.serverState("restarting");
+		fake.serverState("ready");
+		await vi.waitFor(() => expect(resumed()).toContainEqual({ threadId: "t-update" }));
+	} finally {
+		fake.failing.updateState = false;
 	}
 });

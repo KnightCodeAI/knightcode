@@ -720,7 +720,11 @@ async function connected(): Promise<void> {
 			refreshThreads(),
 			refreshModels(),
 			refreshAccounts(),
-			client.host("host/update/state", {}).then((update) => set((s) => ({ ...s, update }))),
+			// Informational: its failure must not stop the resumes below.
+			client
+				.host("host/update/state", {})
+				.then((update) => set((s) => ({ ...s, update })))
+				.catch((error: unknown) => console.error(error)),
 		]);
 		// After a restart the new server has no subscriptions: resume what this window shows.
 		for (const id of Object.keys(state.held)) void resumeThread(id);
