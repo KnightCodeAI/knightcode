@@ -182,6 +182,22 @@ const TerminalInfo = Obj({
 });
 export type TerminalInfo = Static<typeof TerminalInfo>;
 
+/** Where updating stands, for Settings › About and the title bar (desktop-shell.md section 15). */
+export const UpdateState = Type.Union([
+	/** Not for this build: an unpackaged one, or Linux, whose package manager updates it. */
+	Obj({ state: Type.Literal("unavailable") }),
+	/** Not checked yet, or up to date as of `checkedAt`; `error` when that check failed. */
+	Obj({ state: Type.Literal("idle"), checkedAt: Type.Optional(Type.Number()), error: Type.Optional(Str) }),
+	Obj({ state: Type.Literal("checking") }),
+	/** Windows: Squirrel is downloading a newer version. */
+	Obj({ state: Type.Literal("downloading") }),
+	/** Windows: downloaded; quitting installs it. */
+	Obj({ state: Type.Literal("ready"), version: Type.Optional(Str) }),
+	/** macOS: a newer release, downloaded from its page. */
+	Obj({ state: Type.Literal("available"), version: Str, url: Str }),
+]);
+export type UpdateState = Static<typeof UpdateState>;
+
 export const HostMethods = {
 	/** Show a native context menu at the pointer; resolves with the chosen item's id once it closes. */
 	"host/menu/popup": {
@@ -349,6 +365,11 @@ export const HostMethods = {
 			logsDir: Type.String(),
 		}),
 	},
+	"host/update/state": { params: Obj({}), result: UpdateState },
+	/** Starts a check unless one is under way, and answers where updating stands then. */
+	"host/update/check": { params: Obj({}), result: UpdateState },
+	/** Windows, once ready: quit and install, after asking when threads are running. */
+	"host/update/install": { params: Obj({}), result: Obj({}) },
 } as const;
 
 export type HostMethod = keyof typeof HostMethods;
@@ -374,7 +395,8 @@ export type HostEvent =
 	| { event: "terminal/data"; terminalId: string; data: string }
 	| { event: "terminal/exit"; terminalId: string; exitCode: number }
 	/** An app binding pressed while a preview's page had focus, to run as if pressed in the window (section 9.8). */
-	| { event: "key"; binding: string };
+	| { event: "key"; binding: string }
+	| { event: "update"; update: UpdateState };
 
 export interface WindowGlobals {
 	platform: NodeJS.Platform;

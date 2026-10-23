@@ -1,7 +1,7 @@
 /** Host methods: what a sandboxed renderer cannot do itself (desktop-shell.md section 4.4). */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
 	app,
@@ -32,6 +32,7 @@ import { readProfile, signIn, signOut } from "./profile.ts";
 import type { ServerConnection } from "./server.ts";
 import type { StateFile } from "./state.ts";
 import type { Terminals } from "./terminals.ts";
+import type { Updates } from "./updates.ts";
 
 const checks = Object.fromEntries(
 	Object.entries(HostMethods).map(([method, schema]) => [method, Compile(schema.params)]),
@@ -108,6 +109,9 @@ export interface HostDeps {
 	zoom: (window: BrowserWindow, step: -1 | 0 | 1) => void;
 	/** host/window/role for the requesting window. */
 	role: () => { primary: boolean; heldElsewhere: string[] };
+	updates: Updates;
+	/** host/update/install: asks over running threads, then quits the way the quit question does. */
+	installUpdate: (window: BrowserWindow) => Promise<void>;
 }
 
 export async function handleHost(request: HostRequest, window: BrowserWindow, deps: HostDeps): Promise<HostResponse> {
@@ -132,7 +136,7 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openIn, terminals, mcpApps, windowId, openWindow, zoom, role }: HostDeps,
+	{ state, server, openIn, terminals, mcpApps, windowId, openWindow, zoom, role, updates, installUpdate }: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
 		case "host/mcpApp/serve":
@@ -327,10 +331,27 @@ async function run(
 		case "host/app/info":
 			return {
 				appVersion: app.getVersion(),
-				serverVersion: server.initializeResult?.serverInfo.version ?? "",
+				serverVersion: server.initializeResult?.serverInfo.version ?? bundledServerVersion(),
 				platform: process.platform,
 				logsDir: app.getPath("logs"),
 			};
+		case "host/update/state":
+			return updates.state;
+		case "host/update/check":
+			return updates.check();
+		case "host/update/install":
+			await installUpdate(window);
+			return {};
+	}
+}
+
+/** The bundled app server's version while it is not up, from the file scripts/stage-server.ts writes beside it. */
+function bundledServerVersion(): string {
+	if (!app.isPackaged) return "";
+	try {
+		return readFileSync(join(process.resourcesPath, "knightcode", "knightcode.version"), "utf8").trim();
+	} catch {
+		return "";
 	}
 }
 
