@@ -1208,7 +1208,8 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		const answerApp = async (request: McpAppRequest): Promise<McpAppAnswer> => {
 			const server = findServer(request.server);
 			const connection = server && isEnabled(server) ? server.connection : undefined;
-			if (!server || !connection || connection.state !== "connected")
+			// A dropped transport reconnects on the next request (getClient), as the model's calls do.
+			if (!server || !connection || (connection.state !== "connected" && connection.state !== "disconnected"))
 				return { error: { code: "mcpUnavailable", message: `MCP server "${request.server}" is not connected` } };
 			const options = { timeoutMs: connection.timeoutMs, signal: session.signal };
 			if (request.op === "readResource") return { result: await connection.readResource(request.uri, options) };
