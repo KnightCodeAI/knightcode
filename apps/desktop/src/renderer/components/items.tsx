@@ -57,8 +57,9 @@ import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu.tsx";
 function PlanCard({ item }: { item: ToolItem }) {
 	const markdown = typeof inputOf(item).markdown === "string" ? (inputOf(item).markdown as string) : "";
 	const writing = isRunning(item);
-	// As Codex's: a plan still being written starts collapsed, a finished one open.
-	const [collapsed, setCollapsed] = useState(writing);
+	// A plan still being written is collapsed and opens when it is finished, until the user toggles it.
+	const [toggled, setCollapsed] = useState<boolean>();
+	const collapsed = toggled ?? writing;
 	const download = () => {
 		const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
 		const link = document.createElement("a");
