@@ -1024,6 +1024,14 @@ libraries Codex uses, already dependencies: `@pierre/diffs` (`CodeView`,
   folders listing their contents; word wrap; copy path options. Each built
   only as measured; git blame and pull-request review comments stay out
   (no review-comment backend).
+- Done as measured: Go to line is Codex's `goToLine` command, Mod+L (it
+  shares the key with the preview's address bar, which has no binding here),
+  a 200px "Line" field with "1–N" and "Enter a valid whole line number"; each
+  breadcrumb folder opens a 320px panel of that folder's tree (Codex's
+  `review-file-source-breadcrumb`, its active path expanded); Markdown reads
+  rendered by default and as source when opened with a comparison (Codex's
+  `markdownMode`). Codex's file viewer has no word wrap or copy path controls
+  of its own (the Open menu's are S2b's); left out.
 
 #### Validation
 

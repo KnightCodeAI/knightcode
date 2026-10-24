@@ -953,7 +953,11 @@ clean tab takes up changes made elsewhere when the file is read again (a turn,
 a return to the window). Closing an edited tab writes it first; when that
 fails, Codex's "Discard file changes?" / "Your unsaved changes to this file
 will be lost" asks, with Continue viewing and Discard changes. Mod+F in the
-editor opens its search panel, as in Codex. The Changes pane expands unchanged
+editor opens its search panel, as in Codex. Mod+L is Codex's Go to line: a
+field in the file's corner with the valid range ("1–18") beside it. Each folder
+of the breadcrumb opens that folder's tree in a panel, open down to the file
+and with it selected. A Markdown file reads rendered (View preview / View
+source) unless it was opened with its changes. The Changes pane expands unchanged
 lines between hunks from `thread/diff/file`'s two sides (v1-completion-plan.md,
 D5). Tabs are Codex's: per thread, Changes first, then file tabs that share the strip (240px
 each, shrinking to 120px, then scrolling); a tab opened in passing is italic

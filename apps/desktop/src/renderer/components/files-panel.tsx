@@ -10,7 +10,7 @@ import type { FileTreeSortEntry, GitStatus } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
-import { basename } from "../format.ts";
+import { basename, samePath } from "../format.ts";
 import { matches } from "../keys.ts";
 import { type FileComparison, setPanel, showChanges, useStore } from "../store.ts";
 import { Folders, List, Search, X } from "./icons.tsx";
@@ -207,6 +207,122 @@ function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: s
 	);
 }
 
+type TreeModel = ReturnType<typeof useFileTree>["model"];
+
+/**
+ * A folder of the thread's cwd (`base`, "" for the cwd itself) listed into a tree model under `prefix` (a row's path is
+ * `prefix` and its path under `base`, folders ending in "/"), each folder below it the first time it opens, and all of
+ * them again on a return to the window. `known` mirrors the model's paths; `onListed` follows each listing.
+ */
+function useListing(
+	model: TreeModel,
+	threadId: string,
+	base: string,
+	prefix: string,
+	known: { current: Set<string> },
+	onListed: (folder: string) => void,
+) {
+	const listedHandler = useRef(onListed);
+	listedHandler.current = onListed;
+	useEffect(() => {
+		let live = true;
+		const listed = new Set<string>();
+		const rowOf = (path: string) => `${prefix}${base ? path.slice(base.length + 1) : path}`;
+		const list = async (folder: string) => {
+			const result = await client.request("file/list", { threadId, ...(folder ? { path: folder } : {}) }).catch(() => undefined);
+			if (!live || !result) return;
+			listed.add(folder);
+			const parent = folder === base ? prefix : `${rowOf(folder)}/`;
+			const entries = result.entries.map((e: Entry) => `${rowOf(e.path)}${e.type === "directory" ? "/" : ""}`);
+			// Only this folder's own entries: a listed subfolder keeps its children.
+			const own = [...known.current].filter(
+				(p) => p.startsWith(parent) && p !== parent && !p.slice(parent.length).replace(/\/$/, "").includes("/"),
+			);
+			const wanted = new Set(entries);
+			const operations = [
+				...own.filter((p) => !wanted.has(p)).map((path) => ({ type: "remove" as const, path, recursive: true })),
+				...entries.filter((p) => !known.current.has(p)).map((path) => ({ type: "add" as const, path })),
+			];
+			for (const op of operations) op.type === "add" ? known.current.add(op.path) : known.current.delete(op.path);
+			if (operations.length) model.batch(operations);
+			listedHandler.current(folder);
+		};
+		void list(base);
+		// A folder opened in the tree is listed the first time; the model says which are open.
+		const unsubscribe = model.subscribe(() => {
+			for (const path of known.current) {
+				if (!path.startsWith(prefix) || !path.endsWith("/") || path === prefix) continue;
+				const under = path.slice(prefix.length, -1);
+				const folder = base ? `${base}/${under}` : under;
+				if (listed.has(folder)) continue;
+				const item = model.getItem(path) as { isExpanded?: () => boolean } | null;
+				if (item?.isExpanded?.()) {
+					listed.add(folder);
+					void list(folder);
+				}
+			}
+		});
+		const refresh = () => {
+			for (const folder of listed) void list(folder);
+		};
+		window.addEventListener("focus", refresh);
+		return () => {
+			live = false;
+			unsubscribe();
+			window.removeEventListener("focus", refresh);
+		};
+	}, [model, threadId, base, prefix, known]);
+}
+
+/**
+ * Codex's breadcrumb folder (`review-file-source-breadcrumb`): that folder's own tree, open down to the file beside
+ * and with it selected; choosing a file opens it.
+ */
+export function FolderTree({
+	threadId,
+	cwd,
+	folder,
+	activePath,
+	onOpen,
+}: {
+	threadId: string;
+	cwd: string;
+	/** The folder, relative to the cwd ("" for the cwd itself). */
+	folder: string;
+	activePath: string;
+	onOpen: (path: string) => void;
+}) {
+	const known = useRef(new Set<string>());
+	const [rows, setRows] = useState(0);
+	const open = useRef(onOpen);
+	open.current = onOpen;
+	const relative = relativeTo(cwd, activePath);
+	const under = relative === undefined || !folder ? relative : relative.startsWith(`${folder}/`) ? relative.slice(folder.length + 1) : undefined;
+	const { model } = useFileTree({
+		paths: [],
+		flattenEmptyDirectories: false,
+		sort: sectionOrder,
+		icons: { set: "complete", colored: true },
+		itemHeight: 29,
+		unsafeCSS: FILES_TREE_CSS,
+		onSelectionChange: (paths) => {
+			const path = paths[0];
+			if (path && !path.endsWith("/") && path !== under) open.current(joinPath(cwd, folder ? `${folder}/${path}` : path));
+		},
+	});
+	useListing(model, threadId, folder, "", known, () => {
+		// The file's folders open as they are listed, each listing the next.
+		const segments = under?.split("/").slice(0, -1) ?? [];
+		for (let i = 0; i < segments.length; i++)
+			(model.getItem(`${segments.slice(0, i + 1).join("/")}/`) as { expand?: () => void } | null)?.expand?.();
+		setRows((n) => n + 1);
+	});
+	useEffect(() => {
+		if (under && known.current.has(under) && !model.getItem(under)?.isSelected()) model.getItem(under)?.select();
+	}, [rows, under, model]);
+	return <FileTree model={model} className="kc-tree min-h-0 flex-1" />;
+}
+
 /** One @pierre/trees model over both sections; `cwd` and `root` key it, so a new thread starts a new one. */
 function SectionedTree({
 	threadId,
@@ -222,9 +338,12 @@ function SectionedTree({
 	onOpen: FilesTreeProps["onOpen"];
 }) {
 	const known = useRef(new Set<string>([`${CHANGED}/`, `${ALL}/`]));
-	const listed = useRef(new Set<string>());
+	// Bumped as a listing adds rows, so the active file is selected once its row exists.
+	const [rows, setRows] = useState(0);
 	const open = useRef(onOpen);
 	open.current = onOpen;
+	const active = useRef(activePath);
+	active.current = activePath;
 	const changedRoot = useRef(changed?.root);
 	changedRoot.current = changed?.root;
 	const changes = useRef(new Map<string, DiffFile>());
@@ -251,7 +370,9 @@ function SectionedTree({
 			const path = paths[0];
 			if (!path || path.endsWith("/")) return;
 			const target = pathOf(path);
-			if (target) open.current(target, false, path.startsWith(`${CHANGED}/`));
+			// The file already beside: selected to show it (below), not chosen, so nothing to open.
+			if (target && !(active.current && samePath(target, active.current)))
+				open.current(target, false, path.startsWith(`${CHANGED}/`));
 		},
 	});
 
@@ -283,53 +404,12 @@ function SectionedTree({
 	}, [changed, model]);
 
 	// All files: the cwd's entries now, a folder's when it opens; kept until a return to the window lists them again.
-	useEffect(() => {
-		let live = true;
-		const list = async (folder: string) => {
-			const result = await client.request("file/list", { threadId, ...(folder ? { path: folder } : {}) }).catch(() => undefined);
-			if (!live || !result) return;
-			listed.current.add(folder);
-			const prefix = folder ? `${ALL}/${folder}/` : `${ALL}/`;
-			const entries = result.entries.map((e: Entry) => `${ALL}/${e.path}${e.type === "directory" ? "/" : ""}`);
-			// Only this folder's own entries: a listed subfolder keeps its children.
-			const own = [...known.current].filter(
-				(p) => p.startsWith(prefix) && p !== prefix && !p.slice(prefix.length).replace(/\/$/, "").includes("/"),
-			);
-			const wanted = new Set(entries);
-			const operations = [
-				...own.filter((p) => !wanted.has(p)).map((path) => ({ type: "remove" as const, path, recursive: true })),
-				...entries.filter((p) => !known.current.has(p)).map((path) => ({ type: "add" as const, path })),
-			];
-			for (const op of operations) op.type === "add" ? known.current.add(op.path) : known.current.delete(op.path);
-			if (operations.length) model.batch(operations);
-			// The section was empty when the tree was made, so its initial expansion did not hold: open it now, as
-			// Codex shows All files open.
-			if (!folder) (model.getItem(`${ALL}/`) as { expand?: () => void } | null)?.expand?.();
-		};
-		void list("");
-		// A folder opened in the tree is listed the first time; the model says which are open.
-		const unsubscribe = model.subscribe(() => {
-			for (const path of known.current) {
-				if (!path.startsWith(`${ALL}/`) || !path.endsWith("/") || path === `${ALL}/`) continue;
-				const folder = path.slice(ALL.length + 1, -1);
-				if (listed.current.has(folder)) continue;
-				const item = model.getItem(path) as { isExpanded?: () => boolean } | null;
-				if (item?.isExpanded?.()) {
-					listed.current.add(folder);
-					void list(folder);
-				}
-			}
-		});
-		const refresh = () => {
-			for (const folder of listed.current) void list(folder);
-		};
-		window.addEventListener("focus", refresh);
-		return () => {
-			live = false;
-			unsubscribe();
-			window.removeEventListener("focus", refresh);
-		};
-	}, [model, threadId]);
+	useListing(model, threadId, "", `${ALL}/`, known, (folder) => {
+		setRows((n) => n + 1);
+		// The section was empty when the tree was made, so its initial expansion did not hold: open it now, as Codex
+		// shows All files open.
+		if (!folder) (model.getItem(`${ALL}/`) as { expand?: () => void } | null)?.expand?.();
+	});
 
 	// The file beside, selected: its Changed files row when it has one, else its All files row.
 	useEffect(() => {
@@ -344,7 +424,7 @@ function SectionedTree({
 					: undefined;
 		for (const path of model.getSelectedPaths()) if (path !== target) model.getItem(path)?.deselect();
 		if (target && !model.getItem(target)?.isSelected()) model.getItem(target)?.select();
-	}, [activePath, changed, cwd, model]);
+	}, [activePath, changed, cwd, model, rows]);
 
 	return (
 		<FileTree

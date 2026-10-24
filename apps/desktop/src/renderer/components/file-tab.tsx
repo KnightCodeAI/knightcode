@@ -20,7 +20,7 @@ import {
 } from "@pierre/diffs";
 import { Editor, type EditorFactory } from "@pierre/diffs/edit";
 import { EditProvider, FileDiff, File } from "@pierre/diffs/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
 import diffOverrides from "../diff-overrides.css?raw";
 import { basename, samePath } from "../format.ts";
@@ -39,12 +39,14 @@ import {
 } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { highlighterReady } from "./changes.tsx";
-import { FilesTree, joinPath, TreeToggle } from "./files-panel.tsx";
+import { FilesTree, FolderTree, joinPath, relativeTo, TreeToggle } from "./files-panel.tsx";
 import {
 	ChevronDown,
 	ChevronRight,
 	ChevronUp,
+	Code,
 	Columns2,
+	Eye,
 	FileDiff as FileDiffIcon,
 	File as FileIcon,
 	MoreHorizontal,
@@ -52,6 +54,7 @@ import {
 	X,
 } from "./icons.tsx";
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuTrigger } from "./menu.tsx";
+import { Markdown } from "./markdown.tsx";
 import { OpenInButton } from "./open-in.tsx";
 import { Popover } from "./popover.tsx";
 
@@ -69,8 +72,19 @@ export function crumbs(path: string, cwd: string): string[] {
 	return file.split("/").filter(Boolean);
 }
 
-/** `title`: the whole path, shown on hover as Codex does, since a narrow toolbar clips the crumbs. */
-export function Breadcrumb({ segments, title }: { segments: string[]; title?: string }) {
+/**
+ * `title`: the whole path, shown on hover as Codex does, since a narrow toolbar clips the crumbs. `ancestor` draws a
+ * folder's crumb (Codex's opens that folder's tree).
+ */
+export function Breadcrumb({
+	segments,
+	title,
+	ancestor,
+}: {
+	segments: string[];
+	title?: string;
+	ancestor?: (segment: string, index: number) => ReactNode;
+}) {
 	return (
 		<div className="kc-capsule flex h-8 min-w-0 shrink items-center rounded-full p-0.5">
 			<nav aria-label="File path" title={title} className="flex h-full min-w-0 items-center overflow-hidden px-2">
@@ -79,7 +93,13 @@ export function Breadcrumb({ segments, title }: { segments: string[]; title?: st
 						const last = i === segments.length - 1;
 						return (
 							<li key={i} className={`flex items-center gap-1 ${last ? "min-w-0" : "shrink-0"}`}>
-								<span className={last ? "min-w-0 truncate font-medium text-ink" : "whitespace-nowrap"}>{segment}</span>
+								{last ? (
+									<span className="min-w-0 truncate font-medium text-ink">{segment}</span>
+								) : ancestor ? (
+									ancestor(segment, i)
+								) : (
+									<span className="whitespace-nowrap">{segment}</span>
+								)}
 								{last ? null : <ChevronRight size={14} className="shrink-0 text-tertiary" />}
 							</li>
 						);
@@ -267,6 +287,78 @@ function ChangeNavigation({ count, active, onGo }: { count: number; active: numb
 	);
 }
 
+/** A text's line count as an editor numbers it: a final newline starts no line of its own. */
+export function lineCount(text: string): number {
+	return Math.max(1, text.split("\n").length - (text.endsWith("\n") ? 1 : 0));
+}
+
+/**
+ * Codex's Go to line (Mod+L) over a pierre file: a field in the file's top corner with the valid range beside it and
+ * a round close button on its corner. Enter goes; Escape, the button or a click elsewhere closes it.
+ */
+function GoToLine({ count, onGo, onClose }: { count: number; onGo: (line: number) => void; onClose: () => void }) {
+	const [value, setValue] = useState("");
+	const [invalid, setInvalid] = useState(false);
+	return (
+		<div className="pointer-events-none absolute inset-x-4 top-4 z-30 flex justify-end">
+			<form
+				role="search"
+				aria-label="Go to line"
+				className="pointer-events-auto relative flex max-w-full min-w-0 items-center gap-1.5 rounded-[9px] border border-line bg-surface p-1 shadow-[0_4px_8px_rgba(0,0,0,0.075),0_6px_18px_rgba(0,0,0,0.075)]"
+				onSubmit={(e) => {
+					e.preventDefault();
+					const line = Number(value.trim());
+					if (!/^\d+$/.test(value.trim()) || line < 1 || line > count) setInvalid(true);
+					else onGo(line);
+				}}
+				onKeyDown={(e) => {
+					if (!matches(e.nativeEvent, "desktop.picker.dismiss")) return;
+					e.preventDefault();
+					e.stopPropagation();
+					onClose();
+				}}
+				onBlur={(e) => {
+					if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onClose();
+				}}
+			>
+				<label htmlFor="kc-go-to-line" className="sr-only">
+					Go to line
+				</label>
+				<input
+					id="kc-go-to-line"
+					// biome-ignore lint/a11y/noAutofocus: opened by its shortcut to be typed into.
+					autoFocus
+					inputMode="numeric"
+					autoComplete="off"
+					placeholder="Line"
+					value={value}
+					aria-invalid={invalid || undefined}
+					aria-errormessage={invalid ? "kc-go-to-line-error" : undefined}
+					onChange={(e) => {
+						setValue(e.target.value);
+						setInvalid(false);
+					}}
+					className={`h-7 w-[200px] min-w-0 shrink rounded-[6px] border bg-surface px-1.5 text-[13px] leading-6 text-ink outline-none placeholder:text-tertiary ${invalid ? "border-danger-text text-danger-text" : "border-line"}`}
+				/>
+				<span className="flex min-w-[50px] shrink-0 items-center text-[12px] leading-5 font-medium whitespace-nowrap text-tertiary">
+					1–{count}
+				</span>
+				<span id="kc-go-to-line-error" className="sr-only">
+					Enter a valid whole line number
+				</span>
+				<button
+					type="button"
+					aria-label="Close go to line"
+					onClick={onClose}
+					className="absolute end-0 top-0 flex size-5 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-tertiary text-surface hover:bg-ink rtl:-translate-x-1/2"
+				>
+					<X size={10} />
+				</button>
+			</form>
+		</div>
+	);
+}
+
 export function FileTab({
 	threadId,
 	path,
@@ -295,6 +387,11 @@ export function FileTab({
 	const split = useStore((s) => s.panel.fileSplit === true);
 	const [active, setActive] = useState(-1);
 	const [retry, setRetry] = useState(0);
+	const [goingTo, setGoingTo] = useState(false);
+	const [jump, setJump] = useState<number>();
+	const [preview, setPreview] = useState<boolean>();
+	const markdown = /\.(md|markdown|mdx)$/i.test(path);
+	const previewing = markdown && (preview ?? !compare);
 	const body = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -458,11 +555,19 @@ export function FileTab({
 	};
 
 	const cwd = thread?.cwd ?? "";
-	const selected = line ? { start: line, end: line, side: "additions" as const } : null;
+	const segments = crumbs(full, cwd);
+	const marked = jump ?? line;
+	const selected = marked ? { start: marked, end: marked, side: "additions" as const } : null;
 	const controls = (
 		<>
+			{/* A Markdown file reads rendered until its source is asked for, or its changes shown (Codex's default). */}
+			{markdown ? (
+				<IconButton label={previewing ? "View source" : "View preview"} round onClick={() => setPreview(!previewing)}>
+					{previewing ? <Code size={16} /> : <Eye size={16} />}
+				</IconButton>
+			) : null}
 			{/* As in Codex, the icon shows the layout in use and the label the one a click switches to. */}
-			{compare ? (
+			{compare && !previewing ? (
 				<IconButton label={split ? "Switch to unified diff" : "Switch to split diff"} round onClick={() => setPanel({ fileSplit: !split })}>
 					{split ? <Columns2 size={16} /> : <Rows2 size={16} />}
 				</IconButton>
@@ -474,15 +579,55 @@ export function FileTab({
 		<div
 			className="flex h-full min-h-0 min-w-0 flex-col"
 			aria-label={basename(path)}
-			// Mod+S writes the edits now. (Mod+F in the editor is its own search panel, as in Codex.)
+			// Mod+S writes the edits now; Mod+L goes to a line. (Mod+F in the editor is its own search panel, as in Codex.)
 			onKeyDown={(e) => {
-				if (!matches(e.nativeEvent, "desktop.file.save")) return;
-				e.preventDefault();
-				void save();
+				if (matches(e.nativeEvent, "desktop.file.save")) {
+					e.preventDefault();
+					void save();
+				} else if (matches(e.nativeEvent, "desktop.file.goToLine") && file && !previewing) {
+					e.preventDefault();
+					setGoingTo(true);
+				}
 			}}
 		>
 			<header className="@container/file-header relative z-20 flex shrink-0 items-center gap-1.5 p-2">
-				<Breadcrumb segments={crumbs(full, cwd)} title={full} />
+				<Breadcrumb
+					segments={segments}
+					title={full}
+					ancestor={
+						relativeTo(cwd, full) === undefined
+							? undefined
+							: (segment, i) => (
+									<Popover
+										side="bottom"
+										sideOffset={6}
+										className="flex h-80 w-72 flex-col bg-[var(--kc-bg-panel)]!"
+										trigger={(open) => (
+											<button
+												type="button"
+												aria-expanded={open}
+												className="rounded-sm whitespace-nowrap outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-[var(--kc-accent)]"
+											>
+												{segment}
+											</button>
+										)}
+									>
+										{(close) => (
+											<FolderTree
+												threadId={threadId}
+												cwd={cwd}
+												folder={segments.slice(1, i + 1).join("/")}
+												activePath={full}
+												onOpen={(next) => {
+													close();
+													openFileTab(threadId, next);
+												}}
+											/>
+										)}
+									</Popover>
+								)
+					}
+				/>
 				<div className="flex-1" />
 				{compare ? (
 					<ComparisonControls
@@ -503,7 +648,7 @@ export function FileTab({
 						</button>
 					</div>
 				) : null}
-				{compare && diff ? <ChangeNavigation count={blocks.length} active={active} onGo={go} /> : null}
+				{compare && diff && !previewing ? <ChangeNavigation count={blocks.length} active={active} onGo={go} /> : null}
 				{/* Under 625px of toolbar Codex folds the file controls into one button that opens them. */}
 				<div role="group" aria-label="File controls" className="kc-capsule hidden h-8 shrink-0 items-center gap-0.5 rounded-full p-0.5 @min-[625px]/file-header:inline-flex">
 					{controls}
@@ -536,6 +681,18 @@ export function FileTab({
 				</div>
 			) : null}
 			<div className="flex min-h-0 flex-1 border-t border-line">
+				<div className="relative flex min-h-0 min-w-0 flex-1">
+				{goingTo && file ? (
+					<GoToLine
+						count={lineCount(draft?.text ?? file.contents)}
+						onClose={() => setGoingTo(false)}
+						onGo={(to) => {
+							setGoingTo(false);
+							setJump(to);
+							centerRow(body.current, `[data-line="${to}"]:not([data-line-type="change-deletion"])`);
+						}}
+					/>
+				) : null}
 				<div ref={body} className="min-h-0 min-w-0 flex-1 overflow-auto">
 					{error && diff && highlighter ? (
 						<FileDiff fileDiff={diff} options={diffOptions} disableWorkerPool />
@@ -545,6 +702,10 @@ export function FileTab({
 						<Notice title="Binary file not shown" detail="Open it in another app to see it." />
 					) : read.tooLarge ? (
 						<Notice title="This file is too large to preview in the side panel" detail="Open it in another app to see it." />
+					) : previewing && file ? (
+						<div className="mx-auto max-w-3xl px-6 py-5">
+							<Markdown text={draft?.text ?? file.contents} />
+						</div>
 					) : !file || !shown || !highlighter || (compare && !shownBase) ? null : (
 						<EditProvider createEditor={createEditor}>
 							{diff ? (
@@ -572,6 +733,7 @@ export function FileTab({
 							)}
 						</EditProvider>
 					)}
+				</div>
 				</div>
 				{treeShown && cwd ? (
 					<div className="flex w-64 shrink-0 border-l border-line">

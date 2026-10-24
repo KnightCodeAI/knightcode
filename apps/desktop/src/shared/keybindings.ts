@@ -80,6 +80,8 @@ export const DESKTOP_KEYBINDINGS = {
 	"desktop.files.open": { defaultKeys: ["mod+p"], description: "Search files" },
 	// In a file tab: write its edits now rather than after Codex's three seconds.
 	"desktop.file.save": { defaultKeys: ["mod+s"], description: "Save the file" },
+	// Codex's Go to line, in a file tab.
+	"desktop.file.goToLine": { defaultKeys: ["mod+l"], description: "Go to line" },
 	// Codex's Toggle Bottom Panel and Open Terminal (Control+` on macOS too).
 	"desktop.terminal.toggle": { defaultKeys: ["mod+j"], description: "Toggle the terminal" },
 	"desktop.terminal.new": { defaultKeys: ["ctrl+backquote"], description: "Open a new terminal" },
