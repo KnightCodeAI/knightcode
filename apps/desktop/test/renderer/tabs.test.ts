@@ -154,3 +154,16 @@ test("a tab with unsaved edits is never the least recently used tab that closes"
 	expect(paths("i")).toContain("/p/edited.ts");
 	expect(paths("i")).not.toContain("/p/0.ts");
 });
+
+test("closing an edited tab that another save has just written closes it, with nothing to ask", async () => {
+	openFileTab("j", "/p/a.ts");
+	setFileDraft("j", "/p/a.ts", { text: "one", mtimeMs: 1 });
+	let finish = (_: { mtimeMs: number }) => {};
+	request.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+	const autosave = saveFileDraft("j", "/p/a.ts");
+	closeTab("j", 1);
+	finish({ mtimeMs: 2 });
+	await autosave;
+	await vi.waitFor(() => expect(paths("j")).toEqual(["changes"]));
+	expect(getState().discarding).toBeUndefined();
+});
