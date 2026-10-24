@@ -313,7 +313,15 @@ function FoldedText({ text }: { text: string }) {
 	const folded = long && !open;
 	return (
 		<>
-			<div ref={body} className={folded ? "overflow-hidden" : undefined} style={folded ? { maxHeight: `${USER_LINES - 1}lh` } : undefined}>
+			<div
+				ref={body}
+				className={folded ? "overflow-hidden" : undefined}
+				style={folded ? { maxHeight: `${USER_LINES - 1}lh` } : undefined}
+				// Tabbing to a link below the fold opens the message, so focus never sits on hidden text.
+				onFocus={(e) => {
+					if (folded && e.target.matches(":focus-visible")) setOpen(true);
+				}}
+			>
 				<div>
 					<Markdown text={text} tone="user" />
 				</div>
