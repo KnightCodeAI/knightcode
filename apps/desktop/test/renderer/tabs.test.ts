@@ -130,3 +130,27 @@ test("closing an edited file tab saves it first, and asks to discard when that f
 	discardFileTab("g", "/p/b.ts"); // Discard changes
 	expect(paths("g")).toEqual(["changes"]);
 });
+
+test("closing an edited tab while text is typed during its save asks, rather than closing over that text", async () => {
+	openFileTab("h", "/p/a.ts");
+	setFileDraft("h", "/p/a.ts", { text: "one", mtimeMs: 1 });
+	request.mockImplementationOnce(async () => {
+		setFileDraft("h", "/p/a.ts", { text: "one more", mtimeMs: 1 });
+		return { mtimeMs: 2 };
+	});
+	closeTab("h", 1);
+	await vi.waitFor(() => expect(getState().discarding).toEqual({ threadId: "h", path: "/p/a.ts" }));
+	expect(tabsOf("h").tabs[1]).toMatchObject({ draft: { text: "one more", mtimeMs: 2 } });
+	discardFileTab();
+});
+
+test("a tab with unsaved edits is never the least recently used tab that closes", () => {
+	openFileTab("i", "/p/edited.ts");
+	setFileDraft("i", "/p/edited.ts", { text: "x", mtimeMs: 1 });
+	for (let n = 0; n < MAX_FILE_TABS; n++) {
+		openFileTab("i", `/p/${n}.ts`);
+		keepTab("i", tabsOf("i").active);
+	}
+	expect(paths("i")).toContain("/p/edited.ts");
+	expect(paths("i")).not.toContain("/p/0.ts");
+});

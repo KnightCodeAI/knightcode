@@ -1571,9 +1571,11 @@ export function openFileTab(threadId: string, path: string, line?: number, keep 
 				else at = next.push(tab) - 1;
 			}
 			for (;;) {
-				const files = next.flatMap((t, i) => (t.kind === "file" && i !== at ? [{ i, used: t.used }] : []));
-				if (files.length < MAX_FILE_TABS) break;
-				const oldest = files.reduce((a, b) => (b.used < a.used ? b : a));
+				const files = next.flatMap((t, i) => (t.kind === "file" && i !== at ? [{ i, used: t.used, draft: t.draft }] : []));
+				// A tab with unsaved edits never goes: past the limit only while every other one has some.
+				const closable = files.filter((f) => !f.draft);
+				if (files.length < MAX_FILE_TABS || closable.length === 0) break;
+				const oldest = closable.reduce((a, b) => (b.used < a.used ? b : a));
 				next.splice(oldest.i, 1);
 				if (oldest.i < at) at--;
 			}
@@ -1700,9 +1702,12 @@ export function closeTab(threadId: string, index: number): void {
 	if (index === 0) return setPanel({ open: false });
 	const tab = state.tabs[threadId]?.tabs[index];
 	if (tab?.kind === "file" && tab.draft) {
-		void saveFileDraft(threadId, tab.path).then((saved) =>
-			saved ? discardFileTab(threadId, tab.path) : set((s) => ({ ...s, discarding: { threadId, path: tab.path } })),
-		);
+		void saveFileDraft(threadId, tab.path).then((saved) => {
+			// Typed while it wrote: still unsaved, so ask rather than close over it.
+			const left = state.tabs[threadId]?.tabs.find((t) => t.kind === "file" && tabKey(t.path) === tabKey(tab.path));
+			if (saved && !(left?.kind === "file" && left.draft)) discardFileTab(threadId, tab.path);
+			else set((s) => ({ ...s, discarding: { threadId, path: tab.path } }));
+		});
 		return;
 	}
 	updateTabs(threadId, ({ tabs, active }) => ({
