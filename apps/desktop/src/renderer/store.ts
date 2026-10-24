@@ -90,8 +90,19 @@ export interface ThreadView {
  */
 export type PanelTab =
 	| { kind: "changes" }
-	/** `compare`: the comparison whose changes the file shows (Codex's Show changes), none while they are hidden. */
-	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number; compare?: FileComparison }
+	/**
+	 * `compare`: the comparison whose changes the file shows (Codex's Show changes), none while they are hidden.
+	 * `draft`: edits not yet written, kept here so they outlive the tab's view.
+	 */
+	| {
+			kind: "file";
+			path: string;
+			line?: number;
+			preview?: boolean;
+			used: number;
+			compare?: FileComparison;
+			draft?: FileDraft;
+	  }
 	/** A web page (section 9.8), or its new tab page while `url` is empty; `id` keys it, as two can show one URL. */
 	| { kind: "preview"; id: string; url: string; title?: string }
 	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
@@ -102,6 +113,11 @@ export type PanelTab =
 export interface FileComparison {
 	scope: "unstaged" | "uncommitted" | "branch";
 	against?: string;
+}
+/** A file tab's unsaved text, and the mtime of the file it was edited over: a save refuses once the file has moved. */
+export interface FileDraft {
+	text: string;
+	mtimeMs: number;
 }
 export interface ThreadTabs {
 	tabs: PanelTab[];
@@ -158,6 +174,8 @@ export interface State {
 	paletteOpen: boolean;
 	/** The open thread's find bar (View › Find, Ctrl+F). */
 	finding: boolean;
+	/** A file tab whose unsaved edits could not be written as it closed: Codex's "Discard file changes?". */
+	discarding?: { threadId: string; path: string };
 	/** The theme the window shows: the preference, or the system's when it is "system". */
 	resolvedTheme: ThemeName;
 	/** Where updating stands (main/updates.ts): the title bar's pill and Settings › About. */
@@ -1674,12 +1692,78 @@ export function takeAttachments(threadId: string): { images: string[]; text: str
 	return waiting;
 }
 
+/**
+ * Close a tab. A file tab with unsaved edits writes them first, as Codex's does, and closes once they are written;
+ * when they cannot be, Codex's "Discard file changes?" asks (`discarding`).
+ */
 export function closeTab(threadId: string, index: number): void {
 	if (index === 0) return setPanel({ open: false });
+	const tab = state.tabs[threadId]?.tabs[index];
+	if (tab?.kind === "file" && tab.draft) {
+		void saveFileDraft(threadId, tab.path).then((saved) =>
+			saved ? discardFileTab(threadId, tab.path) : set((s) => ({ ...s, discarding: { threadId, path: tab.path } })),
+		);
+		return;
+	}
 	updateTabs(threadId, ({ tabs, active }) => ({
 		tabs: tabs.filter((_, i) => i !== index),
 		active: active >= index ? active - 1 : active,
 	}));
+}
+
+/** Close a file tab, its unsaved edits with it (Discard changes); undefined just dismisses the question. */
+export function discardFileTab(threadId?: string, path?: string): void {
+	set((s) => ({ ...s, discarding: undefined }));
+	if (!threadId || !path) return;
+	const index = (state.tabs[threadId]?.tabs ?? []).findIndex((t) => t.kind === "file" && tabKey(t.path) === tabKey(path));
+	if (index <= 0) return;
+	updateTabs(threadId, ({ tabs, active }) => ({
+		tabs: tabs.filter((_, i) => i !== index),
+		active: active >= index ? active - 1 : active,
+	}));
+}
+
+/** Keep or drop a file tab's unsaved edits; an edited tab is kept, so no other file opens in its place. */
+export function setFileDraft(threadId: string, path: string, draft?: FileDraft): void {
+	const key = tabKey(path);
+	updateTabs(threadId, (t) => ({
+		...t,
+		tabs: t.tabs.map((tab) =>
+			tab.kind === "file" && tabKey(tab.path) === key ? { ...tab, draft, ...(draft ? { preview: false } : {}) } : tab,
+		),
+	}));
+}
+
+const saving = new Map<string, Promise<unknown>>();
+
+/**
+ * Write a file tab's unsaved edits (Codex's save): the text written and the file's new mtime, or undefined with
+ * "Could not save file" when the file changed since it was read or the write failed (the edits stay). One write per
+ * file at a time, as two over the same mtime would refuse each other. Edits made while it writes stay unsaved, over
+ * the file as written.
+ */
+export async function saveFileDraft(threadId: string, path: string): Promise<{ text: string; mtimeMs: number } | undefined> {
+	const key = `${threadId}\0${tabKey(path)}`;
+	while (saving.has(key)) await saving.get(key);
+	const draftOf = () => {
+		const tab = state.tabs[threadId]?.tabs.find((t) => t.kind === "file" && tabKey(t.path) === tabKey(path));
+		return tab?.kind === "file" ? tab.draft : undefined;
+	};
+	const draft = draftOf();
+	if (!draft) return undefined;
+	const write = client.request("file/write", { threadId, path, text: draft.text, expectedMtimeMs: draft.mtimeMs });
+	saving.set(key, write.catch(() => {}));
+	try {
+		const { mtimeMs } = await write;
+		const now = draftOf();
+		setFileDraft(threadId, path, now && now.text !== draft.text ? { text: now.text, mtimeMs } : undefined);
+		return { text: draft.text, mtimeMs };
+	} catch {
+		toast("Could not save file", "error");
+		return undefined;
+	} finally {
+		saving.delete(key);
+	}
 }
 
 export function addComment(threadId: string, comment: DiffComment): void {

@@ -997,8 +997,10 @@ libraries Codex uses, already dependencies: `@pierre/diffs` (`CodeView`,
   are hidden or there are none. The tree on the right (toggled, remembered).
   Opened from a list of changes, the tab takes its comparison and reveals the
   first change (Codex's `revealFirstChange`).
-- Find in file (Mod+F): Codex's bar, "{active} / {matches} results", previous,
-  next, close: the thread's find bar over the file. Done.
+- Find in file (Mod+F): Codex's pierre editor keeps pierre's keymap, so Mod+F
+  in a code file opens pierre's search panel (case, word, regex, previous,
+  next); the "Find in file…" bar in Codex's bundle belongs to its text editor,
+  not used here. Done.
 
 #### Task S2c.3: editing
 
@@ -1008,6 +1010,13 @@ libraries Codex uses, already dependencies: `@pierre/diffs` (`CodeView`,
   changes?" / "Your unsaved changes to this file will be lost" / "Continue
   viewing" / "Discard changes"; files over Codex's limit open read-only
   ("Large file opened read-only").
+- Done, measured against Codex's editor (`pierre-file-editor`): its autosave
+  (3 s after the last edit) and Mod+S both write; closing saves first and asks
+  to discard only when the write fails; a draft lives on the tab (the store),
+  so switching away keeps it. Codex's read-only state is for files over
+  10 MiB, which `file/read` (2 MiB) never hands over, so it has no case here.
+  Codex merges a draft with a file that moved under it (its review of external
+  changes); here that save is refused and the draft kept.
 
 #### Task S2c.4: the rest of Codex's file viewer
 

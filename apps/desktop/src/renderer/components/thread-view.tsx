@@ -30,6 +30,7 @@ import {
 	activateTab,
 	closeTab,
 	copyLastCodeBlock,
+	discardFileTab,
 	dismissPending,
 	fork,
 	keepTab,
@@ -53,6 +54,7 @@ import {
 	toggleTerminal,
 	useStore,
 } from "../store.ts";
+import { ConfirmDialog } from "./dialog.tsx";
 import { FileTab } from "./file-tab.tsx";
 import { FilesTab } from "./files-panel.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
@@ -229,6 +231,7 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 								: basename(tab.path)
 			}
 			italic={tab.kind === "file" && tab.preview}
+			dirty={tab.kind === "file" && tab.draft !== undefined}
 			active={active}
 			onSelect={() => activateTab(threadId, index)}
 			onKeep={() => keepTab(threadId, index)}
@@ -254,6 +257,7 @@ function SidePanel({ id }: { id: string }) {
 	const full = useStore((s) => s.panel.full ?? false);
 	const { tabs, active } = useStore((s) => s.tabs[id] ?? NO_TABS);
 	const shown = tabs[active];
+	const discarding = useStore((s) => s.discarding);
 	const strip = useRef<HTMLDivElement>(null);
 	// A strip wider than the panel scrolls the chosen tab, close button included, into sight.
 	useEffect(() => {
@@ -334,6 +338,7 @@ function SidePanel({ id }: { id: string }) {
 					line={shown.line}
 					used={shown.used}
 					compare={shown.compare}
+					draft={shown.draft}
 				/>
 			) : null}
 			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
@@ -347,6 +352,16 @@ function SidePanel({ id }: { id: string }) {
 			{tabs.map((tab, i) =>
 				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
 			)}
+			{discarding?.threadId === id ? (
+				<ConfirmDialog
+					title="Discard file changes?"
+					description="Your unsaved changes to this file will be lost"
+					cancel="Continue viewing"
+					confirm="Discard changes"
+					onConfirm={() => discardFileTab(discarding.threadId, discarding.path)}
+					onClose={() => discardFileTab()}
+				/>
+			) : null}
 		</aside>
 	);
 }

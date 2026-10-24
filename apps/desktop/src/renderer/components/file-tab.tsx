@@ -5,7 +5,8 @@
  * button) over the file in @pierre/diffs (12px code on 22px lines, the Changes pane's theme), its changes in the
  * comparison drawn in place, the whole file expanded, and the workspace tree on the right. The server reads the file
  * (file/read) and the comparison's side of it (thread/diff/read, thread/diff/file), as it reads every file the desktop
- * shows.
+ * shows. The file is editable, as Codex's is: edits are the tab's draft (the store's, so they outlive this view),
+ * written three seconds after the last one or on Mod+S (file/write, refused once the file has moved).
  */
 
 import type { ResultOf } from "@knightcode/app-server-protocol";
@@ -17,7 +18,8 @@ import {
 	isHighlighterLoaded,
 	parseDiffFromFile,
 } from "@pierre/diffs";
-import { FileDiff, File } from "@pierre/diffs/react";
+import { Editor, type EditorFactory } from "@pierre/diffs/edit";
+import { EditProvider, FileDiff, File } from "@pierre/diffs/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
 import diffOverrides from "../diff-overrides.css?raw";
@@ -26,16 +28,18 @@ import { matches } from "../keys.ts";
 import {
 	errorText,
 	type FileComparison,
+	type FileDraft,
 	openFileTab,
+	saveFileDraft,
 	selectPreferences,
 	setFileComparison,
+	setFileDraft,
 	setPanel,
 	useStore,
 } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { highlighterReady } from "./changes.tsx";
 import { FilesTree, joinPath, TreeToggle } from "./files-panel.tsx";
-import { FindBar } from "./find-bar.tsx";
 import {
 	ChevronDown,
 	ChevronRight,
@@ -95,6 +99,11 @@ function Notice({ title, detail }: { title: string; detail?: string }) {
 		</div>
 	);
 }
+
+/** Codex's autosave: an edit is written this long after the last one. */
+const AUTOSAVE_MS = 3000;
+
+const createEditor: EditorFactory<undefined, undefined> = (type, options, key) => new Editor(type, options, key);
 
 /** Codex's order: the comparison's changed files first, so the default is the first that holds the file. */
 const COMPARISONS: FileComparison["scope"][] = ["unstaged", "uncommitted", "branch"];
@@ -264,12 +273,14 @@ export function FileTab({
 	line,
 	used,
 	compare,
+	draft,
 }: {
 	threadId: string;
 	path: string;
 	line?: number;
 	used: number;
 	compare?: FileComparison;
+	draft?: FileDraft;
 }) {
 	const thread = useStore((s) => s.held[threadId]?.thread);
 	const version = useStore((s) => s.diffVersion[threadId] ?? 0);
@@ -284,7 +295,6 @@ export function FileTab({
 	const split = useStore((s) => s.panel.fileSplit === true);
 	const [active, setActive] = useState(-1);
 	const [retry, setRetry] = useState(0);
-	const [finding, setFinding] = useState(false);
 	const body = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -310,6 +320,52 @@ export function FileTab({
 	const read = loaded?.path === path ? loaded.read : undefined;
 	const error = loaded?.path === path ? loaded.error : undefined;
 	const full = read?.path ?? path;
+
+	// What the editor was given: the file as read, or the tab's draft when it opens with one. It changes only when the
+	// file changes elsewhere while nothing is unsaved (a new `revision` gives the editor the new text); the user's own
+	// edits stay in the editor, which owns them. `disk` is the file as last read or written, which edits are made over.
+	const [shown, setShown] = useState<{ text: string; revision: number }>();
+	const disk = useRef<{ text?: string; mtimeMs: number }>(undefined);
+	const unsaved = useRef(draft);
+	unsaved.current = draft;
+	useEffect(() => {
+		if (read?.text === undefined) return;
+		const text = read.text;
+		const pending = unsaved.current;
+		if (pending) {
+			// Unsaved edits stay: a save refuses once the file has moved under them.
+			disk.current ??= { text: read.mtimeMs === pending.mtimeMs ? text : undefined, mtimeMs: pending.mtimeMs };
+			setShown((s) => s ?? { text: pending.text, revision: 1 });
+			return;
+		}
+		const known = disk.current?.text;
+		disk.current = { text, mtimeMs: read.mtimeMs };
+		setShown((s) => (s && (s.text === text || known === text) ? s : { text, revision: (s?.revision ?? 0) + 1 }));
+	}, [read]);
+
+	const autosave = useRef<ReturnType<typeof setTimeout>>(undefined);
+	const save = async () => {
+		clearTimeout(autosave.current);
+		autosave.current = undefined;
+		const saved = await saveFileDraft(threadId, path);
+		if (saved) disk.current = saved;
+	};
+	const edited = (text: string) => {
+		const known = disk.current;
+		if (!known) return;
+		setFileDraft(threadId, path, text === known.text ? undefined : { text, mtimeMs: known.mtimeMs });
+		clearTimeout(autosave.current);
+		autosave.current = setTimeout(() => void save(), AUTOSAVE_MS);
+	};
+	// Leaving the tab (another tab, another thread) writes what was waiting for the autosave.
+	useEffect(
+		() => () => {
+			if (autosave.current === undefined) return;
+			clearTimeout(autosave.current);
+			void saveFileDraft(threadId, path);
+		},
+		[threadId, path],
+	);
 
 	// The comparison's side, again after a turn and with each read of the file.
 	const baseKey = compare ? `${path}\0${compare.scope}\0${compare.against ?? ""}` : "";
@@ -338,10 +394,7 @@ export function FileTab({
 	const showable = fallback?.path === full ? fallback.compare : undefined;
 
 	// The same object while the text is the same, so a reload of an unchanged file redraws nothing.
-	const file = useMemo(
-		() => (read?.text !== undefined ? { name: basename(read.path), contents: read.text } : undefined),
-		[read?.path, read?.text],
-	);
+	const file = useMemo(() => (shown ? { name: basename(full), contents: shown.text } : undefined), [full, shown]);
 	const diff = useMemo(() => {
 		const text = shownBase?.text;
 		if (typeof text !== "string") return undefined;
@@ -421,13 +474,11 @@ export function FileTab({
 		<div
 			className="flex h-full min-h-0 min-w-0 flex-col"
 			aria-label={basename(path)}
-			// Mod+F in the tab finds in the file (Codex's Find in file), not in the thread; again, back to its field.
+			// Mod+S writes the edits now. (Mod+F in the editor is its own search panel, as in Codex.)
 			onKeyDown={(e) => {
-				if (!matches(e.nativeEvent, "desktop.thread.find")) return;
+				if (!matches(e.nativeEvent, "desktop.file.save")) return;
 				e.preventDefault();
-				const field = e.currentTarget.querySelector<HTMLInputElement>('[role="search"] input');
-				if (field) field.select();
-				else setFinding(true);
+				void save();
 			}}
 		>
 			<header className="@container/file-header relative z-20 flex shrink-0 items-center gap-1.5 p-2">
@@ -485,9 +536,7 @@ export function FileTab({
 				</div>
 			) : null}
 			<div className="flex min-h-0 flex-1 border-t border-line">
-				<div className="relative flex min-h-0 min-w-0 flex-1">
-				{/* Focusable, so a click in the code puts the keyboard (scrolling, Mod+F) in the tab. */}
-				<div ref={body} tabIndex={0} className="min-h-0 min-w-0 flex-1 overflow-auto outline-none">
+				<div ref={body} className="min-h-0 min-w-0 flex-1 overflow-auto">
 					{error && diff && highlighter ? (
 						<FileDiff fileDiff={diff} options={diffOptions} disableWorkerPool />
 					) : error ? (
@@ -496,22 +545,33 @@ export function FileTab({
 						<Notice title="Binary file not shown" detail="Open it in another app to see it." />
 					) : read.tooLarge ? (
 						<Notice title="This file is too large to preview in the side panel" detail="Open it in another app to see it." />
-					) : !file || !highlighter || (compare && !shownBase) ? null : diff ? (
-						<FileDiff fileDiff={diff} options={diffOptions} disableWorkerPool selectedLines={selected} />
-					) : (
-						<File file={file} options={fileOptions} disableWorkerPool selectedLines={selected} />
+					) : !file || !shown || !highlighter || (compare && !shownBase) ? null : (
+						<EditProvider createEditor={createEditor}>
+							{diff ? (
+								<FileDiff
+									key={shown.revision}
+									fileDiff={diff}
+									options={diffOptions}
+									disableWorkerPool
+									selectedLines={selected}
+									edit
+									onEditChange={(e) => edited(e.file.contents)}
+									onEditComplete={() => "reject"}
+								/>
+							) : (
+								<File
+									key={shown.revision}
+									file={file}
+									options={fileOptions}
+									disableWorkerPool
+									selectedLines={selected}
+									edit
+									onEditChange={(e) => edited(e.file.contents)}
+									onEditComplete={() => "reject"}
+								/>
+							)}
+						</EditProvider>
 					)}
-				</div>
-				{finding ? (
-					<FindBar
-						root={body}
-						file
-						onClose={() => {
-							setFinding(false);
-							body.current?.focus();
-						}}
-					/>
-				) : null}
 				</div>
 				{treeShown && cwd ? (
 					<div className="flex w-64 shrink-0 border-l border-line">

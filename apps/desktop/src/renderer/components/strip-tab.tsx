@@ -13,6 +13,7 @@ export function StripTab({
 	title,
 	tooltip,
 	italic = false,
+	dirty = false,
 	active,
 	onSelect,
 	onKeep,
@@ -22,6 +23,8 @@ export function StripTab({
 	title: string;
 	tooltip?: string;
 	italic?: boolean;
+	/** Unsaved edits: a dot where the close button is, the button again on hover. */
+	dirty?: boolean;
 	active: boolean;
 	onSelect: () => void;
 	onKeep?: () => void;
@@ -47,10 +50,11 @@ export function StripTab({
 			<IconButton
 				label={`Close ${title} tab`}
 				size="3xs"
-				className={`absolute end-[7px] z-10 rounded-[10px] ${active ? "" : "opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100"}`}
+				className={`absolute end-[7px] z-10 rounded-[10px] ${active || dirty ? "" : "opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100"}`}
 				onClick={onClose}
 			>
-				<X size={14} />
+				{dirty ? <span aria-hidden className="size-2 rounded-full bg-current group-hover/tab:hidden" /> : null}
+				<X size={14} className={dirty ? "hidden group-hover/tab:block" : undefined} />
 			</IconButton>
 		</div>
 	);

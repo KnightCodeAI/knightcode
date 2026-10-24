@@ -133,6 +133,7 @@ export function ConfirmDialog({
 	title,
 	description,
 	confirm,
+	cancel = "Cancel",
 	onConfirm,
 	onClose,
 }: {
@@ -140,6 +141,8 @@ export function ConfirmDialog({
 	description: ReactNode;
 	/** The action's label ("Delete", "Remove project"). */
 	confirm: string;
+	/** The way back's label, when Codex words it ("Continue viewing"). */
+	cancel?: string;
 	onConfirm: () => void;
 	onClose: () => void;
 }) {
@@ -147,7 +150,7 @@ export function ConfirmDialog({
 		<Dialog title={title} description={description} onClose={onClose}>
 			<DialogActions>
 				<Button color="secondary" size="lg" squircle className="px-4" onClick={onClose}>
-					Cancel
+					{cancel}
 				</Button>
 				<Button
 					variant="soft"

@@ -942,11 +942,20 @@ scope's trees, `thread/diff/file` for the file; nothing for an added file, the
 old text against nothing for a deleted one), word diffs on, unified or split
 (one layout for every file tab), and the navigation steps through its changed
 sections ("2/3", or the count before one is chosen). Under 625px of toolbar the
-file controls fold into one "File controls" button, as Codex's do. Mod+F in a
-file tab is Codex's Find in file: the thread's find bar over that file alone,
-in its corner. The Changes pane expands unchanged lines between hunks from
-`thread/diff/file`'s two sides (v1-completion-plan.md, D5). Tabs are
-Codex's: per thread, Changes first, then file tabs that share the strip (240px
+file controls fold into one "File controls" button, as Codex's do. The file is
+editable in place, shown changes included (Codex's pierre editor, @pierre/diffs'
+`EditProvider`): edits are the tab's draft in the store, so they outlive its
+view, and a tab with one is kept (no other file opens in its place) and shows a
+dot for its close button. A draft is written three seconds after the last edit
+or on Mod+S (`file/write` with the mtime it was edited over; a file that moved
+since is "Could not save file" and the draft stays), and when its view goes. A
+clean tab takes up changes made elsewhere when the file is read again (a turn,
+a return to the window). Closing an edited tab writes it first; when that
+fails, Codex's "Discard file changes?" / "Your unsaved changes to this file
+will be lost" asks, with Continue viewing and Discard changes. Mod+F in the
+editor opens its search panel, as in Codex. The Changes pane expands unchanged
+lines between hunks from `thread/diff/file`'s two sides (v1-completion-plan.md,
+D5). Tabs are Codex's: per thread, Changes first, then file tabs that share the strip (240px
 each, shrinking to 120px, then scrolling); a tab opened in passing is italic
 and the next one replaces it, a double-click keeps it, and past 12 file tabs
 the least recently used goes. Mod+Shift+W closes the active one.
