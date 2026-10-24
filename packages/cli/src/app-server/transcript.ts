@@ -185,6 +185,8 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 				completedAt: entryTime(entry),
 			});
 		} else if (entry.type === "custom_message") {
+			// Context for the model only, as the live mapper leaves it out.
+			if (!entry.display) continue;
 			const view = viewOf(entry.details);
 			t.turn.items.push({
 				type: "extensionMessage",
