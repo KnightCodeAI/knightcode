@@ -423,6 +423,9 @@ export function FileTab({
 	// edits stay in the editor, which owns them. `disk` is the file as last read or written, which edits are made over.
 	const [shown, setShown] = useState<{ text: string; revision: number }>();
 	const disk = useRef<{ text?: string; mtimeMs: number }>(undefined);
+	// The editor's text as last edited: an editor drawn afresh (changes shown or hidden, another comparison) starts
+	// from what the user has, not from the text the tab first read.
+	const typed = useRef<string>(undefined);
 	const unsaved = useRef(draft);
 	unsaved.current = draft;
 	useEffect(() => {
@@ -437,7 +440,9 @@ export function FileTab({
 		}
 		const known = disk.current?.text;
 		disk.current = { text, mtimeMs: read.mtimeMs };
-		setShown((s) => (s && (s.text === text || known === text) ? s : { text, revision: (s?.revision ?? 0) + 1 }));
+		if (shown && (shown.text === text || known === text)) return;
+		typed.current = undefined;
+		setShown({ text, revision: (shown?.revision ?? 0) + 1 });
 	}, [read]);
 
 	const autosave = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -448,6 +453,7 @@ export function FileTab({
 		if (saved) disk.current = saved;
 	};
 	const edited = (text: string) => {
+		typed.current = text;
 		const known = disk.current;
 		if (!known) return;
 		setFileDraft(threadId, path, text === known.text ? undefined : { text, mtimeMs: known.mtimeMs });
@@ -490,8 +496,12 @@ export function FileTab({
 	}, [threadId, full, compare, version]);
 	const showable = fallback?.path === full ? fallback.compare : undefined;
 
-	// The same object while the text is the same, so a reload of an unchanged file redraws nothing.
-	const file = useMemo(() => (shown ? { name: basename(full), contents: shown.text } : undefined), [full, shown]);
+	// The same object while the text is the same, so a reload of an unchanged file redraws nothing. Made again (from the
+	// typed text) only where a new editor is drawn: changes shown or hidden, another comparison or side.
+	const file = useMemo(
+		() => (shown ? { name: basename(full), contents: typed.current ?? shown.text } : undefined),
+		[full, shown, baseKey, shownBase?.text],
+	);
 	const diff = useMemo(() => {
 		const text = shownBase?.text;
 		if (typeof text !== "string") return undefined;
@@ -710,7 +720,7 @@ export function FileTab({
 						<EditProvider createEditor={createEditor}>
 							{diff ? (
 								<FileDiff
-									key={shown.revision}
+									key={`${shown.revision}:${baseKey}`}
 									fileDiff={diff}
 									options={diffOptions}
 									disableWorkerPool
