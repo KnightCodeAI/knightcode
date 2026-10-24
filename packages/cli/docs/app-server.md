@@ -706,7 +706,8 @@ full object id of a tree in the repository, or the file is in neither tree.
 Params: `{threadId, path, maxBytes?}`. Result: `{path, size, binary, tooLarge,
 text?, mtimeMs}`. A file's text, `path` resolved against the thread's cwd like a
 tool's path. `maxBytes` is 1 byte to 8 MiB (default 2 MiB). `text` comes only
-when the file is neither binary (a NUL in its first 8 KiB) nor larger than
+when the file is neither binary (a NUL in its first 8 KiB, or bytes that are not
+UTF-8, which decoded and saved would be replaced) nor larger than
 `maxBytes`; `size` is its length in bytes; `mtimeMs` its modification time when
 read, for `file/write`.
 Errors: `threadNotFound`; `invalidParams` when there is no such file or the path

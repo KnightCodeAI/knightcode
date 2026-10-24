@@ -115,11 +115,15 @@ test("file/read refuses a directory and a missing file; a NUL makes it binary; o
 	});
 });
 
-test("file/read decodes invalid UTF-8 with replacement characters", async () => {
+test("file/read answers bytes that are not UTF-8 as binary, so no save writes them back replaced", async () => {
 	const s = await repoServer();
 	const thread = await localThread(s);
 	writeFileSync(join(s.cwd, "latin1.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
-	expect((await fileRead(s, thread.id, "latin1.txt")).text).toBe("caf�\n");
+	const latin1 = await fileRead(s, thread.id, "latin1.txt");
+	expect(latin1).toMatchObject({ binary: true });
+	expect(latin1).not.toHaveProperty("text");
+	writeFileSync(join(s.cwd, "utf8.txt"), "café\n");
+	expect((await fileRead(s, thread.id, "utf8.txt")).text).toBe("café\n");
 });
 
 /** The new side, rebuilt from the old one and the read's hunks: what an expanded diff shows. */

@@ -4,6 +4,7 @@
  * row may name any file the agent read.
  */
 
+import { isUtf8 } from "node:buffer";
 import { open, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type { ResultOf } from "@knightcode/app-server-protocol";
@@ -44,14 +45,17 @@ export async function readFile(
 	} finally {
 		await handle.close();
 	}
-	const binary = buffer.subarray(0, Math.min(length, BINARY_PROBE_BYTES)).includes(0);
 	const tooLarge = length > maxBytes;
+	// Not UTF-8 is not text either: decoded, it would come back with U+FFFD in place of its bytes, and a save would
+	// write those.
+	const binary =
+		buffer.subarray(0, Math.min(length, BINARY_PROBE_BYTES)).includes(0) ||
+		(!tooLarge && !isUtf8(buffer.subarray(0, length)));
 	return {
 		path: absolute,
 		size: tooLarge ? Math.max(info.size, length) : length,
 		binary,
 		tooLarge,
-		// UTF-8 with U+FFFD for what does not decode.
 		...(binary || tooLarge ? {} : { text: buffer.toString("utf8", 0, length) }),
 		mtimeMs: info.mtimeMs,
 	};

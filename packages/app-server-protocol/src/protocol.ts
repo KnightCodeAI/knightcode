@@ -733,7 +733,7 @@ export const ClientRequests = {
 			/** Absolute. */
 			path: Str,
 			size: Num,
-			/** A NUL byte in the first 8 KiB. */
+			/** Not text: a NUL byte in the first 8 KiB, or bytes that are not UTF-8. */
 			binary: Bool,
 			/** Over maxBytes: `text` is absent. */
 			tooLarge: Bool,
