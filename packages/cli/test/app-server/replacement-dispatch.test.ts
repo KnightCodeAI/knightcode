@@ -163,4 +163,9 @@ test("real /plan approve fresh hands off one target turn rather than cancelling 
 	await a.waitFor("turn/completed", (params) => (params.turn as { threadId: string }).threadId === result.threadId);
 	expect(a.notifications.filter((note) => note.method === "turn/started")).toHaveLength(1);
 	expect(a.notifications.find((note) => note.method === "turn/started")?.params.requestId).toBe("plan-token");
+	// The name plan mode gives the fresh session reaches the client, not the handoff text.
+	expect(
+		a.notifications.find((note) => note.method === "thread/name/updated" && note.params.threadId === result.threadId)
+			?.params.name,
+	).toBe("Implement the task");
 });

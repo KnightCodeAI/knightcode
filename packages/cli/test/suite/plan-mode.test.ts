@@ -14,7 +14,7 @@ import { SessionManager } from "../../src/core/session-manager.ts";
 import toolsExtension from "@knightcode/tools";
 import { NO_USER_TEXT } from "@knightcode/tools/ask/tool";
 import { ENV_AGENT_DIR } from "../../src/config.ts";
-import planMode from "../../src/extensions/plan-mode/index.ts";
+import planMode, { planTitle } from "../../src/extensions/plan-mode/index.ts";
 import codemode from "../../src/extensions/codemode/index.ts";
 import { KeybindingsManager } from "../../src/core/keybindings.ts";
 import { initTheme } from "../../src/modes/interactive/theme/theme.ts";
@@ -250,6 +250,36 @@ describe("enforced plan mode", () => {
 		await h.session.prompt("/plan");
 		expect(h.session.getLastAssistantText()).toBe("implemented from RPC");
 		expect(state(h)).toMatchObject({ mode: "off", approved: 1 });
+	});
+
+	it("the desktop reviews a submitted plan on its own, with Codex's question, and implements it", async () => {
+		const h = await setup();
+		const asked: { title: string; rows: string[] }[] = [];
+		h.session.extensionRunner.setUIContext(
+			createTestUiContext({
+				select: async (title, rows) => {
+					asked.push({ title, rows });
+					return rows[0];
+				},
+			}),
+			"desktop",
+		);
+		h.setResponses([submission(), fauxAssistantMessage("implemented from the desktop")]);
+		await h.session.prompt("/plan task");
+		await vi.waitFor(() => expect(h.session.getLastAssistantText()).toBe("implemented from the desktop"));
+		expect(asked.map((a) => a.title)).toEqual(["Implement this plan?"]);
+		expect(asked[0]?.rows.map((r) => r.split(" — ")[0])).toEqual([
+			"Yes, implement this plan",
+			"Implement in a new thread",
+			"Exit planning",
+		]);
+		expect(state(h)).toMatchObject({ mode: "off", approved: 1 });
+	});
+
+	it("names a fresh session after the plan's first line of prose", () => {
+		expect(planTitle(PLAN)).toBe("Investigate and fix the issue.");
+		expect(planTitle("## Summary\n\n- **Add** `x.ts` support")).toBe("Add x.ts support");
+		expect(planTitle("# Summary\n# Changes")).toBe("Implement the plan");
 	});
 
 	it("an open review is cancelled on shutdown and cannot approve a replaced session", async () => {
