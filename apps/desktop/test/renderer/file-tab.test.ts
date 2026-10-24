@@ -15,7 +15,7 @@ vi.mock("../../src/renderer/components/changes.tsx", () => ({ highlighterReady: 
 vi.mock("@pierre/trees/react", () => ({ FileTree: () => null, useFileTree: () => ({}) }));
 
 import { changeBlocks, comparisonBase, lineCount } from "../../src/renderer/components/file-tab.tsx";
-import { joinPath, relativeTo, sectionOrder } from "../../src/renderer/components/files-panel.tsx";
+import { forget, joinPath, relativeTo, sectionOrder } from "../../src/renderer/components/files-panel.tsx";
 
 test("the comparison's side of a file: its base text, nothing for an added file, null when unchanged", async () => {
 	request.mockImplementation(async (method: string, params: { path?: string }) => {
@@ -76,4 +76,14 @@ test("tree paths join and split with the root's own separator, Windows without c
 
 test("Go to line counts lines as an editor numbers them", () => {
 	expect([lineCount(""), lineCount("a"), lineCount("a\n"), lineCount("a\nb"), lineCount("a\nb\n\n")]).toEqual([1, 1, 1, 2, 3]);
+});
+
+test("a folder leaves the tree with everything under it, and a file only itself", () => {
+	const known = new Set(["All files/src/", "All files/src/a.ts", "All files/src/lib/", "All files/src/lib/b.ts", "All files/srcs/c.ts", "All files/a.ts", "All files/a.tsx"]);
+	forget(known, "All files/src/");
+	forget(known, "All files/a.ts");
+	expect([...known]).toEqual(["All files/srcs/c.ts", "All files/a.tsx"]);
+	const listed = new Set(["", "src", "src/lib", "srcs"]);
+	forget(listed, "src/");
+	expect([...listed]).toEqual(["", "srcs"]);
 });

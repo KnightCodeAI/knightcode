@@ -210,6 +210,16 @@ function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: s
 type TreeModel = ReturnType<typeof useFileTree>["model"];
 
 /**
+ * Drops `path` from `paths`, and everything under it when it is a folder ("src/"). Listed folders, kept without the
+ * slash, are dropped the same way: `forget(listed, "src/")` drops "src" and "src/lib".
+ */
+export function forget(paths: Set<string>, path: string): void {
+	const folder = path.endsWith("/") ? path : undefined;
+	for (const p of [...paths])
+		if (p === path || (folder && (p === folder.slice(0, -1) || p.startsWith(folder)))) paths.delete(p);
+}
+
+/**
  * A folder of the thread's cwd (`base`, "" for the cwd itself) listed into a tree model under `prefix` (a row's path is
  * `prefix` and its path under `base`, folders ending in "/"), each folder below it the first time it opens, and all of
  * them again on a return to the window. `known` mirrors the model's paths; `onListed` follows each listing.
@@ -243,7 +253,15 @@ function useListing(
 				...own.filter((p) => !wanted.has(p)).map((path) => ({ type: "remove" as const, path, recursive: true })),
 				...entries.filter((p) => !known.current.has(p)).map((path) => ({ type: "add" as const, path })),
 			];
-			for (const op of operations) op.type === "add" ? known.current.add(op.path) : known.current.delete(op.path);
+			for (const op of operations) {
+				if (op.type === "add") {
+					known.current.add(op.path);
+					continue;
+				}
+				// A folder goes with everything under it, and is listed afresh if it comes back and opens.
+				forget(known.current, op.path);
+				if (op.path.endsWith("/")) forget(listed, `${base ? `${base}/` : ""}${op.path.slice(prefix.length)}`);
+			}
 			if (operations.length) model.batch(operations);
 			listedHandler.current(folder);
 		};

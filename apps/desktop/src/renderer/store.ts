@@ -1702,10 +1702,11 @@ export function closeTab(threadId: string, index: number): void {
 	if (index === 0) return setPanel({ open: false });
 	const tab = state.tabs[threadId]?.tabs[index];
 	if (tab?.kind === "file" && tab.draft) {
-		void saveFileDraft(threadId, tab.path).then((saved) => {
-			// Typed while it wrote: still unsaved, so ask rather than close over it.
+		void saveFileDraft(threadId, tab.path).then(() => {
+			// Whatever this write did (another may have saved it first), the tab closes once nothing is unsaved; still
+			// unsaved (refused, or typed while it wrote), it asks rather than close over the edits.
 			const left = state.tabs[threadId]?.tabs.find((t) => t.kind === "file" && tabKey(t.path) === tabKey(tab.path));
-			if (saved && !(left?.kind === "file" && left.draft)) discardFileTab(threadId, tab.path);
+			if (!(left?.kind === "file" && left.draft)) discardFileTab(threadId, tab.path);
 			else set((s) => ({ ...s, discarding: { threadId, path: tab.path } }));
 		});
 		return;
