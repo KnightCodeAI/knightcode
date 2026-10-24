@@ -50,7 +50,14 @@ const DESKTOP_REVIEW: { action: ReviewAction; label: string; description: string
 
 /** A fresh session's name: the plan's first line of prose (its summary), so the session list does not show the handoff. */
 export function planTitle(markdown: string): string {
+	let fenced = false;
 	for (const raw of markdown.split("\n")) {
+		// A code block is never the plan's prose, nor a separator such as ---.
+		if (/^\s*(```|~~~)/.test(raw)) {
+			fenced = !fenced;
+			continue;
+		}
+		if (fenced || !/[\p{L}\p{N}]/u.test(raw)) continue;
 		const line = raw
 			.replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s*)/, "")
 			.replaceAll(/\*\*|__|`/g, "")

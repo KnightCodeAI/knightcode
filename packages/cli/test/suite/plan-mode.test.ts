@@ -280,6 +280,7 @@ describe("enforced plan mode", () => {
 		expect(planTitle(PLAN)).toBe("Investigate and fix the issue.");
 		expect(planTitle("## Summary\n\n- **Add** `x.ts` support")).toBe("Add x.ts support");
 		expect(planTitle("# Summary\n# Changes")).toBe("Implement the plan");
+		expect(planTitle("---\n```ts\nconst x = 1;\n```\nCache the index.")).toBe("Cache the index.");
 	});
 
 	it("an open review is cancelled on shutdown and cannot approve a replaced session", async () => {
