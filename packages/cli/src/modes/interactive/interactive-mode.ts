@@ -41,6 +41,7 @@ import {
 	hyperlink,
 	Markdown,
 	matchesKey,
+	MouseRegion,
 	Spacer,
 	setCapabilityOverrides,
 	setKeybindings,
@@ -66,6 +67,7 @@ import {
 	VERSION,
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
+import { BACKGROUND_SHELL_MESSAGE_TYPE } from "../../core/background-shells.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
 import type { AgentSessionRuntimeDiagnostic } from "../../core/agent-session-services.ts";
 import {
@@ -153,6 +155,8 @@ import { BranchSummaryMessageComponent } from "./components/branch-summary-messa
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomEntryComponent } from "./components/custom-entry.ts";
+import { renderBackgroundShellMessage } from "./components/background-shell-message.ts";
+import { BackgroundShellsIndicator, BackgroundTasksComponent } from "./components/background-tasks.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
 import { ViewComponent } from "./components/view-component.ts";
 import { DynamicBorder } from "./components/dynamic-border.ts";
@@ -474,6 +478,14 @@ export class InteractiveMode {
 	private activeSelectorDispose?: () => void;
 	private footer: FooterComponent;
 	private footerContainer: Container;
+	private readonly backgroundShellsIndicator = new BackgroundShellsIndicator(() => this.session.backgroundShells);
+	/** The pill as mounted: a click opens `/tasks`. */
+	private readonly backgroundShellsRow = new MouseRegion(this.backgroundShellsIndicator, (event) => {
+		if (event.type !== "click" || event.button !== "left") return undefined;
+		this.backgroundShellsIndicator.selected = false;
+		this.showBackgroundTasks();
+		return { handled: true };
+	});
 	private footerDataProvider: FooterDataProvider;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
@@ -665,6 +677,7 @@ export class InteractiveMode {
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footerContainer = new Container();
+		this.footerContainer.addChild(this.backgroundShellsRow);
 		this.footerContainer.addChild(this.footer);
 
 		// Load hide thinking block setting
@@ -2557,6 +2570,7 @@ export class InteractiveMode {
 		}
 
 		this.footerContainer.clear();
+		this.footerContainer.addChild(this.backgroundShellsRow);
 		if (factory) {
 			// Create and add custom footer, passing the data provider
 			this.customFooter = factory(this.ui, theme, this.footerDataProvider);
@@ -2910,6 +2924,9 @@ export class InteractiveMode {
 				if (!customEditor.onExtensionShortcut) {
 					customEditor.onExtensionShortcut = (data: string) => this.defaultEditor.onExtensionShortcut?.(data);
 				}
+				if (!customEditor.onKeyIntercept) {
+					customEditor.onKeyIntercept = (data: string) => this.defaultEditor.onKeyIntercept?.(data) ?? false;
+				}
 				// Copy action handlers (clear, suspend, model switching, etc.)
 				for (const [action, handler] of this.defaultEditor.actionHandlers) {
 					(customEditor.actionHandlers as Map<string, () => void>).set(action, handler);
@@ -3089,6 +3106,9 @@ export class InteractiveMode {
 		this.ui.onDebug = () => this.handleDebugCommand();
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
+		// Without a foreground shell command the key belongs to the editor (Ctrl+B moves the cursor).
+		this.defaultEditor.onAction("app.tools.background", () => this.session.backgroundShells.promoteForeground() > 0);
+		this.defaultEditor.onKeyIntercept = (data) => this.handleBackgroundShellsPillKey(data);
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => void this.handleOpenExternalEditor());
 		this.defaultEditor.onAction(
@@ -3252,6 +3272,11 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (text === "/tasks") {
+				this.showBackgroundTasks();
+				this.editor.setText("");
+				return;
+			}
 			if (text === "/fork") {
 				this.showUserMessageSelector();
 				this.editor.setText("");
@@ -3375,9 +3400,15 @@ export class InteractiveMode {
 	}
 
 	private subscribeToAgent(): void {
-		this.unsubscribe = this.session.subscribe(async (event) => {
+		const unsubscribeEvents = this.session.subscribe(async (event) => {
 			await this.handleEvent(event);
 		});
+		// Background commands change while the agent is idle; the footer counts them.
+		const unsubscribeBackgroundShells = this.session.backgroundShells.subscribe(() => this.ui.requestRender());
+		this.unsubscribe = () => {
+			unsubscribeEvents();
+			unsubscribeBackgroundShells();
+		};
 	}
 
 	private async handleEvent(event: AgentSessionEvent): Promise<void> {
@@ -3860,7 +3891,9 @@ export class InteractiveMode {
 			}
 			case "custom": {
 				if (message.display) {
-					const renderer = this.session.extensionRunner.getMessageRenderer(message.customType);
+					const renderer =
+						this.session.extensionRunner.getMessageRenderer(message.customType) ??
+						(message.customType === BACKGROUND_SHELL_MESSAGE_TYPE ? renderBackgroundShellMessage : undefined);
 					const component = new CustomMessageComponent(
 						message,
 						renderer,
@@ -5510,6 +5543,38 @@ export class InteractiveMode {
 		});
 	}
 
+	/**
+	 * Keyboard focus on the background commands pill. Down from an empty prompt moves focus to it,
+	 * Enter opens `/tasks`, and Escape or Up give focus back; any other key goes on to the prompt.
+	 */
+	private handleBackgroundShellsPillKey(data: string): boolean {
+		const pill = this.backgroundShellsIndicator;
+		if (!pill.selected) {
+			if (!this.keybindings.matches(data, "tui.editor.cursorDown") || this.editor.getText() !== "") return false;
+			if (this.session.backgroundShells.runningCount() === 0) return false;
+			pill.selected = true;
+			this.ui.requestRender();
+			return true;
+		}
+		pill.selected = false;
+		this.ui.requestRender();
+		if (this.keybindings.matches(data, "tui.select.confirm")) {
+			this.showBackgroundTasks();
+			return true;
+		}
+		return this.keybindings.matches(data, "tui.select.cancel") || this.keybindings.matches(data, "tui.editor.cursorUp");
+	}
+
+	private showBackgroundTasks(): void {
+		this.showSelector((done) => {
+			const view = new BackgroundTasksComponent(this.session.backgroundShells, this.ui, () => {
+				done();
+				this.ui.requestRender();
+			});
+			return { component: view, focus: view, dispose: () => view.dispose() };
+		});
+	}
+
 	private showUserMessageSelector(): void {
 		const userMessages = this.session.getUserMessagesForForking();
 
@@ -6886,6 +6951,7 @@ export class InteractiveMode {
 		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
+		const backgroundShells = this.getAppKeyDisplay("app.tools.background");
 		const toggleThinking = this.getAppKeyDisplay("app.thinking.toggle");
 		const externalEditor = this.getAppKeyDisplay("app.editor.external");
 		const cycleModelBackward = this.getAppKeyDisplay("app.model.cycleBackward");
@@ -6931,6 +6997,7 @@ export class InteractiveMode {
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |
 | \`${expandTools}\` | Toggle tool output expansion |
+| \`${backgroundShells}\` | Move running shell commands to the background (\`/tasks\` to view them) |
 | \`${toggleThinking}\` | Toggle thinking block visibility |
 | \`${externalEditor}\` | Edit message in external editor |
 | \`${copyMessage}\` | Copy selection or last assistant message |

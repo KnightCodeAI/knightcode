@@ -262,6 +262,8 @@ A tool can run other tools with `ctx.executeTool(name, args, { signal, onUpdate 
 
 See [`hello.ts`](../examples/extensions/hello.ts), [`todo.ts`](../examples/extensions/todo.ts), [`dynamic-tools.ts`](../examples/extensions/dynamic-tools.ts), and [`truncated-tool.ts`](../examples/extensions/truncated-tool.ts).
 
+A tool registered under a built-in name replaces the built-in tool. Re-registering a copy of `createBashToolDefinition(cwd)` or `createPowerShellToolDefinition(cwd)` with object spread, for example to change its rendering, keeps [background commands](usage.md#background-commands): the session runs them with its own background manager as long as the copy keeps the built-in `execute` and `parameters`. A copy that replaces `execute`, such as one that routes commands to a sandbox or a remote host, runs commands in the foreground only, and `task_stop` is not declared for it.
+
 ### Tool exposure
 
 `exposure` controls how the model reaches a tool. "Callable" means callable from other tools through `ctx.executeTool()` (`ctx.tools`), as the `codemode` tool's scripts do:
