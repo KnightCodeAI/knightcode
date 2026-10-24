@@ -1,8 +1,9 @@
 /**
  * A turn's work as Codex shows it (measured 2026-10-20 from the Codex app and its bundle): each tool call is a row
  * named for what it did ("Ran …", "Read …", "Edited …"), consecutive calls fold under one summary row ("Edited
- * files, ran commands", Codex's fixed part order), and questions and plans stand alone. While a turn runs, finished
- * calls are hidden and only the running one shows. Pure, so tests need no DOM.
+ * files, ran commands", Codex's fixed part order), and questions and plans stand alone. While a turn runs every call
+ * stays in sight, the running one in the present tense (Codex 26.1016's thread, commentaryDisplay "all"). Pure, so
+ * tests need no DOM.
  */
 
 import type { ToolOutput } from "@knightcode/app-server-protocol";
@@ -503,11 +504,41 @@ export function workEntries(items: ViewItem[]): Entry[] {
 	return entries;
 }
 
-/** Codex's live view: calls that finished are hidden while the turn runs, except questions and plans. */
-export function liveEntries(entries: Entry[]): Entry[] {
-	return entries.filter((entry) =>
-		entry.kind === "group" ? entry.items.some(isRunning) : !groupable(entry.item) || isRunning(entry.item),
-	);
+/**
+ * A thread's sources, as Codex's summary lists them under "Sources": the images the user attached, the MCP servers
+ * whose tools ran, and the web when the agent searched or fetched it.
+ */
+export function threadSources(turns: { items: ViewItem[] }[]): {
+	images: { mimeType: string; data: string }[];
+	servers: string[];
+	web: boolean;
+} {
+	const images: { mimeType: string; data: string }[] = [];
+	const servers = new Set<string>();
+	let web = false;
+	for (const turn of turns)
+		for (const item of turn.items) {
+			if (item.type === "userMessage") images.push(...(item.images ?? []));
+			if (item.type !== "toolCall") continue;
+			if (item.tool === "websearch" || item.tool === "webfetch") web = true;
+			const server = /^mcp__(.+?)__/.exec(item.tool)?.[1];
+			if (server) servers.add(server);
+		}
+	return { images, servers: [...servers], web };
+}
+
+/**
+ * What the model is thinking about, as Codex's "Thinking" status names it: the bold heading its latest reasoning summary
+ * opens with ("**Inspecting the repo**"). Codex draws reasoning only there, never as rows of its own.
+ */
+export function thinkingHeading(items: ViewItem[]): string | undefined {
+	for (let i = items.length - 1; i >= 0; i--) {
+		const item = items[i]!;
+		if (item.type !== "reasoning") continue;
+		const heading = /^\s*\*\*(.+?)\*\*/.exec(item.text)?.[1]?.trim();
+		if (heading) return heading;
+	}
+	return undefined;
 }
 
 // --- commands ---------------------------------------------------------------------------------------------------
