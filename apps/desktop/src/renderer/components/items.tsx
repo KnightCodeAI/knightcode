@@ -350,7 +350,7 @@ function FoldedText({ text }: { text: string }) {
  */
 function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cwd: string }) {
 	const nestedOf = (id: string) => items.filter((i): i is ToolItem => i.type === "toolCall" && i.parentItemId === id);
-	const entries = workEntries(items.filter((i) => i.type !== "reasoning"));
+	const entries = workEntries(items);
 	const rows: ReactNode[] = [];
 	const call = (item: ToolItem) =>
 		live && isRunning(item) ? (
@@ -599,7 +599,8 @@ export function TurnView({
 	const compactedAfter = finalIndex >= 0 && rest.some((i, n) => i.type === "compaction" && n > finalIndex);
 	// The proposed plan is a card of its own after the reply, as Codex draws it, not a row of the work.
 	const plan = turn.items.findLast(isPlan);
-	const work = rest.filter((i) => i !== final && i.type !== "compaction" && !isPlan(i));
+	// Reasoning is no row (Codex names it only in the running status), so a turn of reasoning alone has no work.
+	const work = rest.filter((i) => i !== final && i.type !== "compaction" && i.type !== "reasoning" && !isPlan(i));
 	const last = turn.items.at(-1);
 	// A reply streaming in shows itself; until one does, Codex's "Thinking" status stands in.
 	const typing = running && last?.type === "agentMessage" && last.completedAt === undefined;
