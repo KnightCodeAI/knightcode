@@ -963,7 +963,7 @@ libraries Codex uses, already dependencies: `@pierre/diffs` (`CodeView`,
   included as Codex's tree shows `.git` and `.gitignore`; at most 5,000 entries
   with `truncated`. `root` is the cwd; entry paths are relative to it.
 - `file/read` gains `mtimeMs`; `file/write {threadId, path, text,
-  expectedMtimeMs?}` → `{mtimeMs}`, refusing with `concurrentChange` when the
+  expectedMtimeMs?}` → `{mtimeMs}`, refusing with `fileChanged` when the
   file's mtime is not the expected one (Codex's saveText).
 
 #### Task S2c.1: the Files tab and the tree
