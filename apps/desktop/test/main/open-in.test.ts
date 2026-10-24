@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -367,5 +367,6 @@ test.skipIf(process.platform === "win32")("a PATH command linked into an app is 
 	const root = layout(["Visual Studio Code.app/Contents/Resources/app/bin/code"]);
 	mkdirSync(join(root, "bin"));
 	symlinkSync(join(root, "Visual Studio Code.app/Contents/Resources/app/bin/code"), join(root, "bin/code"));
-	expect(appBundle(join(root, "bin/code"))).toBe(join(root, "Visual Studio Code.app"));
+	// macOS keeps temporary folders under /var, a link to /private/var: the bundle comes back resolved.
+	expect(appBundle(join(root, "bin/code"))).toBe(realpathSync(join(root, "Visual Studio Code.app")));
 });
