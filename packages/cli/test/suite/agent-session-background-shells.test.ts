@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { BACKGROUND_SHELL_MESSAGE_TYPE, offersBackgroundShells } from "../../src/core/background-shells.ts";
@@ -13,6 +15,11 @@ function backgroundMessages(harness: Harness): CustomMessage[] {
 		(message): message is CustomMessage =>
 			message.role === "custom" && message.customType === BACKGROUND_SHELL_MESSAGE_TYPE,
 	);
+}
+
+/** A shell command that runs `then` once `path` exists, so the test decides when it ends. */
+function waitForFile(path: string, then: string): string {
+	return `while [ ! -f '${path.replace(/\\/g, "/")}' ]; do sleep 0.05; done; ${then}`;
 }
 
 function startBackground(command: string) {
@@ -83,8 +90,9 @@ describe("AgentSession background shell commands", () => {
 
 	it("starts a run to report a command that ends while the agent is idle", async () => {
 		const harness = await create();
+		const gate = join(harness.tempDir, "gate");
 		harness.setResponses([
-			startBackground("sleep 0.3; echo built"),
+			startBackground(waitForFile(gate, "echo built")),
 			fauxAssistantMessage("building in the background"),
 			fauxAssistantMessage("the build finished"),
 		]);
@@ -93,6 +101,7 @@ describe("AgentSession background shell commands", () => {
 		expect(harness.session.backgroundShells.runningCount()).toBe(1);
 		expect(harness.getPendingResponseCount()).toBe(1);
 
+		writeFileSync(gate, "");
 		await harness.session.waitForBackgroundShells();
 
 		expect(harness.getPendingResponseCount()).toBe(0);

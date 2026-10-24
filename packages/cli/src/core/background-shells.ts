@@ -158,6 +158,8 @@ export class BackgroundShellManager {
 		);
 		this.records.set(info.id, record);
 		if (this.disposed) this.stop(info.id, "session");
+		// A foreground command moved here may already be past the limit, and may never write again.
+		else if (info.outputBytes > this.maxOutputBytes) this.stop(info.id, "output_limit");
 		this.emitChange();
 		return {
 			id: info.id,
@@ -254,10 +256,15 @@ export class BackgroundShellManager {
 		return this.foreground.size > 0;
 	}
 
-	/** Move every running foreground command to the background. Returns how many moved. */
+	/**
+	 * Move running foreground commands to the background, as many as the running cap leaves room for;
+	 * the rest stay in the foreground. Returns how many moved.
+	 */
 	promoteForeground(): number {
 		let moved = 0;
 		for (const promote of [...this.foreground]) {
+			// A moved command is adopted a tick later, so count the ones moved in this loop too.
+			if (this.runningCount() + moved >= MAX_RUNNING_BACKGROUND_SHELLS) break;
 			this.foreground.delete(promote);
 			if (promote()) moved++;
 		}
@@ -448,6 +455,8 @@ export interface BackgroundShellNotice {
 	command: string;
 	status: BackgroundShellStatus;
 	exitCode?: number;
+	/** Why the command failed without an exit code. */
+	error?: string;
 	summary: string;
 	outputPath: string;
 	/** The last lines of output, without terminal escapes. */
@@ -474,11 +483,17 @@ export function createBackgroundShellNotice(shell: BackgroundShellInfo, output: 
 		command: shell.command,
 		status: shell.status,
 		exitCode: shell.exitCode,
+		...(shell.error ? { error: shell.error } : {}),
 		summary: describeBackgroundShellEnd(shell),
 		outputPath: shell.outputPath,
 		outputTail: tail.content.trimEnd(),
 		...(shell.outputFileError ? { outputFileError: shell.outputFileError } : {}),
 	};
+}
+
+/** Escapes `&`, `<` and `>`, so a command or its output cannot close a tag or forge one. */
+function escapeXmlText(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** The text the model reads for ended commands. */
@@ -487,14 +502,16 @@ export function formatBackgroundShellNotices(notices: readonly BackgroundShellNo
 		.map((notice) =>
 			[
 				"<task-notification>",
-				`<task-id>${notice.id}</task-id>`,
+				`<task-id>${escapeXmlText(notice.id)}</task-id>`,
 				`<status>${notice.status}</status>`,
-				`<summary>${notice.summary}</summary>`,
-				`<output-file>${notice.outputPath}</output-file>`,
+				`<summary>${escapeXmlText(notice.summary)}</summary>`,
+				`<output-file>${escapeXmlText(notice.outputPath)}</output-file>`,
 				...(notice.outputFileError
-					? [`<output-file-error>The output file is incomplete: ${notice.outputFileError}</output-file-error>`]
+					? [
+							`<output-file-error>The output file is incomplete: ${escapeXmlText(notice.outputFileError)}</output-file-error>`,
+						]
 					: []),
-				...(notice.outputTail ? ["<output-tail>", notice.outputTail, "</output-tail>"] : []),
+				...(notice.outputTail ? ["<output-tail>", escapeXmlText(notice.outputTail), "</output-tail>"] : []),
 				"</task-notification>",
 			].join("\n"),
 		)

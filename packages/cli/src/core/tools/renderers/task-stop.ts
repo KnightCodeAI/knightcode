@@ -20,8 +20,9 @@ export const taskStopRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "r
 	},
 	renderResult(result, _options, theme, context) {
 		const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-		const details = result.details as TaskStopToolDetails | undefined;
-		if (!details) {
+		// A failed call carries `{}` as its details.
+		const details = result.details as Partial<TaskStopToolDetails> | undefined;
+		if (context.isError || typeof details?.command !== "string") {
 			text.setText(theme.fg(context.isError ? "error" : "toolOutput", getTextOutput(result, false).trim()));
 			return text;
 		}

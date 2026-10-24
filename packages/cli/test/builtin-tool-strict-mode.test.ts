@@ -93,7 +93,9 @@ describe("strict built-in tools", () => {
 						expect(session.getToolDefinition(name)?.constrainedSampling).toBe(false);
 					}
 					for (const tool of session.agent.state.tools) {
-						if (tool.name !== "task_stop") expect(tool.constrainedSampling).toBe(false);
+						// task_stop has no strict schema to turn off.
+						if (tool.name === "task_stop") expect(tool.constrainedSampling).toBeUndefined();
+						else expect(tool.constrainedSampling).toBe(false);
 					}
 					if (activeTools.includes("read")) {
 						writeFileSync(join(cwd, "sample.txt"), "still works");

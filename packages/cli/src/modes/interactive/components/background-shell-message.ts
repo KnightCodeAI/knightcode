@@ -1,4 +1,13 @@
-import { type Component, Container, Gutter, Spacer, Text, type TuiMouseEvent } from "@knightcode/tui";
+import {
+	type Component,
+	Container,
+	Gutter,
+	Spacer,
+	Text,
+	type TuiMouseEvent,
+	truncateToWidth,
+	visibleWidth,
+} from "@knightcode/tui";
 import type {
 	BackgroundShellMessageDetails,
 	BackgroundShellNotice,
@@ -26,7 +35,8 @@ function statusLabel(notice: BackgroundShellNotice): string {
 		case "completed":
 			return "Completed";
 		case "failed":
-			return notice.exitCode !== undefined ? `Failed with exit code ${notice.exitCode}` : "Failed";
+			if (notice.exitCode !== undefined) return `Failed with exit code ${notice.exitCode}`;
+			return notice.error ? `Failed: ${notice.error}` : "Failed";
 		case "timed_out":
 			return "Timed out";
 		case "stopped":
@@ -36,11 +46,28 @@ function statusLabel(notice: BackgroundShellNotice): string {
 	}
 }
 
+/** `Background(npm test)` on one line: a long command is cut so the header never wraps. */
+class NoticeHeader implements Component {
+	private readonly command: string;
+	private readonly t: Theme;
+
+	constructor(command: string, t: Theme) {
+		this.command = command.replace(/\s+/g, " ").trim();
+		this.t = t;
+	}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		const t = this.t;
+		const budget = Math.max(0, width - visibleWidth("Background") - 2);
+		const command = truncateToWidth(t.fg("toolOutput", this.command), budget, t.fg("toolOutput", "…"));
+		return [truncateToWidth(formatToolCall(t, "Background", command), width, "…")];
+	}
+}
+
 /** One ended command: `● Background(npm test)`, then its status and the end of its output. */
 function noticeBlock(notice: BackgroundShellNotice, expanded: boolean, t: Theme): Component {
-	const line = notice.command.replace(/\s+/g, " ").trim();
-	const command = line.length > 200 ? `${line.slice(0, 199)}…` : line;
-	const call = formatToolCall(t, "Background", t.fg("toolOutput", command));
 	const result = new Container();
 	result.addChild(new Text(`${t.fg("toolOutput", statusLabel(notice))} ${t.fg("muted", `· ID ${notice.id}`)}`, 0, 0));
 	if (notice.outputTail) {
@@ -60,7 +87,9 @@ function noticeBlock(notice: BackgroundShellNotice, expanded: boolean, t: Theme)
 		);
 	}
 	const block = new Container();
-	block.addChild(new Gutter(new Text(call, 0, 0), t.fg(BULLET_COLORS[notice.status], BULLET_GUTTER), BLOCK_INDENT));
+	block.addChild(
+		new Gutter(new NoticeHeader(notice.command, t), t.fg(BULLET_COLORS[notice.status], BULLET_GUTTER), BLOCK_INDENT),
+	);
 	block.addChild(new Gutter(result, t.fg("dim", RESULT_GUTTER), RESULT_INDENT));
 	return block;
 }

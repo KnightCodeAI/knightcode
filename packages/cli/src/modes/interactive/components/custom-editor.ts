@@ -14,7 +14,7 @@ export class CustomEditor extends Editor {
 	private keybindings: KeybindingsManager;
 	private workingStatusIndicator: StatusIndicator | undefined;
 	public readonly embedWorkingStatus: boolean;
-	/** A handler that returns false leaves the key to the editor. */
+	/** A handler that returns false leaves the key to the editor, except for app.interrupt and app.exit. */
 	public actionHandlers: Map<AppKeybinding, () => unknown> = new Map();
 
 	// Special handlers that can be dynamically replaced

@@ -43,7 +43,8 @@ function allowedLine(active: readonly string[]): string {
 	const shell = shells.length
 		? ` ${shells.join(" and ")} commands are not checked: run only commands that inspect (git log, git diff, tests or builds that leave tracked files alone), never ones that edit, format, install, commit or otherwise change state.`
 		: "";
-	return `Allowed: ${inspect.length ? inspect.join(", ") : "no inspection tools"}, ask_user and submit_plan. Every other tool is blocked.${shell}`;
+	const stop = active.includes("task_stop") ? ", task_stop (to stop a background command)" : "";
+	return `Allowed: ${inspect.length ? inspect.join(", ") : "no inspection tools"}${stop}, ask_user and submit_plan. Every other tool is blocked.${shell}`;
 }
 
 const instructions = (active: readonly string[]) => `<plan_mode>

@@ -16,10 +16,12 @@ import { type ThemeColor, theme } from "../theme/theme.ts";
 
 /** Durations and live output are redrawn this often. */
 const REFRESH_MS = 1000;
-/** Rows shown at once in the list; it scrolls past that. */
+/** Rows shown at once in the list; it scrolls past that. Fewer on a short terminal. */
 const MAX_VISIBLE_ROWS = 10;
-/** Output lines in the details view's box. */
+/** Output lines in the details view's box. Fewer on a short terminal. */
 const OUTPUT_LINES = 10;
+/** Terminal rows left to the footer below the dialog. */
+const SCREEN_RESERVE = 4;
 /** Command characters shown in the details view. */
 const COMMAND_CHARS = 280;
 /** Horizontal padding inside a pane. */
@@ -277,11 +279,10 @@ export class BackgroundTasksComponent implements Component {
 				0,
 				shells.findIndex((shell) => shell.id === this.selectedId),
 			);
-			const start = Math.max(
-				0,
-				Math.min(selected - Math.floor(MAX_VISIBLE_ROWS / 2), shells.length - MAX_VISIBLE_ROWS),
-			);
-			const end = Math.min(start + MAX_VISIBLE_ROWS, shells.length);
+			// The pane's frame with its subtitle takes 7 rows, the "N of M" line one more.
+			const visible = Math.max(3, Math.min(MAX_VISIBLE_ROWS, this.tui.terminal.rows - SCREEN_RESERVE - 8));
+			const start = Math.max(0, Math.min(selected - Math.floor(visible / 2), shells.length - visible));
+			const end = Math.min(start + visible, shells.length);
 			// Pane padding, the pointer, and room for the status label.
 			const commandWidth = Math.max(30, width - PANE_PAD * 2 - 2 - 14);
 			for (let i = start; i < end; i++) {
@@ -325,8 +326,10 @@ export class BackgroundTasksComponent implements Component {
 			body.push(theme.fg("error", `The output file is incomplete: ${shell.outputFileError}`));
 		}
 
+		// The pane's frame takes 6 rows; the "Output:" heading and its gap, the box's borders and the count line 5 more.
+		const room = this.tui.terminal.rows - SCREEN_RESERVE - body.length - 11;
 		body.push("", theme.bold("Output:"));
-		const lines = displayLines(this.manager.readOutput(shell.id)).slice(-OUTPUT_LINES);
+		const lines = displayLines(this.manager.readOutput(shell.id)).slice(-Math.max(3, Math.min(OUTPUT_LINES, room)));
 		if (lines.length === 0) {
 			body.push(theme.fg("dim", "No output available"));
 		} else {

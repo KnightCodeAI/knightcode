@@ -130,15 +130,20 @@ export interface ToolsOptions {
 	backgroundShells?: BackgroundShellManager;
 }
 
+/** The one owner every shell tool and task_stop share, also when it was given only as a shell tool's option. */
+function backgroundOwner(options: ToolsOptions | undefined): BackgroundShellManager | undefined {
+	return options?.backgroundShells ?? options?.bash?.backgroundShells ?? options?.powershell?.backgroundShells;
+}
+
 function shellOptions<T extends object>(
 	options: T | undefined,
 	backgroundShells: BackgroundShellManager | undefined,
 ): T | undefined {
-	return backgroundShells ? ({ backgroundShells, ...options } as T) : options;
+	return backgroundShells ? ({ ...options, backgroundShells } as T) : options;
 }
 
 function taskStopOptions(options: ToolsOptions | undefined) {
-	return { backgroundShells: options?.backgroundShells };
+	return { backgroundShells: backgroundOwner(options) };
 }
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
@@ -146,9 +151,9 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 		case "read":
 			return createReadToolDefinition(cwd, options?.read);
 		case "bash":
-			return createBashToolDefinition(cwd, shellOptions(options?.bash, options?.backgroundShells));
+			return createBashToolDefinition(cwd, shellOptions(options?.bash, backgroundOwner(options)));
 		case "powershell":
-			return createPowerShellToolDefinition(cwd, shellOptions(options?.powershell, options?.backgroundShells));
+			return createPowerShellToolDefinition(cwd, shellOptions(options?.powershell, backgroundOwner(options)));
 		case "task_stop":
 			return createTaskStopToolDefinition(taskStopOptions(options));
 		case "edit":
@@ -171,9 +176,9 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 		case "read":
 			return createReadTool(cwd, options?.read);
 		case "bash":
-			return createBashTool(cwd, shellOptions(options?.bash, options?.backgroundShells));
+			return createBashTool(cwd, shellOptions(options?.bash, backgroundOwner(options)));
 		case "powershell":
-			return createPowerShellTool(cwd, shellOptions(options?.powershell, options?.backgroundShells));
+			return createPowerShellTool(cwd, shellOptions(options?.powershell, backgroundOwner(options)));
 		case "task_stop":
 			return createTaskStopTool(taskStopOptions(options));
 		case "edit":
@@ -194,8 +199,8 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 export function createCodingToolDefinitions(cwd: string, options?: ToolsOptions): ToolDef[] {
 	return [
 		createReadToolDefinition(cwd, options?.read),
-		createBashToolDefinition(cwd, shellOptions(options?.bash, options?.backgroundShells)),
-		...(options?.backgroundShells ? [createTaskStopToolDefinition(taskStopOptions(options))] : []),
+		createBashToolDefinition(cwd, shellOptions(options?.bash, backgroundOwner(options))),
+		...(backgroundOwner(options) ? [createTaskStopToolDefinition(taskStopOptions(options))] : []),
 		createEditToolDefinition(cwd, options?.edit),
 		createWriteToolDefinition(cwd, options?.write),
 	];
@@ -213,8 +218,8 @@ export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOption
 export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<ToolName, ToolDef> {
 	return {
 		read: createReadToolDefinition(cwd, options?.read),
-		bash: createBashToolDefinition(cwd, shellOptions(options?.bash, options?.backgroundShells)),
-		powershell: createPowerShellToolDefinition(cwd, shellOptions(options?.powershell, options?.backgroundShells)),
+		bash: createBashToolDefinition(cwd, shellOptions(options?.bash, backgroundOwner(options))),
+		powershell: createPowerShellToolDefinition(cwd, shellOptions(options?.powershell, backgroundOwner(options))),
 		task_stop: createTaskStopToolDefinition(taskStopOptions(options)),
 		edit: createEditToolDefinition(cwd, options?.edit),
 		write: createWriteToolDefinition(cwd, options?.write),
@@ -227,8 +232,8 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
 	return [
 		createReadTool(cwd, options?.read),
-		createBashTool(cwd, shellOptions(options?.bash, options?.backgroundShells)),
-		...(options?.backgroundShells ? [createTaskStopTool(taskStopOptions(options))] : []),
+		createBashTool(cwd, shellOptions(options?.bash, backgroundOwner(options))),
+		...(backgroundOwner(options) ? [createTaskStopTool(taskStopOptions(options))] : []),
 		createEditTool(cwd, options?.edit),
 		createWriteTool(cwd, options?.write),
 	];
@@ -246,8 +251,8 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {
 	return {
 		read: createReadTool(cwd, options?.read),
-		bash: createBashTool(cwd, shellOptions(options?.bash, options?.backgroundShells)),
-		powershell: createPowerShellTool(cwd, shellOptions(options?.powershell, options?.backgroundShells)),
+		bash: createBashTool(cwd, shellOptions(options?.bash, backgroundOwner(options))),
+		powershell: createPowerShellTool(cwd, shellOptions(options?.powershell, backgroundOwner(options))),
 		task_stop: createTaskStopTool(taskStopOptions(options)),
 		edit: createEditTool(cwd, options?.edit),
 		write: createWriteTool(cwd, options?.write),

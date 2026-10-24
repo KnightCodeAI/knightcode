@@ -12,6 +12,7 @@ import type { CustomMessage } from "../src/core/messages.ts";
 import type { BashOperations, BashToolDetails } from "../src/core/tools/bash.ts";
 import { createBashTool } from "../src/core/tools/bash.ts";
 import { createShellRenderers } from "../src/core/tools/renderers/bash.ts";
+import { taskStopRenderers } from "../src/core/tools/renderers/task-stop.ts";
 import { renderBackgroundShellMessage } from "../src/modes/interactive/components/background-shell-message.ts";
 import {
 	BackgroundShellsIndicator,
@@ -38,6 +39,25 @@ function controlledOperations() {
 			}),
 	};
 	return { operations, exits, emits };
+}
+
+function renderContext(args: Record<string, unknown>, isError: boolean) {
+	return {
+		args,
+		toolCallId: "t1",
+		invalidate: () => {},
+		lastComponent: undefined,
+		state: {},
+		cwd: process.cwd(),
+		executionStarted: true,
+		argsComplete: true,
+		isPartial: false,
+		expanded: false,
+		showImages: false,
+		isError,
+		outputPad: 1,
+		durationMs: undefined,
+	};
 }
 
 function screen(component: { render(width: number): string[] }, width = 100): string {
@@ -154,7 +174,7 @@ describe("/tasks view", () => {
 		pill.selected = false;
 
 		exits[0]?.(0);
-		await Promise.all(manager.list().map((shell) => manager.waitForExit(shell.id, 50)));
+		expect(await manager.waitForExit(manager.list()[0]?.id as string, 5000)).toBe(true);
 		expect(screen(pill, 80)).toBe("1 shell · ↓ to view");
 		manager.dispose();
 	});
@@ -166,6 +186,27 @@ describe("/tasks view", () => {
 			expect(screen(view)).toContain("←/Esc to close");
 		} finally {
 			view.dispose();
+		}
+	});
+
+	it("fits a short terminal: fewer rows in the list, fewer output lines in the details", async () => {
+		const manager = new BackgroundShellManager();
+		const { operations, emits } = controlledOperations();
+		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
+		for (let i = 0; i < 6; i++) await bash.execute(`c${i}`, { command: `job ${i}`, run_in_background: true });
+		emits[5]?.(`${Array.from({ length: 30 }, (_, i) => `out ${i}`).join("\n")}\n`);
+		const view = new BackgroundTasksComponent(manager, fakeTui(16), () => {});
+		try {
+			const list = screen(view);
+			expect(list.match(/\(running\)/g)).toHaveLength(4);
+			expect(list).toContain("1 of 6");
+			view.handleInput("\r");
+			const detail = screen(view);
+			expect(detail).toContain("out 29");
+			expect(detail).toContain("Showing 3 lines");
+		} finally {
+			view.dispose();
+			manager.dispose();
 		}
 	});
 
@@ -230,30 +271,55 @@ describe("background shell transcript", () => {
 		expect(text).toContain("Completed · ID 8c7d1e00");
 	});
 
+	it("keeps a long command's header on one line and says why a command failed without an exit code", () => {
+		const message: CustomMessage<BackgroundShellMessageDetails> = {
+			role: "custom",
+			customType: BACKGROUND_SHELL_MESSAGE_TYPE,
+			content: "",
+			display: true,
+			timestamp: Date.now(),
+			details: {
+				notices: [
+					{
+						id: "3fa9c21e",
+						toolName: "bash",
+						command: `curl ${"https://example.com/".repeat(10)}`,
+						status: "failed",
+						error: "Working directory does not exist: /nope",
+						summary: 'Background command "curl" failed: Working directory does not exist: /nope',
+						outputPath: "/tmp/out.log",
+						outputTail: "",
+					},
+				],
+			},
+		};
+		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1 }, theme);
+		const lines = stripAnsi((component as { render(width: number): string[] }).render(60).join("\n")).split("\n");
+		expect(lines[0]).toMatch(/Background\(curl https:\/\/example\.com.*…\)$/);
+		expect(lines.every((line) => line.length <= 60)).toBe(true);
+		expect(lines[1]).toContain("Failed: Working directory does not exist: /nope");
+	});
+
+	it("shows a failed task_stop's error instead of a summary", () => {
+		const component = taskStopRenderers.renderResult?.(
+			{ content: [{ type: "text", text: 'No background command has the ID "nope".' }], details: {} },
+			{ expanded: false, isPartial: false },
+			theme,
+			renderContext({ task_id: "nope" }, true),
+		);
+		expect(screen(component as { render(width: number): string[] })).toContain(
+			'No background command has the ID "nope".',
+		);
+	});
+
 	it("shows where a background launch went instead of its model-facing text", () => {
 		const renderers = createShellRenderers("Bash");
 		const details: BashToolDetails = { background: { taskId: "3fa9c21e", movedByUser: true } };
-		const context = {
-			args: { command: "npm run dev" },
-			toolCallId: "t1",
-			invalidate: () => {},
-			lastComponent: undefined,
-			state: {},
-			cwd: process.cwd(),
-			executionStarted: true,
-			argsComplete: true,
-			isPartial: false,
-			expanded: false,
-			showImages: false,
-			isError: false,
-			outputPad: 1,
-			durationMs: undefined,
-		};
 		const component = renderers.renderResult?.(
 			{ content: [{ type: "text", text: "The user moved this command to the background..." }], details },
 			{ expanded: false, isPartial: false },
 			theme,
-			context,
+			renderContext({ command: "npm run dev" }, false),
 		);
 		const text = screen(component as { render(width: number): string[] });
 		expect(text).toContain("Running in the background (↓ to manage)");
