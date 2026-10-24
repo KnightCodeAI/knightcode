@@ -4,19 +4,24 @@ vi.hoisted(() => {
 	Object.assign(globalThis, { window: { addEventListener: () => {}, knightcode: { platform: "win32" } } });
 });
 
+const request = vi.hoisted(() => vi.fn());
 vi.mock("../../src/renderer/client.ts", () => ({
-	client: { onNotification: () => {}, onServerRequest: () => {}, onHostEvent: () => {} },
+	client: { request, onNotification: () => {}, onServerRequest: () => {}, onHostEvent: () => {} },
 	RequestError: class extends Error {},
 }));
 
 import {
 	activateTab,
 	closeTab,
+	discardFileTab,
 	getState,
 	keepTab,
 	MAX_FILE_TABS,
 	NO_TABS,
 	openFileTab,
+	saveFileDraft,
+	setFileComparison,
+	setFileDraft,
 	setPanel,
 	showChanges,
 } from "../../src/renderer/store.ts";
@@ -69,4 +74,59 @@ test("Changes cannot close: closing it closes the panel; a closed tab hands over
 	setPanel({ open: false });
 	showChanges("d", "lastTurn");
 	expect(getState().panel).toMatchObject({ open: true, scope: "lastTurn" });
+});
+
+test("a file opened from a list of changes shows them; reopened without a comparison it keeps its own", () => {
+	openFileTab("e", "/p/a.ts", undefined, false, { scope: "unstaged" });
+	expect(tabsOf("e").tabs[1]).toMatchObject({ path: "/p/a.ts", compare: { scope: "unstaged" } });
+	openFileTab("e", "/p/a.ts", 4);
+	expect(tabsOf("e").tabs[1]).toMatchObject({ line: 4, compare: { scope: "unstaged" } });
+	setFileComparison("e", "/p/a.ts", { scope: "branch", against: "main" });
+	expect(tabsOf("e").tabs[1]).toMatchObject({ compare: { scope: "branch", against: "main" } });
+	setFileComparison("e", "/p/a.ts", undefined);
+	expect(tabsOf("e").tabs[1]).not.toHaveProperty("compare.scope");
+});
+
+test("an edited file tab is kept, and a save writes its draft over the mtime it was edited on", async () => {
+	openFileTab("f", "/p/a.ts");
+	setFileDraft("f", "/p/a.ts", { text: "one", mtimeMs: 10 });
+	expect(tabsOf("f").tabs[1]).toMatchObject({ preview: false, draft: { text: "one", mtimeMs: 10 } });
+	request.mockResolvedValueOnce({ mtimeMs: 11 });
+	expect(await saveFileDraft("f", "/p/a.ts")).toEqual({ text: "one", mtimeMs: 11 });
+	expect(request).toHaveBeenLastCalledWith("file/write", { threadId: "f", path: "/p/a.ts", text: "one", expectedMtimeMs: 10 });
+	expect(tabsOf("f").tabs[1]).toMatchObject({ draft: undefined });
+	// Typed while it wrote: still unsaved, now over the file as written.
+	setFileDraft("f", "/p/a.ts", { text: "two", mtimeMs: 11 });
+	request.mockImplementationOnce(async () => {
+		setFileDraft("f", "/p/a.ts", { text: "three", mtimeMs: 11 });
+		return { mtimeMs: 12 };
+	});
+	await saveFileDraft("f", "/p/a.ts");
+	expect(tabsOf("f").tabs[1]).toMatchObject({ draft: { text: "three", mtimeMs: 12 } });
+	// Refused (the file moved): the draft stays and the user is told.
+	request.mockRejectedValueOnce(new Error("fileChanged"));
+	expect(await saveFileDraft("f", "/p/a.ts")).toBeUndefined();
+	expect(tabsOf("f").tabs[1]).toMatchObject({ draft: { text: "three" } });
+	expect(getState().toasts.at(-1)).toMatchObject({ text: "Could not save file", kind: "error" });
+});
+
+test("closing an edited file tab saves it first, and asks to discard when that fails", async () => {
+	openFileTab("g", "/p/a.ts");
+	setFileDraft("g", "/p/a.ts", { text: "x", mtimeMs: 1 });
+	request.mockResolvedValueOnce({ mtimeMs: 2 });
+	closeTab("g", 1);
+	await vi.waitFor(() => expect(paths("g")).toEqual(["changes"]));
+	expect(getState().discarding).toBeUndefined();
+
+	openFileTab("g", "/p/b.ts");
+	setFileDraft("g", "/p/b.ts", { text: "y", mtimeMs: 1 });
+	request.mockRejectedValueOnce(new Error("fileChanged"));
+	closeTab("g", 1);
+	await vi.waitFor(() => expect(getState().discarding).toEqual({ threadId: "g", path: "/p/b.ts" }));
+	expect(paths("g")).toEqual(["changes", "/p/b.ts"]);
+	discardFileTab(); // Continue viewing
+	expect(getState().discarding).toBeUndefined();
+	expect(paths("g")).toEqual(["changes", "/p/b.ts"]);
+	discardFileTab("g", "/p/b.ts"); // Discard changes
+	expect(paths("g")).toEqual(["changes"]);
 });

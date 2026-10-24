@@ -1020,7 +1020,16 @@ export async function detectTargets(
 ): Promise<OpenInTarget[]> {
 	const lookups = new Lookups(platform, env, await pathIndex(platform, env), options.readShortcut);
 	// All at once: the few that run a program (vswhere, xcode-select) wait on it without holding the rest.
-	const hits = await Promise.all(DEFS.map((def) => def[platform as "win32" | "darwin" | "linux"]?.(lookups)));
+	const hits = await Promise.all(
+		DEFS.map(async (def) => {
+			try {
+				return await def[platform as "win32" | "darwin" | "linux"]?.(lookups);
+			} catch {
+				// A path this user cannot probe (EACCES, a file where a folder should be) leaves out one target only.
+				return undefined;
+			}
+		}),
+	);
 	const targets: OpenInTarget[] = [];
 	for (const [i, def] of DEFS.entries()) {
 		const hit = hits[i];

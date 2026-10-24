@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -141,7 +141,26 @@ test("Windows: Codex's targets and lookups, and none it does not have", async ()
 	expect(target("terminal").command).toBe(join(root, "WindowsTerminal/wt.exe"));
 });
 
-test("macOS: a file opened in a terminal runs the user's editor there, at the line", async () => {
+// Not on a Mac: /Applications is searched first, and a real Zed there would answer instead of the fixture.
+test.skipIf(process.platform === "win32" || process.platform === "darwin" || process.getuid?.() === 0)(
+	"a probe that throws (an unreadable folder) leaves out its target, not the list",
+	async () => {
+		const root = layout(["Applications/Zed.app/Contents/MacOS/zed"]);
+		// Every lookup under ~/Applications now fails with EACCES instead of answering "not there".
+		chmodSync(join(root, "Applications"), 0);
+		try {
+			const ids = (await detectTargets("darwin", { HOME: root })).map((t) => t.id);
+			expect(ids).toContain("systemDefault");
+			expect(ids).toContain("fileManager");
+			expect(ids).not.toContain("zed");
+		} finally {
+			chmodSync(join(root, "Applications"), 0o755);
+		}
+	},
+);
+
+// /Applications is searched first: on a Mac a real iTerm there would answer instead of the fixture.
+test.skipIf(process.platform === "darwin")("macOS: a file opened in a terminal runs the user's editor there, at the line", async () => {
 	const root = layout(["Applications/iTerm.app/Contents/Info.plist", "project/src/a.ts"]);
 	const file = join(root, "project/src/a.ts");
 	const targets = await detectTargets("darwin", { HOME: root, EDITOR: "nvim", SHELL: "/bin/zsh" });
