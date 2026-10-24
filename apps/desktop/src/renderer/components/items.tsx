@@ -345,7 +345,8 @@ function FoldedText({ text }: { text: string }) {
 /**
  * Work in order: commentary and tool calls, consecutive calls folded under one summary. While the turn runs every
  * action stays in sight, as in Codex's thread (its commentaryDisplay "all"); a call in progress is its present-tense
- * row, after the finished calls of its run. Reasoning is not a row: Codex names it only in its "Thinking" status.
+ * row in its place, only the finished calls on either side folded. Reasoning is not a row: Codex names it only in its
+ * "Thinking" status.
  */
 function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cwd: string }) {
 	const nestedOf = (id: string) => items.filter((i): i is ToolItem => i.type === "toolCall" && i.parentItemId === id);
@@ -359,11 +360,21 @@ function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cw
 		);
 	for (const entry of entries) {
 		if (entry.kind === "group") {
-			const done = live ? entry.items.filter((i) => !isRunning(i)) : entry.items;
-			if (done.length > 1)
-				rows.push(<ActivityGroup key={entry.items[0]!.id} items={done} cwd={cwd} nestedOf={nestedOf} />);
-			else if (done[0]) rows.push(call(done[0]));
-			if (live) for (const item of entry.items.filter(isRunning)) rows.push(call(item));
+			let done: ToolItem[] = [];
+			const fold = () => {
+				if (done.length > 1)
+					rows.push(<ActivityGroup key={done[0]!.id} items={done} cwd={cwd} nestedOf={nestedOf} />);
+				else if (done[0]) rows.push(call(done[0]));
+				done = [];
+			};
+			for (const item of entry.items) {
+				if (!live || !isRunning(item)) done.push(item);
+				else {
+					fold();
+					rows.push(call(item));
+				}
+			}
+			fold();
 			continue;
 		}
 		const item = entry.item;
