@@ -6,7 +6,7 @@
  */
 
 import { execFile, spawn } from "node:child_process";
-import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -1007,6 +1007,20 @@ async function vswhere(l: Lookups): Promise<string | undefined> {
 		.find((line) => line.length > 0 && exists(line));
 }
 
+/**
+ * The app bundle a macOS command is in, whose icon is the target's: ".app" followed by a separator or the end, not a
+ * home folder such as /Users/anna.applegate. A command found on the PATH is followed through its link first
+ * (/usr/local/bin/code is in Visual Studio Code.app).
+ */
+export function appBundle(command: string): string | undefined {
+	const within = (path: string) => /^.+?\.app(?=[\\/]|$)/.exec(path)?.[0];
+	try {
+		return within(command) ?? within(realpathSync(command));
+	} catch {
+		return undefined;
+	}
+}
+
 export interface DetectOptions {
 	/** A Windows shortcut's target (Electron's shell.readShortcutLink); without it, shortcuts are not followed. */
 	readShortcut?: (lnk: string) => string | undefined;
@@ -1037,9 +1051,7 @@ export async function detectTargets(
 		// Never a shim on Windows: spawning one needs cmd.exe, which parses the path (see Lookups.runnable).
 		if (platform === "win32" && /\.(cmd|bat)$/i.test(hit.command)) continue;
 		const name = typeof def.name === "string" ? def.name : (def.name[platform] ?? def.id);
-		// On macOS the icon is the app bundle's: ".app" followed by a separator or the end, not a home folder such as
-		// /Users/anna.applegate.
-		const bundle = platform === "darwin" && !hit.iconPath ? /^.+?\.app(?=[\\/]|$)/.exec(hit.command)?.[0] : undefined;
+		const bundle = platform === "darwin" && !hit.iconPath ? appBundle(hit.command) : undefined;
 		targets.push({ id: def.id, name, kind: def.kind, ...hit, ...(bundle ? { iconPath: bundle } : {}) });
 	}
 	return targets;

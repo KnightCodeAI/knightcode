@@ -2151,6 +2151,9 @@ export class ThreadManager {
 					if (options?.setup) {
 						await options.setup(next.session.sessionManager);
 						next.session.refreshContext();
+						// Setup writes to the manager, which emits no session_info_changed for a name it gives the session.
+						const name = next.session.sessionManager.getSessionName();
+						if (name) this.ctx.broadcast("thread/name/updated", { threadId: next.id, name });
 					}
 					if (signal?.aborted) return { cancelled: true };
 					if (selection?.model) {

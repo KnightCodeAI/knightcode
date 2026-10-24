@@ -10,8 +10,8 @@
  */
 
 import type { TurnFile } from "@knightcode/app-server-protocol";
-import { type ReactNode, useEffect, useState } from "react";
-import { diffStats, isRunning, liveEntries, type ToolItem, workEntries } from "../activity.ts";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { diffStats, inputOf, isRunning, thinkingHeading, type ToolItem, workEntries } from "../activity.ts";
 import { client } from "../client.ts";
 import { clockTime, duration, messageTime } from "../format.ts";
 import { matches } from "../keys.ts";
@@ -26,14 +26,16 @@ import {
 	type ViewItem,
 	type ViewTurn,
 } from "../store.ts";
-import { ActiveRow, ActivityGroup, ActivityRow, ToolRow } from "./activity.tsx";
+import { ActiveRow, ActivityGroup, ToolRow } from "./activity.tsx";
 import { Button, IconButton } from "./button.tsx";
 import { Tooltip } from "./tooltip.tsx";
 import {
 	Check,
+	ChevronDown,
 	ChevronRight,
 	CircleAlert,
 	Copy,
+	Download,
 	FileDiff,
 	GitBranch,
 	Layers,
@@ -48,20 +50,73 @@ import { type AppItem, McpAppCard } from "./mcp-app.tsx";
 import { ViewNode } from "./view.tsx";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu.tsx";
 
-function Reasoning({ text, streaming, took }: { text: string; streaming: boolean; took?: number }) {
-	const [open, setOpen] = useState(false);
+/**
+ * Codex's proposed plan (plan-summary-item-content): a card headed "Plan" ("Writing plan" while it streams) with
+ * Download, Copy and a collapse toggle, the plan's Markdown held to 320px with "Expand plan" while collapsed.
+ */
+function PlanCard({ item }: { item: ToolItem }) {
+	const markdown = typeof inputOf(item).markdown === "string" ? (inputOf(item).markdown as string) : "";
+	const writing = isRunning(item);
+	// A plan still being written is collapsed and opens when it is finished, until the user toggles it.
+	const [toggled, setCollapsed] = useState<boolean>();
+	const collapsed = toggled ?? writing;
+	const download = () => {
+		const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = "PLAN.md";
+		link.click();
+		URL.revokeObjectURL(url);
+	};
+	const done = !writing && markdown.trim().length > 0;
 	return (
-		<ActivityRow
-			label={
-				streaming ? <span className="kc-shimmer">Thinking</span> : took ? `Thought for ${duration(took)}` : "Thought"
-			}
-			open={open}
-			onToggle={() => setOpen(!open)}
-		>
-			{text ? <div className="selectable pt-2 pb-1 text-base whitespace-pre-wrap text-secondary">{text}</div> : null}
-		</ActivityRow>
+		<div className="overflow-hidden rounded-lg bg-card-soft shadow-[0_0_0_0.5px_var(--kc-border-strong)]">
+			<div className="flex h-10 items-center justify-between gap-2 px-3 py-2">
+				<span className="text-base leading-tight font-semibold text-ink">
+					{writing ? <span className="kc-shimmer">Writing plan</span> : "Plan"}
+				</span>
+				<div className="flex items-center gap-1">
+					{done ? (
+						<>
+							<IconButton label="Download plan" size="sm" className="rounded-md" onClick={download}>
+								<Download size={14} />
+							</IconButton>
+							<CopyMessage text={markdown} />
+						</>
+					) : null}
+					<IconButton
+						label={collapsed ? "Expand plan summary" : "Collapse plan summary"}
+						size="sm"
+						className="rounded-md"
+						onClick={() => setCollapsed(!collapsed)}
+					>
+						<ChevronDown size={14} className={`transition-transform ${collapsed ? "rotate-180" : ""}`} />
+					</IconButton>
+				</div>
+			</div>
+			<div className="relative overflow-hidden px-3 pb-3" style={collapsed ? { height: PLAN_COLLAPSED } : undefined}>
+				<Markdown text={markdown} />
+				{collapsed ? (
+					<>
+						<div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-surface to-transparent" />
+						<div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+							<Button variant="solid" size="md" squircle className="pointer-events-auto" onClick={() => setCollapsed(false)}>
+								Expand plan
+							</Button>
+						</div>
+					</>
+				) : null}
+			</div>
+		</div>
 	);
 }
+
+/** Codex's collapsed plan height. */
+const PLAN_COLLAPSED = 320;
+
+/** The turn's proposed plan: its last plan submission that did not fail (Codex's proposedPlanItem). */
+const isPlan = (item: ViewItem): item is ToolItem =>
+	item.type === "toolCall" && item.tool === "submit_plan" && !item.parentItemId && item.status !== "failed";
 
 /** A row of actions under a message, with its time (Codex's 26px buttons); hidden until hovered unless `shown`. */
 function MessageActions({
@@ -207,9 +262,9 @@ export function UserBubble({
 			) : null}
 			{text ? (
 				<div
-					className={`max-w-[70%] rounded-composer bg-bubble px-4 py-2.5 text-base leading-[22.75px] text-bubble-text ${pending ? "opacity-60" : ""}`}
+					className={`flex max-w-[70%] flex-col rounded-composer bg-bubble px-4 py-2.5 text-base leading-[22.75px] text-bubble-text ${pending ? "opacity-60" : ""}`}
 				>
-					<Markdown text={text} tone="user" />
+					<FoldedText text={text} />
 				</div>
 			) : null}
 			{failed ? (
@@ -236,54 +291,75 @@ export function UserBubble({
 	);
 }
 
+/** Codex's collapsed user message: 20 lines, the last an ellipsis. */
+const USER_LINES = 20;
+
+/** A user message longer than USER_LINES shows its start and "Show more", as Codex folds one. */
+function FoldedText({ text }: { text: string }) {
+	const body = useRef<HTMLDivElement>(null);
+	const [long, setLong] = useState(false);
+	const [open, setOpen] = useState(false);
+	useLayoutEffect(() => {
+		const el = body.current;
+		const content = el?.firstElementChild;
+		if (!el || !content) return;
+		const measure = () =>
+			setLong(content.scrollHeight > USER_LINES * Number.parseFloat(getComputedStyle(el).lineHeight));
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(content);
+		return () => observer.disconnect();
+	}, []);
+	const folded = long && !open;
+	return (
+		<>
+			<div ref={body} className={folded ? "overflow-hidden" : undefined} style={folded ? { maxHeight: `${USER_LINES - 1}lh` } : undefined}>
+				<div>
+					<Markdown text={text} tone="user" />
+				</div>
+			</div>
+			{folded ? <span aria-hidden="true">…</span> : null}
+			{long ? (
+				<button
+					type="button"
+					aria-expanded={open}
+					onClick={() => setOpen(!open)}
+					className="mt-1.5 flex items-center gap-1 self-start opacity-70 hover:opacity-100"
+				>
+					{open ? "Show less" : "Show more"}
+					<ChevronDown size={12} className={open ? "rotate-180" : undefined} />
+				</button>
+			) : null}
+		</>
+	);
+}
+
 /**
- * Work in order: commentary, reasoning, and tool calls, consecutive calls folded under one summary. `live` is the
- * running turn's view: finished calls hidden, the running one as Codex's present-tense row.
+ * Work in order: commentary and tool calls, consecutive calls folded under one summary. While the turn runs every
+ * action stays in sight, as in Codex's thread (its commentaryDisplay "all"); a call in progress is its present-tense
+ * row, after the finished calls of its run. Reasoning is not a row: Codex names it only in its "Thinking" status.
  */
-function WorkItems({
-	items,
-	streamingId,
-	live,
-	cwd,
-}: {
-	items: ViewItem[];
-	streamingId?: string;
-	live?: boolean;
-	cwd: string;
-}) {
+function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cwd: string }) {
 	const nestedOf = (id: string) => items.filter((i): i is ToolItem => i.type === "toolCall" && i.parentItemId === id);
-	const entries = live ? liveEntries(workEntries(items)) : workEntries(items);
+	const entries = workEntries(items.filter((i) => i.type !== "reasoning"));
 	const rows: ReactNode[] = [];
+	const call = (item: ToolItem) =>
+		live && isRunning(item) ? (
+			<ActiveRow key={item.id} item={item} cwd={cwd} />
+		) : (
+			<ToolRow key={item.id} item={item} cwd={cwd} nested={nestedOf(item.id)} />
+		);
 	for (const entry of entries) {
 		if (entry.kind === "group") {
-			const running = entry.items.findLast(isRunning);
-			rows.push(
-				live && running ? (
-					<ActiveRow key={entry.items[0]!.id} item={running} cwd={cwd} />
-				) : (
-					<ActivityGroup key={entry.items[0]!.id} items={entry.items} cwd={cwd} nestedOf={nestedOf} />
-				),
-			);
+			const done = live ? entry.items.filter((i) => !isRunning(i)) : entry.items;
+			if (done.length > 1)
+				rows.push(<ActivityGroup key={entry.items[0]!.id} items={done} cwd={cwd} nestedOf={nestedOf} />);
+			else if (done[0]) rows.push(call(done[0]));
+			if (live) for (const item of entry.items.filter(isRunning)) rows.push(call(item));
 			continue;
 		}
 		const item = entry.item;
-		if (item.type === "toolCall")
-			rows.push(
-				live && isRunning(item) ? (
-					<ActiveRow key={item.id} item={item} cwd={cwd} />
-				) : (
-					<ToolRow key={item.id} item={item} cwd={cwd} nested={nestedOf(item.id)} />
-				),
-			);
-		else if (item.type === "reasoning")
-			rows.push(
-				<Reasoning
-					key={item.id}
-					text={item.text}
-					streaming={item.id === streamingId}
-					took={item.startedAt && item.completedAt ? item.completedAt - item.startedAt : undefined}
-				/>,
-			);
+		if (item.type === "toolCall") rows.push(call(item));
 		else if (item.type === "agentMessage") rows.push(<Markdown key={item.id} text={item.text} />);
 		else if (item.type === "compaction") rows.push(<CompactionDivider key={item.id} />);
 		else if (item.type === "extensionMessage")
@@ -502,10 +578,12 @@ export function TurnView({
 	// Compactions stay visible: those before the final reply show above it, later ones below.
 	const compactedBefore = rest.some((i, n) => i.type === "compaction" && (finalIndex < 0 || n < finalIndex));
 	const compactedAfter = finalIndex >= 0 && rest.some((i, n) => i.type === "compaction" && n > finalIndex);
-	const work = rest.filter((i) => i !== final && i.type !== "compaction");
+	// The proposed plan is a card of its own after the reply, as Codex draws it, not a row of the work.
+	const plan = turn.items.findLast(isPlan);
+	const work = rest.filter((i) => i !== final && i.type !== "compaction" && !isPlan(i));
 	const last = turn.items.at(-1);
-	const streamingId =
-		running && last && (last.type === "reasoning" || last.type === "agentMessage") ? last.id : undefined;
+	// A reply streaming in shows itself; until one does, Codex's "Thinking" status stands in.
+	const typing = running && last?.type === "agentMessage" && last.completedAt === undefined;
 	const files = running ? [] : editedFiles(turn);
 	const apps = turn.items.filter(
 		(i): i is AppItem => i.type === "toolCall" && i.mcpApp !== undefined && i.parentItemId === undefined,
@@ -526,14 +604,18 @@ export function TurnView({
 			{running ? (
 				<>
 					<WorkedFor turn={turn} open />
-					<WorkItems items={work} streamingId={streamingId} live cwd={cwd} />
+					<WorkItems items={work} live cwd={cwd} />
+					{plan ? <PlanCard item={plan} /> : null}
 					{retry ? (
 						<div className="flex items-center gap-2 text-base text-warning">
 							<CircleAlert size={14} /> Retrying (attempt {retry.attempt} of {retry.maxAttempts}): {retry.error}
 						</div>
-					) : !streamingId && !work.some((i) => i.type === "toolCall" && isRunning(i)) && working.visible ? (
-						// Waiting on the model, not on a tool: Codex's shimmering "Thinking", or an extension's working text.
-						<span className="kc-shimmer w-fit text-base">{working.message ?? "Thinking"}</span>
+					) : !typing && !work.some((i) => i.type === "toolCall" && isRunning(i)) && working.visible ? (
+						// Waiting on the model, not on a tool: Codex's shimmering status, named for what it is thinking about,
+						// or an extension's working text.
+						<span className="kc-shimmer w-fit text-base">
+							{working.message ?? thinkingHeading(turn.items) ?? "Thinking"}
+						</span>
 					) : null}
 				</>
 			) : work.length > 0 && !final ? (
@@ -567,6 +649,7 @@ export function TurnView({
 					) : files.length > 0 ? (
 						<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
 					) : null}
+					{plan ? <PlanCard item={plan} /> : null}
 					{compactedAfter ? <CompactionDivider /> : null}
 					{turn.status === "interrupted" ? (
 						<div className="text-base text-tertiary">Interrupted · {clockTime(turn.completedAt ?? turn.startedAt)}</div>

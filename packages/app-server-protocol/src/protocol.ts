@@ -363,6 +363,7 @@ export const Item = Type.Union([
 		mcpApp: Type.Optional(McpApp),
 	}),
 	Obj({ type: Type.Literal("compaction"), id: Str, summary: Str, ...Times }),
+	/** An extension's message sent for display; one sent with `display: false` is context for the model only. */
 	Obj({
 		type: Type.Literal("extensionMessage"),
 		id: Str,

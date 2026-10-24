@@ -5,11 +5,12 @@ import {
 	dialogOption,
 	dialogTitle,
 	expandable,
-	liveEntries,
 	parseExploration,
 	questionsAndAnswers,
 	rowLabel,
 	summaryKind,
+	thinkingHeading,
+	threadSources,
 	type ToolItem,
 	toolBody,
 	workEntries,
@@ -120,7 +121,29 @@ test("a single shell command that reads, searches or lists reads as Codex's expl
 	expect(rowLabel(items[0]!, "").text).toBe("Listed files in src");
 });
 
-test("consecutive calls fold into a group; questions stand alone; the live view keeps only what runs", () => {
+test("the Thinking status takes the latest reasoning summary's bold heading", () => {
+	const reasoning = (text: string): ViewItem => ({ type: "reasoning", id: `r${next++}`, text });
+	expect(thinkingHeading([reasoning("**Reading the code**\nfirst"), text("m"), reasoning("**Planning the fix**")])).toBe(
+		"Planning the fix",
+	);
+	// A summary without a heading (or encrypted reasoning with none) leaves the earlier one, then nothing.
+	expect(thinkingHeading([reasoning("**Reading**"), reasoning("")])).toBe("Reading");
+	expect(thinkingHeading([reasoning(""), text("m")])).toBeUndefined();
+});
+
+test("a thread's sources: attached images, MCP servers whose tools ran, and the web", () => {
+	const image = { mimeType: "image/png", data: "AAAA" };
+	const user = (images: (typeof image)[] = []): ViewItem => ({ type: "userMessage", id: `u${next++}`, text: "", images });
+	expect(
+		threadSources([
+			{ items: [user([image]), call("read"), call("mcp__linear__list_issues"), call("mcp__linear__get_issue")] },
+			{ items: [user(), call("webfetch", { url: "https://example.com" }), user([image, image])] },
+		]),
+	).toEqual({ images: [image, image, image], servers: ["linear"], web: true });
+	expect(threadSources([{ items: [user(), call("bash")] }])).toEqual({ images: [], servers: [], web: false });
+});
+
+test("consecutive calls fold into a group; questions stand alone", () => {
 	const items: ViewItem[] = [
 		text("m1"),
 		call("read"),
@@ -136,12 +159,6 @@ test("consecutive calls fold into a group; questions stand alone; the live view 
 		"agentMessage",
 		"toolCall",
 		"toolCall",
-	]);
-	expect(liveEntries(entries).map((e) => (e.kind === "group" ? "group" : e.item.id))).toEqual([
-		"m1",
-		"m2",
-		items[4]!.id,
-		items[5]!.id,
 	]);
 });
 
