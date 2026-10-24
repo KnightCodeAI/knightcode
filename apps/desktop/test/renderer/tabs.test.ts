@@ -17,6 +17,7 @@ import {
 	MAX_FILE_TABS,
 	NO_TABS,
 	openFileTab,
+	setFileComparison,
 	setPanel,
 	showChanges,
 } from "../../src/renderer/store.ts";
@@ -69,4 +70,15 @@ test("Changes cannot close: closing it closes the panel; a closed tab hands over
 	setPanel({ open: false });
 	showChanges("d", "lastTurn");
 	expect(getState().panel).toMatchObject({ open: true, scope: "lastTurn" });
+});
+
+test("a file opened from a list of changes shows them; reopened without a comparison it keeps its own", () => {
+	openFileTab("e", "/p/a.ts", undefined, false, { scope: "unstaged" });
+	expect(tabsOf("e").tabs[1]).toMatchObject({ path: "/p/a.ts", compare: { scope: "unstaged" } });
+	openFileTab("e", "/p/a.ts", 4);
+	expect(tabsOf("e").tabs[1]).toMatchObject({ line: 4, compare: { scope: "unstaged" } });
+	setFileComparison("e", "/p/a.ts", { scope: "branch", against: "main" });
+	expect(tabsOf("e").tabs[1]).toMatchObject({ compare: { scope: "branch", against: "main" } });
+	setFileComparison("e", "/p/a.ts", undefined);
+	expect(tabsOf("e").tabs[1]).not.toHaveProperty("compare.scope");
 });

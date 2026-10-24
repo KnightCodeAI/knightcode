@@ -81,6 +81,7 @@ const GEAR = (() => {
 export const ChevronRight = icon("ChevronRight", <path d="M6.5 4 10.25 8 6.5 12" />);
 export const ChevronLeft = icon("ChevronLeft", <path d="M9.5 4 5.75 8 9.5 12" />);
 export const ChevronDown = icon("ChevronDown", <path d="m4 6.5 4 3.75 4-3.75" />);
+export const ChevronUp = icon("ChevronUp", <path d="m4 9.5 4-3.75 4 3.75" />);
 
 export const ArrowUp = icon("ArrowUp", <path d="M8 13.25V2.75M3.5 7.25 8 2.75l4.5 4.5" />);
 export const ArrowDown = icon("ArrowDown", <path d="M8 2.75v10.5M3.5 8.75 8 13.25l4.5-4.5" />);

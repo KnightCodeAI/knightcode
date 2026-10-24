@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
 import { basename } from "../format.ts";
 import { matches } from "../keys.ts";
-import { setPanel, showChanges, useStore } from "../store.ts";
+import { type FileComparison, setPanel, showChanges, useStore } from "../store.ts";
 import { Folders, List, Search, X } from "./icons.tsx";
 import { IconButton } from "./button.tsx";
 import { Breadcrumb } from "./file-tab.tsx";
@@ -110,14 +110,18 @@ const FILES_TREE_CSS = `
 
 type Entry = ResultOf<"file/list">["entries"][number];
 
-/** The comparison's changed files (Codex's default, the Index: unstaged changes), again after a turn or a return. */
-function useChangedFiles(threadId: string) {
+/**
+ * The changed files of the file tab's comparison (Codex's Index, unstaged changes, with none), again after a turn or a
+ * return to the window.
+ */
+function useChangedFiles(threadId: string, compare: FileComparison = { scope: "unstaged" }) {
+	const { scope, against } = compare;
 	const version = useStore((s) => s.diffVersion[threadId] ?? 0);
 	const [read, setRead] = useState<{ root: string; files: DiffFile[] }>();
 	useEffect(() => {
 		let live = true;
 		const load = () =>
-			client.request("thread/diff/read", { threadId, scope: "unstaged" }).then(
+			client.request("thread/diff/read", { threadId, scope, ...(against ? { against } : {}) }).then(
 				(r) => live && setRead({ root: r.root, files: r.files }),
 				// Outside git, or a failed read: no Changed files section to show.
 				() => live && setRead(undefined),
@@ -128,7 +132,7 @@ function useChangedFiles(threadId: string) {
 			live = false;
 			window.removeEventListener("focus", load);
 		};
-	}, [threadId, version]);
+	}, [threadId, version, scope, against]);
 	return read;
 }
 
@@ -159,8 +163,10 @@ export interface FilesTreeProps {
 	activePath?: string;
 	/** The "Open file" tab focuses the filter, as Codex's does with no file open. */
 	autoFocus?: boolean;
-	/** A file chosen: `keep` for a double click (a kept tab), else a preview tab. */
-	onOpen: (path: string, keep: boolean) => void;
+	/** The comparison whose changed files the first section lists. */
+	compare?: FileComparison;
+	/** A file chosen: `keep` for a double click (a kept tab), else a preview tab; `changed` from Changed files. */
+	onOpen: (path: string, keep: boolean, changed: boolean) => void;
 }
 
 /** Codex's filter field: a search icon, the input, and a clear button while it holds text. */
@@ -245,7 +251,7 @@ function SectionedTree({
 			const path = paths[0];
 			if (!path || path.endsWith("/")) return;
 			const target = pathOf(path);
-			if (target) open.current(target, false);
+			if (target) open.current(target, false, path.startsWith(`${CHANGED}/`));
 		},
 	});
 
@@ -347,8 +353,9 @@ function SectionedTree({
 			// A double click keeps the file's tab (Codex's onDoubleClick), the click before it having opened it.
 			onDoubleClick={() => {
 				const path = model.getFocusedPath();
-				const target = path && !path.endsWith("/") ? pathOf(path) : undefined;
-				if (target) open.current(target, true);
+				if (!path || path.endsWith("/")) return;
+				const target = pathOf(path);
+				if (target) open.current(target, true, path.startsWith(`${CHANGED}/`));
 			}}
 		/>
 	);
@@ -367,16 +374,16 @@ function ResultsTree({ cwd, paths, onOpen }: { cwd: string; paths: string[]; onO
 		unsafeCSS: FILES_TREE_CSS,
 		onSelectionChange: (selected) => {
 			const path = selected[0];
-			if (path && !path.endsWith("/")) open.current(joinPath(cwd, path), false);
+			if (path && !path.endsWith("/")) open.current(joinPath(cwd, path), false, false);
 		},
 	});
 	return <FileTree model={model} className="kc-tree min-h-0 flex-1" />;
 }
 
 /** The tree pane: Codex's filter, "All changes", then the sections, or the filter's results. */
-export function FilesTree({ threadId, cwd, activePath, autoFocus, onOpen }: FilesTreeProps) {
+export function FilesTree({ threadId, cwd, activePath, autoFocus, compare, onOpen }: FilesTreeProps) {
 	const [query, setQuery] = useState("");
-	const changed = useChangedFiles(threadId);
+	const changed = useChangedFiles(threadId, compare);
 	const results = useSearch(cwd, query);
 	const searching = query.trim().length > 0;
 	const resultsKey = useMemo(() => results?.join("\0") ?? "", [results]);
@@ -423,8 +430,8 @@ export function FilesTree({ threadId, cwd, activePath, autoFocus, onOpen }: File
 export function TreeToggle() {
 	const shown = useStore((s) => s.panel.fileTree !== false);
 	return (
-		<IconButton label="Toggle file tree" aria-pressed={shown} onClick={() => setPanel({ fileTree: !shown })}>
-			<Folders size={16} className={shown ? "text-[var(--kc-accent)]" : undefined} />
+		<IconButton label="Toggle file tree" round toggle aria-pressed={shown} onClick={() => setPanel({ fileTree: !shown })}>
+			<Folders size={16} />
 		</IconButton>
 	);
 }
@@ -435,7 +442,7 @@ export function FilesTab({
 	onOpen,
 }: {
 	threadId: string;
-	onOpen: (path: string, keep: boolean) => void;
+	onOpen: FilesTreeProps["onOpen"];
 }) {
 	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
 	const shown = useStore((s) => s.panel.fileTree !== false);

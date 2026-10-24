@@ -327,11 +327,21 @@ function SidePanel({ id }: { id: string }) {
 				<ChangesPane threadId={id} />
 			</div>
 			{shown?.kind === "file" ? (
-				<FileTab key={shown.path} threadId={id} path={shown.path} line={shown.line} used={shown.used} />
+				<FileTab
+					key={shown.path}
+					threadId={id}
+					path={shown.path}
+					line={shown.line}
+					used={shown.used}
+					compare={shown.compare}
+				/>
 			) : null}
 			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
 			{shown?.kind === "files" ? (
-				<FilesTab threadId={id} onOpen={(path, keep) => openFileTab(id, path, undefined, keep)} />
+				<FilesTab
+					threadId={id}
+					onOpen={(path, keep, changed) => openFileTab(id, path, undefined, keep, changed ? { scope: "unstaged" } : undefined)}
+				/>
 			) : null}
 			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
 			{tabs.map((tab, i) =>

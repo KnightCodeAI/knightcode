@@ -926,10 +926,26 @@ server in a message opens in the thread's preview.
 
 ### 9.9 Files and open-in
 
-A read-only file tab (from tool rows and the changes pane) shows the file with
-syntax highlighting and line numbers, read through `file/read`, at the line the
-tool read or changed; the Changes pane expands unchanged lines between hunks
-from `thread/diff/file`'s two sides (v1-completion-plan.md, D5). Tabs are
+A file tab (from tool rows, the Changes pane and the file tree) is Codex
+26.1016's file viewer: a toolbar of the path as a breadcrumb (the whole path on
+hover), the comparison, the change navigation, the file controls and Open, over
+the file read through `file/read`, at the line the tool read or changed, with
+the workspace tree on the right (Toggle file tree, kept for every file tab).
+The comparison is Codex's three: Index ("Unstaged"), HEAD ("Uncommitted") or a
+branch's merge base, chosen from "Unstaged ▾" beside ✕ Hide changes. A file
+opened from a list of changes (the tree's Changed files, the Changes pane's
+unstaged, uncommitted or branch scope) shows its changes in that comparison and
+scrolls to the first; otherwise they are hidden and "Show changes" picks the
+first comparison that changes the file, as Codex's does. Shown, the whole file
+is drawn as one diff against the comparison's side (`thread/diff/read` for the
+scope's trees, `thread/diff/file` for the file; nothing for an added file, the
+old text against nothing for a deleted one), word diffs on, unified or split
+(one layout for every file tab), and the navigation steps through its changed
+sections ("2/3", or the count before one is chosen). Under 625px of toolbar the
+file controls fold into one "File controls" button, as Codex's do. Mod+F in a
+file tab is Codex's Find in file: the thread's find bar over that file alone,
+in its corner. The Changes pane expands unchanged lines between hunks from
+`thread/diff/file`'s two sides (v1-completion-plan.md, D5). Tabs are
 Codex's: per thread, Changes first, then file tabs that share the strip (240px
 each, shrinking to 120px, then scrolling); a tab opened in passing is italic
 and the next one replaces it, a double-click keeps it, and past 12 file tabs

@@ -67,7 +67,16 @@ function scrollToRange(range: Range): void {
 	}
 }
 
-export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>; onClose: () => void }) {
+/** `file`: Codex's Find in file, the same bar over one file tab (`root`), in its corner and with no scopes. */
+export function FindBar({
+	root,
+	onClose,
+	file,
+}: {
+	root: RefObject<HTMLElement | null>;
+	onClose: () => void;
+	file?: boolean;
+}) {
 	const input = useRef<HTMLInputElement>(null);
 	const [query, setQuery] = useState("");
 	const [ranges, setRanges] = useState<Range[]>([]);
@@ -82,7 +91,7 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 
 	// Find again whenever the query or the text changes (a streaming reply, an earlier page, a redrawn diff).
 	useEffect(() => {
-		const element = scope === "thread" ? root.current : document.querySelector<HTMLElement>(".kc-changes");
+		const element = file || scope === "thread" ? root.current : document.querySelector<HTMLElement>(".kc-changes");
 		if (!element) {
 			setRanges([]);
 			return;
@@ -110,7 +119,7 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 			observer.disconnect();
 			cancelAnimationFrame(frame);
 		};
-	}, [root, query, scope, panelOpen]);
+	}, [root, query, scope, panelOpen, file]);
 	useEffect(() => setActive(0), [query, scope]);
 	const choose = (next: "thread" | "diffs") => {
 		setScope(next);
@@ -151,8 +160,8 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 	return (
 		<div
 			role="search"
-			aria-label="Find in thread"
-			className="no-drag fixed top-2 right-[150px] z-40 w-[340px] max-w-[calc(100vw-160px)] rounded-2xl border border-line bg-surface-secondary"
+			aria-label={file ? "Find in file" : "Find in thread"}
+			className={`no-drag z-40 w-[340px] rounded-2xl border border-line bg-surface-secondary ${file ? "absolute top-2 right-2 max-w-[calc(100%-16px)]" : "fixed top-2 right-[150px] max-w-[calc(100vw-160px)]"}`}
 		>
 			<div className="flex h-11 items-center">
 				<label className="flex min-w-0 flex-1 items-center gap-2 ps-4">
@@ -161,8 +170,8 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 						ref={input}
 						autoFocus
 						value={query}
-						aria-label={scope === "thread" ? "Find in thread" : "Find in diffs"}
-						placeholder={scope === "thread" ? "Search thread…" : "Search diffs…"}
+						aria-label={file ? "Find in file" : scope === "thread" ? "Find in thread" : "Find in diffs"}
+						placeholder={file ? "Find in file…" : scope === "thread" ? "Search thread…" : "Search diffs…"}
 						onChange={(e) => setQuery(e.target.value)}
 						onKeyDown={(e) => {
 							if (matches(e, "desktop.find.previous")) step(-1);
@@ -174,6 +183,7 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 						className="h-6 min-w-0 flex-1 bg-transparent text-base leading-6 outline-none placeholder:text-tertiary focus-visible:outline-none"
 					/>
 				</label>
+				{file ? null : (
 				<div role="group" aria-label="Search in" className="flex items-center gap-2 ps-2">
 					<IconButton
 						label="Search thread"
@@ -187,6 +197,7 @@ export function FindBar({ root, onClose }: { root: RefObject<HTMLElement | null>
 						<FileDiff size={16} />
 					</IconButton>
 				</div>
+				)}
 				<div className="flex items-center gap-2 pe-4 ps-2">
 					<div className="h-4 w-px bg-line" />
 					<IconButton label="Close find" size="xs" onClick={onClose}>

@@ -985,16 +985,20 @@ libraries Codex uses, already dependencies: `@pierre/diffs` (`CodeView`,
 
 - Toolbar, Codex's order: breadcrumb; comparison (Unstaged ▾ with Index
   "Unstaged changes", HEAD "Uncommitted changes", a Branch submenu of
-  `git/branches`, and ✕ "Hide changes"; hidden, a "Show changes" button);
-  change navigation (previous, "1/3", next); file controls (Find in file,
-  diff layout, Toggle file tree); the Open split.
-- Body: `CodeView` with one diff item, the comparison's side
-  (`thread/diff/read` for the scope's trees, `thread/diff/file` for the file)
-  against the file as it is, `expandUnchanged`, unified or split, word diffs;
-  the plain file when changes are hidden or there are none. The tree on the
-  right (toggled, remembered).
+  `git/branches`, and ✕ "Hide changes"; hidden, a "Show changes" button for
+  the first comparison that changes the file, Codex's default); change
+  navigation (previous, "1/3", next); file controls (diff layout while changes
+  show, Toggle file tree; under 625px folded into "File controls"); the Open
+  split. Codex's third control, "Search in files", searches text across the
+  workspace, which nothing here does yet; left out.
+- Body: `FileDiff` of the comparison's side (`thread/diff/read` for the
+  scope's trees, `thread/diff/file` for the file) against the file as it is,
+  `expandUnchanged`, unified or split, word diffs; the plain file when changes
+  are hidden or there are none. The tree on the right (toggled, remembered).
+  Opened from a list of changes, the tab takes its comparison and reveals the
+  first change (Codex's `revealFirstChange`).
 - Find in file (Mod+F): Codex's bar, "{active} / {matches} results", previous,
-  next, close.
+  next, close: the thread's find bar over the file. Done.
 
 #### Task S2c.3: editing
 

@@ -90,13 +90,19 @@ export interface ThreadView {
  */
 export type PanelTab =
 	| { kind: "changes" }
-	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number }
+	/** `compare`: the comparison whose changes the file shows (Codex's Show changes), none while they are hidden. */
+	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number; compare?: FileComparison }
 	/** A web page (section 9.8), or its new tab page while `url` is empty; `id` keys it, as two can show one URL. */
 	| { kind: "preview"; id: string; url: string; title?: string }
 	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
 	| { kind: "mcpApp"; itemId: string }
 	/** Codex's "Open file" tab: the workspace tree beside an empty file view, one per thread. */
 	| { kind: "files" };
+/** A file tab's comparison, Codex's three: the Index (unstaged), HEAD (uncommitted), or a branch's merge base. */
+export interface FileComparison {
+	scope: "unstaged" | "uncommitted" | "branch";
+	against?: string;
+}
 export interface ThreadTabs {
 	tabs: PanelTab[];
 	active: number;
@@ -160,8 +166,11 @@ export interface State {
 	 * The right region (desktop-shell.md section 9.6): open, its width in px, a diff scope asked for, and whether it
 	 * fills the thread view in place of the chat (Codex's full screen).
 	 */
-	/** `fileTree`: the file tabs' tree shown (Codex's Toggle file tree), unless false. */
-	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean; fileTree?: boolean };
+	/**
+	 * `fileTree`: the file tabs' tree shown (Codex's Toggle file tree), unless false. `fileSplit`: their changes drawn
+	 * split, one layout for every file tab as Codex keeps it.
+	 */
+	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean; fileTree?: boolean; fileSplit?: boolean };
 	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
 	tabs: Record<string, ThreadTabs>;
 	/** The bottom region's height in px (section 9.7), 0 until dragged (Codex's 280); each thread has it open or not. */
@@ -1523,9 +1532,10 @@ export function showChanges(threadId = openId(), scope?: DiffScope): void {
 /**
  * Open a file in the thread's side panel, scrolled to `line`: its tab if it has one, else in place of the preview tab,
  * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS. `keep` (a double click in
- * the file tree) makes it a kept tab.
+ * the file tree) makes it a kept tab. `compare` shows the file's changes in that comparison (opened from a list of
+ * changes, as Codex does); without it an open tab keeps its own.
  */
-export function openFileTab(threadId: string, path: string, line?: number, keep = false): void {
+export function openFileTab(threadId: string, path: string, line?: number, keep = false, compare?: FileComparison): void {
 	const used = ++tabClock;
 	updateTabs(
 		threadId,
@@ -1535,9 +1545,9 @@ export function openFileTab(threadId: string, path: string, line?: number, keep 
 			let at = next.findIndex((t) => t.kind === "file" && tabKey(t.path) === key);
 			if (at !== -1) {
 				const open = next[at] as Extract<PanelTab, { kind: "file" }>;
-				next[at] = { ...open, line, used, preview: keep ? false : open.preview };
+				next[at] = { ...open, line, used, preview: keep ? false : open.preview, compare: compare ?? open.compare };
 			} else {
-				const tab: PanelTab = { kind: "file", path, line, preview: !keep, used };
+				const tab: PanelTab = { kind: "file", path, line, preview: !keep, used, compare };
 				at = next.findIndex((t) => t.kind === "file" && t.preview);
 				if (at !== -1) next[at] = tab;
 				else at = next.push(tab) - 1;
@@ -1553,6 +1563,15 @@ export function openFileTab(threadId: string, path: string, line?: number, keep 
 		},
 		true,
 	);
+}
+
+/** Show a file tab's changes in `compare`, or hide them (undefined). */
+export function setFileComparison(threadId: string, path: string, compare?: FileComparison): void {
+	const key = tabKey(path);
+	updateTabs(threadId, (t) => ({
+		...t,
+		tabs: t.tabs.map((tab) => (tab.kind === "file" && tabKey(tab.path) === key ? { ...tab, compare } : tab)),
+	}));
 }
 
 /**
