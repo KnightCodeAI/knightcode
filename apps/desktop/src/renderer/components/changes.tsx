@@ -45,6 +45,7 @@ import { matches } from "../keys.ts";
 import {
 	addComment,
 	errorText,
+	type FileComparison,
 	getState,
 	openFileTab,
 	removeComment,
@@ -401,6 +402,11 @@ function FileSection({
 	];
 	const full = `${root.replace(/[\\/]+$/, "")}/${file.path}`;
 	const scope = selector.scope;
+	// The file opens showing its changes in this comparison when it is one a file tab has (Codex's three).
+	const compare: FileComparison | undefined =
+		scope === "unstaged" || scope === "uncommitted" || scope === "branch"
+			? { scope, ...(selector.against ? { against: selector.against } : {}) }
+			: undefined;
 	// The store's theme, which changes only when the theme does: @pierre/diffs restarts its render on any option
 	// change, and a restart while the highlighter is still loading leaves the file blank.
 	const themeType = useStore((s) => s.resolvedTheme) === "light" ? "light" : "dark";
@@ -470,7 +476,7 @@ function FileSection({
 							size="3xs"
 							round
 							disabled={file.status === "deleted"}
-							onClick={() => openFileTab(threadId, full, firstChange(file))}
+							onClick={() => openFileTab(threadId, full, firstChange(file), false, compare)}
 						>
 							<ExternalLink size={16} />
 						</IconButton>
@@ -486,7 +492,7 @@ function FileSection({
 								</MenuItem>
 								<MenuItem
 									disabled={file.status === "deleted"}
-									onSelect={() => openFileTab(threadId, full, firstChange(file))}
+									onSelect={() => openFileTab(threadId, full, firstChange(file), false, compare)}
 								>
 									Open file
 								</MenuItem>

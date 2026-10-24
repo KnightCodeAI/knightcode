@@ -943,6 +943,102 @@ ahead (AGENTS.md: never run `build:binary` unasked); CI runs it.
   SmartScreen's "More info → Run anyway", updates, where logs live.
 - desktop-shell.md §15 S4 status; §18 figures.
 
+### Phase S2c — Codex's file panel
+
+Branch `feat/desktop-file-panel` on top of S4, one PR. The owner's smoke test
+found S2b's read-only file tab short of Codex 26.1016's file panel (screenshot
+2026-10-24: an "Open file" tab, a comparison toolbar, inline changes, a
+sectioned file tree). Measured from Codex's bundle (`review-file-source-item`,
+`review-file-tree-side-pane`, `review-file-tree-pane`,
+`text-file-editor-tab-content`, `review-file-source-breadcrumb`,
+`workspace-directory-entries-query`) and its screenshots; built on the same
+libraries Codex uses, already dependencies: `@pierre/diffs` (`CodeView`,
+`EditProvider`) and `@pierre/trees`.
+
+#### Task S2c.0: protocol
+
+- `file/list {threadId, path?}` → `{root, entries: {path, type: "file" |
+  "directory"}[]}`: one folder's entries (Codex's directory entries query),
+  `path` relative to the thread's cwd (default: the cwd itself), hidden files
+  included as Codex's tree shows `.git` and `.gitignore`; at most 5,000 entries
+  with `truncated`. `root` is the cwd; entry paths are relative to it.
+- `file/read` gains `mtimeMs`; `file/write {threadId, path, text,
+  expectedMtimeMs?}` → `{mtimeMs}`, refusing with `fileChanged` when the
+  file's mtime is not the expected one (Codex's saveText).
+
+#### Task S2c.1: the Files tab and the tree
+
+- Tools grid: "Files" with Codex's Search Files shortcut, Mod+P
+  (`desktop.files.open`), opening the thread's one "Open file" tab
+  (`PanelTab {kind: "files"}`, Codex's singleton per workspace): the empty
+  state "Open file" / "Select a file from the workspace tree" beside the tree,
+  its filter focused.
+- The tree (Codex's `review-file-tree-side-pane` over `@pierre/trees`,
+  sectioned): "Filter files…" with Clear; "All changes" (opens the Changes
+  tab); "Changed files" (the comparison's files, with git status colours and
+  badges); "All files" (the cwd, one `file/list` per expanded folder, kept 5 s,
+  file-type icons). A filter searches the workspace (`file/search`): "Searching
+  files…", "No matching files". Selecting a file opens it in a tab (a preview
+  tab, double-click keeps it), the active file selected in the tree.
+
+#### Task S2c.2: the file tab
+
+- Toolbar, Codex's order: breadcrumb; comparison (Unstaged ▾ with Index
+  "Unstaged changes", HEAD "Uncommitted changes", a Branch submenu of
+  `git/branches`, and ✕ "Hide changes"; hidden, a "Show changes" button for
+  the first comparison that changes the file, Codex's default); change
+  navigation (previous, "1/3", next); file controls (diff layout while changes
+  show, Toggle file tree; under 625px folded into "File controls"); the Open
+  split. Codex's third control, "Search in files", searches text across the
+  workspace, which nothing here does yet; left out.
+- Body: `FileDiff` of the comparison's side (`thread/diff/read` for the
+  scope's trees, `thread/diff/file` for the file) against the file as it is,
+  `expandUnchanged`, unified or split, word diffs; the plain file when changes
+  are hidden or there are none. The tree on the right (toggled, remembered).
+  Opened from a list of changes, the tab takes its comparison and reveals the
+  first change (Codex's `revealFirstChange`).
+- Find in file (Mod+F): Codex's pierre editor keeps pierre's keymap, so Mod+F
+  in a code file opens pierre's search panel (case, word, regex, previous,
+  next); the "Find in file…" bar in Codex's bundle belongs to its text editor,
+  not used here. Done.
+
+#### Task S2c.3: editing
+
+- `EditProvider` over the file: edits mark the tab, Mod+S writes it
+  (`file/write` with the read's mtime; a changed file is "Could not save
+  file"), closing or switching with unsaved edits asks Codex's "Discard file
+  changes?" / "Your unsaved changes to this file will be lost" / "Continue
+  viewing" / "Discard changes"; files over Codex's limit open read-only
+  ("Large file opened read-only").
+- Done, measured against Codex's editor (`pierre-file-editor`): its autosave
+  (3 s after the last edit) and Mod+S both write; closing saves first and asks
+  to discard only when the write fails; a draft lives on the tab (the store),
+  so switching away keeps it. Codex's read-only state is for files over
+  10 MiB, which `file/read` (2 MiB) never hands over, so it has no case here.
+  Codex merges a draft with a file that moved under it (its review of external
+  changes); here that save is refused and the draft kept.
+
+#### Task S2c.4: the rest of Codex's file viewer
+
+- Markdown "View preview" / "View source"; Go to line (Mod+G); breadcrumb
+  folders listing their contents; word wrap; copy path options. Each built
+  only as measured; git blame and pull-request review comments stay out
+  (no review-comment backend).
+- Done as measured: Go to line is Codex's `goToLine` command, Mod+L (it
+  shares the key with the preview's address bar, which has no binding here),
+  a 200px "Line" field with "1–N" and "Enter a valid whole line number"; each
+  breadcrumb folder opens a 320px panel of that folder's tree (Codex's
+  `review-file-source-breadcrumb`, its active path expanded); Markdown reads
+  rendered by default and as source when opened with a comparison (Codex's
+  `markdownMode`). Codex's file viewer has no word wrap or copy path controls
+  of its own (the Open menu's are S2b's); left out.
+
+#### Validation
+
+- Each task: tests for its server methods and pure helpers, and a CDP pass
+  against Codex's screenshots (`scratchpad/codex/shots/files.png`,
+  `file-math.png`, `open-options.png`).
+
 ### Phase D — the TUI on the app server
 
 Starts after S4 ships. One PR per slice, each leaving the TUI working.

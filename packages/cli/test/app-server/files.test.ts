@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DiffFile, DiffScope } from "@knightcode/app-server-protocol";
@@ -28,8 +28,63 @@ test("file/read resolves a relative path against the thread's cwd and reads an a
 		binary: false,
 		tooLarge: false,
 		text: "export const a = 1;\n",
+		mtimeMs: statSync(join(s.cwd, "src", "a.ts")).mtimeMs,
 	});
 	expect(await fileRead(s, thread.id, relative.path)).toEqual(relative);
+});
+
+test("file/list gives a folder's entries relative to the cwd, hidden ones and folders included", async () => {
+	const s = await repoServer({ "src/a.ts": "a\n", "src/lib/b.ts": "b\n", ".env.example": "X=1\n" });
+	const thread = await localThread(s);
+	const byPath = (entries: { path: string; type: string }[]) =>
+		[...entries].sort((x, y) => x.path.localeCompare(y.path));
+	const root = await s.a.client.request("file/list", { threadId: thread.id });
+	expect(root.root).toBe(s.cwd);
+	expect(root.truncated).toBe(false);
+	expect(byPath(root.entries)).toEqual([
+		{ path: ".env.example", type: "file" },
+		{ path: ".git", type: "directory" },
+		{ path: "src", type: "directory" },
+	]);
+	expect(byPath((await s.a.client.request("file/list", { threadId: thread.id, path: "src" })).entries)).toEqual([
+		{ path: "src/a.ts", type: "file" },
+		{ path: "src/lib", type: "directory" },
+	]);
+	await expect(s.a.client.request("file/list", { threadId: thread.id, path: "src/a.ts" })).rejects.toMatchObject({
+		code: "invalidParams",
+	});
+});
+
+test("file/write writes in place, and refuses a file changed since its read", async () => {
+	const s = await repoServer({ "a.ts": "one\n" });
+	const thread = await localThread(s);
+	const read = await fileRead(s, thread.id, "a.ts");
+	const written = await s.a.client.request("file/write", {
+		threadId: thread.id,
+		path: "a.ts",
+		text: "two\n",
+		expectedMtimeMs: read.mtimeMs,
+	});
+	expect(readFileSync(join(s.cwd, "a.ts"), "utf8")).toBe("two\n");
+	expect(written.mtimeMs).toBe(statSync(join(s.cwd, "a.ts")).mtimeMs);
+	// Changed behind the tab's back: the stale read's save is refused and the file left alone.
+	writeFileSync(join(s.cwd, "a.ts"), "three\n");
+	utimesSync(join(s.cwd, "a.ts"), new Date(), new Date(Date.now() + 5_000));
+	await expect(
+		s.a.client.request("file/write", {
+			threadId: thread.id,
+			path: "a.ts",
+			text: "four\n",
+			expectedMtimeMs: written.mtimeMs,
+		}),
+	).rejects.toMatchObject({ code: "fileChanged" });
+	expect(readFileSync(join(s.cwd, "a.ts"), "utf8")).toBe("three\n");
+	// No expectation: a new file is created.
+	await s.a.client.request("file/write", { threadId: thread.id, path: "new.ts", text: "new\n" });
+	expect(readFileSync(join(s.cwd, "new.ts"), "utf8")).toBe("new\n");
+	await expect(s.a.client.request("file/write", { threadId: thread.id, path: ".", text: "x" })).rejects.toMatchObject({
+		code: "invalidParams",
+	});
 });
 
 test("file/read refuses a directory and a missing file; a NUL makes it binary; one byte over is tooLarge", async () => {
@@ -44,6 +99,7 @@ test("file/read refuses a directory and a missing file; a NUL makes it binary; o
 		size: 8 * 1024,
 		binary: true,
 		tooLarge: false,
+		mtimeMs: statSync(join(s.cwd, "bin.dat")).mtimeMs,
 	});
 	// A NUL past the first 8 KiB is text, as git sees it.
 	writeFileSync(join(s.cwd, "late.dat"), Buffer.concat([Buffer.alloc(8 * 1024, 0x61), Buffer.from([0])]));
@@ -55,14 +111,19 @@ test("file/read refuses a directory and a missing file; a NUL makes it binary; o
 		size: 10,
 		binary: false,
 		tooLarge: true,
+		mtimeMs: statSync(join(s.cwd, "ten.txt")).mtimeMs,
 	});
 });
 
-test("file/read decodes invalid UTF-8 with replacement characters", async () => {
+test("file/read answers bytes that are not UTF-8 as binary, so no save writes them back replaced", async () => {
 	const s = await repoServer();
 	const thread = await localThread(s);
 	writeFileSync(join(s.cwd, "latin1.txt"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
-	expect((await fileRead(s, thread.id, "latin1.txt")).text).toBe("caf�\n");
+	const latin1 = await fileRead(s, thread.id, "latin1.txt");
+	expect(latin1).toMatchObject({ binary: true });
+	expect(latin1).not.toHaveProperty("text");
+	writeFileSync(join(s.cwd, "utf8.txt"), "café\n");
+	expect((await fileRead(s, thread.id, "utf8.txt")).text).toBe("café\n");
 });
 
 /** The new side, rebuilt from the old one and the read's hunks: what an expanded diff shows. */

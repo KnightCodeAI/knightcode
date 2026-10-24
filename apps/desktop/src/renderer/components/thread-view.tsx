@@ -9,6 +9,7 @@ import {
 	AppWindow,
 	ArrowDown,
 	CircleAlert,
+	File,
 	FileDiff,
 	Folder,
 	GitBranchPlus,
@@ -29,12 +30,15 @@ import {
 	activateTab,
 	closeTab,
 	copyLastCodeBlock,
+	discardFileTab,
 	dismissPending,
 	fork,
 	keepTab,
 	loadEarlier,
 	loadTerminals,
 	newTerminal,
+	openFileTab,
+	openFilesTab,
 	openPreview,
 	NO_TABS,
 	openThread,
@@ -50,7 +54,9 @@ import {
 	toggleTerminal,
 	useStore,
 } from "../store.ts";
+import { ConfirmDialog } from "./dialog.tsx";
 import { FileTab } from "./file-tab.tsx";
+import { FilesTab } from "./files-panel.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
 import { BottomRegion } from "./terminal.tsx";
 import { PreviewTab, previewTitle } from "./preview.tsx";
@@ -207,6 +213,8 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 					<Globe size={16} className="shrink-0" />
 				) : tab.kind === "mcpApp" ? (
 					<AppWindow size={16} className="shrink-0" />
+				) : tab.kind === "files" ? (
+					<File size={16} className="shrink-0" />
 				) : (
 					<FileIcon path={tab.path} />
 				)
@@ -218,9 +226,12 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 						? previewTitle(tab)
 						: tab.kind === "mcpApp"
 							? (app?.mcpApp.server ?? "App")
-							: basename(tab.path)
+							: tab.kind === "files"
+								? "Open file"
+								: basename(tab.path)
 			}
 			italic={tab.kind === "file" && tab.preview}
+			dirty={tab.kind === "file" && tab.draft !== undefined}
 			active={active}
 			onSelect={() => activateTab(threadId, index)}
 			onKeep={() => keepTab(threadId, index)}
@@ -246,6 +257,7 @@ function SidePanel({ id }: { id: string }) {
 	const full = useStore((s) => s.panel.full ?? false);
 	const { tabs, active } = useStore((s) => s.tabs[id] ?? NO_TABS);
 	const shown = tabs[active];
+	const discarding = useStore((s) => s.discarding);
 	const strip = useRef<HTMLDivElement>(null);
 	// A strip wider than the panel scrolls the chosen tab, close button included, into sight.
 	useEffect(() => {
@@ -288,7 +300,9 @@ function SidePanel({ id }: { id: string }) {
 										? tab.id
 										: tab.kind === "mcpApp"
 											? `app:${tab.itemId}`
-											: "changes"
+											: tab.kind === "files"
+												? "files"
+												: "changes"
 							}
 							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
@@ -317,13 +331,37 @@ function SidePanel({ id }: { id: string }) {
 				<ChangesPane threadId={id} />
 			</div>
 			{shown?.kind === "file" ? (
-				<FileTab key={shown.path} threadId={id} path={shown.path} line={shown.line} used={shown.used} />
+				<FileTab
+					key={shown.path}
+					threadId={id}
+					path={shown.path}
+					line={shown.line}
+					used={shown.used}
+					compare={shown.compare}
+					draft={shown.draft}
+				/>
 			) : null}
 			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
+			{shown?.kind === "files" ? (
+				<FilesTab
+					threadId={id}
+					onOpen={(path, keep, changed) => openFileTab(id, path, undefined, keep, changed ? { scope: "unstaged" } : undefined)}
+				/>
+			) : null}
 			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
 			{tabs.map((tab, i) =>
 				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
 			)}
+			{discarding?.threadId === id ? (
+				<ConfirmDialog
+					title="Discard file changes?"
+					description="Your unsaved changes to this file will be lost"
+					cancel="Continue viewing"
+					confirm="Discard changes"
+					onConfirm={() => discardFileTab(discarding.threadId, discarding.path)}
+					onClose={() => discardFileTab()}
+				/>
+			) : null}
 		</aside>
 	);
 }
@@ -354,6 +392,11 @@ export function ThreadView({ id }: { id: string }) {
 		if (el && pinned) el.scrollTop = el.scrollHeight;
 	});
 	useBinding("desktop.panel.toggle", () => setPanel({ open: !panelOpen }));
+	useBinding("desktop.files.open", () => {
+		openFilesTab(id);
+		// An "Open file" tab already showing keeps its tree: focus its filter again.
+		requestAnimationFrame(() => document.getElementById("kc-files-filter")?.focus());
+	});
 	const bottomOpen = useStore((s) => s.terminals[id]?.open ?? false);
 	// Terminals main still runs for this thread (a reload, a second window) come back as its tabs.
 	useEffect(() => {

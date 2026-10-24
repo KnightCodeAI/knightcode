@@ -118,6 +118,8 @@ const requestParams: Record<string, unknown> = {
 	"thread/diff/read": { threadId: "t1", scope: "branch", against: "main", context: 3, ignoreWhitespace: true },
 	"thread/diff/file": { threadId: "t1", fromTree: "4b825dc6", toTree: "9a1b2c3d", path: "b.txt", oldPath: "a.txt" },
 	"file/read": { threadId: "t1", path: "src/a.ts", maxBytes: 1024 },
+	"file/list": { threadId: "t1", path: "src" },
+	"file/write": { threadId: "t1", path: "src/a.ts", text: "x=2\n", expectedMtimeMs: 1_700_000_000_000 },
 	"mcp/app/readResource": { threadId: "t1", server: "weather", uri: "ui://weather/forecast.html" },
 	"mcp/app/callTool": {
 		threadId: "t1",
@@ -244,7 +246,23 @@ const requestResults: Record<string, unknown> = {
 		toTree: "9a1b2c3d",
 	},
 	"thread/diff/file": { old: "one\n", new: "two\n", binary: false, tooLarge: false },
-	"file/read": { path: "/p/src/a.ts", size: 4, binary: false, tooLarge: false, text: "x=1\n" },
+	"file/read": {
+		path: "/p/src/a.ts",
+		size: 4,
+		binary: false,
+		tooLarge: false,
+		text: "x=1\n",
+		mtimeMs: 1_700_000_000_000,
+	},
+	"file/list": {
+		root: "/p",
+		entries: [
+			{ path: "src/a.ts", type: "file" },
+			{ path: "src/lib", type: "directory" },
+		],
+		truncated: false,
+	},
+	"file/write": { mtimeMs: 1_700_000_000_500 },
 	"mcp/app/readResource": {
 		contents: [{ uri: "ui://weather/forecast.html", mimeType: "text/html;profile=mcp-app", text: "<p>x</p>" }],
 	},
@@ -528,7 +546,7 @@ describe("app server protocol", () => {
 		const handoff = Compile(ClientRequests["thread/handoff"].params);
 		expect(handoff.Check({ threadId: "t1", to: "local", dryRun: "yes" })).toBe(false);
 		const fileResult = Compile(ClientRequests["file/read"].result);
-		expect(fileResult.Check({ path: "/a", size: 9, binary: true, tooLarge: false })).toBe(true);
+		expect(fileResult.Check({ path: "/a", size: 9, binary: true, tooLarge: false, mtimeMs: 1 })).toBe(true);
 	});
 
 	test("gitConflict reasons are the listed set", () => {
