@@ -99,6 +99,25 @@ export function regroupTopSection(markdown: string): { markdown: string; uncateg
 	};
 }
 
+/**
+ * The release notes for `version`: its section's entries, then, under their own `## <version>` headings, the
+ * versions after `since` that were never released on their own. The desktop app ships when its owner runs the
+ * release, not on every Version Packages merge, so one release can carry several changelog versions. Without
+ * `since`, or when no section matches it, every older section comes along. Undefined when `version` has no section.
+ */
+export function releaseNotes(markdown: string, version: string, since?: string): string | undefined {
+	const lines = markdown.split("\n");
+	const start = lines.indexOf(`## ${version}`);
+	if (start === -1) return undefined;
+	const out: string[] = [];
+	for (let i = start + 1; i < lines.length; i++) {
+		const line = lines[i]!;
+		if (since !== undefined && line === `## ${since}`) break;
+		out.push(line);
+	}
+	return out.join("\n").trim();
+}
+
 if (import.meta.main) {
 	// Two bump buckets collapse into one set of categories, ordered Added before
 	// Fixed however they appeared, commit prefixes are dropped, a multi-paragraph
@@ -192,6 +211,37 @@ if (import.meta.main) {
 
 	// A changelog with no released version yet.
 	strictEqual(regroupTopSection("# @knightcodeai/cli\n").markdown, "# @knightcodeai/cli\n");
+
+	// Release notes run from the version's entries down to the last release, older unreleased versions under their
+	// own headings; a version with no section has no notes, and with no release before it every section comes.
+	const desktop = `# @knightcode/desktop
+
+## 0.4.0
+
+### Fixed
+
+- Fixed a thing.
+
+## 0.3.0
+
+### Added
+
+- Added a panel.
+
+## 0.2.0
+
+### Added
+
+- Added the app.
+`;
+	strictEqual(releaseNotes(desktop, "0.4.0", "0.3.0"), "### Fixed\n\n- Fixed a thing.");
+	strictEqual(
+		releaseNotes(desktop, "0.4.0", "0.2.0"),
+		"### Fixed\n\n- Fixed a thing.\n\n## 0.3.0\n\n### Added\n\n- Added a panel.",
+	);
+	strictEqual(releaseNotes(desktop, "0.2.0"), "### Added\n\n- Added the app.");
+	strictEqual(releaseNotes(desktop, "0.3.0")?.endsWith("- Added the app."), true);
+	strictEqual(releaseNotes(desktop, "0.5.0", "0.4.0"), undefined);
 
 	console.log("changelog-sections self-check passed");
 

@@ -1,10 +1,10 @@
-// scripts/new-changeset.ts — run with `bun run changeset [category] [bump]`.
+// scripts/new-changeset.ts — run with `bun run changeset [category] [bump] [cli|desktop]`.
 //
-// `bun x changeset` walks an interactive package picker, and every changeset in
-// this repo's history has picked the same single package. So scaffold the file
-// directly instead, named after the current branch, with the category verb
-// already in place — see CONTRIBUTING.md for why the first word of the summary
-// matters.
+// `bun x changeset` walks an interactive package picker, and a change here
+// releases the CLI, the desktop app, or both (one changeset each). So scaffold
+// the file directly instead, named after the current branch, with the category
+// verb already in place — see CONTRIBUTING.md for why the first word of the
+// summary matters.
 //
 // The template is inlined rather than kept as `.changeset/TEMPLATE.md`, because
 // @changesets/read parses every non-dotted `.changeset/*.md` except README.md:
@@ -16,11 +16,12 @@ import { CATEGORIES } from "./changelog-sections.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const BUMPS = ["patch", "minor", "major"];
-// Every changeset in this repo's history releases exactly this package; reach
-// for `bun x changeset` on the rare change that needs a different one.
-const PACKAGE = "@knightcodeai/cli";
+// The CLI on npm (the app server and the terminal), and the desktop app, which
+// changesets versions and desktop-release.yml ships. Anything else is rare
+// enough for `bun x changeset`.
+const PACKAGES: Record<string, string> = { cli: "@knightcodeai/cli", desktop: "@knightcode/desktop" };
 
-const [categoryArg, bumpArg] = Bun.argv.slice(2);
+const [categoryArg, bumpArg, packageArg] = Bun.argv.slice(2);
 
 const category = CATEGORIES.find((c) => c.toLowerCase() === (categoryArg ?? "fixed").toLowerCase());
 if (!category) {
@@ -30,6 +31,11 @@ if (!category) {
 const bump = bumpArg ?? "patch";
 if (!BUMPS.includes(bump)) {
 	throw new Error(`Unknown bump "${bump}". Use one of: ${BUMPS.join(", ")}`);
+}
+
+const PACKAGE = PACKAGES[packageArg ?? "cli"];
+if (!PACKAGE) {
+	throw new Error(`Unknown package "${packageArg}". Use one of: ${Object.keys(PACKAGES).join(", ")}`);
 }
 
 // A changeset is named for the change, so the branch name is already the right
