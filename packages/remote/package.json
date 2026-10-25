@@ -14,7 +14,7 @@
 		"@knightcode/tui": "workspace:*"
 	},
 	"devDependencies": {
-		"undici": "8.10.2"
+		"undici": "8.12.3"
 	},
 	"scripts": {
 		"test": "vitest --run"

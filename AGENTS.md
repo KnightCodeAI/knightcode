@@ -97,7 +97,7 @@ User-facing notes belong in `packages/cli/docs/providers.md`, or
 
 ## Dependency and Install Security
 
-- Treat dependency and `bun.lock` changes as reviewed code. Direct external deps stay pinned to exact versions (`.npmrc` sets `save-exact=true`; `min-release-age=2` blocks freshly published versions).
+- Treat dependency and `bun.lock` changes as reviewed code. Direct external deps stay pinned to exact versions (`.npmrc` sets `save-exact=true`). Freshly published versions are held back for two days: `bunfig.toml` sets `minimumReleaseAge`, the setting bun enforces, and `.npmrc` keeps `min-release-age=2` for npm, which bun does not read.
 - When updating `undici`, you MUST read its changelog/release notes for the target version and evaluate whether any changes may affect functionality before applying the update.
 - Install with `bun install`; CI-style with `bun install --frozen-lockfile`.
 - `bunfig.toml` pins `linker = "hoisted"` on purpose: the isolated layout gives `packages/ai` and `packages/cli` separate copies of a dependency, which breaks `vi.mock()` across package boundaries. Do not change it.
