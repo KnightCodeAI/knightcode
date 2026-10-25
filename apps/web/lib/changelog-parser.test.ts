@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 
-import { parseChangelog } from "./changelog-parser"
+import { isUnreleased, parseChangelog } from "./changelog-parser"
+import type { DesktopRelease } from "./desktop-release"
 
 // A trimmed but faithful slice of the changesets-generated CHANGELOG.md:
 // - version heading + bump-type header
@@ -229,5 +230,69 @@ describe("parseChangelog (summary line + bullet list, no kind headings)", () => 
     for (const item of added) {
       expect(item).not.toContain(" Edit tools collapse")
     }
+  })
+})
+
+describe("a hand-written first release", () => {
+  it("shows the intro above the first kind heading as the highlight", () => {
+    const [entry] = parseChangelog(`# @knightcode/desktop
+
+## 0.1.0
+
+The first release of the app.
+It wraps onto a second line.
+
+### Added
+
+- Added projects and threads.
+- Added the composer.
+`)
+    expect(entry?.highlight).toBe(
+      "The first release of the app. It wraps onto a second line."
+    )
+    expect(entry?.groups).toEqual([
+      {
+        kind: "Added",
+        items: ["Added projects and threads.", "Added the composer."],
+      },
+    ])
+  })
+})
+
+describe("isUnreleased", () => {
+  const release = (
+    tag_name: string,
+    options: Partial<DesktopRelease> = {}
+  ): DesktopRelease => ({
+    tag_name,
+    draft: false,
+    prerelease: false,
+    html_url: "",
+    assets: [],
+    ...options,
+  })
+  const releases = [
+    release("@knightcodeai/cli@0.23.0", { draft: true }),
+    release("@knightcodeai/cli@0.22.0"),
+    release("desktop-v0.2.0", { prerelease: true }),
+    release("desktop-v0.1.0"),
+    release("@knightcodeai/cli@0.21.1"),
+  ]
+
+  it("marks only versions newer than the product's newest published release", () => {
+    expect(isUnreleased("0.23.0", "cli", releases)).toBe(true)
+    expect(isUnreleased("0.22.0", "cli", releases)).toBe(false)
+    // Older versions count as released even without a release of their own.
+    expect(isUnreleased("0.5.0", "cli", releases)).toBe(false)
+    expect(isUnreleased("0.2.0", "desktop", releases)).toBe(true)
+    expect(isUnreleased("0.1.0", "desktop", releases)).toBe(false)
+  })
+
+  it("marks every version of a product with no release yet", () => {
+    expect(isUnreleased("0.1.0", "desktop", [release("@knightcodeai/cli@0.22.0")])).toBe(true)
+  })
+
+  it("marks nothing when the releases could not be read", () => {
+    expect(isUnreleased("9.9.9", "cli", null)).toBe(false)
   })
 })

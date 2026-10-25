@@ -1,5 +1,11 @@
-import { getChangelog, type ChangeKind, type ChangelogEntry } from "./changelog-parser"
+import {
+  getChangelog,
+  isUnreleased,
+  type ChangeKind,
+  type ChangelogEntry,
+  type Product,
+} from "./changelog-parser"
 
-export type { ChangeKind, ChangelogEntry }
+export type { ChangeKind, ChangelogEntry, Product }
 
-export { getChangelog }
+export { getChangelog, isUnreleased }

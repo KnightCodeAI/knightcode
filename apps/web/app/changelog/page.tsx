@@ -5,7 +5,13 @@ import Link from "next/link"
 
 import { PageHero, PageShell } from "@/components/site/page-shell"
 import { Button } from "@/components/ui/button"
-import { getChangelog, type ChangeKind } from "@/lib/changelog"
+import {
+  getChangelog,
+  isUnreleased,
+  type ChangeKind,
+  type Product,
+} from "@/lib/changelog"
+import { fetchDesktopReleases } from "@/lib/desktop-release"
 import { getNpmLatestVersion } from "@/lib/version"
 import { SITE, FALLBACK_VERSION } from "@/lib/site"
 import { cn } from "@/lib/utils"
@@ -30,6 +36,11 @@ const kindStyles: Record<ChangeKind, string> = {
   Security:
     "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300",
 }
+
+const PRODUCTS: { id: Product; label: string; href: string }[] = [
+  { id: "cli", label: "CLI", href: "/changelog" },
+  { id: "desktop", label: "Desktop", href: "/changelog?product=desktop" },
+]
 
 function InlineMarkdown({ text }: { text: string }) {
   const parts = []
@@ -88,10 +99,27 @@ function InlineMarkdown({ text }: { text: string }) {
   return <>{parts.length > 0 ? parts : text}</>
 }
 
-export default async function ChangelogPage() {
-  const changelog = await getChangelog()
-  const version =
-    changelog[0]?.version ?? (await getNpmLatestVersion()) ?? FALLBACK_VERSION
+export default async function ChangelogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const product: Product =
+    (await searchParams).product === "desktop" ? "desktop" : "cli"
+  const [changelog, releases] = await Promise.all([
+    getChangelog(product),
+    fetchDesktopReleases(),
+  ])
+  const unreleased = (version: string) =>
+    isUnreleased(version, product, releases)
+  // Latest is the newest section that is out, not one merged ahead of its
+  // release.
+  const latest = changelog.find((entry) => !unreleased(entry.version))
+  const latestLabel = latest
+    ? `Latest - v${latest.version}`
+    : product === "desktop"
+      ? "No release yet"
+      : `Latest - v${(await getNpmLatestVersion()) ?? FALLBACK_VERSION}`
 
   return (
     <PageShell>
@@ -101,7 +129,7 @@ export default async function ChangelogPage() {
         lead="Release notes pulled live from the project changelog - the notable changes per version, shorter than the raw commit history."
         meta={
           <>
-            <span>Latest - v{version}</span>
+            <span>{latestLabel}</span>
             <span className="size-1 rounded-full bg-muted-foreground/40" />
             <span>MIT</span>
           </>
@@ -109,6 +137,27 @@ export default async function ChangelogPage() {
       />
 
       <div className="mx-auto mb-10 flex max-w-3xl flex-wrap items-center justify-center gap-3 px-4 sm:px-6">
+        <nav
+          aria-label="Product"
+          className="inline-flex rounded-full border border-border/60 bg-card/40 p-0.5 backdrop-blur-sm"
+        >
+          {PRODUCTS.map((p) => (
+            <Link
+              key={p.id}
+              href={p.href}
+              scroll={false}
+              aria-current={p.id === product ? "page" : undefined}
+              className={cn(
+                "inline-flex h-7 items-center rounded-full px-3.5 text-sm font-medium transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]",
+                p.id === product
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {p.label}
+            </Link>
+          ))}
+        </nav>
         <Button asChild variant="outline" size="sm" className="rounded-full">
           <Link href={SITE.githubReleases} target="_blank" rel="noreferrer">
             <HugeiconsIcon icon={GithubIcon} strokeWidth={2} />
@@ -125,8 +174,9 @@ export default async function ChangelogPage() {
             </div>
           ) : (
             <ol className="relative space-y-10 border-l border-border/60 pl-8 sm:pl-10">
-              {changelog.map((entry, idx) => {
-                const isLatest = idx === 0
+              {changelog.map((entry) => {
+                const isLatest = entry === latest
+                const isUnreleased = unreleased(entry.version)
                 return (
                   <li key={entry.version} className="relative">
                     <span
@@ -135,7 +185,9 @@ export default async function ChangelogPage() {
                         "absolute -left-[37px] flex size-5 items-center justify-center rounded-full border bg-background sm:-left-[45px]",
                         isLatest
                           ? "border-foreground/70 shadow-[0_0_0_4px_color-mix(in_srgb,var(--foreground)_8%,transparent)]"
-                          : "border-border"
+                          : isUnreleased
+                            ? "border-dashed border-muted-foreground/60"
+                            : "border-border"
                       )}
                     >
                       <HugeiconsIcon
@@ -160,11 +212,19 @@ export default async function ChangelogPage() {
                             Latest
                           </span>
                         ) : null}
+                        {isUnreleased ? (
+                          <span
+                            title="In the changelog on main, with no published GitHub release yet"
+                            className="rounded-full border border-dashed border-muted-foreground/50 px-2 py-0.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase"
+                          >
+                            Unreleased
+                          </span>
+                        ) : null}
                       </div>
 
                       {entry.highlight ? (
                         <p className="mt-2 text-base text-foreground/85 sm:text-lg">
-                          {entry.highlight}
+                          <InlineMarkdown text={entry.highlight} />
                         </p>
                       ) : null}
 

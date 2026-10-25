@@ -1,4 +1,10 @@
 import { CHANGELOG_FALLBACK } from "./changelog-fallback"
+import { type DesktopRelease, latestDesktopRelease } from "./desktop-release"
+import {
+  chooseLatestStable,
+  compareStable,
+  versionFromReleaseTag,
+} from "./installer-lock"
 
 export type ChangeKind =
   | "Added"
@@ -125,7 +131,8 @@ export function parseChangelog(content: string): ChangelogEntry[] {
 
   // Finalize the changeset that just ended: a lead with no kind sections becomes
   // an item under the fallback kind; a first-changeset lead that DID have
-  // sections becomes the version highlight.
+  // sections becomes the version highlight, and so does a hand-written intro
+  // above a version's first kind heading (index -1, before any changeset).
   const finalizeChangeset = () => {
     flushBuffer()
     if (!entry || !lead) {
@@ -134,7 +141,7 @@ export function parseChangelog(content: string): ChangelogEntry[] {
     }
     if (!changesetHasSection) {
       pushItem(fallbackKind(bumpType), lead)
-    } else if (changesetIndex === 0 && !entry.highlight) {
+    } else if (changesetIndex <= 0 && !entry.highlight) {
       entry.highlight = lead
     }
     lead = ""
@@ -278,11 +285,55 @@ export function parseChangelog(content: string): ChangelogEntry[] {
   return entries
 }
 
-export async function getChangelog(): Promise<ChangelogEntry[]> {
+// Each product's changelog on main. Only the CLI's has a build-time snapshot;
+// the desktop page shows no versions while GitHub is unreachable.
+const CHANGELOGS = {
+  cli: { path: "packages/cli/CHANGELOG.md", fallback: CHANGELOG_FALLBACK },
+  desktop: { path: "apps/desktop/CHANGELOG.md", fallback: "" },
+} as const
+
+export type Product = keyof typeof CHANGELOGS
+
+// The newest version of `product` with a published, stable GitHub release, or
+// null when it has none. A changelog section newer than it has merged to main
+// but is not out yet. CLI releases are tagged @knightcodeai/cli@<version>,
+// desktop ones desktop-v<version>.
+export function newestReleased(
+  product: Product,
+  releases: DesktopRelease[]
+): string | null {
+  if (product === "desktop")
+    return latestDesktopRelease(releases)?.version ?? null
+  return chooseLatestStable(
+    releases.flatMap((release) => {
+      const version =
+        !release.draft && !release.prerelease
+          ? versionFromReleaseTag(release.tag_name)
+          : null
+      return version ? [version] : []
+    })
+  )
+}
+
+// Whether `version` is newer than everything released. With `releases` null
+// (GitHub unreachable) nothing is marked, as before this check existed.
+export function isUnreleased(
+  version: string,
+  product: Product,
+  releases: DesktopRelease[] | null
+): boolean {
+  if (!releases) return false
+  const newest = newestReleased(product, releases)
+  return newest === null || compareStable(version, newest) > 0
+}
+
+export async function getChangelog(
+  product: Product = "cli"
+): Promise<ChangelogEntry[]> {
   let content = ""
 
   try {
-    const res = await fetch("https://raw.githubusercontent.com/KnightCodeAI/knightcode/main/packages/cli/CHANGELOG.md", {
+    const res = await fetch(`https://raw.githubusercontent.com/KnightCodeAI/knightcode/main/${CHANGELOGS[product].path}`, {
       // Always read the live changelog so the version badge and release notes
       // reflect GitHub `main` immediately after a release. `no-store` opts every
       // page that calls this (home, footer, changelog) into dynamic rendering,
@@ -299,7 +350,7 @@ export async function getChangelog(): Promise<ChangelogEntry[]> {
     // GitHub unreachable: fall back to the build-time snapshot so the page
     // still renders entries instead of going empty.
     console.error("Failed to fetch changelog from GitHub, using bundled fallback:", err)
-    content = CHANGELOG_FALLBACK
+    content = CHANGELOGS[product].fallback
   }
 
   try {
