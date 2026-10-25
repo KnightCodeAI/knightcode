@@ -402,7 +402,7 @@ function FileSection({
 	];
 	const full = `${root.replace(/[\\/]+$/, "")}/${file.path}`;
 	const scope = selector.scope;
-	// The file opens showing its changes in this comparison when it is one a file tab has (Codex's three).
+	// The file opens showing its changes in this comparison when it is one of a file tab's three.
 	const compare: FileComparison | undefined =
 		scope === "unstaged" || scope === "uncommitted" || scope === "branch"
 			? { scope, ...(selector.against ? { against: selector.against } : {}) }

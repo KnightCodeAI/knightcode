@@ -91,7 +91,7 @@ export interface ThreadView {
 export type PanelTab =
 	| { kind: "changes" }
 	/**
-	 * `compare`: the comparison whose changes the file shows (Codex's Show changes), none while they are hidden.
+	 * `compare`: the comparison whose changes the file shows (Show changes), none while they are hidden.
 	 * `draft`: edits not yet written, kept here so they outlive the tab's view.
 	 */
 	| {
@@ -107,9 +107,9 @@ export type PanelTab =
 	| { kind: "preview"; id: string; url: string; title?: string }
 	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
 	| { kind: "mcpApp"; itemId: string }
-	/** Codex's "Open file" tab: the workspace tree beside an empty file view, one per thread. */
+	/** The "Open file" tab: the workspace tree beside an empty file view, one per thread. */
 	| { kind: "files" };
-/** A file tab's comparison, Codex's three: the Index (unstaged), HEAD (uncommitted), or a branch's merge base. */
+/** A file tab's comparison, one of three: the Index (unstaged), HEAD (uncommitted), or a branch's merge base. */
 export interface FileComparison {
 	scope: "unstaged" | "uncommitted" | "branch";
 	against?: string;
@@ -174,7 +174,7 @@ export interface State {
 	paletteOpen: boolean;
 	/** The open thread's find bar (View › Find, Ctrl+F). */
 	finding: boolean;
-	/** A file tab whose unsaved edits could not be written as it closed: Codex's "Discard file changes?". */
+	/** A file tab whose unsaved edits could not be written as it closed: "Discard file changes?". */
 	discarding?: { threadId: string; path: string };
 	/** The theme the window shows: the preference, or the system's when it is "system". */
 	resolvedTheme: ThemeName;
@@ -1551,7 +1551,7 @@ export function showChanges(threadId = openId(), scope?: DiffScope): void {
  * Open a file in the thread's side panel, scrolled to `line`: its tab if it has one, else in place of the preview tab,
  * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS. `keep` (a double click in
  * the file tree) makes it a kept tab. `compare` shows the file's changes in that comparison (opened from a list of
- * changes, as Codex does); without it an open tab keeps its own.
+ * changes); without it an open tab keeps its own.
  */
 export function openFileTab(threadId: string, path: string, line?: number, keep = false, compare?: FileComparison): void {
 	const used = ++tabClock;
@@ -1595,7 +1595,7 @@ export function setFileComparison(threadId: string, path: string, compare?: File
 }
 
 /**
- * Codex's Files: the thread's one "Open file" tab, focused if it is open, else in place of the new tab page it was
+ * Files: the thread's one "Open file" tab, focused if it is open, else in place of the new tab page it was
  * chosen from (`replace`, a preview tab's index), else after the other tabs.
  */
 export function openFilesTab(threadId = openId(), replace?: number): void {
@@ -1695,8 +1695,8 @@ export function takeAttachments(threadId: string): { images: string[]; text: str
 }
 
 /**
- * Close a tab. A file tab with unsaved edits writes them first, as Codex's does, and closes once they are written;
- * when they cannot be, Codex's "Discard file changes?" asks (`discarding`).
+ * Close a tab. A file tab with unsaved edits writes them first and closes once they are written;
+ * when they cannot be, "Discard file changes?" asks (`discarding`).
  */
 export function closeTab(threadId: string, index: number): void {
 	if (index === 0) return setPanel({ open: false });
@@ -1743,7 +1743,7 @@ export function setFileDraft(threadId: string, path: string, draft?: FileDraft):
 const saving = new Map<string, Promise<unknown>>();
 
 /**
- * Write a file tab's unsaved edits (Codex's save): the text written and the file's new mtime, or undefined with
+ * Write a file tab's unsaved edits: the text written and the file's new mtime, or undefined with
  * "Could not save file" when the file changed since it was read or the write failed (the edits stay). One write per
  * file at a time, as two over the same mtime would refuse each other. Edits made while it writes stay unsaved, over
  * the file as written.

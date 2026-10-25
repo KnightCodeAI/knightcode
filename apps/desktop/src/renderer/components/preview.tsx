@@ -144,7 +144,7 @@ function NewTabPage({ threadId, cwd, tabId }: { threadId: string; cwd: string; t
 			keys: bindingLabel("desktop.terminal.new"),
 			run: () => void newTerminal(threadId, cwd),
 		},
-		// Codex's Files: the "Open file" tab in place of this new tab page.
+		// Files: the "Open file" tab in place of this new tab page.
 		{
 			label: "Files",
 			icon: <File size={16} />,
