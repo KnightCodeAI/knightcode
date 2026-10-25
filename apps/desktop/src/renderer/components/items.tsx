@@ -537,7 +537,7 @@ export function TurnView({
 					) : null}
 				</>
 			) : work.length > 0 && !final ? (
-				// No reply to fold the work under (Codex's turn that only asked questions).
+				// No reply to fold the work under (a turn that only asked questions).
 				<WorkItems items={work} cwd={cwd} />
 			) : work.length > 0 ? (
 				<div className="flex flex-col gap-4">

@@ -1,6 +1,6 @@
 /**
- * "Open in" (desktop-shell.md section 9.9): Codex's open-in targets (26.1016 main bundle, `open-in-targets`, its HVe
- * list) ported one for one. Each target has its own lookup per platform, built from Codex's helpers (PATH, shims to
+ * "Open in" (desktop-shell.md section 9.9): the editors, terminals and IDEs a file or folder opens in. Each target has
+ * its own lookup per platform, built from shared helpers (PATH, shims to
  * the program, install folders, Start menu shortcuts, app bundles, desktop entries), its own go-to-line syntax, and
  * the file manager and the system's default app as two fixed entries that main runs through Electron's shell.
  */
@@ -27,13 +27,13 @@ export interface OpenInTarget {
 	/** Where its icon is read from (Electron's app.getFileIcon); the command when absent. */
 	iconPath?: string;
 	args(path: string, line?: number, column?: number): string[];
-	/** When what runs depends on what is opened: a terminal given a file runs the user's editor in it (Codex's DBe). */
+	/** When what runs depends on what is opened: a terminal given a file runs the user's editor in it. */
 	launch?(path: string, line?: number, column?: number): Launch;
 }
 
 type Args = (path: string, line?: number, column?: number) => string[];
 
-/** A directory as is, a file's folder: where a terminal starts (Codex's $X). */
+/** A directory as is, a file's folder: where a terminal starts. */
 const folderOf = (path: string) => (existsSync(path) && statSync(path).isDirectory() ? path : dirname(path));
 
 const pathKey = (env: NodeJS.ProcessEnv) => Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
@@ -72,7 +72,7 @@ export function onPath(name: string, platform: NodeJS.Platform, env: NodeJS.Proc
 
 const exists = (path: string) => lstatSync(path, { throwIfNoEntry: false }) !== undefined;
 
-/** Newest first, as Codex sorts the folders it scans (its dZ). */
+/** Newest first, the order scanned folders are tried in. */
 const newestFirst = (names: string[]) => [...names].sort((a, b) => b.localeCompare(a));
 
 function list(dir: string): string[] {
@@ -83,7 +83,7 @@ function list(dir: string): string[] {
 	}
 }
 
-/** POSIX single quoting, a bare word left as is (Codex's quote helper). */
+/** POSIX single quoting, a bare word left as is. */
 function quote(word: string): string {
 	return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
 }
@@ -113,7 +113,7 @@ export function shellWords(command: string): string[] | undefined {
 	return words;
 }
 
-/** The line flag each terminal editor reads (Codex's TBe). */
+/** The line flag each terminal editor reads. */
 function editorLine(executable: string, line?: number, column?: number): string[] {
 	if (!line) return [];
 	const col = column ?? 1;
@@ -123,7 +123,7 @@ function editorLine(executable: string, line?: number, column?: number): string[
 	return [];
 }
 
-/** `cd <folder> && <editor> <file>`, the editor's own line flag before a `--` it may carry (Codex's aZ). */
+/** `cd <folder> && <editor> <file>`, the editor's own line flag before a `--` it may carry. */
 export function editorScript(editor: string, file: string, line?: number, column?: number): string {
 	const folder = quote(dirname(file));
 	const words = shellWords(editor);
@@ -135,7 +135,7 @@ export function editorScript(editor: string, file: string, line?: number, column
 	return `cd ${folder} && ${all.map(quote).join(" ")}`;
 }
 
-/** Codex's lookups over one machine: its Ga, ao, oo, ro, co, so, lo (Windows), zX, VX, BX (macOS), JX (Linux). */
+/** The lookups over one machine, shared by every target. */
 class Lookups {
 	readonly home: string;
 	/** %LOCALAPPDATA%\Programs, %ProgramFiles%, %ProgramFiles(x86)%. */
@@ -183,7 +183,7 @@ class Lookups {
 
 	/**
 	 * A command shim (`.cmd`, `.bat`) stands for the program it starts: beside it, or up to three folders above its `bin`
-	 * (Cursor's is `resourcesppin`). Unlike Codex, which runs a shim through cmd.exe, a path is never handed to a
+	 * (Cursor's is `resources\app\bin`). A path is never handed to a
 	 * shell: cmd.exe would read `&` or `%` in a file name as its own syntax.
 	 */
 	runnable(found: string | undefined, exe: string): string | undefined {
@@ -205,7 +205,7 @@ class Lookups {
 		return this.shim(join(this.localAppData, "Microsoft", "WindowsApps", name));
 	}
 
-	/** Every file in both Start menus, in the order Codex's search meets them; walked once per detection. */
+	/** Every file in both Start menus, in search order; walked once per detection. */
 	private shortcuts: string[] | undefined;
 
 	/** A Start menu shortcut by name, in any folder of either Start menu (lo). */
@@ -259,7 +259,7 @@ class Lookups {
 		return undefined;
 	}
 
-	/** A desktop entry by name in the data folders Codex reads, only when `gio` can launch it (its oS and uS). */
+	/** A desktop entry by name in the XDG data folders, only when `gio` can launch it. */
 	desktopEntry(names: string[]): string | undefined {
 		if (!this.which("gio")) return undefined;
 		const xdg = this.env.XDG_DATA_HOME;
@@ -288,7 +288,7 @@ class Lookups {
 		return this.desktopEntry(entries);
 	}
 
-	/** The terminal editor: $VISUAL, $EDITOR, else the first of nvim, vim, nano and less on PATH (Codex's yBe). */
+	/** The terminal editor: $VISUAL, $EDITOR, else the first of nvim, vim, nano and less on PATH. */
 	terminalEditor(): string | undefined {
 		const visual = this.env.VISUAL?.trim() || this.env.EDITOR?.trim();
 		if (visual) return visual;
@@ -299,7 +299,7 @@ class Lookups {
 		return undefined;
 	}
 
-	/** JetBrains Toolbox's apps on macOS, by target: the newest bundle of each (Codex's iVe over KBe). */
+	/** JetBrains Toolbox's apps on macOS, by target: the newest bundle of each. */
 	toolbox(): Map<string, string> {
 		const found = new Map<string, string>();
 		const apps = join(this.home, "Library", "Application Support", "JetBrains", "Toolbox", "apps");
@@ -340,7 +340,7 @@ interface Def {
 	linux?: Detect;
 }
 
-// The go-to-line syntaxes Codex passes (its HX, mZ, fZ, sZ).
+// Each editor family's go-to-line syntax.
 const vscodeArgs =
 	(platform: NodeJS.Platform): Args =>
 	(p, l, c) =>
@@ -350,7 +350,7 @@ const jetbrainsArgs: Args = (p, l, c) => (l ? ["--line", String(l), "--column", 
 const emacsArgs: Args = (p, l, c) => (l ? [`+${l}:${c ?? 1}`, p] : [p]);
 const plain: Args = (p) => [p];
 
-/** A Linux find: a command runs as is; a desktop entry through `gio launch`, which takes the path alone (Codex's YX). */
+/** A Linux find: a command runs as is; a desktop entry through `gio launch`, which takes the path alone. */
 function linuxFound(l: Lookups, found: string | undefined, args: Args): Found | undefined {
 	if (!found) return undefined;
 	if (extname(found) !== ".desktop") return { command: found, args };
@@ -358,7 +358,7 @@ function linuxFound(l: Lookups, found: string | undefined, args: Args): Found | 
 	return gio ? { command: gio, args: (p) => ["launch", found, p] } : undefined;
 }
 
-/** Codex's qX: an editor with one lookup per platform and the VS Code family's arguments. */
+/** An editor with one lookup per platform and the VS Code family's arguments. */
 function editor(
 	id: string,
 	name: string,
@@ -385,7 +385,7 @@ const launchServices =
 		return app ? { command: "/usr/bin/open", args: (p, line, column) => ["-a", name, ...args(p, line, column)], iconPath: app } : undefined;
 	};
 
-/** TextMate's line: a txmt:// URL (Codex's bVe). */
+/** TextMate's line: a txmt:// URL. */
 const textmateArgs: Args = (p, l, c) => {
 	if (!l) return [p];
 	const url = new URL("txmt://open/");
@@ -395,7 +395,7 @@ const textmateArgs: Args = (p, l, c) => {
 	return [url.toString()];
 };
 
-/** The terminals' script runners on macOS, for a file opened with the user's editor in it (Codex's EBe). */
+/** The terminals' script runners on macOS, for a file opened with the user's editor in it. */
 function macTerminalScript(id: string, script: string, shell: string): Launch | undefined {
 	const escaped = script.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 	if (id === "kitty") return { command: "/usr/bin/open", args: ["-na", "kitty.app", "--args", shell, "-lc", script] };
@@ -417,7 +417,7 @@ function macTerminalScript(id: string, script: string, shell: string): Launch | 
 	return undefined;
 }
 
-/** A macOS terminal app (Codex's ZX): `open -a` at the folder, or a file in the user's editor where it can run one. */
+/** A macOS terminal app: `open -a` at the folder, or a file in the user's editor where it can run one. */
 const macTerminal =
 	(id: string, appPaths: string[], appName: string): Detect =>
 	(l) => {
@@ -438,7 +438,7 @@ const macTerminal =
 		};
 	};
 
-/** A Linux terminal's starting-folder flags (Codex's QX). */
+/** A Linux terminal's starting-folder flags. */
 function linuxTerminalArgs(command: string, path: string, shell: string): string[] {
 	const folder = folderOf(path);
 	switch (basename(command)) {
@@ -456,7 +456,7 @@ function linuxTerminalArgs(command: string, path: string, shell: string): string
 	}
 }
 
-/** A file opened in the user's editor inside a Linux terminal, each terminal's way of running it (Codex's vBe). */
+/** A file opened in the user's editor inside a Linux terminal, each terminal's way of running it. */
 function linuxTerminalScript(command: string, args: string[], script: string, shell: string): string[] {
 	switch (basename(command)) {
 		case "kitty":
@@ -478,7 +478,7 @@ function linuxTerminalScript(command: string, args: string[], script: string, sh
 	}
 }
 
-/** A Linux terminal: the first of `commands` on PATH (Codex's ZX linux and _Be). */
+/** A Linux terminal: the first of `commands` on PATH. */
 const linuxTerminal =
 	(commands: string[]): Detect =>
 	(l) => {
@@ -498,10 +498,10 @@ const linuxTerminal =
 		};
 	};
 
-/** Windows Terminal's `-d`, its `;` command separator escaped in every argument (Codex's nZ and rZ). */
+/** Windows Terminal's `-d`, its `;` command separator escaped in every argument. */
 const windowsTerminalArgs = (p: string, ...rest: string[]) => ["-d", folderOf(p), ...rest].map((a) => a.replaceAll(";", "\\;"));
 
-/** Windows Terminal: on PATH or as WindowsApps' alias, else a Start menu shortcut's target (Codex's tZ). */
+/** Windows Terminal: on PATH or as WindowsApps' alias, else a Start menu shortcut's target. */
 function windowsTerminal(l: Lookups): string | undefined {
 	return l.which("wt.exe") ?? l.windowsApp("wt.exe") ?? l.target(l.startMenu(["Terminal.lnk", "Windows Terminal.lnk"]));
 }
@@ -518,7 +518,7 @@ interface JetBrainsIde {
 	desktop: string[];
 }
 
-/** JetBrains' IDEs, Codex's uZ inputs (JBe, YBe and each target's Windows lookup). */
+/** JetBrains' IDEs: each one's program, bundle names and Windows lookup. */
 const JETBRAINS: JetBrainsIde[] = [
 	{
 		id: "androidStudio",
@@ -621,7 +621,7 @@ const JETBRAINS: JetBrainsIde[] = [
 	},
 ];
 
-/** A JetBrains IDE (Codex's uZ, cVe, lVe, uVe and aVe). */
+/** A JetBrains IDE. */
 function jetbrains(ide: JetBrainsIde): Def {
 	const windows = ide.windows;
 	return {
@@ -677,7 +677,7 @@ function output(command: string, args: string[], env: NodeJS.ProcessEnv, timeout
 	});
 }
 
-/** Xcode: `xed` from xcode-select, else Xcode's own, else the app through Launch Services (Codex's yZ and IVe). */
+/** Xcode: `xed` from xcode-select, else Xcode's own, else the app through Launch Services. */
 async function xcode(l: Lookups): Promise<Found | undefined> {
 	const app = l.appNamed("Xcode") ?? l.fixed(["/Applications/Xcode.app"]);
 	let xed: string | undefined;
@@ -697,7 +697,7 @@ async function xcode(l: Lookups): Promise<Found | undefined> {
 	return app ? { command: "/usr/bin/open", iconPath: app, args: (p) => ["-a", app, p] } : undefined;
 }
 
-/** The workspace or project above a path, else the folder of the nearest Package.swift (Codex's FVe). */
+/** The workspace or project above a path, else the folder of the nearest Package.swift. */
 function xcodeProject(path: string): string | undefined {
 	let dir = folderOf(path);
 	let swiftPackage: string | undefined;
@@ -714,7 +714,7 @@ function xcodeProject(path: string): string | undefined {
 	}
 }
 
-/** Codex's targets in its order (HVe), which is the menu's. */
+/** Every target, in the menu's order. */
 const DEFS: Def[] = [
 	editor("vscode", "VS Code", {
 		darwin: ["/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code", "/Applications/Code.app/Contents/Resources/app/bin/code"],
@@ -739,7 +739,7 @@ const DEFS: Def[] = [
 		id: "visualStudio",
 		name: "Visual Studio",
 		kind: "editor",
-		// devenv on PATH, then each year and edition, then vswhere's answer (Codex's wVe).
+		// devenv on PATH, then each year and edition, then vswhere's answer.
 		win32: async (l) => {
 			const onPathProgram = l.shim(l.which("devenv.exe") ?? l.which("devenv"));
 			if (onPathProgram) return found(onPathProgram, plain);
@@ -769,7 +769,7 @@ const DEFS: Def[] = [
 				]) ?? (l.appNamed("Cursor") ? join(l.appNamed("Cursor")!, "Contents", "Resources", "app", "bin", "cursor") : undefined),
 				vscodeArgs("darwin"),
 			),
-		// The shim three folders down (resources\app\bin) stands for Cursor.exe (Codex's MBe).
+		// The shim three folders down (resources\app\bin) stands for Cursor.exe.
 		win32: (l) => {
 			const shim = l.shim(l.which("cursor"));
 			if (shim) {
@@ -859,7 +859,7 @@ const DEFS: Def[] = [
 	}),
 	editor("antigravity", "Antigravity", {
 		darwin: ["/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity"],
-		// Codex's pBe: the command on PATH, else its install folders; a shim stands for the Antigravity.exe above it.
+		// The command on PATH, else its install folders; a shim stands for the Antigravity.exe above it.
 		win32: (l) =>
 			l.runnable(
 				l.shim(l.which("antigravity.exe") ?? l.which("antigravity.cmd") ?? l.which("antigravity")) ??
@@ -879,7 +879,7 @@ const DEFS: Def[] = [
 		id: "githubDesktop",
 		name: "GitHub Desktop",
 		kind: "editor",
-		// Its installer puts it in %LOCALAPPDATA% itself, not under Programs (Codex's UBe).
+		// Its installer puts it in %LOCALAPPDATA% itself, not under Programs.
 		win32: (l) => {
 			const args: Args = (p) => [folderOf(p)];
 			const shim = l.shim(l.which("github.exe") ?? l.which("github"));
@@ -926,7 +926,7 @@ const DEFS: Def[] = [
 		id: "gitBash",
 		name: "Git Bash",
 		kind: "terminal",
-		// Its icon is its Start menu shortcut's (Codex's VBe).
+		// Its icon is its Start menu shortcut's.
 		win32: (l) => {
 			const shim = l.shim(l.which("git-bash.exe") ?? l.which("git-bash"));
 			const program =
@@ -943,7 +943,7 @@ const DEFS: Def[] = [
 		id: "cmder",
 		name: "Cmder",
 		kind: "terminal",
-		// %CMDER_ROOT%, PATH, then its Start menu shortcut's target (Codex's kBe).
+		// %CMDER_ROOT%, PATH, then its Start menu shortcut's target.
 		win32: (l) => {
 			const root = l.env.CMDER_ROOT?.trim();
 			const fromRoot = root && exists(join(root, "Cmder.exe")) ? join(root, "Cmder.exe") : undefined;
@@ -956,7 +956,7 @@ const DEFS: Def[] = [
 		name: "WSL",
 		kind: "terminal",
 		// WSL in Windows Terminal at the folder (Windows' own path, which WSL mounts), in the path's distribution when it
-		// is one's (Codex's NVe and _Z). Its icon is its Start menu shortcut's penguin.
+		// is one's. Its icon is its Start menu shortcut's penguin.
 		win32: (l) => {
 			if (!existsSync(join(l.env.SystemRoot ?? "C:\\Windows", "System32", "wsl.exe"))) return undefined;
 			const wt = windowsTerminal(l);
@@ -993,7 +993,7 @@ const DEFS: Def[] = [
 	{ id: "textmate", name: "TextMate", kind: "editor", darwin: launchServices("TextMate", textmateArgs) },
 ];
 
-/** vswhere's newest devenv.exe, Visual Studio's own locator (Codex's Jte); about 250 ms, so not on main's thread. */
+/** vswhere's newest devenv.exe, Visual Studio's own locator; about 250 ms, so not on main's thread. */
 async function vswhere(l: Lookups): Promise<string | undefined> {
 	const locator = [l.env["ProgramFiles(x86)"], l.env.ProgramFiles]
 		.filter((r): r is string => Boolean(r))
@@ -1012,7 +1012,7 @@ export interface DetectOptions {
 	readShortcut?: (lnk: string) => string | undefined;
 }
 
-/** Every target this machine has, in Codex's order, the file manager and the default app among them. */
+/** Every target this machine has, in the menu's order, the file manager and the default app among them. */
 export async function detectTargets(
 	platform: NodeJS.Platform,
 	env: NodeJS.ProcessEnv,
@@ -1121,7 +1121,7 @@ export interface OpenInDeps {
 	/** The system's default app for the file. */
 	openDefault: (path: string) => Promise<void>;
 	launch?: (command: string, args: string[], env: NodeJS.ProcessEnv) => Promise<void>;
-	/** A Windows shortcut's target, for the terminals Codex finds by their Start menu entry. */
+	/** A Windows shortcut's target, for the terminals found by their Start menu entry. */
 	readShortcut?: (lnk: string) => string | undefined;
 	now?: () => number;
 }

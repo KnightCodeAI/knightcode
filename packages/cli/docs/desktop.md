@@ -189,5 +189,5 @@ once. The protocol side is in [app-server.md](app-server.md#dialogs-and-extensio
 | Stop the running turn | Escape (empty composer) |
 | Allow / deny an approval | Enter / Escape (card focused) |
 
-On macOS, Ctrl is Cmd, except in Ctrl+\` and Ctrl+PageDown/PageUp, which stay Control as in
-Codex. Settings › Keyboard shortcuts lists every binding.
+On macOS, Ctrl is Cmd, except in Ctrl+\` and Ctrl+PageDown/PageUp, which stay Control.
+Settings › Keyboard shortcuts lists every binding.

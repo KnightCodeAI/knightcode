@@ -1,12 +1,11 @@
 /**
- * A file tab (desktop-shell.md section 9.6), Codex's file viewer (26.1016 `text-file-editor-tab-content`, measured over
- * CDP): a toolbar of capsules (the path as a breadcrumb; the comparison, Codex's "Unstaged ▾" beside Hide changes, or
- * Show changes while they are hidden; the change navigation; the diff layout and Toggle file tree; the Open split
- * button) over the file in @pierre/diffs (12px code on 22px lines, the Changes pane's theme), its changes in the
- * comparison drawn in place, the whole file expanded, and the workspace tree on the right. The server reads the file
- * (file/read) and the comparison's side of it (thread/diff/read, thread/diff/file), as it reads every file the desktop
- * shows. The file is editable, as Codex's is: edits are the tab's draft (the store's, so they outlive this view),
- * written three seconds after the last one or on Mod+S (file/write, refused once the file has moved).
+ * A file tab (desktop-shell.md section 9.6): a toolbar of capsules (the path as a breadcrumb; the comparison,
+ * "Unstaged ▾" beside Hide changes, or Show changes while they are hidden; the change navigation; the diff layout and
+ * Toggle file tree; the Open split button) over the file in @pierre/diffs (12px code on 22px lines, the Changes pane's
+ * theme), its changes in the comparison drawn in place, the whole file expanded, and the workspace tree on the right.
+ * The server reads the file (file/read) and the comparison's side of it (thread/diff/read, thread/diff/file), as it
+ * reads every file the desktop shows. The file is editable: edits are the tab's draft (the store's, so they outlive
+ * this view), written three seconds after the last one or on Mod+S (file/write, refused once the file has moved).
  */
 
 import type { ResultOf } from "@knightcode/app-server-protocol";

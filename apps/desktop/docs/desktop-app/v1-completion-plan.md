@@ -17,8 +17,7 @@ phases run in this order:
 | S4 | Installers on Windows, macOS and Linux with the bundled binary, updates, a release workflow, end-to-end tests, the release hardening left over from C | S3 (node-pty must package) |
 | D | The TUI on the app server, in-process, rendering from the same session events it renders today | S4 shipped |
 
-**Architecture:** Codex's model, read from the installed Codex 26.1013 build
-(section 2, D1): built-in panes are native code in the app, and only
+**Architecture** (section 2, D1): built-in panes are native code in the app, and only
 third-party UI runs sandboxed. The Changes pane stays the React component it
 is. The terminal is `node-pty` in Electron main with xterm.js in the renderer.
 The preview is a `<webview>` tag on a per-thread partition. Third-party UI
@@ -125,7 +124,7 @@ what the code shows:
   (`protocol.ts:207-223`); the pane has no file contents to expand into.
 - **Handoff refuses late.** "Move to main checkout" fails only after the user
   confirms, with `localChanges` or `operationInProgress`
-  (`workspaces.ts:927,942,965`); Codex disables the action up front.
+  (`workspaces.ts:927,942,965`); it should be disabled up front.
 - **No terminal, no preview, no third-party UI.** The renderer's CSP already
   names a scheme nothing serves (`main.ts:39`: `frame-src kc-ext:`).
 - **Not installable.** `forge.config.ts:11`: "Packaging, signing and the
@@ -141,17 +140,17 @@ what the code shows:
 
 | # | Question | Decision | Rejected, and why |
 | --- | --- | --- | --- |
-| D1 | Where built-in panes run | Native in the app, as Codex 26.1013 does. REA pass on its `app.asar` (2026-10-23): the diff review is renderer React (`review-file-tree-pane`, `code-diff` chunks, no iframe); the terminal is `node-pty` loaded with `createRequire` in `main-C4DYk222.js`; the browser is a `<webview>` (`surface-*.js`) on partition `persist:codex-browser-app-route:<thread>\0<tab>`, with `webviewTag` set only for primary, detached, hotkey and HUD windows | The old §12 SDK model (every built-in in a sandboxed frame over a `MessagePort`, PTYs in a `utilityProcess`): the user chose Codex's model; it costs an SDK, a scheme, a process and a rewrite of a working Changes pane for no user-visible gain |
-| D2 | Third-party UI | MCP Apps (SEP-1865, Stable 2026-01-26): a tool that names `_meta.ui.resourceUri` gets its `ui://` HTML drawn in a sandboxed iframe on a per-app origin, bridged to the app server. Codex hosts plugin UI the same way (`mcp-sandbox-element`: `sandbox="allow-scripts allow-same-origin"`, no referrer); its bundled "Code Review" plugin is such an app. The spec's sandbox proxy (a second iframe on another origin) is required of web hosts only; a desktop host draws the View directly, and the per-instance `kc-mcp-app://` origin already keeps it apart from the app | A KnightCode-only `desktop.json` package type (a format nobody else ships; MCP Apps is a published extension with servers already using it); `@modelcontextprotocol/ext-apps`' host bridge (a new dependency, with its own dependency tree to review, for about a dozen messages) |
-| D3 | Terminal process | `node-pty` in Electron main, one manager, PTYs keyed by thread, 64 KiB scrollback each for reattach | A `utilityProcess` (Codex does not; the isolation guards against a native crash that ConPTY/node-pty rarely has, at the cost of a process and an IPC hop); the app server's `shell/exec` (sized for `!` commands, arch §7.2) |
-| D4 | Preview host | `<webview>` in the renderer, partition `persist:kc-preview:<threadId>`, guarded in main by `will-attach-webview` | `WebContentsView` (main must hide it whenever a menu or modal overlaps: the renderer has to report every overlap; a `<webview>` is in the DOM and stacks normally). Agent control later (L3) still works: main reaches the guest through `webContents.fromId` and `webContents.debugger`, as Codex's browser use does. Also rejected: one partition per tab, as Codex has (a sign-in in one tab would not carry to the thread's next tab) |
+| D1 | Where built-in panes run | Native in the app: the diff review stays renderer React, the terminal is `node-pty` loaded with `createRequire` in main, and the preview is a `<webview>` | The old §12 SDK model (every built-in in a sandboxed frame over a `MessagePort`, PTYs in a `utilityProcess`): the user chose native panes; it costs an SDK, a scheme, a process and a rewrite of a working Changes pane for no user-visible gain |
+| D2 | Third-party UI | MCP Apps (SEP-1865, Stable 2026-01-26): a tool that names `_meta.ui.resourceUri` gets its `ui://` HTML drawn in a sandboxed iframe on a per-app origin, bridged to the app server. The frame is `sandbox="allow-scripts allow-same-origin"` with no referrer. The spec's sandbox proxy (a second iframe on another origin) is required of web hosts only; a desktop host draws the View directly, and the per-instance `kc-mcp-app://` origin already keeps it apart from the app | A KnightCode-only `desktop.json` package type (a format nobody else ships; MCP Apps is a published extension with servers already using it); `@modelcontextprotocol/ext-apps`' host bridge (a new dependency, with its own dependency tree to review, for about a dozen messages) |
+| D3 | Terminal process | `node-pty` in Electron main, one manager, PTYs keyed by thread, 64 KiB scrollback each for reattach | A `utilityProcess` (the isolation guards against a native crash that ConPTY/node-pty rarely has, at the cost of a process and an IPC hop); the app server's `shell/exec` (sized for `!` commands, arch §7.2) |
+| D4 | Preview host | `<webview>` in the renderer, partition `persist:kc-preview:<threadId>`, guarded in main by `will-attach-webview` | `WebContentsView` (main must hide it whenever a menu or modal overlaps: the renderer has to report every overlap; a `<webview>` is in the DOM and stacks normally). Agent control later (L3) still works: main reaches the guest through `webContents.fromId` and `webContents.debugger`. Also rejected: one partition per tab (a sign-in in one tab would not carry to the thread's next tab) |
 | D5 | File contents for file tabs and hunk expansion | Two server methods: `file/read` and `thread/diff/file` (section 4.1). The server reads files, as §17 requires | Reading files in main (§17 excludes it); shipping contents inside `thread/diff/read` (every read would carry every file twice) |
 | D6 | Handoff pre-check | `thread/handoff` gains `dryRun`: every refusal check runs, nothing is written | Reimplementing the checks in the renderer from `git/status` (it cannot see ignored files in the way, `workspaces.ts:963-968`) |
 | D7 | Signing | None in v1 (no certificates). Builds are unsigned on Windows, ad-hoc signed on macOS; Forge reads signing and notarization credentials from environment variables and signs only when they are set | Blocking the release on certificates |
 | D8 | Updates | Electron `autoUpdater` (Squirrel) on Windows against a knightcode.dev route over GitHub releases tagged `desktop-v<version>`; on macOS, which cannot update an unsigned app, the same feed drives an "Update available" banner that opens the release page; Linux updates by reinstalling the package | update.electronjs.org (it serves the repository's newest release, which is a CLI release here); updating inside the app server (it would replace itself mid-session) |
 | D9 | Release trigger | A `workflow_dispatch` "release button" (bump, prerelease) that commits the version and the tag, then builds every target in the same run and drafts the release, as the IDE's did (WP05) | A tag push (a tag pushed with `GITHUB_TOKEN` triggers no workflow) |
 | D10 | Desktop version | Independent of the CLI's: `apps/desktop/package.json`, tags `desktop-v<version>`, no changeset (the app is private, §15) | Locking it to the CLI version (a CLI patch would force a desktop release) |
-| D11 | Phase D shape | The TUI's app server is always in-process (arch §2). Every action that changes a session (prompts, steering, queueing, interrupts, model and settings changes, tree moves, forks, compaction, `!` commands, retries) goes through protocol methods, so the server's queue, turn markers, locks and approvals apply. Reads and live events go through local handles (arch §7.3), which only the in-process transport has: the session's own `AgentSessionEvent` objects, read-only access to its `SessionManager` and stats, and the TUI's own `ExtensionUIContext` bound as the UI of the threads it holds, so synchronous UI methods keep working. A facade, `RemoteSession`, gives `InteractiveMode` the members it uses today, so its renderers and components do not change and resyncs stay mechanical | Rendering the TUI from protocol items as Codex's TUI does (rewrites every renderer; every resync becomes a hand translation; the user asked on 2026-10-23 to keep these files as identical to upstream as possible). Carrying session events and entries over the wire in `toJsonEvent` shape (review round 1: it is lossy, since `toJsonEvent` drops partials that carry data no delta repeats, `anthropic-messages.ts:753-762`; message events lack persisted entry ids, `session-manager.ts:1301-1309`; and full entry reads would need paging under the 64 MiB stdio cap) |
+| D11 | Phase D shape | The TUI's app server is always in-process (arch §2). Every action that changes a session (prompts, steering, queueing, interrupts, model and settings changes, tree moves, forks, compaction, `!` commands, retries) goes through protocol methods, so the server's queue, turn markers, locks and approvals apply. Reads and live events go through local handles (arch §7.3), which only the in-process transport has: the session's own `AgentSessionEvent` objects, read-only access to its `SessionManager` and stats, and the TUI's own `ExtensionUIContext` bound as the UI of the threads it holds, so synchronous UI methods keep working. A facade, `RemoteSession`, gives `InteractiveMode` the members it uses today, so its renderers and components do not change and resyncs stay mechanical | Rendering the TUI from protocol items (rewrites every renderer; every resync becomes a hand translation; the user asked on 2026-10-23 to keep these files unchanged where possible). Carrying session events and entries over the wire in `toJsonEvent` shape (review round 1: it is lossy, since `toJsonEvent` drops partials that carry data no delta repeats, `anthropic-messages.ts:753-762`; message events lack persisted entry ids, `session-manager.ts:1301-1309`; and full entry reads would need paging under the 64 MiB stdio cap) |
 | D12 | Print mode and `--mode json` | Unchanged: they stay on the direct session, identical to upstream, as RPC mode does (user, 2026-10-23) | Moving them in slice 1 as arch §7.1 had it (a format change or a translation layer, for no user gain) |
 
 ## 3. Ownership
@@ -437,7 +436,7 @@ Branch `feat/desktop-files-open-in`, one PR.
   for the same list plus Xcode; Linux PATH and `.desktop` files. Each entry
   knows its goto syntax (`--goto path:line:column` for VS Code family and
   Cursor/Windsurf, `path:line:column` for Zed and Sublime, `--line` for
-  JetBrains). Plus three fixed entries Codex shows: the file manager
+  JetBrains). Plus three fixed entries: the file manager
   (`shell.showItemInFolder`), a terminal at the folder, and "Default app"
   (today's `openPath`, still behind `refuseToOpen`). Results cached 60 s.
 - Launch with `spawn(command, args, { detached: true, stdio: "ignore",
@@ -447,8 +446,8 @@ Branch `feat/desktop-files-open-in`, one PR.
   out of the list.
 - `host/openIn/list` and `host/openIn/open` in `host.ts`; the `targetId` must
   be one `detectTargets` returned (`invalidParams` otherwise).
-- Preferences gain `openIn?: string` (the last choice). Codex 26.1016 has no
-  Open button in the thread header: a file tab's toolbar carries its "Open"
+- Preferences gain `openIn?: string` (the last choice). There is no Open
+  button in the thread header: a file tab's toolbar carries its "Open"
   split button (the last editor, a chevron listing the rest), and it and the
   Changes pane's file menu open the file at its line.
 
@@ -460,7 +459,7 @@ Branch `feat/desktop-files-open-in`, one PR.
   path), `closeTab(i)`, `activateTab(i)`. Changes is always tab 0 and cannot
   close (closing it closes the panel, as now). At most 12 file tabs: opening
   a 13th closes the least recently active file tab.
-- `thread-view.tsx` `SidePanel`: the strip renders every tab (Codex's 238px
+- `thread-view.tsx` `SidePanel`: the strip renders every tab (a 238px
   pill per tab, icon + name + close), scrolls horizontally past the panel's
   width.
 - `components/file-tab.tsx` (new): `file/read`, then `@pierre/diffs`'
@@ -553,8 +552,8 @@ Branch `feat/desktop-terminal-preview-apps`, one PR.
 
 #### Task S3.1: the bottom region
 
-- `thread-view.tsx`: a bottom region under the thread and side panel, as
-  Codex's: resizable from its top edge, at least 160px, shuts when dragged
+- `thread-view.tsx`: a bottom region under the thread and side panel,
+  resizable from its top edge, at least 160px, shuts when dragged
   under 80px, at most what leaves the transcript 160px. `store.ts`:
   `bottom: { open: boolean; height: number }` per window, kept in memory like
   `panel`.
@@ -565,7 +564,7 @@ Branch `feat/desktop-terminal-preview-apps`, one PR.
 #### Task S3.2: terminals in main
 
 - `src/main/terminals.ts` (section 4.3). `node-pty` via
-  `createRequire(__filename)("node-pty")`, as Codex loads it. Env: the login
+  `createRequire(__filename)("node-pty")`. Env: the login
   shell env main already computes (`loginShellEnv()`), `TERM=xterm-256color`,
   `COLORTERM=truecolor`, `KNIGHTCODE_DESKTOP=1`. Shells per §9.7 (Git Bash
   and WSL listed on Windows when found).
@@ -779,7 +778,7 @@ to the View before `ui/notifications/initialized` (the spec's MUST).
 | `tools/call` | app to host | request | `mcp/app/callTool`; `approvalRequired` opens a confirm card naming the server and tool, then retries with `confirmed`; the app's own server only |
 | `resources/read` | app to host | request | `mcp/app/readResource` on the app's own server |
 | `ui/open-link` | app to host | request | http and https through `host/shell/openExternal`; any other scheme answers `-32000` |
-| `ui/message` | app to host | request | A confirm card with the text, as Codex confirms an app's follow-up; then `send` (or queue while a turn runs) as the user's message |
+| `ui/message` | app to host | request | A confirm card with the text; then `send` (or queue while a turn runs) as the user's message |
 | `ui/request-display-mode` | app to host | request | `inline` and `fullscreen` (a side panel tab `{ kind: "mcpApp"; itemId }`), only modes the app listed in `appCapabilities.availableDisplayModes`; `pip` and anything else answer the current mode |
 | `ui/notifications/size-changed` | app to host | notification | The inline frame's height, 48-720px |
 | `notifications/message` | app to host | notification | Logged to the renderer console |

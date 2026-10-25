@@ -70,7 +70,7 @@ export function openInService(env: NodeJS.ProcessEnv): OpenIn {
 			}
 			return icons;
 		},
-		// Codex follows a terminal's Start menu shortcut to its program (its WVe); an unreadable one is no target.
+		// A terminal's Start menu shortcut is followed to its program; an unreadable one is no target.
 		readShortcut: (lnk) => {
 			try {
 				return shell.readShortcutLink(lnk).target || undefined;
@@ -79,7 +79,7 @@ export function openInService(env: NodeJS.ProcessEnv): OpenIn {
 			}
 		},
 		reveal: async (path) => {
-			// A file is shown selected in its folder; a folder, or the nearest one still there, is opened (Codex's cZ).
+			// A file is shown selected in its folder; a folder, or the nearest one still there, is opened.
 			let at = path;
 			while (!existsSync(at) && dirname(at) !== at) at = dirname(at);
 			if (statSync(at).isFile()) return shell.showItemInFolder(at);
@@ -189,7 +189,7 @@ async function run(
 					: await dialog.showSaveDialog({ defaultPath: proposed });
 				return result.canceled ? undefined : result.filePath;
 			});
-			// The Dock's Downloads stack bounces, as for a finished download (Codex's notify-download-complete).
+			// The Dock's Downloads stack bounces, as for a finished download.
 			if (saved && process.platform === "darwin") app.dock?.downloadFinished(saved);
 			return saved ? { path: saved } : {};
 		}

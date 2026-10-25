@@ -56,7 +56,7 @@ test("Windows: shims resolve to the editor's own program, install folders are se
 		"apps",
 	]);
 	const targets = await detectTargets("win32", env);
-	// Codex's order: editors, the two shell entries, terminals, then the IDEs.
+	// The menu's order: editors, the two shell entries, terminals, then the IDEs.
 	expect(targets.map((t) => t.id)).toEqual([
 		"vscode",
 		"cursor",
@@ -100,7 +100,7 @@ test("each target builds its own go-to-line syntax", async () => {
 	expect(args("terminal", 12)).toEqual(["-d", root.replaceAll(";", "\\;")]);
 });
 
-test("Windows: Codex's targets and lookups, and none it does not have", async () => {
+test("Windows: the targets and lookups, and no others", async () => {
 	const root = layout([
 		"Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe",
 		// GitHub Desktop installs under %LOCALAPPDATA% itself, not Programs.
@@ -109,7 +109,7 @@ test("Windows: Codex's targets and lookups, and none it does not have", async ()
 		// Antigravity's shim stands for the program above its bin.
 		"Local/Programs/Antigravity/Antigravity.exe",
 		"Local/Programs/Antigravity/bin/antigravity.cmd",
-		// Codex looks for none of these on Windows: its renamed build, Windsurf, Emacs, Notepad++.
+		// None of these is looked for on Windows: Antigravity IDE, Windsurf, Emacs, Notepad++.
 		"Local/Programs/Antigravity IDE/Antigravity IDE.exe",
 		"Local/Programs/Windsurf/Windsurf.exe",
 		"tools/emacs.exe",
@@ -184,7 +184,7 @@ test("the editor script quotes its words and puts the line flag before a --", ()
 });
 
 // A Windows folder ("C:\...") cannot sit in a ":"-separated PATH.
-test.skipIf(process.platform === "win32")("Linux: a command on PATH, then the first terminal Codex knows", async () => {
+test.skipIf(process.platform === "win32")("Linux: a command on PATH, then the first known terminal", async () => {
 	const root = layout(["bin/code", "bin/subl", "bin/konsole", "bin/kgx"]);
 	const targets = await detectTargets("linux", {
 		PATH: join(root, "bin"),
@@ -208,7 +208,7 @@ test.skipIf(process.platform === "win32")("Linux: an editor found only by its de
 	const entry = (name: string) => join(root, "share/applications", name);
 	const cursor = targets.find((t) => t.id === "cursor")!;
 	expect(cursor.command).toBe(join(root, "bin/gio"));
-	// gio hands its arguments over as files, so Codex gives it the path alone, never a line.
+	// gio hands its arguments over as files, so it gets the path alone, never a line.
 	expect(cursor.args("/p/a.ts", 3, 1)).toEqual(["launch", entry("cursor.desktop"), "/p/a.ts"]);
 	expect(targets.find((t) => t.id === "zed")!.args("/p/a.ts", 3, 1)).toEqual([
 		"launch",

@@ -278,7 +278,7 @@ function zoomFocused(step: -1 | 0 | 1): void {
 }
 
 /**
- * Codex's update question when threads are running, then the quit question's path without asking again: the server
+ * The update question when threads are running, then the quit question's path without asking again: the server
  * stopped and the terminals ended before Squirrel quits the app to install.
  */
 let installing = false;
@@ -310,7 +310,7 @@ async function installUpdate(parent: BrowserWindow): Promise<void> {
 }
 
 function buildMenu(): void {
-	// The macOS app menu with Codex's Check for Updates… under About; the other platforms' is in the title bar.
+	// The macOS app menu with Check for Updates… under About; the other platforms' is in the title bar.
 	const appMenu: Electron.MenuItemConstructorOptions = {
 		role: "appMenu",
 		submenu: [
@@ -368,7 +368,7 @@ async function start(): Promise<void> {
 	terminals = new Terminals({
 		platform: process.platform,
 		env,
-		// Loaded as Codex loads it, outside the bundle: a native module the main build leaves in node_modules.
+		// Loaded outside the bundle: a native module the main build leaves in node_modules.
 		spawn: () => (createRequire(__filename)("node-pty") as { spawn: SpawnPty }).spawn,
 		post: (windowId, event) => {
 			const open = windows.get(windowId);

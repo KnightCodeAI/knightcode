@@ -17,7 +17,7 @@ export const MAX_HEIGHT = 720;
 
 export type DisplayMode = "inline" | "fullscreen";
 
-/** The spec's style variables from the window's tokens (Codex's mcp-app-host-styles, mapped to ours). */
+/** The spec's style variables from the window's tokens. */
 const COLORS: Record<string, string> = {
 	"--color-background-primary": "--kc-bg-surface",
 	"--color-background-secondary": "--kc-bg-surface-secondary",

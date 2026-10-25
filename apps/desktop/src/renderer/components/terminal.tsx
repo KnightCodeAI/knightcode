@@ -1,6 +1,5 @@
 /**
- * The bottom region and its terminals (desktop-shell.md section 9.7), as Codex's bottom panel (26.1016, measured
- * 2026-10-23): a 40px strip of tabs with + and a chevron that hides the region, over xterm.js drawing a shell main
+ * The bottom region and its terminals (desktop-shell.md section 9.7): a 40px strip of tabs with + and a chevron that hides the region, over xterm.js drawing a shell main
  * runs (main/terminals.ts). The region spans the chat and the side panel, resizes from its top edge, and holds the
  * open thread's terminals.
  */
@@ -33,13 +32,13 @@ import { ChevronDown, MoreHorizontal, Plus, SquareTerminal } from "./icons.tsx";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "./menu.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
 
-/** Codex's bottom panel: 280px until dragged, never under 160px, shut when dragged under 80px. */
+/** The bottom region: 280px until dragged, never under 160px, shut when dragged under 80px. */
 const DEFAULT_HEIGHT = 280;
 const MIN_HEIGHT = 160;
 /** What the region leaves the thread above it. */
 const ABOVE_MIN = 160;
 
-/** App bindings a terminal leaves to the window, as Codex's terminal does; every other key goes to the shell. */
+/** App bindings a terminal leaves to the window; every other key goes to the shell. */
 const OVER_TERMINAL: KeybindingId[] = [
 	"desktop.terminal.toggle",
 	"desktop.terminal.new",
@@ -52,13 +51,13 @@ const OVER_TERMINAL: KeybindingId[] = [
 ];
 /**
  * Off macOS (where bindings use Cmd) a bare Ctrl+letter is the shell's: readline's Ctrl+K, Ctrl+B, Ctrl+N and Ctrl+J,
- * tmux's Ctrl+B. Codex's terminal leaves them to the shell too; the Shift chords and Ctrl+` still reach the window.
+ * tmux's Ctrl+B. The Shift chords and Ctrl+` still reach the window.
  */
 const shellOwns = (event: KeyboardEvent) =>
 	!isMac() && event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && /^Key[A-Z]$/.test(event.code);
 const overTerminal = (event: KeyboardEvent) => !shellOwns(event) && OVER_TERMINAL.some((id) => matches(event, id));
 
-/** Codex's palette: the theme's tokens resolved to colours xterm reads (a probe element resolves `var()`). */
+/** The palette: the theme's tokens resolved to colours xterm reads (a probe element resolves `var()`). */
 function terminalTheme(host: HTMLElement) {
 	const probe = document.createElement("span");
 	host.appendChild(probe);
@@ -100,7 +99,7 @@ function terminalTheme(host: HTMLElement) {
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>`]+[^\s"'<>`.,;:!?)\]]/g;
 
-/** http(s) links in the output open in the browser on a click (Codex loads xterm's web links addon). */
+/** http(s) links in the output open in the browser on a click (xterm's web links addon). */
 function linkProvider(term: Terminal) {
 	return {
 		provideLinks(line: number, callback: (links: ILink[] | undefined) => void) {
@@ -179,7 +178,7 @@ function TerminalView({ threadId, tab, active }: { threadId: string; tab: Termin
 		);
 		const title = xterm.onTitleChange((next) => updateTerminal(threadId, terminalId, { title: next }));
 
-		// Copy and paste as Codex's, off macOS (where the Edit menu does both): copy only with a selection, so Ctrl+C
+		// Copy and paste off macOS (where the Edit menu does both): copy only with a selection, so Ctrl+C
 		// without one still interrupts the shell.
 		xterm.attachCustomKeyEventHandler((event) => {
 			if (event.type !== "keydown") return true;
@@ -237,7 +236,7 @@ function TerminalView({ threadId, tab, active }: { threadId: string; tab: Termin
 		<div
 			className={`relative min-h-0 flex-1 flex-col bg-[var(--kc-terminal-bg)] text-[var(--kc-terminal-fg)] ${active ? "flex" : "hidden"}`}
 		>
-			{/* Codex's padding: 8px over, 16px before, 12px under the text. */}
+			{/* Padding: 8px over, 16px before, 12px under the text. */}
 			<div className="min-h-0 flex-1 overflow-hidden ps-4 pt-2 pb-3">
 				<div ref={host} className="h-full w-full overflow-hidden" />
 			</div>
@@ -245,7 +244,7 @@ function TerminalView({ threadId, tab, active }: { threadId: string; tab: Termin
 	);
 }
 
-/** Codex's notices over a terminal: its shell ended; or it runs outside the thread's folder (after a handoff). */
+/** Notices over a terminal: its shell ended; or it runs outside the thread's folder (after a handoff). */
 function TerminalNotice({ threadId, index, tab, cwd }: { threadId: string; index: number; tab: TerminalTab; cwd: string }) {
 	if (tab.exitCode !== undefined)
 		return (
@@ -273,7 +272,7 @@ function TerminalNotice({ threadId, index, tab, cwd }: { threadId: string; index
 }
 
 /**
- * The region's top edge: a 16px handle centred on it (Codex's) that drags the height between 160px and what leaves the
+ * The region's top edge: a 16px handle centred on it that drags the height between 160px and what leaves the
  * thread 160px; dragged under 80px the region shuts.
  */
 function ResizeHandle({ threadId, height }: { threadId: string; height: number }) {
