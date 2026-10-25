@@ -312,8 +312,12 @@ export function setSidebarOpen(open: boolean): void {
 	updateDesktop((d) => ({ ...d, sidebar: { ...d.sidebar, collapsed: !open } }));
 }
 
+/** A width the sidebar takes: whole pixels, within its minimum and maximum. */
+export const clampSidebarWidth = (width: number) =>
+	Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
+
 export function setSidebarWidth(width: number): void {
-	const clamped = Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)));
+	const clamped = clampSidebarWidth(width);
 	updateDesktop((d) => ({ ...d, sidebar: { ...d.sidebar, width: clamped } }));
 }
 

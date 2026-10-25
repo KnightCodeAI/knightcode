@@ -19,6 +19,7 @@ import {
 	addProject,
 	archive,
 	archiveThreads,
+	clampSidebarWidth,
 	openThread,
 	pinThread,
 	removeProject,
@@ -455,19 +456,27 @@ function ResizeHandle({ width }: { width: number }) {
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientX;
-		const { left, right } = event.currentTarget.parentElement!.getBoundingClientRect();
+		const column = event.currentTarget.parentElement!;
+		const { left, right } = column.getBoundingClientRect();
 		// Where the edge would be, offset by where on the handle it was grabbed.
 		const collapseAt = (left + SIDEBAR_WIDTH.min) / 2 + from - right;
 		let open = true;
+		let size = width;
 		const onMove = (e: PointerEvent) => {
 			const past = e.clientX < collapseAt;
 			if (past === open) {
 				open = !past;
 				setSidebarOpen(open);
 			}
-			if (open) setSidebarWidth(width + e.clientX - from);
+			if (!open) return;
+			size = clampSidebarWidth(width + e.clientX - from);
+			// Shut and opened again in this drag, the sidebar is a new column, sized through the store.
+			if (column.isConnected) column.style.width = `${size}px`;
+			else setSidebarWidth(size);
 		};
-		followDrag(onMove);
+		followDrag(onMove, () => {
+			if (size !== width) setSidebarWidth(size);
+		});
 	};
 	return (
 		<div
