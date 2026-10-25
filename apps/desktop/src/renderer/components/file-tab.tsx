@@ -1,12 +1,11 @@
 /**
- * A file tab (desktop-shell.md section 9.6), Codex's file viewer (26.1016 `text-file-editor-tab-content`, measured over
- * CDP): a toolbar of capsules (the path as a breadcrumb; the comparison, Codex's "Unstaged ▾" beside Hide changes, or
- * Show changes while they are hidden; the change navigation; the diff layout and Toggle file tree; the Open split
- * button) over the file in @pierre/diffs (12px code on 22px lines, the Changes pane's theme), its changes in the
- * comparison drawn in place, the whole file expanded, and the workspace tree on the right. The server reads the file
- * (file/read) and the comparison's side of it (thread/diff/read, thread/diff/file), as it reads every file the desktop
- * shows. The file is editable, as Codex's is: edits are the tab's draft (the store's, so they outlive this view),
- * written three seconds after the last one or on Mod+S (file/write, refused once the file has moved).
+ * A file tab (desktop-shell.md section 9.6): a toolbar of capsules (the path as a breadcrumb; the comparison,
+ * "Unstaged ▾" beside Hide changes, or Show changes while they are hidden; the change navigation; the diff layout and
+ * Toggle file tree; the Open split button) over the file in @pierre/diffs (12px code on 22px lines, the Changes pane's
+ * theme), its changes in the comparison drawn in place, the whole file expanded, and the workspace tree on the right.
+ * The server reads the file (file/read) and the comparison's side of it (thread/diff/read, thread/diff/file), as it
+ * reads every file the desktop shows. The file is editable: edits are the tab's draft (the store's, so they outlive
+ * this view), written three seconds after the last one or on Mod+S (file/write, refused once the file has moved).
  */
 
 import type { ResultOf } from "@knightcode/app-server-protocol";
@@ -73,8 +72,8 @@ export function crumbs(path: string, cwd: string): string[] {
 }
 
 /**
- * `title`: the whole path, shown on hover as Codex does, since a narrow toolbar clips the crumbs. `ancestor` draws a
- * folder's crumb (Codex's opens that folder's tree).
+ * `title`: the whole path, shown on hover, since a narrow toolbar clips the crumbs. `ancestor` draws a folder's crumb,
+ * which opens that folder's tree.
  */
 export function Breadcrumb({
 	segments,
@@ -120,17 +119,17 @@ function Notice({ title, detail }: { title: string; detail?: string }) {
 	);
 }
 
-/** Codex's autosave: an edit is written this long after the last one. */
+/** Autosave: an edit is written this long after the last one. */
 const AUTOSAVE_MS = 3000;
 
 const createEditor: EditorFactory<undefined, undefined> = (type, options, key) => new Editor(type, options, key);
 
-/** Codex's order: the comparison's changed files first, so the default is the first that holds the file. */
+/** The comparison's changed files first, so the default is the first that holds the file. */
 const COMPARISONS: FileComparison["scope"][] = ["unstaged", "uncommitted", "branch"];
 
 /**
  * The comparison's side of a file: its text at the comparison's base, "" for a file the comparison adds, and null
- * when the comparison does not change it (Codex's baseline: the file itself).
+ * when the comparison does not change it (the baseline is then the file itself).
  */
 export async function comparisonBase(threadId: string, path: string, compare: FileComparison): Promise<string | null> {
 	const read = await client.request("thread/diff/read", {
@@ -153,7 +152,7 @@ export async function comparisonBase(threadId: string, path: string, compare: Fi
 }
 
 /**
- * The comparison Show changes picks (Codex's default): the first that changes the file, none when none does.
+ * The comparison Show changes picks: the first that changes the file, none when none does.
  * ponytail: up to three whole diff reads per file; a server call that answers for one path if this shows up slow.
  */
 async function defaultComparison(threadId: string, path: string): Promise<FileComparison | undefined> {
@@ -164,7 +163,7 @@ async function defaultComparison(threadId: string, path: string): Promise<FileCo
 	return undefined;
 }
 
-/** The changed sections of a diff, in order (Codex counts these): runs of added and deleted lines. */
+/** The changed sections of a diff, in order (the navigation counts these): runs of added and deleted lines. */
 export function changeBlocks(diff: FileDiffMetadata): ChangeContent[] {
 	return diff.hunks.flatMap((hunk) => hunk.hunkContent).filter((c): c is ChangeContent => c.type === "change");
 }
@@ -186,7 +185,7 @@ function centerRow(scroller: HTMLElement | null, selector: string): boolean {
 	return true;
 }
 
-/** Codex's comparison capsule: the picker (Index, HEAD, a branch) joined to Hide changes. */
+/** The comparison capsule: the picker (Index, HEAD, a branch) joined to Hide changes. */
 function ComparisonControls({
 	threadId,
 	compare,
@@ -265,7 +264,7 @@ function ComparisonControls({
 	);
 }
 
-/** Codex's change navigation: previous, the position ("2/3", or the count outside a change), next. */
+/** The change navigation: previous, the position ("2/3", or the count outside a change), next. */
 function ChangeNavigation({ count, active, onGo }: { count: number; active: number; onGo: (index: number) => void }) {
 	const previous = active > 0 ? active - 1 : -1;
 	const next = active + 1 < count ? active + 1 : -1;
@@ -293,7 +292,7 @@ export function lineCount(text: string): number {
 }
 
 /**
- * Codex's Go to line (Mod+L) over a pierre file: a field in the file's top corner with the valid range beside it and
+ * Go to line (Mod+L) over a pierre file: a field in the file's top corner with the valid range beside it and
  * a round close button on its corner. Enter goes; Escape, the button or a click elsewhere closes it.
  */
 function GoToLine({ count, onGo, onClose }: { count: number; onGo: (line: number) => void; onClose: () => void }) {
@@ -506,7 +505,7 @@ export function FileTab({
 		const text = shownBase?.text;
 		if (typeof text !== "string") return undefined;
 		const name = basename(path);
-		// A file the comparison deletes cannot be read: its old text against nothing, as Codex shows it.
+		// A file the comparison deletes cannot be read: its old text against nothing.
 		if (!file) return error && text ? parseDiffFromFile({ name, contents: text }, { name, contents: "" }) : undefined;
 		return text === file.contents ? undefined : parseDiffFromFile({ name: file.name, contents: text }, file);
 	}, [file, shownBase?.text, error, path]);
@@ -538,7 +537,7 @@ export function FileTab({
 	);
 
 	// The line it was opened at, each time it is opened there (`used` changes), else the first change of a comparison
-	// it was opened with (Codex's revealFirstChange): scrolled to the middle once, so a reload after an edit leaves the
+	// it was opened with: scrolled to the middle once, so a reload after an edit leaves the
 	// user's own scrolling alone.
 	const scrolled = useRef("");
 	const drawn = diff ?? file;
@@ -570,13 +569,13 @@ export function FileTab({
 	const selected = marked ? { start: marked, end: marked, side: "additions" as const } : null;
 	const controls = (
 		<>
-			{/* A Markdown file reads rendered until its source is asked for, or its changes shown (Codex's default). */}
+			{/* A Markdown file reads rendered until its source is asked for, or its changes shown. */}
 			{markdown ? (
 				<IconButton label={previewing ? "View source" : "View preview"} round onClick={() => setPreview(!previewing)}>
 					{previewing ? <Code size={16} /> : <Eye size={16} />}
 				</IconButton>
 			) : null}
-			{/* As in Codex, the icon shows the layout in use and the label the one a click switches to. */}
+			{/* The icon shows the layout in use and the label the one a click switches to. */}
 			{compare && !previewing ? (
 				<IconButton label={split ? "Switch to unified diff" : "Switch to split diff"} round onClick={() => setPanel({ fileSplit: !split })}>
 					{split ? <Columns2 size={16} /> : <Rows2 size={16} />}
@@ -589,7 +588,7 @@ export function FileTab({
 		<div
 			className="flex h-full min-h-0 min-w-0 flex-col"
 			aria-label={basename(path)}
-			// Mod+S writes the edits now; Mod+L goes to a line. (Mod+F in the editor is its own search panel, as in Codex.)
+			// Mod+S writes the edits now; Mod+L goes to a line. (Mod+F in the editor is its own search panel.)
 			onKeyDown={(e) => {
 				if (matches(e.nativeEvent, "desktop.file.save")) {
 					e.preventDefault();
@@ -659,7 +658,7 @@ export function FileTab({
 					</div>
 				) : null}
 				{compare && diff && !previewing ? <ChangeNavigation count={blocks.length} active={active} onGo={go} /> : null}
-				{/* Under 625px of toolbar Codex folds the file controls into one button that opens them. */}
+				{/* Under 625px of toolbar the file controls fold into one button that opens them. */}
 				<div role="group" aria-label="File controls" className="kc-capsule hidden h-8 shrink-0 items-center gap-0.5 rounded-full p-0.5 @min-[625px]/file-header:inline-flex">
 					{controls}
 				</div>

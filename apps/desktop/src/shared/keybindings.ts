@@ -76,23 +76,23 @@ export const DESKTOP_KEYBINDINGS = {
 	"desktop.sidebar.toggle": { defaultKeys: ["mod+b", "mod+shift+s"], description: "Toggle the sidebar" },
 	"desktop.panel.toggle": { defaultKeys: ["mod+shift+g"], description: "Toggle the Changes panel" },
 	"desktop.panel.closeTab": { defaultKeys: ["mod+shift+w"], description: "Close the side panel's file tab" },
-	// Codex's Search Files…: the "Open file" tab, its filter focused.
+	// Search Files…: the "Open file" tab, its filter focused.
 	"desktop.files.open": { defaultKeys: ["mod+p"], description: "Search files" },
-	// In a file tab: write its edits now rather than after Codex's three seconds.
+	// In a file tab: write its edits now rather than three seconds after the last one.
 	"desktop.file.save": { defaultKeys: ["mod+s"], description: "Save the file" },
-	// Codex's Go to line, in a file tab.
+	// Go to line, in a file tab.
 	"desktop.file.goToLine": { defaultKeys: ["mod+l"], description: "Go to line" },
-	// Codex's Toggle Bottom Panel and Open Terminal (Control+` on macOS too).
+	// Toggle Bottom Panel and Open Terminal (Control+` on macOS too).
 	"desktop.terminal.toggle": { defaultKeys: ["mod+j"], description: "Toggle the terminal" },
 	"desktop.terminal.new": { defaultKeys: ["ctrl+backquote"], description: "Open a new terminal" },
 	"desktop.terminal.next": { defaultKeys: ["ctrl+pagedown"], description: "Next terminal" },
 	"desktop.terminal.previous": { defaultKeys: ["ctrl+pageup"], description: "Previous terminal" },
-	// In a terminal with a selection; Codex's set (Ctrl+C copies only when something is selected).
+	// In a terminal with a selection (Ctrl+C copies only when something is selected).
 	"desktop.terminal.copy": {
 		defaultKeys: ["mod+c", "ctrl+shift+c", "ctrl+insert"],
 		description: "Copy the terminal's selection",
 	},
-	// Codex's Open Browser Tab, Focus Browser Address Bar and annotation mode.
+	// Open Browser Tab, Focus Browser Address Bar and annotation mode.
 	"desktop.preview.open": { defaultKeys: ["mod+t"], description: "Open a preview tab" },
 	"desktop.preview.address": { defaultKeys: ["mod+l"], description: "Focus the preview's address bar" },
 	"desktop.preview.annotate": { defaultKeys: ["mod+shift+period"], description: "Annotate the preview" },

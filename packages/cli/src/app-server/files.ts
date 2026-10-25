@@ -64,7 +64,7 @@ export async function readFile(
 const MAX_ENTRIES = 5_000;
 
 /**
- * `file/list`: one folder's entries for the desktop's tree, hidden ones included (Codex's tree shows `.git`). A link
+ * `file/list`: one folder's entries for the desktop's tree, hidden ones included (the tree shows `.git`). A link
  * to a folder is a folder, followed only when the tree opens it; a link that resolves to nothing is a file.
  */
 export async function listFolder(cwd: string, path: string | undefined): Promise<ResultOf<"file/list">> {
@@ -94,7 +94,7 @@ export async function listFolder(cwd: string, path: string | undefined): Promise
 
 /**
  * `file/write`: a file tab's text written in place (the file keeps its identity, mode and links), refused when it
- * changed since the read whose mtime the tab holds (Codex's saveText).
+ * changed since the read whose mtime the tab holds.
  */
 export async function writeText(
 	cwd: string,

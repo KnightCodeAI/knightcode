@@ -1,5 +1,5 @@
 /**
- * Terminals (desktop-shell.md section 9.7): shells in pseudo-terminals in main, as Codex runs them (node-pty), each
+ * Terminals (desktop-shell.md section 9.7): shells in pseudo-terminals in main (node-pty), each
  * belonging to a thread. A terminal outlives the windows showing it: it keeps 64 KiB of its output, which a window
  * gets first when it attaches (after a reload, or a second window on the thread), and ends only when it is closed,
  * when its thread is archived or deleted, or when the app quits.

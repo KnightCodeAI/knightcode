@@ -743,7 +743,7 @@ export const ClientRequests = {
 			mtimeMs: Num,
 		}),
 	},
-	/** One folder's entries, for the desktop's file tree (Codex's directory entries): hidden ones included. */
+	/** One folder's entries, for the desktop's file tree: hidden ones included. */
 	"file/list": {
 		params: Obj({
 			threadId: Str,
