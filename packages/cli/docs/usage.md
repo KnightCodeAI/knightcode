@@ -90,7 +90,7 @@ KnightCode can start a command in the background, and decides per command whethe
 
 Press `Ctrl+B` while a command runs in the foreground to move it to the background. The same process keeps running; nothing starts again. The key works only while a command runs; otherwise `Ctrl+B` moves the cursor as usual.
 
-While commands run, a pill above the footer counts them: `1 shell`, `3 shells`. Press `Down` in an empty editor to select it and `Enter` to open the **Background tasks** list, or click it; `Esc` or `Up` returns to the editor. `/tasks` opens the same list. With a single command it opens on that command's details.
+While commands run, a pill on the footer's stats line counts them: `1 shell`, `3 shells`. Press `Down` in an empty editor to select it and `Enter` to open the **Background tasks** list, or click it; `Esc` or `Up` returns to the editor. `/tasks` opens the same list. With a single command it opens on that command's details.
 
 | Key | In the list | In a command's details |
 |-----|-------------|------------------------|
@@ -102,7 +102,7 @@ While commands run, a pill above the footer counts them: `1 shell`, `3 shells`. 
 
 A command's details show its status and exit code, runtime, command, and the last 10 lines of its output as it arrives. Its output is also written to a file, and KnightCode reads that file when it needs the output sooner. If writing that file fails, for example on a full disk, the file is incomplete and KnightCode is told so. KnightCode stops a command with the `task_stop` tool, which is on whenever `bash` or `powershell` is.
 
-A background command ends when it exits, when KnightCode or you stop it, or when the session ends: quitting, `/new`, `/resume`, and `/fork` stop it, while `/reload` keeps it. Resuming or forking a session does not start its commands again; with your next message KnightCode is told that they were stopped. A `timeout` given with the command still stops it in the background. A command that writes more than 1 GiB of output is stopped, and at most 32 run at once.
+A background command ends when it exits, when KnightCode or you stop it, or when the session ends: quitting, `/new`, `/resume`, and `/fork` stop it, while `/reload` keeps it. The session's chat records each command it stopped and why, so you and KnightCode see it when you resume the session; its commands are not started again. A `timeout` given with the command still stops it in the background. A command that writes more than 1 GiB of output is stopped, and at most 32 run at once.
 
 A background command has no input: one that asks a question reads end-of-file. If you press `Escape` to stop the current task, a command that ends afterwards is recorded in the conversation without starting KnightCode again; the next message you send re-arms that. In print and JSON modes KnightCode does not exit while a command it started in the background is running, so it can act on how the command ended.
 
