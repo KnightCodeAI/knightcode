@@ -1707,9 +1707,8 @@ off.
 branch choice with its name check) and answers with the same refusal, or with
 the thread and the branch the main checkout would get. It writes nothing, not
 even a manifest or a worktree, and holds no reservation, so a real handoff is
-never kept waiting by one. Codex's handoff dialog checks before the user
-confirms; the desktop's does the same with this, on open and 250 ms after each
-branch edit.
+never kept waiting by one. The desktop's handoff dialog runs it before the
+user confirms, on open and 250 ms after each branch edit.
 
 #### Deleting and restoring worktrees
 
@@ -1756,7 +1755,7 @@ than overwrite.
 
 | Method | Behaviour |
 | --- | --- |
-| `thread/diff/read {threadId, scope?, against?, commit?, context?, ignoreWhitespace?}` | `scope`, Codex's Changes sources: `lastTurn` (the last turn that changed files, before to after), `uncommitted` (`HEAD` to working tree; the default), `unstaged` (index to working tree), `staged` (`HEAD` to index), `committed` (one `commit`, from `git/log`), `branch` (the merge base with `against` to working tree; `against` defaults to the worktree's `baseRef`, else the upstream, else the default branch). `ignoreWhitespace` is Codex's "Hide white space". Files, hunks with content-hash ids, line ranges, binary flag; `context` lines around each hunk (a large value gives whole files). With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call. The serialized response stays within a fixed budget: files past it come without hunks (`tooLarge`), or are only counted (`filesOmitted`). Without `ignoreWhitespace` it names the two trees it compared, `fromTree` and `toTree` (snapshots for the working tree and the index), for `thread/diff/file` |
+| `thread/diff/read {threadId, scope?, against?, commit?, context?, ignoreWhitespace?}` | `scope`, the Changes pane's sources: `lastTurn` (the last turn that changed files, before to after), `uncommitted` (`HEAD` to working tree; the default), `unstaged` (index to working tree), `staged` (`HEAD` to index), `committed` (one `commit`, from `git/log`), `branch` (the merge base with `against` to working tree; `against` defaults to the worktree's `baseRef`, else the upstream, else the default branch). `ignoreWhitespace` is the pane's "Hide white space". Files, hunks with content-hash ids, line ranges, binary flag; `context` lines around each hunk (a large value gives whole files). With more than 500 untracked, not ignored files it returns tracked changes only and `untrackedSkipped: <count>`, so a missing `.gitignore` entry for a build directory cannot stall the call. The serialized response stays within a fixed budget: files past it come without hunks (`tooLarge`), or are only counted (`filesOmitted`). Without `ignoreWhitespace` it names the two trees it compared, `fromTree` and `toTree` (snapshots for the working tree and the index), for `thread/diff/file` |
 | `thread/diff/file {threadId, fromTree, toTree, path, oldPath?}` | `{old?, new?, binary, tooLarge}`: one file's two sides from a read's trees (`git cat-file blob <tree>:<path>`), so the Changes pane expands the unchanged lines between hunks against exactly what the read compared. A tree must be a full object id naming a tree in the repository; a side above 2 MiB gives `tooLarge` and no text, a NUL in the first 8 KiB `binary` |
 | `thread/diff/revert {threadId, scope?, against?, path?, hunkId?, context?, reapply?, turnId?}` | reverse-applies one hunk, one file, or the whole scope to the working tree; `lastTurn` without a path undoes the turn, and `reapply` applies it again (Codex's Reapply). With `turnId` (`lastTurn` only) a newer last turn answers `gitConflict` `diffChanged`. A hunk that changed since it was read answers `gitConflict` `diffChanged`. Refused while a turn runs |
 | `turn/start`, `turn/queue/add` with `comments` | review comments are drafts the client keeps (Codex: "Local comment on line R2", a "1 comment" chip) and sends with the next input; the server quotes each comment's lines from its scope's trees into the text the model reads, and the user item shows the comments, not that text |
@@ -2018,7 +2017,7 @@ specification must:
   every thread on screen. A turn that was running reads back `interrupted`:
   its marker has no end entry (section 4.2).
 - Build the integrated terminal, the diff review pane and the web view
-  natively, as Codex does, and take third-party UI from MCP Apps, never as
+  natively, and take third-party UI from MCP Apps, never as
   HTML from agent extensions (amended 2026-10-23: the GUI extension SDK, its
   `desktop` package resource type and its trust gate are dropped;
   v1-completion-plan.md D1-D2).

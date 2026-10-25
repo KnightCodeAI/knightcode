@@ -240,7 +240,7 @@ function AppTab({ threadId, itemId }: { threadId: string; itemId: string }) {
 	);
 }
 
-/** The right region (desktop-shell.md section 9.6): Codex's tab strip over the chosen tab. */
+/** The right region (desktop-shell.md section 9.6): a tab strip over the chosen tab. */
 function SidePanel({ id }: { id: string }) {
 	const width = useStore((s) => s.panel.width);
 	const full = useStore((s) => s.panel.full ?? false);

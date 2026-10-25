@@ -11,7 +11,7 @@ the transcript, the composer, approvals, the changes pane, the terminal, the
 preview, settings, keybindings, themes, and MCP Apps.
 
 Amended 2026-10-23 by [v1-completion-plan.md](./v1-completion-plan.md): the
-built-in panes are native code, as Codex's are, and third-party UI comes from
+built-in panes are native code, and third-party UI comes from
 MCP Apps (that plan's decisions D1-D4). The GUI extension SDK this document
 first specified is dropped.
 
@@ -113,12 +113,12 @@ Prior art shows each trap concretely:
 | Notification routing | Sidebar notifications to every window; thread-scoped ones only to windows holding that thread; server requests to exactly one window (section 4.3) | Broadcast to all windows (section 1.3) |
 | Git, diffs, worktrees | App server only; the desktop calls protocol methods | Desktop-side git worker (section 1.3) |
 | Desktop-only state | One JSON file in Electron `userData`, written atomically (section 7.3) | SQLite (Codex keeps a desktop thread catalog in SQLite: a native module to rebuild per Electron upgrade, and a second copy of what `thread/list` returns) |
-| Terminal | xterm.js in the renderer, `node-pty` in main, as Codex 26.1013 loads it (amended 2026-10-23) | A `utilityProcess` extension host (Codex has none; it guards against a native crash at the cost of a process and an IPC hop); the app server's `shell/exec` (architecture.md section 7.2 sizes it for `!` commands, not interactive shells) |
-| Web preview | A `<webview>` tag on a per-thread partition, guarded by main's `will-attach-webview`, as Codex's browser is (amended 2026-10-23) | `WebContentsView` (main must hide it under every menu and modal that overlaps it; a `<webview>` stacks in the DOM, and its guest still takes `webContents.debugger` for section 14's L3); an iframe (cannot load arbitrary localhost with the app's CSP) |
-| Built-in panes | Native React in the renderer: Changes, files, terminal, preview (amended 2026-10-23) | Built-ins on a GUI extension SDK in sandboxed frames (the first draft of section 12; Codex runs none of its built-ins that way) |
+| Terminal | xterm.js in the renderer, `node-pty` in main (amended 2026-10-23) | A `utilityProcess` extension host (it guards against a native crash at the cost of a process and an IPC hop); the app server's `shell/exec` (architecture.md section 7.2 sizes it for `!` commands, not interactive shells) |
+| Web preview | A `<webview>` tag on a per-thread partition, guarded by main's `will-attach-webview` (amended 2026-10-23) | `WebContentsView` (main must hide it under every menu and modal that overlaps it; a `<webview>` stacks in the DOM, and its guest still takes `webContents.debugger` for section 14's L3); an iframe (cannot load arbitrary localhost with the app's CSP) |
+| Built-in panes | Native React in the renderer: Changes, files, terminal, preview (amended 2026-10-23) | Built-ins on a GUI extension SDK in sandboxed frames (the first draft of section 12) |
 | Third-party UI | MCP Apps: a tool's `ui://` resource drawn in a sandboxed iframe on its own origin, bridged to the app server (section 12) | A KnightCode-only `desktop.json` package type with a `kc-ext://` scheme and an extension host (the first draft); arbitrary HTML from agent extensions (architecture.md section 8.2 keeps agent views declarative) |
 | Windows | One primary window; any thread can open in a secondary window; tabs pop out later (section 14) | Pop-out of every tab in v1 (Codex pops out only browser tabs, and pre-warms a hidden window to make it instant: real complexity for a rare action) |
-| Packaging | Electron Forge with the Vite plugin and the fuses plugin. Windows: per-user Squirrel installer. macOS: dmg and zip, ad hoc signed until a Developer ID exists, then signed and notarized. Linux: deb and rpm | MSIX on Windows (package identity, Store certification, and binaries under `WindowsApps` that Codex copies out to `%LOCALAPPDATA%` before it can run them); electron-builder (a third-party layer over what Forge does first-party) |
+| Packaging | Electron Forge with the Vite plugin and the fuses plugin. Windows: per-user Squirrel installer. macOS: dmg and zip, ad hoc signed until a Developer ID exists, then signed and notarized. Linux: deb and rpm | MSIX on Windows (package identity, Store certification, and binaries under `WindowsApps` that have to be copied out to `%LOCALAPPDATA%` before they can run); electron-builder (a third-party layer over what Forge does first-party) |
 | Updates | Electron `autoUpdater` on Windows against a knightcode.dev feed over GitHub releases tagged `desktop-v*`; on macOS, until the app is signed, the same feed drives an "Update available" banner; Linux updates through the package manager | Update checks inside the app server (it would update itself mid-session); update.electronjs.org (it serves the repository's newest release, a CLI release here) |
 | Login | The app server's `account/*` methods; the desktop shows their prompts | Desktop-side OAuth (two credential stores) |
 
@@ -512,7 +512,7 @@ theme and keybindings.
 
 Prior art: Codex lets plugins ship arbitrary HTML apps in a sandboxed frame,
 declared on MCP tools. Agent extensions here stay declarative (architecture.md
-section 8.2); arbitrary UI comes, as in Codex, from MCP Apps (section 12) of
+section 8.2); arbitrary UI comes from MCP Apps (section 12) of
 MCP servers the user configured knowingly.
 
 ---
@@ -855,24 +855,21 @@ composer then shows its controls as icons only.
 
 ### 9.7 Terminal
 
-- Bottom region, spanning the thread and the side panel, as Codex's bottom
-  panel (26.1016, measured): 280px until dragged, at least 160px, shut when
-  dragged under 80px, a 16px handle on its top edge, a 40px strip of the side
-  panel's tabs (each named by its shell and cwd), + and a shell menu, and a
-  chevron that hides the region; closing the last terminal hides it too.
-  Ctrl+\` (Control on macOS too, Codex's Open Terminal) opens a terminal in
-  the thread's cwd; Mod+J toggles the region. Whether it shows is each
-  thread's own, and only with that thread's terminals, as Codex keeps its
-  bottom panel per conversation.
-- xterm.js in the renderer; `node-pty` in main (`host/terminal/*`), as Codex
-  runs it. Colours from the `--kc-terminal-*` and `--kc-ansi-*` tokens, which
-  follow Codex's palette: the ANSI slots are the theme's accents (black and
-  bright black the tertiary and secondary text, cyan the blue), so light and
-  dark both follow the theme. Codex's padding (8px over, 16px before, 12px
-  under) and copy and paste: copy only with a selection, so Ctrl+C without
-  one still interrupts the shell; keys the shell gets never reach window
-  bindings. Off macOS a bare Ctrl+letter is the shell's (readline's Ctrl+K,
-  Ctrl+B, Ctrl+N, Ctrl+J; tmux's Ctrl+B), as in Codex's terminal; Ctrl+\`,
+- Bottom region, spanning the thread and the side panel: 280px until
+  dragged, at least 160px, shut when dragged under 80px, a 16px handle on its
+  top edge, a 40px strip of the side panel's tabs (each named by its shell and
+  cwd), + and a shell menu, and a chevron that hides the region; closing the
+  last terminal hides it too. Ctrl+\` (Control on macOS too) opens a terminal
+  in the thread's cwd; Mod+J toggles the region. Whether it shows is each
+  thread's own, and only with that thread's terminals.
+- xterm.js in the renderer; `node-pty` in main (`host/terminal/*`). Colours
+  from the `--kc-terminal-*` and `--kc-ansi-*` tokens: the ANSI slots are the
+  theme's accents (black and bright black the tertiary and secondary text,
+  cyan the blue), so light and dark both follow the theme. Padding: 8px over,
+  16px before, 12px under. Copy and paste: copy only with a selection, so
+  Ctrl+C without one still interrupts the shell; keys the shell gets never
+  reach window bindings. Off macOS a bare Ctrl+letter is the shell's
+  (readline's Ctrl+K, Ctrl+B, Ctrl+N, Ctrl+J; tmux's Ctrl+B); Ctrl+\`,
   Ctrl+PageUp/PageDown and the Shift chords still reach the window. A preview's
   page keeps a bare Ctrl+letter the same way, except the preview's own Ctrl+T and
   Ctrl+L.
@@ -906,8 +903,7 @@ thread's tabs; cleared when the thread is deleted), guarded by main (section
   section 14.
 
 The `<webview>` is part of the DOM, so menus and modals stack over it with no
-help from main. Prior art: Codex's in-app browser is a `<webview>` on a
-`persist:codex-browser-app-route:` partition.
+help from main.
 
 As built (S3, Codex 26.1016 measured): the side panel's + (Mod+T, Codex's Open
 Browser Tab) opens a tab on Codex's new tab page (the address bar over the
@@ -929,19 +925,19 @@ A read-only file tab (from tool rows and the changes pane) shows the file with
 syntax highlighting and line numbers, read through `file/read`, at the line the
 tool read or changed; the Changes pane expands unchanged lines between hunks
 from `thread/diff/file`'s two sides (v1-completion-plan.md, D5). Tabs are
-Codex's: per thread, Changes first, then file tabs that share the strip (240px
+per thread: Changes first, then file tabs that share the strip (240px
 each, shrinking to 120px, then scrolling); a tab opened in passing is italic
 and the next one replaces it, a double-click keeps it, and past 12 file tabs
 the least recently used goes. Mod+Shift+W closes the active one.
 
 "Open in…" lists what `host/openIn/list` finds, each with its program's icon,
-and remembers the choice per project and overall. The targets, their order and
-their lookups are Codex's (26.1016 main bundle, its `HVe` list), one for one:
+and remembers the choice per project and overall. The targets, in menu
+order:
 VS Code, VS Code Insiders, Visual Studio, Cursor, Devin Desktop, BBEdit, Emacs,
 Sublime Text, Zed, Windsurf, Antigravity, GitHub Desktop, the default app, the
 file manager, Terminal, Git Bash, Cmder, WSL, iTerm2, Kitty, Ghostty, Warp,
-Xcode, the eight JetBrains IDEs and TextMate, each only on the platforms Codex
-has it there (no Windows Emacs or Windsurf). Windows: the PATH command, a shim
+Xcode, the eight JetBrains IDEs and TextMate, each only on the platforms where
+it is looked for (no Windows Emacs or Windsurf). Windows: the PATH command, a shim
 resolved to the program beside or above its `bin`, then `%LOCALAPPDATA%\Programs`,
 `Program Files` and `Program Files (x86)` (newest folder first for JetBrains),
 GitHub Desktop in `%LOCALAPPDATA%` itself, Visual Studio by year and edition
@@ -955,8 +951,8 @@ go-to-line syntax (`--goto path:line:column`, `path:line:column`, `--line`,
 on macOS and Linux a file opens in `$VISUAL`, `$EDITOR` or the first of nvim,
 vim, nano and less inside the terminal, at the line (osascript for Terminal and
 iTerm2, `open -na` for Kitty and Ghostty, each Linux terminal's own run flag).
-One departure: Codex runs a Windows `.cmd` shim through cmd.exe with the path as
-an argument, which cmd.exe would parse (`&`, `%`); here a shim stands for the
+A Windows `.cmd` shim never runs through cmd.exe with the path as an
+argument, which cmd.exe would parse (`&`, `%`); a shim stands for the
 program above it or is left out. The menu ends with "Open in folder", "Open in
 GitHub" when the checkout's origin is on github.com and a branch is checked out
 (`git/origin`; the file at the branch and line), and "Save as…"
@@ -1196,7 +1192,7 @@ and dark modes" (customizations are always per theme).
 ## 12. MCP Apps
 
 Third-party UI in the desktop is the MCP Apps extension of MCP
-(`io.modelcontextprotocol/ui`), as Codex hosts its plugins' apps. The first
+(`io.modelcontextprotocol/ui`). The first
 draft of this section, a GUI extension SDK with a `desktop.json` package type,
 a `kc-ext://` scheme and a `utilityProcess` extension host, is dropped
 (v1-completion-plan.md, D1-D2). Built-in panes are native (section 2).
@@ -1221,7 +1217,7 @@ a `kc-ext://` scheme and a `utilityProcess` extension host, is dropped
   `frameDomains` and `baseUriDomains` (nothing undeclared reaches the
   network).
 - The frame is `sandbox="allow-scripts allow-same-origin"` with no referrer
-  and no `allow` permissions, as Codex's `mcp-sandbox-element`. Its origin is
+  and no `allow` permissions. Its origin is
   its own, so `allow-same-origin` reaches neither `app://desktop` nor another
   app. The spec's sandbox proxy is for web hosts; a desktop host draws the
   View directly.
@@ -1238,8 +1234,7 @@ display mode, locale, platform), tool input, result and cancellation
 notifications, `ui/resource-teardown` before the frame goes, `tools/call`
 through `mcp/app/callTool`, `resources/read` of the same server through
 `mcp/app/readResource`, `ui/open-link` (http and https), `ui/message` (sent as
-the user's message after a confirm card, as Codex confirms an app's
-follow-up), size changes, and display mode requests (`inline` and
+the user's message after a confirm card), size changes, and display mode requests (`inline` and
 `fullscreen`). Anything else, `ui/update-model-context` included, answers
 `-32601`. v1-completion-plan.md's "MCP Apps coverage" table is the full
 list.
@@ -1307,12 +1302,12 @@ Specified enough here that v1 does not block them; each gets its own spec.
 | --- | --- | --- |
 | L1 | Pop-out tabs, quick-launch window on a global hotkey, tray | tabs are routes; `host/window/open` |
 | L2 | Full-text thread search | sidebar search box; a server `thread/search` |
-| L3 | Agent control of the preview (navigate, click, read DOM, screenshot) | the preview `<webview>`'s guest, reached by main through `webContents.fromId` and its `webContents.debugger`, as Codex's browser use does (architecture.md section 9) |
+| L3 | Agent control of the preview (navigate, click, read DOM, screenshot) | the preview `<webview>`'s guest, reached by main through `webContents.fromId` and its `webContents.debugger` (architecture.md section 9) |
 | L4 | Agent-to-app tools: the agent opens tabs, creates threads and worktrees, changes settings, through approval-gated tools | `host/*` methods behind a tool extension |
 | L5 | Scheduled runs and recurring threads | none in v1; architecture.md section 12 excludes them until then |
 | L6 | Remote hosts: SSH and WSL app servers, one connection per host | main's single client becomes one client per host; routing keys gain a host id |
 | L7 | Subagent threads shown under their parent | `parentThreadId` on `Thread` |
-| L8 | Code review inbox for pull requests | an MCP App, as Codex's bundled "Code Review" plugin is (section 12) |
+| L8 | Code review inbox for pull requests | an MCP App (section 12) |
 | L9 | Voice input | composer attachment slot |
 | L10 | Extension marketplace | package install; MCP servers with apps (section 12) |
 

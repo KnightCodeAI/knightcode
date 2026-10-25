@@ -84,7 +84,7 @@ export interface ThreadView {
 }
 
 /**
- * A side panel tab (desktop-shell.md section 9.6). A file tab opens as Codex's preview tab (an italic title), which
+ * A side panel tab (desktop-shell.md section 9.6). A file tab opens as a preview tab (an italic title), which
  * the next file opened replaces until it is kept (a double click); `used` orders the least recently used.
  */
 export type PanelTab =
@@ -156,7 +156,7 @@ export interface State {
 	 * fills the thread view in place of the chat (Codex's full screen).
 	 */
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
-	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
+	/** Each thread's side panel tabs: Changes first, then the files it opened. */
 	tabs: Record<string, ThreadTabs>;
 	/** The bottom region's height in px (section 9.7), 0 until dragged (Codex's 280); each thread has it open or not. */
 	bottom: { height: number };
@@ -1517,7 +1517,7 @@ export function activateTab(threadId: string, index: number): void {
 	}));
 }
 
-/** Keep a preview tab (Codex: a double click on it), so the next file opens beside it. */
+/** Keep a preview tab (a double click on it), so the next file opens beside it. */
 export function keepTab(threadId: string, index: number): void {
 	updateTabs(threadId, (t) => ({
 		...t,

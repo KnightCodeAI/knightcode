@@ -728,7 +728,7 @@ function refusalText(error: RequestError): { message: string; paths?: string[] }
 
 /**
  * Codex's "Bring changes back to local checkout" (and its reverse): the branch the main checkout gets, where the
- * changes go, and the server's refusal ("Stash or commit your local changes to hand off") verbatim. As Codex's, it
+ * changes go, and the server's refusal ("Stash or commit your local changes to hand off") verbatim. It
  * checks before the user confirms: a dry run on open and 250 ms after each branch edit keeps "Bring changes back"
  * off while it runs or refuses. The confirm still sends the real handoff, whose own refusal shows the same way.
  */
@@ -822,7 +822,7 @@ export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: ()
 				{basename(thread.projectCwd)}
 			</div>
 			<p className="mt-2 text-xs leading-5 text-tertiary">{main.replaceAll("\\", "/")}</p>
-			{/* Codex's 44px full-width confirm, off while its check runs or refuses. */}
+			{/* A 44px full-width confirm, off while its check runs or refuses. */}
 			<Button
 				variant="solid"
 				pill

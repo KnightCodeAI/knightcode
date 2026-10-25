@@ -1,8 +1,8 @@
 /**
- * Codex's "Open" split button (26.1016, a file tab's toolbar, measured over CDP): the preferred app's icon and
- * "Open", then a chevron listing every app found (host/openIn/list, in Codex's order), then "Open in folder", "Open
+ * The "Open" split button in a file tab's toolbar: the preferred app's icon and
+ * "Open", then a chevron listing every app found (host/openIn/list, in its order), then "Open in folder", "Open
  * in GitHub" when the checkout's origin is on GitHub, and "Save as…". Choosing an app remembers it for the project and
- * as the default (Codex's openInTargetPreferences).
+ * as the default.
  */
 
 import { useEffect, useState } from "react";
@@ -41,7 +41,7 @@ export function useOpenInTargets(): OpenInTargetInfo[] | undefined {
 	return targets;
 }
 
-/** Open `path` in an app, reporting a failure as Codex does ("Unable to open item"). */
+/** Open `path` in an app, reporting a failure as "Unable to open item". */
 export function openIn(targetId: string, path: string, line?: number): void {
 	void client
 		.host("host/openIn/open", { targetId, path, ...(line ? { line } : {}) })
@@ -69,7 +69,7 @@ export function TargetIcon({ target }: { target: OpenInTargetInfo }) {
 	return <AppWindow size={18} className="shrink-0 text-secondary" />;
 }
 
-/** Codex's "Save as…": a copy where the user picks, Codex's own message when it fails. */
+/** "Save as…": a copy where the user picks, with a message when it fails. */
 function saveCopy(path: string): void {
 	void client.host("host/file/saveCopy", { path }).catch(() => toast("Could not download artifact", "error"));
 }
@@ -89,7 +89,7 @@ export function OpenInButton({
 	const preferred = usePreferredTarget(targets, project);
 	const folder = targets?.find((t) => t.kind === "fileManager");
 	const [github, setGithub] = useState<string>();
-	// Asked each time the menu opens, as Codex's menu asks on render: a push or a branch switch shows at once.
+	// Asked each time the menu opens: a push or a branch switch shows at once.
 	const onOpenChange = (open: boolean) => {
 		if (!open || !threadId) return;
 		void client.request("git/origin", { threadId }).then(
