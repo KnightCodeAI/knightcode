@@ -26,7 +26,7 @@ import {
 	type ViewItem,
 	type ViewTurn,
 } from "../store.ts";
-import { ActiveRow, ActivityGroup, ToolRow } from "./activity.tsx";
+import { ActiveRow, ActivityGroup, BackgroundNotices, ToolRow } from "./activity.tsx";
 import { Button, IconButton } from "./button.tsx";
 import { Tooltip } from "./tooltip.tsx";
 import {
@@ -380,6 +380,8 @@ function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cw
 		if (item.type === "toolCall") rows.push(call(item));
 		else if (item.type === "agentMessage") rows.push(<Markdown key={item.id} text={item.text} />);
 		else if (item.type === "compaction") rows.push(<CompactionDivider key={item.id} />);
+		else if (item.type === "extensionMessage" && item.backgroundShells)
+			rows.push(<BackgroundNotices key={item.id} notices={item.backgroundShells} />);
 		else if (item.type === "extensionMessage")
 			rows.push(
 				<div key={item.id}>
@@ -590,7 +592,11 @@ export function TurnView({
 	const working = { visible: workingVisible, message: workingMessage };
 	const [open, setOpen] = useState(false);
 	const first = turn.items.find((i) => i.type === "userMessage");
-	const rest = turn.items.filter((i) => i !== first);
+	// A run a background command's end started has no message of the user's: the notice opens the turn in its place,
+	// out of the work it folds.
+	const opening = turn.items[0];
+	const woke = !first && opening?.type === "extensionMessage" && opening.backgroundShells ? opening : undefined;
+	const rest = turn.items.filter((i) => i !== first && i !== woke);
 	const finalIndex = running ? -1 : rest.findLastIndex((i) => i.type === "agentMessage");
 	const final = finalIndex >= 0 ? rest[finalIndex] : undefined;
 	// Compactions stay visible: those before the final reply show above it, later ones below.
@@ -598,8 +604,14 @@ export function TurnView({
 	const compactedAfter = finalIndex >= 0 && rest.some((i, n) => i.type === "compaction" && n > finalIndex);
 	// The proposed plan is a card of its own after the reply, not a row of the work.
 	const plan = turn.items.findLast(isPlan);
+	// A notice recorded after the reply (a background command the user stopped) is no work of the turn's: below it.
+	const later = rest.filter(
+		(i, n) => finalIndex >= 0 && n > finalIndex && i.type === "extensionMessage" && i.backgroundShells !== undefined,
+	);
 	// Reasoning is no row (it shows only in the running status), so a turn of reasoning alone has no work.
-	const work = rest.filter((i) => i !== final && i.type !== "compaction" && i.type !== "reasoning" && !isPlan(i));
+	const work = rest.filter(
+		(i) => i !== final && i.type !== "compaction" && i.type !== "reasoning" && !isPlan(i) && !later.includes(i),
+	);
 	const last = turn.items.at(-1);
 	// A reply streaming in shows itself; until one does, the "Thinking" status stands in.
 	const typing = running && last?.type === "agentMessage" && last.completedAt === undefined;
@@ -620,6 +632,7 @@ export function TurnView({
 					onEdit={latest && idle ? (text) => void resendEdited(threadId, turn.id, text, first.images) : undefined}
 				/>
 			) : null}
+			{woke?.backgroundShells ? <BackgroundNotices notices={woke.backgroundShells} /> : null}
 			{running ? (
 				<>
 					<WorkedFor turn={turn} open />
@@ -669,6 +682,11 @@ export function TurnView({
 						<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
 					) : null}
 					{plan ? <PlanCard item={plan} /> : null}
+					{later.map((item) =>
+						item.type === "extensionMessage" && item.backgroundShells ? (
+							<BackgroundNotices key={item.id} notices={item.backgroundShells} />
+						) : null,
+					)}
 					{compactedAfter ? <CompactionDivider /> : null}
 					{turn.status === "interrupted" ? (
 						<div className="text-base text-tertiary">Interrupted · {clockTime(turn.completedAt ?? turn.startedAt)}</div>

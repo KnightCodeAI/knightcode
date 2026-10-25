@@ -5,7 +5,7 @@
  * Pure, so tests need no DOM.
  */
 
-import type { ToolOutput } from "@knightcode/app-server-protocol";
+import type { BackgroundShell, BackgroundShellNotice, ToolOutput } from "@knightcode/app-server-protocol";
 import type { ViewItem } from "./turns.ts";
 
 export type ToolItem = Extract<ViewItem, { type: "toolCall" }>;
@@ -268,8 +268,12 @@ function exploration(words: string[]): Exploration | undefined {
 export const explorationOf = (item: ToolItem): Exploration | undefined =>
 	item.tool === "bash" || item.tool === "powershell" ? parseExploration(str(inputOf(item).command)) : undefined;
 
-/** A call's kind, counting a shell command that only reads, searches or lists as exploration, as Codex does. */
-export const kindOfItem = (item: ToolItem): Kind => (explorationOf(item) ? "explore" : kindOf(item.tool));
+/**
+ * A call's kind, counting a shell command that only reads, searches or lists as exploration; one left running in the
+ * background (`tail -f`) stays a command.
+ */
+export const kindOfItem = (item: ToolItem): Kind =>
+	!item.backgroundShellId && explorationOf(item) ? "explore" : kindOf(item.tool);
 
 export const outputText = (output: ToolOutput[]) =>
 	output
@@ -375,8 +379,13 @@ function explorationLabel(found: Exploration, running: boolean): RowLabel {
 	}
 }
 
-/** What a call did, as its row says it (Codex's toolSummaryForCmd and patch labels). */
-export function rowLabel(item: ToolItem, cwd: string, open = false): RowLabel {
+/** What a call did, as its row says it. `background`: how the command a shell call left running stands. */
+export function rowLabel(
+	item: ToolItem,
+	cwd: string,
+	open = false,
+	background?: BackgroundShell["status"],
+): RowLabel {
 	const input = inputOf(item);
 	const running = isRunning(item);
 	const rawPath = str(input.path) || str(input.file_path);
@@ -397,6 +406,7 @@ export function rowLabel(item: ToolItem, cwd: string, open = false): RowLabel {
 			return explorationLabel({ type: "list", ...(path ? { path } : {}) }, running);
 		case "bash":
 		case "powershell": {
+			if (item.backgroundShellId) return { text: backgroundCallText(firstLine(str(input.command)), background) };
 			const found = explorationOf(item);
 			if (found && item.status !== "declined") return explorationLabel(found, running);
 			const command = str(input.command).trim().split("\n")[0] ?? "";
@@ -564,6 +574,62 @@ export function commandResult(item: ToolItem): { output: string; end: CommandEnd
 	if (match?.[2]) return { output, end: { kind: "exit", code: match[2] } };
 	if (match && /aborted|cancelled/.test(match[1]!)) return { output, end: { kind: "stopped" } };
 	return { output, end: { kind: "failed", text: match?.[1] ?? "Failed" } };
+}
+
+// --- background commands ----------------------------------------------------------------------------------------
+
+/** What the transcript knows of a background command: the thread's live entry, or the notice of its end. */
+export type BackgroundState = BackgroundShell | BackgroundShellNotice;
+
+/**
+ * A background command as the transcript tells it: the thread's entry while it runs, else the notice that reported
+ * its end (which has its output), else the entry the thread still keeps. Returns an object it was given, so a store
+ * selector can return it.
+ */
+export function backgroundStateOf(
+	shells: BackgroundShell[] | undefined,
+	turns: { items: ViewItem[] }[],
+	id: string,
+): BackgroundState | undefined {
+	const live = shells?.find((s) => s.id === id);
+	if (live?.status === "running") return live;
+	for (const turn of turns)
+		for (const item of turn.items) {
+			const notice = item.type === "extensionMessage" ? item.backgroundShells?.find((n) => n.id === id) : undefined;
+			if (notice) return notice;
+		}
+	return live;
+}
+
+/** The row of the call that started a background command: started while it runs, then stopped or ran. */
+export function backgroundCallText(command: string, status: BackgroundShell["status"] | undefined): string {
+	if (status === "running") return `Started background terminal with ${command}`;
+	if (status === "stopped") return `Background terminal stopped with ${command}`;
+	return `Ran ${command}`;
+}
+
+/** The row of a notice that a background command ended. */
+export const backgroundNoticeText = (notice: BackgroundShellNotice): string =>
+	`Background terminal ${notice.status === "stopped" ? "stopped" : "finished"} with ${firstLine(notice.command)}`;
+
+const firstLine = (command: string) => command.trim().split("\n")[0] ?? "";
+
+/** How a background command ended, as the Shell card says it; nothing while it runs or when the thread forgot it. */
+export function backgroundEnd(state: BackgroundState | undefined): CommandEnd {
+	switch (state?.status) {
+		case "completed":
+			return { kind: "success" };
+		case "stopped":
+			return { kind: "stopped" };
+		case "timed_out":
+			return { kind: "failed", text: "Timed out" };
+		case "failed":
+			return state.exitCode === undefined
+				? { kind: "failed", text: state.error ?? "Failed" }
+				: { kind: "exit", code: String(state.exitCode) };
+		default:
+			return { kind: "running" };
+	}
 }
 
 // --- questions --------------------------------------------------------------------------------------------------

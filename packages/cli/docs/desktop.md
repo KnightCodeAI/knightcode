@@ -127,6 +127,14 @@ The end-to-end tests launch the production build that packaging leaves in
   opens, and end when you close them, archive or delete the thread, or quit. Copy needs a
   selection (Ctrl+C, Ctrl+Shift+C or Ctrl+Insert); paste with Ctrl+V, Ctrl+Shift+V or
   Shift+Insert (on macOS, Cmd+C and Cmd+V). Links in the output open in your browser.
+- Background terminals: a command KnightCode starts in the background (see
+  [Background commands](usage.md#background-commands)) shows in the transcript as "Started
+  background terminal with …" while it runs, and as stopped or ran once it ends. When it
+  ends, the notice KnightCode was given shows as "Background terminal finished with …",
+  opening to the end of its output and its exit code. The thread's summary lists the running
+  ones under Background processes: click one to follow its output in a side panel tab, or
+  hover it and press Stop. A command you stop is recorded for KnightCode without starting it
+  again.
 - Preview: the side panel's + (Ctrl+T) opens a page in a preview tab, http and https only
   (`localhost:3000` is enough). A link to a local server in a message opens there too.
   Each thread keeps its own cookies and storage, cleared when the thread is deleted; pages

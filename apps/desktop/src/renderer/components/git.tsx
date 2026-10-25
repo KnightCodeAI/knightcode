@@ -39,12 +39,14 @@ import {
 	errorText,
 	handoff,
 	navigate,
+	openBackgroundShellTab,
 	RequestError,
 	refreshDiff,
 	showChanges,
 	toast,
 	useStore,
 } from "../store.ts";
+import { BackgroundProcessesSection } from "./background-terminals.tsx";
 import { Button, IconButton, Kbd } from "./button.tsx";
 import { Totals } from "./changes.tsx";
 import { Dialog } from "./dialog.tsx";
@@ -977,6 +979,13 @@ function SummaryBody({
 					</MenuContent>
 				</Menu>
 			</div>
+			<BackgroundProcessesSection
+				threadId={thread.id}
+				onOpen={(shell) => {
+					closeSummary();
+					openBackgroundShellTab(thread.id, shell);
+				}}
+			/>
 			<SourcesSection threadId={thread.id} onImage={onImage} />
 		</div>
 	);

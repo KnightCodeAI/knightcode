@@ -321,6 +321,41 @@ export type ToolCallStatus = Static<typeof ToolCallStatus>;
 
 const Times = { startedAt: Type.Optional(Num), completedAt: Type.Optional(Num) };
 
+export const BackgroundShellStatus = Type.Union([
+	Type.Literal("running"),
+	Type.Literal("completed"),
+	Type.Literal("failed"),
+	Type.Literal("stopped"),
+	Type.Literal("timed_out"),
+]);
+export type BackgroundShellStatus = Static<typeof BackgroundShellStatus>;
+
+/** A shell command that keeps running after its call returned (`run_in_background`), as its thread tracks it. */
+export const BackgroundShell = Obj({
+	id: Str,
+	command: Str,
+	cwd: Str,
+	status: BackgroundShellStatus,
+	startedAt: Num,
+	endedAt: Type.Optional(Num),
+	exitCode: Type.Optional(Num),
+	/** Why it failed without an exit code. */
+	error: Type.Optional(Str),
+});
+export type BackgroundShell = Static<typeof BackgroundShell>;
+
+/** One ended command in a `background_shell` message: what the model was told about it. */
+export const BackgroundShellNotice = Obj({
+	id: Str,
+	command: Str,
+	status: BackgroundShellStatus,
+	exitCode: Type.Optional(Num),
+	error: Type.Optional(Str),
+	/** The last lines of its output, without terminal escapes. */
+	outputTail: Str,
+});
+export type BackgroundShellNotice = Static<typeof BackgroundShellNotice>;
+
 /**
  * A tool call's MCP App: the server, the `ui://` resource that draws it, and the server's whole `CallToolResult`
  * (with `_meta` and `structuredContent`) for the app, or `resultOmitted` when it was over 256 KiB serialized.
@@ -361,6 +396,8 @@ export const Item = Type.Union([
 		view: Type.Optional(View),
 		/** An MCP tool that declares an app (MCP Apps): the client draws its `ui://` resource with the result. */
 		mcpApp: Type.Optional(McpApp),
+		/** A shell call whose command went on running in the background: its id in thread/backgroundShells/list. */
+		backgroundShellId: Type.Optional(Str),
 	}),
 	Obj({ type: Type.Literal("compaction"), id: Str, summary: Str, ...Times }),
 	/** An extension's message sent for display; one sent with `display: false` is context for the model only. */
@@ -371,6 +408,8 @@ export const Item = Type.Union([
 		text: Str,
 		/** The message's `details.view` (§8.2), drawn in place of the text. */
 		view: Type.Optional(View),
+		/** A `background_shell` message: the commands whose end it reports, drawn in place of the text. */
+		backgroundShells: Type.Optional(Type.Array(BackgroundShellNotice)),
 		...Times,
 	}),
 ]);
@@ -880,6 +919,12 @@ export const ClientRequests = {
 		result: Obj({ thread: Thread }),
 	},
 	"thread/compact": { params: Obj({ threadId: Str, instructions: Type.Optional(Str) }), result: Empty },
+	/** The thread's background commands, running and recently ended, oldest first; changes follow as notifications. */
+	"thread/backgroundShells/list": { params: ThreadId, result: Obj({ shells: Type.Array(BackgroundShell) }) },
+	/** The end of a background command's output, terminal escapes kept: the last 50 KB while it runs, 64 KB after. */
+	"thread/backgroundShells/output": { params: Obj({ threadId: Str, id: Str }), result: Obj({ output: Str }) },
+	/** Stop a running background command; `stopped` is false when it was not running. */
+	"thread/backgroundShells/stop": { params: Obj({ threadId: Str, id: Str }), result: Obj({ stopped: Bool }) },
 	"turn/start": {
 		params: Obj({
 			threadId: Str,
@@ -1083,6 +1128,8 @@ export const ServerNotifications = {
 	"turn/retry": Obj({ threadId: Str, turnId: Str, attempt: Num, maxAttempts: Num, delayMs: Num, error: Str }),
 	"thread/tokenUsage/updated": Obj({ threadId: Str, turnId: Str, usage: TokenUsage }),
 	"turn/queue/updated": Obj({ threadId: Str, steering: Type.Array(Str), followUp: Type.Array(QueueEntry) }),
+	/** The thread's background commands, whole, after one started, stopped or ended. */
+	"thread/backgroundShells/updated": Obj({ threadId: Str, shells: Type.Array(BackgroundShell) }),
 	"item/started": ItemEvent,
 	"item/completed": ItemEvent,
 	/** A streamed item whose block the finalized message no longer has (a message_end handler replaced it). */

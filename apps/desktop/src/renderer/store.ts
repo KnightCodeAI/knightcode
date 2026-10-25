@@ -8,6 +8,7 @@ import { useSyncExternalStore } from "react";
 import type {
 	ApprovalMode,
 	ApprovalResult,
+	BackgroundShell,
 	DiffComment,
 	DiffScope,
 	ImageInput,
@@ -82,6 +83,8 @@ export interface ThreadView {
 	/** Older history: a thread/read cursor, absent once the first turn is loaded. */
 	nextCursor?: string;
 	notice?: string;
+	/** The commands the agent left running in the background, and those that ended lately; absent until listed. */
+	backgroundShells?: BackgroundShell[];
 }
 
 /**
@@ -107,6 +110,8 @@ export type PanelTab =
 	| { kind: "preview"; id: string; url: string; title?: string }
 	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
 	| { kind: "mcpApp"; itemId: string }
+	/** A background command's output; its command names the tab after the command leaves the thread's list. */
+	| { kind: "backgroundShell"; id: string; command: string }
 	/** The "Open file" tab: the workspace tree beside an empty file view, one per thread. */
 	| { kind: "files" };
 /** A file tab's comparison, one of three: the Index (unstaged), HEAD (uncommitted), or a branch's merge base. */
@@ -550,6 +555,9 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 				queue: { steering: n.params.steering, followUp: n.params.followUp },
 			}));
 			return;
+		case "thread/backgroundShells/updated":
+			updateThread(n.params.threadId, (v) => ({ ...v, backgroundShells: n.params.shells }));
+			return;
 		case "item/started":
 		case "item/completed": {
 			const { threadId, turnId, index } = n.params;
@@ -840,6 +848,15 @@ export async function openThread(id: string): Promise<void> {
 const latestResume = new Map<string, number>();
 let resumes = 0;
 
+/**
+ * A subscribed thread's background commands; changes from the subscription on arrive as updates. The answer joins
+ * the event order, so an update that came before it and still waits there cannot overwrite it.
+ */
+async function listBackgroundShells(id: string): Promise<void> {
+	const { shells } = await client.request("thread/backgroundShells/list", { threadId: id });
+	enqueue({ threadId: id }, () => updateThread(id, (v) => ({ ...v, backgroundShells: shells })));
+}
+
 /** Subscribe to a thread and load its history without changing the view. */
 async function resumeThread(id: string): Promise<void> {
 	const issued = ++resumes;
@@ -887,6 +904,8 @@ async function resumeThread(id: string): Promise<void> {
 		}));
 		for (const warning of result.warnings) toast(warning.message);
 		await drain();
+		// Informational: the thread is open whether or not this answers.
+		void listBackgroundShells(id).catch(() => {});
 	} catch (error) {
 		if (superseded()) return;
 		const code = error instanceof RequestError ? error.code : undefined;
@@ -1666,6 +1685,26 @@ export function openAppTab(threadId: string, itemId: string): void {
 		},
 		true,
 	);
+}
+
+/** A background command's output: its own side panel tab (once), shown. */
+export function openBackgroundShellTab(threadId: string, shell: { id: string; command: string }): void {
+	updateTabs(
+		threadId,
+		(t) => {
+			const at = t.tabs.findIndex((tab) => tab.kind === "backgroundShell" && tab.id === shell.id);
+			if (at !== -1) return { ...t, active: at };
+			return { tabs: [...t.tabs, { kind: "backgroundShell", id: shell.id, command: shell.command }], active: t.tabs.length };
+		},
+		true,
+	);
+}
+
+/** Stop a background command; its end arrives as a list update, and the model hears of it with the next turn. */
+export async function stopBackgroundShell(threadId: string, id: string): Promise<void> {
+	await client
+		.request("thread/backgroundShells/stop", { threadId, id })
+		.catch((e: unknown) => toast(`Unable to stop background terminal: ${errorText(e)}`, "error"));
 }
 
 /** Back inline: the app's tab closes. */

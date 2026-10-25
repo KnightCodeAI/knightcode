@@ -18,12 +18,14 @@ import {
 	keepTab,
 	MAX_FILE_TABS,
 	NO_TABS,
+	openBackgroundShellTab,
 	openFileTab,
 	saveFileDraft,
 	setFileComparison,
 	setFileDraft,
 	setPanel,
 	showChanges,
+	stopBackgroundShell,
 } from "../../src/renderer/store.ts";
 
 const tabsOf = (id: string) => getState().tabs[id] ?? NO_TABS;
@@ -166,4 +168,17 @@ test("closing an edited tab that another save has just written closes it, with n
 	await autosave;
 	await vi.waitFor(() => expect(paths("j")).toEqual(["changes"]));
 	expect(getState().discarding).toBeUndefined();
+});
+
+test("a background command's output opens in a tab of its own, once, and stopping it asks the server", async () => {
+	openBackgroundShellTab("bg", { id: "ab12", command: "npm run dev" });
+	openFileTab("bg", "/p/a.ts");
+	openBackgroundShellTab("bg", { id: "ab12", command: "npm run dev" });
+	expect(tabsOf("bg")).toMatchObject({
+		active: 1,
+		tabs: [{ kind: "changes" }, { kind: "backgroundShell", id: "ab12", command: "npm run dev" }, { path: "/p/a.ts" }],
+	});
+	request.mockResolvedValueOnce({ stopped: true });
+	await stopBackgroundShell("bg", "ab12");
+	expect(request).toHaveBeenLastCalledWith("thread/backgroundShells/stop", { threadId: "bg", id: "ab12" });
 });

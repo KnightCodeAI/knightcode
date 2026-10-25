@@ -9,8 +9,13 @@ import type { FileDiffOptions } from "@pierre/diffs";
 import { isHighlighterLoaded } from "@pierre/diffs";
 import { PatchDiff } from "@pierre/diffs/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import type { BackgroundShellNotice } from "@knightcode/app-server-protocol";
 import {
 	activitySummary,
+	backgroundEnd,
+	backgroundNoticeText,
+	type BackgroundState,
+	backgroundStateOf,
 	baseName,
 	commandResult,
 	type CommandEnd,
@@ -131,9 +136,18 @@ export function ActivityRow({
 	);
 }
 
+/** A background command of the open thread, as backgroundStateOf finds it. */
+function useBackgroundState(id: string | undefined): BackgroundState | undefined {
+	return useStore((s) => {
+		const view = id && s.view.kind === "thread" ? s.held[s.view.id] : undefined;
+		return view && id ? backgroundStateOf(view.backgroundShells, view.turns, id) : undefined;
+	});
+}
+
 /** A row's words: the text, a file link, and an edit's totals, coloured on hover as Codex's. */
 function Label({ item, cwd, open }: { item: ToolItem; cwd: string; open: boolean }) {
-	const label = rowLabel(item, cwd, open);
+	const background = useBackgroundState(item.backgroundShellId);
+	const label = rowLabel(item, cwd, open, background?.status);
 	return (
 		<>
 			<span className="truncate">{label.text}</span>
@@ -360,6 +374,41 @@ function QuestionsBody({ item }: { item: ToolItem }) {
 	);
 }
 
+/**
+ * The Shell card of a call whose command went on running in the background: the end of its output and how it ended
+ * once its notice came, until then what the call answered (its id and output file).
+ */
+function BackgroundCallCard({ id, command, item }: { id: string; command: string; item: ToolItem }) {
+	const state = useBackgroundState(id);
+	const output = state && "outputTail" in state ? state.outputTail : outputText(item.output);
+	return <TerminalCard title="Shell" command={command} output={output} end={backgroundEnd(state)} />;
+}
+
+/** A notice that background commands ended, which the agent was told: a row each, opening to its Shell card. */
+export function BackgroundNotices({ notices }: { notices: BackgroundShellNotice[] }) {
+	return (
+		<div className="flex flex-col gap-4">
+			{notices.map((notice) => (
+				<NoticeRow key={notice.id} notice={notice} />
+			))}
+		</div>
+	);
+}
+
+function NoticeRow({ notice }: { notice: BackgroundShellNotice }) {
+	const [open, setOpen] = useState(false);
+	return (
+		<ActivityRow
+			icon={<KindIcon kind="command" />}
+			label={<span className="truncate">{backgroundNoticeText(notice)}</span>}
+			open={open}
+			onToggle={() => setOpen(!open)}
+		>
+			<TerminalCard title="Shell" command={notice.command} output={notice.outputTail} end={backgroundEnd(notice)} />
+		</ActivityRow>
+	);
+}
+
 function ToolBody({ item, cwd, nested }: { item: ToolItem; cwd: string; nested: ToolItem[] }) {
 	const shown = toolBody(item);
 	let body: ReactNode;
@@ -369,6 +418,8 @@ function ToolBody({ item, cwd, nested }: { item: ToolItem; cwd: string; nested: 
 				<ViewNode view={item.view} />
 			</div>
 		);
+	else if (shown === "command" && item.backgroundShellId)
+		body = <BackgroundCallCard id={item.backgroundShellId} command={String(inputOf(item).command ?? "")} item={item} />;
 	else if (shown === "command") {
 		const { output, end } = commandResult(item);
 		body = <TerminalCard title="Shell" command={String(inputOf(item).command ?? "")} output={output} end={end} />;

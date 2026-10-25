@@ -1,6 +1,9 @@
 import { expect, test } from "vitest";
 import {
 	activitySummary,
+	backgroundEnd,
+	backgroundNoticeText,
+	backgroundStateOf,
 	commandResult,
 	dialogOption,
 	dialogTitle,
@@ -218,4 +221,34 @@ test("a tool's view wins over the cards picked by its name", () => {
 	expect(toolBody(call("check"))).toBe("output");
 	expect(expandable(call("read", { path: "a.ts" }, { view }))).toBe(true);
 	expect(expandable(call("read", { path: "a.ts" }))).toBe(false);
+});
+
+test("a backgrounded command's row follows the command: started, then stopped or ran, never an exploration", () => {
+	const started = call("bash", { command: "tail -f server.log\n# watch" }, { backgroundShellId: "ab12" });
+	expect(rowLabel(started, "/repo", false, "running").text).toBe("Started background terminal with tail -f server.log");
+	expect(rowLabel(started, "/repo", false, "stopped").text).toBe("Background terminal stopped with tail -f server.log");
+	expect(rowLabel(started, "/repo", false, "failed").text).toBe("Ran tail -f server.log");
+	// Before the thread lists it, or after it forgot it.
+	expect(rowLabel(started, "/repo").text).toBe("Ran tail -f server.log");
+	expect(summaryKind([started])).toBe("command");
+	expect(expandable(started)).toBe(true);
+});
+
+test("a background command's state is the live entry while it runs, else the notice of its end", () => {
+	const shell = { id: "ab12", command: "npm run dev", cwd: "/repo", startedAt: 1 };
+	const running = { ...shell, status: "running" as const };
+	const ended = { ...shell, status: "failed" as const, exitCode: 1, endedAt: 2 };
+	const notice = { id: "ab12", command: "npm run dev", status: "failed" as const, exitCode: 1, outputTail: "boom" };
+	const turns = [{ items: [{ type: "extensionMessage", id: "m", extension: "background_shell", text: "", backgroundShells: [notice] } as ViewItem] }];
+	expect(backgroundStateOf([running], turns, "ab12")).toBe(running);
+	expect(backgroundStateOf([ended], turns, "ab12")).toBe(notice);
+	expect(backgroundStateOf([ended], [], "ab12")).toBe(ended);
+	expect(backgroundStateOf(undefined, [], "ab12")).toBeUndefined();
+	expect(backgroundNoticeText(notice)).toBe("Background terminal finished with npm run dev");
+	expect(backgroundNoticeText({ ...notice, status: "stopped" })).toBe("Background terminal stopped with npm run dev");
+	expect(backgroundEnd(notice)).toEqual({ kind: "exit", code: "1" });
+	expect(backgroundEnd({ ...notice, exitCode: undefined, error: "spawn ENOENT" })).toEqual({ kind: "failed", text: "spawn ENOENT" });
+	expect(backgroundEnd({ ...notice, status: "timed_out" })).toEqual({ kind: "failed", text: "Timed out" });
+	expect(backgroundEnd(running)).toEqual({ kind: "running" });
+	expect(backgroundEnd(undefined)).toEqual({ kind: "running" });
 });

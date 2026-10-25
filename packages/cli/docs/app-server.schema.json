@@ -2532,6 +2532,9 @@
 																	}
 																},
 																"additionalProperties": false
+															},
+															"backgroundShellId": {
+																"type": "string"
 															}
 														},
 														"additionalProperties": false
@@ -2842,6 +2845,60 @@
 																	}
 																},
 																"$ref": "View"
+															},
+															"backgroundShells": {
+																"type": "array",
+																"items": {
+																	"type": "object",
+																	"required": [
+																		"id",
+																		"command",
+																		"status",
+																		"outputTail"
+																	],
+																	"properties": {
+																		"id": {
+																			"type": "string"
+																		},
+																		"command": {
+																			"type": "string"
+																		},
+																		"status": {
+																			"anyOf": [
+																				{
+																					"type": "string",
+																					"const": "running"
+																				},
+																				{
+																					"type": "string",
+																					"const": "completed"
+																				},
+																				{
+																					"type": "string",
+																					"const": "failed"
+																				},
+																				{
+																					"type": "string",
+																					"const": "stopped"
+																				},
+																				{
+																					"type": "string",
+																					"const": "timed_out"
+																				}
+																			]
+																		},
+																		"exitCode": {
+																			"type": "number"
+																		},
+																		"error": {
+																			"type": "string"
+																		},
+																		"outputTail": {
+																			"type": "string"
+																		}
+																	},
+																	"additionalProperties": false
+																}
 															},
 															"startedAt": {
 																"type": "number"
@@ -3673,6 +3730,9 @@
 																}
 															},
 															"additionalProperties": false
+														},
+														"backgroundShellId": {
+															"type": "string"
 														}
 													},
 													"additionalProperties": false
@@ -3983,6 +4043,60 @@
 																}
 															},
 															"$ref": "View"
+														},
+														"backgroundShells": {
+															"type": "array",
+															"items": {
+																"type": "object",
+																"required": [
+																	"id",
+																	"command",
+																	"status",
+																	"outputTail"
+																],
+																"properties": {
+																	"id": {
+																		"type": "string"
+																	},
+																	"command": {
+																		"type": "string"
+																	},
+																	"status": {
+																		"anyOf": [
+																			{
+																				"type": "string",
+																				"const": "running"
+																			},
+																			{
+																				"type": "string",
+																				"const": "completed"
+																			},
+																			{
+																				"type": "string",
+																				"const": "failed"
+																			},
+																			{
+																				"type": "string",
+																				"const": "stopped"
+																			},
+																			{
+																				"type": "string",
+																				"const": "timed_out"
+																			}
+																		]
+																	},
+																	"exitCode": {
+																		"type": "number"
+																	},
+																	"error": {
+																		"type": "string"
+																	},
+																	"outputTail": {
+																		"type": "string"
+																	}
+																},
+																"additionalProperties": false
+															}
 														},
 														"startedAt": {
 															"type": "number"
@@ -8084,6 +8198,9 @@
 																	}
 																},
 																"additionalProperties": false
+															},
+															"backgroundShellId": {
+																"type": "string"
 															}
 														},
 														"additionalProperties": false
@@ -8394,6 +8511,60 @@
 																	}
 																},
 																"$ref": "View"
+															},
+															"backgroundShells": {
+																"type": "array",
+																"items": {
+																	"type": "object",
+																	"required": [
+																		"id",
+																		"command",
+																		"status",
+																		"outputTail"
+																	],
+																	"properties": {
+																		"id": {
+																			"type": "string"
+																		},
+																		"command": {
+																			"type": "string"
+																		},
+																		"status": {
+																			"anyOf": [
+																				{
+																					"type": "string",
+																					"const": "running"
+																				},
+																				{
+																					"type": "string",
+																					"const": "completed"
+																				},
+																				{
+																					"type": "string",
+																					"const": "failed"
+																				},
+																				{
+																					"type": "string",
+																					"const": "stopped"
+																				},
+																				{
+																					"type": "string",
+																					"const": "timed_out"
+																				}
+																			]
+																		},
+																		"exitCode": {
+																			"type": "number"
+																		},
+																		"error": {
+																			"type": "string"
+																		},
+																		"outputTail": {
+																			"type": "string"
+																		}
+																	},
+																	"additionalProperties": false
+																}
 															},
 															"startedAt": {
 																"type": "number"
@@ -9225,6 +9396,9 @@
 																}
 															},
 															"additionalProperties": false
+														},
+														"backgroundShellId": {
+															"type": "string"
 														}
 													},
 													"additionalProperties": false
@@ -9535,6 +9709,60 @@
 																}
 															},
 															"$ref": "View"
+														},
+														"backgroundShells": {
+															"type": "array",
+															"items": {
+																"type": "object",
+																"required": [
+																	"id",
+																	"command",
+																	"status",
+																	"outputTail"
+																],
+																"properties": {
+																	"id": {
+																		"type": "string"
+																	},
+																	"command": {
+																		"type": "string"
+																	},
+																	"status": {
+																		"anyOf": [
+																			{
+																				"type": "string",
+																				"const": "running"
+																			},
+																			{
+																				"type": "string",
+																				"const": "completed"
+																			},
+																			{
+																				"type": "string",
+																				"const": "failed"
+																			},
+																			{
+																				"type": "string",
+																				"const": "stopped"
+																			},
+																			{
+																				"type": "string",
+																				"const": "timed_out"
+																			}
+																		]
+																	},
+																	"exitCode": {
+																		"type": "number"
+																	},
+																	"error": {
+																		"type": "string"
+																	},
+																	"outputTail": {
+																		"type": "string"
+																	}
+																},
+																"additionalProperties": false
+															}
 														},
 														"startedAt": {
 															"type": "number"
@@ -10192,6 +10420,150 @@
 			"result": {
 				"type": "object",
 				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"thread/backgroundShells/list": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"shells"
+				],
+				"properties": {
+					"shells": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"id",
+								"command",
+								"cwd",
+								"status",
+								"startedAt"
+							],
+							"properties": {
+								"id": {
+									"type": "string"
+								},
+								"command": {
+									"type": "string"
+								},
+								"cwd": {
+									"type": "string"
+								},
+								"status": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "running"
+										},
+										{
+											"type": "string",
+											"const": "completed"
+										},
+										{
+											"type": "string",
+											"const": "failed"
+										},
+										{
+											"type": "string",
+											"const": "stopped"
+										},
+										{
+											"type": "string",
+											"const": "timed_out"
+										}
+									]
+								},
+								"startedAt": {
+									"type": "number"
+								},
+								"endedAt": {
+									"type": "number"
+								},
+								"exitCode": {
+									"type": "number"
+								},
+								"error": {
+									"type": "string"
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"thread/backgroundShells/output": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"id"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"output"
+				],
+				"properties": {
+					"output": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"thread/backgroundShells/stop": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"id"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"stopped"
+				],
+				"properties": {
+					"stopped": {
+						"type": "boolean"
+					}
+				},
 				"additionalProperties": false
 			}
 		},
@@ -13776,6 +14148,9 @@
 													}
 												},
 												"additionalProperties": false
+											},
+											"backgroundShellId": {
+												"type": "string"
 											}
 										},
 										"additionalProperties": false
@@ -14087,6 +14462,60 @@
 												},
 												"$ref": "View"
 											},
+											"backgroundShells": {
+												"type": "array",
+												"items": {
+													"type": "object",
+													"required": [
+														"id",
+														"command",
+														"status",
+														"outputTail"
+													],
+													"properties": {
+														"id": {
+															"type": "string"
+														},
+														"command": {
+															"type": "string"
+														},
+														"status": {
+															"anyOf": [
+																{
+																	"type": "string",
+																	"const": "running"
+																},
+																{
+																	"type": "string",
+																	"const": "completed"
+																},
+																{
+																	"type": "string",
+																	"const": "failed"
+																},
+																{
+																	"type": "string",
+																	"const": "stopped"
+																},
+																{
+																	"type": "string",
+																	"const": "timed_out"
+																}
+															]
+														},
+														"exitCode": {
+															"type": "number"
+														},
+														"error": {
+															"type": "string"
+														},
+														"outputTail": {
+															"type": "string"
+														}
+													},
+													"additionalProperties": false
+												}
+											},
 											"startedAt": {
 												"type": "number"
 											},
@@ -14344,6 +14773,80 @@
 							},
 							"attachments": {
 								"type": "number"
+							}
+						},
+						"additionalProperties": false
+					}
+				}
+			},
+			"additionalProperties": false
+		},
+		"thread/backgroundShells/updated": {
+			"type": "object",
+			"required": [
+				"threadId",
+				"shells"
+			],
+			"properties": {
+				"threadId": {
+					"type": "string"
+				},
+				"shells": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": [
+							"id",
+							"command",
+							"cwd",
+							"status",
+							"startedAt"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"command": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "running"
+									},
+									{
+										"type": "string",
+										"const": "completed"
+									},
+									{
+										"type": "string",
+										"const": "failed"
+									},
+									{
+										"type": "string",
+										"const": "stopped"
+									},
+									{
+										"type": "string",
+										"const": "timed_out"
+									}
+								]
+							},
+							"startedAt": {
+								"type": "number"
+							},
+							"endedAt": {
+								"type": "number"
+							},
+							"exitCode": {
+								"type": "number"
+							},
+							"error": {
+								"type": "string"
 							}
 						},
 						"additionalProperties": false
@@ -14966,6 +15469,9 @@
 												}
 											},
 											"additionalProperties": false
+										},
+										"backgroundShellId": {
+											"type": "string"
 										}
 									},
 									"additionalProperties": false
@@ -15276,6 +15782,60 @@
 												}
 											},
 											"$ref": "View"
+										},
+										"backgroundShells": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"required": [
+													"id",
+													"command",
+													"status",
+													"outputTail"
+												],
+												"properties": {
+													"id": {
+														"type": "string"
+													},
+													"command": {
+														"type": "string"
+													},
+													"status": {
+														"anyOf": [
+															{
+																"type": "string",
+																"const": "running"
+															},
+															{
+																"type": "string",
+																"const": "completed"
+															},
+															{
+																"type": "string",
+																"const": "failed"
+															},
+															{
+																"type": "string",
+																"const": "stopped"
+															},
+															{
+																"type": "string",
+																"const": "timed_out"
+															}
+														]
+													},
+													"exitCode": {
+														"type": "number"
+													},
+													"error": {
+														"type": "string"
+													},
+													"outputTail": {
+														"type": "string"
+													}
+												},
+												"additionalProperties": false
+											}
 										},
 										"startedAt": {
 											"type": "number"
@@ -15974,6 +16534,9 @@
 												}
 											},
 											"additionalProperties": false
+										},
+										"backgroundShellId": {
+											"type": "string"
 										}
 									},
 									"additionalProperties": false
@@ -16284,6 +16847,60 @@
 												}
 											},
 											"$ref": "View"
+										},
+										"backgroundShells": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"required": [
+													"id",
+													"command",
+													"status",
+													"outputTail"
+												],
+												"properties": {
+													"id": {
+														"type": "string"
+													},
+													"command": {
+														"type": "string"
+													},
+													"status": {
+														"anyOf": [
+															{
+																"type": "string",
+																"const": "running"
+															},
+															{
+																"type": "string",
+																"const": "completed"
+															},
+															{
+																"type": "string",
+																"const": "failed"
+															},
+															{
+																"type": "string",
+																"const": "stopped"
+															},
+															{
+																"type": "string",
+																"const": "timed_out"
+															}
+														]
+													},
+													"exitCode": {
+														"type": "number"
+													},
+													"error": {
+														"type": "string"
+													},
+													"outputTail": {
+														"type": "string"
+													}
+												},
+												"additionalProperties": false
+											}
 										},
 										"startedAt": {
 											"type": "number"

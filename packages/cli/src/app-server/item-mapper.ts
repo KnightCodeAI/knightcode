@@ -6,8 +6,17 @@
 
 import type { AssistantMessage } from "@knightcode/ai";
 import { calculateContextTokens } from "../core/compaction/index.ts";
-import type { DiffComment, Item, TokenUsage, Turn, TurnQueue, WireTurn } from "@knightcode/app-server-protocol";
+import type {
+	BackgroundShell,
+	DiffComment,
+	Item,
+	TokenUsage,
+	Turn,
+	TurnQueue,
+	WireTurn,
+} from "@knightcode/app-server-protocol";
 import type { AgentSession, AgentSessionEvent } from "../core/agent-session.ts";
+import type { BackgroundShellManager } from "../core/background-shells.ts";
 import { addUsageToTotals, type UsageTotals } from "../core/usage-totals.ts";
 import { getLatestCompactionEntry } from "../core/session-manager.ts";
 import {
@@ -24,6 +33,8 @@ import { TURN_COMMENTS_ENTRY } from "./diff.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 import {
 	assistantTimes,
+	backgroundNoticesOf,
+	backgroundShellIdOf,
 	callStartedAt,
 	entryTime,
 	fileChangesOf,
@@ -33,6 +44,20 @@ import {
 	toolCallStatus,
 	viewOf,
 } from "./transcript.ts";
+
+/** The session's background commands as the protocol lists them, oldest first. */
+export function backgroundShellsOf(manager: BackgroundShellManager): BackgroundShell[] {
+	return manager.list().map(({ id, command, cwd, status, startedAt, endedAt, exitCode, error }) => ({
+		id,
+		command,
+		cwd,
+		status,
+		startedAt,
+		...(endedAt === undefined ? {} : { endedAt }),
+		...(exitCode === undefined ? {} : { exitCode }),
+		...(error === undefined ? {} : { error }),
+	}));
+}
 
 /** Steers the agent has not delivered yet, and the server's own queued inputs. */
 export function queueOf(thread: LoadedThread): TurnQueue {
@@ -291,12 +316,14 @@ export class ItemMapper {
 					if (!message.display) return;
 					// Inside a run or between runs: an idle extension message belongs to the last turn, as on read-back.
 					const view = viewOf(message.details);
+					const shells = backgroundNoticesOf(message.customType, message.details);
 					const item: Item = {
 						type: "extensionMessage",
 						id: `${counters.id}:custom:${counters.customs++}`,
 						extension: message.customType,
 						text: textOf(message.content),
 						...(view ? { view } : {}),
+						...(shells ? { backgroundShells: shells } : {}),
 					};
 					const index = counters.items++;
 					const turnId = counters.id;
@@ -354,6 +381,8 @@ export class ItemMapper {
 					if (view) call.view = view;
 					const app = mcpAppOf(message.details);
 					if (app) call.mcpApp = app;
+					const shellId = backgroundShellIdOf(message.details);
+					if (shellId) call.backgroundShellId = shellId;
 					this.completed(call, this.positions.get(call.id));
 				}
 				return;

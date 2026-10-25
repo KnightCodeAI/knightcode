@@ -6,6 +6,7 @@
 
 import type { AssistantMessage } from "@knightcode/ai";
 import {
+	type BackgroundShellNotice,
 	checkView,
 	type FileChange,
 	type Item,
@@ -15,6 +16,7 @@ import {
 	type TurnFile,
 	type View,
 } from "@knightcode/app-server-protocol";
+import { BACKGROUND_SHELL_MESSAGE_TYPE } from "../core/background-shells.ts";
 import type { SessionEntry } from "../core/session-manager.ts";
 import { TURN_COMMENTS_ENTRY, TURN_DIFF_ENTRY, type TurnComments, type TurnDiffRecord } from "./diff.ts";
 import {
@@ -81,6 +83,45 @@ export function mcpAppOf(details: unknown): McpApp | undefined {
 		resourceUri,
 		...(resultOmitted === true ? { resultOmitted: true } : result !== undefined ? { result } : {}),
 	};
+}
+
+/** `details.background.taskId` of a shell call's result: its command went on running in the background. */
+export function backgroundShellIdOf(details: unknown): string | undefined {
+	const background =
+		typeof details === "object" && details !== null ? (details as { background?: unknown }).background : undefined;
+	const id =
+		typeof background === "object" && background !== null ? (background as { taskId?: unknown }).taskId : undefined;
+	return typeof id === "string" ? id : undefined;
+}
+
+const SHELL_STATUSES: ReadonlySet<string> = new Set(["running", "completed", "failed", "stopped", "timed_out"]);
+
+/**
+ * The ended commands a `background_shell` message reports, from its `details.notices`. Session files can hold
+ * anything an extension or an import wrote, so a malformed notice is left out; with none left, the text shows.
+ */
+export function backgroundNoticesOf(customType: string, details: unknown): BackgroundShellNotice[] | undefined {
+	if (customType !== BACKGROUND_SHELL_MESSAGE_TYPE) return undefined;
+	const notices =
+		typeof details === "object" && details !== null ? (details as { notices?: unknown }).notices : undefined;
+	if (!Array.isArray(notices)) return undefined;
+	const valid = notices.flatMap((notice: unknown): BackgroundShellNotice[] => {
+		if (typeof notice !== "object" || notice === null) return [];
+		const { id, command, status, exitCode, error, outputTail } = notice as Record<string, unknown>;
+		if (typeof id !== "string" || typeof command !== "string" || typeof status !== "string") return [];
+		if (!SHELL_STATUSES.has(status)) return [];
+		return [
+			{
+				id,
+				command,
+				status: status as BackgroundShellNotice["status"],
+				...(typeof exitCode === "number" ? { exitCode } : {}),
+				...(typeof error === "string" ? { error } : {}),
+				outputTail: typeof outputTail === "string" ? outputTail : "",
+			},
+		];
+	});
+	return valid.length > 0 ? valid : undefined;
 }
 
 /** A call the approval gate blocked has an error result carrying exactly the decline reason. */
@@ -188,12 +229,14 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 			// Context for the model only, as the live mapper leaves it out.
 			if (!entry.display) continue;
 			const view = viewOf(entry.details);
+			const shells = backgroundNoticesOf(entry.customType, entry.details);
 			t.turn.items.push({
 				type: "extensionMessage",
 				id: `${t.turn.id}:custom:${t.customs++}`,
 				extension: entry.customType,
 				text: textOf(entry.content as string | Content),
 				...(view ? { view } : {}),
+				...(shells ? { backgroundShells: shells } : {}),
 				completedAt: entryTime(entry),
 			});
 		} else if (entry.type === "message") {
@@ -258,6 +301,8 @@ export function readTurns(threadId: string, entries: readonly SessionEntry[], ac
 					if (view) call.view = view;
 					const app = mcpAppOf(message.details);
 					if (app) call.mcpApp = app;
+					const shellId = backgroundShellIdOf(message.details);
+					if (shellId) call.backgroundShellId = shellId;
 				}
 			}
 		}

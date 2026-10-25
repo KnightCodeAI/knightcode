@@ -12,6 +12,9 @@ const fake = vi.hoisted(() => {
 		"model/list": () => ({ models: [], default: null }),
 		"account/list": () => ({ accounts: [] }),
 		"config/read": () => ({ settings: {} }),
+		"thread/backgroundShells/list": ({ threadId }) => ({
+			shells: threadId === "bg1" ? [{ id: "ab12", command: "npm run dev", cwd: "/p", status: "running", startedAt: 1 }] : [],
+		}),
 		"thread/resume": ({ threadId }) => ({
 			thread: { id: threadId },
 			turns: [],
@@ -272,4 +275,15 @@ test("after a restart a failed update state read does not stop the window resumi
 	} finally {
 		fake.failing.updateState = false;
 	}
+});
+
+test("an opened thread lists its background commands, and each update replaces the list", async () => {
+	fake.serverState("ready");
+	await openThread("bg1");
+	await vi.waitFor(() => expect(getState().held.bg1?.backgroundShells).toMatchObject([{ id: "ab12", status: "running" }]));
+	fake.notify("thread/backgroundShells/updated", {
+		threadId: "bg1",
+		shells: [{ id: "ab12", command: "npm run dev", cwd: "/p", status: "stopped", startedAt: 1, endedAt: 2 }],
+	});
+	await vi.waitFor(() => expect(getState().held.bg1?.backgroundShells).toMatchObject([{ status: "stopped" }]));
 });

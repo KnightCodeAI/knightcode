@@ -20,8 +20,10 @@ import {
 	PanelRight,
 	Plus,
 	SquarePlus,
+	SquareTerminal,
 	X,
 } from "./icons.tsx";
+import { BackgroundShellTab, commandLabel } from "./background-terminals.tsx";
 import type React from "react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { basename, clockTime, dayLabel, SEPARATOR_GAP_MS } from "../format.ts";
@@ -215,6 +217,8 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 					<AppWindow size={16} className="shrink-0" />
 				) : tab.kind === "files" ? (
 					<File size={16} className="shrink-0" />
+				) : tab.kind === "backgroundShell" ? (
+					<SquareTerminal size={16} className="shrink-0" />
 				) : (
 					<FileIcon path={tab.path} />
 				)
@@ -228,7 +232,9 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 							? (app?.mcpApp.server ?? "App")
 							: tab.kind === "files"
 								? "Open file"
-								: basename(tab.path)
+								: tab.kind === "backgroundShell"
+									? commandLabel(tab.command)
+									: basename(tab.path)
 			}
 			italic={tab.kind === "file" && tab.preview}
 			dirty={tab.kind === "file" && tab.draft !== undefined}
@@ -300,9 +306,11 @@ function SidePanel({ id }: { id: string }) {
 										? tab.id
 										: tab.kind === "mcpApp"
 											? `app:${tab.itemId}`
-											: tab.kind === "files"
-												? "files"
-												: "changes"
+											: tab.kind === "backgroundShell"
+												? `background:${tab.id}`
+												: tab.kind === "files"
+													? "files"
+													: "changes"
 							}
 							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
@@ -342,6 +350,7 @@ function SidePanel({ id }: { id: string }) {
 				/>
 			) : null}
 			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
+			{shown?.kind === "backgroundShell" ? <BackgroundShellTab key={shown.id} threadId={id} id={shown.id} /> : null}
 			{shown?.kind === "files" ? (
 				<FilesTab
 					threadId={id}
