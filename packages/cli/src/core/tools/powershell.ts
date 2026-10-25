@@ -28,7 +28,7 @@ export type PowerShellToolInput = BashToolInput;
 
 export interface PowerShellToolOptions extends Pick<
 	BashToolOptions,
-	"operations" | "exposeSessionEnvironment" | "spawnHook"
+	"operations" | "exposeSessionEnvironment" | "spawnHook" | "backgroundShells"
 > {}
 
 export function createLocalPowerShellOperations(): PowerShellOperations {

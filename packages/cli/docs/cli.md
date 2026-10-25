@@ -13,7 +13,7 @@ knightcode update [target] [options]
 knightcode list
 knightcode config [options]
 knightcode auth <check|print-api-key|print-bearer-token> [options]
-knightcode mcp <list|login|logout> [options]
+knightcode mcp <add|remove|list|login|logout> [options]
 knightcode app-server [-e <extension>]... [--session-dir <dir>]
 ```
 
@@ -167,7 +167,7 @@ The MCP resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `re
 
 The [web tools](usage.md#web-tools) `webfetch` and `websearch` and the [question tool](usage.md#questions) `ask_user` are off until enabled with `/tools` or named here. A tool excluded here stays off whatever `/tools` says, and one turned off with `/tools` stays off even when named here.
 
-Built-in extensions add two more tools. They are off by default; the MCP extension turns them on when an MCP server needs them (see [MCP](mcp.md#exposure)). To enable them yourself, name them in `--tools` or `defaultTools`.
+Built-in extensions add two more tools. They are off by default; the MCP extension turns them on when an MCP server needs them (see [MCP](mcp.md#control-tool-exposure)). To enable them yourself, name them in `--tools` or `defaultTools`.
 
 | Built-in extension | Purpose |
 |---|---|
@@ -388,6 +388,6 @@ These commands work outside a session, so agents can run them through `bash`. Se
 | `knightcode mcp login <server> [--timeout <seconds>]` | Sign in to an OAuth server: open the authorization page and wait for the browser; a terminal also accepts the pasted redirect URL. `--timeout` limits the whole sign-in, including requests to the authorization server (default 300 seconds) |
 | `knightcode mcp logout <server>` | Delete the stored OAuth credentials of a server |
 
-`add` and `remove` change `~/.knightcode/agent/mcp.json`, or `.knightcode/mcp.json` in the current directory with `--local` (`-l`). `add` also takes `--exposure <mode>` (see [Exposure](mcp.md#exposure)) and `--description <text>` and does not connect; run `knightcode mcp list` to check the server.
+`add` and `remove` change `~/.knightcode/agent/mcp.json`, or `.knightcode/mcp.json` in the current directory with `--local` (`-l`). `add` also takes `--exposure <mode>` (see [Exposure](mcp.md#control-tool-exposure)) and `--description <text>` and does not connect; run `knightcode mcp list` to check the server.
 
 Project `.knightcode/mcp.json` files are only read for projects that are already trusted.

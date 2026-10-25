@@ -578,6 +578,108 @@ export function snapshotTree(
 /** Untracked files over this size are left out of turn snapshots and diff reads (Codex's default). */
 export const LARGE_UNTRACKED_BYTES = 10 * 1024 * 1024;
 
+/** A folder holding this many untracked files itself is left out of turn snapshots. */
+export const LARGE_UNTRACKED_FOLDER_FILES = 200;
+
+/** Whether `path` lies under one of the folders, each written with its trailing slash. */
+function underAny(path: string, folders: ReadonlySet<string>): boolean {
+	if (folders.size === 0) return false;
+	for (let i = path.indexOf("/"); i !== -1; i = path.indexOf("/", i + 1))
+		if (folders.has(path.slice(0, i + 1))) return true;
+	return false;
+}
+
+/** Each untracked, not ignored path, streamed and never collected (no stdout limit); `visit` returning false stops it. */
+async function eachUntracked(
+	repo: Repo,
+	signal: AbortSignal | undefined,
+	visit: (path: string) => boolean | void,
+): Promise<void> {
+	const args = ["ls-files", "--others", "--exclude-standard", "-z"];
+	let pending = Buffer.alloc(0);
+	let stopped = false;
+	const result = await runGit(repo, args, {
+		signal,
+		collectStdout: false,
+		onStdout: (chunk) => {
+			// A path can straddle two chunks: split on NUL bytes before decoding.
+			const data = pending.length > 0 ? Buffer.concat([pending, chunk]) : chunk;
+			let start = 0;
+			for (let end = data.indexOf(0); end !== -1; end = data.indexOf(0, start)) {
+				if (visit(data.toString("utf8", start, end)) === false) {
+					stopped = true;
+					return false;
+				}
+				start = end + 1;
+			}
+			pending = Buffer.from(data.subarray(start));
+			return true;
+		},
+	});
+	// A listing cut short by a failure would read as files the turn deleted.
+	if (!stopped && result.code !== 0) throw new GitError(args, result.code, result.stderr);
+}
+
+/**
+ * A turn snapshot: the tracked files' tree, the tree with untracked files too unless too many, the folders left out,
+ * and the folders the untracked files it kept are in.
+ */
+export interface TurnTrees {
+	tracked: string;
+	all?: string;
+	skip: string[];
+	folders: string[];
+}
+
+/**
+ * Every untracked, not ignored file counts up to `limit`. Past it, none under a folder holding
+ * LARGE_UNTRACKED_FOLDER_FILES of them itself. The after-snapshot (`before` given)
+ * leaves out the before one's folders, and a large folder only if no untracked file kept before was under it (one the
+ * turn made), so both leave out the same files. More than `limit` still remaining: no `all` tree. Files over
+ * LARGE_UNTRACKED_BYTES are left out. Both trees come from one temporary index, `tracked` before the untracked adds.
+ */
+export async function turnSnapshot(
+	repo: Repo,
+	limit: number,
+	signal?: AbortSignal,
+	before?: TurnTrees,
+): Promise<TurnTrees> {
+	let total = 0;
+	const counts = new Map<string, number>();
+	await eachUntracked(repo, signal, (path) => {
+		total++;
+		const folder = path.slice(0, path.lastIndexOf("/") + 1);
+		if (folder !== "") counts.set(folder, (counts.get(folder) ?? 0) + 1);
+	});
+	const large = total > limit ? [...counts].filter(([, n]) => n >= LARGE_UNTRACKED_FOLDER_FILES).map(([f]) => f) : [];
+	const skip = before
+		? [...before.skip, ...large.filter((f) => !before.folders.some((kept) => kept.startsWith(f)))]
+		: large;
+	const skipped = new Set(skip);
+	const kept: string[] = [];
+	let over = false;
+	await eachUntracked(repo, signal, (path) => {
+		if (underAny(path, skipped)) return;
+		if (kept.length === limit) {
+			over = true;
+			return false;
+		}
+		kept.push(path);
+	});
+	const folders = [...new Set(kept.map((path) => path.slice(0, path.lastIndexOf("/") + 1)).filter(Boolean))];
+	return withTemporaryIndex(repo, signal, async (run) => {
+		await run(["add", "-u"]);
+		const tracked = await run(["write-tree"]);
+		if (over) return { tracked, skip, folders };
+		const small = kept.filter((path) => {
+			const info = lstatSync(join(repo.root, path), { throwIfNoEntry: false });
+			return info !== undefined && info.size <= LARGE_UNTRACKED_BYTES;
+		});
+		if (small.length > 0) await run(["add", "--pathspec-from-file=-", "--pathspec-file-nul"], `${small.join("\0")}\0`);
+		return { tracked, all: await run(["write-tree"]), skip, folders };
+	});
+}
+
 /** Stops at limit + 1. */
 export async function countUntracked(repo: Repo, limit: number, signal?: AbortSignal): Promise<number> {
 	let count = 0;

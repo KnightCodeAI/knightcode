@@ -62,6 +62,18 @@ import { processImage } from "../utils/image-process.ts";
 import { sleep } from "../utils/sleep.ts";
 import { normalizeToolResultImages } from "../utils/tool-result-images.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
+import {
+	BACKGROUND_SHELL_MESSAGE_TYPE,
+	type BackgroundShellInfo,
+	BackgroundShellManager,
+	type BackgroundShellMessageDetails,
+	type BackgroundShellNotice,
+	backgroundManagerOf,
+	bindBackgroundShells,
+	createBackgroundShellNotice,
+	formatBackgroundShellNotices,
+	formatCommandLabel,
+} from "./background-shells.ts";
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import { generateBugReportSummary } from "./bug-report.ts";
 import type { CacheWarmer, CacheWarmingStatus } from "./cache-warmer.ts";
@@ -416,6 +428,9 @@ function estimateMessagesTokens(messages: AgentMessage[]): number {
 // Constants
 // ============================================================================
 
+/** Built-in tools that can start background commands. */
+const SHELL_TOOL_NAMES = ["bash", "powershell"] as const;
+
 // ============================================================================
 // AgentSession Class
 // ============================================================================
@@ -469,6 +484,26 @@ export class AgentSession {
 	// Bash execution state
 	private readonly _bashAbortControllers = new Set<AbortController>();
 	private _pendingBashMessages: BashExecutionMessage[] = [];
+
+	/** Shell commands that keep running after their tool call returned. The session owns them. */
+	readonly backgroundShells: BackgroundShellManager;
+	/** Ended background commands the model has not been told about yet. */
+	private _backgroundNotices: Array<{ notice: BackgroundShellNotice; wake: boolean }> = [];
+	private _backgroundDeliveryScheduled = false;
+	/**
+	 * Set when a run is aborted: until the next prompt, an ended background command is recorded in
+	 * the conversation without starting a run, so a stopped agent stays stopped.
+	 */
+	private _backgroundWakeSuppressed = false;
+	/** While above zero, ended background commands start no run; see holdBackgroundWake(). */
+	private _backgroundWakeHolds = 0;
+	/**
+	 * Whether the next run still has to report background commands an earlier session started on this
+	 * branch, which are not running here. Checked at the first run, so opening a session writes nothing
+	 * and the branch is the one the user continues.
+	 */
+	private _orphanScanPending = true;
+	private _disposed = false;
 
 	// Extension system
 	private _extensionRunner!: ExtensionRunner;
@@ -559,6 +594,9 @@ export class AgentSession {
 		this._excludedTools = config.excludedToolNames ? createToolNameMatcher(config.excludedToolNames) : undefined;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
+		this.backgroundShells = new BackgroundShellManager({
+			onSettled: (shell) => this._onBackgroundShellSettled(shell),
+		});
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
@@ -979,6 +1017,9 @@ export class AgentSession {
 			const updateMessage = this._preparePromptAndToolLoadout(options, nextContext.messages);
 			// Keep session.systemPrompt and ctx.getSystemPrompt() in step with what the provider sees.
 			this._runSystemPromptOptions = options;
+			// Background commands that ended during the turn are reported before the next response.
+			const backgroundMessage = this._takeBackgroundNoticeMessage();
+			const addedMessages = [updateMessage, backgroundMessage].filter((message) => message !== undefined);
 
 			return {
 				...previousSnapshot,
@@ -986,7 +1027,10 @@ export class AgentSession {
 					...nextContext,
 					tools: this.agent.state.tools.slice(),
 				},
-				messages: updateMessage ? [...(previousSnapshot?.messages ?? []), updateMessage] : previousSnapshot?.messages,
+				messages:
+					addedMessages.length > 0
+						? [...(previousSnapshot?.messages ?? []), ...addedMessages]
+						: previousSnapshot?.messages,
 				model: this.agent.state.model,
 				thinkingLevel: this.agent.state.thinkingLevel,
 			};
@@ -1097,6 +1141,8 @@ export class AgentSession {
 		for (const l of this._eventListeners) {
 			l(event);
 		}
+		// Session state changes, such as a run settling or compaction ending, can make room to deliver.
+		if (this._backgroundNotices.length > 0) this._scheduleBackgroundDelivery();
 	}
 
 	private _emitQueueUpdate(): void {
@@ -1130,6 +1176,7 @@ export class AgentSession {
 
 	private _resolveIdleWaitIfIdle(): void {
 		if (!this.isIdle) return;
+		if (this._backgroundNotices.length > 0) this._scheduleBackgroundDelivery();
 		if (!this.isSettling && this._resolveSettledIdleWait) {
 			const resolve = this._resolveSettledIdleWait;
 			this._settledIdleWaitPromise = undefined;
@@ -1150,6 +1197,7 @@ export class AgentSession {
 		try {
 			try {
 				const aborted = this._agentRunAbortRequested;
+				if (aborted) this._backgroundWakeSuppressed = true;
 				await this._extensionRunner.emit({ type: "agent_settled", aborted });
 				this._emit({ type: "agent_settled", aborted });
 			} finally {
@@ -1168,6 +1216,7 @@ export class AgentSession {
 			}
 		} finally {
 			this._resolveIdleWaitIfIdle();
+			if (this._backgroundNotices.length > 0) this._scheduleBackgroundDelivery();
 		}
 	}
 
@@ -1480,6 +1529,13 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	dispose(): void {
+		// Notices still waiting, as behind a hold during teardown, are recorded while the file is open,
+		// so a resumed session reads how those commands ended.
+		const pending = this._takeBackgroundNoticeMessage();
+		if (pending) this._recordBackgroundNotices(pending);
+		this._disposed = true;
+		// Background commands belong to this session: a replacement session must not inherit them.
+		this.backgroundShells.dispose();
 		try {
 			this.abortRetry();
 			this.abortCompaction();
@@ -1645,6 +1701,8 @@ export class AgentSession {
 	private _isAllowedTool(name: string): boolean {
 		if (this._excludedTools?.(name)) return false;
 		if (!this._allowedTools || this._allowedTools(name)) return true;
+		// task_stop comes with the shell tools: an allowlist naming bash keeps it unless it is excluded.
+		if (name === "task_stop") return SHELL_TOOL_NAMES.some((shell) => this._allowedTools?.(shell));
 		return !this._allowlistFiltersMcp && isMcpToolName(name);
 	}
 
@@ -1681,7 +1739,17 @@ export class AgentSession {
 	 * requests (see {@link _installHiddenDeclarationsProjection}).
 	 */
 	private _applyToolLoadout(toolNames: string[]): AgentTool[] {
-		const tools = [...new Set(toolNames)].flatMap((name) => {
+		const names = new Set(toolNames);
+		// A tool that starts background commands in this session needs task_stop to stop them, so it is
+		// active whenever one of them is.
+		if (
+			[...names].some(
+				(name) => backgroundManagerOf(this._toolDefinitions.get(name)?.definition) === this.backgroundShells,
+			)
+		) {
+			names.add("task_stop");
+		}
+		const tools = [...names].flatMap((name) => {
 			const tool = this._toolRegistry.get(name);
 			return tool && this._getToolExposure(name) !== "hidden" && this._isActivatable(name) ? [tool] : [];
 		});
@@ -2073,6 +2141,9 @@ export class AgentSession {
 		const updateMessage = this._preparePromptAndToolLoadout(result.systemPromptOptions);
 		this._runSystemPromptOptions = result.systemPromptOptions;
 		if (updateMessage) messages.unshift(updateMessage);
+		// Taken last, once nothing here can fail, so a failed start does not lose them.
+		const backgroundMessage = this._takeBackgroundNoticeMessage(true);
+		if (backgroundMessage) messages.push(backgroundMessage);
 		return messages;
 	}
 
@@ -2191,6 +2262,19 @@ export class AgentSession {
 	 * @throws Error if no model selected or no API key available (when not streaming)
 	 */
 	async prompt(text: string, options?: PromptOptions): Promise<void> {
+		// Input re-engages a stopped agent: ended background commands may start runs again.
+		this._backgroundWakeSuppressed = false;
+		// Preflight awaits input handlers and auth while the session still looks idle. A run started by a
+		// background notice meanwhile would make this prompt fail, so notices wait for it.
+		const release = this.holdBackgroundWake();
+		try {
+			await this._prompt(text, options);
+		} finally {
+			release();
+		}
+	}
+
+	private async _prompt(text: string, options?: PromptOptions): Promise<void> {
 		if (this._isEmittingAgentSettled) {
 			this._deferredSettledActions.push(async () => await this.prompt(text, options));
 			return;
@@ -2510,6 +2594,175 @@ export class AgentSession {
 			this._pendingCustomMessages.push(appMessage);
 		} else {
 			this._appendCustomMessage(appMessage);
+		}
+	}
+
+	/** Queue the end of a background command for the model. */
+	private _onBackgroundShellSettled(shell: BackgroundShellInfo): void {
+		// task_stop's result already told the model; a disposed session tells no one.
+		if (this._disposed || shell.stoppedBy === "model" || shell.stoppedBy === "session") return;
+		const notice = createBackgroundShellNotice(shell, this.backgroundShells.readOutput(shell.id));
+		// A command the user stopped is worth knowing about, not worth starting a run for.
+		this._backgroundNotices.push({ notice, wake: shell.stoppedBy !== "user" });
+		this._deliverBackgroundNotices();
+	}
+
+	private _scheduleBackgroundDelivery(): void {
+		if (this._backgroundDeliveryScheduled || this._disposed) return;
+		this._backgroundDeliveryScheduled = true;
+		setImmediate(() => {
+			this._backgroundDeliveryScheduled = false;
+			this._deliverBackgroundNotices();
+		});
+	}
+
+	/**
+	 * Keep ended background commands from starting a run until the returned function is called. A
+	 * caller that checks the session is idle and then awaits before prompt() holds this across the gap,
+	 * so a run a notice starts cannot take the turn it is about to start. prompt() and reload() hold it
+	 * themselves. Notices still reach the model with the next run.
+	 */
+	holdBackgroundWake(): () => void {
+		this._backgroundWakeHolds++;
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			this._backgroundWakeHolds--;
+			if (this._backgroundNotices.length > 0) this._scheduleBackgroundDelivery();
+		};
+	}
+
+	/**
+	 * Combine the queued notices into one message, emptying the queue. A run's first message also
+	 * takes the notices for commands an earlier process left behind.
+	 */
+	private _takeBackgroundNoticeMessage(
+		includeOrphaned = false,
+	): CustomMessage<BackgroundShellMessageDetails> | undefined {
+		const orphaned = includeOrphaned && this._orphanScanPending ? this._findOrphanedBackgroundShells() : [];
+		if (includeOrphaned) this._orphanScanPending = false;
+		if (this._backgroundNotices.length === 0 && orphaned.length === 0) return undefined;
+		const notices = [...orphaned, ...this._backgroundNotices.splice(0).map((entry) => entry.notice)];
+		return {
+			role: "custom",
+			customType: BACKGROUND_SHELL_MESSAGE_TYPE,
+			content: formatBackgroundShellNotices(notices),
+			display: true,
+			details: { notices },
+			timestamp: Date.now(),
+		};
+	}
+
+	/**
+	 * Tell the model about ended background commands. During a run they join the next turn (see
+	 * `_installAgentNextTurnRefresh`) or else the next run. While idle they start a run, unless the
+	 * last run was aborted or no notice warrants one; then they are only recorded, for the model to
+	 * read with the next prompt. While compaction or settlement owns the session, they wait for it.
+	 */
+	private _deliverBackgroundNotices(): void {
+		if (this._disposed || this._backgroundNotices.length === 0) return;
+		if (this.isStreaming || !this.isIdle || this.isSettling || this._backgroundWakeHolds > 0) return;
+		const wake = !this._backgroundWakeSuppressed && this._backgroundNotices.some((entry) => entry.wake);
+		const message = this._takeBackgroundNoticeMessage();
+		if (!message) return;
+		if (!wake) {
+			this._recordBackgroundNotices(message);
+			return;
+		}
+		let started = false;
+		this._startRun({ messageType: "custom", message }, () => {
+			started = true;
+		}).catch(() => {
+			// A run that failed before taking the message must not lose it.
+			if (!started) this._recordBackgroundNotices(message);
+		});
+	}
+
+	/**
+	 * Append notices to the conversation without a run. Delivery runs from timers and process events,
+	 * where a throw would be uncaught, so a session that can no longer be written drops them.
+	 */
+	private _recordBackgroundNotices(message: CustomMessage): void {
+		if (this._disposed) return;
+		try {
+			this._appendCustomMessage(message);
+		} catch {
+			// The session file was closed or its lock lost; nothing more can be recorded in it.
+		}
+	}
+
+	/**
+	 * Background commands an earlier session started on the current branch that are not running here
+	 * and were never reported. Session files can hold anything an extension or an import wrote, so a
+	 * malformed entry is skipped rather than allowed to break the first run.
+	 */
+	private _findOrphanedBackgroundShells(): BackgroundShellNotice[] {
+		try {
+			const commands = new Map<string, string>();
+			const launched = new Map<string, { toolName: string; command: string; outputPath: string }>();
+			const accounted = new Set<string>();
+			for (const entry of this.sessionManager.getBranch()) {
+				if (entry.type === "custom_message" && entry.customType === BACKGROUND_SHELL_MESSAGE_TYPE) {
+					const notices = (entry.details as BackgroundShellMessageDetails | undefined)?.notices;
+					for (const notice of Array.isArray(notices) ? notices : []) {
+						if (typeof notice?.id === "string") accounted.add(notice.id);
+					}
+				}
+				if (entry.type !== "message") continue;
+				const message = entry.message;
+				if (message.role === "assistant" && Array.isArray(message.content)) {
+					for (const part of message.content) {
+						if (part?.type !== "toolCall") continue;
+						const command = (part.arguments as { command?: unknown } | null | undefined)?.command;
+						if (typeof command === "string") commands.set(part.id, command);
+					}
+				} else if (message.role === "toolResult") {
+					const details = message.details as
+						{ background?: { taskId?: unknown }; fullOutputPath?: unknown; taskId?: unknown } | null | undefined;
+					// task_stop's result told the model how the command ended.
+					if (message.toolName === "task_stop" && typeof details?.taskId === "string") accounted.add(details.taskId);
+					const taskId = details?.background?.taskId;
+					if ((SHELL_TOOL_NAMES as readonly string[]).includes(message.toolName) && typeof taskId === "string") {
+						launched.set(taskId, {
+							toolName: message.toolName,
+							command: commands.get(message.toolCallId) ?? "",
+							outputPath: typeof details?.fullOutputPath === "string" ? details.fullOutputPath : "",
+						});
+					}
+				}
+			}
+			return [...launched]
+				.filter(([id]) => !accounted.has(id) && !this.backgroundShells.get(id))
+				.map(([id, launch]) => ({
+					id,
+					toolName: launch.toolName,
+					command: launch.command,
+					status: "stopped" as const,
+					summary: `Background command "${formatCommandLabel(launch.command)}" was started by an earlier session and is not running in this one: a session stops its background commands when it ends`,
+					outputPath: launch.outputPath,
+					outputTail: "",
+				}));
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Wait until no background command is running and the model has been told about every ended one,
+	 * including the runs those notices start. Print mode calls this before it exits.
+	 */
+	async waitForBackgroundShells(): Promise<void> {
+		while (!this._disposed) {
+			await this.waitForIdle({ includeSettlement: true });
+			if (this._backgroundNotices.length > 0) {
+				this._deliverBackgroundNotices();
+				// Delivery that must wait, as behind a hold, is retried shortly.
+				if (this._backgroundNotices.length > 0) await new Promise((resolve) => setTimeout(resolve, 20));
+				continue;
+			}
+			if (this.backgroundShells.runningCount() === 0) return;
+			await this.backgroundShells.waitForSettle();
 		}
 	}
 
@@ -3730,7 +3983,11 @@ export class AgentSession {
 		const previousActiveToolNames = this.getActiveToolNames();
 		const allowedTools = this._allowedTools;
 
-		const registeredTools = this._extensionRunner.getAllRegisteredTools();
+		// An extension's unmodified copy of a built-in shell tool runs background commands in this session.
+		const registeredTools = this._extensionRunner.getAllRegisteredTools().map((tool) => ({
+			...tool,
+			definition: bindBackgroundShells(tool.definition, this.backgroundShells),
+		}));
 		const allCustomTools = [
 			...registeredTools,
 			...this._customTools.map((definition) => ({
@@ -3854,6 +4111,7 @@ export class AgentSession {
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
 					bash: { commandPrefix: shellCommandPrefix, shellPath },
+					backgroundShells: this.backgroundShells,
 				});
 
 		this._baseToolDefinitions = new Map(
@@ -3891,6 +4149,16 @@ export class AgentSession {
 	}
 
 	async reload(options?: { beforeSessionStart?: () => void | Promise<void> }): Promise<void> {
+		// A notice must not start a run while the extension runner is replaced.
+		const release = this.holdBackgroundWake();
+		try {
+			await this._reload(options);
+		} finally {
+			release();
+		}
+	}
+
+	private async _reload(options?: { beforeSessionStart?: () => void | Promise<void> }): Promise<void> {
 		const oldRunner = this._extensionRunner;
 		const oldOwner = this._virtualModelOwner;
 		const previousFlagValues = oldRunner.getFlagValues();
