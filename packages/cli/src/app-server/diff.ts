@@ -521,6 +521,48 @@ export async function readThreadDiff(
 		...(trees.turnId !== undefined ? { turnId: trees.turnId } : {}),
 		...(trees.stale ? { stale: true } : {}),
 		...(trees.against !== undefined ? { against: trees.against } : {}),
+		// Whitespace-blind hunks do not line up with the trees' own text, so such a read names none.
+		...(trees.from && !params.ignoreWhitespace ? { fromTree: trees.from, toTree: trees.to } : {}),
+	};
+}
+
+const DIFF_SIDE_LIMIT = 2 * 1024 * 1024;
+const OBJECT_ID = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/**
+ * `thread/diff/file`: both sides of one file between two trees of an earlier read, for expanding its hunks. Only
+ * object ids are taken (never a ref, which could name other content than the read showed, or an option).
+ */
+export async function readDiffFile(
+	repo: Repo,
+	params: { fromTree: string; toTree: string; path: string; oldPath?: string },
+): Promise<ResultOf<"thread/diff/file">> {
+	for (const tree of [params.fromTree, params.toTree]) {
+		if (!OBJECT_ID.test(tree) || (await runGit(repo, ["cat-file", "-e", `${tree}^{tree}`])).code !== 0)
+			throw invalid(`${tree} is not a tree in this repository`);
+	}
+	const side = async (tree: string, path: string): Promise<Buffer | "tooLarge" | undefined> => {
+		try {
+			const result = await runGit(repo, ["cat-file", "blob", `${tree}:${path}`], { maxStdoutBytes: DIFF_SIDE_LIMIT });
+			return result.code === 0 ? result.stdout : undefined;
+		} catch (error) {
+			if (error instanceof OutputTooLarge) return "tooLarge";
+			throw error;
+		}
+	};
+	const [old, next] = await Promise.all([
+		side(params.fromTree, params.oldPath ?? params.path),
+		side(params.toTree, params.path),
+	]);
+	if (old === undefined && next === undefined) throw invalid(`${params.path} is in neither tree`);
+	if (old === "tooLarge" || next === "tooLarge") return { binary: false, tooLarge: true };
+	const binary = [old, next].some((bytes) => bytes?.subarray(0, 8 * 1024).includes(0));
+	if (binary) return { binary: true, tooLarge: false };
+	return {
+		...(old ? { old: old.toString("utf8") } : {}),
+		...(next ? { new: next.toString("utf8") } : {}),
+		binary: false,
+		tooLarge: false,
 	};
 }
 

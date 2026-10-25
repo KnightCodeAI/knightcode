@@ -54,6 +54,9 @@ test("rows say what each call did, as Codex's do", () => {
 		path: "x.ts",
 		target: "C:\\work\\repo\\src\\x.ts",
 	});
+	// A file tab opens where the read started, and an edit's at its first changed line.
+	expect(rowLabel(call("read", { path: "src/x.ts", offset: 30 }), cwd).line).toBe(30);
+	expect(rowLabel(edit("y.ts", "--- a\n+++ b\n@@ -7,2 +7,3 @@\n a\n+b\n c"), cwd).line).toBe(8);
 	expect(rowLabel(call("grep", { pattern: "class", path: "src" }), cwd).text).toBe("Searched for class in src");
 	expect(rowLabel(call("ls", { path: "src" }), cwd).text).toBe("Listed files in src");
 	expect(rowLabel(edit("src/Person.ts"), cwd)).toEqual({
@@ -61,6 +64,7 @@ test("rows say what each call did, as Codex's do", () => {
 		path: "Person.ts",
 		target: "src/Person.ts",
 		stats: { additions: 2, deletions: 1 },
+		line: 1,
 	});
 	expect(rowLabel(edit("src/Person.ts"), cwd, true)).toEqual({ text: "Edited file" });
 	expect(rowLabel({ ...edit("x.ts"), status: "declined" }, cwd).text).toBe("Rejected");

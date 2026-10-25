@@ -77,6 +77,19 @@ export interface ThreadView {
 	notice?: string;
 }
 
+/**
+ * A side panel tab (desktop-shell.md section 9.6). A file tab opens as a preview tab (an italic title), which
+ * the next file opened replaces until it is kept (a double click); `used` orders the least recently used.
+ */
+export type PanelTab =
+	| { kind: "changes" }
+	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number };
+export interface ThreadTabs {
+	tabs: PanelTab[];
+	active: number;
+}
+export const NO_TABS: ThreadTabs = { tabs: [{ kind: "changes" }], active: 0 };
+
 export type { SettingsPage };
 export type View =
 	{ kind: "thread"; id: string } | { kind: "new"; cwd?: string } | { kind: "settings"; page: SettingsPage };
@@ -112,6 +125,8 @@ export interface State {
 	 * fills the thread view in place of the chat (Codex's full screen).
 	 */
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
+	/** Each thread's side panel tabs: Changes first, then the files it opened. */
+	tabs: Record<string, ThreadTabs>;
 	/** Review comments drafted on the diff, per thread; they go with the next message (Codex's "1 comment"). */
 	comments: Record<string, DiffComment[]>;
 	/** Bumped by turn/diff/updated, so an open Changes pane reloads. */
@@ -140,6 +155,7 @@ let state: State = {
 	finding: false,
 	resolvedTheme: "dark",
 	panel: { open: false, width: 0 },
+	tabs: {},
 	comments: {},
 	diffVersion: {},
 	progress: {},
@@ -1283,6 +1299,93 @@ export function setPanel(panel: Partial<State["panel"]>): void {
 	set((s) => ({ ...s, panel: { ...s.panel, ...panel, ...(panel.open === false ? { full: false } : {}) } }));
 }
 
+/** Files a thread keeps open at once (desktop-shell.md section 9.6); a 13th closes the least recently used. */
+export const MAX_FILE_TABS = 12;
+let tabClock = 0;
+/** One file's tab whatever the separators (and, on Windows, the case) a caller spelled its path with. */
+const tabKey = (path: string) => {
+	const slashes = path.replaceAll("\\", "/");
+	return window.knightcode.platform === "win32" ? slashes.toLowerCase() : slashes;
+};
+
+function updateTabs(threadId: string, fn: (tabs: ThreadTabs) => ThreadTabs, open = false): void {
+	set((s) => ({
+		...s,
+		tabs: { ...s.tabs, [threadId]: fn(s.tabs[threadId] ?? NO_TABS) },
+		...(open ? { panel: { ...s.panel, open: true } } : {}),
+	}));
+}
+
+/** Show the Changes tab, optionally on a scope (the edited-files card asks for Last Turn). */
+export function showChanges(threadId = openId(), scope?: DiffScope): void {
+	if (!threadId) return;
+	updateTabs(threadId, (t) => ({ ...t, active: 0 }), true);
+	if (scope) setPanel({ scope });
+}
+
+/**
+ * Open a file in the thread's side panel, scrolled to `line`: its tab if it has one, else in place of the preview tab,
+ * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS.
+ */
+export function openFileTab(threadId: string, path: string, line?: number): void {
+	const used = ++tabClock;
+	updateTabs(
+		threadId,
+		({ tabs }) => {
+			const next = [...tabs];
+			const key = tabKey(path);
+			let at = next.findIndex((t) => t.kind === "file" && tabKey(t.path) === key);
+			if (at !== -1) next[at] = { ...(next[at] as Extract<PanelTab, { kind: "file" }>), line, used };
+			else {
+				const tab: PanelTab = { kind: "file", path, line, preview: true, used };
+				at = next.findIndex((t) => t.kind === "file" && t.preview);
+				if (at !== -1) next[at] = tab;
+				else at = next.push(tab) - 1;
+			}
+			for (;;) {
+				const files = next.flatMap((t, i) => (t.kind === "file" && i !== at ? [{ i, used: t.used }] : []));
+				if (files.length < MAX_FILE_TABS) break;
+				const oldest = files.reduce((a, b) => (b.used < a.used ? b : a));
+				next.splice(oldest.i, 1);
+				if (oldest.i < at) at--;
+			}
+			return { tabs: next, active: at };
+		},
+		true,
+	);
+}
+
+/** A file named in the open thread's transcript, opened in that thread's side panel. */
+export function openFileInView(path: string, line?: number): void {
+	const id = openId();
+	if (id) openFileTab(id, path, line);
+}
+
+export function activateTab(threadId: string, index: number): void {
+	const used = ++tabClock;
+	updateTabs(threadId, ({ tabs }) => ({
+		tabs: tabs.map((t, i) => (i === index && t.kind === "file" ? { ...t, used } : t)),
+		active: index,
+	}));
+}
+
+/** Keep a preview tab (a double click on it), so the next file opens beside it. */
+export function keepTab(threadId: string, index: number): void {
+	updateTabs(threadId, (t) => ({
+		...t,
+		tabs: t.tabs.map((tab, i) => (i === index && tab.kind === "file" ? { ...tab, preview: false } : tab)),
+	}));
+}
+
+/** Close a tab; Changes cannot close, so closing it closes the panel. The tab on its left takes its place. */
+export function closeTab(threadId: string, index: number): void {
+	if (index === 0) return setPanel({ open: false });
+	updateTabs(threadId, ({ tabs, active }) => ({
+		tabs: tabs.filter((_, i) => i !== index),
+		active: active >= index ? active - 1 : active,
+	}));
+}
+
 export function addComment(threadId: string, comment: DiffComment): void {
 	set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [...(s.comments[threadId] ?? []), comment] } }));
 }
@@ -1306,6 +1409,20 @@ export async function handoff(
 		updateThread(threadId, (v) => ({ ...v, thread: result.thread }));
 		upsertSummary(result.thread);
 		return { ...(result.branch ? { branch: result.branch } : {}) };
+	} catch (error) {
+		return error instanceof RequestError ? error : new RequestError("internal", errorText(error));
+	}
+}
+
+/** The handoff's own refusal, if it would refuse now (a dry run: the server checks everything and writes nothing). */
+export async function checkHandoff(
+	threadId: string,
+	to: "local" | "worktree",
+	branch?: string,
+): Promise<RequestError | undefined> {
+	try {
+		await client.request("thread/handoff", { threadId, to, dryRun: true, ...(branch ? { branch } : {}) });
+		return undefined;
 	} catch (error) {
 		return error instanceof RequestError ? error : new RequestError("internal", errorText(error));
 	}

@@ -8,7 +8,12 @@ The desktop app is an Electron window onto the app server specified in
 approval, worktree and git operation; this document owns everything the user
 sees and touches: processes and IPC in the Electron app, windows, the layout,
 the transcript, the composer, approvals, the changes pane, the terminal, the
-preview, settings, keybindings, themes, and GUI extensions.
+preview, settings, keybindings, themes, and MCP Apps.
+
+Amended 2026-10-23 by [v1-completion-plan.md](./v1-completion-plan.md): the
+built-in panes are native code, and third-party UI comes from
+MCP Apps (that plan's decisions D1-D4). The GUI extension SDK this document
+first specified is dropped.
 
 architecture.md section 9 lists what this specification must satisfy. Each of
 those requirements is answered here and cross-referenced in section 15.
@@ -36,8 +41,8 @@ In this repository:
 6. `packages/cli/src/modes/interactive/theme/dark.json`, `light.json`,
    `theme-schema.ts` — the terminal palettes the desktop defaults derive from
    (section 11).
-7. `packages/cli/src/core/package-manager.ts:204-216` — resource types; section
-   12 adds `desktop`.
+7. `packages/cli/src/extensions/mcp/tools.ts` — MCP tool results, where
+   section 12's `mcpApp` detail starts.
 8. `packages/cli/src/app-server/approvals.ts:18-26` — the read-only and edit
    tool sets behind the three approval modes.
 
@@ -93,7 +98,7 @@ Prior art shows each trap concretely:
   windows, and both could answer it.
 - Native code in the renderer. A renderer with Node access turns any XSS in
   rendered markdown or tool output into code execution. Every renderer here is
-  sandboxed; Node lives in the main process and in one extension host.
+  sandboxed; Node lives in the main process.
 
 ---
 
@@ -108,12 +113,13 @@ Prior art shows each trap concretely:
 | Notification routing | Sidebar notifications to every window; thread-scoped ones only to windows holding that thread; server requests to exactly one window (section 4.3) | Broadcast to all windows (section 1.3) |
 | Git, diffs, worktrees | App server only; the desktop calls protocol methods | Desktop-side git worker (section 1.3) |
 | Desktop-only state | One JSON file in Electron `userData`, written atomically (section 7.3) | SQLite (Codex keeps a desktop thread catalog in SQLite: a native module to rebuild per Electron upgrade, and a second copy of what `thread/list` returns) |
-| Terminal | xterm.js in the renderer, `node-pty` in the extension host process, as the built-in `terminal` GUI extension | PTYs in main (a crashed PTY addon takes every window down); the app server's `shell/exec` (architecture.md section 7.2 sizes it for `!` commands, not interactive shells) |
-| Web preview | `WebContentsView` owned by main on its own session partition, positioned over the preview tab | `<webview>` (deprecated in Electron's guidance); an iframe (cannot load arbitrary localhost with the app's CSP, and agent control later needs `webContents.debugger`) |
-| GUI extensions | Sandboxed frames on a per-extension origin, one SDK over a `MessagePort`, optional Node module in the extension host. Built-ins use the same SDK and the same hosting (section 12) | In-process React components for built-ins (the SDK would never be exercised by its hardest users); arbitrary HTML from agent extensions (architecture.md section 8.2 keeps agent views declarative) |
+| Terminal | xterm.js in the renderer, `node-pty` in main (amended 2026-10-23) | A `utilityProcess` extension host (it guards against a native crash at the cost of a process and an IPC hop); the app server's `shell/exec` (architecture.md section 7.2 sizes it for `!` commands, not interactive shells) |
+| Web preview | A `<webview>` tag on a per-thread partition, guarded by main's `will-attach-webview` (amended 2026-10-23) | `WebContentsView` (main must hide it under every menu and modal that overlaps it; a `<webview>` stacks in the DOM, and its guest still takes `webContents.debugger` for section 14's L3); an iframe (cannot load arbitrary localhost with the app's CSP) |
+| Built-in panes | Native React in the renderer: Changes, files, terminal, preview (amended 2026-10-23) | Built-ins on a GUI extension SDK in sandboxed frames (the first draft of section 12) |
+| Third-party UI | MCP Apps: a tool's `ui://` resource drawn in a sandboxed iframe on its own origin, bridged to the app server (section 12) | A KnightCode-only `desktop.json` package type with a `kc-ext://` scheme and an extension host (the first draft); arbitrary HTML from agent extensions (architecture.md section 8.2 keeps agent views declarative) |
 | Windows | One primary window; any thread can open in a secondary window; tabs pop out later (section 14) | Pop-out of every tab in v1 (Codex pops out only browser tabs, and pre-warms a hidden window to make it instant: real complexity for a rare action) |
-| Packaging | Electron Forge with the Vite plugin and the fuses plugin. Windows: per-user Squirrel installer. macOS: signed and notarized dmg and zip. Linux: deb and rpm | MSIX on Windows (package identity, Store certification, and binaries under `WindowsApps` that Codex copies out to `%LOCALAPPDATA%` before it can run them); electron-builder (a third-party layer over what Forge does first-party) |
-| Updates | Electron `autoUpdater` against a signed static feed on knightcode.dev, Windows and macOS; Linux updates through the package manager | Update checks inside the app server (it would update itself mid-session) |
+| Packaging | Electron Forge with the Vite plugin and the fuses plugin. Windows: per-user Squirrel installer. macOS: dmg and zip, ad hoc signed until a Developer ID exists, then signed and notarized. Linux: deb and rpm | MSIX on Windows (package identity, Store certification, and binaries under `WindowsApps` that have to be copied out to `%LOCALAPPDATA%` before they can run); electron-builder (a third-party layer over what Forge does first-party) |
+| Updates | Electron `autoUpdater` on Windows against a knightcode.dev feed over GitHub releases tagged `desktop-v*`; on macOS, until the app is signed, the same feed drives an "Update available" banner; Linux updates through the package manager | Update checks inside the app server (it would update itself mid-session); update.electronjs.org (it serves the repository's newest release, a CLI release here) |
 | Login | The app server's `account/*` methods; the desktop shows their prompts | Desktop-side OAuth (two credential stores) |
 
 ---
@@ -123,13 +129,11 @@ Prior art shows each trap concretely:
 ```text
 Main            the Electron main process. Node. No UI.
 Renderer        one per window. Sandboxed, no Node. All pixels.
-Extension host  one Electron utilityProcess with Node, for GUI extension
-                host modules (the terminal's PTYs among them).
 App server      the knightcode app-server child (architecture.md).
 Project         a folder the user added to the sidebar. Threads are listed
                 under the project whose path equals their projectCwd.
-Tab             a pane in a window's workspace: a thread, a changes view,
-                a terminal, a preview, a file, an extension tab.
+Tab             a pane in a thread's side panel: Changes, a file, a
+                preview, an MCP App; terminals have the bottom region.
 ```
 
 ### Main
@@ -141,8 +145,9 @@ Owns:
 - routing between windows and the app server (section 4);
 - the desktop state file (section 7.3);
 - native dialogs, clipboard, `shell.openExternal`, open-in-editor;
-- the preview `WebContentsView`s;
-- the extension host's lifetime and the `kc-ext://` protocol (section 12).
+- terminal PTYs (section 9.7);
+- the guards on preview `<webview>` guests and their captures (section 9.8);
+- the `kc-mcp-app://` protocol serving MCP App HTML (section 12).
 
 ### Renderer
 
@@ -154,14 +159,8 @@ Owns:
 - which threads are on screen, and so which it holds (section 4.3).
 
 A renderer never spawns a process, reads a file, or speaks to the network
-except to `app://` and to the extension frames it embeds.
-
-### Extension host
-
-Owns the Node side of GUI extensions: built-in terminal PTYs, and host modules
-of installed GUI extensions (section 12). One process for all of them, so a
-crash kills extensions, not windows; main restarts it with backoff and every
-terminal tab shows "Terminal ended — Restart".
+except to `app://`, to the MCP App frames it embeds, and to the pages its
+preview `<webview>`s load.
 
 ---
 
@@ -246,16 +245,19 @@ or invalid params answers `invalidParams`.
 | `host/dialog/openFiles` | `{filters?, multiple?}` → `{paths}`; used for image attachments, sent as `{path}` images (architecture.md section 4.2) |
 | `host/shell/openExternal` | `{url}` → `{}`; http, https and mailto only |
 | `host/shell/showInFolder` | `{path}` → `{}` |
-| `host/openIn/list` | `{}` → `{targets: {id, name, icon}[]}` (section 9.9) |
+| `host/openIn/list` | `{}` → `{targets: {id, name, kind, icon?}[]}`; `kind` is `editor`, `terminal`, `fileManager` or `systemDefault` (section 9.9) |
 | `host/openIn/open` | `{targetId, path, line?, column?}` → `{}` |
+| `host/file/saveCopy` | `{path}` → `{path?}`; `path` must be absolute; the result is where the copy went, absent when the dialog was cancelled (section 9.9) |
 | `host/clipboard/writeText` | `{text}` → `{}` |
 | `host/clipboard/readImage` | `{}` → `{path?}`; writes a pasted image to a private temp file |
 | `host/window/open` | `{route}` → `{windowId}` |
 | `host/window/setTitle` | `{title}` → `{}` |
 | `host/notify` | `{title, body, threadId?}` → `{}` |
 | `host/state/read` / `host/state/write` | section 7.3 |
-| `host/preview/*` | section 9.8 |
-| `host/ext/*` | section 12 |
+| `host/preview/capture`, `host/keys/set` | section 9.8 (v1-completion-plan.md 4.2) |
+| `host/terminal/*` | section 9.7 (v1-completion-plan.md 4.2) |
+| `host/mcpApp/serve` / `host/mcpApp/release` | section 12 (v1-completion-plan.md 4.2) |
+| `host/update/check` / `host/update/install` | updates (v1-completion-plan.md Task S4.2) |
 | `host/app/info` | `{}` → `{appVersion, serverVersion, platform, logsDir}` |
 | `host/app/relaunch` | `{}` → never answers |
 
@@ -379,7 +381,12 @@ webPreferences: {
   `file://`.
 - CSP: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src
   'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self';
-  connect-src 'self'; frame-src kc-ext:; worker-src 'self' blob:`.
+  connect-src 'self'; frame-src kc-mcp-app:; worker-src 'self' blob:`.
+- `webviewTag` is on for app windows (the preview, section 9.8); main's
+  `will-attach-webview` strips any preload, forces `nodeIntegration` off,
+  `contextIsolation` and `sandbox` on, and refuses a partition outside
+  `persist:kc-preview:<threadId>` or a source that is not http, https or
+  `about:blank`.
 - `will-navigate` is prevented unless the target is the page's own URL (a
   reload: Vite's, or the store's after a hot update); `setWindowOpenHandler`
   denies, opening http and https links with `shell.openExternal`.
@@ -505,8 +512,8 @@ theme and keybindings.
 
 Prior art: Codex lets plugins ship arbitrary HTML apps in a sandboxed frame,
 declared on MCP tools. Agent extensions here stay declarative (architecture.md
-section 8.2); arbitrary UI is the job of GUI extensions (section 12), which
-the user installs knowingly.
+section 8.2); arbitrary UI comes from MCP Apps (section 12) of
+MCP servers the user configured knowingly.
 
 ---
 
@@ -846,47 +853,89 @@ composer then shows its controls as icons only.
   Apply, a step list while it runs, and `gitConflict` paths with
   `recoveryInstructions` shown verbatim when it fails.
 
-### 9.7 Terminal (built-in GUI extension)
+### 9.7 Terminal
 
-- Bottom region by default, spanning the thread and the right region; Mod+\`
-  opens a terminal in the active thread's cwd, Mod+J toggles the region. Its
-  tab strip names each terminal by its shell and cwd, with + to add one and a
-  chevron to collapse the region.
+- Bottom region, spanning the thread and the side panel: at
+  least 160px, shut when dragged under 80px. Mod+\` opens a terminal in the
+  active thread's cwd, Mod+J toggles the region. Its tab strip names each
+  terminal by its shell and cwd, with + to add one and a chevron to collapse
+  the region.
+- xterm.js in the renderer; `node-pty` in main (`host/terminal/*`).
+  Colours from the `--kc-ansi-*` and `--kc-terminal-*`
+  tokens.
 - Shell: the preference, else `pwsh`, then `powershell`, then `%COMSPEC%` on
   Windows; `$SHELL`, then `/bin/bash`, then `/bin/sh` elsewhere. Git Bash and
   WSL are offered in the menu on Windows when found.
-- Each terminal belongs to a thread (its cwd) and survives tab moves and
-  window reloads: the extension host keeps 64 KiB of scrollback and replays it
-  on reattach. Terminals end when their thread is archived or the app quits.
+- Each terminal belongs to a thread (its cwd) and survives window reloads:
+  main keeps 64 KiB of scrollback and replays it on reattach. Terminals end
+  when their thread is archived or deleted, or the app quits.
 - A terminal whose cwd is outside the thread's workspace says so in its tab.
 
-### 9.8 Preview (built-in GUI extension)
+### 9.8 Preview
 
-A preview tab holds a `WebContentsView` owned by main (`host/preview/create`,
-`/navigate`, `/setBounds`, `/destroy`), on session partition
-`persist:kc-preview`, with:
+A preview tab in the side panel holds a `<webview>` on the partition
+`persist:kc-preview:<threadId>` (one per thread, so a sign-in carries across a
+thread's tabs; cleared when the thread is deleted), guarded by main (section
+6.3), with:
 
 - an address bar (Mod+L), back, forward, reload, open in browser;
-- navigation limited to http and https; permission requests denied;
+- navigation limited to http and https (the address bar checks before it
+  loads, since main's `will-navigate` never sees `loadURL`; main refuses
+  page navigations and redirects to anything else); permission requests denied;
   downloads ask through a native save dialog;
-- "Annotate": select a region, capture it with `webContents.capturePage`,
-  and attach it to the composer as an image with the page URL. This is the
-  user showing the agent something; the agent driving the page is section 14.
+- "Annotate": select a region; main captures it from the guest with
+  `webContents.capturePage` (`host/preview/capture`, only for a guest of the
+  asking window) and the composer gets it as an image with the page URL. This
+  is the user showing the agent something; the agent driving the page is
+  section 14.
 
-The view sits on top of the renderer, so main hides it whenever a modal,
-menu or drag would overlap its rectangle (the renderer reports overlap with
-`host/preview/setBounds`).
+The `<webview>` is part of the DOM, so menus and modals stack over it with no
+help from main.
 
 ### 9.9 Files and open-in
 
 A read-only file tab (from tool rows and the changes pane) shows the file with
-syntax highlighting and line numbers; "Open in…" lists editors found by
-`host/openIn/list`. Detection on Windows checks, in order: PATH commands
-(`code`, `cursor`, `zed`, `windsurf`, …), `%LOCALAPPDATA%\Programs`,
-`Program Files`, then Start Menu shortcuts; on macOS `/Applications` and
-Launch Services; on Linux PATH and `.desktop` files. Launch with `--goto
-path:line:column` where the editor supports it. Prior art: Codex's detection
-order on Windows.
+syntax highlighting and line numbers, read through `file/read`, at the line the
+tool read or changed; the Changes pane expands unchanged lines between hunks
+from `thread/diff/file`'s two sides (v1-completion-plan.md, D5). Tabs are
+per thread: Changes first, then file tabs that share the strip (240px
+each, shrinking to 120px, then scrolling); a tab opened in passing is italic
+and the next one replaces it, a double-click keeps it, and past 12 file tabs
+the least recently used goes. Mod+Shift+W closes the active one.
+
+"Open in…" lists what `host/openIn/list` finds, each with its program's icon,
+and remembers the choice per project and overall. The targets, in menu
+order:
+VS Code, VS Code Insiders, Visual Studio, Cursor, Devin Desktop, BBEdit, Emacs,
+Sublime Text, Zed, Windsurf, Antigravity, GitHub Desktop, the default app, the
+file manager, Terminal, Git Bash, Cmder, WSL, iTerm2, Kitty, Ghostty, Warp,
+Xcode, the eight JetBrains IDEs and TextMate, each only on the platforms where
+it is looked for (no Windows Emacs or Windsurf). Windows: the PATH command, a shim
+resolved to the program beside or above its `bin`, then `%LOCALAPPDATA%\Programs`,
+`Program Files` and `Program Files (x86)` (newest folder first for JetBrains),
+GitHub Desktop in `%LOCALAPPDATA%` itself, Visual Studio by year and edition
+then `vswhere`, Windows Terminal through its app alias or Start menu shortcut,
+Cmder through `%CMDER_ROOT%`. macOS: fixed `/Applications` paths (also under
+`~/Applications`), app bundles by name prefix, JetBrains Toolbox's apps, `xed`
+for Xcode. Linux: PATH, JetBrains Toolbox scripts, then `.desktop` entries
+through `gio launch`, which takes the path alone. Each editor gets its own
+go-to-line syntax (`--goto path:line:column`, `path:line:column`, `--line`,
+`+line:column`, TextMate's `txmt://` URL); a terminal opens at the folder, and
+on macOS and Linux a file opens in `$VISUAL`, `$EDITOR` or the first of nvim,
+vim, nano and less inside the terminal, at the line (osascript for Terminal and
+iTerm2, `open -na` for Kitty and Ghostty, each Linux terminal's own run flag).
+A Windows `.cmd` shim never runs through cmd.exe with the path as an
+argument, which cmd.exe would parse (`&`, `%`); a shim stands for the
+program above it or is left out. The menu ends with "Open in folder", "Open in
+GitHub" when the checkout's origin is on github.com and a branch is checked out
+(`git/origin`; the file at the branch and line), and "Save as…"
+(`host/file/saveCopy`: the save dialog with the file's name, written whole).
+Icons on Windows come from one PowerShell extraction per listing, since
+Electron's `getFileIcon` gives many programs the generic icon. Detection runs
+at most once a minute; vswhere and xcode-select run as child processes, so main
+waits on neither (about 30-45 ms of main's time on this machine, 255 ms in all).
+
+Status (2026-10-23): built in S2b with the handoff dialog's dry run.
 
 ### 9.10 Settings
 
@@ -1030,7 +1079,12 @@ The shortcuts page lists every id, including those with no default.
 
 ### 11.1 Theme files
 
-A desktop theme is JSON, contributed by a `desktop` resource (section 12):
+Not implemented, and no longer planned for v1: no package contributes a
+theme (the `desktop` resource type is dropped, section 12). What is built is
+section 11.3's customization: a background, a foreground and an accent per
+theme (`renderer/appearance.ts:17-19`), mixed in RGB, travelling by Copy
+theme and Import theme as `knightcode-theme-v1:` JSON of that customization.
+The theme file this section first specified was:
 
 ```ts
 interface DesktopTheme {
@@ -1073,8 +1127,8 @@ literals in `apps/desktop/src/renderer`:
 --kc-font-ui  --kc-font-code  --kc-size-ui  --kc-size-code  --kc-radius
 ```
 
-Defaults: UI 13 px, code 12 px, radius 8 px. Extension frames receive the
-resolved token values through the SDK (section 12.3).
+Defaults: UI 13 px, code 12 px, radius 8 px. MCP Apps receive the theme in
+their `ui/initialize` host context (section 12).
 
 ### 11.3 Customization (Settings › Appearance)
 
@@ -1108,78 +1162,64 @@ and dark modes" (customizations are always per theme).
 
 ---
 
-## 12. GUI extensions
+## 12. MCP Apps
 
-### 12.1 Packaging
+Third-party UI in the desktop is the MCP Apps extension of MCP
+(`io.modelcontextprotocol/ui`). The first
+draft of this section, a GUI extension SDK with a `desktop.json` package type,
+a `kc-ext://` scheme and a `utilityProcess` extension host, is dropped
+(v1-completion-plan.md, D1-D2). Built-in panes are native (section 2).
 
-A KnightCode package gains a `desktop` resource type beside `extensions`,
-`skills`, `prompts` and `themes` (`package-manager.ts:208`), matching
-`desktop/*/desktop.json`:
+### 12.1 Source
 
-```ts
-interface DesktopManifest {
-	name: string;                       // unique id, [a-z0-9-]
-	displayName: string;
-	ui?: string;                        // HTML entry, relative
-	host?: string;                      // Node module for the extension host, relative
-	contributes?: {
-		tabs?: { id: string; title: string; icon?: string; region?: "main" | "right" | "bottom" }[];
-		commands?: { id: string; title: string; keybinding?: string }[];
-		themes?: string[];              // DesktopTheme files
-		settings?: { id: string; title: string }[];   // settings pages rendered by `ui`
-	};
-	permissions?: ("threads.read" | "threads.write" | "files.read" | "process" | "preview")[];
-}
-```
-
-Project-local packages are gated by the existing project trust; an untrusted
-project's `desktop` resources do not load.
+- The MCP extension advertises the extension's client capability with the
+  `text/html;profile=mcp-app` MIME type. A tool whose `_meta.ui.resourceUri`
+  names a `ui://` resource puts `{server, resourceUri}` in its result's
+  details; the app server carries it as the tool item's `mcpApp`.
+- A tool whose `_meta.ui.visibility` leaves out `"model"` is callable by its
+  app and not offered to the model.
+- Apps come only from MCP servers the user configured; an agent extension
+  cannot ship HTML (architecture.md section 8.2).
 
 ### 12.2 Hosting
 
-- UI runs in a frame `kc-ext://<name>/<ui>`, a privileged standard scheme
-  served by main from the extension's directory only, with its own CSP
-  (`default-src 'self'`, no network). Each extension has its own origin, so
-  frames cannot read each other or `app://desktop`.
-- Frames are `sandbox="allow-scripts allow-same-origin allow-forms"`; no
-  popups, no top navigation.
-- `host` modules are ES modules loaded into the one extension host
-  `utilityProcess`, each receiving its own host API object. They are trusted
-  code, as agent extensions are, and run only for packages the user installed
-  or trusted. A host module that throws at load is disabled with a toast; it
-  does not take the others down.
+- The renderer reads the HTML with `mcp/app/readResource`; main serves it at
+  `kc-mcp-app://<uuid>/index.html`, a privileged standard scheme, one origin
+  per app instance, with the spec's restrictive default CSP widened only by
+  the resource's declared `connectDomains`, `resourceDomains`,
+  `frameDomains` and `baseUriDomains` (nothing undeclared reaches the
+  network).
+- The frame is `sandbox="allow-scripts allow-same-origin"` with no referrer
+  and no `allow` permissions. Its origin is
+  its own, so `allow-same-origin` reaches neither `app://desktop` nor another
+  app. The spec's sandbox proxy is for web hosts; a desktop host draws the
+  View directly.
+- An app draws inline in its tool row (48-720px high, from the app's size
+  notifications) and opens full screen as a side panel tab.
 
-### 12.3 SDK
+### 12.3 Bridge
 
-One `MessagePort` per frame, from main, wrapped by `@knightcode/desktop-sdk`
-(a new private package, published later):
+`renderer/mcp-app-bridge.ts` speaks the extension's JSON-RPC over
+`postMessage` (MCP Apps, Stable 2026-01-26), accepting only the frame's own
+window and origin, and sending nothing before the app's
+`ui/notifications/initialized`: `ui/initialize` (theme and style variables,
+display mode, locale, platform), tool input, result and cancellation
+notifications, `ui/resource-teardown` before the frame goes, `tools/call`
+through `mcp/app/callTool`, `resources/read` of the same server through
+`mcp/app/readResource`, `ui/open-link` (http and https), `ui/message` (sent as
+the user's message after a confirm card), size changes, and display mode requests (`inline` and
+`fullscreen`). Anything else, `ui/update-model-context` included, answers
+`-32601`. v1-completion-plan.md's "MCP Apps coverage" table is the full
+list.
 
-```ts
-interface DesktopExtensionContext {
-	theme: { tokens(): Record<string, string>; onChange(f: (t: Record<string, string>) => void): () => void };
-	protocol: { request<M extends ClientMethod>(m: M, p: ParamsOf<M>): Promise<ResultOf<M>>;
-		onNotification(f: (n: Notification) => void): () => void };      // filtered by `permissions`
-	host: { call(method: string, params: unknown): Promise<unknown>;     // this extension's host module
-		onEvent(f: (event: string, data: unknown) => void): () => void };
-	ui: { toast(message: string, kind?: "info" | "warning" | "error"): void;
-		openTab(tabId: string, state?: unknown): void; setTitle(title: string): void };
-	tab: { state: unknown; threadId?: string; cwd?: string };
-}
-```
+### 12.4 Approval
 
-`protocol.request` is limited by `permissions`: `threads.read` allows
-`thread/list`, `thread/read`, `thread/resume`; `threads.write` adds
-`turn/*` and `thread/settings/update`; `files.read` allows `file/search`.
-Requests outside the grant answer `permissionDenied` in the frame.
-
-### 12.4 Built-ins on the same SDK
-
-The terminal (`ui` with xterm.js, `host` with node-pty, permission `process`),
-the changes pane (`threads.read`, `threads.write`), and the preview
-(`preview`) are bundled packages loaded exactly like installed ones, from
-`<resources>/desktop-builtins/`. A test loads each through the SDK with no
-privileged path (section 16). Prior art: Codex's code review UI is itself a
-sandboxed app declared by a plugin, the same seam this SDK provides.
+An app's tool call runs through the app server's gate, not the agent's: full
+access runs it; Ask and Auto-edit run a tool annotated read-only and answer
+`approvalRequired` for any other, which the desktop turns into a confirm card
+naming the server and the tool before retrying with `confirmed`. An app
+calls only its own server's tools, and only those whose `_meta.ui.visibility`
+includes `"app"`.
 
 ---
 
@@ -1210,7 +1250,11 @@ architecture.md section 4.6:
 - `sessionFile` on a loaded thread (section 9.3, Copy conversation path);
 - `server/diagnostics` (section 9.10);
 - `thread/unsubscribe` status (section 4.3);
-- `initialize` `platform` (section 9.9 paths, section 9.7 shells).
+- `initialize` `platform` (section 9.9 paths, section 9.7 shells);
+- `file/read`, `thread/diff/file` and `thread/handoff`'s `dryRun` (section
+  9.9, the handoff dialog), `mcp/app/readResource`, `mcp/app/callTool` and the tool
+  item's `mcpApp` (section 12), specified in v1-completion-plan.md section
+  4.1.
 
 ---
 
@@ -1222,14 +1266,14 @@ Specified enough here that v1 does not block them; each gets its own spec.
 | --- | --- | --- |
 | L1 | Pop-out tabs, quick-launch window on a global hotkey, tray | tabs are routes; `host/window/open` |
 | L2 | Full-text thread search | sidebar search box; a server `thread/search` |
-| L3 | Agent control of the preview (navigate, click, read DOM, screenshot) | `WebContentsView` with `webContents.debugger` (architecture.md section 9) |
+| L3 | Agent control of the preview (navigate, click, read DOM, screenshot) | the preview `<webview>`'s guest, reached by main through `webContents.fromId` and its `webContents.debugger` (architecture.md section 9) |
 | L4 | Agent-to-app tools: the agent opens tabs, creates threads and worktrees, changes settings, through approval-gated tools | `host/*` methods behind a tool extension |
 | L5 | Scheduled runs and recurring threads | none in v1; architecture.md section 12 excludes them until then |
 | L6 | Remote hosts: SSH and WSL app servers, one connection per host | main's single client becomes one client per host; routing keys gain a host id |
 | L7 | Subagent threads shown under their parent | `parentThreadId` on `Thread` |
-| L8 | Code review inbox for pull requests | a GUI extension on the SDK |
+| L8 | Code review inbox for pull requests | an MCP App (section 12) |
 | L9 | Voice input | composer attachment slot |
-| L10 | Extension marketplace | `desktop` resource type and package install |
+| L10 | Extension marketplace | package install; MCP servers with apps (section 12) |
 
 Not planned: an OS sandbox for agent commands, ChatGPT-style chats without a
 project, desktop pets, hardware macro pads.
@@ -1279,20 +1323,20 @@ changes pane give it a place.
 ### Phase S2 — changes, worktrees, git (needs B)
 
 - Changes pane, worktree composer options, handoff UI, Worktrees settings.
-- Read-only file tabs and "Open in…" (section 9.9): `src/main/open-in.ts`, `host/openIn/list`.
+  Done (#395).
+- Read-only file tabs, "Open in…", hunk expansion and the handoff pre-check
+  moved to S2b, built there (section 9.9).
 
-### Phase S3 — GUI extensions, terminal, preview, extension UI (needs C)
+### Phases S2b, S3, S4 — planned in v1-completion-plan.md
 
-- `kc-ext://` scheme, extension host, `packages/desktop-sdk/`, `desktop`
-  resource type in `package-manager.ts`, built-in terminal, changes pane moved
-  onto the SDK, preview with annotate, View rendering, Extensions settings,
-  `docs/desktop-extensions.md`.
-
-### Phase S4 — packaging and updates
-
-- Forge makers per platform, signing and notarization, the bundled
-  `knightcode` binary and `knightcode.version` under `resources/knightcode/`,
-  fuses, update feed, release workflow, changeset.
+- S2b: file tabs, "Open in…" (`src/main/open-in.ts`, `host/openIn/*`), hunk
+  expansion, the handoff dry run.
+- S3: the terminal (node-pty in main, xterm.js), the preview (`<webview>`),
+  MCP Apps. View rendering and the extension settings pages are done (Phase
+  C, S1).
+- S4: makers, the bundled `knightcode` binary and `knightcode.version` under
+  `resources/knightcode/`, signing hooks (unsigned in v1), the update feed,
+  the release workflow, end-to-end tests, the memory figures.
 
 ---
 
@@ -1317,7 +1361,11 @@ transport where possible):
   killed only after the deadline.
 - `desktop-state.json` corrupt: renamed, defaults apply; writes are atomic.
 - The `app://` protocol rejects `..` and paths outside the renderer directory;
-  `kc-ext://` serves only the extension's own directory.
+  `kc-mcp-app://` serves only an app's own HTML at `/index.html`, with the CSP
+  its resource declared.
+- A `<webview>` with a partition outside `persist:kc-preview:`, a `file:`
+  source or a preload is refused or stripped; a capture of another window's
+  guest is refused.
 - Host method params failing their schema answer `invalidParams`.
 
 Renderer (`apps/desktop/test/renderer/`, Vitest with jsdom):
@@ -1334,11 +1382,12 @@ Renderer (`apps/desktop/test/renderer/`, Vitest with jsdom):
 - Theme derivation: every built-in theme meets WCAG AA (4.5:1) for
   `--kc-text` and 3:1 for `--kc-text-muted` on `--kc-bg-surface`.
 
-GUI extensions:
+MCP Apps:
 
-- Each built-in loads through the SDK from its manifest with no privileged
-  code path; a frame request outside its `permissions` answers
-  `permissionDenied`; an untrusted project's `desktop` resources do not load.
+- The bridge ignores a message from another window or origin, answers an
+  unknown method with `-32601`, and retries an `approvalRequired` call with
+  `confirmed` only after the user confirms; an app reaches only its own
+  server's tools.
 
 End to end (Playwright `_electron`, faux provider, Windows and Linux CI):
 
@@ -1354,7 +1403,9 @@ Do not add:
 
 - Git, file reads or settings writes in main or the renderer (they are
   protocol calls).
-- Node access in any renderer or extension frame.
+- Node access in any renderer, MCP App frame or preview guest.
+- A GUI extension SDK, `desktop.json`, `kc-ext://` or an extension host
+  process (section 12).
 - A second store or cache of thread contents outside the renderer's store.
 - SQLite or another native database in the desktop.
 - A `knightcode` binary resolved from PATH in a packaged build.
@@ -1377,16 +1428,19 @@ From the repo root:
 - `cd apps/desktop && bun x playwright test` (end to end)
 - `rg -n "nodeIntegration: true|contextIsolation: false|sandbox: false" apps/desktop/src`
   → no matches.
-- `rg -n "#[0-9a-fA-F]{3,8}\b|rgb\(" apps/desktop/src/renderer --glob "!**/themes/**"`
-  → no matches.
+- `rg -c "#[0-9a-fA-F]{3,8}\b|rgb\(" apps/desktop/src/renderer --glob "!**/themes/**" --glob "!*.css"`
+  → no TypeScript file above its count on 2026-10-23 (amended: this grep
+  once required no matches, which `main` never met; the counts are listed
+  in v1-completion-plan.md section 9). Colours are defined as tokens in the
+  stylesheets, which may grow.
 - `rg -n "child_process|spawn\(" apps/desktop/src/renderer apps/desktop/src/preload`
   → no matches.
 - `rg -n "simple-git|isomorphic-git|\"git\"," apps/desktop/src` → no matches.
 - `rg -n "event\.key ===|e\.key ===" apps/desktop/src/renderer` → matches only
   in the keybinding dispatcher.
 - Memory: with ten threads held across three windows and one terminal per
-  thread, record main, renderer, extension host and app server working sets on
-  Windows and macOS; publish the figures here before S1 acceptance.
+  thread, record main, renderer and app server working sets on Windows and
+  macOS; publish the figures here before v1 acceptance (S4).
 - Manual, per phase, on Windows and macOS: the end-to-end flow above, a
   server kill (`taskkill /F` / `kill -9`) mid-turn and the recovery banner, a
   second window on the same thread answering an approval, keyboard-only use of
@@ -1398,8 +1452,9 @@ From the repo root:
 
 The desktop app v1 is complete when:
 
-- It installs and updates on Windows and macOS, and installs on Linux, with
-  the bundled `knightcode` binary and no PATH dependency.
+- It installs and updates on Windows, installs on macOS (ad hoc signed, with
+  an "Update available" banner until it is signed) and on Linux, with the
+  bundled `knightcode` binary and no PATH dependency.
 - Many threads across many projects run at once in one app server; the
   sidebar shows running, waiting, unread and failed threads without
   subscribing to them.
@@ -1408,8 +1463,9 @@ The desktop app v1 is complete when:
   modes with command-prefix allowance.
 - The changes pane stages, reverts, comments, commits, pushes, opens PRs and
   hands off worktrees.
-- The terminal, the changes pane and the preview are GUI extensions loaded
-  through the public SDK, and a third-party GUI extension can add a tab.
+- A thread has terminals and a preview with Annotate, file tabs and "Open
+  in…"; an MCP server's app draws in its tool row, calls its own tools
+  through the approval gate, and opens full screen in the side panel.
 - Agent extension dialogs, notifications, status, widgets and views render.
 - Every requirement of architecture.md section 9 is met, the required tests
   pass, and every validation grep matches as stated.

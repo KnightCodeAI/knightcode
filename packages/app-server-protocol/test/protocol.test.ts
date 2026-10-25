@@ -109,15 +109,18 @@ const requestParams: Record<string, unknown> = {
 	},
 	"thread/resume": { threadId: "t1", cursor: "opaque-history-anchor" },
 	"thread/fork": { threadId: "t1", atItemId: "m1:user:0", workspace: { mode: "worktree" } },
-	"thread/handoff": { threadId: "t1", to: "local", branch: "kc/fix-it", environment: "dev" },
+	"thread/handoff": { threadId: "t1", to: "local", branch: "kc/fix-it", environment: "dev", dryRun: true },
 	"thread/worktree/restore": { threadId: "t1" },
 	"worktree/list": { cwd: "/p" },
 	"worktree/delete": { path: "/w/ab12/p" },
 	"environment/list": { cwd: "/p" },
 	"environment/save": { cwd: "/p", environments: [environment] },
 	"thread/diff/read": { threadId: "t1", scope: "branch", against: "main", context: 3, ignoreWhitespace: true },
+	"thread/diff/file": { threadId: "t1", fromTree: "4b825dc6", toTree: "9a1b2c3d", path: "b.txt", oldPath: "a.txt" },
+	"file/read": { threadId: "t1", path: "src/a.ts", maxBytes: 1024 },
 	"thread/diff/revert": { threadId: "t1", scope: "uncommitted", path: "a.txt", hunkId: "h1", context: 3 },
 	"git/status": { threadId: "t1" },
+	"git/origin": { threadId: "t1" },
 	"git/stage": { threadId: "t1", path: "a.txt" },
 	"git/unstage": { threadId: "t1", path: "a.txt", hunkId: "h1" },
 	"git/commit": { threadId: "t1", message: "fix it", includeUnstaged: false },
@@ -229,7 +232,11 @@ const requestResults: Record<string, unknown> = {
 		filesOmitted: 0,
 		untrackedSkipped: 0,
 		turnId: "m1",
+		fromTree: "4b825dc6",
+		toTree: "9a1b2c3d",
 	},
+	"thread/diff/file": { old: "one\n", new: "two\n", binary: false, tooLarge: false },
+	"file/read": { path: "/p/src/a.ts", size: 4, binary: false, tooLarge: false, text: "x=1\n" },
 	"thread/diff/revert": { paths: ["a.txt"] },
 	"git/status": {
 		branch: "main",
@@ -243,6 +250,7 @@ const requestResults: Record<string, unknown> = {
 		conflicted: 0,
 		operation: "merge",
 	},
+	"git/origin": { root: "/repo", url: "git@github.com:owner/repo.git", branch: "main" },
 	"git/stage": { paths: ["a.txt"] },
 	"git/unstage": { paths: ["a.txt"] },
 	"git/commit": { commit: "89abcdef", message: "fix it" },
@@ -490,6 +498,25 @@ describe("app server protocol", () => {
 		expect(Compile(ServerNotifications["item/completed"]).Check({ threadId: "t1", turnId: "m1", item: userItem })).toBe(
 			true,
 		);
+	});
+
+	test("file and diff-file params keep their bounds", () => {
+		const read = Compile(ClientRequests["file/read"].params);
+		expect(read.Check({ threadId: "t1", path: "a", maxBytes: 1 })).toBe(true);
+		expect(read.Check({ threadId: "t1", path: "a", maxBytes: 8 * 1024 * 1024 })).toBe(true);
+		expect(read.Check({ threadId: "t1", path: "a", maxBytes: 8 * 1024 * 1024 + 1 })).toBe(false);
+		expect(read.Check({ threadId: "t1", path: "a", maxBytes: 0 })).toBe(false);
+		expect(read.Check({ threadId: "t1", path: "a", maxBytes: -1 })).toBe(false);
+		expect(read.Check({ threadId: "t1", path: "a", maxBytes: 1.5 })).toBe(false);
+		expect(read.Check({ threadId: "t1", path: "a", encoding: "utf8" })).toBe(false);
+		const file = Compile(ClientRequests["thread/diff/file"].params);
+		expect(file.Check({ threadId: "t1", fromTree: "a", toTree: "b", path: "x" })).toBe(true);
+		expect(file.Check({ threadId: "t1", fromTree: "a", path: "x" })).toBe(false);
+		expect(file.Check({ threadId: "t1", fromTree: "a", toTree: "b", path: "x", scope: "staged" })).toBe(false);
+		const handoff = Compile(ClientRequests["thread/handoff"].params);
+		expect(handoff.Check({ threadId: "t1", to: "local", dryRun: "yes" })).toBe(false);
+		const fileResult = Compile(ClientRequests["file/read"].result);
+		expect(fileResult.Check({ path: "/a", size: 9, binary: true, tooLarge: false })).toBe(true);
 	});
 
 	test("gitConflict reasons are the listed set", () => {
