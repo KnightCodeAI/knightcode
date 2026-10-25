@@ -1,7 +1,6 @@
-import type { Context, JsonValue, WatchHandle } from "@knightcode/chord";
+import { type Context, type JsonValue, Watch, type WatchHandle } from "@knightcode/chord";
 import { withoutAbortSignal } from "@knightcode/chord/context";
 import { applyImmutable, type NonEmptyPath, type Op, type Path } from "@knightcode/chord/delta";
-import { CommittedWatch } from "../session/observation.ts";
 import { contained, type SessionImpl } from "../session/session.ts";
 import type {
 	CommitPublication,
@@ -110,7 +109,7 @@ export class ConversationViews {
 	async watch(id: ConversationId, context: Context): Promise<WatchHandle<ConversationView>> {
 		const { observer } = await this.attach(
 			id,
-			(value, release) => new CommittedWatch<ConversationView>(value, release, (error) => this.#session.report(error)),
+			(value, release) => new Watch<ConversationView>(value, release, (error) => this.#session.report(error)),
 			context,
 		);
 		const signal = context.abortSignal;

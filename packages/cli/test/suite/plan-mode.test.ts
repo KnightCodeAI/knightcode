@@ -817,7 +817,7 @@ describe("enforced plan mode", () => {
 			});
 			expect(result).toMatchObject({ block: true });
 		}
-		for (const name of ["read", "grep", "find", "ls", "websearch", "webfetch", "bash", "powershell"]) {
+		for (const name of ["read", "grep", "find", "ls", "websearch", "webfetch", "bash", "powershell", "task_stop"]) {
 			expect(
 				await h.session.extensionRunner.emitToolCall({
 					type: "tool_call",
@@ -839,6 +839,7 @@ describe("enforced plan mode", () => {
 				.findLast((e) => e.type === "custom_message" && (e.details as { kind?: string })?.kind === "instructions"),
 		);
 		expect(instructions).toContain("webfetch, websearch");
+		expect(instructions).toContain("task_stop (to stop a background command)");
 	});
 
 	it("keeps web tools the user turned off out of planning and its instructions", async () => {

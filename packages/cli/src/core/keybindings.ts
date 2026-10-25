@@ -51,6 +51,11 @@ const APP_KEYBINDINGS = {
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
 	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output" },
+	"app.tools.background": {
+		// Only taken while a shell command runs in the foreground; otherwise Ctrl+B moves the cursor.
+		defaultKeys: "ctrl+b",
+		description: "Move running shell commands to the background",
+	},
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",
 		description: "Toggle thinking blocks",

@@ -14,7 +14,8 @@ export class CustomEditor extends Editor {
 	private keybindings: KeybindingsManager;
 	private workingStatusIndicator: StatusIndicator | undefined;
 	public readonly embedWorkingStatus: boolean;
-	public actionHandlers: Map<AppKeybinding, () => void> = new Map();
+	/** A handler that returns false leaves the key to the editor, except for app.interrupt and app.exit. */
+	public actionHandlers: Map<AppKeybinding, () => unknown> = new Map();
 
 	// Special handlers that can be dynamically replaced
 	public onEscape?: () => void;
@@ -22,6 +23,8 @@ export class CustomEditor extends Editor {
 	public onPasteImage?: () => void;
 	/** Handler for extension-registered shortcuts. Returns true if handled. */
 	public onExtensionShortcut?: (data: string) => boolean;
+	/** Sees every key first, for focus that leaves the editor (the footer pill). Returns true if handled. */
+	public onKeyIntercept?: (data: string) => boolean;
 
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: CustomEditorOptions) {
 		super(tui, theme, options);
@@ -81,11 +84,12 @@ export class CustomEditor extends Editor {
 	/**
 	 * Register a handler for an app action.
 	 */
-	onAction(action: AppKeybinding, handler: () => void): void {
+	onAction(action: AppKeybinding, handler: () => unknown): void {
 		this.actionHandlers.set(action, handler);
 	}
 
 	handleInput(data: string): void {
+		if (this.onKeyIntercept?.(data)) return;
 		// Check extension-registered shortcuts first
 		if (this.onExtensionShortcut?.(data)) {
 			return;
@@ -137,8 +141,8 @@ export class CustomEditor extends Editor {
 		// Check all other app actions
 		for (const [action, handler] of this.actionHandlers) {
 			if (action !== "app.interrupt" && action !== "app.exit" && this.keybindings.matches(data, action)) {
-				handler();
-				return;
+				if (handler() !== false) return;
+				break;
 			}
 		}
 
