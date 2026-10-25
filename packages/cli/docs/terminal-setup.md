@@ -239,4 +239,4 @@ KnightCode reports its state with the [Program Status Protocol (OSC 7501)](https
 | `error` | A run ended with an error that is not retried. The message is the first line of the error. |
 | `idle` | KnightCode started, or you cancelled the run. |
 
-Reports never contain prompts or model output. KnightCode sends them only after the terminal answers the protocol's support query; tmux and screen do not forward them. Set `KNIGHTCODE_PROGRAM_STATUS=1` to send reports without asking, or `KNIGHTCODE_PROGRAM_STATUS=0` to turn them off.
+Reports never contain your prompts to the model or its output. A `blocked` report carries the dialog's title, which can be a question such as the project-trust prompt. KnightCode sends them only after the terminal answers the protocol's support query; tmux and screen do not forward them. Set `KNIGHTCODE_PROGRAM_STATUS=1` to send reports without asking, or `KNIGHTCODE_PROGRAM_STATUS=0` to turn them off.

@@ -29,7 +29,8 @@ revision; it is not approval.
 ## What is enforced
 
 Planning permits model-issued calls to `read`, `grep`, `find`, `ls`, `webfetch`,
-`websearch`, `bash`, `powershell`, `ask_user`, and `submit_plan`. Entering plan
+`websearch`, `bash`, `powershell`, `task_stop` (which only stops commands the
+shells started), `ask_user`, and `submit_plan`. Entering plan
 mode turns on `webfetch` and `websearch` unless they are turned off with
 `/tools`; like the other planning tools, they stay on afterwards. Every other
 tool is blocked, including file edits, MCP tools regardless of their read-only
