@@ -69,7 +69,7 @@ function HomeMark() {
 		<button
 			type="button"
 			className="kc-home-mark"
-			aria-label={playing ? "Stop chess animation" : "Play chess animation"}
+			aria-label="Chess animation"
 			aria-pressed={playing}
 			disabled={reduceMotion}
 			onPointerEnter={() => void loadGame()}

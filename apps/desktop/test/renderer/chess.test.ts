@@ -14,8 +14,9 @@ test("every game moves the side to move's pieces and ends on the mate", () => {
 		});
 		expect(game.indexOf("#"), game).toBe(game.length - 1);
 		expect(plies.at(-1)!.check, game).toBe(true);
+		const kings = START.flatMap((piece, i) => (piece.kind === "k" ? [i] : []));
 		expect(
-			[4, 28].map((king) => frames.at(-1)![king]! >= 0),
+			kings.map((king) => frames.at(-1)![king]! >= 0),
 			game,
 		).toEqual([true, true]);
 	}
