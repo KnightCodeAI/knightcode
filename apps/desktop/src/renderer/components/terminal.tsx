@@ -37,6 +37,8 @@ const DEFAULT_HEIGHT = 280;
 const MIN_HEIGHT = 160;
 /** What the region leaves the thread above it. */
 const ABOVE_MIN = 160;
+/** The region's CSS height, which leaves the thread its room however the window shrinks. */
+const regionHeight = (height: number) => `min(${height}px, max(${MIN_HEIGHT}px, 100% - ${ABOVE_MIN}px))`;
 
 /** App bindings a terminal leaves to the window; every other key goes to the shell. */
 const OVER_TERMINAL: KeybindingId[] = [
@@ -293,13 +295,29 @@ function ResizeHandle({ threadId, height }: { threadId: string; height: number }
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientY;
-		const region = event.currentTarget.parentElement!;
+		let region = event.currentTarget.parentElement!;
 		const initial = region.getBoundingClientRect().height;
-		const max = Math.max(MIN_HEIGHT, region.parentElement!.getBoundingClientRect().height - ABOVE_MIN);
-		followDrag((e: PointerEvent) => {
+		// The thread's column, which stays while the region is shut (unmounted) and opened again.
+		const column = region.parentElement!;
+		const max = Math.max(MIN_HEIGHT, column.getBoundingClientRect().height - ABOVE_MIN);
+		let open = true;
+		let dragged: number | undefined;
+		const onMove = (e: PointerEvent) => {
 			const size = initial - (e.clientY - from);
-			setTerminalsOpen(threadId, size >= MIN_HEIGHT / 2);
-			if (size >= MIN_HEIGHT / 2) setBottom({ height: Math.min(Math.max(size, MIN_HEIGHT), max) });
+			if (size >= MIN_HEIGHT / 2 !== open) {
+				open = !open;
+				setTerminalsOpen(threadId, open);
+			}
+			if (!open) return;
+			dragged = Math.round(Math.min(Math.max(size, MIN_HEIGHT), max));
+			// Shut and opened again in this drag, the region is a new element in the same column.
+			if (!region.isConnected)
+				region = column.querySelector<HTMLElement>(":scope > section[aria-label=Terminal]") ?? region;
+			region.style.height = regionHeight(dragged);
+			region.querySelector(":scope > [role=separator]")?.setAttribute("aria-valuenow", `${dragged}`);
+		};
+		followDrag(onMove, () => {
+			if (dragged !== undefined) setBottom({ height: dragged });
 		});
 	};
 	return (
@@ -339,7 +357,7 @@ export function BottomRegion({ threadId, cwd }: { threadId: string; cwd: string 
 	return (
 		<section
 			aria-label="Terminal"
-			style={{ height: `min(${height}px, max(${MIN_HEIGHT}px, 100% - ${ABOVE_MIN}px))` }}
+			style={{ height: regionHeight(height) }}
 			className="relative flex shrink-0 flex-col border-t border-line bg-[var(--kc-terminal-bg)]"
 		>
 			<ResizeHandle threadId={threadId} height={height} />

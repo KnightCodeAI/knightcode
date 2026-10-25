@@ -152,17 +152,20 @@ function ControlButton({
 /** A pane narrower than this folds Refresh, Word wrap, the layout switch and Collapse all into ⋯, as Codex's does. */
 const COMPACT_WIDTH = 720;
 
-/** The element's width, kept current as it resizes. */
-function useWidth(ref: React.RefObject<HTMLElement | null>): number {
-	const [width, setWidth] = useState(0);
+/**
+ * Whether the element is narrower than `width`, kept current as it resizes. Only a change in the answer re-renders, so
+ * a resize drag does not redraw the pane (and its diff) every frame.
+ */
+function useNarrowerThan(ref: React.RefObject<HTMLElement | null>, width: number): boolean {
+	const [narrower, setNarrower] = useState(true);
 	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
-		const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width));
+		const observer = new ResizeObserver(([entry]) => setNarrower(entry!.contentRect.width < width));
 		observer.observe(el);
 		return () => observer.disconnect();
-	}, [ref]);
-	return width;
+	}, [ref, width]);
+	return narrower;
 }
 
 const TREE_MIN = 200;
@@ -185,7 +188,7 @@ function TreeResizeHandle({
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientX;
-		const tree = event.currentTarget.parentElement!;
+		let tree = event.currentTarget.parentElement!;
 		const initial = tree.getBoundingClientRect().width;
 		// The pane's row, past the tree's slot (.kc-tree-slot), which is only as wide as the tree.
 		const row = tree.parentElement!.parentElement!;
@@ -197,7 +200,14 @@ function TreeResizeHandle({
 				open = !open;
 				onOpen(open);
 			}
-			if (open) onWidth(Math.max(TREE_MIN, Math.min(size, max)));
+			if (!open) return;
+			const width = Math.round(Math.max(TREE_MIN, Math.min(size, max)));
+			// Kept outside React, so a tree shown again in this drag mounts at the latest width.
+			onWidth(width);
+			// Shut and shown again in this drag, the tree is a new element in the same row.
+			if (!tree.isConnected) tree = row.querySelector<HTMLElement>(".kc-tree-slot > div") ?? tree;
+			tree.style.width = `${width}px`;
+			tree.querySelector(":scope > [role=separator]")?.setAttribute("aria-valuenow", `${width}`);
 		};
 		followDrag(onMove);
 	};
@@ -447,8 +457,14 @@ function FileSection({
 			file.oldPath,
 		],
 	);
+	// Off screen the file is neither styled nor laid out, so a resize drag reflows only the files in sight. Until first
+	// drawn it holds a guess at its height: its header and ~22px a line.
+	const lines = collapsed ? 0 : file.hunks.reduce((n, hunk) => n + hunk.lines.length, 0);
 	return (
-		<div className="group/file-diff flex flex-col pb-0.5">
+		<div
+			className="group/file-diff flex flex-col pb-0.5 [content-visibility:auto]"
+			style={{ containIntrinsicBlockSize: `auto ${40 + lines * 22}px` }}
+		>
 			<div className="sticky top-0 z-10 bg-surface">
 				{/* A press anywhere on the row opens or closes the file, except on its own buttons and menu (a press in
 				    the menu, drawn elsewhere in the document, still bubbles here through React). The name stays a
@@ -758,7 +774,9 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 	});
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 	const [filter, setFilter] = useState("");
-	const [treeWidth, setTreeWidth] = useState(250);
+	// Not state: a drag sizes the tree itself (TreeResizeHandle), and re-rendering this pane, every file's diff, just to
+	// record the width stalled the drag's last frame. The next render, or the tree shown again, reads it.
+	const treeWidth = useRef(250);
 	// The file tree stays mounted while it slides shut (styles.css, .kc-tree-slot), and slides open only when opened.
 	const [treeShown, setTreeShown] = useState<"open" | "opened" | false>(opts.tree && "open");
 	if (opts.tree && !treeShown) setTreeShown("opened");
@@ -766,7 +784,7 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 	const [branches, setBranches] = useState<ResultOf<"git/branches">>();
 	const scroller = useRef<HTMLDivElement>(null);
 	const pane = useRef<HTMLDivElement>(null);
-	const compact = useWidth(pane) < COMPACT_WIDTH;
+	const compact = useNarrowerThan(pane, COMPACT_WIDTH);
 	const filterRef = useRef<HTMLInputElement>(null);
 
 	const load = useCallback(async () => {
@@ -1198,12 +1216,14 @@ export function ChangesPane({ threadId }: { threadId: string }) {
 						}}
 					>
 						<div
-							style={{ width: treeWidth }}
+							style={{ width: treeWidth.current }}
 							className="relative flex h-full max-w-full shrink-0 flex-col border-l border-line px-1"
 						>
 							<TreeResizeHandle
-								width={treeWidth}
-								onWidth={setTreeWidth}
+								width={treeWidth.current}
+								onWidth={(width) => {
+									treeWidth.current = width;
+								}}
 								onOpen={(tree) => setOpts((o) => ({ ...o, tree }))}
 							/>
 							<div className="flex shrink-0 items-center gap-1 px-1 pt-1 pb-px">

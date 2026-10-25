@@ -159,6 +159,10 @@ const PANEL_MIN = 320;
 /** The room Codex keeps for the chat beside the side panel. */
 const CHAT_MIN = 352;
 
+/** The side panel's CSS width: 54% of the thread view until dragged, and however it narrows, the chat keeps 352px. */
+const panelWidth = (width: number) =>
+	`min(${width ? `${width}px` : "54cqw"}, max(${PANEL_MIN}px, 100cqw - ${CHAT_MIN}px))`;
+
 /**
  * The side panel's left edge: a 16px handle centred on it that drags the panel's width (Codex's, from its bundle,
  * 2026-10-20). The width stays between 320px and what leaves the chat 352px. Dragged under half the minimum the panel
@@ -170,18 +174,34 @@ function PanelResizeHandle() {
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientX;
-		const panel = event.currentTarget.parentElement!;
+		let panel = event.currentTarget.parentElement!;
 		const initial = panel.getBoundingClientRect().width;
 		// The thread view, past the panel's slot.
-		const workspace = panel.parentElement!.parentElement!.getBoundingClientRect().width;
+		const threadView = panel.parentElement!.parentElement!;
+		const workspace = threadView.getBoundingClientRect().width;
 		const max = Math.max(PANEL_MIN, workspace - CHAT_MIN);
+		let shown = { open: true, full: false };
+		let dragged: number | undefined;
 		const onMove = (e: PointerEvent) => {
 			const size = initial - (e.clientX - from);
 			const open = size >= PANEL_MIN / 2;
 			const full = size > max && workspace - size < PANEL_MIN / 2;
-			setPanel(open && !full ? { open, full, width: Math.min(Math.max(size, PANEL_MIN), max) } : { open, full });
+			const sized = open && !full ? Math.round(Math.min(Math.max(size, PANEL_MIN), max)) : undefined;
+			if (sized !== undefined) dragged = sized;
+			// Shutting, opening and full screen go through the store; a width alone only restyles the panel.
+			if (open !== shown.open || full !== shown.full) {
+				shown = { open, full };
+				setPanel(sized === undefined ? { open, full } : { open, full, width: sized });
+			} else if (sized !== undefined) {
+				// Shut long enough to unmount and shown again in this drag, the panel is a new element in the thread view.
+				if (!panel.isConnected) panel = threadView.querySelector<HTMLElement>(".kc-panel-slot > aside") ?? panel;
+				panel.style.width = panelWidth(sized);
+				panel.querySelector(":scope > [role=separator]")?.setAttribute("aria-valuenow", `${sized}`);
+			}
 		};
-		followDrag(onMove);
+		followDrag(onMove, () => {
+			if (dragged !== undefined) setPanel({ width: dragged });
+		});
 	};
 	return (
 		<div
@@ -291,12 +311,8 @@ function SidePanel({ id }: { id: string }) {
 	);
 	return (
 		<aside
-			// 54% of the thread view (its container) until dragged, and all of it in full screen. However the thread view
-			// narrows (a smaller window, the sidebar opening), it leaves the chat 352px, as a drag does.
-			style={{
-				width: full ? "100cqw" : `min(${width ? `${width}px` : "54cqw"}, max(${PANEL_MIN}px, 100cqw - ${CHAT_MIN}px))`,
-				minWidth: PANEL_MIN,
-			}}
+			// The whole thread view (its container) in full screen.
+			style={{ width: full ? "100cqw" : panelWidth(width), minWidth: PANEL_MIN }}
 			className={`relative flex h-full shrink-0 flex-col bg-surface ${full ? "" : "border-l border-line"}`}
 		>
 			{/* As in Codex, a full-screen panel resizes only while a drag that made it so is still going. */}

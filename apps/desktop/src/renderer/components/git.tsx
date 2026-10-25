@@ -46,7 +46,7 @@ import {
 	toast,
 	useStore,
 } from "../store.ts";
-import { BackgroundProcessesSection } from "./background-terminals.tsx";
+import { BackgroundProcessesSection, useBackgroundStart } from "./background-terminals.tsx";
 import { Button, IconButton, Kbd } from "./button.tsx";
 import { Totals } from "./changes.tsx";
 import { Dialog } from "./dialog.tsx";
@@ -1012,6 +1012,16 @@ export function ThreadSummary({ thread, anchor }: { thread: Thread; anchor: RefO
 		setSheet(undefined);
 		refreshDiff(thread.id);
 	};
+	const [open, setOpen] = useState(false);
+	// A command starting in the background opens the summary on its "Background processes", leaving the focus where
+	// it is (the composer). Not over any dialog, sheet or other panel (all role="dialog"), nor while the header it hangs
+	// from is hidden (a full-screen panel).
+	const [popped, setPopped] = useState(false);
+	useBackgroundStart(thread.id, () => {
+		if (open || document.querySelector('[role="dialog"]') || !anchor.current?.checkVisibility()) return;
+		setPopped(true);
+		setOpen(true);
+	});
 	return (
 		<>
 			<Popover
@@ -1022,6 +1032,12 @@ export function ThreadSummary({ thread, anchor }: { thread: Thread; anchor: RefO
 				sideOffset={7}
 				alignOffset={11}
 				className="kc-slide-in"
+				open={open}
+				onOpenChange={(next) => {
+					setOpen(next);
+					setPopped(false);
+				}}
+				takeFocus={!popped}
 				trigger={(open) => (
 					<IconButton label="Toggle summary" aria-expanded={open} className="no-drag">
 						<ListTodo size={16} />

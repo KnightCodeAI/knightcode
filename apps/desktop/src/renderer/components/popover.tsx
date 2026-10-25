@@ -20,13 +20,19 @@ export function Popover({
 	sideOffset = 1,
 	alignOffset = 0,
 	className = "",
+	open: shown,
 	onOpenChange,
+	takeFocus = true,
 }: {
 	/** One element, usually a button; Radix gives it the handlers that open the panel. */
 	trigger: (open: boolean) => ReactNode;
 	children: (close: () => void) => ReactNode;
+	/** Whether the panel is open, for a caller that also opens it itself; it then keeps this in step from onOpenChange. */
+	open?: boolean;
 	/** Told of every open and close, including `close()` from inside. */
 	onOpenChange?: (open: boolean) => void;
+	/** False when the panel opened on its own, not from its trigger, and should leave the focus where it is. */
+	takeFocus?: boolean;
 	side?: "top" | "bottom";
 	align?: "start" | "center" | "end";
 	/** What the panel lines up with, when not the trigger (the thread summary lines up with the header). */
@@ -35,7 +41,8 @@ export function Popover({
 	alignOffset?: number;
 	className?: string;
 }) {
-	const [open, setOpen] = useState(false);
+	const [own, setOpen] = useState(false);
+	const open = shown ?? own;
 	const change = (next: boolean) => {
 		setOpen(next);
 		onOpenChange?.(next);
@@ -56,6 +63,7 @@ export function Popover({
 					// a field inside has already taken it (a search box with autoFocus).
 					onOpenAutoFocus={(event) => {
 						event.preventDefault();
+						if (!takeFocus) return;
 						const panel = event.currentTarget as HTMLElement;
 						if (!panel.contains(document.activeElement)) panel.focus();
 					}}
