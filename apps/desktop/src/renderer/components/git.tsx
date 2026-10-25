@@ -1014,10 +1014,11 @@ export function ThreadSummary({ thread, anchor }: { thread: Thread; anchor: RefO
 	};
 	const [open, setOpen] = useState(false);
 	// A command starting in the background opens the summary on its "Background processes", leaving the focus where
-	// it is (the composer). Not over a sheet or dialog, nor while the header it hangs from is hidden (a full-screen panel).
+	// it is (the composer). Not over any dialog, sheet or other panel (all role="dialog"), nor while the header it hangs
+	// from is hidden (a full-screen panel).
 	const [popped, setPopped] = useState(false);
 	useBackgroundStart(thread.id, () => {
-		if (open || sheet || image || !anchor.current?.checkVisibility()) return;
+		if (open || document.querySelector('[role="dialog"]') || !anchor.current?.checkVisibility()) return;
 		setPopped(true);
 		setOpen(true);
 	});

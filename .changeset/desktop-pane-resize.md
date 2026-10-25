@@ -2,4 +2,4 @@
 "@knightcode/desktop": patch
 ---
 
-Fixed resizing the sidebar, the side panel, the Changes file tree and the terminal lagging with a large diff open.
+Fixed the lag while dragging the edge of the sidebar, the side panel, the Changes file tree or the terminal with a large diff open.

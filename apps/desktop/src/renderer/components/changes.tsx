@@ -194,7 +194,6 @@ function TreeResizeHandle({
 		const row = tree.parentElement!.parentElement!;
 		const max = Math.max(TREE_MIN, row.getBoundingClientRect().width * TREE_MAX_SHARE);
 		let open = true;
-		let dragged: number | undefined;
 		const onMove = (e: PointerEvent) => {
 			const size = initial - (e.clientX - from);
 			if (size >= TREE_MIN / 2 !== open) {
@@ -202,14 +201,15 @@ function TreeResizeHandle({
 				onOpen(open);
 			}
 			if (!open) return;
-			dragged = Math.max(TREE_MIN, Math.min(size, max));
+			const width = Math.round(Math.max(TREE_MIN, Math.min(size, max)));
+			// Kept outside React, so a tree shown again in this drag mounts at the latest width.
+			onWidth(width);
 			// Shut and shown again in this drag, the tree is a new element in the same row.
 			if (!tree.isConnected) tree = row.querySelector<HTMLElement>(".kc-tree-slot > div") ?? tree;
-			tree.style.width = `${dragged}px`;
+			tree.style.width = `${width}px`;
+			tree.querySelector(":scope > [role=separator]")?.setAttribute("aria-valuenow", `${width}`);
 		};
-		followDrag(onMove, () => {
-			if (dragged !== undefined) onWidth(dragged);
-		});
+		followDrag(onMove);
 	};
 	return (
 		<div

@@ -456,7 +456,8 @@ function ResizeHandle({ width }: { width: number }) {
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientX;
-		const column = event.currentTarget.parentElement!;
+		const handle = event.currentTarget;
+		const column = handle.parentElement!;
 		const { left, right } = column.getBoundingClientRect();
 		// Where the edge would be, offset by where on the handle it was grabbed.
 		const collapseAt = (left + SIDEBAR_WIDTH.min) / 2 + from - right;
@@ -470,9 +471,11 @@ function ResizeHandle({ width }: { width: number }) {
 			}
 			if (!open) return;
 			size = clampSidebarWidth(width + e.clientX - from);
-			// Shut and opened again in this drag, the sidebar is a new column, sized through the store.
-			if (column.isConnected) column.style.width = `${size}px`;
-			else setSidebarWidth(size);
+			// Shutting keeps the column mounted; only Settings opening or closing mid-drag replaces it, and the store sizes
+			// the new one.
+			if (!column.isConnected) return setSidebarWidth(size);
+			column.style.width = `${size}px`;
+			handle.setAttribute("aria-valuenow", `${size}`);
 		};
 		followDrag(onMove, () => {
 			if (size !== width) setSidebarWidth(size);

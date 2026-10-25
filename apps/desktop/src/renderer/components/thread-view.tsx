@@ -174,10 +174,11 @@ function PanelResizeHandle() {
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientX;
-		const panel = event.currentTarget.parentElement!;
+		let panel = event.currentTarget.parentElement!;
 		const initial = panel.getBoundingClientRect().width;
 		// The thread view, past the panel's slot.
-		const workspace = panel.parentElement!.parentElement!.getBoundingClientRect().width;
+		const threadView = panel.parentElement!.parentElement!;
+		const workspace = threadView.getBoundingClientRect().width;
 		const max = Math.max(PANEL_MIN, workspace - CHAT_MIN);
 		let shown = { open: true, full: false };
 		let dragged: number | undefined;
@@ -185,13 +186,18 @@ function PanelResizeHandle() {
 			const size = initial - (e.clientX - from);
 			const open = size >= PANEL_MIN / 2;
 			const full = size > max && workspace - size < PANEL_MIN / 2;
-			const sized = open && !full ? Math.min(Math.max(size, PANEL_MIN), max) : undefined;
+			const sized = open && !full ? Math.round(Math.min(Math.max(size, PANEL_MIN), max)) : undefined;
 			if (sized !== undefined) dragged = sized;
 			// Shutting, opening and full screen go through the store; a width alone only restyles the panel.
-			if (open !== shown.open || full !== shown.full || !panel.isConnected) {
+			if (open !== shown.open || full !== shown.full) {
 				shown = { open, full };
 				setPanel(sized === undefined ? { open, full } : { open, full, width: sized });
-			} else if (sized !== undefined) panel.style.width = panelWidth(sized);
+			} else if (sized !== undefined) {
+				// Shut long enough to unmount and shown again in this drag, the panel is a new element in the thread view.
+				if (!panel.isConnected) panel = threadView.querySelector<HTMLElement>(".kc-panel-slot > aside") ?? panel;
+				panel.style.width = panelWidth(sized);
+				panel.querySelector(":scope > [role=separator]")?.setAttribute("aria-valuenow", `${sized}`);
+			}
 		};
 		followDrag(onMove, () => {
 			if (dragged !== undefined) setPanel({ width: dragged });

@@ -295,9 +295,11 @@ function ResizeHandle({ threadId, height }: { threadId: string; height: number }
 	const start = (event: React.PointerEvent) => {
 		event.preventDefault();
 		const from = event.clientY;
-		const region = event.currentTarget.parentElement!;
+		let region = event.currentTarget.parentElement!;
 		const initial = region.getBoundingClientRect().height;
-		const max = Math.max(MIN_HEIGHT, region.parentElement!.getBoundingClientRect().height - ABOVE_MIN);
+		// The thread's column, which stays while the region is shut (unmounted) and opened again.
+		const column = region.parentElement!;
+		const max = Math.max(MIN_HEIGHT, column.getBoundingClientRect().height - ABOVE_MIN);
 		let open = true;
 		let dragged: number | undefined;
 		const onMove = (e: PointerEvent) => {
@@ -307,10 +309,12 @@ function ResizeHandle({ threadId, height }: { threadId: string; height: number }
 				setTerminalsOpen(threadId, open);
 			}
 			if (!open) return;
-			dragged = Math.min(Math.max(size, MIN_HEIGHT), max);
-			// Shut and opened again in this drag, the region is a new element, sized through the store.
-			if (region.isConnected) region.style.height = regionHeight(dragged);
-			else setBottom({ height: dragged });
+			dragged = Math.round(Math.min(Math.max(size, MIN_HEIGHT), max));
+			// Shut and opened again in this drag, the region is a new element in the same column.
+			if (!region.isConnected)
+				region = column.querySelector<HTMLElement>(":scope > section[aria-label=Terminal]") ?? region;
+			region.style.height = regionHeight(dragged);
+			region.querySelector(":scope > [role=separator]")?.setAttribute("aria-valuenow", `${dragged}`);
 		};
 		followDrag(onMove, () => {
 			if (dragged !== undefined) setBottom({ height: dragged });
