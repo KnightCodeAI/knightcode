@@ -38,6 +38,7 @@ import { basename, samePath } from "../format.ts";
 import { isMac, keyLabel, matches } from "../keys.ts";
 import {
 	answerLogin,
+	checkForUpdates,
 	customize,
 	cancelLogin,
 	deleteThread,
@@ -56,6 +57,8 @@ import {
 	showNew,
 	startLogin,
 	toast,
+	installUpdate,
+	openUpdatePage,
 	unarchive,
 	useStore,
 } from "../store.ts";
@@ -2657,6 +2660,7 @@ function About() {
 			<Row title="App server">
 				<span className="text-sm text-secondary">{info?.serverVersion}</span>
 			</Row>
+			<Updates />
 			<Row title="Logs" detail={info?.logsDir}>
 				<Button
 					variant="soft"
@@ -2669,6 +2673,55 @@ function About() {
 				</Button>
 			</Row>
 		</Card>
+	);
+}
+
+/** Settings › About's updates row: where updating stands, and the one thing to do about it. */
+function Updates() {
+	const update = useStore((s) => s.update);
+	const detail =
+		update.state === "unavailable"
+			? window.knightcode.platform === "linux"
+				? "Update KnightCode with the package manager you installed it with."
+				: "Updates come with an installed build."
+			: update.state === "checking"
+				? "Checking for updates…"
+				: update.state === "downloading"
+					? "Downloading an update…"
+					: update.state === "ready"
+						? `KnightCode ${update.version ? `${update.version} ` : ""}is ready. It installs when KnightCode restarts.`
+						: update.state === "available"
+							? `KnightCode ${update.version} is available.`
+							: update.error
+								? `The last check failed: ${update.error}`
+								: update.checkedAt
+									? `Up to date. Checked ${new Date(update.checkedAt).toLocaleString()}.`
+									: undefined;
+	return (
+		<Row title="Updates" detail={detail}>
+			{update.state === "ready" ? (
+				<Button variant="soft" toolbar onClick={installUpdate}>
+					Restart to update
+				</Button>
+			) : update.state === "available" ? (
+				<Button
+					variant="soft"
+					toolbar
+					onClick={() => openUpdatePage(update.url)}
+				>
+					Download
+				</Button>
+			) : update.state === "unavailable" ? null : (
+				<Button
+					variant="soft"
+					toolbar
+					disabled={update.state === "checking" || update.state === "downloading"}
+					onClick={checkForUpdates}
+				>
+					Check for updates
+				</Button>
+			)}
+		</Row>
 	);
 }
 

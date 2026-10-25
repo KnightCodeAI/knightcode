@@ -3,8 +3,10 @@ import { expect, test, vi } from "vitest";
 const fake = vi.hoisted(() => {
 	Object.assign(globalThis, { window: { addEventListener: () => {} } });
 	const requests: Array<{ method: string; params: unknown }> = [];
+	const failing = { updateState: false };
 	let onHostEvent: (event: unknown) => void = () => {};
 	let onNotification: (n: unknown) => void = () => {};
+	let onServerRequest: (r: unknown) => void = () => {};
 	const results: Record<string, (params: { threadId?: string }) => unknown> = {
 		"thread/list": () => ({ threads: [] }),
 		"model/list": () => ({ models: [], default: null }),
@@ -24,17 +26,22 @@ const fake = vi.hoisted(() => {
 			requests.push({ method, params });
 			return Promise.resolve(results[method]!(params));
 		},
-		host: () => Promise.resolve({ projects: [], preferences: {}, sidebar: { width: 276, collapsed: false } }),
+		host: (method: string) =>
+			method === "host/update/state" && failing.updateState
+				? Promise.reject(new Error("no update state"))
+				: Promise.resolve({ projects: [], preferences: {}, sidebar: { width: 276, collapsed: false } }),
 		onNotification: (handler: typeof onNotification) => (onNotification = handler),
-		onServerRequest: () => {},
+		onServerRequest: (handler: typeof onServerRequest) => (onServerRequest = handler),
 		onHostEvent: (handler: typeof onHostEvent) => (onHostEvent = handler),
 	};
 	return {
 		client,
 		requests,
 		results,
+		failing,
 		serverState: (state: string) => onHostEvent({ event: "server/state", state }),
 		notify: (method: string, params: unknown) => onNotification({ method, params }),
+		serverRequest: (id: string, method: string, params: unknown) => onServerRequest({ id, method, params }),
 	};
 });
 
@@ -187,4 +194,82 @@ test("a started thread installs its result's ui; a replaced one takes the new th
 	});
 	await vi.waitFor(() => expect(uiOf("s2")).toEqual(ui([lines("a", "replacement")])));
 	expect(getState().held.s1).toBeUndefined();
+});
+
+test("of two overlapping resumes only the later one applies, whichever answers first, and later events still arrive", async () => {
+	fake.serverState("ready");
+	const saved = fake.results["thread/resume"]!;
+	try {
+		for (const [n, laterFirst] of [
+			[1, false],
+			[2, true],
+		] as const) {
+			const id = `overlap-${n}`;
+			const answers: ((name: string) => void)[] = [];
+			fake.results["thread/resume"] = (params) =>
+				new Promise((resolve) =>
+					answers.push((name) => resolve({ ...(saved(params) as object), thread: { id: params.threadId, name } })),
+				);
+			const first = openThread(id);
+			const second = openThread(id);
+			await vi.waitFor(() => expect(answers).toHaveLength(2));
+			const [older, newer] = answers;
+			if (laterFirst) {
+				newer!("newer");
+				await second;
+				older!("older");
+				await first;
+			} else {
+				older!("older");
+				newer!("newer");
+				await Promise.all([first, second]);
+			}
+			expect(getState().held[id]?.thread.name).toBe("newer");
+			expect(getState().opening[id]).toBeUndefined();
+			// The window's hold is the later resume's too: what the server sends next still lands.
+			fake.notify("ui/state", { threadId: id, statuses: [], title: "Later", workingVisible: true });
+			fake.serverRequest(`approval-${n}`, "item/commandExecution/requestApproval", { threadId: id });
+			await vi.waitFor(() => expect(getState().held[id]?.ui.title).toBe("Later"));
+			await vi.waitFor(() => expect(getState().held[id]?.requests).toHaveLength(1));
+		}
+	} finally {
+		fake.results["thread/resume"] = saved;
+	}
+});
+
+test("an older resume's failure does not mark a thread the later resume opened", async () => {
+	fake.serverState("ready");
+	const saved = fake.results["thread/resume"]!;
+	try {
+		const answers: ((fail: boolean) => void)[] = [];
+		fake.results["thread/resume"] = (params) =>
+			new Promise((resolve, reject) =>
+				answers.push((fail) => (fail ? reject(new Error("the old server went away")) : resolve(saved(params)))),
+			);
+		const first = openThread("overlap-3");
+		const second = openThread("overlap-3");
+		await vi.waitFor(() => expect(answers).toHaveLength(2));
+		answers[1]!(false);
+		await second;
+		answers[0]!(true);
+		await first;
+		expect(getState().held["overlap-3"]).toBeDefined();
+		expect(getState().opening["overlap-3"]).toBeUndefined();
+	} finally {
+		fake.results["thread/resume"] = saved;
+	}
+});
+
+test("after a restart a failed update state read does not stop the window resuming its threads", async () => {
+	fake.serverState("ready");
+	await openThread("t-update");
+	fake.requests.length = 0;
+	fake.failing.updateState = true;
+	try {
+		fake.serverState("restarting");
+		fake.serverState("ready");
+		await vi.waitFor(() => expect(resumed()).toContainEqual({ threadId: "t-update" }));
+	} finally {
+		fake.failing.updateState = false;
+	}
 });

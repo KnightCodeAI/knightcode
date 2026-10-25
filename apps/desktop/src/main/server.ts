@@ -4,9 +4,9 @@
  */
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { createWriteStream, mkdirSync, type WriteStream } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Message, ResultOf } from "@knightcode/app-server-protocol";
+import { RotatingLog } from "./log-file.ts";
 
 export interface ServerCommand {
 	command: string;
@@ -61,7 +61,7 @@ export class ServerConnection {
 	private startedAt = 0;
 	private stopping = false;
 	private restartTimer: ReturnType<typeof setTimeout> | undefined;
-	private log: WriteStream | undefined;
+	private log: RotatingLog | undefined;
 	initializeResult: InitializeResult | undefined;
 	state: ServerState = "starting";
 
@@ -72,9 +72,7 @@ export class ServerConnection {
 	start(): void {
 		this.setState(this.exits.length === 0 ? "starting" : "restarting");
 		const { command, args } = this.options.command;
-		mkdirSync(this.options.logsDir, { recursive: true });
-		// ponytail: one appended log, no rotation yet; section 5.1 asks for 5 MiB x 5 files.
-		this.log ??= createWriteStream(join(this.options.logsDir, "app-server.log"), { flags: "a" });
+		this.log ??= new RotatingLog(join(this.options.logsDir, "app-server.log"));
 		const child = spawn(command, args, {
 			env: { ...this.options.env, KNIGHTCODE_CLIENT: "desktop" },
 			stdio: ["pipe", "pipe", "pipe"],

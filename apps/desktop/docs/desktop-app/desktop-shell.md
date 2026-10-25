@@ -257,7 +257,8 @@ or invalid params answers `invalidParams`.
 | `host/preview/capture`, `host/keys/set` | section 9.8 (v1-completion-plan.md 4.2) |
 | `host/terminal/*` | section 9.7 (v1-completion-plan.md 4.2) |
 | `host/mcpApp/serve` / `host/mcpApp/release` | section 12 (v1-completion-plan.md 4.2) |
-| `host/update/check` / `host/update/install` | updates (v1-completion-plan.md Task S4.2) |
+| `host/update/state` / `host/update/check` | `{}` → the update state (`unavailable`, `idle`, `checking`, `downloading`, `ready`, `available`); an `update` event carries each change |
+| `host/update/install` | `{}` → `{}`; Windows, once `ready`: asks when threads are running, then stops the server and quits to install |
 | `host/app/info` | `{}` → `{appVersion, serverVersion, platform, logsDir}` |
 | `host/app/relaunch` | `{}` → never answers |
 
@@ -1372,7 +1373,17 @@ changes pane give it a place.
   C, S1). Built (sections 9.7, 9.8, 12).
 - S4: makers, the bundled `knightcode` binary and `knightcode.version` under
   `resources/knightcode/`, signing hooks (unsigned in v1), the update feed,
-  the release workflow, end-to-end tests, the memory figures.
+  the release workflow, end-to-end tests, the memory figures. Built:
+  `scripts/stage-server.ts` (with `knightcode.target`, which the prePackage
+  check also compares), `scripts/make-icons.ts`, Squirrel, zip, dmg, deb and
+  rpm makers, `src/main/updates.ts`, `apps/web/app/api/desktop/update/`,
+  `.github/workflows/desktop-release.yml`, the desktop job in `ci.yml`, and
+  `test/e2e/` with Playwright. Squirrel installs into
+  `%LOCALAPPDATA%\KnightCodeDesktop`, not `KnightCode`: that folder holds the
+  discontinued IDE's data, and Squirrel's uninstall deletes its whole
+  folder. Updates show as a pill at the title bar's end
+  while one downloads or waits, Check for Updates… last but About in Help
+  (in the app menu on macOS, not on Linux), and a row in Settings › About.
 
 ---
 
@@ -1477,6 +1488,16 @@ From the repo root:
 - Memory: with ten threads held across three windows and one terminal per
   thread, record main, renderer and app server working sets on Windows and
   macOS; publish the figures here before v1 acceptance (S4).
+  - Windows 11, 2026-10-23, Electron 44.7.0 on the production Vite build, the
+    app server under Bun from source with the faux model, ten threads with a
+    turn each, a Git Bash terminal in each, three windows (one holding all
+    ten, two holding three each), 10 s after the last action: main 204 MB;
+    renderers 194, 150 and 153 MB; GPU 126 MB; network utility 53 MB; app
+    server 408 MB; each terminal about 26 MB (bash and its conhost); the
+    whole tree 1.59 GB. The compiled binary in an installed build may differ
+    from Bun running the source.
+  - macOS: not measured yet; the owner runs the same script on an installed
+    build.
 - Manual, per phase, on Windows and macOS: the end-to-end flow above, a
   server kill (`taskkill /F` / `kill -9`) mid-turn and the recovery banner, a
   second window on the same thread answering an approval, keyboard-only use of

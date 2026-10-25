@@ -1,2 +1,5 @@
 .vite/
 out/
+/resources/
+test-results/
+playwright-report/
