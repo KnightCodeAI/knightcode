@@ -32,14 +32,14 @@ function Avatar({ profile, size }: { profile: Profile | undefined; size: number 
 				alt=""
 				onError={() => setBroken(true)}
 				style={{ width: size, height: size }}
-				className="shrink-0 rounded-full object-cover"
+				className="kc-profile-avatar shrink-0 rounded-full object-cover"
 			/>
 		);
 	if (profile?.signedIn && profile.login)
 		return (
 			<span
 				style={{ width: size, height: size, fontSize: size * 0.4 }}
-				className="flex shrink-0 items-center justify-center rounded-full bg-avatar font-medium text-white uppercase"
+				className="kc-profile-avatar flex shrink-0 items-center justify-center rounded-full bg-avatar font-medium text-white uppercase"
 			>
 				{profile.login.slice(0, 2)}
 			</span>
