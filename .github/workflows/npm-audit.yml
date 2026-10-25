@@ -42,10 +42,11 @@ jobs:
       #   GHSA-hp3w-g68c-fv3c  sprintf-js <=1.1.3, DoS via unbounded precision
       # image-size is different: the fix exists, but only in 2.x, which drops the
       # sizeOf(path, callback) API that appdmg (via @electron-forge/maker-dmg,
-      # macOS only) calls. appdmg only sizes a DMG background image, and
-      # forge.config.ts configures none, so the parser never runs. Remove this
-      # entry if forge.config.ts ever sets a MakerDMG `background`, since appdmg
-      # then parses that image.
+      # macOS only) calls. appdmg only sizes the DMG background image; with none
+      # set in forge.config.ts, electron-installer-dmg passes its own bundled
+      # background.png, so the parser never sees an ICNS file or anything outside
+      # our build. Remove this entry if forge.config.ts ever sets a MakerDMG
+      # `background`, since appdmg then parses that image.
       #   GHSA-w3rx-r6r6-pgpr  image-size <=2.0.2, infinite loop in the ICNS parser
       - name: Audit dependencies
         run: bun audit --audit-level=moderate --ignore=GHSA-vfj7-8cjw-p6xm --ignore=GHSA-hp3w-g68c-fv3c --ignore=GHSA-w3rx-r6r6-pgpr
