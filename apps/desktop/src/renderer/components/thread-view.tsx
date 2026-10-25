@@ -177,7 +177,7 @@ function PanelResizeHandle() {
 }
 
 /**
- * A tab in the strip, as Codex's (26.1016, measured): a slot of up to 240px, 32px tall; the chosen one on a ghost fill with a
+ * A tab in the strip: a slot of up to 240px, 32px tall; the chosen one on a ghost fill with a
  * hairline ring and a 1px shadow, the others at half strength; a 16px icon 4px from the 13px title, which a preview
  * tab sets in italics; the close button 20px, shown on the chosen tab and on hover.
  */
@@ -213,7 +213,7 @@ function TabButton({ threadId, tab, index, active }: { threadId: string; tab: Pa
 	);
 }
 
-/** The right region (desktop-shell.md section 9.6): Codex's tab strip over the chosen tab. */
+/** The right region (desktop-shell.md section 9.6): a tab strip over the chosen tab. */
 function SidePanel({ id }: { id: string }) {
 	const width = useStore((s) => s.panel.width);
 	const full = useStore((s) => s.panel.full ?? false);
@@ -253,13 +253,13 @@ function SidePanel({ id }: { id: string }) {
 					className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]"
 				>
 					{tabs.map((tab, i) => (
-						// 240px each while they fit, sharing the strip when they do not (Codex's), scrolling past 120px.
+						// 240px each while they fit, sharing the strip when they do not, scrolling past 120px.
 						<div
 							key={tab.kind === "file" ? tab.path : "changes"}
 							className="flex max-w-[240px] min-w-[120px] flex-[1_1_240px] items-center pe-0.5"
 						>
 							<TabButton threadId={id} tab={tab} index={i} active={i === active} />
-							{/* Codex's divider between two tabs at rest. */}
+							{/* A divider between two tabs at rest. */}
 							<div className={`ms-0.5 h-3 w-px shrink-0 bg-line ${i === active || i + 1 === active || i === tabs.length - 1 ? "invisible" : ""}`} />
 						</div>
 					))}

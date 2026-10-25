@@ -1,5 +1,5 @@
 /**
- * A file tab (desktop-shell.md section 9.6), Codex's file viewer read-only (26.1016, measured over CDP): a toolbar of
+ * A file tab (desktop-shell.md section 9.6), a read-only file viewer: a toolbar of
  * capsules, the path as a breadcrumb and the Open split button, over the file in @pierre/diffs' File view (12px code
  * on 22px lines, the Changes pane's theme) with the line it was opened at marked and scrolled into view. The server
  * reads the file (file/read), as it reads every file the desktop shows.

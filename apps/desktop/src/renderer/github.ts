@@ -1,4 +1,4 @@
-/** "Open in GitHub" (Codex's lZa): the link to a checkout's file on github.com at its branch and line. */
+/** "Open in GitHub": the link to a checkout's file on github.com at its branch and line. */
 
 import type { ResultOf } from "@knightcode/app-server-protocol";
 
@@ -14,7 +14,7 @@ export function githubRepo(url: string): { owner: string; repo: string } | undef
 const slashes = (path: string) => path.replaceAll("\\", "/").replace(/\/+$/, "");
 
 /**
- * The file on GitHub at the checkout's branch, at its line (Codex's lZa): none without a github.com origin, a branch,
+ * The file on GitHub at the checkout's branch, at its line: none without a github.com origin, a branch,
  * or a file inside the checkout. Windows paths compare without case.
  */
 export function githubLink(origin: ResultOf<"git/origin">, path: string, line?: number): string | undefined {

@@ -464,7 +464,7 @@ function FileSection({
 					</div>
 					<div className="ms-auto flex shrink-0 items-center gap-1">
 						<Totals additions={file.additions} deletions={file.deletions} className="ms-1 me-1 text-[14px]" />
-						{/* Codex's "Open file in a tab", at the file's first change. */}
+						{/* "Open file in a tab", at the file's first change. */}
 						<IconButton
 							label="Open file in a tab"
 							size="3xs"
