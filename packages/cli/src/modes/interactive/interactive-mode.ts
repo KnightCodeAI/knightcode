@@ -41,7 +41,6 @@ import {
 	hyperlink,
 	Markdown,
 	matchesKey,
-	MouseRegion,
 	Spacer,
 	setCapabilityOverrides,
 	setKeybindings,
@@ -2578,16 +2577,7 @@ export class InteractiveMode {
 	/** Mounts a footer; a click on the background commands pill in it opens `/tasks`. */
 	private mountFooter(footer: Component): void {
 		this.footerContainer.clear();
-		this.footerContainer.addChild(
-			new MouseRegion(footer, (event) => {
-				if (event.type !== "click" || event.button !== "left") return undefined;
-				const line = footer.render(event.width)[event.y] ?? "";
-				if (!this.backgroundShellsIndicator.hit(line, event.x)) return undefined;
-				this.backgroundShellsIndicator.selected = false;
-				this.showBackgroundTasks();
-				return { handled: true };
-			}),
-		);
+		this.footerContainer.addChild(this.backgroundShellsIndicator.clickFirst(footer, () => this.showBackgroundTasks()));
 	}
 
 	/**
@@ -5558,6 +5548,8 @@ export class InteractiveMode {
 		if (!pill.selected) {
 			if (!this.keybindings.matches(data, "tui.editor.cursorDown") || this.editor.getText() !== "") return false;
 			if (this.session.backgroundShells.runningCount() === 0) return false;
+			// A custom footer may not render the pill; focus on it would then be invisible.
+			if (!pill.shownIn((this.customFooter ?? this.footer).render(this.ui.terminal.columns))) return false;
 			pill.selected = true;
 			this.ui.requestRender();
 			return true;

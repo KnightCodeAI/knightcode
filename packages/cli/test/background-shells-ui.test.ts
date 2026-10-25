@@ -196,6 +196,65 @@ describe("/tasks view", () => {
 		manager.dispose();
 	});
 
+	it("knows whether a footer shows the pill, so Down does not focus a pill nobody sees", async () => {
+		const manager = new BackgroundShellManager();
+		const { operations } = controlledOperations();
+		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
+		const pill = new BackgroundShellsIndicator(() => manager);
+		expect(pill.shownIn(["12.3%/200k • $0.012"])).toBe(false);
+
+		await bash.execute("c1", { command: "npm run dev", run_in_background: true });
+		// A custom footer that never renders getBackgroundShells().
+		expect(pill.shownIn(["~/repo (main)", "12.3%/200k • $0.012"])).toBe(false);
+		expect(pill.shownIn(["~/repo (main)", `12.3%/200k • ${pill.render()}`])).toBe(true);
+		manager.dispose();
+	});
+
+	it("takes a click on the pill before a footer that handles clicks itself", async () => {
+		const manager = new BackgroundShellManager();
+		const { operations } = controlledOperations();
+		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
+		const pill = new BackgroundShellsIndicator(() => manager);
+		await bash.execute("c1", { command: "npm run dev", run_in_background: true });
+
+		let footerClicks = 0;
+		let opened = 0;
+		const footer = {
+			render: () => [`12.3%/200k • ${pill.render()}`],
+			invalidate: () => {},
+			handleMouse: () => {
+				footerClicks++;
+				return { handled: true };
+			},
+		};
+		const mounted = pill.clickFirst(footer, () => opened++);
+		const click = (x: number) =>
+			mounted.handleMouse?.({
+				type: "click",
+				button: "left",
+				x,
+				y: 0,
+				screenX: x,
+				screenY: 0,
+				width: 60,
+				height: 1,
+				shift: false,
+				alt: false,
+				ctrl: false,
+			});
+
+		pill.selected = true;
+		click(14); // on "1 shell", which starts at column 13
+		expect(opened).toBe(1);
+		expect(footerClicks).toBe(0);
+		expect(pill.selected).toBe(false);
+
+		click(2); // elsewhere on the line: the footer's own handler
+		expect(opened).toBe(1);
+		expect(footerClicks).toBe(1);
+		manager.dispose();
+	});
+
 	it("says so when nothing runs", () => {
 		const view = new BackgroundTasksComponent(new BackgroundShellManager(), fakeTui(), () => {});
 		try {

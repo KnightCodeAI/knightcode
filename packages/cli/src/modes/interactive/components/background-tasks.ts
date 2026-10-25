@@ -1,5 +1,6 @@
 import {
 	type Component,
+	dispatchMouseEvent,
 	getKeybindings,
 	matchesKey,
 	type TUI,
@@ -185,6 +186,35 @@ export class BackgroundShellsIndicator {
 		if (at < 0) return false;
 		const start = visibleWidth(plain.slice(0, at));
 		return x >= start && x < start + visibleWidth(stripAnsi(pill));
+	}
+
+	/** Whether rendered footer lines show the pill, so selecting it from the keyboard would be visible. */
+	shownIn(lines: string[]): boolean {
+		const running = this.getManager().runningCount();
+		return running > 0 && lines.some((line) => stripAnsi(line).includes(backgroundShellsLabel(running)));
+	}
+
+	/**
+	 * Wraps a footer so a left click on the pill opens `/tasks` before the footer sees the click: a custom
+	 * footer that handles mouse events itself would otherwise take it. Other events go on to the footer.
+	 */
+	clickFirst(footer: Component, open: () => void): Component {
+		return {
+			render: (width) => footer.render(width),
+			invalidate: () => footer.invalidate(),
+			handleMouse: (event) => {
+				if (
+					event.type === "click" &&
+					event.button === "left" &&
+					this.hit(footer.render(event.width)[event.y] ?? "", event.x)
+				) {
+					this.selected = false;
+					open();
+					return { handled: true };
+				}
+				return dispatchMouseEvent(footer, event);
+			},
+		};
 	}
 }
 
