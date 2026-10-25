@@ -19,7 +19,8 @@ Extensions, prompt templates, and skills can add commands. The command menu in K
 | `/scoped-models` | Configure the models used by interactive cycling |
 | `/login [provider]` | Add provider authentication |
 | `/logout` | Remove provider authentication |
-| `/tools` | Turn `webfetch`, `websearch`, the [scratchpad](/docs/run/usage#scratchpad), and the [classifier gate](/docs/run/usage#classifier-gate) off, on for this session, or on by default; pick the search provider, its key, and the gate's model |
+| `/usage` | Show remaining subscription allowance and reset times for Claude, Codex and Grok sign-ins; see [Subscription usage](/docs/reference/providers#check-subscription-usage) |
+| `/tools` | Turn `webfetch`, `websearch`, [`ask_user`](/docs/run/usage#questions), the [scratchpad](/docs/run/usage#scratchpad), and the [classifier gate](/docs/run/usage#classifier-gate) off, on for this session, or on by default; pick the search provider, its key, and the gate's model |
 | `/llama` | Manage models on the configured llama.cpp router |
 
 ## Sessions and context
@@ -36,6 +37,20 @@ Extensions, prompt templates, and skills can add commands. The command menu in K
 | `/undo` | Go back to an earlier user message; optionally restore the files edited after it |
 | `/compact [instructions]` | Compact the current context, optionally with custom instructions |
 | `/import <path>` | Import and resume a JSONL session |
+
+## Planning
+
+| Command | Description |
+|---|---|
+| `/plan [task]` | Enter enforced planning, send a planning task, or review an existing draft |
+| `/plan off` | Exit planning and retain the draft |
+| `/plan approve [N [note]]` | Explicitly approve and implement the latest revision, or revision N, with an optional note |
+| `/plan approve fresh [N [note]]` | Implement in a fresh session |
+
+Commands require an idle session with no pending input. Without a draft,
+`/plan` reports “No plan submitted yet; send a task to continue planning.” and
+opens no dialog. See [Plan mode](/docs/run/plan-mode) for tool restrictions, headless
+output, and restoration.
 
 ## Export and share
 
@@ -54,8 +69,10 @@ Review a session before exporting or sharing it. Sessions can contain prompts, t
 | Command | Description |
 |---|---|
 | `/trust` | Save a project trust decision for future KnightCode processes |
+| `/mcp` | Manage MCP servers: sign in, reconnect, enable or disable, and change exposure |
 | `/reload` | Reload keybindings, extensions, skills, templates, themes, and context files |
 | `/hotkeys` | Show active keyboard shortcuts |
+| `/tasks` | List [background commands](/docs/run/usage#background-commands), show their output, and stop them |
 | `/changelog` | Show changelog entries |
 | `/quit` | Quit KnightCode |
 

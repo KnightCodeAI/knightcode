@@ -86,23 +86,60 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_CODING_AGENT_DIR` | Override the config directory; default is `~/.knightcode/agent` |
 | `KNIGHTCODE_CODING_AGENT_SESSION_DIR` | Override session storage; overridden by `--session-dir` |
 | `KNIGHTCODE_PACKAGE_DIR` | Override the package directory, useful for Nix/Guix store paths |
-| `KNIGHTCODE_SERVER_DIR` | Override the experimental server profile and socket directory; default is `~/.knightcode/server` |
-| `KNIGHTCODE_SERVER_ID` | Select the logical experimental server ID when `--server-id` is omitted |
 | `KNIGHTCODE_OFFLINE` | Disable automatic network activity, including model catalog refreshes |
 | `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS` | Set to `1`, `true`, or `yes` to stop backing up files before edits; `/undo` then rewinds the conversation only. See [Sessions](/docs/run/sessions#file-restore) |
-| `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable the `knightcode.dev` latest-version request |
+| `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable automatic version checks and downloads; explicit `knightcode update` still works |
+| `KNIGHTCODE_DISABLE_AUTO_UPDATE` | Set to `1` to disable automatic update downloads while retaining update notices, overriding the user-level [`autoUpdate` setting](/docs/reference/settings#disable-automatic-updates); explicit `knightcode update` still works |
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
+| `KNIGHTCODE_CODEMODE_MAX_WORKERS` | Maximum codemode workers alive at once across all sessions in the process; default `2`. Each worker's script may use up to 256 MB. Raise it when one process runs several sessions, such as in-process subagents. Further scripts wait for a free worker. See [Codemode](/docs/reference/codemode) |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |
 | `KNIGHTCODE_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
 | `KNIGHTCODE_BUG_ENDPOINT` | Override the origin `/bug` uploads go to; default is `https://remote.knightcode.dev` |
-| `KNIGHTCODE_RADIUS_GATEWAY` | Override the Radius gateway origin used by Radius relay connections |
+| `KNIGHTCODE_CLEAR_ON_SHRINK` | Set to `1` to clear empty rows when rendered content shrinks; the `terminal.clearOnShrink` setting takes precedence. See [Settings](/docs/reference/settings) |
 | `KNIGHTCODE_HARDWARE_CURSOR` | Set to `1` to show the hardware cursor; see [Terminal setup](/docs/run/terminal-setup) |
+| `KNIGHTCODE_CLIPBOARD_OSC52` | Set to `1` to also send copied text to the terminal with OSC 52 after the local clipboard write, as KnightCode does over SSH. Use it when a remote client reaches KnightCode without SSH variables, such as a multiplexer attached from another machine or a remote IDE daemon |
 | `KNIGHTCODE_HYPERLINKS` | Override OSC 8 hyperlink detection with `1`, `0`, or `auto` |
+| `KNIGHTCODE_PROGRAM_STATUS` | Override OSC 7501 program status detection: `1` always reports, `0` never reports; otherwise KnightCode reports only after the terminal confirms support. See [Terminal setup](/docs/run/terminal-setup#program-status) |
 | `KNIGHTCODE_IMAGE_PROTOCOL` | Override inline image detection with `kitty`, `iterm2`, `none`, or `auto` |
 | `KNIGHTCODE_TRUE_COLOR` | Override truecolor detection with `1`, `0`, or `auto` |
 | `KNIGHTCODE_TUI_ESC_TIMEOUT` | How long to wait after a lone ESC before treating it as Escape, in milliseconds; defaults to `100` over SSH and `10` otherwise. Increase if Alt-key input is misread as Escape |
 | `BRAVE_API_KEY` | Brave Search key for `websearch` when none is stored with `/tools`; see [Web tools](/docs/run/usage#web-tools) |
 | `VISUAL`, `EDITOR` | External editor fallback when `externalEditor` is unset |
 | `HTTP_PROXY`, `HTTPS_PROXY` | Proxy outbound HTTP requests |
+
+### Update controls
+
+Automatic updates are on by default. For a persistent preference without
+environment variables, open `/settings` and set **Automatic updates** to `false`,
+or set `"autoUpdate": false` in your user-level `settings.json`; see
+[Disable automatic updates](/docs/reference/settings#disable-automatic-updates) for file locations
+and an example.
+
+To use an environment variable instead, set it before launching KnightCode.
+For the current PowerShell terminal:
+
+```powershell
+$env:KNIGHTCODE_DISABLE_AUTO_UPDATE = "1"
+knightcode
+```
+
+To persist it for your Windows user:
+
+```powershell
+[Environment]::SetEnvironmentVariable("KNIGHTCODE_DISABLE_AUTO_UPDATE", "1", "User")
+```
+
+Then restart your terminal app or IDE so new KnightCode processes inherit it.
+On macOS or Linux, add this line to your shell profile (`~/.zshrc` or `~/.bashrc`),
+then open a new terminal:
+
+```bash
+export KNIGHTCODE_DISABLE_AUTO_UPDATE=1
+```
+
+This variable overrides `autoUpdate: true`. Any non-empty value disables automatic
+downloads, including `0`; unset it to return control to `settings.json`. To suppress
+update notices and checks too, use `KNIGHTCODE_SKIP_VERSION_CHECK=1` instead.
+Explicit `knightcode update` remains available with either variable.
 
 Provider credentials such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and provider-specific configuration are listed in [Providers](/docs/reference/providers#use-an-api-key-from-the-environment).

@@ -7,6 +7,8 @@ description: "This reference lists user-configurable settings, their types, defa
 
 This reference lists user-configurable settings, their types, defaults, and purposes. Project settings override agent-directory settings. Resource lists are combined. See [Configuration](/docs/customize/configuration) for file locations and trust behavior.
 
+Add `"$schema": "https://knightcode.dev/schemas/settings.schema.json"` to `settings.json` for editor validation and completion.
+
 ## Model and thinking
 
 <a id="model-cycling"></a>
@@ -58,24 +60,25 @@ A list of only `+name` and `-name` entries changes the inherited selection inste
 
 This replaces `bash` with `powershell` and enables `grep`: `["-bash", "+powershell", "+grep"]`. Project settings apply on top of user settings: a project list with only `+name` and `-name` entries changes the user's selection, and a project list with a plain name replaces it. In one list, plain names form the selection, and `+name` and `-name` then apply in order.
 
-`/reload` enables tools newly added to `defaultTools`. It does not disable tools removed from it or re-enable unchanged tools you turned off. `--tools`, `--no-tools`, and `--no-builtin-tools` override `defaultTools`, also on reload.
+`/reload` enables tools newly added to `defaultTools`. It does not disable tools removed from it or re-enable unchanged tools you turned off. `--tools` with plain names, `--no-tools`, and `--no-builtin-tools` override `defaultTools`, also on reload.
 
-CLI tool options override this setting for one invocation; `--tools` does not accept `+name` or `-name`. See [Command Line](/docs/reference/cli#tools).
+CLI tool options override this setting for one invocation. `--tools` with only `+name` and `-name` entries changes the resolved `defaultTools` selection instead, for example `knightcode --tools +codemode`. On `/reload`, these entries apply to the reloaded setting too, so a tool removed with `-name` stays removed. See [Command Line](/docs/reference/cli#tools).
 
-The [web tools](/docs/run/usage#web-tools) `webfetch` and `websearch` are not part of `defaultTools`. `/tools` turns them on and stores their settings, including the search provider and Brave key, in `~/.knightcode/agent/tools.json`.
+The [web tools](/docs/run/usage#web-tools) `webfetch` and `websearch` and the [question tool](/docs/run/usage#questions) `ask_user` are not part of the default `defaultTools`. `/tools` turns them on for the current session, which writes nothing to disk, or on or off by default, which is saved in `~/.knightcode/agent/tools.json` together with the `websearch` provider and Brave key. Naming one in `defaultTools` also turns it on, unless `/tools` has it off.
 
 ## Sessions and context
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `sessionDir` | string | Agent session directory | Session storage directory. Relative paths resolve from the working directory. `KNIGHTCODE_CODING_AGENT_SESSION_DIR` and `--session-dir` override this setting. |
+| `sessionShareDestination` | `"auto" \| "gist" \| "radius"` | `"auto"` | Destination used by `/share`. `auto` uses Radius when authenticated and otherwise creates a GitHub gist. `gist` always uses a gist. `radius` requires Radius authentication and never falls back to a gist. |
 
 ### Compaction
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `compaction.enabled` | boolean | `true` | Enable automatic compaction. |
-| `compaction.reserveTokens` | number | `16384` | Tokens reserved for the model response. |
+| `compaction.reserveTokens` | number | `16384` | Free context tokens below which automatic compaction starts. |
 | `compaction.keepRecentTokens` | number | `20000` | Recent tokens retained without summarization. |
 | `compaction.modelOverrides` | object | None | Per-model token settings keyed by exact `provider/modelId`. |
 
@@ -104,12 +107,12 @@ See [Compaction Reference](/docs/reference/compaction) for trigger, summarizatio
 | `fullscreenCopyOnSelect` | boolean | `true` | Copy selected text automatically in fullscreen mode. When disabled, selections stay highlighted and `Ctrl+X` copies the active selection. Has no effect in regular mode. |
 | `fullscreenWheelScrollLines` | `"auto"` \| number | `"auto"` | Lines per mouse-wheel event in fullscreen mode, from 1 to 100. `"auto"` moves one line per event in local macOS terminals, which already accelerate wheel and trackpad input; elsewhere, and over SSH, it speeds up fast wheel spins to at most 6 lines per event. Alt+wheel moves five times as far. |
 | `editorPaddingX` | number | `0` | Horizontal editor padding from 0 to 3 cells. |
-| `outputPad` | `0 \| 1` | `1` | Right-hand margin for user messages, assistant text and thinking. |
+| `outputPad` | `0 \| 1` | `1` | Horizontal transcript padding for messages, tool output, `!` command output, and summary blocks. |
 | `autocompleteMaxVisible` | number | `5` | Visible autocomplete entries, from 3 to 20. |
-| `showHardwareCursor` | boolean | `false` | Show the terminal cursor while KnightCode positions it for input methods. |
+| `showHardwareCursor` | boolean | `false` | Use the terminal cursor instead of KnightCode's drawn cursor. KnightCode still positions it for input methods. |
 | `terminal.showImages` | boolean | `true` | Display inline images when supported. |
 | `terminal.imageWidthCells` | number | `60` | Preferred inline image width in terminal cells. |
-| `terminal.clearOnShrink` | boolean | `false` | Clear empty rows when rendered content shrinks. |
+| `terminal.clearOnShrink` | boolean | `false` | Clear empty rows when rendered content shrinks. When unset, `KNIGHTCODE_CLEAR_ON_SHRINK=1` enables it. |
 | `terminal.showTerminalProgress` | boolean | `false` | Show OSC 9;4 progress in the terminal tab. |
 | `terminal.hyperlinks` | `boolean \| "auto"` | `"auto"` | Override OSC 8 hyperlink detection. |
 | `terminal.images` | `"kitty" \| "iterm2" \| "auto" \| false` | `"auto"` | Override inline-image protocol detection. |
@@ -121,14 +124,67 @@ See [Compaction Reference](/docs/reference/compaction) for trigger, summarizatio
 
 See [Themes](/docs/customize/themes) and [Terminal Setup](/docs/run/terminal-setup) for format and platform details.
 
+## Worktrees
+
+Worktree settings belong to the user: they are read from the agent-directory
+settings file only, never from a project's.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `worktrees.root` | string | `<agent dir>/worktrees` | Absolute directory that holds managed worktrees as `<root>/<4 hex digits>/<repository name>`. Worktrees made under an earlier root are no longer managed. |
+| `worktrees.autoDelete` | boolean | `true` | Archiving a thread deletes its worktree, and the least recently used worktrees past `worktrees.keep` are pruned. Each deletion first keeps a snapshot under `refs/knightcode/snapshots/`. |
+| `worktrees.keep` | number | `15` | Managed worktrees kept before pruning starts. |
+| `worktrees.fetchBeforeCreate` | boolean | `false` | Fetch the base's remote before each new worktree. |
+| `worktrees.branchPrefix` | string | `"kc/"` | Prefix of the branch a handoff to the main checkout creates. |
+
+### Environments
+
+A project's environments live in `.knightcode/environments.json`, which can be
+committed:
+
+```json
+{
+  "version": 1,
+  "environments": [
+    {
+      "name": "node",
+      "setup": { "default": "cd \"$KNIGHTCODE_WORKTREE_PATH\" && npm ci" },
+      "cleanup": { "default": "rm -rf \"$KNIGHTCODE_WORKTREE_PATH/.cache\"" },
+      "actions": [{ "name": "Test", "command": { "default": "npm test" } }]
+    }
+  ]
+}
+```
+
+Each script has `default`, `macos`, `linux` and `windows` variants; the
+platform's wins. Scripts run in bash on every platform (Git Bash on Windows, or
+the `shellPath` setting), so one `default` usually covers all three; a platform
+variant is for a command that differs. The setup script runs when a worktree is
+created and the cleanup script before one is deleted, both at the project root,
+with
+`KNIGHTCODE_SOURCE_TREE_PATH` (the checkout the worktree came from) and
+`KNIGHTCODE_WORKTREE_PATH` (the worktree) set. Since they start in the main
+checkout, work on the worktree through `KNIGHTCODE_WORKTREE_PATH`, as the
+example does: a bare `npm ci` would install into the main checkout. A failing setup keeps the
+worktree and marks it `setupFailed`; a failing cleanup is a warning. An
+untrusted project's scripts never run. `actions` are for the desktop app's
+toolbar.
+
+### `.worktreeinclude`
+
+Ignored files are not copied into a new worktree unless the repository root's
+`.worktreeinclude` (gitignore syntax) lists them, such as `.env`. A file is
+copied only if the worktree ignores it too, so it can never be committed or
+handed off by accident, and nothing is created through a symlink or junction.
+
 ## Network and retries
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `transport` | `"auto" \| "sse" \| "websocket" \| "websocket-cached"` | `"auto"` | Preferred transport for AI providers that support multiple transports. |
 | `httpProxy` | string | None | Proxy URL applied as `HTTP_PROXY` and `HTTPS_PROXY` for KnightCode-managed HTTP clients. **Can only be set in agent-directory settings.** |
-| `httpIdleTimeoutMs` | number | `300000` | HTTP header and body idle timeout in milliseconds. Set to `0` to disable. |
-| `websocketConnectTimeoutMs` | number | `15000` | WebSocket connection timeout in milliseconds. Set to `0` to disable. |
+| `httpIdleTimeoutMs` | number \| `"disabled"` | `300000` | HTTP header and body idle timeout in milliseconds. Set to `0` or `"disabled"` to disable. |
+| `websocketConnectTimeoutMs` | number \| `"disabled"` | `15000` | WebSocket connection timeout in milliseconds. Set to `0` or `"disabled"` to disable. |
 | `retry.enabled` | boolean | `true` | Enable automatic agent-level retry for transient failures. |
 | `retry.maxRetries` | number | `3` | Maximum agent-level retry attempts. |
 | `retry.baseDelayMs` | number | `2000` | Initial exponential-backoff delay in milliseconds. |
@@ -170,7 +226,53 @@ The built-in extensions are named `builtin:mcp`, `builtin:llama.cpp`, `builtin:c
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
+| `autoUpdate` | boolean | `true` | Download KnightCode CLI updates automatically while retaining update notices when `false`. **Can only be set in agent-directory settings.** `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` overrides this setting. See [Disable automatic updates](#disable-automatic-updates). |
 | `collapseChangelog` | boolean | `false` | After an update, show a one-line notice instead of the top three changes. |
 | `enableInstallTelemetry` | boolean | `true` | Enable anonymous install/update reporting and selected provider attribution headers. Does not control update checks. |
 | `enableAnalytics` | boolean | `false` | Opt in to analytics data sharing. Currently used only by the experimental first-run setup. |
 | `warnings.anthropicExtraUsage` | boolean | `true` | Warn when Anthropic subscription authentication may use paid extra usage. |
+
+### Disable automatic updates
+
+Automatic updates are **on by default**. Open `/settings`, search for
+**Automatic updates**, and change it from `true` to `false`. KnightCode saves the
+preference in your user-level `settings.json`; no restart or `/reload` is needed.
+It applies to subsequent update checks and does not cancel a download already
+running. Change it back to `true` in `/settings` to re-enable automatic updates.
+
+Alternatively, add `"autoUpdate": false` to your user-level `settings.json`:
+
+- **Windows:** `%USERPROFILE%\.knightcode\agent\settings.json`
+- **macOS / Linux:** `~/.knightcode/agent/settings.json`
+
+```json
+{
+  "autoUpdate": false
+}
+```
+
+Create the file if it does not exist; otherwise add this property to the existing
+JSON object, keeping your other settings. If `KNIGHTCODE_CODING_AGENT_DIR` overrides
+the agent directory, use `settings.json` in that directory instead. Project-local
+`.knightcode/settings.json` cannot override this preference.
+
+KnightCode still checks for new versions and shows update notices, but does not
+download or install updates automatically. Run `knightcode update` whenever you
+want to update manually. Set `autoUpdate` to `true`, or remove it, to restore
+automatic updates.
+
+After manually editing the file, restart KnightCode or run `/reload`. The new preference
+applies to subsequent update checks; it does not cancel a download already running.
+
+Environment variables are optional alternatives, set in the shell or operating
+system environment **before launching KnightCode**, not inside `settings.json`:
+
+- `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` disables automatic downloads even when
+  `autoUpdate` is `true`. Unset the variable to let the setting control downloads
+  again. The updater treats any non-empty value as disabling, including `0`.
+- `KNIGHTCODE_SKIP_VERSION_CHECK=1` disables both automatic checks and downloads.
+
+Neither variable blocks explicit `knightcode update`. Offline, print, JSON, and
+RPC sessions never start background updates. See [Command Line](/docs/reference/cli#update-knightcode-or-packages)
+for update behavior and [Environment Variables](/docs/reference/environment-variables#update-controls)
+for shell examples.
