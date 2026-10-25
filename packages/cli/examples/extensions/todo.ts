@@ -11,7 +11,7 @@
  */
 
 import { StringEnum } from "@knightcode/ai";
-import type { ExtensionAPI, ExtensionContext, Theme } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext, Theme } from "knightcode";
 import { matchesKey, Text, truncateToWidth } from "@knightcode/tui";
 import { Type } from "typebox";
 

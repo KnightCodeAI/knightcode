@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "knightcode";
 import { deleteToken, logout, readToken, relayOrigin, writeToken } from "./auth.ts";
 import { RelayHost, type RelayHostOptions } from "./host.ts";
 import { Mirror, type MirrorSource } from "./mirror.ts";

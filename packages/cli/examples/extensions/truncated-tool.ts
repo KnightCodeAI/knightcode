@@ -15,7 +15,7 @@
  */
 
 import { mkdtemp, writeFile } from "node:fs/promises";
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -23,7 +23,7 @@ import {
 	type TruncationResult,
 	truncateHead,
 	withFileMutationQueue,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import { Text } from "@knightcode/tui";
 import { execSync } from "child_process";
 import { tmpdir } from "os";

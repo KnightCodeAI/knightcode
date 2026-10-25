@@ -5,7 +5,7 @@
  * tool that queues a follow-up command to trigger reload.
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { Type } from "typebox";
 
 export default function (knightcode: ExtensionAPI) {

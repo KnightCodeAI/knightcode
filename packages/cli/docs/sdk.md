@@ -1,11 +1,11 @@
 # SDK
 
-`@knightcodeai/cli` embeds KnightCode in a Node.js or Bun process. It provides direct TypeScript access to the agent, sessions, tools, models, and resources used by the command-line application.
+`knightcode` embeds KnightCode in a Node.js or Bun process. It provides direct TypeScript access to the agent, sessions, tools, models, and resources used by the command-line application.
 
 Use the SDK for in-process TypeScript integration. For a language-independent or isolated subprocess, see [CLI Integration](cli-integration.md).
 
 ```typescript
-import { createAgentSession } from "@knightcodeai/cli";
+import { createAgentSession } from "knightcode";
 
 const { session } = await createAgentSession();
 
@@ -42,7 +42,7 @@ Sessions are persistent by default. `SessionManager` owns the persisted or in-me
 Use an in-memory manager when the host does not want session files:
 
 ```typescript
-import { createAgentSession, SessionManager } from "@knightcodeai/cli";
+import { createAgentSession, SessionManager } from "knightcode";
 
 const { session } = await createAgentSession({
   sessionManager: SessionManager.inMemory(),
@@ -69,7 +69,7 @@ Persisted managers own a canonical file/parent binding. The SDK exports
 Read-only listings and fork-source reads do not lock or rewrite the source.
 
 ```typescript
-import { SessionLockedError, SessionManager } from "@knightcodeai/cli";
+import { SessionLockedError, SessionManager } from "knightcode";
 
 function openOrFork(file: string, cwd: string, sessionDir: string) {
   try {

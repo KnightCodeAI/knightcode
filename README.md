@@ -6,7 +6,7 @@ code, and writes new files — with a token floor of roughly **1,100 tokens** pe
 request instead of the 20k+ typical of hosted agents.
 
 ```bash
-npm install -g --ignore-scripts @knightcodeai/cli
+npm install -g --ignore-scripts knightcode
 export OPENROUTER_API_KEY=sk-or-...
 knightcode
 ```

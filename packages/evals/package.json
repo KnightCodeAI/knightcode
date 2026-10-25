@@ -11,7 +11,7 @@
 	},
 	"devDependencies": {
 		"@knightcode/ai": "workspace:*",
-		"@knightcodeai/cli": "workspace:*",
+		"knightcode": "workspace:*",
 		"@vitest-evals/core": "0.15.0",
 		"vitest-evals": "0.15.0"
 	}

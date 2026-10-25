@@ -1,6 +1,6 @@
 import type { SettingItem } from "@knightcode/tui";
-import type { ExtensionAPI, ExtensionContext, ModelRegistry, Theme } from "@knightcodeai/cli";
-import { SelectSubmenu } from "@knightcodeai/cli/modes/interactive/components/settings-submenu";
+import type { ExtensionAPI, ExtensionContext, ModelRegistry, Theme } from "knightcode";
+import { SelectSubmenu } from "knightcode/modes/interactive/components/settings-submenu";
 import type { RegisteredToolEntry } from "./registry.ts";
 import { readPersisted, resolveEnabled, type ToolSettings } from "./state.ts";
 

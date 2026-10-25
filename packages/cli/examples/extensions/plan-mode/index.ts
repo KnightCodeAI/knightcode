@@ -14,7 +14,7 @@
 
 import type { AgentMessage } from "@knightcode/agent";
 import type { AssistantMessage, TextContent } from "@knightcode/ai";
-import type { ExtensionAPI, ExtensionContext } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext } from "knightcode";
 import { Key } from "@knightcode/tui";
 import { extractTodoItems, isSafeCommand, markCompletedSteps, type TodoItem } from "./utils.ts";
 

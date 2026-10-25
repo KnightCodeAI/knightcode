@@ -14,7 +14,7 @@
  *
  * Note: Regular !command syntax (whole-line bash) is preserved and works as before.
  */
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	const PATTERN = /!\{([^}]+)\}/g;

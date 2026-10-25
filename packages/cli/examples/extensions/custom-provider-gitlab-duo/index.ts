@@ -22,7 +22,7 @@ import {
 	type ThinkingLevelMap,
 	type TranscriptContext,
 } from "@knightcode/ai/compat";
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 // =============================================================================
 // Constants

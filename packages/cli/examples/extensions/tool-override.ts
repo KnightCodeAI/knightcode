@@ -21,7 +21,7 @@
  */
 
 import type { TextContent } from "@knightcode/ai";
-import { type ExtensionAPI, getAgentDir, withFileMutationQueue } from "@knightcodeai/cli";
+import { type ExtensionAPI, getAgentDir, withFileMutationQueue } from "knightcode";
 import { constants, readFileSync } from "fs";
 import { access, appendFile, readFile } from "fs/promises";
 import { join, resolve } from "path";

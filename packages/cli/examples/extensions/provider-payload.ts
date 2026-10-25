@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { CONFIG_DIR_NAME, type ExtensionAPI } from "@knightcodeai/cli";
+import { CONFIG_DIR_NAME, type ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	knightcode.on("before_provider_request", (event, ctx) => {

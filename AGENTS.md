@@ -15,7 +15,7 @@ is no build step for development.
 
 | Package | What it is |
 | --- | --- |
-| `packages/cli` | `@knightcodeai/cli` — the `knightcode` command: CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills. The only published package. npm gets an esbuild bundle that runs on Node (`bun run build:cli`, `scripts/build-bundle.ts`); Bun-compiled standalone binaries (`bun run build:binary`, `scripts/build.ts`) are GitHub release downloads only |
+| `packages/cli` | `knightcode` — the `knightcode` command: CLI, TUI mode, print mode, RPC mode, sessions, extensions, skills. The only published package. npm gets an esbuild bundle that runs on Node (`bun run build:cli`, `scripts/build-bundle.ts`); Bun-compiled standalone binaries (`bun run build:binary`, `scripts/build.ts`) are GitHub release downloads only |
 | `packages/ai` | Multi-provider LLM layer: providers, API adapters, OAuth, model catalog |
 | `packages/agent` | Agent loop, proxy stream, and their types |
 | `packages/durable` | Durable conversation, task and document runtime (Pico): record contracts and storage |
@@ -27,7 +27,7 @@ is no build step for development.
 
 Everything except `packages/cli*` and `apps/desktop` is private and consumed
 through the workspace.
-The root `tsconfig.json` maps every `@knightcode/*` and `@knightcodeai/cli`
+The root `tsconfig.json` maps every `@knightcode/*` and `knightcode`
 specifier to package source, so imports resolve without a build.
 
 User-facing documentation lives in `packages/cli/docs/`. Keep it in sync when you
@@ -182,7 +182,7 @@ For a user-visible change, add a changeset and commit it with your work:
 bun run changeset [category] [bump] [cli|desktop]   # defaults: fixed patch cli
 ```
 
-That scaffolds `.changeset/<branch>.md` for `@knightcodeai/cli` (or
+That scaffolds `.changeset/<branch>.md` for `knightcode` (or
 `@knightcode/desktop` with `desktop`) with the category word already in place,
 and you finish the sentence:
 
@@ -207,7 +207,7 @@ free `-2` suffix rather than refusing.
 
 Changesets versions only the packages that are not private
 (`privatePackages.version` is false in `.changeset/config.json`), and the CI
-check refuses a changeset naming any other. There are two: `@knightcodeai/cli`,
+check refuses a changeset naming any other. There are two: `knightcode`,
 the only package published to npm, and the desktop app, `@knightcode/desktop`,
 which ships as installers. The desktop app is not private so that it gets a
 version and a changelog; `ci:publish` only publishes the CLI, and its
@@ -216,7 +216,7 @@ a `desktop` changeset, and the Version Packages PR bumps
 `apps/desktop/package.json` and writes `apps/desktop/CHANGELOG.md`; merging a
 Version PR that carries only desktop changesets publishes nothing to npm. A
 desktop change that also changes the app server takes one changeset for each.
-Do not file desktop-only changes under `@knightcodeai/cli`: the CLI's changelog
+Do not file desktop-only changes under `knightcode`: the CLI's changelog
 is what the terminal and knightcode.dev show. Every other package is private,
 never versioned, and takes no changeset; do not make one public to give it a
 changeset.

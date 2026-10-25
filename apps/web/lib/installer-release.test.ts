@@ -7,6 +7,7 @@ import {
   chooseLatestStable,
   CLI_PACKAGE,
   INSTALLER_LOCK_ASSET,
+  LEGACY_CLI_PACKAGE,
   lockDownloadUrl,
   validateInstallerLock,
   versionFromReleaseTag,
@@ -209,8 +210,9 @@ describe("installer routes", () => {
         }),
       })
       expect(found.status).toBe(200)
+      // 0.11.4 shipped before the npm rename, so it installs the legacy name.
       expect(await found.json()).toMatchObject({
-        dependencies: { [CLI_PACKAGE]: "0.11.4" },
+        dependencies: { [LEGACY_CLI_PACKAGE]: "0.11.4" },
       })
 
       const missing = await getArtifact(new Request("http://localhost"), {

@@ -54,8 +54,7 @@ afterEach(() => {
 function createNpmPrefixInstall(template = "knightcode-prefix-"): { prefix: string; packageDir: string } {
 	const prefix = mkdtempSync(join(tmpdir(), template));
 	const root = join(prefix, "lib", "node_modules");
-	const scopeDir = join(root, "@knightcodeai");
-	const packageDir = join(scopeDir, "cli");
+	const packageDir = join(root, "knightcode");
 	mkdirSync(packageDir, { recursive: true });
 	tempDir = prefix;
 	process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
@@ -67,7 +66,7 @@ function createPnpmGlobalInstall(): { root: string; packageDir: string } {
 	const temp = mkdtempSync(join(tmpdir(), "knightcode-pnpm-"));
 	const binDir = join(temp, "bin");
 	const root = join(temp, "pnpm", "global", "5", "node_modules");
-	const packageDir = join(root, "@knightcodeai", "cli");
+	const packageDir = join(root, "knightcode");
 	mkdirSync(packageDir, { recursive: true });
 	mkdirSync(binDir, { recursive: true });
 	writeFileSync(join(binDir, process.platform === "win32" ? "pnpm.cmd" : "pnpm"), createFakePnpmScript(root));
@@ -75,7 +74,7 @@ function createPnpmGlobalInstall(): { root: string; packageDir: string } {
 	tempDir = temp;
 	process.env.PATH = `${binDir}${delimiter}${originalPath ?? ""}`;
 	process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
-	setExecPath(join(root, ".pnpm", "@knightcodeai+cli@0.0.0", "node_modules", "@knightcodeai", "cli", "dist", "cli.js"));
+	setExecPath(join(root, ".pnpm", "knightcode@0.0.0", "node_modules", "knightcode", "dist", "cli.js"));
 	return { root, packageDir };
 }
 
@@ -83,7 +82,7 @@ function createYarnGlobalInstall(): { globalDir: string; packageDir: string } {
 	const temp = mkdtempSync(join(tmpdir(), "knightcode-yarn-"));
 	const binDir = join(temp, "bin");
 	const globalDir = join(temp, "yarn", "global");
-	const packageDir = join(globalDir, "node_modules", "@knightcodeai", "cli");
+	const packageDir = join(globalDir, "node_modules", "knightcode");
 	mkdirSync(packageDir, { recursive: true });
 	mkdirSync(binDir, { recursive: true });
 	writeFileSync(join(binDir, process.platform === "win32" ? "yarn.cmd" : "yarn"), createFakeYarnScript(globalDir));
@@ -91,7 +90,7 @@ function createYarnGlobalInstall(): { globalDir: string; packageDir: string } {
 	tempDir = temp;
 	process.env.PATH = `${binDir}${delimiter}${originalPath ?? ""}`;
 	process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
-	setExecPath(join(globalDir, ".yarn", "@knightcodeai", "cli", "dist", "cli.js"));
+	setExecPath(join(globalDir, ".yarn", "knightcode", "dist", "cli.js"));
 	return { globalDir, packageDir };
 }
 
@@ -100,8 +99,7 @@ function createBunGlobalInstall(): { packageDir: string } {
 	const prefix = join(temp, ".bun");
 	const bunBin = join(prefix, "bin");
 	const root = join(prefix, "install", "global", "node_modules");
-	const scopeDir = join(root, "@knightcodeai");
-	const packageDir = join(scopeDir, "cli");
+	const packageDir = join(root, "knightcode");
 	mkdirSync(packageDir, { recursive: true });
 	mkdirSync(bunBin, { recursive: true });
 	writeFileSync(join(bunBin, process.platform === "win32" ? "bun.cmd" : "bun"), createFakeBunScript(bunBin));
@@ -153,12 +151,12 @@ describe("findNodePackageDir", () => {
 describe("detectInstallMethod", () => {
 	test("detects pnpm from Windows .pnpm install paths", () => {
 		setExecPath(
-			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@KnightCodeAI+@knightcodeai/cli@0.67.68\\node_modules\\@KnightCodeAI\\@knightcodeai/cli\\dist\\cli.js",
+			"C:\\Users\\Admin\\Documents\\pnpm-repository\\global\\5\\.pnpm\\@KnightCodeAI+knightcode@0.67.68\\node_modules\\@KnightCodeAI\\knightcode\\dist\\cli.js",
 		);
 
 		expect(detectInstallMethod()).toBe("pnpm");
-		expect(getUpdateInstruction("@knightcodeai/cli")).toBe(
-			"Run: pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 @knightcodeai/cli",
+		expect(getUpdateInstruction("knightcode")).toBe(
+			"Run: pnpm install -g --ignore-scripts --config.engine-strict=true --config.minimumReleaseAge=0 knightcode",
 		);
 	});
 
@@ -166,16 +164,16 @@ describe("detectInstallMethod", () => {
 		setExecPath("/usr/local/bin/node");
 
 		expect(detectInstallMethod()).toBe("unknown");
-		expect(getSelfUpdateCommand("@knightcodeai/cli")).toBeUndefined();
-		expect(getUpdateInstruction("@knightcodeai/cli")).toBe(
-			"Update @knightcodeai/cli using the package manager, wrapper, or source checkout that provides this installation.",
+		expect(getSelfUpdateCommand("knightcode")).toBeUndefined();
+		expect(getUpdateInstruction("knightcode")).toBe(
+			"Update knightcode using the package manager, wrapper, or source checkout that provides this installation.",
 		);
 	});
 
 	test("self-updates npm installs from custom prefixes", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli");
+		const command = getSelfUpdateCommand("knightcode");
 
 		expect(detectInstallMethod()).toBe("npm");
 		expect(command).toEqual({
@@ -188,18 +186,18 @@ describe("detectInstallMethod", () => {
 				"--ignore-scripts",
 				"--engine-strict",
 				"--min-release-age=0",
-				"@knightcodeai/cli",
+				"knightcode",
 			],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli`,
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 knightcode`,
 		});
 	});
 
 	test("self-updates exact npm versions without uninstalling the current package", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, {
-			packageName: "@knightcodeai/cli",
-			installSpec: "@knightcodeai/cli@1.2.3",
+		const command = getSelfUpdateCommand("knightcode", undefined, {
+			packageName: "knightcode",
+			installSpec: "knightcode@1.2.3",
 		});
 
 		expect(command).toEqual({
@@ -212,26 +210,26 @@ describe("detectInstallMethod", () => {
 				"--ignore-scripts",
 				"--engine-strict",
 				"--min-release-age=0",
-				"@knightcodeai/cli@1.2.3",
+				"knightcode@1.2.3",
 			],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli@1.2.3`,
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 knightcode@1.2.3`,
 		});
 	});
 
 	test("self-updates renamed packages from the current install prefix", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
+		const command = getSelfUpdateCommand("knightcode", undefined, "@new-scope/knightcode");
 
 		expect(command).toEqual({
 			command: "npm",
 			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/knightcode"],
-			display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
+			display: `npm --prefix ${prefix} uninstall -g knightcode && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/knightcode`,
 			steps: [
 				{
 					command: "npm",
-					args: ["--prefix", prefix, "uninstall", "-g", "@knightcodeai/cli"],
-					display: `npm --prefix ${prefix} uninstall -g @knightcodeai/cli`,
+					args: ["--prefix", prefix, "uninstall", "-g", "knightcode"],
+					display: `npm --prefix ${prefix} uninstall -g knightcode`,
 				},
 				{
 					command: "npm",
@@ -254,7 +252,7 @@ describe("detectInstallMethod", () => {
 	test.skipIf(process.platform === "win32")("self-update respects configured npmCommand", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli", ["npm", "--prefix", prefix]);
+		const command = getSelfUpdateCommand("knightcode", ["npm", "--prefix", prefix]);
 
 		expect(command).toEqual({
 			command: "npm",
@@ -266,16 +264,16 @@ describe("detectInstallMethod", () => {
 				"--ignore-scripts",
 				"--engine-strict",
 				"--min-release-age=0",
-				"@knightcodeai/cli",
+				"knightcode",
 			],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli`,
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --engine-strict --min-release-age=0 knightcode`,
 		});
 	});
 
 	test("self-update treats empty npmCommand as unset", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli", []);
+		const command = getSelfUpdateCommand("knightcode", []);
 
 		expect(command?.args).toEqual([
 			"--prefix",
@@ -285,60 +283,60 @@ describe("detectInstallMethod", () => {
 			"--ignore-scripts",
 			"--engine-strict",
 			"--min-release-age=0",
-			"@knightcodeai/cli",
+			"knightcode",
 		]);
 	});
 
 	test("quotes npm self-update display paths", () => {
 		const { prefix } = createNpmPrefixInstall("knightcode prefix ");
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli");
+		const command = getSelfUpdateCommand("knightcode");
 
 		expect(command?.display).toBe(
-			`npm --prefix "${prefix}" install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli`,
+			`npm --prefix "${prefix}" install -g --ignore-scripts --engine-strict --min-release-age=0 knightcode`,
 		);
 	});
 
 	test("does not infer Windows npm custom prefixes from package paths", () => {
-		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@KnightCodeAI\\@knightcodeai/cli";
+		const packageDir = "C:\\Users\\Admin\\npm prefix\\node_modules\\@KnightCodeAI\\knightcode";
 		process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
 		setExecPath(`${packageDir}\\dist\\cli.js`);
 
 		expect(detectInstallMethod()).toBe("npm");
-		expect(getUpdateInstruction("@knightcodeai/cli")).toBe(
-			"Run: npm install -g --ignore-scripts --engine-strict --min-release-age=0 @knightcodeai/cli",
+		expect(getUpdateInstruction("knightcode")).toBe(
+			"Run: npm install -g --ignore-scripts --engine-strict --min-release-age=0 knightcode",
 		);
 	});
 
 	test("self-updates bun global installs from bun pm bin", () => {
 		createBunGlobalInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli");
+		const command = getSelfUpdateCommand("knightcode");
 
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
-			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@knightcodeai/cli"],
-			display: "bun install -g --ignore-scripts --minimum-release-age=0 @knightcodeai/cli",
+			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "knightcode"],
+			display: "bun install -g --ignore-scripts --minimum-release-age=0 knightcode",
 		});
 	});
 
 	test("self-updates renamed pnpm global installs by removing the old package first", () => {
 		createPnpmGlobalInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
+		const command = getSelfUpdateCommand("knightcode", undefined, "@new-scope/knightcode");
 
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
 			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/knightcode"],
 			display:
-				"pnpm remove -g @knightcodeai/cli && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
+				"pnpm remove -g knightcode && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/knightcode",
 			steps: [
 				{
 					command: "pnpm",
-					args: ["remove", "-g", "@knightcodeai/cli"],
-					display: "pnpm remove -g @knightcodeai/cli",
+					args: ["remove", "-g", "knightcode"],
+					display: "pnpm remove -g knightcode",
 				},
 				{
 					command: "pnpm",
@@ -353,8 +351,8 @@ describe("detectInstallMethod", () => {
 		const temp = mkdtempSync(join(tmpdir(), "knightcode-pnpm11-"));
 		const binDir = join(temp, "bin");
 		const root = join(temp, "Library", "pnpm", "global", "v11");
-		const packageName = "@knightcodeai/cli";
-		const globalPackageDir = join(root, "11e9a", "node_modules", "@knightcodeai", "cli");
+		const packageName = "knightcode";
+		const globalPackageDir = join(root, "11e9a", "node_modules", "knightcode");
 		const storePackageDir = join(
 			temp,
 			"Library",
@@ -362,13 +360,11 @@ describe("detectInstallMethod", () => {
 			"store",
 			"v11",
 			"links",
-			"@knightcodeai",
-			"cli",
+			"knightcode",
 			"0.75.0",
 			"hash",
 			"node_modules",
-			"@knightcodeai",
-			"cli",
+			"knightcode",
 		);
 		mkdirSync(globalPackageDir, { recursive: true });
 		mkdirSync(storePackageDir, { recursive: true });
@@ -402,18 +398,18 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed yarn global installs by removing the old package first", () => {
 		createYarnGlobalInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
+		const command = getSelfUpdateCommand("knightcode", undefined, "@new-scope/knightcode");
 
 		expect(detectInstallMethod()).toBe("yarn");
 		expect(command).toEqual({
 			command: "yarn",
 			args: ["global", "add", "--ignore-scripts", "@new-scope/knightcode"],
-			display: "yarn global remove @knightcodeai/cli && yarn global add --ignore-scripts @new-scope/knightcode",
+			display: "yarn global remove knightcode && yarn global add --ignore-scripts @new-scope/knightcode",
 			steps: [
 				{
 					command: "yarn",
-					args: ["global", "remove", "@knightcodeai/cli"],
-					display: "yarn global remove @knightcodeai/cli",
+					args: ["global", "remove", "knightcode"],
+					display: "yarn global remove knightcode",
 				},
 				{
 					command: "yarn",
@@ -427,19 +423,19 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed bun global installs by removing the old package first", () => {
 		createBunGlobalInstall();
 
-		const command = getSelfUpdateCommand("@knightcodeai/cli", undefined, "@new-scope/knightcode");
+		const command = getSelfUpdateCommand("knightcode", undefined, "@new-scope/knightcode");
 
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
 			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/knightcode"],
 			display:
-				"bun uninstall -g @knightcodeai/cli && bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/knightcode",
+				"bun uninstall -g knightcode && bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/knightcode",
 			steps: [
 				{
 					command: "bun",
-					args: ["uninstall", "-g", "@knightcodeai/cli"],
-					display: "bun uninstall -g @knightcodeai/cli",
+					args: ["uninstall", "-g", "knightcode"],
+					display: "bun uninstall -g knightcode",
 				},
 				{
 					command: "bun",
@@ -455,8 +451,8 @@ describe("detectInstallMethod", () => {
 		const { packageDir } = createNpmPrefixInstall();
 		chmodSync(packageDir, 0o500);
 
-		expect(getSelfUpdateCommand("@knightcodeai/cli")).toBeUndefined();
-		expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli")).toContain("the install path is not writable");
+		expect(getSelfUpdateCommand("knightcode")).toBeUndefined();
+		expect(getSelfUpdateUnavailableInstruction("knightcode")).toContain("the install path is not writable");
 	});
 });
 
@@ -471,7 +467,7 @@ describe("detectInstallMethod for the Bun release binary", () => {
 			setExecPath(execPath);
 
 			expect(detectInstallMethod(binary)).toBe("bun-binary");
-			expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli", undefined, undefined, binary)).toBe(
+			expect(getSelfUpdateUnavailableInstruction("knightcode", undefined, undefined, binary)).toBe(
 				"Download from: https://github.com/KnightCodeAI/knightcode/releases/latest",
 			);
 		},
@@ -488,7 +484,7 @@ describe("getSelfUpdatePackageDir", () => {
 
 	test("follows a pnpm global link into the store", () => {
 		const { root, packageDir } = createPnpmGlobalInstall();
-		const storeDir = join(root, ".pnpm", "@knightcodeai+cli@0.0.0", "node_modules", "@knightcodeai", "cli");
+		const storeDir = join(root, ".pnpm", "knightcode@0.0.0", "node_modules", "knightcode");
 		mkdirSync(storeDir, { recursive: true });
 		writeFileSync(join(storeDir, "package.json"), "{}");
 		rmSync(packageDir, { recursive: true, force: true });
@@ -501,7 +497,7 @@ describe("getSelfUpdatePackageDir", () => {
 	test("ignores a global package that is not the running one", () => {
 		const { packageDir } = createNpmPrefixInstall();
 		writeFileSync(join(packageDir, "package.json"), "{}");
-		const other = join(tempDir!, "elsewhere", "@knightcodeai", "cli");
+		const other = join(tempDir!, "elsewhere", "knightcode");
 		mkdirSync(other, { recursive: true });
 		process.env.KNIGHTCODE_PACKAGE_DIR = other;
 

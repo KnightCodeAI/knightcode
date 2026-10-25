@@ -6,7 +6,7 @@
  * as expandable custom entries.
  */
 
-import { type ExtensionAPI, keyHint } from "@knightcodeai/cli";
+import { type ExtensionAPI, keyHint } from "knightcode";
 import { Box, Text } from "@knightcode/tui";
 
 const ENTRY_TYPE = "debug-provider-events";

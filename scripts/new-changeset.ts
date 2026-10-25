@@ -19,7 +19,7 @@ const BUMPS = ["patch", "minor", "major"];
 // The CLI on npm (the app server and the terminal), and the desktop app, which
 // changesets versions and desktop-release.yml ships. Anything else is rare
 // enough for `bun x changeset`.
-const PACKAGES: Record<string, string> = { cli: "@knightcodeai/cli", desktop: "@knightcode/desktop" };
+const PACKAGES: Record<string, string> = { cli: "knightcode", desktop: "@knightcode/desktop" };
 
 const [categoryArg, bumpArg, packageArg] = Bun.argv.slice(2);
 

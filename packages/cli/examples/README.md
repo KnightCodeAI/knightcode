@@ -1,6 +1,6 @@
 # Examples
 
-Example code for the @knightcodeai/cli SDK, process integration, and extensions.
+Example code for the knightcode SDK, process integration, and extensions.
 
 ## CLI integration
 

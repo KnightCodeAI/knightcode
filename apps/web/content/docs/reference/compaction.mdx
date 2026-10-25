@@ -14,7 +14,7 @@ This reference describes automatic compaction, branch summarization, persisted e
 - [`packages/cli/src/core/session-manager.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/session-manager.ts) - Entry types (`CompactionEntry`, `BranchSummaryEntry`)
 - [`packages/cli/src/core/extensions/types.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/core/extensions/types.ts) - Extension event types
 
-For TypeScript definitions in your project, inspect `node_modules/@knightcodeai/cli/dist/`.
+For TypeScript definitions in your project, inspect `node_modules/knightcode/dist/`.
 
 ## Overview
 
@@ -340,7 +340,7 @@ knightcode.on("session_before_compact", async (event, ctx) => {
 To generate a summary with your own model, convert messages to text using `serializeConversation`:
 
 ```typescript
-import { convertToLlm, serializeConversation } from "@knightcodeai/cli";
+import { convertToLlm, serializeConversation } from "knightcode";
 
 knightcode.on("session_before_compact", async (event, ctx) => {
   const { preparation } = event;

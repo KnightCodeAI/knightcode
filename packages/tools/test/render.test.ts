@@ -1,6 +1,6 @@
 import { setKeybindings } from "@knightcode/tui";
-import type { Theme } from "@knightcodeai/cli";
-import { KeybindingsManager } from "@knightcodeai/cli/core/keybindings";
+import type { Theme } from "knightcode";
+import { KeybindingsManager } from "knightcode/core/keybindings";
 import { beforeAll, describe, expect, test } from "vitest";
 import { webfetchCallText, webfetchResultText, websearchCallText, websearchResultText } from "../src/web/render.ts";
 

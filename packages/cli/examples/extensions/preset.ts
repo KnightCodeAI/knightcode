@@ -41,8 +41,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Api, Model } from "@knightcode/ai";
-import type { ExtensionAPI, ExtensionContext } from "@knightcodeai/cli";
-import { CONFIG_DIR_NAME, DynamicBorder, getAgentDir } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext } from "knightcode";
+import { CONFIG_DIR_NAME, DynamicBorder, getAgentDir } from "knightcode";
 import { Container, Key, type SelectItem, SelectList, Text } from "@knightcode/tui";
 
 // Preset configuration

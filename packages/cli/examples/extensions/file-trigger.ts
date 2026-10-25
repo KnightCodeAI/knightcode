@@ -9,7 +9,7 @@
  */
 
 import * as fs from "node:fs";
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	knightcode.on("session_start", async (_event, ctx) => {

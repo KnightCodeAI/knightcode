@@ -1,7 +1,10 @@
 #!/bin/sh
 # Installs KnightCode on macOS and Linux. Run it again to reinstall or uninstall.
 
-KNIGHTCODE_PACKAGE="@knightcodeai/cli"
+KNIGHTCODE_PACKAGE="knightcode"
+# The npm name before the rename. Uninstalls remove it too, and releases
+# published under it still lock it.
+KNIGHTCODE_LEGACY_PACKAGE="@knightcodeai/cli"
 KNIGHTCODE_CMD="knightcode"
 KNIGHTCODE_INSTALLER_API_BASE="${KNIGHTCODE_INSTALLER_API_BASE:-https://knightcode.dev/api/installer/releases}"
 KNIGHTCODE_MANAGED_INSTALL_MARKER="managed-install.json"
@@ -11,7 +14,7 @@ KNIGHTCODE_NPM_INSTALL_MIN_AGE_ARG="--min-release-age=0"
 KNIGHTCODE_ESC=$(printf '\033')
 KNIGHTCODE_CR=$(printf '\r')
 KNIGHTCODE_ETX=$(printf '\003')
-readonly KNIGHTCODE_PACKAGE KNIGHTCODE_CMD KNIGHTCODE_INSTALLER_API_BASE KNIGHTCODE_MANAGED_INSTALL_MARKER KNIGHTCODE_NPM_INSTALL_MIN_AGE_ARG KNIGHTCODE_ESC KNIGHTCODE_CR KNIGHTCODE_ETX
+readonly KNIGHTCODE_PACKAGE KNIGHTCODE_LEGACY_PACKAGE KNIGHTCODE_CMD KNIGHTCODE_INSTALLER_API_BASE KNIGHTCODE_MANAGED_INSTALL_MARKER KNIGHTCODE_NPM_INSTALL_MIN_AGE_ARG KNIGHTCODE_ESC KNIGHTCODE_CR KNIGHTCODE_ETX
 
 knightcode_installer_main() {
   set -eu
@@ -536,7 +539,7 @@ print_existing_global_knightcode_not_writable_message() {
   printf 'Update or remove the existing global install first. If it was installed with npm, you can run:\n\n' >&2
   printf '  sudo npm install -g --ignore-scripts %s %s\n\n' "$KNIGHTCODE_NPM_INSTALL_MIN_AGE_ARG" "$KNIGHTCODE_PACKAGE" >&2
   printf 'or uninstall it first with:\n\n' >&2
-  printf '  sudo npm uninstall -g %s\n\n' "$KNIGHTCODE_PACKAGE" >&2
+  printf '  sudo npm uninstall -g %s %s\n\n' "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE" >&2
   printf 'Then run this installer again.\n' >&2
 }
 
@@ -1072,12 +1075,13 @@ validate_managed_install_artifacts() {
   package_lock_path="$2"
   managed_version="$3"
 
-  node - "$package_json_path" "$package_lock_path" "$KNIGHTCODE_PACKAGE" "$managed_version" <<'NODE'
+  node - "$package_json_path" "$package_lock_path" "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE" "$managed_version" <<'NODE'
 const fs = require("node:fs");
 const packageJson = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const packageLock = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
-const cliPackage = process.argv[4];
-const version = process.argv[5];
+// Releases published before the npm rename lock the legacy name.
+const cliPackage = packageJson.dependencies?.[process.argv[5]] === undefined ? process.argv[4] : process.argv[5];
+const version = process.argv[6];
 const root = packageLock.packages?.[""];
 const cliEntry = packageLock.packages?.[`node_modules/${cliPackage}`];
 
@@ -1233,9 +1237,9 @@ write_managed_current_version() {
 
 print_npm_uninstall_command() {
   if [ -n "${KNIGHTCODE_NPM_UNINSTALL_PREFIX:-}" ]; then
-    printf 'npm uninstall -g --prefix %s %s' "$KNIGHTCODE_NPM_UNINSTALL_PREFIX" "$KNIGHTCODE_PACKAGE"
+    printf 'npm uninstall -g --prefix %s %s %s' "$KNIGHTCODE_NPM_UNINSTALL_PREFIX" "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE"
   else
-    printf 'npm uninstall -g %s' "$KNIGHTCODE_PACKAGE"
+    printf 'npm uninstall -g %s %s' "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE"
   fi
 }
 
@@ -1397,18 +1401,18 @@ uninstall_knightcode_package() {
 
 npm_package_is_installed_for_uninstall() {
   if [ -n "${KNIGHTCODE_NPM_UNINSTALL_PREFIX:-}" ]; then
-    npm ls -g --prefix "$KNIGHTCODE_NPM_UNINSTALL_PREFIX" --depth=0 "$KNIGHTCODE_PACKAGE" >/dev/null 2>&1
+    npm ls -g --prefix "$KNIGHTCODE_NPM_UNINSTALL_PREFIX" --depth=0 "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE" >/dev/null 2>&1
   else
-    npm ls -g --depth=0 "$KNIGHTCODE_PACKAGE" >/dev/null 2>&1
+    npm ls -g --depth=0 "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE" >/dev/null 2>&1
   fi
 }
 
 run_npm_uninstall_knightcode() {
   npm_loglevel="$1"
   if [ -n "${KNIGHTCODE_NPM_UNINSTALL_PREFIX:-}" ]; then
-    npm uninstall -g --prefix "$KNIGHTCODE_NPM_UNINSTALL_PREFIX" --no-fund --no-audit "--loglevel=$npm_loglevel" --progress=false "$KNIGHTCODE_PACKAGE"
+    npm uninstall -g --prefix "$KNIGHTCODE_NPM_UNINSTALL_PREFIX" --no-fund --no-audit "--loglevel=$npm_loglevel" --progress=false "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE"
   else
-    npm uninstall -g --no-fund --no-audit "--loglevel=$npm_loglevel" --progress=false "$KNIGHTCODE_PACKAGE"
+    npm uninstall -g --no-fund --no-audit "--loglevel=$npm_loglevel" --progress=false "$KNIGHTCODE_PACKAGE" "$KNIGHTCODE_LEGACY_PACKAGE"
   fi
 }
 

@@ -28,7 +28,7 @@ describe("extension crash attribution", () => {
 		const unrelated = packageExtension("npm:unrelated", "/home/fedora/.knightcode/agent/npm/node_modules/unrelated");
 		const stack =
 			"TypeError: Cannot read properties of undefined (reading 'runtime')\n" +
-			"    at streamSimple (file:///home/fedora/.local/lib/node_modules/@knightcodeai/cli/dist/bundle/chunks/chunk-CMRUVXTE.js:1093:16944)\n" +
+			"    at streamSimple (file:///home/fedora/.local/lib/node_modules/knightcode/dist/bundle/chunks/chunk-CMRUVXTE.js:1093:16944)\n" +
 			"    at /home/fedora/.knightcode/agent/npm/node_modules/knightcode-observational-memory/src/agents/worker-stream.ts:43:45";
 
 		expect(findExtensionStackMatches(stack, [memory, unrelated])).toEqual(["npm:knightcode-observational-memory"]);

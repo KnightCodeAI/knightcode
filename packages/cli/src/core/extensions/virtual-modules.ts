@@ -8,7 +8,7 @@ import * as bundledTypebox from "typebox";
 import * as bundledTypeboxCompile from "typebox/compile";
 import * as bundledTypeboxValue from "typebox/value";
 // This import is safe because loader.ts exports are not re-exported from index.ts.
-// Extensions can therefore import from @knightcodeai/cli.
+// Extensions can therefore import from knightcode (or @knightcodeai/cli, its name before the rename).
 import * as bundledKnightCli from "../../index.ts";
 
 /** Modules available to extensions in source and compiled binary runtimes. */
@@ -28,5 +28,6 @@ export const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@knightcode/ai/models": bundledKnightAiModels,
 	"@knightcode/ai/oauth": bundledKnightAiOauth,
 	"@knightcode/ai/providers/all": bundledKnightAiProviders,
+	knightcode: bundledKnightCli,
 	"@knightcodeai/cli": bundledKnightCli,
 };

@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionCommandContext } from "knightcode";
 import { type RegisteredToolEntry, TOOLS } from "./registry.ts";
 import { MODE_LABELS, toolSettingsPanel } from "./settings.ts";
 import { applyActiveTools, describeMode, readPersisted, setMode, TOOL_MODES, type ToolMode } from "./state.ts";

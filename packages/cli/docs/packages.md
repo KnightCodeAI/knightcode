@@ -83,7 +83,7 @@ KnightCode supplies these packages to extensions and skills:
 
 - `@knightcode/ai`
 - `@knightcode/agent`
-- `@knightcodeai/cli`
+- `knightcode`
 - `@knightcode/tui`
 - `typebox`
 

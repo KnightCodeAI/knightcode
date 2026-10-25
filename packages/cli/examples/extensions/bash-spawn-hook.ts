@@ -7,8 +7,8 @@
  *   knightcode -e ./bash-spawn-hook.ts
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
-import { createBashTool } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
+import { createBashTool } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	const cwd = process.cwd();

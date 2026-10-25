@@ -1,5 +1,5 @@
-import type { ToolDefinition } from "@knightcodeai/cli";
-import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "@knightcodeai/cli/core/tools/truncate";
+import type { ToolDefinition } from "knightcode";
+import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "knightcode/core/tools/truncate";
 import { RE2JS } from "re2js";
 import { type Static, Type } from "typebox";
 import { assertPublicUrl, type GuardOptions, type PublicUrl } from "./guard.ts";

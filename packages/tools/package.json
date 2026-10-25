@@ -12,7 +12,7 @@
 	},
 	"dependencies": {
 		"@knightcode/tui": "workspace:*",
-		"@knightcodeai/cli": "workspace:*",
+		"knightcode": "workspace:*",
 		"proper-lockfile": "4.1.2",
 		"re2js": "2.8.6",
 		"turndown": "7.2.0",

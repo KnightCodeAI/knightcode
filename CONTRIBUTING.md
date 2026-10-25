@@ -94,7 +94,7 @@ bun run changeset [category] [bump] [cli|desktop]   # defaults: fixed patch cli
 ```
 
 That writes `.changeset/<your-branch>.md`, already filled in for
-`@knightcodeai/cli` (or `@knightcode/desktop` with `desktop`), and you finish
+`knightcode` (or `@knightcode/desktop` with `desktop`), and you finish
 the sentence:
 
 > Fixed Windows shell aborts crashing KnightCode when `taskkill.exe` is missing.

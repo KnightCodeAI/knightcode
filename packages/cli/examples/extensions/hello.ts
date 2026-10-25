@@ -3,7 +3,7 @@
  */
 
 import { Type } from "@knightcode/ai";
-import { defineTool, type ExtensionAPI } from "@knightcodeai/cli";
+import { defineTool, type ExtensionAPI } from "knightcode";
 
 const helloTool = defineTool({
 	name: "hello",

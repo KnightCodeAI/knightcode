@@ -10,7 +10,7 @@
  * 3. When enabled, the agent will respond like a pirate
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function pirateExtension(knightcode: ExtensionAPI) {
 	let pirateMode = false;

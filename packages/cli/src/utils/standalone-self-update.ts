@@ -12,13 +12,14 @@ import {
 	rmSync,
 } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
-import { PACKAGE_NAME } from "../config.ts";
 import { trySelfUpdateLockSync, withSelfUpdateLock } from "./global-self-update.ts";
 import { fetchWithRetry } from "./management-http.ts";
 import { downloadFile, extractTarGzArchive, extractZipArchive } from "./tools-manager.ts";
 import { runUpdateProcess } from "./update-process.ts";
 
 const RELEASES_URL = "https://github.com/KnightCodeAI/knightcode/releases/download";
+/** Release tags keep the npm name from before the rename: binaries built earlier download from them too. */
+const RELEASE_TAG_PACKAGE = "@knightcodeai/cli";
 const RELEASE_TARGETS = new Set(["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"]);
 /** Files an update replaced. Windows cannot delete a running executable, so they wait for the next start. */
 const REPLACED_DIR = ".knightcode-update-old";
@@ -105,7 +106,7 @@ async function replaceRelease(version: string, binaryPath: string, lockLost: Abo
 	const dir = dirname(binaryPath);
 	const releaseBinary = RELEASE_BINARY;
 	const asset = `knightcode-${process.platform}-${process.arch}${process.platform === "win32" ? ".zip" : ".tar.gz"}`;
-	const releaseUrl = `${RELEASES_URL}/${encodeURIComponent(`${PACKAGE_NAME}@${version}`)}`;
+	const releaseUrl = `${RELEASES_URL}/${encodeURIComponent(`${RELEASE_TAG_PACKAGE}@${version}`)}`;
 
 	cleanupStandaloneUpdate(binaryPath);
 	// Stage beside the binary so every swap is a same-volume rename.

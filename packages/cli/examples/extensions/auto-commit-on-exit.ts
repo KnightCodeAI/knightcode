@@ -5,7 +5,7 @@
  * Uses the last assistant message to generate a commit message.
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	knightcode.on("session_shutdown", async (event, ctx) => {

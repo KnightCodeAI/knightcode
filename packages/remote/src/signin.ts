@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { hostname } from "node:os";
-import type { ExtensionCommandContext, Theme } from "@knightcodeai/cli";
+import type { ExtensionCommandContext, Theme } from "knightcode";
 import { type Component, Container, getKeybindings, Loader, Spacer, Text, type TUI } from "@knightcode/tui";
 import { login } from "./auth.ts";
 

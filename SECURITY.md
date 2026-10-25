@@ -40,7 +40,7 @@ and coordinate disclosure as appropriate.
 
 ## Scope
 
-Security issues in the distributed npm package (`@knightcodeai/cli`), the
+Security issues in the distributed npm package (`knightcode`), the
 standalone binaries attached to GitHub releases, the command-line tool, and
 repository code are in scope, as is the model catalog distribution at
 `knightcode.dev`.

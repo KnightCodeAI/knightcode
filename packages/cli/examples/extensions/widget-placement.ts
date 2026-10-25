@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function widgetPlacementExtension(knightcode: ExtensionAPI) {
 	knightcode.on("session_start", (_event, ctx) => {

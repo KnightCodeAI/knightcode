@@ -7,7 +7,7 @@
  * Usage: /status [message] - sends a status message with custom rendering
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { Box, Text } from "@knightcode/tui";
 
 export default function (knightcode: ExtensionAPI) {

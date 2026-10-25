@@ -5,7 +5,7 @@
  * without paying for an extra follow-up LLM turn.
  */
 
-import { defineTool, type ExtensionAPI } from "@knightcodeai/cli";
+import { defineTool, type ExtensionAPI } from "knightcode";
 import { Text } from "@knightcode/tui";
 import { Type } from "typebox";
 

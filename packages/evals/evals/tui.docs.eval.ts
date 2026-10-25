@@ -8,7 +8,7 @@ import {
 	InteractiveMode,
 	SessionManager,
 	createAgentSessionFromServices,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import { createJudge, describeEval } from "vitest-evals";
 import { createDocumentationEvalHarness, type KnightCodeHarnessInput } from "../src/harness.ts";
 

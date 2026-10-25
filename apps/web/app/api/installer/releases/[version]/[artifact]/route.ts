@@ -1,5 +1,6 @@
 import {
   installerPackageJson,
+  lockCliPackage,
   parseInstallerVersion,
 } from "@/lib/installer-lock"
 import { loadInstallerLock } from "@/lib/installer-release"
@@ -31,7 +32,10 @@ export async function GET(
     })
   }
 
-  return Response.json(installerPackageJson(version), {
-    headers: { "cache-control": IMMUTABLE },
-  })
+  return Response.json(
+    installerPackageJson(version, lockCliPackage(JSON.parse(lock.body))),
+    {
+      headers: { "cache-control": IMMUTABLE },
+    }
+  )
 }

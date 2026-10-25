@@ -1,6 +1,6 @@
 import { uuidv7 } from "@knightcode/ai";
-import type { ExtensionAPI, ExtensionCommandContext } from "@knightcodeai/cli";
-import { DynamicBorder, getMarkdownTheme } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionCommandContext } from "knightcode";
+import { DynamicBorder, getMarkdownTheme } from "knightcode";
 import { Container, Markdown, matchesKey, Text } from "@knightcode/tui";
 
 type ContentBlock = {

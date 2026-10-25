@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { type Api, type Context, contentText, type Model, type ModelsSimpleStreamOptions } from "@knightcode/ai";
-import { ModelRuntime } from "@knightcodeai/cli";
+import { ModelRuntime } from "knightcode";
 
 type ModelFields = {
 	id: string;

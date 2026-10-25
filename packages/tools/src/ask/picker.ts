@@ -8,8 +8,8 @@ import {
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@knightcode/tui";
-import type { Theme } from "@knightcodeai/cli";
-import { formatKeyText } from "@knightcodeai/cli/modes/interactive/components/keybinding-hints";
+import type { Theme } from "knightcode";
+import { formatKeyText } from "knightcode/modes/interactive/components/keybinding-hints";
 import type { AskAnswers, AskQuestion } from "./tool.ts";
 
 /** The row every question gets after the model's options; choosing it asks for the user's own answer. */

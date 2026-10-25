@@ -4,7 +4,7 @@
   </a>
 </p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/@knightcodeai/cli"><img alt="npm" src="https://img.shields.io/npm/v/@knightcodeai/cli?style=flat-square&logo=npm&logoColor=white" /></a>
+  <a href="https://www.npmjs.com/package/knightcode"><img alt="npm" src="https://img.shields.io/npm/v/knightcode?style=flat-square&logo=npm&logoColor=white" /></a>
 </p>
 
 > New issues and PRs from new contributors are closed automatically. Maintainers review closed submissions daily. See [CONTRIBUTING.md](https://github.com/KnightCodeAI/knightcode/blob/main/CONTRIBUTING.md).
@@ -20,7 +20,7 @@ Ask KnightCode to create the prompt templates, skills, extensions, and themes yo
 Install the command-line interface with npm:
 
 ```bash
-npm install -g --ignore-scripts @knightcodeai/cli
+npm install -g --ignore-scripts knightcode
 ```
 
 This requires Node.js 22.19 or newer. KnightCode does not require dependency lifecycle scripts for a normal npm installation, and it runs on your Node: you do not need Bun. For a machine without Node, each [GitHub release](https://github.com/KnightCodeAI/knightcode/releases) also carries standalone binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).

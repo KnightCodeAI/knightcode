@@ -175,8 +175,8 @@
       },
     },
     "packages/cli": {
-      "name": "@knightcodeai/cli",
-      "version": "0.20.0",
+      "name": "knightcode",
+      "version": "0.21.1",
       "bin": {
         "knightcode": "./dist/bundle/cli.js",
       },
@@ -251,8 +251,8 @@
       "version": "0.1.0",
       "devDependencies": {
         "@knightcode/ai": "workspace:*",
-        "@knightcodeai/cli": "workspace:*",
         "@vitest-evals/core": "0.15.0",
+        "knightcode": "workspace:*",
         "vitest-evals": "0.15.0",
       },
     },
@@ -282,10 +282,10 @@
     },
     "packages/tools": {
       "name": "@knightcode/tools",
-      "version": "0.1.31",
+      "version": "0.1.32",
       "dependencies": {
         "@knightcode/tui": "workspace:*",
-        "@knightcodeai/cli": "workspace:*",
+        "knightcode": "workspace:*",
         "proper-lockfile": "4.1.2",
         "re2js": "2.8.6",
         "turndown": "7.2.0",
@@ -746,8 +746,6 @@
     "@knightcode/tools": ["@knightcode/tools@workspace:packages/tools"],
 
     "@knightcode/tui": ["@knightcode/tui@workspace:packages/tui"],
-
-    "@knightcodeai/cli": ["@knightcodeai/cli@workspace:packages/cli"],
 
     "@malept/cross-spawn-promise": ["@malept/cross-spawn-promise@2.0.0", "", { "dependencies": { "cross-spawn": "^7.0.1" } }, "sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg=="],
 
@@ -2116,6 +2114,8 @@
     "keyv": ["keyv@4.5.4", "", { "dependencies": { "json-buffer": "3.0.1" } }, "sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw=="],
 
     "kleur": ["kleur@4.1.5", "", {}, "sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ=="],
+
+    "knightcode": ["knightcode@workspace:packages/cli"],
 
     "knightcode-remote": ["knightcode-remote@workspace:apps/remote"],
 

@@ -1,6 +1,6 @@
 import { Text } from "@knightcode/tui";
-import type { Theme, ToolDefinition } from "@knightcodeai/cli";
-import { getTextOutput, plural } from "@knightcodeai/cli/core/tools/render-utils";
+import type { Theme, ToolDefinition } from "knightcode";
+import { getTextOutput, plural } from "knightcode/core/tools/render-utils";
 import type { AskUserDetails, AskUserParams, askUserSchema } from "./tool.ts";
 
 interface RenderableResult {

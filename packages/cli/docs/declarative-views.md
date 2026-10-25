@@ -7,7 +7,7 @@ components: the terminal with TUI components, the [desktop app](desktop.md) with
 its own. A view is data only. It never holds HTML, scripts or URLs that load.
 
 ```ts
-import type { View } from "@knightcodeai/cli";
+import type { View } from "knightcode";
 
 const view: View = {
 	type: "stack",

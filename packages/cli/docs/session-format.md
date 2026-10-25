@@ -40,7 +40,7 @@ Source on GitHub ([knightcode](https://github.com/KnightCodeAI/knightcode)):
 - [`packages/ai/src/types.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/ai/src/types.ts) - Base message and content-block types
 - [`packages/agent/src/types.ts`](https://github.com/KnightCodeAI/knightcode/blob/main/packages/agent/src/types.ts) - Extensible `AgentMessage` union
 
-For TypeScript definitions in your project, inspect `node_modules/@knightcodeai/cli/dist/` and `node_modules/@knightcode/ai/dist/`.
+For TypeScript definitions in your project, inspect `node_modules/knightcode/dist/` and `node_modules/@knightcode/ai/dist/`.
 
 ## Messages
 

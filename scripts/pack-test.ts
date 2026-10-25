@@ -1,5 +1,5 @@
 // scripts/pack-test.ts — validate the published install end-to-end, locally.
-// Packs @knightcodeai/cli with real `npm pack`, installs the tarball into a
+// Packs knightcode with real `npm pack`, installs the tarball into a
 // throwaway project the way users get it, and runs the installed command.
 import { $ } from "bun";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -60,7 +60,7 @@ try {
 	}
 	console.log("✓ --help exit 0");
 
-	const entry = join(proj, "node_modules", "@knightcodeai", "cli", pkg.bin.knightcode);
+	const entry = join(proj, "node_modules", "knightcode", pkg.bin.knightcode);
 
 	// One real turn on this Node, against a local OpenAI-compatible server. --version and --help
 	// send no request. It is HTTPS and sends zstd only when asked, as Cloudflare does, because
@@ -128,7 +128,7 @@ try {
 	// <platform>-<arch> directory loadNativePlatformHelper reads, not just the OS.
 	const target = `${process.platform}-${process.arch}`;
 	const prebuilds = join(process.platform, "prebuilds", target);
-	const shipped = join(proj, "node_modules", "@knightcodeai", "cli", "dist", "bundle", "native", prebuilds);
+	const shipped = join(proj, "node_modules", "knightcode", "dist", "bundle", "native", prebuilds);
 	if (existsSync(join(ROOT, "packages", "tui", "native", prebuilds)) && !existsSync(shipped)) {
 		throw new Error(`Package has no native helpers for ${target}`);
 	}

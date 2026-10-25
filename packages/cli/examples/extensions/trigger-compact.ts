@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext } from "knightcode";
 
 const COMPACT_THRESHOLD_TOKENS = 100_000;
 

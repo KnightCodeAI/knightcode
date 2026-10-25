@@ -25,7 +25,7 @@ import {
 } from "../modes/interactive/theme/theme.ts";
 import { requestTerminalColors } from "../modes/interactive/theme/theme-controller.ts";
 
-const OFFICIAL_PACKAGE_NAME = "@knightcodeai/cli";
+const OFFICIAL_PACKAGE_NAME = "knightcode";
 const OFFICIAL_APP_NAME = "knightcode";
 const OFFICIAL_CONFIG_DIR_NAME = ".knightcode";
 

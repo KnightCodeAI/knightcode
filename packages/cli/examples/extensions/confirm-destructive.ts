@@ -5,7 +5,7 @@
  * Demonstrates how to cancel session events using the before_* events.
  */
 
-import type { ExtensionAPI, SessionBeforeSwitchEvent, SessionMessageEntry } from "@knightcodeai/cli";
+import type { ExtensionAPI, SessionBeforeSwitchEvent, SessionMessageEntry } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	knightcode.on("session_before_switch", async (event: SessionBeforeSwitchEvent, ctx) => {

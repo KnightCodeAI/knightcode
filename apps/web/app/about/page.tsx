@@ -81,7 +81,7 @@ export default async function AboutPage() {
 
         <h2>How it&apos;s built</h2>
         <p>
-          The published command is <code>@knightcodeai/cli</code>. It depends on
+          The published command is <code>knightcode</code>. It depends on
           the other packages in this repository. <code>@knightcode/ai</code>{" "}
           is the provider layer: catalogs, API adapters, OAuth, and streaming.
           <code>@knightcode/agent</code> is the loop, the harness, compaction,

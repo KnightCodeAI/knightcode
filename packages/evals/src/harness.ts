@@ -18,7 +18,7 @@ import {
 	readStoredCredential,
 	SessionManager,
 	SettingsManager,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import {
 	attachHarnessRunToError,
 	createHarness,

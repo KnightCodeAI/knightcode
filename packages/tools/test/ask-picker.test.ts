@@ -1,6 +1,6 @@
 import { setKeybindings, visibleWidth } from "@knightcode/tui";
-import type { Theme } from "@knightcodeai/cli";
-import { KeybindingsManager } from "@knightcodeai/cli/core/keybindings";
+import type { Theme } from "knightcode";
+import { KeybindingsManager } from "knightcode/core/keybindings";
 import { beforeEach, describe, expect, test } from "vitest";
 import { AskPicker } from "../src/ask/picker.ts";
 import type { AskAnswers, AskQuestion } from "../src/ask/tool.ts";

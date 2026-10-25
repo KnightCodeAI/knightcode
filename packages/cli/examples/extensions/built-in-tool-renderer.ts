@@ -25,13 +25,13 @@
  *   knightcode -e ./built-in-tool-renderer.ts
  */
 
-import type { BashToolDetails, EditToolDetails, ExtensionAPI, ReadToolDetails } from "@knightcodeai/cli";
+import type { BashToolDetails, EditToolDetails, ExtensionAPI, ReadToolDetails } from "knightcode";
 import {
 	createBashToolDefinition,
 	createEditToolDefinition,
 	createReadToolDefinition,
 	createWriteToolDefinition,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import { Text } from "@knightcode/tui";
 
 export default function (knightcode: ExtensionAPI) {

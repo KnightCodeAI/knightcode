@@ -5,7 +5,7 @@
  * from cwd and ~/.knightcode/agent. Model chosen from settings or first available.
  */
 
-import { createAgentSession } from "@knightcodeai/cli";
+import { createAgentSession } from "knightcode";
 
 const { session } = await createAgentSession();
 

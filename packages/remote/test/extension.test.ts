@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
-import type { ExtensionAPI, ExtensionCommandContext } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionCommandContext } from "knightcode";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ENV_CONFIG_DIR, ENV_RELAY, readToken } from "../src/auth.ts";
 import { remoteCommands, remoteExtension } from "../src/extension.ts";

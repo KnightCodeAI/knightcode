@@ -19,7 +19,7 @@ import {
 	getAgentDir,
 	SessionManager,
 	SettingsManager,
-} from "@knightcodeai/cli";
+} from "knightcode";
 
 const cwd = process.cwd();
 

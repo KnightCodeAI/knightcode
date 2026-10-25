@@ -11,7 +11,7 @@
  * Start knightcode with this extension:
  *   knightcode -e ./examples/extensions/input-transform-streaming.ts
  */
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 const TRIGGER = /\b(changes?|diff|modified)\b/i;
 

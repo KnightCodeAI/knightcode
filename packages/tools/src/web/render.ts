@@ -1,7 +1,7 @@
 import { Text } from "@knightcode/tui";
-import type { Theme, ToolDefinition } from "@knightcodeai/cli";
-import { formatToolCall, formatToolSummary, getTextOutput } from "@knightcodeai/cli/core/tools/render-utils";
-import { formatSize } from "@knightcodeai/cli/core/tools/truncate";
+import type { Theme, ToolDefinition } from "knightcode";
+import { formatToolCall, formatToolSummary, getTextOutput } from "knightcode/core/tools/render-utils";
+import { formatSize } from "knightcode/core/tools/truncate";
 import type { TSchema } from "typebox";
 import type { WebfetchDetails, WebfetchParams, webfetchSchema } from "./fetch.ts";
 import type { WebsearchDetails, WebsearchParams, websearchSchema } from "./search.ts";

@@ -6,7 +6,7 @@ import {
 	getSettingsListTheme,
 	type ModelRegistry,
 	type Theme,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import type { RegisteredToolEntry } from "./registry.ts";
 import {
 	applyActiveTools,

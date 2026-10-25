@@ -20,7 +20,7 @@
  */
 
 import type { Message } from "@knightcode/ai";
-import type { ExtensionAPI, ExtensionContext, ModelRoute, ModelRouteRequest } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext, ModelRoute, ModelRouteRequest } from "knightcode";
 
 const PROVIDER = "openai-codex";
 const SOL = "gpt-5.6-sol";

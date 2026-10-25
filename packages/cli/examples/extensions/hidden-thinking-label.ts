@@ -18,7 +18,7 @@
  *   /thinking-label          Reset to the default label
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext } from "knightcode";
 
 const DEFAULT_LABEL = "Pondering...";
 

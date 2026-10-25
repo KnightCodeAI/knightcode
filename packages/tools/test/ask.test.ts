@@ -1,7 +1,7 @@
 import { type Component, setKeybindings, type TUI } from "@knightcode/tui";
-import type { ExtensionToolContext, Theme } from "@knightcodeai/cli";
-import type { ToolRenderContext } from "@knightcodeai/cli/core/extensions/types";
-import { KeybindingsManager } from "@knightcodeai/cli/core/keybindings";
+import type { ExtensionToolContext, Theme } from "knightcode";
+import type { ToolRenderContext } from "knightcode/core/extensions/types";
+import { KeybindingsManager } from "knightcode/core/keybindings";
 import { Value } from "typebox/value";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { OTHER_LABEL } from "../src/ask/picker.ts";

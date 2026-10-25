@@ -26,7 +26,7 @@ import {
 	getAgentDir,
 	getMarkdownTheme,
 	withFileMutationQueue,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import { Container, Markdown, Spacer, Text } from "@knightcode/tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";

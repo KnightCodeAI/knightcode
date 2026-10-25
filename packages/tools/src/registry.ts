@@ -1,5 +1,5 @@
 import type { SettingItem } from "@knightcode/tui";
-import type { ModelRegistry, Theme, ToolDefinition } from "@knightcodeai/cli";
+import type { ModelRegistry, Theme, ToolDefinition } from "knightcode";
 import { askUserTool } from "./ask/tool.ts";
 import type { ToolSettings } from "./state.ts";
 import { webfetchTool } from "./web/fetch.ts";

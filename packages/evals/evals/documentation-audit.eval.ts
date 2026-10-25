@@ -1,7 +1,7 @@
 import { globSync } from "node:fs";
 import { resolve } from "node:path";
 import { Type } from "@knightcode/ai";
-import { defineTool } from "@knightcodeai/cli";
+import { defineTool } from "knightcode";
 import { expect } from "vitest";
 import { describeEval, toolCalls } from "vitest-evals";
 import { createKnightCodeHarness } from "../src/harness.ts";

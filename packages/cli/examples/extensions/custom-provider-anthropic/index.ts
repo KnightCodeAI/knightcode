@@ -46,7 +46,7 @@ import {
 	type ToolResultMessage,
 	type TranscriptContext,
 } from "@knightcode/ai";
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 // =============================================================================
 // OAuth implementation adapted for the legacy extension compatibility interface.

@@ -7,7 +7,7 @@
  * Usage: knightcode -e ./model-status.ts
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	knightcode.on("model_select", async (event, ctx) => {

@@ -15,8 +15,8 @@
  */
 
 import { uuidv7 } from "@knightcode/ai";
-import type { ExtensionAPI } from "@knightcodeai/cli";
-import { convertToLlm, serializeConversation } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
+import { convertToLlm, serializeConversation } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	knightcode.on("session_before_compact", async (event, ctx) => {

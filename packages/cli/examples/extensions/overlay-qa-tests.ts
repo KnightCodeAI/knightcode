@@ -19,7 +19,7 @@
  *   /overlay-streaming  - Multiple input panels with simulated streaming (Tab to cycle focus)
  */
 
-import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionCommandContext, Theme } from "knightcode";
 import type { Component, OverlayAnchor, OverlayHandle, OverlayOptions, TUI } from "@knightcode/tui";
 import { Input, matchesKey, truncateToWidth, visibleWidth } from "@knightcode/tui";
 import { spawn } from "child_process";

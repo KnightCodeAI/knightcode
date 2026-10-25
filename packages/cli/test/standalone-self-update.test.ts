@@ -74,6 +74,7 @@ beforeEach(() => {
 	vi.stubGlobal(
 		"fetch",
 		vi.fn(async (url: string) => {
+			// Release tags keep the pre-rename npm name, which older binaries also download from.
 			expect(url).toContain(encodeURIComponent("@knightcodeai/cli@1.0.1"));
 			return url.endsWith("/SHA256SUMS")
 				? new Response(`${"0".repeat(64)}  other.zip\n${checksum}  ${asset}\n`)

@@ -1,6 +1,6 @@
 import type { SettingItem } from "@knightcode/tui";
-import type { Theme } from "@knightcodeai/cli";
-import { SelectSubmenu } from "@knightcodeai/cli/modes/interactive/components/settings-submenu";
+import type { Theme } from "knightcode";
+import { SelectSubmenu } from "knightcode/modes/interactive/components/settings-submenu";
 import { maskKey, TextSubmenu } from "../settings.ts";
 import type { ToolSettings } from "../state.ts";
 

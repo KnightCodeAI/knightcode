@@ -1,4 +1,4 @@
-import type { Theme } from "@knightcodeai/cli";
+import type { Theme } from "knightcode";
 import type { TUI } from "@knightcode/tui";
 import { expect, test } from "vitest";
 import { SignInScreen } from "../src/signin.ts";

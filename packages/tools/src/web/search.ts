@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@knightcodeai/cli";
+import type { ToolDefinition } from "knightcode";
 import { type Static, Type } from "typebox";
 import { readPersisted, type ToolSettings } from "../state.ts";
 import { combineSignals, decodeBody, discard, readBody, USER_AGENT } from "./fetch.ts";

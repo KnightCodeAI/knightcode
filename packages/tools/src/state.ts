@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ExtensionAPI } from "@knightcodeai/cli";
-import { getAgentDir } from "@knightcodeai/cli/config";
+import type { ExtensionAPI } from "knightcode";
+import { getAgentDir } from "knightcode/config";
 import lockfile from "proper-lockfile";
 
 export type ToolMode = "off" | "session" | "always";

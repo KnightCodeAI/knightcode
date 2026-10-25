@@ -5,8 +5,8 @@
  * (logo + keybinding hints) with a custom component showing the knightcode mascot.
  */
 
-import type { ExtensionAPI, Theme } from "@knightcodeai/cli";
-import { VERSION } from "@knightcodeai/cli";
+import type { ExtensionAPI, Theme } from "knightcode";
+import { VERSION } from "knightcode";
 
 // --- KNIGHTCODE MASCOT ---
 // The KnightCode agent character

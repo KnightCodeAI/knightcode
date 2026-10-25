@@ -12,7 +12,7 @@ import {
 	getAgentDir,
 	SessionManager,
 	type Skill,
-} from "@knightcodeai/cli";
+} from "knightcode";
 
 // Or define custom skills inline
 const customSkill: Skill = {

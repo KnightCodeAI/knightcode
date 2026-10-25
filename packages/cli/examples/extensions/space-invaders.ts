@@ -3,7 +3,7 @@
  * Uses Kitty keyboard protocol for smooth movement (press/release detection)
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { isKeyRelease, Key, matchesKey, visibleWidth } from "@knightcode/tui";
 
 const GAME_WIDTH = 60;

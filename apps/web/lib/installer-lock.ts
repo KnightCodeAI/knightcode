@@ -2,7 +2,10 @@
 // install.sh rejects a package.json or lockfile that fails these checks, so a
 // lock is only published after it passes the same checks.
 
-export const CLI_PACKAGE = "@knightcodeai/cli"
+export const CLI_PACKAGE = "knightcode"
+// The npm name before the rename. Locks for releases published under it keep
+// it, and release tags still carry it so older binaries find their updates.
+export const LEGACY_CLI_PACKAGE = "@knightcodeai/cli"
 export const INSTALLER_PACKAGE_NAME = "knightcode-managed-install"
 export const INSTALLER_LOCK_ASSET = "installer-package-lock.json"
 export const CLI_REPOSITORY = "KnightCodeAI/knightcode"
@@ -35,14 +38,26 @@ export function parseInstallerVersion(value: string): string | null {
   return INSTALLER_VERSION_RE.test(value) ? value : null
 }
 
-export function installerPackageJson(version: string): InstallerPackageJson {
+export function installerPackageJson(
+  version: string,
+  cliPackage: string = CLI_PACKAGE
+): InstallerPackageJson {
   return {
     name: INSTALLER_PACKAGE_NAME,
     version,
     private: true,
     description: "Lockfile root used by the KnightCode installer and updater.",
-    dependencies: { [CLI_PACKAGE]: version },
+    dependencies: { [cliPackage]: version },
   }
+}
+
+// The CLI package a lock installs: the current name, or the legacy one for
+// releases published before the rename.
+export function lockCliPackage(lock: unknown): string {
+  const root = (lock as LockFile | null)?.packages?.[""] as LockRoot | undefined
+  return root?.dependencies?.[LEGACY_CLI_PACKAGE] === undefined
+    ? CLI_PACKAGE
+    : LEGACY_CLI_PACKAGE
 }
 
 // Mirrors validate_managed_install_artifacts in public/install.sh.
@@ -52,18 +67,19 @@ export function validateInstallerLock(
 ): string | null {
   if (!lock || typeof lock !== "object") return "lockfile is not an object"
   const file = lock as LockFile
+  const cliPackage = lockCliPackage(lock)
   const root = file.packages?.[""] as LockRoot | undefined
-  const cli = file.packages?.[`node_modules/${CLI_PACKAGE}`]
+  const cli = file.packages?.[`node_modules/${cliPackage}`]
   if (file.lockfileVersion !== 3) return "lockfileVersion must be 3"
   if (
     file.version !== version ||
     root?.version !== version ||
-    root?.dependencies?.[CLI_PACKAGE] !== version
+    root?.dependencies?.[cliPackage] !== version
   ) {
-    return `lockfile root must describe ${CLI_PACKAGE}@${version}`
+    return `lockfile root must describe ${cliPackage}@${version}`
   }
   if (cli?.version !== version) {
-    return `lockfile does not include ${CLI_PACKAGE}@${version}`
+    return `lockfile does not include ${cliPackage}@${version}`
   }
   return null
 }
@@ -75,7 +91,7 @@ export function lockDownloadUrl(version: string): string {
 }
 
 export function versionFromReleaseTag(tag: string): string | null {
-  const prefix = `${CLI_PACKAGE}@`
+  const prefix = `${LEGACY_CLI_PACKAGE}@`
   if (!tag.startsWith(prefix)) return null
   return parseInstallerVersion(tag.slice(prefix.length))
 }

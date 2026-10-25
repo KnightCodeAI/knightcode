@@ -8,8 +8,8 @@
  */
 
 import type { UserMessage } from "@knightcode/ai";
-import type { ExtensionAPI } from "@knightcodeai/cli";
-import { BorderedLoader } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
+import { BorderedLoader } from "knightcode";
 
 const SYSTEM_PROMPT = `You are a question extractor. Given text from a conversation, extract any questions that need answering and format them for the user to fill in.
 

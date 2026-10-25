@@ -66,10 +66,10 @@ jobs:
         run: |
           local_ver=$(node -p "require('./packages/cli/package.json').version")
           needs_publish=false
-          if [ -z "$(npm view "@knightcodeai/cli@${local_ver}" version 2>/dev/null)" ]; then
+          if [ -z "$(npm view "knightcode@${local_ver}" version 2>/dev/null)" ]; then
             needs_publish=true
           elif ! gh release view "@knightcodeai/cli@${local_ver}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "@knightcodeai/cli@${local_ver} is on npm but has no GitHub Release; finishing it."
+            echo "knightcode@${local_ver} is on npm but has no GitHub Release; finishing it."
             needs_publish=true
           fi
           echo "needsPublish=${needs_publish}" >> "$GITHUB_OUTPUT"
@@ -292,6 +292,7 @@ jobs:
         shell: bash
         run: |
           version=$(node -p "require('./packages/cli/package.json').version")
+          # Tags keep the npm name from before the rename: older binaries download their updates from them.
           tag="@knightcodeai/cli@${version}"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release for $tag already exists — adding any missing installer files."

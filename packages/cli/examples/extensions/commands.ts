@@ -10,7 +10,7 @@
  * 3. Use /commands extensions to filter by source
  */
 
-import type { ExtensionAPI, SlashCommandInfo } from "@knightcodeai/cli";
+import type { ExtensionAPI, SlashCommandInfo } from "knightcode";
 
 export default function commandsExtension(knightcode: ExtensionAPI) {
 	knightcode.registerCommand("commands", {

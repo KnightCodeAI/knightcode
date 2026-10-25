@@ -93,7 +93,7 @@ export async function SiteFooter() {
               className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
             >
               <NpmLogo className="h-2.5 w-auto fill-current opacity-70 transition-opacity hover:opacity-100" />
-              @knightcodeai/cli
+              knightcode
             </Link>
           </div>
         </div>

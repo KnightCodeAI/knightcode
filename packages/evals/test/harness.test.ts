@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { getDocsPath, getExamplesPath, getReadmePath } from "@knightcodeai/cli";
+import { getDocsPath, getExamplesPath, getReadmePath } from "knightcode";
 import { describe, expect, it, vi } from "vitest";
 import { buildSystemPrompt } from "../../cli/src/core/system-prompt.ts";
 import {

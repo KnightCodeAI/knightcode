@@ -599,7 +599,7 @@ try {
 }
 
 const brandName: string | undefined = pkg.knightcodeConfig?.name;
-export const PACKAGE_NAME: string = pkg.name || "@knightcodeai/cli";
+export const PACKAGE_NAME: string = pkg.name || "knightcode";
 export const APP_NAME: string = brandName || "knightcode";
 export const APP_TITLE: string = brandName ? APP_NAME : "KnightCode";
 export const CONFIG_DIR_NAME: string = pkg.knightcodeConfig?.configDir || ".knightcode";

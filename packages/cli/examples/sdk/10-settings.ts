@@ -4,7 +4,7 @@
  * Override settings using SettingsManager.
  */
 
-import { createAgentSession, SessionManager, SettingsManager } from "@knightcodeai/cli";
+import { createAgentSession, SessionManager, SettingsManager } from "knightcode";
 
 const cwd = process.cwd();
 

@@ -1,8 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@knightcodeai/cli";
-import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
+import type { ExtensionAPI } from "knightcode";
+import { ENV_AGENT_DIR } from "knightcode/config";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
 	NOTES_MAX_BYTES,

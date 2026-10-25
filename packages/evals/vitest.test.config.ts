@@ -8,7 +8,7 @@ export default mergeConfig(
 			include: ["test/**/*.test.ts"],
 		},
 		resolve: {
-			alias: [{ find: /^@knightcodeai\/cli$/, replacement: workspaceSourcePaths.codingAgentIndex }],
+			alias: [{ find: /^knightcode$/, replacement: workspaceSourcePaths.codingAgentIndex }],
 		},
 	}),
 );

@@ -13,7 +13,7 @@
  * Try it in a project containing .knightcode, AGENTS.md/CLAUDE.md, or .agents/skills.
  */
 
-import type { ExtensionAPI, ProjectTrustEventResult } from "@knightcodeai/cli";
+import type { ExtensionAPI, ProjectTrustEventResult } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
 	let loadCount = 0;

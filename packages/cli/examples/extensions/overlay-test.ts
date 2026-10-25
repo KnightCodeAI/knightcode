@@ -8,7 +8,7 @@
  * - Edge case tests (wide chars, styled text, emoji)
  */
 
-import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionCommandContext, Theme } from "knightcode";
 import { CURSOR_MARKER, type Focusable, matchesKey, renderFakeCursor, visibleWidth } from "@knightcode/tui";
 
 export default function (knightcode: ExtensionAPI) {

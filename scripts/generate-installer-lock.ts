@@ -1,5 +1,5 @@
 // Builds the package.json and package-lock.json that install.sh and
-// `knightcode update` download. Run after @knightcodeai/cli is on npm.
+// `knightcode update` download. Run after knightcode is on npm.
 //
 //   bun run scripts/generate-installer-lock.ts --out release-assets
 //   bun run scripts/generate-installer-lock.ts --bundle

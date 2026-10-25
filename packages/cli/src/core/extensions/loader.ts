@@ -96,6 +96,8 @@ function getAliases(): Record<string, string> {
 	const knightAiProvidersEntry = resolveWorkspaceOrImport("ai/dist/providers/all.js", "@knightcode/ai/providers/all");
 
 	_aliases = {
+		knightcode: knightCliEntry,
+		// The package name before the rename; extensions written against it keep loading.
 		"@knightcodeai/cli": knightCliEntry,
 		"@knightcode/agent": knightAgentEntry,
 		"@knightcode/tui": knightTuiEntry,

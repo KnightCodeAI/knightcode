@@ -9,7 +9,7 @@
  * - ctrl+c, ctrl+d, etc. work in both modes
  */
 
-import { CustomEditor, type ExtensionAPI } from "@knightcodeai/cli";
+import { CustomEditor, type ExtensionAPI } from "knightcode";
 import { matchesKey, truncateToWidth, visibleWidth } from "@knightcode/tui";
 
 // Normal mode key mappings: key -> escape sequence (or null for mode switch)

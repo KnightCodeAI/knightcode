@@ -34,7 +34,7 @@ Registering only `baseUrl` or `headers` for an existing provider preserves its b
 Register only the fields that should change. This keeps the provider's built-in catalog, authentication, API implementation, and compatibility settings:
 
 ```typescript
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
   knightcode.registerProvider("anthropic", {
@@ -53,7 +53,7 @@ Use this form for a proxy or gateway that preserves the provider's protocol. Do 
 When a service implements a supported protocol but has its own model catalog, register the endpoint and only the models the service actually exposes:
 
 ```typescript
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
   knightcode.registerProvider("acme", {

@@ -16,7 +16,7 @@
  *   /working-indicator reset     Restore knightcode's default spinner
  */
 
-import type { ExtensionAPI, ExtensionContext, WorkingIndicatorOptions } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext, WorkingIndicatorOptions } from "knightcode";
 
 type WorkingIndicatorMode = "dot" | "none" | "pulse" | "spinner" | "default";
 

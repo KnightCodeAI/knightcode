@@ -10,7 +10,7 @@
  * extensions system using knightcode.registerTool().
  */
 
-import { createAgentSession, SessionManager } from "@knightcodeai/cli";
+import { createAgentSession, SessionManager } from "knightcode";
 
 // Read-only mode (no edit/write)
 const { session: readOnlySession } = await createAgentSession({

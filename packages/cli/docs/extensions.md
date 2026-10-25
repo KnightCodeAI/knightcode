@@ -17,7 +17,7 @@ An extension exports a default factory that receives `ExtensionAPI`. The factory
 Create `~/.knightcode/agent/extensions/hello.ts`:
 
 ```typescript
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
   knightcode.registerCommand("hello", {

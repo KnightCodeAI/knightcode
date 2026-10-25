@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { Type } from "typebox";
 
 export const seenAtSessionStart: string[][] = [];

@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI, ExtensionCommandContext } from "@knightcodeai/cli";
-import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
-import { initTheme, theme } from "@knightcodeai/cli/modes/interactive/theme/theme";
+import type { ExtensionAPI, ExtensionCommandContext } from "knightcode";
+import { ENV_AGENT_DIR } from "knightcode/config";
+import { initTheme, theme } from "knightcode/modes/interactive/theme/theme";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { toolsCommand, toolsCompletions } from "../src/command.ts";
 import toolsExtension from "../src/index.ts";

@@ -2,7 +2,7 @@
  * Snake game extension - play snake with /snake command
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { matchesKey, visibleWidth } from "@knightcode/tui";
 
 const GAME_WIDTH = 40;

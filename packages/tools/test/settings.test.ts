@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ModelRegistry } from "@knightcodeai/cli";
-import { ENV_AGENT_DIR } from "@knightcodeai/cli/config";
-import { initTheme, theme } from "@knightcodeai/cli/modes/interactive/theme/theme";
+import type { ModelRegistry } from "knightcode";
+import { ENV_AGENT_DIR } from "knightcode/config";
+import { initTheme, theme } from "knightcode/modes/interactive/theme/theme";
 import { stripTerminalSequences } from "@knightcode/tui";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { TOOLS } from "../src/registry.ts";

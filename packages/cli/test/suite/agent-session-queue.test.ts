@@ -1,6 +1,6 @@
 import type { AgentTool } from "@knightcode/agent";
 import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
-import type { ExtensionAPI, InputEvent } from "@knightcodeai/cli";
+import type { ExtensionAPI, InputEvent } from "knightcode";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, getAssistantTexts, getMessageText, getUserTexts, type Harness } from "./harness.ts";

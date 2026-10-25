@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { registerClassifierGate } from "./classifier-gate.ts";
 import { toolsCommand, toolsCompletions } from "./command.ts";
 import { TOOLS } from "./registry.ts";

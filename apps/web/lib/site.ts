@@ -6,7 +6,7 @@ import cliPackage from "../../../packages/cli/package.json"
 // version without pulling in version.ts's async changelog/registry fetches.
 export const VERSION = cliPackage.version
 export const FALLBACK_VERSION = VERSION
-export const NPM_PACKAGE = "@knightcodeai/cli"
+export const NPM_PACKAGE = "knightcode"
 export const INSTALL_COMMAND = `npm install -g --ignore-scripts ${NPM_PACKAGE}`
 export const RUN_COMMAND = "knightcode"
 
@@ -22,7 +22,7 @@ export const SITE = {
   issues: "https://github.com/KnightCodeAI/knightcode/issues",
   me: "https://github.com/Raghav1428",
   websiteRepo: "https://github.com/KnightCodeAI/knightcode",
-  npm: "https://www.npmjs.com/package/@knightcodeai/cli",
+  npm: "https://www.npmjs.com/package/knightcode",
   demoVideoId: "kykgXa7sm1g",
   demoVideoUrl: "https://youtu.be/kykgXa7sm1g",
   youtube: "https://www.youtube.com/@Raghav1428",

@@ -1,4 +1,4 @@
-import type { ExtensionUIContext, ToolDefinition } from "@knightcodeai/cli";
+import type { ExtensionUIContext, ToolDefinition } from "knightcode";
 import { type Static, Type } from "typebox";
 import { AskPicker, OTHER_LABEL } from "./picker.ts";
 import { askRenderers } from "./render.ts";

@@ -16,7 +16,7 @@
  * Then use ctrl+o to toggle between minimal (collapsed) and full (expanded) views.
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import {
 	createBashToolDefinition,
 	createEditToolDefinition,
@@ -26,7 +26,7 @@ import {
 	createReadToolDefinition,
 	createWriteToolDefinition,
 	formatReadLineRange,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import { Text } from "@knightcode/tui";
 import { homedir } from "os";
 

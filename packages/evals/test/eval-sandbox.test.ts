@@ -9,7 +9,7 @@ import {
 	createAgentSessionServices,
 	ModelRuntime,
 	SessionManager,
-} from "@knightcodeai/cli";
+} from "knightcode";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEvalSandboxGuard, describeEvalEscape, type EvalSandbox } from "../src/harness.ts";
 

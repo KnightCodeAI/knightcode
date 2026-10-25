@@ -4,7 +4,7 @@
  * Usage: knightcode --extension ./examples/extensions/rainbow-editor.ts
  */
 
-import { CustomEditor, type ExtensionAPI } from "@knightcodeai/cli";
+import { CustomEditor, type ExtensionAPI } from "knightcode";
 
 // Base colors (coral → yellow → green → teal → blue → purple → pink)
 const COLORS: [number, number, number][] = [

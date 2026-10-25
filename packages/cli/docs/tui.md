@@ -70,7 +70,7 @@ Regular mode leaves mouse input to the terminal because the terminal owns scroll
 This complete extension shows the custom-component lifecycle: render within the supplied width, use injected keybindings, invalidate cached output after state changes, request a render, and finish through `done()`.
 
 ```typescript
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { truncateToWidth } from "@knightcode/tui";
 
 export default function (knightcode: ExtensionAPI) {

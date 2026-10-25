@@ -11,7 +11,7 @@
  */
 
 import { Type } from "@knightcode/ai";
-import { defineTool, type ExtensionAPI, type ExtensionContext, type View } from "@knightcodeai/cli";
+import { defineTool, type ExtensionAPI, type ExtensionContext, type View } from "knightcode";
 
 const WIDGET = "desktop-view:checks";
 

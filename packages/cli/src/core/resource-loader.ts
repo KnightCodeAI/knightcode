@@ -59,6 +59,7 @@ export interface ResourceLoaderReloadOptions {
 const HOST_PROVIDED_EXTENSION_PACKAGES = new Set([
 	"@knightcode/agent",
 	"@knightcode/ai",
+	"knightcode",
 	"@knightcodeai/cli",
 	"@knightcode/tui",
 	"@sinclair/typebox",

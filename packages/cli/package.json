@@ -1,5 +1,5 @@
 {
-  "name": "@knightcodeai/cli",
+  "name": "knightcode",
   "version": "0.21.1",
   "description": "KnightCode — a local, BYOK terminal coding agent powered by OpenRouter.",
   "type": "module",

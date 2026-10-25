@@ -9,8 +9,8 @@
  * 2. Use /tools to open the tool selector
  */
 
-import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@knightcodeai/cli";
-import { getSettingsListTheme } from "@knightcodeai/cli";
+import type { ExtensionAPI, ExtensionContext, ToolInfo } from "knightcode";
+import { getSettingsListTheme } from "knightcode";
 import { Container, type SettingItem, SettingsList } from "@knightcode/tui";
 
 // State persisted to session

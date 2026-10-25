@@ -9,7 +9,7 @@
  */
 
 import type { AssistantMessage } from "@knightcode/ai";
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { truncateToWidth, visibleWidth } from "@knightcode/tui";
 
 export default function (knightcode: ExtensionAPI) {

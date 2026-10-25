@@ -11,7 +11,7 @@ import {
 	getAgentDir,
 	type PromptTemplate,
 	SessionManager,
-} from "@knightcodeai/cli";
+} from "knightcode";
 
 // Define custom templates
 const deployTemplate: PromptTemplate = {

@@ -5,7 +5,7 @@
  * Demonstrates how extensions can use ctx.shutdown() to exit knightcode cleanly.
  */
 
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { Type } from "typebox";
 
 export default function (knightcode: ExtensionAPI) {

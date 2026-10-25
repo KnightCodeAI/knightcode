@@ -1,8 +1,8 @@
 import { lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@knightcodeai/cli";
-import { truncateHead } from "@knightcodeai/cli/core/tools/truncate";
+import type { ExtensionAPI } from "knightcode";
+import { truncateHead } from "knightcode/core/tools/truncate";
 import type { RegisteredToolEntry } from "./registry.ts";
 import { readPersisted, resolveEnabled } from "./state.ts";
 

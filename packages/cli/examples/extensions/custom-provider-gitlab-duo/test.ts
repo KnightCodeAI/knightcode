@@ -9,7 +9,7 @@
  */
 
 import { type Api, type Context, type Model, registerApiProvider, streamSimple } from "@knightcode/ai/compat";
-import { getAgentDir } from "@knightcodeai/cli";
+import { getAgentDir } from "knightcode";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { MODELS, streamGitLabDuo } from "./index.ts";

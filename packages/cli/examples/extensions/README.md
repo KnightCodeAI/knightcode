@@ -1,6 +1,6 @@
 # Extension Examples
 
-Example extensions for @knightcodeai/cli.
+Example extensions for knightcode.
 
 ## Usage
 
@@ -144,7 +144,7 @@ cp permission-gate.ts ~/.knightcode/agent/extensions/
 See [docs/extensions.md](../../docs/extensions.md) for full documentation.
 
 ```typescript
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 import { Type } from "typebox";
 
 export default function (knightcode: ExtensionAPI) {

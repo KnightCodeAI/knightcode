@@ -31,7 +31,7 @@ Context usage uses the limits of the physical model that produced the latest res
 ## Register a virtual model
 
 ```typescript
-import type { ExtensionAPI } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "knightcode";
 
 export default function (knightcode: ExtensionAPI) {
   knightcode.registerVirtualModel({

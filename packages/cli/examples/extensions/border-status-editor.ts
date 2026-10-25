@@ -1,5 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "@knightcodeai/cli";
+import { CustomEditor, type ExtensionAPI, type ExtensionContext, type KeybindingsManager } from "knightcode";
 import type { Component, EditorTheme, TUI } from "@knightcode/tui";
 import { truncateToWidth, visibleWidth } from "@knightcode/tui";
 
