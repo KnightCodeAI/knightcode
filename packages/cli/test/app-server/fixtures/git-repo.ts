@@ -9,6 +9,7 @@ import {
 	readFileSync,
 	readlinkSync,
 	rmSync,
+	utimesSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -125,7 +126,12 @@ export function checkoutState(dir: string) {
 	const temp = join(mkdtempSync(join(tmpdir(), "kc-fixture-")), "index");
 	// A fresh repository may have no index (the temporary one then starts empty) and no HEAD (null below).
 	const realIndex = sh(dir, "rev-parse", "--path-format=absolute", "--git-path", "index");
-	if (existsSync(realIndex)) copyFileSync(realIndex, temp);
+	if (existsSync(realIndex)) {
+		copyFileSync(realIndex, temp);
+		// Dated just after the epoch (0 turns git's check off), so every entry is racily clean and git compares content.
+		// Otherwise the copy is newer than a same-size edit made within the second of the checkout, which git trusts.
+		utimesSync(temp, 1, 1);
+	}
 	const env = { GIT_INDEX_FILE: temp };
 	let trackedTree: string;
 	try {

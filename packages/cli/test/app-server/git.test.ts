@@ -244,6 +244,14 @@ test("checkoutState handles a fresh repository and an unborn branch with a stage
 	expect(checkoutState(dir)).not.toEqual(staged);
 });
 
+test("checkoutState sees a same-size edit made within the second of the checkout", async () => {
+	const dir = repoDir();
+	write(dir, "a.txt", "worktree edit\n"); // as long as "one\ntwo\nthree\n"
+	// Read a second later, as a test does after a request: the index copy is then newer than the edit.
+	await new Promise((resolve) => setTimeout(resolve, 1100));
+	expect(sh(dir, "ls-tree", checkoutState(dir).trackedTree, "a.txt")).toContain(sh(dir, "hash-object", "a.txt"));
+});
+
 test("checkoutState sees a rewritten assume-unchanged file", async () => {
 	const dir = repoDir();
 	sh(dir, "update-index", "--assume-unchanged", "a.txt");
