@@ -1,5 +1,59 @@
 # @knightcodeai/cli
 
+## 0.21.0
+
+### Added
+
+- Added background terminals. The `bash` and `powershell` tools take `run_in_background`, so the agent can start a dev server, watcher, or long build and keep working; it is told how the command ended, with the end of its output, and continues from there. Press Ctrl+B to move a running command to the background without restarting it, see running commands in a row above the footer, and run `/tasks` to watch their output or stop them. The new `task_stop` tool is on whenever a shell tool is. Background commands end with the session; print and JSON modes wait for them before exiting.
+
+- Added `file/list` and `file/write` to the app server, and `mtimeMs` to `file/read`: a client can list a folder of the thread's cwd one level at a time for a file tree, and write a file it showed, refused with `fileChanged` when the file has changed since it was read.
+
+- Added `file/read`, `thread/diff/file` and `git/origin` to the app server, and a dry run for `thread/handoff`: a client can show a file read-only, expand the unchanged lines between a diff's hunks from the two trees `thread/diff/read` now names, link a file to its GitHub page from the checkout's origin and branch, and check a handoff before the user confirms it.
+
+- Added plan review to the desktop app: a submitted plan asks "Implement this plan?" by itself, offering to implement it in the thread, in a new thread with only the plan, or to exit planning.
+
+- Added MCP Apps: a tool that declares an app (`_meta.ui.resourceUri`) shows it in the desktop app, which reads and calls its server through the new `mcp/app/readResource` and `mcp/app/callTool` app server methods, asking first before a call that may change things.
+
+- Added a confirmation step to device-code sign-in. The dialog shows the code and waits for Enter before opening the browser and copying the code to the clipboard, so a code already on the clipboard is not replaced silently. Providers can turn either action off with `openBrowserOnConfirm` and `copyCodeOnConfirm` on the device-code event.
+
+### Changed
+
+- Changed a session that implements a plan in a new thread to be named after the plan's first line instead of the handoff text, and the app server now tells clients the name a new session's setup gives it.
+
+### Fixed
+
+- Fixed KnightCode Messages replies dropping the concrete model a provider reports.
+
+- Fixed Anthropic requests rejected when an organization caps effort below the cached top-level level.
+
+- Fixed the command reference, settings, and MCP pages so they match the current flags, anchors, and timeout values.
+
+- Fixed command output corrupted when a multi-byte character is split across two chunks.
+
+- Fixed fd and rg setup on unsupported CPU architectures, so KnightCode warns instead of downloading an x86-64 binary.
+
+- Fixed the todo example crashing the terminal when a tool call fails validation.
+
+- Fixed startup when a configured package cannot be installed, so KnightCode skips that package, warns, and continues.
+
+- Fixed `exec` from extensions swallowing the reason a command could not start. A missing binary or a bad working directory used to return an empty `stderr` with exit code 1; the spawn error message is now in `stderr`.
+
+- Fixed fuzzy search ranking scattered matches above exact ones. Typing `opus` in the model selector now lists Claude Opus models before names that merely contain those letters, and the session search ranks name and text hits above scattered characters, ignores where a match sits in long message text, and no longer matches scattered characters in session ids.
+
+- Fixed plan mode's instructions showing in the desktop app's transcript: an extension message sent with `display: false` is no longer an app server item, live or read back.
+
+- Fixed standalone binaries built with a Bun release that broke abort, HTTPS, file tools, image resize, and session resume.
+
+- Fixed fullscreen double-click selection so +, \, ~, _, and . stay part of the word.
+
+- Fixed deeply nested blockquotes growing without bound and crashing the terminal.
+
+- Fixed a turn's changes going unrecorded in a checkout with more than 500 untracked files: a file the agent created there never reached `turn/diff/updated`, so the desktop app's Last Turn was empty and offered no Undo. Past 500, turn snapshots now leave out only untracked folders holding 200 or more files, and fall back to tracked files only when more than 500 remain.
+
+### Security
+
+- Security Rejected MCP authorization endpoints that are not http or https before sign-in opens them.
+
 ## 0.20.0
 
 ### Added
