@@ -13,17 +13,19 @@ import {
 	addProject,
 	getState,
 	navigate,
+	newTerminal,
 	openThread,
 	selectProjects,
 	setPaletteOpen,
 	setSidebarOpen,
 	showNew,
 	threadSlotsOf,
+	toggleTerminal,
 	useStore,
 } from "../store.ts";
 import { Kbd } from "./button.tsx";
 import { Dialog } from "./dialog.tsx";
-import { FolderOpen, Keyboard, PanelLeft, Settings, SquarePen } from "./icons.tsx";
+import { FolderOpen, Keyboard, PanelLeft, Settings, SquarePen, SquareTerminal } from "./icons.tsx";
 import { SETTINGS_PAGES } from "./settings.tsx";
 
 interface Entry {
@@ -40,6 +42,8 @@ export function Palette() {
 	const threads = useStore((s) => s.threads);
 	const projects = useStore(selectProjects);
 	const sidebarOpen = useStore((s) => s.sidebarOpen);
+	// The open thread, for the terminal's actions.
+	const open = useStore((s) => (s.view.kind === "thread" ? s.held[s.view.id]?.thread : undefined));
 	const [query, setQuery] = useState("");
 	const [selected, setSelected] = useState(0);
 	const listId = useId();
@@ -69,6 +73,24 @@ export function Palette() {
 			binding: "desktop.sidebar.toggle",
 			run: () => setSidebarOpen(!sidebarOpen),
 		},
+		...(open
+			? [
+					{
+						id: "terminal",
+						label: "Toggle terminal",
+						icon: <SquareTerminal size={16} />,
+						binding: "desktop.terminal.toggle" as const,
+						run: () => toggleTerminal(open.id, open.cwd),
+					},
+					{
+						id: "newTerminal",
+						label: "New terminal",
+						icon: <SquareTerminal size={16} />,
+						binding: "desktop.terminal.new" as const,
+						run: () => void newTerminal(open.id, open.cwd),
+					},
+				]
+			: []),
 		{
 			id: "settings",
 			label: "Settings",

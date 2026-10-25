@@ -72,6 +72,24 @@ on Windows, `~/Library/Logs/KnightCode` on macOS, `~/.config/KnightCode/logs` on
 - Open in: a file tab's Open button sends the file, at its line, to an editor, terminal
   or IDE found on your machine, or to the system's default app or file manager. The app
   remembers the last choice, per project and overall.
+- Terminal: Ctrl+\` opens a terminal in the thread's folder, in a region under the chat and
+  the side panel; Ctrl+J shows or hides it, and its top edge resizes it. The + menu offers
+  the shells found (PowerShell, Windows PowerShell, Command Prompt, Git Bash and WSL on
+  Windows; your login shell elsewhere), and the last one picked is the default. Terminals
+  belong to their thread: they keep running when the window reloads or another thread
+  opens, and end when you close them, archive or delete the thread, or quit. Copy needs a
+  selection (Ctrl+C, Ctrl+Shift+C or Ctrl+Insert); paste with Ctrl+V, Ctrl+Shift+V or
+  Shift+Insert (on macOS, Cmd+C and Cmd+V). Links in the output open in your browser.
+- Preview: the side panel's + (Ctrl+T) opens a page in a preview tab, http and https only
+  (`localhost:3000` is enough). A link to a local server in a message opens there too.
+  Each thread keeps its own cookies and storage, cleared when the thread is deleted; pages
+  get no permissions, and downloads ask where to save. Annotate (Ctrl+Shift+.) lets you
+  drag over part of the page to attach it to the message you are writing, with the page's
+  address.
+- MCP Apps: a tool from an [MCP server](mcp.md#mcp-apps) that has an app shows it in the
+  thread, under the turn's work. The app can call its own server's tools (asking you
+  first for one that may change things), send a follow-up message once you confirm it,
+  and open full screen in the side panel.
 - Archived threads: search, unarchive, or delete for good.
 - Command palette (Ctrl+K): actions and threads in one search.
 - Quitting while threads run asks first.
@@ -114,10 +132,15 @@ once. The protocol side is in [app-server.md](app-server.md#dialogs-and-extensio
 | Back / forward | Alt+Left / Alt+Right |
 | Archive the thread | Ctrl+Shift+A |
 | Close the side panel's file tab | Ctrl+Shift+W |
+| Open a terminal / show or hide them | Ctrl+\` / Ctrl+J |
+| Next / previous terminal | Ctrl+PageDown / Ctrl+PageUp |
+| Open a preview / focus its address bar | Ctrl+T / Ctrl+L |
+| Annotate the preview | Ctrl+Shift+. |
 | Send | Enter |
 | New line | Shift+Enter |
 | Steer the running turn | Ctrl+Enter |
 | Stop the running turn | Escape (empty composer) |
 | Allow / deny an approval | Enter / Escape (card focused) |
 
-On macOS, Ctrl is Cmd. Settings › Keyboard shortcuts lists every binding.
+On macOS, Ctrl is Cmd, except in Ctrl+\` and Ctrl+PageDown/PageUp, which stay Control.
+Settings › Keyboard shortcuts lists every binding.

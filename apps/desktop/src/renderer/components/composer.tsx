@@ -39,6 +39,7 @@ import {
 	startingThinking,
 	startThread,
 	steer,
+	takeAttachments,
 	toast,
 	updateSettings,
 	useStore,
@@ -213,6 +214,16 @@ export function Composer({
 		ref.current?.focus();
 		commands.current = undefined;
 	}, [threadId]);
+	// An annotated preview region arrives as an image with the page's URL, as a paste would.
+	const waiting = useStore((s) => (threadId ? s.attachments[threadId] : undefined));
+	useEffect(() => {
+		if (!threadId || !waiting) return;
+		const taken = takeAttachments(threadId);
+		if (!taken) return;
+		setImages((list) => [...list, ...taken.images.filter((p) => !list.includes(p))]);
+		if (taken.text) setText((t) => (t.trim() ? `${t}\n${taken.text}` : taken.text));
+		ref.current?.focus();
+	}, [threadId, waiting]);
 	useEffect(() => {
 		// A new thread's commands come from its project, and so do a worktree's base branch and environment.
 		commands.current = undefined;

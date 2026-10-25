@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
 
 vi.mock("../../src/renderer/client.ts", () => ({ client: { host: () => Promise.resolve({}) } }));
+// Views draw markdown, whose local links open previews; the store needs a window and a server.
+vi.mock("../../src/renderer/store.ts", () => ({ getState: () => ({ view: { kind: "new" } }), openPreview: () => {} }));
 
 import { ViewNode, WidgetPanel } from "../../src/renderer/components/view.tsx";
 

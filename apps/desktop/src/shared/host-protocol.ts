@@ -61,6 +61,8 @@ export const Preferences = Obj({
 	openIn: Type.Optional(
 		Obj({ global: Type.Optional(Type.String()), perPath: Type.Optional(Type.Record(Type.String(), Type.String())) }),
 	),
+	/** The shell a new terminal runs (section 9.7): the last one picked from the terminal's + menu. */
+	terminalShell: Type.Optional(Type.String()),
 });
 export type Preferences = Static<typeof Preferences>;
 
@@ -168,6 +170,18 @@ export const NativeMenuItem = Type.Union([
 ]);
 export type NativeMenuItem = Static<typeof NativeMenuItem>;
 
+const TerminalSize = Type.Integer({ minimum: 1, maximum: 1000 });
+const TerminalInfo = Obj({
+	terminalId: Type.String(),
+	threadId: Type.String(),
+	cwd: Type.String(),
+	shellId: Type.String(),
+	shellName: Type.String(),
+	/** Present once its shell has ended. */
+	exitCode: Type.Optional(Type.Integer()),
+});
+export type TerminalInfo = Static<typeof TerminalInfo>;
+
 export const HostMethods = {
 	/** Show a native context menu at the pointer; resolves with the chosen item's id once it closes. */
 	"host/menu/popup": {
@@ -219,9 +233,83 @@ export const HostMethods = {
 		}),
 		result: Obj({}),
 	},
+	/** The shells a terminal can run (section 9.7), the default first. */
+	"host/terminal/shells": {
+		params: Obj({}),
+		result: Obj({ shells: Type.Array(Obj({ id: Type.String(), name: Type.String() })) }),
+	},
+	/** A terminal for a thread in a folder; its output arrives as `terminal/data` events in the asking window. */
+	"host/terminal/create": {
+		params: Obj({
+			threadId: Type.String(),
+			cwd: Type.String(),
+			shellId: Type.Optional(Type.String()),
+			cols: TerminalSize,
+			rows: TerminalSize,
+		}),
+		result: TerminalInfo,
+	},
+	"host/terminal/list": { params: Obj({ threadId: Type.String() }), result: Obj({ terminals: Type.Array(TerminalInfo) }) },
+	/** Show a running (or ended) terminal in this window: its last 64 KiB of output, then its events. */
+	"host/terminal/attach": {
+		params: Obj({ terminalId: Type.String() }),
+		result: Obj({ scrollback: Type.String(), exitCode: Type.Optional(Type.Integer()) }),
+	},
+	/** Keystrokes and pastes, at most 1 MiB at a time. */
+	"host/terminal/write": {
+		params: Obj({ terminalId: Type.String(), data: Type.String({ maxLength: 1024 * 1024 }) }),
+		result: Obj({}),
+	},
+	"host/terminal/resize": {
+		params: Obj({ terminalId: Type.String(), cols: TerminalSize, rows: TerminalSize }),
+		result: Obj({}),
+	},
+	"host/terminal/kill": { params: Obj({ terminalId: Type.String() }), result: Obj({}) },
 	/** "Save as…": a copy of an absolute path where the user picks; `path` is where it went, none if cancelled. */
 	"host/file/saveCopy": { params: Obj({ path: Type.String() }), result: Obj({ path: Type.Optional(Type.String()) }) },
 	"host/clipboard/writeText": { params: Obj({ text: Type.String() }), result: Obj({}) },
+	/**
+	 * Annotate (section 9.8): a region of a preview's page, in its CSS pixels, saved as a PNG beside pasted images. Only
+	 * a guest of the asking window is captured.
+	 */
+	"host/preview/capture": {
+		params: Obj({
+			webContentsId: Type.Integer(),
+			rect: Obj({
+				x: Type.Integer({ minimum: 0 }),
+				y: Type.Integer({ minimum: 0 }),
+				width: Type.Integer({ minimum: 1 }),
+				height: Type.Integer({ minimum: 1 }),
+			}),
+		}),
+		result: Obj({ path: Type.String() }),
+	},
+	/**
+	 * An MCP App's document (section 12.2), served on its own `kc-mcp-app://` origin with a policy from the domains its
+	 * resource declared; a declaration that is not a list of host sources answers `invalidParams`.
+	 */
+	"host/mcpApp/serve": {
+		params: Obj({
+			html: Type.String({ maxLength: 4 * 1024 * 1024 }),
+			csp: Type.Optional(
+				Obj({
+					connectDomains: Type.Optional(Type.Unknown()),
+					resourceDomains: Type.Optional(Type.Unknown()),
+					frameDomains: Type.Optional(Type.Unknown()),
+					baseUriDomains: Type.Optional(Type.Unknown()),
+				}),
+			),
+		}),
+		result: Obj({ id: Type.String(), url: Type.String() }),
+	},
+	"host/mcpApp/release": { params: Obj({ id: Type.String() }), result: Obj({}) },
+	/** The user's rebindings, so main knows which keys a focused preview hands to the app (section 9.8). */
+	"host/keys/set": {
+		params: Obj({ overrides: Type.Record(Type.String(), Type.Array(Type.String())) }),
+		result: Obj({}),
+	},
+	/** The clipboard's text, for a paste into a terminal (a page cannot read the clipboard). */
+	"host/clipboard/readText": { params: Obj({}), result: Obj({ text: Type.String() }) },
 	"host/window/setTitle": { params: Obj({ title: Type.String() }), result: Obj({}) },
 	/** Another window, showing a thread when one is named (Codex's "Open in new window"). */
 	"host/window/open": { params: Obj({ threadId: Type.Optional(Type.String()) }), result: Obj({}) },
@@ -283,7 +371,12 @@ export type HostEvent =
 	/** A `knightcode://` link to show (section 6.1). */
 	| { event: "navigate"; route: string }
 	/** The window's zoom changed (View › Zoom In, Zoom Out, Actual Size); 1 is 100%. */
-	| { event: "zoom"; factor: number };
+	| { event: "zoom"; factor: number }
+	/** A terminal's output since the last, at most every 16 ms (section 9.7). */
+	| { event: "terminal/data"; terminalId: string; data: string }
+	| { event: "terminal/exit"; terminalId: string; exitCode: number }
+	/** An app binding pressed while a preview's page had focus, to run as if pressed in the window (section 9.8). */
+	| { event: "key"; binding: string };
 
 export interface WindowGlobals {
 	platform: NodeJS.Platform;

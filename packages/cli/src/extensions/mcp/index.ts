@@ -35,9 +35,17 @@ import type {
 	ExtensionCommandContext,
 	ExtensionContext,
 	ExtensionFactory,
+	ExtensionMode,
 	ToolDefinition,
 } from "../../core/extensions/types.ts";
-import { mcpNamespace } from "../../core/mcp-servers.ts";
+import {
+	MCP_APP_MIME_TYPE,
+	MCP_APPS_CHANNEL,
+	MCP_APPS_EXTENSION,
+	type McpAppAnswer,
+	type McpAppRequest,
+	mcpNamespace,
+} from "../../core/mcp-servers.ts";
 import type { ModelRegistry } from "../../core/model-registry.ts";
 import { openBrowser } from "../../utils/open-browser.ts";
 import { CODEMODE_TOOL_NAME } from "../codemode/tool.ts";
@@ -61,7 +69,14 @@ import {
 import { loadMcpRuntime } from "./runtime.lazy.ts";
 import type * as McpRuntime from "./runtime.ts";
 import type { McpServerConnection, McpServerLog, McpTransportFactory } from "./runtime.ts";
-import { createMcpToolDefinition, createMcpToolName, createMcpToolRenderers, type McpToolDetails } from "./tools.ts";
+import {
+	createMcpToolDefinition,
+	createMcpToolName,
+	createMcpToolRenderers,
+	type McpToolDetails,
+	mcpAppOf,
+	visibilityOf,
+} from "./tools.ts";
 import { type McpMenu, type McpUi, showMcpManager } from "./ui.ts";
 
 export type { McpTransportFactory } from "./runtime.ts";
@@ -304,6 +319,12 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		const startupWaitMs = options.startupWaitMs ?? DEFAULT_STARTUP_WAIT_MS;
 		/** Working directory of the session, for stdio servers. */
 		let sessionCwd = process.cwd();
+		/**
+		 * The session's mode. Only the desktop draws MCP Apps, so only there do servers hear the client supports them
+		 * (the others send their text fallback) and do app tools get their app.
+		 */
+		let sessionMode: ExtensionMode = "tui";
+		const drawsApps = () => sessionMode === "desktop";
 		let credentials = options.credentials;
 		/** The session's model registry, which resolves `auth.provider` tokens. */
 		let modelRegistry: ModelRegistry | undefined;
@@ -430,6 +451,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 					tool,
 					name: assignName(tool.name, `${server}\0${tool.name}`),
 					exposure: getMcpToolExposure(entry.config, tool.name),
+					...(drawsApps() ? { app: mcpAppOf(tool), visibility: visibilityOf(tool) } : {}),
 					namespace,
 					timeoutMs: connection.timeoutMs,
 					getClient: async () => {
@@ -581,6 +603,9 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 				credentials: getCredentials(runtime),
 				providerToken: async (provider) => modelRegistry?.getApiKeyForProvider(provider),
 				log: getServerLog(runtime),
+				...(drawsApps()
+					? { capabilities: { extensions: { [MCP_APPS_EXTENSION]: { mimeTypes: [MCP_APP_MIME_TYPE] } } } }
+					: {}),
 				onTools: (connection) => {
 					if (isCurrent()) registerTools(connection);
 				},
@@ -1119,6 +1144,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			warnedUnreachable = false;
 			waitedForStartup = false;
 			sessionCwd = ctx.cwd;
+			sessionMode = ctx.mode;
 			modelRegistry = ctx.modelRegistry;
 			session = new AbortController();
 			const { signal } = session;
@@ -1156,8 +1182,9 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		const waitForDirectServers = async (ctx: ExtensionContext) => {
 			if (waitedForStartup) return;
 			waitedForStartup = true;
+			// In the desktop every server: a codemode server's app tools are declared to the model too (model-only).
 			const ready = servers.flatMap((server) =>
-				isEnabled(server) && hasDirectTools(server.entry) && server.ready ? [server.ready] : [],
+				isEnabled(server) && (drawsApps() || hasDirectTools(server.entry)) && server.ready ? [server.ready] : [],
 			);
 			if (ready.length === 0) return;
 			let timer: NodeJS.Timeout | undefined;
@@ -1172,6 +1199,50 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 				ctx.ui.notify("MCP servers are still connecting; their tools become available once connected.", "info");
 			}
 		};
+
+		/**
+		 * MCP Apps (desktop): the app server asks, over the session's event bus, for an app's resources and calls of its
+		 * tools. Only the app's own server is reached, only while connected, and only tools its configuration does not
+		 * hide and whose visibility includes the app.
+		 */
+		const answerApp = async (request: McpAppRequest): Promise<McpAppAnswer> => {
+			const starting = findServer(request.server);
+			// A thread just opened: its apps ask while its servers still connect (startConnection, at session start).
+			if (starting && isEnabled(starting) && starting.ready) {
+				let timer: NodeJS.Timeout | undefined;
+				await Promise.race([
+					waitForServers([starting], session.signal),
+					new Promise<void>((resolve) => {
+						timer = setTimeout(resolve, startupWaitMs);
+					}),
+				]);
+				clearTimeout(timer);
+			}
+			const server = findServer(request.server);
+			const connection = server && isEnabled(server) ? server.connection : undefined;
+			// A dropped transport reconnects on the next request (getClient), as the model's calls do.
+			if (!server || !connection || (connection.state !== "connected" && connection.state !== "disconnected"))
+				return { error: { code: "mcpUnavailable", message: `MCP server "${request.server}" is not connected` } };
+			const options = { timeoutMs: connection.timeoutMs, signal: session.signal };
+			if (request.op === "readResource") return { result: await connection.readResource(request.uri, options) };
+			const tool = connection.tools.find((offered) => offered.name === request.name);
+			const callable =
+				tool && getMcpToolExposure(server.entry.config, tool.name) !== "hidden" && visibilityOf(tool).includes("app");
+			if (!tool || !callable)
+				return {
+					error: { code: "invalidParams", message: `"${request.server}/${request.name}" is not a tool apps can call` },
+				};
+			if (request.op === "describe")
+				return { result: { readOnly: tool.annotations?.readOnlyHint === true, visibility: visibilityOf(tool) } };
+			return { result: await connection.callTool(tool.name, request.arguments, options) };
+		};
+		knightcode.events.on(MCP_APPS_CHANNEL, (data) => {
+			const request = data as McpAppRequest;
+			request.heard();
+			void answerApp(request).then(request.reply, (error: unknown) =>
+				request.reply({ error: { code: "internal", message: errorMessage(error) } }),
+			);
+		});
 
 		// Every prompt lists the servers in the `mcp_servers` section as they are when it starts. KnightCode
 		// appends the section to the conversation when it changed, for example after a server connected.

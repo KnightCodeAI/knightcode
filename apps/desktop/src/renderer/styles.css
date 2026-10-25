@@ -124,6 +124,18 @@
 	--kc-app-menu-bg: #1f1f1f;
 	--kc-app-menu-hint: rgb(255 255 255 / 0.75);
 	--kc-app-menu-rule: rgb(255 255 255 / 0.157);
+	/* Terminals (section 9.7): the surface and text, and ANSI slots from its theme's accents (measured
+	   2026-10-23): black and bright black are the tertiary and secondary text, cyan is blue, white is the text. */
+	--kc-terminal-bg: var(--kc-bg-surface);
+	--kc-terminal-fg: var(--kc-text);
+	--kc-terminal-selection: rgb(255 255 255 / 0.1);
+	--kc-ansi-red: #ff6764;
+	--kc-ansi-green: #40c977;
+	--kc-ansi-yellow: #ffd240;
+	--kc-ansi-blue: #3a83f7;
+	--kc-ansi-magenta: #b06dff;
+	--kc-ansi-black: rgb(255 255 255 / 0.5);
+	--kc-ansi-bright-black: rgb(255 255 255 / 0.71);
 	--kc-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 	--kc-font-code: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 	/* Appearance › Advanced: the UI size over Codex's 14px (scales the type scale below) and the code size. */
@@ -284,6 +296,14 @@
 	--kc-app-menu-bg: #ffffff;
 	--kc-app-menu-hint: rgb(0 0 0 / 0.6);
 	--kc-app-menu-rule: rgb(0 0 0 / 0.12);
+	--kc-terminal-selection: rgb(0 0 0 / 0.1);
+	--kc-ansi-red: #e02e2a;
+	--kc-ansi-green: #00a240;
+	--kc-ansi-yellow: #ffc300;
+	--kc-ansi-blue: #339cff;
+	--kc-ansi-magenta: #924ff7;
+	--kc-ansi-black: rgb(26 28 31 / 0.5);
+	--kc-ansi-bright-black: rgb(26 28 31 / 0.7);
 	color-scheme: light;
 }
 

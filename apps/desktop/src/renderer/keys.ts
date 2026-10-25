@@ -16,6 +16,7 @@ const KEY_NAMES: Record<string, string> = {
 	semicolon: ";",
 	backquote: "`",
 	comma: ",",
+	period: ".",
 	digit0: "0",
 	numpadadd: "Num+",
 	numpadsubtract: "Num-",
@@ -104,6 +105,19 @@ export const matches = (event: KeyboardEvent | React.KeyboardEvent, id: Keybindi
 	return !(isMac() && event.altKey && !event.metaKey && !event.ctrlKey && isEditable(event.target));
 };
 
+type Handler = { current: (event: KeyboardEvent) => void | false };
+/** The enabled handlers by binding id, so a key main caught in a focused preview page runs the same one. */
+const handlers = new Map<KeybindingId, Set<Handler>>();
+
+/**
+ * Run a binding as if its key were pressed in the window: main caught it while a preview's page had focus, where the
+ * window's keydown listeners never hear it. The first handler that takes it wins, as with a real key.
+ */
+export function runBinding(id: string): void {
+	for (const handler of handlers.get(id as KeybindingId) ?? [])
+		if (handler.current(new KeyboardEvent("keydown")) !== false) return;
+}
+
 /**
  * A window-level handler for one binding id; the latest handler always runs. Keys a field already
  * handled are skipped, and a handler returning `false` leaves the key to its default action.
@@ -119,7 +133,13 @@ export function useBinding(id: KeybindingId, handler: (event: KeyboardEvent) => 
 			event.preventDefault();
 		};
 		window.addEventListener("keydown", listener);
-		return () => window.removeEventListener("keydown", listener);
+		const set = handlers.get(id) ?? new Set<Handler>();
+		set.add(ref);
+		handlers.set(id, set);
+		return () => {
+			window.removeEventListener("keydown", listener);
+			set.delete(ref);
+		};
 	}, [id, enabled]);
 }
 

@@ -12,6 +12,7 @@ import {
 	type MenuItemConstructorOptions,
 	nativeImage,
 	shell,
+	webContents,
 } from "electron";
 import { Compile } from "typebox/compile";
 import {
@@ -23,12 +24,15 @@ import {
 	WINDOW_CHROME,
 } from "../shared/host-protocol.ts";
 import { closeFromShortcut } from "./close.ts";
+import type { DeclaredCsp, McpApps } from "./mcp-apps.ts";
 import { InvalidParams, OpenIn, windowsIcons } from "./open-in.ts";
 import { refuseToOpen } from "./open-path.ts";
+import { setKeyOverrides } from "./preview.ts";
 import { readProfile, signIn, signOut } from "./profile.ts";
 import { saveCopy } from "./save-copy.ts";
 import type { ServerConnection } from "./server.ts";
 import type { StateFile } from "./state.ts";
+import type { Terminals } from "./terminals.ts";
 
 const checks = Object.fromEntries(
 	Object.entries(HostMethods).map(([method, schema]) => [method, Compile(schema.params)]),
@@ -90,11 +94,24 @@ export function openInService(env: NodeJS.ProcessEnv): OpenIn {
 	});
 }
 
+/** A private PNG beside pasted images, which the app server reads by path. */
+function savePng(png: Buffer): string {
+	const dir = join(app.getPath("temp"), "knightcode-desktop-paste");
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
+	const path = join(dir, `${randomUUID()}.png`);
+	writeFileSync(path, png, { mode: 0o600 });
+	return path;
+}
+
 /** What host methods reach beyond their window: the state file, the server, and opening another window on a route. */
 export interface HostDeps {
 	state: StateFile;
 	server: ServerConnection;
 	openIn: OpenIn;
+	terminals: Terminals;
+	mcpApps: McpApps;
+	/** The requesting window's id, which terminal events are posted to. */
+	windowId: number;
 	openWindow: (route?: string) => void;
 	/** Step the window's zoom (-1 out, 1 in, 0 back to 100%). */
 	zoom: (window: BrowserWindow, step: -1 | 0 | 1) => void;
@@ -124,9 +141,31 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openIn, openWindow, zoom, role }: HostDeps,
+	{ state, server, openIn, terminals, mcpApps, windowId, openWindow, zoom, role }: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
+		case "host/mcpApp/serve":
+			return mcpApps.serve(params.html as string, params.csp as DeclaredCsp | undefined, windowId);
+		case "host/mcpApp/release":
+			mcpApps.release(params.id as string);
+			return {};
+		case "host/terminal/shells":
+			return { shells: terminals.shells().map(({ id, name }) => ({ id, name })) };
+		case "host/terminal/create":
+			return terminals.create(params as Parameters<Terminals["create"]>[0], windowId);
+		case "host/terminal/list":
+			return { terminals: terminals.list(params.threadId as string) };
+		case "host/terminal/attach":
+			return terminals.attach(params.terminalId as string, windowId);
+		case "host/terminal/write":
+			terminals.write(params.terminalId as string, params.data as string);
+			return {};
+		case "host/terminal/resize":
+			terminals.resize(params.terminalId as string, params.cols as number, params.rows as number);
+			return {};
+		case "host/terminal/kill":
+			terminals.kill(params.terminalId as string);
+			return {};
 		case "host/openIn/list":
 			return { targets: await openIn.list() };
 		case "host/openIn/open":
@@ -186,6 +225,8 @@ async function run(
 		case "host/clipboard/writeText":
 			await clipboard.writeText(params.text as string);
 			return {};
+		case "host/clipboard/readText":
+			return { text: clipboard.readText() };
 		case "host/window/setTitle":
 			window.setTitle(params.title as string);
 			return {};
@@ -211,12 +252,19 @@ async function run(
 			const item = (await clipboard.read()).find((i) => i.types.includes("image/png"));
 			if (!item) return {};
 			const blob = await item.getType("image/png");
-			const dir = join(app.getPath("temp"), "knightcode-desktop-paste");
-			mkdirSync(dir, { recursive: true, mode: 0o700 });
-			const path = join(dir, `${randomUUID()}.png`);
-			writeFileSync(path, Buffer.from(await blob.arrayBuffer()), { mode: 0o600 });
-			return { path };
+			return { path: savePng(Buffer.from(await blob.arrayBuffer())) };
 		}
+		case "host/preview/capture": {
+			const guest = webContents.fromId(params.webContentsId as number);
+			if (!guest || guest.hostWebContents !== window.webContents)
+				throw new InvalidParams("not a preview of this window");
+			const image = await guest.capturePage(params.rect as Electron.Rectangle);
+			if (image.isEmpty()) throw new Error("the page drew nothing there");
+			return { path: savePng(image.toPNG()) };
+		}
+		case "host/keys/set":
+			setKeyOverrides(params.overrides as Record<string, string[]>);
+			return {};
 		case "host/image/thumbnail": {
 			// The renderer cannot read files; a small data URL is enough for an attachment chip.
 			const image = nativeImage.createFromPath(params.path as string);

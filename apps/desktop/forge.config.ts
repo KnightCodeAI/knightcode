@@ -7,11 +7,40 @@ import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { cpSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join, relative } from "node:path";
 
-// Packaging, signing and the bundled knightcode binary are phase S4 (desktop-shell.md section 15).
+/**
+ * node-pty runs in main outside the bundle (main.ts requires it at runtime), and the Vite build leaves node_modules
+ * out of the package. Copied from where it is installed: its package.json, its JS, and the target's binaries (the
+ * prebuild, or a node-gyp build where there is none), without sources, tests or debug symbols. No binary fails the
+ * package: every terminal would fail at run time instead.
+ */
+function copyNodePty(buildPath: string, platform: string, arch: string): void {
+	const from = dirname(createRequire(__filename).resolve("node-pty/package.json"));
+	const to = join(buildPath, "node_modules/node-pty");
+	const runtime = (path: string) =>
+		!/\.(pdb|lib|exp|ilk|obj|iobj|ipdb|map)$|\.test\.js$|(^|[\\/])obj([\\/]|$)/i.test(relative(from, path));
+	cpSync(join(from, "package.json"), join(to, "package.json"));
+	cpSync(join(from, "lib"), join(to, "lib"), { recursive: true, filter: runtime });
+	const prebuilt = join(from, "prebuilds", `${platform}-${arch}`);
+	const built = join(from, "build", "Release");
+	if (existsSync(prebuilt)) cpSync(prebuilt, join(to, "prebuilds", `${platform}-${arch}`), { recursive: true, filter: runtime });
+	else if (platform === process.platform && arch === process.arch && existsSync(built))
+		cpSync(built, join(to, "build", "Release"), { recursive: true, filter: runtime });
+	else throw new Error(`node-pty has no binary for ${platform}-${arch}: no prebuild, and no node-gyp build in ${built}`);
+}
+
+// Signing and the bundled knightcode binary are phase S4 (desktop-shell.md section 15).
 const config: ForgeConfig = {
+	hooks: {
+		packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) =>
+			copyNodePty(buildPath, platform, arch),
+	},
 	packagerConfig: {
-		asar: true,
+		// node-pty's binaries, spawn-helper and its conout worker run from real files.
+		asar: { unpack: "**/node_modules/node-pty/**" },
 		name: "KnightCode",
 		executableName: "knightcode-desktop",
 		// macOS learns the link scheme from Info.plist; Windows and Linux register it at launch (src/main.ts).

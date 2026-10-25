@@ -12,6 +12,7 @@ import type {
 	Workspace,
 } from "@knightcode/app-server-protocol";
 import type { AgentSession } from "../core/agent-session.ts";
+import type { EventBus } from "../core/event-bus.ts";
 import { emitSessionShutdownEvent } from "../core/extensions/runner.ts";
 import { AppServerError, SubscriberGone } from "./errors.ts";
 import { ExtensionUiState } from "./dialogs.ts";
@@ -89,6 +90,8 @@ export class LoadedThread {
 	onClosed: () => void = () => {};
 	/** Derived from the session cwd and the worktree manifest on every read, so a manifest update shows at once. */
 	resolveWorkspace: () => Workspace = () => ({ mode: "local" });
+	/** The session's event bus, where its MCP extension answers the thread's MCP Apps (mcp-apps.ts). */
+	mcpApps: () => EventBus | undefined = () => undefined;
 	readonly subscribers = new Set<Subscriber>();
 	lastTurnSubscriber: Subscriber | undefined;
 	approvalMode: ApprovalMode;

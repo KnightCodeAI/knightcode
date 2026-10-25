@@ -162,6 +162,14 @@
 									},
 									{
 										"type": "string",
+										"const": "approvalRequired"
+									},
+									{
+										"type": "string",
+										"const": "mcpUnavailable"
+									},
+									{
+										"type": "string",
 										"const": "internal"
 									}
 								]
@@ -2500,6 +2508,26 @@
 																	}
 																},
 																"$ref": "View"
+															},
+															"mcpApp": {
+																"type": "object",
+																"required": [
+																	"server",
+																	"resourceUri"
+																],
+																"properties": {
+																	"server": {
+																		"type": "string"
+																	},
+																	"resourceUri": {
+																		"type": "string"
+																	},
+																	"result": {},
+																	"resultOmitted": {
+																		"type": "boolean"
+																	}
+																},
+																"additionalProperties": false
 															}
 														},
 														"additionalProperties": false
@@ -3621,6 +3649,26 @@
 																}
 															},
 															"$ref": "View"
+														},
+														"mcpApp": {
+															"type": "object",
+															"required": [
+																"server",
+																"resourceUri"
+															],
+															"properties": {
+																"server": {
+																	"type": "string"
+																},
+																"resourceUri": {
+																	"type": "string"
+																},
+																"result": {},
+																"resultOmitted": {
+																	"type": "boolean"
+																}
+															},
+															"additionalProperties": false
 														}
 													},
 													"additionalProperties": false
@@ -5987,6 +6035,101 @@
 				"additionalProperties": false
 			}
 		},
+		"mcp/app/readResource": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"server",
+					"uri"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"server": {
+						"type": "string"
+					},
+					"uri": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"contents"
+				],
+				"properties": {
+					"contents": {
+						"type": "array",
+						"items": {}
+					},
+					"_meta": {
+						"type": "object",
+						"patternProperties": {
+							"^.*$": {}
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"mcp/app/callTool": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId",
+					"server",
+					"name"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					},
+					"server": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"arguments": {
+						"type": "object",
+						"patternProperties": {
+							"^.*$": {}
+						}
+					},
+					"confirmed": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"content"
+				],
+				"properties": {
+					"content": {
+						"type": "array",
+						"items": {}
+					},
+					"structuredContent": {},
+					"isError": {
+						"type": "boolean"
+					},
+					"_meta": {
+						"type": "object",
+						"patternProperties": {
+							"^.*$": {}
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
 		"file/read": {
 			"params": {
 				"type": "object",
@@ -7813,6 +7956,26 @@
 																	}
 																},
 																"$ref": "View"
+															},
+															"mcpApp": {
+																"type": "object",
+																"required": [
+																	"server",
+																	"resourceUri"
+																],
+																"properties": {
+																	"server": {
+																		"type": "string"
+																	},
+																	"resourceUri": {
+																		"type": "string"
+																	},
+																	"result": {},
+																	"resultOmitted": {
+																		"type": "boolean"
+																	}
+																},
+																"additionalProperties": false
 															}
 														},
 														"additionalProperties": false
@@ -8934,6 +9097,26 @@
 																}
 															},
 															"$ref": "View"
+														},
+														"mcpApp": {
+															"type": "object",
+															"required": [
+																"server",
+																"resourceUri"
+															],
+															"properties": {
+																"server": {
+																	"type": "string"
+																},
+																"resourceUri": {
+																	"type": "string"
+																},
+																"result": {},
+																"resultOmitted": {
+																	"type": "boolean"
+																}
+															},
+															"additionalProperties": false
 														}
 													},
 													"additionalProperties": false
@@ -13465,6 +13648,26 @@
 													}
 												},
 												"$ref": "View"
+											},
+											"mcpApp": {
+												"type": "object",
+												"required": [
+													"server",
+													"resourceUri"
+												],
+												"properties": {
+													"server": {
+														"type": "string"
+													},
+													"resourceUri": {
+														"type": "string"
+													},
+													"result": {},
+													"resultOmitted": {
+														"type": "boolean"
+													}
+												},
+												"additionalProperties": false
 											}
 										},
 										"additionalProperties": false
@@ -14635,6 +14838,26 @@
 												}
 											},
 											"$ref": "View"
+										},
+										"mcpApp": {
+											"type": "object",
+											"required": [
+												"server",
+												"resourceUri"
+											],
+											"properties": {
+												"server": {
+													"type": "string"
+												},
+												"resourceUri": {
+													"type": "string"
+												},
+												"result": {},
+												"resultOmitted": {
+													"type": "boolean"
+												}
+											},
+											"additionalProperties": false
 										}
 									},
 									"additionalProperties": false
@@ -15623,6 +15846,26 @@
 												}
 											},
 											"$ref": "View"
+										},
+										"mcpApp": {
+											"type": "object",
+											"required": [
+												"server",
+												"resourceUri"
+											],
+											"properties": {
+												"server": {
+													"type": "string"
+												},
+												"resourceUri": {
+													"type": "string"
+												},
+												"result": {},
+												"resultOmitted": {
+													"type": "boolean"
+												}
+											},
+											"additionalProperties": false
 										}
 									},
 									"additionalProperties": false
