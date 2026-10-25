@@ -82,9 +82,11 @@ function displayLines(output: string): string[] {
 
 /** Running commands first, newest first within each group. */
 function sortShells(shells: BackgroundShellInfo[]): BackgroundShellInfo[] {
-	return [...shells].sort(
-		(a, b) => Number(a.status !== "running") - Number(b.status !== "running") || b.startedAt - a.startedAt,
-	);
+	// The list is oldest first and the sort stable: reversed first, commands started in the same millisecond stay newest
+	// first too.
+	return [...shells]
+		.reverse()
+		.sort((a, b) => Number(a.status !== "running") - Number(b.status !== "running") || b.startedAt - a.startedAt);
 }
 
 /** `Enter to view`: the key, then what it does. */
