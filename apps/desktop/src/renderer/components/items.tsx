@@ -11,7 +11,7 @@
 
 import type { TurnFile } from "@knightcode/app-server-protocol";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { diffStats, inputOf, isRunning, thinkingHeading, type ToolItem, workEntries } from "../activity.ts";
+import { afterReply, diffStats, inputOf, isRunning, thinkingHeading, type ToolItem, workEntries } from "../activity.ts";
 import { client } from "../client.ts";
 import { clockTime, duration, messageTime } from "../format.ts";
 import { matches } from "../keys.ts";
@@ -606,13 +606,10 @@ export function TurnView({
 	const final = finalIndex >= 0 ? rest[finalIndex] : undefined;
 	// Compactions stay visible: those before the final reply show above it, later ones below.
 	const compactedBefore = rest.some((i, n) => i.type === "compaction" && (finalIndex < 0 || n < finalIndex));
-	const compactedAfter = finalIndex >= 0 && rest.some((i, n) => i.type === "compaction" && n > finalIndex);
 	// The proposed plan is a card of its own after the reply, not a row of the work.
 	const plan = turn.items.findLast(isPlan);
-	// A notice recorded after the reply (a background command the user stopped) is no work of the turn's: below it.
-	const later = rest.filter(
-		(i, n) => finalIndex >= 0 && n > finalIndex && i.type === "extensionMessage" && i.backgroundShells !== undefined,
-	);
+	// Below the reply, in the order they came: later compactions and notices recorded after it.
+	const later = afterReply(rest, finalIndex);
 	// Reasoning is no row (it shows only in the running status), so a turn of reasoning alone has no work.
 	const work = rest.filter(
 		(i) => i !== final && i.type !== "compaction" && i.type !== "reasoning" && !isPlan(i) && !later.includes(i),
@@ -688,11 +685,12 @@ export function TurnView({
 					) : null}
 					{plan ? <PlanCard item={plan} /> : null}
 					{later.map((item) =>
-						item.type === "extensionMessage" && item.backgroundShells ? (
+						item.type === "compaction" ? (
+							<CompactionDivider key={item.id} />
+						) : item.type === "extensionMessage" && item.backgroundShells ? (
 							<BackgroundNotices key={item.id} notices={item.backgroundShells} />
 						) : null,
 					)}
-					{compactedAfter ? <CompactionDivider /> : null}
 					{turn.status === "interrupted" ? (
 						<div className="text-base text-tertiary">Interrupted · {clockTime(turn.completedAt ?? turn.startedAt)}</div>
 					) : null}

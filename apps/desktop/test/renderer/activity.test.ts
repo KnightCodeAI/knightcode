@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
 	activitySummary,
+	afterReply,
 	backgroundEnd,
 	backgroundNoticeText,
 	backgroundStateOf,
@@ -287,4 +288,23 @@ test("a later read of a command's output appends what follows the end of the las
 	const block = "compiled ok\n".repeat(300);
 	const output = `${block}changed a.ts\n${block}`;
 	expect(output.slice(outputOverlap(`start\n${block}`, output))).toBe(`changed a.ts\n${block}`);
+});
+
+test("what follows a turn's reply keeps its order: a compaction, then a notice recorded after it, stays below the reply", () => {
+	const reply: ViewItem = { type: "agentMessage", id: "reply", text: "done" };
+	const compaction: ViewItem = { type: "compaction", id: "c", summary: "" };
+	const notice = (id: string): ViewItem => ({
+		type: "extensionMessage",
+		id,
+		extension: "background_shell",
+		text: "",
+		backgroundShells: [{ id, command: "npm run dev", status: "stopped", outputTail: "" }],
+	});
+	const other: ViewItem = { type: "extensionMessage", id: "x", extension: "plan", text: "" };
+	const items = [call("bash"), notice("n0"), reply, compaction, notice("n1"), other];
+	// The notice before the reply is the turn's work; after it, the compaction comes first, as it did.
+	expect(afterReply(items, 2).map((i) => i.id)).toEqual(["c", "n1"]);
+	expect(afterReply([reply, notice("n1"), compaction], 0).map((i) => i.id)).toEqual(["n1", "c"]);
+	// No reply: nothing is set apart.
+	expect(afterReply(items, -1)).toEqual([]);
 });

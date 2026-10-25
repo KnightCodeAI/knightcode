@@ -509,6 +509,20 @@ export function workEntries(items: ViewItem[]): Entry[] {
 }
 
 /**
+ * What follows a finished turn's reply (at `finalIndex` of `items`), in the order it came: compactions, which change
+ * what the model sees, and notices recorded once the turn was over (a background command the user stopped). Neither
+ * is work the reply sums up, so both show below it rather than fold into it.
+ */
+export const afterReply = (items: ViewItem[], finalIndex: number): ViewItem[] =>
+	finalIndex < 0
+		? []
+		: items.filter(
+				(item, n) =>
+					n > finalIndex &&
+					(item.type === "compaction" || (item.type === "extensionMessage" && item.backgroundShells !== undefined)),
+			);
+
+/**
  * A thread's sources, as the summary lists them under "Sources": the images the user attached, the MCP servers
  * whose tools ran, and the web when the agent searched or fetched it.
  */

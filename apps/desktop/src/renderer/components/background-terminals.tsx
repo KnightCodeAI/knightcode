@@ -11,6 +11,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { outputOverlap } from "../activity.ts";
 import { client } from "../client.ts";
+import { pollInOrder } from "../latest.ts";
 import { selectPreferences, stopBackgroundShell, useStore } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { Spinner, Square, SquareTerminal } from "./icons.tsx";
@@ -145,8 +146,8 @@ function OutputTerminal({ output }: { output: string }) {
 }
 
 /**
- * A background command's output tab. It reads the output on open, once a second while the command runs, and once
- * more when it ends.
+ * A background command's output tab. It reads the output on open, a second after each answer while the command runs,
+ * and once more when it ends; one read at a time, so the view never goes back to an older answer.
  */
 export function BackgroundShellTab({ threadId, id }: { threadId: string; id: string }) {
 	const running = useStore(
@@ -154,25 +155,20 @@ export function BackgroundShellTab({ threadId, id }: { threadId: string; id: str
 	);
 	const [output, setOutput] = useState<string>();
 	const [gone, setGone] = useState(false);
-	useEffect(() => {
-		let closed = false;
-		const read = () =>
-			client.request("thread/backgroundShells/output", { threadId, id }).then(
+	// ponytail: polls the kept end of the output; push output deltas if a second's lag or the 50 KB end falls short.
+	useEffect(
+		() =>
+			pollInOrder(
+				1000,
+				() => client.request("thread/backgroundShells/output", { threadId, id }),
 				(result) => {
-					if (!closed) setOutput(result.output);
+					setOutput(result.output);
+					return running;
 				},
-				() => {
-					if (!closed) setGone(true);
-				},
-			);
-		void read();
-		// ponytail: polls the kept end of the output; push output deltas if a second's lag or the 50 KB end falls short.
-		const timer = running ? setInterval(() => void read(), 1000) : undefined;
-		return () => {
-			closed = true;
-			clearInterval(timer);
-		};
-	}, [threadId, id, running]);
+				() => setGone(true),
+			),
+		[threadId, id, running],
+	);
 	return (
 		<div className="flex min-h-0 flex-1 flex-col bg-surface">
 			{output ? (
