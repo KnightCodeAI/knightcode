@@ -1,3 +1,4 @@
+import { getHeapStatistics } from "node:v8";
 import { InMemoryTelemetryContext, type TelemetrySpan } from "@knightcode/telemetry";
 import { describe, expect, it, vi } from "vitest";
 import { lazyStream } from "../src/api/lazy.ts";
@@ -5,6 +6,7 @@ import { AI_TELEMETRY_SCHEMA, createModels, createProvider } from "../src/models
 import { observeModelRequest } from "../src/telemetry.ts";
 import type { AssistantMessage, AssistantMessageEvent, DeferredHandle, Model } from "../src/types.ts";
 import { AssistantMessageEventStream } from "../src/utils/event-stream.ts";
+import { collectGarbage } from "./memory-helpers.ts";
 
 const model: Model<"telemetry-test"> = {
 	id: "model",
@@ -191,6 +193,25 @@ describe("AI telemetry", () => {
 		expect(JSON.stringify(span)).not.toContain("discarded-tail");
 		expect(JSON.stringify(span.attributes)).not.toContain("xxx");
 		expect(JSON.stringify(span.events)).not.toContain("xxx");
+	});
+
+	// A telemetry error message owns a bounded excerpt, so the provider message can be collected.
+	it("keeps a bounded error message that does not hold the provider's whole message alive", async () => {
+		const telemetry = new InMemoryTelemetryContext();
+		await collectGarbage();
+		const before = getHeapStatistics().used_heap_size;
+		await (async () => {
+			const result = message("error");
+			result.errorMessage = `${"x".repeat(4_000_000)}tail`;
+			const { models } = setup(result);
+			await telemetry.startSpan({ name: "caller" }, (span) => models.fetchDeferred(model, handle, { telemetry: span }));
+			await settled(telemetry);
+		})();
+		await collectGarbage();
+		const [, span] = telemetry.getSpans();
+		expect(span?.status).toEqual({ status: "error", error: { name: "provider_error", message: "x".repeat(500) } });
+		// A slice of the 4 MB message would keep all of it alive with the span.
+		expect(getHeapStatistics().used_heap_size - before).toBeLessThan(2_000_000);
 	});
 
 	it("includes setup failures and omits non-scalar native reasoning", async () => {
