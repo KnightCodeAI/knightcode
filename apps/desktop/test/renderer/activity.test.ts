@@ -1,8 +1,10 @@
+import type { BackgroundShell } from "@knightcode/app-server-protocol";
 import { expect, test } from "vitest";
 import {
 	activitySummary,
 	afterReply,
 	backgroundEnd,
+	backgroundStarted,
 	backgroundNoticeText,
 	backgroundStateOf,
 	commandResult,
@@ -288,6 +290,25 @@ test("a later read of a command's output appends what follows the end of the las
 	const block = "compiled ok\n".repeat(300);
 	const output = `${block}changed a.ts\n${block}`;
 	expect(output.slice(outputOverlap(`start\n${block}`, output))).toBe(`changed a.ts\n${block}`);
+});
+
+test("a background command has started when a list has one running that the last list lacked", () => {
+	const shell = (id: string, status: "running" | "completed"): BackgroundShell => ({
+		id,
+		command: "bun run dev",
+		cwd: "/repo",
+		status,
+		startedAt: 0,
+	});
+	// The thread's first list: what already runs did not just start.
+	expect(backgroundStarted(undefined, [shell("a", "running")])).toBe(false);
+	expect(backgroundStarted(new Set(), [shell("a", "running")])).toBe(true);
+	// One ending, or the same one listed again, starts nothing.
+	expect(backgroundStarted(new Set(["a"]), [shell("a", "completed")])).toBe(false);
+	expect(backgroundStarted(new Set(["a"]), [shell("a", "running")])).toBe(false);
+	expect(backgroundStarted(new Set(["a"]), [shell("a", "completed"), shell("b", "running")])).toBe(true);
+	// Already over by the time it was listed.
+	expect(backgroundStarted(new Set(["a"]), [shell("b", "completed")])).toBe(false);
 });
 
 test("what follows a turn's reply keeps its order: a compaction, then a notice recorded after it, stays below the reply", () => {

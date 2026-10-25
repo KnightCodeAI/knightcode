@@ -658,6 +658,13 @@ export function outputOverlap(before: string, output: string): number {
 	return -1;
 }
 
+/**
+ * Whether a thread's background commands list one running that `known`, the ids its last list had, lacks: a command
+ * just started. Before a first list (the thread opening, the server restarting) nothing is known and nothing starts.
+ */
+export const backgroundStarted = (known: ReadonlySet<string> | undefined, shells: readonly BackgroundShell[]) =>
+	known !== undefined && shells.some((shell) => shell.status === "running" && !known.has(shell.id));
+
 // --- questions --------------------------------------------------------------------------------------------------
 
 /** ask_user's questions with the answers its result names (`id: label`, `id: Other: text`, `id: unanswered`). */

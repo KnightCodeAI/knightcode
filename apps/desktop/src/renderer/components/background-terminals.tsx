@@ -9,7 +9,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { outputOverlap } from "../activity.ts";
+import { backgroundStarted, outputOverlap } from "../activity.ts";
 import { client } from "../client.ts";
 import { pollInOrder } from "../latest.ts";
 import { selectPreferences, stopBackgroundShell, useStore } from "../store.ts";
@@ -22,6 +22,18 @@ import { Tooltip } from "./tooltip.tsx";
 export const commandLabel = (command: string) => command.trim().split("\n")[0] || "Background terminal";
 
 const NO_SHELLS: BackgroundShell[] = [];
+
+/** Runs `onStart` when one of the thread's commands starts running in the background (activity.ts, backgroundStarted). */
+export function useBackgroundStart(threadId: string, onStart: () => void): void {
+	const shells = useStore((s) => s.held[threadId]?.backgroundShells);
+	const known = useRef<{ threadId: string; ids: Set<string> }>(undefined);
+	useEffect(() => {
+		const before = known.current?.threadId === threadId ? known.current.ids : undefined;
+		known.current = shells && { threadId, ids: new Set(shells.map((shell) => shell.id)) };
+		if (shells && backgroundStarted(before, shells)) onStart();
+		// Only a new list can start a command; onStart is whatever the render that brought it passed.
+	}, [threadId, shells]);
+}
 
 /** The summary's "Background processes": a count, then a row per running command, Stop shown on hover. */
 export function BackgroundProcessesSection({
