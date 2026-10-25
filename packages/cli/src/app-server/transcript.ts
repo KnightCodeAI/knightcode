@@ -94,7 +94,8 @@ export function backgroundShellIdOf(details: unknown): string | undefined {
 	return typeof id === "string" ? id : undefined;
 }
 
-const SHELL_STATUSES: ReadonlySet<string> = new Set(["running", "completed", "failed", "stopped", "timed_out"]);
+/** A notice reports an end, so a command it calls running is malformed. */
+const ENDED_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "stopped", "timed_out"]);
 
 /**
  * The ended commands a `background_shell` message reports, from its `details.notices`. Session files can hold
@@ -108,8 +109,8 @@ export function backgroundNoticesOf(customType: string, details: unknown): Backg
 	const valid = notices.flatMap((notice: unknown): BackgroundShellNotice[] => {
 		if (typeof notice !== "object" || notice === null) return [];
 		const { id, command, status, exitCode, error, outputTail } = notice as Record<string, unknown>;
-		if (typeof id !== "string" || typeof command !== "string" || typeof status !== "string") return [];
-		if (!SHELL_STATUSES.has(status)) return [];
+		if (typeof id !== "string" || typeof command !== "string" || typeof outputTail !== "string") return [];
+		if (typeof status !== "string" || !ENDED_STATUSES.has(status)) return [];
 		return [
 			{
 				id,
@@ -117,7 +118,7 @@ export function backgroundNoticesOf(customType: string, details: unknown): Backg
 				status: status as BackgroundShellNotice["status"],
 				...(typeof exitCode === "number" ? { exitCode } : {}),
 				...(typeof error === "string" ? { error } : {}),
-				outputTail: typeof outputTail === "string" ? outputTail : "",
+				outputTail,
 			},
 		];
 	});

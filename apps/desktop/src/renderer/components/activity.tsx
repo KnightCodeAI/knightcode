@@ -8,7 +8,7 @@
 import type { FileDiffOptions } from "@pierre/diffs";
 import { isHighlighterLoaded } from "@pierre/diffs";
 import { PatchDiff } from "@pierre/diffs/react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import type { BackgroundShellNotice } from "@knightcode/app-server-protocol";
 import {
 	activitySummary,
@@ -109,6 +109,8 @@ export function ActivityRow({
 	active?: boolean;
 	children?: ReactNode;
 }) {
+	// The toggle covers the row but holds none of it, so it takes its name from the label.
+	const labelId = useId();
 	return (
 		<div className="flex min-w-0 flex-col">
 			<div className="group/activity relative inline-flex max-w-full min-w-0 items-center gap-1 self-start text-base">
@@ -116,13 +118,16 @@ export function ActivityRow({
 					<button
 						type="button"
 						aria-expanded={open}
+						aria-labelledby={labelId}
 						onClick={onToggle}
 						className="absolute inset-0 rounded-md focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
 					/>
 				) : null}
 				<span className="pointer-events-none relative flex min-w-0 items-center gap-1.5 text-activity group-hover/activity:text-ink">
 					{icon}
-					<span className={`flex min-w-0 items-center truncate ${active ? "kc-shimmer" : ""}`}>{label}</span>
+					<span id={labelId} className={`flex min-w-0 items-center truncate ${active ? "kc-shimmer" : ""}`}>
+						{label}
+					</span>
 				</span>
 				{onToggle ? (
 					<ChevronRight

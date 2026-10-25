@@ -321,13 +321,16 @@ export type ToolCallStatus = Static<typeof ToolCallStatus>;
 
 const Times = { startedAt: Type.Optional(Num), completedAt: Type.Optional(Num) };
 
-export const BackgroundShellStatus = Type.Union([
-	Type.Literal("running"),
+/** How a background command ended. */
+export const BackgroundShellEnd = Type.Union([
 	Type.Literal("completed"),
 	Type.Literal("failed"),
 	Type.Literal("stopped"),
 	Type.Literal("timed_out"),
 ]);
+export type BackgroundShellEnd = Static<typeof BackgroundShellEnd>;
+
+export const BackgroundShellStatus = Type.Union([Type.Literal("running"), ...BackgroundShellEnd.anyOf]);
 export type BackgroundShellStatus = Static<typeof BackgroundShellStatus>;
 
 /** A shell command that keeps running after its call returned (`run_in_background`), as its thread tracks it. */
@@ -348,7 +351,7 @@ export type BackgroundShell = Static<typeof BackgroundShell>;
 export const BackgroundShellNotice = Obj({
 	id: Str,
 	command: Str,
-	status: BackgroundShellStatus,
+	status: BackgroundShellEnd,
 	exitCode: Type.Optional(Num),
 	error: Type.Optional(Str),
 	/** The last lines of its output, without terminal escapes. */
@@ -921,7 +924,7 @@ export const ClientRequests = {
 	"thread/compact": { params: Obj({ threadId: Str, instructions: Type.Optional(Str) }), result: Empty },
 	/** The thread's background commands, running and recently ended, oldest first; changes follow as notifications. */
 	"thread/backgroundShells/list": { params: ThreadId, result: Obj({ shells: Type.Array(BackgroundShell) }) },
-	/** The end of a background command's output, terminal escapes kept: the last 50 KB while it runs, 64 KB after. */
+	/** The end of a background command's output, terminal escapes kept: the last 2,000 lines or 50 KB. */
 	"thread/backgroundShells/output": { params: Obj({ threadId: Str, id: Str }), result: Obj({ output: Str }) },
 	/** Stop a running background command; `stopped` is false when it was not running. */
 	"thread/backgroundShells/stop": { params: Obj({ threadId: Str, id: Str }), result: Obj({ stopped: Bool }) },

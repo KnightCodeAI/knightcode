@@ -8,6 +8,7 @@ import {
 	dialogOption,
 	dialogTitle,
 	expandable,
+	outputOverlap,
 	parseExploration,
 	questionsAndAnswers,
 	rowLabel,
@@ -244,7 +245,19 @@ test("a background command's state is the live entry while it runs, else the not
 	const running = { ...shell, status: "running" as const };
 	const ended = { ...shell, status: "failed" as const, exitCode: 1, endedAt: 2 };
 	const notice = { id: "ab12", command: "npm run dev", status: "failed" as const, exitCode: 1, outputTail: "boom" };
-	const turns = [{ items: [{ type: "extensionMessage", id: "m", extension: "background_shell", text: "", backgroundShells: [notice] } as ViewItem] }];
+	const turns = [
+		{
+			items: [
+				{
+					type: "extensionMessage",
+					id: "m",
+					extension: "background_shell",
+					text: "",
+					backgroundShells: [notice],
+				} as ViewItem,
+			],
+		},
+	];
 	expect(backgroundStateOf([running], turns, "ab12")).toBe(running);
 	expect(backgroundStateOf([ended], turns, "ab12")).toBe(notice);
 	expect(backgroundStateOf([ended], [], "ab12")).toBe(ended);
@@ -252,8 +265,26 @@ test("a background command's state is the live entry while it runs, else the not
 	expect(backgroundNoticeText(notice)).toBe("Background terminal finished with npm run dev");
 	expect(backgroundNoticeText({ ...notice, status: "stopped" })).toBe("Background terminal stopped with npm run dev");
 	expect(backgroundEnd(notice)).toEqual({ kind: "exit", code: "1" });
-	expect(backgroundEnd({ ...notice, exitCode: undefined, error: "spawn ENOENT" })).toEqual({ kind: "failed", text: "spawn ENOENT" });
+	expect(backgroundEnd({ ...notice, exitCode: undefined, error: "spawn ENOENT" })).toEqual({
+		kind: "failed",
+		text: "spawn ENOENT",
+	});
 	expect(backgroundEnd({ ...notice, status: "timed_out" })).toEqual({ kind: "failed", text: "Timed out" });
 	expect(backgroundEnd(running)).toEqual({ kind: "running" });
 	expect(backgroundEnd(undefined)).toEqual({ kind: "running" });
+});
+
+test("a later read of a command's output appends what follows the end of the last read it starts with", () => {
+	expect(outputOverlap("", "ready")).toBe(0);
+	expect(outputOverlap("abc", "abcdef")).toBe(3);
+	expect(outputOverlap("abcdef", "def")).toBe(3);
+	expect(outputOverlap("aaaa", "zzzz")).toBe(-1);
+	// The server dropped the oldest output between the reads.
+	const lines = Array.from({ length: 900 }, (_, i) => `line ${i}\n`);
+	const later = lines.slice(100).join("");
+	expect(later.slice(outputOverlap(lines.slice(0, 600).join(""), later))).toBe(lines.slice(600).join(""));
+	// A block printed again after new lines is new output, not the end of the last read found again.
+	const block = "compiled ok\n".repeat(300);
+	const output = `${block}changed a.ts\n${block}`;
+	expect(output.slice(outputOverlap(`start\n${block}`, output))).toBe(`changed a.ts\n${block}`);
 });

@@ -380,12 +380,7 @@ function explorationLabel(found: Exploration, running: boolean): RowLabel {
 }
 
 /** What a call did, as its row says it. `background`: how the command a shell call left running stands. */
-export function rowLabel(
-	item: ToolItem,
-	cwd: string,
-	open = false,
-	background?: BackgroundShell["status"],
-): RowLabel {
+export function rowLabel(item: ToolItem, cwd: string, open = false, background?: BackgroundShell["status"]): RowLabel {
 	const input = inputOf(item);
 	const running = isRunning(item);
 	const rawPath = str(input.path) || str(input.file_path);
@@ -630,6 +625,23 @@ export function backgroundEnd(state: BackgroundState | undefined): CommandEnd {
 		default:
 			return { kind: "running" };
 	}
+}
+
+/** How much of a read's start must be found in the last read to match the two up. */
+const OVERLAP_PROBE = 2048;
+
+/**
+ * How much of `before`, the last read of a command's kept output, `output`, a later read, starts with: the longest end
+ * of `before` it begins with, so what follows that is new. -1 when it begins with none of it, more having come between
+ * the reads than the server keeps, or with less than the probe's 2 KB of it, which starts the view over all the same.
+ * ponytail: output that repeats one block over and over can match too long an end and drop repeats of it; stream
+ * output deltas if that shows.
+ */
+export function outputOverlap(before: string, output: string): number {
+	const probe = output.slice(0, Math.min(OVERLAP_PROBE, before.length));
+	for (let at = before.indexOf(probe); at !== -1; at = before.indexOf(probe, at + 1))
+		if (output.startsWith(before.slice(at))) return before.length - at;
+	return -1;
 }
 
 // --- questions --------------------------------------------------------------------------------------------------

@@ -630,16 +630,17 @@ options, a button with a value).
 
 ### `thread/backgroundShells/list`, `thread/backgroundShells/output` and `thread/backgroundShells/stop`
 
-The commands a thread's shell calls left running in the background (`run_in_background`),
-and the last 50 that ended; they end with the session, so a thread that is not loaded has
-none. `list` takes `{threadId}` and answers `{shells: [{id, command, cwd, status, startedAt,
-endedAt?, exitCode?, error?}]}`, oldest first; `status` is `running`, `completed`, `failed`,
-`stopped` or `timed_out`, and `error` says why a command failed without an exit code. After
-that, subscribers get `thread/backgroundShells/updated: {threadId, shells}`, the whole list,
-whenever a command starts, is asked to stop, or ends.
+The commands a thread's shell calls left running in the background (`run_in_background`, or
+a foreground command moved there while it ran, as the terminal's Ctrl+B does), and the last
+50 that ended; they end with the session, so a thread that is not loaded has none. `list`
+takes `{threadId}` and answers `{shells: [{id, command, cwd, status, startedAt, endedAt?,
+exitCode?, error?}]}`, oldest first; `status` is `running`, `completed`, `failed`, `stopped`
+or `timed_out`, and `error` says why a command failed without an exit code. After that,
+subscribers get `thread/backgroundShells/updated: {threadId, shells}`, the whole list,
+whenever a command starts or ends. A command asked to stop stays `running` until it exits.
 
 `output` takes `{threadId, id}` and answers `{output}`: the end of the command's output with
-its terminal escapes, the last 2,000 lines or 50 KB while it runs and 64 KB once it ended.
+its terminal escapes, the last 2,000 lines or 50 KB, kept after the command ended.
 `stop` takes `{threadId, id}`, stops a running command as the user, and answers `{stopped}`,
 false when it had already ended or was already stopping. A command the user stops is
 recorded for the model without starting a turn. Both answer `invalidParams` for an id the
@@ -648,7 +649,7 @@ thread does not know.
 A shell call whose command went on in the background carries `backgroundShellId`, and the
 `extensionMessage` that tells the model commands ended (extension `background_shell`)
 carries `backgroundShells: [{id, command, status, exitCode?, error?, outputTail}]`, both
-live and read back.
+live and read back; a notice's `status` is how the command ended, never `running`.
 
 ```json
 {"id":19,"method":"thread/backgroundShells/stop","params":{"threadId":"THREAD_ID","id":"ab12cd34"}}

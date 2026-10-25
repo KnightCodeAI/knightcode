@@ -1,6 +1,6 @@
 /**
  * Background terminals: the commands the agent left running after their calls returned. The thread's summary lists
- * the running ones under "Background processes", each opening its output in a side panel tab and stopping on hover;
+ * the running ones under "Background processes", each opening its output in a side panel tab, Stop shown on hover;
  * the tab draws the command's output in a read-only terminal, following it while it runs.
  */
 
@@ -9,6 +9,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { outputOverlap } from "../activity.ts";
 import { client } from "../client.ts";
 import { selectPreferences, stopBackgroundShell, useStore } from "../store.ts";
 import { IconButton } from "./button.tsx";
@@ -53,11 +54,11 @@ export function BackgroundProcessesSection({
 					</button>
 					<IconButton
 						label="Stop background terminal"
+						// The tooltip stays short; a screen reader hears which command stops.
+						aria-label={`Stop ${commandLabel(shell.command)}`}
 						round
 						disabled={stopping !== undefined}
-						className={
-							stopping === shell.id ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-						}
+						className={stopping === shell.id ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}
 						onClick={() => {
 							setStopping(shell.id);
 							void stopBackgroundShell(threadId, shell.id).finally(() => setStopping(undefined));
@@ -70,9 +71,6 @@ export function BackgroundProcessesSection({
 		</>
 	);
 }
-
-/** How much of the last output a read must find again in the next to append to it rather than start over. */
-const OVERLAP = 2048;
 
 /** Output in a terminal that takes no input: appended as it grows, and kept in sight at its end. */
 function OutputTerminal({ output }: { output: string }) {
@@ -129,16 +127,11 @@ function OutputTerminal({ output }: { output: string }) {
 	useEffect(() => {
 		const xterm = term.current;
 		if (!xterm) return;
-		const before = written.current;
-		// The server keeps only the end of a running command's output, so a read can start past where the last one did:
-		// what follows the last read's end is new. Output that no longer holds it starts the view over.
-		// ponytail: a 2 KB overlap; output that repeats whole 2 KB blocks can append twice, stream deltas if it shows.
-		const tail = before.slice(-OVERLAP);
-		const at = before ? (output.startsWith(before) ? before.length : output.lastIndexOf(tail) + tail.length) : 0;
-		if (before && at < tail.length) {
-			xterm.reset();
-			xterm.write(output);
-		} else xterm.write(output.slice(at));
+		// The server keeps only the end of a running command's output, so a read can start past where the last one did.
+		// Output that shares too little with the last read starts the view over.
+		const kept = outputOverlap(written.current, output);
+		if (kept < 0) xterm.reset();
+		xterm.write(kept < 0 ? output : output.slice(kept));
 		written.current = output;
 	}, [output]);
 

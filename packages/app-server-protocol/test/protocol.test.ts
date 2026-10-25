@@ -606,6 +606,8 @@ describe("app server protocol", () => {
 		const notice = { id: "ab12cd34", command: "npm test", status: "failed", exitCode: 1, outputTail: "1 failed" };
 		expect(items.Check({ ...message, backgroundShells: [notice] })).toBe(true);
 		expect(items.Check({ ...message, backgroundShells: [{ ...notice, status: "exited" }] })).toBe(false);
+		// A notice reports an end.
+		expect(items.Check({ ...message, backgroundShells: [{ ...notice, status: "running" }] })).toBe(false);
 	});
 
 	test("the generated JSON Schema is up to date", () => {

@@ -71,8 +71,11 @@ test("read back, a backgrounded shell call names its command and a notice carrie
 						outputPath: "",
 						outputTail: "boom",
 					},
-					// Session files can hold anything: a notice without a command is left out.
-					{ id: "zz", status: "completed" },
+					// Session files can hold anything: a notice without a command or an output tail, or one of a command
+					// still running, is left out.
+					{ id: "zz", status: "completed", outputTail: "" },
+					{ id: "yy", command: "npm test", status: "completed" },
+					{ id: "xx", command: "npm test", status: "running", outputTail: "" },
 				],
 			},
 		}),

@@ -750,11 +750,13 @@ window.addEventListener("focus", () => {
 // --- actions ----------------------------------------------------------------------------------
 
 async function connected(): Promise<void> {
-	// The extension UI died with the old server: dropped before anything here can fail, each resume below brings the
-	// new one, and a failed resume leaves no widget to press.
+	// The extension UI and the background commands died with the old server: dropped before anything here can fail,
+	// each resume below brings the new ones, and a failed resume leaves no widget to press and no command to stop.
 	set((s) => ({
 		...s,
-		held: Object.fromEntries(Object.entries(s.held).map(([id, v]) => [id, { ...v, ui: EMPTY_UI }])),
+		held: Object.fromEntries(
+			Object.entries(s.held).map(([id, v]) => [id, { ...v, ui: EMPTY_UI, backgroundShells: undefined }]),
+		),
 	}));
 	try {
 		const first = !state.desktop;
@@ -851,11 +853,14 @@ let resumes = 0;
 
 /**
  * A subscribed thread's background commands; changes from the subscription on arrive as updates. The answer joins
- * the event order, so an update that came before it and still waits there cannot overwrite it.
+ * the event order, so an update that came before it and still waits there cannot overwrite it, and it is dropped
+ * once a newer resume has begun, which lists them again.
  */
-async function listBackgroundShells(id: string): Promise<void> {
+async function listBackgroundShells(id: string, superseded: () => boolean): Promise<void> {
 	const { shells } = await client.request("thread/backgroundShells/list", { threadId: id });
-	enqueue({ threadId: id }, () => updateThread(id, (v) => ({ ...v, backgroundShells: shells })));
+	enqueue({ threadId: id }, () => {
+		if (!superseded()) updateThread(id, (v) => ({ ...v, backgroundShells: shells }));
+	});
 }
 
 /** Subscribe to a thread and load its history without changing the view. */
@@ -906,7 +911,7 @@ async function resumeThread(id: string): Promise<void> {
 		for (const warning of result.warnings) toast(warning.message);
 		await drain();
 		// Informational: the thread is open whether or not this answers.
-		void listBackgroundShells(id).catch(() => {});
+		void listBackgroundShells(id, superseded).catch(() => {});
 	} catch (error) {
 		if (superseded()) return;
 		const code = error instanceof RequestError ? error.code : undefined;
@@ -1714,7 +1719,10 @@ export function openBackgroundShellTab(threadId: string, shell: { id: string; co
 		(t) => {
 			const at = t.tabs.findIndex((tab) => tab.kind === "backgroundShell" && tab.id === shell.id);
 			if (at !== -1) return { ...t, active: at };
-			return { tabs: [...t.tabs, { kind: "backgroundShell", id: shell.id, command: shell.command }], active: t.tabs.length };
+			return {
+				tabs: [...t.tabs, { kind: "backgroundShell", id: shell.id, command: shell.command }],
+				active: t.tabs.length,
+			};
 		},
 		true,
 	);

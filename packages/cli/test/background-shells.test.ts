@@ -377,6 +377,8 @@ describe("background shell edge cases", () => {
 			processes[i + 1]?.exit(0);
 			await manager.waitForExit((quick.details as BashToolDetails).background?.taskId as string, 5000);
 		}
+		const published: number[] = [];
+		manager.subscribe(() => published.push(manager.list().length));
 		processes[0]?.emit("BUILD OUTPUT LINE\n");
 		processes[0]?.exit(0);
 		await settle(manager);
@@ -385,6 +387,8 @@ describe("background shell edge cases", () => {
 		expect(manager.readOutput(firstId)).toContain("BUILD OUTPUT LINE");
 		expect(settled.at(-1)?.id).toBe(firstId);
 		expect(manager.list().filter((shell) => shell.status !== "running")).toHaveLength(50);
+		// Listeners hear of the list once pruned, not only of the end that briefly made it 51.
+		expect(published.at(-1)).toBe(50);
 	});
 
 	it("ignores a stop that arrives after the process exited on its own", async () => {

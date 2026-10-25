@@ -2867,10 +2867,6 @@
 																			"anyOf": [
 																				{
 																					"type": "string",
-																					"const": "running"
-																				},
-																				{
-																					"type": "string",
 																					"const": "completed"
 																				},
 																				{
@@ -4063,10 +4059,6 @@
 																	},
 																	"status": {
 																		"anyOf": [
-																			{
-																				"type": "string",
-																				"const": "running"
-																			},
 																			{
 																				"type": "string",
 																				"const": "completed"
@@ -8533,10 +8525,6 @@
 																			"anyOf": [
 																				{
 																					"type": "string",
-																					"const": "running"
-																				},
-																				{
-																					"type": "string",
 																					"const": "completed"
 																				},
 																				{
@@ -9729,10 +9717,6 @@
 																	},
 																	"status": {
 																		"anyOf": [
-																			{
-																				"type": "string",
-																				"const": "running"
-																			},
 																			{
 																				"type": "string",
 																				"const": "completed"
@@ -14483,10 +14467,6 @@
 															"anyOf": [
 																{
 																	"type": "string",
-																	"const": "running"
-																},
-																{
-																	"type": "string",
 																	"const": "completed"
 																},
 																{
@@ -15804,10 +15784,6 @@
 														"anyOf": [
 															{
 																"type": "string",
-																"const": "running"
-															},
-															{
-																"type": "string",
 																"const": "completed"
 															},
 															{
@@ -16867,10 +16843,6 @@
 													},
 													"status": {
 														"anyOf": [
-															{
-																"type": "string",
-																"const": "running"
-															},
 															{
 																"type": "string",
 																"const": "completed"

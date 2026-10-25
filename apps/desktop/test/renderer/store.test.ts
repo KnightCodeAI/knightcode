@@ -13,7 +13,8 @@ const fake = vi.hoisted(() => {
 		"account/list": () => ({ accounts: [] }),
 		"config/read": () => ({ settings: {} }),
 		"thread/backgroundShells/list": ({ threadId }) => ({
-			shells: threadId === "bg1" ? [{ id: "ab12", command: "npm run dev", cwd: "/p", status: "running", startedAt: 1 }] : [],
+			shells:
+				threadId === "bg1" ? [{ id: "ab12", command: "npm run dev", cwd: "/p", status: "running", startedAt: 1 }] : [],
 		}),
 		"thread/resume": ({ threadId }) => ({
 			thread: { id: threadId },
@@ -282,13 +283,34 @@ test("after a restart a failed update state read does not stop the window resumi
 	}
 });
 
-test("an opened thread lists its background commands, and each update replaces the list", async () => {
+test("an opened thread lists its background commands, each update replaces the list, and a restart drops it", async () => {
 	fake.serverState("ready");
 	await openThread("bg1");
-	await vi.waitFor(() => expect(getState().held.bg1?.backgroundShells).toMatchObject([{ id: "ab12", status: "running" }]));
-	fake.notify("thread/backgroundShells/updated", {
-		threadId: "bg1",
-		shells: [{ id: "ab12", command: "npm run dev", cwd: "/p", status: "stopped", startedAt: 1, endedAt: 2 }],
-	});
-	await vi.waitFor(() => expect(getState().held.bg1?.backgroundShells).toMatchObject([{ status: "stopped" }]));
+	await vi.waitFor(() =>
+		expect(getState().held.bg1?.backgroundShells).toMatchObject([{ id: "ab12", status: "running" }]),
+	);
+	const next = {
+		id: "cd34",
+		command: "npm test",
+		cwd: "/p",
+		status: "completed",
+		startedAt: 3,
+		endedAt: 4,
+		exitCode: 0,
+	};
+	fake.notify("thread/backgroundShells/updated", { threadId: "bg1", shells: [next] });
+	await vi.waitFor(() => expect(getState().held.bg1?.backgroundShells).toEqual([next]));
+	const saved = fake.results["thread/resume"]!;
+	try {
+		// The old server's commands died with it, so a resume that fails leaves none to stop.
+		fake.results["thread/resume"] = () => {
+			throw new Error("locked");
+		};
+		fake.serverState("restarting");
+		fake.serverState("ready");
+		await vi.waitFor(() => expect(getState().opening.bg1).toBeDefined());
+		expect(getState().held.bg1?.backgroundShells).toBeUndefined();
+	} finally {
+		fake.results["thread/resume"] = saved;
+	}
 });

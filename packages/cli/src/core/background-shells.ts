@@ -80,8 +80,6 @@ export const MAX_RUNNING_BACKGROUND_SHELLS = 32;
 /** Ended commands kept for `/tasks`; older ones are dropped. Their output files stay. */
 const MAX_ENDED_BACKGROUND_SHELLS = 50;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024 * 1024;
-/** Output kept in memory for an ended command, for `/tasks`. */
-const ENDED_OUTPUT_TAIL_BYTES = 64 * 1024;
 
 interface ShellRecord {
 	info: BackgroundShellInfo;
@@ -222,7 +220,7 @@ export class BackgroundShellManager {
 		return count;
 	}
 
-	/** The output tail held in memory: the last 2000 lines or 50KB while running, 64KB once ended. */
+	/** The output tail held in memory: the last 2000 lines or 50KB, kept once the command ended. */
 	readOutput(id: string): string {
 		const record = this.records.get(id);
 		if (!record) return "";
@@ -298,7 +296,7 @@ export class BackgroundShellManager {
 				info.outputFileError = error instanceof Error ? error.message : String(error);
 			}
 			info.outputBytes = output.getTotalBytes();
-			record.endedOutput = truncateTail(output.snapshot().content, { maxBytes: ENDED_OUTPUT_TAIL_BYTES }).content;
+			record.endedOutput = output.snapshot().content;
 			record.output = undefined;
 		}
 		// A stop request wins over the exit status it caused, except a process that exited on its own first.
@@ -321,14 +319,14 @@ export class BackgroundShellManager {
 		this.pruneEnded();
 	}
 
-	/** Drop the commands that ended longest ago, after the latest end has been reported. */
+	/** Drop the commands that ended longest ago, after the latest end has been reported, and publish the shorter list. */
 	private pruneEnded(): void {
 		const ended = [...this.records.values()]
 			.filter((record) => record.info.status !== "running")
 			.sort((a, b) => (a.info.endedAt ?? 0) - (b.info.endedAt ?? 0));
-		for (const record of ended.slice(0, Math.max(0, ended.length - MAX_ENDED_BACKGROUND_SHELLS))) {
-			this.records.delete(record.info.id);
-		}
+		const dropped = ended.slice(0, Math.max(0, ended.length - MAX_ENDED_BACKGROUND_SHELLS));
+		for (const record of dropped) this.records.delete(record.info.id);
+		if (dropped.length > 0) this.emitChange();
 	}
 
 	private createId(): string {
