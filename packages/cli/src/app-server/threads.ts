@@ -80,7 +80,7 @@ import { FileSearch } from "./file-search.ts";
 import { listFolder, readFile, writeText } from "./files.ts";
 import { callAppTool, createMcpAppsExtension, type McpAppsHolder, readAppResource } from "./mcp-apps.ts";
 import { APPROVAL_MODE_ENTRY, createApprovalExtension, readApprovalMode } from "./approvals.ts";
-import { ItemMapper, queueOf, usageOf } from "./item-mapper.ts";
+import { backgroundShellsOf, ItemMapper, queueOf, usageOf } from "./item-mapper.ts";
 import { readImageInput } from "./image-input.ts";
 import { StartRequest } from "./start-request.ts";
 import { LoadedThread, titleOf } from "./loaded-thread.ts";
@@ -1554,10 +1554,17 @@ export class ThreadManager {
 			// Running background commands keep the thread busy; when the last one ends it may go idle again.
 			const backgroundShells = session.backgroundShells;
 			let backgroundRunning = backgroundShells.runningCount();
+			// The manager also reports foreground commands coming and going, which change nothing the list shows.
+			let listed = JSON.stringify(backgroundShellsOf(backgroundShells));
 			const unsubscribeBackgroundShells = backgroundShells.subscribe(() => {
 				const running = backgroundShells.runningCount();
 				if (backgroundRunning > 0 && running === 0) this.afterActivity(thread);
 				backgroundRunning = running;
+				const shells = backgroundShellsOf(backgroundShells);
+				const next = JSON.stringify(shells);
+				if (next === listed) return;
+				listed = next;
+				thread.notify("thread/backgroundShells/updated", { threadId: thread.id, shells });
 			});
 			thread.unsubscribeSession = () => {
 				unsubscribeEvents();
@@ -2332,6 +2339,26 @@ export class ThreadManager {
 						return {};
 					}, false),
 				),
+			"thread/backgroundShells/list": ({ threadId }, connection) =>
+				this.withThread(threadId, connection.mode, async (thread) => ({
+					shells: backgroundShellsOf(thread.session.backgroundShells),
+				})),
+			"thread/backgroundShells/output": ({ threadId, id }, connection) =>
+				this.withThread(threadId, connection.mode, async (thread) => {
+					const shells = thread.session.backgroundShells;
+					if (!shells.get(id)) throw new AppServerError("invalidParams", `no background command: ${id}`);
+					return { output: shells.readOutput(id) };
+				}),
+			"thread/backgroundShells/stop": ({ threadId, id }, connection) =>
+				this.withThread(threadId, connection.mode, async (thread) => {
+					const shells = thread.session.backgroundShells;
+					const before = shells.get(id);
+					if (!before) throw new AppServerError("invalidParams", `no background command: ${id}`);
+					// A command already stopping, or one that exited on its own, takes no second stop.
+					const stopped =
+						before.status === "running" && !before.stoppedBy && shells.stop(id, "user")?.stoppedBy === "user";
+					return { stopped };
+				}),
 			"thread/settings/update": ({ threadId, model, thinkingLevel, approvalMode }, connection) =>
 				this.ensureLoaded(threadId, connection.mode).then((thread) =>
 					thread.exclusive(async () => {

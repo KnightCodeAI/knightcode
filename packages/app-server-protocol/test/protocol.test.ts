@@ -94,6 +94,8 @@ const ui = {
 };
 
 // One valid example per message. A message without an example fails the coverage test below.
+const backgroundShell = { id: "ab12cd34", command: "npm run dev", cwd: "/p", status: "running", startedAt: 1 };
+
 const requestParams: Record<string, unknown> = {
 	initialize: {
 		clientInfo: { name: "test", version: "1" },
@@ -149,6 +151,9 @@ const requestParams: Record<string, unknown> = {
 	"thread/name/set": { threadId: "t1", name: "n" },
 	"thread/settings/update": { threadId: "t1", thinkingLevel: "high", approvalMode: "fullAccess" },
 	"thread/compact": { threadId: "t1", instructions: "keep the plan" },
+	"thread/backgroundShells/list": { threadId: "t1" },
+	"thread/backgroundShells/output": { threadId: "t1", id: "ab12cd34" },
+	"thread/backgroundShells/stop": { threadId: "t1", id: "ab12cd34" },
 	"turn/start": {
 		threadId: "t1",
 		text: "hi",
@@ -299,6 +304,9 @@ const requestResults: Record<string, unknown> = {
 	"thread/name/set": {},
 	"thread/settings/update": { thread },
 	"thread/compact": {},
+	"thread/backgroundShells/list": { shells: [backgroundShell] },
+	"thread/backgroundShells/output": { output: "\u001b[32mready\u001b[0m on :3000\n" },
+	"thread/backgroundShells/stop": { stopped: true },
 	"turn/start": { status: "started", threadId: "t1", requestId: "r1" },
 	"turn/steer": {},
 	"turn/queue/add": { queueId: "q2" },
@@ -411,6 +419,10 @@ const notificationParams: Record<string, unknown> = {
 	},
 	"turn/retry": { threadId: "t1", turnId: "m1", attempt: 1, maxAttempts: 3, delayMs: 1000, error: "overloaded" },
 	"turn/queue/updated": { threadId: "t1", steering: ["a"], followUp: [{ id: "q1", text: "b" }] },
+	"thread/backgroundShells/updated": {
+		threadId: "t1",
+		shells: [backgroundShell, { ...backgroundShell, id: "ef56", status: "failed", endedAt: 9, exitCode: 2 }],
+	},
 	"item/started": { threadId: "t1", turnId: "m1", item, index: 0 },
 	"item/completed": { threadId: "t1", turnId: "m1", item, index: 0 },
 	"item/removed": { threadId: "t1", turnId: "m1", itemId: "m1:0:1" },
@@ -590,6 +602,12 @@ describe("app server protocol", () => {
 		expect(items.Check({ ...message, view: { type: "markdown", markdown: "**done**" } })).toBe(true);
 		expect(items.Check({ ...message, view: { type: "text", text: "x", html: "<b>x</b>" } })).toBe(false);
 		expect(items.Check({ ...message, view: { type: "button", label: "Go" } })).toBe(false);
+		expect(items.Check({ ...toolCall, backgroundShellId: "ab12cd34" })).toBe(true);
+		const notice = { id: "ab12cd34", command: "npm test", status: "failed", exitCode: 1, outputTail: "1 failed" };
+		expect(items.Check({ ...message, backgroundShells: [notice] })).toBe(true);
+		expect(items.Check({ ...message, backgroundShells: [{ ...notice, status: "exited" }] })).toBe(false);
+		// A notice reports an end.
+		expect(items.Check({ ...message, backgroundShells: [{ ...notice, status: "running" }] })).toBe(false);
 	});
 
 	test("the generated JSON Schema is up to date", () => {

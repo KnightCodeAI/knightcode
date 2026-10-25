@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { latestCheck } from "../../src/renderer/latest.ts";
+import { latestCheck, pollInOrder } from "../../src/renderer/latest.ts";
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -95,4 +95,60 @@ test("a refresh checks the same name again, and only its answer counts", async (
 	checker.refresh();
 	await vi.advanceTimersByTimeAsync(500);
 	expect(asked).toHaveLength(2);
+});
+
+test("polling waits for each answer before the next read, so a slow answer never lands after a newer one", async () => {
+	vi.useFakeTimers();
+	const answers: ((output: string) => void)[] = [];
+	const shown: string[] = [];
+	let more = true;
+	const stop = pollInOrder(
+		1000,
+		() => new Promise<string>((resolve) => answers.push(resolve)),
+		(output) => {
+			shown.push(output);
+			return more;
+		},
+		() => shown.push("failed"),
+	);
+	await vi.advanceTimersByTimeAsync(0);
+	expect(answers).toHaveLength(1);
+	// A read slower than the interval starts no second one.
+	await vi.advanceTimersByTimeAsync(5000);
+	expect(answers).toHaveLength(1);
+	answers[0]!("one");
+	await vi.advanceTimersByTimeAsync(999);
+	expect(answers).toHaveLength(1);
+	await vi.advanceTimersByTimeAsync(1);
+	expect(answers).toHaveLength(2);
+	answers[1]!("two");
+	await vi.advanceTimersByTimeAsync(1000);
+	expect(shown).toEqual(["one", "two"]);
+	// Stopped, an answer still on its way is dropped and nothing more is read.
+	stop();
+	answers[2]!("late");
+	await vi.advanceTimersByTimeAsync(5000);
+	expect(shown).toEqual(["one", "two"]);
+	expect(answers).toHaveLength(3);
+	// An answer that says stop reads no more; a failed read reports once and ends.
+	more = false;
+	const once = pollInOrder(
+		1000,
+		async () => "done",
+		(output) => (shown.push(output), more),
+		() => {},
+	);
+	await vi.advanceTimersByTimeAsync(5000);
+	expect(shown.at(-1)).toBe("done");
+	expect(shown.filter((s) => s === "done")).toHaveLength(1);
+	once();
+	const failing = pollInOrder(
+		1000,
+		() => Promise.reject(new Error("gone")),
+		() => true,
+		() => shown.push("failed"),
+	);
+	await vi.advanceTimersByTimeAsync(5000);
+	expect(shown.filter((s) => s === "failed")).toHaveLength(1);
+	failing();
 });

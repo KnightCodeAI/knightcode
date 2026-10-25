@@ -58,7 +58,7 @@ const shellOwns = (event: KeyboardEvent) =>
 const overTerminal = (event: KeyboardEvent) => !shellOwns(event) && OVER_TERMINAL.some((id) => matches(event, id));
 
 /** The palette: the theme's tokens resolved to colours xterm reads (a probe element resolves `var()`). */
-function terminalTheme(host: HTMLElement) {
+export function terminalTheme(host: HTMLElement) {
 	const probe = document.createElement("span");
 	host.appendChild(probe);
 	const color = (token: string) => {
@@ -100,7 +100,7 @@ function terminalTheme(host: HTMLElement) {
 const URL_PATTERN = /https?:\/\/[^\s"'<>`]+[^\s"'<>`.,;:!?)\]]/g;
 
 /** http(s) links in the output open in the browser on a click (xterm's web links addon). */
-function linkProvider(term: Terminal) {
+export function linkProvider(term: Terminal) {
 	return {
 		provideLinks(line: number, callback: (links: ILink[] | undefined) => void) {
 			const text = term.buffer.active.getLine(line - 1)?.translateToString(true) ?? "";

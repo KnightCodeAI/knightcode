@@ -1,10 +1,15 @@
 import { expect, test } from "vitest";
 import {
 	activitySummary,
+	afterReply,
+	backgroundEnd,
+	backgroundNoticeText,
+	backgroundStateOf,
 	commandResult,
 	dialogOption,
 	dialogTitle,
 	expandable,
+	outputOverlap,
 	parseExploration,
 	questionsAndAnswers,
 	rowLabel,
@@ -223,4 +228,83 @@ test("a tool's view wins over the cards picked by its name", () => {
 	expect(toolBody(call("check"))).toBe("output");
 	expect(expandable(call("read", { path: "a.ts" }, { view }))).toBe(true);
 	expect(expandable(call("read", { path: "a.ts" }))).toBe(false);
+});
+
+test("a backgrounded command's row follows the command: started, then stopped or ran, never an exploration", () => {
+	const started = call("bash", { command: "tail -f server.log\n# watch" }, { backgroundShellId: "ab12" });
+	expect(rowLabel(started, "/repo", false, "running").text).toBe("Started background terminal with tail -f server.log");
+	expect(rowLabel(started, "/repo", false, "stopped").text).toBe("Background terminal stopped with tail -f server.log");
+	expect(rowLabel(started, "/repo", false, "failed").text).toBe("Ran tail -f server.log");
+	// Before the thread lists it, or after it forgot it.
+	expect(rowLabel(started, "/repo").text).toBe("Ran tail -f server.log");
+	expect(summaryKind([started])).toBe("command");
+	expect(expandable(started)).toBe(true);
+});
+
+test("a background command's state is the live entry while it runs, else the notice of its end", () => {
+	const shell = { id: "ab12", command: "npm run dev", cwd: "/repo", startedAt: 1 };
+	const running = { ...shell, status: "running" as const };
+	const ended = { ...shell, status: "failed" as const, exitCode: 1, endedAt: 2 };
+	const notice = { id: "ab12", command: "npm run dev", status: "failed" as const, exitCode: 1, outputTail: "boom" };
+	const turns = [
+		{
+			items: [
+				{
+					type: "extensionMessage",
+					id: "m",
+					extension: "background_shell",
+					text: "",
+					backgroundShells: [notice],
+				} as ViewItem,
+			],
+		},
+	];
+	expect(backgroundStateOf([running], turns, "ab12")).toBe(running);
+	expect(backgroundStateOf([ended], turns, "ab12")).toBe(notice);
+	expect(backgroundStateOf([ended], [], "ab12")).toBe(ended);
+	expect(backgroundStateOf(undefined, [], "ab12")).toBeUndefined();
+	expect(backgroundNoticeText(notice)).toBe("Background terminal finished with npm run dev");
+	expect(backgroundNoticeText({ ...notice, status: "stopped" })).toBe("Background terminal stopped with npm run dev");
+	expect(backgroundEnd(notice)).toEqual({ kind: "exit", code: "1" });
+	expect(backgroundEnd({ ...notice, exitCode: undefined, error: "spawn ENOENT" })).toEqual({
+		kind: "failed",
+		text: "spawn ENOENT",
+	});
+	expect(backgroundEnd({ ...notice, status: "timed_out" })).toEqual({ kind: "failed", text: "Timed out" });
+	expect(backgroundEnd(running)).toEqual({ kind: "running" });
+	expect(backgroundEnd(undefined)).toEqual({ kind: "running" });
+});
+
+test("a later read of a command's output appends what follows the end of the last read it starts with", () => {
+	expect(outputOverlap("", "ready")).toBe(0);
+	expect(outputOverlap("abc", "abcdef")).toBe(3);
+	expect(outputOverlap("abcdef", "def")).toBe(3);
+	expect(outputOverlap("aaaa", "zzzz")).toBe(-1);
+	// The server dropped the oldest output between the reads.
+	const lines = Array.from({ length: 900 }, (_, i) => `line ${i}\n`);
+	const later = lines.slice(100).join("");
+	expect(later.slice(outputOverlap(lines.slice(0, 600).join(""), later))).toBe(lines.slice(600).join(""));
+	// A block printed again after new lines is new output, not the end of the last read found again.
+	const block = "compiled ok\n".repeat(300);
+	const output = `${block}changed a.ts\n${block}`;
+	expect(output.slice(outputOverlap(`start\n${block}`, output))).toBe(`changed a.ts\n${block}`);
+});
+
+test("what follows a turn's reply keeps its order: a compaction, then a notice recorded after it, stays below the reply", () => {
+	const reply: ViewItem = { type: "agentMessage", id: "reply", text: "done" };
+	const compaction: ViewItem = { type: "compaction", id: "c", summary: "" };
+	const notice = (id: string): ViewItem => ({
+		type: "extensionMessage",
+		id,
+		extension: "background_shell",
+		text: "",
+		backgroundShells: [{ id, command: "npm run dev", status: "stopped", outputTail: "" }],
+	});
+	const other: ViewItem = { type: "extensionMessage", id: "x", extension: "plan", text: "" };
+	const items = [call("bash"), notice("n0"), reply, compaction, notice("n1"), other];
+	// The notice before the reply is the turn's work; after it, the compaction comes first, as it did.
+	expect(afterReply(items, 2).map((i) => i.id)).toEqual(["c", "n1"]);
+	expect(afterReply([reply, notice("n1"), compaction], 0).map((i) => i.id)).toEqual(["n1", "c"]);
+	// No reply: nothing is set apart.
+	expect(afterReply(items, -1)).toEqual([]);
 });
