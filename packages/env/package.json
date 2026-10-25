@@ -1,6 +1,6 @@
 {
   "name": "@knightcode/env",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "private": true,
   "description": "Remote execution environments for KnightCode Durable: a small daemon deployed over SSH and its ExecutionEnv client",
   "type": "module",
