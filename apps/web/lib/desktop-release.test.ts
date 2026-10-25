@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import {
   type DesktopRelease,
+  desktopDownloads,
   fetchDesktopReleases,
   latestDesktopRelease,
   macUpdate,
@@ -201,5 +202,33 @@ describe("desktop update feed", () => {
         expect((await res.json()).version).toBe("0.2.0")
       }
     )
+  })
+
+  it("picks each platform's installer from the release's assets", () => {
+    const tag = "desktop-v0.2.0"
+    const files = [
+      "KnightCode-0.2.0.Setup.exe",
+      "KnightCodeDesktop-0.2.0-full.nupkg",
+      "RELEASES",
+      "KnightCode-0.2.0-arm64.dmg",
+      "KnightCode-0.2.0-x64.dmg",
+      "KnightCode-darwin-arm64-0.2.0.zip",
+      "KnightCode-darwin-x64-0.2.0.zip",
+      "knightcode-desktop_0.2.0_amd64.deb",
+      "knightcode-desktop-0.2.0-1.x86_64.rpm",
+      "SHA256SUMS",
+    ]
+    const at = (name: string) => `${DOWNLOAD}/${tag}/${name}`
+    expect(
+      desktopDownloads({ release: release(tag, { files }), version: "0.2.0" })
+    ).toEqual({
+      version: "0.2.0",
+      page: `https://github.com/KnightCodeAI/knightcode/releases/tag/${tag}`,
+      windows: at("KnightCode-0.2.0.Setup.exe"),
+      macArm64: at("KnightCode-0.2.0-arm64.dmg"),
+      macX64: at("KnightCode-0.2.0-x64.dmg"),
+      deb: at("knightcode-desktop_0.2.0_amd64.deb"),
+      rpm: at("knightcode-desktop-0.2.0-1.x86_64.rpm"),
+    })
   })
 })
