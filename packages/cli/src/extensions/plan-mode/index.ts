@@ -14,7 +14,8 @@ import { foldPlanState, type PlanSnapshot, type PlanTransition, transitionPlan }
 
 const INSPECT = ["read", "grep", "find", "ls", "webfetch", "websearch"];
 const SHELLS = ["bash", "powershell"];
-const ALLOWED = new Set([...INSPECT, ...SHELLS, "ask_user", "submit_plan"]);
+// task_stop only stops commands the shells started, such as a test run in the background.
+const ALLOWED = new Set([...INSPECT, ...SHELLS, "task_stop", "ask_user", "submit_plan"]);
 const LOADOUT = ["ask_user", "submit_plan", "read", "grep", "find", "ls"];
 // Planning benefits from research: on from entry unless the user turned them off in /tools. Like the
 // rest of the loadout they stay on afterwards, so leaving planning never rewrites the tool list.
@@ -35,7 +36,7 @@ const REVIEW: { action: ReviewAction; label: string; description: string }[] = [
 ];
 const REVISE = { label: "Revise the plan", description: "Tell the model what to change." };
 /**
- * The desktop's review, Codex's "Implement this plan?" panel: the plan is already a card in the transcript, so the
+ * The desktop's review, an "Implement this plan?" question: the plan is already a card in the transcript, so the
  * question stands alone, and skipping it keeps planning (a message in the composer revises the plan).
  */
 const DESKTOP_REVIEW: { action: ReviewAction; label: string; description: string }[] = [
@@ -75,7 +76,8 @@ function allowedLine(active: readonly string[]): string {
 	const shell = shells.length
 		? ` ${shells.join(" and ")} commands are not checked: run only commands that inspect (git log, git diff, tests or builds that leave tracked files alone), never ones that edit, format, install, commit or otherwise change state.`
 		: "";
-	return `Allowed: ${inspect.length ? inspect.join(", ") : "no inspection tools"}, ask_user and submit_plan. Every other tool is blocked.${shell}`;
+	const stop = active.includes("task_stop") ? ", task_stop (to stop a background command)" : "";
+	return `Allowed: ${inspect.length ? inspect.join(", ") : "no inspection tools"}${stop}, ask_user and submit_plan. Every other tool is blocked.${shell}`;
 }
 
 const instructions = (active: readonly string[]) => `<plan_mode>
@@ -365,7 +367,7 @@ export default function planMode(kc: ExtensionAPI): void {
 		if (revision === undefined || snapshot.draft?.revision !== revision) return;
 		if (ctx.mode === "print") writeRawStdout(snapshot.draft.markdown + "\n");
 		else if (ctx.mode === "rpc") notice(ctx, `Plan revision ${revision} submitted. Run /plan to review.`);
-		// The terminal's review, and the desktop's Codex panel, open on their own once a plan is in.
+		// The terminal's review, and the desktop's question, open on their own once a plan is in.
 		else if ((ctx.mode === "tui" || ctx.mode === "desktop") && lastShown !== revision) {
 			kc.sendUserMessage("/plan", { expandPromptTemplates: true });
 		}

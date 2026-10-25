@@ -140,7 +140,7 @@ function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; ite
 					run: () => navigate({ kind: "settings", page: "shortcuts" }),
 				},
 				"-",
-				// Codex's: last but About, and not on Linux, whose package manager updates the app.
+				// Last but About, and not on Linux, whose package manager updates the app.
 				...(window.knightcode.platform === "linux"
 					? []
 					: [
@@ -159,7 +159,7 @@ function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; ite
 }
 
 /**
- * Codex's update pill at the bar's end (measured from its bundle): 20px high, 10px semibold white on the accent blue,
+ * The update pill at the bar's end: 20px high, 10px semibold white on the accent blue,
  * shown only while there is something to do. Windows: "Downloading", then "Update", which quits and installs.
  * macOS: "Update" opens the newer release's page.
  */

@@ -1,8 +1,7 @@
 /**
- * Codex's file panel (26.1016 `review-file-tree-side-pane`, `review-file-source-item`): the workspace tree beside a
- * file tab, and the "Open file" tab that is the tree beside no file yet. The tree has Codex's two sections, the
- * comparison's changed files and all of the cwd, each a top-level folder of one @pierre/trees model (as Codex builds
- * them); a folder of All files is listed (`file/list`) when it opens, and a filter searches the workspace instead.
+ * The file panel: the workspace tree beside a file tab, and the "Open file" tab that is the tree beside no file yet. The
+ * tree has two sections, the comparison's changed files and all of the cwd, each a top-level folder of one
+ * @pierre/trees model; a folder of All files is listed (`file/list`) when it opens, and a filter searches the workspace instead.
  */
 
 import type { DiffFile, ResultOf } from "@knightcode/app-server-protocol";
@@ -52,7 +51,7 @@ const STATUS: Record<DiffFile["status"], GitStatus> = {
 };
 
 /**
- * Codex's git badges in place of the status letter: a rounded square in the status colour, a dot for a change, a plus
+ * Git badges in place of the status letter: a rounded square in the status colour, a dot for a change, a plus
  * for an addition, a minus for a deletion.
  */
 const FILES_TREE_CSS = `
@@ -111,7 +110,7 @@ const FILES_TREE_CSS = `
 type Entry = ResultOf<"file/list">["entries"][number];
 
 /**
- * The changed files of the file tab's comparison (Codex's Index, unstaged changes, with none), again after a turn or a
+ * The changed files of the file tab's comparison (the Index, unstaged changes, with none), again after a turn or a
  * return to the window.
  */
 function useChangedFiles(threadId: string, compare: FileComparison = { scope: "unstaged" }) {
@@ -161,7 +160,7 @@ export interface FilesTreeProps {
 	cwd: string;
 	/** The file the tab beside shows, selected in the tree. */
 	activePath?: string;
-	/** The "Open file" tab focuses the filter, as Codex's does with no file open. */
+	/** The "Open file" tab focuses the filter, with no file open yet. */
 	autoFocus?: boolean;
 	/** The comparison whose changed files the first section lists. */
 	compare?: FileComparison;
@@ -169,7 +168,7 @@ export interface FilesTreeProps {
 	onOpen: (path: string, keep: boolean, changed: boolean) => void;
 }
 
-/** Codex's filter field: a search icon, the input, and a clear button while it holds text. */
+/** The filter field: a search icon, the input, and a clear button while it holds text. */
 function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
 	return (
 		<div className="relative flex h-7 w-full items-center gap-1.5 rounded-lg border border-line bg-soft-alt text-[13px] leading-[18px]">
@@ -179,7 +178,7 @@ function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: s
 			</label>
 			<input
 				id="kc-files-filter"
-				// biome-ignore lint/a11y/noAutofocus: Codex focuses the filter of an "Open file" tab.
+				// biome-ignore lint/a11y/noAutofocus: an "Open file" tab starts in its filter.
 				autoFocus={autoFocus}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
@@ -293,7 +292,7 @@ function useListing(
 }
 
 /**
- * Codex's breadcrumb folder (`review-file-source-breadcrumb`): that folder's own tree, open down to the file beside
+ * A breadcrumb folder: that folder's own tree, open down to the file beside
  * and with it selected; choosing a file opens it.
  */
 export function FolderTree({
@@ -408,7 +407,7 @@ function SectionedTree({
 		);
 	};
 
-	// Changed files, their folders open as Codex keeps them, with git's colours.
+	// Changed files, their folders open, with git's colours.
 	useEffect(() => {
 		const files = changed?.files ?? [];
 		const paths = files.flatMap((f) => {
@@ -424,8 +423,8 @@ function SectionedTree({
 	// All files: the cwd's entries now, a folder's when it opens; kept until a return to the window lists them again.
 	useListing(model, threadId, "", `${ALL}/`, known, (folder) => {
 		setRows((n) => n + 1);
-		// The section was empty when the tree was made, so its initial expansion did not hold: open it now, as Codex
-		// shows All files open.
+		// The section was empty when the tree was made, so its initial expansion did not hold: open it now, since All
+		// files starts open.
 		if (!folder) (model.getItem(`${ALL}/`) as { expand?: () => void } | null)?.expand?.();
 	});
 
@@ -448,7 +447,7 @@ function SectionedTree({
 		<FileTree
 			model={model}
 			className="kc-tree min-h-0 flex-1"
-			// A double click keeps the file's tab (Codex's onDoubleClick), the click before it having opened it.
+			// A double click keeps the file's tab, the click before it having opened it.
 			onDoubleClick={() => {
 				const path = model.getFocusedPath();
 				if (!path || path.endsWith("/")) return;
@@ -459,7 +458,7 @@ function SectionedTree({
 	);
 }
 
-/** Search results as a tree of their folders, all open (Codex's filtered tree). */
+/** Search results as a tree of their folders, all open. */
 function ResultsTree({ cwd, paths, onOpen }: { cwd: string; paths: string[]; onOpen: FilesTreeProps["onOpen"] }) {
 	const open = useRef(onOpen);
 	open.current = onOpen;
@@ -478,7 +477,7 @@ function ResultsTree({ cwd, paths, onOpen }: { cwd: string; paths: string[]; onO
 	return <FileTree model={model} className="kc-tree min-h-0 flex-1" />;
 }
 
-/** The tree pane: Codex's filter, "All changes", then the sections, or the filter's results. */
+/** The tree pane: the filter, "All changes", then the sections, or the filter's results. */
 export function FilesTree({ threadId, cwd, activePath, autoFocus, compare, onOpen }: FilesTreeProps) {
 	const [query, setQuery] = useState("");
 	const changed = useChangedFiles(threadId, compare);
@@ -524,7 +523,7 @@ export function FilesTree({ threadId, cwd, activePath, autoFocus, compare, onOpe
 	);
 }
 
-/** Codex's Toggle file tree, remembered for every file tab. */
+/** Toggle file tree, remembered for every file tab. */
 export function TreeToggle() {
 	const shown = useStore((s) => s.panel.fileTree !== false);
 	return (
@@ -534,7 +533,7 @@ export function TreeToggle() {
 	);
 }
 
-/** Codex's "Open file" tab: the tree beside an empty view until a file is chosen. */
+/** The "Open file" tab: the tree beside an empty view until a file is chosen. */
 export function FilesTab({
 	threadId,
 	onOpen,

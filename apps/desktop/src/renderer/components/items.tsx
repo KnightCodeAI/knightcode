@@ -51,7 +51,7 @@ import { ViewNode } from "./view.tsx";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu.tsx";
 
 /**
- * Codex's proposed plan (plan-summary-item-content): a card headed "Plan" ("Writing plan" while it streams) with
+ * The proposed plan: a card headed "Plan" ("Writing plan" while it streams) with
  * Download, Copy and a collapse toggle, the plan's Markdown held to 320px with "Expand plan" while collapsed.
  */
 function PlanCard({ item }: { item: ToolItem }) {
@@ -111,10 +111,10 @@ function PlanCard({ item }: { item: ToolItem }) {
 	);
 }
 
-/** Codex's collapsed plan height. */
+/** A collapsed plan's height. */
 const PLAN_COLLAPSED = 320;
 
-/** The turn's proposed plan: its last plan submission that did not fail (Codex's proposedPlanItem). */
+/** The turn's proposed plan: its last plan submission that did not fail. */
 const isPlan = (item: ViewItem): item is ToolItem =>
 	item.type === "toolCall" && item.tool === "submit_plan" && !item.parentItemId && item.status !== "failed";
 
@@ -291,10 +291,10 @@ export function UserBubble({
 	);
 }
 
-/** Codex's collapsed user message: 20 lines, the last an ellipsis. */
+/** A collapsed user message: 20 lines, the last an ellipsis. */
 const USER_LINES = 20;
 
-/** A user message longer than USER_LINES shows its start and "Show more", as Codex folds one. */
+/** A user message longer than USER_LINES shows its start and "Show more". */
 function FoldedText({ text }: { text: string }) {
 	const body = useRef<HTMLDivElement>(null);
 	const [long, setLong] = useState(false);
@@ -344,9 +344,8 @@ function FoldedText({ text }: { text: string }) {
 
 /**
  * Work in order: commentary and tool calls, consecutive calls folded under one summary. While the turn runs every
- * action stays in sight, as in Codex's thread (its commentaryDisplay "all"); a call in progress is its present-tense
- * row in its place, only the finished calls on either side folded. Reasoning is not a row: Codex names it only in its
- * "Thinking" status.
+ * action stays in sight; a call in progress is its present-tense row in its place, only the finished calls on either
+ * side folded. Reasoning is not a row: it shows only in the "Thinking" status.
  */
 function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cwd: string }) {
 	const nestedOf = (id: string) => items.filter((i): i is ToolItem => i.type === "toolCall" && i.parentItemId === id);
@@ -597,12 +596,12 @@ export function TurnView({
 	// Compactions stay visible: those before the final reply show above it, later ones below.
 	const compactedBefore = rest.some((i, n) => i.type === "compaction" && (finalIndex < 0 || n < finalIndex));
 	const compactedAfter = finalIndex >= 0 && rest.some((i, n) => i.type === "compaction" && n > finalIndex);
-	// The proposed plan is a card of its own after the reply, as Codex draws it, not a row of the work.
+	// The proposed plan is a card of its own after the reply, not a row of the work.
 	const plan = turn.items.findLast(isPlan);
-	// Reasoning is no row (Codex names it only in the running status), so a turn of reasoning alone has no work.
+	// Reasoning is no row (it shows only in the running status), so a turn of reasoning alone has no work.
 	const work = rest.filter((i) => i !== final && i.type !== "compaction" && i.type !== "reasoning" && !isPlan(i));
 	const last = turn.items.at(-1);
-	// A reply streaming in shows itself; until one does, Codex's "Thinking" status stands in.
+	// A reply streaming in shows itself; until one does, the "Thinking" status stands in.
 	const typing = running && last?.type === "agentMessage" && last.completedAt === undefined;
 	const files = running ? [] : editedFiles(turn);
 	const apps = turn.items.filter(
@@ -631,7 +630,7 @@ export function TurnView({
 							<CircleAlert size={14} /> Retrying (attempt {retry.attempt} of {retry.maxAttempts}): {retry.error}
 						</div>
 					) : !typing && !work.some((i) => i.type === "toolCall" && isRunning(i)) && working.visible ? (
-						// Waiting on the model, not on a tool: Codex's shimmering status, named for what it is thinking about,
+						// Waiting on the model, not on a tool: a shimmering status, named for what it is thinking about,
 						// or an extension's working text.
 						<span className="kc-shimmer w-fit text-base">
 							{working.message ?? thinkingHeading(turn.items) ?? "Thinking"}
@@ -639,7 +638,7 @@ export function TurnView({
 					) : null}
 				</>
 			) : work.length > 0 && !final ? (
-				// No reply to fold the work under (Codex's turn that only asked questions).
+				// No reply to fold the work under (a turn that only asked questions).
 				<WorkItems items={work} cwd={cwd} />
 			) : work.length > 0 ? (
 				<div className="flex flex-col gap-4">

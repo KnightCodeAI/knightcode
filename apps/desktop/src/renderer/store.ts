@@ -85,13 +85,13 @@ export interface ThreadView {
 }
 
 /**
- * A side panel tab (desktop-shell.md section 9.6). A file tab opens as Codex's preview tab (an italic title), which
+ * A side panel tab (desktop-shell.md section 9.6). A file tab opens as a preview tab (an italic title), which
  * the next file opened replaces until it is kept (a double click); `used` orders the least recently used.
  */
 export type PanelTab =
 	| { kind: "changes" }
 	/**
-	 * `compare`: the comparison whose changes the file shows (Codex's Show changes), none while they are hidden.
+	 * `compare`: the comparison whose changes the file shows (Show changes), none while they are hidden.
 	 * `draft`: edits not yet written, kept here so they outlive the tab's view.
 	 */
 	| {
@@ -107,9 +107,9 @@ export type PanelTab =
 	| { kind: "preview"; id: string; url: string; title?: string }
 	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
 	| { kind: "mcpApp"; itemId: string }
-	/** Codex's "Open file" tab: the workspace tree beside an empty file view, one per thread. */
+	/** The "Open file" tab: the workspace tree beside an empty file view, one per thread. */
 	| { kind: "files" };
-/** A file tab's comparison, Codex's three: the Index (unstaged), HEAD (uncommitted), or a branch's merge base. */
+/** A file tab's comparison, one of three: the Index (unstaged), HEAD (uncommitted), or a branch's merge base. */
 export interface FileComparison {
 	scope: "unstaged" | "uncommitted" | "branch";
 	against?: string;
@@ -138,7 +138,7 @@ export interface TerminalTab {
 	/** The "outside this chat's workspace" notice was dismissed. */
 	dismissed?: boolean;
 }
-/** A thread's terminals, and whether its bottom region shows them: Codex keeps that per conversation, open only with tabs. */
+/** A thread's terminals, and whether its bottom region shows them: kept per thread, open only with tabs. */
 export interface ThreadTerminals {
 	tabs: TerminalTab[];
 	active: number;
@@ -174,7 +174,7 @@ export interface State {
 	paletteOpen: boolean;
 	/** The open thread's find bar (View › Find, Ctrl+F). */
 	finding: boolean;
-	/** A file tab whose unsaved edits could not be written as it closed: Codex's "Discard file changes?". */
+	/** A file tab whose unsaved edits could not be written as it closed: "Discard file changes?". */
 	discarding?: { threadId: string; path: string };
 	/** The theme the window shows: the preference, or the system's when it is "system". */
 	resolvedTheme: ThemeName;
@@ -185,13 +185,13 @@ export interface State {
 	 * fills the thread view in place of the chat (Codex's full screen).
 	 */
 	/**
-	 * `fileTree`: the file tabs' tree shown (Codex's Toggle file tree), unless false. `fileSplit`: their changes drawn
-	 * split, one layout for every file tab as Codex keeps it.
+	 * `fileTree`: the file tabs' tree shown (Toggle file tree), unless false. `fileSplit`: their changes drawn split,
+	 * one layout for every file tab.
 	 */
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean; fileTree?: boolean; fileSplit?: boolean };
-	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
+	/** Each thread's side panel tabs: Changes first, then the files it opened. */
 	tabs: Record<string, ThreadTabs>;
-	/** The bottom region's height in px (section 9.7), 0 until dragged (Codex's 280); each thread has it open or not. */
+	/** The bottom region's height in px (section 9.7), 0 until dragged (then 280); each thread has it open or not. */
 	bottom: { height: number };
 	/** Each thread's terminals, in tab order, and the one shown. */
 	terminals: Record<string, ThreadTerminals>;
@@ -1452,7 +1452,7 @@ export async function loadTerminals(threadId: string): Promise<void> {
 }
 
 /**
- * A new terminal for the thread in its folder (Codex's Open Terminal), shown in the bottom region. A shell picked from
+ * A new terminal for the thread in its folder (Open Terminal), shown in the bottom region. A shell picked from
  * the + menu becomes the one new terminals run.
  */
 export async function newTerminal(threadId: string, cwd: string, shellId?: string): Promise<void> {
@@ -1473,7 +1473,7 @@ export async function newTerminal(threadId: string, cwd: string, shellId?: strin
 	}
 }
 
-/** Mod+J: show or hide the thread's region; showing it with no terminal opens one, as Codex's does. */
+/** Mod+J: show or hide the thread's region; showing it with no terminal opens one. */
 export function toggleTerminal(threadId: string, cwd: string): void {
 	const { tabs, open } = state.terminals[threadId] ?? NO_TERMINALS;
 	if (open) setTerminalsOpen(threadId, false);
@@ -1496,7 +1496,7 @@ export function updateTerminal(threadId: string, terminalId: string, patch: Part
 	}));
 }
 
-/** Close a terminal (its shell ends); the last one closing hides the region, as Codex's does. */
+/** Close a terminal (its shell ends); the last one closing hides the region. */
 export function closeTerminal(threadId: string, index: number): void {
 	const tab = state.terminals[threadId]?.tabs[index];
 	if (!tab) return;
@@ -1551,7 +1551,7 @@ export function showChanges(threadId = openId(), scope?: DiffScope): void {
  * Open a file in the thread's side panel, scrolled to `line`: its tab if it has one, else in place of the preview tab,
  * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS. `keep` (a double click in
  * the file tree) makes it a kept tab. `compare` shows the file's changes in that comparison (opened from a list of
- * changes, as Codex does); without it an open tab keeps its own.
+ * changes); without it an open tab keeps its own.
  */
 export function openFileTab(threadId: string, path: string, line?: number, keep = false, compare?: FileComparison): void {
 	const used = ++tabClock;
@@ -1595,7 +1595,7 @@ export function setFileComparison(threadId: string, path: string, compare?: File
 }
 
 /**
- * Codex's Files: the thread's one "Open file" tab, focused if it is open, else in place of the new tab page it was
+ * Files: the thread's one "Open file" tab, focused if it is open, else in place of the new tab page it was
  * chosen from (`replace`, a preview tab's index), else after the other tabs.
  */
 export function openFilesTab(threadId = openId(), replace?: number): void {
@@ -1630,7 +1630,7 @@ export function activateTab(threadId: string, index: number): void {
 	}));
 }
 
-/** Keep a preview tab (Codex: a double click on it), so the next file opens beside it. */
+/** Keep a preview tab (a double click on it), so the next file opens beside it. */
 export function keepTab(threadId: string, index: number): void {
 	updateTabs(threadId, (t) => ({
 		...t,
@@ -1641,7 +1641,7 @@ export function keepTab(threadId: string, index: number): void {
 /** Close a tab; Changes cannot close, so closing it closes the panel. The tab on its left takes its place. */
 let previewCount = 0;
 
-/** A preview tab (Codex's browser tab) after the others: on `url`, or on its new tab page. */
+/** A preview tab after the others: on `url`, or on its new tab page. */
 export function openPreview(threadId = openId(), url = ""): void {
 	if (!threadId) return;
 	const tab: PanelTab = { kind: "preview", id: `preview-${++previewCount}`, url };
@@ -1695,8 +1695,8 @@ export function takeAttachments(threadId: string): { images: string[]; text: str
 }
 
 /**
- * Close a tab. A file tab with unsaved edits writes them first, as Codex's does, and closes once they are written;
- * when they cannot be, Codex's "Discard file changes?" asks (`discarding`).
+ * Close a tab. A file tab with unsaved edits writes them first and closes once they are written;
+ * when they cannot be, "Discard file changes?" asks (`discarding`).
  */
 export function closeTab(threadId: string, index: number): void {
 	if (index === 0) return setPanel({ open: false });
@@ -1743,7 +1743,7 @@ export function setFileDraft(threadId: string, path: string, draft?: FileDraft):
 const saving = new Map<string, Promise<unknown>>();
 
 /**
- * Write a file tab's unsaved edits (Codex's save): the text written and the file's new mtime, or undefined with
+ * Write a file tab's unsaved edits: the text written and the file's new mtime, or undefined with
  * "Could not save file" when the file changed since it was read or the write failed (the edits stay). One write per
  * file at a time, as two over the same mtime would refuse each other. Edits made while it writes stay unsaved, over
  * the file as written.

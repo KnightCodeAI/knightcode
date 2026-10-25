@@ -3,7 +3,7 @@ import { IconButton } from "./button.tsx";
 import { X } from "./icons.tsx";
 
 /**
- * A tab in a strip (the side panel's, the terminals'), as Codex's (26.1016, measured): a slot of up to 240px, 32px
+ * A tab in a strip (the side panel's, the terminals'): a slot of up to 240px, 32px
  * tall; the chosen one on a ghost fill with a hairline ring and a 1px shadow, the others at half strength; a 16px icon
  * 4px from the 13px title, which a preview tab sets in italics; the close button 20px, shown on the chosen tab and on
  * hover.
@@ -65,7 +65,7 @@ export function StripSlot({ children, divider }: { children: ReactNode; divider:
 	return (
 		<div className="flex w-[240px] min-w-[120px] shrink items-center pe-0.5">
 			{children}
-			{/* Codex's divider between two tabs at rest. */}
+			{/* A divider between two tabs at rest. */}
 			<div className={`ms-0.5 h-3 w-px shrink-0 bg-line ${divider ? "" : "invisible"}`} />
 		</div>
 	);

@@ -72,7 +72,7 @@ export function KindIcon({ kind, tool }: { kind: Kind; tool?: string }) {
 const fullPath = (path: string, cwd: string) =>
 	/^([a-zA-Z]:)?[\\/]/.test(path) ? path : `${cwd.replace(/[\\/]+$/, "")}/${path}`;
 
-/** A file named in a row: Codex's link, at half strength and underlined, opening the file in a side panel tab. */
+/** A file named in a row: a link at half strength and underlined, opening the file in a side panel tab. */
 function FileLink({ path, cwd, line, children }: { path: string; cwd: string; line?: number; children: ReactNode }) {
 	return (
 		<button

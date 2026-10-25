@@ -84,7 +84,7 @@ test("a prompt gets the model's reply, and a bash call runs once approved", asyn
 	await send(page, "run echo e2e-bash");
 	await page.getByRole("button", { name: /^Allow once/ }).click();
 	await expect(page.getByText("Ran it.")).toBeVisible();
-	// A finished turn folds its work under one summary, as Codex's does.
+	// A finished turn folds its work under one summary.
 	await page.getByRole("button", { name: /^Worked for/ }).last().click();
 	await expect(page.getByText(/Ran echo e2e-bash/)).toBeVisible();
 });

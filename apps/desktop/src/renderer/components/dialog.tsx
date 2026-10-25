@@ -141,7 +141,7 @@ export function ConfirmDialog({
 	description: ReactNode;
 	/** The action's label ("Delete", "Remove project"). */
 	confirm: string;
-	/** The way back's label, when Codex words it ("Continue viewing"). */
+	/** The way back's label, when it is not Cancel ("Continue viewing"). */
 	cancel?: string;
 	onConfirm: () => void;
 	onClose: () => void;
