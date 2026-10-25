@@ -1381,7 +1381,7 @@ changes pane give it a place.
   `test/e2e/` with Playwright. Squirrel installs into
   `%LOCALAPPDATA%\KnightCodeDesktop`, not `KnightCode`: that folder holds the
   discontinued IDE's data, and Squirrel's uninstall deletes its whole
-  folder. Updates show as Codex shows them: a pill at the title bar's end
+  folder. Updates show as a pill at the title bar's end
   while one downloads or waits, Check for Updates… last but About in Help
   (in the app menu on macOS, not on Linux), and a row in Settings › About.
 
