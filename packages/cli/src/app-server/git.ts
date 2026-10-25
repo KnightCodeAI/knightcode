@@ -578,7 +578,7 @@ export function snapshotTree(
 /** Untracked files over this size are left out of turn snapshots and diff reads (Codex's default). */
 export const LARGE_UNTRACKED_BYTES = 10 * 1024 * 1024;
 
-/** A folder holding this many untracked files itself is left out of turn snapshots (Codex's ghost snapshots' rule). */
+/** A folder holding this many untracked files itself is left out of turn snapshots. */
 export const LARGE_UNTRACKED_FOLDER_FILES = 200;
 
 /** Whether `path` lies under one of the folders, each written with its trailing slash. */
@@ -633,7 +633,7 @@ export interface TurnTrees {
 
 /**
  * Every untracked, not ignored file counts up to `limit`. Past it, none under a folder holding
- * LARGE_UNTRACKED_FOLDER_FILES of them itself (Codex's ghost snapshots' rule). The after-snapshot (`before` given)
+ * LARGE_UNTRACKED_FOLDER_FILES of them itself. The after-snapshot (`before` given)
  * leaves out the before one's folders, and a large folder only if no untracked file kept before was under it (one the
  * turn made), so both leave out the same files. More than `limit` still remaining: no `all` tree. Files over
  * LARGE_UNTRACKED_BYTES are left out. Both trees come from one temporary index, `tracked` before the untracked adds.
