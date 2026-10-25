@@ -124,7 +124,7 @@
 	--kc-app-menu-bg: #1f1f1f;
 	--kc-app-menu-hint: rgb(255 255 255 / 0.75);
 	--kc-app-menu-rule: rgb(255 255 255 / 0.157);
-	/* Terminals (section 9.7), as Codex's: the surface and text, and ANSI slots from its theme's accents (measured
+	/* Terminals (section 9.7): the surface and text, and ANSI slots from its theme's accents (measured
 	   2026-10-23): black and bright black are the tertiary and secondary text, cyan is blue, white is the text. */
 	--kc-terminal-bg: var(--kc-bg-surface);
 	--kc-terminal-fg: var(--kc-text);

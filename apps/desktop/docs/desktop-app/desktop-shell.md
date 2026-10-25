@@ -880,7 +880,7 @@ composer then shows its controls as icons only.
   main keeps 64 KiB of scrollback and replays it on reattach. Terminals end
   when their thread is archived or deleted, or the app quits.
 - A terminal whose cwd is outside the thread's workspace says so, with
-  Codex's Dismiss and Open new terminal; one whose shell ended offers Restart.
+  Dismiss and Open new terminal; one whose shell ended offers Restart.
 
 Status (2026-10-23): built in S3.
 
@@ -905,10 +905,10 @@ thread's tabs; cleared when the thread is deleted), guarded by main (section
 The `<webview>` is part of the DOM, so menus and modals stack over it with no
 help from main.
 
-As built (S3, Codex 26.1016 measured): the side panel's + (Mod+T, Codex's Open
-Browser Tab) opens a tab on Codex's new tab page (the address bar over the
+As built (S3): the side panel's + (Mod+T, Open Browser Tab) opens a tab on
+its new tab page (the address bar over the
 tools, Changes and Terminal); the toolbar is back, forward and reload in one
-capsule, the 32px address capsule, then Annotate (Mod+Shift+., Codex's
+capsule, the 32px address capsule, then Annotate (Mod+Shift+.,
 annotation mode) and Open in browser. A bare `localhost:3000` gets `http://`,
 a dotted host `https://`. `window.open` from a page loads an http(s) page in
 the same tab (the webview has `allowpopups` so the request reaches main, which
@@ -1252,10 +1252,10 @@ Status (2026-10-23): built in S3. An app draws between its turn's work and the
 reply, so it stays in sight when the work folds, at a position that holds while
 the turn runs and after (the frame is never made again). Full screen is a side
 panel tab with a fresh instance of the app (given the call's input and result),
-and the inline card says it is shown there. The confirmations are Codex's:
+and the inline card says it is shown there. The confirmations:
 "Send follow-up?" / "An app wants to send this prompt" for `ui/message`, and a
 card naming the tool for a call that may change things. The style variables
-map our tokens the way Codex's `mcp-app-host-styles` maps its own.
+map the app's own tokens onto the spec's names.
 
 ---
 

@@ -308,7 +308,7 @@ async function start(): Promise<void> {
 	terminals = new Terminals({
 		platform: process.platform,
 		env,
-		// Loaded as Codex loads it, outside the bundle: a native module the main build leaves in node_modules.
+		// Loaded outside the bundle: a native module the main build leaves in node_modules.
 		spawn: () => (createRequire(__filename)("node-pty") as { spawn: SpawnPty }).spawn,
 		post: (windowId, event) => {
 			const open = windows.get(windowId);
