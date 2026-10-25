@@ -78,8 +78,11 @@ function HomeMark() {
 				else if (!reduceMotion) {
 					const slot = event.currentTarget;
 					const area = slot.closest(".kc-home-content");
-					// The board extends 56px above the compact mark; a very short viewport keeps the static mark.
-					if (area && slot.getBoundingClientRect().top - area.getBoundingClientRect().top < 56) return;
+					// The board rises above the compact mark by its side less the mark's height, both from styles.css;
+					// a very short viewport keeps the static mark.
+					const box = slot.getBoundingClientRect();
+					const overhang = parseFloat(getComputedStyle(slot).getPropertyValue("--kc-chess-board")) - box.height;
+					if (area && box.top - area.getBoundingClientRect().top < overhang) return;
 					setStopping(false);
 					setPlaying(true);
 				}

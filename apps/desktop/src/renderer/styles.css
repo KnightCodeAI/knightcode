@@ -1871,9 +1871,11 @@ body {
 }
 .kc-home-mark {
 	--kc-chess-ease: cubic-bezier(0.23, 1, 0.32, 1);
+	/* The board's side; home.tsx reads it to tell whether the board fits above the mark. */
+	--kc-chess-board: 128px;
 	position: relative;
 	display: grid;
-	width: 128px;
+	width: var(--kc-chess-board);
 	height: 72px;
 	flex-shrink: 0;
 	place-items: center;
@@ -1895,7 +1897,7 @@ body {
 	position: absolute;
 	inset: auto 0 0;
 	display: grid;
-	height: 128px;
+	height: var(--kc-chess-board);
 	grid-template: repeat(8, 16px) / repeat(8, 16px);
 }
 .kc-chess-sq {
