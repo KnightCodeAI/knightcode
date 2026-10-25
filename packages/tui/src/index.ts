@@ -160,6 +160,7 @@ export {
 	Container,
 	CURSOR_MARKER,
 	compositeTuiLine,
+	dispatchMouseEvent,
 	type Focusable,
 	isFocusable,
 	isViewportTUI,

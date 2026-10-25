@@ -41,7 +41,6 @@ import {
 	hyperlink,
 	Markdown,
 	matchesKey,
-	MouseRegion,
 	Spacer,
 	setCapabilityOverrides,
 	setKeybindings,
@@ -479,13 +478,6 @@ export class InteractiveMode {
 	private footer: FooterComponent;
 	private footerContainer: Container;
 	private readonly backgroundShellsIndicator = new BackgroundShellsIndicator(() => this.session.backgroundShells);
-	/** The pill as mounted: a click opens `/tasks`. */
-	private readonly backgroundShellsRow = new MouseRegion(this.backgroundShellsIndicator, (event) => {
-		if (event.type !== "click" || event.button !== "left") return undefined;
-		this.backgroundShellsIndicator.selected = false;
-		this.showBackgroundTasks();
-		return { handled: true };
-	});
 	private footerDataProvider: FooterDataProvider;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
@@ -674,11 +666,11 @@ export class InteractiveMode {
 		this.editorContainer = new Container();
 		this.editorContainer.addChild(this.editor as Component);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
+		this.footerDataProvider.setBackgroundShells(() => this.backgroundShellsIndicator.render());
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footerContainer = new Container();
-		this.footerContainer.addChild(this.backgroundShellsRow);
-		this.footerContainer.addChild(this.footer);
+		this.mountFooter(this.footer);
 
 		// Load hide thinking block setting
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
@@ -2569,19 +2561,23 @@ export class InteractiveMode {
 			this.customFooter.dispose();
 		}
 
-		this.footerContainer.clear();
-		this.footerContainer.addChild(this.backgroundShellsRow);
 		if (factory) {
 			// Create and add custom footer, passing the data provider
 			this.customFooter = factory(this.ui, theme, this.footerDataProvider);
-			this.footerContainer.addChild(this.customFooter);
+			this.mountFooter(this.customFooter);
 		} else {
 			// Restore built-in footer
 			this.customFooter = undefined;
-			this.footerContainer.addChild(this.footer);
+			this.mountFooter(this.footer);
 		}
 
 		this.ui.requestRender();
+	}
+
+	/** Mounts a footer; a click on the background commands pill in it opens `/tasks`. */
+	private mountFooter(footer: Component): void {
+		this.footerContainer.clear();
+		this.footerContainer.addChild(this.backgroundShellsIndicator.clickFirst(footer, () => this.showBackgroundTasks()));
 	}
 
 	/**
@@ -5552,6 +5548,8 @@ export class InteractiveMode {
 		if (!pill.selected) {
 			if (!this.keybindings.matches(data, "tui.editor.cursorDown") || this.editor.getText() !== "") return false;
 			if (this.session.backgroundShells.runningCount() === 0) return false;
+			// A custom footer may not render the pill; focus on it would then be invisible.
+			if (!pill.shownIn((this.customFooter ?? this.footer).render(this.ui.terminal.columns))) return false;
 			pill.selected = true;
 			this.ui.requestRender();
 			return true;

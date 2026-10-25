@@ -81,6 +81,8 @@ export type GenerationCheckpoint =
 			attempt: number;
 			compacted?: TaskId<CompactionResult>;
 			model: ModelRef;
+			/** Absent in checkpoints of earlier versions. */
+			thinkingLevel?: ModelThinkingLevel;
 			cutoff: EntryId;
 			handle: DeferredHandle;
 			pollAt: number;
@@ -106,6 +108,7 @@ type Request = {
 	readonly attempt: number;
 	readonly compacted: TaskId<CompactionResult> | undefined;
 	readonly model: ModelRef;
+	readonly thinkingLevel: ModelThinkingLevel | undefined;
 	readonly cutoff: EntryId;
 	/** Committed model context through `cutoff`, when the phase already derived it. */
 	readonly messages?: readonly Message[];
@@ -238,7 +241,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 				...(thinkingLevel === "off" ? {} : { reasoning: thinkingLevel }),
 			};
 			const message = await streamResponse(runtime, model, messages, options, attempt, context);
-			const request = { attempt, compacted, model: ref, cutoff, messages: view.messages };
+			const request = { attempt, compacted, model: ref, thinkingLevel, cutoff, messages: view.messages };
 			await classify(runtime, request, message, context);
 		},
 		/** After the backoff's sleep; a run before `until` (an early wake, or a record of an earlier version) sleeps again. */
@@ -257,7 +260,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 		},
 		/** After the sleep until `pollAt`; a run before it (an early wake, or a record of an earlier version) sleeps again. */
 		poll: async (task, runtime, context) => {
-			const { attempt, compacted, model: ref, cutoff, handle, pollAt } = task.state.checkpoint;
+			const { attempt, compacted, model: ref, thinkingLevel, cutoff, handle, pollAt } = task.state.checkpoint;
 			if (pollAt > runtime.now()) return runtime.sleepUntil(pollAt, task.state.checkpoint, context);
 			const model = runtime.models.getModel(ref.provider, ref.modelId);
 			if (model === undefined) return failNoModel(runtime, ref, context);
@@ -265,7 +268,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 				signal: runtime.signal,
 				telemetry: context.telemetry,
 			});
-			const request = { attempt, compacted, model: ref, cutoff, pollAt };
+			const request = { attempt, compacted, model: ref, thinkingLevel, cutoff, pollAt };
 			await classify(runtime, request, message, context);
 		},
 		tools: async (task, runtime, context) => {
@@ -527,7 +530,9 @@ async function classify(
 	// An abort mark or close: the abort invocation or the reopened run handles the committed state.
 	runtime.signal.throwIfAborted();
 	const conversationId = runtime.conversationId;
-	const { attempt, compacted, model: ref, cutoff } = request;
+	const { attempt, compacted, model: ref, thinkingLevel, cutoff } = request;
+	// Record the requested level, as @knightcode/agent's agent loop does.
+	if (thinkingLevel !== undefined) message.thinkingLevel = thinkingLevel;
 	if (message.stopReason === "deferred" && message.deferred !== undefined) {
 		const handle = message.deferred;
 		const pollAt = Math.max(
@@ -541,6 +546,7 @@ async function classify(
 				attempt,
 				...(compacted === undefined ? {} : { compacted }),
 				model: ref,
+				...(thinkingLevel === undefined ? {} : { thinkingLevel }),
 				cutoff,
 				handle,
 				pollAt,

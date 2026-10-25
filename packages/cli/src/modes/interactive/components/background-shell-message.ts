@@ -40,7 +40,18 @@ function statusLabel(notice: BackgroundShellNotice): string {
 		case "timed_out":
 			return "Timed out";
 		case "stopped":
-			return "Stopped";
+			switch (notice.stoppedBy) {
+				case "user":
+					return "Stopped by the user";
+				case "model":
+					return "Stopped by the agent";
+				case "session":
+					return "Stopped because the session ended";
+				case "output_limit":
+					return "Stopped: too much output";
+				default:
+					return "Stopped";
+			}
 		case "running":
 			return "Running";
 	}

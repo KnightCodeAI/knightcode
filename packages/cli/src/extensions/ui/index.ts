@@ -352,7 +352,8 @@ export default function uiExtension(knightcode: ExtensionAPI): void {
 						.sort(([a], [b]) => a.localeCompare(b))
 						.map(([, text]) => ` ${theme.fg("muted", "·")} ${oneLine(text)}`)
 						.join("");
-					const stats = `${context}${theme.fg("muted", ` · $${cost.toFixed(3)} · ${speed}`)}${statuses}`;
+					const shells = footerData.getBackgroundShells();
+					const stats = `${context}${theme.fg("muted", ` · $${cost.toFixed(3)} · ${speed}`)}${shells ? ` ${theme.fg("muted", "·")} ${shells}` : ""}${statuses}`;
 
 					const branch = footerData.getGitBranch();
 					const gitParts: string[] = [];

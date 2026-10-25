@@ -1,5 +1,6 @@
 import {
 	type Component,
+	dispatchMouseEvent,
 	getKeybindings,
 	matchesKey,
 	type TUI,
@@ -145,11 +146,11 @@ export function backgroundShellsLabel(running: number): string {
 }
 
 /**
- * The background commands pill, a row above the footer while commands run: `2 shells`. Down from an
- * empty prompt selects it, which inverts it; Enter then opens `/tasks`. It sits outside the footer so a
- * custom footer keeps it.
+ * The background commands pill, on the footer's stats line while commands run: `2 shells`. Down from an
+ * empty prompt selects it, which inverts it; Enter then opens `/tasks`. Footers read it from their
+ * footer data, so a custom footer shows it by rendering `getBackgroundShells()`.
  */
-export class BackgroundShellsIndicator implements Component {
+export class BackgroundShellsIndicator {
 	private readonly getManager: () => BackgroundShellManager;
 	/** Whether keyboard focus is on the pill instead of the prompt. */
 	selected = false;
@@ -158,19 +159,62 @@ export class BackgroundShellsIndicator implements Component {
 		this.getManager = getManager;
 	}
 
-	invalidate(): void {}
-
-	render(width: number): string[] {
+	/** The styled pill, or undefined while nothing runs. */
+	render(): string | undefined {
 		const running = this.getManager().runningCount();
 		if (running === 0) {
 			this.selected = false;
-			return [];
+			return undefined;
 		}
 		const label = backgroundShellsLabel(running);
 		// SGR 7 directly, like the theme's own colours: chalk's inverse is dropped when it detects no colour support.
 		const pill = this.selected ? `\x1b[7m${theme.fg("accent", label)}\x1b[27m` : theme.fg("accent", label);
 		const cta = this.selected ? hint("Enter", "view") : hint("↓", "view");
-		return [truncateToWidth(`${pill}${theme.fg("dim", ` · ${cta}`)}`, width, "…")];
+		return `${pill}${theme.fg("dim", ` · ${cta}`)}`;
+	}
+
+	/**
+	 * Whether column `x` of a rendered footer line falls on the pill. The footer decides where it goes,
+	 * so it is found by its label: a footer too narrow for the hint still takes the click on what shows.
+	 */
+	hit(line: string, x: number): boolean {
+		const pill = this.render();
+		if (!pill) return false;
+		const plain = stripAnsi(line);
+		// ponytail: a label the footer clipped too ("1 shel...") is not found; reserve its width if that matters.
+		const at = plain.indexOf(backgroundShellsLabel(this.getManager().runningCount()));
+		if (at < 0) return false;
+		const start = visibleWidth(plain.slice(0, at));
+		return x >= start && x < start + visibleWidth(stripAnsi(pill));
+	}
+
+	/** Whether rendered footer lines show the pill, so selecting it from the keyboard would be visible. */
+	shownIn(lines: string[]): boolean {
+		const running = this.getManager().runningCount();
+		return running > 0 && lines.some((line) => stripAnsi(line).includes(backgroundShellsLabel(running)));
+	}
+
+	/**
+	 * Wraps a footer so a left click on the pill opens `/tasks` before the footer sees the click: a custom
+	 * footer that handles mouse events itself would otherwise take it. Other events go on to the footer.
+	 */
+	clickFirst(footer: Component, open: () => void): Component {
+		return {
+			render: (width) => footer.render(width),
+			invalidate: () => footer.invalidate(),
+			handleMouse: (event) => {
+				if (
+					event.type === "click" &&
+					event.button === "left" &&
+					this.hit(footer.render(event.width)[event.y] ?? "", event.x)
+				) {
+					this.selected = false;
+					open();
+					return { handled: true };
+				}
+				return dispatchMouseEvent(footer, event);
+			},
+		};
 	}
 }
 
