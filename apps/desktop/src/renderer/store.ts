@@ -90,11 +90,35 @@ export interface ThreadView {
  */
 export type PanelTab =
 	| { kind: "changes" }
-	| { kind: "file"; path: string; line?: number; preview?: boolean; used: number }
+	/**
+	 * `compare`: the comparison whose changes the file shows (Show changes), none while they are hidden.
+	 * `draft`: edits not yet written, kept here so they outlive the tab's view.
+	 */
+	| {
+			kind: "file";
+			path: string;
+			line?: number;
+			preview?: boolean;
+			used: number;
+			compare?: FileComparison;
+			draft?: FileDraft;
+	  }
 	/** A web page (section 9.8), or its new tab page while `url` is empty; `id` keys it, as two can show one URL. */
 	| { kind: "preview"; id: string; url: string; title?: string }
 	/** An MCP App shown full screen (section 12.2): the tool call it belongs to. */
-	| { kind: "mcpApp"; itemId: string };
+	| { kind: "mcpApp"; itemId: string }
+	/** The "Open file" tab: the workspace tree beside an empty file view, one per thread. */
+	| { kind: "files" };
+/** A file tab's comparison, one of three: the Index (unstaged), HEAD (uncommitted), or a branch's merge base. */
+export interface FileComparison {
+	scope: "unstaged" | "uncommitted" | "branch";
+	against?: string;
+}
+/** A file tab's unsaved text, and the mtime of the file it was edited over: a save refuses once the file has moved. */
+export interface FileDraft {
+	text: string;
+	mtimeMs: number;
+}
 export interface ThreadTabs {
 	tabs: PanelTab[];
 	active: number;
@@ -150,6 +174,8 @@ export interface State {
 	paletteOpen: boolean;
 	/** The open thread's find bar (View › Find, Ctrl+F). */
 	finding: boolean;
+	/** A file tab whose unsaved edits could not be written as it closed: "Discard file changes?". */
+	discarding?: { threadId: string; path: string };
 	/** The theme the window shows: the preference, or the system's when it is "system". */
 	resolvedTheme: ThemeName;
 	/** Where updating stands (main/updates.ts): the title bar's pill and Settings › About. */
@@ -158,7 +184,11 @@ export interface State {
 	 * The right region (desktop-shell.md section 9.6): open, its width in px, a diff scope asked for, and whether it
 	 * fills the thread view in place of the chat (Codex's full screen).
 	 */
-	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
+	/**
+	 * `fileTree`: the file tabs' tree shown (Toggle file tree), unless false. `fileSplit`: their changes drawn split,
+	 * one layout for every file tab.
+	 */
+	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean; fileTree?: boolean; fileSplit?: boolean };
 	/** Each thread's side panel tabs: Changes first, then the files it opened. */
 	tabs: Record<string, ThreadTabs>;
 	/** The bottom region's height in px (section 9.7), 0 until dragged (then 280); each thread has it open or not. */
@@ -1519,9 +1549,11 @@ export function showChanges(threadId = openId(), scope?: DiffScope): void {
 
 /**
  * Open a file in the thread's side panel, scrolled to `line`: its tab if it has one, else in place of the preview tab,
- * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS.
+ * else as a new preview tab, closing the least recently used file tab past MAX_FILE_TABS. `keep` (a double click in
+ * the file tree) makes it a kept tab. `compare` shows the file's changes in that comparison (opened from a list of
+ * changes); without it an open tab keeps its own.
  */
-export function openFileTab(threadId: string, path: string, line?: number): void {
+export function openFileTab(threadId: string, path: string, line?: number, keep = false, compare?: FileComparison): void {
 	const used = ++tabClock;
 	updateTabs(
 		threadId,
@@ -1529,21 +1561,56 @@ export function openFileTab(threadId: string, path: string, line?: number): void
 			const next = [...tabs];
 			const key = tabKey(path);
 			let at = next.findIndex((t) => t.kind === "file" && tabKey(t.path) === key);
-			if (at !== -1) next[at] = { ...(next[at] as Extract<PanelTab, { kind: "file" }>), line, used };
-			else {
-				const tab: PanelTab = { kind: "file", path, line, preview: true, used };
+			if (at !== -1) {
+				const open = next[at] as Extract<PanelTab, { kind: "file" }>;
+				next[at] = { ...open, line, used, preview: keep ? false : open.preview, compare: compare ?? open.compare };
+			} else {
+				const tab: PanelTab = { kind: "file", path, line, preview: !keep, used, compare };
 				at = next.findIndex((t) => t.kind === "file" && t.preview);
 				if (at !== -1) next[at] = tab;
 				else at = next.push(tab) - 1;
 			}
 			for (;;) {
-				const files = next.flatMap((t, i) => (t.kind === "file" && i !== at ? [{ i, used: t.used }] : []));
-				if (files.length < MAX_FILE_TABS) break;
-				const oldest = files.reduce((a, b) => (b.used < a.used ? b : a));
+				const files = next.flatMap((t, i) => (t.kind === "file" && i !== at ? [{ i, used: t.used, draft: t.draft }] : []));
+				// A tab with unsaved edits never goes: past the limit only while every other one has some.
+				const closable = files.filter((f) => !f.draft);
+				if (files.length < MAX_FILE_TABS || closable.length === 0) break;
+				const oldest = closable.reduce((a, b) => (b.used < a.used ? b : a));
 				next.splice(oldest.i, 1);
 				if (oldest.i < at) at--;
 			}
 			return { tabs: next, active: at };
+		},
+		true,
+	);
+}
+
+/** Show a file tab's changes in `compare`, or hide them (undefined). */
+export function setFileComparison(threadId: string, path: string, compare?: FileComparison): void {
+	const key = tabKey(path);
+	updateTabs(threadId, (t) => ({
+		...t,
+		tabs: t.tabs.map((tab) => (tab.kind === "file" && tabKey(tab.path) === key ? { ...tab, compare } : tab)),
+	}));
+}
+
+/**
+ * Files: the thread's one "Open file" tab, focused if it is open, else in place of the new tab page it was
+ * chosen from (`replace`, a preview tab's index), else after the other tabs.
+ */
+export function openFilesTab(threadId = openId(), replace?: number): void {
+	if (!threadId) return;
+	updateTabs(
+		threadId,
+		({ tabs }) => {
+			const open = tabs.findIndex((t) => t.kind === "files");
+			if (open !== -1) return { tabs, active: open };
+			if (replace !== undefined && tabs[replace]?.kind === "preview") {
+				const next = [...tabs];
+				next[replace] = { kind: "files" };
+				return { tabs: next, active: replace };
+			}
+			return { tabs: [...tabs, { kind: "files" }], active: tabs.length };
 		},
 		true,
 	);
@@ -1627,12 +1694,82 @@ export function takeAttachments(threadId: string): { images: string[]; text: str
 	return waiting;
 }
 
+/**
+ * Close a tab. A file tab with unsaved edits writes them first and closes once they are written;
+ * when they cannot be, "Discard file changes?" asks (`discarding`).
+ */
 export function closeTab(threadId: string, index: number): void {
 	if (index === 0) return setPanel({ open: false });
+	const tab = state.tabs[threadId]?.tabs[index];
+	if (tab?.kind === "file" && tab.draft) {
+		void saveFileDraft(threadId, tab.path).then(() => {
+			// Whatever this write did (another may have saved it first), the tab closes once nothing is unsaved; still
+			// unsaved (refused, or typed while it wrote), it asks rather than close over the edits.
+			const left = state.tabs[threadId]?.tabs.find((t) => t.kind === "file" && tabKey(t.path) === tabKey(tab.path));
+			if (!(left?.kind === "file" && left.draft)) discardFileTab(threadId, tab.path);
+			else set((s) => ({ ...s, discarding: { threadId, path: tab.path } }));
+		});
+		return;
+	}
 	updateTabs(threadId, ({ tabs, active }) => ({
 		tabs: tabs.filter((_, i) => i !== index),
 		active: active >= index ? active - 1 : active,
 	}));
+}
+
+/** Close a file tab, its unsaved edits with it (Discard changes); undefined just dismisses the question. */
+export function discardFileTab(threadId?: string, path?: string): void {
+	set((s) => ({ ...s, discarding: undefined }));
+	if (!threadId || !path) return;
+	const index = (state.tabs[threadId]?.tabs ?? []).findIndex((t) => t.kind === "file" && tabKey(t.path) === tabKey(path));
+	if (index <= 0) return;
+	updateTabs(threadId, ({ tabs, active }) => ({
+		tabs: tabs.filter((_, i) => i !== index),
+		active: active >= index ? active - 1 : active,
+	}));
+}
+
+/** Keep or drop a file tab's unsaved edits; an edited tab is kept, so no other file opens in its place. */
+export function setFileDraft(threadId: string, path: string, draft?: FileDraft): void {
+	const key = tabKey(path);
+	updateTabs(threadId, (t) => ({
+		...t,
+		tabs: t.tabs.map((tab) =>
+			tab.kind === "file" && tabKey(tab.path) === key ? { ...tab, draft, ...(draft ? { preview: false } : {}) } : tab,
+		),
+	}));
+}
+
+const saving = new Map<string, Promise<unknown>>();
+
+/**
+ * Write a file tab's unsaved edits: the text written and the file's new mtime, or undefined with
+ * "Could not save file" when the file changed since it was read or the write failed (the edits stay). One write per
+ * file at a time, as two over the same mtime would refuse each other. Edits made while it writes stay unsaved, over
+ * the file as written.
+ */
+export async function saveFileDraft(threadId: string, path: string): Promise<{ text: string; mtimeMs: number } | undefined> {
+	const key = `${threadId}\0${tabKey(path)}`;
+	while (saving.has(key)) await saving.get(key);
+	const draftOf = () => {
+		const tab = state.tabs[threadId]?.tabs.find((t) => t.kind === "file" && tabKey(t.path) === tabKey(path));
+		return tab?.kind === "file" ? tab.draft : undefined;
+	};
+	const draft = draftOf();
+	if (!draft) return undefined;
+	const write = client.request("file/write", { threadId, path, text: draft.text, expectedMtimeMs: draft.mtimeMs });
+	saving.set(key, write.catch(() => {}));
+	try {
+		const { mtimeMs } = await write;
+		const now = draftOf();
+		setFileDraft(threadId, path, now && now.text !== draft.text ? { text: now.text, mtimeMs } : undefined);
+		return { text: draft.text, mtimeMs };
+	} catch {
+		toast("Could not save file", "error");
+		return undefined;
+	} finally {
+		saving.delete(key);
+	}
 }
 
 export function addComment(threadId: string, comment: DiffComment): void {

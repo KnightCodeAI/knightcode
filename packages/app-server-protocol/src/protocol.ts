@@ -45,6 +45,8 @@ export const ErrorCode = Type.Union([
 	Type.Literal("approvalRequired"),
 	/** The MCP server an app belongs to is not connected (or MCP is off in the thread). */
 	Type.Literal("mcpUnavailable"),
+	/** `file/write` found the file changed since the read it was given. */
+	Type.Literal("fileChanged"),
 	Type.Literal("internal"),
 ]);
 export type ErrorCode = Static<typeof ErrorCode>;
@@ -731,12 +733,40 @@ export const ClientRequests = {
 			/** Absolute. */
 			path: Str,
 			size: Num,
-			/** A NUL byte in the first 8 KiB. */
+			/** Not text: a NUL byte in the first 8 KiB, or bytes that are not UTF-8. */
 			binary: Bool,
 			/** Over maxBytes: `text` is absent. */
 			tooLarge: Bool,
 			text: Type.Optional(Str),
+			/** The file's mtime when read, for `file/write`'s `expectedMtimeMs`. */
+			mtimeMs: Num,
 		}),
+	},
+	/** One folder's entries, for the desktop's file tree: hidden ones included. */
+	"file/list": {
+		params: Obj({
+			threadId: Str,
+			/** Relative to the thread's cwd, or absolute; the cwd when absent. */
+			path: Type.Optional(Str),
+		}),
+		result: Obj({
+			/** The thread's cwd: entry paths are relative to it, `/`-separated. */
+			root: Str,
+			entries: Type.Array(Obj({ path: Str, type: Type.Union([Type.Literal("file"), Type.Literal("directory")]) })),
+			/** More than 5,000 entries: the rest are left out. */
+			truncated: Bool,
+		}),
+	},
+	/** A file tab's save: refused with `fileChanged` when `expectedMtimeMs` is not the file's mtime any more. */
+	"file/write": {
+		params: Obj({
+			threadId: Str,
+			/** Relative to the thread's cwd, or absolute. */
+			path: Str,
+			text: Type.String({ maxLength: 8 * 1024 * 1024 }),
+			expectedMtimeMs: Type.Optional(Num),
+		}),
+		result: Obj({ mtimeMs: Num }),
 	},
 	"thread/diff/revert": {
 		params: Obj({

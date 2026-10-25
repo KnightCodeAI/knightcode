@@ -77,7 +77,7 @@ import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import { positionOf } from "./config.ts";
 import { FileSearch } from "./file-search.ts";
-import { readFile } from "./files.ts";
+import { listFolder, readFile, writeText } from "./files.ts";
 import { callAppTool, createMcpAppsExtension, type McpAppsHolder, readAppResource } from "./mcp-apps.ts";
 import { APPROVAL_MODE_ENTRY, createApprovalExtension, readApprovalMode } from "./approvals.ts";
 import { ItemMapper, queueOf, usageOf } from "./item-mapper.ts";
@@ -2352,6 +2352,18 @@ export class ThreadManager {
 				this.track(() =>
 					this.withThread(threadId, connection.mode, (thread) =>
 						readFile(thread.session.sessionManager.getCwd(), path, maxBytes),
+					),
+				),
+			"file/list": ({ threadId, path }, connection) =>
+				this.track(() =>
+					this.withThread(threadId, connection.mode, (thread) =>
+						listFolder(thread.session.sessionManager.getCwd(), path),
+					),
+				),
+			"file/write": ({ threadId, path, text, expectedMtimeMs }, connection) =>
+				this.track(() =>
+					this.withThread(threadId, connection.mode, (thread) =>
+						writeText(thread.session.sessionManager.getCwd(), path, text, expectedMtimeMs),
 					),
 				),
 			"mcp/app/readResource": (params, connection) =>

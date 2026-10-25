@@ -704,16 +704,39 @@ full object id of a tree in the repository, or the file is in neither tree.
 ### `file/read`
 
 Params: `{threadId, path, maxBytes?}`. Result: `{path, size, binary, tooLarge,
-text?}`. A file's text, `path` resolved against the thread's cwd like a tool's
-path. `maxBytes` is 1 byte to 8 MiB (default 2 MiB). `text` comes only when the
-file is neither binary (a NUL in its first 8 KiB) nor larger than `maxBytes`;
-`size` is its length in bytes.
+text?, mtimeMs}`. A file's text, `path` resolved against the thread's cwd like a
+tool's path. `maxBytes` is 1 byte to 8 MiB (default 2 MiB). `text` comes only
+when the file is neither binary (a NUL in its first 8 KiB, or bytes that are not
+UTF-8, which decoded and saved would be replaced) nor larger than
+`maxBytes`; `size` is its length in bytes; `mtimeMs` its modification time when
+read, for `file/write`.
 Errors: `threadNotFound`; `invalidParams` when there is no such file or the path
 is not a file.
 
 ```json
 {"id":25,"method":"file/read","params":{"threadId":"THREAD_ID","path":"src/a.ts"}}
 ```
+
+### `file/list`
+
+Params: `{threadId, path?}`. Result: `{root, entries, truncated}`. One folder's
+entries for a file tree: `path` resolved like `file/read`'s, the thread's cwd
+when absent; `root` is the cwd and each entry `{path, type}` is relative to it,
+`/`-separated, `type` `file` or `directory` (a link to a folder is a folder).
+Hidden entries are included. Past 5,000 entries the rest are left out and
+`truncated` is true.
+Errors: `threadNotFound`; `invalidParams` when the path is not a folder or
+cannot be read.
+
+### `file/write`
+
+Params: `{threadId, path, text, expectedMtimeMs?}`. Result: `{mtimeMs}`. Writes
+`text` (UTF-8, at most 8 MiB) to the file in place, so it keeps its mode and
+links; a missing file is created. With `expectedMtimeMs` (the `mtimeMs` of the
+read the text came from), a file modified since is refused with `fileChanged`
+and left as it is.
+Errors: `threadNotFound`; `fileChanged`; `invalidParams` when the path is a
+folder or cannot be written.
 
 ### `thread/diff/revert`
 
