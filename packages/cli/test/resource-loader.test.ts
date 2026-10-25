@@ -81,6 +81,92 @@ describe("DefaultResourceLoader", () => {
 			]);
 		});
 
+		// A configured package that fails to install warns and does not stop the rest of the load.
+		it("should warn and keep loading when a configured package cannot be installed", async () => {
+			vi.stubEnv("KNIGHTCODE_OFFLINE", "");
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				settingsManager: SettingsManager.inMemory({
+					packages: ["npm:broken-package"],
+					// Any non-zero exit stands in for an npm install that cannot reach the registry.
+					npmCommand: [process.execPath, "-e", "process.exit(1)"],
+				}),
+			});
+
+			await loader.reload();
+
+			const warnings = loader.getExtensions().warnings ?? [];
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0].path).toBe("npm:broken-package");
+			expect(warnings[0].warning).toMatch(/^failed to install \(.*failed with code 1\)\./);
+			expect(warnings[0].warning).toContain(
+				'Run "knightcode remove npm:broken-package" to remove it from settings.json.',
+			);
+		});
+
+		// A one-off -e source says to check the source, not to remove a saved package.
+		it("should point temporary extension sources at the source instead of knightcode remove", async () => {
+			vi.stubEnv("KNIGHTCODE_OFFLINE", "");
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				additionalExtensionPaths: ["npm:broken-package"],
+				settingsManager: SettingsManager.inMemory({
+					npmCommand: [process.execPath, "-e", "process.exit(1)"],
+				}),
+			});
+
+			await loader.reload();
+
+			const warnings = loader.getExtensions().warnings ?? [];
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0].path).toBe("npm:broken-package");
+			expect(warnings[0].warning).toContain("Check the source and try again.");
+			expect(warnings[0].warning).not.toContain("knightcode remove");
+		});
+
+		// A project package points at remove --local.
+		it("should point project extension packages at knightcode remove --local", async () => {
+			vi.stubEnv("KNIGHTCODE_OFFLINE", "");
+			writeFileSync(
+				join(agentDir, "settings.json"),
+				JSON.stringify({ npmCommand: [process.execPath, "-e", "process.exit(1)"] }),
+			);
+			mkdirSync(join(cwd, ".knightcode"), { recursive: true });
+			writeFileSync(join(cwd, ".knightcode", "settings.json"), JSON.stringify({ packages: ["npm:broken-package"] }));
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				settingsManager: SettingsManager.create(cwd, agentDir, { projectTrusted: true }),
+			});
+
+			await loader.reload();
+
+			const warnings = loader.getExtensions().warnings ?? [];
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0].warning).toContain('Run "knightcode remove npm:broken-package --local"');
+		});
+
+		// Resolving project trust does not warn about the same failed install a second time.
+		it("should warn once about a failing install when project trust is resolved", async () => {
+			vi.stubEnv("KNIGHTCODE_OFFLINE", "");
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				settingsManager: SettingsManager.inMemory({
+					packages: ["npm:broken-package"],
+					npmCommand: [process.execPath, "-e", "process.exit(1)"],
+				}),
+			});
+
+			await loader.reload({ resolveProjectTrust: async () => false });
+
+			const warnings = loader.getExtensions().warnings ?? [];
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0].path).toBe("npm:broken-package");
+		});
+
 		it("should fail when an extension package manifest cannot be parsed", async () => {
 			const packageRoot = join(tempDir, "invalid-extension-package");
 			const extensionsDir = join(packageRoot, "extensions");

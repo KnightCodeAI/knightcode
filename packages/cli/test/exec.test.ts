@@ -18,4 +18,19 @@ describe("execCommand", () => {
 
 		expect(result).toEqual({ stdout: "", stderr: "", code: 1, killed: false });
 	});
+
+	it("decodes a multi-byte character split across stdout and stderr chunks", async () => {
+		const script = [
+			'const text = Buffer.from("你好");',
+			"process.stdout.write(text.subarray(0, 1));",
+			"process.stderr.write(text.subarray(0, 1));",
+			"setTimeout(() => {",
+			"  process.stdout.write(text.subarray(1));",
+			"  process.stderr.write(text.subarray(1));",
+			"}, 50);",
+		].join("\n");
+		const result = await execCommand(process.execPath, ["-e", script], process.cwd());
+
+		expect(result).toEqual({ stdout: "你好", stderr: "你好", code: 0, killed: false });
+	});
 });

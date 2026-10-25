@@ -1343,11 +1343,15 @@ export class ThreadManager {
 
 	/** Start the idle timer when nobody watches and nothing holds the thread (§5.6). */
 	scheduleIdle(thread: LoadedThread): void {
-		if (thread.state !== "ready" || thread.subscribers.size > 0 || thread.busy || thread.idleTimer) return;
+		// Unloading disposes the session, which would kill its background commands: a thread keeps them
+		// running until they end, and the last one ending schedules this again.
+		const keepsBackgroundShells = () => thread.session.backgroundShells.runningCount() > 0;
+		if (thread.state !== "ready" || thread.subscribers.size > 0 || thread.busy || keepsBackgroundShells()) return;
+		if (thread.idleTimer) return;
 		thread.idleTimer = setTimeout(() => {
 			thread.idleTimer = undefined;
 			// Something may have started since the timer was set.
-			if (thread.subscribers.size === 0 && !thread.busy) void this.unload(thread.id);
+			if (thread.subscribers.size === 0 && !thread.busy && !keepsBackgroundShells()) void this.unload(thread.id);
 		}, this.idleMs);
 		thread.idleTimer.unref?.();
 	}
@@ -1546,7 +1550,19 @@ export class ThreadManager {
 				(turnId) => this.afterSettle(thread, turnId),
 			);
 			thread.mapper.restore(readTurns(thread.id, session.sessionManager.getBranch()));
-			thread.unsubscribeSession = session.subscribe((event) => thread.mapper.handle(event));
+			const unsubscribeEvents = session.subscribe((event) => thread.mapper.handle(event));
+			// Running background commands keep the thread busy; when the last one ends it may go idle again.
+			const backgroundShells = session.backgroundShells;
+			let backgroundRunning = backgroundShells.runningCount();
+			const unsubscribeBackgroundShells = backgroundShells.subscribe(() => {
+				const running = backgroundShells.runningCount();
+				if (backgroundRunning > 0 && running === 0) this.afterActivity(thread);
+				backgroundRunning = running;
+			});
+			thread.unsubscribeSession = () => {
+				unsubscribeEvents();
+				unsubscribeBackgroundShells();
+			};
 			for (const diagnostic of session.settingsManager.drainErrors()) {
 				let content = "";
 				try {
@@ -1747,6 +1763,9 @@ export class ThreadManager {
 		const next = thread.queued.shift();
 		if (!next) return;
 		thread.draining = true;
+		// A background command ending before this start reaches prompt() must not start a run of its own,
+		// which would make the start fail and drop the queued input.
+		const releaseWake = thread.session.holdBackgroundWake();
 		this.notifyQueue(thread);
 		void queueHooks
 			.afterDequeue()
@@ -1762,6 +1781,7 @@ export class ThreadManager {
 				});
 			})
 			.finally(() => {
+				releaseWake();
 				thread.draining = false;
 				this.afterActivity(thread);
 			});
@@ -1820,6 +1840,7 @@ export class ThreadManager {
 		const request = new StartRequest(thread, requestId);
 		const start = request.controller;
 		let acceptTurn: (() => void) | undefined;
+		let releaseWake: (() => void) | undefined;
 		this.startsBySignal.set(start.signal, request);
 		thread.pendingStarts.add(start);
 		const work = (async (): Promise<TurnStartResult> => {
@@ -1832,6 +1853,9 @@ export class ThreadManager {
 					if (thread.reservedStart && thread.reservedStart !== start)
 						throw new AppServerError("turnInProgress", "replacement preflight reserved this thread");
 					const { session } = thread;
+					// From the idle check until the turn starts, an ended background command must not start a
+					// run of its own: this start would then fail, or the run would take its request id.
+					releaseWake = session.holdBackgroundWake();
 					if (session.sessionManager.hasLostLock()) {
 						this.afterSettle(thread);
 						throw new AppServerError("threadLockedElsewhere", "the session file is no longer owned here");
@@ -1924,6 +1948,7 @@ export class ThreadManager {
 				request.record("cancelled");
 				return request.result();
 			} finally {
+				releaseWake?.();
 				const owner = request.owner;
 				if (owner.acceptTurnStart === acceptTurn) owner.acceptTurnStart = undefined;
 				owner.pendingStarts.delete(start);
