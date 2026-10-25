@@ -6,7 +6,8 @@ import { guardWebviews } from "../../src/main/preview.ts";
 import { previewPartition } from "../../src/shared/preview-url.ts";
 
 const electron = vi.hoisted(() => ({
-	permission: undefined as ((contents: unknown, permission: string, callback: (granted: boolean) => void) => void) | undefined,
+	permission: undefined as
+		((contents: unknown, permission: string, callback: (granted: boolean) => void) => void) | undefined,
 	guests: new Map<number, { hostWebContents: unknown; capturePage: () => Promise<unknown> }>(),
 }));
 

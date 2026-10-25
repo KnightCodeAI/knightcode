@@ -147,7 +147,9 @@ export function OpenInButton({
 						</>
 					) : null}
 					{github ? (
-						<MenuItem onSelect={() => void client.host("host/shell/openExternal", { url: github })}>Open in GitHub</MenuItem>
+						<MenuItem onSelect={() => void client.host("host/shell/openExternal", { url: github })}>
+							Open in GitHub
+						</MenuItem>
 					) : null}
 					<MenuItem onSelect={() => saveCopy(path)}>Save as…</MenuItem>
 				</MenuContent>

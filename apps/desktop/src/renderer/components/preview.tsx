@@ -66,7 +66,10 @@ function AnnotateLayer({
 	useEffect(() => layer.current?.focus(), []);
 	const point = (event: React.PointerEvent) => {
 		const box = layer.current!.getBoundingClientRect();
-		return { x: Math.max(0, Math.min(event.clientX - box.left, box.width)), y: Math.max(0, Math.min(event.clientY - box.top, box.height)) };
+		return {
+			x: Math.max(0, Math.min(event.clientX - box.left, box.width)),
+			y: Math.max(0, Math.min(event.clientY - box.top, box.height)),
+		};
 	};
 	const finish = async () => {
 		if (!drag) return;
@@ -128,7 +131,10 @@ function AnnotateLayer({
 				</span>
 			</div>
 			{box ? (
-				<div className="pointer-events-none absolute rounded-sm border-2 border-[var(--kc-accent)] bg-[var(--kc-accent)]/10" style={box} />
+				<div
+					className="pointer-events-none absolute rounded-sm border-2 border-[var(--kc-accent)] bg-[var(--kc-accent)]/10"
+					style={box}
+				/>
 			) : null}
 		</div>
 	);
@@ -137,7 +143,12 @@ function AnnotateLayer({
 /** The new tab page under the bar: the tools a tab can open, with their keys. */
 function NewTabPage({ threadId, cwd, tabId }: { threadId: string; cwd: string; tabId: string }) {
 	const tools = [
-		{ label: "Changes", icon: <FileDiff size={16} />, keys: bindingLabel("desktop.panel.toggle"), run: () => showChanges(threadId) },
+		{
+			label: "Changes",
+			icon: <FileDiff size={16} />,
+			keys: bindingLabel("desktop.panel.toggle"),
+			run: () => showChanges(threadId),
+		},
 		{
 			label: "Terminal",
 			icon: <SquareTerminal size={16} />,
@@ -271,7 +282,9 @@ export function PreviewTab({ threadId, tab, active }: { threadId: string; tab: P
 						{nav.loading ? <X size={16} /> : <RefreshCw size={16} />}
 					</IconButton>
 				</div>
-				<div className={`kc-capsule flex h-8 min-w-0 flex-1 items-center rounded-full p-0.5 ${refused ? "ring-1 ring-[var(--kc-danger)]" : ""}`}>
+				<div
+					className={`kc-capsule flex h-8 min-w-0 flex-1 items-center rounded-full p-0.5 ${refused ? "ring-1 ring-[var(--kc-danger)]" : ""}`}
+				>
 					<input
 						ref={field}
 						value={address}

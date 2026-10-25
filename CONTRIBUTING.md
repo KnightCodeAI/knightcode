@@ -119,13 +119,15 @@ bun run scripts/changelog-sections.ts
 A change to the desktop app (`apps/desktop`) takes a `desktop` changeset, which
 lands in `apps/desktop/CHANGELOG.md` and the desktop release's notes. Its
 app server side (`packages/cli`, `packages/app-server-protocol`) is part of the
-CLI, so a change to both takes one of each. Reach for `bun x changeset` on the
-rare change that releases some other package.
+CLI, so a change to both takes one of each. No other package takes a
+changeset: they are private and never versioned, and CI refuses a changeset
+that names one.
 
 Commit the generated file in `.changeset/` with your PR. The release workflow
-turns accumulated changesets into a "Version Packages" PR; merging that PR
-publishes the CLI to npm and sets the desktop app's next version, which the
-desktop release workflow builds when it is run.
+turns accumulated changesets into a "Version Packages" PR. Merging it publishes
+the CLI to npm when it gave the CLI a new version, and sets the desktop app's
+next version, which the desktop release workflow builds when it is run; a
+Version PR with only desktop changesets publishes nothing to npm.
 
 If you are adding a new provider to `packages/ai`, see `AGENTS.md` for the
 required tests.

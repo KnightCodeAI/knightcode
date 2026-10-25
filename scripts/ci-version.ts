@@ -6,16 +6,12 @@
 import { $ } from "bun";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { regroupTopSection } from "./changelog-sections.ts";
+import { regroupTopSection, releasedPackages } from "./changelog-sections.ts";
 
 const ROOT = join(import.meta.dir, "..");
-// The packages whose changelogs are read: the CLI on npm, and the desktop app,
-// which changesets versions but never publishes (.github/workflows/desktop-release.yml
-// releases it).
-const PACKAGES = [
-	{ name: "@knightcodeai/cli", dir: "packages/cli" },
-	{ name: "@knightcode/desktop", dir: "apps/desktop" },
-];
+// The packages changesets versions: the CLI, which goes to npm, and the desktop
+// app, which .github/workflows/desktop-release.yml ships.
+const PACKAGES = await releasedPackages(ROOT);
 
 // changesets rewrites package.json; read from disk, never from an import cache
 // that predates the bump.

@@ -25,7 +25,8 @@ is no build step for development.
 | `apps/web` | The website. Separate toolchain; not covered by the root type check |
 | `apps/desktop` | The Electron desktop app (Forge + Vite + React). Talks to `knightcode app-server`; own `tsconfig.json` and Vitest run, not covered by the root type check |
 
-Everything except `packages/cli*` is private and consumed through the workspace.
+Everything except `packages/cli*` and `apps/desktop` is private and consumed
+through the workspace.
 The root `tsconfig.json` maps every `@knightcode/*` and `@knightcodeai/cli`
 specifier to package source, so imports resolve without a build.
 
@@ -204,16 +205,21 @@ a single heading, so two user-visible changes in one branch means two
 changesets — a second `bun run changeset` on the same branch takes the next
 free `-2` suffix rather than refusing.
 
-`@knightcodeai/cli` is the only published package. The desktop app,
-`@knightcode/desktop`, is private but versioned by changesets: a change to
-`apps/desktop` takes a `desktop` changeset, and the Version Packages PR bumps
-`apps/desktop/package.json` and writes `apps/desktop/CHANGELOG.md` (changesets
-never tags or publishes it, `privatePackages` in `.changeset/config.json`). A
+Changesets versions only the packages that are not private
+(`privatePackages.version` is false in `.changeset/config.json`), and the CI
+check refuses a changeset naming any other. There are two: `@knightcodeai/cli`,
+the only package published to npm, and the desktop app, `@knightcode/desktop`,
+which ships as installers. The desktop app is not private so that it gets a
+version and a changelog; `ci:publish` only publishes the CLI, and its
+`prepublishOnly` script refuses `npm publish`. A change to `apps/desktop` takes
+a `desktop` changeset, and the Version Packages PR bumps
+`apps/desktop/package.json` and writes `apps/desktop/CHANGELOG.md`; merging a
+Version PR that carries only desktop changesets publishes nothing to npm. A
 desktop change that also changes the app server takes one changeset for each.
 Do not file desktop-only changes under `@knightcodeai/cli`: the CLI's changelog
-is what the terminal and knightcode.dev show. Reach for `bun x changeset` only
-for the rare change that releases some other package. Other private
-`@knightcode/*` packages are never published and take no changeset.
+is what the terminal and knightcode.dev show. Every other package is private,
+never versioned, and takes no changeset; do not make one public to give it a
+changeset.
 
 Releases are automated by `.github/workflows/publish.yml`; there is no local
 release command and nothing to publish by hand:

@@ -70,7 +70,12 @@ test("after a restart a thread whose resume fails keeps no extension UI from the
 	fake.serverState("ready");
 	await openThread("t3");
 	fake.notify("ui/widget", { threadId: "t3", ...widget });
-	fake.notify("ui/state", { threadId: "t3", statuses: [{ key: "s", text: "old" }], title: "Old", workingVisible: true });
+	fake.notify("ui/state", {
+		threadId: "t3",
+		statuses: [{ key: "s", text: "old" }],
+		title: "Old",
+		workingVisible: true,
+	});
 	await vi.waitFor(() => expect(getState().held.t3?.ui.widgets).toEqual([widget]));
 	const saved = fake.results["thread/resume"]!;
 	try {

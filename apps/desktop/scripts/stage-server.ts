@@ -30,7 +30,9 @@ const to = join(DESKTOP, "resources", "knightcode");
 rmSync(to, { recursive: true, force: true });
 mkdirSync(to, { recursive: true });
 cpSync(from, to, { recursive: true });
-const { version } = JSON.parse(readFileSync(join(ROOT, "packages", "cli", "package.json"), "utf8")) as { version: string };
+const { version } = JSON.parse(readFileSync(join(ROOT, "packages", "cli", "package.json"), "utf8")) as {
+	version: string;
+};
 writeFileSync(join(to, "knightcode.version"), `${version}\n`);
 writeFileSync(join(to, "knightcode.target"), `${target}\n`);
 console.log(`stage-server: knightcode ${version} for ${target} in ${to}`);

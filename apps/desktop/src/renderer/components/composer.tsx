@@ -132,27 +132,27 @@ function QueuedRow({
 				<div className="flex shrink-0 items-center gap-0.5">
 					{attachments ? null : (
 						<Tooltip content="Submit without interrupting the model">
-						<Button color="secondary" size="xs" pill onClick={onSteer} className="px-2">
-							Steer
-						</Button>
-					</Tooltip>
+							<Button color="secondary" size="xs" pill onClick={onSteer} className="px-2">
+								Steer
+							</Button>
+						</Tooltip>
 					)}
 					<IconButton label="Delete queued message" size="xs" round onClick={onDelete}>
 						<Trash2 size={14} />
 					</IconButton>
 					{attachments ? null : (
-					<Menu>
-						<MenuTrigger>
-							<IconButton label="Queued message actions" size="xs" round>
-								<MoreHorizontal size={14} />
-							</IconButton>
-						</MenuTrigger>
-						<MenuContent align="end" side="top" minWidth={0}>
-							<MenuItem icon={<Pencil />} onSelect={onEdit}>
-								Edit message
-							</MenuItem>
-						</MenuContent>
-					</Menu>
+						<Menu>
+							<MenuTrigger>
+								<IconButton label="Queued message actions" size="xs" round>
+									<MoreHorizontal size={14} />
+								</IconButton>
+							</MenuTrigger>
+							<MenuContent align="end" side="top" minWidth={0}>
+								<MenuItem icon={<Pencil />} onSelect={onEdit}>
+									Edit message
+								</MenuItem>
+							</MenuContent>
+						</Menu>
 					)}
 				</div>
 			)}
@@ -527,7 +527,9 @@ export function Composer({
 									attachments={"attachments" in q ? q.attachments : undefined}
 									onSteer={() => {
 										if (!threadId || !q.id) return;
-										void removeQueued(threadId, q.id).then((removed) => (removed ? steer(threadId, q.text) : undefined));
+										void removeQueued(threadId, q.id).then((removed) =>
+											removed ? steer(threadId, q.text) : undefined,
+										);
 									}}
 									onDelete={() => threadId && q.id && void removeQueued(threadId, q.id)}
 									onEdit={() => {

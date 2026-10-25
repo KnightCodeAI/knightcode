@@ -265,7 +265,10 @@ export const HostMethods = {
 		}),
 		result: TerminalInfo,
 	},
-	"host/terminal/list": { params: Obj({ threadId: Type.String() }), result: Obj({ terminals: Type.Array(TerminalInfo) }) },
+	"host/terminal/list": {
+		params: Obj({ threadId: Type.String() }),
+		result: Obj({ terminals: Type.Array(TerminalInfo) }),
+	},
 	/** Show a running (or ended) terminal in this window: its last 64 KiB of output, then its events. */
 	"host/terminal/attach": {
 		params: Obj({ terminalId: Type.String() }),

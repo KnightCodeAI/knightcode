@@ -35,7 +35,9 @@ test("the comparison's side of a file: its base text, nothing for an added file,
 	});
 	// Windows paths match whatever their case and slashes.
 	expect(await comparisonBase("t", "c:/REPO/src/a.ts", { scope: "unstaged" })).toBe("base of src/a.ts");
-	expect(await comparisonBase("t", "C:\\repo\\src\\b.ts", { scope: "branch", against: "main" })).toBe("base of src/b.ts");
+	expect(await comparisonBase("t", "C:\\repo\\src\\b.ts", { scope: "branch", against: "main" })).toBe(
+		"base of src/b.ts",
+	);
 	expect(request).toHaveBeenCalledWith("thread/diff/read", { threadId: "t", scope: "branch", against: "main" });
 	expect(request).toHaveBeenCalledWith("thread/diff/file", {
 		threadId: "t",
@@ -68,18 +70,40 @@ test("tree paths join and split with the root's own separator, Windows without c
 		const segments = path.split("/");
 		return { path, segments, basename: segments.at(-1)!, isDirectory, depth: segments.length };
 	};
-	const sorted = [entry("All files/b.ts"), entry("All files/src", true), entry("Changed files/z.ts"), entry("All files/a10.ts"), entry("All files/a9.ts")]
+	const sorted = [
+		entry("All files/b.ts"),
+		entry("All files/src", true),
+		entry("Changed files/z.ts"),
+		entry("All files/a10.ts"),
+		entry("All files/a9.ts"),
+	]
 		.sort(sectionOrder)
 		.map((e) => e.path);
-	expect(sorted).toEqual(["Changed files/z.ts", "All files/src", "All files/a9.ts", "All files/a10.ts", "All files/b.ts"]);
+	expect(sorted).toEqual([
+		"Changed files/z.ts",
+		"All files/src",
+		"All files/a9.ts",
+		"All files/a10.ts",
+		"All files/b.ts",
+	]);
 });
 
 test("Go to line counts lines as an editor numbers them", () => {
-	expect([lineCount(""), lineCount("a"), lineCount("a\n"), lineCount("a\nb"), lineCount("a\nb\n\n")]).toEqual([1, 1, 1, 2, 3]);
+	expect([lineCount(""), lineCount("a"), lineCount("a\n"), lineCount("a\nb"), lineCount("a\nb\n\n")]).toEqual([
+		1, 1, 1, 2, 3,
+	]);
 });
 
 test("a folder leaves the tree with everything under it, and a file only itself", () => {
-	const known = new Set(["All files/src/", "All files/src/a.ts", "All files/src/lib/", "All files/src/lib/b.ts", "All files/srcs/c.ts", "All files/a.ts", "All files/a.tsx"]);
+	const known = new Set([
+		"All files/src/",
+		"All files/src/a.ts",
+		"All files/src/lib/",
+		"All files/src/lib/b.ts",
+		"All files/srcs/c.ts",
+		"All files/a.ts",
+		"All files/a.tsx",
+	]);
 	forget(known, "All files/src/");
 	forget(known, "All files/a.ts");
 	expect([...known]).toEqual(["All files/srcs/c.ts", "All files/a.tsx"]);

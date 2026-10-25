@@ -17,7 +17,7 @@
 // not the change, and an entry reads better as a plain sentence.
 import { Glob } from "bun";
 import { deepStrictEqual, strictEqual } from "node:assert/strict";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // Keep a Changelog order. Anything uncategorised lands in Changed.
 export const CATEGORIES = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"] as const;
@@ -116,6 +116,24 @@ export function releaseNotes(markdown: string, version: string, since?: string):
 		out.push(line);
 	}
 	return out.join("\n").trim();
+}
+
+/**
+ * The packages changesets versions: every workspace package that is not private (privatePackages in
+ * .changeset/config.json leaves the private ones alone). That is the CLI, which goes to npm, and the desktop app,
+ * which ships as installers (.github/workflows/desktop-release.yml) and is not private so that it gets a version and
+ * a changelog. `dir` is relative to the repository root, with forward slashes.
+ */
+export async function releasedPackages(root: string): Promise<{ name: string; dir: string }[]> {
+	const { workspaces = [] } = (await Bun.file(join(root, "package.json")).json()) as { workspaces?: string[] };
+	const released: { name: string; dir: string }[] = [];
+	for (const pattern of workspaces) {
+		for await (const file of new Glob(`${pattern}/package.json`).scan(root)) {
+			const pkg = (await Bun.file(join(root, file)).json()) as { name?: string; private?: boolean };
+			if (pkg.name && !pkg.private) released.push({ name: pkg.name, dir: dirname(file).replaceAll("\\", "/") });
+		}
+	}
+	return released.sort((a, b) => a.dir.localeCompare(b.dir));
 }
 
 if (import.meta.main) {
@@ -249,12 +267,21 @@ if (import.meta.main) {
 	// where a contributor can still fix it. The release job's warning arrives
 	// after the entry has already been filed under the wrong heading.
 	const dir = join(import.meta.dir, "..", ".changeset");
+	// Private packages are never versioned (privatePackages in config.json):
+	// changesets drops a changeset that names only private packages, and refuses
+	// one that mixes them with a released one — at release time, after the PR has
+	// merged. Catch both here instead.
+	const released = new Set((await releasedPackages(join(import.meta.dir, ".."))).map(({ name }) => name));
 	const bad: string[] = [];
+	const unreleased: string[] = [];
 	for await (const file of new Glob("*.md").scan(dir)) {
 		if (file === "README.md") continue;
 		// Frontmatter, then the summary: "---", packages, "---", the sentence.
-		const summary = (await Bun.file(join(dir, file)).text()).split(/^---\s*$/m)[2]?.trim() ?? "";
-		if (categoryOf(summary) === null) bad.push(`.changeset/${file}`);
+		const [, frontmatter = "", summary = ""] = (await Bun.file(join(dir, file)).text()).split(/^---\s*$/m);
+		if (categoryOf(summary.trim()) === null) bad.push(`.changeset/${file}`);
+		for (const [, name] of frontmatter.matchAll(/^\s*["']?([^"':]+)["']?\s*:/gm)) {
+			if (!released.has(name!)) unreleased.push(`.changeset/${file}: ${name}`);
+		}
 	}
 	if (bad.length > 0) {
 		console.error(
@@ -262,6 +289,13 @@ if (import.meta.main) {
 				`see CONTRIBUTING.md:\n  ` +
 				bad.join("\n  "),
 		);
-		process.exit(1);
 	}
+	if (unreleased.length > 0) {
+		console.error(
+			`Changesets may only name released packages (${[...released].join(", ")}); ` +
+				`list the user-visible change under the package that ships it:\n  ` +
+				unreleased.join("\n  "),
+		);
+	}
+	if (bad.length > 0 || unreleased.length > 0) process.exit(1);
 }
