@@ -35,7 +35,7 @@
 		"@types/react": "19.2.7",
 		"@types/react-dom": "19.2.4",
 		"@vitejs/plugin-react": "5.1.1",
-		"electron": "44.7.0",
+		"electron": "44.9.3",
 		"marked": "18.0.11",
 		"react": "19.2.4",
 		"react-dom": "19.2.4",
