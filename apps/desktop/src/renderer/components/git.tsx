@@ -858,7 +858,7 @@ type SheetKind = "commit" | "branch" | "switch" | "pr" | "handoff";
 type Preview = { src: string; label: string };
 
 /**
- * Codex's "Sources" (its summary's tool-sources section): a count, then a row for each image the user attached (an
+ * The summary's "Sources": a count, then a row for each image the user attached (an
  * 18px thumbnail, opening the image), each MCP server whose tools ran, and "Web search" when the agent used the web.
  */
 function SourcesSection({ threadId, onImage }: { threadId: string; onImage: (preview: Preview) => void }) {

@@ -252,7 +252,7 @@ describe("enforced plan mode", () => {
 		expect(state(h)).toMatchObject({ mode: "off", approved: 1 });
 	});
 
-	it("the desktop reviews a submitted plan on its own, with Codex's question, and implements it", async () => {
+	it("the desktop reviews a submitted plan on its own, with one question, and implements it", async () => {
 		const h = await setup();
 		const asked: { title: string; rows: string[] }[] = [];
 		h.session.extensionRunner.setUIContext(

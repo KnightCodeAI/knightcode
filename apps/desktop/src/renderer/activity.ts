@@ -1,9 +1,8 @@
 /**
- * A turn's work as Codex shows it (measured 2026-10-20 from the Codex app and its bundle): each tool call is a row
- * named for what it did ("Ran …", "Read …", "Edited …"), consecutive calls fold under one summary row ("Edited
- * files, ran commands", Codex's fixed part order), and questions and plans stand alone. While a turn runs every call
- * stays in sight, the running one in the present tense (Codex 26.1016's thread, commentaryDisplay "all"). Pure, so
- * tests need no DOM.
+ * A turn's work as the transcript shows it: each tool call is a row named for what it did ("Ran …", "Read …", "Edited
+ * …"), consecutive calls fold under one summary row ("Edited files, ran commands", in a fixed part order), and
+ * questions and plans stand alone. While a turn runs every call stays in sight, the running one in the present tense.
+ * Pure, so tests need no DOM.
  */
 
 import type { ToolOutput } from "@knightcode/app-server-protocol";
@@ -505,7 +504,7 @@ export function workEntries(items: ViewItem[]): Entry[] {
 }
 
 /**
- * A thread's sources, as Codex's summary lists them under "Sources": the images the user attached, the MCP servers
+ * A thread's sources, as the summary lists them under "Sources": the images the user attached, the MCP servers
  * whose tools ran, and the web when the agent searched or fetched it.
  */
 export function threadSources(turns: { items: ViewItem[] }[]): {
@@ -528,8 +527,8 @@ export function threadSources(turns: { items: ViewItem[] }[]): {
 }
 
 /**
- * What the model is thinking about, as Codex's "Thinking" status names it: the bold heading its latest reasoning summary
- * opens with ("**Inspecting the repo**"). Codex draws reasoning only there, never as rows of its own.
+ * What the model is thinking about, as the "Thinking" status names it: the bold heading its latest reasoning summary
+ * opens with ("**Inspecting the repo**"). Reasoning shows only there, never as rows of its own.
  */
 export function thinkingHeading(items: ViewItem[]): string | undefined {
 	for (let i = items.length - 1; i >= 0; i--) {

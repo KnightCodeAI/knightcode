@@ -645,8 +645,8 @@ Codex's thread menu (measured 2026-10-19) has this shape, plus side chats,
 scheduled tasks, sharing, "Move to right pane" and Open in ›, which are
 section 14 or not planned; Codex lists Delete and "Copy conversation path" as
 commands only. The conversation path is the thread's `sessionFile`.
-"Toggle summary" opens Codex's thread summary: the project, Changes, and
-Sources with their count, as in Codex: each image the user attached (a
+"Toggle summary" opens the thread summary: the project, Changes, and
+Sources with their count: each image the user attached (a
 thumbnail; it opens a preview), each MCP server the thread called, and "Web
 search" when it searched or fetched the web.
 
@@ -654,9 +654,9 @@ Transcript, by item type:
 
 | Item | Rendering |
 | --- | --- |
-| `userMessage` | right-aligned bubble; images as thumbnails; actions: copy, fork from here; past 20 lines it shows 19, an ellipsis and "Show more" (Codex's collapsed user message) |
+| `userMessage` | right-aligned bubble; images as thumbnails; actions: copy, fork from here; past 20 lines it shows 19, an ellipsis and "Show more" |
 | `agentMessage` | markdown (GFM, code blocks with copy and language label, syntax highlighted); streams in place |
-| `reasoning` | no row, as in Codex; while the turn runs, the shimmering status under the work names the latest reasoning's bold heading ("Inspecting the module"), else "Thinking" |
+| `reasoning` | no row; while the turn runs, the shimmering status under the work names the latest reasoning's bold heading ("Inspecting the module"), else "Thinking" |
 | `toolCall` read-only (`read`, `grep`, `find`, `ls`) | one line "Read src/app.ts", "Searched for 'x' in src" |
 | `toolCall` `bash` / `powershell` | "Running `npm test`" then "Ran `npm test` in 4.2s"; expands to `$ command`, cwd, output with ANSI colours, exit code or "Interrupted" |
 | `toolCall` `edit` / `write` | "Edited src/app.ts +12 −3"; expands to the file's diff from `fileChanges`; a link opens it in the changes pane |
@@ -664,7 +664,7 @@ Transcript, by item type:
 | `toolCall` nested (`parentItemId`) | indented under its parent, collapsed with it |
 | `compaction` | divider "Context compacted" expanding to the summary |
 | `extensionMessage` | labelled with the extension name; markdown or its `view`. One sent with `display: false` (plan mode's instructions) is context for the model and never an item |
-| `toolCall` `submit_plan` | not a work row: Codex's plan card after the turn's reply, "Plan" ("Writing plan" while it streams) with Download (PLAN.md), Copy and a collapse toggle; collapsed it holds 320px of the Markdown with "Expand plan" |
+| `toolCall` `submit_plan` | not a work row: a plan card after the turn's reply, "Plan" ("Writing plan" while it streams) with Download (PLAN.md), Copy and a collapse toggle; collapsed it holds 320px of the Markdown with "Expand plan" |
 
 Grouping: a completed turn shows as three parts. First a quiet row, "Worked
 for 2m 14s ›", from the turn's `startedAt` and `completedAt`.
@@ -673,8 +673,7 @@ The row expands to everything else in the turn, in order: the agent's
 progress messages ("I found eight independent change sets…") and, between
 them, each run of consecutive tool calls collapsed to one line ("Ran 3
 commands, read 4 files, edited 2 files") that expands to the rows of the table
-above. While a turn runs, every item stays in sight in order (Codex's main
-thread shows all its activity until the reply starts), the call in progress
+above. While a turn runs, every item stays in sight in order, the call in progress
 last in the present tense, and the newest item is in view; it collapses when
 the turn completes. Under the final message: copy,
 a … menu with Codex's "Branch in new thread" (a fork up to the end of that

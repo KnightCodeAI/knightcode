@@ -35,7 +35,7 @@ const REVIEW: { action: ReviewAction; label: string; description: string }[] = [
 ];
 const REVISE = { label: "Revise the plan", description: "Tell the model what to change." };
 /**
- * The desktop's review, Codex's "Implement this plan?" panel: the plan is already a card in the transcript, so the
+ * The desktop's review, an "Implement this plan?" question: the plan is already a card in the transcript, so the
  * question stands alone, and skipping it keeps planning (a message in the composer revises the plan).
  */
 const DESKTOP_REVIEW: { action: ReviewAction; label: string; description: string }[] = [
@@ -365,7 +365,7 @@ export default function planMode(kc: ExtensionAPI): void {
 		if (revision === undefined || snapshot.draft?.revision !== revision) return;
 		if (ctx.mode === "print") writeRawStdout(snapshot.draft.markdown + "\n");
 		else if (ctx.mode === "rpc") notice(ctx, `Plan revision ${revision} submitted. Run /plan to review.`);
-		// The terminal's review, and the desktop's Codex panel, open on their own once a plan is in.
+		// The terminal's review, and the desktop's question, open on their own once a plan is in.
 		else if ((ctx.mode === "tui" || ctx.mode === "desktop") && lastShown !== revision) {
 			kc.sendUserMessage("/plan", { expandPromptTemplates: true });
 		}
