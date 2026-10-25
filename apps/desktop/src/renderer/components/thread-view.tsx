@@ -240,7 +240,7 @@ function AppTab({ threadId, itemId }: { threadId: string; itemId: string }) {
 	);
 }
 
-/** The right region (desktop-shell.md section 9.6): Codex's tab strip over the chosen tab. */
+/** The right region (desktop-shell.md section 9.6): a tab strip over the chosen tab. */
 function SidePanel({ id }: { id: string }) {
 	const width = useStore((s) => s.panel.width);
 	const full = useStore((s) => s.panel.full ?? false);
@@ -296,7 +296,7 @@ function SidePanel({ id }: { id: string }) {
 						</StripSlot>
 					))}
 				</div>
-				{/* Codex's New tab, right after the tabs: a preview on its new tab page. */}
+				{/* New tab, right after the tabs: a preview on its new tab page. */}
 				<IconButton label="New tab" onClick={() => openPreview(id)}>
 					<Plus size={16} />
 				</IconButton>
@@ -390,7 +390,7 @@ export function ThreadView({ id }: { id: string }) {
 	const project = basename(view?.thread.projectCwd ?? summary?.projectCwd ?? cwd);
 	const deleted = (failure?.data as { reason?: string } | undefined)?.reason === "worktreeDeleted";
 	return (
-		// The bottom region (terminals) spans the chat and the side panel, under both, as Codex's bottom panel.
+		// The bottom region (terminals) spans the chat and the side panel, under both.
 		<div className="flex h-full min-w-0 flex-1 flex-col">
 			<div className="@container flex min-h-0 min-w-0 flex-1">
 				{/* Hidden, not unmounted, while the side panel is full screen, so the transcript and a draft stay put. */}
@@ -546,7 +546,7 @@ export function ThreadView({ id }: { id: string }) {
 							))}
 						</div>
 					</div>
-					{/* Codex's Scroll to bottom: a 32px round button over the composer, faded out while pinned. The negative
+					{/* Scroll to bottom: a 32px round button over the composer, faded out while pinned. The negative
 					    margin pulls it and the composer 1rem over the transcript's faded tail. */}
 					<div className="relative -mt-4">
 						<Tooltip content="Scroll to bottom">
@@ -571,7 +571,7 @@ export function ThreadView({ id }: { id: string }) {
 							onEvent={(key, control, value) => sendViewEvent(id, key, control, value)}
 						/>
 					) : null}
-					{/* A request takes the composer's place, as in Codex; the composer stays mounted so a draft survives. */}
+					{/* A request takes the composer's place; the composer stays mounted so a draft survives. */}
 					{/* Positioned so it paints over the transcript it overlaps. */}
 					<div className="relative">
 						{asking?.method === "item/toolCall/requestApproval" ? (

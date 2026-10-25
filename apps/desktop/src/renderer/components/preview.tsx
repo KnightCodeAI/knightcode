@@ -1,7 +1,7 @@
 /**
- * A preview tab (desktop-shell.md section 9.8), as Codex's browser tab (26.1016, measured 2026-10-23): a 48px toolbar
+ * A preview tab (desktop-shell.md section 9.8): a 48px toolbar
  * (back, forward and reload in one capsule, the 32px address capsule, then Annotate and Open in browser) over a
- * `<webview>` on the thread's partition. Until it has a page it is Codex's new tab page: the address bar and the
+ * `<webview>` on the thread's partition. Until it has a page it is a new tab page: the address bar and the
  * tools. Main guards what the webview attaches and where it navigates (main/preview.ts); the address bar refuses
  * anything but http and https before it loads, since main never sees a load the renderer starts.
  */
@@ -18,7 +18,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, FileDiff, Pencil, RefreshCw, Squar
 
 type Preview = Extract<PanelTab, { kind: "preview" }>;
 
-/** What the tab strip calls a preview: its page's title, else its host, else Codex's "New tab". */
+/** What the tab strip calls a preview: its page's title, else its host, else "New tab". */
 export function previewTitle(tab: Preview): string {
 	if (tab.title) return tab.title;
 	try {
@@ -124,7 +124,7 @@ function AnnotateLayer({
 	);
 }
 
-/** Codex's new tab page under the bar: the tools a tab can open, with their keys. */
+/** The new tab page under the bar: the tools a tab can open, with their keys. */
 function NewTabPage({ threadId, cwd }: { threadId: string; cwd: string }) {
 	const tools = [
 		{ label: "Changes", icon: <FileDiff size={16} />, keys: bindingLabel("desktop.panel.toggle"), run: () => showChanges(threadId) },

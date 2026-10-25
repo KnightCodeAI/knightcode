@@ -1039,8 +1039,8 @@ export async function planHandoff(input: PlanInput): Promise<HandoffPlan> {
 }
 
 /**
- * Phase B of `thread/handoff` (§6.1): moves the uncommitted changes between the worktree and the main checkout, as
- * Codex's "Hand off" does: the destination must be clean, the changes are saved to a patch first, applied in the
+ * Phase B of `thread/handoff` (§6.1): moves the uncommitted changes between the worktree and the main checkout:
+ * the destination must be clean, the changes are saved to a patch first, applied in the
  * destination and only then removed from the source. Runs no hooks and creates no commit.
  */
 export async function handoffChanges(input: HandoffInput): Promise<{ manifest: Manifest; branch?: string }> {

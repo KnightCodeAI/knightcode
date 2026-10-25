@@ -85,7 +85,7 @@ export interface ThreadView {
 }
 
 /**
- * A side panel tab (desktop-shell.md section 9.6). A file tab opens as Codex's preview tab (an italic title), which
+ * A side panel tab (desktop-shell.md section 9.6). A file tab opens as a preview tab (an italic title), which
  * the next file opened replaces until it is kept (a double click); `used` orders the least recently used.
  */
 export type PanelTab =
@@ -114,7 +114,7 @@ export interface TerminalTab {
 	/** The "outside this chat's workspace" notice was dismissed. */
 	dismissed?: boolean;
 }
-/** A thread's terminals, and whether its bottom region shows them: Codex keeps that per conversation, open only with tabs. */
+/** A thread's terminals, and whether its bottom region shows them: kept per thread, open only with tabs. */
 export interface ThreadTerminals {
 	tabs: TerminalTab[];
 	active: number;
@@ -159,9 +159,9 @@ export interface State {
 	 * fills the thread view in place of the chat (Codex's full screen).
 	 */
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean };
-	/** Each thread's side panel tabs: Changes first, then the files it opened (Codex's tabs, per chat). */
+	/** Each thread's side panel tabs: Changes first, then the files it opened. */
 	tabs: Record<string, ThreadTabs>;
-	/** The bottom region's height in px (section 9.7), 0 until dragged (Codex's 280); each thread has it open or not. */
+	/** The bottom region's height in px (section 9.7), 0 until dragged (then 280); each thread has it open or not. */
 	bottom: { height: number };
 	/** Each thread's terminals, in tab order, and the one shown. */
 	terminals: Record<string, ThreadTerminals>;
@@ -1422,7 +1422,7 @@ export async function loadTerminals(threadId: string): Promise<void> {
 }
 
 /**
- * A new terminal for the thread in its folder (Codex's Open Terminal), shown in the bottom region. A shell picked from
+ * A new terminal for the thread in its folder (Open Terminal), shown in the bottom region. A shell picked from
  * the + menu becomes the one new terminals run.
  */
 export async function newTerminal(threadId: string, cwd: string, shellId?: string): Promise<void> {
@@ -1443,7 +1443,7 @@ export async function newTerminal(threadId: string, cwd: string, shellId?: strin
 	}
 }
 
-/** Mod+J: show or hide the thread's region; showing it with no terminal opens one, as Codex's does. */
+/** Mod+J: show or hide the thread's region; showing it with no terminal opens one. */
 export function toggleTerminal(threadId: string, cwd: string): void {
 	const { tabs, open } = state.terminals[threadId] ?? NO_TERMINALS;
 	if (open) setTerminalsOpen(threadId, false);
@@ -1466,7 +1466,7 @@ export function updateTerminal(threadId: string, terminalId: string, patch: Part
 	}));
 }
 
-/** Close a terminal (its shell ends); the last one closing hides the region, as Codex's does. */
+/** Close a terminal (its shell ends); the last one closing hides the region. */
 export function closeTerminal(threadId: string, index: number): void {
 	const tab = state.terminals[threadId]?.tabs[index];
 	if (!tab) return;
@@ -1563,7 +1563,7 @@ export function activateTab(threadId: string, index: number): void {
 	}));
 }
 
-/** Keep a preview tab (Codex: a double click on it), so the next file opens beside it. */
+/** Keep a preview tab (a double click on it), so the next file opens beside it. */
 export function keepTab(threadId: string, index: number): void {
 	updateTabs(threadId, (t) => ({
 		...t,
@@ -1574,7 +1574,7 @@ export function keepTab(threadId: string, index: number): void {
 /** Close a tab; Changes cannot close, so closing it closes the panel. The tab on its left takes its place. */
 let previewCount = 0;
 
-/** A preview tab (Codex's browser tab) after the others: on `url`, or on its new tab page. */
+/** A preview tab after the others: on `url`, or on its new tab page. */
 export function openPreview(threadId = openId(), url = ""): void {
 	if (!threadId) return;
 	const tab: PanelTab = { kind: "preview", id: `preview-${++previewCount}`, url };

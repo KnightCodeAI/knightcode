@@ -76,7 +76,7 @@ function teardownHolder(): HTMLDivElement {
 
 type Ask = { kind: "tool"; server: string; tool: string } | { kind: "message"; text: string };
 
-/** Codex's confirmations: an app's follow-up prompt ("Send follow-up?"), and a call that may change things. */
+/** The confirmations: an app's follow-up prompt ("Send follow-up?"), and a call that may change things. */
 function AskDialog({ ask, onAnswer }: { ask: Ask; onAnswer: (yes: boolean) => void }) {
 	return (
 		<Dialog
