@@ -1,12 +1,11 @@
 /**
  * The new-thread screen (desktop-shell.md section 9.12), as Codex's home (measured 2026-10-19): the mark, faint and
- * large, over "What should we build in ‹project›?" (28px; the project's name opens the project picker), centred in
- * the space above the composer, which sits at the bottom with its utility bar. Before the first sign-in or project, a
- * card offers it above the title. In a short window the space around the title gives way first, then the title's
- * own top, so the composer stays on screen.
+ * large, over "What should we build in ‹project›?" (28px; the project's name opens the project picker). The mark and
+ * title share the centre of the space above the bottom composer. Setup cards join that group; in a short window,
+ * the group scrolls while the composer stays on screen.
  */
 
-import { type ReactNode, useEffect, useState } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { basename } from "../format.ts";
 import { addProject, navigate, selectProjects, showNew, useStore } from "../store.ts";
 import { Button } from "./button.tsx";
@@ -44,6 +43,59 @@ function SetupCard({
 	);
 }
 
+const loadGame = () => import("./knight-game.tsx");
+const KnightGame = lazy(loadGame);
+
+/**
+ * A click turns the mark into a short game of chess. The board unfolds upward along the mark's centreline without
+ * moving or overlapping the title. Reduced motion keeps the static mark.
+ */
+function HomeMark() {
+	const [playing, setPlaying] = useState(false);
+	const [stopping, setStopping] = useState(false);
+	const [reduceMotion, setReduceMotion] = useState(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+	useEffect(() => {
+		const preference = matchMedia("(prefers-reduced-motion: reduce)");
+		const update = () => {
+			setReduceMotion(preference.matches);
+			if (preference.matches) setPlaying(false);
+		};
+		update();
+		preference.addEventListener("change", update);
+		return () => preference.removeEventListener("change", update);
+	}, []);
+	const mark = <KnightMark size={56} className="kc-home-mark-icon block text-ink opacity-30" />;
+	return (
+		<button
+			type="button"
+			className="kc-home-mark"
+			aria-label={playing ? "Stop chess animation" : "Play chess animation"}
+			aria-pressed={playing}
+			disabled={reduceMotion}
+			onPointerEnter={() => void loadGame()}
+			onClick={(event) => {
+				if (playing) setStopping(true);
+				else if (!reduceMotion) {
+					const slot = event.currentTarget;
+					const area = slot.closest(".kc-home-content");
+					// The board extends 56px above the compact mark; a very short viewport keeps the static mark.
+					if (area && slot.getBoundingClientRect().top - area.getBoundingClientRect().top < 56) return;
+					setStopping(false);
+					setPlaying(true);
+				}
+			}}
+		>
+			{playing ? (
+				<Suspense fallback={mark}>
+					<KnightGame stopping={stopping} onDone={() => setPlaying(false)} />
+				</Suspense>
+			) : (
+				mark
+			)}
+		</button>
+	);
+}
+
 export function Home({ cwd: requested }: { cwd?: string }) {
 	const accounts = useStore((s) => s.accounts);
 	const models = useStore((s) => s.models);
@@ -57,56 +109,53 @@ export function Home({ cwd: requested }: { cwd?: string }) {
 	}, [cwd, projects]);
 	const signedOut = accounts !== undefined && accounts.accounts.length === 0 && models.length === 0;
 	return (
-		// Codex leaves its header's 52px and a 46px band above the layout, then bottom-aligns the hero 96px over its own
-		// box, which ends 124px above the composer block (measured 2026-10-19 at a 1365 by 830 window, equal inner sizes).
-		// Those gaps are spacers that shrink before the hero does, and the hero clips from its top.
 		<div className="flex h-full min-w-0 flex-1 flex-col">
-			<div aria-hidden className="min-h-0 flex-[1_1_122px]" />
-			<div className="mx-auto flex min-h-0 w-full max-w-3xl shrink-[0.1] flex-col items-center justify-end gap-6 overflow-hidden px-5">
-				{signedOut ? (
-					<SetupCard
-						icon={<LogIn size={16} />}
-						title="Sign in to a model provider to start"
-						detail="Sign-ins are shared with the KnightCode terminal."
-						action="Sign in"
-						onAction={() => navigate({ kind: "settings", page: "models" })}
-					/>
-				) : null}
-				{projects.length === 0 && !cwd ? (
-					<SetupCard
-						icon={<FolderPlus size={16} />}
-						title="Add a project folder"
-						detail="KnightCode works in the folder you choose."
-						action="Add folder"
-						onAction={() => void addProject().then((path) => path && showNew(path))}
-					/>
-				) : null}
-				<KnightMark size={56} className="text-ink opacity-30" />
-				<h1 className="text-center text-xl leading-[33.6px] font-normal text-ink">
-					What should we build
-					{cwd ? (
-						<>
-							{" in "}
-							<ProjectPicker
-								cwd={cwd}
-								onChange={setCwd}
-								side="bottom"
-								trigger={() => (
-									<button
-										type="button"
-										className="inline-block max-w-full align-baseline break-words underline decoration-tertiary decoration-dotted decoration-1 underline-offset-4 hover:text-secondary"
-									>
-										{basename(cwd)}?
-									</button>
-								)}
-							/>
-						</>
-					) : (
-						"?"
-					)}
-				</h1>
+			<div className="kc-home-content">
+				<div className="kc-home-intro">
+					{signedOut ? (
+						<SetupCard
+							icon={<LogIn size={16} />}
+							title="Sign in to a model provider to start"
+							detail="Sign-ins are shared with the KnightCode terminal."
+							action="Sign in"
+							onAction={() => navigate({ kind: "settings", page: "models" })}
+						/>
+					) : null}
+					{projects.length === 0 && !cwd ? (
+						<SetupCard
+							icon={<FolderPlus size={16} />}
+							title="Add a project folder"
+							detail="KnightCode works in the folder you choose."
+							action="Add folder"
+							onAction={() => void addProject().then((path) => path && showNew(path))}
+						/>
+					) : null}
+					<HomeMark />
+					<h1 className="text-center text-xl leading-[33.6px] font-normal text-ink">
+						What should we build
+						{cwd ? (
+							<>
+								{" in "}
+								<ProjectPicker
+									cwd={cwd}
+									onChange={setCwd}
+									side="bottom"
+									trigger={() => (
+										<button
+											type="button"
+											className="inline-block max-w-full align-baseline break-words underline decoration-tertiary decoration-dotted decoration-1 underline-offset-4 hover:text-secondary"
+										>
+											{basename(cwd)}?
+										</button>
+									)}
+								/>
+							</>
+						) : (
+							"?"
+						)}
+					</h1>
+				</div>
 			</div>
-			<div aria-hidden className="min-h-0 shrink basis-[220px]" />
 			<div className="shrink-0">
 				<Composer project={{ cwd, onChange: setCwd }} />
 			</div>
