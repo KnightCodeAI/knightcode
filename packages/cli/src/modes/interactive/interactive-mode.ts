@@ -134,6 +134,7 @@ import {
 	normalizeChangelogLinks,
 	parseChangelog,
 } from "../../utils/changelog.ts";
+import { stripAnsi } from "../../utils/ansi.ts";
 import { copyToClipboard, readClipboardFilePaths, readClipboardText } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
 import { parseGitUrl } from "../../utils/git.ts";
@@ -479,13 +480,6 @@ export class InteractiveMode {
 	private footer: FooterComponent;
 	private footerContainer: Container;
 	private readonly backgroundShellsIndicator = new BackgroundShellsIndicator(() => this.session.backgroundShells);
-	/** The pill as mounted: a click opens `/tasks`. */
-	private readonly backgroundShellsRow = new MouseRegion(this.backgroundShellsIndicator, (event) => {
-		if (event.type !== "click" || event.button !== "left") return undefined;
-		this.backgroundShellsIndicator.selected = false;
-		this.showBackgroundTasks();
-		return { handled: true };
-	});
 	private footerDataProvider: FooterDataProvider;
 	// Stored so the same manager can be injected into custom editors, selectors, and extension UI.
 	private keybindings: KeybindingsManager;
@@ -674,11 +668,11 @@ export class InteractiveMode {
 		this.editorContainer = new Container();
 		this.editorContainer.addChild(this.editor as Component);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
+		this.footerDataProvider.setBackgroundShells(() => this.backgroundShellsIndicator.render());
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footerContainer = new Container();
-		this.footerContainer.addChild(this.backgroundShellsRow);
-		this.footerContainer.addChild(this.footer);
+		this.mountFooter(this.footer);
 
 		// Load hide thinking block setting
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
@@ -2569,19 +2563,38 @@ export class InteractiveMode {
 			this.customFooter.dispose();
 		}
 
-		this.footerContainer.clear();
-		this.footerContainer.addChild(this.backgroundShellsRow);
 		if (factory) {
 			// Create and add custom footer, passing the data provider
 			this.customFooter = factory(this.ui, theme, this.footerDataProvider);
-			this.footerContainer.addChild(this.customFooter);
+			this.mountFooter(this.customFooter);
 		} else {
 			// Restore built-in footer
 			this.customFooter = undefined;
-			this.footerContainer.addChild(this.footer);
+			this.mountFooter(this.footer);
 		}
 
 		this.ui.requestRender();
+	}
+
+	/** Mounts a footer; a click on the background commands pill in it opens `/tasks`. */
+	private mountFooter(footer: Component): void {
+		this.footerContainer.clear();
+		this.footerContainer.addChild(
+			new MouseRegion(footer, (event) => {
+				if (event.type !== "click" || event.button !== "left") return undefined;
+				const pill = this.backgroundShellsIndicator.render();
+				if (!pill) return undefined;
+				// The footer decides where the pill goes, so find it on the clicked line.
+				const line = stripAnsi(footer.render(event.width)[event.y] ?? "");
+				const text = stripAnsi(pill);
+				const at = line.indexOf(text);
+				const start = visibleWidth(line.slice(0, at));
+				if (at < 0 || event.x < start || event.x >= start + visibleWidth(text)) return undefined;
+				this.backgroundShellsIndicator.selected = false;
+				this.showBackgroundTasks();
+				return { handled: true };
+			}),
+		);
 	}
 
 	/**

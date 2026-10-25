@@ -111,6 +111,7 @@ export class FooterDataProvider {
 	private reftableTablesListPath: string | null = null;
 	private branchChangeCallbacks = new Set<() => void>();
 	private availableProviderCount = 0;
+	private backgroundShells: () => string | undefined = () => undefined;
 	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 	private gitWatcherRetryTimer: ReturnType<typeof setTimeout> | null = null;
 	private refreshInFlight = false;
@@ -164,6 +165,16 @@ export class FooterDataProvider {
 	/** Internal: update available provider count */
 	setAvailableProviderCount(count: number): void {
 		this.availableProviderCount = count;
+	}
+
+	/** The background commands pill, styled (`1 shell · ↓ to view`), or undefined while none run. */
+	getBackgroundShells(): string | undefined {
+		return this.backgroundShells();
+	}
+
+	/** Internal: set what renders the background commands pill */
+	setBackgroundShells(render: () => string | undefined): void {
+		this.backgroundShells = render;
 	}
 
 	setCwd(cwd: string): void {
@@ -384,5 +395,5 @@ export class FooterDataProvider {
 /** Read-only view for extensions - excludes setExtensionStatus, setAvailableProviderCount and dispose */
 export type ReadonlyFooterDataProvider = Pick<
 	FooterDataProvider,
-	"getGitBranch" | "getExtensionStatuses" | "getAvailableProviderCount" | "onBranchChange"
+	"getGitBranch" | "getExtensionStatuses" | "getAvailableProviderCount" | "getBackgroundShells" | "onBranchChange"
 >;

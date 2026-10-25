@@ -92,11 +92,12 @@ function createSession(options: {
 	return session as unknown as AgentSession;
 }
 
-function createFooterData(providerCount: number): ReadonlyFooterDataProvider {
+function createFooterData(providerCount: number, backgroundShells?: string): ReadonlyFooterDataProvider {
 	const provider = {
 		getGitBranch: () => "main",
 		getExtensionStatuses: () => new Map<string, string>(),
 		getAvailableProviderCount: () => providerCount,
+		getBackgroundShells: () => backgroundShells,
 		onBranchChange: (callback: () => void) => {
 			void callback;
 			return () => {};
@@ -279,5 +280,12 @@ describe("FooterComponent width handling", () => {
 
 		expect(stats).toContain("$1.234");
 		expect(stats).not.toContain("(sub)");
+	});
+
+	it("puts the background shells pill on the stats line", () => {
+		const session = createSession({ sessionName: "" });
+		const footer = new FooterComponent(session, createFooterData(1, "1 shell · ↓ to view"));
+
+		expect(stripAnsi(footer.render(120)[1])).toContain("12.3%/200k (auto) • 1 shell · ↓ to view");
 	});
 });

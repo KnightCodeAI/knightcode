@@ -1529,13 +1529,22 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	dispose(): void {
-		// Notices still waiting, as behind a hold during teardown, are recorded while the file is open,
-		// so a resumed session reads how those commands ended.
+		// Background commands belong to this session: a replacement session must not inherit them.
+		this.backgroundShells.dispose();
+		// The commands just stopped, and notices still waiting as behind a hold during teardown, are
+		// recorded while the file is open, so the chat says how they ended when the session is resumed.
+		// A command already exiting on its own is left to the orphan scan, and task_stop told the model.
+		for (const shell of this.backgroundShells.list()) {
+			if (shell.status !== "running" || !shell.stoppedBy || shell.stoppedBy === "model") continue;
+			const notice = createBackgroundShellNotice(
+				{ ...shell, status: "stopped" },
+				this.backgroundShells.readOutput(shell.id),
+			);
+			this._backgroundNotices.push({ notice, wake: false });
+		}
 		const pending = this._takeBackgroundNoticeMessage();
 		if (pending) this._recordBackgroundNotices(pending);
 		this._disposed = true;
-		// Background commands belong to this session: a replacement session must not inherit them.
-		this.backgroundShells.dispose();
 		try {
 			this.abortRetry();
 			this.abortCompaction();
@@ -2739,6 +2748,7 @@ export class AgentSession {
 					toolName: launch.toolName,
 					command: launch.command,
 					status: "stopped" as const,
+					stoppedBy: "session" as const,
 					summary: `Background command "${formatCommandLabel(launch.command)}" was started by an earlier session and is not running in this one: a session stops its background commands when it ends`,
 					outputPath: launch.outputPath,
 					outputTail: "",

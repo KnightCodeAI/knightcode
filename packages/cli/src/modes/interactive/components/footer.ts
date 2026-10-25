@@ -213,6 +213,8 @@ export class FooterComponent implements Component {
 		if (areExperimentalFeaturesEnabled()) {
 			statsParts.push(`${theme.fg("dim", "•")} ${theme.bold(theme.fg("warning", "xp"))}`);
 		}
+		const shells = this.footerData.getBackgroundShells();
+		if (shells) statsParts.push(`${theme.fg("dim", "•")} ${shells}`);
 
 		// Extension statuses ride the stats line rather than a line of their own: they are
 		// short accents on the session, and a whole extra footer row for "remote active"

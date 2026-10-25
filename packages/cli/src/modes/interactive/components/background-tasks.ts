@@ -145,11 +145,11 @@ export function backgroundShellsLabel(running: number): string {
 }
 
 /**
- * The background commands pill, a row above the footer while commands run: `2 shells`. Down from an
- * empty prompt selects it, which inverts it; Enter then opens `/tasks`. It sits outside the footer so a
- * custom footer keeps it.
+ * The background commands pill, on the footer's stats line while commands run: `2 shells`. Down from an
+ * empty prompt selects it, which inverts it; Enter then opens `/tasks`. Footers read it from their
+ * footer data, so a custom footer shows it by rendering `getBackgroundShells()`.
  */
-export class BackgroundShellsIndicator implements Component {
+export class BackgroundShellsIndicator {
 	private readonly getManager: () => BackgroundShellManager;
 	/** Whether keyboard focus is on the pill instead of the prompt. */
 	selected = false;
@@ -158,19 +158,18 @@ export class BackgroundShellsIndicator implements Component {
 		this.getManager = getManager;
 	}
 
-	invalidate(): void {}
-
-	render(width: number): string[] {
+	/** The styled pill, or undefined while nothing runs. */
+	render(): string | undefined {
 		const running = this.getManager().runningCount();
 		if (running === 0) {
 			this.selected = false;
-			return [];
+			return undefined;
 		}
 		const label = backgroundShellsLabel(running);
 		// SGR 7 directly, like the theme's own colours: chalk's inverse is dropped when it detects no colour support.
 		const pill = this.selected ? `\x1b[7m${theme.fg("accent", label)}\x1b[27m` : theme.fg("accent", label);
 		const cta = this.selected ? hint("Enter", "view") : hint("↓", "view");
-		return [truncateToWidth(`${pill}${theme.fg("dim", ` · ${cta}`)}`, width, "…")];
+		return `${pill}${theme.fg("dim", ` · ${cta}`)}`;
 	}
 }
 

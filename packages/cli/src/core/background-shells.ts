@@ -270,7 +270,10 @@ export class BackgroundShellManager {
 		return moved;
 	}
 
-	/** Stop every running command without telling the model. Further adopted commands are stopped at once. */
+	/**
+	 * Stop every running command without reporting their ends: the session records them itself.
+	 * Further adopted commands are stopped at once.
+	 */
 	dispose(): void {
 		if (this.disposed) return;
 		this.disposed = true;
@@ -428,6 +431,8 @@ export function describeBackgroundShellEnd(shell: BackgroundShellInfo): string {
 			switch (shell.stoppedBy) {
 				case "user":
 					return `${command} was stopped by the user`;
+				case "session":
+					return `${command} was stopped because the session ended`;
 				case "output_limit":
 					return `${command} was stopped because it wrote too much output (${formatSize(shell.outputBytes)})`;
 				default:
@@ -455,6 +460,8 @@ export interface BackgroundShellNotice {
 	exitCode?: number;
 	/** Why the command failed without an exit code. */
 	error?: string;
+	/** Who stopped a stopped command. */
+	stoppedBy?: BackgroundShellStopper;
 	summary: string;
 	outputPath: string;
 	/** The last lines of output, without terminal escapes. */
@@ -482,6 +489,7 @@ export function createBackgroundShellNotice(shell: BackgroundShellInfo, output: 
 		status: shell.status,
 		exitCode: shell.exitCode,
 		...(shell.error ? { error: shell.error } : {}),
+		...(shell.status === "stopped" && shell.stoppedBy ? { stoppedBy: shell.stoppedBy } : {}),
 		summary: describeBackgroundShellEnd(shell),
 		outputPath: shell.outputPath,
 		outputTail: tail.content.trimEnd(),

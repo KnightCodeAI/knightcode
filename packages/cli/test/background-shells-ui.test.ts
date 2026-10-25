@@ -163,19 +163,19 @@ describe("/tasks view", () => {
 		const { operations, exits } = controlledOperations();
 		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
 		const pill = new BackgroundShellsIndicator(() => manager);
-		expect(pill.render(80)).toEqual([]);
+		expect(pill.render()).toBeUndefined();
 
 		await bash.execute("c1", { command: "npm run dev", run_in_background: true });
 		await bash.execute("c2", { command: "npm run watch", run_in_background: true });
-		expect(screen(pill, 80)).toBe("2 shells · ↓ to view");
+		expect(stripAnsi(pill.render() ?? "")).toBe("2 shells · ↓ to view");
 		pill.selected = true;
-		expect(pill.render(80)[0]).toContain("\x1b[7m");
-		expect(screen(pill, 80)).toBe("2 shells · Enter to view");
+		expect(pill.render()).toContain("\x1b[7m");
+		expect(stripAnsi(pill.render() ?? "")).toBe("2 shells · Enter to view");
 		pill.selected = false;
 
 		exits[0]?.(0);
 		expect(await manager.waitForExit(manager.list()[0]?.id as string, 5000)).toBe(true);
-		expect(screen(pill, 80)).toBe("1 shell · ↓ to view");
+		expect(stripAnsi(pill.render() ?? "")).toBe("1 shell · ↓ to view");
 		manager.dispose();
 	});
 
@@ -298,6 +298,34 @@ describe("background shell transcript", () => {
 		expect(lines[0]).toMatch(/Background\(curl https:\/\/example\.com.*…\)$/);
 		expect(lines.every((line) => line.length <= 60)).toBe(true);
 		expect(lines[1]).toContain("Failed: Working directory does not exist: /nope");
+	});
+
+	it("says who stopped a stopped command", () => {
+		const message: CustomMessage<BackgroundShellMessageDetails> = {
+			role: "custom",
+			customType: BACKGROUND_SHELL_MESSAGE_TYPE,
+			content: "",
+			display: true,
+			timestamp: Date.now(),
+			details: {
+				notices: [
+					{
+						id: "0badc0de",
+						toolName: "bash",
+						command: "npm run dev",
+						status: "stopped",
+						stoppedBy: "session",
+						summary: 'Background command "npm run dev" was stopped because the session ended',
+						outputPath: "/tmp/dev.log",
+						outputTail: "",
+					},
+				],
+			},
+		};
+		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1 }, theme);
+		expect(screen(component as { render(width: number): string[] })).toContain(
+			"Stopped because the session ended · ID 0badc0de",
+		);
 	});
 
 	it("shows a failed task_stop's error instead of a summary", () => {
