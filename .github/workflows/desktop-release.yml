@@ -1,21 +1,19 @@
 name: desktop-release
 
 # The desktop app's release (apps/desktop/docs/desktop-app/desktop-shell.md
-# section 15): bump apps/desktop's version on main, build the installers on each
-# platform from that commit, smoke-test each packaged app, then tag it
-# desktop-v<version> and leave a draft GitHub Release with every artifact and
-# SHA256SUMS for the owner to publish. A failed build leaves no tag, so the same
-# version runs again with bump "current". The update feed on knightcode.dev
-# (apps/web/app/api/desktop/update) offers only published releases.
+# section 15): build the installers on each platform from main at the version
+# changesets gave apps/desktop, smoke-test each packaged app, then tag it
+# desktop-v<version> and leave a draft GitHub Release with every artifact,
+# SHA256SUMS, and the changelog since the last published desktop release for the
+# owner to publish. The version moves only through a @knightcode/desktop
+# changeset and the Version Packages PR (publish.yml). A failed build leaves no
+# tag, so the same version runs again. The update feed on knightcode.dev
+# (apps/web/app/api/desktop/update) offers only published releases, and shows
+# their notes as what's new.
 
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: How to move apps/desktop's version ("current" tags it as it is)
-        type: choice
-        options: [patch, minor, major, current]
-        default: patch
       prerelease:
         description: Mark the draft as a prerelease (the update feed skips prereleases)
         type: boolean
@@ -31,55 +29,46 @@ jobs:
   version:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # commit the bump to main
-    env:
-      HUSKY: 0
+      contents: read # read the releases for the notes
     outputs:
-      version: ${{ steps.bump.outputs.version }}
-      sha: ${{ steps.bump.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+      notes: ${{ steps.version.outputs.notes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.3
 
-      - name: Bump and commit
-        id: bump
+      - name: Read the version and its notes
+        id: version
         env:
-          BUMP: ${{ inputs.bump }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version=$(bun -e '
-            const fs = require("node:fs");
-            const path = "apps/desktop/package.json";
-            const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
-            const [major, minor, patch] = pkg.version.split(".").map(Number);
-            const bump = process.env.BUMP;
-            if (bump !== "current") {
-              pkg.version = bump === "major" ? `${major + 1}.0.0` : bump === "minor" ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`;
-              fs.writeFileSync(path, JSON.stringify(pkg, null, "\t") + "\n");
-            }
-            console.log(pkg.version);
-          ')
+          version=$(bun -e 'console.log(require("./apps/desktop/package.json").version)')
           tag="desktop-v${version}"
           if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
-            echo "::error::${tag} already exists"
+            echo "::error::${tag} already exists. Add a @knightcode/desktop changeset and merge the Version Packages PR that bumps apps/desktop."
             exit 1
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ "$BUMP" != "current" ]; then
-            # bun.lock records each workspace's version.
-            bun install --lockfile-only
-            git add apps/desktop/package.json bun.lock
-            git commit -m "Release desktop v${version}"
-            git push origin HEAD:main
-          fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # The notes cover everything since the newest desktop release users could install.
+          since=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isDraft,isPrerelease \
+            --jq '.[] | select(.isDraft | not) | select(.isPrerelease | not) | .tagName | select(startswith("desktop-v")) | ltrimstr("desktop-v")' \
+            | sort -V | tail -n 1)
+          notes=$(bun run scripts/desktop-release-notes.ts "$version" "$since")
+          delimiter="NOTES_$(openssl rand -hex 16)"
+          {
+            echo "version=${version}"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "notes<<${delimiter}"
+            printf '%s\n' "$notes"
+            echo "${delimiter}"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     needs: version
@@ -115,7 +104,7 @@ jobs:
       run:
         shell: bash
     steps:
-      # The version job's commit: this run's GITHUB_SHA is the one before the bump.
+      # The main commit the version job read the version and notes from, even if main moved since.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.version.outputs.sha }}
@@ -238,18 +227,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
           SHA: ${{ needs.version.outputs.sha }}
+          NOTES: ${{ needs.version.outputs.notes }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           set -euo pipefail
           tag="desktop-v${VERSION}"
+          # What changed, then how to install it.
+          printf '%s\n\n---\n\n%s\n' "$NOTES" "Windows: run the Setup.exe. macOS: open the .dmg for your Mac (Apple silicon arm64, Intel x64). Linux: the .deb or .rpm. Check downloads against SHA256SUMS. Install notes: https://knightcode.dev/docs" > notes.md
           # Only now that every build passed.
           gh api "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/${tag}" -f sha="$SHA" >/dev/null
           flags=(--draft --latest=false --target "$SHA" --title "KnightCode desktop ${VERSION}")
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
           # A failed create or upload must not leave the tag, which would block running this version again.
-          if ! gh release create "$tag" --repo "${{ github.repository }}" "${flags[@]}" \
-            --notes "Windows: run the Setup.exe. macOS: open the .dmg for your Mac (Apple silicon arm64, Intel x64). Linux: the .deb or .rpm. Check downloads against SHA256SUMS. Install notes: https://knightcode.dev/docs" \
-            assets/*; then
+          if ! gh release create "$tag" --repo "${{ github.repository }}" "${flags[@]}" --notes-file notes.md assets/*; then
             gh release delete "$tag" --repo "${{ github.repository }}" --yes 2>/dev/null || true
             gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${tag}" || true
             exit 1

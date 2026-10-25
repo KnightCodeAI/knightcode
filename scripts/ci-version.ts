@@ -6,34 +6,41 @@
 import { $ } from "bun";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { regroupTopSection } from "./changelog-sections.ts";
+import { regroupTopSection, releasedPackages } from "./changelog-sections.ts";
 
 const ROOT = join(import.meta.dir, "..");
-const MAIN = "@knightcodeai/cli";
+// The packages changesets versions: the CLI, which goes to npm, and the desktop
+// app, which .github/workflows/desktop-release.yml ships.
+const PACKAGES = await releasedPackages(ROOT);
+
+// changesets rewrites package.json; read from disk, never from an import cache
+// that predates the bump.
+const versionOf = (dir: string) =>
+	(JSON.parse(readFileSync(join(ROOT, dir, "package.json"), "utf8")) as { version: string }).version;
+
+const before = PACKAGES.map(({ dir }) => versionOf(dir));
 
 await $`bun x changeset version`.cwd(ROOT);
 
 // Changesets groups the new section by semver bump; regroup it under Keep a
-// Changelog headings, the way pi's changelogs read. Only the top section is
-// touched, and never its `## <version>` line — publish.yml matches on that
-// exactly to build the GitHub Release body.
-const changelog = join(ROOT, "packages", "cli", "CHANGELOG.md");
-const { markdown, uncategorised } = regroupTopSection(readFileSync(changelog, "utf8"));
-writeFileSync(changelog, markdown);
-for (const entry of uncategorised) {
-	console.warn(
-		`cli/CHANGELOG.md: entry does not start with Added/Changed/Deprecated/Removed/` +
-			`Fixed/Security, filed under Changed:\n  ${entry.split("\n")[0]}`,
-	);
+// Changelog headings, the way pi's changelogs read. Only the top section of a
+// package this run versioned is touched, and never its `## <version>` line —
+// the release workflows match on that exactly to build the GitHub Release body.
+for (const [i, { name, dir }] of PACKAGES.entries()) {
+	const version = versionOf(dir);
+	if (version === before[i]) continue;
+	const changelog = join(ROOT, dir, "CHANGELOG.md");
+	const { markdown, uncategorised } = regroupTopSection(readFileSync(changelog, "utf8"));
+	writeFileSync(changelog, markdown);
+	for (const entry of uncategorised) {
+		console.warn(
+			`${dir}/CHANGELOG.md: entry does not start with Added/Changed/Deprecated/Removed/` +
+				`Fixed/Security, filed under Changed:\n  ${entry.split("\n")[0]}`,
+		);
+	}
+	console.log(`Versioned ${name} at ${version}`);
 }
 
-// Record the workspace version bump in the lockfile so the Version PR is
+// Record the workspace version bumps in the lockfile so the Version PR is
 // installable as-is.
 await $`bun install --lockfile-only`.cwd(ROOT);
-
-// changesets rewrites package.json; re-read from disk, never from an import cache
-// that predates the bump.
-const { version } = JSON.parse(readFileSync(join(ROOT, "packages", "cli", "package.json"), "utf8")) as {
-	version: string;
-};
-console.log(`Versioned ${MAIN} at ${version}`);
