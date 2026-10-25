@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, type AssistantMessage, type ImageContent } from "@knightcode/ai";
 import { askUserTool } from "@knightcode/tools/ask/tool";
 import { AgentSessionRuntime } from "../src/core/agent-session-runtime.ts";
@@ -24,6 +26,7 @@ type FakeSession = {
 	subscribe: ReturnType<typeof vi.fn>;
 	prompt: ReturnType<typeof vi.fn>;
 	reload: ReturnType<typeof vi.fn>;
+	waitForBackgroundShells: ReturnType<typeof vi.fn>;
 };
 
 type FakeRuntimeHost = {
@@ -77,6 +80,7 @@ function createRuntimeHost(assistantMessage: AssistantMessage): FakeRuntimeHost 
 		subscribe: vi.fn(() => () => {}),
 		prompt: vi.fn(async () => {}),
 		reload: vi.fn(async () => {}),
+		waitForBackgroundShells: vi.fn(async () => {}),
 	};
 
 	return {
@@ -166,6 +170,72 @@ describe("runPrintMode", () => {
 			}
 		},
 	);
+
+	it("stays until a background command ends and prints the response that acts on it", async () => {
+		const h = await createHarness();
+		const services = await createAgentSessionServices({
+			cwd: h.tempDir,
+			agentDir: h.tempDir,
+			modelRuntime: h.session.modelRuntime,
+			settingsManager: h.settingsManager,
+			resourceLoaderOptions: { noExtensions: true, noSkills: true, noContextFiles: true },
+		});
+		const runtime = new AgentSessionRuntime(h.session, services, async () => {
+			throw new Error("replacement not expected");
+		});
+		const chunks: string[] = [];
+		vi.spyOn(process.stdout, "write").mockImplementation((chunk, encodingOrCallback, callback) => {
+			chunks.push(String(chunk));
+			const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+			done?.();
+			return true;
+		});
+		// The command ends only once the first run has, so the end always arrives while idle.
+		const gate = join(h.tempDir, "gate").replace(/\\/g, "/");
+		const unsubscribe = h.session.subscribe((event) => {
+			if (event.type === "agent_end") writeFileSync(gate, "");
+		});
+		const command = `while [ ! -f '${gate}' ]; do sleep 0.05; done; echo built`;
+		h.setResponses([
+			fauxAssistantMessage(fauxToolCall("bash", { command, run_in_background: true }), {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("building"),
+			fauxAssistantMessage("the build finished"),
+		]);
+		try {
+			expect(await runPrintMode(runtime, { mode: "text", initialMessage: "build it" })).toBe(0);
+			expect(chunks.join("")).toBe("the build finished\n");
+			expect(h.faux.state.callCount).toBe(3);
+		} finally {
+			unsubscribe();
+			h.cleanup();
+		}
+	});
+
+	it("disposes the runtime on Ctrl+C, so background commands do not outlive it", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
+		let finishWaiting = () => {};
+		runtimeHost.session.waitForBackgroundShells.mockImplementation(
+			() => new Promise<void>((resolve) => (finishWaiting = resolve)),
+		);
+		const onSpy = vi.spyOn(process, "on");
+		const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+		const run = runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+			initialMessage: "start a dev server",
+		});
+		await vi.waitFor(() => expect(runtimeHost.session.waitForBackgroundShells).toHaveBeenCalled());
+		const sigint = onSpy.mock.calls.find(([event]) => event === "SIGINT")?.[1] as (() => void) | undefined;
+		expect(sigint).toBeDefined();
+
+		sigint?.();
+		await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(130));
+		expect(runtimeHost.dispose).toHaveBeenCalledTimes(1);
+		finishWaiting();
+		await run;
+		expect(process.listeners("SIGINT")).not.toContain(sigint);
+	});
 
 	it("reports fatal plan startup without requesting a provider or printing a plan", async () => {
 		const h = await createHarness({ extensionFactories: [planMode], allowedToolNames: [] });
