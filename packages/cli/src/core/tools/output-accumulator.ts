@@ -1,5 +1,6 @@
 import type { WriteStream } from "node:fs";
 import { open } from "node:fs/promises";
+import { finished } from "node:stream/promises";
 import { createOutputFileStream } from "../../utils/output-files.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, type TruncationResult, truncateTail } from "./truncate.ts";
 
@@ -125,20 +126,9 @@ export class OutputAccumulator {
 
 		const stream = this.tempFileStream;
 		this.tempFileStream = undefined;
-
-		await new Promise<void>((resolve, reject) => {
-			const onError = (error: Error) => {
-				stream.off("finish", onFinish);
-				reject(error);
-			};
-			const onFinish = () => {
-				stream.off("error", onError);
-				resolve();
-			};
-			stream.once("error", onError);
-			stream.once("finish", onFinish);
-			stream.end();
-		});
+		stream.end();
+		// Rejects with a write error even when it happened before this call.
+		await finished(stream);
 	}
 
 	/**
@@ -177,6 +167,17 @@ export class OutputAccumulator {
 
 	getLastLineBytes(): number {
 		return this.currentLineBytes;
+	}
+
+	/** Raw bytes appended so far. */
+	getTotalBytes(): number {
+		return this.totalRawBytes;
+	}
+
+	/** Write all output, past and future, to the temp file and return its path. */
+	persist(): string {
+		this.ensureTempFile();
+		return this.tempFilePath as string;
 	}
 
 	private appendDecodedText(text: string): void {
@@ -247,6 +248,8 @@ export class OutputAccumulator {
 			return;
 		}
 		const { path, stream } = createOutputFileStream(this.tempFilePrefix, ".log");
+		// A write error such as a full disk must not crash the process; closeTempFile() reports it.
+		stream.on("error", () => {});
 		this.tempFilePath = path;
 		this.tempFileStream = stream;
 		for (const chunk of this.rawChunks) {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import lockfile from "proper-lockfile";
 import { afterEach, expect, test, vi } from "vitest";
 import { SessionManager } from "../../src/core/session-manager.ts";
+import { OutputAccumulator } from "../../src/core/tools/output-accumulator.ts";
 import { createGate } from "./fixtures/gate-extension.ts";
 import { cleanupServers, startServer, waitForLine } from "./harness.ts";
 
@@ -223,6 +224,34 @@ test("the idle timer does not unload a busy thread", async () => {
 	await vi.advanceTimersByTimeAsync(60_001);
 	expect(threads.loadedCount()).toBe(1);
 	finish();
+	await vi.advanceTimersByTimeAsync(60_001);
+	expect(threads.loadedCount()).toBe(0);
+});
+
+test("the idle timer does not unload a thread whose background command runs, and does once it ends", async () => {
+	vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+	const { cwd, sessionDir, threads, connect } = await startServer({ idleMs: 60_000 });
+	const { id } = savedThread(cwd, sessionDir);
+	const a = await connect();
+	await a.client.request("thread/resume", { threadId: id });
+	const manager = threads.get(id).session.backgroundShells;
+	let exit!: (code: number) => void;
+	const shell = manager.adopt({
+		toolName: "bash",
+		command: "npm run dev",
+		cwd,
+		output: new OutputAccumulator(),
+		done: new Promise((resolve) => (exit = (exitCode) => resolve({ exitCode }))),
+		abort: new AbortController(),
+	});
+	// Not busy: queued input still drains and archive still works while it runs.
+	expect(threads.get(id).busy).toBe(false);
+	await a.client.request("thread/unsubscribe", { threadId: id });
+	await vi.advanceTimersByTimeAsync(60_001);
+	// Unloading would dispose the session and kill the command.
+	expect(threads.loadedCount()).toBe(1);
+	exit(0);
+	await vi.waitFor(() => expect(manager.get(shell.id)?.status).toBe("completed"));
 	await vi.advanceTimersByTimeAsync(60_001);
 	expect(threads.loadedCount()).toBe(0);
 });

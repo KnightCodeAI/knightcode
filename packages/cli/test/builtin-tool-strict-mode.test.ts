@@ -85,13 +85,17 @@ describe("strict built-in tools", () => {
 				try {
 					const originalPrompt = session.systemPrompt;
 					await session.bindExtensions({});
-					expect(session.getActiveToolNames()).toEqual(activeTools);
+					// task_stop comes with the shell tools, whose re-registered copies keep background commands.
+					const withShell = activeTools.some((name) => name === "bash" || name === "powershell");
+					expect(session.getActiveToolNames()).toEqual(withShell ? [...activeTools, "task_stop"] : activeTools);
 					expect(session.systemPrompt).toBe(originalPrompt);
 					for (const name of strictToolNames) {
 						expect(session.getToolDefinition(name)?.constrainedSampling).toBe(false);
 					}
 					for (const tool of session.agent.state.tools) {
-						expect(tool.constrainedSampling).toBe(false);
+						// task_stop has no strict schema to turn off.
+						if (tool.name === "task_stop") expect(tool.constrainedSampling).toBeUndefined();
+						else expect(tool.constrainedSampling).toBe(false);
 					}
 					if (activeTools.includes("read")) {
 						writeFileSync(join(cwd, "sample.txt"), "still works");

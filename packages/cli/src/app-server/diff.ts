@@ -31,6 +31,8 @@ import {
 	LARGE_UNTRACKED_BYTES,
 	snapshotTree,
 	submodulePaths,
+	type TurnTrees,
+	turnSnapshot,
 } from "./git.ts";
 import type { LoadedThread } from "./loaded-thread.ts";
 import { TURN_MARKER_TYPE } from "../extensions/turn-marker.ts";
@@ -60,7 +62,7 @@ export class TurnChanges {
 	private readonly record: (record: TurnDiffRecord) => void;
 	private readonly notify: (record: TurnDiffRecord) => void;
 	private chain: Promise<void> = Promise.resolve();
-	private before: Promise<{ tree: string; untracked: boolean } | undefined> | undefined;
+	private before: Promise<TurnTrees | undefined> | undefined;
 	private closed = false;
 
 	constructor(repo: Repo, record: (r: TurnDiffRecord) => void, notify: (r: TurnDiffRecord) => void) {
@@ -84,20 +86,19 @@ export class TurnChanges {
 	beforeTool(): Promise<void> {
 		if (this.closed) return Promise.resolve();
 		this.before ??= this.enqueue(async () => {
-			const untracked = (await countUntracked(this.repo, UNTRACKED_LIMIT)) <= UNTRACKED_LIMIT;
-			const tree = await snapshotTree(
-				this.repo,
-				untracked,
-				AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
-				LARGE_UNTRACKED_BYTES,
-			);
+			const trees = await turnSnapshot(this.repo, UNTRACKED_LIMIT, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS));
 			await turnChangeHooks.afterSnapshot("before");
-			return { tree, untracked };
+			return trees;
 		});
 		return this.before.then(() => {});
 	}
 
-	/** After settle: queue the after-snapshot (same untracked mode as before) on the thread's chain. */
+	/**
+	 * After settle: queue the after-snapshot on the thread's chain, leaving out the before-snapshot's folders (a skipped
+	 * folder the turn empties below 200 files must not read as files it added) and any large folder the turn made.
+	 * Compared with their untracked files when both have them, else tracked-only: a turn that leaves more than 500
+	 * behind still records its tracked edits.
+	 */
 	settled(turnId: string | undefined): void {
 		const before = this.before;
 		if (this.closed || !before || turnId === undefined) return;
@@ -105,15 +106,12 @@ export class TurnChanges {
 		void this.enqueue(async () => {
 			const start = await before;
 			if (!start) return;
-			const after = await snapshotTree(
-				this.repo,
-				start.untracked,
-				AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS),
-				LARGE_UNTRACKED_BYTES,
-			);
+			const end = await turnSnapshot(this.repo, UNTRACKED_LIMIT, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS), start);
 			await turnChangeHooks.afterSnapshot("after");
-			if (after === start.tree) return;
-			const args = ["diff", "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", start.tree, after];
+			const [from, after] =
+				start.all !== undefined && end.all !== undefined ? [start.all, end.all] : [start.tracked, end.tracked];
+			if (after === from) return;
+			const args = ["diff", "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", from, after];
 			const listed = await git(this.repo.root, args);
 			// Each file is "<added>\t<deleted>\t<path>"; a binary file counts "-\t-", so 0 and 0.
 			const files = listed
@@ -123,7 +121,7 @@ export class TurnChanges {
 					const [added, deleted, ...path] = line.split("\t");
 					return { path: path.join("\t"), additions: Number(added) || 0, deletions: Number(deleted) || 0 };
 				});
-			const record = { turnId, before: start.tree, after, files };
+			const record = { turnId, before: from, after, files };
 			this.record(record);
 			this.notify(record);
 		});
