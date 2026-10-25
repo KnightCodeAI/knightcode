@@ -35,6 +35,39 @@ const REVIEW: { action: ReviewAction; label: string; description: string }[] = [
 	{ action: "exit", label: "Exit planning", description: "Leave plan mode without implementing; the draft is kept." },
 ];
 const REVISE = { label: "Revise the plan", description: "Tell the model what to change." };
+/**
+ * The desktop's review, an "Implement this plan?" question: the plan is already a card in the transcript, so the
+ * question stands alone, and skipping it keeps planning (a message in the composer revises the plan).
+ */
+const DESKTOP_REVIEW: { action: ReviewAction; label: string; description: string }[] = [
+	{
+		action: "implement",
+		label: "Yes, implement this plan",
+		description: "Leave plan mode and implement it in this thread.",
+	},
+	{ action: "fresh", label: "Implement in a new thread", description: "Start clean with only the plan." },
+	{ action: "exit", label: "Exit planning", description: "Leave plan mode without implementing; the plan is kept." },
+];
+
+/** A fresh session's name: the plan's first line of prose (its summary), so the session list does not show the handoff. */
+export function planTitle(markdown: string): string {
+	let fenced = false;
+	for (const raw of markdown.split("\n")) {
+		// A code block is never the plan's prose, nor a separator such as ---.
+		if (/^\s*(```|~~~)/.test(raw)) {
+			fenced = !fenced;
+			continue;
+		}
+		if (fenced || !/[\p{L}\p{N}]/u.test(raw)) continue;
+		const line = raw
+			.replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s*)/, "")
+			.replaceAll(/\*\*|__|`/g, "")
+			.trim();
+		if (line && !/^#/.test(raw.trim()) && !/^(summary|plan|changes|verification|assumptions):?$/i.test(line))
+			return line;
+	}
+	return "Implement the plan";
+}
 
 /** Names only the tools this session has, so the model is never pointed at a disabled one. */
 function allowedLine(active: readonly string[]): string {
@@ -333,9 +366,9 @@ export default function planMode(kc: ExtensionAPI): void {
 		submitted = undefined;
 		if (revision === undefined || snapshot.draft?.revision !== revision) return;
 		if (ctx.mode === "print") writeRawStdout(snapshot.draft.markdown + "\n");
-		else if (ctx.mode === "rpc" || ctx.mode === "desktop")
-			notice(ctx, `Plan revision ${revision} submitted. Run /plan to review.`);
-		else if (ctx.mode === "tui" && lastShown !== revision) {
+		else if (ctx.mode === "rpc") notice(ctx, `Plan revision ${revision} submitted. Run /plan to review.`);
+		// The terminal's review, and the desktop's question, open on their own once a plan is in.
+		else if ((ctx.mode === "tui" || ctx.mode === "desktop") && lastShown !== revision) {
 			kc.sendUserMessage("/plan", { expandPromptTemplates: true });
 		}
 	});
@@ -382,6 +415,7 @@ export default function planMode(kc: ExtensionAPI): void {
 						parentSession,
 						setup: async (manager) => {
 							manager.appendCustomEntry("plan-mode", approved);
+							manager.appendSessionInfo(planTitle(approved.draft!.markdown));
 						},
 						withSession: async (replacement) => {
 							await replacement.sendUserMessage(handoff);
@@ -440,6 +474,15 @@ export default function planMode(kc: ExtensionAPI): void {
 						const answer = answers?.plan;
 						feedback = answer?.other ?? answer?.note;
 						action = answer?.other ? "keep" : REVIEW.find((r) => r.label === answer?.label)?.action;
+					} else if (ctx.mode === "desktop") {
+						// The select's options are "label — description", as the desktop draws them.
+						const percent = ctx.getContextUsage()?.percent;
+						const rows = DESKTOP_REVIEW.map(
+							({ action, label, description }) =>
+								`${label} — ${action === "fresh" && percent != null ? `${description} ${Math.round(percent)}% of the context is used now.` : description}`,
+						);
+						const choice = await ctx.ui.select("Implement this plan?", rows, { signal: controller.signal });
+						action = DESKTOP_REVIEW[rows.indexOf(choice ?? "")]?.action;
 					} else {
 						const rows = ["Implement", "Implement in a fresh session", "Keep planning (Esc)", "Exit planning"];
 						const choice = await ctx.ui.select(`Plan revision ${draft.revision}\n\n${draft.markdown}`, rows, {

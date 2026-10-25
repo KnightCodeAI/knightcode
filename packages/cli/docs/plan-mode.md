@@ -69,6 +69,10 @@ to the highlighted choice; on an implement choice it is sent with the
 approval, and on Keep planning it is sent as feedback. Escape keeps planning. Review does not open automatically on resume. Session replacement, tree navigation, or a new run cancels an open
 picker. An action rechecks the shown revision before changing state.
 
+The desktop app opens review by itself too, asking "Implement this plan?":
+Yes, implement this plan; Implement in a new thread; or Exit planning.
+A fresh session is named after the plan's first line of prose.
+
 RPC reports a submission notification; `/plan` opens its review selection.
 JSON mode adds no extra output:
 the submission tool-call events contain the Markdown.

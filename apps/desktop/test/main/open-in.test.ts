@@ -1,8 +1,16 @@
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { detectTargets, editorScript, InvalidParams, OpenIn, shellWords, windowsIcons } from "../../src/main/open-in.ts";
+import {
+	appBundle,
+	detectTargets,
+	editorScript,
+	InvalidParams,
+	OpenIn,
+	shellWords,
+	windowsIcons,
+} from "../../src/main/open-in.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -346,3 +354,19 @@ test.skipIf(process.platform === "darwin")(
 		expect(cursor?.iconPath).toBe(join(home, "Applications", "Cursor.app"));
 	},
 );
+
+test("a macOS command's icon is its app bundle's, through a PATH link too", () => {
+	expect(appBundle("/Applications/Zed.app/Contents/MacOS/cli")).toBe("/Applications/Zed.app");
+	// A home folder named like a bundle is not one.
+	expect(appBundle("/Users/anna.applegate/bin/tool")).toBeUndefined();
+	expect(appBundle("/nowhere/code")).toBeUndefined();
+});
+
+// Creating a symlink needs administrator rights on Windows.
+test.skipIf(process.platform === "win32")("a PATH command linked into an app is that app's", () => {
+	const root = layout(["Visual Studio Code.app/Contents/Resources/app/bin/code"]);
+	mkdirSync(join(root, "bin"));
+	symlinkSync(join(root, "Visual Studio Code.app/Contents/Resources/app/bin/code"), join(root, "bin/code"));
+	// macOS keeps temporary folders under /var, a link to /private/var: the bundle comes back resolved.
+	expect(appBundle(join(root, "bin/code"))).toBe(realpathSync(join(root, "Visual Studio Code.app")));
+});

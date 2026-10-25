@@ -287,6 +287,8 @@ export class ItemMapper {
 				const counters = this.counters;
 				if (!counters) return;
 				if (message.role === "custom") {
+					// Context for the model only (plan mode's instructions), never shown, as the terminal leaves it out.
+					if (!message.display) return;
 					// Inside a run or between runs: an idle extension message belongs to the last turn, as on read-back.
 					const view = viewOf(message.details);
 					const item: Item = {

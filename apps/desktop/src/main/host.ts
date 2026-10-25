@@ -65,7 +65,16 @@ export function openInService(env: NodeJS.ProcessEnv): OpenIn {
 			if (process.platform === "win32") return windowsIcons(paths, env);
 			const icons = new Map<string, string>();
 			for (const path of paths) {
-				const image = await app.getFileIcon(path, { size: "normal" }).catch(() => undefined);
+				// macOS 26 and later answer getFileIcon with a blank tile for an app whose icon is in the Icon
+				// Composer format; Quick Look's thumbnail of the bundle draws the real one.
+				const thumbnail =
+					process.platform === "darwin" && /\.app$/.test(path)
+						? await nativeImage.createThumbnailFromPath(path, { width: 64, height: 64 }).catch(() => undefined)
+						: undefined;
+				const image =
+					thumbnail && !thumbnail.isEmpty()
+						? thumbnail
+						: await app.getFileIcon(path, { size: "normal" }).catch(() => undefined);
 				if (image && !image.isEmpty()) icons.set(path, image.toDataURL());
 			}
 			return icons;

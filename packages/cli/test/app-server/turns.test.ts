@@ -622,6 +622,31 @@ test("an extension message keeps its time live and read back", async () => {
 	);
 });
 
+test("an extension message sent with display false is never an item, live or read back", async () => {
+	const { cwd, faux, connect } = await startServer({
+		extraExtensions: [
+			{
+				name: "hidden",
+				factory: (k) => {
+					k.on("agent_start", () => {
+						k.sendMessage({ customType: "plan-mode", content: "<plan_mode>for the model</plan_mode>", display: false });
+						k.sendMessage({ customType: "note", content: "shown", display: true });
+					});
+				},
+			},
+		],
+	});
+	const a = await connect();
+	const { thread } = await a.client.request("thread/start", { cwd });
+	faux.setResponses([fauxAssistantMessage([fauxText("ok")])]);
+	await a.client.request("turn/start", { threadId: thread.id, text: "hi" });
+	await a.waitFor("turn/completed");
+	await expectReadBackMatches(a, thread.id);
+	const messages = (await a.readTurns(thread.id))[0].items.filter((i) => i.type === "extensionMessage");
+	expect(messages).toMatchObject([{ extension: "note", text: "shown" }]);
+	expect(messages[0]?.id).toMatch(/:custom:0$/);
+});
+
 test("an idle compaction keeps its durable time live and read back", async () => {
 	const { cwd, faux, threads, agentDir, connect } = await startServer();
 	writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ compaction: { keepRecentTokens: 1 } }));

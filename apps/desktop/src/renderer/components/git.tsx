@@ -6,6 +6,7 @@
 
 import type { Environment, ResultOf, Thread, WorkspaceRequest } from "@knightcode/app-server-protocol";
 import {
+	AppWindow,
 	ArrowLeftRight,
 	ArrowUpRight,
 	Check,
@@ -19,6 +20,7 @@ import {
 	GitCommitHorizontal,
 	GitPullRequest,
 	GitPullRequestDraft,
+	Globe,
 	ListTodo,
 	MoreHorizontal,
 	Plus,
@@ -27,6 +29,7 @@ import {
 	SquareTerminal,
 } from "./icons.tsx";
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
+import { threadSources } from "../activity.ts";
 import { client } from "../client.ts";
 import { basename } from "../format.ts";
 import { matches } from "../keys.ts";
@@ -851,14 +854,59 @@ export function HandoffDialog({ thread, onClose }: { thread: Thread; onClose: ()
 type SheetKind = "commit" | "branch" | "switch" | "pr" | "handoff";
 
 /** The summary's body: the project and its Actions, then Changes with Git actions on hover (both menus drop below). */
+/** An image a source row opens, shown over the window. */
+type Preview = { src: string; label: string };
+
+/**
+ * The summary's "Sources": a count, then a row for each image the user attached (an
+ * 18px thumbnail, opening the image), each MCP server whose tools ran, and "Web search" when the agent used the web.
+ */
+function SourcesSection({ threadId, onImage }: { threadId: string; onImage: (preview: Preview) => void }) {
+	const turns = useStore((s) => s.held[threadId]?.turns);
+	const sources = useMemo(() => threadSources(turns ?? []), [turns]);
+	const count = sources.images.length + sources.servers.length + (sources.web ? 1 : 0);
+	if (count === 0) return null;
+	const row = "flex h-[34px] w-full items-center gap-2.5 rounded-xl ps-3 text-start text-base text-ink";
+	return (
+		<>
+			<div className="mt-1 flex h-9 items-center gap-1.5 ps-3 text-sm text-tertiary">
+				Sources <span className="tabular-nums">{count}</span>
+			</div>
+			{sources.images.map((image, i) => {
+				const src = `data:${image.mimeType};base64,${image.data}`;
+				const label = `Image ${i + 1}`;
+				return (
+					<button key={i} type="button" onClick={() => onImage({ src, label })} className={`${row} hover:bg-ghost-hover`}>
+						<img src={src} alt="" className="size-[18px] shrink-0 rounded-[3px] border border-line object-cover" />
+						{label}
+					</button>
+				);
+			})}
+			{sources.servers.map((server) => (
+				<div key={server} className={row}>
+					<AppWindow size={16} className="shrink-0 text-secondary" />
+					<span className="truncate">{server}</span>
+				</div>
+			))}
+			{sources.web ? (
+				<div className={row}>
+					<Globe size={16} className="shrink-0 text-secondary" /> Web search
+				</div>
+			) : null}
+		</>
+	);
+}
+
 function SummaryBody({
 	thread,
 	closeSummary,
 	open,
+	onImage,
 }: {
 	thread: Thread;
 	closeSummary: () => void;
 	open: (kind: SheetKind) => void;
+	onImage: (preview: Preview) => void;
 }) {
 	const status = useStatus(thread.id);
 	const inWorktree = thread.workspace.mode === "worktree";
@@ -929,6 +977,7 @@ function SummaryBody({
 					</MenuContent>
 				</Menu>
 			</div>
+			<SourcesSection threadId={thread.id} onImage={onImage} />
 		</div>
 	);
 }
@@ -939,6 +988,8 @@ function SummaryBody({
  */
 export function ThreadSummary({ thread, anchor }: { thread: Thread; anchor: RefObject<HTMLElement | null> }) {
 	const [sheet, setSheet] = useState<SheetKind>();
+	// Outside the panel, which closes as the image opens.
+	const [image, setImage] = useState<Preview>();
 	// Commits, switches and handoffs change the checkout without a turn; reload an open Changes pane.
 	const close = () => {
 		setSheet(undefined);
@@ -968,9 +1019,18 @@ export function ThreadSummary({ thread, anchor }: { thread: Thread; anchor: RefO
 							closeSummary();
 							setSheet(kind);
 						}}
+						onImage={(preview) => {
+							closeSummary();
+							setImage(preview);
+						}}
 					/>
 				)}
 			</Popover>
+			{image ? (
+				<Dialog title={image.label} onClose={() => setImage(undefined)} width={720}>
+					<img src={image.src} alt={image.label} className="max-h-[70vh] w-full rounded-lg object-contain" />
+				</Dialog>
+			) : null}
 			{sheet === "commit" ? <CommitSheet thread={thread} onClose={close} /> : null}
 			{sheet === "branch" ? <CreateBranchDialog thread={thread} onClose={close} /> : null}
 			{sheet === "switch" ? (
