@@ -117,11 +117,11 @@ OpenShell inference routing can keep raw model credentials outside the sandbox. 
 
 ## Route tools through Gondolin
 
-[Gondolin](https://github.com/KnightCodeAI/gondolin) is a local Linux micro-VM. Its example extension keeps the KnightCode process and file-based provider credentials on the host while routing the built-in tools and user `!` commands into the VM.
+[Gondolin](https://github.com/earendil-works/gondolin) is a local Linux micro-VM. Its example extension keeps the KnightCode process and file-based provider credentials on the host while routing the built-in tools and user `!` commands into the VM.
 
 Commands inside the VM inherit the host process environment. Provider keys supplied through environment variables can therefore be visible inside the VM. Do not use this pattern as a credential boundary unless you remove sensitive variables or change the extension's environment handling.
 
-Gondolin requires Node.js 23.6 or newer and QEMU installed through your operating-system package manager.
+Gondolin requires Node.js 22.19 or newer and QEMU installed through your operating-system package manager.
 
 ### Install the extension
 

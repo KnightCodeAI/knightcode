@@ -58,7 +58,7 @@ See [Settings](settings.md#tools) for other tool combinations.
 
 ## WSL
 
-WSL path conversion on Windows and extra Git branch polling in WSL recognize `/mnt/<drive>`, not custom mount roots.
+On Windows, shell path conversion accepts `/mnt/<drive>`, `/cygdrive/<drive>` and `/<drive>`. Extra Git branch polling in WSL recognizes only `/mnt/<drive>`. Neither recognizes custom mount roots.
 
 When using the legacy WSL `bash.exe` launcher from Windows, KnightCode sends commands over stdin to avoid command-line quoting problems.
 

@@ -123,16 +123,13 @@ function rewriteHref(href, from) {
 	}
 	const img = href.match(/^(?:\.\/)?images\/([^#?]+)$/)
 	if (img) return `/docs/images/${img[1]}`
-	if (href.startsWith(".")) {
-		const hash = href.includes("#") ? `#${href.slice(href.indexOf("#") + 1)}` : ""
-		const raw = hash ? href.slice(0, href.indexOf("#")) : href
-		const resolved = posix.normalize(posix.join("packages/cli/docs", posix.dirname(from), raw)).replace(/\/$/, "")
-		if (resolved.startsWith("..")) throw new Error(`${from} escapes the repo: ${href}`)
-		const kind = raw.endsWith("/") ? "tree" : "blob"
-		return `https://github.com/KnightCodeAI/knightcode/${kind}/main/${resolved}${hash}`
-	}
-	if (href.includes(".md")) throw new Error(`${from} has an unrewritten relative link: ${href}`)
-	return href
+	// Any other relative path names a repo file (app-server.schema.json, ../src/...); the site does not serve it.
+	const hash = href.includes("#") ? `#${href.slice(href.indexOf("#") + 1)}` : ""
+	const raw = hash ? href.slice(0, href.indexOf("#")) : href
+	const resolved = posix.normalize(posix.join("packages/cli/docs", posix.dirname(from), raw)).replace(/\/$/, "")
+	if (resolved.startsWith("..")) throw new Error(`${from} escapes the repo: ${href}`)
+	const kind = raw.endsWith("/") ? "tree" : "blob"
+	return `https://github.com/KnightCodeAI/knightcode/${kind}/main/${resolved}${hash}`
 }
 
 function rewriteMarkdown(text, from) {
@@ -192,7 +189,8 @@ function maskCode(markdown) {
 		blocks.push(block)
 		return token
 	})
-	const masked = fenced.replace(/(`+)[\s\S]*?\1/g, (span) => {
+	// An escaped backtick (Ctrl+\`) opens no span; pairing from it would mask the prose between spans instead.
+	const masked = fenced.replace(/(?<!\\)(`+)[\s\S]*?\1/g, (span) => {
 		const token = `\u0000CODE${blocks.length}\u0000`
 		blocks.push(span)
 		return token
@@ -238,8 +236,8 @@ function describe(body) {
 	const text = para
 		.join(" ")
 		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-		.replace(/`([^`]+)`/g, "$1")
-		.replace(/<[^>]+>/g, "")
+		// One pass, so a code span's own <placeholder> survives while HTML tags around it go.
+		.replace(/`([^`]+)`|<[^>]+>/g, (_all, code) => code ?? "")
 		.replace(/\s+/g, " ")
 		.trim()
 	if (text.length <= 180) return text
@@ -312,6 +310,9 @@ for (const output of outputs) {
 	if (problems.length > 0) {
 		throw new Error(`${output.file} still has MDX-sensitive text outside code: ${problems.slice(0, 8).join(" | ")}`)
 	}
+	// Checked unmasked: a code-span pairing slip hides links from the rewrite, and would hide them from this too.
+	const stale = generated.match(/\]\((?:\.\/)?[^):/#\s]+\.md\b[^)]*\)/)
+	if (stale) throw new Error(`${output.file} still links to a .md file: ${stale[0]}`)
 }
 
 const quickstart = readFileSync(join(outDir, "quickstart.mdx"), "utf8")

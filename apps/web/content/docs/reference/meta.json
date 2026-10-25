@@ -5,6 +5,7 @@
     "codemode",
     "slash-commands",
     "settings",
+    "models-configuration",
     "environment-variables",
     "keybindings",
     "providers",
@@ -14,6 +15,7 @@
     "rpc",
     "rpc-commands",
     "rpc-extension-ui",
+    "app-server",
     "message-types"
   ],
   "icon": "BookOpen"

@@ -21,6 +21,8 @@ knightcode install ./local-package
 
 `knightcode list` shows configured packages. Use `knightcode remove <source>` to remove one and `knightcode update --extensions` to reconcile package installations. See [Command Line](/docs/reference/cli#package-commands) for every package command and option.
 
+If a configured package fails to install at startup, for example because npm cannot reach the registry, KnightCode warns about it, skips that package's resources, and keeps running. KnightCode tries to install it again on the next start or `/reload`. `knightcode install` and `knightcode update --extensions` still report the failure and exit non-zero.
+
 Personal installs are written to `~/.knightcode/agent/settings.json`. Add `--local` or `-l` to write the package declaration to `.knightcode/settings.json`. KnightCode reads declarations from that file only after project trust is granted.
 
 Project packages are installed and loaded only after project trust is resolved. Packages can execute extension code and can include skills that instruct the model to run programs. Review third-party package source before installing it. Review project package declarations before granting project trust.

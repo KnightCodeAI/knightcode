@@ -71,8 +71,8 @@ cd apps/desktop && bun run make
 
 The end-to-end tests launch the production build that packaging leaves in
 `apps/desktop/.vite/`, against an app server whose model is scripted
-(`packages/cli/test/fixtures/faux-app-server.ts`): run `bun run package`, then
-`bun run test:e2e`.
+(`packages/cli/test/fixtures/faux-app-server.ts`): from `apps/desktop`, run
+`bun run package`, then `bun run test:e2e`.
 
 ## What works
 
@@ -105,7 +105,8 @@ The end-to-end tests launch the production build that packaging leaves in
     Brave key, ask user, scratchpad, classifier gate with its model), the tools new threads
     start with (`defaultTools`), and codemode.
   - MCP servers: add, remove, turn on or off and set the exposure of the servers in the user's
-    or a trusted project's `mcp.json`, as `/mcp` and `knightcode mcp` do. Signing in to a
+    `mcp.json` or a trusted project's `.knightcode/mcp.json`, as `/mcp` and `knightcode mcp`
+    do. Signing in to a
     server and its live status stay with `/mcp` in a thread.
   - Extensions & skills: load or skip each extension, skill, prompt template and theme you
     added, as `knightcode config` does. Built-in extensions are always on and not listed.
@@ -153,7 +154,7 @@ The end-to-end tests launch the production build that packaging leaves in
 ## Extensions
 
 Extensions load in desktop threads as they do in the terminal (`ctx.mode` is
-`"desktop"`). What they show appears in the app:
+`"desktop"` and `ctx.hasUI` is `true`). What they show appears in the app:
 
 - Dialogs (`select`, `confirm`, `input`, `editor`) and `ask_user`'s questions take
   the composer's place; notices (`notify`) show as toasts.

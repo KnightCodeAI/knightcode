@@ -19,7 +19,8 @@ knightcode update [target] [options]
 knightcode list
 knightcode config [options]
 knightcode auth <check|print-api-key|print-bearer-token> [options]
-knightcode mcp <list|login|logout> [options]
+knightcode mcp <add|remove|list|login|logout> [options]
+knightcode app-server [-e <extension>]... [--session-dir <dir>]
 ```
 
 <a id="modes"></a>
@@ -56,6 +57,22 @@ KnightCode resolves `@path` from the current working directory. The working dire
 
 RPC mode rejects `@file` arguments. JSON and RPC modes reserve stdout for protocol records. See [JSON Event Stream](/docs/reference/json) and [RPC Protocol](/docs/reference/rpc).
 
+### Plan before implementing
+
+```sh
+knightcode --plan
+knightcode -p --plan "Plan the authentication refactor"
+```
+
+The built-in `--plan` extension flag enters enforced [plan mode](/docs/run/plan-mode)
+only on initial startup, including when opening a saved session. Later reloads,
+new sessions, resumes, and forks follow their saved state rather than reapplying
+the flag. Print mode (`-p`) writes the submitted Markdown to stdout;
+implementation requires explicit `/plan approve`. Incompatible tool filters or
+active codemode `only` mode fail startup before any provider request.
+`--no-extensions` disables the built-in unless explicitly loaded with
+`-e builtin:plan-mode`.
+
 <a id="model-options"></a>
 
 ## Models
@@ -69,13 +86,13 @@ See [Choose a Model](/docs/run/models) for model selection and [Providers](/docs
 - `--provider <name>`<br />
   Restricts `--model` lookup to one provider. It requires `--model`.
 - `--model <pattern>`<br />
-  Selects by exact ID or fuzzy ID/name match. It accepts `provider/id` and an optional `:<thinking>` suffix.
+  Selects by exact ID or fuzzy ID/name match. It accepts `provider/id` and an optional `:<thinking>` suffix. If several providers match, KnightCode prefers the one with credentials, otherwise it asks for `--provider`.
 - `--api-key <key>`<br />
-  Uses a non-persistent API-key override. It requires a model selected through `--model` or `--models`.
+  Uses a non-persistent API-key override. It requires a model selected through `--model` or `--models`. It does not choose between providers that offer the same model.
 - `--thinking <level>`<br />
   Sets `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. It overrides a `--model` suffix and is clamped to the model's capabilities.
 - `--models <patterns>`<br />
-  Sets a comma-separated scope for startup and cycling. It accepts exact IDs, fuzzy matches, case-insensitive globs, and optional `:<thinking>` suffixes.
+  Sets a comma-separated scope for startup and cycling. It accepts exact IDs, fuzzy matches, case-insensitive globs, and optional `:<thinking>` suffixes. A model offered by several providers is added for each, with a warning.
 - `--list-models [search]`<br />
   Lists available models, optionally filtered by a fuzzy search, then exits.
 
@@ -123,15 +140,25 @@ knightcode --tools read,grep,find,ls --print "Review this project"
 See [Settings](/docs/reference/settings#tools) for configuring the default tool selection.
 
 - `-t`, `--tools <list>`<br />
-  Replaces the default selection with a comma-separated allowlist of built-in, extension, or custom tools.
+  Replaces the default selection with a comma-separated allowlist of built-in, extension, or custom tools. Entries are tool names or patterns where `*` matches any characters. MCP tools are kept unless an entry starts with `mcp__` (see [MCP tools](#mcp-tools)). A list of only `+name` and `-name` entries is not an allowlist; it changes the default selection instead.
 - `-xt`, `--exclude-tools <list>`<br />
-  Disables comma-separated tool names after all other selection options.
+  Disables comma-separated tool names or patterns after all other selection options, MCP tools included.
 - `-nbt`, `--no-builtin-tools`<br />
   Disables default built-in tools while retaining extension and custom tools.
 - `-nt`, `--no-tools`<br />
-  Starts with all built-in, extension, and custom tools disabled.
+  Starts with all built-in, extension, custom, and MCP tools disabled.
 
-Default enabled tools are `read`, `bash`, `edit`, and `write`, unless `defaultTools` changes them. `--tools` replaces the whole selection, so name every tool you want; `defaultTools` also accepts `+name` and `-name` to change the defaults instead.
+Default enabled tools are `read`, `bash`, `edit`, and `write`, unless `defaultTools` changes them. `--tools` with plain names replaces the whole selection, so name every tool you want. Like `defaultTools`, it also accepts a list of only `+name` and `-name` entries, which adds tools to or removes them from the default selection: `knightcode --tools +codemode,-write` keeps the other default tools, enables `codemode`, and disables `write`. These entries take exact tool names, not `*` patterns; use `--exclude-tools` to disable tools by pattern. Plain names and `+name`/`-name` entries cannot be mixed. `/reload` enables tools newly added to `defaultTools`, but a tool removed with `-name` stays removed.
+
+<a id="mcp-tools"></a>
+
+`--tools` selects the tools declared to the model. It does not remove MCP tools, whose reach is set by their [exposure](/docs/customize/mcp#control-tool-exposure): `knightcode --tools read,codemode` keeps every MCP tool callable from codemode scripts. An MCP tool that no entry names or matches is never declared directly, whatever its exposure; only `tool_search`, if listed, can load it. Once an entry starts with `mcp__`, `--tools` filters MCP tools too, so this keeps only the tools of the `radius` server:
+
+```sh
+knightcode --tools read,bash,codemode,'mcp__radius__*'
+```
+
+The MCP resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`) count as MCP tools. To remove MCP tools, use `--exclude-tools 'mcp__*'` or [`--no-mcp`](#resource-options).
 
 | Built-in | Purpose |
 |---|---|
@@ -144,9 +171,9 @@ Default enabled tools are `read`, `bash`, `edit`, and `write`, unless `defaultTo
 | `find` | Find paths using glob patterns |
 | `ls` | List directory contents |
 
-The [web tools](/docs/run/usage#web-tools) `webfetch` and `websearch` are off until enabled with `/tools`. A tool excluded here stays off whatever `/tools` says.
+The [web tools](/docs/run/usage#web-tools) `webfetch` and `websearch` and the [question tool](/docs/run/usage#questions) `ask_user` are off until enabled with `/tools` or named here. A tool excluded here stays off whatever `/tools` says, and one turned off with `/tools` stays off even when named here.
 
-Built-in extensions add two more tools. They are off by default; the MCP extension turns them on when an MCP server needs them (see [MCP](/docs/customize/mcp#exposure)). To enable them yourself, name them in `--tools` or `defaultTools`.
+Built-in extensions add two more tools. They are off by default; the MCP extension turns them on when an MCP server needs them (see [MCP](/docs/customize/mcp#control-tool-exposure)). To enable them yourself, name them in `--tools` or `defaultTools`.
 
 | Built-in extension | Purpose |
 |---|---|
@@ -163,10 +190,10 @@ To turn on `codemode` for every session, add it to the default tools in `~/.knig
 }
 ```
 
-This keeps `read`, `bash`, `edit`, and `write` and adds `codemode`. For one invocation, list every tool, since `--tools` replaces the selection:
+This keeps `read`, `bash`, `edit`, and `write` and adds `codemode`. For one invocation, add it with `--tools`:
 
 ```sh
-knightcode --tools read,bash,edit,write,codemode
+knightcode --tools +codemode
 ```
 
 Codemode is useful without MCP: scripts can run several tool calls in parallel, filter large output before it reaches the model, call classifier models such as TypeSafe's Jev through `models.classify()` (see [Classifier models](/docs/run/models#use-classifier-models)), and generate images through `models.generateImages()` (see [Image models](/docs/run/models#use-image-models)).
@@ -193,6 +220,8 @@ See [Configuration](/docs/customize/configuration) for conventional directories 
   Loads an extension file or directory, or a built-in extension such as `builtin:mcp`, and is repeatable.
 - `-ne`, `--no-extensions`<br />
   Disables discovered, configured, and built-in extensions. Explicit `-e` paths still load, so `knightcode -ne -e builtin:mcp` keeps only the built-in MCP support.
+- `--no-mcp`<br />
+  Disables the built-in MCP support for this run: no servers connect, and there are no MCP tools or `/mcp`. It does not affect an extension that replaces the built-in MCP support.
 - `--skill <path>`<br />
   Loads a skill file or directory and is repeatable.
 - `-ns`, `--no-skills`<br />
@@ -266,6 +295,41 @@ Add `--local` or `-l` to `install`, `remove`, `uninstall`, or `config` to use pr
 
 Running `knightcode update` without a target updates KnightCode itself.
 
+Interactive sessions check for updates at startup and hourly. Installer-managed
+installs, writable global package manager installs, and downloaded release
+binaries update in the background. A right-aligned line directly above the input
+shows **Downloading vX.Y.Z**, then **Restart for vX.Y.Z** in green. Errors are red;
+waiting for another terminal is yellow. Exit when convenient and relaunch; use
+the displayed restart command to continue the saved session. Active work is never
+restarted automatically.
+
+The script installer stages and verifies a separate release before changing the
+launcher, retaining the version that open sessions use. Global package manager
+installs update in place, and the new version is started once to check it before
+the update reports success. A downloaded standalone binary is replaced from the
+matching [GitHub release](https://github.com/KnightCodeAI/knightcode/releases)
+archive, checked against its `SHA256SUMS`, and smoke-tested before any file
+moves; files next to it that the release does not ship are left alone. These
+updates run in a separate process that can finish after you exit. Other open
+sessions keep running, but files on disk change under them; after an in-place
+update, a session warns you to restart if code it loads on demand fails. On
+Windows, automatic global updates support npm and pnpm. Source checkouts,
+non-writable installs, and package renames show manual update notices instead.
+
+Failed background updates show a manual retry command and are retried on a later
+check. Automatic updates are on by default. To retain update notices without
+automatic downloads, open `/settings` and set **Automatic updates** to `false`,
+or add `"autoUpdate": false` to your user-level `~/.knightcode/agent/settings.json` (Windows:
+`%USERPROFILE%\.knightcode\agent\settings.json`). Project settings cannot override
+this preference. See [Disable automatic updates](/docs/reference/settings#disable-automatic-updates)
+for a complete example and reload instructions.
+
+Alternatively, set `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` in your shell or operating
+system environment before launching KnightCode; it overrides `autoUpdate: true`.
+`KNIGHTCODE_SKIP_VERSION_CHECK=1` suppresses both automatic checks and downloads.
+Explicit `knightcode update` remains available regardless of the setting or either
+variable. Offline, print, JSON, and RPC sessions do not start background updates.
+
 | Task | Command |
 |---|---|
 | Update KnightCode | `knightcode update` |
@@ -309,6 +373,14 @@ Authentication commands require `--provider <provider>` or `--model <model>`. Se
 
 Credential-printing commands write secrets to stdout.
 
+## App server
+
+`knightcode app-server` hosts many threads in one headless process. It reads
+newline-delimited JSON requests from stdin, writes protocol messages to stdout,
+and logs to stderr. It exits when stdin closes, unloading sessions and releasing
+their locks. See [App Server](/docs/reference/app-server) for the handshake, threads, approvals,
+payload retrieval, and limits.
+
 ## MCP commands
 
 These commands work outside a session, so agents can run them through `bash`. See [MCP Servers](/docs/customize/mcp).
@@ -319,9 +391,9 @@ These commands work outside a session, so agents can run them through `bash`. Se
 | `knightcode mcp add <server> [options] --url <url>` | Add or replace a streamable HTTP server; `--header KEY=VALUE` (repeatable), `--bearer-token-env-var <NAME>` (sends `Authorization: Bearer ${NAME}`), `--oauth-client-id`, `--oauth-client-secret`, `--oauth-callback-port`, and `--oauth-client-name` configure authentication |
 | `knightcode mcp remove <server>` | Remove a server from `mcp.json`; stored OAuth credentials are kept |
 | `knightcode mcp list [--json]` | Connect to every enabled server and print its state, tools, and errors; exit with `1` when a config entry is invalid or an enabled server is not connected |
-| `knightcode mcp login <server> [--timeout <seconds>]` | Sign in to an OAuth server: open the authorization page and wait for the browser (default 300 seconds); a terminal also accepts the pasted redirect URL |
+| `knightcode mcp login <server> [--timeout <seconds>]` | Sign in to an OAuth server: open the authorization page and wait for the browser; a terminal also accepts the pasted redirect URL. `--timeout` limits the whole sign-in, including requests to the authorization server (default 300 seconds) |
 | `knightcode mcp logout <server>` | Delete the stored OAuth credentials of a server |
 
-`add` and `remove` change `~/.knightcode/agent/mcp.json`, or `.knightcode/mcp.json` in the current directory with `--local` (`-l`). `add` also takes `--exposure <mode>` (see [Exposure](/docs/customize/mcp#exposure)) and `--description <text>` and does not connect; run `knightcode mcp list` to check the server.
+`add` and `remove` change `~/.knightcode/agent/mcp.json`, or `.knightcode/mcp.json` in the current directory with `--local` (`-l`). `add` also takes `--exposure <mode>` (see [Exposure](/docs/customize/mcp#control-tool-exposure)) and `--description <text>` and does not connect; run `knightcode mcp list` to check the server.
 
 Project `.knightcode/mcp.json` files are only read for projects that are already trusted.

@@ -9,8 +9,7 @@ The transport is newline-delimited JSON over stdin/stdout. Messages use JSON-RPC
 2.0 request, response, and notification shapes without a `"jsonrpc"` field.
 There is no protocol version number: the client and the server ship together,
 and a client that needs a newer server checks `serverInfo.version`. It is
-separate from the single-session [RPC mode](rpc.md). Worktrees, diffs, git operations and
-extension dialogs are later phases; this server does not implement them yet.
+separate from the single-session [RPC mode](rpc.md).
 
 ## Starting
 
@@ -21,8 +20,10 @@ knightcode app-server [-e <extension>]... [--session-dir <dir>]
 `-e` / `--extension` is repeatable. Paths resolve against the process working
 directory and load in each thread as explicitly trusted CLI paths. Project-local
 resources still follow [project trust](security.md#understand-project-trust).
-Extension dialogs and custom UI are not yet available in desktop mode; extensions
-see `mode: "desktop"` and `hasUI: false`.
+Extensions see `mode: "desktop"` and `hasUI: true`; their dialogs and the
+extension UI that reaches a desktop client are under
+[Dialogs and extension UI](#dialogs-and-extension-ui). Threads a terminal-mode
+connection loads have `hasUI: false`.
 
 Session storage uses `--session-dir`, then
 `KNIGHTCODE_CODING_AGENT_SESSION_DIR`, then the global `sessionDir` setting.

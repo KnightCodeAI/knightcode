@@ -63,7 +63,7 @@ See [CLI resources](/docs/reference/cli#resources) for the command-line option.
 
 ## Create a custom theme
 
-Copy one of the [built-in themes](https://github.com/KnightCodeAI/knightcode/tree/main/packages/cli/src/modes/interactive/theme) or create a new JSON file conforming to the [schema](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/modes/interactive/theme/theme-schema.json). The built-in themes use OKHSL colors, with variables for colors that several roles share, so you can adjust a hue, saturation, or lightness directly.
+Copy one of the [built-in themes](https://github.com/KnightCodeAI/knightcode/tree/main/packages/cli/src/modes/interactive/theme) or create a new JSON file conforming to the [schema](https://knightcode.dev/schemas/theme.schema.json). The built-in themes use OKHSL colors, with variables for colors that several roles share, so you can adjust a hue, saturation, or lightness directly.
 
 1. Save the file as `<agent-dir>/themes/my-theme.json`. The agent directory defaults to `~/.knightcode/agent`.
 2. Set its `name` to `my-theme`.
@@ -83,6 +83,8 @@ Use the theme name as the filename. KnightCode hot-reloads the active user theme
 | `colors` | Yes | Assigns colors to terminal UI roles. The schema identifies required and optional roles. |
 | `export` | No | Overrides page and panel backgrounds in HTML exports. |
 
+Theme objects are strict: only documented top-level fields and color tokens are accepted. Define reusable custom colors under `vars`; custom keys under `colors` or `export` and additional top-level metadata are rejected.
+
 A color can be written in six forms:
 
 | Form | Example | Meaning |
@@ -98,7 +100,7 @@ Terminal default colors render as the terminal's own colors. Where KnightCode ne
 
 KnightCode resolves chained variable references. A missing variable or circular reference makes the theme invalid. KnightCode uses truecolor when available, gamut-maps OKLCH to sRGB, and approximates colors for 256-color terminals. HTML exports convert OKHSL values to hexadecimal because CSS does not support them. If colors differ from their source values, check your terminal's truecolor detection and contrast settings. See [Configure Your Terminal](/docs/run/terminal-setup#override-detected-capabilities).
 
-Use the [theme JSON schema](https://github.com/KnightCodeAI/knightcode/blob/main/packages/cli/src/modes/interactive/theme/theme-schema.json) for the exact properties, required colors, and accepted value types.
+Use the [theme JSON schema](https://knightcode.dev/schemas/theme.schema.json) for the exact properties, required colors, and accepted value types.
 
 KnightCode reports invalid theme files during startup and `/reload`.
 
@@ -115,7 +117,7 @@ Theme colors describe interface roles rather than individual components. Use the
 | Markdown | `md*` |
 | Tool diffs | `toolDiff*`; added and removed rows are tinted with `toolSuccessBg` and `toolErrorBg` |
 | Syntax highlighting | `syntax*` |
-| Editor modes | `border` frames the prompt at every thinking level; `bashMode` frames shell input |
+| Editor modes | `border`, mixed 35% toward `text` for contrast, frames the prompt at every thinking level; `bashMode` frames shell input |
 | HTML export | `export.pageBg`, `export.cardBg`, `export.infoBg` |
 
 The schema is the format reference. The built-in themes provide complete values that you can copy and adjust.
