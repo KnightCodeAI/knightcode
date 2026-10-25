@@ -43,7 +43,10 @@ async function launch(options: { counter?: boolean } = {}): Promise<Launched> {
 	mkdirSync(agentDir);
 	writeFileSync(join(project, "README.md"), "# e2e fixture\n");
 	// The model a user would have picked: the new-thread composer offers the settings' default.
-	writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProvider: "faux-e2e", defaultModel: "faux-e2e" }));
+	writeFileSync(
+		join(agentDir, "settings.json"),
+		JSON.stringify({ defaultProvider: "faux-e2e", defaultModel: "faux-e2e" }),
+	);
 	if (options.counter)
 		writeFileSync(
 			join(agentDir, "mcp.json"),
@@ -85,7 +88,10 @@ test("a prompt gets the model's reply, and a bash call runs once approved", asyn
 	await page.getByRole("button", { name: /^Allow once/ }).click();
 	await expect(page.getByText("Ran it.")).toBeVisible();
 	// A finished turn folds its work under one summary.
-	await page.getByRole("button", { name: /^Worked for/ }).last().click();
+	await page
+		.getByRole("button", { name: /^Worked for/ })
+		.last()
+		.click();
 	await expect(page.getByText(/Ran echo e2e-bash/)).toBeVisible();
 });
 

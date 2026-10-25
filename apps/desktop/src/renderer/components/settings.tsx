@@ -1355,7 +1355,9 @@ function Environments() {
 							aria-label="Environment name"
 							defaultValue={env.name}
 							placeholder="Name"
-							onBlur={(e) => save(rows.map((x, j) => (j === i ? { key: x.key, env: { ...x.env, name: e.target.value } } : x)))}
+							onBlur={(e) =>
+								save(rows.map((x, j) => (j === i ? { key: x.key, env: { ...x.env, name: e.target.value } } : x)))
+							}
 							className="kc-input h-7 flex-1 border-line-strong px-2"
 						/>
 						<Button variant="soft" color="danger" toolbar onClick={() => save(rows.filter((_, j) => j !== i))}>
@@ -2704,11 +2706,7 @@ function Updates() {
 					Restart to update
 				</Button>
 			) : update.state === "available" ? (
-				<Button
-					variant="soft"
-					toolbar
-					onClick={() => openUpdatePage(update.url)}
-				>
+				<Button variant="soft" toolbar onClick={() => openUpdatePage(update.url)}>
 					Download
 				</Button>
 			) : update.state === "unavailable" ? null : (

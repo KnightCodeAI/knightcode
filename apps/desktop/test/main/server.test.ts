@@ -32,7 +32,12 @@ vi.mock("node:child_process", () => ({
 		return child;
 	},
 }));
-vi.mock("../../src/main/log-file.ts", () => ({ RotatingLog: class { write() {} end() {} } }));
+vi.mock("../../src/main/log-file.ts", () => ({
+	RotatingLog: class {
+		write() {}
+		end() {}
+	},
+}));
 
 beforeEach(() => {
 	vi.useFakeTimers();

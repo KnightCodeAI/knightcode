@@ -481,7 +481,8 @@ async function applyNotification(n: AnyNotification): Promise<void> {
 				.then(({ primary, heldElsewhere }) => {
 					if (!primary) return;
 					// An outcome the user did not see marks the thread unread until they open it.
-					const shown = (state.view.kind === "thread" && state.view.id === threadId) || heldElsewhere.includes(threadId);
+					const shown =
+						(state.view.kind === "thread" && state.view.id === threadId) || heldElsewhere.includes(threadId);
 					if (!shown) setUnread(threadId, true);
 					notifyTurn(turn);
 				})
@@ -946,7 +947,10 @@ function restoreQueuedComments(threadId: string, queueId?: string): void {
 	for (const [id, kept] of queuedComments) {
 		if (kept.threadId !== threadId || (queueId !== undefined && kept.queueId !== queueId)) continue;
 		queuedComments.delete(id);
-		set((s) => ({ ...s, comments: { ...s.comments, [threadId]: [...(s.comments[threadId] ?? []), ...kept.comments] } }));
+		set((s) => ({
+			...s,
+			comments: { ...s.comments, [threadId]: [...(s.comments[threadId] ?? []), ...kept.comments] },
+		}));
 	}
 }
 
@@ -1513,7 +1517,13 @@ export async function restartTerminal(threadId: string, index: number): Promise<
 	if (!tab) return;
 	void client.host("host/terminal/kill", { terminalId: tab.terminalId }).catch(() => {});
 	try {
-		const info = await client.host("host/terminal/create", { threadId, cwd: tab.cwd, shellId: tab.shellId, cols: 80, rows: 24 });
+		const info = await client.host("host/terminal/create", {
+			threadId,
+			cwd: tab.cwd,
+			shellId: tab.shellId,
+			cols: 80,
+			rows: 24,
+		});
 		updateTerminals(threadId, (t) => ({
 			...t,
 			tabs: t.tabs.map((other) => (other.terminalId === tab.terminalId ? tabOf(info) : other)),
@@ -1553,7 +1563,13 @@ export function showChanges(threadId = openId(), scope?: DiffScope): void {
  * the file tree) makes it a kept tab. `compare` shows the file's changes in that comparison (opened from a list of
  * changes); without it an open tab keeps its own.
  */
-export function openFileTab(threadId: string, path: string, line?: number, keep = false, compare?: FileComparison): void {
+export function openFileTab(
+	threadId: string,
+	path: string,
+	line?: number,
+	keep = false,
+	compare?: FileComparison,
+): void {
 	const used = ++tabClock;
 	updateTabs(
 		threadId,
@@ -1571,7 +1587,9 @@ export function openFileTab(threadId: string, path: string, line?: number, keep 
 				else at = next.push(tab) - 1;
 			}
 			for (;;) {
-				const files = next.flatMap((t, i) => (t.kind === "file" && i !== at ? [{ i, used: t.used, draft: t.draft }] : []));
+				const files = next.flatMap((t, i) =>
+					t.kind === "file" && i !== at ? [{ i, used: t.used, draft: t.draft }] : [],
+				);
 				// A tab with unsaved edits never goes: past the limit only while every other one has some.
 				const closable = files.filter((f) => !f.draft);
 				if (files.length < MAX_FILE_TABS || closable.length === 0) break;
@@ -1662,7 +1680,9 @@ export function openAppTab(threadId: string, itemId: string): void {
 		threadId,
 		(t) => {
 			const at = t.tabs.findIndex((tab) => tab.kind === "mcpApp" && tab.itemId === itemId);
-			return at !== -1 ? { ...t, active: at } : { tabs: [...t.tabs, { kind: "mcpApp", itemId }], active: t.tabs.length };
+			return at !== -1
+				? { ...t, active: at }
+				: { tabs: [...t.tabs, { kind: "mcpApp", itemId }], active: t.tabs.length };
 		},
 		true,
 	);
@@ -1721,7 +1741,9 @@ export function closeTab(threadId: string, index: number): void {
 export function discardFileTab(threadId?: string, path?: string): void {
 	set((s) => ({ ...s, discarding: undefined }));
 	if (!threadId || !path) return;
-	const index = (state.tabs[threadId]?.tabs ?? []).findIndex((t) => t.kind === "file" && tabKey(t.path) === tabKey(path));
+	const index = (state.tabs[threadId]?.tabs ?? []).findIndex(
+		(t) => t.kind === "file" && tabKey(t.path) === tabKey(path),
+	);
 	if (index <= 0) return;
 	updateTabs(threadId, ({ tabs, active }) => ({
 		tabs: tabs.filter((_, i) => i !== index),
@@ -1748,7 +1770,10 @@ const saving = new Map<string, Promise<unknown>>();
  * file at a time, as two over the same mtime would refuse each other. Edits made while it writes stay unsaved, over
  * the file as written.
  */
-export async function saveFileDraft(threadId: string, path: string): Promise<{ text: string; mtimeMs: number } | undefined> {
+export async function saveFileDraft(
+	threadId: string,
+	path: string,
+): Promise<{ text: string; mtimeMs: number } | undefined> {
 	const key = `${threadId}\0${tabKey(path)}`;
 	while (saving.has(key)) await saving.get(key);
 	const draftOf = () => {
@@ -1758,7 +1783,10 @@ export async function saveFileDraft(threadId: string, path: string): Promise<{ t
 	const draft = draftOf();
 	if (!draft) return undefined;
 	const write = client.request("file/write", { threadId, path, text: draft.text, expectedMtimeMs: draft.mtimeMs });
-	saving.set(key, write.catch(() => {}));
+	saving.set(
+		key,
+		write.catch(() => {}),
+	);
 	try {
 		const { mtimeMs } = await write;
 		const now = draftOf();
@@ -1887,9 +1915,9 @@ export async function resendEdited(
 				thread.cwd,
 				text,
 				{
-				// thread/start takes only {provider, id}: the full ModelRef fails its parameter check.
-				...(thread.model ? { model: { provider: thread.model.provider, id: thread.model.id } } : {}),
-				...(thread.thinkingLevel ? { thinkingLevel: thread.thinkingLevel } : {}),
+					// thread/start takes only {provider, id}: the full ModelRef fails its parameter check.
+					...(thread.model ? { model: { provider: thread.model.provider, id: thread.model.id } } : {}),
+					...(thread.thinkingLevel ? { thinkingLevel: thread.thinkingLevel } : {}),
 					approvalMode: thread.approvalMode,
 				},
 				images,

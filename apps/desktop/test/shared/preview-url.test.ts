@@ -11,7 +11,14 @@ test("a preview shows http and https pages and the blank page, nothing else", ()
 	expect(isPreviewUrl("http://localhost:3000/")).toBe(true);
 	expect(isPreviewUrl("https://example.com/a?b#c")).toBe(true);
 	expect(isPreviewUrl("about:blank")).toBe(true);
-	for (const url of ["file:///etc/passwd", "javascript:alert(1)", "data:text/html,x", "app://desktop/index.html", "chrome://gpu", "nonsense"])
+	for (const url of [
+		"file:///etc/passwd",
+		"javascript:alert(1)",
+		"data:text/html,x",
+		"app://desktop/index.html",
+		"chrome://gpu",
+		"nonsense",
+	])
 		expect(isPreviewUrl(url)).toBe(false);
 });
 

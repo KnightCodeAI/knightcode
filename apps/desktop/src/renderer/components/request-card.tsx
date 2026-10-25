@@ -234,8 +234,7 @@ export function QuestionsCard({ threadId, request }: { threadId: string; request
 				// A chosen option answers the question as typed text does; Skip is only for a question with neither.
 				action: answer.text.trim() || answer.label !== undefined ? (last ? "Submit" : "Next") : "Skip",
 				// Skip leaves the question unanswered.
-				onAction: () =>
-					done(answer.text.trim() || answer.label !== undefined ? answers : update({ text: "" })),
+				onAction: () => done(answer.text.trim() || answer.label !== undefined ? answers : update({ text: "" })),
 			}}
 			onDismiss={() => answerQuestions(threadId, request, {})}
 		/>

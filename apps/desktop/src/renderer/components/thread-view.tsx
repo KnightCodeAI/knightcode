@@ -202,7 +202,17 @@ function appItemOf(threadId: string, itemId: string) {
 			.find((i): i is AppItem => i.id === itemId && i.type === "toolCall" && i.mcpApp !== undefined);
 }
 
-function TabButton({ threadId, tab, index, active }: { threadId: string; tab: PanelTab; index: number; active: boolean }) {
+function TabButton({
+	threadId,
+	tab,
+	index,
+	active,
+}: {
+	threadId: string;
+	tab: PanelTab;
+	index: number;
+	active: boolean;
+}) {
 	const app = useStore(tab.kind === "mcpApp" ? appItemOf(threadId, tab.itemId) : () => undefined);
 	return (
 		<StripTab
@@ -261,7 +271,9 @@ function SidePanel({ id }: { id: string }) {
 	const strip = useRef<HTMLDivElement>(null);
 	// A strip wider than the panel scrolls the chosen tab, close button included, into sight.
 	useEffect(() => {
-		strip.current?.querySelector("[aria-selected=true]")?.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
+		strip.current
+			?.querySelector("[aria-selected=true]")
+			?.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
 	}, [active, tabs.length]);
 	useBinding(
 		"desktop.panel.closeTab",
@@ -345,7 +357,9 @@ function SidePanel({ id }: { id: string }) {
 			{shown?.kind === "files" ? (
 				<FilesTab
 					threadId={id}
-					onOpen={(path, keep, changed) => openFileTab(id, path, undefined, keep, changed ? { scope: "unstaged" } : undefined)}
+					onOpen={(path, keep, changed) =>
+						openFileTab(id, path, undefined, keep, changed ? { scope: "unstaged" } : undefined)
+					}
 				/>
 			) : null}
 			{/* Previews stay mounted behind the other tabs, keeping their pages. */}

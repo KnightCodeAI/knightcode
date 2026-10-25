@@ -104,13 +104,11 @@ function linkProvider(term: Terminal) {
 	return {
 		provideLinks(line: number, callback: (links: ILink[] | undefined) => void) {
 			const text = term.buffer.active.getLine(line - 1)?.translateToString(true) ?? "";
-			const links = [...text.matchAll(URL_PATTERN)].map(
-				(m): ILink => ({
-					text: m[0],
-					range: { start: { x: m.index + 1, y: line }, end: { x: m.index + m[0].length, y: line } },
-					activate: () => void client.host("host/shell/openExternal", { url: m[0] }).catch(() => {}),
-				}),
-			);
+			const links = [...text.matchAll(URL_PATTERN)].map((m): ILink => ({
+				text: m[0],
+				range: { start: { x: m.index + 1, y: line }, end: { x: m.index + m[0].length, y: line } },
+				activate: () => void client.host("host/shell/openExternal", { url: m[0] }).catch(() => {}),
+			}));
 			callback(links.length > 0 ? links : undefined);
 		},
 	};
@@ -191,7 +189,10 @@ function TerminalView({ threadId, tab, active }: { threadId: string; tab: Termin
 			}
 			if (matches(event, "desktop.terminal.paste")) {
 				event.preventDefault();
-				void client.host("host/clipboard/readText", {}).then(({ text }) => text && xterm.paste(text), () => {});
+				void client.host("host/clipboard/readText", {}).then(
+					({ text }) => text && xterm.paste(text),
+					() => {},
+				);
 				return false;
 			}
 			return true;
@@ -245,7 +246,17 @@ function TerminalView({ threadId, tab, active }: { threadId: string; tab: Termin
 }
 
 /** Notices over a terminal: its shell ended; or it runs outside the thread's folder (after a handoff). */
-function TerminalNotice({ threadId, index, tab, cwd }: { threadId: string; index: number; tab: TerminalTab; cwd: string }) {
+function TerminalNotice({
+	threadId,
+	index,
+	tab,
+	cwd,
+}: {
+	threadId: string;
+	index: number;
+	tab: TerminalTab;
+	cwd: string;
+}) {
 	if (tab.exitCode !== undefined)
 		return (
 			<div role="status" className="flex h-6 shrink-0 items-center gap-2 px-2 text-xs text-secondary select-none">
@@ -259,7 +270,10 @@ function TerminalNotice({ threadId, index, tab, cwd }: { threadId: string; index
 		);
 	if (tab.dismissed || !cwd || inside(tab.cwd, cwd)) return null;
 	return (
-		<div role="status" className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-sm text-secondary">
+		<div
+			role="status"
+			className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-sm text-secondary"
+		>
 			<span className="min-w-0 flex-1 truncate">This terminal is outside this chat's workspaces</span>
 			<Button variant="ghost" size="sm" onClick={() => updateTerminal(threadId, tab.terminalId, { dismissed: true })}>
 				Dismiss
@@ -306,9 +320,16 @@ export function BottomRegion({ threadId, cwd }: { threadId: string; cwd: string 
 	const height = useStore((s) => s.bottom.height) || DEFAULT_HEIGHT;
 	const [shells, setShells] = useState<{ id: string; name: string }[]>([]);
 	useEffect(() => {
-		void client.host("host/terminal/shells", {}).then(({ shells: found }) => setShells(found), () => {});
+		void client.host("host/terminal/shells", {}).then(
+			({ shells: found }) => setShells(found),
+			() => {},
+		);
 	}, []);
-	useBinding("desktop.terminal.next", () => activateTerminal(threadId, (active + 1) % Math.max(1, tabs.length)), tabs.length > 1);
+	useBinding(
+		"desktop.terminal.next",
+		() => activateTerminal(threadId, (active + 1) % Math.max(1, tabs.length)),
+		tabs.length > 1,
+	);
 	useBinding(
 		"desktop.terminal.previous",
 		() => activateTerminal(threadId, (active - 1 + tabs.length) % Math.max(1, tabs.length)),
@@ -323,7 +344,11 @@ export function BottomRegion({ threadId, cwd }: { threadId: string; cwd: string 
 		>
 			<ResizeHandle threadId={threadId} height={height} />
 			<div className="flex h-10 shrink-0 items-center gap-1.5 ps-2 pe-1.5">
-				<div role="tablist" aria-label="Terminals" className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
+				<div
+					role="tablist"
+					aria-label="Terminals"
+					className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]"
+				>
 					{tabs.map((tab, i) => (
 						<StripSlot key={tab.terminalId} divider={i !== active && i + 1 !== active && i !== tabs.length - 1}>
 							<StripTab

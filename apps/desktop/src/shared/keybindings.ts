@@ -96,7 +96,10 @@ export const DESKTOP_KEYBINDINGS = {
 	"desktop.preview.open": { defaultKeys: ["mod+t"], description: "Open a preview tab" },
 	"desktop.preview.address": { defaultKeys: ["mod+l"], description: "Focus the preview's address bar" },
 	"desktop.preview.annotate": { defaultKeys: ["mod+shift+period"], description: "Annotate the preview" },
-	"desktop.terminal.paste": { defaultKeys: ["mod+v", "ctrl+shift+v", "shift+insert"], description: "Paste into the terminal" },
+	"desktop.terminal.paste": {
+		defaultKeys: ["mod+v", "ctrl+shift+v", "shift+insert"],
+		description: "Paste into the terminal",
+	},
 	"desktop.view.zoomIn": { defaultKeys: ["mod+shift+equal", "mod+equal", "mod+numpadadd"], description: "Zoom in" },
 	"desktop.view.zoomOut": { defaultKeys: ["mod+minus", "mod+numpadsubtract"], description: "Zoom out" },
 	"desktop.view.zoomReset": { defaultKeys: ["mod+digit0"], description: "Actual size" },

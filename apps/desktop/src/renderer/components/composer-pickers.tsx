@@ -226,7 +226,7 @@ export function ModelPicker({
 					view={view}
 					draft={draft}
 					onList={() => setView("list")}
-						onDone={close}
+					onDone={close}
 					onThinking={(level) => update({ ...latest.current, thinking: level })}
 					onModel={(m) => {
 						const level = latest.current.thinking;

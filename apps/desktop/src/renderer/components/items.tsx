@@ -100,7 +100,13 @@ function PlanCard({ item }: { item: ToolItem }) {
 					<>
 						<div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-surface to-transparent" />
 						<div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-							<Button variant="solid" size="md" squircle className="pointer-events-auto" onClick={() => setCollapsed(false)}>
+							<Button
+								variant="solid"
+								size="md"
+								squircle
+								className="pointer-events-auto"
+								onClick={() => setCollapsed(false)}
+							>
 								Expand plan
 							</Button>
 						</div>
@@ -361,8 +367,7 @@ function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cw
 		if (entry.kind === "group") {
 			let done: ToolItem[] = [];
 			const fold = () => {
-				if (done.length > 1)
-					rows.push(<ActivityGroup key={done[0]!.id} items={done} cwd={cwd} nestedOf={nestedOf} />);
+				if (done.length > 1) rows.push(<ActivityGroup key={done[0]!.id} items={done} cwd={cwd} nestedOf={nestedOf} />);
 				else if (done[0]) rows.push(call(done[0]));
 				done = [];
 			};

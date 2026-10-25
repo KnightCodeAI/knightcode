@@ -218,8 +218,7 @@ export class McpAppBridge {
 		if (status === "completed" || status === "failed") {
 			this.sentEnd = true;
 			const text = this.item.output.flatMap((o) => (o.type === "text" ? [{ type: "text", text: o.text }] : []));
-			const result =
-				this.item.mcpApp.result ?? { content: text, ...(status === "failed" ? { isError: true } : {}) };
+			const result = this.item.mcpApp.result ?? { content: text, ...(status === "failed" ? { isError: true } : {}) };
 			this.notify("ui/notifications/tool-result", result as Json);
 		} else if (status === "declined") {
 			this.sentEnd = true;
@@ -275,7 +274,8 @@ export class McpAppBridge {
 		switch (method) {
 			case "ui/initialize": {
 				const modes = (params.appCapabilities as Json | undefined)?.availableDisplayModes;
-				if (Array.isArray(modes)) this.modes = modes.filter((m): m is DisplayMode => m === "inline" || m === "fullscreen");
+				if (Array.isArray(modes))
+					this.modes = modes.filter((m): m is DisplayMode => m === "inline" || m === "fullscreen");
 				return {
 					protocolVersion: MCP_APP_PROTOCOL,
 					hostInfo: { name: "knightcode-desktop", version: this.host.appVersion },
@@ -321,7 +321,9 @@ export class McpAppBridge {
 			case "ui/message": {
 				const content = Array.isArray(params.content) ? params.content : [];
 				const text = content
-					.flatMap((c) => (typeof c === "object" && c !== null && (c as Json).type === "text" ? [String((c as Json).text ?? "")] : []))
+					.flatMap((c) =>
+						typeof c === "object" && c !== null && (c as Json).type === "text" ? [String((c as Json).text ?? "")] : [],
+					)
 					.join("\n")
 					.trim();
 				if (!text) throw failure(-32602, "the message has no text");
