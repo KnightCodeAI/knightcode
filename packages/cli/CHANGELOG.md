@@ -1,5 +1,29 @@
 # @knightcodeai/cli
 
+## 0.22.0
+
+### Added
+
+- Added `thread/backgroundShells/list`, `thread/backgroundShells/output` and `thread/backgroundShells/stop` to the app server, with the `thread/backgroundShells/updated` notification: a client can list a thread's background commands, read the end of their output and stop them. A shell call whose command went on in the background carries `backgroundShellId`, and a `background_shell` message carries its notices.
+
+### Changed
+
+- Changed what a session records when it ends: the background commands it stops are written to the chat as stopped because the session ended, so resuming the session shows them, and a stopped command's notice now says who stopped it.
+
+- Changed the background commands pill to sit on the footer's stats line instead of a row of its own above the footer; a click on it still opens `/tasks`.
+
+### Fixed
+
+- Fixed model references whose provider id contains a slash, such as a URL-derived provider, by matching the whole provider id.
+
+- Fixed package installs through a symlinked agent directory, which wrote broken paths because npm was given the link as its prefix.
+
+- Fixed extension statuses on the footer's stats line losing the footer's dim when they follow the experimental features marker.
+
+### Security
+
+- Security: updated undici from 8.10.2 to 8.12.3, which fixes eight published advisories in its request handling.
+
 ## 0.21.1
 
 ### Changed
