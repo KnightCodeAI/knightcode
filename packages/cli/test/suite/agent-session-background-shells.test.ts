@@ -227,6 +227,26 @@ describe("AgentSession background shell commands", () => {
 		expect(harness.eventsOfType("agent_start")).toHaveLength(1);
 	});
 
+	it("records at dispose a command the model asked to stop that has not exited", async () => {
+		const harness = await create();
+		harness.setResponses([startBackground("sleep 30"), fauxAssistantMessage("running")]);
+		await harness.session.prompt("start");
+		const manager = harness.session.backgroundShells;
+		const [shell] = manager.list();
+
+		// As task_stop leaves it when its wait gives up: asked to stop, still running.
+		manager.stop(shell?.id as string, "model");
+		harness.session.dispose();
+		expect(await manager.waitForExit(shell?.id as string, 10_000)).toBe(true);
+		const recorded = harness.sessionManager
+			.getEntries()
+			.filter((entry) => entry.type === "custom_message" && entry.customType === BACKGROUND_SHELL_MESSAGE_TYPE);
+		expect(recorded).toHaveLength(1);
+		expect(recorded[0]).toMatchObject({
+			details: { notices: [{ id: shell?.id, status: "stopped", stoppedBy: "model" }] },
+		});
+	});
+
 	it("does not let a notice start a run while a prompt is in preflight", async () => {
 		const harness = await create({
 			extensionFactories: [

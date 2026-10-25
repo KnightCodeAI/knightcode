@@ -1533,9 +1533,10 @@ export class AgentSession {
 		this.backgroundShells.dispose();
 		// The commands just stopped, and notices still waiting as behind a hold during teardown, are
 		// recorded while the file is open, so the chat says how they ended when the session is resumed.
-		// A command already exiting on its own is left to the orphan scan, and task_stop told the model.
+		// A command already exiting on its own is left to the orphan scan. One the model stopped that is
+		// still running is recorded too: task_stop only said it had not exited yet.
 		for (const shell of this.backgroundShells.list()) {
-			if (shell.status !== "running" || !shell.stoppedBy || shell.stoppedBy === "model") continue;
+			if (shell.status !== "running" || !shell.stoppedBy) continue;
 			const notice = createBackgroundShellNotice(
 				{ ...shell, status: "stopped" },
 				this.backgroundShells.readOutput(shell.id),

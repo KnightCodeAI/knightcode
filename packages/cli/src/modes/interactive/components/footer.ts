@@ -219,11 +219,12 @@ export class FooterComponent implements Component {
 		// Extension statuses ride the stats line rather than a line of their own: they are
 		// short accents on the session, and a whole extra footer row for "remote active"
 		// reads as more important than the tokens it sits under. Appended last so the
-		// colour an extension applies cannot cancel the dim on the parts before it.
+		// colour an extension applies cannot cancel the dim on the parts before it. Each reopens
+		// the dim, which a part before it (the pill, "xp") or another status may have closed.
 		for (const [, text] of Array.from(this.footerData.getExtensionStatuses().entries()).sort(([a], [b]) =>
 			a.localeCompare(b),
 		)) {
-			statsParts.push(sanitizeStatusText(text));
+			statsParts.push(`${theme.getFgAnsi("dim")}${sanitizeStatusText(text)}`);
 		}
 
 		let statsLeft = statsParts.join(" ");

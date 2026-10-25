@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 type AssistantUsage = {
@@ -92,10 +92,14 @@ function createSession(options: {
 	return session as unknown as AgentSession;
 }
 
-function createFooterData(providerCount: number, backgroundShells?: string): ReadonlyFooterDataProvider {
+function createFooterData(
+	providerCount: number,
+	backgroundShells?: string,
+	statuses: Record<string, string> = {},
+): ReadonlyFooterDataProvider {
 	const provider = {
 		getGitBranch: () => "main",
-		getExtensionStatuses: () => new Map<string, string>(),
+		getExtensionStatuses: () => new Map(Object.entries(statuses)),
 		getAvailableProviderCount: () => providerCount,
 		getBackgroundShells: () => backgroundShells,
 		onBranchChange: (callback: () => void) => {
@@ -287,5 +291,14 @@ describe("FooterComponent width handling", () => {
 		const footer = new FooterComponent(session, createFooterData(1, "1 shell · ↓ to view"));
 
 		expect(stripAnsi(footer.render(120)[1])).toContain("12.3%/200k (auto) • 1 shell · ↓ to view");
+	});
+
+	it("keeps extension statuses dim after a part that closes the dim", () => {
+		const session = createSession({ sessionName: "" });
+		const pill = `${theme.fg("accent", "1 shell")}${theme.fg("dim", " · ↓ view")}`;
+		const stats = new FooterComponent(session, createFooterData(1, pill, { remote: "remote on" })).render(120)[1]!;
+
+		const at = stats.indexOf("remote on");
+		expect(stats.lastIndexOf("\x1b[2m", at)).toBeGreaterThan(stats.lastIndexOf("\x1b[22", at));
 	});
 });

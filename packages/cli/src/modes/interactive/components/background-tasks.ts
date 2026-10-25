@@ -171,6 +171,21 @@ export class BackgroundShellsIndicator {
 		const cta = this.selected ? hint("Enter", "view") : hint("↓", "view");
 		return `${pill}${theme.fg("dim", ` · ${cta}`)}`;
 	}
+
+	/**
+	 * Whether column `x` of a rendered footer line falls on the pill. The footer decides where it goes,
+	 * so it is found by its label: a footer too narrow for the hint still takes the click on what shows.
+	 */
+	hit(line: string, x: number): boolean {
+		const pill = this.render();
+		if (!pill) return false;
+		const plain = stripAnsi(line);
+		// ponytail: a label the footer clipped too ("1 shel...") is not found; reserve its width if that matters.
+		const at = plain.indexOf(backgroundShellsLabel(this.getManager().runningCount()));
+		if (at < 0) return false;
+		const start = visibleWidth(plain.slice(0, at));
+		return x >= start && x < start + visibleWidth(stripAnsi(pill));
+	}
 }
 
 /**

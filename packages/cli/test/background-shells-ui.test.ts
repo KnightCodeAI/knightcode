@@ -1,4 +1,4 @@
-import { setKeybindings, type TUI, TuiMainScreen } from "@knightcode/tui";
+import { setKeybindings, type TUI, TuiMainScreen, truncateToWidth } from "@knightcode/tui";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { defaultEditorTheme } from "../../tui/test/test-themes.ts";
 import { VirtualTerminal } from "../../tui/test/virtual-terminal.ts";
@@ -176,6 +176,23 @@ describe("/tasks view", () => {
 		exits[0]?.(0);
 		expect(await manager.waitForExit(manager.list()[0]?.id as string, 5000)).toBe(true);
 		expect(stripAnsi(pill.render() ?? "")).toBe("1 shell · ↓ to view");
+		manager.dispose();
+	});
+
+	it("takes a click on the pill's label when a narrow footer clips its hint", async () => {
+		const manager = new BackgroundShellManager();
+		const { operations } = controlledOperations();
+		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
+		const pill = new BackgroundShellsIndicator(() => manager);
+		await bash.execute("c1", { command: "npm run dev", run_in_background: true });
+
+		// "12.3%/200k • 1 shell · ↓ to view", clipped at 26 columns: the label spans columns 13 to 19.
+		const line = truncateToWidth(`12.3%/200k • ${pill.render()}`, 26, "...");
+		expect(stripAnsi(line)).toBe("12.3%/200k • 1 shell · ...");
+		expect(pill.hit(line, 12)).toBe(false);
+		expect(pill.hit(line, 13)).toBe(true);
+		expect(pill.hit(line, 19)).toBe(true);
+		expect(pill.hit(`12.3%/200k • ${pill.render()}`, 30)).toBe(true);
 		manager.dispose();
 	});
 
