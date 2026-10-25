@@ -198,9 +198,18 @@ function ComparisonControls({
 	onHide: () => void;
 }) {
 	const [branches, setBranches] = useState<string[]>();
-	const label = compare.scope === "unstaged" ? "Unstaged" : compare.scope === "uncommitted" ? "Uncommitted" : (compare.against ?? "Branch");
+	const label =
+		compare.scope === "unstaged"
+			? "Unstaged"
+			: compare.scope === "uncommitted"
+				? "Uncommitted"
+				: (compare.against ?? "Branch");
 	return (
-		<div role="group" aria-label="File comparison" className="kc-capsule inline-flex h-8 min-w-0 shrink-0 items-center rounded-full p-0.5">
+		<div
+			role="group"
+			aria-label="File comparison"
+			className="kc-capsule inline-flex h-8 min-w-0 shrink-0 items-center rounded-full p-0.5"
+		>
 			<Menu>
 				<MenuTrigger>
 					<button
@@ -269,7 +278,11 @@ function ChangeNavigation({ count, active, onGo }: { count: number; active: numb
 	const previous = active > 0 ? active - 1 : -1;
 	const next = active + 1 < count ? active + 1 : -1;
 	return (
-		<div role="group" aria-label="Navigate changes" className="kc-capsule inline-flex h-8 shrink-0 items-center gap-0.5 rounded-full p-0.5">
+		<div
+			role="group"
+			aria-label="Navigate changes"
+			className="kc-capsule inline-flex h-8 shrink-0 items-center gap-0.5 rounded-full p-0.5"
+		>
 			<IconButton label="Previous change" round disabled={previous < 0} onClick={() => onGo(previous)}>
 				<ChevronUp size={16} />
 			</IconButton>
@@ -577,7 +590,11 @@ export function FileTab({
 			) : null}
 			{/* The icon shows the layout in use and the label the one a click switches to. */}
 			{compare && !previewing ? (
-				<IconButton label={split ? "Switch to unified diff" : "Switch to split diff"} round onClick={() => setPanel({ fileSplit: !split })}>
+				<IconButton
+					label={split ? "Switch to unified diff" : "Switch to split diff"}
+					round
+					onClick={() => setPanel({ fileSplit: !split })}
+				>
 					{split ? <Columns2 size={16} /> : <Rows2 size={16} />}
 				</IconButton>
 			) : null}
@@ -659,7 +676,11 @@ export function FileTab({
 				) : null}
 				{compare && diff && !previewing ? <ChangeNavigation count={blocks.length} active={active} onGo={go} /> : null}
 				{/* Under 625px of toolbar the file controls fold into one button that opens them. */}
-				<div role="group" aria-label="File controls" className="kc-capsule hidden h-8 shrink-0 items-center gap-0.5 rounded-full p-0.5 @min-[625px]/file-header:inline-flex">
+				<div
+					role="group"
+					aria-label="File controls"
+					className="kc-capsule hidden h-8 shrink-0 items-center gap-0.5 rounded-full p-0.5 @min-[625px]/file-header:inline-flex"
+				>
 					{controls}
 				</div>
 				<div className="kc-capsule inline-flex h-8 shrink-0 items-center rounded-full p-0.5 @min-[625px]/file-header:hidden">
@@ -691,58 +712,61 @@ export function FileTab({
 			) : null}
 			<div className="flex min-h-0 flex-1 border-t border-line">
 				<div className="relative flex min-h-0 min-w-0 flex-1">
-				{goingTo && file ? (
-					<GoToLine
-						count={lineCount(draft?.text ?? file.contents)}
-						onClose={() => setGoingTo(false)}
-						onGo={(to) => {
-							setGoingTo(false);
-							setJump(to);
-							centerRow(body.current, `[data-line="${to}"]:not([data-line-type="change-deletion"])`);
-						}}
-					/>
-				) : null}
-				<div ref={body} className="min-h-0 min-w-0 flex-1 overflow-auto">
-					{error && diff && highlighter ? (
-						<FileDiff fileDiff={diff} options={diffOptions} disableWorkerPool />
-					) : error ? (
-						<Notice title="Could not open file" detail={error} />
-					) : !read ? null : read.binary ? (
-						<Notice title="Binary file not shown" detail="Open it in another app to see it." />
-					) : read.tooLarge ? (
-						<Notice title="This file is too large to preview in the side panel" detail="Open it in another app to see it." />
-					) : previewing && file ? (
-						<div className="mx-auto max-w-3xl px-6 py-5">
-							<Markdown text={draft?.text ?? file.contents} />
-						</div>
-					) : !file || !shown || !highlighter || (compare && !shownBase) ? null : (
-						<EditProvider createEditor={createEditor}>
-							{diff ? (
-								<FileDiff
-									key={`${shown.revision}:${baseKey}`}
-									fileDiff={diff}
-									options={diffOptions}
-									disableWorkerPool
-									selectedLines={selected}
-									edit
-									onEditChange={(e) => edited(e.file.contents)}
-									onEditComplete={() => "reject"}
-								/>
-							) : (
-								<File
-									key={shown.revision}
-									file={file}
-									options={fileOptions}
-									disableWorkerPool
-									selectedLines={selected}
-									edit
-									onEditChange={(e) => edited(e.file.contents)}
-									onEditComplete={() => "reject"}
-								/>
-							)}
-						</EditProvider>
-					)}
-				</div>
+					{goingTo && file ? (
+						<GoToLine
+							count={lineCount(draft?.text ?? file.contents)}
+							onClose={() => setGoingTo(false)}
+							onGo={(to) => {
+								setGoingTo(false);
+								setJump(to);
+								centerRow(body.current, `[data-line="${to}"]:not([data-line-type="change-deletion"])`);
+							}}
+						/>
+					) : null}
+					<div ref={body} className="min-h-0 min-w-0 flex-1 overflow-auto">
+						{error && diff && highlighter ? (
+							<FileDiff fileDiff={diff} options={diffOptions} disableWorkerPool />
+						) : error ? (
+							<Notice title="Could not open file" detail={error} />
+						) : !read ? null : read.binary ? (
+							<Notice title="Binary file not shown" detail="Open it in another app to see it." />
+						) : read.tooLarge ? (
+							<Notice
+								title="This file is too large to preview in the side panel"
+								detail="Open it in another app to see it."
+							/>
+						) : previewing && file ? (
+							<div className="mx-auto max-w-3xl px-6 py-5">
+								<Markdown text={draft?.text ?? file.contents} />
+							</div>
+						) : !file || !shown || !highlighter || (compare && !shownBase) ? null : (
+							<EditProvider createEditor={createEditor}>
+								{diff ? (
+									<FileDiff
+										key={`${shown.revision}:${baseKey}`}
+										fileDiff={diff}
+										options={diffOptions}
+										disableWorkerPool
+										selectedLines={selected}
+										edit
+										onEditChange={(e) => edited(e.file.contents)}
+										onEditComplete={() => "reject"}
+									/>
+								) : (
+									<File
+										key={shown.revision}
+										file={file}
+										options={fileOptions}
+										disableWorkerPool
+										selectedLines={selected}
+										edit
+										onEditChange={(e) => edited(e.file.contents)}
+										onEditComplete={() => "reject"}
+									/>
+								)}
+							</EditProvider>
+						)}
+					</div>
 				</div>
 				{treeShown && cwd ? (
 					<div className="flex w-64 shrink-0 border-l border-line">
@@ -752,7 +776,13 @@ export function FileTab({
 							activePath={full}
 							compare={compare ?? showable}
 							onOpen={(next, keep, changed) =>
-								openFileTab(threadId, next, undefined, keep, changed ? (compare ?? showable ?? { scope: "unstaged" }) : undefined)
+								openFileTab(
+									threadId,
+									next,
+									undefined,
+									keep,
+									changed ? (compare ?? showable ?? { scope: "unstaged" }) : undefined,
+								)
 							}
 						/>
 					</div>

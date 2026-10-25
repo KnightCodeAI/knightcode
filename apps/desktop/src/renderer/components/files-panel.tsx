@@ -31,7 +31,9 @@ export function relativeTo(root: string, path: string): string | undefined {
 	const r = normal(root);
 	const p = normal(path);
 	const windows = /^[a-zA-Z]:/.test(r) || r.startsWith("//");
-	return (windows ? p.toLowerCase() : p).startsWith(`${windows ? r.toLowerCase() : r}/`) ? p.slice(r.length + 1) : undefined;
+	return (windows ? p.toLowerCase() : p).startsWith(`${windows ? r.toLowerCase() : r}/`)
+		? p.slice(r.length + 1)
+		: undefined;
 }
 
 /** Changed files first, then All files; within a section folders first, then by name as the eye reads digits. */
@@ -238,7 +240,9 @@ function useListing(
 		const listed = new Set<string>();
 		const rowOf = (path: string) => `${prefix}${base ? path.slice(base.length + 1) : path}`;
 		const list = async (folder: string) => {
-			const result = await client.request("file/list", { threadId, ...(folder ? { path: folder } : {}) }).catch(() => undefined);
+			const result = await client
+				.request("file/list", { threadId, ...(folder ? { path: folder } : {}) })
+				.catch(() => undefined);
 			if (!live || !result) return;
 			listed.add(folder);
 			const parent = folder === base ? prefix : `${rowOf(folder)}/`;
@@ -314,7 +318,12 @@ export function FolderTree({
 	const open = useRef(onOpen);
 	open.current = onOpen;
 	const relative = relativeTo(cwd, activePath);
-	const under = relative === undefined || !folder ? relative : relative.startsWith(`${folder}/`) ? relative.slice(folder.length + 1) : undefined;
+	const under =
+		relative === undefined || !folder
+			? relative
+			: relative.startsWith(`${folder}/`)
+				? relative.slice(folder.length + 1)
+				: undefined;
 	const { model } = useFileTree({
 		paths: [],
 		flattenEmptyDirectories: false,
@@ -324,7 +333,8 @@ export function FolderTree({
 		unsafeCSS: FILES_TREE_CSS,
 		onSelectionChange: (paths) => {
 			const path = paths[0];
-			if (path && !path.endsWith("/") && path !== under) open.current(joinPath(cwd, folder ? `${folder}/${path}` : path));
+			if (path && !path.endsWith("/") && path !== under)
+				open.current(joinPath(cwd, folder ? `${folder}/${path}` : path));
 		},
 	});
 	useListing(model, threadId, folder, "", known, () => {
@@ -403,7 +413,9 @@ function SectionedTree({
 		if (operations.length === 0) return;
 		for (const op of operations) op.type === "add" ? known.current.add(op.path) : known.current.delete(op.path);
 		model.batch(
-			operations.map((op) => (op.type === "add" ? { type: "add", path: op.path } : { type: "remove", path: op.path, recursive: true })),
+			operations.map((op) =>
+				op.type === "add" ? { type: "add", path: op.path } : { type: "remove", path: op.path, recursive: true },
+			),
 		);
 	};
 
@@ -412,7 +424,10 @@ function SectionedTree({
 		const files = changed?.files ?? [];
 		const paths = files.flatMap((f) => {
 			const segments = f.path.split("/");
-			return [...segments.slice(0, -1).map((_, i) => `${CHANGED}/${segments.slice(0, i + 1).join("/")}/`), `${CHANGED}/${f.path}`];
+			return [
+				...segments.slice(0, -1).map((_, i) => `${CHANGED}/${segments.slice(0, i + 1).join("/")}/`),
+				`${CHANGED}/${f.path}`,
+			];
 		});
 		sync(`${CHANGED}/`, paths);
 		for (const path of [`${CHANGED}/`, ...paths])
@@ -527,20 +542,20 @@ export function FilesTree({ threadId, cwd, activePath, autoFocus, compare, onOpe
 export function TreeToggle() {
 	const shown = useStore((s) => s.panel.fileTree !== false);
 	return (
-		<IconButton label="Toggle file tree" round toggle aria-pressed={shown} onClick={() => setPanel({ fileTree: !shown })}>
+		<IconButton
+			label="Toggle file tree"
+			round
+			toggle
+			aria-pressed={shown}
+			onClick={() => setPanel({ fileTree: !shown })}
+		>
 			<Folders size={16} />
 		</IconButton>
 	);
 }
 
 /** The "Open file" tab: the tree beside an empty view until a file is chosen. */
-export function FilesTab({
-	threadId,
-	onOpen,
-}: {
-	threadId: string;
-	onOpen: FilesTreeProps["onOpen"];
-}) {
+export function FilesTab({ threadId, onOpen }: { threadId: string; onOpen: FilesTreeProps["onOpen"] }) {
 	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
 	const shown = useStore((s) => s.panel.fileTree !== false);
 	return (

@@ -1998,6 +1998,8 @@ export class SessionManager {
 				: options.leafId === null
 					? []
 					: branchEntries(sourceEntries, options.leafId);
+		// Header and entries go out in one write. Reopening the file per entry is slow where
+		// open/close is expensive.
 		const content = [newHeader, ...copied].map((entry) => `${JSON.stringify(entry)}\n`).join("");
 		const lock = acquireSessionLock(newSessionFile);
 		let created = false;

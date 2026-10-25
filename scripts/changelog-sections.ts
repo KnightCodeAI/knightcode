@@ -199,12 +199,24 @@ if (import.meta.main) {
 	// where a contributor can still fix it. The release job's warning arrives
 	// after the entry has already been filed under the wrong heading.
 	const dir = join(import.meta.dir, "..", ".changeset");
+	// Private packages are never versioned (privatePackages in config.json), and
+	// changesets refuses a changeset that mixes them with a published one — at
+	// release time, after the PR has merged. Catch it here instead.
+	const published = new Set<string>();
+	for await (const file of new Glob("packages/*/package.json").scan(join(import.meta.dir, ".."))) {
+		const pkg = await Bun.file(join(import.meta.dir, "..", file)).json();
+		if (!pkg.private) published.add(pkg.name);
+	}
 	const bad: string[] = [];
+	const unpublished: string[] = [];
 	for await (const file of new Glob("*.md").scan(dir)) {
 		if (file === "README.md") continue;
 		// Frontmatter, then the summary: "---", packages, "---", the sentence.
-		const summary = (await Bun.file(join(dir, file)).text()).split(/^---\s*$/m)[2]?.trim() ?? "";
-		if (categoryOf(summary) === null) bad.push(`.changeset/${file}`);
+		const [, frontmatter = "", summary = ""] = (await Bun.file(join(dir, file)).text()).split(/^---\s*$/m);
+		if (categoryOf(summary.trim()) === null) bad.push(`.changeset/${file}`);
+		for (const [, name] of frontmatter.matchAll(/^\s*["']?([^"':]+)["']?\s*:/gm)) {
+			if (!published.has(name!)) unpublished.push(`.changeset/${file}: ${name}`);
+		}
 	}
 	if (bad.length > 0) {
 		console.error(
@@ -212,6 +224,13 @@ if (import.meta.main) {
 				`see CONTRIBUTING.md:\n  ` +
 				bad.join("\n  "),
 		);
-		process.exit(1);
 	}
+	if (unpublished.length > 0) {
+		console.error(
+			`Changesets may only name published packages (${[...published].join(", ")}); ` +
+				`list the user-visible change under the package that ships it:\n  ` +
+				unpublished.join("\n  "),
+		);
+	}
+	if (bad.length > 0 || unpublished.length > 0) process.exit(1);
 }

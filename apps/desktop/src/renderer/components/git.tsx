@@ -728,7 +728,10 @@ const REFUSALS = ["gitConflict", "invalidParams", "turnInProgress"];
 
 function refusalText(error: RequestError): { message: string; paths?: string[] } {
 	const data = error.data as { recoveryInstructions?: string[]; paths?: string[] } | undefined;
-	return { message: data?.recoveryInstructions?.[0] ?? error.message, ...(data?.paths?.length ? { paths: data.paths } : {}) };
+	return {
+		message: data?.recoveryInstructions?.[0] ?? error.message,
+		...(data?.paths?.length ? { paths: data.paths } : {}),
+	};
 }
 
 /**
@@ -878,7 +881,12 @@ function SourcesSection({ threadId, onImage }: { threadId: string; onImage: (pre
 				const src = `data:${image.mimeType};base64,${image.data}`;
 				const label = `Image ${i + 1}`;
 				return (
-					<button key={i} type="button" onClick={() => onImage({ src, label })} className={`${row} hover:bg-ghost-hover`}>
+					<button
+						key={i}
+						type="button"
+						onClick={() => onImage({ src, label })}
+						className={`${row} hover:bg-ghost-hover`}
+					>
 						<img src={src} alt="" className="size-[18px] shrink-0 rounded-[3px] border border-line object-cover" />
 						{label}
 					</button>

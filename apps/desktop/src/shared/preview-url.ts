@@ -38,13 +38,17 @@ export function previewAddress(typed: string): string | undefined {
 	const text = typed.trim();
 	if (!text || /\s/.test(text)) return undefined;
 	// A scheme only with "://", or one of those written without it: "example.com:8080" is a host and a port.
-	const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) || /^(about|javascript|data|file|blob|mailto|chrome):/i.test(text);
-	const candidate = hasScheme && !LOCAL.test(text)
-		? text
-		: LOCAL.test(text)
-			? `http://${text}`
-			: /^[^/?#]+\.[^/?#]+/.test(text)
-				? `https://${text}`
-				: undefined;
-	return candidate && candidate !== "about:blank" && isPreviewUrl(candidate) ? new URL(candidate).toString() : undefined;
+	const hasScheme =
+		/^[a-z][a-z0-9+.-]*:\/\//i.test(text) || /^(about|javascript|data|file|blob|mailto|chrome):/i.test(text);
+	const candidate =
+		hasScheme && !LOCAL.test(text)
+			? text
+			: LOCAL.test(text)
+				? `http://${text}`
+				: /^[^/?#]+\.[^/?#]+/.test(text)
+					? `https://${text}`
+					: undefined;
+	return candidate && candidate !== "about:blank" && isPreviewUrl(candidate)
+		? new URL(candidate).toString()
+		: undefined;
 }

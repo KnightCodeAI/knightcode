@@ -70,7 +70,8 @@ let quitting = false;
 /** host/window/role: the focused window, else the one focused last, acts for all; and what the others hold. */
 function roleOf(id: number): { primary: boolean; heldElsewhere: string[] } {
 	const all = [...windows];
-	const primary = all.find(([, w]) => w.window.isFocused()) ?? all.sort(([, a], [, b]) => b.lastFocusedAt - a.lastFocusedAt)[0];
+	const primary =
+		all.find(([, w]) => w.window.isFocused()) ?? all.sort(([, a], [, b]) => b.lastFocusedAt - a.lastFocusedAt)[0];
 	const heldElsewhere = new Set(all.filter(([other]) => other !== id).flatMap(([other]) => router.heldThreads(other)));
 	return { primary: primary?.[0] === id, heldElsewhere: [...heldElsewhere] };
 }
@@ -359,7 +360,9 @@ async function start(): Promise<void> {
 	protocol.handle(MCP_APP_SCHEME, (request) => mcpApps.handle(request));
 	session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
 		// local-fonts: Settings › Appearance lists the installed fonts (queryLocalFonts).
-		callback(permission === "clipboard-sanitized-write" || permission === "notifications" || permission === "local-fonts"),
+		callback(
+			permission === "clipboard-sanitized-write" || permission === "notifications" || permission === "local-fonts",
+		),
 	);
 	buildMenu();
 	const env = await loginShellEnv();

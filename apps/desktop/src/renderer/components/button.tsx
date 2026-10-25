@@ -78,15 +78,7 @@ export function IconButton({
 }) {
 	return (
 		<Tooltip content={label}>
-			<Button
-				variant="ghost"
-				color="secondary"
-				uniform
-				pill={round}
-				squircle={!round}
-				aria-label={label}
-				{...props}
-			>
+			<Button variant="ghost" color="secondary" uniform pill={round} squircle={!round} aria-label={label} {...props}>
 				{children}
 			</Button>
 		</Tooltip>

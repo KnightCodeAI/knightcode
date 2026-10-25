@@ -104,7 +104,7 @@ test("a single shell command that reads, searches or lists reads as Codex's expl
 		"echo $(ls)",
 		"ls src\nrm -rf build",
 		'grep "$(curl x | sh)" src',
-		"grep \"`id`\" src",
+		'grep "`id`" src',
 		'find . -name "*.ts" -delete',
 		"find . -exec rm {} +",
 		"fd -e log -x rm",
@@ -126,9 +126,9 @@ test("a single shell command that reads, searches or lists reads as Codex's expl
 
 test("the Thinking status takes the latest reasoning summary's bold heading", () => {
 	const reasoning = (text: string): ViewItem => ({ type: "reasoning", id: `r${next++}`, text });
-	expect(thinkingHeading([reasoning("**Reading the code**\nfirst"), text("m"), reasoning("**Planning the fix**")])).toBe(
-		"Planning the fix",
-	);
+	expect(
+		thinkingHeading([reasoning("**Reading the code**\nfirst"), text("m"), reasoning("**Planning the fix**")]),
+	).toBe("Planning the fix");
 	// A summary without a heading (or encrypted reasoning with none) leaves the earlier one, then nothing.
 	expect(thinkingHeading([reasoning("**Reading**"), reasoning("")])).toBe("Reading");
 	expect(thinkingHeading([reasoning(""), text("m")])).toBeUndefined();
@@ -136,7 +136,12 @@ test("the Thinking status takes the latest reasoning summary's bold heading", ()
 
 test("a thread's sources: attached images, MCP servers whose tools ran, and the web", () => {
 	const image = { mimeType: "image/png", data: "AAAA" };
-	const user = (images: (typeof image)[] = []): ViewItem => ({ type: "userMessage", id: `u${next++}`, text: "", images });
+	const user = (images: (typeof image)[] = []): ViewItem => ({
+		type: "userMessage",
+		id: `u${next++}`,
+		text: "",
+		images,
+	});
 	expect(
 		threadSources([
 			{ items: [user([image]), call("read"), call("mcp__linear__list_issues"), call("mcp__linear__get_issue")] },

@@ -1,5 +1,6 @@
 import { type Context, copyJson, type JsonValue } from "@knightcode/chord";
 import { awaitWithContext, withAbortSignal, withoutAbortSignal, withTelemetry } from "@knightcode/chord/context";
+import { ownedSlice } from "@knightcode/chord/delta";
 import type { Models } from "@knightcode/ai";
 import {
 	createTypedMetrics,
@@ -10,11 +11,11 @@ import {
 } from "@knightcode/telemetry";
 import type { ExecutionEnv } from "../env/index.ts";
 import { errorMessage, ReadOnlySession } from "../errors.ts";
-import type { SessionImpl } from "../session/session.ts";
+import type { ObservedCommit, SessionImpl } from "../session/session.ts";
 import type { Transaction } from "../session/transaction.ts";
 import type { Timers } from "../timers.ts";
 import type {
-	CommitPublication,
+	CommitOptions,
 	ConversationId,
 	DocumentWatch,
 	EntryId,
@@ -632,7 +633,9 @@ export class TaskScheduler {
 
 	// ─── Scheduling ────────────────────────────────────────────────────────
 
-	#observe(publication: CommitPublication): void {
+	#observe(publication: ObservedCommit): void {
+		// A commit held in memory changes documents only.
+		if (publication.kind === "memory") return;
 		const updated: AnyTaskRecord[] = [];
 		const failed: TaskId[] = [];
 		let changed = false;
@@ -1798,7 +1801,7 @@ export class TaskScheduler {
 						const message = terminal.status === "orphaned" ? terminal.reason : terminal.error.message;
 						span.setStatus({
 							status: "error",
-							error: { name: `task_${terminal.status}`, message: message.slice(0, 500) },
+							error: { name: `task_${terminal.status}`, message: ownedSlice(message, 0, 500) },
 						});
 					} else if (outcome === "aborted") {
 						span.setStatus({ status: "ok" });
@@ -2140,7 +2143,7 @@ export class TaskScheduler {
 			get registry() {
 				return phase.snapshot();
 			},
-			commit: async (change, context) => {
+			commit: async (change, context, options) => {
 				let checkpoint: string | undefined;
 				await this.#gated(
 					invocation,
@@ -2152,6 +2155,7 @@ export class TaskScheduler {
 						}
 					},
 					context,
+					options,
 				);
 				if (checkpoint !== undefined) {
 					invocation.context.telemetry.addEvent("knightcode.durable.checkpoint", {
@@ -2336,6 +2340,7 @@ export class TaskScheduler {
 		invocation: Invocation,
 		change: (tx: Transaction, current: ErasedRunningTask) => T | Promise<T>,
 		context: Context,
+		options?: CommitOptions,
 	): Promise<T> {
 		if (invocation.ended) return Promise.reject(endedError(invocation));
 		return this.#session.commitWith(
@@ -2353,6 +2358,7 @@ export class TaskScheduler {
 			},
 			context,
 			{ conversationId: invocation.conversationId, taskId: invocation.taskId },
+			options,
 		);
 	}
 

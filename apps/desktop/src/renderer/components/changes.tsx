@@ -434,7 +434,18 @@ function FileSection({
 				}),
 		}),
 		// The file's identity, not the object: a refresh hands over equal files.
-		[themeType, indicators, options.split, options.wrap, options.wordDiffs, threadId, trees?.from, trees?.to, file.path, file.oldPath],
+		[
+			themeType,
+			indicators,
+			options.split,
+			options.wrap,
+			options.wordDiffs,
+			threadId,
+			trees?.from,
+			trees?.to,
+			file.path,
+			file.oldPath,
+		],
 	);
 	return (
 		<div className="group/file-diff flex flex-col pb-0.5">

@@ -86,7 +86,8 @@ export class Updates {
 
 	async check(): Promise<UpdateState> {
 		const { state } = this.state;
-		if (state === "unavailable" || state === "checking" || state === "downloading" || state === "ready") return this.state;
+		if (state === "unavailable" || state === "checking" || state === "downloading" || state === "ready")
+			return this.state;
 		if (process.platform === "win32") {
 			// The events above carry the outcome.
 			this.set({ state: "checking" });
@@ -104,7 +105,12 @@ export class Updates {
 			else {
 				const { version, url } = (await response.json()) as { version?: unknown; url?: unknown };
 				// The page is opened in the browser: only a release page of this repository, for a real version.
-				if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version) || typeof url !== "string" || !url.startsWith(RELEASES))
+				if (
+					typeof version !== "string" ||
+					!/^\d+\.\d+\.\d+$/.test(version) ||
+					typeof url !== "string" ||
+					!url.startsWith(RELEASES)
+				)
 					throw new Error("The update feed answered something that is not a release.");
 				this.set({ state: "available", version, url });
 			}

@@ -77,7 +77,12 @@ test("a terminal runs the thread's shell in its folder, with the app's terminal 
 	expect(info).toMatchObject({ threadId: "t1", cwd: root, shellId: "bash", shellName: "bash" });
 	expect(info.exitCode).toBeUndefined();
 	expect(spawned[0]).toMatchObject({ command: join(root, "bin/bash"), args: ["-l"], cwd: root });
-	expect(spawned[0]!.env).toMatchObject({ TERM: "xterm-256color", COLORTERM: "truecolor", KNIGHTCODE_DESKTOP: "1", HOME: root });
+	expect(spawned[0]!.env).toMatchObject({
+		TERM: "xterm-256color",
+		COLORTERM: "truecolor",
+		KNIGHTCODE_DESKTOP: "1",
+		HOME: root,
+	});
 	expect(() => terminals.create({ threadId: "t1", cwd: join(root, "missing"), cols: 80, rows: 24 }, 1)).toThrow(
 		InvalidParams,
 	);
@@ -186,7 +191,7 @@ test("Windows offers PowerShell 7, Windows PowerShell, Command Prompt, Git Bash 
 		args: ["--login", "-i"],
 	});
 	// Without them, Command Prompt alone.
-	expect(detectShells("win32", { SystemRoot: join(root, "none"), ComSpec: "C:\\Windows\\cmd.exe" }).map((s) => s.id)).toEqual([
-		"cmd",
-	]);
+	expect(
+		detectShells("win32", { SystemRoot: join(root, "none"), ComSpec: "C:\\Windows\\cmd.exe" }).map((s) => s.id),
+	).toEqual(["cmd"]);
 });

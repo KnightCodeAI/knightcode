@@ -51,11 +51,18 @@ type PathIndex = Map<string, Set<string>>;
 async function pathIndex(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Promise<PathIndex> {
 	const dirs = pathDirs(platform, env);
 	const lists = await Promise.all(dirs.map((dir) => readdir(dir).catch((): string[] => [])));
-	return new Map(dirs.map((dir, i) => [dir, new Set(platform === "win32" ? lists[i]!.map((n) => n.toLowerCase()) : lists[i])]));
+	return new Map(
+		dirs.map((dir, i) => [dir, new Set(platform === "win32" ? lists[i]!.map((n) => n.toLowerCase()) : lists[i])]),
+	);
 }
 
 /** A command on PATH: with Windows' PATHEXT for a bare name. `index` skips the names a directory does not hold. */
-export function onPath(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv, index?: PathIndex): string | undefined {
+export function onPath(
+	name: string,
+	platform: NodeJS.Platform,
+	env: NodeJS.ProcessEnv,
+	index?: PathIndex,
+): string | undefined {
 	const extensions =
 		platform === "win32" && !extname(name) ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
 	for (const dir of pathDirs(platform, env))
@@ -129,9 +136,16 @@ export function editorScript(editor: string, file: string, line?: number, column
 	const words = shellWords(editor);
 	const program = words?.[0]?.trim();
 	if (!words || !program) return `cd ${folder} && ${editor} ${quote(file)}`;
-	const flags = editorLine(basename(program).replace(/\.exe$/i, "").toLowerCase(), line, column);
+	const flags = editorLine(
+		basename(program)
+			.replace(/\.exe$/i, "")
+			.toLowerCase(),
+		line,
+		column,
+	);
 	const dashes = words.indexOf("--");
-	const all = dashes < 0 ? [...words, ...flags, file] : [...words.slice(0, dashes), ...flags, ...words.slice(dashes), file];
+	const all =
+		dashes < 0 ? [...words, ...flags, file] : [...words.slice(0, dashes), ...flags, ...words.slice(dashes), file];
 	return `cd ${folder} && ${all.map(quote).join(" ")}`;
 }
 
@@ -196,7 +210,8 @@ class Lookups {
 	/** A PATH shim's own program, else the install folder's (co). */
 	program(command: string, exe: string, installDir: string): string | undefined {
 		const found = this.shim(this.which(command));
-		if (found) return this.beside(found, exe) ?? (basename(found).toLowerCase() === exe.toLowerCase() ? found : undefined);
+		if (found)
+			return this.beside(found, exe) ?? (basename(found).toLowerCase() === exe.toLowerCase() ? found : undefined);
 		return this.installed([[installDir, exe]]);
 	}
 
@@ -264,7 +279,9 @@ class Lookups {
 		if (!this.which("gio")) return undefined;
 		const xdg = this.env.XDG_DATA_HOME;
 		const dataHome = xdg && isAbsolute(xdg) ? xdg : join(this.home, ".local", "share");
-		const dataDirs = this.env.XDG_DATA_DIRS ? this.env.XDG_DATA_DIRS.split(":").filter(isAbsolute) : ["/usr/local/share", "/usr/share"];
+		const dataDirs = this.env.XDG_DATA_DIRS
+			? this.env.XDG_DATA_DIRS.split(":").filter(isAbsolute)
+			: ["/usr/local/share", "/usr/share"];
 		const dirs = [
 			dataHome,
 			join(this.home, ".local", "share", "flatpak", "exports", "share"),
@@ -382,7 +399,9 @@ const launchServices =
 	(name: string, args: Args = plain): Detect =>
 	(l) => {
 		const app = l.appNamed(name) ?? l.fixed([`/Applications/${name}.app`]);
-		return app ? { command: "/usr/bin/open", args: (p, line, column) => ["-a", name, ...args(p, line, column)], iconPath: app } : undefined;
+		return app
+			? { command: "/usr/bin/open", args: (p, line, column) => ["-a", name, ...args(p, line, column)], iconPath: app }
+			: undefined;
 	};
 
 /** TextMate's line: a txmt:// URL. */
@@ -399,8 +418,10 @@ const textmateArgs: Args = (p, l, c) => {
 function macTerminalScript(id: string, script: string, shell: string): Launch | undefined {
 	const escaped = script.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 	if (id === "kitty") return { command: "/usr/bin/open", args: ["-na", "kitty.app", "--args", shell, "-lc", script] };
-	if (id === "ghostty") return { command: "/usr/bin/open", args: ["-na", "Ghostty.app", "--args", "-e", shell, "-lc", script] };
-	if (id === "terminal") return { command: "/usr/bin/osascript", args: ["-e", `tell application "Terminal" to do script "${escaped}"`] };
+	if (id === "ghostty")
+		return { command: "/usr/bin/open", args: ["-na", "Ghostty.app", "--args", "-e", shell, "-lc", script] };
+	if (id === "terminal")
+		return { command: "/usr/bin/osascript", args: ["-e", `tell application "Terminal" to do script "${escaped}"`] };
 	if (id === "iterm2")
 		return {
 			command: "/usr/bin/osascript",
@@ -433,7 +454,9 @@ const macTerminal =
 				const isFile = existsSync(p) && !statSync(p).isDirectory();
 				const script = editorCommand && isFile ? editorScript(editorCommand, p, line, column) : undefined;
 				const shell = l.env.SHELL?.trim() || "/bin/zsh";
-				return (script ? macTerminalScript(id, script, shell) : undefined) ?? { command: "/usr/bin/open", args: args(p) };
+				return (
+					(script ? macTerminalScript(id, script, shell) : undefined) ?? { command: "/usr/bin/open", args: args(p) }
+				);
 			},
 		};
 	};
@@ -493,13 +516,17 @@ const linuxTerminal =
 				const editorCommand = l.terminalEditor();
 				const isFile = existsSync(p) && !statSync(p).isDirectory();
 				if (!editorCommand || !isFile) return { command, args: args(p) };
-				return { command, args: linuxTerminalScript(command, args(p), editorScript(editorCommand, p, line, column), shell) };
+				return {
+					command,
+					args: linuxTerminalScript(command, args(p), editorScript(editorCommand, p, line, column), shell),
+				};
 			},
 		};
 	};
 
 /** Windows Terminal's `-d`, its `;` command separator escaped in every argument. */
-const windowsTerminalArgs = (p: string, ...rest: string[]) => ["-d", folderOf(p), ...rest].map((a) => a.replaceAll(";", "\\;"));
+const windowsTerminalArgs = (p: string, ...rest: string[]) =>
+	["-d", folderOf(p), ...rest].map((a) => a.replaceAll(";", "\\;"));
 
 /** Windows Terminal: on PATH or as WindowsApps' alias, else a Start menu shortcut's target. */
 function windowsTerminal(l: Lookups): string | undefined {
@@ -546,7 +573,11 @@ const JETBRAINS: JetBrainsIde[] = [
 		name: "IntelliJ IDEA",
 		exe: "idea",
 		bundlePrefixes: ["intellij idea"],
-		windows: { commands: ["idea64.exe", "idea.exe", "idea"], dirPrefixes: ["intellij idea", "idea"], exes: ["idea64.exe", "idea.exe"] },
+		windows: {
+			commands: ["idea64.exe", "idea.exe", "idea"],
+			dirPrefixes: ["intellij idea", "idea"],
+			exes: ["idea64.exe", "idea.exe"],
+		},
 		desktop: [
 			"jetbrains-idea.desktop",
 			"jetbrains-idea-ce.desktop",
@@ -562,7 +593,11 @@ const JETBRAINS: JetBrainsIde[] = [
 		name: "Rider",
 		exe: "rider",
 		bundlePrefixes: ["rider"],
-		windows: { commands: ["rider64.exe", "rider.exe", "rider"], dirPrefixes: ["rider"], exes: ["rider64.exe", "rider.exe"] },
+		windows: {
+			commands: ["rider64.exe", "rider.exe", "rider"],
+			dirPrefixes: ["rider"],
+			exes: ["rider64.exe", "rider.exe"],
+		},
 		desktop: ["jetbrains-rider.desktop", "com.jetbrains.Rider.desktop", "rider_rider.desktop"],
 	},
 	{
@@ -584,7 +619,11 @@ const JETBRAINS: JetBrainsIde[] = [
 		name: "PyCharm",
 		exe: "pycharm",
 		bundlePrefixes: ["pycharm"],
-		windows: { commands: ["pycharm64.exe", "pycharm.exe", "pycharm"], dirPrefixes: ["pycharm"], exes: ["pycharm64.exe", "pycharm.exe"] },
+		windows: {
+			commands: ["pycharm64.exe", "pycharm.exe", "pycharm"],
+			dirPrefixes: ["pycharm"],
+			exes: ["pycharm64.exe", "pycharm.exe"],
+		},
 		desktop: [
 			"jetbrains-pycharm.desktop",
 			"jetbrains-pycharm-ce.desktop",
@@ -717,11 +756,20 @@ function xcodeProject(path: string): string | undefined {
 /** Every target, in the menu's order. */
 const DEFS: Def[] = [
 	editor("vscode", "VS Code", {
-		darwin: ["/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code", "/Applications/Code.app/Contents/Resources/app/bin/code"],
+		darwin: [
+			"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+			"/Applications/Code.app/Contents/Resources/app/bin/code",
+		],
 		win32: (l) => l.program("code", "Code.exe", "Microsoft VS Code"),
 		linux: [
 			["code", "code-oss"],
-			["code.desktop", "code-oss.desktop", "com.visualstudio.code.desktop", "com.visualstudio.code-oss.desktop", "code_code.desktop"],
+			[
+				"code.desktop",
+				"code-oss.desktop",
+				"com.visualstudio.code.desktop",
+				"com.visualstudio.code-oss.desktop",
+				"code_code.desktop",
+			],
 		],
 	}),
 	editor("vscodeInsiders", "VS Code Insiders", {
@@ -766,7 +814,10 @@ const DEFS: Def[] = [
 					"/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
 					"/Applications/Cursor Preview.app/Contents/Resources/app/bin/cursor",
 					"/Applications/Cursor Nightly.app/Contents/Resources/app/bin/cursor",
-				]) ?? (l.appNamed("Cursor") ? join(l.appNamed("Cursor")!, "Contents", "Resources", "app", "bin", "cursor") : undefined),
+				]) ??
+					(l.appNamed("Cursor")
+						? join(l.appNamed("Cursor")!, "Contents", "Resources", "app", "bin", "cursor")
+						: undefined),
 				vscodeArgs("darwin"),
 			),
 		// The shim three folders down (resources\app\bin) stands for Cursor.exe.
@@ -797,7 +848,11 @@ const DEFS: Def[] = [
 		kind: "editor",
 		darwin: launchServices("Emacs"),
 		linux: (l) =>
-			linuxFound(l, l.linux(["emacs", "emacsclient"], ["emacs.desktop", "emacsclient.desktop", "org.gnu.emacs.desktop"]), emacsArgs),
+			linuxFound(
+				l,
+				l.linux(["emacs", "emacsclient"], ["emacs.desktop", "emacsclient.desktop", "org.gnu.emacs.desktop"]),
+				emacsArgs,
+			),
 	},
 	{
 		id: "sublimeText",
@@ -809,7 +864,8 @@ const DEFS: Def[] = [
 			const app = l.appNamed("Sublime Text");
 			const inApp = app ? join(app, "Contents", "SharedSupport", "bin", "subl") : undefined;
 			return found(
-				(inApp && exists(inApp) ? inApp : undefined) ?? l.fixed(["/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"]),
+				(inApp && exists(inApp) ? inApp : undefined) ??
+					l.fixed(["/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl"]),
 				colon,
 			);
 		},
@@ -827,7 +883,10 @@ const DEFS: Def[] = [
 		linux: (l) =>
 			linuxFound(
 				l,
-				l.linux(["subl", "sublime_text"], ["sublime_text.desktop", "com.sublimetext.three.desktop", "sublime-text_subl.desktop"]),
+				l.linux(
+					["subl", "sublime_text"],
+					["sublime_text.desktop", "com.sublimetext.three.desktop", "sublime-text_subl.desktop"],
+				),
 				colon,
 			),
 	},
@@ -864,10 +923,10 @@ const DEFS: Def[] = [
 			l.runnable(
 				l.shim(l.which("antigravity.exe") ?? l.which("antigravity.cmd") ?? l.which("antigravity")) ??
 					l.installed([
-				["Antigravity", "Antigravity.exe"],
-				["antigravity", "Antigravity.exe"],
-				["Antigravity", "bin", "antigravity.cmd"],
-				["antigravity", "bin", "antigravity.cmd"],
+						["Antigravity", "Antigravity.exe"],
+						["antigravity", "Antigravity.exe"],
+						["Antigravity", "bin", "antigravity.cmd"],
+						["antigravity", "bin", "antigravity.cmd"],
 						["Antigravity", "resources", "app", "bin", "antigravity.cmd"],
 						["antigravity", "resources", "app", "bin", "antigravity.cmd"],
 					]),
@@ -920,7 +979,16 @@ const DEFS: Def[] = [
 		kind: "terminal",
 		darwin: macTerminal("terminal", ["/System/Applications/Utilities/Terminal.app"], "Terminal"),
 		win32: (l) => found(windowsTerminal(l), (p) => windowsTerminalArgs(p)),
-		linux: linuxTerminal(["kgx", "gnome-terminal", "konsole", "xfce4-terminal", "mate-terminal", "tilix", "alacritty", "x-terminal-emulator"]),
+		linux: linuxTerminal([
+			"kgx",
+			"gnome-terminal",
+			"konsole",
+			"xfce4-terminal",
+			"mate-terminal",
+			"tilix",
+			"alacritty",
+			"x-terminal-emulator",
+		]),
 	},
 	{
 		id: "gitBash",
@@ -947,7 +1015,8 @@ const DEFS: Def[] = [
 		win32: (l) => {
 			const root = l.env.CMDER_ROOT?.trim();
 			const fromRoot = root && exists(join(root, "Cmder.exe")) ? join(root, "Cmder.exe") : undefined;
-			const program = fromRoot ?? l.shim(l.which("cmder.exe") ?? l.which("cmder")) ?? l.target(l.startMenu(["Cmder.lnk"]));
+			const program =
+				fromRoot ?? l.shim(l.which("cmder.exe") ?? l.which("cmder")) ?? l.target(l.startMenu(["Cmder.lnk"]));
 			return found(program, (p) => ["/START", folderOf(p)]);
 		},
 	},
@@ -972,7 +1041,12 @@ const DEFS: Def[] = [
 			);
 		},
 	},
-	{ id: "iterm2", name: "iTerm2", kind: "terminal", darwin: macTerminal("iterm2", ["/Applications/iTerm.app", "/Applications/iTerm2.app"], "iTerm") },
+	{
+		id: "iterm2",
+		name: "iTerm2",
+		kind: "terminal",
+		darwin: macTerminal("iterm2", ["/Applications/iTerm.app", "/Applications/iTerm2.app"], "iTerm"),
+	},
 	{
 		id: "kitty",
 		name: "Kitty",
@@ -1220,7 +1294,10 @@ export class OpenIn {
 		if (target.kind === "fileManager") return this.deps.reveal(path);
 		if (target.kind === "systemDefault") return this.deps.openDefault(path);
 		// The environment detection used: a Dock- or launcher-started app's own PATH is shorter than the user's.
-		const run = target.launch?.(path, line, column) ?? { command: target.command, args: target.args(path, line, column) };
+		const run = target.launch?.(path, line, column) ?? {
+			command: target.command,
+			args: target.args(path, line, column),
+		};
 		await (this.deps.launch ?? launch)(run.command, run.args, this.deps.env);
 	}
 }

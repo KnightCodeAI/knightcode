@@ -32,7 +32,11 @@ interface Loaded {
 
 /** The app's document: the first content of the app MIME type, its text or base64 blob, with its `_meta.ui`. */
 async function loadApp(threadId: string, app: McpApp): Promise<Loaded> {
-	const { contents } = await client.request("mcp/app/readResource", { threadId, server: app.server, uri: app.resourceUri });
+	const { contents } = await client.request("mcp/app/readResource", {
+		threadId,
+		server: app.server,
+		uri: app.resourceUri,
+	});
 	const content = contents.find(
 		(c): c is Record<string, unknown> =>
 			typeof c === "object" && c !== null && String((c as { mimeType?: unknown }).mimeType ?? "").startsWith(APP_MIME),
@@ -131,7 +135,14 @@ export function McpAppView({
 	const [version, setVersion] = useState("");
 	const versionRef = useRef(version);
 	versionRef.current = version;
-	useEffect(() => void client.host("host/app/info", {}).then((info) => setVersion(info.appVersion), () => {}), []);
+	useEffect(
+		() =>
+			void client.host("host/app/info", {}).then(
+				(info) => setVersion(info.appVersion),
+				() => {},
+			),
+		[],
+	);
 
 	useEffect(() => {
 		let live = true;
@@ -198,12 +209,7 @@ export function McpAppView({
 	useEffect(() => bridge.current?.update(item), [item]);
 	useEffect(() => bridge.current?.contextChanged(), [theme]);
 
-	if (error)
-		return (
-			<div className="mt-1.5 rounded-lg border border-line px-4 py-3 text-sm text-tertiary">
-				{error}
-			</div>
-		);
+	if (error) return <div className="mt-1.5 rounded-lg border border-line px-4 py-3 text-sm text-tertiary">{error}</div>;
 	const framed = loaded?.prefersBorder !== false;
 	return (
 		<div
@@ -211,7 +217,9 @@ export function McpAppView({
 			style={mode === "fullscreen" ? undefined : { height: Math.max(MIN_HEIGHT, height) }}
 		>
 			<div ref={box} className="h-full w-full" />
-			{!loaded ? <div className="kc-pulse absolute inset-0 flex items-center px-4 text-sm text-tertiary">Loading app…</div> : null}
+			{!loaded ? (
+				<div className="kc-pulse absolute inset-0 flex items-center px-4 text-sm text-tertiary">Loading app…</div>
+			) : null}
 			{ask ? (
 				<AskDialog
 					ask={ask.ask}

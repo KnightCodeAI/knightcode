@@ -92,7 +92,8 @@ export const isEditable = (target: EventTarget | null) =>
 /** A field, or a control whose own Enter or Space activation a window-level binding must not take over. */
 export const isControl = (target: EventTarget | null) =>
 	isEditable(target) ||
-	(target instanceof Element && target.closest("button, a[href], [role^='menuitem'], [role='option'], [role='tab']") !== null);
+	(target instanceof Element &&
+		target.closest("button, a[href], [role^='menuitem'], [role='option'], [role='tab']") !== null);
 
 export const matches = (event: KeyboardEvent | React.KeyboardEvent, id: KeybindingId) => {
 	// Enter that commits an IME candidate (Chinese, Japanese, Korean input) is not a shortcut, in any field.

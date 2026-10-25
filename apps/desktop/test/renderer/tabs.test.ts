@@ -34,7 +34,10 @@ const paths = (id: string) => tabsOf(id).tabs.map((t) => (t.kind === "file" ? t.
 test("a file opens as the preview tab, which the next file replaces until it is kept", () => {
 	openFileTab("a", "C:\\p\\one.ts", 3);
 	expect(getState().panel.open).toBe(true);
-	expect(tabsOf("a")).toMatchObject({ active: 1, tabs: [{ kind: "changes" }, { path: "C:\\p\\one.ts", line: 3, preview: true }] });
+	expect(tabsOf("a")).toMatchObject({
+		active: 1,
+		tabs: [{ kind: "changes" }, { path: "C:\\p\\one.ts", line: 3, preview: true }],
+	});
 	openFileTab("a", "C:\\p\\two.ts");
 	expect(paths("a")).toEqual(["changes", "C:\\p\\two.ts"]);
 	keepTab("a", 1);
@@ -95,7 +98,12 @@ test("an edited file tab is kept, and a save writes its draft over the mtime it 
 	expect(tabsOf("f").tabs[1]).toMatchObject({ preview: false, draft: { text: "one", mtimeMs: 10 } });
 	request.mockResolvedValueOnce({ mtimeMs: 11 });
 	expect(await saveFileDraft("f", "/p/a.ts")).toEqual({ text: "one", mtimeMs: 11 });
-	expect(request).toHaveBeenLastCalledWith("file/write", { threadId: "f", path: "/p/a.ts", text: "one", expectedMtimeMs: 10 });
+	expect(request).toHaveBeenLastCalledWith("file/write", {
+		threadId: "f",
+		path: "/p/a.ts",
+		text: "one",
+		expectedMtimeMs: 10,
+	});
 	expect(tabsOf("f").tabs[1]).toMatchObject({ draft: undefined });
 	// Typed while it wrote: still unsaved, now over the file as written.
 	setFileDraft("f", "/p/a.ts", { text: "two", mtimeMs: 11 });
