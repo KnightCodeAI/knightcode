@@ -238,7 +238,7 @@ KnightCode reports its state with the [Program Status Protocol (OSC 7501)](https
 
 | State | When |
 |---|---|
-| `working` | An agent run or compaction is in progress. The message is the session name. |
+| `working` | An agent run or compaction is in progress. The message is the session name, or `Compacting context` during compaction. |
 | `blocked` | An extension dialog or login waits for you. The message is the dialog title. |
 | `done` | A run finished. The message is the session name. |
 | `error` | A run ended with an error that is not retried. The message is the first line of the error. |
