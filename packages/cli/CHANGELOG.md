@@ -1,5 +1,21 @@
 # @knightcodeai/cli
 
+## 0.21.1
+
+### Changed
+
+- Changed model selector rows to show a model's display name when that name has words the id does not.
+
+### Fixed
+
+- Fixed Gemini tool calls whose JSON Schema used const, by sending a single-value enum and leaving literal schema keys intact.
+
+- Fixed Kimi K3.1 Pro models using Kimi K2 request settings. Point releases now share K3's request format, subscription costs, and output limit.
+
+- Fixed streamed tool-call arguments being parsed and redrawn once per fragment. A call now renders once per frame, and the parser keeps only the text it still needs.
+
+- Fixed images inside padded or colored boxes disappearing once their first row scrolls above the viewport.
+
 ## 0.21.0
 
 ### Added

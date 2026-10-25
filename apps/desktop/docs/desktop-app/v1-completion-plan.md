@@ -148,8 +148,8 @@ what the code shows:
 | D6 | Handoff pre-check | `thread/handoff` gains `dryRun`: every refusal check runs, nothing is written | Reimplementing the checks in the renderer from `git/status` (it cannot see ignored files in the way, `workspaces.ts:963-968`) |
 | D7 | Signing | None in v1 (no certificates). Builds are unsigned on Windows, ad-hoc signed on macOS; Forge reads signing and notarization credentials from environment variables and signs only when they are set | Blocking the release on certificates |
 | D8 | Updates | Electron `autoUpdater` (Squirrel) on Windows against a knightcode.dev route over GitHub releases tagged `desktop-v<version>`; on macOS, which cannot update an unsigned app, the same feed drives an "Update available" banner that opens the release page; Linux updates by reinstalling the package | update.electronjs.org (it serves the repository's newest release, which is a CLI release here); updating inside the app server (it would replace itself mid-session) |
-| D9 | Release trigger | A `workflow_dispatch` "release button" (bump, prerelease) that commits the version and the tag, then builds every target in the same run and drafts the release, as the IDE's did (WP05) | A tag push (a tag pushed with `GITHUB_TOKEN` triggers no workflow) |
-| D10 | Desktop version | Independent of the CLI's: `apps/desktop/package.json`, tags `desktop-v<version>`, no changeset (the app is private, §15) | Locking it to the CLI version (a CLI patch would force a desktop release) |
+| D9 | Release trigger | A `workflow_dispatch` "release button" (prerelease) that builds every target from `main` at the version changesets set, then tags it and drafts the release, as the IDE's did (WP05). Amended 2026-10-25: it no longer bumps the version itself (see D10) | A tag push (a tag pushed with `GITHUB_TOKEN` triggers no workflow) |
+| D10 | Desktop version | Independent of the CLI's: `apps/desktop/package.json`, tags `desktop-v<version>`. Amended 2026-10-25: versioned by `@knightcode/desktop` changesets. Changesets versions only packages that are not private (`privatePackages.version: false`), so `apps/desktop` is not private, with a `prepublishOnly` that refuses `npm publish` (`ci:publish` only publishes the CLI). The Version Packages PR bumps it and writes `apps/desktop/CHANGELOG.md`; one with only desktop changesets publishes no CLI, since the CLI neither depends on the app nor shares a fixed group with it. The draft's notes are that changelog since the last published desktop release | Locking it to the CLI version (a CLI patch would force a desktop release); filing desktop changes under the CLI's changeset (they landed in the terminal's changelog); a workflow-side bump beside changesets (two writers of one version); versioning private packages again with the libraries in `ignore` (every private package, and every new one, would have to be listed, or it gets "Updated dependencies" bumps) |
 | D11 | Phase D shape | The TUI's app server is always in-process (arch §2). Every action that changes a session (prompts, steering, queueing, interrupts, model and settings changes, tree moves, forks, compaction, `!` commands, retries) goes through protocol methods, so the server's queue, turn markers, locks and approvals apply. Reads and live events go through local handles (arch §7.3), which only the in-process transport has: the session's own `AgentSessionEvent` objects, read-only access to its `SessionManager` and stats, and the TUI's own `ExtensionUIContext` bound as the UI of the threads it holds, so synchronous UI methods keep working. A facade, `RemoteSession`, gives `InteractiveMode` the members it uses today, so its renderers and components do not change and resyncs stay mechanical | Rendering the TUI from protocol items (rewrites every renderer; every resync becomes a hand translation; the user asked on 2026-10-23 to keep these files unchanged where possible). Carrying session events and entries over the wire in `toJsonEvent` shape (review round 1: it is lossy, since `toJsonEvent` drops partials that carry data no delta repeats, `anthropic-messages.ts:753-762`; message events lack persisted entry ids, `session-manager.ts:1301-1309`; and full entry reads would need paging under the 64 MiB stdio cap) |
 | D12 | Print mode and `--mode json` | Unchanged: they stay on the direct session, identical to upstream, as RPC mode does (user, 2026-10-23) | Moving them in slice 1 as arch §7.1 had it (a format change or a translation layer, for no user gain) |
 
@@ -875,15 +875,15 @@ ahead (AGENTS.md: never run `build:binary` unasked); CI runs it.
 #### Task S4.3: the release workflow
 
 - `.github/workflows/desktop-release.yml`: `workflow_dispatch` with
-  `bump: patch | minor | major | current` and `prerelease: boolean`. A
-  version job bumps `apps/desktop/package.json`, refreshes `bun.lock` with
-  `bun install --lockfile-only` (the lockfile records the workspace's
-  version, `bun.lock:23-24`, as `scripts/ci-version.ts:29-31` already does
-  for CLI releases), commits both as `Release desktop v<version>` to `main`,
-  pushes the tag `desktop-v<version>` atomically, and outputs the commit
-  SHA. Every later job checks out that SHA (the run's own `GITHUB_SHA` is the
-  commit before the bump) and asserts the packaged app's version equals the
-  tag. A build matrix in the same run:
+  `prerelease: boolean` (amended 2026-10-25, D10: it took a `bump` and
+  committed the version to `main`; changesets sets the version now). A
+  version job reads `apps/desktop/package.json` on `main`, refuses a version
+  already tagged `desktop-v<version>` or with no `## <version>` section in
+  `apps/desktop/CHANGELOG.md`, takes the notes from that changelog since the
+  newest published desktop release (`scripts/desktop-release-notes.ts`), and
+  outputs the commit SHA it read. Every later job checks out that SHA and
+  asserts the packaged app's version equals the tag. A build matrix in the
+  same run:
   `windows-2022` (win32-x64), `macos-15` (darwin-arm64, and darwin-x64
   cross-built with `--arch=x64` and the bun `darwin-x64` target),
   `ubuntu-22.04` (linux-x64). Each: `bun install --frozen-lockfile`,
@@ -891,7 +891,8 @@ ahead (AGENTS.md: never run `build:binary` unasked); CI runs it.
   the smoke test (`KNIGHTCODE_DESKTOP_SMOKE=1` under `xvfb-run` on Linux;
   darwin-x64 skips it, no free Intel runner), upload. The darwin-arm64 leg
   also runs the real PTY test, macOS's only CI run of it. A last job creates a
-  draft release with every artifact and `SHA256SUMS`; the owner publishes it.
+  draft release with every artifact, `SHA256SUMS` and those notes; the owner
+  publishes it.
 - `ci.yml` (which has no desktop job today): a job running `apps/desktop`'s
   check-types and Vitest on Windows and Linux.
 

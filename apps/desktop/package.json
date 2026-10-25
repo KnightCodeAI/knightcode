@@ -2,11 +2,12 @@
 	"name": "@knightcode/desktop",
 	"productName": "KnightCode",
 	"version": "0.1.0",
-	"private": true,
+	"private": false,
 	"description": "The KnightCode desktop app",
 	"author": "KnightCode",
 	"main": ".vite/build/main.cjs",
 	"scripts": {
+		"prepublishOnly": "echo The desktop app ships as installers through desktop-release.yml, never to npm. && exit 1",
 		"prestart": "bun scripts/link-electron.ts",
 		"start": "electron-forge start",
 		"prepackage": "bun scripts/link-electron.ts",

@@ -17,7 +17,7 @@
 // not the change, and an entry reads better as a plain sentence.
 import { Glob } from "bun";
 import { deepStrictEqual, strictEqual } from "node:assert/strict";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // Keep a Changelog order. Anything uncategorised lands in Changed.
 export const CATEGORIES = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"] as const;
@@ -97,6 +97,43 @@ export function regroupTopSection(markdown: string): { markdown: string; uncateg
 		markdown: [...lines.slice(0, start + 1), "", ...rebuilt, ...lines.slice(end)].join("\n"),
 		uncategorised,
 	};
+}
+
+/**
+ * The release notes for `version`: its section's entries, then, under their own `## <version>` headings, the
+ * versions after `since` that were never released on their own. The desktop app ships when its owner runs the
+ * release, not on every Version Packages merge, so one release can carry several changelog versions. Without
+ * `since`, or when no section matches it, every older section comes along. Undefined when `version` has no section.
+ */
+export function releaseNotes(markdown: string, version: string, since?: string): string | undefined {
+	const lines = markdown.split("\n");
+	const start = lines.indexOf(`## ${version}`);
+	if (start === -1) return undefined;
+	const out: string[] = [];
+	for (let i = start + 1; i < lines.length; i++) {
+		const line = lines[i]!;
+		if (since !== undefined && line === `## ${since}`) break;
+		out.push(line);
+	}
+	return out.join("\n").trim();
+}
+
+/**
+ * The packages changesets versions: every workspace package that is not private (privatePackages in
+ * .changeset/config.json leaves the private ones alone). That is the CLI, which goes to npm, and the desktop app,
+ * which ships as installers (.github/workflows/desktop-release.yml) and is not private so that it gets a version and
+ * a changelog. `dir` is relative to the repository root, with forward slashes.
+ */
+export async function releasedPackages(root: string): Promise<{ name: string; dir: string }[]> {
+	const { workspaces = [] } = (await Bun.file(join(root, "package.json")).json()) as { workspaces?: string[] };
+	const released: { name: string; dir: string }[] = [];
+	for (const pattern of workspaces) {
+		for await (const file of new Glob(`${pattern}/package.json`).scan(root)) {
+			const pkg = (await Bun.file(join(root, file)).json()) as { name?: string; private?: boolean };
+			if (pkg.name && !pkg.private) released.push({ name: pkg.name, dir: dirname(file).replaceAll("\\", "/") });
+		}
+	}
+	return released.sort((a, b) => a.dir.localeCompare(b.dir));
 }
 
 if (import.meta.main) {
@@ -193,29 +230,57 @@ if (import.meta.main) {
 	// A changelog with no released version yet.
 	strictEqual(regroupTopSection("# @knightcodeai/cli\n").markdown, "# @knightcodeai/cli\n");
 
+	// Release notes run from the version's entries down to the last release, older unreleased versions under their
+	// own headings; a version with no section has no notes, and with no release before it every section comes.
+	const desktop = `# @knightcode/desktop
+
+## 0.4.0
+
+### Fixed
+
+- Fixed a thing.
+
+## 0.3.0
+
+### Added
+
+- Added a panel.
+
+## 0.2.0
+
+### Added
+
+- Added the app.
+`;
+	strictEqual(releaseNotes(desktop, "0.4.0", "0.3.0"), "### Fixed\n\n- Fixed a thing.");
+	strictEqual(
+		releaseNotes(desktop, "0.4.0", "0.2.0"),
+		"### Fixed\n\n- Fixed a thing.\n\n## 0.3.0\n\n### Added\n\n- Added a panel.",
+	);
+	strictEqual(releaseNotes(desktop, "0.2.0"), "### Added\n\n- Added the app.");
+	strictEqual(releaseNotes(desktop, "0.3.0")?.endsWith("- Added the app."), true);
+	strictEqual(releaseNotes(desktop, "0.5.0", "0.4.0"), undefined);
+
 	console.log("changelog-sections self-check passed");
 
 	// The category is only ever the first word of a summary, so check it here,
 	// where a contributor can still fix it. The release job's warning arrives
 	// after the entry has already been filed under the wrong heading.
 	const dir = join(import.meta.dir, "..", ".changeset");
-	// Private packages are never versioned (privatePackages in config.json), and
-	// changesets refuses a changeset that mixes them with a published one — at
-	// release time, after the PR has merged. Catch it here instead.
-	const published = new Set<string>();
-	for await (const file of new Glob("packages/*/package.json").scan(join(import.meta.dir, ".."))) {
-		const pkg = await Bun.file(join(import.meta.dir, "..", file)).json();
-		if (!pkg.private) published.add(pkg.name);
-	}
+	// Private packages are never versioned (privatePackages in config.json):
+	// changesets drops a changeset that names only private packages, and refuses
+	// one that mixes them with a released one — at release time, after the PR has
+	// merged. Catch both here instead.
+	const released = new Set((await releasedPackages(join(import.meta.dir, ".."))).map(({ name }) => name));
 	const bad: string[] = [];
-	const unpublished: string[] = [];
+	const unreleased: string[] = [];
 	for await (const file of new Glob("*.md").scan(dir)) {
 		if (file === "README.md") continue;
 		// Frontmatter, then the summary: "---", packages, "---", the sentence.
 		const [, frontmatter = "", summary = ""] = (await Bun.file(join(dir, file)).text()).split(/^---\s*$/m);
 		if (categoryOf(summary.trim()) === null) bad.push(`.changeset/${file}`);
 		for (const [, name] of frontmatter.matchAll(/^\s*["']?([^"':]+)["']?\s*:/gm)) {
-			if (!published.has(name!)) unpublished.push(`.changeset/${file}: ${name}`);
+			if (!released.has(name!)) unreleased.push(`.changeset/${file}: ${name}`);
 		}
 	}
 	if (bad.length > 0) {
@@ -225,12 +290,12 @@ if (import.meta.main) {
 				bad.join("\n  "),
 		);
 	}
-	if (unpublished.length > 0) {
+	if (unreleased.length > 0) {
 		console.error(
-			`Changesets may only name published packages (${[...published].join(", ")}); ` +
+			`Changesets may only name released packages (${[...released].join(", ")}); ` +
 				`list the user-visible change under the package that ships it:\n  ` +
-				unpublished.join("\n  "),
+				unreleased.join("\n  "),
 		);
 	}
-	if (bad.length > 0 || unpublished.length > 0) process.exit(1);
+	if (bad.length > 0 || unreleased.length > 0) process.exit(1);
 }
