@@ -18,7 +18,8 @@ releases `@knightcode/desktop`, the desktop app. A change to both takes one of
 each.
 
 Commit the generated `.changeset/*.md` file with your PR. On merge to `main`,
-the Changesets bot opens a "Version Packages" PR; merging that PR publishes all
-`@knightcodeai/cli*` packages and sets the desktop app's next version and
-changelog, which `.github/workflows/desktop-release.yml` builds and drafts when
-it is run.
+the Changesets bot opens a "Version Packages" PR. Merging it publishes the
+`@knightcodeai/cli*` packages when it gave them a version npm does not have yet,
+and nothing when it carried only desktop changesets. It also sets the desktop
+app's next version and changelog, which `.github/workflows/desktop-release.yml`
+builds and drafts when it is run.

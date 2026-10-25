@@ -874,19 +874,16 @@ ahead (AGENTS.md: never run `build:binary` unasked); CI runs it.
 
 #### Task S4.3: the release workflow
 
-- (Amended 2026-10-25, D10: the workflow now takes only `prerelease`, reads the
-  version changesets set, and puts the changelog in the draft; the bump below
-  is gone.)
 - `.github/workflows/desktop-release.yml`: `workflow_dispatch` with
-  `bump: patch | minor | major | current` and `prerelease: boolean`. A
-  version job bumps `apps/desktop/package.json`, refreshes `bun.lock` with
-  `bun install --lockfile-only` (the lockfile records the workspace's
-  version, `bun.lock:23-24`, as `scripts/ci-version.ts:29-31` already does
-  for CLI releases), commits both as `Release desktop v<version>` to `main`,
-  pushes the tag `desktop-v<version>` atomically, and outputs the commit
-  SHA. Every later job checks out that SHA (the run's own `GITHUB_SHA` is the
-  commit before the bump) and asserts the packaged app's version equals the
-  tag. A build matrix in the same run:
+  `prerelease: boolean` (amended 2026-10-25, D10: it took a `bump` and
+  committed the version to `main`; changesets sets the version now). A
+  version job reads `apps/desktop/package.json` on `main`, refuses a version
+  already tagged `desktop-v<version>` or with no `## <version>` section in
+  `apps/desktop/CHANGELOG.md`, takes the notes from that changelog since the
+  newest published desktop release (`scripts/desktop-release-notes.ts`), and
+  outputs the commit SHA it read. Every later job checks out that SHA and
+  asserts the packaged app's version equals the tag. A build matrix in the
+  same run:
   `windows-2022` (win32-x64), `macos-15` (darwin-arm64, and darwin-x64
   cross-built with `--arch=x64` and the bun `darwin-x64` target),
   `ubuntu-22.04` (linux-x64). Each: `bun install --frozen-lockfile`,
@@ -894,7 +891,8 @@ ahead (AGENTS.md: never run `build:binary` unasked); CI runs it.
   the smoke test (`KNIGHTCODE_DESKTOP_SMOKE=1` under `xvfb-run` on Linux;
   darwin-x64 skips it, no free Intel runner), upload. The darwin-arm64 leg
   also runs the real PTY test, macOS's only CI run of it. A last job creates a
-  draft release with every artifact and `SHA256SUMS`; the owner publishes it.
+  draft release with every artifact, `SHA256SUMS` and those notes; the owner
+  publishes it.
 - `ci.yml` (which has no desktop job today): a job running `apps/desktop`'s
   check-types and Vitest on Windows and Linux.
 

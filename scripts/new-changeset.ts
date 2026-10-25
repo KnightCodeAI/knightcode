@@ -33,7 +33,9 @@ if (!BUMPS.includes(bump)) {
 	throw new Error(`Unknown bump "${bump}". Use one of: ${BUMPS.join(", ")}`);
 }
 
-const PACKAGE = PACKAGES[packageArg ?? "cli"];
+// Own keys only: `toString` or `__proto__` would otherwise name an inherited value.
+const packageKey = packageArg ?? "cli";
+const PACKAGE = Object.hasOwn(PACKAGES, packageKey) ? PACKAGES[packageKey] : undefined;
 if (!PACKAGE) {
 	throw new Error(`Unknown package "${packageArg}". Use one of: ${Object.keys(PACKAGES).join(", ")}`);
 }
