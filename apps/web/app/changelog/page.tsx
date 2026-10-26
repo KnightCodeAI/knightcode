@@ -11,15 +11,35 @@ import {
   type ChangeKind,
   type Product,
 } from "@/lib/changelog"
-import { fetchDesktopReleases } from "@/lib/desktop-release"
+import {
+  fetchDesktopReleases,
+  latestDesktopRelease,
+} from "@/lib/desktop-release"
 import { getNpmLatestVersion } from "@/lib/version"
 import { SITE, FALLBACK_VERSION } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
-export const metadata: Metadata = {
-  title: "Changelog",
-  description: `Release notes for ${SITE.name}.`,
-  alternates: { canonical: `${SITE.url}/changelog` },
+type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
+
+async function productOf(searchParams: SearchParams): Promise<Product> {
+  return (await searchParams).product === "desktop" ? "desktop" : "cli"
+}
+
+// Each product's view is its own page, so the desktop one must not
+// canonicalize to the CLI's.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: SearchParams
+}): Promise<Metadata> {
+  const product = await productOf(searchParams)
+  return {
+    title: product === "desktop" ? "Desktop changelog" : "Changelog",
+    description: `Release notes for ${SITE.name}${product === "desktop" ? " Desktop" : ""}.`,
+    alternates: {
+      canonical: `${SITE.url}${PRODUCTS.find((p) => p.id === product)!.href}`,
+    },
+  }
 }
 
 const kindStyles: Record<ChangeKind, string> = {
@@ -102,10 +122,9 @@ function InlineMarkdown({ text }: { text: string }) {
 export default async function ChangelogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+  searchParams: SearchParams
 }) {
-  const product: Product =
-    (await searchParams).product === "desktop" ? "desktop" : "cli"
+  const product = await productOf(searchParams)
   const [changelog, releases] = await Promise.all([
     getChangelog(product),
     fetchDesktopReleases(),
@@ -117,13 +136,18 @@ export default async function ChangelogPage({
   const latest = releases
     ? changelog.find((entry) => !unreleased(entry.version))
     : undefined
+  // The desktop changelog has no build-time snapshot, so it can be empty while
+  // a release is out: only the releases can say there is none.
+  const desktopLatest = releases && latestDesktopRelease(releases)
   const latestLabel = latest
     ? `Latest - v${latest.version}`
     : product === "cli"
       ? `Latest - v${(await getNpmLatestVersion()) ?? FALLBACK_VERSION}`
-      : releases
-        ? "No release yet"
-        : "Desktop app"
+      : desktopLatest
+        ? `Latest - v${desktopLatest.version}`
+        : releases
+          ? "No release yet"
+          : "Desktop app"
 
   return (
     <PageShell>
