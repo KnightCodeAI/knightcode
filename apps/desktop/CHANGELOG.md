@@ -12,7 +12,7 @@ The first release of the KnightCode desktop app. It runs the same agent as the t
 - Added plan review: a submitted plan asks whether to implement it in the thread, implement it in a new thread with only the plan, keep planning, or exit planning.
 - Added the Changes panel: the thread's diff with expandable context and review comments, read-only file tabs at the line a tool read or changed, and Open in, which sends a file to an editor, terminal or IDE on your machine.
 - Added worktrees and git: start a thread in a new worktree, commit and push, create or switch branches, open a pull request, and hand a thread's changes between a worktree and the local checkout.
-- Added terminals in the thread's folder with the shells found on your machine, and background terminals: commands KnightCode runs in the background list under Background processes in the thread's summary, each with its live output in a side panel tab and a Stop control.
+- Added terminals in the thread's folder with the shells found on your machine, and background terminals: when KnightCode starts a command in the background, the thread's summary opens on its own and lists it under Background processes, with its live output in a side panel tab and a Stop control.
 - Added preview tabs for http and https pages, each thread with its own storage, and Annotate, which attaches part of a page to the message you are writing.
 - Added MCP Apps: a tool's app shows in the thread, calls its own server's tools after asking you, and opens full screen in the side panel.
 - Added extension UI: dialogs, questions, notices, status chips, widgets and declarative views from extensions show in the app.
