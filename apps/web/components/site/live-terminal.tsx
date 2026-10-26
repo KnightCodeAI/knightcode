@@ -344,10 +344,13 @@ function useColumns(ref: React.RefObject<HTMLElement | null>): number {
     if (!el) return
     const probe = document.createElement("span")
     probe.textContent = "0".repeat(100)
-    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre"
+    // Zero-size and clipped: a probe that hung out of the panel would make it
+    // scrollable, and focusing the input would scroll the chrome out of view.
+    probe.style.cssText =
+      "position:absolute;top:0;left:0;width:0;height:0;overflow:hidden;visibility:hidden;white-space:pre"
     el.appendChild(probe)
     const measure = () =>
-      setColumns(Math.floor(el.clientWidth / (probe.offsetWidth / 100)))
+      setColumns(Math.floor(el.clientWidth / (probe.scrollWidth / 100)))
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     measure()
