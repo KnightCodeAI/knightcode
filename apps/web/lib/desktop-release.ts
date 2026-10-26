@@ -95,6 +95,38 @@ export function macUpdate(
   }
 }
 
+// The home page's download buttons: one installer per platform, matched by the
+// names desktop-release.yml gives them, and the release page for everything
+// else. Without a version, the feed could not be read and `page` lists every
+// release.
+export type DesktopDownloads = {
+  version?: string
+  page: string
+  windows?: string
+  macArm64?: string
+  macX64?: string
+  deb?: string
+  rpm?: string
+}
+
+export function desktopDownloads({
+  release,
+  version,
+}: LatestDesktopRelease): DesktopDownloads {
+  const find = (suffix: string) =>
+    release.assets.find(({ name }) => name.endsWith(suffix))
+      ?.browser_download_url
+  return {
+    version,
+    page: release.html_url,
+    windows: find("Setup.exe"),
+    macArm64: find("-arm64.dmg"),
+    macX64: find("-x64.dmg"),
+    deb: find(".deb"),
+    rpm: find(".rpm"),
+  }
+}
+
 const PAGE_SIZE = 100
 // CLI releases share the repository and outnumber desktop ones.
 const MAX_PAGES = 10

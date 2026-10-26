@@ -1,15 +1,17 @@
 "use client"
 
-import { ArrowRight01Icon } from "@hugeicons/core-free-icons"
+import { ArrowRight01Icon, CommandLineIcon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { motion, useReducedMotion, type Variants } from "motion/react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 
 import { TypingAnimation } from "@/components/text-typing"
+import type { DesktopDownloads } from "@/lib/desktop-release"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { NPM_PACKAGE, SITE, FALLBACK_VERSION } from "@/lib/site"
-import { InstallCommand } from "./install-command"
+import { DesktopDownload } from "./desktop-download"
+import { InstallCommand, TabBarLabel } from "./install-command"
 
 // Phones never see the terminal, so they should never pay for it either: the
 // panel is ~80 columns of monospace that cannot shrink, and its script runs
@@ -21,6 +23,7 @@ const LiveTerminal = dynamic(
 
 const PHRASES = [
   "inside your terminal.",
+  "on your desktop.",
   "with your own key.",
   "close to your repo.",
   "on your machine.",
@@ -38,7 +41,13 @@ const item: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE_OUT } },
 }
 
-export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
+export function Hero({
+  version = FALLBACK_VERSION,
+  desktop,
+}: {
+  version?: string
+  desktop: DesktopDownloads | null
+}) {
   const reduceMotion = useReducedMotion()
   // Matches the lg breakpoint below, where the layout gains a second column.
   const twoColumn = useMediaQuery("(min-width: 64rem)")
@@ -115,22 +124,22 @@ export function Hero({ version = FALLBACK_VERSION }: { version?: string }) {
             variants={item}
             className="mt-6 max-w-xl text-base text-foreground/70 sm:text-lg"
           >
-            A local coding agent for your terminal. It reads, searches, edits,
-            and runs commands in the folder you opened, through the provider
-            account you choose.
+            A local coding agent, in your terminal or as a desktop app. It
+            reads, searches, edits, and runs commands in the folder you opened,
+            through the provider account you choose.
           </motion.p>
 
-          <motion.div variants={item} className="mt-10 w-full">
-            <InstallCommand />
-          </motion.div>
-
+          {/* Both ways in, one card: each row names itself on the left and
+              offers its choices on the right, so the two read as siblings. */}
           <motion.div
             variants={item}
-            className="mt-5 flex items-center gap-5 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase"
+            className="mt-9 w-full divide-y divide-border overflow-hidden rounded-2xl border border-border/60 bg-card/40 shadow-sm backdrop-blur-md"
           >
-            <span>macOS</span>
-            <span>Linux</span>
-            <span>Windows</span>
+            <InstallCommand
+              label={<TabBarLabel icon={CommandLineIcon}>Terminal</TabBarLabel>}
+              className="rounded-none border-x-0 border-t-0 bg-transparent shadow-none backdrop-blur-none"
+            />
+            <DesktopDownload downloads={desktop} />
           </motion.div>
 
           <motion.a

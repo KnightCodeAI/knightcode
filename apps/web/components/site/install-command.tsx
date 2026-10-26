@@ -1,8 +1,8 @@
 "use client"
 
-import { useLayoutEffect, useRef, useState } from "react"
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
 import { NPM_PACKAGE } from "@/lib/site"
 import { cn } from "@/lib/utils"
@@ -75,27 +75,108 @@ export function CommandBlock({
   )
 }
 
-/** Install command with a package-manager switcher. */
-export function InstallCommand({ className }: { className?: string }) {
-  const [manager, setManager] = useState<ManagerId>("npm")
+/** Toggle tabs with a sliding underline, after an optional row label. */
+export function TabBar<T extends string>({
+  tabs,
+  active,
+  onSelect,
+  label,
+}: {
+  tabs: readonly { id: T; label: string }[]
+  active: T
+  onSelect: (id: T) => void
+  label?: ReactNode
+}) {
   const barRef = useRef<HTMLDivElement>(null)
   // Motion's shared-element `layoutId` mis-measured this underline: it
   // rendered ~28px below the tab row on every switch and slid diagonally back
   // up. The tabs never move relative to the bar, so the indicator is placed
   // from the active tab's own offsets and moved with a plain CSS transition.
   const [rail, setRail] = useState({ left: 0, width: 0 })
-  const active = MANAGERS.find((m) => m.id === manager) ?? MANAGERS[0]
 
   useLayoutEffect(() => {
-    const tab = barRef.current?.querySelector<HTMLElement>("[data-active]")
-    if (!tab) return
+    const bar = barRef.current
+    const tab = bar?.querySelector<HTMLElement>("[data-active]")
+    if (!bar || !tab) return
     const measure = () => setRail({ left: tab.offsetLeft, width: tab.offsetWidth })
     measure()
-    // The tabs are content-sized, so only a font swap moves them.
+    // A font swap resizes the tab, and with a label the tabs sit at the bar's
+    // end, so resizing the bar moves them too.
     const observer = new ResizeObserver(measure)
     observer.observe(tab)
+    observer.observe(bar)
     return () => observer.disconnect()
-  }, [manager])
+  }, [active])
+
+  return (
+    <div
+      ref={barRef}
+      className="relative flex items-center border-b border-border/50 bg-foreground/[0.025] px-2"
+    >
+      {label}
+      {/* With a label the tabs sit at the row's end, as its options. */}
+      <div className={cn("flex", label && "ml-auto")}>
+        {tabs.map((t) => {
+          const isActive = t.id === active
+          return (
+            <button
+              key={t.id}
+              onClick={() => onSelect(t.id)}
+              aria-pressed={isActive}
+              data-active={isActive ? "" : undefined}
+              className={cn(
+                "cursor-pointer px-2.5 py-2.5 font-mono text-xs transition-colors sm:px-3",
+                isActive
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground/80"
+              )}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+      <span
+        aria-hidden
+        className="absolute bottom-0 left-0 h-px bg-(--brand) transition-[transform,width] duration-200 ease-out motion-reduce:transition-none"
+        style={{
+          transform: `translateX(${rail.left + 8}px)`,
+          width: Math.max(0, rail.width - 16),
+        }}
+      />
+    </div>
+  )
+}
+
+/** A row label for a TabBar: an icon and a short name. */
+export function TabBarLabel({
+  icon,
+  children,
+}: {
+  icon: IconSvgElement
+  children: ReactNode
+}) {
+  return (
+    <span className="flex items-center gap-2 py-2.5 pr-3 pl-2 font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
+      <HugeiconsIcon icon={icon} className="size-3.5" strokeWidth={2} />
+      {/* Icon only on phones, where the name would push the last tab out. */}
+      <span className="max-sm:sr-only">{children}</span>
+    </span>
+  )
+}
+
+const MANAGER_TABS = MANAGERS.map((m) => ({ id: m.id, label: m.id }))
+
+/** Install command with a package-manager switcher. */
+export function InstallCommand({
+  className,
+  label,
+}: {
+  className?: string
+  label?: ReactNode
+}) {
+  const [manager, setManager] = useState<ManagerId>("npm")
+  const active = MANAGERS.find((m) => m.id === manager) ?? MANAGERS[0]
 
   return (
     <div
@@ -104,38 +185,12 @@ export function InstallCommand({ className }: { className?: string }) {
         className
       )}
     >
-      <div
-        ref={barRef}
-        className="relative flex items-center border-b border-border/50 px-2"
-      >
-        {MANAGERS.map((m) => {
-          const isActive = m.id === manager
-          return (
-            <button
-              key={m.id}
-              onClick={() => setManager(m.id)}
-              aria-pressed={isActive}
-              data-active={isActive ? "" : undefined}
-              className={cn(
-                "cursor-pointer px-3 py-2.5 font-mono text-xs transition-colors",
-                isActive
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground/80"
-              )}
-            >
-              {m.id}
-            </button>
-          )
-        })}
-        <span
-          aria-hidden
-          className="absolute bottom-0 left-0 h-px bg-(--brand) transition-[transform,width] duration-200 ease-out motion-reduce:transition-none"
-          style={{
-            transform: `translateX(${rail.left + 8}px)`,
-            width: Math.max(0, rail.width - 16),
-          }}
-        />
-      </div>
+      <TabBar
+        tabs={MANAGER_TABS}
+        active={manager}
+        onSelect={setManager}
+        label={label}
+      />
       {/* key: reset the copied state when the command changes */}
       <CommandBlock key={manager} command={active.command} />
     </div>

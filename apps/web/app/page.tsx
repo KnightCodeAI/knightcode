@@ -7,6 +7,11 @@ import { SiteFooter } from "@/components/site/footer"
 import { SiteHeader } from "@/components/site/header"
 import { Hero } from "@/components/site/hero"
 import { Stats } from "@/components/site/stats"
+import {
+  desktopDownloads,
+  fetchDesktopReleases,
+  latestDesktopRelease,
+} from "@/lib/desktop-release"
 import { SITE } from "@/lib/site"
 import { getLatestVersion } from "@/lib/version"
 import terminalScreen from "@/public/screens/terminal.webp"
@@ -35,7 +40,18 @@ import {
 } from "@hugeicons/core-free-icons"
 
 export default async function HomePage() {
-  const version = await getLatestVersion()
+  const [version, desktopReleases] = await Promise.all([
+    getLatestVersion(),
+    fetchDesktopReleases(),
+  ])
+  const latestDesktop = desktopReleases && latestDesktopRelease(desktopReleases)
+  // An unreadable feed links to the releases page rather than claim there is
+  // no desktop app yet.
+  const desktop = latestDesktop
+    ? desktopDownloads(latestDesktop)
+    : desktopReleases
+      ? null
+      : { page: SITE.githubReleases }
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -64,7 +80,7 @@ export default async function HomePage() {
     <>
       <SiteHeader />
       <main className="relative">
-        <Hero version={version} />
+        <Hero version={version} desktop={desktop} />
         <Stats />
         {/* <Demo /> */}
 
