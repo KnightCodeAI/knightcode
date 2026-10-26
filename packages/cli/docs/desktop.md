@@ -7,8 +7,8 @@ configuration lives in the files the terminal reads (`settings.json`, `mcp.json`
 `tools.json`); the app's Settings edit those same files, so a change made in either place
 shows in both.
 
-Installers come from the GitHub releases tagged `desktop-v<version>`; none is published yet,
-so for now the app runs from a source checkout.
+Download it from [knightcode.dev](https://knightcode.dev) or from the GitHub releases tagged
+`desktop-v<version>`.
 
 ## Installing
 

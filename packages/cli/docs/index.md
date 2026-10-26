@@ -1,6 +1,6 @@
 # KnightCode
 
-KnightCode is an extensible AI agent that works from your terminal. Give it a goal and a working folder, and it can inspect files, run commands, edit content, and work through multi-step tasks.
+KnightCode is an extensible AI agent that works from your terminal or the [desktop app](desktop.md). Give it a goal and a working folder, and it can inspect files, run commands, edit content, and work through multi-step tasks.
 
 Use KnightCode for software development, research notes, writing projects, data files, or hobby work. You can use KnightCode as is, prompt it to adapt itself to your workflow, or build other applications powered by KnightCode using the SDK.
 

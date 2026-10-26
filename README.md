@@ -11,6 +11,10 @@ export OPENROUTER_API_KEY=sk-or-...
 knightcode
 ```
 
+There is also a desktop app for Windows, macOS and Linux. It runs the same agent and
+shares sessions and settings with the terminal: download it from
+[knightcode.dev](https://knightcode.dev).
+
 ## Why
 
 Most terminal agents spend 20–25k tokens on tool descriptions and system prompt
@@ -29,6 +33,7 @@ tokens, measured.
 | `packages/durable` | Durable conversation, task and document runtime (Pico) |
 | `packages/tui` | Terminal UI library with differential rendering |
 | `packages/telemetry` | Vendor-neutral telemetry contracts |
+| `apps/desktop` | The desktop app: an Electron window over `knightcode app-server` |
 
 ## Development
 
