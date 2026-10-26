@@ -16,7 +16,7 @@ export const SITE = {
   url: "https://knightcode.dev",
   tagline: "Agentic coding in your terminal",
   description:
-    "KnightCode is a local, bring-your-own-key terminal coding agent. Install it from npm, connect a provider you already have, and run it in your repository.",
+    "KnightCode is a local, bring-your-own-key coding agent for your terminal and desktop. Install it from npm or download the desktop app, connect a provider you already have, and run it in your repository.",
   github: "https://github.com/KnightCodeAI/knightcode",
   githubReleases: "https://github.com/KnightCodeAI/knightcode/releases",
   issues: "https://github.com/KnightCodeAI/knightcode/issues",

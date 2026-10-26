@@ -237,8 +237,11 @@ The desktop app is released by hand with `.github/workflows/desktop-release.yml`
 Version Packages PR gave `apps/desktop`, so merge that PR first; a version that
 is already tagged, or has no `## <version>` section in `apps/desktop/CHANGELOG.md`,
 is refused. The draft release's notes are the changelog since the last
-published desktop release, which the update feed shows as what's new. Never
-bump `apps/desktop/package.json` by hand.
+published desktop release, which the update feed shows as what's new. Publish
+the draft with the release label None, never Latest: the repository's latest
+release must stay the CLI's, since the CLI's download links point at
+`/releases/latest`. A prerelease is skipped by the update feed and the
+website's download buttons. Never bump `apps/desktop/package.json` by hand.
 
 The model catalog is published separately by
 `.github/workflows/publish-model-catalog.yml` from `bun run
