@@ -35,7 +35,7 @@ import { aborted, deferred } from "./task-support.ts";
 async function listen(harness: Harness, conversation: Conversation) {
 	const stream = await watchEvents(harness, conversation.id, context);
 	const batches: AgentEvent[][] = [];
-	stream.start(async (events) => {
+	stream.start(async ({ value: events }) => {
 		batches.push([...events]);
 	});
 	return { stream, batches, events: () => batches.flat() };
@@ -263,7 +263,7 @@ describe("agent events", () => {
 			await root.commit((tx) => tx.appendEntry(root.id, { kind: "note", data: { index } }), context);
 		}
 		const batches: AgentEvent[][] = [];
-		stream.start(async (events) => {
+		stream.start(async ({ value: events }) => {
 			batches.push([...events]);
 		});
 		await drained();
@@ -282,7 +282,7 @@ describe("agent events", () => {
 			await root.commit((tx) => tx.appendEntry(root.id, { kind: "note" }), context);
 		}
 		const batches: AgentEvent[][] = [];
-		stream.start(async (events) => {
+		stream.start(async ({ value: events }) => {
 			batches.push([...events]);
 		});
 		await drained();
@@ -544,7 +544,7 @@ describe("agent events", () => {
 			await root.commit((tx) => tx.appendEntry(root.id, { kind: "note" }), context);
 		}
 		const batches: AgentEvent[][] = [];
-		stream.start(async (events) => {
+		stream.start(async ({ value: events }) => {
 			batches.push([...events]);
 		});
 		await drained();
