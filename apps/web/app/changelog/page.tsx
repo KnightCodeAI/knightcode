@@ -113,13 +113,17 @@ export default async function ChangelogPage({
   const unreleased = (version: string) =>
     isUnreleased(version, product, releases)
   // Latest is the newest section that is out, not one merged ahead of its
-  // release.
-  const latest = changelog.find((entry) => !unreleased(entry.version))
+  // release. Without the releases there is no telling which that is.
+  const latest = releases
+    ? changelog.find((entry) => !unreleased(entry.version))
+    : undefined
   const latestLabel = latest
     ? `Latest - v${latest.version}`
-    : product === "desktop"
-      ? "No release yet"
-      : `Latest - v${(await getNpmLatestVersion()) ?? FALLBACK_VERSION}`
+    : product === "cli"
+      ? `Latest - v${(await getNpmLatestVersion()) ?? FALLBACK_VERSION}`
+      : releases
+        ? "No release yet"
+        : "Desktop app"
 
   return (
     <PageShell>

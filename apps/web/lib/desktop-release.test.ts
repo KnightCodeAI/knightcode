@@ -231,4 +231,22 @@ describe("desktop update feed", () => {
       rpm: at("knightcode-desktop-0.2.0-1.x86_64.rpm"),
     })
   })
+
+  it("leaves out installers the release does not carry", () => {
+    const tag = "desktop-v0.2.0"
+    const files = ["KnightCode-0.2.0.Setup.exe", "KnightCode-0.2.0-arm64.dmg"]
+    const at = (name: string) => `${DOWNLOAD}/${tag}/${name}`
+    // The home page sends the platforms left out to the release page.
+    expect(
+      desktopDownloads({ release: release(tag, { files }), version: "0.2.0" })
+    ).toEqual({
+      version: "0.2.0",
+      page: `https://github.com/KnightCodeAI/knightcode/releases/tag/${tag}`,
+      windows: at("KnightCode-0.2.0.Setup.exe"),
+      macArm64: at("KnightCode-0.2.0-arm64.dmg"),
+      macX64: undefined,
+      deb: undefined,
+      rpm: undefined,
+    })
+  })
 })

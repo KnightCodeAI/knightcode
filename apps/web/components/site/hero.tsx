@@ -137,7 +137,7 @@ export function Hero({
           >
             <InstallCommand
               label={<TabBarLabel icon={CommandLineIcon}>Terminal</TabBarLabel>}
-              className="rounded-none border-0 bg-transparent shadow-none backdrop-blur-none"
+              className="rounded-none border-x-0 border-t-0 bg-transparent shadow-none backdrop-blur-none"
             />
             <DesktopDownload downloads={desktop} />
           </motion.div>

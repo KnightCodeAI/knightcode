@@ -95,13 +95,16 @@ export function TabBar<T extends string>({
   const [rail, setRail] = useState({ left: 0, width: 0 })
 
   useLayoutEffect(() => {
-    const tab = barRef.current?.querySelector<HTMLElement>("[data-active]")
-    if (!tab) return
+    const bar = barRef.current
+    const tab = bar?.querySelector<HTMLElement>("[data-active]")
+    if (!bar || !tab) return
     const measure = () => setRail({ left: tab.offsetLeft, width: tab.offsetWidth })
     measure()
-    // The tabs are content-sized, so only a font swap moves them.
+    // A font swap resizes the tab, and with a label the tabs sit at the bar's
+    // end, so resizing the bar moves them too.
     const observer = new ResizeObserver(measure)
     observer.observe(tab)
+    observer.observe(bar)
     return () => observer.disconnect()
   }, [active])
 

@@ -124,7 +124,7 @@ export function DesktopDownload({
         </div>
         <Body title="KnightCode for desktop" detail="macOS, Windows, and Linux">
           <a
-            href={SITE.github}
+            href={SITE.githubReleases}
             target="_blank"
             rel="noreferrer"
             className={cn(
