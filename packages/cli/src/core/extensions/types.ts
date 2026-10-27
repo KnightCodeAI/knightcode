@@ -52,6 +52,7 @@ import type {
 	KeyId,
 	OverlayHandle,
 	OverlayOptions,
+	ProgramStatus,
 	TUI,
 } from "@knightcode/tui";
 import type { Static, TSchema } from "typebox";
@@ -246,6 +247,11 @@ export interface ExtensionUIContext {
 			overlayOptions?: OverlayOptions | (() => OverlayOptions);
 			/** Called with the overlay handle after the overlay is shown. Use to control visibility. */
 			onHandle?: (handle: OverlayHandle) => void;
+			/**
+			 * Report KnightCode as blocked on user input (OSC 7501 program status) while this component is visible.
+			 * Only applies to inline components, not overlays.
+			 */
+			blocked?: { kind: NonNullable<ProgramStatus["kind"]>; message: string };
 		},
 	): Promise<T>;
 
