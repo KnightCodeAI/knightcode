@@ -7,7 +7,7 @@ const hasBun = spawnSync("bun", ["--version"], { shell: process.platform === "wi
 
 // The compiled CLI runs on Bun, which has bun:sqlite but no node:sqlite.
 describe.skipIf(!hasBun)("Bun SQLite adapter", () => {
-	it("runs statements, transactions and storage migrations, and releases the file on close", () => {
+	it("runs statements, transactions and storage migrations, counts changed rows, and releases the file on close", () => {
 		const result = spawnSync("bun", [fixture], { encoding: "utf8", shell: process.platform === "win32" });
 		expect(result.stderr).toBe("");
 		expect(result.status).toBe(0);
@@ -16,6 +16,7 @@ describe.skipIf(!hasBun)("Bun SQLite adapter", () => {
 			journal: "wal",
 			rollbackError: "boom",
 			rows: ["a", "b"],
+			changed: [2, 0],
 			prefixed: true,
 		});
 	}, 30_000);

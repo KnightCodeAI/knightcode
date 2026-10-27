@@ -19,7 +19,7 @@ type TransactionScope = { active: boolean };
 
 /** A prepared statement of a synchronous SQLite driver, as this adapter uses it. */
 export interface SyncSqliteStatement {
-	run(...params: SqliteValue[]): unknown;
+	run(...params: SqliteValue[]): { changes: number | bigint };
 	get(...params: SqliteValue[]): unknown;
 	all(...params: SqliteValue[]): unknown[];
 }
@@ -108,6 +108,10 @@ abstract class NodeSqliteExecutor implements SqliteExecutor {
 		return this.runOperation(() => {
 			this.statement(sql).run(...params);
 		});
+	}
+
+	runCounted(sql: string, ...params: SqliteValue[]): Promise<number> {
+		return this.runOperation(() => Number(this.statement(sql).run(...params).changes));
 	}
 
 	get<T extends object>(sql: string, ...params: SqliteValue[]): Promise<T | undefined> {

@@ -25,6 +25,10 @@ try {
 		rollbackError = (error as Error).message;
 	}
 	const rows = await db.all<{ v: string }>("SELECT v FROM t ORDER BY id");
+	const changed = [
+		await db.runCounted("UPDATE t SET v = v || '!'"),
+		await db.runCounted("DELETE FROM t WHERE id = ?", 99),
+	];
 	await db.close();
 
 	const storagePath = join(dir, "storage.sqlite");
@@ -44,6 +48,7 @@ try {
 			journal: journal?.journal_mode,
 			rollbackError,
 			rows: rows.map((row) => row.v),
+			changed,
 			prefixed,
 		}),
 	);
