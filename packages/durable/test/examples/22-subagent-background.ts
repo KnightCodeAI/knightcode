@@ -14,7 +14,6 @@ import { createModels } from "@knightcode/ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@knightcode/ai/providers/faux";
 import { openaiProvider } from "@knightcode/ai/providers/openai";
 import {
-	type AgentEvent,
 	AssistantEntry,
 	type ConversationId,
 	configure,
@@ -282,7 +281,7 @@ function contentText(content: string | readonly { type: string; text?: string }[
 /** Print the main conversation's messages as they are committed. Subagents work in their own conversations. */
 async function follow(harness: Harness, id: ConversationId): Promise<void> {
 	const stream = await watchEvents(harness, id, context);
-	stream.start(async (events: readonly AgentEvent[]) => {
+	stream.start(async ({ value: events }) => {
 		for (const event of events) {
 			if (event.type !== "message_end") continue;
 			const message = event.entry.model?.[0];
