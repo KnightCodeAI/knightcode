@@ -43,7 +43,7 @@ import { AgentDoc, configure, createAgent, resolveAgent, resolveSettings } from 
 import { createCompaction } from "./compaction.ts";
 import { readContext } from "./context.ts";
 import { InboxDoc, withdrawQueuedInputs } from "./inbox.ts";
-import { LiveDoc, settleSchedulerOutcome } from "./live.ts";
+import { LIMITS_RESTARTS, LiveDoc, settleSchedulerOutcome } from "./live.ts";
 import { ProviderDoc } from "./provider.ts";
 import { BUILTIN_TASKS } from "./registry.ts";
 import { type InvocationBinding, TaskScheduler } from "./scheduler.ts";
@@ -74,7 +74,7 @@ import type {
 } from "./types.ts";
 import { addUsageState, UsageDoc, type UsageState } from "./usage.ts";
 import { scanAll } from "./util.ts";
-import { type ConversationView, ConversationViews } from "./view.ts";
+import { type ConversationView, ConversationViews, type ConversationWindow } from "./view.ts";
 
 const SCAN_PAGE_SIZE = 256;
 
@@ -178,8 +178,8 @@ class ConversationImpl<Tool extends ToolRegistration> implements Conversation {
 		return this.#host.tasks.waitForIdle(this.id, context);
 	}
 
-	watch(context: Context): Promise<ConversationWatch> {
-		return this.#host.views.watch(this.id, context);
+	watch(context: Context, window?: ConversationWindow): Promise<ConversationWatch> {
+		return this.#host.views.watch(this.id, context, window);
 	}
 }
 
@@ -245,6 +245,7 @@ class HarnessImpl<Tool extends ToolRegistration> extends SessionImpl implements 
 			timers: hostTimers(options.setTimer, (error) => report(error, { type: "host_error", callback: "setTimer" })),
 			writeAtClose: (writes) => this.writeAtClose(writes),
 			report: this.#report,
+			limitsRestarts: (kind) => LIMITS_RESTARTS.has(kind),
 			settleOutcome: settleSchedulerOutcome,
 			withdrawInputs: withdrawQueuedInputs,
 			conversation: async (id, binding, callContext) => {
@@ -343,11 +344,6 @@ class HarnessImpl<Tool extends ToolRegistration> extends SessionImpl implements 
 		return this.#tasks.abort(id, context);
 	}
 
-	retryTask(id: TaskId, context: Context): Promise<void> {
-		this.assertUsable();
-		return this.#tasks.retry(id, context);
-	}
-
 	async waitForTask<R>(id: TaskId<R>, context: Context): Promise<SettledTask<R>> {
 		this.#tasks.resume();
 		return this.#tasks.waitForTask(id, context) as Promise<SettledTask<R>>;
@@ -384,9 +380,10 @@ class HarnessImpl<Tool extends ToolRegistration> extends SessionImpl implements 
 		id: ConversationId,
 		observer: Observer<ConversationView>,
 		context: Context,
+		window?: ConversationWindow,
 	): Promise<Observation<ConversationView>> {
 		this.assertUsable();
-		return this.#host.views.observe(id, observer, context);
+		return this.#host.views.observe(id, observer, context, window);
 	}
 
 	root(
@@ -470,12 +467,12 @@ function safeReport(
 		};
 		switch (info.type) {
 			case "task_faulted":
+			case "task_interrupted":
 			case "task_outdated":
 				attributes.reason = info.reason;
 				attributes.extension = info.extension;
 				attributes["task.id"] = info.task.id;
 				break;
-			case "task_parked":
 			case "migration_failed":
 			case "task_error":
 			case "extension_error":
