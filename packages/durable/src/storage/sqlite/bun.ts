@@ -14,7 +14,7 @@ import { SqliteStorage } from "./storage.ts";
 
 /** The part of `bun:sqlite` this adapter uses. Declared here so the package needs no Bun type definitions. */
 interface BunStatement {
-	run(...params: SqliteValue[]): unknown;
+	run(...params: SqliteValue[]): { changes: number | bigint };
 	get(...params: SqliteValue[]): unknown;
 	all(...params: SqliteValue[]): unknown[];
 	finalize(): void;

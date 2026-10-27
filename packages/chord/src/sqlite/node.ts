@@ -19,7 +19,7 @@ type TransactionScope = { active: boolean };
 
 /** A prepared statement of a synchronous SQLite driver, as this adapter uses it. */
 export interface SyncSqliteStatement {
-	run(...params: SqliteValue[]): unknown;
+	run(...params: SqliteValue[]): { changes: number | bigint };
 	get(...params: SqliteValue[]): unknown;
 	all(...params: SqliteValue[]): unknown[];
 }
@@ -85,9 +85,14 @@ class SerialOperationQueue {
 	}
 }
 
+/** How many prepared statements one connection keeps. */
+const STATEMENT_CACHE_LIMIT = 256;
+
 /**
  * Executes SQL on one connection. Prepared statements are cached per connection by SQL text, so the
- * database and its transaction handles share them across transactions.
+ * database and its transaction handles share them across transactions. The cache keeps the
+ * `STATEMENT_CACHE_LIMIT` most recently used statements, so callers generating SQL of unbounded shapes
+ * cannot grow it without bound.
  */
 abstract class NodeSqliteExecutor implements SqliteExecutor {
 	protected readonly database: SyncSqliteConnection;
@@ -110,6 +115,10 @@ abstract class NodeSqliteExecutor implements SqliteExecutor {
 		});
 	}
 
+	runCounted(sql: string, ...params: SqliteValue[]): Promise<number> {
+		return this.runOperation(() => Number(this.statement(sql).run(...params).changes));
+	}
+
 	get<T extends object>(sql: string, ...params: SqliteValue[]): Promise<T | undefined> {
 		return this.runOperation(() => this.statement(sql).get(...params) as T | undefined);
 	}
@@ -121,11 +130,20 @@ abstract class NodeSqliteExecutor implements SqliteExecutor {
 	protected abstract runOperation<T>(operation: () => T): Promise<T>;
 
 	private statement(sql: string): SyncSqliteStatement {
-		let statement = this.statements.get(sql);
-		if (statement === undefined) {
-			statement = this.database.prepare(sql);
-			this.statements.set(sql, statement);
+		const statements = this.statements;
+		let statement = statements.get(sql);
+		if (statement !== undefined) {
+			// Recency matters only once evictions come near: a small cache keeps one lookup per statement.
+			if (statements.size > STATEMENT_CACHE_LIMIT / 2) {
+				statements.delete(sql);
+				statements.set(sql, statement);
+			}
+			return statement;
 		}
+		statement = this.database.prepare(sql);
+		statements.set(sql, statement);
+		// A Map iterates in insertion order: its first key is the least recently used statement.
+		if (statements.size > STATEMENT_CACHE_LIMIT) statements.delete(statements.keys().next().value!);
 		return statement;
 	}
 }
