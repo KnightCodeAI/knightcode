@@ -1,5 +1,57 @@
 # @knightcodeai/cli
 
+## 0.22.1
+
+### Added
+
+- Added a `blocked` option to `ctx.ui.custom()`, so an inline component that waits for the user reports the CLI as blocked through terminal program status instead of as working.
+
+- Added GPT-6.1 Terra to the `openai`, `azure` and `openai-codex` providers: $1 input, $0.05 cached input, $1.25 cache writes and $5 output per million tokens, with long-context pricing above 272K input tokens, tool search, additional tools and mid-conversation effort changes. It supports thinking off but not minimal. The `openai-codex` provider serves it with a 500K context window.
+
+### Changed
+
+- Changed the `openai` provider's default model from GPT-5.5 to GPT-6.1 Sol, matching `openai-codex`. It applies after `/login` when no model is set, as the startup fallback, and for `--provider openai`.
+
+### Fixed
+
+- Fixed Amazon Bedrock requests failing when tools with `strict: "prefer"` exceed Bedrock's strict tool limits. The request is retried once with those tools non-strict, as the Anthropic provider already does.
+
+- Fixed `/tree` summaries ignoring the session's thinking level. Reasoning models that do not accept effort `none` rejected the summary request with a 400 error.
+
+- Fixed `tool_search` and codemode's `searchTools()` ranking another tool above the one the query names. A query equal to a tool's full name, or to the part after a `__` separator (`thread_read` for `mcp__app__thread_read`), now puts that tool first, in any case and with `-` or a space in place of `_`.
+
+- Fixed an open extension dialog disappearing when an extension replaced the editor component. The dialog stayed pending with nothing on screen to answer it; the new editor now waits until the last dialog closes.
+
+- Fixed switching to GPT-5.4 or GPT-5.5 on `openai`, OpenCode or GitHub Copilot after another model's tool calls, which failed with a 400 error. Those models now get their tools declared up front instead of through tool search or additional tools; mid-conversation system messages still work.
+
+- Fixed `grep` with `context` misnumbering lines in a file that contains a lone carriage return. Context lines now count lines the same way ripgrep does, so the match and the lines around it are the right ones.
+
+- Fixed blank rows in assistant messages when thinking is hidden and the hidden-thinking label is empty. Such a thinking run now renders nothing, spacing included.
+
+- Fixed shortcuts bound to F1-F12 never firing under the kitty keyboard protocol, including modified keys such as Ctrl+F5. F13 and above no longer insert invisible characters into the prompt.
+
+- Fixed `knightcode-messages` streams accepting any `contentIndex` from the server. An index that is not the next block (for a start event) or an existing block (for any other event) now ends the response with an error instead of growing a sparse content array or writing through `__proto__`.
+
+- Fixed display math wider than the terminal breaking apart, with rows of the equation shifting out of line. It now falls back to the raw LaTeX source, which wraps like normal text.
+
+- Fixed `/login` printing sign-in, device-code and help URLs as received. The dialog now opens only `http:` and `https:` URLs, shows web URLs normalized (control characters percent-encoded) and replaces control characters in anything else, so a URL cannot end its terminal hyperlink early or send its own escape sequences.
+
+- Fixed `install`, `remove` and `update --extensions` printing npm's audit and funding advice. Following that advice (`npm audit fix`) installed a second copy of the CLI's own packages into the extension directory.
+
+- Fixed OpenCode DeepSeek V4.1 Flash requests sending `prompt_cache_retention`. The model is the renamed DeepSeek V4 Flash and, like it, does not accept the long cache retention parameter.
+
+- Fixed OpenCode and OpenCode Go sending every request to the shared inference base URL. Each model now uses its protocol's endpoint (`/openai/v1`, `/anthropic`, `/google/v1beta`, and `/systemone/v1` for Jev).
+
+- Fixed Radius sign-in passing any URL the gateway returned to the system URL handler. The browser authorization endpoint and the device-code verification URL must now be `http:` or `https:` URLs, as GitHub Copilot, Kimi Code and Meta sign-in already required, so a `file:` path or a custom protocol in the response fails the login instead of being opened.
+
+- Fixed a failed session write (disk full, a busy or timed-out network drive) leaving later entries pointing to a parent missing from the file. Resuming such a session lost everything before the gap, including the tool declarations; the failed entry is now dropped from memory too.
+
+- Fixed a session name containing a BEL or ESC character ending the terminal title sequence early and sending the rest of the name to the terminal as escape sequences. Control characters in the title are now replaced with spaces.
+
+### Security
+
+- Security: updated shell-quote in the sandbox example extension's lockfile from 1.8.3 to 1.12.0, past a critical advisory in its `quote()`.
+
 ## 0.22.0
 
 ### Added
