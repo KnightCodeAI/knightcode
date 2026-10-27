@@ -2874,8 +2874,12 @@ export class InteractiveMode {
 		// Save text from current editor before switching
 		const currentText = this.editor.getText();
 
-		this.disposeActiveSelector();
-		this.editorContainer.clear();
+		// An open extension dialog keeps the editor slot; the new editor is shown when the last dialog closes.
+		const dialogOpen = this.extensionDialogs.length > 0;
+		if (!dialogOpen) {
+			this.disposeActiveSelector();
+			this.editorContainer.clear();
+		}
 
 		if (factory) {
 			// Create the custom editor with tui, theme, and keybindings
@@ -2936,7 +2940,7 @@ export class InteractiveMode {
 			this.editor = this.defaultEditor;
 		}
 
-		this.editorContainer.addChild(this.editor as Component);
+		if (!dialogOpen) this.editorContainer.addChild(this.editor as Component);
 		if (this.activeStatusIndicator) {
 			this.statusContainer.clear();
 			this.activeWorkingIndicatorEmbedded = this.setEditorWorkingStatusIndicator(this.activeStatusIndicator);
@@ -2946,7 +2950,7 @@ export class InteractiveMode {
 			// Moving between the border and the standalone row changes which colour applies.
 			this.activeStatusIndicator.invalidate();
 		}
-		this.ui.setFocus(this.editor as Component);
+		if (!dialogOpen) this.ui.setFocus(this.editor as Component);
 		this.ui.requestRender();
 	}
 
