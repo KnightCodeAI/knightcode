@@ -45,6 +45,8 @@ import {
 import { DEFAULT_TOOL_NAMES, SettingsManager } from "../core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { builtInExtensions } from "../extensions/index.ts";
+import { pluginCommands } from "../extensions/plugins/index.ts";
+import { PluginManager } from "../plugins/manager.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ShellConfig } from "../utils/shell.ts";
 import {
@@ -75,7 +77,7 @@ import {
 } from "./git-actions.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
-import { positionOf } from "./config.ts";
+import { positionOf, projectReadable } from "./config.ts";
 import { FileSearch } from "./file-search.ts";
 import { listFolder, readFile, writeText } from "./files.ts";
 import { callAppTool, createMcpAppsExtension, type McpAppsHolder, readAppResource } from "./mcp-apps.ts";
@@ -1692,6 +1694,23 @@ export class ThreadManager {
 		});
 	}
 
+	/**
+	 * Plugin commands and skills a new thread in `cwd` would offer. The probe session is never bound, so neither
+	 * session_start (which registers them) nor resources_discover (which loads the skills) fires; MCP servers stay off.
+	 */
+	private pluginCommandsFor(cwdParam: string): ResultOf<"command/list">["commands"] {
+		const cwd = resolvePath(cwdParam);
+		const { plugins } = new PluginManager({ agentDir: this.ctx.agentDir, cwd }).loadActive(
+			projectReadable(this.ctx.agentDir, cwd),
+		);
+		return [
+			...pluginCommands(plugins).map((command) => ({ name: command.name, description: command.description })),
+			...plugins.flatMap((plugin) =>
+				plugin.inventory.skills.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description })),
+			),
+		];
+	}
+
 	/** Per-thread bridge for model changes, which are extension-only events. */
 	private threadExtensions(holder: { thread?: LoadedThread } & McpAppsHolder): InlineExtension[] {
 		return [
@@ -2276,7 +2295,9 @@ export class ThreadManager {
 			"command/list": async (params) =>
 				"threadId" in params
 					? { commands: commandsOf(this.get(params.threadId).session) }
-					: this.probe(params.cwd, (session) => ({ commands: commandsOf(session) })),
+					: this.probe(params.cwd, (session) => ({
+							commands: [...commandsOf(session), ...this.pluginCommandsFor(params.cwd)],
+						})),
 			// Without a project, the agent directory stands in: it has no `.knightcode` of its own.
 			"tool/list": async ({ cwd }) => {
 				// The defaults from the probe's own settings: a trusted project's override counts.

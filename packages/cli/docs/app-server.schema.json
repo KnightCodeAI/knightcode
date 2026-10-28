@@ -12070,6 +12070,1002 @@
 				"additionalProperties": false
 			}
 		},
+		"plugin/list": {
+			"params": {
+				"type": "object",
+				"properties": {
+					"cwd": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"plugins",
+					"diagnostics"
+				],
+				"properties": {
+					"plugins": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"name",
+								"namespace",
+								"identity",
+								"scope",
+								"source",
+								"commit",
+								"enabled",
+								"trusted",
+								"active",
+								"skills",
+								"commands",
+								"mcpServers",
+								"environment",
+								"unsupported",
+								"warnings"
+							],
+							"properties": {
+								"name": {
+									"type": "string"
+								},
+								"namespace": {
+									"type": "string"
+								},
+								"identity": {
+									"type": "string"
+								},
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "global"
+										},
+										{
+											"type": "string",
+											"const": "project"
+										}
+									]
+								},
+								"marketplace": {
+									"type": "string"
+								},
+								"source": {
+									"type": "string"
+								},
+								"ref": {
+									"type": "string"
+								},
+								"commit": {
+									"type": "string"
+								},
+								"enabled": {
+									"type": "boolean"
+								},
+								"trusted": {
+									"type": "boolean"
+								},
+								"active": {
+									"type": "boolean"
+								},
+								"description": {
+									"type": "string"
+								},
+								"version": {
+									"type": "string"
+								},
+								"skills": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
+								"commands": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
+								"mcpServers": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"name",
+											"target"
+										],
+										"properties": {
+											"name": {
+												"type": "string"
+											},
+											"target": {
+												"type": "string"
+											}
+										},
+										"additionalProperties": false
+									}
+								},
+								"environment": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
+								"unsupported": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
+								"warnings": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"diagnostics": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"plugin/install": {
+			"params": {
+				"type": "object",
+				"required": [
+					"scope",
+					"source"
+				],
+				"properties": {
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "global"
+							},
+							{
+								"type": "string",
+								"const": "project"
+							}
+						]
+					},
+					"cwd": {
+						"type": "string"
+					},
+					"source": {
+						"type": "string"
+					},
+					"ref": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string"
+					},
+					"trust": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"plugin"
+				],
+				"properties": {
+					"plugin": {
+						"type": "object",
+						"required": [
+							"name",
+							"namespace",
+							"identity",
+							"scope",
+							"source",
+							"commit",
+							"enabled",
+							"trusted",
+							"active",
+							"skills",
+							"commands",
+							"mcpServers",
+							"environment",
+							"unsupported",
+							"warnings"
+						],
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"namespace": {
+								"type": "string"
+							},
+							"identity": {
+								"type": "string"
+							},
+							"scope": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "global"
+									},
+									{
+										"type": "string",
+										"const": "project"
+									}
+								]
+							},
+							"marketplace": {
+								"type": "string"
+							},
+							"source": {
+								"type": "string"
+							},
+							"ref": {
+								"type": "string"
+							},
+							"commit": {
+								"type": "string"
+							},
+							"enabled": {
+								"type": "boolean"
+							},
+							"trusted": {
+								"type": "boolean"
+							},
+							"active": {
+								"type": "boolean"
+							},
+							"description": {
+								"type": "string"
+							},
+							"version": {
+								"type": "string"
+							},
+							"skills": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"commands": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"mcpServers": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"required": [
+										"name",
+										"target"
+									],
+									"properties": {
+										"name": {
+											"type": "string"
+										},
+										"target": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								}
+							},
+							"environment": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"unsupported": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"warnings": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"plugin/set": {
+			"params": {
+				"type": "object",
+				"required": [
+					"scope",
+					"name"
+				],
+				"properties": {
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "global"
+							},
+							{
+								"type": "string",
+								"const": "project"
+							}
+						]
+					},
+					"cwd": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"trust": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"plugin"
+				],
+				"properties": {
+					"plugin": {
+						"type": "object",
+						"required": [
+							"name",
+							"namespace",
+							"identity",
+							"scope",
+							"source",
+							"commit",
+							"enabled",
+							"trusted",
+							"active",
+							"skills",
+							"commands",
+							"mcpServers",
+							"environment",
+							"unsupported",
+							"warnings"
+						],
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"namespace": {
+								"type": "string"
+							},
+							"identity": {
+								"type": "string"
+							},
+							"scope": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "global"
+									},
+									{
+										"type": "string",
+										"const": "project"
+									}
+								]
+							},
+							"marketplace": {
+								"type": "string"
+							},
+							"source": {
+								"type": "string"
+							},
+							"ref": {
+								"type": "string"
+							},
+							"commit": {
+								"type": "string"
+							},
+							"enabled": {
+								"type": "boolean"
+							},
+							"trusted": {
+								"type": "boolean"
+							},
+							"active": {
+								"type": "boolean"
+							},
+							"description": {
+								"type": "string"
+							},
+							"version": {
+								"type": "string"
+							},
+							"skills": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"commands": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"mcpServers": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"required": [
+										"name",
+										"target"
+									],
+									"properties": {
+										"name": {
+											"type": "string"
+										},
+										"target": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								}
+							},
+							"environment": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"unsupported": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"warnings": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"plugin/update": {
+			"params": {
+				"type": "object",
+				"required": [
+					"scope",
+					"name"
+				],
+				"properties": {
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "global"
+							},
+							{
+								"type": "string",
+								"const": "project"
+							}
+						]
+					},
+					"cwd": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"plugin",
+					"changed"
+				],
+				"properties": {
+					"plugin": {
+						"type": "object",
+						"required": [
+							"name",
+							"namespace",
+							"identity",
+							"scope",
+							"source",
+							"commit",
+							"enabled",
+							"trusted",
+							"active",
+							"skills",
+							"commands",
+							"mcpServers",
+							"environment",
+							"unsupported",
+							"warnings"
+						],
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"namespace": {
+								"type": "string"
+							},
+							"identity": {
+								"type": "string"
+							},
+							"scope": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "global"
+									},
+									{
+										"type": "string",
+										"const": "project"
+									}
+								]
+							},
+							"marketplace": {
+								"type": "string"
+							},
+							"source": {
+								"type": "string"
+							},
+							"ref": {
+								"type": "string"
+							},
+							"commit": {
+								"type": "string"
+							},
+							"enabled": {
+								"type": "boolean"
+							},
+							"trusted": {
+								"type": "boolean"
+							},
+							"active": {
+								"type": "boolean"
+							},
+							"description": {
+								"type": "string"
+							},
+							"version": {
+								"type": "string"
+							},
+							"skills": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"commands": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"mcpServers": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"required": [
+										"name",
+										"target"
+									],
+									"properties": {
+										"name": {
+											"type": "string"
+										},
+										"target": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								}
+							},
+							"environment": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"unsupported": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							"warnings": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							}
+						},
+						"additionalProperties": false
+					},
+					"changed": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"plugin/uninstall": {
+			"params": {
+				"type": "object",
+				"required": [
+					"scope",
+					"name"
+				],
+				"properties": {
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "global"
+							},
+							{
+								"type": "string",
+								"const": "project"
+							}
+						]
+					},
+					"cwd": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"plugin/marketplace/list": {
+			"params": {
+				"type": "object",
+				"properties": {
+					"cwd": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"marketplaces"
+				],
+				"properties": {
+					"marketplaces": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"name",
+								"source",
+								"commit",
+								"updatedAt",
+								"plugins",
+								"diagnostics"
+							],
+							"properties": {
+								"name": {
+									"type": "string"
+								},
+								"source": {
+									"type": "string"
+								},
+								"ref": {
+									"type": "string"
+								},
+								"description": {
+									"type": "string"
+								},
+								"commit": {
+									"type": "string"
+								},
+								"updatedAt": {
+									"type": "string"
+								},
+								"plugins": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"name",
+											"installed"
+										],
+										"properties": {
+											"name": {
+												"type": "string"
+											},
+											"description": {
+												"type": "string"
+											},
+											"version": {
+												"type": "string"
+											},
+											"installed": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
+									}
+								},
+								"diagnostics": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"plugin/marketplace/add": {
+			"params": {
+				"type": "object",
+				"required": [
+					"scope",
+					"source"
+				],
+				"properties": {
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "global"
+							},
+							{
+								"type": "string",
+								"const": "project"
+							}
+						]
+					},
+					"cwd": {
+						"type": "string"
+					},
+					"source": {
+						"type": "string"
+					},
+					"ref": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"marketplace"
+				],
+				"properties": {
+					"marketplace": {
+						"type": "object",
+						"required": [
+							"name",
+							"source",
+							"commit",
+							"updatedAt",
+							"plugins",
+							"diagnostics"
+						],
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"source": {
+								"type": "string"
+							},
+							"ref": {
+								"type": "string"
+							},
+							"description": {
+								"type": "string"
+							},
+							"commit": {
+								"type": "string"
+							},
+							"updatedAt": {
+								"type": "string"
+							},
+							"plugins": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"required": [
+										"name",
+										"installed"
+									],
+									"properties": {
+										"name": {
+											"type": "string"
+										},
+										"description": {
+											"type": "string"
+										},
+										"version": {
+											"type": "string"
+										},
+										"installed": {
+											"type": "boolean"
+										}
+									},
+									"additionalProperties": false
+								}
+							},
+							"diagnostics": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"plugin/marketplace/update": {
+			"params": {
+				"type": "object",
+				"properties": {
+					"cwd": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"marketplaces"
+				],
+				"properties": {
+					"marketplaces": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"name",
+								"source",
+								"commit",
+								"updatedAt",
+								"plugins",
+								"diagnostics"
+							],
+							"properties": {
+								"name": {
+									"type": "string"
+								},
+								"source": {
+									"type": "string"
+								},
+								"ref": {
+									"type": "string"
+								},
+								"description": {
+									"type": "string"
+								},
+								"commit": {
+									"type": "string"
+								},
+								"updatedAt": {
+									"type": "string"
+								},
+								"plugins": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"name",
+											"installed"
+										],
+										"properties": {
+											"name": {
+												"type": "string"
+											},
+											"description": {
+												"type": "string"
+											},
+											"version": {
+												"type": "string"
+											},
+											"installed": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
+									}
+								},
+								"diagnostics": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"plugin/marketplace/remove": {
+			"params": {
+				"type": "object",
+				"required": [
+					"scope",
+					"name"
+				],
+				"properties": {
+					"scope": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "global"
+							},
+							{
+								"type": "string",
+								"const": "project"
+							}
+						]
+					},
+					"cwd": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
 		"project/trust/read": {
 			"params": {
 				"type": "object",

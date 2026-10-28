@@ -30,7 +30,7 @@ import type { Handlers } from "./server.ts";
 const RESOURCE_TYPES = ["extensions", "skills", "prompts", "themes"] as const satisfies readonly ResourceType[];
 
 /** A project directory the user explicitly trusted, as project writes require (config/write does the same). */
-function trustedProject(agentDir: string, cwd: string | undefined): string {
+export function trustedProject(agentDir: string, cwd: string | undefined): string {
 	if (cwd === undefined) throw new AppServerError("invalidParams", "project writes require cwd");
 	const resolved = resolvePath(cwd);
 	if (new ProjectTrustStore(agentDir).get(resolved) !== true)

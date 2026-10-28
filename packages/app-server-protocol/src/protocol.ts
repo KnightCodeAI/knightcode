@@ -595,6 +595,49 @@ export const Resource = Obj({
 });
 export type Resource = Static<typeof Resource>;
 
+/** An installed Claude Code or Grok Build plugin. `global` scope is the user's settings. */
+export const PluginInfo = Obj({
+	name: Str,
+	/** The prefix of its commands and skills: `/<namespace>:<name>`. */
+	namespace: Str,
+	identity: Str,
+	scope: SettingsScope,
+	marketplace: Type.Optional(Str),
+	source: Str,
+	ref: Type.Optional(Str),
+	/** The installed commit, or a content hash for a directory source. */
+	commit: Str,
+	enabled: Bool,
+	trusted: Bool,
+	/** Loaded by new threads in this project: declared, installed, trusted and enabled. */
+	active: Bool,
+	description: Type.Optional(Str),
+	version: Type.Optional(Str),
+	skills: Type.Array(Str),
+	commands: Type.Array(Str),
+	/** What each MCP server runs or connects to. */
+	mcpServers: Type.Array(Obj({ name: Str, target: Str })),
+	/** Environment variables the MCP configuration reads. */
+	environment: Type.Array(Str),
+	/** Components KnightCode never runs: hooks, agents, LSP servers, output styles. */
+	unsupported: Type.Array(Str),
+	warnings: Type.Array(Str),
+});
+export type PluginInfo = Static<typeof PluginInfo>;
+export const PluginMarketplaceInfo = Obj({
+	name: Str,
+	source: Str,
+	ref: Type.Optional(Str),
+	description: Type.Optional(Str),
+	commit: Str,
+	updatedAt: Str,
+	plugins: Type.Array(
+		Obj({ name: Str, description: Type.Optional(Str), version: Type.Optional(Str), installed: Bool }),
+	),
+	diagnostics: Type.Array(Str),
+});
+export type PluginMarketplaceInfo = Static<typeof PluginMarketplaceInfo>;
+
 /** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
 /** `attachments`: images and review comments the input carries, which its text alone does not. */
 const QueueEntry = Obj({ id: Str, text: Str, attachments: Type.Optional(Num) });
@@ -1068,6 +1111,60 @@ export const ClientRequests = {
 	},
 	"resource/set": {
 		params: Obj({ cwd: Type.Optional(Str), type: ResourceType, path: Str, enabled: Bool }),
+		result: Empty,
+	},
+	/** Installed plugins of the user and, with cwd, its project. Reads local state only. */
+	"plugin/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({ plugins: Type.Array(PluginInfo), diagnostics: Type.Array(Str) }),
+	},
+	/** Installs without trusting unless `trust`; an untrusted plugin runs nothing until `plugin/set` trusts it. */
+	"plugin/install": {
+		params: Obj({
+			scope: SettingsScope,
+			cwd: Type.Optional(Str),
+			source: Str,
+			ref: Type.Optional(Str),
+			path: Type.Optional(Str),
+			trust: Type.Optional(Bool),
+		}),
+		result: Obj({ plugin: PluginInfo }),
+	},
+	/** `name` is a namespace, `name@marketplace`, or an identity. */
+	"plugin/set": {
+		params: Obj({
+			scope: SettingsScope,
+			cwd: Type.Optional(Str),
+			name: Str,
+			enabled: Type.Optional(Bool),
+			trust: Type.Optional(Bool),
+		}),
+		result: Obj({ plugin: PluginInfo }),
+	},
+	"plugin/update": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
+		result: Obj({ plugin: PluginInfo, changed: Bool }),
+	},
+	"plugin/uninstall": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
+		result: Empty,
+	},
+	"plugin/marketplace/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({ marketplaces: Type.Array(PluginMarketplaceInfo) }),
+	},
+	/** Fetches the catalog. Nothing in it is installed. */
+	"plugin/marketplace/add": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), source: Str, ref: Type.Optional(Str) }),
+		result: Obj({ marketplace: PluginMarketplaceInfo }),
+	},
+	"plugin/marketplace/update": {
+		params: Obj({ cwd: Type.Optional(Str), name: Type.Optional(Str) }),
+		result: Obj({ marketplaces: Type.Array(PluginMarketplaceInfo) }),
+	},
+	/** Plugins installed from the marketplace stay installed. */
+	"plugin/marketplace/remove": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
 		result: Empty,
 	},
 	"project/trust/read": {
