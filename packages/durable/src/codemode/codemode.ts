@@ -37,13 +37,13 @@
 import { type Context, copyJson, type JsonValue } from "@knightcode/chord";
 import { ownedSlice } from "@knightcode/chord/delta";
 import type { TextContent } from "@knightcode/ai";
-import {
-	type CodemodeHostCall,
-	type CodemodeOutcome,
-	type CodemodeResult,
-	type CodemodeRun,
-	type CodemodeSandboxBase,
-	toCodemodeIdentifier,
+import { toCodemodeIdentifier } from "@knightcode/codemode/declarations";
+import type {
+	CodemodeHostCall,
+	CodemodeOutcome,
+	CodemodeResult,
+	CodemodeRun,
+	CodemodeSandboxBase,
 } from "@knightcode/codemode/portable";
 import { CODEMODE_SOURCE_GRAMMAR, parseCodemodeSource } from "@knightcode/codemode/source";
 import { type Static, Type } from "typebox";
