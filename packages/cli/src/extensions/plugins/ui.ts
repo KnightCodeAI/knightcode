@@ -1,6 +1,8 @@
 /**
- * `/plugins`: one searchable picker over installed plugins and marketplace catalogs, with details, trust, install,
- * enable and disable, update, uninstall and reload. Mounted with `ctx.ui.custom`, so terminal only.
+ * `/plugins`: one searchable picker over installed plugins, the plugins Claude Code and Grok Build have, the
+ * marketplaces not added yet (the built-in Anthropic and xAI ones and those tools' own), and the added catalogs, with
+ * details, trust, install, enable and disable, update, uninstall and reload. Mounted with `ctx.ui.custom`, so terminal
+ * only.
  */
 
 import {
@@ -201,15 +203,28 @@ export async function managePlugins(
 		try {
 			markets = manager.listMarketplaces();
 		} catch {}
+		const importable = manager.importablePlugins();
+		const available = manager.availableMarketplaces();
+		const imports = new Set(importable.map((plugin) => plugin.source));
 		const items: SelectItem[] = [
 			...installed.map((plugin) => ({
 				value: `plugin:${plugin.scopeKind}:${plugin.namespace}`,
 				label: plugin.namespace,
 				description: `${!plugin.enabled ? "disabled" : plugin.trusted ? "enabled" : "not trusted"} · ${plugin.scopeKind}${plugin.inventory.description ? ` · ${plugin.inventory.description}` : ""}`,
 			})),
+			...importable.map((plugin) => ({
+				value: `entry:${plugin.source}`,
+				label: plugin.source,
+				description: `installed in ${plugin.from}${plugin.enabled ? "" : " (off there)"} · import`,
+			})),
+			...available.map((market) => ({
+				value: `market:${market.name}`,
+				label: market.name,
+				description: `${market.from} marketplace · not added · open to add it`,
+			})),
 			...markets.flatMap((market) =>
 				market.plugins
-					.filter((entry) => !entry.installed)
+					.filter((entry) => !entry.installed && !imports.has(`${entry.name}@${market.name}`))
 					.map((entry) => ({
 						value: `entry:${entry.name}@${market.name}`,
 						label: `${entry.name}@${market.name}`,
@@ -220,10 +235,6 @@ export async function managePlugins(
 		];
 		const choice = await ui.menu({
 			title: "Plugins",
-			details:
-				installed.length || markets.length
-					? undefined
-					: ["No plugins or marketplaces yet. Use knightcode plugin install <source>."],
 			items,
 			search: true,
 			confirmLabel: "open",
@@ -233,6 +244,15 @@ export async function managePlugins(
 		if (choice === "reload") {
 			await options.reload();
 			return;
+		}
+		if (choice.startsWith("market:")) {
+			const market = available.find((candidate) => `market:${candidate.name}` === choice);
+			if (!market) continue;
+			await run(`Adding ${market.name}`, "Fetching its catalog…", async () => {
+				const added = await manager.addMarketplace(market.source, market.ref ? { ref: market.ref } : {});
+				return `Added ${added.name} with ${added.plugins.length} plugins. Nothing is installed.`;
+			});
+			continue;
 		}
 		if (choice.startsWith("entry:")) {
 			const source = choice.slice("entry:".length);

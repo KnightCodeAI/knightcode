@@ -16,6 +16,13 @@ import { type PluginDeclaration, SettingsManager } from "../core/settings-manage
 import { ProjectTrustStore } from "../core/trust-manager.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import { fetchCommit, resolveRemoteCommit } from "./git.ts";
+import {
+	type ForeignPlugin,
+	foreignPlugins,
+	type KnownMarketplace,
+	knownMarketplaces,
+	marketplaceKey,
+} from "./known.ts";
 import { loadPlugin, resolveInsideRoot, sanitizePluginName } from "./manifest.ts";
 import { type MarketplaceCatalog, type MarketplaceEntry, readMarketplace } from "./marketplace.ts";
 import { describeMcpServer, mcpEnvironmentNames } from "./mcp.ts";
@@ -66,6 +73,15 @@ export interface MarketplaceView {
 	updatedAt: string;
 	plugins: Array<{ name: string; description?: string; version?: string; installed: boolean }>;
 	diagnostics: string[];
+}
+
+/** A plugin Claude Code or Grok Build installed that is not installed here; `source` installs it. */
+export interface ImportablePlugin {
+	name: string;
+	from: ForeignPlugin["from"];
+	source: string;
+	/** False when that tool has it turned off. */
+	enabled: boolean;
 }
 
 /** Asked before a plugin is trusted, with the lines of `describeInventory()`. */
@@ -390,12 +406,18 @@ export class PluginManager {
 		const scope = options.scope ?? "user";
 		this.scopeKey(scope);
 		this.openSettings(scope);
-		// A removed marketplace's catalog stays cached for the plugins installed from it, but installs nothing new.
+		// A built-in marketplace, or one Claude Code or Grok Build has, is added by the first install from it. A removed
+		// marketplace's catalog stays cached for the plugins installed from it, but installs nothing new.
 		const parsed = parseSource(source, this.cwd);
 		if (!("error" in parsed) && parsed.kind === "marketplace" && !this.declaredMarketplaces().has(parsed.marketplace)) {
-			throw new Error(
-				`marketplace "${parsed.marketplace}" is not added; add it with knightcode plugin marketplace add <source>`,
-			);
+			const known = this.availableMarketplaces().find((market) => market.name === parsed.marketplace);
+			if (!known) {
+				throw new Error(
+					`marketplace "${parsed.marketplace}" is not added; add it with knightcode plugin marketplace add <source>`,
+				);
+			}
+			const market = await this.addMarketplace(known.source, { scope, ...(known.ref ? { ref: known.ref } : {}) });
+			source = `${parsed.plugin}@${market.name}`;
 		}
 		const target = this.resolveTarget(
 			{
@@ -754,7 +776,13 @@ export class PluginManager {
 		const scope = options.scope ?? "user";
 		this.scopeKey(scope);
 		this.openSettings(scope);
-		const staged = await this.stageMarketplace(source, options.ref);
+		// A bare name picks a known marketplace: `knightcode plugin marketplace add claude-plugins-official`.
+		const known =
+			"error" in parseSource(source, this.cwd)
+				? knownMarketplaces().find((market) => market.name === source.trim())
+				: undefined;
+		const ref = options.ref ?? known?.ref;
+		const staged = await this.stageMarketplace(known?.source ?? source, ref);
 		try {
 			const name = staged.catalog.name;
 			if (!sanitizePluginName(name) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
@@ -773,7 +801,7 @@ export class PluginManager {
 				const record: MarketplaceRecord = {
 					name,
 					source: staged.declaredSource,
-					...(options.ref ? { ref: options.ref } : {}),
+					...(ref ? { ref } : {}),
 					canonical: staged.canonical,
 					id,
 					commit: staged.commit,
@@ -786,7 +814,7 @@ export class PluginManager {
 					...(
 						(scope === "user" ? settings.getGlobalSettings() : settings.getProjectSettings()).pluginMarketplaces ?? []
 					).filter((declaration) => declaration.name !== name),
-					{ name, source: record.source, ...(options.ref ? { ref: options.ref } : {}) },
+					{ name, source: record.source, ...(ref ? { ref } : {}) },
 				];
 				await this.saveSettings(settings, () =>
 					scope === "user"
@@ -813,6 +841,54 @@ export class PluginManager {
 		}
 		for (const { name } of settings.getGlobalSettings().pluginMarketplaces ?? []) declared.set(name, "user");
 		return declared;
+	}
+
+	/** Marketplaces offered but not added here: the built-in ones, and Claude Code's and Grok Build's. */
+	availableMarketplaces(): KnownMarketplace[] {
+		let added: MarketplaceRecord[];
+		try {
+			const declared = this.declaredMarketplaces();
+			added = this.readState().marketplaces.filter((record) => declared.has(record.name));
+		} catch {
+			return [];
+		}
+		return knownMarketplaces().filter(
+			(market) =>
+				!added.some((record) => record.name === market.name || record.canonical === marketplaceKey(market.source)),
+		);
+	}
+
+	/**
+	 * Plugins Claude Code or Grok Build installed for the user that are not installed here, each with the
+	 * `name@marketplace` that installs it. One from a marketplace KnightCode cannot name is left out.
+	 */
+	importablePlugins(): ImportablePlugin[] {
+		let state: ReturnType<PluginStore["read"]>;
+		try {
+			state = this.readState();
+		} catch {
+			return [];
+		}
+		const declared = this.declaredMarketplaces();
+		const markets = [
+			...state.marketplaces.filter((record) => declared.has(record.name)),
+			...this.availableMarketplaces().map((market) => ({
+				name: market.name,
+				canonical: marketplaceKey(market.source),
+			})),
+		];
+		const installed = new Set(this.visibleRecords(state).map((record) => record.name));
+		const seen = new Set<string>();
+		return foreignPlugins().flatMap((plugin) => {
+			const key = plugin.marketplace.source ? marketplaceKey(plugin.marketplace.source) : undefined;
+			const market =
+				markets.find((candidate) => candidate.name === plugin.marketplace.name) ??
+				(key ? markets.find((candidate) => candidate.canonical === key) : undefined);
+			const source = market ? `${plugin.name}@${market.name}` : undefined;
+			if (!source || installed.has(plugin.name) || seen.has(source)) return [];
+			seen.add(source);
+			return [{ name: plugin.name, from: plugin.from, source, enabled: plugin.enabled }];
+		});
 	}
 
 	/** Catalogs declared in the user's settings and, when it is trusted, the current project's. */

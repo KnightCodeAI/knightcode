@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Compile } from "typebox/compile";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { writeTree } from "../plugins/helpers.ts";
 import { cleanupServers, startServer } from "./harness.ts";
 
@@ -115,4 +115,37 @@ test("adds marketplaces without installing, and installs from them", async () =>
 	await a.client.request("plugin/marketplace/remove", { scope: "global", cwd, name: "shop" });
 	expect((await a.client.request("plugin/marketplace/list", { cwd })).marketplaces).toEqual([]);
 	expect((await a.client.request("plugin/list", { cwd })).plugins).toHaveLength(1);
+});
+
+test("offers Claude Code's installs and the known marketplaces, and imports through the marketplace", async () => {
+	const claude = mkdtempSync(join(tmpdir(), "kc-app-claude-"));
+	const market = mkdtempSync(join(tmpdir(), "kc-app-market-"));
+	dirs.push(claude, market);
+	vi.stubEnv("CLAUDE_CONFIG_DIR", claude);
+	writeTree(market, {
+		".claude-plugin/marketplace.json": { name: "shop", plugins: [{ name: "alpha", source: "./alpha" }] },
+		"alpha/commands/a.md": "a",
+	});
+	writeTree(claude, {
+		"plugins/known_marketplaces.json": { shop: { source: { source: "directory", path: market } } },
+		"plugins/installed_plugins.json": { version: 2, plugins: { "alpha@shop": [{ scope: "user", installPath: "x" }] } },
+	});
+	const { cwd, connect } = await startServer();
+	const a = await connect();
+	const listed = await a.client.request("plugin/list", { cwd });
+	conforms("plugin/list", listed);
+	expect(listed.importable).toEqual([{ name: "alpha", from: "Claude Code", source: "alpha@shop", enabled: true }]);
+	const markets = await a.client.request("plugin/marketplace/list", { cwd });
+	conforms("plugin/marketplace/list", markets);
+	expect(markets.available).toEqual([
+		{ name: "claude-plugins-official", source: "anthropics/claude-plugins-official", from: "Anthropic" },
+		{ name: "xai-official", source: "xai-org/plugin-marketplace", from: "xAI" },
+		{ name: "shop", source: market, from: "Claude Code" },
+	]);
+	const imported = await a.client.request("plugin/install", { scope: "global", cwd, source: "alpha@shop" });
+	expect(imported.plugin).toMatchObject({ name: "alpha", marketplace: "shop", trusted: false });
+	const after = await a.client.request("plugin/marketplace/list", { cwd });
+	expect(after.marketplaces.map((added) => added.name)).toEqual(["shop"]);
+	expect(after.available.map((known) => known.name)).toEqual(["claude-plugins-official", "xai-official"]);
+	expect((await a.client.request("plugin/list", { cwd })).importable).toEqual([]);
 });

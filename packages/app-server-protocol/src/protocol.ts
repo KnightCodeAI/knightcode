@@ -639,6 +639,20 @@ export const PluginMarketplaceInfo = Obj({
 	diagnostics: Type.Array(Str),
 });
 export type PluginMarketplaceInfo = Static<typeof PluginMarketplaceInfo>;
+/** A plugin Claude Code or Grok Build installed that is not installed here; installing `source` imports it. */
+export const PluginImportInfo = Obj({
+	name: Str,
+	/** `Claude Code` or `Grok Build`. */
+	from: Str,
+	/** `name@marketplace`. */
+	source: Str,
+	/** False when that tool has it turned off. */
+	enabled: Bool,
+});
+export type PluginImportInfo = Static<typeof PluginImportInfo>;
+/** A marketplace not added yet: built in (Anthropic, xAI), or one Claude Code or Grok Build has. */
+export const PluginMarketplaceSuggestion = Obj({ name: Str, source: Str, ref: Type.Optional(Str), from: Str });
+export type PluginMarketplaceSuggestion = Static<typeof PluginMarketplaceSuggestion>;
 
 /** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
 /** `attachments`: images and review comments the input carries, which its text alone does not. */
@@ -1115,12 +1129,22 @@ export const ClientRequests = {
 		params: Obj({ cwd: Type.Optional(Str), type: ResourceType, path: Str, enabled: Bool }),
 		result: Empty,
 	},
-	/** Installed plugins of the user and, with cwd, its project. Reads local state only. */
+	/**
+	 * Installed plugins of the user and, with cwd, its project, and the plugins Claude Code and Grok Build have that
+	 * are not installed. Reads local state only.
+	 */
 	"plugin/list": {
 		params: Obj({ cwd: Type.Optional(Str) }),
-		result: Obj({ plugins: Type.Array(PluginInfo), diagnostics: Type.Array(Str) }),
+		result: Obj({
+			plugins: Type.Array(PluginInfo),
+			diagnostics: Type.Array(Str),
+			importable: Type.Array(PluginImportInfo),
+		}),
 	},
-	/** Installs without trusting unless `trust`; an untrusted plugin runs nothing until `plugin/set` trusts it. */
+	/**
+	 * Installs without trusting unless `trust`; an untrusted plugin runs nothing until `plugin/set` trusts it.
+	 * `name@marketplace` from a known marketplace not added yet adds it first.
+	 */
 	"plugin/install": {
 		params: Obj({
 			scope: SettingsScope,
@@ -1151,11 +1175,15 @@ export const ClientRequests = {
 		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
 		result: Empty,
 	},
+	/** The added marketplaces, and the known ones not added yet. */
 	"plugin/marketplace/list": {
 		params: Obj({ cwd: Type.Optional(Str) }),
-		result: Obj({ marketplaces: Type.Array(PluginMarketplaceInfo) }),
+		result: Obj({
+			marketplaces: Type.Array(PluginMarketplaceInfo),
+			available: Type.Array(PluginMarketplaceSuggestion),
+		}),
 	},
-	/** Fetches the catalog. Nothing in it is installed. */
+	/** Fetches the catalog. Nothing in it is installed. `source` may name a known marketplace. */
 	"plugin/marketplace/add": {
 		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), source: Str, ref: Type.Optional(Str) }),
 		result: Obj({ marketplace: PluginMarketplaceInfo }),

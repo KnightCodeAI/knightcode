@@ -63,6 +63,9 @@ async function launch(options: { counter?: boolean } = {}): Promise<Launched> {
 		env: {
 			...process.env,
 			KNIGHTCODE_CODING_AGENT_DIR: agentDir,
+			// Plugins also read Claude Code's and Grok Build's folders; keep the developer's own out.
+			CLAUDE_CONFIG_DIR: join(root, "claude"),
+			GROK_HOME: join(root, "grok"),
 			// Split on whitespace (src/main/server.ts): the checkout's path has no spaces in CI.
 			KNIGHTCODE_DESKTOP_SERVER: `bun ${FAUX_SERVER}`,
 		},
@@ -219,4 +222,9 @@ test("a plugin installs, asks for trust, toggles, uninstalls, and offers its com
 	await page.getByRole("button", { name: "Uninstall e2e-plugin" }).click();
 	await page.getByRole("button", { name: "Uninstall", exact: true }).click();
 	await expect(page.getByText("No plugins", { exact: true })).toBeVisible();
+	// The built-in marketplaces are offered without being added.
+	await page.getByRole("tab", { name: "Marketplaces" }).click();
+	await expect(page.getByRole("button", { name: "Add", exact: true })).toHaveCount(2);
+	await expect(page.getByText("Anthropic · not added")).toBeVisible();
+	await expect(page.getByText("xAI · not added")).toBeVisible();
 });

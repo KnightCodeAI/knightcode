@@ -22,7 +22,7 @@ knightcode plugin enable review-tools --trust
 
 Start KnightCode, or run `/reload` in a running session. The plugin's commands appear as `/<plugin>:<command>`, for example `/review-tools:review src/app.ts`.
 
-Use `/plugins` in an interactive session to browse installed plugins and marketplace catalogs, trust, install, enable, disable, update, and uninstall them, and reload. The desktop app has the same controls under **Settings › Plugins**.
+Use `/plugins` in an interactive session to browse installed plugins, the plugins Claude Code and Grok Build have, and marketplace catalogs; to add marketplaces; to trust, install, enable, disable, update, and uninstall plugins; and to reload. The desktop app has the same controls under **Settings › Plugins**.
 
 ## Marketplaces
 
@@ -34,7 +34,29 @@ knightcode plugin marketplace list
 knightcode plugin install review-tools@acme-plugins
 ```
 
-`marketplace update` fetches the catalogs again; `plugin update` then picks up the new entries. Removing a marketplace leaves the plugins installed from it installed, and they still update from its last catalog; installing more from it needs it added again. KnightCode has no default marketplace.
+`marketplace update` fetches the catalogs again; `plugin update` then picks up the new entries. Removing a marketplace leaves the plugins installed from it installed, and they still update from its last catalog; installing more from it needs it added again.
+
+### Built-in and known marketplaces
+
+Two marketplaces are built in: Anthropic's `claude-plugins-official` (`anthropics/claude-plugins-official`) and xAI's `xai-official` (`xai-org/plugin-marketplace`). KnightCode also offers the marketplaces Claude Code and Grok Build know: `extraKnownMarketplaces` in their `settings.json` and `settings.local.json`, and their `plugins/known_marketplaces.json`. `/plugins`, **Settings › Plugins** and `marketplace list` show these until you add them, which you do by name:
+
+```bash
+knightcode plugin marketplace add claude-plugins-official
+```
+
+Installing `name@marketplace` from a known marketplace that is not added yet adds it first. Nothing is fetched until you add or install.
+
+### Importing from Claude Code and Grok Build
+
+`/plugins`, **Settings › Plugins** and `plugin list` also show the plugins Claude Code (`plugins/installed_plugins.json`) and Grok Build (`installed-plugins/registry.json`) installed for you and KnightCode has not, each as the `name@marketplace` that installs it:
+
+```bash
+knightcode plugin install superpowers@claude-plugins-official
+```
+
+Importing is an ordinary install: KnightCode fetches its own copy from the marketplace and asks for trust. Trust and enabled state in those tools never carry over, and KnightCode never reads their installed copies. Not offered: Claude Code's project and local installs, and Grok Build installs from a marketplace KnightCode cannot name or from no marketplace; install those by source.
+
+KnightCode reads `~/.claude` (or `CLAUDE_CONFIG_DIR`) and `~/.grok` (or `GROK_HOME`). Grok Build's `config.toml` is not read.
 
 ## Commands
 
@@ -43,7 +65,7 @@ knightcode plugin install <source|name@marketplace> [--ref <ref>] [--path <dir>]
 knightcode plugin list [--json]
 knightcode plugin details|enable|disable|update|uninstall <plugin> [-l]
 knightcode plugin validate <path>
-knightcode plugin marketplace add <source> [--ref <ref>] [-l]
+knightcode plugin marketplace add <source|name> [--ref <ref>] [-l]
 knightcode plugin marketplace list [--json]
 knightcode plugin marketplace update [<name>]
 knightcode plugin marketplace remove <name> [-l]

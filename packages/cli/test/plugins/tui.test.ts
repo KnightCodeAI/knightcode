@@ -95,6 +95,47 @@ describe("/plugins", () => {
 		expect(reload).toHaveBeenCalledOnce();
 	});
 
+	it("offers the built-in marketplaces and Claude Code's installs, and adds a marketplace when chosen", async () => {
+		const claude = tempDir();
+		vi.stubEnv("CLAUDE_CONFIG_DIR", claude);
+		const market = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": {
+				name: "shop",
+				plugins: [
+					{ name: "alpha", source: "./plugins/alpha" },
+					{ name: "beta", source: "./plugins/alpha" },
+				],
+			},
+			"plugins/alpha/commands/a.md": "a",
+		});
+		writeTree(claude, {
+			"plugins/known_marketplaces.json": { shop: { source: { source: "directory", path: market } } },
+			"plugins/installed_plugins.json": {
+				version: 2,
+				plugins: { "alpha@shop": [{ scope: "user", installPath: "x" }] },
+			},
+		});
+		const agentDir = tempDir();
+		const manager = new PluginManager({ agentDir, cwd: agentDir });
+		const ui = scriptedUi(["market:shop", undefined]);
+		await managePlugins(ui, manager, { notify: vi.fn(), reload: vi.fn(async () => {}), projectTrusted: false });
+		expect(ui.shown[0]?.items.map((item) => `${item.value} | ${item.description}`)).toEqual([
+			"entry:alpha@shop | installed in Claude Code · import",
+			"market:claude-plugins-official | Anthropic marketplace · not added · open to add it",
+			"market:xai-official | xAI marketplace · not added · open to add it",
+			"market:shop | Claude Code marketplace · not added · open to add it",
+			"reload | apply plugin changes now",
+		]);
+		// Once added, its catalog shows; the plugin Claude Code has is offered once, as the import.
+		expect(ui.shown[1]?.items.map((item) => item.value)).toEqual([
+			"entry:alpha@shop",
+			"market:claude-plugins-official",
+			"market:xai-official",
+			"entry:beta@shop",
+			"reload",
+		]);
+	});
+
 	it("confirms before uninstalling and does nothing when cancelled", async () => {
 		const { manager, notify, reload } = await setup();
 		await managePlugins(scriptedUi(["plugin:user:demo", "uninstall", undefined, undefined, undefined]), manager, {

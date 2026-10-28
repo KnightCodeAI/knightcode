@@ -2656,6 +2656,7 @@ function Extensions() {
 
 type PluginRow = ResultOf<"plugin/list">["plugins"][number];
 type MarketplaceRow = ResultOf<"plugin/marketplace/list">["marketplaces"][number];
+type MarketplaceSuggestion = ResultOf<"plugin/marketplace/list">["available"][number];
 
 /** A plugin's or catalog's source to add, and where to save it. */
 function AddPluginSourceDialog({
@@ -2792,7 +2793,8 @@ function TrustPluginDialog({
 }
 
 /**
- * Plugins (Claude Code and Grok Build): the installed ones and the marketplace catalogs, as `knightcode plugin` and
+ * Plugins (Claude Code and Grok Build): the installed ones, the ones those tools have to import, the marketplaces not
+ * added yet (built-in Anthropic and xAI, and those tools' own) and the marketplace catalogs, as `knightcode plugin` and
  * `/plugins` manage them. A plugin runs nothing until it is trusted. Sign-in and live status of plugin MCP servers
  * stay with `/mcp` in a thread, since the MCP page lists only mcp.json servers.
  */
@@ -2806,6 +2808,7 @@ function Plugins() {
 		cwd: string | undefined;
 		plugins: ResultOf<"plugin/list">;
 		marketplaces: MarketplaceRow[];
+		available: MarketplaceSuggestion[];
 	}>();
 	const latest = useRef(0);
 	const list = loaded && loaded.cwd === cwd ? loaded : undefined;
@@ -2819,7 +2822,9 @@ function Plugins() {
 		const params = cwd === undefined ? {} : { cwd };
 		Promise.all([client.request("plugin/list", params), client.request("plugin/marketplace/list", params)])
 			.then(([plugins, markets]) => {
-				if (request === latest.current) setLoaded({ cwd, plugins, marketplaces: markets.marketplaces });
+				if (request === latest.current) {
+					setLoaded({ cwd, plugins, marketplaces: markets.marketplaces, available: markets.available });
+				}
 			})
 			.catch((e: unknown) => toast(errorText(e), "error"));
 	}, [cwd, trusted]);
@@ -2843,6 +2848,9 @@ function Plugins() {
 	const needle = query.trim().toLowerCase();
 	const plugins = (list?.plugins.plugins ?? []).filter((plugin) =>
 		`${plugin.name} ${plugin.description ?? ""} ${plugin.source}`.toLowerCase().includes(needle),
+	);
+	const importable = (list?.plugins.importable ?? []).filter((plugin) =>
+		`${plugin.source} ${plugin.from}`.toLowerCase().includes(needle),
 	);
 	return (
 		<>
@@ -2951,7 +2959,28 @@ function Plugins() {
 						</Row>
 					))}
 				</Card>
-			) : (
+			) : null}
+			{tab === "installed" && importable.length ? (
+				<Card title="In Claude Code and Grok Build">
+					{importable.map((plugin) => (
+						<Row
+							key={`${plugin.from}:${plugin.source}`}
+							title={plugin.name}
+							detail={`${plugin.from} · ${plugin.source}${plugin.enabled ? "" : " · off there"}`}
+						>
+							<Button
+								variant="soft"
+								toolbar
+								disabled={busy}
+								onClick={() => run(() => install({ source: plugin.source, scope: "global" }))}
+							>
+								<Download size={16} /> Import
+							</Button>
+						</Row>
+					))}
+				</Card>
+			) : null}
+			{tab === "marketplaces" ? (
 				<>
 					<Card
 						title="Marketplaces"
@@ -2961,7 +2990,7 @@ function Plugins() {
 							</Button>
 						}
 					>
-						{list?.marketplaces.length === 0 ? (
+						{list?.marketplaces.length === 0 && list.available.length === 0 ? (
 							<Row title="No marketplaces" detail="Adding one installs nothing; pick plugins from it here" />
 						) : null}
 						{list?.marketplaces.map((market) => (
@@ -2994,6 +3023,36 @@ function Plugins() {
 								</IconButton>
 							</Row>
 						))}
+						{list?.available.map((market) => (
+							<Row
+								key={`available:${market.name}`}
+								title={
+									<span className="flex items-center gap-2">
+										{market.name}
+										<span className="text-xs font-normal text-tertiary">{market.from} · not added</span>
+									</span>
+								}
+								detail={market.source}
+							>
+								<Button
+									variant="soft"
+									toolbar
+									disabled={busy}
+									onClick={() =>
+										run(() =>
+											client.request("plugin/marketplace/add", {
+												...where,
+												scope: "global",
+												source: market.source,
+												...(market.ref ? { ref: market.ref } : {}),
+											}),
+										)
+									}
+								>
+									<Plus size={16} /> Add
+								</Button>
+							</Row>
+						))}
 					</Card>
 					{list?.marketplaces.map((market) => {
 						const entries = market.plugins.filter((entry) =>
@@ -3021,7 +3080,7 @@ function Plugins() {
 						) : null;
 					})}
 				</>
-			)}
+			) : null}
 			{list?.plugins.diagnostics.length ? (
 				<Card title="Problems">
 					{list.plugins.diagnostics.map((diagnostic) => (

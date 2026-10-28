@@ -20,13 +20,17 @@ const HELP = `${chalk.bold("Usage:")}
   ${APP_NAME} plugin list [--json]
   ${APP_NAME} plugin details|enable|disable|update|uninstall <plugin> [-l]
   ${APP_NAME} plugin validate <path>
-  ${APP_NAME} plugin marketplace add <source> [--ref <ref>] [-l]
+  ${APP_NAME} plugin marketplace add <source|name> [--ref <ref>] [-l]
   ${APP_NAME} plugin marketplace list [--json]
   ${APP_NAME} plugin marketplace update [<name>]
   ${APP_NAME} plugin marketplace remove <name> [-l]
 
 Install Claude Code and Grok Build plugins: their skills, slash commands and MCP servers. A source is owner/repo, a
 Git URL, a local directory, or name@marketplace. Hooks, agents, LSP servers and output styles are not run.
+
+Anthropic's (claude-plugins-official) and xAI's (xai-official) marketplaces are built in, and the marketplaces and
+plugins Claude Code and Grok Build have are listed too: list and marketplace list show them, and installing
+name@marketplace from one of them adds that marketplace first.
 
 A plugin runs nothing until you trust it: install asks in a terminal, or pass --trust. Changes apply to new and
 reloaded sessions.
@@ -188,6 +192,14 @@ export async function runPluginCommand(args: string[], options: PluginCommandOpt
 				for (const { plugin, active: isActive } of plugins) {
 					log(`${plugin.namespace}  ${status(plugin, isActive)}  ${plugin.scopeKind}  ${chalk.dim(plugin.source)}`);
 				}
+				const importable = manager.importablePlugins();
+				if (importable.length) {
+					log("");
+					log(`Installed in Claude Code or Grok Build; import one with ${APP_NAME} plugin install <name@marketplace>:`);
+					for (const plugin of importable) {
+						log(`  ${plugin.source}  ${chalk.dim(`${plugin.from}${plugin.enabled ? "" : ", off there"}`)}`);
+					}
+				}
 				return 0;
 			}
 			case "details": {
@@ -274,7 +286,7 @@ async function runMarketplaceCommand(
 				log(JSON.stringify(markets, null, 2));
 				return 0;
 			}
-			if (markets.length === 0) log(`No marketplaces. Add one with: ${APP_NAME} plugin marketplace add <source>`);
+			if (markets.length === 0) log(`No marketplaces added. Add one with: ${APP_NAME} plugin marketplace add <source>`);
 			for (const market of markets) {
 				log(`${market.name}  ${chalk.dim(market.source)}`);
 				for (const entry of market.plugins) {
@@ -282,6 +294,12 @@ async function runMarketplaceCommand(
 						`  ${entry.name}${entry.installed ? chalk.green(" (installed)") : ""}${entry.description ? `  ${chalk.dim(entry.description)}` : ""}`,
 					);
 				}
+			}
+			const available = manager.availableMarketplaces();
+			if (available.length) {
+				log("");
+				log(`Not added; add one with ${APP_NAME} plugin marketplace add <name>:`);
+				for (const market of available) log(`  ${market.name}  ${chalk.dim(`${market.from} · ${market.source}`)}`);
 			}
 			return 0;
 		}

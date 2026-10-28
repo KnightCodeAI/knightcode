@@ -111,7 +111,9 @@ The end-to-end tests launch the production build that packaging leaves in
   - Extensions & skills: load or skip each extension, skill, prompt template and theme you
     added, as `knightcode config` does. Built-in extensions are always on and not listed.
   - Plugins: install, trust, turn on or off, update and uninstall [plugins](plugins.md), and
-    add marketplaces and install from their catalogs, as `knightcode plugin` does. A plugin
+    add marketplaces (the built-in Anthropic and xAI ones and those Claude Code and Grok Build
+    know are offered) and install from their catalogs, or import what Claude Code and Grok
+    Build installed, as `knightcode plugin` does. A plugin
     is trusted only after a confirmation that lists what it runs. Its MCP servers' sign-in
     and status stay with `/mcp` in a thread.
 

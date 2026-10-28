@@ -67,6 +67,7 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 			return {
 				plugins: manager.list().map((plugin) => info(manager, cwd, plugin)),
 				diagnostics: manager.loadActive(projectTrusted).diagnostics,
+				importable: manager.importablePlugins(),
 			};
 		},
 		"plugin/install": async ({ scope, cwd, source, ref, path, trust }) => {
@@ -97,9 +98,13 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 			await writer(scope, cwd).uninstall(name, { scope: scopeOf(scope) });
 			return {};
 		},
-		"plugin/marketplace/list": async ({ cwd }) => ({
-			marketplaces: managerFor(cwd).listMarketplaces().map(marketplaceInfo),
-		}),
+		"plugin/marketplace/list": async ({ cwd }) => {
+			const manager = managerFor(cwd);
+			return {
+				marketplaces: manager.listMarketplaces().map(marketplaceInfo),
+				available: manager.availableMarketplaces(),
+			};
+		},
 		"plugin/marketplace/add": async ({ scope, cwd, source, ref }) => ({
 			marketplace: marketplaceInfo(
 				await writer(scope, cwd).addMarketplace(source, { scope: scopeOf(scope), ...(ref ? { ref } : {}) }),

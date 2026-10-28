@@ -559,14 +559,19 @@ need a trusted project; an unknown path is `invalidParams`.
 settings) or `project`; project writes need a trusted project (`invalidParams` with
 `reason: "untrusted"` otherwise). `name` is a plugin's name, `name@marketplace`, or its identity.
 
-- `plugin/list {cwd?}` returns `{plugins, diagnostics}`: each plugin's identity, scope, source,
-  commit, `enabled`, `trusted`, `active` (what a new thread in `cwd` loads), skills, commands,
-  MCP servers, the environment variables they read, unsupported components and warnings.
+- `plugin/list {cwd?}` returns `{plugins, diagnostics, importable}`: each plugin's identity, scope,
+  source, commit, `enabled`, `trusted`, `active` (what a new thread in `cwd` loads), skills,
+  commands, MCP servers, the environment variables they read, unsupported components and warnings;
+  and `importable`, the plugins Claude Code and Grok Build installed that are not installed here,
+  each `{name, from, source, enabled}` with the `name@marketplace` that installs it.
 - `plugin/install {scope, cwd?, source, ref?, path?, trust?}` installs without trusting unless
-  `trust`; an untrusted plugin runs nothing.
+  `trust`; an untrusted plugin runs nothing. `name@marketplace` from a known marketplace that is not
+  added yet adds it first.
 - `plugin/set {scope, cwd?, name, enabled?, trust?}`, `plugin/update {scope, cwd?, name}` and
   `plugin/uninstall {scope, cwd?, name}`.
-- `plugin/marketplace/list {cwd?}`, `plugin/marketplace/add {scope, cwd?, source, ref?}`,
+- `plugin/marketplace/list {cwd?}` returns `{marketplaces, available}`: the added catalogs, and
+  the known ones not added yet (`{name, source, ref?, from}`: built in, or Claude Code's or Grok
+  Build's). `plugin/marketplace/add {scope, cwd?, source, ref?}` takes a source or a known name;
   `plugin/marketplace/update {cwd?, name?}` and `plugin/marketplace/remove {scope, cwd?, name}`.
   Adding a marketplace installs nothing.
 

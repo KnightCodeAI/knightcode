@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runPluginCommand } from "../../src/plugins/cli.ts";
 import { useTempDirs, writeTree } from "./helpers.ts";
 
@@ -117,5 +117,30 @@ describe("knightcode plugin", () => {
 		take();
 		expect(await run("list", "--json")).toBe(0);
 		expect(JSON.parse(take().out)).toMatchObject([{ name: "alpha", marketplace: "shop", active: true }]);
+	});
+
+	it("lists what Claude Code has and the marketplaces not added, and adds one by name", async () => {
+		const { run, take } = setup();
+		const claude = tempDir();
+		vi.stubEnv("CLAUDE_CONFIG_DIR", claude);
+		const market = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": { name: "shop", plugins: [{ name: "alpha", source: "./alpha" }] },
+			"alpha/commands/a.md": "a",
+		});
+		writeTree(claude, {
+			"plugins/known_marketplaces.json": { shop: { source: { source: "directory", path: market } } },
+			"plugins/installed_plugins.json": {
+				version: 2,
+				plugins: { "alpha@shop": [{ scope: "user", installPath: "x" }] },
+			},
+		});
+		expect(await run("list")).toBe(0);
+		expect(take().out).toMatch(/Installed in Claude Code or Grok Build.*\n {2}alpha@shop .*Claude Code/);
+		expect(await run("marketplace", "list")).toBe(0);
+		const listed = take().out;
+		expect(listed).toMatch(/\n {2}claude-plugins-official .*Anthropic · anthropics\/claude-plugins-official/);
+		expect(listed).toMatch(/\n {2}xai-official .*xAI · xai-org\/plugin-marketplace/);
+		expect(await run("marketplace", "add", "shop")).toBe(0);
+		expect(take().out).toMatch(/Added marketplace shop/);
 	});
 });

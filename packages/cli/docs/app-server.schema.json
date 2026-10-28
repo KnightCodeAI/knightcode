@@ -12084,7 +12084,8 @@
 				"type": "object",
 				"required": [
 					"plugins",
-					"diagnostics"
+					"diagnostics",
+					"importable"
 				],
 				"properties": {
 					"plugins": {
@@ -12214,6 +12215,33 @@
 						"type": "array",
 						"items": {
 							"type": "string"
+						}
+					},
+					"importable": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"name",
+								"from",
+								"source",
+								"enabled"
+							],
+							"properties": {
+								"name": {
+									"type": "string"
+								},
+								"from": {
+									"type": "string"
+								},
+								"source": {
+									"type": "string"
+								},
+								"enabled": {
+									"type": "boolean"
+								}
+							},
+							"additionalProperties": false
 						}
 					}
 				},
@@ -12764,7 +12792,8 @@
 			"result": {
 				"type": "object",
 				"required": [
-					"marketplaces"
+					"marketplaces",
+					"available"
 				],
 				"properties": {
 					"marketplaces": {
@@ -12841,6 +12870,32 @@
 									"items": {
 										"type": "string"
 									}
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"available": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"name",
+								"source",
+								"from"
+							],
+							"properties": {
+								"name": {
+									"type": "string"
+								},
+								"source": {
+									"type": "string"
+								},
+								"ref": {
+									"type": "string"
+								},
+								"from": {
+									"type": "string"
 								}
 							},
 							"additionalProperties": false
