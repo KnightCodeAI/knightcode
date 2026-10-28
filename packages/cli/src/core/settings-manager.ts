@@ -17,6 +17,8 @@ import type {
 	FullscreenExitOutput,
 	MermaidRenderingMode,
 	PackageSource,
+	PluginDeclaration,
+	PluginMarketplaceDeclaration,
 	QuietStartup,
 	SessionShareDestination,
 	Settings,
@@ -39,6 +41,8 @@ export type {
 	MarkdownSettings,
 	MermaidRenderingMode,
 	PackageSource,
+	PluginDeclaration,
+	PluginMarketplaceDeclaration,
 	ProviderRetrySettings,
 	QuietStartup,
 	RetrySettings,
@@ -1126,6 +1130,38 @@ export class SettingsManager {
 	setProjectPackages(packages: PackageSource[]): void {
 		this.updateProjectSettings("packages", (settings) => {
 			settings.packages = packages;
+		});
+	}
+
+	getPlugins(): PluginDeclaration[] {
+		return [...(this.settings.plugins ?? [])];
+	}
+
+	setPlugins(plugins: PluginDeclaration[]): void {
+		this.globalSettings.plugins = plugins;
+		this.markModified("plugins");
+		this.save();
+	}
+
+	setProjectPlugins(plugins: PluginDeclaration[]): void {
+		this.updateProjectSettings("plugins", (settings) => {
+			settings.plugins = plugins;
+		});
+	}
+
+	getPluginMarketplaces(): PluginMarketplaceDeclaration[] {
+		return [...(this.settings.pluginMarketplaces ?? [])];
+	}
+
+	setPluginMarketplaces(marketplaces: PluginMarketplaceDeclaration[]): void {
+		this.globalSettings.pluginMarketplaces = marketplaces;
+		this.markModified("pluginMarketplaces");
+		this.save();
+	}
+
+	setProjectPluginMarketplaces(marketplaces: PluginMarketplaceDeclaration[]): void {
+		this.updateProjectSettings("pluginMarketplaces", (settings) => {
+			settings.pluginMarketplaces = marketplaces;
 		});
 	}
 
