@@ -5,7 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -36,7 +36,8 @@ test.afterEach(async () => {
 
 /** The app on a new thread in a fixture project, opened by a `knightcode://new?cwd=` link as the system would. */
 async function launch(options: { counter?: boolean } = {}): Promise<Launched> {
-	const root = mkdtempSync(join(tmpdir(), "kc-e2e-"));
+	// Its long form: a Windows runner's temp dir is an 8.3 name (RUNNER~1), and git gives a repository's root long.
+	const root = realpathSync.native(mkdtempSync(join(tmpdir(), "kc-e2e-")));
 	roots.push(root);
 	const project = join(root, "project");
 	const agentDir = join(root, "agent");
