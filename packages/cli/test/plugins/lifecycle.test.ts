@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SettingsManager } from "../../src/core/settings-manager.ts";
 import { ProjectTrustStore } from "../../src/core/trust-manager.ts";
 import { PluginManager } from "../../src/plugins/manager.ts";
 import { useTempDirs, writeTree } from "./helpers.ts";
@@ -386,5 +387,38 @@ describe("marketplaces", () => {
 		expect(beta.plugin.inventory.commands.map((command) => command.name).sort()).toEqual(["a", "extra"]);
 		await manager().removeMarketplace("shop", {});
 		expect(manager().loadActive(false).plugins).toHaveLength(2);
+		// Installed plugins stay, and update from the cached catalog; new installs need the marketplace added again.
+		await expect(manager().install("alpha@shop", { trust: true })).rejects.toThrow(/marketplace add/);
+		expect((await manager().update("alpha", {})).changed).toBe(false);
+	});
+});
+
+describe("plugin housekeeping", () => {
+	it("sweeps staging directories a killed process left behind, but not fresh ones", async () => {
+		const { manager, agentDir } = setup();
+		const stale = join(agentDir, "plugins", "tmp", "stale");
+		const fresh = join(agentDir, "plugins", "tmp", "fresh");
+		mkdirSync(stale, { recursive: true });
+		mkdirSync(fresh, { recursive: true });
+		const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+		utimesSync(stale, twoDaysAgo, twoDaysAgo);
+		const source = writeTree(tempDir(), { "plugin.json": { name: "sweep" }, "commands/x.md": "x" });
+		await manager().install(source, { trust: true });
+		expect(existsSync(stale)).toBe(false);
+		expect(existsSync(fresh)).toBe(true);
+	});
+
+	it("reads settings once per scope when listing", async () => {
+		const { manager } = setup();
+		for (const name of ["one", "two", "three"]) {
+			await manager().install(writeTree(tempDir(), { "plugin.json": { name }, "commands/x.md": "x" }), { trust: true });
+		}
+		const create = vi.spyOn(SettingsManager, "create");
+		try {
+			expect(manager().list()).toHaveLength(3);
+			expect(create.mock.calls.length).toBeLessThanOrEqual(2);
+		} finally {
+			create.mockRestore();
+		}
 	});
 });

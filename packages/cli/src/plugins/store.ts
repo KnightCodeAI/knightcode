@@ -66,6 +66,9 @@ export interface PluginState {
 	marketplaces: MarketplaceRecord[];
 }
 
+/** Staging older than this belongs to a process that died. */
+const STALE_STAGING_MS = 24 * 60 * 60 * 1000;
+
 export function sha256(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
 }
@@ -138,9 +141,22 @@ export class PluginStore {
 		return join(this.dir, "marketplaces", id, revision);
 	}
 
-	/** A fresh staging directory, removed by the caller. */
+	/**
+	 * A fresh staging directory, removed by the caller. Staging left behind by a process that was killed mid-install
+	 * is swept here.
+	 */
 	tempDir(): string {
-		const dir = join(this.dir, "tmp", randomUUID());
+		const tmp = join(this.dir, "tmp");
+		// ponytail: age-based sweep, since a live install in another process holds no lock while it stages; no
+		// staging takes a day (every Git network call has a deadline). Lock staging dirs if that ever stops holding.
+		const staleBefore = Date.now() - STALE_STAGING_MS;
+		for (const name of existsSync(tmp) ? readdirSync(tmp) : []) {
+			const path = join(tmp, name);
+			try {
+				if (statSync(path).mtimeMs < staleBefore) rmSync(path, { recursive: true, force: true });
+			} catch {}
+		}
+		const dir = join(tmp, randomUUID());
 		mkdirSync(dir, { recursive: true });
 		return dir;
 	}

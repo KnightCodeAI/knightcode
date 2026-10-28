@@ -34,7 +34,7 @@ knightcode plugin marketplace list
 knightcode plugin install review-tools@acme-plugins
 ```
 
-`marketplace update` fetches the catalogs again; `plugin update` then picks up the new entries. Removing a marketplace leaves the plugins installed from it installed. KnightCode has no default marketplace.
+`marketplace update` fetches the catalogs again; `plugin update` then picks up the new entries. Removing a marketplace leaves the plugins installed from it installed, and they still update from its last catalog; installing more from it needs it added again. KnightCode has no default marketplace.
 
 ## Commands
 
@@ -99,7 +99,7 @@ KnightCode reads the first of `plugin.json`, `.grok-plugin/plugin.json`, and `.c
 
 The plugin's name becomes a namespace: lowercase, characters outside `a-z`, `0-9` and `-` replaced by `-`, at most 64 characters. Skills are named `<plugin>:<skill>`.
 
-KnightCode replaces these tokens in skill and command files when the plugin is installed: `${CLAUDE_PLUGIN_ROOT}` and `${GROK_PLUGIN_ROOT}` (the installed folder), `${CLAUDE_PLUGIN_DATA}` and `${GROK_PLUGIN_DATA}`, and in skills `${CLAUDE_SKILL_DIR}` and `${SKILL_DIR}`. A skill without a `description` gets one from its first paragraph or heading. Other files a skill references are not rewritten.
+KnightCode replaces these tokens in skill and command files when the plugin is installed: `${CLAUDE_PLUGIN_ROOT}` and `${GROK_PLUGIN_ROOT}` (the installed folder), `${CLAUDE_PLUGIN_DATA}` and `${GROK_PLUGIN_DATA}`, and in skills `${CLAUDE_SKILL_DIR}` and `${SKILL_DIR}`. A skill without a `description` gets one from its first paragraph or heading. An `argument-hint` in a command's or skill's frontmatter shows in autocomplete. Other files a skill references are not rewritten.
 
 ## Compatibility
 

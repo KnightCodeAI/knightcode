@@ -36,11 +36,12 @@ const PLUGIN = {
 		skills: ["./skills/fix", "./skills/solo.md"],
 		mcpServers: { docs: { command: "docs-server" } },
 	},
-	"skills/fix/SKILL.md": "---\ndescription: Fix things\narguments: [target]\n---\nFix $target carefully.\n",
+	"skills/fix/SKILL.md":
+		"---\ndescription: Fix things\narguments: [target]\nargument-hint: <target>\n---\nFix $target carefully.\n",
 	"skills/solo.md": "---\ndescription: Solo\n---\nSolo body\n",
 	"skills/stray.md": "---\ndescription: Not declared\n---\n",
 	"skills/other/SKILL.md": "---\ndescription: Not declared either\n---\n",
-	"commands/go.md": "---\ndescription: Go somewhere\n---\nGo to $0 then $1.\n",
+	"commands/go.md": "---\ndescription: Go somewhere\nargument-hint: <place> <then>\n---\nGo to $0 then $1.\n",
 	"commands/plain.md": "Review the code.\n",
 };
 
@@ -97,6 +98,11 @@ describe("plugin commands", () => {
 		const harness = await setup(agentDir);
 		const names = harness.session.extensionRunner.getRegisteredCommands().map((command) => command.invocationName);
 		expect(names).toEqual(expect.arrayContaining(["demo:fix", "demo:solo", "demo:go", "demo:plain"]));
+		// Autocomplete draws a hint as "<hint> — <description>"; extension commands carry it in the description.
+		const description = (name: string) => harness.session.extensionRunner.getCommand(name)?.description;
+		expect(description("demo:go")).toBe("<place> <then> — Go somewhere");
+		expect(description("demo:fix")).toBe("<target> — Fix things");
+		expect(description("demo:plain")).toBe("Review the code.");
 		harness.setResponses([fauxAssistantMessage("a"), fauxAssistantMessage("b"), fauxAssistantMessage("c")]);
 		await harness.session.prompt(`/demo:go "the moon" back\\ home`);
 		await harness.session.prompt("/demo:plain src/x.ts");

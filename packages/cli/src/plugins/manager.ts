@@ -363,7 +363,19 @@ export class PluginManager {
 		} catch {
 			return [];
 		}
-		return this.visibleRecords(state).map((record) => this.view(record, state));
+		// One settings read per scope, not per plugin.
+		const settings = new Map<PluginScope, SettingsManager>();
+		const settingsFor = (scope: PluginScope) => {
+			let manager = settings.get(scope);
+			if (!manager) {
+				manager = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted: scope === "project" });
+				settings.set(scope, manager);
+			}
+			return manager;
+		};
+		return this.visibleRecords(state).map((record) =>
+			this.view(record, state, settingsFor(record.scope === "user" ? "user" : "project")),
+		);
 	}
 
 	details(name: string, scope?: PluginScope): PluginView {
@@ -378,6 +390,13 @@ export class PluginManager {
 		const scope = options.scope ?? "user";
 		this.scopeKey(scope);
 		this.openSettings(scope);
+		// A removed marketplace's catalog stays cached for the plugins installed from it, but installs nothing new.
+		const parsed = parseSource(source, this.cwd);
+		if (!("error" in parsed) && parsed.kind === "marketplace" && !this.declaredMarketplaces().has(parsed.marketplace)) {
+			throw new Error(
+				`marketplace "${parsed.marketplace}" is not added; add it with knightcode plugin marketplace add <source>`,
+			);
+		}
 		const target = this.resolveTarget(
 			{
 				source,
@@ -781,22 +800,29 @@ export class PluginManager {
 		}
 	}
 
+	/**
+	 * Names of the catalogs declared in the user's settings and, when it is trusted, the current project's, with the
+	 * scope that declares each (the user's when both do).
+	 */
+	private declaredMarketplaces(): Map<string, PluginScope> {
+		const projectTrusted = new ProjectTrustStore(this.agentDir).get(this.cwd) === true;
+		const settings = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted });
+		const declared = new Map<string, PluginScope>();
+		for (const { name } of projectTrusted ? (settings.getProjectSettings().pluginMarketplaces ?? []) : []) {
+			declared.set(name, "project");
+		}
+		for (const { name } of settings.getGlobalSettings().pluginMarketplaces ?? []) declared.set(name, "user");
+		return declared;
+	}
+
 	/** Catalogs declared in the user's settings and, when it is trusted, the current project's. */
 	listMarketplaces(): MarketplaceView[] {
 		const state = this.readState();
-		const projectTrusted = new ProjectTrustStore(this.agentDir).get(this.cwd) === true;
-		const settings = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted });
-		const user = new Set(
-			(settings.getGlobalSettings().pluginMarketplaces ?? []).map((declaration) => declaration.name),
-		);
-		const project = new Set(
-			(projectTrusted ? (settings.getProjectSettings().pluginMarketplaces ?? []) : []).map(
-				(declaration) => declaration.name,
-			),
-		);
-		return state.marketplaces
-			.filter((record) => user.has(record.name) || project.has(record.name))
-			.map((record) => this.marketplaceView(record, state, user.has(record.name) ? "user" : "project"));
+		const declared = this.declaredMarketplaces();
+		return state.marketplaces.flatMap((record) => {
+			const scope = declared.get(record.name);
+			return scope ? [this.marketplaceView(record, state, scope)] : [];
+		});
 	}
 
 	/** Fetches catalogs again: the named one, or every declared one. */

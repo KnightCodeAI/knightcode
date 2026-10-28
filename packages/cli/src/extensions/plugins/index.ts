@@ -23,6 +23,14 @@ export interface PluginCommand {
 	expand(args: string): string;
 }
 
+/**
+ * A description with the argument hint in front, as autocomplete draws a built-in command's hint
+ * (`<hint> — <description>`): extension commands have no hint field of their own.
+ */
+function withHint(description: string, hint: string | undefined): string {
+	return hint ? `${hint} — ${description}` : description;
+}
+
 /** The `/<plugin>:<name>` commands of the active plugins: each command, and each skill users may invoke. */
 export function pluginCommands(plugins: readonly ActivePlugin[]): PluginCommand[] {
 	return plugins.flatMap((plugin) => [
@@ -32,7 +40,7 @@ export function pluginCommands(plugins: readonly ActivePlugin[]): PluginCommand[
 				const file = join(plugin.root, skill.file);
 				return {
 					name: skill.name,
-					description: skill.description,
+					description: withHint(skill.description, skill.argumentHint),
 					// The block `/skill:<name>` sends (agent-session.ts), with the arguments in the plugin dialect.
 					expand: (args: string) => {
 						const body = substitutePluginArguments(
@@ -46,7 +54,7 @@ export function pluginCommands(plugins: readonly ActivePlugin[]): PluginCommand[
 			}),
 		...plugin.inventory.commands.map((command) => ({
 			name: `${plugin.namespace}:${command.name}`,
-			description: command.description,
+			description: withHint(command.description, command.argumentHint),
 			expand: (args: string) => {
 				const body = command.content ?? stripFrontmatter(readFileSync(join(plugin.root, command.file ?? ""), "utf-8"));
 				return substitutePluginArguments(body.trim(), args, command.arguments);
