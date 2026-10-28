@@ -7,10 +7,13 @@
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { getAgentDir } from "../../config.ts";
 import type { ExtensionFactory } from "../../core/extensions/types.ts";
+import { ProjectTrustStore } from "../../core/trust-manager.ts";
 import { substitutePluginArguments } from "../../plugins/arguments.ts";
 import { type ActivePlugin, PluginManager } from "../../plugins/manager.ts";
 import { stripFrontmatter } from "../../utils/frontmatter.ts";
+import { managePlugins, PluginsView } from "./ui.ts";
 
 export interface PluginCommand {
 	/** `<plugin>:<name>`. */
@@ -79,6 +82,30 @@ export function createPluginsExtension(options: { agentDir?: string } = {}): Ext
 			for (const message of diagnostics) ctx.ui.notify(message, "warning");
 		});
 		knightcode.on("resources_discover", () => ({ skillPaths }));
+		knightcode.registerCommand("plugins", {
+			description: "Install, trust, enable, update and remove plugins",
+			handler: async (_args, ctx) => {
+				if (ctx.mode !== "tui") {
+					ctx.ui.notify("/plugins needs the terminal UI; use knightcode plugin instead.", "warning");
+					return;
+				}
+				const manager = new PluginManager({ agentDir: options.agentDir, cwd: ctx.cwd });
+				const projectTrusted = new ProjectTrustStore(options.agentDir ?? getAgentDir()).get(ctx.cwd) === true;
+				let reload = false;
+				await ctx.ui.custom<void>((tui, theme, keybindings, done) => {
+					const view = new PluginsView(tui, theme, keybindings);
+					void managePlugins(view, manager, {
+						notify: (message, type) => ctx.ui.notify(message, type),
+						reload: async () => {
+							reload = true;
+						},
+						projectTrusted,
+					}).finally(() => done());
+					return view;
+				});
+				if (reload) await ctx.reload();
+			},
+		});
 	};
 }
 

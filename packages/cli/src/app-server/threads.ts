@@ -197,7 +197,7 @@ export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
 
 // ponytail: a fixed list of built-in commands that do nothing outside the terminal: they open custom() components,
 // which the desktop does not draw (Phase C, D6). Replace with command metadata if desktop versions are built.
-const TERMINAL_ONLY_COMMANDS = new Set(["usage", "llama", "undo"]);
+const TERMINAL_ONLY_COMMANDS = new Set(["usage", "llama", "undo", "plugins"]);
 
 function commandsOf(session: AgentSession): ResultOf<"command/list">["commands"] {
 	return [
