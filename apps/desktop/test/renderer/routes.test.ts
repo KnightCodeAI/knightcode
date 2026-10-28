@@ -10,6 +10,7 @@ test("new-thread and settings links", () => {
 	expect(viewOfLink("knightcode://new?cwd=C%3A%5Cwork")).toEqual({ kind: "new", cwd: "C:\\work" });
 	expect(viewOfLink("knightcode://new")).toEqual({ kind: "new" });
 	expect(viewOfLink("knightcode://settings/archived")).toEqual({ kind: "settings", page: "archived" });
+	expect(viewOfLink("knightcode://settings/plugins")).toEqual({ kind: "settings", page: "plugins" });
 	expect(viewOfLink("knightcode://settings")).toEqual({ kind: "settings", page: "general" });
 });
 

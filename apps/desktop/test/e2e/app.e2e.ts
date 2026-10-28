@@ -186,3 +186,37 @@ test("an MCP App draws in its tool's row and calls its server's tool once confir
 	await page.getByRole("button", { name: "Run" }).click();
 	await expect(app.locator("#count")).toHaveText("1");
 });
+
+test("a plugin installs, asks for trust, toggles, uninstalls, and offers its command", async () => {
+	const { page, project } = await launch();
+	const plugin = join(project, "..", "e2e-plugin");
+	mkdirSync(join(plugin, "commands"), { recursive: true });
+	writeFileSync(join(plugin, "plugin.json"), JSON.stringify({ name: "e2e-plugin", description: "E2E plugin" }));
+	writeFileSync(join(plugin, "commands", "go.md"), "---\ndescription: Go somewhere\n---\nGo to $0\n");
+	const mod = process.platform === "darwin" ? "Meta" : "Control";
+	await page.keyboard.press(`${mod}+Comma`);
+	await page.getByRole("button", { name: "Plugins" }).click();
+	await page.getByRole("button", { name: "Install plugin" }).click();
+	await page.getByRole("textbox", { name: "Source" }).fill(plugin);
+	await page.getByRole("button", { name: "Install", exact: true }).click();
+	// Installed untrusted; the trust dialog lists what it offers before anything runs.
+	await expect(page.getByText("Trust e2e-plugin?")).toBeVisible();
+	await expect(page.getByRole("dialog").getByText("Commands: /e2e-plugin:go")).toBeVisible();
+	await page.getByRole("button", { name: "Trust and activate" }).click();
+	await expect(page.getByText(/User · active/)).toBeVisible();
+	await page.getByRole("switch", { name: "Enable e2e-plugin" }).click();
+	await expect(page.getByText(/User · active/)).toBeHidden();
+	await page.getByRole("switch", { name: "Enable e2e-plugin" }).click();
+	await expect(page.getByText(/User · active/)).toBeVisible();
+	// A new thread in the project offers the plugin's command before the thread exists. Back leaves Plugins, then
+	// General, which opened Settings.
+	await page.keyboard.press(`${mod}+BracketLeft`);
+	await page.keyboard.press(`${mod}+BracketLeft`);
+	await page.getByRole("textbox", { name: "Message" }).fill("/e2e");
+	await expect(page.getByText("e2e-plugin:go")).toBeVisible();
+	await page.keyboard.press(`${mod}+Comma`);
+	await page.getByRole("button", { name: "Plugins" }).click();
+	await page.getByRole("button", { name: "Uninstall e2e-plugin" }).click();
+	await page.getByRole("button", { name: "Uninstall", exact: true }).click();
+	await expect(page.getByText("No plugins", { exact: true })).toBeVisible();
+});

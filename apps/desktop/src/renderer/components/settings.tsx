@@ -68,11 +68,12 @@ import { ConfirmDialog, Dialog, DialogActions } from "./dialog.tsx";
 import {
 	Archive,
 	Check,
-	Copy,
 	ChevronDown,
 	ChevronRight,
 	CircleUserRound,
 	Code,
+	Copy,
+	Download,
 	ExternalLink,
 	Folder,
 	GitBranch,
@@ -82,11 +83,12 @@ import {
 	Keyboard,
 	KeyRound,
 	Layers,
-	LogIn,
 	ListFilter,
+	LogIn,
 	LogOut,
 	MessageSquare,
 	Pencil,
+	Plug,
 	Plus,
 	RefreshCw,
 	Search,
@@ -123,6 +125,7 @@ export const SETTINGS_PAGES: { page: SettingsPage; label: string; icon: ReactNod
 	{ page: "tools", label: "Tools", icon: <Wrench size={16} />, group: "Coding" },
 	{ page: "mcp", label: "MCP servers", icon: <Globe size={16} />, group: "Coding" },
 	{ page: "extensions", label: "Extensions & skills", icon: <Layers size={16} />, group: "Coding" },
+	{ page: "plugins", label: "Plugins", icon: <Plug size={16} />, group: "Coding" },
 	{ page: "worktrees", label: "Worktrees", icon: <GitBranch size={16} />, group: "Coding" },
 ];
 
@@ -2651,6 +2654,441 @@ function Extensions() {
 	);
 }
 
+type PluginRow = ResultOf<"plugin/list">["plugins"][number];
+type MarketplaceRow = ResultOf<"plugin/marketplace/list">["marketplaces"][number];
+
+/** A plugin's or catalog's source to add, and where to save it. */
+function AddPluginSourceDialog({
+	title,
+	placeholder,
+	action,
+	cwd,
+	onAdd,
+	onClose,
+}: {
+	title: string;
+	placeholder: string;
+	action: string;
+	cwd: string | undefined;
+	onAdd: (params: { source: string; ref?: string; scope: "global" | "project" }) => Promise<unknown>;
+	onClose: () => void;
+}) {
+	const [source, setSource] = useState("");
+	const [ref, setRef] = useState("");
+	const [scope, setScope] = useState<"global" | "project">("global");
+	const [busy, setBusy] = useState(false);
+	const valid = source.trim() !== "" && !busy;
+	const add = () => {
+		setBusy(true);
+		void onAdd({ source: source.trim(), ...(ref.trim() ? { ref: ref.trim() } : {}), scope })
+			.then(onClose)
+			.catch((e: unknown) => toast(errorText(e), "error"))
+			.finally(() => setBusy(false));
+	};
+	return (
+		<Dialog title={title} onClose={onClose}>
+			<div className="flex flex-col items-start gap-3 pt-3">
+				<input
+					autoFocus
+					aria-label="Source"
+					value={source}
+					spellCheck={false}
+					placeholder={placeholder}
+					onChange={(e) => setSource(e.target.value)}
+					onKeyDown={(e) => valid && matches(e, "desktop.item.activate") && add()}
+					className="kc-input font-code text-xs"
+				/>
+				<input
+					aria-label="Ref"
+					value={ref}
+					spellCheck={false}
+					placeholder="Branch, tag or commit (optional)"
+					onChange={(e) => setRef(e.target.value)}
+					className="kc-input font-code text-xs"
+				/>
+				{cwd ? (
+					<Segmented
+						label="Save to"
+						value={scope}
+						onChange={setScope}
+						options={[
+							{ value: "global", label: "User" },
+							{ value: "project", label: "This project" },
+						]}
+					/>
+				) : null}
+			</div>
+			<DialogActions>
+				<Button color="secondary" size="lg" squircle className="px-4" onClick={onClose}>
+					Cancel
+				</Button>
+				<Button variant="solid" size="lg" squircle className="px-4" disabled={!valid} onClick={add}>
+					{busy ? "Working…" : action}
+				</Button>
+			</DialogActions>
+		</Dialog>
+	);
+}
+
+/** What a plugin offers and runs: its commands, skills, MCP servers and the environment they read. */
+function pluginInventory(plugin: PluginRow): string[] {
+	return [
+		...(plugin.commands.length ? [`Commands: ${plugin.commands.map((c) => `/${c}`).join(", ")}`] : []),
+		...(plugin.skills.length ? [`Skills: ${plugin.skills.join(", ")}`] : []),
+		...plugin.mcpServers.map((server) => `MCP server ${server.name}: ${server.target}`),
+		...(plugin.environment.length ? [`Reads environment variables: ${plugin.environment.join(", ")}`] : []),
+	];
+}
+
+/** Asked before a plugin is trusted: it lists what the plugin will run, and what KnightCode will not run. */
+function TrustPluginDialog({
+	plugin,
+	onTrust,
+	onClose,
+}: {
+	plugin: PluginRow;
+	onTrust: () => void;
+	onClose: () => void;
+}) {
+	return (
+		<Dialog title={`Trust ${plugin.name}?`} onClose={onClose}>
+			<div className="flex flex-col gap-2 pt-3 text-sm">
+				<p className="text-secondary">
+					Trusting it lets new threads run its MCP servers and offer its skills and commands:
+				</p>
+				<ul className="flex flex-col gap-1 font-code text-xs">
+					{pluginInventory(plugin).map((line) => (
+						<li key={line}>{line}</li>
+					))}
+				</ul>
+				{plugin.unsupported.length ? (
+					<p className="text-xs text-secondary">Not supported, never run: {plugin.unsupported.join(", ")}</p>
+				) : null}
+				{plugin.warnings.map((warning) => (
+					<p key={warning} className="text-xs text-secondary">
+						{warning}
+					</p>
+				))}
+			</div>
+			<DialogActions>
+				<Button color="secondary" size="lg" squircle className="px-4" onClick={onClose}>
+					Not now
+				</Button>
+				<Button
+					variant="solid"
+					size="lg"
+					squircle
+					className="px-4"
+					onClick={() => {
+						onTrust();
+						onClose();
+					}}
+				>
+					Trust and activate
+				</Button>
+			</DialogActions>
+		</Dialog>
+	);
+}
+
+/**
+ * Plugins (Claude Code and Grok Build): the installed ones and the marketplace catalogs, as `knightcode plugin` and
+ * `/plugins` manage them. A plugin runs nothing until it is trusted. Sign-in and live status of plugin MCP servers
+ * stay with `/mcp` in a thread, since the MCP page lists only mcp.json servers.
+ */
+function Plugins() {
+	const [cwd, setCwd] = useState<string>();
+	const [trusted, setTrusted] = useProjectTrust(cwd);
+	const [tab, setTab] = useState<"installed" | "marketplaces">("installed");
+	const [query, setQuery] = useState("");
+	// Tagged with its scope, newest request only: another project's list never shows (or gets acted on) under this one.
+	const [loaded, setLoaded] = useState<{
+		cwd: string | undefined;
+		plugins: ResultOf<"plugin/list">;
+		marketplaces: MarketplaceRow[];
+	}>();
+	const latest = useRef(0);
+	const list = loaded && loaded.cwd === cwd ? loaded : undefined;
+	const [busy, setBusy] = useState(false);
+	const [adding, setAdding] = useState<"plugin" | "marketplace">();
+	const [trusting, setTrusting] = useState<PluginRow>();
+	const [removing, setRemoving] = useState<PluginRow>();
+	const where = cwd === undefined ? {} : { cwd };
+	const load = useCallback(() => {
+		const request = ++latest.current;
+		const params = cwd === undefined ? {} : { cwd };
+		Promise.all([client.request("plugin/list", params), client.request("plugin/marketplace/list", params)])
+			.then(([plugins, markets]) => {
+				if (request === latest.current) setLoaded({ cwd, plugins, marketplaces: markets.marketplaces });
+			})
+			.catch((e: unknown) => toast(errorText(e), "error"));
+	}, [cwd, trusted]);
+	useEffect(load, [load]);
+	/** One mutation at a time: conflicting actions are disabled until it settles. */
+	const run = <T,>(request: () => Promise<T>, then?: (result: T) => void) => {
+		setBusy(true);
+		void request()
+			.then((result) => {
+				then?.(result);
+				load();
+			})
+			.catch((e: unknown) => toast(errorText(e), "error"))
+			.finally(() => setBusy(false));
+	};
+	const install = (params: { source: string; ref?: string; scope: "global" | "project" }) =>
+		client.request("plugin/install", { ...where, ...params }).then(({ plugin }) => {
+			load();
+			setTrusting(plugin);
+		});
+	const needle = query.trim().toLowerCase();
+	const plugins = (list?.plugins.plugins ?? []).filter((plugin) =>
+		`${plugin.name} ${plugin.description ?? ""} ${plugin.source}`.toLowerCase().includes(needle),
+	);
+	return (
+		<>
+			<ScopeCard
+				cwd={cwd}
+				onCwd={setCwd}
+				trusted={trusted}
+				onTrust={setTrusted}
+				detail="A trusted project adds the plugins its .knightcode/settings.json declares"
+			/>
+			<PageBar>
+				<div className="flex items-center justify-between gap-4">
+					<Tabs
+						label="Plugins"
+						value={tab}
+						onChange={setTab}
+						options={[
+							{ value: "installed", label: "Installed" },
+							{ value: "marketplaces", label: "Marketplaces" },
+						]}
+					/>
+					<SearchField value={query} onChange={setQuery} placeholder="Search plugins" page />
+				</div>
+			</PageBar>
+			{tab === "installed" ? (
+				<Card
+					title="Installed"
+					aside={
+						<Button variant="soft" toolbar disabled={busy} onClick={() => setAdding("plugin")}>
+							<Plus size={16} /> Install plugin
+						</Button>
+					}
+				>
+					{list && plugins.length === 0 ? (
+						<Row
+							title={needle ? "No plugins match" : "No plugins"}
+							detail="Install one here, from a marketplace, or with knightcode plugin install"
+						/>
+					) : null}
+					{plugins.map((plugin) => (
+						<Row
+							key={`${plugin.scope}:${plugin.identity}`}
+							title={
+								<span className="flex items-center gap-2">
+									{plugin.name}
+									<span className="text-xs font-normal text-tertiary">
+										{plugin.scope === "project" ? "Project" : "User"}
+										{plugin.marketplace ? ` · ${plugin.marketplace}` : ""}
+										{plugin.active ? " · active" : plugin.trusted ? "" : " · not trusted"}
+									</span>
+								</span>
+							}
+							detail={
+								<>
+									{plugin.description ? <span className="block">{plugin.description}</span> : null}
+									{pluginInventory(plugin).map((line) => (
+										<span key={line} className="block font-code">
+											{line}
+										</span>
+									))}
+									{plugin.unsupported.length ? (
+										<span className="block">Not supported, never run: {plugin.unsupported.join(", ")}</span>
+									) : null}
+								</>
+							}
+						>
+							<IconButton
+								label={`Update ${plugin.name}`}
+								toolbar
+								disabled={busy}
+								onClick={() =>
+									run(
+										() => client.request("plugin/update", { ...where, scope: plugin.scope, name: plugin.identity }),
+										(result) =>
+											toast(result.changed ? `Updated ${plugin.name}` : `${plugin.name} is up to date`, "info"),
+									)
+								}
+							>
+								<RefreshCw size={16} />
+							</IconButton>
+							<Switch
+								label={`Enable ${plugin.name}`}
+								checked={plugin.enabled && plugin.trusted}
+								disabled={busy}
+								onChange={(on) =>
+									on && !plugin.trusted
+										? setTrusting(plugin)
+										: run(() =>
+												client.request("plugin/set", {
+													...where,
+													scope: plugin.scope,
+													name: plugin.identity,
+													enabled: on,
+												}),
+											)
+								}
+							/>
+							<IconButton
+								label={`Uninstall ${plugin.name}`}
+								toolbar
+								disabled={busy}
+								onClick={() => setRemoving(plugin)}
+							>
+								<Trash2 size={16} />
+							</IconButton>
+						</Row>
+					))}
+				</Card>
+			) : (
+				<>
+					<Card
+						title="Marketplaces"
+						aside={
+							<Button variant="soft" toolbar disabled={busy} onClick={() => setAdding("marketplace")}>
+								<Plus size={16} /> Add marketplace
+							</Button>
+						}
+					>
+						{list?.marketplaces.length === 0 ? (
+							<Row title="No marketplaces" detail="Adding one installs nothing; pick plugins from it here" />
+						) : null}
+						{list?.marketplaces.map((market) => (
+							<Row
+								key={market.name}
+								title={market.name}
+								detail={`${market.source} · ${market.plugins.length} plugins${market.diagnostics.length ? ` · ${market.diagnostics.join("; ")}` : ""}`}
+							>
+								<IconButton
+									label={`Update ${market.name}`}
+									toolbar
+									disabled={busy}
+									onClick={() =>
+										run(() => client.request("plugin/marketplace/update", { ...where, name: market.name }))
+									}
+								>
+									<RefreshCw size={16} />
+								</IconButton>
+								<IconButton
+									label={`Remove ${market.name}`}
+									toolbar
+									disabled={busy}
+									onClick={() =>
+										run(() =>
+											client.request("plugin/marketplace/remove", { ...where, scope: market.scope, name: market.name }),
+										)
+									}
+								>
+									<Trash2 size={16} />
+								</IconButton>
+							</Row>
+						))}
+					</Card>
+					{list?.marketplaces.map((market) => {
+						const entries = market.plugins.filter((entry) =>
+							`${entry.name} ${entry.description ?? ""}`.toLowerCase().includes(needle),
+						);
+						return entries.length ? (
+							<Card key={market.name} title={market.name}>
+								{entries.map((entry) => (
+									<Row key={entry.name} title={entry.name} detail={entry.description}>
+										{entry.installed ? (
+											<span className="text-xs text-tertiary">Installed</span>
+										) : (
+											<Button
+												variant="soft"
+												toolbar
+												disabled={busy}
+												onClick={() => run(() => install({ source: `${entry.name}@${market.name}`, scope: "global" }))}
+											>
+												<Download size={16} /> Install
+											</Button>
+										)}
+									</Row>
+								))}
+							</Card>
+						) : null;
+					})}
+				</>
+			)}
+			{list?.plugins.diagnostics.length ? (
+				<Card title="Problems">
+					{list.plugins.diagnostics.map((diagnostic) => (
+						<Row key={diagnostic} title={<span className="font-normal text-danger-text">{diagnostic}</span>} />
+					))}
+				</Card>
+			) : null}
+			<Card>
+				<Row
+					title="When changes apply"
+					detail="New and reloaded threads load plugin changes. Running threads keep the revision they loaded"
+				/>
+				<Row
+					title="Plugin MCP servers"
+					detail="Sign in to them, reconnect them or see their tools with /mcp in a thread"
+				/>
+			</Card>
+			{adding ? (
+				<AddPluginSourceDialog
+					title={adding === "plugin" ? "Install plugin" : "Add marketplace"}
+					placeholder={
+						adding === "plugin"
+							? "owner/repo, a Git URL, a folder, or name@marketplace"
+							: "owner/repo, a Git URL, or a folder"
+					}
+					action={adding === "plugin" ? "Install" : "Add"}
+					cwd={trusted ? cwd : undefined}
+					onAdd={(params) =>
+						adding === "plugin"
+							? install(params)
+							: client.request("plugin/marketplace/add", { ...where, ...params }).then(load)
+					}
+					onClose={() => setAdding(undefined)}
+				/>
+			) : null}
+			{trusting ? (
+				<TrustPluginDialog
+					plugin={trusting}
+					onTrust={() =>
+						run(() =>
+							client.request("plugin/set", {
+								...where,
+								scope: trusting.scope,
+								name: trusting.identity,
+								trust: true,
+								enabled: true,
+							}),
+						)
+					}
+					onClose={() => setTrusting(undefined)}
+				/>
+			) : null}
+			{removing ? (
+				<ConfirmDialog
+					title={`Uninstall ${removing.name}?`}
+					description="Its settings entry and trust are removed. Its data directory is kept."
+					confirm="Uninstall"
+					onConfirm={() =>
+						run(() => client.request("plugin/uninstall", { ...where, scope: removing.scope, name: removing.identity }))
+					}
+					onClose={() => setRemoving(undefined)}
+				/>
+			) : null}
+		</>
+	);
+}
+
 function About() {
 	const [info, setInfo] = useState<{ appVersion: string; serverVersion: string; platform: string; logsDir: string }>();
 	useEffect(() => void client.host("host/app/info", {}).then(setInfo), []);
@@ -2750,6 +3188,7 @@ export function Settings({ page }: { page: SettingsPage }) {
 		tools: <Tools />,
 		mcp: <McpServers />,
 		extensions: <Extensions />,
+		plugins: <Plugins />,
 		worktrees: <Worktrees />,
 		about: <About />,
 	}[page];
