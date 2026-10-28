@@ -4,6 +4,7 @@
  * (packages/cli/test/fixtures/faux-app-server.ts). No credentials, no network.
  */
 
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
@@ -185,6 +186,46 @@ test("opening files from the tree keeps its folders open", async () => {
 	await expect(result).not.toHaveAttribute("aria-selected", "true");
 	await result.click();
 	await expect(page.getByRole("tab", { name: "a.ts" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("Changed files lists only the comparison of the file beside", async () => {
+	const { page, project } = await launch();
+	const git = (...args: string[]) =>
+		execFileSync("git", ["-c", "user.name=e2e", "-c", "user.email=e2e@example.com", ...args], { cwd: project });
+	writeFileSync(join(project, "s.ts"), "export const s = 1;\n");
+	writeFileSync(join(project, "u.ts"), "export const u = 1;\n");
+	git("init", "-q");
+	git("add", ".");
+	git("commit", "-q", "-m", "init");
+	// s.ts changed and staged ("uncommitted" shows it), u.ts changed and not ("unstaged" shows it, alone).
+	writeFileSync(join(project, "s.ts"), "export const s = 2;\n");
+	git("add", "s.ts");
+	writeFileSync(join(project, "u.ts"), "export const u = 2;\n");
+	await send(page, "say hello");
+	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+P" : "Control+P");
+	const row = (path: string) => page.locator(`[data-item-path="${path}"]:not([data-file-tree-sticky-row])`);
+	await row("All files/s.ts").dblclick();
+	await row("All files/u.ts").dblclick();
+	await page.getByRole("tab", { name: "s.ts" }).click();
+	await expect(row("Changed files/s.ts")).toBeAttached();
+	// Each change the tree draws while u.ts shows: s.ts's row, from s.ts's comparison, must never be one of them.
+	await page.evaluate(() => {
+		const host = [...document.querySelectorAll("*")].find((e) =>
+			e.shadowRoot?.querySelector('[data-item-path^="All files/"]'),
+		);
+		const root = host?.shadowRoot as ShadowRoot;
+		const seen = { stale: false };
+		Object.assign(globalThis, { seen });
+		new MutationObserver(() => {
+			const beside = document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.includes("u.ts");
+			if (beside && root.querySelector('[data-item-path="Changed files/s.ts"]')) seen.stale = true;
+		}).observe(root, { subtree: true, childList: true, attributes: true });
+	});
+	await page.getByRole("tab", { name: "u.ts" }).click();
+	await expect(row("Changed files/u.ts")).toBeAttached();
+	await expect(row("Changed files/s.ts")).not.toBeAttached();
+	expect(await page.evaluate(() => (globalThis as unknown as { seen: { stale: boolean } }).seen.stale)).toBe(false);
 });
 
 test("a preview tab shows a page served on this machine", async () => {

@@ -118,12 +118,13 @@ type Entry = ResultOf<"file/list">["entries"][number];
 function useChangedFiles(threadId: string, compare: FileComparison = { scope: "unstaged" }) {
 	const { scope, against } = compare;
 	const version = useStore((s) => s.diffVersion[threadId] ?? 0);
-	const [read, setRead] = useState<{ root: string; files: DiffFile[] }>();
+	const comparison = `${scope}\0${against ?? ""}`;
+	const [read, setRead] = useState<{ comparison: string; root: string; files: DiffFile[] }>();
 	useEffect(() => {
 		let live = true;
 		const load = () =>
 			client.request("thread/diff/read", { threadId, scope, ...(against ? { against } : {}) }).then(
-				(r) => live && setRead({ root: r.root, files: r.files }),
+				(r) => live && setRead({ comparison, root: r.root, files: r.files }),
 				// Outside git, or a failed read: no Changed files section to show.
 				() => live && setRead(undefined),
 			);
@@ -133,8 +134,12 @@ function useChangedFiles(threadId: string, compare: FileComparison = { scope: "u
 			live = false;
 			window.removeEventListener("focus", load);
 		};
-	}, [threadId, version, scope, against]);
-	return read;
+	}, [threadId, version, scope, against, comparison]);
+	// Another comparison's files never show while this one's load: none until then, the root kept so the tree stays.
+	return useMemo(
+		() => (read && read.comparison !== comparison ? { root: read.root, files: [] } : read),
+		[read, comparison],
+	);
 }
 
 /** A filter's workspace search (`file/search`): undefined while it runs. */
