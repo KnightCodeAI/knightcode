@@ -172,6 +172,11 @@ export interface FilesTreeProps {
 
 /** The filter field: a search icon, the input, and a clear button while it holds text. */
 function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
+	const input = useRef<HTMLInputElement>(null);
+	// Each time an "Open file" tab shows, also when the tree stays from the file tab before it.
+	useEffect(() => {
+		if (autoFocus) input.current?.focus();
+	}, [autoFocus]);
 	return (
 		<div className="relative flex h-7 w-full items-center gap-1.5 rounded-lg border border-line bg-soft-alt text-[13px] leading-[18px]">
 			<Search size={14} className="ms-2 shrink-0 text-tertiary" />
@@ -179,9 +184,8 @@ function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: s
 				Filter files
 			</label>
 			<input
+				ref={input}
 				id="kc-files-filter"
-				// biome-ignore lint/a11y/noAutofocus: an "Open file" tab starts in its filter.
-				autoFocus={autoFocus}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
 				onKeyDown={(e) => {

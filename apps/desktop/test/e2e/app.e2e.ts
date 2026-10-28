@@ -173,6 +173,9 @@ test("opening files from the tree keeps its folders open", async () => {
 	await expect(page.getByRole("tab", { name: "a.ts" })).toHaveAttribute("aria-selected", "true");
 	await expect(row("src/")).toHaveAttribute("aria-expanded", "true");
 	await expect(row("src/lib/")).toHaveAttribute("aria-expanded", "true");
+	// Back on "Open file", over the same tree, the filter takes the typing again.
+	await page.getByRole("tab", { name: "Open file" }).click();
+	await expect(page.getByRole("textbox", { name: "Filter files" })).toBeFocused();
 });
 
 test("a preview tab shows a page served on this machine", async () => {
