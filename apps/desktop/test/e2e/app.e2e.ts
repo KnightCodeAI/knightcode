@@ -176,6 +176,15 @@ test("opening files from the tree keeps its folders open", async () => {
 	// Back on "Open file", over the same tree, the filter takes the typing again.
 	await page.getByRole("tab", { name: "Open file" }).click();
 	await expect(page.getByRole("textbox", { name: "Filter files" })).toBeFocused();
+	// The filter's results follow the file beside too: its row selected on its tab, none on "Open file".
+	await page.keyboard.type("a.ts");
+	const result = page.locator('[data-item-path="src/a.ts"]');
+	await page.getByRole("tab", { name: "a.ts" }).click();
+	await expect(result).toHaveAttribute("aria-selected", "true");
+	await page.getByRole("tab", { name: "Open file" }).click();
+	await expect(result).not.toHaveAttribute("aria-selected", "true");
+	await result.click();
+	await expect(page.getByRole("tab", { name: "a.ts" })).toHaveAttribute("aria-selected", "true");
 });
 
 test("a preview tab shows a page served on this machine", async () => {

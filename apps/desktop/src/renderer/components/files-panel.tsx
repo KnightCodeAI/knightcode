@@ -458,8 +458,7 @@ function SectionedTree({
 				: inAll !== undefined && known.current.has(`${ALL}/${inAll}`)
 					? `${ALL}/${inAll}`
 					: undefined;
-		for (const path of model.getSelectedPaths()) if (path !== target) model.getItem(path)?.deselect();
-		if (target && !model.getItem(target)?.isSelected()) model.getItem(target)?.select();
+		selectOnly(model, target);
 	}, [activePath, changed, cwd, model, rows]);
 
 	return (
@@ -477,10 +476,22 @@ function SectionedTree({
 	);
 }
 
-/** Search results as a tree of their folders, all open. */
-function ResultsTree({ cwd, paths, onOpen }: { cwd: string; paths: string[]; onOpen: FilesTreeProps["onOpen"] }) {
+/** Search results as a tree of their folders, all open, the file beside selected as in the sections. */
+function ResultsTree({
+	cwd,
+	paths,
+	activePath,
+	onOpen,
+}: {
+	cwd: string;
+	paths: string[];
+	activePath?: string;
+	onOpen: FilesTreeProps["onOpen"];
+}) {
 	const open = useRef(onOpen);
 	open.current = onOpen;
+	const active = useRef(activePath);
+	active.current = activePath;
 	const { model } = useFileTree({
 		paths,
 		initialExpansion: "open",
@@ -490,10 +501,22 @@ function ResultsTree({ cwd, paths, onOpen }: { cwd: string; paths: string[]; onO
 		unsafeCSS: FILES_TREE_CSS,
 		onSelectionChange: (selected) => {
 			const path = selected[0];
-			if (path && !path.endsWith("/")) open.current(joinPath(cwd, path), false, false);
+			if (!path || path.endsWith("/")) return;
+			const target = joinPath(cwd, path);
+			if (!(active.current && samePath(target, active.current))) open.current(target, false, false);
 		},
 	});
+	useEffect(() => {
+		const relative = activePath ? relativeTo(cwd, activePath) : undefined;
+		selectOnly(model, relative !== undefined && paths.includes(relative) ? relative : undefined);
+	}, [activePath, cwd, model, paths]);
 	return <FileTree model={model} className="kc-tree min-h-0 flex-1" />;
+}
+
+/** `target` alone selected, or nothing when it is undefined. */
+function selectOnly(model: TreeModel, target: string | undefined) {
+	for (const path of model.getSelectedPaths()) if (path !== target) model.getItem(path)?.deselect();
+	if (target && !model.getItem(target)?.isSelected()) model.getItem(target)?.select();
 }
 
 /** The tree pane: the filter, "All changes", then the sections, or the filter's results. */
@@ -516,7 +539,7 @@ export function FilesTree({ threadId, cwd, activePath, autoFocus, compare, onOpe
 				) : results.length === 0 ? (
 					<div className="px-2 py-2 text-[13px] text-tertiary">No matching files</div>
 				) : (
-					<ResultsTree key={resultsKey} cwd={cwd} paths={results} onOpen={onOpen} />
+					<ResultsTree key={resultsKey} cwd={cwd} paths={results} activePath={activePath} onOpen={onOpen} />
 				)
 			) : (
 				<>
