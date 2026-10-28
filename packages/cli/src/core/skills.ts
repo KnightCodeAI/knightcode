@@ -88,8 +88,13 @@ export interface LoadSkillsResult {
 /**
  * Validate skill name per Agent Skills spec.
  * Returns array of validation error messages (empty if valid).
+ * Plugin skills carry one `<plugin>:` prefix; each part follows the same rules.
  */
 function validateName(name: string): string[] {
+	const [prefix, rest, ...extra] = name.split(":");
+	if (rest !== undefined && extra.length === 0 && prefix) {
+		return [...validateName(prefix), ...validateName(rest)];
+	}
 	const errors: string[] = [];
 
 	if (name.length > MAX_NAME_LENGTH) {

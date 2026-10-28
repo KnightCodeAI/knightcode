@@ -5,6 +5,8 @@ import codemodeExtension from "./codemode/index.ts";
 import llamaExtension from "./llama/index.ts";
 import mcpExtension from "./mcp/index.ts";
 import planMode from "./plan-mode/index.ts";
+import pluginsExtension from "./plugins/index.ts";
+import pluginMcpExtension from "./plugins/mcp.ts";
 import toolSearchExtension from "./tool-search/index.ts";
 import { turnMarkerExtension } from "./turn-marker.ts";
 import uiExtension from "./ui/index.ts";
@@ -20,6 +22,10 @@ export const builtInExtensions: InlineExtension[] = [
 	{ name: "codemode", factory: codemodeExtension, replaceable: true, builtin: true },
 	{ name: "tool-search", factory: toolSearchExtension, replaceable: true, builtin: true },
 	{ name: "mcp", factory: mcpExtension, replaceable: true, builtin: true },
+	// Claude Code and Grok Build plugins: skills and commands, and (separately, so --no-mcp drops them) MCP servers.
+	// After "mcp", whose session_start must run first to connect what plugin-mcp registers in its own.
+	{ name: "plugins", factory: pluginsExtension, builtin: true },
+	{ name: "plugin-mcp", factory: pluginMcpExtension, builtin: true },
 	// /undo is a built-in command; file checkpoints ride on the extension hooks so core stays untouched.
 	{ name: "undo", factory: undoExtension, builtin: true },
 	// /usage is a built-in command.
@@ -34,3 +40,6 @@ export const builtInExtensions: InlineExtension[] = [
 	// KnightCode's header, editor frame and footer. Kept out of modes/interactive so resyncs never touch it.
 	{ name: "ui", factory: uiExtension, builtin: true },
 ];
+
+/** Built-ins that `--no-mcp` turns off: plugin servers registered while nothing connects them are errors. */
+export const MCP_BUILTIN_EXTENSIONS = ["mcp", "plugin-mcp"];
