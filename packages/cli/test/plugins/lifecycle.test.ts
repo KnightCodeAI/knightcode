@@ -182,7 +182,11 @@ describe("plugin installation", () => {
 	it("fails a hanging remote at the deadline and never waits for credentials", async () => {
 		const { manager } = setup();
 		const sockets: Array<{ destroy(): void }> = [];
-		const server: Server = createServer((socket) => sockets.push(socket));
+		// Git resets these connections when it is killed or gives up; the reset is expected, not a test error.
+		const server: Server = createServer((socket) => {
+			socket.on("error", () => {});
+			sockets.push(socket);
+		});
 		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 		const port = (server.address() as { port: number }).port;
 		try {
@@ -195,9 +199,10 @@ describe("plugin installation", () => {
 			for (const socket of sockets) socket.destroy();
 			server.close();
 		}
-		const auth = createServer((socket) =>
-			socket.end('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="x"\r\nContent-Length: 0\r\n\r\n'),
-		);
+		const auth = createServer((socket) => {
+			socket.on("error", () => {});
+			socket.end('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="x"\r\nContent-Length: 0\r\n\r\n');
+		});
 		await new Promise<void>((resolve) => auth.listen(0, "127.0.0.1", resolve));
 		try {
 			const authPort = (auth.address() as { port: number }).port;
