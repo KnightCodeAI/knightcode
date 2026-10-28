@@ -1,17 +1,17 @@
 /**
- * The file panel: the workspace tree beside a file tab, and the "Open file" tab that is the tree beside no file yet. The
- * tree has two sections, the comparison's changed files and all of the cwd, each a top-level folder of one
- * @pierre/trees model; a folder of All files is listed (`file/list`) when it opens, and a filter searches the workspace instead.
+ * The file panel: the workspace tree beside a file tab, and the "Open file" tab that is the tree beside no file yet; one
+ * tree serves every such tab of the thread. The tree has two sections, the comparison's changed files and all of the
+ * cwd, each a top-level folder of one @pierre/trees model; a folder of All files is listed (`file/list`) when it opens, and a filter searches the workspace instead.
  */
 
 import type { DiffFile, ResultOf } from "@knightcode/app-server-protocol";
 import type { FileTreeSortEntry, GitStatus } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
 import { basename, samePath } from "../format.ts";
 import { matches } from "../keys.ts";
-import { type FileComparison, setPanel, showChanges, useStore } from "../store.ts";
+import { type FileComparison, openFileTab, setPanel, showChanges, useStore } from "../store.ts";
 import { Folders, List, Search, X } from "./icons.tsx";
 import { IconButton } from "./button.tsx";
 import { Breadcrumb } from "./file-tab.tsx";
@@ -443,11 +443,11 @@ function SectionedTree({
 		if (!folder) (model.getItem(`${ALL}/`) as { expand?: () => void } | null)?.expand?.();
 	});
 
-	// The file beside, selected: its Changed files row when it has one, else its All files row.
+	// The file beside, selected: its Changed files row when it has one, else its All files row. With no file beside
+	// ("Open file"), nothing is, so any row chosen opens.
 	useEffect(() => {
-		if (!activePath) return;
-		const inChanges = changed ? relativeTo(changed.root, activePath) : undefined;
-		const inAll = relativeTo(cwd, activePath);
+		const inChanges = activePath && changed ? relativeTo(changed.root, activePath) : undefined;
+		const inAll = activePath ? relativeTo(cwd, activePath) : undefined;
 		const target =
 			inChanges !== undefined && known.current.has(`${CHANGED}/${inChanges}`)
 				? `${CHANGED}/${inChanges}`
@@ -554,13 +554,58 @@ export function TreeToggle() {
 	);
 }
 
-/** The "Open file" tab: the tree beside an empty view until a file is chosen. */
-export function FilesTab({ threadId, onOpen }: { threadId: string; onOpen: FilesTreeProps["onOpen"] }) {
+/** What the file tab beside the tree shows: its file, selected in the tree, and the comparison Changed files lists. */
+export interface TabBeside {
+	activePath?: string;
+	compare?: FileComparison;
+}
+
+/**
+ * The file and "Open file" tabs over one tree. A tab is a header over a body (grid row 1, a notice in row 2, the
+ * body in row 3) and the tree sits beside the body, so opening a file keeps the tree's open folders, scroll and
+ * filter. A file tab says what it shows through `beside`.
+ */
+export function FilesPanel({
+	threadId,
+	autoFocus,
+	children,
+}: {
+	threadId: string;
+	/** The "Open file" tab focuses the filter when it opens the panel. */
+	autoFocus?: boolean;
+	children: (beside: (tab: TabBeside) => void) => ReactNode;
+}) {
 	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
 	const shown = useStore((s) => s.panel.fileTree !== false);
+	const [tab, setTab] = useState<TabBeside>({});
+	const { activePath, compare } = tab;
 	return (
-		<div className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Open file">
-			<header className="relative z-20 flex shrink-0 items-center gap-1.5 p-2">
+		<div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_minmax(0,1fr)]">
+			{children(setTab)}
+			{shown && cwd ? (
+				<div className="col-start-2 row-start-3 flex min-h-0 w-64 border-t border-l border-line">
+					<FilesTree
+						threadId={threadId}
+						cwd={cwd}
+						activePath={activePath}
+						autoFocus={autoFocus}
+						compare={compare}
+						onOpen={(path, keep, changed) =>
+							openFileTab(threadId, path, undefined, keep, changed ? (compare ?? { scope: "unstaged" }) : undefined)
+						}
+					/>
+				</div>
+			) : null}
+		</div>
+	);
+}
+
+/** The "Open file" tab: an empty view beside the tree until a file is chosen. */
+export function FilesTab({ threadId }: { threadId: string }) {
+	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
+	return (
+		<div className="contents" aria-label="Open file">
+			<header className="relative z-20 col-span-2 flex shrink-0 items-center gap-1.5 p-2">
 				{/* The workspace's own crumb, as a file tab's breadcrumb starts with it. */}
 				{cwd ? <Breadcrumb segments={[basename(cwd)]} /> : null}
 				<div className="flex-1" />
@@ -568,17 +613,10 @@ export function FilesTab({ threadId, onOpen }: { threadId: string; onOpen: Files
 					<TreeToggle />
 				</div>
 			</header>
-			<div className="flex min-h-0 flex-1 border-t border-line">
-				<div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
-					<Folders size={40} strokeWidth={1} className="mb-2 text-ink/85" />
-					<div className="text-[15px] leading-6 font-semibold text-ink">Open file</div>
-					<div className="text-[13px] leading-5 text-tertiary">Select a file from the workspace tree</div>
-				</div>
-				{shown && cwd ? (
-					<div className="flex w-64 shrink-0 border-l border-line">
-						<FilesTree threadId={threadId} cwd={cwd} autoFocus onOpen={onOpen} />
-					</div>
-				) : null}
+			<div className="col-start-1 row-start-3 flex min-w-0 flex-col items-center justify-center gap-1 border-t border-line px-6 text-center">
+				<Folders size={40} strokeWidth={1} className="mb-2 text-ink/85" />
+				<div className="text-[15px] leading-6 font-semibold text-ink">Open file</div>
+				<div className="text-[13px] leading-5 text-tertiary">Select a file from the workspace tree</div>
 			</div>
 		</div>
 	);

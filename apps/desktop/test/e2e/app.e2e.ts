@@ -154,6 +154,27 @@ test("a terminal runs a command in the thread's folder", async () => {
 	await expect(page.locator(".xterm-rows")).toContainText("kc-term");
 });
 
+test("opening files from the tree keeps its folders open", async () => {
+	const { page, project } = await launch();
+	mkdirSync(join(project, "src", "lib"), { recursive: true });
+	writeFileSync(join(project, "src", "a.ts"), "export const a = 1;\n");
+	writeFileSync(join(project, "src", "lib", "b.ts"), "export const b = 2;\n");
+	await send(page, "say hello");
+	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+P" : "Control+P");
+	// A row's path is its section and its path there; a folder's ends in "/". Sticky rows repeat a folder's path.
+	const row = (path: string) => page.locator(`[data-item-path="All files/${path}"]:not([data-file-tree-sticky-row])`);
+	await row("src/").click();
+	await row("src/lib/").click();
+	// From the "Open file" tab, then from the file tab it opened.
+	await row("src/lib/b.ts").click();
+	await expect(page.getByRole("tab", { name: "b.ts" })).toHaveAttribute("aria-selected", "true");
+	await row("src/a.ts").click();
+	await expect(page.getByRole("tab", { name: "a.ts" })).toHaveAttribute("aria-selected", "true");
+	await expect(row("src/")).toHaveAttribute("aria-expanded", "true");
+	await expect(row("src/lib/")).toHaveAttribute("aria-expanded", "true");
+});
+
 test("a preview tab shows a page served on this machine", async () => {
 	const server: Server = createServer((_request, response) => {
 		response.writeHead(200, { "content-type": "text/html" });
