@@ -13,7 +13,7 @@ const tempDir = useTempDirs();
 const skill = (text = "Does a thing.") => `---\ndescription: ${text}\n---\nBody\n`;
 
 function git(cwd: string, ...args: string[]): string {
-	return execFileSync("git", args, {
+	return execFileSync("git", ["-c", "core.longpaths=true", ...args], {
 		cwd,
 		encoding: "utf-8",
 		env: {
@@ -127,6 +127,14 @@ describe("plugin installation", () => {
 				.loadActive(false)
 				.plugins[0]?.inventory.commands.map((c) => c.name),
 		).toEqual(["one"]);
+	});
+
+	it("installs a repository whose paths pass Windows' 260-character limit", async () => {
+		const { manager } = setup();
+		const deep = Array.from({ length: 5 }, (_, index) => String(index).padEnd(50, "d")).join("/");
+		const repo = gitRepo({ "plugin.json": { name: "deep" }, "commands/go.md": "go", [`${deep}/file.md`]: "x" });
+		const { plugin } = await manager().install(repo.url, { trust: true });
+		expect(existsSync(join(plugin.root, deep, "file.md"))).toBe(true);
 	});
 
 	it("never runs npm or lifecycle scripts for a source with package.json", async () => {

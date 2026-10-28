@@ -39,7 +39,10 @@ function gitEnv(): NodeJS.ProcessEnv {
 /** Runs `git` with the safety settings above. Rejects with the command's stderr when it fails. */
 export async function runGit(args: string[], options: GitOptions & { network?: boolean }): Promise<string> {
 	const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
-	const child = spawnProcess("git", ["-c", `core.hooksPath=${nullDevice}`, "-c", "submodule.recurse=false", ...args], {
+	// core.longpaths lets Git for Windows check out past 260 characters, which deep catalogs such as Anthropic's need;
+	// other platforms ignore it.
+	const safety = ["-c", `core.hooksPath=${nullDevice}`, "-c", "submodule.recurse=false", "-c", "core.longpaths=true"];
+	const child = spawnProcess("git", [...safety, ...args], {
 		cwd: options.cwd,
 		env: gitEnv(),
 		stdio: ["ignore", "pipe", "pipe"],
