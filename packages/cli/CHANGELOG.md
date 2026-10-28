@@ -1,5 +1,17 @@
 # @knightcodeai/cli
 
+## 0.22.2
+
+### Added
+
+- Added the full API reference back to the extensions guide: every event with its payload and return value, each `ExtensionContext`, command-context and `knightcode.*` method, custom tools, rendering, custom UI and mode behaviour, with lifecycle diagrams and an examples index. The shortened guide left most of this to the type declarations.
+
+### Fixed
+
+- Fixed a LiteLLM proxy rejecting an oversized request with `ContextWindowExceededError` ("Context Window exceeded for given call") ending the turn as an ordinary error; it is now recognised as a context overflow, so the session compacts and retries.
+
+- Fixed the `reload-runtime` example extension's `reload_runtime` tool never reloading: it queued `/reload-runtime` as a follow-up, which reaches the model as plain text instead of running the command. The tool now ends the run and the extension sends the command once the agent has settled, as a command.
+
 ## 0.22.1
 
 ### Added
