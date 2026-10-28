@@ -2,6 +2,8 @@
 
 KnightCode packages install and distribute extensions, skills, prompt templates, and themes as one unit. Use a package when a customization should be shared through npm or git, or when several resources belong together.
 
+To use a Claude Code or Grok Build plugin, see [Plugins](plugins.md) instead: plugins deliver skills, commands, and MCP servers as files, and never run dependency installs.
+
 A package is an ordinary directory or npm package. It can expose conventional resource directories, declare explicit paths under the `knightcode` key in `package.json`, and carry its own runtime dependencies.
 
 ## Install and manage packages

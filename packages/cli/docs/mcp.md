@@ -25,6 +25,8 @@ These commands add user-level servers by default. Add `--local` or `-l` to write
 knightcode mcp add -l tools --env API_KEY='${TOOLS_KEY}' -- uvx tools-mcp
 ```
 
+[Plugins](plugins.md) can bring MCP servers too; they connect next to these and are listed by `/mcp`.
+
 Use `/mcp` inside an interactive session to inspect connections, sign in, reconnect, change exposure, or enable and disable servers. Run `/reload` after adding, removing, or changing a server outside the session.
 
 ## Configure servers

@@ -110,6 +110,10 @@ The end-to-end tests launch the production build that packaging leaves in
     server and its live status stay with `/mcp` in a thread.
   - Extensions & skills: load or skip each extension, skill, prompt template and theme you
     added, as `knightcode config` does. Built-in extensions are always on and not listed.
+  - Plugins: install, trust, turn on or off, update and uninstall [plugins](plugins.md), and
+    add marketplaces and install from their catalogs, as `knightcode plugin` does. A plugin
+    is trusted only after a confirmation that lists what it runs. Its MCP servers' sign-in
+    and status stay with `/mcp` in a thread.
 
   Changes apply to threads that start or resume afterwards.
 - Side panel: Changes shows the thread's diff; the separators between hunks expand to

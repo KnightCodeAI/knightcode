@@ -111,6 +111,10 @@
             {
               "title": "Connect MCP Servers",
               "path": "mcp.md"
+            },
+            {
+              "title": "Install Plugins",
+              "path": "plugins.md"
             }
           ]
         },
