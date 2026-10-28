@@ -39,7 +39,6 @@ import {
 	loadEarlier,
 	loadTerminals,
 	newTerminal,
-	openFileTab,
 	openFilesTab,
 	openPreview,
 	NO_TABS,
@@ -58,7 +57,7 @@ import {
 } from "../store.ts";
 import { ConfirmDialog } from "./dialog.tsx";
 import { FileTab } from "./file-tab.tsx";
-import { FilesTab } from "./files-panel.tsx";
+import { FilesPanel, FilesTab } from "./files-panel.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
 import { BottomRegion } from "./terminal.tsx";
 import { PreviewTab, previewTitle } from "./preview.tsx";
@@ -366,27 +365,29 @@ function SidePanel({ id }: { id: string }) {
 			<div className={active === 0 ? "contents" : "hidden"}>
 				<ChangesPane threadId={id} />
 			</div>
-			{shown?.kind === "file" ? (
-				<FileTab
-					key={shown.path}
-					threadId={id}
-					path={shown.path}
-					line={shown.line}
-					used={shown.used}
-					compare={shown.compare}
-					draft={shown.draft}
-				/>
+			{/* File tabs and "Open file" share one tree, kept as it is from one file to the next. */}
+			{shown?.kind === "file" || shown?.kind === "files" ? (
+				<FilesPanel threadId={id} autoFocus={shown.kind === "files"}>
+					{(beside) =>
+						shown.kind === "file" ? (
+							<FileTab
+								key={shown.path}
+								threadId={id}
+								path={shown.path}
+								line={shown.line}
+								used={shown.used}
+								compare={shown.compare}
+								draft={shown.draft}
+								beside={beside}
+							/>
+						) : (
+							<FilesTab threadId={id} />
+						)
+					}
+				</FilesPanel>
 			) : null}
 			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
 			{shown?.kind === "backgroundShell" ? <BackgroundShellTab key={shown.id} threadId={id} id={shown.id} /> : null}
-			{shown?.kind === "files" ? (
-				<FilesTab
-					threadId={id}
-					onOpen={(path, keep, changed) =>
-						openFileTab(id, path, undefined, keep, changed ? { scope: "unstaged" } : undefined)
-					}
-				/>
-			) : null}
 			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
 			{tabs.map((tab, i) =>
 				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,

@@ -1,17 +1,17 @@
 /**
- * The file panel: the workspace tree beside a file tab, and the "Open file" tab that is the tree beside no file yet. The
- * tree has two sections, the comparison's changed files and all of the cwd, each a top-level folder of one
- * @pierre/trees model; a folder of All files is listed (`file/list`) when it opens, and a filter searches the workspace instead.
+ * The file panel: the workspace tree beside a file tab, and the "Open file" tab that is the tree beside no file yet; one
+ * tree serves every such tab of the thread. The tree has two sections, the comparison's changed files and all of the
+ * cwd, each a top-level folder of one @pierre/trees model; a folder of All files is listed (`file/list`) when it opens, and a filter searches the workspace instead.
  */
 
 import type { DiffFile, ResultOf } from "@knightcode/app-server-protocol";
 import type { FileTreeSortEntry, GitStatus } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
 import { basename, samePath } from "../format.ts";
 import { matches } from "../keys.ts";
-import { type FileComparison, setPanel, showChanges, useStore } from "../store.ts";
+import { type FileComparison, openFileTab, setPanel, showChanges, useStore } from "../store.ts";
 import { Folders, List, Search, X } from "./icons.tsx";
 import { IconButton } from "./button.tsx";
 import { Breadcrumb } from "./file-tab.tsx";
@@ -118,12 +118,13 @@ type Entry = ResultOf<"file/list">["entries"][number];
 function useChangedFiles(threadId: string, compare: FileComparison = { scope: "unstaged" }) {
 	const { scope, against } = compare;
 	const version = useStore((s) => s.diffVersion[threadId] ?? 0);
-	const [read, setRead] = useState<{ root: string; files: DiffFile[] }>();
+	const comparison = `${scope}\0${against ?? ""}`;
+	const [read, setRead] = useState<{ comparison: string; root: string; files: DiffFile[] }>();
 	useEffect(() => {
 		let live = true;
 		const load = () =>
 			client.request("thread/diff/read", { threadId, scope, ...(against ? { against } : {}) }).then(
-				(r) => live && setRead({ root: r.root, files: r.files }),
+				(r) => live && setRead({ comparison, root: r.root, files: r.files }),
 				// Outside git, or a failed read: no Changed files section to show.
 				() => live && setRead(undefined),
 			);
@@ -133,8 +134,12 @@ function useChangedFiles(threadId: string, compare: FileComparison = { scope: "u
 			live = false;
 			window.removeEventListener("focus", load);
 		};
-	}, [threadId, version, scope, against]);
-	return read;
+	}, [threadId, version, scope, against, comparison]);
+	// Another comparison's files never show while this one's load: none until then, the root kept so the tree stays.
+	return useMemo(
+		() => (read && read.comparison !== comparison ? { root: read.root, files: [] } : read),
+		[read, comparison],
+	);
 }
 
 /** A filter's workspace search (`file/search`): undefined while it runs. */
@@ -172,6 +177,11 @@ export interface FilesTreeProps {
 
 /** The filter field: a search icon, the input, and a clear button while it holds text. */
 function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
+	const input = useRef<HTMLInputElement>(null);
+	// Each time an "Open file" tab shows, also when the tree stays from the file tab before it.
+	useEffect(() => {
+		if (autoFocus) input.current?.focus();
+	}, [autoFocus]);
 	return (
 		<div className="relative flex h-7 w-full items-center gap-1.5 rounded-lg border border-line bg-soft-alt text-[13px] leading-[18px]">
 			<Search size={14} className="ms-2 shrink-0 text-tertiary" />
@@ -179,9 +189,8 @@ function Filter({ value, onChange, autoFocus }: { value: string; onChange: (v: s
 				Filter files
 			</label>
 			<input
+				ref={input}
 				id="kc-files-filter"
-				// biome-ignore lint/a11y/noAutofocus: an "Open file" tab starts in its filter.
-				autoFocus={autoFocus}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
 				onKeyDown={(e) => {
@@ -443,19 +452,18 @@ function SectionedTree({
 		if (!folder) (model.getItem(`${ALL}/`) as { expand?: () => void } | null)?.expand?.();
 	});
 
-	// The file beside, selected: its Changed files row when it has one, else its All files row.
+	// The file beside, selected: its Changed files row when it has one, else its All files row. With no file beside
+	// ("Open file"), nothing is, so any row chosen opens.
 	useEffect(() => {
-		if (!activePath) return;
-		const inChanges = changed ? relativeTo(changed.root, activePath) : undefined;
-		const inAll = relativeTo(cwd, activePath);
+		const inChanges = activePath && changed ? relativeTo(changed.root, activePath) : undefined;
+		const inAll = activePath ? relativeTo(cwd, activePath) : undefined;
 		const target =
 			inChanges !== undefined && known.current.has(`${CHANGED}/${inChanges}`)
 				? `${CHANGED}/${inChanges}`
 				: inAll !== undefined && known.current.has(`${ALL}/${inAll}`)
 					? `${ALL}/${inAll}`
 					: undefined;
-		for (const path of model.getSelectedPaths()) if (path !== target) model.getItem(path)?.deselect();
-		if (target && !model.getItem(target)?.isSelected()) model.getItem(target)?.select();
+		selectOnly(model, target);
 	}, [activePath, changed, cwd, model, rows]);
 
 	return (
@@ -473,10 +481,22 @@ function SectionedTree({
 	);
 }
 
-/** Search results as a tree of their folders, all open. */
-function ResultsTree({ cwd, paths, onOpen }: { cwd: string; paths: string[]; onOpen: FilesTreeProps["onOpen"] }) {
+/** Search results as a tree of their folders, all open, the file beside selected as in the sections. */
+function ResultsTree({
+	cwd,
+	paths,
+	activePath,
+	onOpen,
+}: {
+	cwd: string;
+	paths: string[];
+	activePath?: string;
+	onOpen: FilesTreeProps["onOpen"];
+}) {
 	const open = useRef(onOpen);
 	open.current = onOpen;
+	const active = useRef(activePath);
+	active.current = activePath;
 	const { model } = useFileTree({
 		paths,
 		initialExpansion: "open",
@@ -486,10 +506,22 @@ function ResultsTree({ cwd, paths, onOpen }: { cwd: string; paths: string[]; onO
 		unsafeCSS: FILES_TREE_CSS,
 		onSelectionChange: (selected) => {
 			const path = selected[0];
-			if (path && !path.endsWith("/")) open.current(joinPath(cwd, path), false, false);
+			if (!path || path.endsWith("/")) return;
+			const target = joinPath(cwd, path);
+			if (!(active.current && samePath(target, active.current))) open.current(target, false, false);
 		},
 	});
+	useEffect(() => {
+		const relative = activePath ? relativeTo(cwd, activePath) : undefined;
+		selectOnly(model, relative !== undefined && paths.includes(relative) ? relative : undefined);
+	}, [activePath, cwd, model, paths]);
 	return <FileTree model={model} className="kc-tree min-h-0 flex-1" />;
+}
+
+/** `target` alone selected, or nothing when it is undefined. */
+function selectOnly(model: TreeModel, target: string | undefined) {
+	for (const path of model.getSelectedPaths()) if (path !== target) model.getItem(path)?.deselect();
+	if (target && !model.getItem(target)?.isSelected()) model.getItem(target)?.select();
 }
 
 /** The tree pane: the filter, "All changes", then the sections, or the filter's results. */
@@ -512,7 +544,7 @@ export function FilesTree({ threadId, cwd, activePath, autoFocus, compare, onOpe
 				) : results.length === 0 ? (
 					<div className="px-2 py-2 text-[13px] text-tertiary">No matching files</div>
 				) : (
-					<ResultsTree key={resultsKey} cwd={cwd} paths={results} onOpen={onOpen} />
+					<ResultsTree key={resultsKey} cwd={cwd} paths={results} activePath={activePath} onOpen={onOpen} />
 				)
 			) : (
 				<>
@@ -554,13 +586,58 @@ export function TreeToggle() {
 	);
 }
 
-/** The "Open file" tab: the tree beside an empty view until a file is chosen. */
-export function FilesTab({ threadId, onOpen }: { threadId: string; onOpen: FilesTreeProps["onOpen"] }) {
+/** What the file tab beside the tree shows: its file, selected in the tree, and the comparison Changed files lists. */
+export interface TabBeside {
+	activePath?: string;
+	compare?: FileComparison;
+}
+
+/**
+ * The file and "Open file" tabs over one tree. A tab is a header over a body (grid row 1, a notice in row 2, the
+ * body in row 3) and the tree sits beside the body, so opening a file keeps the tree's open folders, scroll and
+ * filter. A file tab says what it shows through `beside`.
+ */
+export function FilesPanel({
+	threadId,
+	autoFocus,
+	children,
+}: {
+	threadId: string;
+	/** The "Open file" tab focuses the filter when it opens the panel. */
+	autoFocus?: boolean;
+	children: (beside: (tab: TabBeside) => void) => ReactNode;
+}) {
 	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
 	const shown = useStore((s) => s.panel.fileTree !== false);
+	const [tab, setTab] = useState<TabBeside>({});
+	const { activePath, compare } = tab;
 	return (
-		<div className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Open file">
-			<header className="relative z-20 flex shrink-0 items-center gap-1.5 p-2">
+		<div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_minmax(0,1fr)]">
+			{children(setTab)}
+			{shown && cwd ? (
+				<div className="col-start-2 row-start-3 flex min-h-0 w-64 border-t border-l border-line">
+					<FilesTree
+						threadId={threadId}
+						cwd={cwd}
+						activePath={activePath}
+						autoFocus={autoFocus}
+						compare={compare}
+						onOpen={(path, keep, changed) =>
+							openFileTab(threadId, path, undefined, keep, changed ? (compare ?? { scope: "unstaged" }) : undefined)
+						}
+					/>
+				</div>
+			) : null}
+		</div>
+	);
+}
+
+/** The "Open file" tab: an empty view beside the tree until a file is chosen. */
+export function FilesTab({ threadId }: { threadId: string }) {
+	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
+	return (
+		<div className="contents" aria-label="Open file">
+			<header className="relative z-20 col-span-2 flex shrink-0 items-center gap-1.5 p-2">
 				{/* The workspace's own crumb, as a file tab's breadcrumb starts with it. */}
 				{cwd ? <Breadcrumb segments={[basename(cwd)]} /> : null}
 				<div className="flex-1" />
@@ -568,17 +645,10 @@ export function FilesTab({ threadId, onOpen }: { threadId: string; onOpen: Files
 					<TreeToggle />
 				</div>
 			</header>
-			<div className="flex min-h-0 flex-1 border-t border-line">
-				<div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
-					<Folders size={40} strokeWidth={1} className="mb-2 text-ink/85" />
-					<div className="text-[15px] leading-6 font-semibold text-ink">Open file</div>
-					<div className="text-[13px] leading-5 text-tertiary">Select a file from the workspace tree</div>
-				</div>
-				{shown && cwd ? (
-					<div className="flex w-64 shrink-0 border-l border-line">
-						<FilesTree threadId={threadId} cwd={cwd} autoFocus onOpen={onOpen} />
-					</div>
-				) : null}
+			<div className="col-start-1 row-start-3 flex min-w-0 flex-col items-center justify-center gap-1 border-t border-line px-6 text-center">
+				<Folders size={40} strokeWidth={1} className="mb-2 text-ink/85" />
+				<div className="text-[15px] leading-6 font-semibold text-ink">Open file</div>
+				<div className="text-[13px] leading-5 text-tertiary">Select a file from the workspace tree</div>
 			</div>
 		</div>
 	);

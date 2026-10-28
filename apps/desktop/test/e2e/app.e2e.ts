@@ -4,7 +4,8 @@
  * (packages/cli/test/fixtures/faux-app-server.ts). No credentials, no network.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -35,7 +36,8 @@ test.afterEach(async () => {
 
 /** The app on a new thread in a fixture project, opened by a `knightcode://new?cwd=` link as the system would. */
 async function launch(options: { counter?: boolean } = {}): Promise<Launched> {
-	const root = mkdtempSync(join(tmpdir(), "kc-e2e-"));
+	// Its long form: a Windows runner's temp dir is an 8.3 name (RUNNER~1), and git gives a repository's root long.
+	const root = realpathSync.native(mkdtempSync(join(tmpdir(), "kc-e2e-")));
 	roots.push(root);
 	const project = join(root, "project");
 	const agentDir = join(root, "agent");
@@ -152,6 +154,79 @@ test("a terminal runs a command in the thread's folder", async () => {
 	await page.keyboard.type('echo kc-"term"');
 	await page.keyboard.press("Enter");
 	await expect(page.locator(".xterm-rows")).toContainText("kc-term");
+});
+
+test("opening files from the tree keeps its folders open", async () => {
+	const { page, project } = await launch();
+	mkdirSync(join(project, "src", "lib"), { recursive: true });
+	writeFileSync(join(project, "src", "a.ts"), "export const a = 1;\n");
+	writeFileSync(join(project, "src", "lib", "b.ts"), "export const b = 2;\n");
+	await send(page, "say hello");
+	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+P" : "Control+P");
+	// A row's path is its section and its path there; a folder's ends in "/". Sticky rows repeat a folder's path.
+	const row = (path: string) => page.locator(`[data-item-path="All files/${path}"]:not([data-file-tree-sticky-row])`);
+	await row("src/").click();
+	await row("src/lib/").click();
+	// From the "Open file" tab, then from the file tab it opened.
+	await row("src/lib/b.ts").click();
+	await expect(page.getByRole("tab", { name: "b.ts" })).toHaveAttribute("aria-selected", "true");
+	await row("src/a.ts").click();
+	await expect(page.getByRole("tab", { name: "a.ts" })).toHaveAttribute("aria-selected", "true");
+	await expect(row("src/")).toHaveAttribute("aria-expanded", "true");
+	await expect(row("src/lib/")).toHaveAttribute("aria-expanded", "true");
+	// Back on "Open file", over the same tree, the filter takes the typing again.
+	await page.getByRole("tab", { name: "Open file" }).click();
+	await expect(page.getByRole("textbox", { name: "Filter files" })).toBeFocused();
+	// The filter's results follow the file beside too: its row selected on its tab, none on "Open file".
+	await page.keyboard.type("a.ts");
+	const result = page.locator('[data-item-path="src/a.ts"]');
+	await page.getByRole("tab", { name: "a.ts" }).click();
+	await expect(result).toHaveAttribute("aria-selected", "true");
+	await page.getByRole("tab", { name: "Open file" }).click();
+	await expect(result).not.toHaveAttribute("aria-selected", "true");
+	await result.click();
+	await expect(page.getByRole("tab", { name: "a.ts" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("Changed files lists only the comparison of the file beside", async () => {
+	const { page, project } = await launch();
+	const git = (...args: string[]) =>
+		execFileSync("git", ["-c", "user.name=e2e", "-c", "user.email=e2e@example.com", ...args], { cwd: project });
+	writeFileSync(join(project, "s.ts"), "export const s = 1;\n");
+	writeFileSync(join(project, "u.ts"), "export const u = 1;\n");
+	git("init", "-q");
+	git("add", ".");
+	git("commit", "-q", "-m", "init");
+	// s.ts changed and staged ("uncommitted" shows it), u.ts changed and not ("unstaged" shows it, alone).
+	writeFileSync(join(project, "s.ts"), "export const s = 2;\n");
+	git("add", "s.ts");
+	writeFileSync(join(project, "u.ts"), "export const u = 2;\n");
+	await send(page, "say hello");
+	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+P" : "Control+P");
+	const row = (path: string) => page.locator(`[data-item-path="${path}"]:not([data-file-tree-sticky-row])`);
+	await row("All files/s.ts").dblclick();
+	await row("All files/u.ts").dblclick();
+	await page.getByRole("tab", { name: "s.ts" }).click();
+	await expect(row("Changed files/s.ts")).toBeAttached();
+	// Each change the tree draws while u.ts shows: s.ts's row, from s.ts's comparison, must never be one of them.
+	await page.evaluate(() => {
+		const host = [...document.querySelectorAll("*")].find((e) =>
+			e.shadowRoot?.querySelector('[data-item-path^="All files/"]'),
+		);
+		const root = host?.shadowRoot as ShadowRoot;
+		const seen = { stale: false };
+		Object.assign(globalThis, { seen });
+		new MutationObserver(() => {
+			const beside = document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.includes("u.ts");
+			if (beside && root.querySelector('[data-item-path="Changed files/s.ts"]')) seen.stale = true;
+		}).observe(root, { subtree: true, childList: true, attributes: true });
+	});
+	await page.getByRole("tab", { name: "u.ts" }).click();
+	await expect(row("Changed files/u.ts")).toBeAttached();
+	await expect(row("Changed files/s.ts")).not.toBeAttached();
+	expect(await page.evaluate(() => (globalThis as unknown as { seen: { stale: boolean } }).seen.stale)).toBe(false);
 });
 
 test("a preview tab shows a page served on this machine", async () => {
