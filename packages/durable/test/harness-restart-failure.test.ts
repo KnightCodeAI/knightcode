@@ -31,7 +31,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { allEntries, type ChatSetup, chatSetup, openChat, textOf, unanswered, waitFor } from "./chat-support.ts";
 import { addSection, addTool } from "./harness-support.ts";
-import { context, observeCommits } from "./session-support.ts";
+import { context, followCommits } from "./session-support.ts";
 import { aborted, deferred } from "./task-support.ts";
 
 const directories = new Set<string>();
@@ -80,9 +80,9 @@ async function live(harness: Harness): Promise<Readonly<LiveState>> {
 /** Every `knightcode.live` value from now on, as memory adopts it. */
 function liveValues(harness: Harness): LiveState[] {
 	const values: LiveState[] = [];
-	observeCommits(harness, (publication) => {
+	followCommits(harness, (publication) => {
 		for (const change of publication.changes) {
-			if (change.type === "document" && change.record.kind === "knightcode.live" && change.value !== null) {
+			if (change.type === "document" && change.record.kind === "knightcode.live" && change.kind === "change") {
 				values.push(change.value as LiveState);
 			}
 		}
@@ -363,7 +363,7 @@ describe("a generation interrupted while the model answers", () => {
 		});
 		await waitFor(() => setup.infos.length > 0);
 		expect(setup.infos).toContainEqual(
-			expect.objectContaining({ type: "task_interrupted", reason: "restart_limit", restarts: 1 }),
+			expect.objectContaining({ kind: "task_interrupted", reason: "restart_limit", restarts: 1 }),
 		);
 		await opened.harness.close(context);
 	});
@@ -434,7 +434,7 @@ describe("other tasks cut off restartLimit times in a row", () => {
 			outcome: { status: "failed", error: { detail: { reason: "restart_limit" } } },
 		});
 		expect(setup.infos).toContainEqual({
-			type: "task_interrupted",
+			kind: "task_interrupted",
 			task: { id: toolTask.id, kind: "knightcode.tool", conversationId: ROOT_CONVERSATION_ID },
 			reason: "restart_limit",
 			restarts: 2,
@@ -469,13 +469,13 @@ describe("other tasks cut off restartLimit times in a row", () => {
 		});
 		expect((await live(opened.harness)).compactionFailure).toEqual({
 			taskId: compaction,
-			reason: "manual",
+			trigger: "manual",
 			error,
 		});
 		expect((await live(opened.harness)).compactions).toBeUndefined();
 		await waitFor(() => setup.infos.length > 0);
 		expect(setup.infos).toContainEqual({
-			type: "task_interrupted",
+			kind: "task_interrupted",
 			task: { id: compaction, kind: "knightcode.compaction", conversationId: ROOT_CONVERSATION_ID },
 			reason: "restart_limit",
 			restarts: 1,
@@ -707,8 +707,8 @@ describe("crash edges", () => {
 			status: "faulted",
 			error: { detail: { reason: "restart_limit" } },
 		});
-		await waitFor(() => setup.infos.some((info) => info.type === "task_faulted"));
-		expect(setup.infos).toContainEqual(expect.objectContaining({ type: "task_faulted", reason: "restart_limit" }));
+		await waitFor(() => setup.infos.some((info) => info.kind === "task_faulted"));
+		expect(setup.infos).toContainEqual(expect.objectContaining({ kind: "task_faulted", reason: "restart_limit" }));
 		await opened.harness.close(context);
 	});
 });
@@ -727,7 +727,7 @@ describe("reports of work crashes ended", () => {
 		await waitFor(() => setup.infos.length > 0);
 		expect(setup.infos).toEqual([
 			{
-				type: "task_interrupted",
+				kind: "task_interrupted",
 				task: { id: taskId, kind: "knightcode.generation", conversationId: ROOT_CONVERSATION_ID },
 				reason: "interrupted",
 				restarts: 1,
