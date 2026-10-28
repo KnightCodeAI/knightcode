@@ -152,6 +152,17 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 		}
 	};
 
+	/** A file whose frontmatter does not parse is skipped, so one broken file never fails the whole plugin. */
+	const parse = (text: string, where: string) => {
+		try {
+			return parseFrontmatter<Record<string, unknown>>(text);
+		} catch (error) {
+			const reason = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+			warnings.push(`${where}: skipped, its frontmatter is not valid YAML (${reason})`);
+			return undefined;
+		}
+	};
+
 	const rendered = new Set<string>();
 	const skills: InventorySkill[] = [];
 	for (const path of plugin.components.skills) {
@@ -159,7 +170,9 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 		for (const file of files) {
 			if (rendered.has(file)) continue;
 			rendered.add(file);
-			const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(readFileSync(file, "utf-8"));
+			const parsed = parse(readFileSync(file, "utf-8"), relativePath(file));
+			if (!parsed) continue;
+			const { frontmatter, body } = parsed;
 			const fallbackName = basename(file) === "SKILL.md" ? basename(dirname(file)) : basename(file, ".md");
 			const ownName =
 				(typeof frontmatter.name === "string" && sanitizePluginName(frontmatter.name.split(":").pop() ?? "")) ||
@@ -200,8 +213,17 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 			commands.push(command);
 		}
 	};
-	const renderCommand = (source: string, name: string, overrides: { description?: string; argumentHint?: string }) => {
-		const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(source);
+	const renderCommand = (
+		source: string,
+		rawName: string,
+		where: string,
+		overrides: { description?: string; argumentHint?: string },
+	) => {
+		// Command names cannot hold whitespace: the command parser reads the name up to the first space.
+		const name = rawName.trim().replace(/\s+/g, "-");
+		const parsed = parse(source, where);
+		if (!parsed) return undefined;
+		const { frontmatter, body } = parsed;
 		checkCompatibility(`command "${name}"`, frontmatter, body);
 		const renderedBody = replaceAll(body, rootTokens);
 		const hint = overrides.argumentHint ?? frontmatter["argument-hint"];
@@ -222,8 +244,8 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 	};
 	for (const source of plugin.components.commands) {
 		if (source.content !== undefined) {
-			const { body, command } = renderCommand(source.content, source.name ?? "command", source);
-			addCommand({ content: body, ...command });
+			const result = renderCommand(source.content, source.name ?? "command", `command "${source.name}"`, source);
+			if (result) addCommand({ content: result.body, ...result.command });
 			continue;
 		}
 		if (!source.path) continue;
@@ -233,7 +255,9 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 				source.name ??
 				(isDir ? relative(source.path, file) : basename(file)).replace(/\.md$/, "").split(/[\\/]/).join(":");
 			const raw = readFileSync(file, "utf-8");
-			const { frontmatter, body, command } = renderCommand(raw, name, source);
+			const result = renderCommand(raw, name, relativePath(file), source);
+			if (!result) continue;
+			const { frontmatter, body, command } = result;
 			if (!rendered.has(file)) {
 				rendered.add(file);
 				const keepsFrontmatter = Object.keys(frontmatter).length > 0;

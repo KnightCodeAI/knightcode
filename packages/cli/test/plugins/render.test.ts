@@ -127,6 +127,30 @@ describe("plugin rendering", () => {
 		);
 	});
 
+	it("turns whitespace in command names into hyphens, since command names cannot contain it", () => {
+		const { inventory } = render({
+			"plugin.json": { name: "p", commands: ["./commands", "./inline-holder.md"] },
+			"commands/my cmd.md": "spaced",
+			"inline-holder.md": "x",
+		});
+		expect(inventory.commands.map((command) => command.name)).toEqual(["my-cmd", "inline-holder"]);
+		const inline = render({ "plugin.json": { name: "p", commands: { "two words": { content: "hi" } } } });
+		expect(inline.inventory.commands.map((command) => command.name)).toEqual(["two-words"]);
+	});
+
+	it("skips a skill or command with malformed frontmatter and renders the rest", () => {
+		const { inventory } = render({
+			"skills/bad/SKILL.md": "---\ndescription: [unclosed\n---\nbody\n",
+			"skills/good/SKILL.md": "---\ndescription: fine\n---\nbody\n",
+			"commands/broken.md": "---\nargs: {\n---\nbody\n",
+			"commands/ok.md": "ok",
+		});
+		expect(inventory.skills.map((skill) => skill.file)).toEqual(["skills/good/SKILL.md"]);
+		expect(inventory.commands.map((command) => command.name)).toEqual(["ok"]);
+		expect(inventory.warnings.join("\n")).toMatch(/skills\/bad\/SKILL\.md/);
+		expect(inventory.warnings.join("\n")).toMatch(/commands\/broken\.md/);
+	});
+
 	it("names plugin servers safely for tool names", () => {
 		expect(pluginServerName("p", "a.b c")).toBe("plugin_p_a_b_c");
 		expect(pluginServerName("p", "__x__")).toBe("plugin_p_x_");
