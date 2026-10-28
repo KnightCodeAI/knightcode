@@ -5,7 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -24,6 +24,7 @@ interface Launched {
 	app: ElectronApplication;
 	page: Page;
 	project: string;
+	agentDir: string;
 }
 
 const roots: string[] = [];
@@ -35,7 +36,7 @@ test.afterEach(async () => {
 });
 
 /** The app on a new thread in a fixture project, opened by a `knightcode://new?cwd=` link as the system would. */
-async function launch(options: { counter?: boolean } = {}): Promise<Launched> {
+async function launch(options: { counter?: boolean; projectSettings?: boolean } = {}): Promise<Launched> {
 	// Its long form: a Windows runner's temp dir is an 8.3 name (RUNNER~1), and git gives a repository's root long.
 	const root = realpathSync.native(mkdtempSync(join(tmpdir(), "kc-e2e-")));
 	roots.push(root);
@@ -44,6 +45,11 @@ async function launch(options: { counter?: boolean } = {}): Promise<Launched> {
 	mkdirSync(project);
 	mkdirSync(agentDir);
 	writeFileSync(join(project, "README.md"), "# e2e fixture\n");
+	// Its own settings, which load only once the project is trusted.
+	if (options.projectSettings) {
+		mkdirSync(join(project, ".knightcode"));
+		writeFileSync(join(project, ".knightcode", "settings.json"), "{}\n");
+	}
 	// The model a user would have picked: the new-thread composer offers the settings' default.
 	writeFileSync(
 		join(agentDir, "settings.json"),
@@ -72,7 +78,7 @@ async function launch(options: { counter?: boolean } = {}): Promise<Launched> {
 	apps.push(app);
 	const page = await app.firstWindow();
 	await expect(page.getByText("Faux E2E")).toBeVisible();
-	return { app, page, project };
+	return { app, page, project, agentDir };
 }
 
 async function send(page: Page, text: string): Promise<void> {
@@ -95,6 +101,28 @@ test("a prompt gets the model's reply, and a bash call runs once approved", asyn
 		.last()
 		.click();
 	await expect(page.getByText(/Ran echo e2e-bash/)).toBeVisible();
+});
+
+test("a project with its own settings asks for trust before its first thread", async () => {
+	const { page, agentDir } = await launch({ projectSettings: true });
+	await page.getByRole("button", { name: "Trust", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Trust", exact: true })).toBeHidden();
+	// The terminal's trust store, which the terminal reads too.
+	expect(Object.values(JSON.parse(readFileSync(join(agentDir, "trust.json"), "utf8")))).toEqual([true]);
+	await send(page, "say hello");
+	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
+	await expect(page.getByText(/they were not loaded/)).toHaveCount(0);
+});
+
+test("Not now leaves a project undecided, so it loads without its own settings", async () => {
+	const { page, agentDir } = await launch({ projectSettings: true });
+	await page.getByRole("button", { name: "Not now" }).click();
+	await expect(page.getByRole("button", { name: "Not now" })).toBeHidden();
+	expect(existsSync(join(agentDir, "trust.json"))).toBe(false);
+	await send(page, "say hello");
+	await expect(page.getByText(/they were not loaded/)).toBeVisible();
+	// Settled, so closing the app does not ask about a running thread.
+	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
 });
 
 test("Stop interrupts a running turn", async () => {
