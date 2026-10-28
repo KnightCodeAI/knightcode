@@ -223,6 +223,7 @@ const pluginInfo = {
 };
 const marketplaceInfo = {
 	name: "shop",
+	scope: "global",
 	source: "acme/marketplace",
 	commit: "b".repeat(40),
 	updatedAt: "2026-10-28T00:00:00.000Z",

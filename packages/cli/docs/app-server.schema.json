@@ -12773,6 +12773,7 @@
 							"type": "object",
 							"required": [
 								"name",
+								"scope",
 								"source",
 								"commit",
 								"updatedAt",
@@ -12782,6 +12783,18 @@
 							"properties": {
 								"name": {
 									"type": "string"
+								},
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "global"
+										},
+										{
+											"type": "string",
+											"const": "project"
+										}
+									]
 								},
 								"source": {
 									"type": "string"
@@ -12879,6 +12892,7 @@
 						"type": "object",
 						"required": [
 							"name",
+							"scope",
 							"source",
 							"commit",
 							"updatedAt",
@@ -12888,6 +12902,18 @@
 						"properties": {
 							"name": {
 								"type": "string"
+							},
+							"scope": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "global"
+									},
+									{
+										"type": "string",
+										"const": "project"
+									}
+								]
 							},
 							"source": {
 								"type": "string"
@@ -12967,6 +12993,7 @@
 							"type": "object",
 							"required": [
 								"name",
+								"scope",
 								"source",
 								"commit",
 								"updatedAt",
@@ -12976,6 +13003,18 @@
 							"properties": {
 								"name": {
 									"type": "string"
+								},
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "global"
+										},
+										{
+											"type": "string",
+											"const": "project"
+										}
+									]
 								},
 								"source": {
 									"type": "string"

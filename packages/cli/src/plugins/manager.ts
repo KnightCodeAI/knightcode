@@ -57,6 +57,8 @@ export interface ActivePlugin {
 
 export interface MarketplaceView {
 	name: string;
+	/** Where it is declared: the user's settings, or else the current project's. */
+	scope: PluginScope;
 	source: string;
 	ref?: string;
 	description?: string;
@@ -695,7 +697,11 @@ export class PluginManager {
 		}
 	}
 
-	private marketplaceView(record: MarketplaceRecord, state: ReturnType<PluginStore["read"]>): MarketplaceView {
+	private marketplaceView(
+		record: MarketplaceRecord,
+		state: ReturnType<PluginStore["read"]>,
+		scope: PluginScope,
+	): MarketplaceView {
 		let catalog: MarketplaceCatalog | undefined;
 		let error: string | undefined;
 		try {
@@ -708,6 +714,7 @@ export class PluginManager {
 		);
 		return {
 			name: record.name,
+			scope,
 			source: record.source,
 			...(record.ref ? { ref: record.ref } : {}),
 			...(catalog?.description ? { description: catalog.description } : {}),
@@ -767,7 +774,7 @@ export class PluginManager {
 						? settings.setPluginMarketplaces(declarations)
 						: settings.setProjectPluginMarketplaces(declarations),
 				);
-				return this.marketplaceView(record, state);
+				return this.marketplaceView(record, state, scope);
 			});
 		} finally {
 			rmSync(staged.tmp, { recursive: true, force: true });
@@ -779,20 +786,24 @@ export class PluginManager {
 		const state = this.readState();
 		const projectTrusted = new ProjectTrustStore(this.agentDir).get(this.cwd) === true;
 		const settings = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted });
-		const declared = new Set(
-			[
-				...(settings.getGlobalSettings().pluginMarketplaces ?? []),
-				...(projectTrusted ? (settings.getProjectSettings().pluginMarketplaces ?? []) : []),
-			].map((declaration) => declaration.name),
+		const user = new Set(
+			(settings.getGlobalSettings().pluginMarketplaces ?? []).map((declaration) => declaration.name),
+		);
+		const project = new Set(
+			(projectTrusted ? (settings.getProjectSettings().pluginMarketplaces ?? []) : []).map(
+				(declaration) => declaration.name,
+			),
 		);
 		return state.marketplaces
-			.filter((record) => declared.has(record.name))
-			.map((record) => this.marketplaceView(record, state));
+			.filter((record) => user.has(record.name) || project.has(record.name))
+			.map((record) => this.marketplaceView(record, state, user.has(record.name) ? "user" : "project"));
 	}
 
 	/** Fetches catalogs again: the named one, or every declared one. */
 	async updateMarketplaces(name?: string): Promise<MarketplaceView[]> {
-		const names = name ? [name] : this.listMarketplaces().map((view) => view.name);
+		const declared = this.listMarketplaces();
+		const scopeOf = (marketName: string) => declared.find((view) => view.name === marketName)?.scope ?? "user";
+		const names = name ? [name] : declared.map((view) => view.name);
 		const updated: MarketplaceView[] = [];
 		for (const marketName of names) {
 			const record = this.readState().marketplaces.find((candidate) => candidate.name === marketName);
@@ -807,7 +818,7 @@ export class PluginManager {
 						const next = { ...record, commit: staged.commit, revision, updatedAt: new Date().toISOString() };
 						state.marketplaces = state.marketplaces.map((other) => (other.name === record.name ? next : other));
 						this.store.write(state);
-						return this.marketplaceView(next, state);
+						return this.marketplaceView(next, state, scopeOf(record.name));
 					}),
 				);
 			} finally {

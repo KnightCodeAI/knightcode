@@ -626,6 +626,8 @@ export const PluginInfo = Obj({
 export type PluginInfo = Static<typeof PluginInfo>;
 export const PluginMarketplaceInfo = Obj({
 	name: Str,
+	/** Where it is declared; `global` when the user's settings do. */
+	scope: SettingsScope,
 	source: Str,
 	ref: Type.Optional(Str),
 	description: Type.Optional(Str),

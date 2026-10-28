@@ -4,9 +4,9 @@
  * plugin runs nothing until it is trusted. Project writes need a project the user trusted.
  */
 
-import type { ParamsOf, PluginInfo } from "@knightcode/app-server-protocol";
+import type { ParamsOf, PluginInfo, PluginMarketplaceInfo } from "@knightcode/app-server-protocol";
 import { describeMcpServer, mcpEnvironmentNames } from "../plugins/mcp.ts";
-import { PluginManager, type PluginScope, type PluginView } from "../plugins/manager.ts";
+import { type MarketplaceView, PluginManager, type PluginScope, type PluginView } from "../plugins/manager.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { projectReadable } from "./config.ts";
 import { trustedProject } from "./configure.ts";
@@ -14,6 +14,10 @@ import type { AppServerContext } from "./context.ts";
 import type { Handlers } from "./server.ts";
 
 type Scope = ParamsOf<"plugin/install">["scope"];
+
+function marketplaceInfo(market: MarketplaceView): PluginMarketplaceInfo {
+	return { ...market, scope: market.scope === "user" ? "global" : "project" };
+}
 
 export function pluginHandlers(ctx: AppServerContext): Handlers {
 	/** Without a project, the agent directory stands in: it has no `.knightcode` of its own. */
@@ -93,12 +97,16 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 			await writer(scope, cwd).uninstall(name, { scope: scopeOf(scope) });
 			return {};
 		},
-		"plugin/marketplace/list": async ({ cwd }) => ({ marketplaces: managerFor(cwd).listMarketplaces() }),
+		"plugin/marketplace/list": async ({ cwd }) => ({
+			marketplaces: managerFor(cwd).listMarketplaces().map(marketplaceInfo),
+		}),
 		"plugin/marketplace/add": async ({ scope, cwd, source, ref }) => ({
-			marketplace: await writer(scope, cwd).addMarketplace(source, { scope: scopeOf(scope), ...(ref ? { ref } : {}) }),
+			marketplace: marketplaceInfo(
+				await writer(scope, cwd).addMarketplace(source, { scope: scopeOf(scope), ...(ref ? { ref } : {}) }),
+			),
 		}),
 		"plugin/marketplace/update": async ({ cwd, name }) => ({
-			marketplaces: await managerFor(cwd).updateMarketplaces(name),
+			marketplaces: (await managerFor(cwd).updateMarketplaces(name)).map(marketplaceInfo),
 		}),
 		"plugin/marketplace/remove": async ({ scope, cwd, name }) => {
 			await writer(scope, cwd).removeMarketplace(name, { scope: scopeOf(scope) });
