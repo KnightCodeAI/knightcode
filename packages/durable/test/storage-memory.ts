@@ -17,8 +17,9 @@ import { openNodeJsonlStorage } from "../src/storage/jsonl/node.ts";
 import { MemoryStorage } from "../src/storage/memory.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import type { Storage } from "../src/types.ts";
+import { openStoreStorage } from "./store-storage-support.ts";
 
-const STORAGE_BENCHMARK_BACKENDS = ["memory", "sqlite", "jsonl"] as const;
+const STORAGE_BENCHMARK_BACKENDS = ["memory", "sqlite", "store", "jsonl"] as const;
 type StorageBenchmarkBackend = (typeof STORAGE_BENCHMARK_BACKENDS)[number];
 
 type MemorySnapshot = {
@@ -125,9 +126,13 @@ async function runWorker(backend: StorageBenchmarkBackend, scale: StorageBenchma
 		storage = new MemoryStorage();
 	} else {
 		directory = await mkdtemp(join(tmpdir(), `knightcode-durable-${backend}-memory-`));
-		path = join(directory, backend === "sqlite" ? "storage.sqlite" : "storage");
+		path = join(directory, backend === "jsonl" ? "storage" : "storage.sqlite");
 		storage =
-			backend === "sqlite" ? await openNodeSqliteStorage(path) : await openNodeJsonlStorage(path, BACKGROUND_CONTEXT);
+			backend === "sqlite"
+				? await openNodeSqliteStorage(path)
+				: backend === "store"
+					? await openStoreStorage(path)
+					: await openNodeJsonlStorage(path, BACKGROUND_CONTEXT);
 	}
 
 	try {
@@ -149,7 +154,7 @@ async function runWorker(backend: StorageBenchmarkBackend, scale: StorageBenchma
 		collectGarbage();
 		const postRead = snapshot();
 		let disk: DiskFootprint | undefined;
-		if (path !== undefined && backend === "sqlite") {
+		if (path !== undefined && backend !== "jsonl") {
 			disk = {
 				...sqliteMetrics(path),
 				mainBytes: await fileSize(path),

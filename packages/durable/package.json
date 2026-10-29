@@ -20,6 +20,7 @@
     "./storage/indexeddb": "./src/storage/indexeddb.ts",
     "./storage/jsonl": "./src/storage/jsonl/index.ts",
     "./storage/jsonl/node": "./src/storage/jsonl/node.ts",
+    "./storage/store": "./src/storage/store/index.ts",
     "./storage/sqlite": "./src/storage/sqlite/index.ts",
     "./storage/sqlite/node": "./src/storage/sqlite/node.ts",
     "./storage/sqlite/bun": "./src/storage/sqlite/bun.ts",
@@ -41,7 +42,8 @@
     "fake-indexeddb": "6.2.6"
   },
   "scripts": {
-    "test": "vitest --run && KNIGHTCODE_DURABLE_DOCUMENT_RETENTION_MS=0 vitest --run",
+    "test": "vitest --run && KNIGHTCODE_DURABLE_DOCUMENT_RETENTION_MS=0 vitest --run && bun run test:store",
+    "test:store": "vitest --run --config vitest.store.config.ts",
     "bench:storage": "vitest bench --config vitest.benchmark.config.ts",
     "bench:storage:memory": "node --conditions=source --experimental-strip-types test/storage-memory.ts",
     "bench:tool-output": "node --conditions=source --experimental-strip-types --expose-gc test/tool-output-bench.ts",
