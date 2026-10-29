@@ -20,7 +20,7 @@ vi.mock("../src/utils/clipboard-image.ts", () => ({
 beforeEach(() => vi.resetAllMocks());
 
 test("Finder file paths take precedence over their icon image", async () => {
-	// Regression: REWRITE-ME.
+	// Finder copies a file as both its path and its icon image; pasting must insert the path, not the icon.
 	const filePaths = ["/tmp/screenshot.png", "/tmp/My Photos/photo.png"];
 	mocks.readClipboardFilePaths.mockResolvedValue(filePaths);
 	mocks.readClipboardImage.mockResolvedValue({
