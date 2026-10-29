@@ -1,5 +1,4 @@
-// `afterTool` runs on every result a tool task writes, also those the Harness decides without executing the tool
-//.
+// `afterTool` runs on every result a tool task writes, also those the Harness decides without executing the tool.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
