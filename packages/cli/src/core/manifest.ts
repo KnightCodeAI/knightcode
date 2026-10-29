@@ -6,6 +6,7 @@ export interface KnightManifest {
 	skills?: string[];
 	prompts?: string[];
 	themes?: string[];
+	changelogPath?: string;
 }
 
 const RESOURCE_FIELDS = ["extensions", "skills", "prompts", "themes"] as const;
@@ -28,6 +29,12 @@ export function readKnightcodeManifest(packageJsonPath: string): KnightManifest 
 				manifest[field] = entries;
 			}
 		}
+
+		const changelogPath = pkg.knightcode.changelogPath;
+		if (typeof changelogPath === "string") {
+			manifest.changelogPath = changelogPath;
+		}
+
 		return manifest;
 	} catch {
 		return null;
