@@ -286,6 +286,28 @@ describe("/tasks view", () => {
 		}
 	});
 
+	it("pages the list with PageUp/PageDown and keeps those keys from the transcript only in the list", async () => {
+		const manager = new BackgroundShellManager();
+		const { operations } = controlledOperations();
+		const bash = createBashTool(process.cwd(), { operations, backgroundShells: manager });
+		for (let i = 0; i < 6; i++) await bash.execute(`c${i}`, { command: `job ${i}`, run_in_background: true });
+		const view = new BackgroundTasksComponent(manager, fakeTui(16), () => {});
+		try {
+			expect(view.capturesViewportInput).toBe(true);
+			view.handleInput("\x1b[6~");
+			expect(screen(view)).toContain("5 of 6");
+			view.handleInput("\x1b[6~");
+			expect(screen(view)).toContain("6 of 6");
+			view.handleInput("\x1b[5~");
+			expect(screen(view)).toContain("2 of 6");
+			view.handleInput("\r");
+			expect(view.capturesViewportInput).toBe(false);
+		} finally {
+			view.dispose();
+			manager.dispose();
+		}
+	});
+
 	it("never renders a line wider than the terminal", async () => {
 		const { manager, bash, emits } = await twoShells();
 		await bash.execute("c3", { command: `echo ${"x".repeat(300)}`, run_in_background: true });
