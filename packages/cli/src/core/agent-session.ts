@@ -1747,19 +1747,23 @@ export class AgentSession {
 	 * the registered, non-hidden ones; they are declared to the model. Active tools with a
 	 * `prepareLoadout` hook can change the declared descriptions and hide declarations from
 	 * requests (see {@link _installHiddenDeclarationsProjection}).
+	 *
+	 * The active tools are a set: tools that stay active keep their current order and newly active
+	 * ones are appended, so reordering the same names does not change the prompt.
 	 */
 	private _applyToolLoadout(toolNames: string[]): AgentTool[] {
-		const names = new Set(toolNames);
+		const requested = new Set(toolNames);
 		// A tool that starts background commands in this session needs task_stop to stop them, so it is
 		// active whenever one of them is.
 		if (
-			[...names].some(
+			[...requested].some(
 				(name) => backgroundManagerOf(this._toolDefinitions.get(name)?.definition) === this.backgroundShells,
 			)
 		) {
-			names.add("task_stop");
+			requested.add("task_stop");
 		}
-		const tools = [...names].flatMap((name) => {
+		const kept = this.getActiveToolNames().filter((name) => requested.has(name));
+		const tools = [...new Set([...kept, ...requested])].flatMap((name) => {
 			const tool = this._toolRegistry.get(name);
 			return tool && this._getToolExposure(name) !== "hidden" && this._isActivatable(name) ? [tool] : [];
 		});
