@@ -189,6 +189,79 @@ describe("marketplaces and plugins from Claude Code and Grok Build", () => {
 		]);
 	});
 
+	it("shows a catalog at once from Claude Code's and Grok Build's own copies, before fetching", () => {
+		const { manager } = setup();
+		const catalog = (name: string, plugin: string) => ({
+			".claude-plugin/marketplace.json": { name, plugins: [{ name: plugin, source: "./plugins/x" }] },
+		});
+		const clone = writeTree(tempDir(), catalog("ponytail", "ponytail"));
+		writeTree(claude, {
+			"plugins/known_marketplaces.json": {
+				ponytail: { source: { source: "github", repo: "DietrichGebert/ponytail" }, installLocation: clone },
+			},
+		});
+		writeTree(grok, {
+			"marketplace-cache/c6b314fa/.git/config":
+				'[core]\n\tbare = false\n[remote "origin"]\n\turl = https://github.com/xai-org/plugin-marketplace.git\n',
+			...Object.fromEntries(
+				Object.entries(catalog("xai-official", "cloudflare")).map(([path, value]) => [
+					`marketplace-cache/c6b314fa/${path}`,
+					value,
+				]),
+			),
+		});
+		const listed = manager()
+			.browseMarketplaces()
+			.map((listing) => `${listing.name} ${listing.missing === true} ${listing.plugins.map((plugin) => plugin.name)}`);
+		expect(listed).toEqual([
+			"claude-plugins-official true ",
+			"xai-official false cloudflare",
+			"ponytail false ponytail",
+		]);
+	});
+
+	it("browses a known marketplace from KnightCode's cache without adding it, and marks updates", async () => {
+		const { manager, userSettings } = setup();
+		const entry = (version: string) => ({
+			name: "alpha",
+			source: "./plugins/alpha",
+			version,
+			author: { name: "Ada" },
+		});
+		const market = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": { name: "shop", plugins: [entry("1.0.0")] },
+			"plugins/alpha/plugin.json": { name: "alpha", version: "1.0.0" },
+			"plugins/alpha/commands/a.md": "a",
+		});
+		writeTree(claude, {
+			"plugins/known_marketplaces.json": { shop: { source: { source: "directory", path: market } } },
+		});
+		const shop = () =>
+			manager()
+				.browseMarketplaces()
+				.find((listing) => listing.name === "shop");
+		expect(
+			manager()
+				.browseMarketplaces()
+				.map((listing) => `${listing.name} ${listing.from} ${listing.added} ${listing.missing === true}`),
+		).toEqual([
+			"claude-plugins-official Anthropic false true",
+			"xai-official xAI false true",
+			"shop Claude Code false true",
+		]);
+		await manager().cacheMarketplace({ source: market });
+		expect(shop()).toMatchObject({
+			added: false,
+			plugins: [{ name: "alpha", version: "1.0.0", author: "Ada", installed: false, update: false }],
+		});
+		expect(userSettings().pluginMarketplaces).toBeUndefined();
+		await manager().install("alpha@shop", { trust: true });
+		expect(shop()).toMatchObject({ added: true, plugins: [{ installed: true, update: false }] });
+		writeTree(market, { ".claude-plugin/marketplace.json": { name: "shop", plugins: [entry("2.0.0")] } });
+		await manager().updateMarketplaces("shop");
+		expect(shop()?.plugins[0]).toMatchObject({ installed: true, update: true });
+	});
+
 	it("still refuses a marketplace it does not know", async () => {
 		const { manager } = setup();
 		await expect(manager().install("alpha@nowhere", {})).rejects.toThrow(/marketplace add/);

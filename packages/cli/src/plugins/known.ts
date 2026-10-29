@@ -5,7 +5,7 @@
  * install asks for trust like any other; trust in those tools never carries over.
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isRecord } from "./marketplace.ts";
@@ -88,6 +88,38 @@ function toolMarketplaces(dir: string, from: KnownOrigin): KnownMarketplace[] {
 		}),
 		...marketplaceMap(readJson(join(dir, "plugins", "known_marketplaces.json")), from),
 	];
+}
+
+/**
+ * The copies Claude Code and Grok Build keep of marketplaces, by repository (`marketplaceKey`): Claude Code's
+ * `known_marketplaces.json` names each `installLocation`, and Grok Build clones into `marketplace-cache/`. Their
+ * catalog files show at once, before KnightCode fetches its own copy; nothing in them is installed or run.
+ */
+export function toolClones(): Map<string, string> {
+	const clones = new Map<string, string>();
+	const known = readJson(join(claudeDir(), "plugins", "known_marketplaces.json"));
+	for (const [name, entry] of Object.entries(isRecord(known) ? known : {})) {
+		const [market] = marketplaceMap({ [name]: entry }, "Claude Code");
+		const key = market && marketplaceKey(market.source);
+		if (key && isRecord(entry) && typeof entry.installLocation === "string") clones.set(key, entry.installLocation);
+	}
+	const cache = join(grokDir(), "marketplace-cache");
+	let dirs: string[] = [];
+	try {
+		dirs = readdirSync(cache);
+	} catch {}
+	for (const dir of dirs) {
+		let config: string;
+		try {
+			config = readFileSync(join(cache, dir, ".git", "config"), "utf-8");
+		} catch {
+			continue;
+		}
+		const url = /^\s*url\s*=\s*(\S+)/m.exec(config)?.[1];
+		const key = url && marketplaceKey(url);
+		if (key && !clones.has(key)) clones.set(key, join(cache, dir));
+	}
+	return clones;
 }
 
 /** The built-in marketplaces, then Claude Code's and Grok Build's; the first of each repository and each name. */

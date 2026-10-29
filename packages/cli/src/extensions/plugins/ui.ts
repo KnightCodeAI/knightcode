@@ -7,6 +7,7 @@
  * install whose server asks for a sign-in opens them itself. Mounted with `ctx.ui.custom`, so terminal only.
  */
 
+import { homedir } from "node:os";
 import {
 	type Component,
 	Container,
@@ -28,13 +29,13 @@ import { getSelectListTheme, type Theme } from "../../modes/interactive/theme/th
 import {
 	describeInventory,
 	type ImportablePlugin,
-	type MarketplaceView,
+	type MarketplaceListing,
 	type PluginManager,
 	type PluginView,
 	type TrustConfirm,
 } from "../../plugins/manager.ts";
-import type { KnownMarketplace } from "../../plugins/known.ts";
 import { pluginServerName } from "../../plugins/render.ts";
+import { parseSource } from "../../plugins/sources.ts";
 import type { McpServerSummary } from "../mcp/control.ts";
 import { McpManagerView, type McpUi } from "../mcp/ui.ts";
 
@@ -554,12 +555,31 @@ export interface ManagePluginsOptions {
 }
 
 const MCP_WAIT_MS = 15_000;
+/** Catalogs older than this are fetched again when `/plugins` opens, as Grok Build does. */
+const CATALOG_TTL_MS = 5 * 60 * 1000;
 
 interface Snapshot {
 	installed: PluginView[];
 	importable: ImportablePlugin[];
-	markets: MarketplaceView[];
-	available: KnownMarketplace[];
+	markets: MarketplaceListing[];
+}
+
+/** Catalog fetches running in the background, and the ones that failed. */
+interface Fetches {
+	busy: Set<string>;
+	failed: Map<string, string>;
+	offline: boolean;
+}
+
+/** `--offline` or `KNIGHTCODE_OFFLINE`: catalogs are fetched only from folders. */
+function isOffline(): boolean {
+	const value = process.env.KNIGHTCODE_OFFLINE?.toLowerCase();
+	return value === "1" || value === "true" || value === "yes";
+}
+
+function isLocal(source: string): boolean {
+	const parsed = parseSource(source, homedir());
+	return !("error" in parsed) && parsed.kind === "local";
 }
 
 interface Outcome {
@@ -653,38 +673,53 @@ function pluginsTab(data: Snapshot, running: McpServerSummary[]): BrowseTab {
 	};
 }
 
-function marketplaceTab(data: Snapshot): BrowseTab {
-	const groups: BrowseGroup[] = data.markets.map((market) => ({
-		key: `market:${market.name}`,
-		label: market.name,
-		right: market.source,
-		...(market.plugins.length === 0 && market.diagnostics.length
-			? { badge: { text: market.diagnostics[0]!, tone: "error" } }
-			: {}),
-		actions: { u: "refresh", x: "remove" },
-		rows: market.plugins.map((entry): BrowseRow => ({
-			key: `entry:${entry.name}@${market.name}`,
-			label: entry.name,
-			...(entry.version ? { right: `v${entry.version}` } : {}),
-			...(entry.description ? { description: entry.description } : {}),
-			...(entry.installed ? { badge: { text: "installed", tone: "success" } } : {}),
-			actions: entry.installed ? { d: "uninstall" } : { enter: "install", i: "install" },
-		})),
-	}));
-	if (data.available.length) {
-		groups.push({
-			key: "available",
-			label: "Not added",
-			rows: data.available.map((market) => ({
-				key: `known:${market.name}`,
-				label: market.name,
-				right: market.from,
-				description: market.source,
-				badge: { text: "not added", tone: "muted" },
-				actions: { enter: "add", i: "add" },
-			})),
-		});
-	}
+/** Every marketplace with every plugin, as Grok Build lists them; installing one adds its marketplace. */
+function marketplaceTab(data: Snapshot, fetches: Fetches): BrowseTab {
+	const elsewhere = new Map(data.importable.map((plugin) => [plugin.source, plugin.from]));
+	const groups = data.markets.map((market): BrowseGroup => {
+		const failure = fetches.failed.get(market.name);
+		const badge: Badge | undefined = failure
+			? { text: "fetch failed", tone: "error" }
+			: market.missing
+				? fetches.busy.has(market.name)
+					? { text: "fetching…", tone: "muted" }
+					: fetches.offline
+						? { text: "offline", tone: "muted" }
+						: undefined
+				: market.plugins.length === 0 && market.diagnostics.length
+					? { text: "unreadable", tone: "error" }
+					: undefined;
+		return {
+			key: `market:${market.name}`,
+			label: market.name,
+			right: failure ?? market.from ?? market.source,
+			...(badge ? { badge } : {}),
+			actions: { u: "refresh", ...(market.added ? { x: "remove" } : {}) },
+			rows: market.plugins.map((entry): BrowseRow => {
+				const source = `${entry.name}@${market.name}`;
+				const from = elsewhere.get(source);
+				const by = [entry.version ? `v${entry.version}` : "", entry.author ? `by ${entry.author}` : ""]
+					.filter(Boolean)
+					.join(" ");
+				return {
+					key: `entry:${source}`,
+					label: entry.name,
+					...(by ? { right: by } : {}),
+					...(entry.description ? { description: entry.description } : {}),
+					...(entry.update
+						? { badge: { text: "update available", tone: "warning" } }
+						: entry.installed
+							? { badge: { text: "installed", tone: "success" } }
+							: from
+								? { badge: { text: `in ${from}`, tone: "accent" } }
+								: {}),
+					actions: entry.installed
+						? { ...(entry.update ? { u: "update" } : {}), d: "uninstall" }
+						: { enter: "install", i: "install" },
+				};
+			}),
+		};
+	});
 	return {
 		id: "marketplace",
 		label: "Marketplace",
@@ -720,18 +755,45 @@ export async function managePlugins(
 			"Trust and activate",
 			"Do not trust",
 		);
-	const snapshot = (): Snapshot => {
-		let markets: MarketplaceView[] = [];
-		try {
-			markets = manager.listMarketplaces();
-		} catch {}
-		return {
-			installed: manager.list(),
-			importable: manager.importablePlugins(),
-			markets,
-			available: manager.availableMarketplaces(),
+	const snapshot = (): Snapshot => ({
+		installed: manager.list(),
+		importable: manager.importablePlugins(),
+		markets: manager.browseMarketplaces(),
+	});
+	let data = snapshot();
+	const listeners = new Set<() => void>();
+	/** Rebuilds the screen on MCP changes and when a catalog fetch lands. */
+	const subscribe = (listener: () => void) => {
+		listeners.add(listener);
+		const off = mcp?.subscribe(listener);
+		return () => {
+			listeners.delete(listener);
+			off?.();
 		};
 	};
+	const fetches: Fetches = { busy: new Set(), failed: new Map(), offline: isOffline() };
+	const fetchCatalog = async (market: MarketplaceListing) => {
+		try {
+			await (market.added ? manager.updateMarketplaces(market.name) : manager.cacheMarketplace(market));
+			fetches.failed.delete(market.name);
+		} catch (error) {
+			fetches.failed.set(market.name, errorText(error));
+		}
+	};
+	// Opening /plugins fetches the catalogs that are missing or a few minutes old, in the background, as Grok Build
+	// does; each group fills in as its fetch lands.
+	for (const market of data.markets) {
+		const stale = market.missing || !market.updatedAt || Date.now() - Date.parse(market.updatedAt) > CATALOG_TTL_MS;
+		if (!stale || (fetches.offline && !isLocal(market.source))) continue;
+		fetches.busy.add(market.name);
+		void fetchCatalog(market).finally(() => {
+			fetches.busy.delete(market.name);
+			try {
+				data = snapshot();
+			} catch {}
+			for (const listener of listeners) listener();
+		});
+	}
 	/** Starts and stops plugin MCP servers now; skills and commands load on reload. */
 	const applyMcp = (): string[] => {
 		changed = true;
@@ -799,6 +861,16 @@ export async function managePlugins(
 		return { notice: { text: [`Uninstalled ${plugin.name}.`, ...problems].join(" "), error: problems.length > 0 } };
 	};
 
+	const update = async (plugin: PluginView): Promise<Outcome> => {
+		ui.status(`Updating ${plugin.name}`, "Fetching its source…");
+		const result = await manager.update(plugin.namespace, { scope: plugin.scopeKind });
+		if (result.changed) applyMcp();
+		return {
+			focus: { tab: "plugins", key: rowKey(plugin) },
+			notice: { text: result.changed ? `Updated ${plugin.name}. ${reloadHint}` : `${plugin.name} is up to date.` },
+		};
+	};
+
 	const addMarketplace = async (source: string, ref?: string): Promise<Outcome> => {
 		ui.status(`Adding ${source}`, "Fetching its catalog…");
 		const added = await manager.addMarketplace(source, ref ? { ref } : {});
@@ -822,27 +894,38 @@ export async function managePlugins(
 			return source ? addMarketplace(source) : undefined;
 		}
 		if (tab === "marketplace" && key === "r") {
-			ui.status("Refreshing marketplaces", "Fetching their catalogs…");
-			const updated = await manager.updateMarketplaces();
-			return { notice: { text: `Refreshed ${count(updated.length, "marketplace")}.` } };
+			const markets = data.markets.filter((market) => !fetches.offline || isLocal(market.source));
+			ui.status("Refreshing marketplaces", `Fetching ${count(markets.length, "catalog")}…`);
+			await Promise.all(markets.map(fetchCatalog));
+			const failed = markets.filter((market) => fetches.failed.has(market.name)).length;
+			return {
+				notice: {
+					text: `Refreshed ${count(markets.length - failed, "marketplace")}.${failed ? ` ${failed} failed.` : ""}`,
+					error: failed > 0,
+				},
+			};
 		}
 		if (target?.startsWith("import:")) return install(target.slice("import:".length));
 		if (target?.startsWith("entry:")) {
 			const source = target.slice("entry:".length);
-			if (key !== "d") return install(source);
-			const plugin = data.installed.find((candidate) => candidate.source === source);
-			return plugin ? uninstall(plugin) : undefined;
+			const installed = data.installed.find((candidate) => candidate.source === source);
+			if (!installed) return install(source);
+			if (key === "d") return uninstall(installed);
+			if (key === "u") return update(installed);
+			return undefined;
 		}
-		const known = data.available.find((market) => `known:${market.name}` === target);
-		if (known) return addMarketplace(known.source, known.ref);
 		const market = data.markets.find((candidate) => `market:${candidate.name}` === target);
 		if (market && key === "u") {
 			ui.status(`Refreshing ${market.name}`, "Fetching its catalog…");
-			await manager.updateMarketplaces(market.name);
-			return { focus: { tab, key: `market:${market.name}` }, notice: { text: `Refreshed ${market.name}.` } };
+			await fetchCatalog(market);
+			const failure = fetches.failed.get(market.name);
+			return {
+				focus: { tab, key: `market:${market.name}` },
+				notice: failure ? { text: failure, error: true } : { text: `Refreshed ${market.name}.` },
+			};
 		}
-		if (market && key === "x") {
-			await manager.removeMarketplace(market.name, { scope: market.scope });
+		if (market?.added && key === "x") {
+			await manager.removeMarketplace(market.name, { scope: market.scope ?? "user" });
 			return { notice: { text: `Removed ${market.name}. Plugins installed from it stay installed.` } };
 		}
 		const plugin = data.installed.find((candidate) => rowKey(candidate) === target);
@@ -875,15 +958,8 @@ export async function managePlugins(
 					);
 				return { focus };
 			}
-			case "u": {
-				ui.status(`Updating ${plugin.name}`, "Fetching its source…");
-				const result = await manager.update(plugin.namespace, { scope: plugin.scopeKind });
-				if (result.changed) applyMcp();
-				return {
-					focus,
-					notice: { text: result.changed ? `Updated ${plugin.name}. ${reloadHint}` : `${plugin.name} is up to date.` },
-				};
-			}
+			case "u":
+				return update(plugin);
 			case "x":
 				return uninstall(plugin);
 		}
@@ -892,9 +968,9 @@ export async function managePlugins(
 
 	let outcome: Outcome = {};
 	for (;;) {
-		const data = snapshot();
-		const action = await ui.browse(() => [pluginsTab(data, mcp?.list() ?? []), marketplaceTab(data)], {
-			...(mcp ? { subscribe: (listener: () => void) => mcp.subscribe(listener) } : {}),
+		data = snapshot();
+		const action = await ui.browse(() => [pluginsTab(data, mcp?.list() ?? []), marketplaceTab(data, fetches)], {
+			subscribe,
 			...outcome,
 		});
 		if (!action) break;

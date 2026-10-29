@@ -133,7 +133,22 @@ describe("plugins view", () => {
 	});
 });
 
-type Answer = string | BrowseAction | undefined;
+/** A screen answer that waits until `ready` holds for the rebuilt tabs, as background fetches finish. */
+type Waiting = (build: () => BrowseTab[], options: BrowseOptions) => Promise<BrowseAction | undefined>;
+type Answer = string | BrowseAction | Waiting | undefined;
+
+const when =
+	(ready: (tabs: BrowseTab[]) => boolean, action?: BrowseAction): Waiting =>
+	(build, options) =>
+		new Promise((resolve) => {
+			const check = () => {
+				if (!ready(build())) return;
+				off?.();
+				resolve(action);
+			};
+			const off = options.subscribe?.(check);
+			check();
+		});
 
 /** A UI that answers from a script and records what it showed. */
 function scriptedUi(answers: Answer[]) {
@@ -146,7 +161,8 @@ function scriptedUi(answers: Answer[]) {
 		async browse(build, browseOptions = {}) {
 			screens.push(build());
 			options.push(browseOptions);
-			return answers.shift() as BrowseAction | undefined;
+			const answer = answers.shift();
+			return typeof answer === "function" ? answer(build, browseOptions) : (answer as BrowseAction | undefined);
 		},
 		async menu(menu) {
 			menus.push(menu);
@@ -219,15 +235,15 @@ describe("/plugins", () => {
 		expect(manager.list()).toHaveLength(0);
 	});
 
-	it("lays out Claude Code's installs and the marketplaces not added, and adds one", async () => {
+	it("lists every known marketplace's plugins as Grok Build does, and installs one with enter", async () => {
 		const claude = tempDir();
 		vi.stubEnv("CLAUDE_CONFIG_DIR", claude);
 		const market = writeTree(tempDir(), {
 			".claude-plugin/marketplace.json": {
 				name: "shop",
 				plugins: [
-					{ name: "alpha", source: "./plugins/alpha" },
-					{ name: "beta", source: "./plugins/alpha" },
+					{ name: "alpha", source: "./plugins/alpha", version: "1.0.0", author: { name: "Ada" } },
+					{ name: "beta", source: "./plugins/alpha", description: "Beta" },
 				],
 			},
 			"plugins/alpha/commands/a.md": "a",
@@ -240,21 +256,35 @@ describe("/plugins", () => {
 			},
 		});
 		const agentDir = tempDir();
-		const script = scriptedUi([{ tab: "marketplace", key: "enter", target: "known:shop" }, undefined]);
-		await managePlugins(script.ui, new PluginManager({ agentDir, cwd: agentDir }), { reload: vi.fn() });
-		const [plugins, marketplace] = script.screens[0] ?? [];
-		expect(plugins?.groups.map((group) => group.label)).toEqual(["In Claude Code"]);
-		expect(row(script.screens[0], "import:alpha@shop")?.actions).toEqual({ enter: "import", i: "import" });
-		expect(marketplace?.groups.flatMap((group) => group.rows.map((known) => `${known.key} ${known.right}`))).toEqual([
-			"known:claude-plugins-official Anthropic",
-			"known:xai-official xAI",
-			"known:shop Claude Code",
+		const manager = new PluginManager({ agentDir, cwd: agentDir });
+		const marketplace = (tabs: BrowseTab[]) => tabs.find((tab) => tab.id === "marketplace");
+		let listed: BrowseTab | undefined;
+		const script = scriptedUi([
+			// The catalog is fetched in the background; its plugins show without adding the marketplace.
+			when(
+				(tabs) => {
+					listed = marketplace(tabs);
+					return row(tabs, "entry:beta@shop") !== undefined;
+				},
+				{ tab: "marketplace", key: "enter", target: "entry:beta@shop" },
+			),
+			"yes",
+			undefined,
+			"later",
 		]);
-		expect(script.options[1]?.focus).toEqual({ tab: "marketplace", key: "market:shop" });
-		expect(script.screens[1]?.[1]?.groups[0]?.rows.map((entry) => entry.key)).toEqual([
-			"entry:alpha@shop",
-			"entry:beta@shop",
+		await managePlugins(script.ui, manager, { reload: vi.fn() });
+		expect(script.screens[0]?.[0]?.groups.map((group) => group.label)).toEqual(["In Claude Code"]);
+		expect(listed?.groups.map((group) => `${group.label} ${group.right} ${group.badge?.text ?? ""}`)).toEqual([
+			"claude-plugins-official Anthropic offline",
+			"xai-official xAI offline",
+			"shop Claude Code ",
 		]);
+		expect(
+			listed?.groups[2]?.rows.map((entry) => `${entry.label} ${entry.right ?? ""} ${entry.badge?.text ?? ""}`),
+		).toEqual(["alpha v1.0.0 by Ada in Claude Code", "beta  "]);
+		expect(manager.list().map((plugin) => plugin.source)).toEqual(["beta@shop"]);
+		expect(manager.listMarketplaces().map((added) => added.name)).toEqual(["shop"]);
+		expect(row(script.screens[1], "entry:beta@shop")?.badge).toEqual({ text: "installed", tone: "success" });
 	});
 
 	it("opens /mcp for a plugin server that asks for a sign-in after the install", async () => {

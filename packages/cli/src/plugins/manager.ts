@@ -20,11 +20,13 @@ import {
 	type ForeignPlugin,
 	foreignPlugins,
 	type KnownMarketplace,
+	type KnownOrigin,
 	knownMarketplaces,
 	marketplaceKey,
+	toolClones,
 } from "./known.ts";
 import { loadPlugin, resolveInsideRoot, sanitizePluginName } from "./manifest.ts";
-import { type MarketplaceCatalog, type MarketplaceEntry, readMarketplace } from "./marketplace.ts";
+import { isRecord, type MarketplaceCatalog, type MarketplaceEntry, readMarketplace } from "./marketplace.ts";
 import { describeMcpServer, mcpEnvironmentNames } from "./mcp.ts";
 import { type PluginInventory, renderPlugin } from "./render.ts";
 import { canonicalUrlFor, parseSource, pluginIdentity } from "./sources.ts";
@@ -72,6 +74,32 @@ export interface MarketplaceView {
 	commit: string;
 	updatedAt: string;
 	plugins: Array<{ name: string; description?: string; version?: string; installed: boolean }>;
+	diagnostics: string[];
+}
+
+/** A marketplace to browse: an added one, or a known one not added yet. */
+export interface MarketplaceListing {
+	name: string;
+	source: string;
+	ref?: string;
+	/** For the built-in marketplaces and those Claude Code and Grok Build know. */
+	from?: KnownOrigin;
+	added: boolean;
+	/** The settings that declare it, when added. */
+	scope?: PluginScope;
+	/** When its catalog was fetched. */
+	updatedAt?: string;
+	/** Its catalog was never fetched. */
+	missing?: boolean;
+	plugins: Array<{
+		name: string;
+		description?: string;
+		version?: string;
+		author?: string;
+		installed: boolean;
+		/** The catalog has a version other than the installed one. */
+		update: boolean;
+	}>;
 	diagnostics: string[];
 }
 
@@ -410,7 +438,12 @@ export class PluginManager {
 		// marketplace's catalog stays cached for the plugins installed from it, but installs nothing new.
 		const parsed = parseSource(source, this.cwd);
 		if (!("error" in parsed) && parsed.kind === "marketplace" && !this.declaredMarketplaces().has(parsed.marketplace)) {
-			const known = this.availableMarketplaces().find((market) => market.name === parsed.marketplace);
+			// The name is the known one, or the catalog's own when it was fetched for browsing.
+			const cached = this.readState().marketplaces.find((record) => record.name === parsed.marketplace);
+			const known = this.availableMarketplaces().find(
+				(market) =>
+					market.name === parsed.marketplace || (cached && marketplaceKey(market.source) === cached.canonical),
+			);
 			if (!known) {
 				throw new Error(
 					`marketplace "${parsed.marketplace}" is not added; add it with knightcode plugin marketplace add <source>`,
@@ -781,15 +814,27 @@ export class PluginManager {
 			"error" in parseSource(source, this.cwd)
 				? knownMarketplaces().find((market) => market.name === source.trim())
 				: undefined;
-		const ref = options.ref ?? known?.ref;
-		const staged = await this.stageMarketplace(known?.source ?? source, ref);
+		return this.storeMarketplace(known?.source ?? source, options.ref ?? known?.ref, scope);
+	}
+
+	/**
+	 * Fetches a known marketplace's catalog into the cache without adding it, for browsing. The first install from it
+	 * adds it.
+	 */
+	async cacheMarketplace(market: { source: string; ref?: string }): Promise<MarketplaceView> {
+		return this.storeMarketplace(market.source, market.ref);
+	}
+
+	/** Fetches a catalog and records it; with `declare`, also adds it to that scope's settings. */
+	private async storeMarketplace(source: string, ref: string | undefined, declare?: PluginScope) {
+		const staged = await this.stageMarketplace(source, ref);
 		try {
 			const name = staged.catalog.name;
 			if (!sanitizePluginName(name) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
 				throw new Error(`marketplace name "${name}" must use letters, digits, ".", "_" and "-"`);
 			}
 			return await this.store.withLock(async () => {
-				const settings = this.openSettings(scope);
+				const settings = declare ? this.openSettings(declare) : undefined;
 				const state = this.readState();
 				const existing = state.marketplaces.find((record) => record.name === name);
 				if (existing && existing.canonical !== staged.canonical) {
@@ -810,18 +855,21 @@ export class PluginManager {
 				};
 				state.marketplaces = [...state.marketplaces.filter((other) => other.name !== name), record];
 				this.store.write(state);
-				const declarations = [
-					...(
-						(scope === "user" ? settings.getGlobalSettings() : settings.getProjectSettings()).pluginMarketplaces ?? []
-					).filter((declaration) => declaration.name !== name),
-					{ name, source: record.source, ...(ref ? { ref } : {}) },
-				];
-				await this.saveSettings(settings, () =>
-					scope === "user"
-						? settings.setPluginMarketplaces(declarations)
-						: settings.setProjectPluginMarketplaces(declarations),
-				);
-				return this.marketplaceView(record, state, scope);
+				if (settings && declare) {
+					const declarations = [
+						...(
+							(declare === "user" ? settings.getGlobalSettings() : settings.getProjectSettings()).pluginMarketplaces ??
+							[]
+						).filter((declaration) => declaration.name !== name),
+						{ name, source: record.source, ...(ref ? { ref } : {}) },
+					];
+					await this.saveSettings(settings, () =>
+						declare === "user"
+							? settings.setPluginMarketplaces(declarations)
+							: settings.setProjectPluginMarketplaces(declarations),
+					);
+				}
+				return this.marketplaceView(record, state, declare ?? "user");
 			});
 		} finally {
 			rmSync(staged.tmp, { recursive: true, force: true });
@@ -889,6 +937,102 @@ export class PluginManager {
 			seen.add(source);
 			return [{ name: plugin.name, from: plugin.from, source, enabled: plugin.enabled }];
 		});
+	}
+
+	/** A catalog's entries with what is installed from them here, and whether the catalog has a newer version. */
+	private listingPlugins(record: MarketplaceRecord, state: ReturnType<PluginStore["read"]>) {
+		let catalog: MarketplaceCatalog;
+		try {
+			catalog = this.catalog(record);
+		} catch (error) {
+			return { plugins: [], diagnostics: [errorText(error)] };
+		}
+		return this.catalogPlugins(catalog, record.name, state);
+	}
+
+	private catalogPlugins(catalog: MarketplaceCatalog, market: string, state: ReturnType<PluginStore["read"]>) {
+		const installed = new Map(
+			this.visibleRecords(state)
+				.filter((plugin) => plugin.marketplace === market)
+				.map((plugin) => [plugin.source, plugin]),
+		);
+		return {
+			plugins: catalog.plugins.map((entry) => {
+				const plugin = installed.get(`${entry.name}@${market}`);
+				const version = plugin && this.store.readInventory(plugin.id, plugin.revision)?.version;
+				const author = entry.raw.author;
+				const by = typeof author === "string" ? author : isRecord(author) ? author.name : undefined;
+				return {
+					name: entry.name,
+					...(entry.description ? { description: entry.description } : {}),
+					...(entry.version ? { version: entry.version } : {}),
+					...(typeof by === "string" && by ? { author: by } : {}),
+					installed: plugin !== undefined,
+					update: entry.version !== undefined && version !== undefined && entry.version !== version,
+				};
+			}),
+			diagnostics: catalog.diagnostics,
+		};
+	}
+
+	/**
+	 * Every marketplace to browse, as Grok Build lists them: the built-in ones first, then the added ones, then Claude
+	 * Code's and Grok Build's. A known marketplace not added shows the catalog `cacheMarketplace` fetched, else the
+	 * one in Claude Code's or Grok Build's copy, else none yet.
+	 */
+	browseMarketplaces(): MarketplaceListing[] {
+		let state: ReturnType<PluginStore["read"]>;
+		try {
+			state = this.readState();
+		} catch {
+			return [];
+		}
+		const declared = this.declaredMarketplaces();
+		const known = knownMarketplaces();
+		const listing = (
+			record: MarketplaceRecord,
+			extra: Omit<MarketplaceListing, "name" | "source" | "plugins" | "diagnostics">,
+		) => ({
+			name: record.name,
+			source: record.source,
+			...(record.ref ? { ref: record.ref } : {}),
+			updatedAt: record.updatedAt,
+			...this.listingPlugins(record, state),
+			...extra,
+		});
+		const added = state.marketplaces.filter((record) => declared.has(record.name));
+		const listings: MarketplaceListing[] = added.map((record) => {
+			const from = known.find(
+				(market) => market.name === record.name || marketplaceKey(market.source) === record.canonical,
+			)?.from;
+			return listing(record, { added: true, scope: declared.get(record.name)!, ...(from ? { from } : {}) });
+		});
+		const clones = toolClones();
+		const copied = (key: string | undefined) => {
+			const clone = key ? clones.get(key) : undefined;
+			try {
+				return clone ? readMarketplace(clone) : undefined;
+			} catch {
+				return undefined;
+			}
+		};
+		for (const market of known) {
+			const key = marketplaceKey(market.source);
+			if (added.some((record) => record.name === market.name || record.canonical === key)) continue;
+			const cached = state.marketplaces.find((record) => record.canonical === key);
+			const where = { from: market.from, added: false, ...(market.ref ? { ref: market.ref } : {}) };
+			const copy = cached ? undefined : copied(key);
+			listings.push(
+				cached
+					? { ...listing(cached, where), source: market.source }
+					: copy
+						? { name: market.name, source: market.source, ...where, ...this.catalogPlugins(copy, market.name, state) }
+						: { name: market.name, source: market.source, ...where, missing: true, plugins: [], diagnostics: [] },
+			);
+		}
+		const rank = ({ from }: MarketplaceListing) =>
+			from === "Anthropic" || from === "xAI" ? 0 : from === undefined ? 1 : from === "Claude Code" ? 2 : 3;
+		return listings.sort((a, b) => rank(a) - rank(b));
 	}
 
 	/** Catalogs declared in the user's settings and, when it is trusted, the current project's. */
