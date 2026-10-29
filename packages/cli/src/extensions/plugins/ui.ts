@@ -1,8 +1,10 @@
 /**
- * `/plugins`: one searchable picker over installed plugins, the plugins Claude Code and Grok Build have, the
- * marketplaces not added yet (the built-in Anthropic and xAI ones and those tools' own), and the added catalogs, with
- * details, trust, install, enable and disable, update, uninstall and reload. Mounted with `ctx.ui.custom`, so terminal
- * only.
+ * `/plugins`, laid out as Grok Build's plugin screen. Two tabs share one search: Plugins (installed, and the ones
+ * Claude Code and Grok Build have to import) and Marketplace (the added catalogs, and the marketplaces not added
+ * yet). Rows carry their state and the keys that act on them.
+ *
+ * MCP servers stay with `/mcp`: a plugin's row shows its servers' state and opens `/mcp`'s menus for them, and an
+ * install whose server asks for a sign-in opens them itself. Mounted with `ctx.ui.custom`, so terminal only.
  */
 
 import {
@@ -10,17 +12,31 @@ import {
 	Container,
 	type Focusable,
 	Input,
+	matchesKey,
 	type SelectItem,
 	SelectList,
 	Spacer,
 	Text,
 	type TUI,
+	truncateToWidth,
+	visibleWidth,
 } from "@knightcode/tui";
 import type { KeybindingsManager } from "../../core/keybindings.ts";
 import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
-import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
+import { keyHint, rawKeyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getSelectListTheme, type Theme } from "../../modes/interactive/theme/theme.ts";
-import { describeInventory, type PluginManager, type PluginScope, type TrustConfirm } from "../../plugins/manager.ts";
+import {
+	describeInventory,
+	type ImportablePlugin,
+	type MarketplaceView,
+	type PluginManager,
+	type PluginView,
+	type TrustConfirm,
+} from "../../plugins/manager.ts";
+import type { KnownMarketplace } from "../../plugins/known.ts";
+import { pluginServerName } from "../../plugins/render.ts";
+import type { McpServerSummary } from "../mcp/control.ts";
+import { McpManagerView, type McpUi } from "../mcp/ui.ts";
 
 export interface PluginMenu {
 	title: string;
@@ -33,14 +49,81 @@ export interface PluginMenu {
 	cancelLabel: string;
 }
 
+export type PluginsTab = "plugins" | "marketplace";
+
+export interface Badge {
+	text: string;
+	tone: "success" | "warning" | "error" | "muted" | "accent";
+}
+
+export interface BrowseRow {
+	/** Names the row across rebuilds and in actions. */
+	key: string;
+	label: string;
+	/** Dim text after the label: a version, a marketplace. */
+	right?: string;
+	/** One dim line under the label. */
+	description?: string;
+	/** Shown under the row when enter opens it. */
+	details?: string[];
+	badge?: Badge;
+	dimmed?: boolean;
+	/** What each key does here, as `enter`, `space` or a letter, to its hint. */
+	actions: Record<string, string>;
+}
+
+export interface BrowseGroup {
+	key: string;
+	label: string;
+	right?: string;
+	badge?: Badge;
+	/** Keys on the group's own line; enter expands or collapses it otherwise. */
+	actions?: Record<string, string>;
+	rows: BrowseRow[];
+}
+
+export interface BrowseTab {
+	id: PluginsTab;
+	label: string;
+	groups: BrowseGroup[];
+	/** Keys that act on the tab wherever the selection is. */
+	actions: Record<string, string>;
+	/** Shown when the tab has nothing. */
+	empty: string;
+}
+
+export interface BrowseAction {
+	tab: PluginsTab;
+	/** `enter`, `space`, or a letter. */
+	key: string;
+	/** The selected row or group. */
+	target?: string;
+}
+
+export interface BrowseOptions {
+	/** Rebuilds the tabs on every change, keeping the tab, search and selection. */
+	subscribe?: (listener: () => void) => () => void;
+	/** Switches to a tab and selects a row or group, once. */
+	focus?: { tab: PluginsTab; key?: string };
+	/** What the last action did. */
+	notice?: { text: string; error?: boolean };
+}
+
 export interface PluginsUi {
+	/** Shows the tabs until a key acts; resolves to that action, or undefined when the user leaves. */
+	browse(build: () => BrowseTab[], options?: BrowseOptions): Promise<BrowseAction | undefined>;
 	/** Resolves to the chosen item's value, or undefined when cancelled. */
 	menu(menu: PluginMenu): Promise<string | undefined>;
+	/** Asks for one line of text; undefined when cancelled or empty. */
+	input(title: string, placeholder: string): Promise<string | undefined>;
 	/** Shows a message while an operation runs. */
 	status(title: string, message: string): void;
+	/** `/mcp`'s screen, shown in place of this one until the next call. */
+	mcpUi(): McpUi;
 }
 
 const MAX_VISIBLE_ITEMS = 12;
+const MAX_VISIBLE_ROWS = 10;
 const LIST_KEYS = [
 	"tui.select.up",
 	"tui.select.down",
@@ -50,14 +133,39 @@ const LIST_KEYS = [
 	"tui.select.cancel",
 ] as const;
 
+type Item =
+	| { kind: "group"; group: BrowseGroup; count: number; collapsed: boolean }
+	| { kind: "row"; row: BrowseRow; group: BrowseGroup };
+
+const itemKey = (item: Item) => (item.kind === "row" ? item.row.key : item.group.key);
+
+/** Lines drawn at render time, for the list whose layout depends on the width. */
+class Lines implements Component {
+	private readonly draw: (width: number) => string[];
+	constructor(draw: (width: number) => string[]) {
+		this.draw = draw;
+	}
+	render(width: number): string[] {
+		return this.draw(width);
+	}
+	invalidate(): void {}
+}
+
 export class PluginsView implements PluginsUi, Component, Focusable {
 	private readonly tui: TUI;
 	private readonly theme: Theme;
 	private readonly keybindings: KeybindingsManager;
-	private content: Container;
+	private content: Component;
 	private inputHandler: ((data: string) => void) | undefined;
-	private search: Input | undefined;
+	private inputTarget: Focusable | undefined;
 	private _focused = false;
+	// The list's state, kept between screens so the user comes back where they left.
+	private tab: PluginsTab = "plugins";
+	private readonly selected = new Map<PluginsTab, string>();
+	private readonly collapsed = new Set<string>();
+	private readonly opened = new Set<string>();
+	private readonly search = new Input();
+	private searching = false;
 
 	constructor(tui: TUI, theme: Theme, keybindings: KeybindingsManager) {
 		this.tui = tui;
@@ -72,7 +180,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 
 	set focused(value: boolean) {
 		this._focused = value;
-		if (this.search) this.search.focused = value;
+		if (this.inputTarget) this.inputTarget.focused = value;
 	}
 
 	private frame(title: string, body: Component[], footer?: string): Container {
@@ -88,12 +196,12 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		return container;
 	}
 
-	private show(content: Container, inputHandler?: (data: string) => void, search?: Input): void {
-		if (this.search) this.search.focused = false;
+	private show(content: Component, inputHandler?: (data: string) => void, inputTarget?: Focusable): void {
+		if (this.inputTarget) this.inputTarget.focused = false;
 		this.content = content;
 		this.inputHandler = inputHandler;
-		this.search = search;
-		if (search) search.focused = this._focused;
+		this.inputTarget = inputTarget;
+		if (inputTarget) inputTarget.focused = this._focused;
 		this.tui.requestRender();
 	}
 
@@ -141,8 +249,268 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		});
 	}
 
+	input(title: string, placeholder: string): Promise<string | undefined> {
+		return new Promise((resolve) => {
+			const field = new Input();
+			const footer = `${keyHint("tui.select.confirm", "confirm")} • ${keyHint("tui.select.cancel", "cancel")}`;
+			this.show(
+				this.frame(title, [new Text(this.theme.fg("muted", placeholder), 1, 0), field], footer),
+				(data) => {
+					if (this.keybindings.matches(data, "tui.select.confirm")) resolve(field.getValue().trim() || undefined);
+					else if (this.keybindings.matches(data, "tui.select.cancel")) resolve(undefined);
+					else {
+						field.handleInput(data);
+						this.tui.requestRender();
+					}
+				},
+				field,
+			);
+		});
+	}
+
 	status(title: string, message: string): void {
 		this.show(this.frame(title, [new Text(this.theme.fg("muted", message), 1, 1)]));
+	}
+
+	mcpUi(): McpUi {
+		const view = new McpManagerView(this.tui, this.theme, this.keybindings);
+		this.show(view, (data) => view.handleInput(data), view);
+		return view;
+	}
+
+	browse(build: () => BrowseTab[], options: BrowseOptions = {}): Promise<BrowseAction | undefined> {
+		return new Promise((resolve) => {
+			let tabs = build();
+			const { focus } = options;
+			if (focus) {
+				this.tab = focus.tab;
+				if (focus.key) {
+					this.selected.set(focus.tab, focus.key);
+					const owner = tabs
+						.find((tab) => tab.id === focus.tab)
+						?.groups.find((group) => group.rows.some((row) => row.key === focus.key));
+					if (owner) this.collapsed.delete(owner.key);
+				}
+			}
+			let unsubscribe: (() => void) | undefined;
+			const render = () => {
+				this.show(
+					this.browseScreen(tabs, options.notice),
+					(data) => {
+						const action = this.browseKey(tabs, data);
+						if (action === undefined) {
+							render();
+							return;
+						}
+						unsubscribe?.();
+						resolve(action === "close" ? undefined : action);
+					},
+					this.searching ? this.search : undefined,
+				);
+			};
+			unsubscribe = options.subscribe?.(() => {
+				tabs = build();
+				render();
+			});
+			render();
+		});
+	}
+
+	/** The visible groups and rows of `tab`: a search shows every matching row and opens every group. */
+	private items(tab: BrowseTab): Item[] {
+		const query = this.search.getValue().trim().toLowerCase();
+		const hit = (text: string) => text.toLowerCase().includes(query);
+		return tab.groups.flatMap((group): Item[] => {
+			const rows =
+				!query || hit(group.label)
+					? group.rows
+					: group.rows.filter((row) => hit(`${row.label} ${row.right ?? ""} ${row.description ?? ""}`));
+			if (query && rows.length === 0) return [];
+			const collapsed = !query && this.collapsed.has(group.key);
+			return [
+				{ kind: "group", group, count: rows.length, collapsed },
+				...(collapsed ? [] : rows.map((row) => ({ kind: "row" as const, row, group }))),
+			];
+		});
+	}
+
+	private selectedIndex(tab: BrowseTab, items: Item[]): number {
+		const index = items.findIndex((item) => itemKey(item) === this.selected.get(tab.id));
+		if (index !== -1) return index;
+		const firstRow = items.findIndex((item) => item.kind === "row");
+		return firstRow === -1 ? 0 : firstRow;
+	}
+
+	/** Handles a key on the list: the action it picks, `close`, or undefined when only the screen changed. */
+	private browseKey(tabs: BrowseTab[], data: string): BrowseAction | "close" | undefined {
+		const keys = this.keybindings;
+		const tab = tabs.find((candidate) => candidate.id === this.tab) ?? tabs[0]!;
+		const items = this.items(tab);
+		const index = this.selectedIndex(tab, items);
+		const select = (next: number) => {
+			const item = items[Math.max(0, Math.min(items.length - 1, next))];
+			if (item) this.selected.set(tab.id, itemKey(item));
+		};
+		if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
+			const step = matchesKey(data, "tab") ? 1 : tabs.length - 1;
+			this.tab = tabs[(tabs.indexOf(tab) + step) % tabs.length]!.id;
+			return undefined;
+		}
+		if (this.searching) {
+			if (keys.matches(data, "tui.select.cancel")) {
+				if (this.search.getValue()) this.search.setValue("");
+				else this.searching = false;
+			} else if (keys.matches(data, "tui.select.down") || keys.matches(data, "tui.select.confirm")) {
+				this.searching = false;
+				const firstRow = items.findIndex((item) => item.kind === "row");
+				select(firstRow === -1 ? 0 : firstRow);
+			} else if (keys.matches(data, "tui.select.up")) {
+				this.searching = false;
+			} else {
+				this.search.handleInput(data);
+			}
+			return undefined;
+		}
+		const item = items[index];
+		if (keys.matches(data, "tui.select.up")) select(index - 1);
+		else if (keys.matches(data, "tui.select.down")) select(index + 1);
+		else if (keys.matches(data, "tui.select.pageUp")) select(index - MAX_VISIBLE_ROWS);
+		else if (keys.matches(data, "tui.select.pageDown")) select(index + MAX_VISIBLE_ROWS);
+		else if (keys.matches(data, "tui.select.left") && item) {
+			this.collapsed.add(item.group.key);
+			this.selected.set(tab.id, item.group.key);
+		} else if (keys.matches(data, "tui.select.right") && item) {
+			this.collapsed.delete(item.group.key);
+		} else if (keys.matches(data, "tui.select.cancel")) {
+			return "close";
+		} else if (data === "/") {
+			this.searching = true;
+		} else {
+			const key = keys.matches(data, "tui.select.confirm")
+				? "enter"
+				: data === " "
+					? "space"
+					: /^[a-z]$/.test(data)
+						? data
+						: undefined;
+			if (!key) return undefined;
+			const own = item ? (item.kind === "row" ? item.row.actions : (item.group.actions ?? {})) : {};
+			const target = item ? { target: itemKey(item) } : {};
+			if (Object.hasOwn(own, key)) return { tab: tab.id, key, ...target };
+			if (key === "enter" && item?.kind === "group") {
+				if (item.collapsed) this.collapsed.delete(item.group.key);
+				else this.collapsed.add(item.group.key);
+			} else if (key === "enter" && item?.kind === "row") {
+				if (this.opened.has(item.row.key)) this.opened.delete(item.row.key);
+				else this.opened.add(item.row.key);
+			} else if (Object.hasOwn(tab.actions, key)) {
+				return { tab: tab.id, key, ...target };
+			}
+		}
+		return undefined;
+	}
+
+	private browseScreen(tabs: BrowseTab[], notice: BrowseOptions["notice"]): Component {
+		const { theme } = this;
+		const tab = tabs.find((candidate) => candidate.id === this.tab) ?? tabs[0]!;
+		const query = this.search.getValue().trim();
+		const bar = tabs
+			.map((candidate) => {
+				const label = query
+					? `${candidate.label} (${this.items(candidate).filter((item) => item.kind === "row").length})`
+					: candidate.label;
+				return candidate === tab ? theme.fg("accent", theme.bold(label)) : theme.fg("muted", label);
+			})
+			.join("   ");
+		const items = this.items(tab);
+		// The search covers every tab: point at the ones with matches.
+		const elsewhere = tabs.filter(
+			(candidate) => candidate !== tab && this.items(candidate).some((item) => item.kind === "row"),
+		);
+		const none = !query
+			? tab.empty
+			: elsewhere.length
+				? `Nothing matches here; ${elsewhere.map((candidate) => candidate.label).join(" and ")} ${elsewhere.length === 1 ? "has" : "have"} matches (tab).`
+				: "Nothing matches.";
+		const body: Component[] = [
+			new Text(bar, 1, 0),
+			this.searching || query ? this.search : new Text(theme.fg("dim", "/ search"), 1, 0),
+			new Spacer(1),
+			items.length ? new Lines((width) => this.listLines(tab, items, width)) : new Text(theme.fg("muted", none), 1, 0),
+		];
+		if (notice) body.push(new Spacer(1), new Text(theme.fg(notice.error ? "error" : "success", notice.text), 1, 0));
+		return this.frame("Plugins", body, this.browseFooter(tab, items));
+	}
+
+	/** One line: the label, a dim right text, and the badge at the right edge. */
+	private line(prefix: string, label: string, right: string | undefined, badge: Badge | undefined, width: number) {
+		const tag = badge ? this.theme.fg(badge.tone, `[${badge.text}]`) : "";
+		const left = `${prefix}${label}${right ? `  ${this.theme.fg("dim", right)}` : ""}`;
+		const shown = truncateToWidth(left, Math.max(1, width - (tag ? visibleWidth(tag) + 2 : 0)));
+		return tag ? `${shown}${" ".repeat(Math.max(2, width - visibleWidth(shown) - visibleWidth(tag)))}${tag}` : shown;
+	}
+
+	private listLines(tab: BrowseTab, items: Item[], width: number): string[] {
+		const { theme } = this;
+		const inner = Math.max(1, width - 2);
+		const index = this.selectedIndex(tab, items);
+		const start = Math.max(0, Math.min(index - Math.floor(MAX_VISIBLE_ROWS / 2), items.length - MAX_VISIBLE_ROWS));
+		const lines: string[] = [];
+		items.slice(start, start + MAX_VISIBLE_ROWS).forEach((item, offset) => {
+			const selected = start + offset === index;
+			const cursor = selected ? theme.fg("accent", "→ ") : "  ";
+			if (item.kind === "group") {
+				const head = theme.bold(`${item.collapsed ? "▸" : "▾"} ${item.group.label} (${item.count})`);
+				const label = selected ? theme.fg("accent", head) : head;
+				lines.push(` ${this.line(cursor, label, item.group.right, item.group.badge, inner)}`);
+				return;
+			}
+			const { row } = item;
+			const label = selected ? theme.fg("accent", row.label) : row.dimmed ? theme.fg("muted", row.label) : row.label;
+			lines.push(` ${this.line(`  ${cursor}`, label, row.right, row.badge, inner)}`);
+			const below = [
+				...(row.description ? [theme.fg("dim", row.description)] : []),
+				...(this.opened.has(row.key) ? (row.details ?? []).map((detail) => theme.fg("muted", detail)) : []),
+			];
+			for (const text of below) lines.push(` ${truncateToWidth(`      ${text}`, inner)}`);
+		});
+		if (items.length > MAX_VISIBLE_ROWS) lines.push(` ${theme.fg("muted", `  ${index + 1}/${items.length}`)}`);
+		return lines;
+	}
+
+	private browseFooter(tab: BrowseTab, items: Item[]): string {
+		if (this.searching) {
+			return [
+				rawKeyHint("type", "to filter"),
+				keyHint("tui.select.confirm", "results"),
+				rawKeyHint("tab", "next tab"),
+				keyHint("tui.select.cancel", "clear"),
+			].join(" • ");
+		}
+		const item = items[this.selectedIndex(tab, items)];
+		const own = item ? (item.kind === "row" ? item.row.actions : (item.group.actions ?? {})) : {};
+		const opens =
+			item?.kind === "group"
+				? item.collapsed
+					? "expand"
+					: "collapse"
+				: item?.kind === "row" && item.row.details?.length
+					? "details"
+					: undefined;
+		const actions = [
+			...Object.entries(own),
+			...(opens && !Object.hasOwn(own, "enter") ? [["enter", opens]] : []),
+			...Object.entries(tab.actions).filter(([key]) => !Object.hasOwn(own, key)),
+		];
+		// One hint per action: `enter/i install`.
+		const byLabel = new Map<string, string[]>();
+		for (const [key, label] of actions) byLabel.set(label!, [...(byLabel.get(label!) ?? []), key!]);
+		return [
+			...[...byLabel].map(([label, keys]) => rawKeyHint(keys.join("/"), label)),
+			rawKeyHint("/", "search"),
+			rawKeyHint("tab", "next tab"),
+			keyHint("tui.select.cancel", "close"),
+		].join(" • ");
 	}
 
 	handleInput(data: string): void {
@@ -162,186 +530,389 @@ function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-export interface ManagePluginsOptions {
-	notify: (message: string, type?: "info" | "warning" | "error") => void;
-	/** Reloads the session, which applies plugin changes. */
-	reload: () => Promise<void>;
-	/** Whether the current project is trusted, which project installs need. */
-	projectTrusted: boolean;
+function count(n: number, noun: string): string {
+	return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-/** Runs the `/plugins` menus until the user leaves; offers a reload when something changed. */
+/** The session's MCP servers, from the MCP extension. */
+export interface PluginsMcp {
+	list(): McpServerSummary[];
+	subscribe(listener: () => void): () => void;
+	/** Runs `/mcp`'s menus for `names` on `ui` until the user leaves them. */
+	manage(names: readonly string[], ui: McpUi): Promise<void>;
+}
+
+export interface ManagePluginsOptions {
+	/** Reloads the session, which loads plugin skills and commands. */
+	reload: () => Promise<void>;
+	/** The session's MCP servers; absent with `--no-mcp`. */
+	mcp?: PluginsMcp;
+	/** Starts and stops plugin MCP servers for what is installed, trusted and enabled now. Returns problems. */
+	applyMcp?: () => string[];
+	/** How long an install waits for its MCP servers to connect or ask for a sign-in. */
+	mcpWaitMs?: number;
+}
+
+const MCP_WAIT_MS = 15_000;
+
+interface Snapshot {
+	installed: PluginView[];
+	importable: ImportablePlugin[];
+	markets: MarketplaceView[];
+	available: KnownMarketplace[];
+}
+
+interface Outcome {
+	focus?: BrowseOptions["focus"];
+	notice?: BrowseOptions["notice"];
+}
+
+/** The names a plugin's MCP servers register under. */
+function serverNames(plugin: PluginView): string[] {
+	return Object.keys(plugin.inventory.mcpServers).map((server) => pluginServerName(plugin.namespace, server));
+}
+
+/** What a plugin's running servers are doing, for its row. */
+function mcpState(servers: McpServerSummary[]): { text: string; badge?: Badge } | undefined {
+	if (servers.length === 0) return undefined;
+	const any = (state: McpServerSummary["state"]) => servers.some((server) => server.state === state);
+	if (any("needs-auth")) return { text: "MCP needs sign-in", badge: { text: "needs sign-in", tone: "warning" } };
+	if (any("failed")) return { text: "MCP failed", badge: { text: "MCP failed", tone: "error" } };
+	if (any("starting") || any("connecting")) return { text: "MCP connecting…" };
+	if (servers.every((server) => server.state === "connected")) {
+		return {
+			text: `MCP connected, ${count(
+				servers.reduce((sum, server) => sum + server.tools, 0),
+				"tool",
+			)}`,
+		};
+	}
+	return { text: "MCP off" };
+}
+
+function pluginRow(plugin: PluginView, running: McpServerSummary[]): BrowseRow {
+	const { inventory } = plugin;
+	const on = plugin.enabled && plugin.trusted;
+	const names = serverNames(plugin);
+	const mine = on ? running.filter((server) => names.includes(server.name)) : [];
+	const mcp = mcpState(mine);
+	const offers = [
+		...(inventory.skills.length ? [count(inventory.skills.length, "skill")] : []),
+		...(inventory.commands.length ? [count(inventory.commands.length, "command")] : []),
+		...(names.length ? [count(names.length, "MCP server")] : []),
+	].join(", ");
+	return {
+		key: `plugin:${plugin.scopeKind}:${plugin.namespace}`,
+		label: `${plugin.namespace}${inventory.version ? ` v${inventory.version}` : ""}`,
+		...(plugin.marketplace ? { right: `@${plugin.marketplace}` } : {}),
+		description: [offers, mcp?.text, inventory.description].filter(Boolean).join(" · "),
+		details: [plugin.identity, ...describeInventory(inventory).slice(1)],
+		...(!plugin.trusted
+			? { badge: { text: "not trusted", tone: "warning" } }
+			: !plugin.enabled
+				? { badge: { text: "disabled", tone: "error" } }
+				: mcp?.badge
+					? { badge: mcp.badge }
+					: {}),
+		dimmed: !on,
+		actions: {
+			...(mine.some((server) => server.state === "needs-auth") ? { enter: "sign in" } : {}),
+			space: on ? "disable" : plugin.trusted ? "enable" : "trust and enable",
+			...(mine.length ? { m: "MCP servers" } : {}),
+			u: "update",
+			x: "uninstall",
+		},
+	};
+}
+
+function pluginsTab(data: Snapshot, running: McpServerSummary[]): BrowseTab {
+	const installed = (scope: PluginView["scopeKind"]) =>
+		data.installed.filter((plugin) => plugin.scopeKind === scope).map((plugin) => pluginRow(plugin, running));
+	const imports = (from: ImportablePlugin["from"]) =>
+		data.importable
+			.filter((plugin) => plugin.from === from)
+			.map((plugin): BrowseRow => ({
+				key: `import:${plugin.source}`,
+				label: plugin.name,
+				right: `@${plugin.source.slice(plugin.source.indexOf("@") + 1)}`,
+				description: `installed in ${plugin.from}${plugin.enabled ? "" : ", turned off there"}`,
+				badge: { text: "not imported", tone: "muted" },
+				actions: { enter: "import", i: "import" },
+			}));
+	return {
+		id: "plugins",
+		label: "Plugins",
+		groups: [
+			{ key: "user", label: "User", rows: installed("user") },
+			{ key: "project", label: "This project", rows: installed("project") },
+			{ key: "claude", label: "In Claude Code", rows: imports("Claude Code") },
+			{ key: "grok", label: "In Grok Build", rows: imports("Grok Build") },
+		].filter((group) => group.rows.length > 0),
+		actions: { a: "install from source", r: "reload session" },
+		empty: "No plugins installed. Press a to install one from a source, or tab to the Marketplace.",
+	};
+}
+
+function marketplaceTab(data: Snapshot): BrowseTab {
+	const groups: BrowseGroup[] = data.markets.map((market) => ({
+		key: `market:${market.name}`,
+		label: market.name,
+		right: market.source,
+		...(market.plugins.length === 0 && market.diagnostics.length
+			? { badge: { text: market.diagnostics[0]!, tone: "error" } }
+			: {}),
+		actions: { u: "refresh", x: "remove" },
+		rows: market.plugins.map((entry): BrowseRow => ({
+			key: `entry:${entry.name}@${market.name}`,
+			label: entry.name,
+			...(entry.version ? { right: `v${entry.version}` } : {}),
+			...(entry.description ? { description: entry.description } : {}),
+			...(entry.installed ? { badge: { text: "installed", tone: "success" } } : {}),
+			actions: entry.installed ? { d: "uninstall" } : { enter: "install", i: "install" },
+		})),
+	}));
+	if (data.available.length) {
+		groups.push({
+			key: "available",
+			label: "Not added",
+			rows: data.available.map((market) => ({
+				key: `known:${market.name}`,
+				label: market.name,
+				right: market.from,
+				description: market.source,
+				badge: { text: "not added", tone: "muted" },
+				actions: { enter: "add", i: "add" },
+			})),
+		});
+	}
+	return {
+		id: "marketplace",
+		label: "Marketplace",
+		groups,
+		actions: { a: "add marketplace", r: "refresh all" },
+		empty: "No marketplaces. Press a to add one.",
+	};
+}
+
+/** Runs `/plugins` until the user leaves; offers a reload when something changed. */
 export async function managePlugins(
 	ui: PluginsUi,
 	manager: PluginManager,
 	options: ManagePluginsOptions,
 ): Promise<void> {
+	const { mcp } = options;
 	let changed = false;
-	const confirmTrust: TrustConfirm = async (summary, inventory) =>
+	const confirm = async (title: string, details: string[], yes: string, no: string) =>
 		(await ui.menu({
-			title: `Trust ${inventory.name}?`,
-			details: ["Trusting a plugin lets it run its MCP servers and use its skills and commands:", ...summary],
+			title,
+			details,
 			items: [
-				{ value: "yes", label: "Trust and activate" },
-				{ value: "no", label: "Do not trust" },
+				{ value: "yes", label: yes },
+				{ value: "no", label: no },
 			],
 			confirmLabel: "choose",
-			cancelLabel: "do not trust",
+			cancelLabel: no.toLowerCase(),
 		})) === "yes";
-	const run = async (title: string, message: string, action: () => Promise<string>) => {
-		ui.status(title, message);
-		try {
-			options.notify(await action(), "info");
-		} catch (error) {
-			options.notify(errorText(error), "error");
-		}
-	};
-
-	while (true) {
-		const installed = manager.list();
-		let markets: ReturnType<PluginManager["listMarketplaces"]> = [];
+	const confirmTrust: TrustConfirm = (summary, inventory) =>
+		confirm(
+			`Trust ${inventory.name}?`,
+			["Trusting a plugin lets it run its MCP servers and use its skills and commands:", ...summary],
+			"Trust and activate",
+			"Do not trust",
+		);
+	const snapshot = (): Snapshot => {
+		let markets: MarketplaceView[] = [];
 		try {
 			markets = manager.listMarketplaces();
 		} catch {}
-		const importable = manager.importablePlugins();
-		const available = manager.availableMarketplaces();
-		const imports = new Set(importable.map((plugin) => plugin.source));
-		const items: SelectItem[] = [
-			...installed.map((plugin) => ({
-				value: `plugin:${plugin.scopeKind}:${plugin.namespace}`,
-				label: plugin.namespace,
-				description: `${!plugin.enabled ? "disabled" : plugin.trusted ? "enabled" : "not trusted"} · ${plugin.scopeKind}${plugin.inventory.description ? ` · ${plugin.inventory.description}` : ""}`,
-			})),
-			...importable.map((plugin) => ({
-				value: `entry:${plugin.source}`,
-				label: plugin.source,
-				description: `installed in ${plugin.from}${plugin.enabled ? "" : " (off there)"} · import`,
-			})),
-			...available.map((market) => ({
-				value: `market:${market.name}`,
-				label: market.name,
-				description: `${market.from} marketplace · not added · open to add it`,
-			})),
-			...markets.flatMap((market) =>
-				market.plugins
-					.filter((entry) => !entry.installed && !imports.has(`${entry.name}@${market.name}`))
-					.map((entry) => ({
-						value: `entry:${entry.name}@${market.name}`,
-						label: `${entry.name}@${market.name}`,
-						description: `available${entry.description ? ` · ${entry.description}` : ""}`,
-					})),
-			),
-			{ value: "reload", label: "Reload session", description: "apply plugin changes now" },
-		];
-		const choice = await ui.menu({
-			title: "Plugins",
-			items,
-			search: true,
-			confirmLabel: "open",
-			cancelLabel: "close",
+		return {
+			installed: manager.list(),
+			importable: manager.importablePlugins(),
+			markets,
+			available: manager.availableMarketplaces(),
+		};
+	};
+	/** Starts and stops plugin MCP servers now; skills and commands load on reload. */
+	const applyMcp = (): string[] => {
+		changed = true;
+		return options.applyMcp?.() ?? [];
+	};
+	const rowKey = (plugin: PluginView) => `plugin:${plugin.scopeKind}:${plugin.namespace}`;
+	const reloadHint = "Skills and commands load when you reload (r).";
+
+	/** Resolves once the servers connected, failed or asked for a sign-in, or the wait ran out. */
+	const settle = (names: string[]) =>
+		new Promise<McpServerSummary[]>((resolve) => {
+			if (!mcp) return resolve([]);
+			const mine = () => mcp.list().filter((server) => names.includes(server.name));
+			let unsubscribe = () => {};
+			const finish = () => {
+				clearTimeout(timer);
+				unsubscribe();
+				resolve(mine());
+			};
+			const timer = setTimeout(finish, options.mcpWaitMs ?? MCP_WAIT_MS);
+			const check = () => {
+				const states = mine();
+				const busy = states.some((server) => server.state === "starting" || server.state === "connecting");
+				if (states.length === names.length && !busy) finish();
+			};
+			unsubscribe = mcp.subscribe(check);
+			check();
 		});
-		if (choice === undefined) break;
-		if (choice === "reload") {
-			await options.reload();
-			return;
+
+	/** A plugin turned on: start its MCP servers, and open `/mcp` for those that ask for a sign-in. */
+	const activated = async (plugin: PluginView, done: string): Promise<Outcome> => {
+		const focus = { tab: "plugins" as const, key: rowKey(plugin) };
+		const problems = applyMcp();
+		if (problems.length) return { focus, notice: { text: [done, ...problems].join(" "), error: true } };
+		const names = serverNames(plugin);
+		if (mcp && names.length) {
+			ui.status(`Starting ${plugin.name}`, "Connecting its MCP servers…");
+			const asking = (await settle(names)).filter((server) => server.state === "needs-auth");
+			if (asking.length)
+				await mcp.manage(
+					asking.map((server) => server.name),
+					ui.mcpUi(),
+				);
 		}
-		if (choice.startsWith("market:")) {
-			const market = available.find((candidate) => `market:${candidate.name}` === choice);
-			if (!market) continue;
-			await run(`Adding ${market.name}`, "Fetching its catalog…", async () => {
-				const added = await manager.addMarketplace(market.source, market.ref ? { ref: market.ref } : {});
-				return `Added ${added.name} with ${added.plugins.length} plugins. Nothing is installed.`;
-			});
-			continue;
+		return { focus, notice: { text: `${done} ${reloadHint}` } };
+	};
+
+	const install = async (source: string): Promise<Outcome> => {
+		ui.status(`Installing ${source}`, "Fetching and checking the plugin…");
+		const { plugin, trusted } = await manager.install(source, { confirm: confirmTrust });
+		changed = true;
+		if (trusted) return activated(plugin, `Installed ${plugin.name}.`);
+		return {
+			focus: { tab: "plugins", key: rowKey(plugin) },
+			notice: { text: `Installed ${plugin.name}. It runs nothing until you trust it: space.` },
+		};
+	};
+
+	const uninstall = async (plugin: PluginView): Promise<Outcome | undefined> => {
+		if (!(await confirm(`Uninstall ${plugin.name}?`, ["Its data directory is kept."], "Uninstall", "Keep it"))) {
+			return undefined;
 		}
-		if (choice.startsWith("entry:")) {
-			const source = choice.slice("entry:".length);
-			const scope = await ui.menu({
-				title: `Install ${source}`,
-				items: [
-					{ value: "user", label: "Install for me", description: "user settings" },
-					...(options.projectTrusted
-						? [{ value: "project", label: "Install in this project", description: "project settings" }]
-						: []),
-				],
-				confirmLabel: "install",
-				cancelLabel: "back",
-			});
-			if (!scope) continue;
-			await run(`Installing ${source}`, "Fetching and checking the plugin…", async () => {
-				const { plugin, trusted } = await manager.install(source, {
-					scope: scope as PluginScope,
+		await manager.uninstall(plugin.namespace, { scope: plugin.scopeKind });
+		const problems = applyMcp();
+		return { notice: { text: [`Uninstalled ${plugin.name}.`, ...problems].join(" "), error: problems.length > 0 } };
+	};
+
+	const addMarketplace = async (source: string, ref?: string): Promise<Outcome> => {
+		ui.status(`Adding ${source}`, "Fetching its catalog…");
+		const added = await manager.addMarketplace(source, ref ? { ref } : {});
+		return {
+			focus: { tab: "marketplace", key: `market:${added.name}` },
+			notice: { text: `Added ${added.name} with ${count(added.plugins.length, "plugin")}. Nothing is installed.` },
+		};
+	};
+
+	const perform = async (
+		{ tab, key, target }: BrowseAction,
+		data: Snapshot,
+	): Promise<Outcome | "reload" | undefined> => {
+		if (tab === "plugins" && key === "r") return "reload";
+		if (tab === "plugins" && key === "a") {
+			const source = await ui.input("Install a plugin", "owner/repo, a Git URL, a folder, or name@marketplace");
+			return source ? install(source) : undefined;
+		}
+		if (tab === "marketplace" && key === "a") {
+			const source = await ui.input("Add a marketplace", "owner/repo, a Git URL, or a folder");
+			return source ? addMarketplace(source) : undefined;
+		}
+		if (tab === "marketplace" && key === "r") {
+			ui.status("Refreshing marketplaces", "Fetching their catalogs…");
+			const updated = await manager.updateMarketplaces();
+			return { notice: { text: `Refreshed ${count(updated.length, "marketplace")}.` } };
+		}
+		if (target?.startsWith("import:")) return install(target.slice("import:".length));
+		if (target?.startsWith("entry:")) {
+			const source = target.slice("entry:".length);
+			if (key !== "d") return install(source);
+			const plugin = data.installed.find((candidate) => candidate.source === source);
+			return plugin ? uninstall(plugin) : undefined;
+		}
+		const known = data.available.find((market) => `known:${market.name}` === target);
+		if (known) return addMarketplace(known.source, known.ref);
+		const market = data.markets.find((candidate) => `market:${candidate.name}` === target);
+		if (market && key === "u") {
+			ui.status(`Refreshing ${market.name}`, "Fetching its catalog…");
+			await manager.updateMarketplaces(market.name);
+			return { focus: { tab, key: `market:${market.name}` }, notice: { text: `Refreshed ${market.name}.` } };
+		}
+		if (market && key === "x") {
+			await manager.removeMarketplace(market.name, { scope: market.scope });
+			return { notice: { text: `Removed ${market.name}. Plugins installed from it stay installed.` } };
+		}
+		const plugin = data.installed.find((candidate) => rowKey(candidate) === target);
+		if (!plugin) return undefined;
+		const focus = { tab: "plugins" as const, key: rowKey(plugin) };
+		switch (key) {
+			case "space": {
+				const enable = !(plugin.enabled && plugin.trusted);
+				const result = await manager.setEnabled(plugin.namespace, enable, {
+					scope: plugin.scopeKind,
 					confirm: confirmTrust,
 				});
-				changed = true;
-				return trusted
-					? `Installed ${plugin.name}.`
-					: `Installed ${plugin.name}; it stays inactive until you trust it.`;
-			});
-			continue;
+				if (enable && !result.trusted)
+					return { focus, notice: { text: `${plugin.name} is not trusted and stays off.` } };
+				if (enable) return activated(result.plugin, `Enabled ${plugin.name}.`);
+				const problems = applyMcp();
+				return {
+					focus,
+					notice: { text: [`Disabled ${plugin.name}.`, ...problems].join(" "), error: problems.length > 0 },
+				};
+			}
+			case "enter":
+			case "m": {
+				const names = serverNames(plugin);
+				const running = mcp?.list().filter((server) => names.includes(server.name)) ?? [];
+				if (mcp && running.length)
+					await mcp.manage(
+						running.map((server) => server.name),
+						ui.mcpUi(),
+					);
+				return { focus };
+			}
+			case "u": {
+				ui.status(`Updating ${plugin.name}`, "Fetching its source…");
+				const result = await manager.update(plugin.namespace, { scope: plugin.scopeKind });
+				if (result.changed) applyMcp();
+				return {
+					focus,
+					notice: { text: result.changed ? `Updated ${plugin.name}. ${reloadHint}` : `${plugin.name} is up to date.` },
+				};
+			}
+			case "x":
+				return uninstall(plugin);
 		}
-		const [, scopeKind, name] = choice.split(":") as [string, PluginScope, string];
-		const plugin = installed.find((candidate) => candidate.scopeKind === scopeKind && candidate.namespace === name);
-		if (!plugin) continue;
-		const action = await ui.menu({
-			title: plugin.name,
-			details: [`${plugin.scopeKind} · ${plugin.source} · ${plugin.commit.slice(0, 12)}`],
-			items: [
-				{ value: "details", label: "Details", description: "what it offers and runs" },
-				...(!plugin.enabled || !plugin.trusted
-					? [{ value: "enable", label: plugin.trusted ? "Enable" : "Trust and enable" }]
-					: [{ value: "disable", label: "Disable" }]),
-				{ value: "update", label: "Update", description: "fetch its source again" },
-				{ value: "uninstall", label: "Uninstall" },
-			],
-			confirmLabel: "choose",
-			cancelLabel: "back",
+		return undefined;
+	};
+
+	let outcome: Outcome = {};
+	for (;;) {
+		const data = snapshot();
+		const action = await ui.browse(() => [pluginsTab(data, mcp?.list() ?? []), marketplaceTab(data)], {
+			...(mcp ? { subscribe: (listener: () => void) => mcp.subscribe(listener) } : {}),
+			...outcome,
 		});
-		if (action === "details") {
-			await ui.menu({
-				title: plugin.name,
-				details: [plugin.identity, ...describeInventory(plugin.inventory)],
-				items: [{ value: "back", label: "Back" }],
-				confirmLabel: "back",
-				cancelLabel: "back",
-			});
-		} else if (action === "enable" || action === "disable") {
-			const enabled = action === "enable";
-			await run(`${enabled ? "Enabling" : "Disabling"} ${plugin.name}`, "Saving…", async () => {
-				const result = await manager.setEnabled(plugin.namespace, enabled, { scope: scopeKind, confirm: confirmTrust });
-				if (enabled && !result.trusted) return `${plugin.name} is not trusted and stays inactive.`;
-				changed = true;
-				return `${enabled ? "Enabled" : "Disabled"} ${plugin.name}.`;
-			});
-		} else if (action === "update") {
-			await run(`Updating ${plugin.name}`, "Fetching its source…", async () => {
-				const result = await manager.update(plugin.namespace, { scope: scopeKind });
-				if (result.changed) changed = true;
-				return result.changed ? `Updated ${plugin.name}.` : `${plugin.name} is already up to date.`;
-			});
-		} else if (action === "uninstall") {
-			const sure = await ui.menu({
-				title: `Uninstall ${plugin.name}?`,
-				details: ["Its data directory is kept."],
-				items: [
-					{ value: "yes", label: "Uninstall" },
-					{ value: "no", label: "Keep it" },
-				],
-				confirmLabel: "choose",
-				cancelLabel: "keep it",
-			});
-			if (sure !== "yes") continue;
-			await run(`Uninstalling ${plugin.name}`, "Removing…", async () => {
-				await manager.uninstall(plugin.namespace, { scope: scopeKind });
-				changed = true;
-				return `Uninstalled ${plugin.name}.`;
-			});
+		if (!action) break;
+		try {
+			const result = await perform(action, data);
+			if (result === "reload") {
+				await options.reload();
+				return;
+			}
+			outcome = result ?? {};
+		} catch (error) {
+			outcome = { notice: { text: errorText(error), error: true } };
 		}
 	}
 	if (!changed) return;
 	const reload = await ui.menu({
 		title: "Apply plugin changes?",
-		details: ["Changes apply to new and reloaded sessions."],
+		details: ["Skills and commands of plugins you changed load in new and reloaded sessions."],
 		items: [
 			{ value: "reload", label: "Reload this session now" },
 			{ value: "later", label: "Later" },

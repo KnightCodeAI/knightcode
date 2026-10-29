@@ -22,7 +22,16 @@ knightcode plugin enable review-tools --trust
 
 Start KnightCode, or run `/reload` in a running session. The plugin's commands appear as `/<plugin>:<command>`, for example `/review-tools:review src/app.ts`.
 
-Use `/plugins` in an interactive session to browse installed plugins, the plugins Claude Code and Grok Build have, and marketplace catalogs; to add marketplaces; to trust, install, enable, disable, update, and uninstall plugins; and to reload. The desktop app has the same controls under **Settings › Plugins**.
+In an interactive session, `/plugins` opens two tabs that one search covers (`/` to search, `tab` to switch):
+
+- **Plugins**: the installed plugins, and the ones Claude Code and Grok Build have to import. `space` turns a plugin on or off (asking for trust first), `u` updates, `x` uninstalls, `enter` shows what it offers, `a` installs from a source, and `r` reloads the session.
+- **Marketplace**: the added catalogs and the marketplaces not added yet. `enter` or `i` installs an entry or adds a marketplace, `d` uninstalls, `u` and `x` refresh and remove a marketplace, and `a` adds one from a source.
+
+Each row shows its state, such as `not trusted`, `disabled`, `installed`, or `needs sign-in`, and the footer lists the keys that act on it.
+
+A plugin's MCP servers start as soon as it is installed or turned on, without a reload. When one asks for a sign-in, `/plugins` opens [`/mcp`](mcp.md)'s menu for it, where you sign in in the browser. Later, `m` on the plugin opens the same menus to sign in or out, reconnect, or turn its servers off. Skills and commands load when you reload.
+
+The desktop app has the plugin controls under **Settings › Plugins**.
 
 ## Marketplaces
 

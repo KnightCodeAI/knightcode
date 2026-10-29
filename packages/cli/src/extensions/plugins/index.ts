@@ -2,17 +2,18 @@
  * Claude Code and Grok Build plugins in a session: their skills (through `resources_discover`) and their commands
  * and skills as `/<plugin>:<name>` commands. What is active is read from the plugin manager at session start and on
  * `/reload`; the files were rendered when the plugin was installed, so nothing is rewritten here. MCP servers are
- * registered by the `plugin-mcp` extension (./mcp.ts), so `--no-mcp` can leave them out.
+ * registered by the `plugin-mcp` extension (./mcp.ts), so `--no-mcp` can leave them out; `/plugins` asks it to start
+ * and stop them as plugins change, and leaves signing in to them to `/mcp`'s menus.
  */
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getAgentDir } from "../../config.ts";
 import type { ExtensionFactory } from "../../core/extensions/types.ts";
-import { ProjectTrustStore } from "../../core/trust-manager.ts";
 import { substitutePluginArguments } from "../../plugins/arguments.ts";
 import { type ActivePlugin, PluginManager } from "../../plugins/manager.ts";
 import { stripFrontmatter } from "../../utils/frontmatter.ts";
+import { getMcpControl } from "../mcp/control.ts";
+import { PLUGINS_CHANGED_CHANNEL } from "./mcp.ts";
 import { managePlugins, PluginsView } from "./ui.ts";
 
 export interface PluginCommand {
@@ -98,17 +99,31 @@ export function createPluginsExtension(options: { agentDir?: string } = {}): Ext
 					return;
 				}
 				const manager = new PluginManager({ agentDir: options.agentDir, cwd: ctx.cwd });
-				const projectTrusted = new ProjectTrustStore(options.agentDir ?? getAgentDir()).get(ctx.cwd) === true;
+				const control = getMcpControl(knightcode.events);
 				let reload = false;
 				await ctx.ui.custom<void>((tui, theme, keybindings, done) => {
 					const view = new PluginsView(tui, theme, keybindings);
 					void managePlugins(view, manager, {
-						notify: (message, type) => ctx.ui.notify(message, type),
 						reload: async () => {
 							reload = true;
 						},
-						projectTrusted,
-					}).finally(() => done());
+						...(control
+							? {
+									mcp: {
+										list: () => control.list(),
+										subscribe: (listener) => control.subscribe(listener),
+										manage: (names, ui) => control.manage(names, ui, ctx),
+									},
+								}
+							: {}),
+						applyMcp: () => {
+							const event = { problems: [] as string[] };
+							knightcode.events.emit(PLUGINS_CHANGED_CHANNEL, event);
+							return event.problems;
+						},
+					})
+						.catch((error: unknown) => ctx.ui.notify(error instanceof Error ? error.message : String(error), "error"))
+						.finally(() => done());
 					return view;
 				});
 				if (reload) await ctx.reload();
