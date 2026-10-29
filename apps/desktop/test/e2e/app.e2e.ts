@@ -112,6 +112,8 @@ test("a project with its own settings asks for trust before its first thread", a
 	await send(page, "say hello");
 	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
 	await expect(page.getByText(/they were not loaded/)).toHaveCount(0);
+	// The reply shows before the turn ends; quitting over a running thread asks first, and nothing would answer.
+	await expect(page.getByRole("button", { name: "Stop" })).toBeHidden();
 });
 
 test("Not now leaves a project undecided, so it loads without its own settings", async () => {
@@ -121,8 +123,8 @@ test("Not now leaves a project undecided, so it loads without its own settings",
 	expect(existsSync(join(agentDir, "trust.json"))).toBe(false);
 	await send(page, "say hello");
 	await expect(page.getByText(/they were not loaded/)).toBeVisible();
-	// Settled, so closing the app does not ask about a running thread.
 	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
+	await expect(page.getByRole("button", { name: "Stop" })).toBeHidden();
 });
 
 test("Stop interrupts a running turn", async () => {

@@ -58,8 +58,8 @@ function SetupCard({
 const later = new Set<string>();
 
 /**
- * The trust question before a project's first thread, for a project with its own extensions or settings and no saved
- * decision. The answer goes to the trust store the terminal's `/trust` uses; until trusted, threads load without them.
+ * The trust question before a project's first thread, for a project with its own extensions, skills or settings and no
+ * saved decision. The answer goes to the trust store the terminal's `/trust` uses; until trusted, threads load without them.
  */
 function TrustCard({ cwd }: { cwd: string }) {
 	const [asking, setAsking] = useState(false);
@@ -67,11 +67,11 @@ function TrustCard({ cwd }: { cwd: string }) {
 		setAsking(false);
 		if (later.has(cwd)) return;
 		let current = true;
-		// Unanswered, the project stays as it is; Settings › Configuration can still trust it.
+		// A failed read (a malformed trust.json, say) is the user's to see, as Settings shows it.
 		void client
 			.request("project/trust/read", { cwd })
 			.then((r) => current && setAsking(r.needsTrust && r.trusted === null))
-			.catch(() => {});
+			.catch((e: unknown) => current && toast(errorText(e), "error"));
 		return () => {
 			current = false;
 		};
@@ -79,7 +79,7 @@ function TrustCard({ cwd }: { cwd: string }) {
 	return asking ? (
 		<SetupCard
 			icon={<ShieldAlert size={16} />}
-			title="This project has its own extensions and settings. Trust it?"
+			title="This project has its own extensions, skills and settings. Trust it?"
 			detail="Trusted, its extensions can run code on this computer."
 			action="Trust"
 			onAction={() =>
