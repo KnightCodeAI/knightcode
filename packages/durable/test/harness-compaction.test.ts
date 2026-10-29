@@ -29,6 +29,7 @@ import {
 	type LiveState,
 	MemoryStorage,
 	ProviderDoc,
+	type SubmissionId,
 	type TaskId,
 	UsageDoc,
 } from "@knightcode/durable";
@@ -2509,6 +2510,7 @@ describe("knightcode.live version 2", () => {
 		);
 		await session.commit(async (tx) => {
 			const live = await tx.doc(LiveV1, conversationId);
+			live.run = { taskId: 9, inputs: [4] };
 			live.compactions = [{ taskId: 7, reason: "threshold", blocking: true, attempt: 2 }];
 			live.compactionFailure = { taskId: 5, reason: "manual", error: "no model" };
 		}, context);
@@ -2522,6 +2524,8 @@ describe("knightcode.live version 2", () => {
 			return (await storage.document(record!.id, "current", context))!;
 		};
 		const migrated: LiveState = {
+			// A run in flight across the upgrade counts its turns from 0.
+			run: { taskId: 9 as TaskId, inputs: [4 as SubmissionId], turns: 0 },
 			compactions: [{ taskId: 7 as TaskId<CompactionResult>, trigger: "threshold", blocking: true, attempt: 2 }],
 			compactionFailure: { taskId: 5 as TaskId<CompactionResult>, trigger: "manual", error: "no model" },
 		};
