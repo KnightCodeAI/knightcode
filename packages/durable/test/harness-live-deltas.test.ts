@@ -347,7 +347,7 @@ describe("knightcode.live deltas", () => {
 		await harness.close(context);
 	});
 
-	it("starts calls the request did not offer as done and marks a faulted tool's slot done without an entry", async () => {
+	it("starts calls the request did not offer as flagged tasks and marks a faulted tool's slot done without an entry", async () => {
 		const setup = chatSetup();
 		addTool(
 			setup.registry,
@@ -376,14 +376,13 @@ describe("knightcode.live deltas", () => {
 			end: () => {},
 		});
 		await (await root.submit({ type: "input", content: "go" }, context)).wait(context);
-		const entries = await root.entries({}, 10, undefined, context);
-		const ghostResult = entries.items.find((entry) => entry.kind === "knightcode.tool-result")!.id;
 		const handover = commits.find((ops) => ops.some((op) => op[0] === "s" && op[1][0] === "tools"))!;
+		// An unoffered call gets a task too, flagged on its slot.
 		expect(handover).toContainEqual([
 			"s",
 			["tools"],
 			[
-				{ callId: "g", name: "ghost", status: "done", entry: ghostResult },
+				{ callId: "g", name: "ghost", taskId: expect.any(Number), status: "pending", unoffered: true },
 				{ callId: "b", name: "bad", taskId: expect.any(Number), status: "pending" },
 			],
 		]);
