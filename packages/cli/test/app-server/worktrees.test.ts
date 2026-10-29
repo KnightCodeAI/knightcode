@@ -183,6 +183,20 @@ test("the worktree inherits the project's trust decision", async () => {
 	expect(warnings.filter((w) => w.source === "trust")).toEqual([]);
 });
 
+test("trust read and set at a worktree's cwd are its project's decision", async () => {
+	const s = await repoServer({ ".knightcode/settings.json": "{}" });
+	const { workspace } = await worktreeThread(s);
+	expect(await s.a.client.request("project/trust/read", { cwd: workspace.path })).toEqual({
+		trusted: null,
+		needsTrust: true,
+	});
+	await s.a.client.request("project/trust/set", { cwd: workspace.path, trusted: true });
+	expect(await s.a.client.request("project/trust/read", { cwd: s.cwd })).toMatchObject({ trusted: true });
+	// A new thread in that worktree, as Settings' "New thread" there starts one.
+	const { warnings } = await s.a.client.request("thread/start", { cwd: workspace.path });
+	expect(warnings.filter((w) => w.source === "trust")).toEqual([]);
+});
+
 test("worktrees.root moves new worktrees; fetchBeforeCreate brings an upstream commit in", async () => {
 	const s = await repoServer();
 	const root = realpathSync.native(tempDir("kc-root-"));

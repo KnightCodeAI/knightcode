@@ -22,6 +22,7 @@ function SetupCard({
 	action,
 	onAction,
 	onLater,
+	busy,
 }: {
 	icon: ReactNode;
 	title: string;
@@ -29,6 +30,7 @@ function SetupCard({
 	action: string;
 	onAction: () => void;
 	onLater?: () => void;
+	busy?: boolean;
 }) {
 	return (
 		// Narrow, the buttons wrap under the text rather than squeeze it.
@@ -42,11 +44,11 @@ function SetupCard({
 			</div>
 			<div className="ml-auto flex shrink-0 gap-2">
 				{onLater ? (
-					<Button size="lg" squircle className="px-4" onClick={onLater}>
+					<Button size="lg" squircle className="px-4" disabled={busy} onClick={onLater}>
 						Not now
 					</Button>
 				) : null}
-				<Button variant="solid" size="lg" squircle className="px-4" onClick={onAction}>
+				<Button variant="solid" size="lg" squircle className="px-4" disabled={busy} onClick={onAction}>
 					{action}
 				</Button>
 			</div>
@@ -63,8 +65,9 @@ const later = new Set<string>();
  */
 function TrustCard({ cwd }: { cwd: string }) {
 	const [asking, setAsking] = useState(false);
+	// Both answers wait for a Trust being saved: a Not now after it would hide a decision already on its way.
+	const [saving, setSaving] = useState(false);
 	useEffect(() => {
-		setAsking(false);
 		if (later.has(cwd)) return;
 		let current = true;
 		// A failed read (a malformed trust.json, say) is the user's to see, as Settings shows it.
@@ -80,14 +83,17 @@ function TrustCard({ cwd }: { cwd: string }) {
 		<SetupCard
 			icon={<ShieldAlert size={16} />}
 			title="This project has its own extensions, skills and settings. Trust it?"
-			detail="Trusted, its extensions can run code on this computer."
+			detail="Once trusted, its extensions can run code on this computer."
 			action="Trust"
-			onAction={() =>
+			busy={saving}
+			onAction={() => {
+				setSaving(true);
 				void client
 					.request("project/trust/set", { cwd, trusted: true })
 					.then(() => setAsking(false))
 					.catch((e: unknown) => toast(errorText(e), "error"))
-			}
+					.finally(() => setSaving(false));
+			}}
 			onLater={() => {
 				later.add(cwd);
 				setAsking(false);
@@ -186,7 +192,8 @@ export function Home({ cwd: requested }: { cwd?: string }) {
 							onAction={() => void addProject().then((path) => path && showNew(path))}
 						/>
 					) : null}
-					{cwd ? <TrustCard cwd={cwd} /> : null}
+					{/* Keyed: a Trust answered after the picker moves on must not reach the next project's card. */}
+					{cwd ? <TrustCard key={cwd} cwd={cwd} /> : null}
 					<HomeMark />
 					<h1 className="text-center text-xl leading-[33.6px] font-normal text-ink">
 						What should we build

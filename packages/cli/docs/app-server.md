@@ -558,7 +558,8 @@ need a trusted project; an unknown path is `invalidParams`.
 Params: `{cwd}`. Result: `{trusted, needsTrust}`. `trusted` is true, false, or
 null (undecided); `needsTrust` means project-local resources require a decision.
 This reads the server-owned [trust store](security.md#understand-project-trust),
-not a separate desktop-side preference.
+not a separate desktop-side preference. At a managed worktree's `cwd`, `trusted`
+is its project's decision, the one the worktree's threads load with.
 
 ```json
 {"id":13,"method":"project/trust/read","params":{"cwd":"/path/to/project"}}
@@ -568,7 +569,8 @@ not a separate desktop-side preference.
 
 Params: `{cwd, trusted}` with a boolean decision. Result: `{}`. Writes the
 server-owned trust store; subsequent loads and config reads use it. Already
-loaded runtimes are not silently rebuilt. A `cwd` that is not an existing
+loaded runtimes are not silently rebuilt. At a managed worktree's `cwd`, the
+decision is recorded for its project. A `cwd` that is not an existing
 directory returns `invalidParams`. Filesystem failures return `internal`.
 
 ```json

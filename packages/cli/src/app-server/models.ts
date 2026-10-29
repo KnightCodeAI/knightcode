@@ -14,8 +14,11 @@ import { projectReadable, readSettings, writeSetting } from "./config.ts";
 import { AppServerError } from "./errors.ts";
 import type { AppServerContext } from "./context.ts";
 import type { Handlers } from "./server.ts";
+import { manifestFor, worktreeSettings } from "./workspaces.ts";
 
 export function modelHandlers(ctx: AppServerContext): Handlers {
+	// A managed worktree's trust is its project's, the decision thread/start reads (§6.1).
+	const projectOf = (cwd: string) => manifestFor(worktreeSettings(ctx.agentDir, []), cwd)?.projectCwd ?? cwd;
 	return {
 		"model/list": async () => {
 			const available = await ctx.models.getAvailable();
@@ -62,7 +65,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 		"project/trust/read": async ({ cwd }) => {
 			const resolved = resolvePath(cwd);
 			return {
-				trusted: new ProjectTrustStore(ctx.agentDir).get(resolved),
+				trusted: new ProjectTrustStore(ctx.agentDir).get(projectOf(resolved)),
 				needsTrust: hasTrustRequiringProjectResources(resolved),
 			};
 		},
@@ -71,7 +74,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 			// A typo would otherwise leave a permanent trust entry for a path that is not a project.
 			const stats = await stat(resolved).catch(() => undefined);
 			if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${cwd}`);
-			new ProjectTrustStore(ctx.agentDir).set(resolved, trusted);
+			new ProjectTrustStore(ctx.agentDir).set(projectOf(resolved), trusted);
 			return {};
 		},
 	};

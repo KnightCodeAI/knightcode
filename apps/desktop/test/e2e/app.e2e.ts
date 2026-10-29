@@ -104,11 +104,11 @@ test("a prompt gets the model's reply, and a bash call runs once approved", asyn
 });
 
 test("a project with its own settings asks for trust before its first thread", async () => {
-	const { page, agentDir } = await launch({ projectSettings: true });
+	const { page, project, agentDir } = await launch({ projectSettings: true });
 	await page.getByRole("button", { name: "Trust", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Trust", exact: true })).toBeHidden();
-	// The terminal's trust store, which the terminal reads too.
-	expect(Object.values(JSON.parse(readFileSync(join(agentDir, "trust.json"), "utf8")))).toEqual([true]);
+	// The terminal's trust store, which the terminal reads too, keyed by the project's real path.
+	expect(JSON.parse(readFileSync(join(agentDir, "trust.json"), "utf8"))).toEqual({ [realpathSync(project)]: true });
 	await send(page, "say hello");
 	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
 	await expect(page.getByText(/they were not loaded/)).toHaveCount(0);
