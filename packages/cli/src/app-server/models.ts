@@ -10,15 +10,13 @@ import { stat } from "node:fs/promises";
 import { getSupportedThinkingLevels } from "@knightcode/ai";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { resolvePath } from "../utils/paths.ts";
-import { projectReadable, readSettings, writeSetting } from "./config.ts";
+import { readSettings, writeSetting } from "./config.ts";
 import { AppServerError } from "./errors.ts";
 import type { AppServerContext } from "./context.ts";
 import type { Handlers } from "./server.ts";
-import { manifestFor, worktreeSettings } from "./workspaces.ts";
+import { projectReadable, trustKey } from "./workspaces.ts";
 
 export function modelHandlers(ctx: AppServerContext): Handlers {
-	// A managed worktree's trust is its project's, the decision thread/start reads (§6.1).
-	const projectOf = (cwd: string) => manifestFor(worktreeSettings(ctx.agentDir, []), cwd)?.projectCwd ?? cwd;
 	return {
 		"model/list": async () => {
 			const available = await ctx.models.getAvailable();
@@ -48,7 +46,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 			const resolved = cwd === undefined ? undefined : resolvePath(cwd);
 			if (scope === "project") {
 				if (resolved === undefined) throw new AppServerError("invalidParams", "project writes require cwd");
-				if (new ProjectTrustStore(ctx.agentDir).get(resolved) !== true)
+				if (new ProjectTrustStore(ctx.agentDir).get(trustKey(ctx.agentDir, resolved)) !== true)
 					throw new AppServerError("invalidParams", "project is not trusted", { reason: "untrusted" });
 			}
 			const keyPath = key.split(".");
@@ -64,9 +62,11 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 		},
 		"project/trust/read": async ({ cwd }) => {
 			const resolved = resolvePath(cwd);
+			const project = trustKey(ctx.agentDir, resolved);
 			return {
-				trusted: new ProjectTrustStore(ctx.agentDir).get(projectOf(resolved)),
+				trusted: new ProjectTrustStore(ctx.agentDir).get(project),
 				needsTrust: hasTrustRequiringProjectResources(resolved),
+				project,
 			};
 		},
 		"project/trust/set": async ({ cwd, trusted }) => {
@@ -74,7 +74,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 			// A typo would otherwise leave a permanent trust entry for a path that is not a project.
 			const stats = await stat(resolved).catch(() => undefined);
 			if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${cwd}`);
-			new ProjectTrustStore(ctx.agentDir).set(projectOf(resolved), trusted);
+			new ProjectTrustStore(ctx.agentDir).set(trustKey(ctx.agentDir, resolved), trusted);
 			return {};
 		},
 	};

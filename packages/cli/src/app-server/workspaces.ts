@@ -31,6 +31,7 @@ import {
 	type Workspace,
 } from "@knightcode/app-server-protocol";
 import { CONFIG_DIR_NAME } from "../config.ts";
+import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { getShellConfig, type ShellConfig } from "../utils/shell.ts";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
@@ -241,6 +242,18 @@ export function manifestFor(settings: WorktreeSettings, cwd: string): Manifest |
 	if (segments.length < 2 || !BUCKET.test(segments[0])) return undefined;
 	const manifest = readManifest(join(root, segments[0], "worktree.json"));
 	return manifest && inside(manifest.path, path) ? manifest : undefined;
+}
+
+/** Where `cwd`'s trust decision is kept: a managed worktree's is its project's, the one its threads load with (§6.1). */
+export function trustKey(agentDir: string, cwd: string): string {
+	return manifestFor(worktreeSettings(agentDir, []), cwd)?.projectCwd ?? cwd;
+}
+
+/** Whether a project's own files are read: it has nothing that needs trust, or the user trusted it. */
+export function projectReadable(agentDir: string, cwd: string): boolean {
+	return (
+		!hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(agentDir).get(trustKey(agentDir, cwd)) === true
+	);
 }
 
 /** Every managed worktree's manifest under the root. */

@@ -120,11 +120,12 @@ test("Not now leaves a project undecided, so it loads without its own settings",
 	const { page, agentDir } = await launch({ projectSettings: true });
 	await page.getByRole("button", { name: "Not now" }).click();
 	await expect(page.getByRole("button", { name: "Not now" })).toBeHidden();
-	expect(existsSync(join(agentDir, "trust.json"))).toBe(false);
 	await send(page, "say hello");
 	await expect(page.getByText(/they were not loaded/)).toBeVisible();
 	await expect(page.getByText("Hello from the faux model.")).toBeVisible();
 	await expect(page.getByRole("button", { name: "Stop" })).toBeHidden();
+	// Checked once the thread has loaded and answered, so a decision written anywhere along the way would show.
+	expect(existsSync(join(agentDir, "trust.json"))).toBe(false);
 });
 
 test("Stop interrupts a running turn", async () => {

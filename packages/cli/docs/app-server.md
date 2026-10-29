@@ -555,11 +555,13 @@ need a trusted project; an unknown path is `invalidParams`.
 
 ### `project/trust/read`
 
-Params: `{cwd}`. Result: `{trusted, needsTrust}`. `trusted` is true, false, or
-null (undecided); `needsTrust` means project-local resources require a decision.
-This reads the server-owned [trust store](security.md#understand-project-trust),
-not a separate desktop-side preference. At a managed worktree's `cwd`, `trusted`
-is its project's decision, the one the worktree's threads load with.
+Params: `{cwd}`. Result: `{trusted, needsTrust, project}`. `trusted` is true,
+false, or null (undecided); `needsTrust` means project-local resources require a
+decision; `project` is the path the decision is kept under. This reads the
+server-owned [trust store](security.md#understand-project-trust), not a separate
+desktop-side preference. At a managed worktree's `cwd`, `trusted` is its
+project's decision, the one the worktree's threads load with and the project
+settings, MCP and resource methods check there, and `project` is that project.
 
 ```json
 {"id":13,"method":"project/trust/read","params":{"cwd":"/path/to/project"}}

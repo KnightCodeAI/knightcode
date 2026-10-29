@@ -56,7 +56,7 @@ function SetupCard({
 	);
 }
 
-/** Projects whose trust question was put off: asked again at the next launch. */
+/** Projects whose trust question was put off, by the project the decision belongs to: asked again at the next launch. */
 const later = new Set<string>();
 
 /**
@@ -64,22 +64,22 @@ const later = new Set<string>();
  * saved decision. The answer goes to the trust store the terminal's `/trust` uses; until trusted, threads load without them.
  */
 function TrustCard({ cwd }: { cwd: string }) {
-	const [asking, setAsking] = useState(false);
+	// The project asked about: a worktree's is its project, so Not now there holds for both.
+	const [asking, setAsking] = useState<string | null>(null);
 	// Both answers wait for a Trust being saved: a Not now after it would hide a decision already on its way.
 	const [saving, setSaving] = useState(false);
 	useEffect(() => {
-		if (later.has(cwd)) return;
 		let current = true;
 		// A failed read (a malformed trust.json, say) is the user's to see, as Settings shows it.
 		void client
 			.request("project/trust/read", { cwd })
-			.then((r) => current && setAsking(r.needsTrust && r.trusted === null))
+			.then((r) => current && setAsking(r.needsTrust && r.trusted === null && !later.has(r.project) ? r.project : null))
 			.catch((e: unknown) => current && toast(errorText(e), "error"));
 		return () => {
 			current = false;
 		};
 	}, [cwd]);
-	return asking ? (
+	return asking !== null ? (
 		<SetupCard
 			icon={<ShieldAlert size={16} />}
 			title="This project has its own extensions, skills and settings. Trust it?"
@@ -90,13 +90,13 @@ function TrustCard({ cwd }: { cwd: string }) {
 				setSaving(true);
 				void client
 					.request("project/trust/set", { cwd, trusted: true })
-					.then(() => setAsking(false))
+					.then(() => setAsking(null))
 					.catch((e: unknown) => toast(errorText(e), "error"))
 					.finally(() => setSaving(false));
 			}}
 			onLater={() => {
-				later.add(cwd);
-				setAsking(false);
+				later.add(asking);
+				setAsking(null);
 			}}
 		/>
 	) : null;
