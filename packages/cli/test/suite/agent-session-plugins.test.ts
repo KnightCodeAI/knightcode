@@ -5,15 +5,17 @@ import { fauxAssistantMessage } from "@knightcode/ai";
 import { type JsonRpcRequest, LATEST_PROTOCOL_VERSION } from "@knightcode/mcp";
 import { createInMemoryTransportPair } from "@knightcode/mcp/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { EventBus } from "../../src/core/event-bus.ts";
 import type { ExtensionFactory } from "../../src/core/extensions/types.ts";
 import { DefaultResourceLoader } from "../../src/core/resource-loader.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
 import { ProjectTrustStore } from "../../src/core/trust-manager.ts";
 import { builtInExtensions, MCP_BUILTIN_EXTENSIONS } from "../../src/extensions/index.ts";
 import type { McpServerEntry } from "../../src/extensions/mcp/config.ts";
+import { getMcpControl } from "../../src/extensions/mcp/control.ts";
 import { createMcpExtension } from "../../src/extensions/mcp/index.ts";
 import { createPluginsExtension } from "../../src/extensions/plugins/index.ts";
-import { createPluginMcpExtension } from "../../src/extensions/plugins/mcp.ts";
+import { createPluginMcpExtension, PLUGINS_CHANGED_CHANNEL } from "../../src/extensions/plugins/mcp.ts";
 import { PluginManager } from "../../src/plugins/manager.ts";
 import { writeTree } from "../plugins/helpers.ts";
 import { createHarness, createTestUiContext, getUserTexts, type Harness } from "./harness.ts";
@@ -198,6 +200,34 @@ describe("plugin MCP servers", () => {
 		await new PluginManager({ agentDir, cwd: agentDir }).setEnabled("demo", false, {});
 		await harness.session.reload();
 		expect(harness.session.getAllTools().some((tool) => tool.name === "mcp__plugin_demo_docs__search")).toBe(false);
+	});
+
+	it("start and stop without a reload when /plugins reports a change, and report their state", async () => {
+		const agentDir = tempDir();
+		let bus: EventBus | undefined;
+		const harness = await setup(agentDir, [
+			createMcpExtension({ loadConfig: () => ({ servers: [], errors: [] }), createTransport: () => fakeMcpServer() }),
+			createPluginMcpExtension({ agentDir }),
+			(knightcode) => {
+				bus = knightcode.events;
+			},
+		]);
+		const changed = () => {
+			const event = { problems: [] as string[] };
+			bus?.emit(PLUGINS_CHANGED_CHANNEL, event);
+			return event.problems;
+		};
+		const hasTool = () => harness.session.getAllTools().some((tool) => tool.name === "mcp__plugin_demo_docs__search");
+		await installDemo(agentDir);
+		expect(changed()).toEqual([]);
+		await vi.waitFor(() =>
+			expect(bus && getMcpControl(bus)?.list()).toEqual([{ name: "plugin_demo_docs", state: "connected", tools: 1 }]),
+		);
+		await vi.waitFor(() => expect(hasTool()).toBe(true));
+		await new PluginManager({ agentDir, cwd: agentDir }).setEnabled("demo", false, {});
+		expect(changed()).toEqual([]);
+		// The MCP extension hides a removed server's tools, as `/mcp` does when one is turned off.
+		await vi.waitFor(() => expect(bus && getMcpControl(bus)?.list()).toEqual([]));
 	});
 
 	it("are left out with --no-mcp without errors", async () => {
