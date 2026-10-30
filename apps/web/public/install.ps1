@@ -511,19 +511,17 @@ function Read-NodeNpmInstallChoice {
   return $true
 }
 
+# Resolve the agent directory the way KnightCode does, so settings.json and the
+# managed Git Bash land where KnightCode reads them.
 function Get-KnightcodeAgentDir {
+  if ($env:KNIGHTCODE_CODING_AGENT_DIR) {
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:KNIGHTCODE_CODING_AGENT_DIR)
+  }
   return Join-Path ([Environment]::GetFolderPath("UserProfile")) ".knightcode\agent"
 }
 
 function Test-KnightcodeManagedInstallEnabled {
   return $env:KNIGHTCODE_LEGACY_INSTALL -ne "1"
-}
-
-function Get-KnightcodeManagedDefaultAgentDir {
-  if ($env:KNIGHTCODE_CODING_AGENT_DIR) {
-    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:KNIGHTCODE_CODING_AGENT_DIR)
-  }
-  return Get-KnightcodeAgentDir
 }
 
 function Get-KnightcodeSettingsPath {
@@ -975,7 +973,7 @@ function Select-KnightcodeManagedInstallDir {
     return $managedRoot
   }
 
-  return Join-Path (Get-KnightcodeManagedDefaultAgentDir) "install"
+  return Join-Path (Get-KnightcodeAgentDir) "install"
 }
 
 function Get-NpmUninstallKnightcodeCommand {
@@ -1819,6 +1817,10 @@ function Write-KnightcodeNotOnPathMessage {
   }
 
   if ($knightcodeBinDir) {
+    if (-not (Test-InstallerInteractiveInput)) {
+      Write-Host "No terminal detected; add $knightcodeBinDir to your PATH, then run: knightcode"
+      return
+    }
     $answer = Read-Host "Add $knightcodeBinDir to your user PATH now? [Y/n]"
     if (-not $answer -or $answer -notmatch "^(n|no)$") {
       Add-UserPathEntry $knightcodeBinDir -Prepend
