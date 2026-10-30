@@ -13177,7 +13177,8 @@
 				"type": "object",
 				"required": [
 					"trusted",
-					"needsTrust"
+					"needsTrust",
+					"project"
 				],
 				"properties": {
 					"trusted": {
@@ -13192,6 +13193,9 @@
 					},
 					"needsTrust": {
 						"type": "boolean"
+					},
+					"project": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false

@@ -67,9 +67,17 @@ test("project trust can be read and set; trusted project keys report their origi
 	mkdirSync(join(cwd, ".knightcode"), { recursive: true });
 	writeFileSync(join(cwd, ".knightcode", "settings.json"), JSON.stringify({ theme: "light" }));
 	const a = await connect();
-	expect(await a.client.request("project/trust/read", { cwd })).toEqual({ trusted: null, needsTrust: true });
+	expect(await a.client.request("project/trust/read", { cwd })).toEqual({
+		trusted: null,
+		needsTrust: true,
+		project: cwd,
+	});
 	await a.client.request("project/trust/set", { cwd, trusted: true });
-	expect(await a.client.request("project/trust/read", { cwd })).toEqual({ trusted: true, needsTrust: true });
+	expect(await a.client.request("project/trust/read", { cwd })).toEqual({
+		trusted: true,
+		needsTrust: true,
+		project: cwd,
+	});
 	const missing = `${cwd}-missing`; // not under cwd, whose trust it would inherit
 	await expect(a.client.request("project/trust/set", { cwd: missing, trusted: true })).rejects.toMatchObject({
 		code: "invalidParams",

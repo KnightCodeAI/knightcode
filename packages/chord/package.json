@@ -12,6 +12,7 @@
     "./output": "./src/output.ts",
     "./delta": "./src/delta/index.ts",
     "./node": "./src/node.ts",
+    "./next": "./src/next/index.ts",
     "./telemetry-sqlite": "./src/telemetry-sqlite/index.ts",
     "./sqlite": "./src/sqlite/index.ts",
     "./sqlite/node": "./src/sqlite/node.ts",

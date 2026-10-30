@@ -1199,7 +1199,7 @@ export const ClientRequests = {
 	},
 	"project/trust/read": {
 		params: Obj({ cwd: Str }),
-		result: Obj({ trusted: Type.Union([Bool, Type.Null()]), needsTrust: Bool }),
+		result: Obj({ trusted: Type.Union([Bool, Type.Null()]), needsTrust: Bool, project: Str }),
 	},
 	"project/trust/set": { params: Obj({ cwd: Str, trusted: Bool }), result: Empty },
 	"account/list": {

@@ -49,7 +49,7 @@ This is an iTerm2-wide setting and can also change native trackpad scrolling. Th
 
 ## Apple Terminal
 
-KnightCode enables enhanced key reporting when available. If Terminal.app still sends plain Return for `Shift+Enter`, KnightCode uses a local macOS modifier fallback and treats it as `Shift+Enter`.
+KnightCode enables enhanced key reporting when available. If Terminal.app still sends plain Return or `ESC` + Return for `Shift+Enter`, KnightCode uses a local macOS modifier fallback and treats it as `Shift+Enter`. `ESC` + Return without Shift held remains `Alt+Enter`.
 
 The fallback works only when KnightCode runs on the same Mac as Terminal.app. It cannot inspect the local modifier state when KnightCode runs on another machine over SSH.
 
@@ -178,6 +178,8 @@ Add these bindings to Zed's `keymap.json`:
 Windows Terminal uses KnightCode's Windows and WSL shortcut defaults. See [Keybindings](keybindings.md) for the complete list.
 
 ### Forward Shift+Enter
+
+When KnightCode runs natively on Windows, it checks the local Shift key state and treats plain Return or `ESC` + Return as `Shift+Enter` while Shift is held. This fallback does not work in WSL or over SSH. If `Shift+Enter` still submits, forward it explicitly.
 
 Open Windows Terminal's `settings.json` with `Ctrl+Shift+,` or **Settings > Open JSON file**. Add this object to its `actions` array:
 

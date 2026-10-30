@@ -24,9 +24,9 @@
     "typebox": "1.3.27"
   },
   "scripts": {
-    "generate-models": "node scripts/generate-models.ts --strict",
-    "hydrate-model-data": "node scripts/generate-models.ts --strict --data-only",
-    "generate-model-catalog": "node scripts/generate-models.ts --strict --json-only --json-output ../../.artifacts/model-catalog",
+    "generate-models": "node catalog/generate.ts --strict",
+    "hydrate-model-data": "node catalog/generate.ts --strict --data-only",
+    "generate-model-catalog": "node catalog/generate.ts --strict --json-only --json-output ../../.artifacts/model-catalog",
     "check:model-data": "node scripts/check-model-data.ts",
     "test": "vitest --run"
   },

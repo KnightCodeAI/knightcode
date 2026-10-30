@@ -22,10 +22,11 @@ import {
 	updateMcpServerConfig,
 } from "../extensions/mcp/config.ts";
 import { resolvePath } from "../utils/paths.ts";
-import { projectReadable, writeSetting } from "./config.ts";
+import { writeSetting } from "./config.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import type { Handlers } from "./server.ts";
+import { projectReadable, trustKey } from "./workspaces.ts";
 
 const RESOURCE_TYPES = ["extensions", "skills", "prompts", "themes"] as const satisfies readonly ResourceType[];
 
@@ -33,7 +34,7 @@ const RESOURCE_TYPES = ["extensions", "skills", "prompts", "themes"] as const sa
 export function trustedProject(agentDir: string, cwd: string | undefined): string {
 	if (cwd === undefined) throw new AppServerError("invalidParams", "project writes require cwd");
 	const resolved = resolvePath(cwd);
-	if (new ProjectTrustStore(agentDir).get(resolved) !== true)
+	if (new ProjectTrustStore(agentDir).get(trustKey(agentDir, resolved)) !== true)
 		throw new AppServerError("invalidParams", "project is not trusted", { reason: "untrusted" });
 	return resolved;
 }
@@ -109,7 +110,8 @@ export function configureHandlers(ctx: AppServerContext): Handlers {
 		return loadMcpConfig({
 			agentDir: ctx.agentDir,
 			cwd: resolved ?? ctx.agentDir,
-			projectTrusted: resolved !== undefined && new ProjectTrustStore(ctx.agentDir).get(resolved) === true,
+			projectTrusted:
+				resolved !== undefined && new ProjectTrustStore(ctx.agentDir).get(trustKey(ctx.agentDir, resolved)) === true,
 		});
 	};
 	const mcpPath = (scope: ParamsOf<"mcp/add">["scope"], cwd: string | undefined) =>

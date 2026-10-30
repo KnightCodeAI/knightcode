@@ -1,4 +1,4 @@
-import { type Component, truncateToWidth } from "@knightcode/tui";
+import { type Component, getSelectPageIndex, truncateToWidth } from "@knightcode/tui";
 import type { KeybindingsManager } from "../../core/keybindings.ts";
 import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
 import { theme } from "../../modes/interactive/theme/theme.ts";
@@ -17,6 +17,8 @@ const MAX_VISIBLE = 10;
 
 /** Picker of user messages to undo back to, mounted through `ctx.ui.custom`. */
 export class UndoPicker implements Component {
+	// PageUp/PageDown page this list instead of scrolling the fullscreen transcript.
+	readonly capturesViewportInput = true;
 	private readonly rows: UndoRow[];
 	private readonly keybindings: KeybindingsManager;
 	private readonly done: (id: string | undefined) => void;
@@ -69,7 +71,10 @@ export class UndoPicker implements Component {
 
 	handleInput(data: string): void {
 		const last = this.rows.length - 1;
-		if (this.keybindings.matches(data, "tui.select.up")) {
+		const pageIndex = getSelectPageIndex(this.keybindings, data, this.selectedIndex, this.rows.length, MAX_VISIBLE);
+		if (pageIndex !== undefined) {
+			if (this.rows.length > 0) this.selectedIndex = pageIndex;
+		} else if (this.keybindings.matches(data, "tui.select.up")) {
 			this.selectedIndex = this.selectedIndex === 0 ? last : this.selectedIndex - 1;
 		} else if (this.keybindings.matches(data, "tui.select.down")) {
 			this.selectedIndex = this.selectedIndex === last ? 0 : this.selectedIndex + 1;

@@ -119,7 +119,7 @@ import {
 } from "../../core/session-manager.ts";
 import type { FullscreenExitOutput, TuiMode } from "../../core/settings-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
-import type { SourceInfo } from "../../core/source-info.ts";
+import { getSourcePackageKey, type SourceInfo } from "../../core/source-info.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import { withBuiltInRenderers } from "../../core/tools/renderers/index.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
@@ -141,6 +141,7 @@ import { getCwdRelativePath } from "../../utils/paths.ts";
 import { getKnightcodeUserAgent } from "../../utils/user-agent.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { loadAllHighlightLanguages } from "../../utils/syntax-highlight.ts";
+import { stripBom } from "../../utils/text.ts";
 import { ensureTool, type ToolStatus } from "../../utils/tools-manager.ts";
 import type { LatestPiRelease } from "../../utils/version-check.ts";
 import { BackgroundUpdater, type BackgroundUpdateState } from "../../utils/background-update.ts";
@@ -454,6 +455,12 @@ export interface InteractiveModeOptions {
 	terminal?: Terminal;
 }
 
+interface ExtensionChangelogUpdate {
+	name: string;
+	version: string;
+	highlights: string[];
+}
+
 export class InteractiveMode {
 	private runtimeHost: AgentSessionRuntime;
 	private renderer: TuiMainScreen | TuiAltScreen;
@@ -499,6 +506,7 @@ export class InteractiveMode {
 	private lastSigintTime = 0;
 	private lastEscapeTime = 0;
 	private changelogHighlights: string[] | undefined = undefined;
+	private extensionChangelogUpdates: ExtensionChangelogUpdate[] = [];
 	private startupNoticesShown = false;
 	private anthropicSubscriptionWarningShown = false;
 
@@ -860,7 +868,8 @@ export class InteractiveMode {
 		this.startupNoticesShown = true;
 
 		const highlights = this.changelogHighlights;
-		if (!highlights?.length) {
+		const extensionUpdates = this.extensionChangelogUpdates;
+		if (!highlights?.length && extensionUpdates.length === 0) {
 			return;
 		}
 
@@ -869,28 +878,49 @@ export class InteractiveMode {
 		}
 		const pad = this.outputPad;
 		const version = this.version;
-		if (this.settingsManager.getCollapseChangelog()) {
-			this.chatContainer.addChild(
-				new ThemedText(() => `Updated to v${version}. Use ${theme.bold("/changelog")} for what's new.`, pad, 0),
-			);
+		const collapse = this.settingsManager.getCollapseChangelog();
+		if (highlights?.length) {
+			if (collapse) {
+				this.chatContainer.addChild(
+					new ThemedText(() => `Updated to v${version}. Use ${theme.bold("/changelog")} for what's new.`, pad, 0),
+				);
+			} else {
+				// A few one-line highlights, not the full notes: those can run to hundreds of lines and push the
+				// rest of the startup screen away. `/changelog` has the full text.
+				const shown = highlights.slice(0, MAX_CHANGELOG_HIGHLIGHTS);
+				const more = highlights.length - shown.length;
+				this.chatContainer.addChild(
+					new ThemedText(() => theme.bold(theme.fg("accent", `What's new in v${version}`)), pad, 0),
+				);
+				for (const highlight of shown) this.chatContainer.addChild(new TruncatedText(`  • ${highlight}`, pad, 0));
+				this.chatContainer.addChild(
+					new ThemedText(
+						() => theme.fg("dim", more > 0 ? `  +${more} more · /changelog` : "  /changelog for the full notes"),
+						pad,
+						0,
+					),
+				);
+			}
+		}
+		if (extensionUpdates.length === 0) return;
+		if (highlights?.length && !collapse) this.chatContainer.addChild(new Spacer(1));
+		if (collapse) {
+			for (const update of extensionUpdates) {
+				this.chatContainer.addChild(new TruncatedText(`Updated ${update.name} to v${update.version}.`, pad, 0));
+			}
 			return;
 		}
-
-		// A few one-line highlights, not the full notes: those can run to hundreds of lines and push the
-		// rest of the startup screen away. `/changelog` has the full text.
-		const shown = highlights.slice(0, MAX_CHANGELOG_HIGHLIGHTS);
-		const more = highlights.length - shown.length;
-		this.chatContainer.addChild(
-			new ThemedText(() => theme.bold(theme.fg("accent", `What's new in v${version}`)), pad, 0),
-		);
-		for (const highlight of shown) this.chatContainer.addChild(new TruncatedText(`  • ${highlight}`, pad, 0));
-		this.chatContainer.addChild(
-			new ThemedText(
-				() => theme.fg("dim", more > 0 ? `  +${more} more · /changelog` : "  /changelog for the full notes"),
-				pad,
-				0,
-			),
-		);
+		// The same capped highlights per package; the package's own CHANGELOG.md has the full notes.
+		this.chatContainer.addChild(new ThemedText(() => theme.bold(theme.fg("accent", "Extension updates")), pad, 0));
+		for (const update of extensionUpdates) {
+			const shown = update.highlights.slice(0, MAX_CHANGELOG_HIGHLIGHTS);
+			const more = update.highlights.length - shown.length;
+			this.chatContainer.addChild(
+				new ThemedText(() => `  ${theme.bold(update.name)} ${theme.fg("dim", `v${update.version}`)}`, pad, 0),
+			);
+			for (const highlight of shown) this.chatContainer.addChild(new TruncatedText(`    • ${highlight}`, pad, 0));
+			if (more > 0) this.chatContainer.addChild(new ThemedText(() => theme.fg("dim", `    +${more} more`), pad, 0));
+		}
 	}
 
 	private mountInteractiveTui(tui: TuiMainScreen | TuiAltScreen, components: readonly Component[]): void {
@@ -968,22 +998,15 @@ export class InteractiveMode {
 
 		this.registerSignalHandlers();
 
-		// Load changelog (only show new entries, skip for resumed sessions)
+		// Load changelogs (only show new entries, skip for resumed sessions)
 		this.changelogHighlights = this.getChangelogForDisplay();
+		this.extensionChangelogUpdates = this.getExtensionChangelogUpdates();
 
-		if (this.session.scopedModels.length > 0 && this.shouldShowStartupDetails()) {
-			const modelList = this.session.scopedModels
-				.map((sm) => {
-					const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
-					return `${sm.model.id}${thinkingStr}`;
-				})
-				.join(", ");
-			const cycleKeys = this.keybindings.getKeys("app.model.cycleForward");
-			const cycleHint =
-				cycleKeys.length > 0
-					? theme.fg("muted", ` (${formatKeyText(cycleKeys.join("/"), { capitalize: true })} to cycle)`)
-					: "";
-			console.log(theme.fg("dim", `Model scope: ${modelList}${cycleHint}`));
+		// Fullscreen renders on the alternate screen, so text printed to stdout here would stay in the shell
+		// after exit. Fullscreen shows the notice in the header instead.
+		if (this.renderer.mode !== "fullscreen") {
+			const modelScopeNotice = this.getModelScopeNotice();
+			if (modelScopeNotice) console.log(modelScopeNotice);
 		}
 
 		// Keep one component tree and remount it when changing renderers.
@@ -1095,6 +1118,7 @@ export class InteractiveMode {
 			this.builtInHeader = new Text("", 0, 0);
 			this.headerContainer.addChild(this.builtInHeader);
 		}
+		if (this.renderer.mode === "fullscreen") this.showFullscreenModelScopeNotice();
 		this.ui.requestRender();
 
 		// Ensure fd and rg are available after mounting the TUI (downloads if missing, adds to PATH via getBinDir)
@@ -1371,6 +1395,66 @@ export class InteractiveMode {
 		return undefined;
 	}
 
+	private getExtensionChangelogUpdates(): ExtensionChangelogUpdate[] {
+		// Skip changelog for resumed/continued sessions (already have messages)
+		if (this.session.state.messages.length > 0) {
+			return [];
+		}
+
+		const seenKeys = new Set<string>();
+		const updates: ExtensionChangelogUpdate[] = [];
+		for (const { sourceInfo } of this.session.resourceLoader.getExtensions().extensions) {
+			if (sourceInfo.origin !== "package" || !sourceInfo.baseDir || !sourceInfo.changelogPath) {
+				continue;
+			}
+
+			const key = getSourcePackageKey(sourceInfo);
+			if (seenKeys.has(key)) {
+				continue;
+			}
+			seenKeys.add(key);
+
+			const pkg = this.readPackageJson(sourceInfo.baseDir);
+			if (!pkg?.version) {
+				continue;
+			}
+
+			const lastVersion = this.settingsManager.getExtensionChangelogVersion(key);
+			if (!lastVersion) {
+				// Fresh install - record the version, don't show changelog
+				this.settingsManager.setExtensionChangelogVersion(key, pkg.version);
+				continue;
+			}
+
+			const newEntries = getNewEntries(parseChangelog(sourceInfo.changelogPath), lastVersion);
+			if (newEntries.length > 0) {
+				this.settingsManager.setExtensionChangelogVersion(key, pkg.version);
+				updates.push({
+					name: pkg.name || sourceInfo.source,
+					version: pkg.version,
+					highlights: getChangelogHighlights(newEntries),
+				});
+			}
+		}
+
+		return updates;
+	}
+
+	private readPackageJson(packageRoot: string): { name?: string; version?: string } | undefined {
+		try {
+			const pkg = JSON.parse(stripBom(fs.readFileSync(path.join(packageRoot, "package.json"), "utf-8"))) as {
+				name?: unknown;
+				version?: unknown;
+			};
+			return {
+				name: typeof pkg.name === "string" ? pkg.name : undefined,
+				version: typeof pkg.version === "string" ? pkg.version : undefined,
+			};
+		} catch {
+			return undefined;
+		}
+	}
+
 	private reportInstallTelemetry(version: string): void {
 		if (process.env.KNIGHTCODE_OFFLINE) {
 			return;
@@ -1440,6 +1524,28 @@ export class InteractiveMode {
 	}
 
 	/** Startup details (model scope, loaded resources). Hidden by quietStartup: true or "header". */
+	private getModelScopeNotice(): string | undefined {
+		if (this.session.scopedModels.length === 0 || !this.shouldShowStartupDetails()) return undefined;
+		const modelList = this.session.scopedModels
+			.map((sm) => {
+				const thinkingStr = sm.thinkingLevel ? `:${sm.thinkingLevel}` : "";
+				return `${sm.model.id}${thinkingStr}`;
+			})
+			.join(", ");
+		const cycleKeys = this.keybindings.getKeys("app.model.cycleForward");
+		const cycleHint =
+			cycleKeys.length > 0
+				? theme.fg("muted", ` (${formatKeyText(cycleKeys.join("/"), { capitalize: true })} to cycle)`)
+				: "";
+		return theme.fg("dim", `Model scope: ${modelList}${cycleHint}`);
+	}
+
+	private showFullscreenModelScopeNotice(): void {
+		if (!this.getModelScopeNotice()) return;
+		this.headerContainer.addChild(new ThemedText(() => this.getModelScopeNotice() ?? "", 1, 0));
+		this.headerContainer.addChild(new Spacer(1));
+	}
+
 	private shouldShowStartupDetails(): boolean {
 		return this.options.verbose === true || this.settingsManager.getQuietStartup() === false;
 	}

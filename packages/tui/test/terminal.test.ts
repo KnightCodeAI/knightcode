@@ -36,6 +36,13 @@ describe("normalizeNativeShiftEnterInput", () => {
 		assert.equal(normalizeNativeShiftEnterInput("\r", true, true), "\x1b[13;2u");
 	});
 
+	it("rewrites ESC+CR to CSI-u Shift+Enter when Shift is pressed", () => {
+		// Some Apple Terminal setups send ESC+CR for Shift+Enter; with Shift held it must not become Alt+Enter.
+		assert.equal(normalizeNativeShiftEnterInput("\x1b\r", true, true), "\x1b[13;2u");
+		assert.equal(normalizeNativeShiftEnterInput("\x1b\r", true, false), "\x1b\r");
+		assert.equal(normalizeNativeShiftEnterInput("\x1b\r", false, true), "\x1b\r");
+	});
+
 	it("leaves Return unchanged when native Shift detection is disabled", () => {
 		assert.equal(normalizeNativeShiftEnterInput("\r", false, true), "\r");
 	});

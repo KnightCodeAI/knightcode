@@ -2,6 +2,7 @@ import {
 	type Component,
 	dispatchMouseEvent,
 	getKeybindings,
+	getSelectPageIndex,
 	matchesKey,
 	type TUI,
 	truncateToWidth,
@@ -234,6 +235,11 @@ export class BackgroundTasksComponent implements Component {
 	/** Set when the dialog opened on a command's details; going back then closes it if nothing else runs. */
 	private skippedList = false;
 
+	/** In the list, PageUp/PageDown page the selection instead of scrolling the fullscreen transcript. */
+	get capturesViewportInput(): boolean {
+		return this.detailId === undefined;
+	}
+
 	constructor(manager: BackgroundShellManager, tui: TUI, onClose: () => void) {
 		this.manager = manager;
 		this.tui = tui;
@@ -288,8 +294,11 @@ export class BackgroundTasksComponent implements Component {
 
 		const index = shells.findIndex((shell) => shell.id === this.selectedId);
 		const selected = shells[index];
+		const pageIndex = getSelectPageIndex(kb, data, Math.max(0, index), shells.length, this.visibleRows());
 		if (kb.matches(data, "tui.select.cancel") || matchesKey(data, "left")) {
 			this.onClose();
+		} else if (pageIndex !== undefined) {
+			this.selectedId = shells[pageIndex]?.id ?? this.selectedId;
 		} else if (kb.matches(data, "tui.select.up")) {
 			this.selectedId = shells[Math.max(0, index - 1)]?.id;
 		} else if (kb.matches(data, "tui.select.down")) {
@@ -302,6 +311,11 @@ export class BackgroundTasksComponent implements Component {
 			return;
 		}
 		this.tui.requestRender();
+	}
+
+	/** Rows the list shows at once: the pane's frame with its subtitle takes 7 rows, the "N of M" line one more. */
+	private visibleRows(): number {
+		return Math.max(3, Math.min(MAX_VISIBLE_ROWS, this.tui.terminal.rows - SCREEN_RESERVE - 8));
 	}
 
 	/** Back to the list, or closed when the dialog opened on these details and nothing else is listed. */
@@ -325,8 +339,7 @@ export class BackgroundTasksComponent implements Component {
 				0,
 				shells.findIndex((shell) => shell.id === this.selectedId),
 			);
-			// The pane's frame with its subtitle takes 7 rows, the "N of M" line one more.
-			const visible = Math.max(3, Math.min(MAX_VISIBLE_ROWS, this.tui.terminal.rows - SCREEN_RESERVE - 8));
+			const visible = this.visibleRows();
 			const start = Math.max(0, Math.min(selected - Math.floor(visible / 2), shells.length - visible));
 			const end = Math.min(start + visible, shells.length);
 			// Pane padding, the pointer, and room for the status label.

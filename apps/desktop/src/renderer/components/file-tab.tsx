@@ -19,7 +19,7 @@ import {
 } from "@pierre/diffs";
 import { Editor, type EditorFactory } from "@pierre/diffs/edit";
 import { EditProvider, FileDiff, File } from "@pierre/diffs/react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { client } from "../client.ts";
 import diffOverrides from "../diff-overrides.css?raw";
 import { basename, samePath } from "../format.ts";
@@ -38,7 +38,7 @@ import {
 } from "../store.ts";
 import { IconButton } from "./button.tsx";
 import { highlighterReady } from "./changes.tsx";
-import { FilesTree, FolderTree, joinPath, relativeTo, TreeToggle } from "./files-panel.tsx";
+import { FolderTree, joinPath, relativeTo, type TabBeside, TreeToggle } from "./files-panel.tsx";
 import {
 	ChevronDown,
 	ChevronRight,
@@ -378,6 +378,7 @@ export function FileTab({
 	used,
 	compare,
 	draft,
+	beside,
 }: {
 	threadId: string;
 	path: string;
@@ -385,13 +386,14 @@ export function FileTab({
 	used: number;
 	compare?: FileComparison;
 	draft?: FileDraft;
+	/** Tells the tree beside (FilesPanel) which file this is and its comparison. */
+	beside: (tab: TabBeside) => void;
 }) {
 	const thread = useStore((s) => s.held[threadId]?.thread);
 	const version = useStore((s) => s.diffVersion[threadId] ?? 0);
 	const themeType = useStore((s) => s.resolvedTheme) === "light" ? "light" : "dark";
 	// Appearance › Diff markers, as the Changes pane draws them.
 	const indicators = useStore((s) => selectPreferences(s).diffMarkers) === "plusMinus" ? "classic" : "bars";
-	const treeShown = useStore((s) => s.panel.fileTree !== false);
 	const [loaded, setLoaded] = useState<{ path: string; read?: Read; error?: string }>();
 	const [base, setBase] = useState<{ key: string; text?: string | null; error?: string }>();
 	const [fallback, setFallback] = useState<{ path: string; compare?: FileComparison }>();
@@ -507,6 +509,11 @@ export function FileTab({
 		};
 	}, [threadId, full, compare, version]);
 	const showable = fallback?.path === full ? fallback.compare : undefined;
+	// Before paint, so the tree never draws the file before. A tab that goes leaves the tree with no file.
+	useLayoutEffect(() => {
+		beside({ activePath: full, compare: compare ?? showable });
+		return () => beside({});
+	}, [beside, full, compare, showable]);
 
 	// The same object while the text is the same, so a reload of an unchanged file redraws nothing. Made again (from the
 	// typed text) only where a new editor is drawn: changes shown or hidden, another comparison or side.
@@ -603,7 +610,8 @@ export function FileTab({
 	);
 	return (
 		<div
-			className="flex h-full min-h-0 min-w-0 flex-col"
+			// Its header, notice and body are cells of FilesPanel's grid.
+			className="contents"
 			aria-label={basename(path)}
 			// Mod+S writes the edits now; Mod+L goes to a line. (Mod+F in the editor is its own search panel.)
 			onKeyDown={(e) => {
@@ -616,7 +624,7 @@ export function FileTab({
 				}
 			}}
 		>
-			<header className="@container/file-header relative z-20 flex shrink-0 items-center gap-1.5 p-2">
+			<header className="@container/file-header relative z-20 col-span-2 flex shrink-0 items-center gap-1.5 p-2">
 				<Breadcrumb
 					segments={segments}
 					title={full}
@@ -704,13 +712,13 @@ export function FileTab({
 				<OpenInButton path={full} line={line} project={thread?.projectCwd ?? cwd} threadId={threadId} />
 			</header>
 			{compare && shownBase?.error ? (
-				<div role="status" className="border-t border-line px-3 py-2 text-sm text-secondary">
+				<div role="status" className="col-span-2 border-t border-line px-3 py-2 text-sm text-secondary">
 					<button type="button" className="hover:text-ink" onClick={() => setRetry((r) => r + 1)}>
 						Could not load changes. Try again
 					</button>
 				</div>
 			) : null}
-			<div className="flex min-h-0 flex-1 border-t border-line">
+			<div className="col-start-1 row-start-3 flex min-h-0 min-w-0 border-t border-line">
 				<div className="relative flex min-h-0 min-w-0 flex-1">
 					{goingTo && file ? (
 						<GoToLine
@@ -768,25 +776,6 @@ export function FileTab({
 						)}
 					</div>
 				</div>
-				{treeShown && cwd ? (
-					<div className="flex w-64 shrink-0 border-l border-line">
-						<FilesTree
-							threadId={threadId}
-							cwd={cwd}
-							activePath={full}
-							compare={compare ?? showable}
-							onOpen={(next, keep, changed) =>
-								openFileTab(
-									threadId,
-									next,
-									undefined,
-									keep,
-									changed ? (compare ?? showable ?? { scope: "unstaged" }) : undefined,
-								)
-							}
-						/>
-					</div>
-				) : null}
 			</div>
 		</div>
 	);

@@ -431,7 +431,7 @@ const requestResults: Record<string, unknown> = {
 		],
 	},
 	"resource/set": {},
-	"project/trust/read": { trusted: null, needsTrust: true },
+	"project/trust/read": { trusted: null, needsTrust: true, project: "/p" },
 	"project/trust/set": {},
 	"account/list": {
 		accounts: [{ provider: "anthropic", providerName: "Anthropic", type: "oauth", isSubscription: true }],

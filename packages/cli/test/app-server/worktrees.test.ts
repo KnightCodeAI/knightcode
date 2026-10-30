@@ -183,6 +183,26 @@ test("the worktree inherits the project's trust decision", async () => {
 	expect(warnings.filter((w) => w.source === "trust")).toEqual([]);
 });
 
+test("trust read and set at a worktree's cwd are its project's decision", async () => {
+	const s = await repoServer({ ".knightcode/settings.json": '{"theme":"light"}' });
+	const { workspace } = await worktreeThread(s);
+	expect(await s.a.client.request("project/trust/read", { cwd: workspace.path })).toEqual({
+		trusted: null,
+		needsTrust: true,
+		project: s.root,
+	});
+	await s.a.client.request("project/trust/set", { cwd: workspace.path, trusted: true });
+	expect(await s.a.client.request("project/trust/read", { cwd: s.cwd })).toMatchObject({ trusted: true });
+	// A new thread in that worktree, as Settings' "New thread" there starts one.
+	const { warnings } = await s.a.client.request("thread/start", { cwd: workspace.path });
+	expect(warnings.filter((w) => w.source === "trust")).toEqual([]);
+	// Settings there reads and writes the worktree's own file under the same decision.
+	const read = await s.a.client.request("config/read", { cwd: workspace.path });
+	expect(read.origins.theme).toBe("project");
+	await s.a.client.request("config/write", { scope: "project", cwd: workspace.path, key: "theme", value: "dark" });
+	expect(readFileSync(join(workspace.path, ".knightcode", "settings.json"), "utf8")).toContain('"dark"');
+});
+
 test("worktrees.root moves new worktrees; fetchBeforeCreate brings an upstream commit in", async () => {
 	const s = await repoServer();
 	const root = realpathSync.native(tempDir("kc-root-"));

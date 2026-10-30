@@ -31,6 +31,7 @@
       "@knightcode/chord": ["./packages/chord/src/index.ts"],
       "@knightcode/chord/context": ["./packages/chord/src/context/index.ts"],
       "@knightcode/chord/delta": ["./packages/chord/src/delta/index.ts"],
+      "@knightcode/chord/next": ["./packages/chord/src/next/index.ts"],
       "@knightcode/chord/output": ["./packages/chord/src/output.ts"],
       "@knightcode/chord/telemetry-sqlite": ["./packages/chord/src/telemetry-sqlite/index.ts"],
       "@knightcode/chord/sqlite": ["./packages/chord/src/sqlite/index.ts"],
@@ -47,6 +48,6 @@
       "typebox": ["./node_modules/typebox"]
     }
   },
-  "include": ["scripts/model-catalog-protocol.ts", "scripts/model-catalog-protocol.test.ts", "packages/*/src/**/*", "packages/*/test/**/*", "packages/evals/evals/**/*"],
+  "include": ["scripts/model-catalog-protocol.ts", "scripts/model-catalog-protocol.test.ts", "packages/*/src/**/*", "packages/*/test/**/*", "packages/ai/catalog/**/*", "packages/evals/evals/**/*"],
   "exclude": ["**/dist/**", "**/node_modules/**"]
 }
