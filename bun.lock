@@ -21,7 +21,7 @@
     },
     "apps/desktop": {
       "name": "@knightcode/desktop",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@pierre/diffs": "1.5.2",
         "@pierre/trees": "1.0.0-beta.6",
@@ -176,7 +176,7 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.21.1",
+      "version": "0.23.0",
       "bin": {
         "knightcode": "./dist/bundle/cli.js",
       },
@@ -287,7 +287,7 @@
         "@knightcode/tui": "workspace:*",
         "@knightcodeai/cli": "workspace:*",
         "proper-lockfile": "4.1.2",
-        "re2js": "2.8.6",
+        "re2js": "2.8.7",
         "turndown": "7.2.0",
         "typebox": "1.3.27",
       },
@@ -2561,7 +2561,7 @@
 
     "rc": ["rc@1.2.8", "", { "dependencies": { "deep-extend": "^0.6.0", "ini": "~1.3.0", "minimist": "^1.2.0", "strip-json-comments": "~2.0.1" }, "bin": { "rc": "./cli.js" } }, "sha512-y3bGgqKj3QBdxLbLkomlohkvsA8gdAiUQlSBJnBhfn+BPxg4bc62d8TcBW15wavDfgexCgccckhcZvywyQYPOw=="],
 
-    "re2js": ["re2js@2.8.6", "", {}, "sha512-xLgQil4kIUCrAzVk9fRSkxkFNwmygLFjVxXrLc65aE1F0+Zsb8rxumFBy4XKyvgMCTL6kilDq3EZ0piE2dP/Dg=="],
+    "re2js": ["re2js@2.8.7", "", {}, "sha512-bRSL/vn3KAmlGfGNoVpcsBXLaVvl6AbuvMMWbz0m3vBj60nj+p2/biozfBUOSBP+5XTduF6mr6IO/ZVjmqqkVQ=="],
 
     "react": ["react@19.2.4", "", {}, "sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ=="],
 
