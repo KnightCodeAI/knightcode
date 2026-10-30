@@ -286,6 +286,9 @@ jobs:
       # One GitHub Release per version. Body = the CHANGELOG.md section
       # Changesets wrote.
       # Idempotent: a re-run uploads each installer file only when it is missing.
+      # --target pins a new tag to the released commit, the one v<version>
+      # points at; without it GitHub tags main's tip, which a later merge may
+      # have moved by the time this step runs.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -313,5 +316,6 @@ jobs:
           fi
           printf '%s\n' "$notes" | gh release create "$tag" \
             --title "v${version}" \
+            --target "$GITHUB_SHA" \
             --notes-file - \
             release-assets/*
