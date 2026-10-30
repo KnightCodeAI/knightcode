@@ -168,6 +168,7 @@ describe("MCP OAuth sign-in", () => {
 describe("MCP OAuth client ID metadata documents", () => {
 	const cleanups: (() => Promise<void>)[] = [];
 	const cimd: McpOAuthSettings = { clientRegistration: "cimd" };
+	const dcr: McpOAuthSettings = { clientRegistration: "dcr" };
 
 	afterEach(async () => {
 		while (cleanups.length > 0) await cleanups.pop()?.();
@@ -187,16 +188,16 @@ describe("MCP OAuth client ID metadata documents", () => {
 		return { server, store, signIn };
 	}
 
-	it("registers dynamically by default, even when the server supports documents", async () => {
+	it("registers dynamically with dcr, even when the server supports documents", async () => {
 		const { server, signIn } = await startServer({ cimd: true, issParameter: true });
-		await signIn({});
+		await signIn(dcr);
 		expect(server.registrations).toHaveLength(1);
 		expect(server.authorizations[0].get("client_id")).toBe("client-1");
 	});
 
-	it("uses the client metadata document when authorization responses name their issuer", async () => {
+	it("uses the client metadata document by default when authorization responses name their issuer", async () => {
 		const { server, store, signIn } = await startServer({ cimd: true, issParameter: true });
-		await signIn(cimd);
+		await signIn({});
 		const [authorization] = server.authorizations;
 		expect(authorization.get("client_id")).toBe("https://knightcode.dev/oauth/client.json");
 		const redirect = new URL(authorization.get("redirect_uri") ?? "");
@@ -207,10 +208,34 @@ describe("MCP OAuth client ID metadata documents", () => {
 		expect(server.tokenRequests[0].get("redirect_uri")).toBe(redirect.href);
 		// The document is not stored, so signing in again refreshes the tokens instead of discarding them.
 		expect((await store.load())?.clientInformation).toBeUndefined();
-		await signIn(cimd);
+		await signIn({});
 		expect(server.authorizations).toHaveLength(1);
 		expect(server.tokenRequests[1].get("grant_type")).toBe("refresh_token");
 		expect(server.tokenRequests[1].get("client_id")).toBe("https://knightcode.dev/oauth/client.json");
+	});
+
+	it("registers dynamically by default when the server does not support documents", async () => {
+		const { server, signIn } = await startServer({ issParameter: true });
+		await signIn({});
+		expect(server.registrations).toHaveLength(1);
+		expect(server.authorizations[0].get("client_id")).toBe("client-1");
+	});
+
+	it("registers dynamically by default with a client name", async () => {
+		const { server, signIn } = await startServer({ cimd: true, issParameter: true });
+		await signIn({ clientName: "Claude Code" });
+		expect(server.registrations).toMatchObject([{ client_name: "Claude Code" }]);
+	});
+
+	it("keeps a registered client by default", async () => {
+		const { server, store, signIn } = await startServer({ cimd: true, issParameter: true });
+		await signIn(dcr);
+		await signIn({});
+		// The registered client's tokens are refreshed instead of signing in with the document.
+		expect(server.authorizations).toHaveLength(1);
+		expect(server.tokenRequests[1].get("grant_type")).toBe("refresh_token");
+		expect(server.tokenRequests[1].get("client_id")).toBe("client-1");
+		expect((await store.load())?.clientInformation?.client_id).toBe("client-1");
 	});
 
 	it("uses a document and callback path specific to the MCP server without the iss parameter", async () => {
@@ -228,7 +253,7 @@ describe("MCP OAuth client ID metadata documents", () => {
 
 	it("replaces a registered client when switching to the document", async () => {
 		const { server, store, signIn } = await startServer({ cimd: true, issParameter: true });
-		await signIn({});
+		await signIn(dcr);
 		expect((await store.load())?.clientInformation?.client_id).toBe("client-1");
 		await signIn(cimd);
 		// The registered client's tokens are not refreshed with another client.
