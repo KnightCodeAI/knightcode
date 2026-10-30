@@ -172,6 +172,33 @@ describe("detectInstallMethod", () => {
 		);
 	});
 
+	// A wrapper that only lives under PNPM_HOME is not a global pnpm install.
+	test("does not name pnpm for unmanaged installs under PNPM_HOME", () => {
+		tempDir = mkdtempSync(join(tmpdir(), "knightcode-pnpm-home-"));
+		const packageDir = join(
+			tempDir,
+			".local",
+			"share",
+			"pnpm",
+			"global-nub",
+			"5",
+			"node_modules",
+			"@knightcodeai",
+			"cli",
+		);
+		mkdirSync(packageDir, { recursive: true });
+		process.env.KNIGHTCODE_PACKAGE_DIR = packageDir;
+		process.env.PATH = "";
+		process.argv[1] = join(packageDir, "dist", "cli.js");
+		setExecPath(join(packageDir, "dist", "cli.js"));
+
+		expect(detectInstallMethod()).toBe("pnpm");
+		expect(getSelfUpdateCommand("@knightcodeai/cli")).toBeUndefined();
+		expect(getSelfUpdateUnavailableInstruction("@knightcodeai/cli")).toBe(
+			"Update @knightcodeai/cli using the package manager, wrapper, or source checkout that provides this installation.",
+		);
+	});
+
 	test("self-updates npm installs from custom prefixes", () => {
 		const { prefix } = createNpmPrefixInstall();
 
