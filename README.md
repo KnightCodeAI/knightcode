@@ -6,10 +6,15 @@ code, and writes new files — with a token floor of roughly **1,100 tokens** pe
 request instead of the 20k+ typical of hosted agents.
 
 ```bash
-npm install -g --ignore-scripts @knightcodeai/cli
+curl -fsSL https://knightcode.dev/install.sh | sh
 export OPENROUTER_API_KEY=sk-or-...
 knightcode
 ```
+
+On Windows, install with `powershell -c "irm https://knightcode.dev/install.ps1 | iex"`.
+The installer pins all dependencies and updates KnightCode with `knightcode update`.
+Alternatively, install with npm, which does not pin transitive dependencies:
+`npm install -g --ignore-scripts @knightcodeai/cli`.
 
 There is also a desktop app for Windows, macOS and Linux. It runs the same agent and
 shares sessions and settings with the terminal: download it from

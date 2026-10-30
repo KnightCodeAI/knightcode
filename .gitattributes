@@ -5,6 +5,9 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+# Served for `irm | iex`; its here-strings become launcher files, and the
+# Git Bash launcher must not pick up CRs.
+apps/web/public/install.ps1 text eol=lf
 
 # Shell scripts should keep LF
 *.sh text eol=lf
