@@ -174,9 +174,11 @@ async function rowsStep(
  */
 function macrotask(channel: () => InstanceType<typeof MessageChannel>): Promise<void> {
 	return new Promise((resolve) => {
-		// A runtime feature check: Workers and browsers have no `setImmediate`.
-		if ("setImmediate" in globalThis) {
-			setImmediate(resolve);
+		// A runtime feature check: Workers and browsers have no `setImmediate`. Read once from the global, and called only
+		// when it is a function: a check by name (`in`) and a later lookup could disagree.
+		const immediate = (globalThis as { readonly setImmediate?: unknown }).setImmediate;
+		if (typeof immediate === "function") {
+			immediate(resolve);
 			return;
 		}
 		const { port1, port2 } = channel();
