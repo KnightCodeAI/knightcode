@@ -16,7 +16,6 @@ import {
 	type SettingsScope,
 } from "../core/settings-manager.ts";
 import { SETTINGS_DEFAULTS } from "../core/settings-defaults.ts";
-import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { resolvePath } from "../utils/paths.ts";
 
 const versionOf = (content: string | undefined) =>
@@ -61,11 +60,6 @@ function managerOver(contents: Partial<Record<SettingsScope, string>>): Settings
 	for (const [scope, content] of Object.entries(contents) as [SettingsScope, string | undefined][])
 		memory.withLock(scope, () => content);
 	return SettingsManager.fromStorage(memory);
-}
-
-/** Whether a project's own files are read: it has nothing that needs trust, or the user trusted it. */
-export function projectReadable(agentDir: string, cwd: string): boolean {
-	return !hasTrustRequiringProjectResources(cwd) || new ProjectTrustStore(agentDir).get(cwd) === true;
 }
 
 /** An untrusted project's file is not read: it reports no settings and version "none". */

@@ -6,41 +6,100 @@
  */
 
 import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
+import { client } from "../client.ts";
 import { basename } from "../format.ts";
-import { addProject, navigate, selectProjects, showNew, useStore } from "../store.ts";
+import { addProject, errorText, navigate, selectProjects, showNew, toast, useStore } from "../store.ts";
 import { Button } from "./button.tsx";
 import { Composer } from "./composer.tsx";
 import { ProjectPicker } from "./composer-pickers.tsx";
-import { FolderPlus, KnightMark, LogIn } from "./icons.tsx";
+import { FolderPlus, KnightMark, LogIn, ShieldAlert } from "./icons.tsx";
 
-/** A prompt card above the title: sign in, add a folder. */
+/** A prompt card above the title: sign in, add a folder, trust the project. `onLater` adds "Not now". */
 function SetupCard({
 	icon,
 	title,
 	detail,
 	action,
 	onAction,
+	onLater,
+	busy,
 }: {
 	icon: ReactNode;
 	title: string;
 	detail: string;
 	action: string;
 	onAction: () => void;
+	onLater?: () => void;
+	busy?: boolean;
 }) {
 	return (
-		<div className="flex w-full items-center gap-3 rounded-2xl bg-soft-alt px-4 py-3 shadow-[0_0_0_0.5px_var(--kc-border)]">
+		// Narrow, the buttons wrap under the text rather than squeeze it.
+		<div className="flex w-full flex-wrap items-center gap-3 rounded-2xl bg-soft-alt px-4 py-3 shadow-[0_0_0_0.5px_var(--kc-border)]">
 			<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-secondary">
 				{icon}
 			</span>
-			<div className="min-w-0 flex-1">
+			<div className="min-w-40 flex-1">
 				<div className="text-base text-ink">{title}</div>
 				<div className="text-sm text-tertiary">{detail}</div>
 			</div>
-			<Button variant="solid" size="lg" squircle className="px-4" onClick={onAction}>
-				{action}
-			</Button>
+			<div className="ml-auto flex shrink-0 gap-2">
+				{onLater ? (
+					<Button size="lg" squircle className="px-4" disabled={busy} onClick={onLater}>
+						Not now
+					</Button>
+				) : null}
+				<Button variant="solid" size="lg" squircle className="px-4" disabled={busy} onClick={onAction}>
+					{action}
+				</Button>
+			</div>
 		</div>
 	);
+}
+
+/** Projects whose trust question was put off, by the project the decision belongs to: asked again at the next launch. */
+const later = new Set<string>();
+
+/**
+ * The trust question before a project's first thread, for a project with its own extensions, skills or settings and no
+ * saved decision. The answer goes to the trust store the terminal's `/trust` uses; until trusted, threads load without them.
+ */
+function TrustCard({ cwd }: { cwd: string }) {
+	// The project asked about: a worktree's is its project, so Not now there holds for both.
+	const [asking, setAsking] = useState<string | null>(null);
+	// Both answers wait for a Trust being saved: a Not now after it would hide a decision already on its way.
+	const [saving, setSaving] = useState(false);
+	useEffect(() => {
+		let current = true;
+		// A failed read (a malformed trust.json, say) is the user's to see, as Settings shows it.
+		void client
+			.request("project/trust/read", { cwd })
+			.then((r) => current && setAsking(r.needsTrust && r.trusted === null && !later.has(r.project) ? r.project : null))
+			.catch((e: unknown) => current && toast(errorText(e), "error"));
+		return () => {
+			current = false;
+		};
+	}, [cwd]);
+	return asking !== null ? (
+		<SetupCard
+			icon={<ShieldAlert size={16} />}
+			title="This project has its own extensions, skills and settings. Trust it?"
+			detail="Once trusted, its extensions can run code on this computer."
+			action="Trust"
+			busy={saving}
+			onAction={() => {
+				setSaving(true);
+				void client
+					.request("project/trust/set", { cwd, trusted: true })
+					.then(() => setAsking(null))
+					.catch((e: unknown) => toast(errorText(e), "error"))
+					.finally(() => setSaving(false));
+			}}
+			onLater={() => {
+				later.add(asking);
+				setAsking(null);
+			}}
+		/>
+	) : null;
 }
 
 const loadGame = () => import("./knight-game.tsx");
@@ -133,6 +192,8 @@ export function Home({ cwd: requested }: { cwd?: string }) {
 							onAction={() => void addProject().then((path) => path && showNew(path))}
 						/>
 					) : null}
+					{/* Keyed: a Trust answered after the picker moves on must not reach the next project's card. */}
+					{cwd ? <TrustCard key={cwd} cwd={cwd} /> : null}
 					<HomeMark />
 					<h1 className="text-center text-xl leading-[33.6px] font-normal text-ink">
 						What should we build
