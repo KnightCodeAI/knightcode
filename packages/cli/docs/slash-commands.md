@@ -23,7 +23,7 @@ Extensions, prompt templates, and skills can add commands. The command menu in K
 | Command | Description |
 |---|---|
 | `/new` | Start a new session |
-| `/resume` | Switch to another saved session |
+| `/resume` | Resume another session |
 | `/name [name]` | Set the session display name, or show the current name when omitted |
 | `/session` | Show current session information and statistics |
 | `/tree` | Navigate the session tree |
@@ -31,7 +31,7 @@ Extensions, prompt templates, and skills can add commands. The command menu in K
 | `/clone` | Duplicate the current session at its current position |
 | `/undo` | Go back to an earlier user message; optionally restore the files edited after it |
 | `/compact [instructions]` | Compact the current context, optionally with custom instructions |
-| `/import <path>` | Import and resume a JSONL session |
+| `/import <path>` | Import a JSONL session, preserving its ID and working directory |
 
 ## Planning
 
