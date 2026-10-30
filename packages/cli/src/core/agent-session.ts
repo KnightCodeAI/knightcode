@@ -30,6 +30,7 @@ import {
 	type BeforeToolCallResult,
 	type PrepareNextTurnContext,
 	runToolCall,
+	type StreamFn,
 	type ThinkingLevel,
 } from "@knightcode/agent";
 import { contentText, getCurrentSystemMessage, getCurrentTools, retryDelayMs } from "@knightcode/ai";
@@ -171,6 +172,18 @@ import {
 	VIRTUAL_MODEL_STATE_ENTRY,
 	type VirtualModelStateData,
 } from "./virtual-models.ts";
+
+/**
+ * Stream functions that resolve auth through a given ModelRuntime themselves, such as the one
+ * createAgentSession installs. Summaries sent through them must not pass pre-resolved credentials:
+ * the runtime would take them as an explicit API key instead of the stored OAuth login.
+ */
+const runtimeStreamFunctions = new WeakMap<StreamFn, ModelRuntime>();
+
+/** Mark `streamFn` as resolving auth through `modelRuntime` on its own. */
+export function markRuntimeStreamFunction(streamFn: StreamFn, modelRuntime: ModelRuntime): void {
+	runtimeStreamFunctions.set(streamFn, modelRuntime);
+}
 
 // ============================================================================
 // Skill Block Parsing
@@ -685,6 +698,9 @@ export class AgentSession {
 			: { model: selectedModel, thinkingLevel: this.thinkingLevel };
 		if (this.agent.streamFunction === streamSimple) {
 			return { ...(await this._getRequiredRequestAuth(model, signal)), thinkingLevel };
+		}
+		if (runtimeStreamFunctions.get(this.agent.streamFunction) === this._modelRuntime) {
+			return { model, thinkingLevel };
 		}
 
 		try {
@@ -1747,19 +1763,23 @@ export class AgentSession {
 	 * the registered, non-hidden ones; they are declared to the model. Active tools with a
 	 * `prepareLoadout` hook can change the declared descriptions and hide declarations from
 	 * requests (see {@link _installHiddenDeclarationsProjection}).
+	 *
+	 * The active tools are a set: tools that stay active keep their current order and newly active
+	 * ones are appended, so reordering the same names does not change the prompt.
 	 */
 	private _applyToolLoadout(toolNames: string[]): AgentTool[] {
-		const names = new Set(toolNames);
+		const requested = new Set(toolNames);
 		// A tool that starts background commands in this session needs task_stop to stop them, so it is
 		// active whenever one of them is.
 		if (
-			[...names].some(
+			[...requested].some(
 				(name) => backgroundManagerOf(this._toolDefinitions.get(name)?.definition) === this.backgroundShells,
 			)
 		) {
-			names.add("task_stop");
+			requested.add("task_stop");
 		}
-		const tools = [...names].flatMap((name) => {
+		const kept = this.getActiveToolNames().filter((name) => requested.has(name));
+		const tools = [...new Set([...kept, ...requested])].flatMap((name) => {
 			const tool = this._toolRegistry.get(name);
 			return tool && this._getToolExposure(name) !== "hidden" && this._isActivatable(name) ? [tool] : [];
 		});

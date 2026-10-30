@@ -7,7 +7,7 @@ Behavioral evals for KnightCode's coding agent, built with `vitest-evals`.
 Eval definitions are flat under `evals/`:
 
 - `*.docs.eval.ts` is a documentation-lift eval. `eval:docs` runs each case twice, once `without_docs` and once `with_docs`, and reports the lift between the two.
-- Other `*.eval.ts` files are host evals. `eval:host` runs them with Vitest. They are ordinary vitest-evals suites, not paired comparisons.
+- Other `*.eval.ts` files are host evals. `eval:host` runs the smoke suite; `eval:audit` runs the documentation audit. They are ordinary vitest-evals suites, not paired comparisons.
 
 Runner code lives in `src/`:
 
@@ -19,21 +19,21 @@ Runner code lives in `src/`:
 
 ## Run evals
 
-Host evals and documentation-lift evals both need `KNIGHTCODE_PROVIDER` and `KNIGHTCODE_MODEL`.
+The host smoke eval, the on-demand documentation audit, and documentation-lift evals need `KNIGHTCODE_PROVIDER` and `KNIGHTCODE_MODEL`.
 
 ```bash
 KNIGHTCODE_PROVIDER=openrouter KNIGHTCODE_MODEL=anthropic/claude-haiku-4.5 bun run eval
 ```
 
-That runs the host evals, then the documentation comparison. Extra flags after `--` go to `eval:docs` only.
+That runs the host smoke eval, then the documentation comparison. The documentation audit stays explicit because it reads every documentation page. Extra flags after `--` go to `eval:docs` only.
 
 Authentication comes from KnightCode's normal `ModelRuntime`. The runner also loads the repository's `.env`, so a key kept there (`OPENROUTER_API_KEY`, ...) is picked up without exporting it.
 
-Host evals only:
+Documentation audit:
 
 ```bash
 KNIGHTCODE_PROVIDER=openrouter KNIGHTCODE_MODEL=anthropic/claude-haiku-4.5 \
-  bun run --filter '@knightcode/evals' eval:host -- evals/documentation-audit.eval.ts
+  bun run --filter '@knightcode/evals' eval:audit
 ```
 
 ## Run documentation comparisons

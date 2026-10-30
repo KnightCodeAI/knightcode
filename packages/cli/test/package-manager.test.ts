@@ -666,6 +666,92 @@ Content`,
 			expect(result.skills.some((r) => r.path === slashSkillPath && r.enabled)).toBe(true);
 		});
 
+		it("should expose manifest changelogPath on package resources", async () => {
+			const pkgDir = join(tempDir, "changelog-manifest-package");
+			const extensionPath = join(pkgDir, "src", "index.ts");
+			const changelogPath = join(pkgDir, "docs", "CHANGELOG.md");
+			mkdirSync(join(pkgDir, "src"), { recursive: true });
+			mkdirSync(join(pkgDir, "docs"), { recursive: true });
+			writeFileSync(extensionPath, "export default function() {}");
+			writeFileSync(changelogPath, "## [1.0.0]\n\n- Initial release");
+			writeFileSync(
+				join(pkgDir, "package.json"),
+				JSON.stringify({
+					name: "changelog-manifest-package",
+					knightcode: {
+						extensions: ["src/index.ts"],
+						changelogPath: "docs/CHANGELOG.md",
+					},
+				}),
+			);
+
+			const result = await packageManager.resolveExtensionSources([pkgDir]);
+			const extension = result.extensions.find((r) => r.path === extensionPath);
+
+			expect(extension?.metadata.changelogPath).toBe(changelogPath);
+		});
+
+		it("should expose package CHANGELOG.md by convention", async () => {
+			const pkgDir = join(tempDir, "changelog-convention-package");
+			const extensionPath = join(pkgDir, "extensions", "index.ts");
+			const changelogPath = join(pkgDir, "CHANGELOG.md");
+			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
+			writeFileSync(extensionPath, "export default function() {}");
+			writeFileSync(changelogPath, "## [1.0.0]\n\n- Initial release");
+
+			const result = await packageManager.resolveExtensionSources([pkgDir]);
+			const extension = result.extensions.find((r) => r.path === extensionPath);
+
+			expect(extension?.metadata.changelogPath).toBe(changelogPath);
+		});
+
+		it("should still auto-discover resources when the knightcode manifest only declares changelogPath", async () => {
+			const pkgDir = join(tempDir, "changelog-only-manifest-package");
+			const extensionPath = join(pkgDir, "extensions", "index.ts");
+			const changelogPath = join(pkgDir, "CHANGELOG.md");
+			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
+			writeFileSync(extensionPath, "export default function() {}");
+			writeFileSync(changelogPath, "## [1.0.0]\n\n- Initial release");
+			writeFileSync(
+				join(pkgDir, "package.json"),
+				JSON.stringify({
+					name: "changelog-only-manifest-package",
+					knightcode: {
+						changelogPath: "CHANGELOG.md",
+					},
+				}),
+			);
+
+			const result = await packageManager.resolveExtensionSources([pkgDir]);
+			const extension = result.extensions.find((r) => r.path === extensionPath);
+
+			expect(extension?.metadata.changelogPath).toBe(changelogPath);
+		});
+
+		it("should ignore manifest changelogPath outside the package root", async () => {
+			const pkgDir = join(tempDir, "unsafe-changelog-package");
+			const extensionPath = join(pkgDir, "src", "index.ts");
+			mkdirSync(join(pkgDir, "src"), { recursive: true });
+			writeFileSync(extensionPath, "export default function() {}");
+			writeFileSync(join(tempDir, "CHANGELOG.md"), "## [1.0.0]\n\n- Outside");
+			writeFileSync(join(pkgDir, "CHANGELOG.md"), "## [1.0.0]\n\n- Fallback should not be used");
+			writeFileSync(
+				join(pkgDir, "package.json"),
+				JSON.stringify({
+					name: "unsafe-changelog-package",
+					knightcode: {
+						extensions: ["src/index.ts"],
+						changelogPath: "../CHANGELOG.md",
+					},
+				}),
+			);
+
+			const result = await packageManager.resolveExtensionSources([pkgDir]);
+			const extension = result.extensions.find((r) => r.path === extensionPath);
+
+			expect(extension?.metadata.changelogPath).toBeUndefined();
+		});
+
 		it("should handle directories with auto-discovery layout", async () => {
 			const pkgDir = join(tempDir, "auto-pkg");
 			mkdirSync(join(pkgDir, "extensions"), { recursive: true });
@@ -2734,6 +2820,33 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect(updateGitSpy).toHaveBeenCalledTimes(4);
 			expect(maxConcurrentNpmUpdates).toBeGreaterThan(1);
 			expect(maxConcurrentGitUpdates).toBeGreaterThan(1);
+		});
+
+		it("should warn when an npm update leaves the installed version unchanged", async () => {
+			const stalePath = join(agentDir, "npm", "node_modules", "stale-pkg");
+			const freshPath = join(agentDir, "npm", "node_modules", "fresh-pkg");
+			mkdirSync(stalePath, { recursive: true });
+			mkdirSync(freshPath, { recursive: true });
+			writeFileSync(join(stalePath, "package.json"), JSON.stringify({ name: "stale-pkg", version: "1.0.0" }));
+			writeFileSync(join(freshPath, "package.json"), JSON.stringify({ name: "fresh-pkg", version: "1.0.0" }));
+			settingsManager.setPackages(["npm:stale-pkg", "npm:fresh-pkg"]);
+
+			vi.spyOn(packageManager as any, "runCommandCapture").mockResolvedValue('"1.0.1"');
+			vi.spyOn(packageManager as any, "runCommand").mockImplementation(async () => {
+				// Simulate npm resolving stale metadata for stale-pkg only.
+				writeFileSync(join(freshPath, "package.json"), JSON.stringify({ name: "fresh-pkg", version: "1.0.1" }));
+			});
+
+			const events: ProgressEvent[] = [];
+			packageManager.setProgressCallback((event) => events.push(event));
+
+			await packageManager.update();
+
+			const warnings = events.filter((event) => event.type === "progress");
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0].source).toBe("npm:stale-pkg");
+			expect(warnings[0].message).toContain("is still 1.0.0");
+			expect(warnings[0].message).toContain("1.0.1");
 		});
 
 		it("should suggest npm source prefixes for update lookups", async () => {
