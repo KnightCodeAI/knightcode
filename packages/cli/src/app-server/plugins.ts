@@ -6,7 +6,13 @@
 
 import type { ParamsOf, PluginInfo, PluginMarketplaceInfo } from "@knightcode/app-server-protocol";
 import { describeMcpServer, mcpEnvironmentNames } from "../plugins/mcp.ts";
-import { type MarketplaceView, PluginManager, type PluginScope, type PluginView } from "../plugins/manager.ts";
+import {
+	type ActivePlugin,
+	type MarketplaceView,
+	PluginManager,
+	type PluginScope,
+	type PluginView,
+} from "../plugins/manager.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { trustedProject } from "./configure.ts";
 import type { AppServerContext } from "./context.ts";
@@ -28,11 +34,10 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 		scope === "project" ? managerFor(trustedProject(ctx.agentDir, cwd)) : managerFor(cwd);
 	const scopeOf = (scope: Scope): PluginScope => (scope === "global" ? "user" : "project");
 
-	const info = (manager: PluginManager, cwd: string | undefined, plugin: PluginView): PluginInfo => {
-		const projectTrusted = cwd !== undefined && projectReadable(ctx.agentDir, resolvePath(cwd));
-		const active = manager
-			.loadActive(projectTrusted)
-			.plugins.some((candidate) => candidate.identity === plugin.identity && candidate.scope === plugin.scopeKind);
+	const loadActive = (manager: PluginManager, cwd: string | undefined) =>
+		manager.loadActive(cwd !== undefined && projectReadable(ctx.agentDir, resolvePath(cwd)));
+
+	const info = (plugin: PluginView, active: readonly ActivePlugin[]): PluginInfo => {
 		const { inventory } = plugin;
 		return {
 			name: plugin.name,
@@ -45,7 +50,9 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 			commit: plugin.commit,
 			enabled: plugin.enabled,
 			trusted: plugin.trusted,
-			active,
+			active: active.some(
+				(candidate) => candidate.identity === plugin.identity && candidate.scope === plugin.scopeKind,
+			),
 			...(inventory.description ? { description: inventory.description } : {}),
 			...(inventory.version ? { version: inventory.version } : {}),
 			skills: inventory.skills.map((skill) => skill.name),
@@ -63,10 +70,10 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 	return {
 		"plugin/list": async ({ cwd }) => {
 			const manager = managerFor(cwd);
-			const projectTrusted = cwd !== undefined && projectReadable(ctx.agentDir, resolvePath(cwd));
+			const { plugins: active, diagnostics } = loadActive(manager, cwd);
 			return {
-				plugins: manager.list().map((plugin) => info(manager, cwd, plugin)),
-				diagnostics: manager.loadActive(projectTrusted).diagnostics,
+				plugins: manager.list().map((plugin) => info(plugin, active)),
+				diagnostics,
 				importable: manager.importablePlugins(),
 			};
 		},
@@ -78,7 +85,7 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 				...(ref ? { ref } : {}),
 				...(path ? { path } : {}),
 			});
-			return { plugin: info(manager, cwd, plugin) };
+			return { plugin: info(plugin, loadActive(manager, cwd).plugins) };
 		},
 		"plugin/set": async ({ scope, cwd, name, enabled, trust }) => {
 			const manager = writer(scope, cwd);
@@ -87,12 +94,12 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 				scope: scopeOf(scope),
 				trust: trust === true,
 			});
-			return { plugin: info(manager, cwd, plugin) };
+			return { plugin: info(plugin, loadActive(manager, cwd).plugins) };
 		},
 		"plugin/update": async ({ scope, cwd, name }) => {
 			const manager = writer(scope, cwd);
 			const { plugin, changed } = await manager.update(name, { scope: scopeOf(scope) });
-			return { plugin: info(manager, cwd, plugin), changed };
+			return { plugin: info(plugin, loadActive(manager, cwd).plugins), changed };
 		},
 		"plugin/uninstall": async ({ scope, cwd, name }) => {
 			await writer(scope, cwd).uninstall(name, { scope: scopeOf(scope) });

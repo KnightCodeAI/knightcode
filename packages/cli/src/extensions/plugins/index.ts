@@ -64,18 +64,14 @@ export function pluginCommands(plugins: readonly ActivePlugin[]): PluginCommand[
 	]);
 }
 
-/** Every skill file of the active plugins: the exact files, never their directories. */
-export function pluginSkillPaths(plugins: readonly ActivePlugin[]): string[] {
-	return plugins.flatMap((plugin) => plugin.inventory.skills.map((skill) => join(plugin.root, skill.file)));
-}
-
 export function createPluginsExtension(options: { agentDir?: string } = {}): ExtensionFactory {
 	return (knightcode) => {
 		let skillPaths: string[] = [];
 		knightcode.on("session_start", (_event, ctx) => {
 			const manager = new PluginManager({ agentDir: options.agentDir, cwd: ctx.cwd });
 			const { plugins, diagnostics } = manager.loadActive(ctx.isProjectTrusted());
-			skillPaths = pluginSkillPaths(plugins);
+			// The exact skill files, never their directories.
+			skillPaths = plugins.flatMap((plugin) => plugin.inventory.skills.map((skill) => join(plugin.root, skill.file)));
 			for (const command of pluginCommands(plugins)) {
 				knightcode.registerCommand(command.name, {
 					description: command.description,
@@ -108,13 +104,7 @@ export function createPluginsExtension(options: { agentDir?: string } = {}): Ext
 							reload = true;
 						},
 						...(control
-							? {
-									mcp: {
-										list: () => control.list(),
-										subscribe: (listener) => control.subscribe(listener),
-										manage: (names, ui, action) => control.manage(names, ui, ctx, action),
-									},
-								}
+							? { mcp: { ...control, manage: (names, ui, action) => control.manage(names, ui, ctx, action) } }
 							: {}),
 						applyMcp: () => {
 							const event = { problems: [] as string[] };

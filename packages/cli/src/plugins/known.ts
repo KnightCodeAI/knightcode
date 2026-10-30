@@ -8,7 +8,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { isRecord } from "./marketplace.ts";
+import { isRecord } from "./manifest.ts";
 import { parseSource } from "./sources.ts";
 
 export type KnownOrigin = "Anthropic" | "xAI" | "Claude Code" | "Grok Build";

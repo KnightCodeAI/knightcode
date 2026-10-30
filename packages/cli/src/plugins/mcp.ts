@@ -2,14 +2,17 @@
  * Plugin MCP servers: what the trust prompt shows about them, and their translation into KnightCode server configs.
  */
 
-import { mcpNamespace, validateMcpServerConfig } from "../core/mcp-servers.ts";
+import { type McpServerConfig, mcpNamespace, validateMcpServerConfig } from "../core/mcp-servers.ts";
+import { isRecord } from "./manifest.ts";
 import { pluginServerName } from "./render.ts";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-const PLUGIN_TOKENS = new Set(["CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA", "GROK_PLUGIN_ROOT", "GROK_PLUGIN_DATA"]);
+/** Variables naming the plugin's own folders: filled in here, never read from the environment. */
+const PATH_TOKENS: readonly string[] = [
+	"CLAUDE_PLUGIN_ROOT",
+	"GROK_PLUGIN_ROOT",
+	"CLAUDE_PLUGIN_DATA",
+	"GROK_PLUGIN_DATA",
+];
 /** Grok fields whose value is the name of an environment variable. */
 const ENV_NAME_FIELDS = ["bearer_token_env_var", "oauth_client_secret_env_var", "clientSecretEnvVar"];
 
@@ -31,7 +34,7 @@ export function mcpEnvironmentNames(servers: Record<string, unknown>): string[] 
 		if (typeof value === "string") {
 			if (key && ENV_NAME_FIELDS.includes(key) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) names.add(value);
 			for (const match of value.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}/g)) {
-				if (!PLUGIN_TOKENS.has(match[1]!)) names.add(match[1]!);
+				if (!PATH_TOKENS.includes(match[1]!)) names.add(match[1]!);
 			}
 		} else if (Array.isArray(value)) {
 			for (const item of value) visit(item);
@@ -43,7 +46,6 @@ export function mcpEnvironmentNames(servers: Record<string, unknown>): string[] 
 	return [...names].sort();
 }
 
-const PATH_TOKENS = ["CLAUDE_PLUGIN_ROOT", "GROK_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA", "GROK_PLUGIN_DATA"] as const;
 const KNOWN_FIELDS = new Set([
 	"type",
 	"command",
@@ -80,9 +82,8 @@ export interface PluginServerSource {
 export interface TranslatedServer {
 	/** `plugin_<plugin>_<server>`. */
 	name: string;
-	config: Record<string, unknown>;
+	config: McpServerConfig;
 	identity: string;
-	server: string;
 }
 
 class MissingVariable extends Error {}
@@ -260,7 +261,7 @@ export function translatePluginServers(
 				diagnostics.push(`MCP server "${server}" of ${plugin.identity} is not registered: ${validated}`);
 				continue;
 			}
-			candidates.push({ name, config: translated.config, identity: plugin.identity, server });
+			candidates.push({ name, config: validated, identity: plugin.identity });
 		}
 	}
 	const servers = candidates.filter((candidate) => {

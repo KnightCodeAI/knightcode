@@ -10,7 +10,6 @@
 import { homedir } from "node:os";
 import {
 	type Component,
-	Container,
 	type Focusable,
 	Input,
 	matchesKey,
@@ -23,7 +22,8 @@ import {
 	visibleWidth,
 } from "@knightcode/tui";
 import type { KeybindingsManager } from "../../core/keybindings.ts";
-import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
+import { isOfflineModeEnabled } from "../../core/package-manager.ts";
+import { plural } from "../../core/tools/render-utils.ts";
 import { keyHint, rawKeyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getSelectListTheme, type Theme } from "../../modes/interactive/theme/theme.ts";
 import {
@@ -37,15 +37,13 @@ import {
 import { pluginServerName } from "../../plugins/render.ts";
 import { parseSource } from "../../plugins/sources.ts";
 import type { McpServerSummary } from "../mcp/control.ts";
-import { McpManagerView, type McpUi } from "../mcp/ui.ts";
+import { frame, McpManagerView, type McpUi } from "../mcp/ui.ts";
 
 export interface PluginMenu {
 	title: string;
 	/** Lines shown below the title. */
 	details?: string[];
 	items: SelectItem[];
-	/** Shows a search field that filters the items by label and description. */
-	search?: boolean;
 	confirmLabel: string;
 	cancelLabel: string;
 }
@@ -125,14 +123,6 @@ export interface PluginsUi {
 
 const MAX_VISIBLE_ITEMS = 12;
 const MAX_VISIBLE_ROWS = 10;
-const LIST_KEYS = [
-	"tui.select.up",
-	"tui.select.down",
-	"tui.select.pageUp",
-	"tui.select.pageDown",
-	"tui.select.confirm",
-	"tui.select.cancel",
-] as const;
 
 type Item =
 	| { kind: "group"; group: BrowseGroup; count: number; collapsed: boolean }
@@ -176,7 +166,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		this.tui = tui;
 		this.theme = theme;
 		this.keybindings = keybindings;
-		this.content = this.frame("Plugins", [new Text(theme.fg("muted", "Loading…"), 1, 1)]);
+		this.content = frame(theme, "Plugins", [new Text(theme.fg("muted", "Loading…"), 1, 1)]);
 	}
 
 	get focused(): boolean {
@@ -192,19 +182,6 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		return this.inputHandler?.capturesViewportInput === true;
 	}
 
-	private frame(title: string, body: Component[], footer?: string): Container {
-		const container = new Container();
-		container.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
-		container.addChild(new Text(this.theme.fg("accent", this.theme.bold(title)), 1, 0));
-		for (const child of body) container.addChild(child);
-		if (footer) {
-			container.addChild(new Spacer(1));
-			container.addChild(new Text(this.theme.fg("dim", footer), 1, 0));
-		}
-		container.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
-		return container;
-	}
-
 	private show(content: Component, inputHandler?: InputHandler, inputTarget?: Focusable): void {
 		if (this.inputTarget) this.inputTarget.focused = false;
 		this.content = content;
@@ -216,45 +193,23 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 
 	menu(menu: PluginMenu): Promise<string | undefined> {
 		return new Promise((resolve) => {
-			const search = menu.search ? new Input() : undefined;
-			let selected: string | undefined;
-			const render = () => {
-				const filter = search?.getValue().trim().toLowerCase() ?? "";
-				const items = filter
-					? menu.items.filter((item) => `${item.label} ${item.description ?? ""}`.toLowerCase().includes(filter))
-					: menu.items;
-				const body: Component[] = (menu.details ?? []).map((line) => new Text(this.theme.fg("muted", line), 1, 0));
-				if (search) body.push(search);
-				body.push(new Spacer(1));
-				const list = new SelectList(
-					items,
-					Math.max(1, Math.min(items.length, MAX_VISIBLE_ITEMS)),
-					getSelectListTheme(),
-				);
-				const index = items.findIndex((item) => item.value === selected);
-				if (index !== -1) list.setSelectedIndex(index);
-				list.onSelectionChange = (item) => {
-					selected = item.value;
-				};
-				list.onSelect = (item) => resolve(item.value);
-				list.onCancel = () => resolve(undefined);
-				body.push(items.length ? list : new Text(this.theme.fg("muted", "Nothing matches."), 1, 0));
-				const footer = `${keyHint("tui.select.confirm", menu.confirmLabel)} • ${keyHint("tui.select.cancel", menu.cancelLabel)}`;
-				this.show(
-					this.frame(menu.title, body, footer),
-					listInput((data) => {
-						if (!search || LIST_KEYS.some((key) => this.keybindings.matches(data, key))) {
-							if (items.length) list.handleInput(data);
-							else if (this.keybindings.matches(data, "tui.select.cancel")) resolve(undefined);
-							return;
-						}
-						search.handleInput(data);
-						render();
-					}),
-					search,
-				);
-			};
-			render();
+			const list = new SelectList(
+				menu.items,
+				Math.max(1, Math.min(menu.items.length, MAX_VISIBLE_ITEMS)),
+				getSelectListTheme(),
+			);
+			list.onSelect = (item) => resolve(item.value);
+			list.onCancel = () => resolve(undefined);
+			const body: Component[] = [
+				...(menu.details ?? []).map((line) => new Text(this.theme.fg("muted", line), 1, 0)),
+				new Spacer(1),
+				list,
+			];
+			const footer = `${keyHint("tui.select.confirm", menu.confirmLabel)} • ${keyHint("tui.select.cancel", menu.cancelLabel)}`;
+			this.show(
+				frame(this.theme, menu.title, body, footer),
+				listInput((data) => list.handleInput(data)),
+			);
 		});
 	}
 
@@ -263,7 +218,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			const field = new Input();
 			const footer = `${keyHint("tui.select.confirm", "confirm")} • ${keyHint("tui.select.cancel", "cancel")}`;
 			this.show(
-				this.frame(title, [new Text(this.theme.fg("muted", placeholder), 1, 0), field], footer),
+				frame(this.theme, title, [new Text(this.theme.fg("muted", placeholder), 1, 0), field], footer),
 				{
 					handleInput: (data) => {
 						if (this.keybindings.matches(data, "tui.select.confirm")) resolve(field.getValue().trim() || undefined);
@@ -280,7 +235,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 	}
 
 	status(title: string, message: string): void {
-		this.show(this.frame(title, [new Text(this.theme.fg("muted", message), 1, 1)]));
+		this.show(frame(this.theme, title, [new Text(this.theme.fg("muted", message), 1, 1)]));
 	}
 
 	mcpUi(): McpUi {
@@ -451,7 +406,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			items.length ? new Lines((width) => this.listLines(tab, items, width)) : new Text(theme.fg("muted", none), 1, 0),
 		];
 		if (notice) body.push(new Spacer(1), new Text(theme.fg(notice.error ? "error" : "success", notice.text), 1, 0));
-		return this.frame("Plugins", body, this.browseFooter(tab, items));
+		return frame(theme, "Plugins", body, this.browseFooter(tab, items));
 	}
 
 	/** One line: the label, a dim right text, and the badge at the right edge. */
@@ -542,10 +497,6 @@ function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-function count(n: number, noun: string): string {
-	return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
 /** The session's MCP servers, from the MCP extension. */
 export interface PluginsMcp {
 	list(): McpServerSummary[];
@@ -561,10 +512,9 @@ export interface ManagePluginsOptions {
 	mcp?: PluginsMcp;
 	/** Starts and stops plugin MCP servers for what is installed, trusted and enabled now. Returns problems. */
 	applyMcp?: () => string[];
-	/** How long an install waits for its MCP servers to connect or ask for a sign-in. */
-	mcpWaitMs?: number;
 }
 
+/** How long an install waits for its MCP servers to connect or ask for a sign-in. */
 const MCP_WAIT_MS = 15_000;
 /** Catalogs older than this are fetched again when `/plugins` opens, as Grok Build does. */
 const CATALOG_TTL_MS = 5 * 60 * 1000;
@@ -580,12 +530,6 @@ interface Fetches {
 	busy: Set<string>;
 	failed: Map<string, string>;
 	offline: boolean;
-}
-
-/** `--offline` or `KNIGHTCODE_OFFLINE`: catalogs are fetched only from folders. */
-function isOffline(): boolean {
-	const value = process.env.KNIGHTCODE_OFFLINE?.toLowerCase();
-	return value === "1" || value === "true" || value === "yes";
 }
 
 function isLocal(source: string): boolean {
@@ -612,7 +556,7 @@ function mcpState(servers: McpServerSummary[]): { text: string; badge?: Badge } 
 	if (any("starting") || any("connecting")) return { text: "MCP connecting…" };
 	if (servers.every((server) => server.state === "connected")) {
 		return {
-			text: `MCP connected, ${count(
+			text: `MCP connected, ${plural(
 				servers.reduce((sum, server) => sum + server.tools, 0),
 				"tool",
 			)}`,
@@ -628,9 +572,9 @@ function pluginRow(plugin: PluginView, running: McpServerSummary[]): BrowseRow {
 	const mine = on ? running.filter((server) => names.includes(server.name)) : [];
 	const mcp = mcpState(mine);
 	const offers = [
-		...(inventory.skills.length ? [count(inventory.skills.length, "skill")] : []),
-		...(inventory.commands.length ? [count(inventory.commands.length, "command")] : []),
-		...(names.length ? [count(names.length, "MCP server")] : []),
+		...(inventory.skills.length ? [plural(inventory.skills.length, "skill")] : []),
+		...(inventory.commands.length ? [plural(inventory.commands.length, "command")] : []),
+		...(names.length ? [plural(names.length, "MCP server")] : []),
 	].join(", ");
 	return {
 		key: `plugin:${plugin.scopeKind}:${plugin.namespace}`,
@@ -782,7 +726,8 @@ export async function managePlugins(
 			off?.();
 		};
 	};
-	const fetches: Fetches = { busy: new Set(), failed: new Map(), offline: isOffline() };
+	// `--offline` or `KNIGHTCODE_OFFLINE`: catalogs are fetched only from folders.
+	const fetches: Fetches = { busy: new Set(), failed: new Map(), offline: isOfflineModeEnabled() };
 	const fetchCatalog = async (market: MarketplaceListing) => {
 		try {
 			// A declared catalog never fetched here has no record to update yet.
@@ -827,7 +772,7 @@ export async function managePlugins(
 				unsubscribe();
 				resolve(mine());
 			};
-			const timer = setTimeout(finish, options.mcpWaitMs ?? MCP_WAIT_MS);
+			const timer = setTimeout(finish, MCP_WAIT_MS);
 			const check = () => {
 				const states = mine();
 				const busy = states.some((server) => server.state === "starting" || server.state === "connecting");
@@ -890,7 +835,7 @@ export async function managePlugins(
 		const added = await manager.addMarketplace(source, ref ? { ref } : {});
 		return {
 			focus: { tab: "marketplace", key: `market:${added.name}` },
-			notice: { text: `Added ${added.name} with ${count(added.plugins.length, "plugin")}. Nothing is installed.` },
+			notice: { text: `Added ${added.name} with ${plural(added.plugins.length, "plugin")}. Nothing is installed.` },
 		};
 	};
 
@@ -909,12 +854,12 @@ export async function managePlugins(
 		}
 		if (tab === "marketplace" && key === "r") {
 			const markets = data.markets.filter((market) => !fetches.offline || isLocal(market.source));
-			ui.status("Refreshing marketplaces", `Fetching ${count(markets.length, "catalog")}…`);
+			ui.status("Refreshing marketplaces", `Fetching ${plural(markets.length, "catalog")}…`);
 			await Promise.all(markets.map(fetchCatalog));
 			const failed = markets.filter((market) => fetches.failed.has(market.name)).length;
 			return {
 				notice: {
-					text: `Refreshed ${count(markets.length - failed, "marketplace")}.${failed ? ` ${failed} failed.` : ""}`,
+					text: `Refreshed ${plural(markets.length - failed, "marketplace")}.${failed ? ` ${failed} failed.` : ""}`,
 					error: failed > 0,
 				},
 			};
@@ -992,7 +937,6 @@ export async function managePlugins(
 
 	let outcome: Outcome = {};
 	for (;;) {
-		data = snapshot();
 		const action = await ui.browse(() => [pluginsTab(data, mcp?.list() ?? []), marketplaceTab(data, fetches)], {
 			subscribe,
 			...outcome,
@@ -1008,6 +952,7 @@ export async function managePlugins(
 		} catch (error) {
 			outcome = { notice: { text: errorText(error), error: true } };
 		}
+		data = snapshot();
 	}
 	if (!changed) return;
 	const reload = await ui.menu({

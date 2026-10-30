@@ -4,9 +4,9 @@
  * array; otherwise it is a plugin manifest and the probe moves on.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { PluginEntryOverlay } from "./manifest.ts";
+import { isRecord, type PluginEntryOverlay, readJson } from "./manifest.ts";
 
 const CATALOG_PATHS = [
 	".grok-plugin/marketplace.json",
@@ -33,10 +33,6 @@ export interface MarketplaceCatalog {
 	plugins: MarketplaceEntry[];
 	/** Entries that were skipped, and why. */
 	diagnostics: string[];
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -82,12 +78,7 @@ export function readMarketplace(root: string): MarketplaceCatalog {
 	for (const path of CATALOG_PATHS) {
 		const candidate = join(root, path);
 		if (!existsSync(candidate)) continue;
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(readFileSync(candidate, "utf-8").replace(/^﻿/, ""));
-		} catch (error) {
-			throw new Error(`${candidate}: ${error instanceof Error ? error.message : String(error)}`);
-		}
+		const parsed = readJson(candidate);
 		if (path.endsWith("plugin.json") && !(isRecord(parsed) && Array.isArray(parsed.plugins))) continue;
 		if (!isRecord(parsed) || !Array.isArray(parsed.plugins))
 			throw new Error(`${candidate}: "plugins" must be an array`);

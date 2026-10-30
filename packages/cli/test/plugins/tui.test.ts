@@ -31,7 +31,6 @@ beforeEach(() => setKeybindings(new KeybindingsManager()));
 describe("plugins view", () => {
 	const menu: PluginMenu = {
 		title: "Plugins",
-		search: true,
 		items: [
 			{ value: "a", label: "alpha", description: "first" },
 			{ value: "b", label: "beta", description: "second" },
@@ -41,13 +40,12 @@ describe("plugins view", () => {
 		cancelLabel: "close",
 	};
 
-	it("filters a menu by typed text and confirms the selection", async () => {
+	it("shows a menu and confirms the selection", async () => {
 		const view = new PluginsView(tui, theme, new KeybindingsManager());
 		const choice = view.menu(menu);
-		for (const char of "mm") view.handleInput(char);
-		const text = stripAnsi(view.render(80).join("\n"));
-		expect(text).toContain("gamma");
-		expect(text).not.toContain("alpha");
+		expect(stripAnsi(view.render(80).join("\n"))).toMatch(/alpha[\s\S]*beta[\s\S]*gamma/);
+		view.handleInput(DOWN);
+		view.handleInput(DOWN);
 		view.handleInput(ENTER);
 		expect(await choice).toBe("c");
 	});

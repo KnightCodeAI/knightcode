@@ -2841,10 +2841,7 @@ function Plugins() {
 			.finally(() => setBusy(false));
 	};
 	const install = (params: { source: string; ref?: string; scope: "global" | "project" }) =>
-		client.request("plugin/install", { ...where, ...params }).then(({ plugin }) => {
-			load();
-			setTrusting(plugin);
-		});
+		client.request("plugin/install", { ...where, ...params }).then(({ plugin }) => setTrusting(plugin));
 	const needle = query.trim().toLowerCase();
 	const plugins = (list?.plugins.plugins ?? []).filter((plugin) =>
 		`${plugin.name} ${plugin.description ?? ""} ${plugin.source}`.toLowerCase().includes(needle),
@@ -3110,7 +3107,7 @@ function Plugins() {
 					cwd={trusted ? cwd : undefined}
 					onAdd={(params) =>
 						adding === "plugin"
-							? install(params)
+							? install(params).then(load)
 							: client.request("plugin/marketplace/add", { ...where, ...params }).then(load)
 					}
 					onClose={() => setAdding(undefined)}

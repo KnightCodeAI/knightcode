@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { getAgentDir } from "../config.ts";
 import { type PluginDeclaration, SettingsManager } from "../core/settings-manager.ts";
 import { ProjectTrustStore } from "../core/trust-manager.ts";
-import { canonicalizePath, resolvePath } from "../utils/paths.ts";
+import { canonicalizePath, getCwdRelativePath, resolvePath } from "../utils/paths.ts";
 import { fetchCommit, resolveRemoteCommit } from "./git.ts";
 import {
 	type ForeignPlugin,
@@ -25,11 +25,11 @@ import {
 	marketplaceKey,
 	toolClones,
 } from "./known.ts";
-import { loadPlugin, resolveInsideRoot, sanitizePluginName } from "./manifest.ts";
-import { isRecord, type MarketplaceCatalog, type MarketplaceEntry, readMarketplace } from "./marketplace.ts";
+import { isRecord, loadPlugin, resolveInsideRoot, sanitizePluginName } from "./manifest.ts";
+import { type MarketplaceCatalog, type MarketplaceEntry, readMarketplace } from "./marketplace.ts";
 import { describeMcpServer, mcpEnvironmentNames } from "./mcp.ts";
 import { type PluginInventory, renderPlugin } from "./render.ts";
-import { canonicalUrlFor, parseSource, pluginIdentity } from "./sources.ts";
+import { canonicalUrl, forwardSlashes, parseSource, pluginIdentity } from "./sources.ts";
 import { copyContent, hashTree, type InstallRecord, type MarketplaceRecord, PluginStore, sha256 } from "./store.ts";
 
 export type PluginScope = "user" | "project";
@@ -54,11 +54,9 @@ export interface PluginView extends InstallRecord {
 
 export interface ActivePlugin {
 	identity: string;
-	name: string;
 	namespace: string;
 	scope: PluginScope;
 	commit: string;
-	revision: string;
 	root: string;
 	dataDir: string;
 	inventory: PluginInventory;
@@ -276,7 +274,7 @@ export class PluginManager {
 		}
 		return {
 			...base,
-			identity: pluginIdentity(canonicalUrlFor(entry.source.url), entry.source.path, catalogEntry),
+			identity: pluginIdentity(canonicalUrl(entry.source.url), entry.source.path, catalogEntry),
 			origin: { kind: "git", url: entry.source.url, ref: declaration.ref ?? entry.source.sha ?? entry.source.ref },
 			subdir: entry.source.path,
 		};
@@ -531,12 +529,8 @@ export class PluginManager {
 	/** A local source as the declaration stores it: absolute for the user, relative to the project when inside it. */
 	private declaredLocalSource(dir: string, scope: PluginScope): string {
 		if (scope === "user") return dir;
-		const rel = join(dir).startsWith(join(this.cwd))
-			? `./${join(dir)
-					.slice(join(this.cwd).length + 1)
-					.replace(/\\/g, "/")}`
-			: dir;
-		return rel === "./" ? "." : rel;
+		const rel = getCwdRelativePath(dir, this.cwd);
+		return rel === undefined ? dir : rel === "." ? "." : `./${forwardSlashes(rel)}`;
 	}
 
 	/** Fetches the declaration's source again and moves the scope's record to the new revision. */
@@ -722,11 +716,9 @@ export class PluginManager {
 			}
 			plugins.push({
 				identity,
-				name: record.name,
 				namespace: record.namespace,
 				scope,
 				commit: record.commit,
-				revision: record.revision,
 				root: this.store.pluginRoot(record.id, record.revision),
 				dataDir: this.store.dataDir(record.id),
 				inventory,
@@ -1074,9 +1066,10 @@ export class PluginManager {
 
 	/** Fetches catalogs again: the named one, or every declared one. */
 	async updateMarketplaces(name?: string): Promise<MarketplaceView[]> {
-		const declared = this.listMarketplaces();
-		const scopeOf = (marketName: string) => declared.find((view) => view.name === marketName)?.scope ?? "user";
-		const names = name ? [name] : declared.map((view) => view.name);
+		const declared = this.declaredMarketplaces();
+		const names = name
+			? [name]
+			: this.readState().marketplaces.flatMap((record) => (declared.has(record.name) ? [record.name] : []));
 		const updated: MarketplaceView[] = [];
 		for (const marketName of names) {
 			const record = this.readState().marketplaces.find((candidate) => candidate.name === marketName);
@@ -1091,7 +1084,7 @@ export class PluginManager {
 						const next = { ...record, commit: staged.commit, revision, updatedAt: new Date().toISOString() };
 						state.marketplaces = state.marketplaces.map((other) => (other.name === record.name ? next : other));
 						this.store.write(state);
-						return this.marketplaceView(next, state, scopeOf(record.name));
+						return this.marketplaceView(next, state, declared.get(record.name)?.scope ?? "user");
 					}),
 				);
 			} finally {

@@ -23,8 +23,9 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { join, relative } from "node:path";
 import lockfile from "proper-lockfile";
+import { isInside } from "./manifest.ts";
 import type { PluginInventory } from "./render.ts";
 
 export interface InstallRecord {
@@ -71,11 +72,6 @@ const STALE_STAGING_MS = 24 * 60 * 60 * 1000;
 
 export function sha256(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
-}
-
-function isInside(root: string, target: string): boolean {
-	const rel = relative(root, target);
-	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 /**

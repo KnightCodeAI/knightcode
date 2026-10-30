@@ -1146,10 +1146,6 @@ export class SettingsManager {
 		});
 	}
 
-	getPlugins(): PluginDeclaration[] {
-		return [...(this.settings.plugins ?? [])];
-	}
-
 	setPlugins(plugins: PluginDeclaration[]): void {
 		this.globalSettings.plugins = plugins;
 		this.markModified("plugins");
@@ -1160,10 +1156,6 @@ export class SettingsManager {
 		this.updateProjectSettings("plugins", (settings) => {
 			settings.plugins = plugins;
 		});
-	}
-
-	getPluginMarketplaces(): PluginMarketplaceDeclaration[] {
-		return [...(this.settings.pluginMarketplaces ?? [])];
 	}
 
 	setPluginMarketplaces(marketplaces: PluginMarketplaceDeclaration[]): void {

@@ -82,11 +82,11 @@ export interface LoadedPlugin {
 	diagnostics: string[];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isInside(root: string, target: string): boolean {
+export function isInside(root: string, target: string): boolean {
 	const rel = relative(root, target);
 	return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
 }
@@ -108,7 +108,8 @@ export function resolveInsideRoot(root: string, path: string): string | { error:
 	return target;
 }
 
-function readJson(path: string): unknown {
+/** Parses a JSON file, ignoring a byte order mark; errors name the file. */
+export function readJson(path: string): unknown {
 	try {
 		return JSON.parse(readFileSync(path, "utf-8").replace(/^﻿/, ""));
 	} catch (error) {

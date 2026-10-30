@@ -8,7 +8,6 @@
  */
 
 import type { ExtensionFactory } from "../../core/extensions/types.ts";
-import type { McpServerConfig } from "../../core/mcp-servers.ts";
 import { PluginManager } from "../../plugins/manager.ts";
 import { translatePluginServers } from "../../plugins/mcp.ts";
 
@@ -18,9 +17,7 @@ import { translatePluginServers } from "../../plugins/mcp.ts";
  */
 export const PLUGINS_CHANGED_CHANNEL = "plugins-changed";
 
-export function createPluginMcpExtension(
-	options: { agentDir?: string; env?: Record<string, string | undefined> } = {},
-): ExtensionFactory {
+export function createPluginMcpExtension(options: { agentDir?: string } = {}): ExtensionFactory {
 	return (knightcode) => {
 		let session: { cwd: string; projectTrusted: boolean } | undefined;
 		/** Registered servers and their configs, so a change starts and stops only what changed. */
@@ -31,7 +28,7 @@ export function createPluginMcpExtension(
 			const { plugins } = new PluginManager({ agentDir: options.agentDir, cwd: session.cwd }).loadActive(
 				session.projectTrusted,
 			);
-			const { servers, diagnostics } = translatePluginServers(plugins, options.env ?? process.env);
+			const { servers, diagnostics } = translatePluginServers(plugins);
 			const next = new Map(servers.map((server) => [server.name, JSON.stringify(server.config)]));
 			for (const [name, config] of registered) {
 				if (next.get(name) !== config) knightcode.unregisterMcpServer(name);
@@ -39,7 +36,7 @@ export function createPluginMcpExtension(
 			for (const server of servers) {
 				if (registered.get(server.name) === next.get(server.name)) continue;
 				try {
-					knightcode.registerMcpServer(server.name, server.config as unknown as McpServerConfig);
+					knightcode.registerMcpServer(server.name, server.config);
 				} catch (error) {
 					next.delete(server.name);
 					diagnostics.push(error instanceof Error ? error.message : String(error));

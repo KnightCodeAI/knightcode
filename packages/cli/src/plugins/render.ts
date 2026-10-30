@@ -7,8 +7,10 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { stringify } from "yaml";
+import { mcpNamespace } from "../core/mcp-servers.ts";
 import { parseFrontmatter } from "../utils/frontmatter.ts";
 import { type LoadedPlugin, sanitizePluginName } from "./manifest.ts";
+import { forwardSlashes } from "./sources.ts";
 
 export interface InventorySkill {
 	/** `<plugin>:<skill>`. */
@@ -55,15 +57,6 @@ const MAX_DESCRIPTION_LENGTH = 1024;
 /** `plugin_<plugin>_<server>` with characters outside `[A-Za-z0-9_-]` replaced and runs of `_` collapsed. */
 export function pluginServerName(namespace: string, server: string): string {
 	return `plugin_${namespace}_${server}`.replace(/[^A-Za-z0-9_-]/g, "_").replace(/_+/g, "_");
-}
-
-/** The `mcp__<server>__` prefix KnightCode gives a server's tools (`extensions/mcp/tools.ts`). */
-function toolPrefix(server: string): string {
-	return `mcp__${server.replace(/[^A-Za-z0-9_]/g, "_")}__`;
-}
-
-function forwardSlashes(path: string): string {
-	return path.replace(/\\/g, "/");
 }
 
 function replaceAll(text: string, tokens: Record<string, string>): string {
@@ -138,7 +131,7 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 	// Skills and commands name the plugin's tools the way Claude Code does; KnightCode turns `-` into `_` as well.
 	for (const server of Object.keys(plugin.components.mcpServers)) {
 		const claudeServer = `plugin_${plugin.displayName}_${server}`.replace(/[^A-Za-z0-9_-]/g, "_");
-		rootTokens[`mcp__${claudeServer}__`] = toolPrefix(pluginServerName(plugin.namespace, server));
+		rootTokens[`mcp__${claudeServer}__`] = `${mcpNamespace(pluginServerName(plugin.namespace, server))}__`;
 	}
 	const relativePath = (path: string) => forwardSlashes(relative(plugin.root, path));
 
@@ -261,10 +254,7 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 			if (!rendered.has(file)) {
 				rendered.add(file);
 				const keepsFrontmatter = Object.keys(frontmatter).length > 0;
-				writeFileSync(
-					file,
-					keepsFrontmatter ? serialize(frontmatter, body) : raw === "" ? "" : replaceAll(raw, rootTokens),
-				);
+				writeFileSync(file, keepsFrontmatter ? serialize(frontmatter, body) : replaceAll(raw, rootTokens));
 			}
 			addCommand({ file: relativePath(file), ...command });
 		}

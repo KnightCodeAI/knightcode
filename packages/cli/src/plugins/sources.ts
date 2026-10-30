@@ -16,12 +16,12 @@ export type ParsedSource =
 const CATALOG_REF = /^([A-Za-z0-9][A-Za-z0-9._-]*)@([A-Za-z0-9][A-Za-z0-9._-]*)$/;
 const GITHUB_SHORTHAND = /^[A-Za-z0-9][\w.-]*\/[\w.-]+$/;
 
-function forwardSlashes(path: string): string {
+export function forwardSlashes(path: string): string {
 	return path.replace(/\\/g, "/");
 }
 
 /** `https://host/owner/repo`: lowercase host, no `.git`, no trailing slash. */
-function canonicalUrl(url: string): string {
+export function canonicalUrl(url: string): string {
 	const trimmed = url.replace(/\/+$/, "").replace(/\.git$/, "");
 	try {
 		const parsed = new URL(trimmed);
@@ -85,9 +85,4 @@ export function parseSource(source: string, baseDir: string): ParsedSource | { e
 export function pluginIdentity(canonical: string, path: string | undefined, catalogEntry?: string): string {
 	const subdir = path ? forwardSlashes(path).replace(/^\.\//, "").replace(/\/+$/, "") : "";
 	return `${canonical}${subdir && subdir !== "." ? `#path=${subdir}` : ""}${catalogEntry ? `#plugin=${catalogEntry}` : ""}`;
-}
-
-/** `canonical` with a URL-free path appended, for catalog entries that live inside the catalog's own repository. */
-export function canonicalUrlFor(url: string): string {
-	return canonicalUrl(url);
 }
