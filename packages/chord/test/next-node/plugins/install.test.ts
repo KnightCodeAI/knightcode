@@ -1,9 +1,9 @@
 // Tests of installing a plugin's dependencies (slice 7c §5): the npm arguments, run in the plugin's real directory,
 // the command overridable; a failure and an abort reject.
 
-import { readFile, realpath, symlink } from "node:fs/promises";
+import { readFile, realpath, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BACKGROUND_CONTEXT as context, withCancel } from "../../../src/context/index.ts";
 import { discoverPlugins, installDependencies } from "../../../src/next-node/plugins/index.ts";
 import { rejection } from "../../next/support.ts";
@@ -58,5 +58,24 @@ describe("installDependencies", () => {
 		const running = installDependencies(plugin, aborted, { npmCommand: await fakeNpm(tools, 0, 5_000) });
 		setTimeout(() => cancel(new Error("stop")), 50);
 		expect(await rejection(running)).toMatchObject({ name: "AbortError" });
+	});
+
+	it("settles an aborted install once the command has exited, its directory free (Windows locks a process's cwd)", async () => {
+		const tools = await tempRoot();
+		const root = await tempRoot();
+		const dir = await writePlugin(root, "deps", "@test/deps", {});
+		const { plugins } = await discoverPlugins([root], { kinds: KINDS }, context);
+		const started = join(tools, "started");
+		await writeFiles(tools, {
+			"slow-npm.mjs": `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(started)}, "");\nsetTimeout(() => {}, 5_000);`,
+		});
+		const { context: aborted, cancel } = withCancel(context);
+		const running = installDependencies(plugins[0]!, aborted, {
+			npmCommand: [process.execPath, join(tools, "slow-npm.mjs")],
+		});
+		await vi.waitFor(() => readFile(started), { timeout: 10_000 });
+		cancel(new Error("stop"));
+		expect(await rejection(running)).toMatchObject({ name: "AbortError" });
+		await rm(dir, { recursive: true });
 	});
 });

@@ -218,8 +218,13 @@ export class PluginWatcher extends Source {
 		if (this.#watchers.has(dir) || this.#reported) return;
 		let watcher: FSWatcher;
 		try {
-			watcher = watch(dir, (_event, file) => {
-				if (file !== null) this.#changedIn(join(dir, file));
+			watcher = watch(dir, (event, file) => {
+				if (file === null) return;
+				const path = join(dir, file);
+				// Windows reports a `change` for a directory whenever an entry inside it changes; that directory's own
+				// watch reports the entry, so the event would only mark the directory itself as added or removed.
+				if (event === "change" && this.#watchers.has(path)) return;
+				this.#changedIn(path);
 			});
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") this.#failed(error);

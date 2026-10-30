@@ -15,7 +15,7 @@ const INSTALL_ARGS = ["install", "--omit=dev", "--legacy-peer-deps", "--ignore-s
 /**
  * Installs `plugin`'s `dependencies` into its own `node_modules` (`npm install --omit=dev --legacy-peer-deps
  * --ignore-scripts --no-audit --no-fund` in its real directory). Rejects with the command's output when it fails, and
- * when `context` aborts (the command is killed).
+ * when `context` aborts (the command is killed, and the promise settles once it has exited).
  */
 export async function installDependencies(
 	plugin: Plugin,
@@ -38,8 +38,14 @@ export async function installDependencies(
 		output += chunk.toString();
 	});
 	const code = await new Promise<number | null>((resolve, reject) => {
-		child.on("error", reject);
-		child.on("close", resolve);
+		// An abort kills the command but reports before it has exited; until then it can still write `node_modules`, and
+		// on Windows its working directory (the plugin's) stays locked.
+		let aborted: Error | undefined;
+		child.on("error", (error) => {
+			if (error.name === "AbortError") aborted = error;
+			else reject(error);
+		});
+		child.on("close", (exit) => (aborted === undefined ? resolve(exit) : reject(aborted)));
 	});
 	if (code !== 0) {
 		throw new Error(`plugin "${plugin.name}": ${command} install failed (exit ${code}): ${output.trim()}`);
