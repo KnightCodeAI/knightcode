@@ -18,8 +18,8 @@ import { Section, SectionEyebrow, SectionHeading } from "./section"
 const setupNotes = [
   {
     icon: CommandLineIcon,
-    title: "Install from npm",
-    desc: "Node.js 22.19 or newer. One global install exposes knightcode on macOS, Linux, and Windows. Lifecycle scripts are not required.",
+    title: "Install with one command",
+    desc: "The installer sets up Node.js 22.19 or newer if it is missing, pins every dependency, and updates with knightcode update. npm, pnpm, and bun installs need Node.js 22.19 or newer.",
   },
   {
     icon: CpuIcon,
@@ -51,7 +51,7 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
               Install the CLI. Open your repo. Start a session.
             </SectionHeading>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-[17px]">
-              KnightCode is installed from npm. There is no KnightCode account: install the command, sign in to a provider, and run it in the folder you want to work on.
+              KnightCode installs with one command on macOS, Linux, and Windows. There is no KnightCode account: install the command, sign in to a provider, and run it in the folder you want to work on.
             </p>
           </div>
 
@@ -62,7 +62,7 @@ export function Download({ version = FALLBACK_VERSION }: { version?: string }) {
             
             <div className="mt-4">
               <div className="text-sm font-medium text-foreground/90">
-                Install globally:
+                Install:
               </div>
               <InstallCommand className="mt-2.5" />
             </div>

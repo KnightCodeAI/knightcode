@@ -4,17 +4,39 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 
-import { NPM_PACKAGE } from "@/lib/site"
+import { NPM_PACKAGE, SITE } from "@/lib/site"
 import { cn } from "@/lib/utils"
+import { usePlatform } from "./platform-detect"
 
-// The CLI is a Node bundle with no install scripts, so every major package
-// manager installs it the same way.
+// The installers pin every dependency and update with `knightcode update`;
+// the CLI is a Node bundle with no install scripts, so package managers work
+// too.
 const MANAGERS = [
-  { id: "npm", command: `npm install -g --ignore-scripts ${NPM_PACKAGE}` },
-  { id: "pnpm", command: `pnpm add -g --ignore-scripts ${NPM_PACKAGE}` },
-  { id: "bun", command: `bun install -g --ignore-scripts ${NPM_PACKAGE}` },
-  { id: "yarn", command: `yarn global add --ignore-scripts ${NPM_PACKAGE}` },
-  { id: "npx", command: `npx --ignore-scripts ${NPM_PACKAGE}` },
+  {
+    id: "curl",
+    label: "curl",
+    command: `curl -fsSL ${SITE.url}/install.sh | sh`,
+  },
+  {
+    id: "powershell",
+    label: "PowerShell",
+    command: `powershell -c "irm ${SITE.url}/install.ps1 | iex"`,
+  },
+  {
+    id: "npm",
+    label: "npm",
+    command: `npm install -g --ignore-scripts ${NPM_PACKAGE}`,
+  },
+  {
+    id: "pnpm",
+    label: "pnpm",
+    command: `pnpm add -g --ignore-scripts ${NPM_PACKAGE}`,
+  },
+  {
+    id: "bun",
+    label: "bun",
+    command: `bun add -g --ignore-scripts ${NPM_PACKAGE}`,
+  },
 ] as const
 
 type ManagerId = (typeof MANAGERS)[number]["id"]
@@ -41,11 +63,11 @@ export function CommandBlock({
 
   return (
     <div className={cn("flex items-center gap-3 px-4 py-3", className)}>
-      {/* One line, sized to fit: the longest command is 52ch including the
-          prompt, and a Geist Mono ch is 0.6em, so 100cqi / 31.2 fills the row.
+      {/* One line, sized to fit: the longest command is 62ch including the
+          prompt, and a Geist Mono ch is 0.6em, so 100cqi / 37.2 fills the row.
           Below the 11px floor (narrow phones) it scrolls by swipe instead. */}
       <p className="@container min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <span className="font-mono text-[length:clamp(11px,3.1cqi,14px)] whitespace-nowrap">
+        <span className="font-mono text-[length:clamp(11px,2.6cqi,14px)] whitespace-nowrap">
           <span aria-hidden className="select-none text-(--brand)">
             $
           </span>{" "}
@@ -165,9 +187,7 @@ export function TabBarLabel({
   )
 }
 
-const MANAGER_TABS = MANAGERS.map((m) => ({ id: m.id, label: m.id }))
-
-/** Install command with a package-manager switcher. */
+/** Install command with an installer and package-manager switcher. */
 export function InstallCommand({
   className,
   label,
@@ -175,7 +195,10 @@ export function InstallCommand({
   className?: string
   label?: ReactNode
 }) {
-  const [manager, setManager] = useState<ManagerId>("npm")
+  const detected = usePlatform()
+  const [picked, setPicked] = useState<ManagerId | null>(null)
+  // The visitor's installer first: PowerShell on Windows, curl elsewhere.
+  const manager = picked ?? (detected === "windows" ? "powershell" : "curl")
   const active = MANAGERS.find((m) => m.id === manager) ?? MANAGERS[0]
 
   return (
@@ -186,9 +209,9 @@ export function InstallCommand({
       )}
     >
       <TabBar
-        tabs={MANAGER_TABS}
+        tabs={MANAGERS}
         active={manager}
-        onSelect={setManager}
+        onSelect={setPicked}
         label={label}
       />
       {/* key: reset the copied state when the command changes */}
