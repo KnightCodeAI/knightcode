@@ -128,7 +128,7 @@ Remote servers that use OAuth, such as Sentry, need no credentials in `mcp.json`
 
 When the server rejects an unauthenticated connection, `/mcp` shows that it needs sign-in. Select "Sign in", run `/mcp login sentry`, or run `knightcode mcp login sentry`. KnightCode opens the authorization page and waits for approval. If the browser runs on another machine, such as over SSH, paste its redirected URL into the sign-in screen. A running session uses the new credentials on its next turn.
 
-KnightCode registers itself with the authorization server, stores tokens in `~/.knightcode/agent/mcp-auth.json`, and refreshes access tokens when they expire or the server rejects them. If a server later requests additional scope, KnightCode asks for sign-in again. Signing out deletes the stored credentials.
+KnightCode registers itself with the authorization server, stores tokens in `~/.knightcode/agent/mcp-auth.json`, and refreshes access tokens when they expire or the server rejects them. If a server later requests additional scope, KnightCode asks for sign-in again and names the missing scope; the new sign-in requests it on top of what was granted. Signing out deletes the stored credentials.
 
 Credentials belong to a server name and URL. Servers with the same URL under different names, such as one per account, sign in separately; servers with the same name and URL in different `mcp.json` files share one sign-in.
 

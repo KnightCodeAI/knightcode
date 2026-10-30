@@ -758,6 +758,32 @@ for await (const line of createInterface({ input: process.stdin })) {
 		}
 	});
 
+	// A sign-in that granted too little (Cloudflare's "Minimal") is not a missing sign-in.
+	it("says which access is missing when an OAuth server asks for more scope", async () => {
+		const server = createServer((request, response) => {
+			request.resume();
+			response.writeHead(403, { "www-authenticate": 'Bearer error="insufficient_scope", scope="workers:read"' }).end();
+		});
+		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+		const { port } = server.address() as AddressInfo;
+		const connection = new McpServerConnection({
+			entry: { name: "cf", config: { url: `http://127.0.0.1:${port}/mcp` }, source: "test" },
+			cwd: process.cwd(),
+			createTransport: createDefaultTransport,
+			credentials: new McpOAuthCredentialStore(new InMemoryAuthStorageBackend()),
+			onTools: () => {},
+		});
+		try {
+			await expect(connection.getClient()).rejects.toThrow(
+				'MCP server "cf" needs access its sign-in did not grant (workers:read). Run /mcp to sign in again and grant it.',
+			);
+			expect(connection.state).toBe("needs-auth");
+		} finally {
+			await connection.close();
+			await new Promise((resolve) => server.close(resolve));
+		}
+	});
+
 	it("appends server log messages to the log file", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "knightcode-mcp-log-"));
 		try {
