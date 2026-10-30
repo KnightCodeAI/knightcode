@@ -604,6 +604,47 @@ describe("InteractiveMode.createBaseAutocompleteProvider", () => {
 		});
 		expect(radiusSuggestions?.items).toEqual([{ value: "radius", label: "radius", description: "Radius · account" }]);
 	});
+
+	test("lists a skill an extension also offers as its own command once, and still runs it as /skill:", async () => {
+		const sourceInfo: SourceInfo = { path: "/tmp/demo", source: "local", scope: "temporary", origin: "top-level" };
+		const fakeThis = {
+			session: {
+				scopedModels: [],
+				modelRuntime: { getAvailableSnapshot: () => [] },
+				promptTemplates: [],
+				extensionRunner: {
+					getRegisteredCommands: () => [{ name: "demo:fix", invocationName: "demo:fix", description: "Fix things" }],
+				},
+				resourceLoader: {
+					getSkills: () => ({
+						skills: [
+							{ name: "demo:fix", description: "Fix things", filePath: "/tmp/demo/fix.md", sourceInfo },
+							{ name: "demo:solo", description: "Solo", filePath: "/tmp/demo/solo.md", sourceInfo },
+						],
+					}),
+				},
+			},
+			settingsManager: { getEnableSkillCommands: () => true },
+			skillCommands: new Map<string, string>(),
+			sessionManager: { getCwd: () => "/tmp" },
+			fdPath: null,
+			prefixAutocompleteDescription: (description: string | undefined) => description,
+		};
+		const createBaseAutocompleteProvider = (
+			InteractiveMode as unknown as {
+				prototype: { createBaseAutocompleteProvider(this: typeof fakeThis): AutocompleteProvider };
+			}
+		).prototype.createBaseAutocompleteProvider;
+
+		const provider = createBaseAutocompleteProvider.call(fakeThis);
+		const line = "/demo";
+		const suggestions = await provider.getSuggestions([line], 0, line.length, {
+			signal: new AbortController().signal,
+		});
+
+		expect(suggestions?.items.map((item) => item.value).sort()).toEqual(["demo:fix", "skill:demo:solo"]);
+		expect([...fakeThis.skillCommands.keys()].sort()).toEqual(["skill:demo:fix", "skill:demo:solo"]);
+	});
 });
 describe("InteractiveMode.showLoadedResources", () => {
 	beforeAll(() => {

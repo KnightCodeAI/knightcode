@@ -6,7 +6,7 @@ import { type JsonRpcRequest, LATEST_PROTOCOL_VERSION } from "@knightcode/mcp";
 import { createInMemoryTransportPair } from "@knightcode/mcp/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventBus } from "../../src/core/event-bus.ts";
-import type { ExtensionFactory } from "../../src/core/extensions/types.ts";
+import type { ExtensionContext, ExtensionFactory } from "../../src/core/extensions/types.ts";
 import { DefaultResourceLoader } from "../../src/core/resource-loader.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
 import { ProjectTrustStore } from "../../src/core/trust-manager.ts";
@@ -14,6 +14,7 @@ import { builtInExtensions, MCP_BUILTIN_EXTENSIONS } from "../../src/extensions/
 import type { McpServerEntry } from "../../src/extensions/mcp/config.ts";
 import { getMcpControl } from "../../src/extensions/mcp/control.ts";
 import { createMcpExtension } from "../../src/extensions/mcp/index.ts";
+import type { McpUi } from "../../src/extensions/mcp/ui.ts";
 import { createPluginsExtension } from "../../src/extensions/plugins/index.ts";
 import { createPluginMcpExtension, PLUGINS_CHANGED_CHANNEL } from "../../src/extensions/plugins/mcp.ts";
 import { PluginManager } from "../../src/plugins/manager.ts";
@@ -228,6 +229,37 @@ describe("plugin MCP servers", () => {
 		expect(changed()).toEqual([]);
 		// The MCP extension hides a removed server's tools, as `/mcp` does when one is turned off.
 		await vi.waitFor(() => expect(bus && getMcpControl(bus)?.list()).toEqual([]));
+	});
+
+	it("run the action /plugins asks for before showing /mcp's menu", async () => {
+		const agentDir = tempDir();
+		await installDemo(agentDir);
+		let bus: EventBus | undefined;
+		let ctx: ExtensionContext | undefined;
+		await setup(agentDir, [
+			createMcpExtension({ loadConfig: () => ({ servers: [], errors: [] }), createTransport: () => fakeMcpServer() }),
+			createPluginMcpExtension({ agentDir }),
+			(knightcode) => {
+				bus = knightcode.events;
+				knightcode.on("session_start", (_event, context) => {
+					ctx = context;
+				});
+			},
+		]);
+		await vi.waitFor(() => expect(bus && getMcpControl(bus)?.list()).toMatchObject([{ state: "connected" }]));
+		const control = bus && getMcpControl(bus);
+		if (!control || !ctx) throw new Error("the MCP extension did not start");
+		const titles: string[] = [];
+		const ui: McpUi = {
+			menu: async (build) => {
+				titles.push(build().title);
+				return undefined;
+			},
+			status: () => {},
+			redirectUrl: async () => undefined,
+		};
+		await control.manage(["plugin_demo_docs"], ui, ctx, "tools");
+		expect(titles).toEqual(["Tools of plugin_demo_docs", expect.stringContaining("plugin_demo_docs")]);
 	});
 
 	it("are left out with --no-mcp without errors", async () => {

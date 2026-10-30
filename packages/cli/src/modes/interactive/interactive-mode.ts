@@ -829,6 +829,8 @@ export class InteractiveMode {
 			for (const skill of this.session.resourceLoader.getSkills().skills) {
 				const commandName = `skill:${skill.name}`;
 				this.skillCommands.set(commandName, skill.filePath);
+				// A skill an extension offers as its own command (a plugin's `/<plugin>:<skill>`) is listed once.
+				if (extensionCommands.some((command) => command.name === skill.name)) continue;
 				skillCommandList.push({
 					name: commandName,
 					description: this.prefixAutocompleteDescription(skill.description, skill.sourceInfo),

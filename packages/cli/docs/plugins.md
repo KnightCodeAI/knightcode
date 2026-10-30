@@ -24,12 +24,12 @@ Start KnightCode, or run `/reload` in a running session. The plugin's commands a
 
 In an interactive session, `/plugins` opens two tabs that one search covers (`/` to search, `tab` to switch):
 
-- **Plugins**: the installed plugins, and the ones Claude Code and Grok Build have to import. `space` turns a plugin on or off (asking for trust first), `u` updates, `x` uninstalls, `enter` shows what it offers, `a` installs from a source, and `r` reloads the session.
+- **Plugins**: the installed plugins, and the ones Claude Code and Grok Build have to import. `space` turns a plugin on or off (asking for trust first), `u` updates, `x` uninstalls, `enter` shows what it offers (or signs in when one of its MCP servers needs it), `a` installs from a source, and `r` reloads the session.
 - **Marketplace**: every plugin of every marketplace, as Grok Build lists them: the built-in Anthropic and xAI catalogs, the ones you added, and Claude Code's and Grok Build's. `enter` or `i` installs a plugin, adding its marketplace if needed; `d` uninstalls, `u` updates a plugin or refreshes a marketplace, `x` removes an added marketplace, `r` refreshes them all, and `a` adds one from a source.
 
 Each row shows its state, such as `not trusted`, `disabled`, `installed`, `update available`, `in Claude Code`, or `needs sign-in`, and the footer lists the keys that act on it.
 
-Opening `/plugins` shows catalogs at once: KnightCode's cached copy, or else the copy Claude Code or Grok Build keeps (only its catalog file is read). Catalogs missing or more than five minutes old are fetched in the background, and each group updates when its fetch lands; with `--offline`, only folders are read.
+Opening `/plugins` shows catalogs at once: KnightCode's cached copy, or else the copy Claude Code or Grok Build keeps (only its catalog file is read). Catalogs missing or more than five minutes old are fetched in the background, including ones your or the project's settings declare but this machine never fetched, and each group updates when its fetch lands; with `--offline`, only folders are read and the others show `offline`.
 
 A plugin's MCP servers start as soon as it is installed or turned on, without a reload. When one asks for a sign-in, `/plugins` opens [`/mcp`](mcp.md)'s menu for it, where you sign in in the browser. Later, `m` on the plugin opens the same menus to sign in or out, reconnect, or turn its servers off. Skills and commands load when you reload.
 
@@ -157,7 +157,7 @@ KnightCode replaces these tokens in skill and command files when the plugin is i
 
 Grok Build splits arguments on whitespace instead, so `"two words"` is one argument in KnightCode and two in Grok Build. KnightCode's own [prompt templates](prompt-templates.md) keep their 1-indexed `$1` and `$@`.
 
-The native `/skill:<plugin>:<skill> args` also works, with native semantics: the arguments follow the skill, unsubstituted.
+The native `/skill:<plugin>:<skill> args` also works, with native semantics: the arguments follow the skill, unsubstituted. Autocomplete lists such a skill once, as `/<plugin>:<skill>`.
 
 ### MCP configuration
 

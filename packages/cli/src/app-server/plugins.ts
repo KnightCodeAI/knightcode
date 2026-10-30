@@ -8,10 +8,10 @@ import type { ParamsOf, PluginInfo, PluginMarketplaceInfo } from "@knightcode/ap
 import { describeMcpServer, mcpEnvironmentNames } from "../plugins/mcp.ts";
 import { type MarketplaceView, PluginManager, type PluginScope, type PluginView } from "../plugins/manager.ts";
 import { resolvePath } from "../utils/paths.ts";
-import { projectReadable } from "./config.ts";
 import { trustedProject } from "./configure.ts";
 import type { AppServerContext } from "./context.ts";
 import type { Handlers } from "./server.ts";
+import { projectReadable } from "./workspaces.ts";
 
 type Scope = ParamsOf<"plugin/install">["scope"];
 

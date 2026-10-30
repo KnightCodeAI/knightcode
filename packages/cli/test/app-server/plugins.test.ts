@@ -86,9 +86,26 @@ test("lists plugin commands for a cwd before any thread exists, without starting
 	const listed = await a.client.request("command/list", { cwd });
 	conforms("command/list", listed);
 	const names = listed.commands.map((command) => command.name);
-	expect(names).toEqual(expect.arrayContaining(["demo:go", "demo:fix", "skill:demo:fix"]));
+	expect(names).toEqual(expect.arrayContaining(["demo:go", "demo:fix"]));
+	// The skill is offered once, as the plugin's own command.
+	expect(names).not.toContain("skill:demo:fix");
 	expect(names).not.toContain("plugins");
 	expect(listed.commands.find((command) => command.name === "demo:go")?.description).toBe("Go");
+});
+
+test("loads a thread's plugins from the server's agent directory", async () => {
+	const { cwd, connect } = await startServer();
+	const a = await connect();
+	const dir = mkdtempSync(join(tmpdir(), "kc-app-plugin-"));
+	dirs.push(dir);
+	const source = writeTree(dir, {
+		"plugin.json": { name: "local" },
+		"commands/hi.md": "---\ndescription: Hi\n---\nHi",
+	});
+	await a.client.request("plugin/install", { scope: "global", cwd, source, trust: true });
+	const { thread } = await a.client.request("thread/start", { cwd });
+	const { commands } = await a.client.request("command/list", { threadId: thread.id });
+	expect(commands.map((command) => command.name)).toContain("local:hi");
 });
 
 test("adds marketplaces without installing, and installs from them", async () => {

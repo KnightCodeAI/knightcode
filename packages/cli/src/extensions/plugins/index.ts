@@ -112,7 +112,7 @@ export function createPluginsExtension(options: { agentDir?: string } = {}): Ext
 									mcp: {
 										list: () => control.list(),
 										subscribe: (listener) => control.subscribe(listener),
-										manage: (names, ui) => control.manage(names, ui, ctx),
+										manage: (names, ui, action) => control.manage(names, ui, ctx, action),
 									},
 								}
 							: {}),

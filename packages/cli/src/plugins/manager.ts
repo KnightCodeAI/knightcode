@@ -877,17 +877,21 @@ export class PluginManager {
 	}
 
 	/**
-	 * Names of the catalogs declared in the user's settings and, when it is trusted, the current project's, with the
+	 * The catalogs declared in the user's settings and, when it is trusted, the current project's, by name, with the
 	 * scope that declares each (the user's when both do).
 	 */
-	private declaredMarketplaces(): Map<string, PluginScope> {
+	private declaredMarketplaces(): Map<string, { scope: PluginScope; source: string; ref?: string }> {
 		const projectTrusted = new ProjectTrustStore(this.agentDir).get(this.cwd) === true;
 		const settings = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted });
-		const declared = new Map<string, PluginScope>();
-		for (const { name } of projectTrusted ? (settings.getProjectSettings().pluginMarketplaces ?? []) : []) {
-			declared.set(name, "project");
+		const declared = new Map<string, { scope: PluginScope; source: string; ref?: string }>();
+		for (const { name, source, ref } of projectTrusted
+			? (settings.getProjectSettings().pluginMarketplaces ?? [])
+			: []) {
+			declared.set(name, { scope: "project", source, ...(ref ? { ref } : {}) });
 		}
-		for (const { name } of settings.getGlobalSettings().pluginMarketplaces ?? []) declared.set(name, "user");
+		for (const { name, source, ref } of settings.getGlobalSettings().pluginMarketplaces ?? []) {
+			declared.set(name, { scope: "user", source, ...(ref ? { ref } : {}) });
+		}
 		return declared;
 	}
 
@@ -1005,8 +1009,26 @@ export class PluginManager {
 			const from = known.find(
 				(market) => market.name === record.name || marketplaceKey(market.source) === record.canonical,
 			)?.from;
-			return listing(record, { added: true, scope: declared.get(record.name)!, ...(from ? { from } : {}) });
+			return listing(record, { added: true, scope: declared.get(record.name)!.scope, ...(from ? { from } : {}) });
 		});
+		// Declared but never fetched here, like a project's on a new machine: `/plugins` fetches it.
+		for (const [name, { scope, source, ref }] of declared) {
+			if (state.marketplaces.some((record) => record.name === name)) continue;
+			const from = known.find(
+				(market) => market.name === name || marketplaceKey(market.source) === marketplaceKey(source),
+			)?.from;
+			listings.push({
+				name,
+				source,
+				...(ref ? { ref } : {}),
+				...(from ? { from } : {}),
+				added: true,
+				scope,
+				missing: true,
+				plugins: [],
+				diagnostics: [],
+			});
+		}
 		const clones = toolClones();
 		const copied = (key: string | undefined) => {
 			const clone = key ? clones.get(key) : undefined;
@@ -1018,7 +1040,12 @@ export class PluginManager {
 		};
 		for (const market of known) {
 			const key = marketplaceKey(market.source);
-			if (added.some((record) => record.name === market.name || record.canonical === key)) continue;
+			if (
+				declared.has(market.name) ||
+				added.some((record) => record.name === market.name || record.canonical === key)
+			) {
+				continue;
+			}
 			const cached = state.marketplaces.find((record) => record.canonical === key);
 			const where = { from: market.from, added: false, ...(market.ref ? { ref: market.ref } : {}) };
 			const copy = cached ? undefined : copied(key);
@@ -1040,7 +1067,7 @@ export class PluginManager {
 		const state = this.readState();
 		const declared = this.declaredMarketplaces();
 		return state.marketplaces.flatMap((record) => {
-			const scope = declared.get(record.name);
+			const scope = declared.get(record.name)?.scope;
 			return scope ? [this.marketplaceView(record, state, scope)] : [];
 		});
 	}

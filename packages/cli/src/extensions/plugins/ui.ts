@@ -140,6 +140,10 @@ type Item =
 
 const itemKey = (item: Item) => (item.kind === "row" ? item.row.key : item.group.key);
 
+type InputHandler = Pick<Component, "handleInput" | "capturesViewportInput">;
+/** A list screen's keys, which include the fullscreen viewport keys (PageUp, PageDown). */
+const listInput = (handleInput: (data: string) => void): InputHandler => ({ handleInput, capturesViewportInput: true });
+
 /** Lines drawn at render time, for the list whose layout depends on the width. */
 class Lines implements Component {
 	private readonly draw: (width: number) => string[];
@@ -157,7 +161,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 	private readonly theme: Theme;
 	private readonly keybindings: KeybindingsManager;
 	private content: Component;
-	private inputHandler: ((data: string) => void) | undefined;
+	private inputHandler: InputHandler | undefined;
 	private inputTarget: Focusable | undefined;
 	private _focused = false;
 	// The list's state, kept between screens so the user comes back where they left.
@@ -184,6 +188,10 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		if (this.inputTarget) this.inputTarget.focused = value;
 	}
 
+	get capturesViewportInput(): boolean {
+		return this.inputHandler?.capturesViewportInput === true;
+	}
+
 	private frame(title: string, body: Component[], footer?: string): Container {
 		const container = new Container();
 		container.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
@@ -197,7 +205,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		return container;
 	}
 
-	private show(content: Component, inputHandler?: (data: string) => void, inputTarget?: Focusable): void {
+	private show(content: Component, inputHandler?: InputHandler, inputTarget?: Focusable): void {
 		if (this.inputTarget) this.inputTarget.focused = false;
 		this.content = content;
 		this.inputHandler = inputHandler;
@@ -234,7 +242,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 				const footer = `${keyHint("tui.select.confirm", menu.confirmLabel)} • ${keyHint("tui.select.cancel", menu.cancelLabel)}`;
 				this.show(
 					this.frame(menu.title, body, footer),
-					(data) => {
+					listInput((data) => {
 						if (!search || LIST_KEYS.some((key) => this.keybindings.matches(data, key))) {
 							if (items.length) list.handleInput(data);
 							else if (this.keybindings.matches(data, "tui.select.cancel")) resolve(undefined);
@@ -242,7 +250,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 						}
 						search.handleInput(data);
 						render();
-					},
+					}),
 					search,
 				);
 			};
@@ -256,13 +264,15 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			const footer = `${keyHint("tui.select.confirm", "confirm")} • ${keyHint("tui.select.cancel", "cancel")}`;
 			this.show(
 				this.frame(title, [new Text(this.theme.fg("muted", placeholder), 1, 0), field], footer),
-				(data) => {
-					if (this.keybindings.matches(data, "tui.select.confirm")) resolve(field.getValue().trim() || undefined);
-					else if (this.keybindings.matches(data, "tui.select.cancel")) resolve(undefined);
-					else {
-						field.handleInput(data);
-						this.tui.requestRender();
-					}
+				{
+					handleInput: (data) => {
+						if (this.keybindings.matches(data, "tui.select.confirm")) resolve(field.getValue().trim() || undefined);
+						else if (this.keybindings.matches(data, "tui.select.cancel")) resolve(undefined);
+						else {
+							field.handleInput(data);
+							this.tui.requestRender();
+						}
+					},
 				},
 				field,
 			);
@@ -275,7 +285,8 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 
 	mcpUi(): McpUi {
 		const view = new McpManagerView(this.tui, this.theme, this.keybindings);
-		this.show(view, (data) => view.handleInput(data), view);
+		// Its own screens decide whether they take the viewport keys.
+		this.show(view, view, view);
 		return view;
 	}
 
@@ -297,7 +308,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			const render = () => {
 				this.show(
 					this.browseScreen(tabs, options.notice),
-					(data) => {
+					listInput((data) => {
 						const action = this.browseKey(tabs, data);
 						if (action === undefined) {
 							render();
@@ -305,7 +316,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 						}
 						unsubscribe?.();
 						resolve(action === "close" ? undefined : action);
-					},
+					}),
 					this.searching ? this.search : undefined,
 				);
 			};
@@ -515,7 +526,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 	}
 
 	handleInput(data: string): void {
-		this.inputHandler?.(data);
+		this.inputHandler?.handleInput?.(data);
 	}
 
 	render(width: number): string[] {
@@ -539,8 +550,8 @@ function count(n: number, noun: string): string {
 export interface PluginsMcp {
 	list(): McpServerSummary[];
 	subscribe(listener: () => void): () => void;
-	/** Runs `/mcp`'s menus for `names` on `ui` until the user leaves them. */
-	manage(names: readonly string[], ui: McpUi): Promise<void>;
+	/** Runs `/mcp`'s menus for `names` on `ui` until the user leaves them; with one name, `action` runs first. */
+	manage(names: readonly string[], ui: McpUi, action?: string): Promise<void>;
 }
 
 export interface ManagePluginsOptions {
@@ -774,7 +785,10 @@ export async function managePlugins(
 	const fetches: Fetches = { busy: new Set(), failed: new Map(), offline: isOffline() };
 	const fetchCatalog = async (market: MarketplaceListing) => {
 		try {
-			await (market.added ? manager.updateMarketplaces(market.name) : manager.cacheMarketplace(market));
+			// A declared catalog never fetched here has no record to update yet.
+			await (market.added && !market.missing
+				? manager.updateMarketplaces(market.name)
+				: manager.cacheMarketplace(market));
 			fetches.failed.delete(market.name);
 		} catch (error) {
 			fetches.failed.set(market.name, errorText(error));
@@ -911,7 +925,8 @@ export async function managePlugins(
 			const installed = data.installed.find((candidate) => candidate.source === source);
 			if (!installed) return install(source);
 			if (key === "d") return uninstall(installed);
-			if (key === "u") return update(installed);
+			// The user stays on the catalog row they updated.
+			if (key === "u") return { ...(await update(installed)), focus: { tab, key: target } };
 			return undefined;
 		}
 		const market = data.markets.find((candidate) => `market:${candidate.name}` === target);
@@ -951,11 +966,20 @@ export async function managePlugins(
 			case "m": {
 				const names = serverNames(plugin);
 				const running = mcp?.list().filter((server) => names.includes(server.name)) ?? [];
-				if (mcp && running.length)
+				// Enter is offered only while a server needs a sign-in: it starts that sign-in.
+				const asking = running.filter((server) => server.state === "needs-auth");
+				if (mcp && key === "enter" && asking.length) {
+					await mcp.manage(
+						asking.map((server) => server.name),
+						ui.mcpUi(),
+						"signin",
+					);
+				} else if (mcp && running.length) {
 					await mcp.manage(
 						running.map((server) => server.name),
 						ui.mcpUi(),
 					);
+				}
 				return { focus };
 			}
 			case "u":

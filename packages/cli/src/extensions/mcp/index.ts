@@ -1026,14 +1026,19 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			ensureDiscoveryActive(ctx);
 			emitChange();
 		};
-		/** `only` limits the menus to those servers; with one, its menu opens directly and leaving it ends. */
-		const manage = async (ui: McpUi, ctx: ExtensionContext, only?: readonly string[]) => {
+		/**
+		 * `only` limits the menus to those servers; with one, its menu opens directly and leaving it ends, and `first`
+		 * (one of its menu's values) runs before the menu shows.
+		 */
+		const manage = async (ui: McpUi, ctx: ExtensionContext, only?: readonly string[], first?: string) => {
 			const single = only?.length === 1 ? only[0] : undefined;
+			let pending = single ? first : undefined;
 			for (;;) {
 				const name = single ?? (await ui.menu(() => serversMenu(only), subscribe));
 				if (!name) return;
 				for (;;) {
-					const action = await ui.menu(() => serverMenu(name), subscribe);
+					const action = pending ?? (await ui.menu(() => serverMenu(name), subscribe));
+					pending = undefined;
 					const server = findServer(name);
 					if (!action || !server) break;
 					await runAction(ui, ctx, server, action);
@@ -1257,7 +1262,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 					return { name: server.entry.name, state, tools: state === "connected" ? (connection?.tools.length ?? 0) : 0 };
 				}),
 			subscribe,
-			manage: (names, ui, ctx) => manage(ui, ctx, names),
+			manage: (names, ui, ctx, action) => manage(ui, ctx, names, action),
 		};
 		knightcode.events.on(MCP_CONTROL_CHANNEL, (data) => {
 			(data as { provide(control: McpControl): void }).provide(control);

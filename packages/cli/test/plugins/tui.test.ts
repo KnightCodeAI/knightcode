@@ -131,6 +131,23 @@ describe("plugins view", () => {
 		view.handleInput(ESCAPE);
 		expect(await action).toBeUndefined();
 	});
+
+	// PageDown has to reach the list in fullscreen instead of scrolling the transcript.
+	it("captures fullscreen viewport keys while a list is shown, and leaves /mcp's screens to decide", () => {
+		const view = new PluginsView(tui, theme, new KeybindingsManager());
+		void view.browse(tabs);
+		expect(view.capturesViewportInput).toBe(true);
+		void view.menu(menu);
+		expect(view.capturesViewportInput).toBe(true);
+		view.status("Installing demo", "Fetching and checking the plugin…");
+		expect(view.capturesViewportInput).toBe(false);
+		const mcp = view.mcpUi();
+		const items = [{ value: "plugin_demo_api", label: "plugin_demo_api" }];
+		void mcp.menu(() => ({ title: "MCP servers", items, confirmLabel: "open", cancelLabel: "close" }));
+		expect(view.capturesViewportInput).toBe(true);
+		mcp.status("Sign in to demo", "Connecting…");
+		expect(view.capturesViewportInput).toBe(false);
+	});
 });
 
 /** A screen answer that waits until `ready` holds for the rebuilt tabs, as background fetches finish. */
@@ -297,6 +314,74 @@ describe("/plugins", () => {
 		const installed = row(script.screens[1], "plugin:user:demo");
 		expect(installed?.badge).toEqual({ text: "needs sign-in", tone: "warning" });
 		expect(installed?.actions).toMatchObject({ enter: "sign in", m: "MCP servers" });
+	});
+
+	it("signs in with enter on a row that needs it, and opens /mcp's menu with m", async () => {
+		const agentDir = tempDir();
+		const manager = new PluginManager({ agentDir, cwd: agentDir });
+		const { mcp, applyMcp } = fakeMcp("needs-auth");
+		const target = "plugin:user:demo";
+		const script = scriptedUi([
+			{ tab: "plugins", key: "a" },
+			demo(),
+			"yes",
+			{ tab: "plugins", key: "enter", target },
+			{ tab: "plugins", key: "m", target },
+			undefined,
+			"later",
+		]);
+		await managePlugins(script.ui, manager, { reload: vi.fn(), mcp, applyMcp });
+		expect(vi.mocked(mcp.manage).mock.calls.slice(1)).toEqual([
+			[["plugin_demo_api"], script.mcpUi, "signin"],
+			[["plugin_demo_api"], script.mcpUi],
+		]);
+	});
+
+	it("stays on the Marketplace tab after updating a plugin from it", async () => {
+		const catalog = (version: string) => ({
+			".claude-plugin/marketplace.json": {
+				name: "shop",
+				plugins: [{ name: "alpha", source: "./plugins/alpha", version }],
+			},
+			"plugins/alpha/plugin.json": { name: "alpha", version },
+			"plugins/alpha/commands/a.md": "a",
+		});
+		const market = writeTree(tempDir(), catalog("1.0.0"));
+		const agentDir = tempDir();
+		const manager = new PluginManager({ agentDir, cwd: agentDir });
+		await manager.addMarketplace(market, {});
+		await manager.install("alpha@shop", { trust: true });
+		writeTree(market, catalog("2.0.0"));
+		await manager.updateMarketplaces("shop");
+		const target = "entry:alpha@shop";
+		const script = scriptedUi([{ tab: "marketplace", key: "u", target }, undefined, "later"]);
+		await managePlugins(script.ui, manager, { reload: vi.fn() });
+		expect(script.options[1]?.notice?.text).toMatch(/^Updated alpha/);
+		expect(script.options[1]?.focus).toEqual({ tab: "marketplace", key: target });
+	});
+
+	it("lists marketplaces the settings declare before their catalogs are fetched, and fetches local ones", async () => {
+		const market = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": { name: "acme", plugins: [{ name: "alpha", source: "./plugins/alpha" }] },
+			"plugins/alpha/commands/a.md": "a",
+		});
+		const agentDir = tempDir();
+		writeTree(agentDir, {
+			"settings.json": {
+				pluginMarketplaces: [
+					{ name: "acme", source: market },
+					{ name: "remote", source: "acme/remote-plugins" },
+				],
+			},
+		});
+		const manager = new PluginManager({ agentDir, cwd: agentDir });
+		const script = scriptedUi([when((tabs) => row(tabs, "entry:alpha@acme") !== undefined), undefined]);
+		await managePlugins(script.ui, manager, { reload: vi.fn() });
+		const groups = script.screens[0]?.find((tab) => tab.id === "marketplace")?.groups ?? [];
+		// Tests run offline: the GitHub catalog is not fetched, the folder is.
+		expect(groups.find((group) => group.label === "remote")?.badge?.text).toBe("offline");
+		expect(groups.find((group) => group.label === "acme")?.actions).toMatchObject({ u: "refresh", x: "remove" });
+		expect(manager.listMarketplaces().map((added) => added.name)).toEqual(["acme"]);
 	});
 
 	it("stays in /plugins when the plugin's servers connect, and shows them on the row", async () => {

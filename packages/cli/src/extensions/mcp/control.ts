@@ -25,9 +25,9 @@ export interface McpControl {
 	subscribe(listener: () => void): () => void;
 	/**
 	 * Runs `/mcp`'s menus on `ui` for `names`: one server's menu, or a list of several. Resolves when the user
-	 * leaves them.
+	 * leaves them. With one server, `action` (a value of its menu, such as `signin`) runs before the menu shows.
 	 */
-	manage(names: readonly string[], ui: McpUi, ctx: ExtensionContext): Promise<void>;
+	manage(names: readonly string[], ui: McpUi, ctx: ExtensionContext, action?: string): Promise<void>;
 }
 
 /** The MCP extension's control, or undefined when it is not loaded (`--no-mcp`). */

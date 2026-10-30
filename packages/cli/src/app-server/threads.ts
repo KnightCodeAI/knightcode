@@ -45,7 +45,8 @@ import {
 import { DEFAULT_TOOL_NAMES, SettingsManager } from "../core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { builtInExtensions } from "../extensions/index.ts";
-import { pluginCommands } from "../extensions/plugins/index.ts";
+import { createPluginsExtension, pluginCommands } from "../extensions/plugins/index.ts";
+import { createPluginMcpExtension } from "../extensions/plugins/mcp.ts";
 import { PluginManager } from "../plugins/manager.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ShellConfig } from "../utils/shell.ts";
@@ -77,7 +78,7 @@ import {
 } from "./git-actions.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
-import { positionOf, projectReadable } from "./config.ts";
+import { positionOf } from "./config.ts";
 import { FileSearch } from "./file-search.ts";
 import { listFolder, readFile, writeText } from "./files.ts";
 import { callAppTool, createMcpAppsExtension, type McpAppsHolder, readAppResource } from "./mcp-apps.ts";
@@ -118,6 +119,7 @@ import {
 	manifestFor,
 	placeThread,
 	prepareWorktree,
+	projectReadable,
 	runCleanup,
 	readEnvironments,
 	saveEnvironments,
@@ -202,15 +204,17 @@ export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
 const TERMINAL_ONLY_COMMANDS = new Set(["usage", "llama", "undo", "plugins"]);
 
 function commandsOf(session: AgentSession): ResultOf<"command/list">["commands"] {
+	const commands = session.extensionRunner.getRegisteredCommands();
 	return [
-		...session.extensionRunner
-			.getRegisteredCommands()
+		...commands
 			.filter((command) => !TERMINAL_ONLY_COMMANDS.has(command.invocationName))
 			.map((command) => ({ name: command.invocationName, description: command.description ?? "" })),
 		...session.promptTemplates.map((template) => ({ name: template.name, description: template.description ?? "" })),
+		// A skill an extension offers as its own command (a plugin's `/<plugin>:<skill>`) is listed once.
 		...session.resourceLoader
 			.getSkills()
-			.skills.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description ?? "" })),
+			.skills.filter((skill) => !commands.some((command) => command.invocationName === skill.name))
+			.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description ?? "" })),
 	];
 }
 
@@ -1646,7 +1650,7 @@ export class ThreadManager {
 			settingsManager: SettingsManager.create(cwd, this.ctx.agentDir, { projectTrusted }),
 			resourceLoaderOptions: {
 				extensionFactories: [
-					...builtInExtensions,
+					...this.builtInExtensions(),
 					...this.threadExtensions(holder),
 					...(this.options.extraExtensions ?? []),
 					// Inline extensions load after all others, so this input handler runs last.
@@ -1703,12 +1707,26 @@ export class ThreadManager {
 		const { plugins } = new PluginManager({ agentDir: this.ctx.agentDir, cwd }).loadActive(
 			projectReadable(this.ctx.agentDir, cwd),
 		);
+		// A skill users may invoke is already a `/<plugin>:<skill>` command; the rest only have `/skill:`, as in commandsOf.
 		return [
 			...pluginCommands(plugins).map((command) => ({ name: command.name, description: command.description })),
 			...plugins.flatMap((plugin) =>
-				plugin.inventory.skills.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description })),
+				plugin.inventory.skills
+					.filter((skill) => !skill.userInvocable)
+					.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description })),
 			),
 		];
+	}
+
+	/** The built-in extensions, with plugins read from this server's agent directory, as `pluginCommandsFor` reads them. */
+	private builtInExtensions(): InlineExtension[] {
+		const { agentDir } = this.ctx;
+		return builtInExtensions.map((extension) => {
+			if (typeof extension === "function") return extension;
+			if (extension.name === "plugins") return { ...extension, factory: createPluginsExtension({ agentDir }) };
+			if (extension.name === "plugin-mcp") return { ...extension, factory: createPluginMcpExtension({ agentDir }) };
+			return extension;
+		});
 	}
 
 	/** Per-thread bridge for model changes, which are extension-only events. */
