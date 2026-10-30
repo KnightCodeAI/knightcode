@@ -2060,9 +2060,10 @@ validation and copies the v2 kernel added around Delta.
 - **Restricted names instead of assigned table names (owner, 2026-10-27; slice 6a spec review blocker 5):** names
   that become SQL names are restricted at declaration (and checked on import) instead of being mapped. Host kinds,
   object types (every contract, not only stores) and table names use npm package-name characters `[a-z0-9@/._~-]`,
-  lowercase only (SQLite compares identifiers case-insensitively), so plugin-prefixed type names (`@pi/file-history.store`)
-  stay valid; the separator is `:`, which they cannot contain, so the rendering `"session:@pi/file-history.store:edits"`
-  is injective (`a/b` + `c` and `a` + `b/c` differ) and readable in `sqlite3`. Index names `[a-z0-9_]+`, rendered
+  lowercase only (SQLite compares identifiers case-insensitively), so plugin-prefixed type names
+  (`@knightcode/file-history.store`) stay valid; the separator is `:`, which they cannot contain, so the rendering
+  `"session:@knightcode/file-history.store:edits"` is injective (`a/b` + `c` and `a` + `b/c` differ) and readable in
+  `sqlite3`. Index names `[a-z0-9_]+`, rendered
   `<table>:<index>`. Column names `[A-Za-z_][A-Za-z0-9_]*` (camelCase allowed), two columns equal ignoring ASCII case
   refused at `defineTable`, no `$` (the hidden `$v` and `<column>$v` cannot collide). Import is a trust boundary: every
   name in an archive is checked against these rules (no `"` can occur: quoting is always safe), every row against its
