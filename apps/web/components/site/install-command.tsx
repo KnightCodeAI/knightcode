@@ -131,9 +131,11 @@ export function TabBar<T extends string>({
   }, [active])
 
   return (
+    // On the narrowest phones the tabs outgrow the card, so the row scrolls
+    // by swipe; the underline lives inside it and scrolls along.
     <div
       ref={barRef}
-      className="relative flex items-center border-b border-border/50 bg-foreground/[0.025] px-2"
+      className="relative flex items-center overflow-x-auto border-b border-border/50 bg-foreground/[0.025] px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {label}
       {/* With a label the tabs sit at the row's end, as its options. */}
