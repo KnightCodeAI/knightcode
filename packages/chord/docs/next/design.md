@@ -89,7 +89,8 @@ worker worker worker      addressable by a typed address, started on demand
 | worker | yes, many | stamped by the parent | started on demand by the app |
 
 Clients serve only `local` types (they are not addressable): a host without a principal or without an address refuses
-to serve a remote type (`load` throws; a remote object is owned by a principal of the host serving it, owner,
+to serve a remote type (a declaration error: `load` leaves that plugin out and reports it, a reload keeps it on its
+old code; a remote object is owned by a principal of the host serving it, owner,
 2026-10-24; and placed by its host address, owner, 2026-10-29). No client providers for now (owner,
 2026-10-28): client-side capabilities (a camera, WebMCP tools) go through an owner's requests that clients answer
 (section 20, the Questions service). A client's local
@@ -231,8 +232,8 @@ parent link closes. `resolve` returns the link before the worker has loaded (the
 | Call | Meaning |
 | --- | --- |
 | `createHost<P>({ address?, principal?, ...options })` | with an address: addressable, serves only objects placed there, acts as `principal` on its own host; without: a client. `P` is the app's principal type |
-| `load([{ name, facet }], context)` | facets with their plugin names (the plugin's `package.json` name, npm style; duplicates and invalid names are refused); runs every facet's setup, publishes all of them in one batch (types and registries served, registries composed once, contributions; requests waiting for the publication are placed after it), then waits for the start barrier (section 21: the first outcomes of its host-lifetime objects, slice 7a); a throwing setup rejects and closes the host; runs once. Loaders are adapters; base code passes its core facet the same way |
-| `reload([{ name, facet }], context)` | the complete new plugin set after `load` (a facet passed as the same object is an unchanged plugin): staging, then one commit, then every object of a changed or removed plugin takes its fate; resolves with a report, rejects with a staging error and nothing changed; one at a time (section 21, slice 7b) |
+| `load([{ name, facet }], context)` | facets with their plugin names (the plugin's `package.json` name, npm style; duplicates and invalid names are refused); runs every facet's setup, publishes all of them in one batch (types and registries served, registries composed once, contributions; requests waiting for the publication are placed after it), then waits for the start barrier (section 21: the first outcomes of its host-lifetime objects, slice 7a); a plugin whose setup throws is left out and reported (`load` resolves with `{ failed: [{ plugin, error }] }`, decision "Per plugin at startup and reload"); runs once. Loaders are adapters; base code passes its core facet the same way |
+| `reload([{ name, facet }], context)` | the complete new plugin set after `load` (a facet passed as the same object is an unchanged plugin): staging, then one commit, then every object of a changed or removed plugin takes its fate; resolves with a report (a plugin whose new code fails keeps its old code, listed in `failed`); one at a time (section 21, slice 7b) |
 | `connect(link, { principal, trusted?, codec? }, context)` | the link to the parent, at most one open; once it closed (a drop), `connect` takes the next, and every remote reference over the parent is held again on it. `principal` = who the parent is |
 | `accept(link, { principal, trusted?, codec? }, context)` | a link from a child; holds and calls on it act as `principal` |
 | `route(Kind, { authorize, resolve }, context)` | how to reach hosts of a kind (below); called before `load`, once per kind; work arriving on its links runs under `context` |
@@ -714,7 +715,8 @@ host.serve(Notes, ({ session }, principal, self) =>
   the watches before natives open, so a failed open still has them). Every trigger works like `ref.retry()`: the
   backoff window is skipped, an attempt starts now, holders are told `loading`. `retryOn` sources must live independently of the
   attempt (registry values); a reference's member is a type error. A facet cannot fail
-  after `load`: its setup only declares (a throwing setup rejects `load`, slice 2; owner, 2026-10-26).
+  after `load`: its setup only declares (a throwing setup leaves its plugin out of `load`, reported in `load`'s
+  `failed`; decision "Per plugin at startup and reload"; owner, 2026-10-26, 2026-10-30).
 
 ### The factory principle
 
@@ -1810,14 +1812,18 @@ agent asks everyone present. Its store must live in an object (it predates "nati
 changed (Chord compares no code); one passed as the very same facet object is unchanged and untouched (owner,
 2026-10-29: base code passes its core facet value every time); one loaded and not in it is removed. It resolves with a
 report once the commit happened and every object took its fate (swaps and retries had their first dependency check;
-it does not wait for objects to go live), and rejects with the code error when staging fails, nothing changed.
+it does not wait for objects to go live); a plugin whose new code fails keeps its old code and is listed in the
+report's `failed` (per plugin, below).
 Reloads run one after another per host; before `load` resolved it throws, after `close` it rejects `released/closed`;
 `context` bounds it (decision 4: no install watchdog): its abort before the commit rejects `aborted` and changes
-nothing, after the commit it only ends the wait.
+nothing, after the commit it only ends the wait: it rejects `aborted` with `details.committed`, a `CommittedReload`
+`{ added, changed, removed, failed }` naming what the commit applied (the plugins component adopts it, so a later
+reload never passes a committed plugin's old facet; owner, 2026-10-30).
 
 ```ts
 type ReloadReport = {
   readonly plugins: { readonly added: readonly string[]; readonly changed: readonly string[]; readonly removed: readonly string[] };
+  readonly failed: readonly { readonly plugin: string; readonly error: unknown }[];   // new code failed: old code kept, an added one left out
   readonly objects: readonly ({ readonly object: string } & (
     | { readonly kind: "swapped" } | { readonly kind: "restarted" } | { readonly kind: "ended" }
     | { readonly kind: "parked"; readonly cause: FailureCause } | { readonly kind: "retried" }))[];
@@ -1825,20 +1831,33 @@ type ReloadReport = {
 ```
 
 ```
-1. load      new bundles (the app's or loader's: a facet arrives evaluated); an import or syntax error rejects
-2. staging   every setup into a staged table, and every affected object's new factory against a recording `self`
-             (declarations only, nothing activated, bound or opened); any throw rejects
+1. load      new bundles (the app's or loader's: a facet arrives evaluated); a plugin whose build or evaluation
+             fails keeps its loaded facet (`reload(facets, context, { failed })`)
+2. staging   every new setup into a staged table, and every affected object's new factory against a recording
+             `self` (declarations only, nothing activated, bound or opened); a plugin whose new code throws keeps its
+             old code, staging runs again without it, then the closure rule (below)
 3. commit    one batch: the host switches to the new code atomically, a publication (7a)
 4. after     each object takes its fate (below)
 ```
 
-- **Rollback is all-or-nothing per host:** any load or staging error (a setup's or factory's throw, a declaration
-  error, `checkAccepts`, a type or registry served twice, a remote type on a host without principal or address)
-  rejects the reload naming the plugin (and object), and the host stays entirely on its old code; a host is at
-  revision R or R−1. Runtime states (registry conflicts, failed opens, migrations) are not rollback reasons: they are
-  per object after the commit (`onError` as always; no new `HostError` kind, the report is the summary).
-- **Staging** runs every facet's setup into a staged table beside the live one (types with their factory, `linger` and
-  provider, `bindProvider(contract, options.accepts)`; registry providers; facet contributions by plugin), then, for
+- **Per plugin, never all or nothing** (owner, 2026-10-30, decision "Per plugin at startup and reload"; supersedes 7b's
+  rollback per host): a plugin whose new code fails at a reload (its build or evaluation, a setup's or factory's throw
+  in staging, a declaration error, `checkAccepts`, a type or registry served twice, a remote type on a host without
+  principal or address) keeps its old code (its loaded facet, unchanged) and is reported in the reload's report
+  (`failed: [{ plugin, error }]`, the same list `load`'s report has; an added plugin that fails is left out); staging runs again without it, and every other plugin of the reload applies. **The
+  closure rule:** a changed plugin whose recorded requests would not bind because the plugin they need was kept old (or
+  is missing) is kept old too, so a consumer edited together with a broken provider keeps working on its old code. At
+  startup the same holds: `load` leaves a failing plugin out and resolves with `{ failed: [{ plugin, error }] }`; its
+  consumers wait `failed { waiting }`; `load` never closes the host for a plugin (base code decides whether its core
+  failing is fatal). A loader that kept a plugin on its loaded facet because its new code failed before staging (its
+  build, its evaluation) tells the host with `reload(facets, context, { failed })`: the host lists it and applies the
+  closure rule to it as to a plugin whose staging failed. What no rule detects: a consumer relying on new behaviour of a kept provider whose contract did not
+  change (as in a rollout across hosts). Runtime states (registry conflicts, failed opens, migrations) stay per object
+  after the commit (`onError` as always).
+- **Staging** runs every new setup (each plugin into its own table, merged; an unchanged or kept plugin's loaded
+  entries are reused, its setup not run again) into a staged table beside the live one (types with their factory,
+  `linger` and provider, `bindProvider(contract, options.accepts)`; registry providers; facet contributions by
+  plugin), then, for
   every live, activating, parked or failed object of a changed or removed plugin whose type is still served, its new
   factory with the object's params (and principal) against a recording `self`: it records what the factory opens,
   the documents, tables and jobs it declares with their versions, its contributions and requests, runs the checks an
@@ -1888,7 +1907,9 @@ type ReloadReport = {
   in their own process, model runtimes, sandboxes and the search index rebuild in milliseconds); reloading the plugin
   that owns SSH connections or the relay socket hurts.
 - **No factory trial, no migrate dry run, no consumer contract check during staging:** staging records declarations;
-  incompatible consumers wait at bind (`failed { waiting }`, `contract_mismatch`).
+  incompatible consumers wait at bind (`failed { waiting }`, `contract_mismatch`). The one exception is the closure
+  rule above: when a plugin of the reload failed, a changed plugin's recorded requests are checked as a bind would
+  check them, to keep it old.
 - **Start barrier** (host start and first load; dependency model §6, decision (a), slice 7a): `load` runs the facets'
   setups (the core facet with its start data among them) and **publishes** them in one batch (types served,
   registries served and composed once, contributions in their tables); requests that waited for the publication are
@@ -1909,8 +1930,8 @@ type ReloadReport = {
 ### Rollout across hosts
 
 - **The rollout is the app's** (decision "Slice 7b's open points" (3)): it calls `host.reload` on each host in order,
-  server, then workers, then clients; Chord guarantees per host (staging, commit, rollback). The app kit's
-  dev component (slice 7c) is such an app. An install never waits for activations (a reverse-order rollout would
+  server, then workers, then clients; Chord guarantees per host (staging, commit, a failing plugin kept on its old
+  code). The plugins component's `rollout` (slice 7c) runs such steps. An install never waits for activations (a reverse-order rollout would
   deadlock).
 - **Each host knows only its own install** (model §5): until its reload commits (while the app bundles, before
   `host.reload`), a hold that does not fit its running code is answered `failed { waiting, version }` and the commit
@@ -1922,18 +1943,30 @@ type ReloadReport = {
   unchanged server restart reinstalls nothing), serialized installs, a host that starts or reconnects installing the
   current set before anything is routed to it, a rejected own install failing its own requests with the reason.
 
-### Loading and the dev loop
+### Loading plugins and the reload loop (slice 7c)
 
-- Plugins come from built-in, global (`<data>/plugins`), package (npm/git, installed with `--ignore-scripts`) and
-  project roots, found by directory listing (no source parsing); the server selects; dependencies resolve by contract
-  name at runtime; names are prefixed (`<plugin>.<name>`; tools `<plugin>_<name>`).
-- **Loader D:** one base bundle per surface (host packages and the app runtime) plus one script per facet (host
-  packages passed in, no module map); old generations are reclaimed by the GC; stable filename per (facet, digest) and
-  V8's compilation cache off on hosts that reload in place. The loader is an adapter: static imports (tests, Durable
-  Objects) work the same.
-- Project plugins, trust, snapshots and scopes: `apps/p2/docs/plugin-loading.md` (still the reference for those).
-- **Dev loop:** a source watcher marks plugins dirty (never applies changes); a reload control (playground web shell,
-  CLI, agent tool) reloads the changed plugins or restarts all hosts for base code.
+- **No dev/prod split** (owner, 2026-10-30): a Chord app is self-modifying (the owner or an agent edits a plugin while
+  it runs), so finding, building, loading, watching and rolling out plugins is core machinery: one component,
+  `chord/next/plugins` (`src/next-node/plugins/`, Node-side; the kernel stays portable and takes facets however they
+  were made: static imports in tests and Durable Objects work the same). Reloads stay explicit: the watcher marks,
+  never applies.
+- **A plugin** is a directory with a `package.json` (its `name` is the plugin's name, npm style) and one file per facet
+  kind the app names; plugins come from roots found by directory listing (no source parsing; the first root wins a
+  duplicate name). Dependencies between plugins resolve by contract name at runtime; names are prefixed
+  (`<plugin>.<name>`; tools `<plugin>_<name>`).
+- **Loader D:** one esbuild script per facet (its own files, copied files of other plugins, its npm `dependencies`
+  inlined; host packages, `chord.external` packages and Node builtins external, passed in at evaluation); evaluated with
+  `vm.Script` under a stable filename per (plugin, kind, digest); no module map: old generations are reclaimed by the
+  GC; V8's compilation cache turned off when the component is created. `pluginFile(path)` resolves a file of the
+  calling facet's own plugin. A plugin's dependencies are installed into its directory (`installDependencies`, as
+  coding-agent does: `--omit=dev --legacy-peer-deps --ignore-scripts`). esbuild is an optional peer dependency.
+- **The reload loop:** a watcher marks plugins dirty from the files each facet used (a copied contract dirties every
+  user) and flags changes of base code (the app restarts its hosts); a build is per plugin (a failed one keeps its old code); `rollout` runs the app's
+  steps in order (server, workers, clients; decision "Slice 7b's open points" (3)). A reload control (a button, a CLI,
+  an agent tool) is the app's. One base bundle per surface (host packages and the app runtime) is an app's startup
+  optimization, the web's in slice 11.
+- Project plugins, trust, snapshots, scopes and npm/git package installs: `apps/p2/docs/plugin-loading.md` (still the
+  reference for those; not in 7c).
 
 - **UI reload vs. leaving:** "leaving" is never derived from an unmount, only from explicit navigation or presence (a
   dropped reference); a component unmounted by a reload has not left.
@@ -2409,8 +2442,7 @@ with their contributor, readable contributions and readers looking up the curren
 registry keys with a `conflict` flag;
 `restart_required`; detached references counting toward presence; contracts taken from the running app; ceremony
 (`native/` directories, `defineNative`, lints); weakening type checking; "magic" input-field matching for delete; a
-factory trial; a migrate dry run; principal field patterns and re-stamping for revocation; `storeKey`; a consumer contract check during staging; reload votes; per-plugin rollback within a
-host; `defaultProjectTrust: "always"`; loader variants A and B; a topology layer above the host API; a stream type in
+factory trial; a migrate dry run; principal field patterns and re-stamping for revocation; `storeKey`; a consumer contract check during staging; reload votes; `defaultProjectTrust: "always"`; loader variants A and B; a topology layer above the host API; a stream type in
 Chord; callbacks as method arguments; `opaque` members; numeric middleware priorities; host addresses as data naming an
 input field; host-name strings in app code; host values (start data and platform bindings are core objects);
 consumer-side linger; registry composition as a staging check; a JSONL document storage; `tx.get` for documents; validating state and documents on commits or reads (migration results are validated once, R8); copying values on same-host calls; op-rewriting projections and a
