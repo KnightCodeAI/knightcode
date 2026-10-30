@@ -10,8 +10,12 @@ export function runClipboardCommand(
 		// Clipboard writers can daemonize. Do not give them output pipes to retain.
 		// Detach on POSIX so the daemon leaves KnightCode's process group and Ctrl+Z suspend
 		// (SIGTSTP to the group) does not stop the clipboard owner.
+		// Run from / (the current drive root on Windows): clipboard tools ignore the cwd, and WSL cannot start
+		// Windows executables (powershell.exe) when the cwd's \\wsl.localhost\... path
+		// exceeds MAX_PATH. This also keeps daemons from pinning KnightCode's cwd.
 		const child = spawn(command, args, {
 			stdio: ["pipe", options?.input === undefined ? "pipe" : "ignore", "ignore"],
+			cwd: "/",
 			detached: process.platform !== "win32",
 			windowsHide: true,
 		});
