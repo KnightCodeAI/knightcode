@@ -91,6 +91,23 @@ async function migrateVersion(
 	target: MigrationTarget,
 	context: Context,
 ): Promise<void> {
+	const { table } = target;
+	// Old handles are refused from now on: their SQL must never queue behind this version's DDL.
+	const withdraw = target.store.announceTable(table, definition.version);
+	try {
+		await migrateSteps(definition, from, target, context);
+	} finally {
+		withdraw();
+	}
+}
+
+/** The commits of `migrateVersion`. */
+async function migrateSteps(
+	definition: TableDefinition,
+	from: "begin" | "resume",
+	target: MigrationTarget,
+	context: Context,
+): Promise<void> {
 	const { before, step, after } = definition.evolution!.migration;
 	const { table } = target;
 	const edits = (list: typeof before): StagedWrite[] => list.map((edit) => stageEdit(table, definition.version, edit));
