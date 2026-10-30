@@ -112,6 +112,11 @@ function buildGitSource(args: { repo: string; host: string; path: string; ref?: 
 	if (hasUnsafeGitInstallPart(args.host, false) || hasUnsafeGitInstallPart(normalizedPath, true)) {
 		return null;
 	}
+	// The ref reaches `git fetch` and `git checkout` as an argument, where a leading dash reads as an option. No branch,
+	// tag, or commit can start with one.
+	if (args.ref?.startsWith("-")) {
+		return null;
+	}
 
 	return {
 		type: "git",
