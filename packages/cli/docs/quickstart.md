@@ -6,10 +6,14 @@ For native Windows setup, read [Windows Setup](windows.md). For Android, read [T
 
 ## 1. Install KnightCode
 
-On macOS or Linux, you can use the installer. It installs Node.js 22.19 or newer if Node is missing or older, then installs KnightCode for your user:
+Install KnightCode with the installer on macOS, Linux, or Windows. It installs Node.js 22.19 or newer if Node is missing or older, then installs KnightCode for your user:
 
-```bash
+```bash tab="macOS / Linux"
 curl -fsSL https://knightcode.dev/install.sh | sh
+```
+
+```powershell tab="Windows"
+powershell -c "irm https://knightcode.dev/install.ps1 | iex"
 ```
 
 Alternatively, install KnightCode from npm. This requires Node.js 22.19 or newer:
@@ -121,8 +125,12 @@ npm uninstall -g @knightcodeai/cli
 
 If you used the installer, run it again and choose **Uninstall KnightCode**:
 
-```bash
+```bash tab="macOS / Linux"
 curl -fsSL https://knightcode.dev/install.sh | sh
+```
+
+```powershell tab="Windows"
+powershell -c "irm https://knightcode.dev/install.ps1 | iex"
 ```
 
 Neither method removes configuration, credentials, sessions, or installed KnightCode packages from `~/.knightcode/agent/`.

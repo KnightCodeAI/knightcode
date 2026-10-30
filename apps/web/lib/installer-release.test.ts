@@ -20,10 +20,10 @@ import {
 import { GET as getArtifact } from "../app/api/installer/releases/[version]/[artifact]/route"
 import { GET as getLatest } from "../app/api/installer/releases/latest/route"
 
-const installScript = readFileSync(
-  join(import.meta.dir, "../public/install.sh"),
-  "utf8"
-)
+const installScripts = ["install.sh", "install.ps1"].map((name) => ({
+  name,
+  source: readFileSync(join(import.meta.dir, "../public", name), "utf8"),
+}))
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status })
@@ -82,18 +82,23 @@ describe("installer lock contract", () => {
     )
   })
 
-  it("keeps the same checks the shell script runs", () => {
-    expect(installScript).toContain(
-      'marker.kind !== "knightcode-managed-install"'
-    )
-    expect(installScript).toContain(
-      "https://knightcode.dev/api/installer/releases"
-    )
-    expect(installScript).toContain(CLI_PACKAGE)
-    expect(installScript).toContain("lockfileVersion !== 3")
-    expect(installScript).toContain("KNIGHTCODE_MANAGED_INSTALL_ROOT")
-    expect(installScript).not.toContain("pi.dev")
-    expect(installScript).not.toContain("earendil")
+  for (const { name, source } of installScripts) {
+    it(`keeps the same checks ${name} runs`, () => {
+      expect(source).toContain('marker.kind !== "knightcode-managed-install"')
+      expect(source).toContain("https://knightcode.dev/api/installer/releases")
+      expect(source).toContain(CLI_PACKAGE)
+      expect(source).toContain("lockfileVersion !== 3")
+      expect(source).toContain("KNIGHTCODE_MANAGED_INSTALL_ROOT")
+      expect(source).not.toContain("pi.dev")
+      expect(source).not.toContain("earendil")
+    })
+  }
+
+  // `irm | iex` in Windows PowerShell 5.1 decodes a response without a
+  // charset as Latin-1, so any non-ASCII byte would arrive garbled.
+  it("keeps install.ps1 ASCII", () => {
+    const ps1 = installScripts.find(({ name }) => name === "install.ps1")
+    expect(/^[\x00-\x7f]*$/.test(ps1!.source)).toBe(true)
   })
 })
 
