@@ -1334,9 +1334,15 @@ if (cliRelative.startsWith("..") || path.isAbsolute(cliRelative) || !fs.statSync
 	throw new Error(`Managed KnightCode executable is invalid: ${cliPath}`);
 }
 
+// Put this Node first on PATH for KnightCode's child processes, so npm in
+// `knightcode update` and the npm shims it runs use the same Node. A new
+// Windows shell puts machine PATH first, ahead of a standalone Node.
+const env = { ...process.env, KNIGHTCODE_MANAGED_INSTALL_ROOT: installRoot };
+const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
+env[pathKey] = [path.dirname(process.execPath), env[pathKey]].filter(Boolean).join(path.delimiter);
 const result = spawnSync(process.execPath, [cliPath, ...process.argv.slice(2)], {
 	stdio: "inherit",
-	env: { ...process.env, KNIGHTCODE_MANAGED_INSTALL_ROOT: installRoot },
+	env,
 });
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);
@@ -1526,9 +1532,29 @@ function Invoke-KnightcodeManagedInstall {
 
     $managedReleaseDir = Join-Path $managedReleasesRoot $managedVersion
     Write-Host "Activating managed KnightCode $managedVersion"
-    if (Test-Path $managedReleaseDir -PathType Container) {
+    # Keep an existing copy of this release only if it still runs: reinstalling
+    # is how a damaged install gets repaired. A copy in use stays in place.
+    $existingReleaseWorks = $false
+    $existingReleaseBin = Join-Path $managedReleaseDir "node_modules\.bin\knightcode.cmd"
+    if (Test-Path $existingReleaseBin -PathType Leaf) {
+      $savedErrorActionPreference = $ErrorActionPreference
+      try {
+        # A damaged release writes to stderr, which Windows PowerShell would
+        # promote to a terminating error here.
+        $ErrorActionPreference = "Continue"
+        $existingReleaseVersion = & $existingReleaseBin --version
+        $existingReleaseWorks = ($LASTEXITCODE -eq 0) -and (("$existingReleaseVersion").Trim() -eq $managedVersion)
+      } finally {
+        $ErrorActionPreference = $savedErrorActionPreference
+      }
+    }
+    if ($existingReleaseWorks) {
       Remove-Item $managedStageDir -Recurse -Force
     } else {
+      if (Test-Path $managedReleaseDir) {
+        Write-Host "Replacing the damaged managed KnightCode $managedVersion"
+        Remove-Item $managedReleaseDir -Recurse -Force
+      }
       Move-Item $managedStageDir $managedReleaseDir
     }
 
