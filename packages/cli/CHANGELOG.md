@@ -1,5 +1,32 @@
 # @knightcodeai/cli
 
+## 0.23.1
+
+### Changed
+
+- Changed MCP OAuth sign-in to identify with KnightCode's Client ID Metadata Document by default when the authorization server supports it for public clients, and to register a client dynamically otherwise. A client registered before keeps being used until you sign out. Set `oauth.clientRegistration` to `dcr` to always register, or pass `--oauth-client-registration` to `knightcode mcp add`.
+
+### Fixed
+
+- Fixed git package sources accepting a ref that starts with `-`, which `git fetch` and `git checkout` read as an option rather than a ref. Such sources are now rejected like other malformed git URLs.
+
+- Fixed regular expressions for provider error messages, npm package specs, and LaTeX sub/superscripts that slowed down quadratically on long runs of whitespace or slashes. They now run in linear time and match exactly the same strings.
+
+- Fixed images not rendering inline in Orca terminals. Orca supports Kitty graphics and advertises it through `ORCA_IMAGE_PROTOCOL=kitty`, which is now detected.
+
+- Fixed `knightcode -e npm:<pkg>` staying on the version from the first download. On each start and `/reload`, an `-e` npm package without an exact version is reinstalled when the registry has a newer matching version. `knightcode -e git:<repo>@<branch>` likewise stayed on its first checkout and is now fetched and reset to the branch; a commit-hash ref that is already checked out is not fetched. Offline mode and failed checks keep the cached copy.
+
+- Fixed a saved "Do not trust" decision being ignored for projects without trust-requiring resources, such as a folder with only `AGENTS.md`. Such projects were always auto-trusted, so `ctx.isProjectTrusted()` returned true and package commands treated them as trusted. A saved decision in `trust.json` now wins; auto-trust applies only when nothing is saved.
+
+- Fixed paths that differ only by letter case being treated as different locations on Windows. A project trust decision saved as `C:\Work\app` now applies to `c:\work\app`, the user `~/.agents/skills` folder is recognized when `HOME` uses different casing, and duplicate resources, the current session in `/resume`, and `~` shortening in displayed paths now ignore case on Windows.
+
+- Fixed wrapped Markdown lines starting with a space after a bold or code word at the wrap boundary, and strikethrough bleeding into the padding of a wrapped line on a background color.
+
+### Security
+
+- Security updated the webfetch regex dependency `re2js` to 2.8.7 to address
+  CVE-2026-116795. KnightCode does not enable the affected lookbehind feature.
+
 ## 0.23.0
 
 ### Added
