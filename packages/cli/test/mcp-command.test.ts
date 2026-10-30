@@ -210,6 +210,15 @@ describe("knightcode mcp", () => {
 		expect(readConfig(join(agentDir, "mcp.json")).mcpServers).toMatchObject({
 			sentry: { url: "https://mcp.sentry.dev/mcp", oauth: { clientId: "sentry-app", clientName: "Claude Code" } },
 		});
+
+		await run(
+			["add", "linear", "--url", "https://mcp.linear.app/mcp", "--oauth-client-registration", "dcr"],
+			undefined,
+			agentDir,
+		);
+		expect(readConfig(join(agentDir, "mcp.json")).mcpServers).toMatchObject({
+			linear: { url: "https://mcp.linear.app/mcp", oauth: { clientRegistration: "dcr" } },
+		});
 	});
 
 	it("rejects invalid add invocations without writing", async () => {
@@ -222,6 +231,7 @@ describe("knightcode mcp", () => {
 			["add", "x", "--header", "A=1", "--", "cmd"],
 			["add", "x", "--env", "NOVALUE", "--", "cmd"],
 			["add", "x", "--exposure", "loud", "--", "cmd"],
+			["add", "x", "--url", "https://example.com", "--oauth-client-registration", "maybe"],
 		];
 		for (const args of cases) {
 			const result = await run(args, undefined);

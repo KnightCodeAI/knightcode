@@ -140,11 +140,13 @@ export interface McpOAuthConfig {
 	 */
 	clientName?: string;
 	/**
-	 * How KnightCode identifies itself without `clientId`. `dcr` (default): dynamic client registration. `cimd`:
-	 * KnightCode's Client ID Metadata Document on knightcode.dev, for authorization servers that allow KnightCode by that URL. The
-	 * server must support it for public clients, and the callback must use the default path `/callback`.
+	 * How KnightCode identifies itself without `clientId`. `auto` (default): KnightCode's Client ID Metadata Document on
+	 * knightcode.dev when the authorization server supports it for public clients, otherwise dynamic client
+	 * registration; with `clientName` or a `callbackUrl` other than `/callback` on localhost or 127.0.0.1,
+	 * always dynamic client registration. `cimd`: always the document, and sign-in fails without support.
+	 * `dcr`: always dynamic client registration.
 	 */
-	clientRegistration?: "dcr" | "cimd";
+	clientRegistration?: "auto" | "dcr" | "cimd";
 	/**
 	 * Authorization server metadata document (RFC 8414 or OpenID Connect discovery) to use instead of
 	 * discovery through the server, for servers that advertise a wrong authorization server or none.
@@ -160,6 +162,16 @@ export function isLoopbackRedirectUri(value: string): boolean {
 	if (!URL.canParse(value)) return false;
 	const url = new URL(value);
 	return url.protocol === "http:" && LOOPBACK_HOSTS.includes(url.hostname) && url.search === "" && url.hash === "";
+}
+
+/**
+ * Whether KnightCode's Client ID Metadata Documents list a redirect URI for the loopback `callbackUrl`: they list
+ * `/callback` on localhost and 127.0.0.1, on any port. Without `callbackUrl`, KnightCode uses such a URI.
+ */
+export function isClientMetadataDocumentCallback(callbackUrl: string | undefined): boolean {
+	if (callbackUrl === undefined) return true;
+	const url = new URL(callbackUrl);
+	return url.hostname !== "[::1]" && url.pathname === "/callback";
 }
 
 export interface McpHttpServerConfig extends McpServerConfigBase {
@@ -217,13 +229,13 @@ function validateOAuth(value: unknown): string | undefined {
 	if (value.clientName !== undefined && (typeof value.clientName !== "string" || !value.clientName.trim())) {
 		return "oauth.clientName must be a non-empty string";
 	}
-	if (value.clientRegistration !== undefined && value.clientRegistration !== "dcr") {
-		if (value.clientRegistration !== "cimd") return 'oauth.clientRegistration must be "dcr" or "cimd"';
+	const registration = value.clientRegistration;
+	if (registration !== undefined && registration !== "auto" && registration !== "dcr") {
+		if (registration !== "cimd") return 'oauth.clientRegistration must be "auto", "dcr", or "cimd"';
 		if (value.clientId !== undefined || value.clientName !== undefined) {
 			return 'oauth.clientRegistration "cimd" cannot be combined with oauth.clientId or oauth.clientName';
 		}
-		const callback = typeof value.callbackUrl === "string" ? new URL(value.callbackUrl) : undefined;
-		if (callback && (callback.hostname === "[::1]" || callback.pathname !== "/callback")) {
+		if (!isClientMetadataDocumentCallback(typeof value.callbackUrl === "string" ? value.callbackUrl : undefined)) {
 			return 'oauth.clientRegistration "cimd" requires oauth.callbackUrl on localhost or 127.0.0.1 with path /callback';
 		}
 	}
