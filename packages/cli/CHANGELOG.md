@@ -1,5 +1,51 @@
 # @knightcodeai/cli
 
+## 0.23.0
+
+### Added
+
+- Added extension changelogs. After an extension package updates, the next fresh launch shows the top changes from its new `CHANGELOG.md` entries under "Extension updates", the same way KnightCode shows its own. Packages can point `knightcode.changelogPath` at another file inside the package, or set it to `""` to opt out; `collapseChangelog` condenses the section to one line per package.
+
+- Added a Windows installer. `powershell -c "irm https://knightcode.dev/install.ps1 | iex"` installs KnightCode the same way `install.sh` does on macOS and Linux: a managed install pinned by the published lockfile that updates with `knightcode update`. It offers to install Node.js and Git Bash when they are missing, and running it again reinstalls or uninstalls.
+
+### Changed
+
+- Changed `knightcode update` on global npm installations to recommend migrating to the managed installation from the knightcode.dev installer, which pins all dependencies. It shows the `install.ps1` command on Windows and the `install.sh` command elsewhere.
+
+### Fixed
+
+- Fixed thinking being dropped on replay for OpenRouter's `~anthropic/claude-*-latest` aliases: they used Chat Completions, which loses the thinking signature. They now use Anthropic Messages with adaptive thinking, like the versioned Claude models.
+
+- Fixed a Zhipu / Z.ai plan that reached its usage limit (HTTP 429 with error code `1308`) being retried: the limit resets after hours, so the retries only delayed the error by about 14 seconds. It is now reported at once.
+
+- Fixed the app server treating a managed worktree as a project of its own for trust. At a worktree's path, `project/trust/read` and `project/trust/set` now read and record its project's decision, the one its threads load with, and `project/trust/read` names that project in a new `project` field. Project settings, MCP servers and resources read and written there check the same decision; before, trusting there was never seen by a new thread in that worktree, and Settings in the worktree could not read or write project settings once the project was trusted.
+
+- Fixed an extension that sets the same active tools in a different order recording a "System Prompt Update: tools, rules" message, and on providers without mid-conversation system messages rewriting the prompt head and losing the cache. Tools that stay active now keep their order and newly active ones are appended.
+
+- Fixed codemode tool descriptions inlining a tool's whole output type when it was a union or spanned several lines, which added thousands of characters to every request. Unions of objects now list each variant's field names (with the value of `const` discriminators such as `action`), and other multi-line types point to `describeTool()` instead.
+
+- Fixed starting `knightcode` from a directory that has since been deleted: it crashed with an `ENOENT ... uv_cwd` stack trace (also for `--version` and `--help`). It now prints that the working directory no longer exists and exits with code 1.
+
+- Fixed `knightcode.exec()` in extensions buffering unlimited output: a command that kept writing could exhaust memory. Output is now capped by a new `maxBuffer` option (default 256 MiB); past it the command is terminated and the result has `truncated: true`. A command that ignores SIGTERM is now actually force-killed after 5 seconds, and the call returns even when a child process keeps the output pipes open.
+
+- Fixed the startup `Model scope: …` notice staying in the shell after a fullscreen session exited (above the resume hint, with `fullscreenExitOutput: "resume-hint"`). Fullscreen now shows the notice in its header; regular mode prints it before the session starts, as before.
+
+- Fixed resized photos being sent as multi-megabyte PNGs, which could make requests fail or time out. Resizing now picks whichever of PNG and JPEG is smaller at each size step; screenshots where PNG is smaller still go out as PNG.
+
+- Fixed `knightcode update` reporting an npm package as updated when npm actually installed the old version again (stale registry metadata shortly after a publish). It now warns that the package is still on the old version and suggests trying again in a few minutes.
+
+- Fixed compaction, branch summaries and bug-report summaries failing for a provider whose API-key path differs from its OAuth login (for example one that refuses explicit keys) while normal prompts worked. Summaries now let the session's model runtime resolve the stored login, as prompts do.
+
+- Fixed tool output keeping the parameters of private-parameter escape sequences, such as `35;59;1M` from a mouse report (`ESC[<35;59;1M`). They are now stripped whole, while the digits after `ESC=` and `ESC>` keypad-mode sequences stay.
+
+- Fixed bare URLs in Markdown swallowing the CJK punctuation and text that follow them (`https://example.com。后面的中文` linked the whole run). A bare URL now ends at CJK punctuation; explicit links and `<...>` autolinks can still contain it.
+
+- Fixed Shift+Enter in Apple Terminal setups that send `ESC` + Return being read as Alt+Enter, which queued a follow-up message instead of inserting a new line. With Shift held, `ESC` + Return is now treated as Shift+Enter (also on native Windows); without Shift it stays Alt+Enter.
+
+- Fixed PageUp and PageDown (`tui.select.pageUp` / `tui.select.pageDown`) being ignored by most scrolling lists: autocomplete, `/settings`, the model, scoped-model, login, undo, fork and `/mcp` pickers, the llama.cpp model search and the background tasks list now page their selection. In fullscreen these keys used to scroll the transcript instead; a focused list now receives them. A remapped page key also pages an open autocomplete menu before triggering an app action.
+
+- Fixed the terminal's program status (for example the working indicator in iTerm2 3.7.5+) disappearing right after a run started in regular mode. KnightCode no longer writes OSC 133 shell-prompt markers to the terminal there; fullscreen already stripped them.
+
 ## 0.22.2
 
 ### Added
