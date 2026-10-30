@@ -68,7 +68,8 @@ const OVERFLOW_PATTERNS = [
 	/^(?:[\w -]+ API error \(413\):|413(?:\s|:|$))/i,
 ];
 
-const CEREBRAS_BODYLESS_OVERFLOW_PATTERN = /^4(?:00|13)\s*(?:status code)?\s*\(no body\)/i;
+// One `\s*` per gap: two adjacent ones (when "status code" is absent) backtrack quadratically on long whitespace.
+const CEREBRAS_BODYLESS_OVERFLOW_PATTERN = /^4(?:00|13)\s*(?:status code\s*)?\(no body\)/i;
 
 /**
  * Patterns that indicate non-overflow errors (e.g. rate limiting, server errors).

@@ -137,6 +137,15 @@ describe("isContextOverflow", () => {
 		expect(isContextOverflow(createErrorMessage(errorMessage, "opencode-go"), 1000000)).toBe(false);
 	});
 
+	it("matches a bodyless Cerebras error in linear time", () => {
+		// The quadratic pattern took about 10 s on this message.
+		const message = createErrorMessage(`400${"\t".repeat(100_000)}`, "cerebras");
+		const start = performance.now();
+		expect(isContextOverflow(message, 131072)).toBe(false);
+		expect(performance.now() - start).toBeLessThan(1000);
+		expect(isContextOverflow(createErrorMessage("400\t (no body)", "cerebras"), 131072)).toBe(true);
+	});
+
 	it("does not treat Bedrock throttling 'Too many tokens' as overflow", () => {
 		// Bedrock returns this for HTTP 429 rate limiting, NOT context overflow.
 		// formatBedrockError uses a human-readable prefix for ThrottlingException.
