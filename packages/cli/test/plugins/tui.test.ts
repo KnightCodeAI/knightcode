@@ -130,6 +130,31 @@ describe("plugins view", () => {
 		expect(await action).toBeUndefined();
 	});
 
+	it("follows rebound tab, search and toggle keys", async () => {
+		const keys = new KeybindingsManager({
+			"app.plugins.nextTab": "]",
+			"app.plugins.search": "ctrl+f",
+			"app.plugins.toggle": "t",
+		});
+		setKeybindings(keys);
+		const view = new PluginsView(tui, theme, keys);
+		const action = view.browse(tabs);
+		expect(screen(view)).toMatch(/t disable[\s\S]*ctrl\+f search[\s\S]*\] next tab/);
+		// The old keys no longer act.
+		view.handleInput(TAB);
+		view.handleInput("/");
+		view.handleInput(" ");
+		expect(screen(view)).toMatch(/ctrl\+f search *\n[\s\S]*demo[\s\S]*t disable/);
+		view.handleInput("]");
+		expect(screen(view)).toContain("alpha");
+		view.handleInput("]");
+		view.handleInput("\x06");
+		for (const char of "dem") view.handleInput(char);
+		view.handleInput(ENTER);
+		view.handleInput("t");
+		expect(await action).toEqual({ tab: "plugins", key: "space", target: "plugin:demo" });
+	});
+
 	// PageDown has to reach the list in fullscreen instead of scrolling the transcript.
 	it("captures fullscreen viewport keys while a list is shown, and leaves /mcp's screens to decide", () => {
 		const view = new PluginsView(tui, theme, new KeybindingsManager());

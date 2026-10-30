@@ -12,7 +12,6 @@ import {
 	type Component,
 	type Focusable,
 	Input,
-	matchesKey,
 	type SelectItem,
 	SelectList,
 	Spacer,
@@ -24,7 +23,7 @@ import {
 import type { KeybindingsManager } from "../../core/keybindings.ts";
 import { isOfflineModeEnabled } from "../../core/package-manager.ts";
 import { plural } from "../../core/tools/render-utils.ts";
-import { keyHint, rawKeyHint } from "../../modes/interactive/components/keybinding-hints.ts";
+import { keyHint, keyText, rawKeyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { getSelectListTheme, type Theme } from "../../modes/interactive/theme/theme.ts";
 import {
 	describeInventory,
@@ -318,8 +317,9 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			const item = items[Math.max(0, Math.min(items.length - 1, next))];
 			if (item) this.selected.set(tab.id, itemKey(item));
 		};
-		if (matchesKey(data, "tab") || matchesKey(data, "shift+tab")) {
-			const step = matchesKey(data, "tab") ? 1 : tabs.length - 1;
+		const next = keys.matches(data, "app.plugins.nextTab");
+		if (next || keys.matches(data, "app.plugins.previousTab")) {
+			const step = next ? 1 : tabs.length - 1;
 			this.tab = tabs[(tabs.indexOf(tab) + step) % tabs.length]!.id;
 			return undefined;
 		}
@@ -350,12 +350,12 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			this.collapsed.delete(item.group.key);
 		} else if (keys.matches(data, "tui.select.cancel")) {
 			return "close";
-		} else if (data === "/") {
+		} else if (keys.matches(data, "app.plugins.search")) {
 			this.searching = true;
 		} else {
 			const key = keys.matches(data, "tui.select.confirm")
 				? "enter"
-				: data === " "
+				: keys.matches(data, "app.plugins.toggle")
 					? "space"
 					: /^[a-z]$/.test(data)
 						? data
@@ -397,11 +397,13 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		const none = !query
 			? tab.empty
 			: elsewhere.length
-				? `Nothing matches here; ${elsewhere.map((candidate) => candidate.label).join(" and ")} ${elsewhere.length === 1 ? "has" : "have"} matches (tab).`
+				? `Nothing matches here; ${elsewhere.map((candidate) => candidate.label).join(" and ")} ${elsewhere.length === 1 ? "has" : "have"} matches (${keyText("app.plugins.nextTab")}).`
 				: "Nothing matches.";
 		const body: Component[] = [
 			new Text(bar, 1, 0),
-			this.searching || query ? this.search : new Text(theme.fg("dim", "/ search"), 1, 0),
+			this.searching || query
+				? this.search
+				: new Text(theme.fg("dim", `${keyText("app.plugins.search")} search`), 1, 0),
 			new Spacer(1),
 			items.length ? new Lines((width) => this.listLines(tab, items, width)) : new Text(theme.fg("muted", none), 1, 0),
 		];
@@ -450,7 +452,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			return [
 				rawKeyHint("type", "to filter"),
 				keyHint("tui.select.confirm", "results"),
-				rawKeyHint("tab", "next tab"),
+				keyHint("app.plugins.nextTab", "next tab"),
 				keyHint("tui.select.cancel", "clear"),
 			].join(" • ");
 		}
@@ -469,13 +471,15 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			...(opens && !Object.hasOwn(own, "enter") ? [["enter", opens]] : []),
 			...Object.entries(tab.actions).filter(([key]) => !Object.hasOwn(own, key)),
 		];
-		// One hint per action: `enter/i install`.
+		// One hint per action: `enter/i install`, with `enter` and `space` shown as the keys they are bound to.
+		const shown = (key: string) =>
+			key === "enter" ? keyText("tui.select.confirm") : key === "space" ? keyText("app.plugins.toggle") : key;
 		const byLabel = new Map<string, string[]>();
-		for (const [key, label] of actions) byLabel.set(label!, [...(byLabel.get(label!) ?? []), key!]);
+		for (const [key, label] of actions) byLabel.set(label!, [...(byLabel.get(label!) ?? []), shown(key!)]);
 		return [
 			...[...byLabel].map(([label, keys]) => rawKeyHint(keys.join("/"), label)),
-			rawKeyHint("/", "search"),
-			rawKeyHint("tab", "next tab"),
+			keyHint("app.plugins.search", "search"),
+			keyHint("app.plugins.nextTab", "next tab"),
 			keyHint("tui.select.cancel", "close"),
 		].join(" • ");
 	}
@@ -624,7 +628,7 @@ function pluginsTab(data: Snapshot, running: McpServerSummary[]): BrowseTab {
 			{ key: "grok", label: "In Grok Build", rows: imports("Grok Build") },
 		].filter((group) => group.rows.length > 0),
 		actions: { a: "install from source", r: "reload session" },
-		empty: "No plugins installed. Press a to install one from a source, or tab to the Marketplace.",
+		empty: `No plugins installed. Press a to install one from a source, or ${keyText("app.plugins.nextTab")} to the Marketplace.`,
 	};
 }
 
@@ -807,7 +811,9 @@ export async function managePlugins(
 		if (trusted) return activated(plugin, `Installed ${plugin.name}.`);
 		return {
 			focus: { tab: "plugins", key: rowKey(plugin) },
-			notice: { text: `Installed ${plugin.name}. It runs nothing until you trust it: space.` },
+			notice: {
+				text: `Installed ${plugin.name}. It runs nothing until you trust it: ${keyText("app.plugins.toggle")}.`,
+			},
 		};
 	};
 

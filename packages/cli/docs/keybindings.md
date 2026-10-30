@@ -196,3 +196,14 @@ Used inside the scoped models selector (opened via `/scoped-models`).
 | `app.models.toggleProvider` | `ctrl+p` | Toggle all models for the current provider |
 | `app.models.reorderUp` | `alt+up` | Move the selected model up in the cycle order |
 | `app.models.reorderDown` | `alt+down` | Move the selected model down in the cycle order |
+
+### Plugins Screen
+
+Used inside `/plugins`. The per-row letter keys are listed in the screen's footer.
+
+| Keybinding id | Default | Description |
+|--------|---------|-------------|
+| `app.plugins.nextTab` | `tab` | Switch to the next tab |
+| `app.plugins.previousTab` | `shift+tab` | Switch to the previous tab |
+| `app.plugins.search` | `/` | Search every tab |
+| `app.plugins.toggle` | `space` | Turn the selected plugin on or off (asking for trust first) |

@@ -179,6 +179,22 @@ const APP_KEYBINDINGS = {
 		defaultKeys: "shift+ctrl+o",
 		description: "Tree filter: cycle backward",
 	},
+	"app.plugins.nextTab": {
+		defaultKeys: "tab",
+		description: "Plugins: next tab",
+	},
+	"app.plugins.previousTab": {
+		defaultKeys: "shift+tab",
+		description: "Plugins: previous tab",
+	},
+	"app.plugins.search": {
+		defaultKeys: "/",
+		description: "Plugins: search",
+	},
+	"app.plugins.toggle": {
+		defaultKeys: "space",
+		description: "Plugins: turn a plugin on or off",
+	},
 } as const satisfies KeybindingDefinitions;
 
 export type AppKeybinding = keyof typeof APP_KEYBINDINGS;

@@ -378,6 +378,22 @@
     "app.tree.filter.cycleBackward": {
       "$ref": "#/$defs/KeybindingValue",
       "description": "Tree filter: cycle backward"
+    },
+    "app.plugins.nextTab": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: next tab"
+    },
+    "app.plugins.previousTab": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: previous tab"
+    },
+    "app.plugins.search": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: search"
+    },
+    "app.plugins.toggle": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: turn a plugin on or off"
     }
   },
   "additionalProperties": {
