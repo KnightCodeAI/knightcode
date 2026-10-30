@@ -1838,6 +1838,45 @@ validation and copies the v2 kernel added around Delta.
   key hold two pins (counted on the key's one source; the document is loaded and kept once). **Binary append commit-to-frame
   median +10% accepted** (owner, 2026-10-29; CPU 10, 0.031 → 0.034-0.035 ms): equal with the young generation pinned, fewer
   scavenges over the whole benchmark (V8's young-generation sizing, slice 7b fix round 3).
+- **Per plugin at startup and reload (owner, 2026-10-30: "yes", "1. lgtm 2. yes"; analyses
+  `/tmp/per-plugin-{opus,fable}.md`):** supersedes "Rollback is all-or-nothing per host" (2026-10-2x, 7b §2, design §21)
+  and 7c's Q2 ("a facet throwing while evaluated fails its host's whole step"). Why all or nothing was chosen: per plugin
+  was decided first and p2's plugin reviewers found counter-traces (a dropped argument field written into a transcript; a
+  copied Durable document written by two versions; a provider's failed factory leaving the harness hanging; mixed copied
+  code and registries); v2 has since closed them (closed argument schemas for every caller, Q12, Q15; version binding
+  with waiting, 7a; ownership of documents; registry versions with `accepts`, Q8; copied cross-plugin files limited to
+  contracts without dependencies, 7c). Rules: (1) **at startup** a plugin whose build, evaluation or setup fails is left
+  out; `load` resolves with a report `{ failed: [{ plugin, error }] }` and never closes the host for it (the core facet
+  included: base code decides whether that is fatal); its consumers wait `failed { waiting }` as for any missing plugin.
+  (2) **At reload** a plugin whose new code fails (build, evaluation, setup, a factory in staging, a declaration error,
+  `checkAccepts`) keeps its old code (its loaded facet, unchanged), and every other plugin of the reload applies; the
+  report lists it (`failed: [{ plugin, error }]`, as `load`'s; an added plugin that fails is left out); staging retries without it. (3) **The closure rule** (Opus): after
+  staging, a changed plugin whose recorded requests would not bind because the plugin they need was kept old or left
+  out is kept old too, so a consumer edited together with a broken provider keeps working on its old code. Its "missing"
+  branch (owner, 2026-10-30: "keep", against narrowing it to names served before): a request nobody serves keeps its
+  plugin old whenever any plugin of the reload failed, since a failed new setup may be what would have served it. (4) What no
+  rule detects: a consumer relying on new behaviour of a kept provider whose contract (version, fingerprint) did not
+  change: the same risk as a rollout across hosts, documented. (5) `rollout` keeps a plugin dirty while it was kept old
+  on any host. Built with slice 7c (the kernel's `load` and `reload` change with it).
+- **Slice 7c's points (owner, 2026-10-30; `slice-7c.md` §5):** (1) esbuild is an optional peer dependency of Chord,
+  imported only by the plugins component. (2) **No dev/prod split** (owner: "chord apps are supposed to not have a
+  prod/dev split. they are supposed to be self modifying applications"): watching, rebuilding and rolling out are core
+  machinery; one component `chord/next/plugins` (discovery, build, evaluation, `pluginFile`, the watcher, `rollout`) in
+  `src/next-node/plugins/`, exported with v2's entry point; it turns V8's compilation cache off when created; reloads
+  stay explicit (the watcher marks, never applies). Supersedes the separate `loader` and `dev` subpaths of "Slice 7b's
+  open points" (5), (6). (3) `installDependencies(plugin, ctx)` as coding-agent installs package dependencies (`npm
+  install --omit=dev --legacy-peer-deps --ignore-scripts --no-audit --no-fund` in the plugin's real directory, the
+  command overridable). (4) Cross-plugin imports: any file of a discovered plugin, copied, documented as contracts and
+  side-effect-free modules only, listed by the build, no static check yet. (5) `pluginFile` answered per facet by the
+  `require` evaluation passes.
+- **Slice 7c build: an abort after the commit names what it applied (owner, 2026-10-30: "yes"; fix round 1, item
+  11, Astra):** `host.reload` still rejects `aborted` when its context aborts after the commit (the commit stands, only
+  the wait ends), and the error carries `details.committed`, a `CommittedReload { added, changed, removed, failed }`
+  (plugin names; `failed`: kept on their old code). Why: the plugins component keeps per host the facet each plugin
+  runs and adopts it when the reload resolves; on this rejection it would keep the old facet and pass it at the next
+  reload, swapping the committed plugin back silently. Rejected: resolving with the report after the commit despite
+  the abort (it would change the rule that an abort after the commit rejects). Examples for 7c (owner): full coverage,
+  each example a folder with the host code and real plugin directories (35-39).
 - **A plugin's npm dependencies are bundled; external only by opt-in (owner, 2026-10-29: "explicit opt in + (a)"):**
   a plugin's `dependencies` are installed into its own `node_modules` (`npm install --ignore-scripts`) and bundled into
   each facet that imports them (host packages, its `peerDependencies`, stay external and are passed in). On Node a
@@ -2021,9 +2060,10 @@ validation and copies the v2 kernel added around Delta.
 - **Restricted names instead of assigned table names (owner, 2026-10-27; slice 6a spec review blocker 5):** names
   that become SQL names are restricted at declaration (and checked on import) instead of being mapped. Host kinds,
   object types (every contract, not only stores) and table names use npm package-name characters `[a-z0-9@/._~-]`,
-  lowercase only (SQLite compares identifiers case-insensitively), so plugin-prefixed type names (`@pi/file-history.store`)
-  stay valid; the separator is `:`, which they cannot contain, so the rendering `"session:@pi/file-history.store:edits"`
-  is injective (`a/b` + `c` and `a` + `b/c` differ) and readable in `sqlite3`. Index names `[a-z0-9_]+`, rendered
+  lowercase only (SQLite compares identifiers case-insensitively), so plugin-prefixed type names
+  (`@knightcode/file-history.store`) stay valid; the separator is `:`, which they cannot contain, so the rendering
+  `"session:@knightcode/file-history.store:edits"` is injective (`a/b` + `c` and `a` + `b/c` differ) and readable in
+  `sqlite3`. Index names `[a-z0-9_]+`, rendered
   `<table>:<index>`. Column names `[A-Za-z_][A-Za-z0-9_]*` (camelCase allowed), two columns equal ignoring ASCII case
   refused at `defineTable`, no `$` (the hidden `$v` and `<column>$v` cannot collide). Import is a trust boundary: every
   name in an archive is checked against these rules (no `"` can occur: quoting is always safe), every row against its
@@ -2269,6 +2309,81 @@ validation and copies the v2 kernel added around Delta.
   descriptions on the wire (the `describe` message kind of R1 and the per-link description cache go away), R3 is moot,
   the coverage check across fingerprints of one version is gone.
 
+## Simplification audit (2026-10-30)
+
+The owner asked, after slice 7b's seven fix rounds, how many other mechanisms serve a rare case at a high cost. Audits
+by Opus and Sol (`/tmp/audit-{opus,sol}.md`) and this session; each item decided by the owner with its code and case.
+
+- **A1, `installing` is cut (owner, 2026-10-30: "cut"):** model §1's state for a hold or request that does not fit the
+  running code while a reload stages: staging is synchronous (`stagePlugins`, `recordFactory`), so no message or caller
+  can arrive while it runs (the only test reached it from a factory calling back into the host). The `Serving` kind, the
+  host's map, `Hold.start`'s branch and the test go. During the app's bundling before `host.reload` the old code
+  answers a mismatch `failed { waiting }` until the commit wakes the request (model §5's accepted gap). Supersedes
+  model §1's `installing` row and design §21's installing sentences.
+
+- **A2, static registry cycle edges are cut (owner, 2026-10-30: "yeah cut"):** the edges a contribution of another
+  registry's value recorded (`RegistryEdge`, `#reads` counts, `assertNoCycle`, `#reaches`, an attempt's pending edges,
+  staging's edges) go; the runtime guard stays (a registry read while it composes throws `invalid/cycle`; the
+  contribution that read it is left out and reported `contribution_failed`). A ring of registries is caught at its first
+  composition instead of at `self.contribute`: the contributing object goes live, the rest of the registry works.
+  Supersedes slice 8's "a cycle of registries reading each other refused when the second one serves or contributes".
+
+- **A3, routine calls keep their ops (owner, 2026-10-30: "keep"):** `self.on` handlers keep `{ value, ops, retired }`
+  with the routine's own folding (`PendingOps`, the basis after a throw).
+
+- **A4, cross-host activation chains stay (owner, 2026-10-30: "yep keep"):** they catch the common, sequential form of a
+  cross-host dependency ring (one request whose activation creates the other side) with an immediate `invalid/cycle`
+  naming the path; `parked_long` stays the slow net for the rare simultaneous race.
+
+- **A5, retry propagation by a hop budget (owner, 2026-10-30: "b if correct"):** `ref.retry()` still passes on from a
+  parked object to its failed dependencies (model §3.7), but its dedupe is simpler: on one host one retry's walk keeps a
+  visited set (a diamond retries a shared dependency once); across links the `retry` message carries a hop budget (an
+  integer, 16 from the first host, one less per host, dropped at 0) instead of the operation id (uuidv7), the objects'
+  last-8 remembered ids and the `through` list. Bounded effects, both harmless: a diamond across hosts may send a shared
+  dependency two retries (the second meets it activating and is ignored, or starts one more attempt if the first
+  already failed); a waiting ring across hosts (the undetected simultaneous cycle) passes the retry round until the budget
+  runs out, starting no attempt (parked objects only pass it on). Instance ids stay (activation chains, A4).
+
+- **A6, staging factories against a recording `self` stay (owner, 2026-10-30: "keep"):** a throwing new factory keeps
+  rejecting the whole reload (the host stays on its old code), and each object's fate is decided from its recorded
+  declarations before the commit.
+
+- **A7, registry last-good with provenance stays (owner, 2026-10-30: "a").**
+
+- **A8, deferred job-state persistence keeps its held ops (owner, 2026-10-30: "keep").**
+
+- **A9, a pure swap sends holds a fresh `bound` (owner, 2026-10-30: "simplify"):** a hold over a link whose object
+  swaps in place gets a fresh `bound` (one snapshot of its members), the path a restart, a variant change and a version
+  change already take, instead of a re-subscription with `[["r", value]]` per changed member (`Hold.#rebound`, its
+  constant-to-source and failed-member cases, `currentOf`). A tab's watchers may get one frame for an unchanged member;
+  nothing is lost or stale. Supersedes design §21/§22's per-member `r` rule for holds after a swap.
+
+- **A10, one rule after a live failure (owner, 2026-10-30: "simplify"):** every member of a failed live instance keeps
+  being followed (references and holds) until the commits it admitted published (`documents.settled()`), then all stop:
+  the restarts' rule. The "own" against "foreign" split (`#follows === "own"`, `Attempt.owns` and its mapping-derive
+  case, `Hold.#stopForeign`) goes; a re-exposed member of another object may show one more change in that window.
+  Refines 6a's build-review rule "members following another object's sources freeze at once".
+
+- **A11, `parked_long` widened (owner, 2026-10-30: "widen"):** reported once per parking episode when an attempt has been
+  parked longer than its `readyTimeout`, whatever its blocker (the first in declaration order named, with its state);
+  the remote-loading condition, `heldOnLink` and the clock restart at a link go. Also covers a cross-host ring one of
+  whose members waits on a failed dependency. Supersedes decision 6's narrow condition.
+- **A12, the routine fence token folds into the seal (owner, 2026-10-30: "fold"):** one seal token per attempt; after a
+  swap the old routine calls get `closeTimeout` to finish, then the whole old attempt is sealed (its method calls had
+  the same bound). `RoutineContext.fence` and the token choice per transaction go. Supersedes slice 7b decision 4's
+  separate token.
+- **A13, the table version fence stays (owner, 2026-10-30: "keep"):** an old call stuck past a restart's drain never
+  issues SQL against a migrated table (which would stop the store and close the host).
+- **A14, key pins keep their hand-over between instances (owner, 2026-10-30: "keep").**
+
+- **A15, keyed members across objects stay, with their versioning (owner, 2026-10-30: "keep essential"):** they fill
+  the gap P3 creates (a view with params following one entry of a persisted store live); the alternatives (a singleton
+  map, a method) are weaker.
+
+Summary: cut A1 (`installing`), A2 (static registry cycle edges); simplified A5 (retry hop budget), A9 (a fresh `bound`
+after a swap), A10 (one rule after a live failure), A11 (`parked_long` widened), A12 (one seal token); kept A3, A4, A6,
+A7, A8, A13, A14, A15.
+
 ## Portability boundaries in the kernel
 
 From `research/chord-on-durable-objects.md`, adopted for the Chord v2 kernel because they cost little and help tests:
@@ -2320,7 +2435,7 @@ From `research/chord-on-durable-objects.md`, adopted for the Chord v2 kernel bec
 
 - **Per host:** load (bundle; a load error rejects) → staging (run the facet setup and every live object's new factory
   with a recording `self`, declarations only, nothing activated; a throw rejects) → commit (atomic) → after.
-- **Rollback is all-or-nothing per host:** any load or staging error leaves the host entirely on its previous code.
+- ~~**Rollback is all-or-nothing per host:**~~ (**superseded** by "Per plugin at startup and reload", 2026-10-30) any load or staging error leaves the host entirely on its previous code.
   A host is completely at revision R or R−1, so status per host suffices.
 - **Pure objects** (**superseded in part** by R15 (old code touching a document migrated past its version throws)) (no `self.open`, old or new) are swapped in place: new methods and derives; documents, references
   and jobs stay; routines restart serialized; new references become live; then the object's gate opens. Running calls

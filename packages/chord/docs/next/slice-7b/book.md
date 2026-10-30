@@ -82,7 +82,7 @@ plugins/notes/
 
 ```json
 {
-  "name": "@pi/notes",
+  "name": "@knightcode/notes",
   "version": "1.4.0",
   "type": "module",
   "peerDependencies": {
@@ -149,7 +149,7 @@ Each facet is built on its own, as one script. The bundler starts at the facet f
 | An import of | Becomes |
 | --- | --- |
 | the plugin's own files (`./store.ts`, `./NoteList.tsx`) | inlined into the facet's script |
-| another plugin's contract (`../sessions/contract.ts`, or `@pi/sessions/contract` for an installed package) | inlined too: a copy, so a plugin carries the contract version it was built against (`accepts` needs that); only contracts and side-effect-free modules may be imported across plugins |
+| another plugin's contract (`../sessions/contract.ts`, or `@knightcode/sessions/contract` for an installed package) | inlined too: a copy, so a plugin carries the contract version it was built against (`accepts` needs that); only contracts and side-effect-free modules may be imported across plugins |
 | an npm package in `dependencies` (`marked`) | inlined, resolved from the plugin's own `node_modules` |
 | an npm package listed in `chord.external` (Node facets only) | external: `require`d from the plugin's own `node_modules` at evaluation |
 | a host package (`@knightcode/chord/next`, `react`, `@app/core`, …) | **external**: a parameter of the script, the host's instance at load time |
@@ -181,7 +181,7 @@ const HOST_PACKAGES = {                                     // the app's base bu
 };
 const script = await buildFacet({ plugin: "/data/plugins/notes", facet: "worker.ts", hostPackages: Object.keys(HOST_PACKAGES), platform: "node" });
 const facet = evaluateFacet(script, { hostPackages: HOST_PACKAGES, require: createRequire(import.meta.url), dir: "/data/plugins/notes" });
-await host.reload([{ name: "@pi/notes", facet }], ctx);    // or host.load the first time
+await host.reload([{ name: "@knightcode/notes", facet }], ctx);    // or host.load the first time
 ```
 
 - `buildFacet` is esbuild with: the facet as entry, the host packages and `node:*` external, `format: "cjs"` wrapped

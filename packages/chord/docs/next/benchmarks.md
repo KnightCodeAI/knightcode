@@ -850,3 +850,67 @@ The small call, measured apart (ten bursts of 1,000 after 3,000 warm-up calls, t
 29.5-30.6 → 27.6-27.9 µs and text 25.1-25.9 → 27.5-28.3 µs; with the young generation pinned, binary 29.7-30.7 →
 30.3-30.7 µs and text 23.6-23.7 → 23.9-24.1 µs. The stock text gap is the young generation's sizing, as for commit to
 frame above (pinned, the two match); the snapshot before the final review's fixes measures the same.
+
+## Simplification audit (2026-10-30)
+
+HEAD before the audit → the audit build (A1, A2, A5, A9-A12), copies at paths of equal length, CPU 6, alternating.
+`calls.ts`, three runs: local call 2.70-2.73 → 2.69-2.73 µs (6,660 B both), watched derive commit 10.41-10.75 →
+10.42-10.74 µs (14,899 B both), activation churn 59.0-60.9 → 59.1-61.4 µs (41,473-41,482 → 41,478 B). Retained per live
+object with one dependency (10,000 kept) 6,745-6,754 → 6,745-6,752 B; a first cut of the declaration-ordered
+dependency list (A11) kept it on live attempts, +225 B, and is now let go after the dependency check. `links.ts` with
+the young generation pinned: commit to frame, hold to live and retained per hold equal within run spread (176.4 →
+176.2-176.6 KiB per hold).
+
+**Text-codec calls in isolation** (Sol's probe: a remote object over one memory link, 5,000 warm-up calls, ten bursts
+of 1,000 small calls, then 200 warm-up and 30 bursts of 10 calls with a 1 MiB argument; binary first, then text; the
+heap collected before each burst and the collections in it recorded: none in any burst), seven alternating pairs,
+median of the pairs' medians:
+
+| Case | stock | young generation pinned |
+| --- | --- | --- |
+| binary small | 26.53 → 26.37 µs | 25.72 → 25.90 µs |
+| text small | 19.31 → 20.95 µs (+8.5%) | 19.11 → 19.93 µs (+4.3%) |
+| binary 1 MiB | 985 → 993 µs | 539 → 412 µs (bimodal: 187-607 µs per run) |
+| text 1 MiB | 958 → 963 µs | 273 → 284 µs (221-352 µs per run) |
+
+Heap per call is the same (text small 15,171 → 15,160-15,202 B). The text small gap is not per-call work: the codec
+alone (encode, decode and the message check of a call and a result message, 20,000 per burst) measures the same in both
+trees (text call 1.55 µs and 52 B, result 1.52 µs and 171 B), deoptimizations and inlining decisions are the same, and
+the gap follows the shape of the text decoder's `fromFields`, not what runs: the build with HEAD's `text.ts` matches HEAD
+(19.0-19.2 µs), the one change in it that matters is the never-executed `T` (retry) case, and writing that case with an
+object spread again (`...(f.length >= 2 ? { hops } : …)`) restores HEAD's 19.1 µs while other edits of the same size do
+not. With text measured first the gap is 22.4-22.5 → 23.0-23.3 µs (+2-3%). V8 code generation, recorded as noise.
+
+## Slice 7c: plugins (2026-10-30)
+
+**The plugins component** (`test/next/bench/plugins.ts`, new): 20 plugins, one worker facet each (a store object over a
+document, a derive, a method, a helper module and a copied contract; 80.9 KiB of scripts in all), Node 24.4.1. Medians
+of seven runs; three runs pinned to CPU 8, one unpinned:
+
+| Measurement | CPU 8 | unpinned (32 CPUs) |
+| --- | --- | --- |
+| cold build of the 20 worker facets (one esbuild build each, all at once) | 240.1-240.7 ms | 26.4 ms |
+| rebuild of one facet after an edit | 13.1-13.3 ms | 11.0 ms |
+| evaluation of one facet (`vm.Script`, its source map registered) | 0.16-0.27 ms | 0.09 ms |
+| reload of one plugin on a host (evaluation and `host.reload`, a pure swap) | 0.44-0.45 ms | 0.44 ms |
+| heap after 100 reloads of one plugin, against after a warm-up | +230-235 KiB | +229 KiB |
+
+The heap does not grow per reload: 2,000, 4,000 and 8,000 reloads leave +897, +1,186 and +1,432 KiB (sublinear); the
+same evaluations through plain `vm.Script` with V8's compilation cache off leave +420 KiB at 8,000 against +465 KiB
+through `evaluateFacet` (V8's own per-script bookkeeping), and the kernel's reloads alone wander between +200 and
++600 KiB at any count. Old facets and their closures are collected (the GC test: 200 reloads, every facet but the last
+two collected, the heap within 2 MiB of the warm-up).
+
+Fix round 1 (inline source maps without `sourcesContent`: positions only), CPU 8: the 20 scripts take 53.4 KiB (80.9
+KiB before); cold build 241.1 ms, rebuild 13.0 ms, evaluation 0.14 ms per facet, a reload 0.39 ms, heap after 100
+reloads +238 KiB.
+
+**Kernel hot paths** (per plugin at load and reload changes only staging), HEAD before slice 7c → build at paths of equal
+length, CPU 6, three alternating runs. `calls.ts`: local call 2.69-2.71 → 2.71-2.75 µs (6,660 B both), watched
+derive commit 10.34-10.36 → 10.43-10.49 µs (14,899 → 14,901 B), activation churn 58.93-59.58 → 59.44-59.73 µs
+(41,452-41,470 → 41,470 B). `links.ts` binary commit to frame (median / p90): append 0.035-0.036 / 0.058-0.059 →
+0.034-0.036 / 0.058-0.060 ms, changed field 0.027-0.028 / 0.031-0.033 → 0.027-0.028 / 0.031-0.033 ms, removal 0.022 /
+0.026-0.028 → 0.022 / 0.026-0.027 ms; with the young generation pinned alike within 2 µs; text alike; small call
+0.026-0.030 → 0.028-0.033 ms (pinned 0.030-0.035 → 0.030-0.032 ms); retained per hold equal (one binary hold 176.2 →
+170.1 KiB). `reload.ts`: swap of 50 / 1,000 objects 1.44-1.73 / 30.83-32.71 → 1.52-1.53 / 30.55-33.25 ms, restart
+1.01-1.05 / 15.54-16.87 → 0.95-0.99 / 15.90-16.02 ms until the reload resolves.

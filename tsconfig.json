@@ -32,6 +32,7 @@
       "@knightcode/chord/context": ["./packages/chord/src/context/index.ts"],
       "@knightcode/chord/delta": ["./packages/chord/src/delta/index.ts"],
       "@knightcode/chord/next": ["./packages/chord/src/next/index.ts"],
+      "@knightcode/chord/next/plugins": ["./packages/chord/src/next-node/plugins/index.ts"],
       "@knightcode/chord/output": ["./packages/chord/src/output.ts"],
       "@knightcode/chord/telemetry-sqlite": ["./packages/chord/src/telemetry-sqlite/index.ts"],
       "@knightcode/chord/sqlite": ["./packages/chord/src/sqlite/index.ts"],

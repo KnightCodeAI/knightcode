@@ -56,7 +56,7 @@ telemetry last, since it instruments the app kit too).
 | 8 | **Registries and `host.root`** | registries, `self.writable`, `retryOn`, Durable's `registryReader`, `host.root` (`chord(fn, context)` and the harness object are p3's base code) |
 | 7a | **The dependency model** | requests that outlive providers, parked attempts without timers, wakes, the publication gate, getters, registries as dependencies, `parked_long` (`slice-7a.md`, `dependencies/model.md`) |
 | 7b | **Reload in the kernel** | `host.reload`: staging, commit, rollback; swaps, restarts, removal and re-serving; holds and `accepts` across a reload; jobs and registries across a reload; per-name wakes (`slice-7b/` brief) |
-| 7c | **Loader and dev** | `chord/next/loader` (discovery, `buildFacet`, `evaluateFacet`, `pluginFile`, dependencies) and `chord/next/dev` (watcher, reload control across hosts) |
+| 7c | **Plugins** | `chord/next/plugins` (discovery, `buildFacet`, `evaluateFacet`, `pluginFile`, `installDependencies`, the watcher, `rollout`, `mapStack`; no dev/prod split; the kernel's `load`/`reload` per plugin; `slice-7c.md`) |
 | 10 | **HTTP and workers** | `chord/next/http` (server, `Http` registry, responses as descriptions, WebSocket entry) and `chord/next/workers` (a worker per address, IPC, idle stop) |
 | 11 | **Web and TUI** | `chord/next/web` (page host, React hooks) and `chord/next/tui` (launcher, sandbox), from p2's code |
 | 9 | **Telemetry** | spans, events, metrics across hosts |
@@ -134,7 +134,7 @@ pattern, no code. Decided cuts are noted where they apply.
 | 18 | platform bindings as core objects | doc (8) |
 | 19 | `host.references` (presence) | 4b |
 | 20 | flows kept by their owner, the `steps` helper, the Questions service | doc (5); deferred decisions #9, #11 |
-| 21 | `host.reload`: staging, atomic commit, pure swaps, native restarts, removal and re-serving, `installing` | 7b |
+| 21 | `host.reload`: staging, atomic commit, pure swaps, native restarts, removal and re-serving | 7b |
 | 21 | loading plugins (loader D), dev loop; the rollout across hosts is the app's (decision "Slice 7b's open points" (3)) | 7c |
 | 22 | message format, header schema, unknown ids, one message per commit per link, consumers apply ops, plugin errors | 3a |
 | 22 | relays, size limits per part, compression at the origin, adapted bindings get diffs | 4a (relays), 4b (limits, compression), 7b |
