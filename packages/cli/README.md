@@ -17,15 +17,7 @@ Ask KnightCode to create the prompt templates, skills, extensions, and themes yo
 
 ## Getting started
 
-Install the command-line interface with npm:
-
-```bash
-npm install -g --ignore-scripts @knightcodeai/cli
-```
-
-This requires Node.js 22.19 or newer. KnightCode does not require dependency lifecycle scripts for a normal npm installation, and it runs on your Node: you do not need Bun. For a machine without Node, each CLI release on [GitHub](https://github.com/KnightCodeAI/knightcode/releases) (tagged `@knightcodeai/cli@<version>`) also carries standalone binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).
-
-You can instead use the installer. It installs Node.js 22.19 or newer if Node is missing or older. On macOS or Linux:
+Install the command-line interface:
 
 ```bash
 curl -fsSL https://knightcode.dev/install.sh | sh
@@ -36,6 +28,14 @@ On Windows:
 ```powershell
 powershell -c "irm https://knightcode.dev/install.ps1 | iex"
 ```
+
+The installer pins all dependencies and updates KnightCode with `knightcode update`. Alternatively, install directly with npm, which does not pin transitive dependencies:
+
+```bash
+npm install -g --ignore-scripts @knightcodeai/cli
+```
+
+KnightCode requires Node.js 22.19 or newer. The macOS, Linux, and Windows installers can install it if needed. KnightCode does not require dependency lifecycle scripts for a normal npm installation, and it runs on your Node: you do not need Bun. For a machine without Node, each CLI release on [GitHub](https://github.com/KnightCodeAI/knightcode/releases) (tagged `@knightcodeai/cli@<version>`) also carries standalone binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64).
 
 KnightCode also comes as a desktop app for Windows, macOS and Linux, which shares your sessions and settings with the terminal. Download it from [knightcode.dev](https://knightcode.dev).
 

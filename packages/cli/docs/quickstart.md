@@ -16,7 +16,7 @@ curl -fsSL https://knightcode.dev/install.sh | sh
 powershell -c "irm https://knightcode.dev/install.ps1 | iex"
 ```
 
-Alternatively, install KnightCode from npm. This requires Node.js 22.19 or newer:
+Both installers pin all dependencies and update KnightCode with `knightcode update`. Alternatively, install KnightCode from npm, which does not pin transitive dependencies. This requires Node.js 22.19 or newer:
 
 ```bash
 npm install -g --ignore-scripts @knightcodeai/cli
