@@ -84,7 +84,7 @@ describe("provider retry classification", () => {
 	it.each(["The pending stream has been canceled", "The pending stream has been canceled (caused by: socket closed)"])(
 		"matches HTTP/2 pending stream cancellation: %s",
 		(errorMessage) => {
-			// Regression: REWRITE-ME.
+			// An HTTP/2 stream the server cancelled before it started is a transport hiccup; the request never ran.
 			expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
 		},
 	);
@@ -149,6 +149,16 @@ describe("provider retry classification", () => {
 		const errorMessage =
 			'OpenAI API error (429): {"code":"subscription_sharing_usage_limit_exceeded","message":"Usage limit reached."}';
 		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(false);
+	});
+
+	it("keeps the Zhipu plan usage limit (code 1308) non-retryable, and only that code", () => {
+		const limit = '429 {"code":"1308","message":"Usage limit reached for 5 hours, resets at 2026-10-30 18:00:00"}';
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage: limit }))).toBe(
+			false,
+		);
+		// A request id or byte count containing 1308 is not the code.
+		const busy = '429 {"code":"1302","message":"Rate limited, request id 13081308"}';
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage: busy }))).toBe(true);
 	});
 
 	it("keeps the ChatGPT Business workspace usage limit non-retryable", () => {

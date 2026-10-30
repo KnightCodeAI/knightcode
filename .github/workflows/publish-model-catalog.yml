@@ -67,7 +67,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # Network only, no API keys: generate-models.ts reads models.dev.
+      # Network only, no API keys: catalog/generate.ts reads models.dev.
       - name: Generate model catalog JSON
         run: bun run generate:model-catalog
 
