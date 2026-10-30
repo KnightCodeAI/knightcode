@@ -612,8 +612,14 @@ function replaceCharacters(value: string, replacements: Readonly<Record<string, 
 	return result;
 }
 
+/** Drop the whitespace around `=`, `+`, and `-`. */
 function normalizeScriptValue(value: string): string {
-	return value.trim().replace(/\s*([=+-])\s*/g, "$1");
+	// Split rather than replace `/\s*([=+-])\s*/g`, which is quadratic on a long whitespace run with no operator.
+	return value
+		.trim()
+		.split(/([=+-])/)
+		.map((part, index) => (index % 2 === 0 ? part.trim() : part))
+		.join("");
 }
 
 function formatUnicodeScript(value: string, kind: "sub" | "sup"): string | undefined {

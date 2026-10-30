@@ -27,7 +27,9 @@ export const MODEL_CATALOG_INDEX_KEY = `${MODEL_CATALOG_PREFIX}/index.json`;
 export const MODEL_CATALOG_REVISION_RE = /^sha256-[0-9a-f]{64}$/;
 
 const KNIGHTCODE_VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
-const KNIGHTCODE_USER_AGENT_RE = /^knightcode\/([^\s()]+)(?: \([^;()]+(?:;\s*[^;()]+(?:;\s*[^()]+)?)?\))?$/i;
+// No `\s*` after the semicolons: the classes that follow already match whitespace, and the overlap made a
+// request header with a long whitespace run backtrack quadratically.
+const KNIGHTCODE_USER_AGENT_RE = /^knightcode\/([^\s()]+)(?: \([^;()]+(?:;[^;()]+(?:;[^()]+)?)?\))?$/i;
 const MODEL_TYPE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 type ParsedKnightcodeVersion = readonly [major: number, minor: number, patch: number, prerelease: string];

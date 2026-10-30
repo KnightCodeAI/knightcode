@@ -1842,7 +1842,7 @@ export class DefaultPackageManager implements PackageManager {
 	}
 
 	private parseNpmSpec(spec: string): { name: string; version?: string } {
-		const match = spec.match(/^(@?[^@]+(?:\/[^@]+)?)(?:@(.+))?$/);
+		const match = spec.match(/^(@?[^@]+)(?:@(.+))?$/);
 		if (!match) {
 			return { name: spec };
 		}
