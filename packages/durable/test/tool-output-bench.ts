@@ -259,7 +259,7 @@ async function openStorage(backend: Backend, path: string): Promise<Storage> {
 	return openNodeJsonlStorage(path, context);
 }
 
-/** Measure every Storage commit. */
+/** Measure every Storage commit call. */
 function timed(storage: Storage, latencies: number[]): Storage {
 	return new Proxy(storage, {
 		get(target, property) {
