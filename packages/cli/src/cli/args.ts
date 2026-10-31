@@ -465,6 +465,7 @@ ${chalk.bold("Environment Variables:")}
   ${ENV_SESSION_DIR.padEnd(32)} - Session storage directory (overridden by --session-dir)
   KNIGHTCODE_PACKAGE_DIR                   - Override package directory (for Nix/Guix store paths)
   KNIGHTCODE_OFFLINE                       - Disable startup network operations when set to 1/true/yes
+  KNIGHTCODE_SELF_UPDATE_COMMAND           - Command knightcode update runs to update KnightCode itself ({packageName}, {version}, {installSpec})
   KNIGHTCODE_TELEMETRY                     - Override install telemetry when set to 1/true/yes or 0/false/no
   KNIGHTCODE_SHARE_VIEWER_URL              - Base URL for /share command (default: https://knightcode.dev/session/)
 

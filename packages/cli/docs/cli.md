@@ -334,6 +334,18 @@ variable. Offline, print, JSON, and RPC sessions do not start background updates
 
 Add `--force` to reinstall KnightCode when the selected update includes KnightCode.
 
+#### Custom update command
+
+`knightcode update` cannot update KnightCode when a wrapper or another package manager provides it, such as mise or Nix. Set `KNIGHTCODE_SELF_UPDATE_COMMAND` so `knightcode update` runs that tool's update command instead:
+
+```sh
+export KNIGHTCODE_SELF_UPDATE_COMMAND="mise use -g npm:{packageName}@{version}"
+```
+
+`knightcode update` runs it only when knightcode.dev has a newer release (or with `--force`), replacing `{packageName}`, `{version}`, and `{installSpec}` (`{packageName}@{version}`) with that release. The value is split on spaces. For arguments with spaces, use the `selfUpdateCommand` setting in `~/.knightcode/agent/settings.json` instead, an argv array such as `["nix", "profile", "upgrade", "knightcode"]`. Project settings cannot set it.
+
+A configured command replaces KnightCode's own update for every install method, including the script installer. Automatic updates then only show the update notice; run `knightcode update` to apply it. After the command exits, `knightcode update` checks the version that `knightcode --version` reports on `PATH` and warns if it is not the new release.
+
 ### Aliases and command options
 
 - `knightcode uninstall <source>` is an alias for `knightcode remove <source>`.

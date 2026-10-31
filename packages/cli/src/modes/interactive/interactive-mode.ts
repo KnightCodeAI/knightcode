@@ -61,6 +61,7 @@ import {
 	detectInstallChange,
 	getAgentDir,
 	getAuthPath,
+	getConfiguredSelfUpdateArgv,
 	getDebugLogPath,
 	getDocsPath,
 	VERSION,
@@ -1197,7 +1198,11 @@ export class InteractiveMode {
 		this.backgroundUpdater = new BackgroundUpdater(
 			this.version,
 			(state) => this.showBackgroundUpdateNotification(state),
-			() => this.settingsManager.getAutoUpdate(),
+			// A configured update command replaces KnightCode's own update logic, including this
+			// one; it runs from `knightcode update`, never detached with its output discarded.
+			() =>
+				this.settingsManager.getAutoUpdate() &&
+				!getConfiguredSelfUpdateArgv(this.settingsManager.getGlobalSettings().selfUpdateCommand),
 		);
 		this.backgroundUpdater.start();
 
