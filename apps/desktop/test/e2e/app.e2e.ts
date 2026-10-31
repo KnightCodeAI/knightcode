@@ -314,7 +314,7 @@ test("a plugin installs, asks for trust, toggles, uninstalls, and offers its com
 	await page.getByRole("button", { name: "Install", exact: true }).click();
 	// Installed untrusted; the trust dialog lists what it offers before anything runs.
 	await expect(page.getByText("Trust e2e-plugin?")).toBeVisible();
-	await expect(page.getByRole("dialog").getByText("Commands: /e2e-plugin:go")).toBeVisible();
+	await expect(page.getByRole("dialog").getByText("/e2e-plugin:go")).toBeVisible();
 	await page.getByRole("button", { name: "Not now" }).click();
 	await expect(page.getByText("Not trusted", { exact: true })).toBeVisible();
 	const enable = page.getByRole("switch", { name: "Enable e2e-plugin" });

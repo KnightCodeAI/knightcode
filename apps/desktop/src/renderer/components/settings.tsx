@@ -2780,16 +2780,6 @@ function AddPluginSourceDialog({
 	);
 }
 
-/** What a plugin offers and runs: its commands, skills, MCP servers and the environment they read. */
-function pluginInventory(plugin: PluginRow): string[] {
-	return [
-		...(plugin.commands.length ? [`Commands: ${plugin.commands.map((c) => `/${c}`).join(", ")}`] : []),
-		...(plugin.skills.length ? [`Skills: ${plugin.skills.join(", ")}`] : []),
-		...plugin.mcpServers.map((server) => `MCP server ${server.name}: ${server.target}`),
-		...(plugin.environment.length ? [`Reads environment variables: ${plugin.environment.join(", ")}`] : []),
-	];
-}
-
 /** A plugin's row text: what it offers, then its description, as `/plugins` writes it. */
 function pluginSummary(plugin: PluginRow): string {
 	const offers = [
@@ -2800,16 +2790,16 @@ function pluginSummary(plugin: PluginRow): string {
 	return [offers, plugin.description].filter(Boolean).join(" · ");
 }
 
-/** Everything a plugin holds, under its row once opened. Its own skills drop the `<plugin>:` they all carry. */
-function PluginDetails({ plugin }: { plugin: PluginRow }) {
+/**
+ * Everything a plugin holds: what it runs first (its MCP servers and the environment they read), then what it offers.
+ * Its own skills drop the `<plugin>:` they all carry. Under its row once opened, and in the trust question.
+ */
+function PluginDetails({ plugin, className = "px-4 pb-3" }: { plugin: PluginRow; className?: string }) {
 	const prefix = `${plugin.namespace}:`;
 	const own = (name: string) => (name.startsWith(prefix) ? name.slice(prefix.length) : name);
+	const counted = (term: string, count: number) => (count > 1 ? `${term} (${count})` : term);
 	const facts: [string, ReactNode][] = [
 		["Source", <span className="font-code">{plugin.ref ? `${plugin.source}#${plugin.ref}` : plugin.source}</span>],
-		...(plugin.skills.length ? [["Skills", plugin.skills.map(own).join(", ")] as [string, ReactNode]] : []),
-		...(plugin.commands.length
-			? [["Commands", plugin.commands.map((command) => `/${command}`).join(", ")] as [string, ReactNode]]
-			: []),
 		...plugin.mcpServers.map((server): [string, ReactNode] => [
 			"MCP server",
 			<>
@@ -2819,10 +2809,21 @@ function PluginDetails({ plugin }: { plugin: PluginRow }) {
 		...(plugin.environment.length
 			? [["Reads", <span className="font-code">{plugin.environment.join(", ")}</span>] as [string, ReactNode]]
 			: []),
+		...(plugin.commands.length
+			? [
+					[counted("Commands", plugin.commands.length), plugin.commands.map((command) => `/${command}`).join(", ")] as [
+						string,
+						ReactNode,
+					],
+				]
+			: []),
+		...(plugin.skills.length
+			? [[counted("Skills", plugin.skills.length), plugin.skills.map(own).join(", ")] as [string, ReactNode]]
+			: []),
 		...(plugin.unsupported.length ? [["Never runs", plugin.unsupported.join(", ")] as [string, ReactNode]] : []),
 	];
 	return (
-		<div className="flex flex-col gap-2 px-4 pb-3">
+		<div className={`flex flex-col gap-2 ${className}`}>
 			<dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
 				{facts.map(([term, value], index) => (
 					<Fragment key={index}>
@@ -2840,7 +2841,10 @@ function PluginDetails({ plugin }: { plugin: PluginRow }) {
 	);
 }
 
-/** Asked before a plugin is trusted: it lists what the plugin will run, and what KnightCode will not run. */
+/**
+ * Asked before a plugin is trusted: what it will run and offer, and what KnightCode never runs, in a panel that scrolls
+ * when a plugin brings hundreds of skills.
+ */
 function TrustPluginDialog({
 	plugin,
 	onTrust,
@@ -2851,24 +2855,17 @@ function TrustPluginDialog({
 	onClose: () => void;
 }) {
 	return (
-		<Dialog title={`Trust ${plugin.name}?`} onClose={onClose}>
-			<div className="flex flex-col gap-2 pt-3 text-sm">
-				<p className="text-secondary">
-					Trusting it lets new threads run its MCP servers and offer its skills and commands:
-				</p>
-				<ul className="flex flex-col gap-1 font-code text-xs">
-					{pluginInventory(plugin).map((line) => (
-						<li key={line}>{line}</li>
-					))}
-				</ul>
-				{plugin.unsupported.length ? (
-					<p className="text-xs text-secondary">Not supported, never run: {plugin.unsupported.join(", ")}</p>
-				) : null}
-				{plugin.warnings.map((warning) => (
-					<p key={warning} className="text-xs text-secondary">
-						{warning}
-					</p>
-				))}
+		<Dialog
+			title={`Trust ${plugin.name}?`}
+			description="New threads will run its MCP servers and offer its skills and commands."
+			width={480}
+			onClose={onClose}
+		>
+			<div className="pt-4">
+				<PluginDetails
+					plugin={plugin}
+					className="max-h-[min(320px,45vh)] overflow-y-auto rounded-lg bg-card-soft px-3 py-2.5 shadow-[0_0_0_0.5px_var(--kc-border-strong)]"
+				/>
 			</div>
 			<DialogActions>
 				<Button color="secondary" size="lg" squircle className="px-4" onClick={onClose}>
