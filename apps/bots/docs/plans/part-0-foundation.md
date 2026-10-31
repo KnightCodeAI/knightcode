@@ -56,7 +56,7 @@ git commit -m "docs(bots): add the KnightCode Bots design and MVP plan"
   classes are exported from `src/worker.ts` as empty shells here and filled
   in by Part 2 and 3.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/test/worker.test.ts
@@ -76,12 +76,12 @@ it("refuses unknown API routes with a JSON 404", async () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bunx vitest --run test/worker.test.ts` in `apps/bots`
 Expected: FAIL (no worker yet).
 
-- [ ] **Step 3: Implement the skeleton**
+- [x] **Step 3: Implement the skeleton**
 
 `package.json`: name `knightcode-bots`, private, `type: module`, scripts
 `test` (`vitest --run`), `typecheck` (`tsc --noEmit`), `dev:worker`
@@ -103,12 +103,12 @@ override, since `web/dist` does not exist until the web app is built.
 `src/env.ts` also exports `getKek(env): Promise<CryptoKey>`, which reads the
 Secrets Store binding in production and a plain `TEST_KEK` binding in tests.
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bunx vitest --run test/worker.test.ts` and `bun run typecheck`
 Expected: 2 passed; no type errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/package.json apps/bots/wrangler.jsonc apps/bots/tsconfig.json apps/bots/vitest.config.ts apps/bots/test apps/bots/migrations apps/bots/src apps/bots/.gitignore bun.lock

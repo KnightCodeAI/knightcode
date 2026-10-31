@@ -1,0 +1,30 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "knightcode-bots",
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-08-22",
+	"compatibility_flags": ["nodejs_compat"],
+	"account_id": "43557fce17fd00ec09461c12c39dc41a",
+	// No routes yet; the production domain is attached when the Worker is deployed.
+	"workers_dev": true,
+	// run_worker_first keeps every path behind the Worker's own checks, and html_handling
+	// "none" stops ASSETS.fetch("/index.html") from redirecting back to "/".
+	"assets": { "directory": "./web/dist", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" },
+	"durable_objects": {
+		"bindings": [
+			{ "name": "BOT", "class_name": "BotObject" },
+			{ "name": "USER", "class_name": "UserObject" },
+			{ "name": "COMPUTER", "class_name": "ComputerObject" }
+		]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["BotObject", "UserObject", "ComputerObject"] }],
+	"d1_databases": [{ "binding": "DB", "database_name": "knightcode-bots", "database_id": "00000000-0000-0000-0000-000000000000" }],
+	"r2_buckets": [{ "binding": "FILES", "bucket_name": "knightcode-bots-files" }],
+	"queues": {
+		"producers": [{ "binding": "OUTBOUND", "queue": "bots-outbound" }],
+		"consumers": [{ "queue": "bots-outbound", "dead_letter_queue": "bots-outbound-dlq" }]
+	},
+	// The key-encryption key. SESSION_SECRET is a plain Worker secret (wrangler secret put).
+	"secrets_store_secrets": [{ "binding": "KEK", "store_id": "00000000000000000000000000000000", "secret_name": "bots-kek" }],
+	"observability": { "enabled": true }
+}
