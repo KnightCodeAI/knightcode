@@ -48,6 +48,8 @@
       "@knightcode/chord/sqlite/node": ["./packages/chord/src/sqlite/node.ts"],
       "@knightcode/chord/sqlite/cloudflare": ["./packages/chord/src/sqlite/cloudflare.ts"],
       "@knightcode/chord/*": ["./packages/chord/src/*.ts", "./packages/chord/src/*"],
+      "@knightcode/schema": ["./packages/schema/src/index.ts"],
+      "@knightcode/schema/formats": ["./packages/schema/src/formats/index.ts"],
       "@knightcode/app-server-protocol": ["./packages/app-server-protocol/src/index.ts"],
       "@knightcode/remote": ["./packages/remote/src/index.ts"],
       "@knightcode/remote/*": ["./packages/remote/src/*"],
