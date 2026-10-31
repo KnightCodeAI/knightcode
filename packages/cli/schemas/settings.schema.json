@@ -279,7 +279,7 @@
     },
     "enableInstallTelemetry": {
       "type": "boolean",
-      "description": "Send an anonymous version and update ping after changelog-detected updates.",
+      "description": "Send anonymous install, update, and launch pings.",
       "default": true
     },
     "enableAnalytics": {

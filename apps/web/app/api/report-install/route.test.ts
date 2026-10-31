@@ -97,6 +97,38 @@ describe("the anonymous id", () => {
   })
 })
 
+describe("activity pings", () => {
+  const ID = "0123456789abcdef0123456789abcdef"
+
+  it("records a launch per client under the install id", async () => {
+    for (const client of ["cli", "desktop"]) {
+      stubFetch()
+      await GET(ping(`?version=0.4.2&id=${ID}&active=${client}`))
+      expect(sent[0].body.event).toBe("app_active")
+      expect(sent[0].body.distinct_id).toBe(ID)
+      expect((sent[0].body.properties as Record<string, unknown>).client).toBe(client)
+    }
+  })
+
+  it("keys installs by the install id too, so both events share one person", async () => {
+    await GET(ping(`?version=0.4.2&id=${ID}`))
+    expect(sent[0].body.event).toBe("cli_install")
+    expect(sent[0].body.distinct_id).toBe(ID)
+  })
+
+  it("falls back to the hashed id for a malformed install id", async () => {
+    await GET(ping("?version=0.4.2&id=not-a-hash&active=cli"))
+    expect(sent[0].body.distinct_id).toMatch(/^[0-9a-f]{32}$/)
+    expect(sent[0].body.distinct_id).not.toBe("not-a-hash")
+  })
+
+  it("rejects an unknown client and sends nothing", async () => {
+    const response = await GET(ping(`?version=0.4.2&id=${ID}&active=ide`))
+    expect(response.status).toBe(400)
+    expect(sent).toHaveLength(0)
+  })
+})
+
 describe("launch signals", () => {
   it("rejects every event, including the IDE's old ones, and sends nothing", async () => {
     for (const event of ["ide_first_run", "ide_keystroke"]) {

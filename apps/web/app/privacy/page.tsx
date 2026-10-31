@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE.url}/privacy` },
 }
 
-const updated = "September 2026"
+const updated = "October 2026"
 
 export default function PrivacyPage() {
   return (
@@ -80,13 +80,17 @@ export default function PrivacyPage() {
             <code>KNIGHTCODE_OFFLINE=1</code> turns them off.
           </li>
           <li>
-            <strong>Install and update ping.</strong> The first launch of a new
-            version sends one anonymous request to <code>knightcode.dev</code>{" "}
-            with the KnightCode version and a user agent that names your
-            operating system, runtime, and CPU architecture. The site adds a
-            coarse location (country, region, city) from the request and an
-            anonymous ID made from a one-way hash of your IP address and user
-            agent. It does not store the address. The ping is on by default. Turn it off
+            <strong>Install, update, and launch pings.</strong> Each launch of
+            the CLI or the desktop app sends one anonymous request to{" "}
+            <code>knightcode.dev</code> with the KnightCode version, whether it
+            was the CLI or the desktop app, and a user agent that names your
+            operating system, runtime, and CPU architecture. The first launch of
+            a new version also marks the install or update. The request carries
+            an anonymous install ID: a one-way hash of a random ID stored in
+            your settings, so it cannot be traced back to that ID. The site
+            adds a coarse location (country, region, city) from the request and
+            does not store your IP address. This counts how many people use
+            KnightCode each day. The pings are on by default. Turn them off
             with <code>enableInstallTelemetry: false</code> or{" "}
             <code>KNIGHTCODE_TELEMETRY=0</code>. The same setting controls the
             identifying headers KnightCode adds to requests for OpenRouter,

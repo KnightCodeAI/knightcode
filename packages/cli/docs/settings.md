@@ -223,7 +223,7 @@ The built-in extensions are named `builtin:mcp`, `builtin:llama.cpp`, `builtin:c
 |---|---|---|---|
 | `autoUpdate` | boolean | `true` | Download KnightCode CLI updates automatically while retaining update notices when `false`. **Can only be set in agent-directory settings.** `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` overrides this setting. See [Disable automatic updates](#disable-automatic-updates). |
 | `collapseChangelog` | boolean | `false` | After an update, show a one-line notice instead of the top three changes, and one line per updated extension package. |
-| `enableInstallTelemetry` | boolean | `true` | Enable anonymous install/update reporting and selected provider attribution headers. Does not control update checks. |
+| `enableInstallTelemetry` | boolean | `true` | Enable anonymous install, update, and launch reporting and selected provider attribution headers. Does not control update checks. |
 | `enableAnalytics` | boolean | `false` | Opt in to analytics data sharing. Currently used only by the experimental first-run setup. |
 | `warnings.anthropicExtraUsage` | boolean | `true` | Warn when Anthropic subscription authentication may use paid extra usage. |
 

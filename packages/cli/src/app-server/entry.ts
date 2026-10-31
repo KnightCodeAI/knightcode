@@ -10,6 +10,7 @@ import { parseArgs as parseNodeArgs } from "node:util";
 import { ENV_SESSION_DIR, expandTildePath, getAgentDir, VERSION } from "../config.ts";
 import { flushRawStdout, takeOverStdout, writeRawStdoutReporting } from "../core/output-guard.ts";
 import { SettingsManager } from "../core/settings-manager.ts";
+import { reportTelemetry } from "../core/telemetry.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
 import { accountHandlers } from "./accounts.ts";
 import { configureHandlers } from "./configure.ts";
@@ -63,6 +64,8 @@ export async function runAppServer(args: string[]): Promise<void> {
 		(envSessionDir ? expandTildePath(envSessionDir) : undefined) ??
 		SettingsManager.create(process.cwd(), agentDir, { projectTrusted: false }).getSessionDir();
 	const ctx = await createAppServerContext({ agentDir, sessionDir });
+	// The desktop app is the only client that starts `app-server`, so each start is one desktop launch.
+	reportTelemetry(ctx.settings, VERSION, "desktop");
 	const threads = new ThreadManager(ctx, { extensionPaths: (values.extension ?? []).map((path) => resolvePath(path)) });
 	const transport = createStdioTransport(process.stdin, writeRawStdoutReporting);
 	// Output closes after the connection answered everything it accepted (Task 7), or on abort.
