@@ -2109,6 +2109,16 @@ validation and copies the v2 kernel added around Delta.
   thin layer); an import of an unlisted version is a build error naming the available ones. No `package.json` field
   and no npm ranges for this. Contracts and registry tokens inside an API keep their own versions. The rest of the
   plugin model is a proposal (`docs/next/plugin-model/`).
+- **A schema package beneath @knightcode/ai and Chord (owner, 2026-10-31: "i want the schema package"; "if we keep it a
+  dependency in @knightcode/ai, we must be able to rip it out"; TypeBox is "horrible to treeshake"):** a small package with no
+  dependencies (working name `@knightcode/schema`) under both @knightcode/ai and Chord (siblings: neither depends on the
+  other): helpers returning plain JSON Schema, a structural `JsonSchema` type, `Static` from the helpers' literal
+  types, and a validator for general JSON Schema (tool schemas from MCP servers and extensions use `$ref`, `anyOf`,
+  `pattern`, ...), without `eval` or `new Function` (CSP-safe). Chord v2 drops TypeBox; @knightcode/ai's core never imports
+  it (TypeBox schemas still pass as JSON Schema; TypeBox-typed extras only in an optional subpath, so ripping it out
+  is deleting that subpath). Not omptype (its validator compiles with `new Function`; its 10.7k lines are mostly
+  ArkType's API). Open: which validator (measure `@cfworker/json-schema` and TypeBox against the official
+  JSON-Schema-Test-Suite and Chord's argument checks first), and moving `Type` out of @knightcode/ai's main export.
 - **A plugin's npm dependencies are bundled; external only by opt-in (owner, 2026-10-29: "explicit opt in + (a)"):**
   a plugin's `dependencies` are installed into its own `node_modules` (`npm install --ignore-scripts`) and bundled into
   each facet that imports them (host packages, its `peerDependencies`, stay external and are passed in). On Node a
