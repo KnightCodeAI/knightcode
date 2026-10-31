@@ -2084,6 +2084,31 @@ validation and copies the v2 kernel added around Delta.
   is trusted (a plugin's own file). (2) The worker lock on macOS and the BSDs fails closed on a stale lock file, with an
   error naming it (no takeover; Linux and Android use abstract sockets and are unaffected). (3) A route's overhead:
   Opus's two trims, measured again after the `fetch` rework, and the numbers brought to the owner.
+- **Slice 10: a route's overhead accepted; no header accessor (owner, 2026-10-31: "1 yes, 2 no"):** after the `fetch`
+  rework and the Node fast path a route costs +20-21 µs over a plain Node handler on the standard bench, +12-13 µs warmed
+  (before the rework +4.5 µs): the request's scope (2.1 µs), URL parsing, admission and routing, the baseline's headers,
+  the scope's seal, and about 5 µs of Node's microtask machinery an async path triggers. Accepted against the 10% bar.
+  No `request.header(name)` accessor: an authenticator reading headers builds the Web `Request` (about 3.5 µs more).
+- **A CSP nonce per response (owner, 2026-10-31: "csp ok"; Fable's recheck):** the HTTP component makes a fresh script
+  nonce for every response (`request.nonce`), not one per server: a nonce read from one page cannot be reused by an
+  injected script elsewhere.
+- **Settings are arguments, extensions are registries (owner, 2026-10-31: "making that config a registry is dumb; it's a
+  general problem for all host-lifetime natives that need initialization at host startup"; "k"; supersedes the
+  `HttpConfig` registry of "The HTTP server is a native object"):** what the app decides once at startup (a port, frame
+  limits, a timeout, a data directory, which implementation to use) is an argument to the component's facet, which base
+  code constructs; the facet and its host-lifetime objects close over it; changing it is a restart; no plugin can
+  touch it. What plugins add while the app runs (routes, authenticators, tools, panels, more indexers) is a registry.
+  HTTP: `createHttp(host, { listen, links, closeTimeout, onError }, ctx)`; `Http` and `Authenticators` stay registries.
+  The same for the harness (its store and defaults as arguments; models, environments, extensions as registries) and
+  the app kit's components (a session index takes its indexer as an argument, and may also follow a registry of
+  indexers if plugins should supply them).
+- **API versions in the import path (owner, 2026-10-31: "this sounds about right"; "must be declared by the plugin in
+  code, we do not want to dig around package.json files anymore"):** the app's base code is internal except its API
+  modules, which it exposes as host packages with a version in the path (`@acme/app/v3`; Chord's
+  `@knightcode/chord/next/v2`); the app lists the versions it still provides (an older one as the same module, or a
+  thin layer); an import of an unlisted version is a build error naming the available ones. No `package.json` field
+  and no npm ranges for this. Contracts and registry tokens inside an API keep their own versions. The rest of the
+  plugin model is a proposal (`docs/next/plugin-model/`).
 - **A plugin's npm dependencies are bundled; external only by opt-in (owner, 2026-10-29: "explicit opt in + (a)"):**
   a plugin's `dependencies` are installed into its own `node_modules` (`npm install --ignore-scripts`) and bundled into
   each facet that imports them (host packages, its `peerDependencies`, stay external and are passed in). On Node a
