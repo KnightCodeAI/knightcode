@@ -102,6 +102,11 @@ export const RefreshCw = icon(
 	"RefreshCw",
 	<path d="M2.75 8a5.25 5.25 0 0 1 9.55-3.01M12.75 2.5v2.75H10M13.25 8a5.25 5.25 0 0 1-9.55 3.01M3.25 13.5v-2.75H6" />,
 );
+// A plug: two prongs over a rounded body and its lead, for plugins.
+export const Plug = icon(
+	"Plug",
+	<path d="M6 2.25v3M10 2.25v3M4.25 5.25h7.5V8a3.75 3.75 0 0 1-7.5 0V5.25ZM8 11.75v2" />,
+);
 // Codex's Undo: an arrow back to the left that comes round into a hook.
 export const Undo = icon("Undo", <path d="M5.25 2 2.5 4.75 5.25 7.5M2.5 4.75h6.75a4 4 0 0 1 0 8h-2.5" />);
 // Codex's spinner: a faint ring with three quarters of it drawn over, turned by `motion-safe:animate-spin`.

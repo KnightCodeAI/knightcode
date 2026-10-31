@@ -55,7 +55,7 @@ export interface McpUi {
 	redirectUrl(title: string, authorizationUrl: string, signal: AbortSignal): Promise<string | undefined>;
 }
 
-function frame(theme: Theme, title: string, body: Component[], footer?: string): Container {
+export function frame(theme: Theme, title: string, body: Component[], footer?: string): Container {
 	const container = new Container();
 	container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
 	container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));

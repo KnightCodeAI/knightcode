@@ -201,6 +201,17 @@ test("trust read and set at a worktree's cwd are its project's decision", async 
 	expect(read.origins.theme).toBe("project");
 	await s.a.client.request("config/write", { scope: "project", cwd: workspace.path, key: "theme", value: "dark" });
 	expect(readFileSync(join(workspace.path, ".knightcode", "settings.json"), "utf8")).toContain('"dark"');
+	// So do project plugins.
+	const plugin = tempDir("kc-plugin-");
+	write(plugin, "plugin.json", '{"name":"wt"}');
+	write(plugin, "commands/hi.md", "hi");
+	const installed = await s.a.client.request("plugin/install", {
+		scope: "project",
+		cwd: workspace.path,
+		source: plugin,
+		trust: true,
+	});
+	expect(installed.plugin).toMatchObject({ scope: "project", active: true });
 });
 
 test("worktrees.root moves new worktrees; fetchBeforeCreate brings an upstream commit in", async () => {

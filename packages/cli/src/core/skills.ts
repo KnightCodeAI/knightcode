@@ -88,8 +88,13 @@ export interface LoadSkillsResult {
 /**
  * Validate skill name per Agent Skills spec.
  * Returns array of validation error messages (empty if valid).
+ * Plugin skills carry one `<plugin>:` prefix; each part follows the same rules.
  */
-function validateName(name: string): string[] {
+function validateName(name: string, pluginSkill = false): string[] {
+	const [prefix, rest, ...extra] = name.split(":");
+	if (pluginSkill && rest !== undefined && extra.length === 0 && prefix) {
+		return [...validateName(prefix), ...validateName(rest)];
+	}
 	const errors: string[] = [];
 
 	if (name.length > MAX_NAME_LENGTH) {
@@ -277,6 +282,7 @@ function loadSkillsFromDirInternal(
 function loadSkillFromFile(
 	filePath: string,
 	source: string,
+	pluginSkill = false,
 ): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
 	const diagnostics: ResourceDiagnostic[] = [];
 	const isDeclaredSkill = basename(filePath) === "SKILL.md";
@@ -321,7 +327,7 @@ function loadSkillFromFile(
 	const name = frontmatterName || parentDirName;
 
 	// Validate name
-	const nameErrors = validateName(name);
+	const nameErrors = validateName(name, pluginSkill);
 	for (const error of nameErrors) {
 		diagnostics.push({ type: "warning", message: error, path: filePath });
 	}
@@ -491,7 +497,12 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 			if (stats.isDirectory()) {
 				addSkills(loadSkillsFromDirInternal(resolvedPath, source, true));
 			} else if (stats.isFile() && resolvedPath.endsWith(".md")) {
-				const result = loadSkillFromFile(resolvedPath, source);
+				// Plugin skills are the exact files the plugin manager rendered under <agentDir>/plugins.
+				const result = loadSkillFromFile(
+					resolvedPath,
+					source,
+					isPathWithin(join(resolvedAgentDir, "plugins"), resolvedPath),
+				);
 				if (result.skill) {
 					addSkills({ skills: [result.skill], diagnostics: result.diagnostics });
 				} else {

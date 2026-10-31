@@ -358,6 +358,59 @@
       },
       "description": "Local extension file paths or directories."
     },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "`owner/repo`, a Git URL, a local path, or `name@marketplace`."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Branch, tag, or full commit SHA."
+          },
+          "path": {
+            "type": "string",
+            "description": "Plugin subdirectory inside a repository source."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Set to false to keep the plugin installed but inactive."
+          }
+        }
+      },
+      "description": "Claude Code and Grok Build plugins, managed with `knightcode plugin`."
+    },
+    "pluginMarketplaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "source"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The catalog's name, used in `plugin@marketplace`."
+          },
+          "source": {
+            "type": "string",
+            "description": "`owner/repo`, a Git URL, or a local path."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Branch, tag, or full commit SHA."
+          }
+        }
+      },
+      "description": "Plugin marketplace catalogs, managed with `knightcode plugin marketplace`."
+    },
     "deviceId": {
       "type": "string",
       "description": "Stable installation UUID, generated when authentication first needs it. Global only."

@@ -5,6 +5,8 @@ import codemodeExtension from "./codemode/index.ts";
 import llamaExtension from "./llama/index.ts";
 import mcpExtension from "./mcp/index.ts";
 import planMode from "./plan-mode/index.ts";
+import pluginsExtension from "./plugins/index.ts";
+import pluginMcpExtension from "./plugins/mcp.ts";
 import toolSearchExtension from "./tool-search/index.ts";
 import { turnMarkerExtension } from "./turn-marker.ts";
 import uiExtension from "./ui/index.ts";
@@ -20,6 +22,11 @@ export const builtInExtensions: InlineExtension[] = [
 	{ name: "codemode", factory: codemodeExtension, replaceable: true, builtin: true },
 	{ name: "tool-search", factory: toolSearchExtension, replaceable: true, builtin: true },
 	{ name: "mcp", factory: mcpExtension, replaceable: true, builtin: true },
+	// Claude Code and Grok Build plugins: skills and commands, and (separately, so turning MCP off drops them) MCP
+	// servers. The resource loader leaves plugin-mcp out whenever "mcp" is. After "mcp", whose session_start must run
+	// first to connect what plugin-mcp registers in its own.
+	{ name: "plugins", factory: pluginsExtension, builtin: true },
+	{ name: "plugin-mcp", factory: pluginMcpExtension, builtin: true },
 	// /undo is a built-in command; file checkpoints ride on the extension hooks so core stays untouched.
 	{ name: "undo", factory: undoExtension, builtin: true },
 	// /usage is a built-in command.

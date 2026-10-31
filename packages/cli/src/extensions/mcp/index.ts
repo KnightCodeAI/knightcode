@@ -77,6 +77,7 @@ import {
 	mcpAppOf,
 	visibilityOf,
 } from "./tools.ts";
+import { MCP_CONTROL_CHANNEL, type McpControl } from "./control.ts";
 import { type McpMenu, type McpUi, showMcpManager } from "./ui.ts";
 
 export type { McpTransportFactory } from "./runtime.ts";
@@ -819,10 +820,12 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			...overridden.map((line) => `overridden: ${line}`),
 		];
 
-		const serversMenu = (): McpMenu => ({
+		/** `only` narrows the list to those servers, as `/plugins` opens it for one plugin. */
+		const serversMenu = (only?: readonly string[]): McpMenu => ({
 			title: "MCP servers",
 			error: notices().join("\n") || undefined,
-			items: [...servers]
+			items: servers
+				.filter((server) => !only || only.includes(server.entry.name))
 				.sort((a, b) => attentionRank(a) - attentionRank(b) || a.entry.name.localeCompare(b.entry.name))
 				.map((server) => ({
 					value: server.entry.name,
@@ -1023,16 +1026,24 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			ensureDiscoveryActive(ctx);
 			emitChange();
 		};
-		const manage = async (ui: McpUi, ctx: ExtensionContext) => {
+		/**
+		 * `only` limits the menus to those servers; with one, its menu opens directly and leaving it ends, and `first`
+		 * (one of its menu's values) runs before the menu shows.
+		 */
+		const manage = async (ui: McpUi, ctx: ExtensionContext, only?: readonly string[], first?: string) => {
+			const single = only?.length === 1 ? only[0] : undefined;
+			let pending = single ? first : undefined;
 			for (;;) {
-				const name = await ui.menu(serversMenu, subscribe);
+				const name = single ?? (await ui.menu(() => serversMenu(only), subscribe));
 				if (!name) return;
 				for (;;) {
-					const action = await ui.menu(() => serverMenu(name), subscribe);
+					const action = pending ?? (await ui.menu(() => serverMenu(name), subscribe));
+					pending = undefined;
 					const server = findServer(name);
 					if (!action || !server) break;
 					await runAction(ui, ctx, server, action);
 				}
+				if (single) return;
 			}
 		};
 
@@ -1236,6 +1247,27 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 				return { result: { readOnly: tool.annotations?.readOnlyHint === true, visibility: visibilityOf(tool) } };
 			return { result: await connection.callTool(tool.name, request.arguments, options) };
 		};
+		// `/plugins` shows these servers' states and opens the menus above for them.
+		const control: McpControl = {
+			list: () =>
+				servers.map((server) => {
+					const { connection } = server;
+					const state = !isEnabled(server)
+						? "disabled"
+						: !connection
+							? "starting"
+							: connection.state === "closed"
+								? "disconnected"
+								: connection.state;
+					return { name: server.entry.name, state, tools: state === "connected" ? (connection?.tools.length ?? 0) : 0 };
+				}),
+			subscribe,
+			manage: (names, ui, ctx, action) => manage(ui, ctx, names, action),
+		};
+		knightcode.events.on(MCP_CONTROL_CHANNEL, (data) => {
+			(data as { provide(control: McpControl): void }).provide(control);
+		});
+
 		knightcode.events.on(MCP_APPS_CHANNEL, (data) => {
 			const request = data as McpAppRequest;
 			request.heard();

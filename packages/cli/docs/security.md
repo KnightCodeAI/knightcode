@@ -51,6 +51,7 @@ Granting project trust allows KnightCode to load:
 - extensions, skills, prompt templates, themes, and system-prompt files under `.knightcode`
 - missing packages configured through project settings
 - project-local and project-package extensions
+- [plugins](plugins.md) the project declares, which also need plugin trust of their own
 
 Declining project trust skips those protected resources, except for the initial `sessionDir` lookup described above.
 

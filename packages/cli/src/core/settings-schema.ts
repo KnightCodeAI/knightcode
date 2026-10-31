@@ -188,6 +188,19 @@ const PackageSourceSchema = Type.Union(
 	},
 );
 
+const PluginDeclarationSchema = Type.Object({
+	source: Type.String({ description: "`owner/repo`, a Git URL, a local path, or `name@marketplace`." }),
+	ref: Type.Optional(Type.String({ description: "Branch, tag, or full commit SHA." })),
+	path: Type.Optional(Type.String({ description: "Plugin subdirectory inside a repository source." })),
+	enabled: Type.Optional(Type.Boolean({ description: "Set to false to keep the plugin installed but inactive." })),
+});
+
+const PluginMarketplaceDeclarationSchema = Type.Object({
+	name: Type.String({ description: "The catalog's name, used in `plugin@marketplace`." }),
+	source: Type.String({ description: "`owner/repo`, a Git URL, or a local path." }),
+	ref: Type.Optional(Type.String({ description: "Branch, tag, or full commit SHA." })),
+});
+
 const StringArraySchema = Type.Array(Type.String());
 const SkillsInputSchema = Type.Union(
 	[
@@ -323,6 +336,16 @@ export const SettingsSchema = Type.Object(
 			}),
 		),
 		extensions: Type.Optional(Type.Array(Type.String(), { description: "Local extension file paths or directories." })),
+		plugins: Type.Optional(
+			Type.Array(PluginDeclarationSchema, {
+				description: "Claude Code and Grok Build plugins, managed with `knightcode plugin`.",
+			}),
+		),
+		pluginMarketplaces: Type.Optional(
+			Type.Array(PluginMarketplaceDeclarationSchema, {
+				description: "Plugin marketplace catalogs, managed with `knightcode plugin marketplace`.",
+			}),
+		),
 		deviceId: Type.Optional(
 			Type.String({
 				description: "Stable installation UUID, generated when authentication first needs it. Global only.",
@@ -489,6 +512,8 @@ export type QuietStartup = NonNullable<SettingsInput["quietStartup"]>;
 export type TransportSetting = NonNullable<SettingsInput["transport"]>;
 export type SessionShareDestination = NonNullable<SettingsInput["sessionShareDestination"]>;
 export type PackageSource = Static<typeof PackageSourceSchema>;
+export type PluginDeclaration = Static<typeof PluginDeclarationSchema>;
+export type PluginMarketplaceDeclaration = Static<typeof PluginMarketplaceDeclarationSchema>;
 export type FullscreenExitOutput = NonNullable<SettingsInput["fullscreenExitOutput"]>;
 export type TuiMode = NonNullable<SettingsInput["tuiMode"]>;
 export type CacheWarmingMode = NonNullable<SettingsInput["cacheWarming"]>;

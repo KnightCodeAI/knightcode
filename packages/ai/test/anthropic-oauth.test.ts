@@ -48,7 +48,10 @@ describe.sequential("Anthropic OAuth", () => {
 			const body = getJsonBody(init);
 			expect(body.grant_type).toBe("authorization_code");
 			expect(body.code).toBe("manual-code");
-			expect(body.redirect_uri).toBe("http://localhost:53692/callback");
+			// The callback server prefers 53692 but takes another port when that one is held (on a CI runner a parallel
+			// test's ephemeral connection can be), so compare against the URL the user was sent to.
+			expect(body.redirect_uri).toBe(new URL(authUrl).searchParams.get("redirect_uri"));
+			expect(body.redirect_uri).toMatch(/^http:\/\/localhost:\d+\/callback$/);
 			return jsonResponse({
 				access_token: "access-token",
 				refresh_token: "refresh-token",
@@ -224,7 +227,14 @@ describe.sequential("Anthropic OAuth", () => {
 	// #10571
 	it("falls back to a free callback port when the preferred port cannot be bound", async () => {
 		const blocker = createServer();
-		await listen(blocker, 53692);
+		// When something else already holds the port, that is the case under test anyway.
+		const blocked = await listen(blocker, 53692).then(
+			() => true,
+			(error: NodeJS.ErrnoException) => {
+				if (error.code !== "EADDRINUSE") throw error;
+				return false;
+			},
+		);
 		try {
 			const login = await loginThroughBrowserCallback();
 			const redirectUri = new URL(login.redirectUri);
@@ -236,7 +246,7 @@ describe.sequential("Anthropic OAuth", () => {
 			expect(login.exchangedRedirectUri).toBe(login.redirectUri);
 			expect(login.pageStatus).toBe(200);
 		} finally {
-			await new Promise<void>((resolve) => blocker.close(() => resolve()));
+			if (blocked) await new Promise<void>((resolve) => blocker.close(() => resolve()));
 		}
 	});
 });

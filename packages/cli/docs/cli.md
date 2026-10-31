@@ -14,8 +14,11 @@ knightcode list
 knightcode config [options]
 knightcode auth <check|print-api-key|print-bearer-token> [options]
 knightcode mcp <add|remove|list|login|logout> [options]
+knightcode plugin <install|list|details|enable|disable|update|uninstall|validate|marketplace> [options]
 knightcode app-server [-e <extension>]... [--session-dir <dir>]
 ```
+
+`knightcode plugin` installs and manages Claude Code and Grok Build plugins; see [Plugins](plugins.md).
 
 <a id="modes"></a>
 

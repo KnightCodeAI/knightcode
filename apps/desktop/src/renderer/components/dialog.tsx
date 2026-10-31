@@ -83,7 +83,10 @@ export function Dialog({
 					}}
 					style={{ width }}
 					className={`fixed left-1/2 z-50 max-w-[92vw] -translate-x-1/2 text-ink outline-none ${placement === "top" ? "top-[20vh]" : "top-1/2 -translate-y-1/2"} ${
-						card ? "kc-card flex flex-col gap-1 rounded-2xl p-1" : "kc-dialog rounded-3xl p-5"
+						card
+							? "kc-card flex flex-col gap-1 rounded-2xl p-1"
+							: // Never taller than the window: a long body scrolls instead of pushing the title and actions off it.
+								"kc-dialog max-h-[calc(100vh-32px)] overflow-y-auto rounded-3xl p-5"
 					}`}
 				>
 					{card ? (

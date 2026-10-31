@@ -45,6 +45,9 @@ import {
 import { DEFAULT_TOOL_NAMES, SettingsManager } from "../core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
 import { builtInExtensions } from "../extensions/index.ts";
+import { createPluginsExtension, pluginCommands } from "../extensions/plugins/index.ts";
+import { createPluginMcpExtension } from "../extensions/plugins/mcp.ts";
+import { PluginManager } from "../plugins/manager.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
 import type { ShellConfig } from "../utils/shell.ts";
 import {
@@ -116,6 +119,7 @@ import {
 	manifestFor,
 	placeThread,
 	prepareWorktree,
+	projectReadable,
 	runCleanup,
 	readEnvironments,
 	saveEnvironments,
@@ -197,18 +201,22 @@ export function defaultApprovalMode(mode: "desktop" | "tui"): ApprovalMode {
 
 // ponytail: a fixed list of built-in commands that do nothing outside the terminal: they open custom() components,
 // which the desktop does not draw (Phase C, D6). Replace with command metadata if desktop versions are built.
-const TERMINAL_ONLY_COMMANDS = new Set(["usage", "llama", "undo"]);
+const TERMINAL_ONLY_COMMANDS = new Set(["usage", "llama", "undo", "plugins"]);
 
 function commandsOf(session: AgentSession): ResultOf<"command/list">["commands"] {
+	const commands = session.extensionRunner.getRegisteredCommands();
 	return [
-		...session.extensionRunner
-			.getRegisteredCommands()
+		...commands
 			.filter((command) => !TERMINAL_ONLY_COMMANDS.has(command.invocationName))
 			.map((command) => ({ name: command.invocationName, description: command.description ?? "" })),
 		...session.promptTemplates.map((template) => ({ name: template.name, description: template.description ?? "" })),
+		// A plugin skill its plugin offers as `/<plugin>:<skill>` is listed once; other skills always keep theirs.
 		...session.resourceLoader
 			.getSkills()
-			.skills.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description ?? "" })),
+			.skills.filter(
+				(skill) => !skill.name.includes(":") || !commands.some((command) => command.invocationName === skill.name),
+			)
+			.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description ?? "" })),
 	];
 }
 
@@ -1644,7 +1652,7 @@ export class ThreadManager {
 			settingsManager: SettingsManager.create(cwd, this.ctx.agentDir, { projectTrusted }),
 			resourceLoaderOptions: {
 				extensionFactories: [
-					...builtInExtensions,
+					...this.builtInExtensions(),
 					...this.threadExtensions(holder),
 					...(this.options.extraExtensions ?? []),
 					// Inline extensions load after all others, so this input handler runs last.
@@ -1689,6 +1697,41 @@ export class ThreadManager {
 					services.resourceLoader.releaseExtensionCache?.();
 				}
 			}
+		});
+	}
+
+	/**
+	 * Plugin commands and skills a new thread in `cwd` would offer. The probe session is never bound, so neither
+	 * session_start (which registers them) nor resources_discover (which loads the skills) fires; MCP servers stay off.
+	 * None when the probe's extension selection leaves the plugins extension out, as the thread would.
+	 */
+	private pluginCommandsFor(session: AgentSession, cwdParam: string): ResultOf<"command/list">["commands"] {
+		if (!session.resourceLoader.getExtensions().extensions.some((extension) => extension.path === "builtin:plugins")) {
+			return [];
+		}
+		const cwd = resolvePath(cwdParam);
+		const { plugins } = new PluginManager({ agentDir: this.ctx.agentDir, cwd }).loadActive(
+			projectReadable(this.ctx.agentDir, cwd),
+		);
+		// A skill users may invoke is already a `/<plugin>:<skill>` command; the rest only have `/skill:`, as in commandsOf.
+		return [
+			...pluginCommands(plugins).map((command) => ({ name: command.name, description: command.description })),
+			...plugins.flatMap((plugin) =>
+				plugin.inventory.skills
+					.filter((skill) => !skill.userInvocable)
+					.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description })),
+			),
+		];
+	}
+
+	/** The built-in extensions, with plugins read from this server's agent directory, as `pluginCommandsFor` reads them. */
+	private builtInExtensions(): InlineExtension[] {
+		const { agentDir } = this.ctx;
+		return builtInExtensions.map((extension) => {
+			if (typeof extension === "function") return extension;
+			if (extension.name === "plugins") return { ...extension, factory: createPluginsExtension({ agentDir }) };
+			if (extension.name === "plugin-mcp") return { ...extension, factory: createPluginMcpExtension({ agentDir }) };
+			return extension;
 		});
 	}
 
@@ -2276,7 +2319,9 @@ export class ThreadManager {
 			"command/list": async (params) =>
 				"threadId" in params
 					? { commands: commandsOf(this.get(params.threadId).session) }
-					: this.probe(params.cwd, (session) => ({ commands: commandsOf(session) })),
+					: this.probe(params.cwd, (session) => ({
+							commands: [...commandsOf(session), ...this.pluginCommandsFor(session, params.cwd)],
+						})),
 			// Without a project, the agent directory stands in: it has no `.knightcode` of its own.
 			"tool/list": async ({ cwd }) => {
 				// The defaults from the probe's own settings: a trusted project's override counts.

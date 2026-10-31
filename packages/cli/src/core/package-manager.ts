@@ -60,7 +60,7 @@ const NETWORK_TIMEOUT_MS = 10000;
 const UPDATE_CHECK_CONCURRENCY = 4;
 const GIT_UPDATE_CONCURRENCY = 4;
 
-function isOfflineModeEnabled(): boolean {
+export function isOfflineModeEnabled(): boolean {
 	const value = process.env.KNIGHTCODE_OFFLINE;
 	if (!value) return false;
 	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";

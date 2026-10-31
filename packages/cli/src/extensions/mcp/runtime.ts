@@ -75,7 +75,12 @@ function isTransientError(error: unknown): boolean {
 	return error instanceof TypeError;
 }
 
-function signInRequiredMessage(entry: McpServerEntry): string {
+function signInRequiredMessage(entry: McpServerEntry, challenge: OAuthChallenge | undefined): string {
+	// Signed in, but the grant is too narrow (step-up): the next sign-in asks for the missing scope.
+	if (challenge?.error === "insufficient_scope") {
+		const scope = challenge.scope ? ` (${challenge.scope})` : "";
+		return `MCP server "${entry.name}" needs access its sign-in did not grant${scope}. Run /mcp to sign in again and grant it.`;
+	}
 	const provider = "url" in entry.config ? entry.config.auth?.provider : undefined;
 	return `MCP server "${entry.name}" requires sign-in. Run ${provider ? `/login ${provider}` : "/mcp"} to sign in.`;
 }
@@ -299,7 +304,7 @@ export class McpServerConnection implements McpToolCaller, McpResourceServer {
 				if (!this.needsSignIn(error)) throw error;
 				await this.dropClient(client);
 				this.markNeedsAuth();
-				throw new Error(signInRequiredMessage(this.entry));
+				throw new Error(signInRequiredMessage(this.entry, this.challenge));
 			}
 		}
 	}
@@ -414,7 +419,7 @@ export class McpServerConnection implements McpToolCaller, McpResourceServer {
 	private connectFailed(error: unknown): Error {
 		if (this.needsSignIn(error) && !this.closed) {
 			this.markNeedsAuth();
-			return new Error(signInRequiredMessage(this.entry));
+			return new Error(signInRequiredMessage(this.entry, this.challenge));
 		}
 		this.state = this.closed ? "closed" : "failed";
 		this.error = this.stderrTail ? `${errorMessage(error)}\n${this.stderrTail}` : errorMessage(error);

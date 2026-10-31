@@ -208,6 +208,8 @@ Resource paths in user settings resolve from the agent directory. Paths in proje
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `packages` | array | `[]` | npm, git, or local KnightCode package sources. See [KnightCode Packages](packages.md). |
+| `plugins` | array | `[]` | Claude Code and Grok Build plugins, as `{source, ref?, path?, enabled?}`. Managed with `knightcode plugin`; see [Plugins](plugins.md). |
+| `pluginMarketplaces` | array | `[]` | Plugin catalogs, as `{name, source, ref?}`. See [Plugins](plugins.md#marketplaces). |
 | `extensions` | `string[]` | `[]` | Extension files or directories. |
 | `skills` | `string[]` | `[]` | Skill files or directories. |
 | `prompts` | `string[]` | `[]` | Prompt-template files or directories. |

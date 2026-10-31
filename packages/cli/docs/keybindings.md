@@ -196,3 +196,21 @@ Used inside the scoped models selector (opened via `/scoped-models`).
 | `app.models.toggleProvider` | `ctrl+p` | Toggle all models for the current provider |
 | `app.models.reorderUp` | `alt+up` | Move the selected model up in the cycle order |
 | `app.models.reorderDown` | `alt+down` | Move the selected model down in the cycle order |
+
+### Plugins Screen
+
+Used inside `/plugins`. The footer shows which of them the selected row and tab offer.
+
+| Keybinding id | Default | Description |
+|--------|---------|-------------|
+| `app.plugins.nextTab` | `tab` | Switch to the next tab |
+| `app.plugins.previousTab` | `shift+tab` | Switch to the previous tab |
+| `app.plugins.search` | `/` | Search every tab |
+| `app.plugins.toggle` | `space` | Turn the selected plugin on or off (asking for trust first) |
+| `app.plugins.add` | `a` | Install a plugin from a source (Installed), or add a marketplace (Marketplace) |
+| `app.plugins.refresh` | `r` | Reload the session (Installed), or refresh every marketplace (Marketplace) |
+| `app.plugins.update` | `u` | Update the selected plugin, or refresh the selected marketplace |
+| `app.plugins.remove` | `x` | Uninstall the selected installed plugin, or remove the selected marketplace |
+| `app.plugins.uninstall` | `d` | Uninstall the selected plugin on the Marketplace tab |
+| `app.plugins.install` | `i` | Install the selected Marketplace plugin, or import one from Claude Code or Grok Build |
+| `app.plugins.mcp` | `m` | Open `/mcp` for the selected plugin's MCP servers |
