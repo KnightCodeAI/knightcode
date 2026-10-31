@@ -19,6 +19,7 @@ import {
 	BackgroundTasksComponent,
 } from "../src/modes/interactive/components/background-tasks.ts";
 import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
+import { keyHint, keyText } from "../src/modes/interactive/components/keybinding-hints.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
@@ -57,6 +58,8 @@ function renderContext(args: Record<string, unknown>, isError: boolean) {
 		isError,
 		outputPad: 1,
 		durationMs: undefined,
+		keyText,
+		keyHint,
 	};
 }
 
@@ -360,7 +363,7 @@ describe("background shell transcript", () => {
 				],
 			},
 		};
-		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1 }, theme);
+		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1, keyText, keyHint }, theme);
 		const text = screen(component as { render(width: number): string[] });
 		expect(text).toContain("Background(npm test)");
 		expect(text).toContain("Failed with exit code 1 · ID 3fa9c21e");
@@ -391,7 +394,7 @@ describe("background shell transcript", () => {
 				],
 			},
 		};
-		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1 }, theme);
+		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1, keyText, keyHint }, theme);
 		const lines = stripAnsi((component as { render(width: number): string[] }).render(60).join("\n")).split("\n");
 		expect(lines[0]).toMatch(/Background\(curl https:\/\/example\.com.*…\)$/);
 		expect(lines.every((line) => line.length <= 60)).toBe(true);
@@ -420,7 +423,7 @@ describe("background shell transcript", () => {
 				],
 			},
 		};
-		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1 }, theme);
+		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1, keyText, keyHint }, theme);
 		expect(screen(component as { render(width: number): string[] })).toContain(
 			"Stopped because the session ended · ID 0badc0de",
 		);
