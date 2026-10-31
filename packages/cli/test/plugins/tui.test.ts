@@ -265,10 +265,10 @@ const row = (screen: BrowseTab[] | undefined, key: string) =>
 	screen?.flatMap((tab) => tab.groups.flatMap((group) => group.rows)).find((candidate) => candidate.key === key);
 
 /** MCP servers in a fixed state once the plugin's servers are registered. */
-function fakeMcp(state: McpServerState) {
+function fakeMcp(state: McpServerState, names = ["plugin_demo_api"]) {
 	let registered = false;
 	const mcp: PluginsMcp = {
-		list: () => (registered ? [{ name: "plugin_demo_api", state, tools: state === "connected" ? 3 : 0 }] : []),
+		list: () => (registered ? names.map((name) => ({ name, state, tools: state === "connected" ? 3 : 0 })) : []),
 		subscribe: () => () => {},
 		manage: vi.fn(async () => {}),
 	};
@@ -400,6 +400,26 @@ describe("/plugins", () => {
 			[["plugin_demo_api"], script.mcpUi, "signin"],
 			[["plugin_demo_api"], script.mcpUi],
 		]);
+	});
+
+	it("signs in to each server that needs it with one enter", async () => {
+		const agentDir = tempDir();
+		const manager = new PluginManager({ agentDir, cwd: agentDir });
+		const names = ["plugin_demo_api", "plugin_demo_docs"];
+		const { mcp, applyMcp } = fakeMcp("needs-auth", names);
+		const source = writeTree(tempDir(), {
+			"plugin.json": { name: "demo", mcpServers: { api: { command: "node" }, docs: { command: "node" } } },
+		});
+		const script = scriptedUi([
+			{ tab: "plugins", key: "a" },
+			source,
+			"yes",
+			{ tab: "plugins", key: "enter", target: "plugin:user:demo" },
+			undefined,
+			"later",
+		]);
+		await managePlugins(script.ui, manager, { reload: vi.fn(), mcp, applyMcp });
+		expect(vi.mocked(mcp.manage).mock.calls.slice(1)).toEqual(names.map((name) => [[name], script.mcpUi, "signin"]));
 	});
 
 	it("stays on the Marketplace tab after updating a plugin from it", async () => {

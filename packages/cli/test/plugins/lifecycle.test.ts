@@ -181,10 +181,10 @@ describe("plugin installation", () => {
 		await manager().install(repo.url, { trust: true });
 		repo.commit({ "commands/y.md": "y" });
 		await manager().update("shadow", {});
-		const local = await manager()
-			.install(repo.dir, { trust: true })
-			.catch((error: Error) => error);
-		expect(local).toBeInstanceOf(Error); // same namespace from a different source
+		// The same namespace from a different source.
+		await expect(manager().install(repo.dir, { trust: true })).rejects.toThrow(
+			/plugin namespace "shadow" is already used by/,
+		);
 		expect(existsSync(marker)).toBe(false);
 	});
 
@@ -204,6 +204,12 @@ describe("plugin installation", () => {
 				/timed out/,
 			);
 			expect(Date.now() - started).toBeLessThan(10_000);
+			// A pinned commit skips ls-remote, so the fetch is what stalls: it gets one deadline, not a second fallback one.
+			const pinned = Date.now();
+			await expect(
+				manager({ gitTimeoutMs: 2500 }).install(`http://127.0.0.1:${port}/x.git`, { ref: "a".repeat(40) }),
+			).rejects.toThrow(/timed out/);
+			expect(Date.now() - pinned).toBeLessThan(4500);
 		} finally {
 			for (const socket of sockets) socket.destroy();
 			server.close();
@@ -302,6 +308,25 @@ describe("plugin scopes", () => {
 		writeTree(cwd, { ".knightcode/settings.json": { plugins: [{ source, enabled: false }] } });
 		expect(manager().loadActive(true).plugins).toEqual([]);
 		expect(manager().loadActive(false).plugins).toHaveLength(1);
+		// Declared on, the project loads the user's install, and says so: list matches active plugins by record scope.
+		writeTree(cwd, { ".knightcode/settings.json": { plugins: [{ source }] } });
+		expect(
+			manager()
+				.loadActive(true)
+				.plugins.map((plugin) => plugin.scope),
+		).toEqual(["user"]);
+	});
+
+	it("refuses an update that renames the plugin onto another plugin's namespace", async () => {
+		const { manager } = setup();
+		await manager().install(writeTree(tempDir(), { "plugin.json": { name: "taken" }, "commands/x.md": "x" }), {
+			trust: true,
+		});
+		const repo = gitRepo({ "plugin.json": { name: "mover" }, "commands/y.md": "y" });
+		await manager().install(repo.url, { trust: true });
+		repo.commit({ "plugin.json": { name: "taken" } });
+		await expect(manager().update("mover", {})).rejects.toThrow(/plugin namespace "taken" is already used by/);
+		expect(manager().details("mover").namespace).toBe("mover");
 	});
 });
 
@@ -398,6 +423,26 @@ describe("marketplaces", () => {
 		// Installed plugins stay, and update from the cached catalog; new installs need the marketplace added again.
 		await expect(manager().install("alpha@shop", { trust: true })).rejects.toThrow(/marketplace add/);
 		expect((await manager().update("alpha", {})).changed).toBe(false);
+	});
+
+	it("keeps trust off a plugin whose catalog entry moved to another source", async () => {
+		const { manager } = setup();
+		const elsewhere = gitRepo({ "plugin.json": { name: "tool" }, "commands/x.md": "x" });
+		const market = gitRepo({
+			".claude-plugin/marketplace.json": { name: "shop", plugins: [{ name: "tool", source: "./tool" }] },
+			"tool/plugin.json": { name: "tool" },
+			"tool/commands/x.md": "x",
+		});
+		await manager().addMarketplace(market.url, {});
+		await manager().install("tool@shop", { trust: true });
+		market.commit({
+			".claude-plugin/marketplace.json": {
+				name: "shop",
+				plugins: [{ name: "tool", source: { source: "url", url: elsewhere.url } }],
+			},
+		});
+		await manager().updateMarketplaces("shop");
+		await expect(manager().update("tool", {})).rejects.toThrow(/uninstall it and install it again/);
 	});
 });
 

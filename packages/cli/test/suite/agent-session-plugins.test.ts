@@ -10,7 +10,7 @@ import type { ExtensionContext, ExtensionFactory } from "../../src/core/extensio
 import { DefaultResourceLoader } from "../../src/core/resource-loader.ts";
 import { SettingsManager } from "../../src/core/settings-manager.ts";
 import { ProjectTrustStore } from "../../src/core/trust-manager.ts";
-import { builtInExtensions, MCP_BUILTIN_EXTENSIONS } from "../../src/extensions/index.ts";
+import { builtInExtensions } from "../../src/extensions/index.ts";
 import type { McpServerEntry } from "../../src/extensions/mcp/config.ts";
 import { getMcpControl } from "../../src/extensions/mcp/control.ts";
 import { createMcpExtension } from "../../src/extensions/mcp/index.ts";
@@ -145,16 +145,20 @@ describe("plugin commands", () => {
 	it("drops a disabled plugin's commands on reload and isolates projects", async () => {
 		const agentDir = tempDir();
 		await installDemo(agentDir);
-		const project = tempDir();
 		const harness = await setup(agentDir);
 		expect(harness.session.extensionRunner.getCommand("demo:go")).toBeDefined();
 		await new PluginManager({ agentDir, cwd: agentDir }).setEnabled("demo", false, {});
 		await harness.session.reload();
 		expect(harness.session.extensionRunner.getCommand("demo:go")).toBeUndefined();
 
+		// The harness's own directory is the project, so a session there proves the install loads at all.
+		const inside = await setup(agentDir);
+		const project = inside.tempDir;
 		new ProjectTrustStore(agentDir).set(project, true);
 		const local = writeTree(tempDir(), { "plugin.json": { name: "local-only" }, "commands/hi.md": "hi" });
 		await new PluginManager({ agentDir, cwd: project }).install(local, { scope: "project", trust: true });
+		await inside.session.reload();
+		expect(inside.session.extensionRunner.getCommand("local-only:hi")).toBeDefined();
 		const elsewhere = await setup(agentDir);
 		expect(elsewhere.session.extensionRunner.getCommand("local-only:hi")).toBeUndefined();
 	});
@@ -262,23 +266,27 @@ describe("plugin MCP servers", () => {
 		expect(titles).toEqual(["Tools of plugin_demo_docs", expect.stringContaining("plugin_demo_docs")]);
 	});
 
-	it("are left out with --no-mcp without errors", async () => {
+	it("are left out with --no-mcp or -builtin:mcp without errors", async () => {
 		const agentDir = tempDir();
 		await installDemo(agentDir);
 		const cwd = tempDir();
-		const resourceLoader = new DefaultResourceLoader({
-			cwd,
-			agentDir,
-			settingsManager: SettingsManager.inMemory(),
-			extensionFactories: builtInExtensions,
-			disabledBuiltinExtensions: MCP_BUILTIN_EXTENSIONS,
-		});
-		await resourceLoader.reload();
-		const paths = resourceLoader.getExtensions().extensions.map((extension) => extension.path);
-		expect(paths).toContain("builtin:plugins");
-		expect(paths).not.toContain("builtin:plugin-mcp");
-		expect(paths).not.toContain("builtin:mcp");
-		expect(resourceLoader.getExtensions().errors).toEqual([]);
+		for (const options of [
+			{ settingsManager: SettingsManager.inMemory(), disabledBuiltinExtensions: ["mcp"] },
+			{ settingsManager: SettingsManager.inMemory({ extensions: ["-builtin:mcp"] }) },
+		]) {
+			const resourceLoader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				extensionFactories: builtInExtensions,
+				...options,
+			});
+			await resourceLoader.reload();
+			const paths = resourceLoader.getExtensions().extensions.map((extension) => extension.path);
+			expect(paths).toContain("builtin:plugins");
+			expect(paths).not.toContain("builtin:plugin-mcp");
+			expect(paths).not.toContain("builtin:mcp");
+			expect(resourceLoader.getExtensions().errors).toEqual([]);
+		}
 		const none = new DefaultResourceLoader({
 			cwd,
 			agentDir,

@@ -79,7 +79,7 @@ test("rejects project writes in an untrusted project", async () => {
 	expect(local.plugin).toMatchObject({ scope: "project", active: true });
 });
 
-test("lists plugin commands for a cwd before any thread exists, without starting MCP servers", async () => {
+test("lists plugin commands for a cwd before any thread exists", async () => {
 	const { cwd, connect } = await startServer();
 	const a = await connect();
 	await a.client.request("plugin/install", { scope: "global", cwd, source: pluginSource(), trust: true });
@@ -94,7 +94,7 @@ test("lists plugin commands for a cwd before any thread exists, without starting
 });
 
 test("loads a thread's plugins from the server's agent directory", async () => {
-	const { cwd, connect } = await startServer();
+	const { cwd, agentDir, connect } = await startServer();
 	const a = await connect();
 	const dir = mkdtempSync(join(tmpdir(), "kc-app-plugin-"));
 	dirs.push(dir);
@@ -102,10 +102,13 @@ test("loads a thread's plugins from the server's agent directory", async () => {
 		"plugin.json": { name: "local" },
 		"commands/hi.md": "---\ndescription: Hi\n---\nHi",
 	});
+	// A user skill that shares a built-in command's name keeps its own `/skill:` entry.
+	writeTree(agentDir, { "skills/plan/SKILL.md": "---\nname: plan\ndescription: Mine\n---\nMine" });
 	await a.client.request("plugin/install", { scope: "global", cwd, source, trust: true });
 	const { thread } = await a.client.request("thread/start", { cwd });
 	const { commands } = await a.client.request("command/list", { threadId: thread.id });
-	expect(commands.map((command) => command.name)).toContain("local:hi");
+	const names = commands.map((command) => command.name);
+	expect(names).toEqual(expect.arrayContaining(["local:hi", "plan", "skill:plan"]));
 });
 
 test("adds marketplaces without installing, and installs from them", async () => {

@@ -568,7 +568,8 @@ settings) or `project`; project writes need a trusted project (`invalidParams` w
   `trust`; an untrusted plugin runs nothing. `name@marketplace` from a known marketplace that is not
   added yet adds it first.
 - `plugin/set {scope, cwd?, name, enabled?, trust?}`, `plugin/update {scope, cwd?, name}` and
-  `plugin/uninstall {scope, cwd?, name}`.
+  `plugin/uninstall {scope, cwd?, name}`. `trust: true` trusts the plugin; `plugin/set` never revokes
+  trust (`false` leaves it as it is), and uninstalling the plugin from every scope does.
 - `plugin/marketplace/list {cwd?}` returns `{marketplaces}`: every marketplace `/plugins` lists
   (built in, added, then Claude Code's and Grok Build's), each `{name, source, ref?, from?, added,
   scope?, updatedAt?, missing?, plugins, diagnostics}` with its whole catalog, each plugin

@@ -89,7 +89,7 @@ knightcode plugin marketplace remove <name> [-l]
 
 ## Trust
 
-A plugin runs nothing until you trust it. The confirmation lists the commands and URLs of its MCP servers, the environment variables its MCP configuration reads, and the components KnightCode will not run. Trust belongs to the plugin's identity (its source, subdirectory, and catalog entry) and carries across updates; `update` prints the new inventory.
+A plugin runs nothing until you trust it. The confirmation lists the commands and URLs of its MCP servers, the environment variables its MCP configuration reads, and the components KnightCode will not run. Trust belongs to the plugin's identity (its source, subdirectory, and catalog entry) and carries across updates; `update` prints the new inventory. When a marketplace moves a plugin to another source, `update` refuses it: uninstall the plugin and install it again, and trust it anew.
 
 A plugin declared in a project's settings needs both plugin trust and [project trust](security.md#understand-project-trust). Trust is never read from repository files.
 
@@ -180,5 +180,5 @@ Two plugin servers whose names differ only in `-` and `_` would share tool names
 ### Flags
 
 - `--no-extensions` turns off every plugin resource.
-- `--no-mcp` leaves plugin MCP servers out with the rest of MCP support.
+- `--no-mcp`, or `-builtin:mcp` in the `extensions` setting, leaves plugin MCP servers out with the rest of MCP support.
 - `--no-skills` and `--no-prompt-templates` do not hide plugin skills or commands.

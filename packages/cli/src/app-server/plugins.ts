@@ -14,10 +14,9 @@ import {
 	type PluginView,
 } from "../plugins/manager.ts";
 import { resolvePath } from "../utils/paths.ts";
-import { trustedProject } from "./configure.ts";
 import type { AppServerContext } from "./context.ts";
 import type { Handlers } from "./server.ts";
-import { projectReadable } from "./workspaces.ts";
+import { projectReadable, trustedProject, trustKey } from "./workspaces.ts";
 
 type Scope = ParamsOf<"plugin/install">["scope"];
 
@@ -28,9 +27,14 @@ function marketplaceInfo(market: MarketplaceView): PluginMarketplaceInfo {
 }
 
 export function pluginHandlers(ctx: AppServerContext): Handlers {
-	/** Without a project, the agent directory stands in: it has no `.knightcode` of its own. */
-	const managerFor = (cwd: string | undefined) =>
-		new PluginManager({ agentDir: ctx.agentDir, cwd: cwd === undefined ? ctx.agentDir : resolvePath(cwd) });
+	/**
+	 * Without a project, the agent directory stands in: it has no `.knightcode` of its own. A managed worktree's
+	 * project trust is its project's, as `trustedProject` reads it.
+	 */
+	const managerFor = (cwd: string | undefined) => {
+		const dir = cwd === undefined ? ctx.agentDir : resolvePath(cwd);
+		return new PluginManager({ agentDir: ctx.agentDir, cwd: dir, trustPath: trustKey(ctx.agentDir, dir) });
+	};
 	/** A manager for writing `scope`; project writes need a trusted project. */
 	const writer = (scope: Scope, cwd: string | undefined) =>
 		scope === "project" ? managerFor(trustedProject(ctx.agentDir, cwd)) : managerFor(cwd);

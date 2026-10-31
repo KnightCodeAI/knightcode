@@ -95,11 +95,22 @@ describe("plugin rendering", () => {
 		expect(inventory.warnings.join("\n")).toMatch(/command "dup".*skill/);
 	});
 
-	it("marks skills that are not user-invocable", () => {
+	it("marks skills that are not user-invocable, which leave a command of their name alone", () => {
 		const { inventory } = render({
 			"skills/hidden/SKILL.md": "---\ndescription: d\nuser-invocable: false\n---\n",
+			"commands/hidden.md": "command",
 		});
 		expect(inventory.skills[0]?.userInvocable).toBe(false);
+		expect(inventory.commands.map((command) => command.name)).toEqual(["hidden"]);
+	});
+
+	it("keeps the first of two skills with one name", () => {
+		const { inventory } = render({
+			"skills/a/SKILL.md": "---\nname: dup\ndescription: first\n---\n",
+			"skills/b/SKILL.md": "---\nname: dup\ndescription: second\n---\n",
+		});
+		expect(inventory.skills.map((skill) => skill.description)).toEqual(["first"]);
+		expect(inventory.warnings.join("\n")).toMatch(/skill "dup" is declared twice/);
 	});
 
 	it("warns about execution frontmatter, shell preprocessing and session tokens without running anything", () => {

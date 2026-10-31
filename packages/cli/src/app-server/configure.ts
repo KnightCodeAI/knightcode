@@ -26,18 +26,9 @@ import { writeSetting } from "./config.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
 import type { Handlers } from "./server.ts";
-import { projectReadable, trustKey } from "./workspaces.ts";
+import { projectReadable, trustedProject, trustKey } from "./workspaces.ts";
 
 const RESOURCE_TYPES = ["extensions", "skills", "prompts", "themes"] as const satisfies readonly ResourceType[];
-
-/** A project directory the user explicitly trusted, as project writes require (config/write does the same). */
-export function trustedProject(agentDir: string, cwd: string | undefined): string {
-	if (cwd === undefined) throw new AppServerError("invalidParams", "project writes require cwd");
-	const resolved = resolvePath(cwd);
-	if (new ProjectTrustStore(agentDir).get(trustKey(agentDir, resolved)) !== true)
-		throw new AppServerError("invalidParams", "project is not trusted", { reason: "untrusted" });
-	return resolved;
-}
 
 /** The name `knightcode config` shows for a resource. */
 function resourceName(type: ResourceType, path: string): string {

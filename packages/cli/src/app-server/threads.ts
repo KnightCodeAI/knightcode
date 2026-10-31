@@ -210,10 +210,12 @@ function commandsOf(session: AgentSession): ResultOf<"command/list">["commands"]
 			.filter((command) => !TERMINAL_ONLY_COMMANDS.has(command.invocationName))
 			.map((command) => ({ name: command.invocationName, description: command.description ?? "" })),
 		...session.promptTemplates.map((template) => ({ name: template.name, description: template.description ?? "" })),
-		// A skill an extension offers as its own command (a plugin's `/<plugin>:<skill>`) is listed once.
+		// A plugin skill its plugin offers as `/<plugin>:<skill>` is listed once; other skills always keep theirs.
 		...session.resourceLoader
 			.getSkills()
-			.skills.filter((skill) => !commands.some((command) => command.invocationName === skill.name))
+			.skills.filter(
+				(skill) => !skill.name.includes(":") || !commands.some((command) => command.invocationName === skill.name),
+			)
 			.map((skill) => ({ name: `skill:${skill.name}`, description: skill.description ?? "" })),
 	];
 }

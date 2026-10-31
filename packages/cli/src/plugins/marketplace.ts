@@ -44,6 +44,10 @@ export function parseEntrySource(raw: unknown): PluginSourceSpec | { error: stri
 	if (typeof raw === "string") return { kind: "local", path: raw };
 	if (!isRecord(raw)) return { error: "source must be a path or an object" };
 	const kind = optionalString(raw.source) ?? optionalString(raw.type);
+	// Anything else would be looked up as a ref, and the pin would follow a branch.
+	if (raw.sha !== undefined && !(typeof raw.sha === "string" && /^[0-9a-f]{40}$/i.test(raw.sha))) {
+		return { error: "sha must be a full 40-character commit SHA" };
+	}
 	const pins = {
 		...(optionalString(raw.ref) ? { ref: raw.ref as string } : {}),
 		...(optionalString(raw.sha) ? { sha: raw.sha as string } : {}),
@@ -78,7 +82,14 @@ export function readMarketplace(root: string): MarketplaceCatalog {
 	for (const path of CATALOG_PATHS) {
 		const candidate = join(root, path);
 		if (!existsSync(candidate)) continue;
-		const parsed = readJson(candidate);
+		// A plugin.json is a catalog only when it lists plugins; any other, even a malformed one, is a plugin's own.
+		let parsed: unknown;
+		try {
+			parsed = readJson(candidate);
+		} catch (error) {
+			if (path.endsWith("plugin.json")) continue;
+			throw error;
+		}
 		if (path.endsWith("plugin.json") && !(isRecord(parsed) && Array.isArray(parsed.plugins))) continue;
 		if (!isRecord(parsed) || !Array.isArray(parsed.plugins))
 			throw new Error(`${candidate}: "plugins" must be an array`);
@@ -96,6 +107,10 @@ export function readMarketplace(root: string): MarketplaceCatalog {
 		const entryName = isRecord(raw) ? optionalString(raw.name) : undefined;
 		if (!isRecord(raw) || !entryName) {
 			diagnostics.push("skipped a catalog entry without a name");
+			continue;
+		}
+		if (plugins.some((other) => other.name === entryName)) {
+			diagnostics.push(`${entryName}: listed twice; the first entry is used`);
 			continue;
 		}
 		const source = parseEntrySource(raw.source);

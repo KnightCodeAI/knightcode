@@ -1182,7 +1182,10 @@ export const ClientRequests = {
 		}),
 		result: Obj({ plugin: PluginInfo }),
 	},
-	/** `name` is a namespace, `name@marketplace`, or an identity. */
+	/**
+	 * `name` is a namespace, `name@marketplace`, or an identity. `trust: true` trusts the plugin; trust is only ever
+	 * granted here (`false` or none leaves it as it is), and uninstalling the plugin from every scope revokes it.
+	 */
 	"plugin/set": {
 		params: Obj({
 			scope: SettingsScope,

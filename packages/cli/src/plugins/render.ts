@@ -172,6 +172,10 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 				sanitizePluginName(fallbackName) ||
 				"skill";
 			const name = `${plugin.namespace}:${ownName}`;
+			if (skills.some((other) => other.name === name)) {
+				warnings.push(`skill "${ownName}" is declared twice; the first one is used`);
+				continue;
+			}
 			const skillDir = [finalRoot, relativePath(dirname(file))].filter(Boolean).join("/");
 			checkCompatibility(`skill "${name}"`, frontmatter, body);
 			const renderedBody = replaceAll(body, {
@@ -195,7 +199,10 @@ export function renderPlugin(plugin: LoadedPlugin, options: RenderOptions): Plug
 		}
 	}
 
-	const skillNames = new Set(skills.map((skill) => skill.name.slice(plugin.namespace.length + 1)));
+	// Only a skill users may invoke is a `/<plugin>:<skill>` command of its own.
+	const skillNames = new Set(
+		skills.filter((skill) => skill.userInvocable).map((skill) => skill.name.slice(plugin.namespace.length + 1)),
+	);
 	const commands: InventoryCommand[] = [];
 	const addCommand = (command: InventoryCommand) => {
 		if (skillNames.has(command.name)) {

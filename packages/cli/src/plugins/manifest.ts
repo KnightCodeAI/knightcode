@@ -168,7 +168,9 @@ class ComponentReader {
 				commands.push({ name, content: spec.content, ...metadata });
 			} else if (typeof spec.source === "string") {
 				const [path] = this.paths(spec.source, `commands.${name}`);
-				if (path) commands.push({ name, path, ...metadata });
+				// One name is one command: a directory would give every file in it that name.
+				if (path && statSync(path).isDirectory()) this.diagnostics.push(`commands.${name}: source must be a file`);
+				else if (path) commands.push({ name, path, ...metadata });
 			} else {
 				this.diagnostics.push(`commands.${name} needs "source" or "content"`);
 			}
@@ -273,7 +275,7 @@ export function loadPlugin(root: string, entry?: PluginEntryOverlay): LoadedPlug
 	for (const field of UNSUPPORTED_FIELDS) {
 		if (
 			own[field] !== undefined ||
-			(entry && ["hooks", "agents", "lspServers"].includes(field) && entry.raw[field] !== undefined)
+			(entry && ["hooks", "agents", "lspServers", "outputStyles"].includes(field) && entry.raw[field] !== undefined)
 		) {
 			unsupported.add(field);
 		}

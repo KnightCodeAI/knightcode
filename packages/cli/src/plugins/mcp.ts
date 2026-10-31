@@ -15,6 +15,7 @@ const PATH_TOKENS: readonly string[] = [
 ];
 /** Grok fields whose value is the name of an environment variable. */
 const ENV_NAME_FIELDS = ["bearer_token_env_var", "oauth_client_secret_env_var", "clientSecretEnvVar"];
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** What a server runs or connects to, in one line. */
 export function describeMcpServer(config: unknown): string {
@@ -32,7 +33,7 @@ export function mcpEnvironmentNames(servers: Record<string, unknown>): string[] 
 	const names = new Set<string>();
 	const visit = (value: unknown, key?: string) => {
 		if (typeof value === "string") {
-			if (key && ENV_NAME_FIELDS.includes(key) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) names.add(value);
+			if (key && ENV_NAME_FIELDS.includes(key) && ENV_NAME.test(value)) names.add(value);
 			for (const match of value.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}/g)) {
 				if (!PATH_TOKENS.includes(match[1]!)) names.add(match[1]!);
 			}
@@ -104,11 +105,22 @@ class Translator {
 	}
 
 	/** Fully expanded, for fields nothing resolves later: `command`, `args`, `cwd`, `url` and most of `oauth`. */
+	/** A plugin path token's value; `${constructor}` and other inherited names are not tokens. */
+	private path(name: string): string | undefined {
+		return PATH_TOKENS.includes(name) ? this.paths[name] : undefined;
+	}
+
+	/** A set, non-empty variable; inherited members of the env object are not variables. */
+	private variable(name: string): string | undefined {
+		const value = this.env[name];
+		return typeof value === "string" && value ? value : undefined;
+	}
+
 	expand(value: string): string {
 		return value.replace(PLACEHOLDER, (_, name: string, fallback: string | undefined) => {
-			const path = this.paths[name];
+			const path = this.path(name);
 			if (path !== undefined) return path;
-			const resolved = this.env[name] || fallback;
+			const resolved = this.variable(name) ?? fallback;
 			if (resolved === undefined) throw new MissingVariable(name);
 			return resolved;
 		});
@@ -125,9 +137,9 @@ class Translator {
 		for (const match of value.matchAll(PLACEHOLDER)) {
 			const [whole, name, fallback] = match;
 			result += escapeDollars(value.slice(last, match.index));
-			const path = this.paths[name!];
+			const path = this.path(name!);
 			if (path !== undefined) result += escapeDollars(path);
-			else if (fallback !== undefined) result += escapeDollars(this.env[name!] || fallback);
+			else if (fallback !== undefined) result += escapeDollars(this.variable(name!) ?? fallback);
 			else result += whole;
 			last = match.index + whole.length;
 		}
@@ -161,7 +173,9 @@ function joinScopes(value: unknown): string | undefined {
 	return undefined;
 }
 
+/** `${name}`, resolved when the server connects. Only a plain name: the trust prompt lists exactly these. */
 function envReference(name: string): string {
+	if (!ENV_NAME.test(name)) throw new Error(`names an invalid environment variable "${name}"`);
 	return "${" + name + "}";
 }
 

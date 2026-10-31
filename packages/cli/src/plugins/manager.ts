@@ -9,7 +9,7 @@
  * inactive orphan that no session loads.
  */
 
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "../config.ts";
 import { isOfflineModeEnabled } from "../core/package-manager.ts";
@@ -31,13 +31,23 @@ import { type MarketplaceCatalog, type MarketplaceEntry, readMarketplace } from 
 import { describeMcpServer, mcpEnvironmentNames } from "./mcp.ts";
 import { type PluginInventory, renderPlugin } from "./render.ts";
 import { canonicalUrl, forwardSlashes, parseSource, pluginIdentity } from "./sources.ts";
-import { copyContent, hashTree, type InstallRecord, type MarketplaceRecord, PluginStore, sha256 } from "./store.ts";
+import {
+	copyContent,
+	discardStaging,
+	hashTree,
+	type InstallRecord,
+	type MarketplaceRecord,
+	PluginStore,
+	sha256,
+} from "./store.ts";
 
 export type PluginScope = "user" | "project";
 
 export interface PluginManagerOptions {
 	agentDir?: string;
 	cwd: string;
+	/** Where `cwd`'s project trust is kept, when not at `cwd` itself (the app server's managed worktrees). */
+	trustPath?: string;
 	/** Deadline for each network Git operation. */
 	gitTimeoutMs?: number;
 	/** Test seam, called after each step of a mutation. */
@@ -129,7 +139,16 @@ interface Target extends Declaration {
 }
 
 /** Catalog entry fields that change what the plugin contains; they are part of its revision. */
-const ENTRY_COMPONENT_FIELDS = ["skills", "commands", "mcpServers", "strict", "agents", "hooks", "lspServers"];
+const ENTRY_COMPONENT_FIELDS = [
+	"skills",
+	"commands",
+	"mcpServers",
+	"strict",
+	"agents",
+	"hooks",
+	"lspServers",
+	"outputStyles",
+];
 
 /** What a plugin will run and offer, for the trust confirmation, `details` and `update`. */
 export function describeInventory(inventory: PluginInventory): string[] {
@@ -182,12 +201,14 @@ export class PluginManager {
 	readonly store: PluginStore;
 	private readonly agentDir: string;
 	private readonly cwd: string;
+	private readonly trustPath: string;
 	private readonly gitTimeoutMs: number | undefined;
 	private readonly failpoint: PluginManagerOptions["failpoint"];
 
 	constructor(options: PluginManagerOptions) {
 		this.agentDir = options.agentDir ?? getAgentDir();
 		this.cwd = resolvePath(options.cwd);
+		this.trustPath = options.trustPath ?? this.cwd;
 		this.store = new PluginStore(this.agentDir);
 		this.gitTimeoutMs = options.gitTimeoutMs;
 		this.failpoint = options.failpoint;
@@ -206,7 +227,7 @@ export class PluginManager {
 	/** The record scope for `scope`. Project scope needs a project the user trusted. */
 	private scopeKey(scope: PluginScope): string {
 		if (scope === "user") return "user";
-		if (new ProjectTrustStore(this.agentDir).get(this.cwd) !== true) {
+		if (new ProjectTrustStore(this.agentDir).get(this.trustPath) !== true) {
 			throw new Error(`project ${this.cwd} is not trusted; start knightcode there and trust it first`);
 		}
 		return this.projectKey;
@@ -343,7 +364,7 @@ export class PluginManager {
 			writeFileSync(join(stage, "inventory.json"), `${JSON.stringify(inventory, null, 2)}\n`);
 			return { tmp, stage, commit, revision, id, inventory };
 		} catch (error) {
-			rmSync(tmp, { recursive: true, force: true });
+			discardStaging(tmp);
 			throw error;
 		}
 	}
@@ -535,7 +556,7 @@ export class PluginManager {
 			});
 			return { plugin: this.view(record, this.readState()), trusted };
 		} finally {
-			rmSync(staged.tmp, { recursive: true, force: true });
+			discardStaging(staged.tmp);
 		}
 	}
 
@@ -552,6 +573,12 @@ export class PluginManager {
 		const record = this.resolveRecord(name, scope);
 		const baseDir = scope === "user" ? this.agentDir : this.cwd;
 		const target = this.resolveTarget({ source: record.source, ref: record.ref, path: record.path }, baseDir);
+		// Trust belongs to the identity, so a catalog that moved the plugin to another source needs a fresh install.
+		if (target.identity !== record.identity) {
+			throw new Error(
+				`${record.marketplace ?? "the source"} now points ${record.name} at ${target.identity}; uninstall it and install it again`,
+			);
+		}
 		const staged = await this.stage(target);
 		try {
 			if (staged.revision === record.revision && staged.id === record.id) {
@@ -559,6 +586,7 @@ export class PluginManager {
 			}
 			const updated = await this.store.withLock(async () => {
 				const state = this.readState();
+				this.assertNamespaceFree(staged.inventory.namespace, record.identity, state);
 				this.store.commitRevision(staged.stage, this.store.revisionDir(staged.id, staged.revision));
 				mkdirSync(this.store.dataDir(staged.id), { recursive: true });
 				const next: InstallRecord = {
@@ -578,7 +606,7 @@ export class PluginManager {
 			});
 			return { plugin: this.view(updated, this.readState()), changed: true };
 		} finally {
-			rmSync(staged.tmp, { recursive: true, force: true });
+			discardStaging(staged.tmp);
 		}
 	}
 
@@ -730,7 +758,8 @@ export class PluginManager {
 			plugins.push({
 				identity,
 				namespace: record.namespace,
-				scope,
+				// The record's scope, which a project declaration of a user install still loads from.
+				scope: record.scope === "user" ? "user" : "project",
 				commit: record.commit,
 				root: this.store.pluginRoot(record.id, record.revision),
 				dataDir: this.store.dataDir(record.id),
@@ -771,7 +800,7 @@ export class PluginManager {
 				declaredSource: parsed.kind === "local" ? parsed.dir : source,
 			};
 		} catch (error) {
-			rmSync(tmp, { recursive: true, force: true });
+			discardStaging(tmp);
 			throw error;
 		}
 	}
@@ -890,7 +919,7 @@ export class PluginManager {
 				return this.marketplaceView(record, state, declare ?? "user");
 			});
 		} finally {
-			rmSync(staged.tmp, { recursive: true, force: true });
+			discardStaging(staged.tmp);
 		}
 	}
 
@@ -1114,7 +1143,7 @@ export class PluginManager {
 					}),
 				);
 			} finally {
-				rmSync(staged.tmp, { recursive: true, force: true });
+				discardStaging(staged.tmp);
 			}
 		}
 		return updated;

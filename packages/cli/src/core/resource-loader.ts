@@ -647,13 +647,18 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const cliEnabledPrompts = getEnabledPaths(cliExtensionPaths.prompts);
 		const cliEnabledThemes = getEnabledPaths(cliExtensionPaths.themes);
 
-		const extensionPaths = (
+		const enabledPaths = (
 			this.noExtensions ? cliEnabledExtensions : this.mergePaths(cliEnabledExtensions, enabledExtensions)
 		).filter(
 			(path) =>
 				!path.startsWith(BUILTIN_PATH_PREFIX) ||
 				!this.disabledBuiltinExtensions.has(path.slice(BUILTIN_PATH_PREFIX.length)),
 		);
+		// Plugin MCP servers only reach the built-in MCP extension: however that is turned off (--no-mcp, `-builtin:mcp`),
+		// plugin-mcp goes with it, or each of its servers would be reported as unconnected.
+		const extensionPaths = enabledPaths.includes(`${BUILTIN_PATH_PREFIX}mcp`)
+			? enabledPaths
+			: enabledPaths.filter((path) => path !== `${BUILTIN_PATH_PREFIX}plugin-mcp`);
 
 		const packageWarnings = collectExtensionPackageWarnings(extensionPaths, metadataByPath);
 		const extensionsResult = await this.loadFinalExtensionSet(extensionPaths, preTrustExtensions);

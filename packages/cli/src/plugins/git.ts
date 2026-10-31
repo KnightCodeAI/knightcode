@@ -11,6 +11,7 @@
  */
 
 import { spawnProcess, waitForChildProcess } from "../utils/child-process.ts";
+import { killProcessTree } from "../utils/shell.ts";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const FULL_SHA = /^[0-9a-f]{40}$/i;
@@ -22,7 +23,13 @@ export interface GitOptions {
 	timeoutMs?: number;
 }
 
-export class GitError extends Error {}
+export class GitError extends Error {
+	readonly timedOut: boolean;
+	constructor(message: string, timedOut = false) {
+		super(message);
+		this.timedOut = timedOut;
+	}
+}
 
 function gitEnv(): NodeJS.ProcessEnv {
 	return {
@@ -61,12 +68,14 @@ export async function runGit(args: string[], options: GitOptions & { network?: b
 	const timer = options.network
 		? setTimeout(() => {
 				timedOut = true;
-				child.kill("SIGKILL");
+				// On Windows, Git's transport helper (git-remote-http) outlives a killed git and keeps the checkout open.
+				if (process.platform === "win32" && child.pid) killProcessTree(child.pid);
+				else child.kill("SIGKILL");
 			}, timeoutMs)
 		: undefined;
 	try {
 		const code = await waitForChildProcess(child);
-		if (timedOut) throw new GitError(`git ${args[0]} timed out after ${Math.round(timeoutMs / 1000)} s`);
+		if (timedOut) throw new GitError(`git ${args[0]} timed out after ${Math.round(timeoutMs / 1000)} s`, true);
 		if (code !== 0) throw new GitError(`git ${args[0]} failed: ${stderr.trim() || `exit code ${code}`}`);
 		return stdout;
 	} catch (error) {
@@ -121,6 +130,8 @@ export async function fetchCommit(url: string, commit: string, into: string, opt
 		...options,
 		network: true,
 	}).catch(async (error: unknown) => {
+		// A remote that stalled once gets no second deadline.
+		if (error instanceof GitError && error.timedOut) throw error;
 		// Servers that refuse unadvertised commits (and local paths) need the full history.
 		const refspecs = ["+refs/heads/*:refs/remotes/source/*", "+refs/tags/*:refs/tags/*"];
 		await runGit(["-C", into, "fetch", "--quiet", "--", url, ...refspecs], { ...options, network: true }).catch(() => {

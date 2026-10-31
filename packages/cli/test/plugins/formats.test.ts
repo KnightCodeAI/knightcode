@@ -1,8 +1,10 @@
-import { mkdirSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadPlugin, sanitizePluginName } from "../../src/plugins/manifest.ts";
 import { readMarketplace } from "../../src/plugins/marketplace.ts";
+import { parseSource } from "../../src/plugins/sources.ts";
+import { copyContent } from "../../src/plugins/store.ts";
 import { useTempDirs, writeTree } from "./helpers.ts";
 
 const tempDir = useTempDirs();
@@ -92,6 +94,15 @@ describe("plugin manifests", () => {
 			{ name: "review", path: join(root, "prompts/review.md"), description: "Review", argumentHint: "<file>" },
 			{ name: "hello", content: "Say hello to $0" },
 		]);
+		// One name is one command, so a named record cannot point at a directory of them.
+		const dir = writeTree(tempDir(), {
+			"plugin.json": { name: "p", commands: { all: { source: "./prompts" } } },
+			"prompts/a.md": "a",
+			"prompts/b.md": "b",
+		});
+		const plugin = loadPlugin(dir);
+		expect(plugin.components.commands).toEqual([]);
+		expect(plugin.diagnostics.join("\n")).toMatch(/commands\.all: source must be a file/);
 	});
 
 	it("merges MCP paths and inline maps in order, later definitions winning", () => {
@@ -203,6 +214,30 @@ describe("marketplace catalogs", () => {
 		expect(market.diagnostics.join("\n")).toMatch(/pip.*unsupported source/);
 	});
 
+	it("skips entries pinned to something other than a commit, and repeated names", () => {
+		const root = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": catalog([
+				{ name: "branch", source: { source: "github", repo: "acme/a", sha: "main" } },
+				{ name: "twice", source: "./one" },
+				{ name: "twice", source: "./two" },
+			]),
+		});
+		const market = readMarketplace(root);
+		expect(market.plugins.map((entry) => [entry.name, entry.source])).toEqual([
+			["twice", { kind: "local", path: "./one" }],
+		]);
+		expect(market.diagnostics.join("\n")).toMatch(/branch: sha must be a full 40-character commit SHA/);
+		expect(market.diagnostics.join("\n")).toMatch(/twice: listed twice/);
+	});
+
+	it("probes past a malformed plugin.json, which is a plugin's own file", () => {
+		const root = writeTree(tempDir(), {
+			".grok-plugin/plugin.json": "{ not json",
+			".claude-plugin/marketplace.json": catalog([{ name: "a", source: "./a" }]),
+		});
+		expect(readMarketplace(root).catalogPath).toBe(join(root, ".claude-plugin/marketplace.json"));
+	});
+
 	it("adds entry components to a manifest-less plugin and takes its metadata and MCP servers", () => {
 		const root = writeTree(tempDir(), {
 			"commands/conventional.md": "c",
@@ -232,11 +267,11 @@ describe("marketplace catalogs", () => {
 		const plugin = loadPlugin(root, {
 			name: "p",
 			strict: true,
-			raw: { skills: ["./b"], mcpServers: { s: { command: "s" } }, agents: ["./x.md"] },
+			raw: { skills: ["./b"], mcpServers: { s: { command: "s" } }, agents: ["./x.md"], outputStyles: "./styles" },
 		});
 		expect(plugin.components.skills).toEqual([join(root, "a"), join(root, "b")]);
 		expect(plugin.components.mcpServers).toEqual({});
-		expect(plugin.components.unsupported).toContain("agents");
+		expect(plugin.components.unsupported).toEqual(expect.arrayContaining(["agents", "outputStyles"]));
 	});
 
 	it("rejects a non-strict entry that declares components next to a manifest, but not MCP servers alone", () => {
@@ -251,5 +286,43 @@ describe("marketplace catalogs", () => {
 		mkdirSync(join(root, "skills"));
 		writeTree(root, { "plugin.json": { name: "p", skills: ["./skills/one.md"] }, "skills/one.md": skill() });
 		expect(loadPlugin(root).components.skills).toEqual([join(root, "skills/one.md")]);
+	});
+});
+
+describe("plugin content copies", () => {
+	const link = (target: string, path: string) =>
+		symlinkSync(target, path, process.platform === "win32" ? "junction" : "dir");
+
+	it("leave out .git even through a link, and copy each linked directory once", () => {
+		const root = writeTree(tempDir(), { ".git/config": "[remote]", "shared/f.md": "f" });
+		link(join(root, ".git"), join(root, "meta"));
+		link(join(root, "shared"), join(root, "one"));
+		link(join(root, "shared"), join(root, "two"));
+		const copy = join(tempDir(), "copy");
+		copyContent(root, copy);
+		expect(existsSync(join(copy, ".git"))).toBe(false);
+		expect(existsSync(join(copy, "meta"))).toBe(false);
+		// Whichever comes first holds the content; links cannot multiply it.
+		expect(["shared", "one", "two"].filter((dir) => existsSync(join(copy, dir, "f.md")))).toHaveLength(1);
+	});
+});
+
+describe("plugin sources", () => {
+	const canonical = (source: string) => {
+		const parsed = parseSource(source, tempDir());
+		return "canonical" in parsed ? parsed.canonical : undefined;
+	};
+
+	it("keeps a Git server's port and ignores the case of GitHub paths", () => {
+		expect(canonical("https://git.example.com:3000/o/r.git")).not.toBe(
+			canonical("https://git.example.com:4000/o/r.git"),
+		);
+		expect(canonical("https://git.example.com:3000/o/r.git")).toBe("https://git.example.com:3000/o/r");
+		expect(canonical("git@git.example.com:o/r.git")).toBe("https://git.example.com/o/r");
+		expect(
+			new Set(
+				["Owner/Repo", "owner/repo", "https://github.com/Owner/Repo", "git@github.com:OWNER/repo.git"].map(canonical),
+			),
+		).toEqual(new Set(["https://github.com/owner/repo"]));
 	});
 });

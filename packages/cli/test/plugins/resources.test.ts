@@ -21,6 +21,8 @@ describe("plugin argument dialect", () => {
 		expect(substitutePluginArguments("$ARGUMENTS[1] / $ARGUMENTS", args, [])).toBe(`src/a b.ts / ${args}`);
 		expect(substitutePluginArguments("Do $action to $file", args, ["action", "file"])).toBe("Do fix to src/a b.ts");
 		expect(substitutePluginArguments("$actions stays", "", ["action"])).toBe("$actions stays");
+		// An argument that reads like a placeholder is inserted as written, never expanded again.
+		expect(substitutePluginArguments("Run $cmd on $1", "'$1' x", ["cmd"])).toBe("Run $1 on x");
 	});
 
 	it("appends the arguments when no placeholder appears, and only when there are arguments", () => {
@@ -33,16 +35,24 @@ describe("plugin argument dialect", () => {
 });
 
 describe("plugin skill names", () => {
-	it("load with a single <plugin>: prefix and no warning", () => {
+	it("load with a single <plugin>: prefix and no warning, from the plugin cache only", () => {
 		const root = writeTree(tempDir(), {
-			"ok.md": "---\nname: my-plugin:fix-it\ndescription: d\n---\n",
-			"bad.md": "---\nname: a:b:c\ndescription: d\n---\n",
+			"plugins/cache/p/r/plugin/ok.md": "---\nname: my-plugin:fix-it\ndescription: d\n---\n",
+			"plugins/cache/p/r/plugin/bad.md": "---\nname: a:b:c\ndescription: d\n---\n",
+			"skills/own.md": "---\nname: my-plugin:fix-it\ndescription: d\n---\n",
 		});
-		const ok = loadSkills({ cwd: root, agentDir: root, skillPaths: [`${root}/ok.md`], includeDefaults: false });
+		const load = (path: string) =>
+			loadSkills({ cwd: root, agentDir: root, skillPaths: [`${root}/${path}`], includeDefaults: false });
+		const messages = (path: string) =>
+			load(path)
+				.diagnostics.map((diagnostic) => diagnostic.message)
+				.join("\n");
+		const ok = load("plugins/cache/p/r/plugin/ok.md");
 		expect(ok.skills.map((skill) => skill.name)).toEqual(["my-plugin:fix-it"]);
 		expect(ok.diagnostics).toEqual([]);
-		const bad = loadSkills({ cwd: root, agentDir: root, skillPaths: [`${root}/bad.md`], includeDefaults: false });
-		expect(bad.diagnostics.map((diagnostic) => diagnostic.message).join("\n")).toMatch(/invalid characters/);
+		expect(messages("plugins/cache/p/r/plugin/bad.md")).toMatch(/invalid characters/);
+		// A hand-written skill keeps the spec's name rules.
+		expect(messages("skills/own.md")).toMatch(/invalid characters/);
 	});
 });
 
@@ -103,6 +113,22 @@ describe("plugin MCP translation", () => {
 		const { servers, diagnostics } = translate({ run: { command: "${MISSING_BIN}" } });
 		expect(servers).toEqual([]);
 		expect(diagnostics.join("\n")).toMatch(/MISSING_BIN/);
+		// Object members are neither plugin paths nor variables.
+		const inherited = translate({ run: { command: "x", args: ["${constructor}"] } });
+		expect(inherited.servers).toEqual([]);
+		expect(inherited.diagnostics.join("\n")).toMatch(/needs the environment variable constructor/);
+	});
+
+	it("refuses an env-var field that is not one plain name, so it cannot read variables trust never listed", () => {
+		for (const field of [
+			{ bearer_token_env_var: "TOKEN}${OTHER" },
+			{ oauth_client_secret_env_var: "A}${B" },
+			{ oauth: { clientSecretEnvVar: "A B" } },
+		]) {
+			const { servers, diagnostics } = translate({ web: { url: "https://example.com/mcp", ...field } });
+			expect(servers).toEqual([]);
+			expect(diagnostics.join("\n")).toMatch(/invalid environment variable/);
+		}
 	});
 
 	it("maps Grok fields", () => {

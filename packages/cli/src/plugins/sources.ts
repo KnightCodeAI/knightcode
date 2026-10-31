@@ -34,6 +34,13 @@ export function canonicalUrl(url: string): string {
 	}
 }
 
+/** `https://host[:port]/owner/repo` for any transport; GitHub ignores case in repository paths, so it is dropped. */
+function hostCanonical(host: string, path: string, port = ""): string {
+	const lower = host.toLowerCase();
+	const repo = path.replace(/\.git$/, "");
+	return `https://${lower}${port ? `:${port}` : ""}/${lower === "github.com" ? repo.toLowerCase() : repo}`;
+}
+
 function looksLocal(source: string, baseDir: string): boolean {
 	return (
 		source.startsWith(".") ||
@@ -62,7 +69,7 @@ export function parseSource(source: string, baseDir: string): ParsedSource | { e
 			url: git.repo,
 			canonical:
 				git.host && git.path
-					? `https://${git.host.toLowerCase()}/${git.path.replace(/\.git$/, "")}`
+					? hostCanonical(git.host, git.path, URL.canParse(git.repo) ? new URL(git.repo).port : "")
 					: canonicalUrl(git.repo),
 			...(git.ref ? { ref: git.ref } : {}),
 		};
@@ -74,7 +81,7 @@ export function parseSource(source: string, baseDir: string): ParsedSource | { e
 		return {
 			kind: "git",
 			url: `https://github.com/${repo}.git`,
-			canonical: `https://github.com/${repo}`,
+			canonical: hostCanonical("github.com", repo),
 			...(shorthand[2] ? { ref: shorthand[2] } : {}),
 		};
 	}

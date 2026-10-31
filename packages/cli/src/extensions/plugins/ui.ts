@@ -950,14 +950,11 @@ export async function managePlugins(
 			case "m": {
 				const names = serverNames(plugin);
 				const running = mcp?.list().filter((server) => names.includes(server.name)) ?? [];
-				// Enter is offered only while a server needs a sign-in: it starts that sign-in.
+				// Enter is offered only while a server needs a sign-in: it starts each one's sign-in in turn (`manage` runs
+				// a first action only for a single server).
 				const asking = running.filter((server) => server.state === "needs-auth");
 				if (mcp && key === "enter" && asking.length) {
-					await mcp.manage(
-						asking.map((server) => server.name),
-						ui.mcpUi(),
-						"signin",
-					);
+					for (const server of asking) await mcp.manage([server.name], ui.mcpUi(), "signin");
 				} else if (mcp && running.length) {
 					await mcp.manage(
 						running.map((server) => server.name),

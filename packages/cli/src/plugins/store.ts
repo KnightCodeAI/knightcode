@@ -23,7 +23,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import lockfile from "proper-lockfile";
 import { isInside } from "./manifest.ts";
 import type { PluginInventory } from "./render.ts";
@@ -75,27 +75,37 @@ export function sha256(value: string): string {
 }
 
 /**
- * Copies `from` into the new directory `to`, without `.git`. Links inside the tree are copied as the files they point
- * at; a symlink or junction that leaves `from` fails the copy.
+ * Copies `from` into the new directory `to`, without anything in a `.git`, even through a link. Links inside the tree
+ * are copied as the files they point at, and each directory once: a second link to it (or a cycle) is left out, so
+ * links cannot multiply the copy. A symlink or junction that leaves `from` fails the copy.
  */
 export function copyContent(from: string, to: string): void {
 	const root = realpathSync(from);
-	const visit = (source: string, target: string, seen: Set<string>) => {
+	const seen = new Set<string>();
+	const visit = (source: string, target: string) => {
 		const real = realpathSync(source);
 		if (!isInside(root, real)) throw new Error(`${relative(from, source)} links outside the plugin`);
+		if (relative(root, real).split(sep).includes(".git")) return;
 		if (statSync(real).isDirectory()) {
 			if (seen.has(real)) return;
+			seen.add(real);
 			mkdirSync(target, { recursive: true });
-			const next = new Set(seen).add(real);
-			for (const name of readdirSync(source)) {
-				if (name === ".git") continue;
-				visit(join(source, name), join(target, name), next);
-			}
+			for (const name of readdirSync(source)) visit(join(source, name), join(target, name));
 			return;
 		}
 		if (lstatSync(source).isSymbolicLink() || statSync(real).isFile()) copyFileSync(real, target);
 	};
-	visit(from, to, new Set());
+	visit(from, to);
+}
+
+/**
+ * Removes a staging directory. Windows can hold it a moment after a killed Git exits, so it retries; a leftover is swept
+ * a day later, so a failure never replaces the outcome being reported.
+ */
+export function discardStaging(path: string): void {
+	try {
+		rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+	} catch {}
 }
 
 /** A hash of every file's path and content under `dir`, for sources that have no commit. */

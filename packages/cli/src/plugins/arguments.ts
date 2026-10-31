@@ -70,13 +70,23 @@ function escapeRegExp(text: string): string {
  */
 export function substitutePluginArguments(content: string, args: string, names: readonly string[]): string {
 	const parsed = parsePluginArguments(args);
-	let result = content;
-	names.forEach((name, index) => {
-		result = result.replace(new RegExp(`\\$${escapeRegExp(name)}(?![\\[\\w])`, "g"), () => parsed[index] ?? "");
+	// One pass, so an argument that itself reads like a placeholder is never expanded again.
+	const placeholder = new RegExp(
+		[
+			...names.map((name) => `\\$${escapeRegExp(name)}(?![\\[\\w])`),
+			"\\$ARGUMENTS\\[(\\d+)\\]",
+			"\\$ARGUMENTS",
+			"\\$(\\d+)(?!\\w)",
+		].join("|"),
+		"g",
+	);
+	let found = false;
+	const result = content.replace(placeholder, (match, indexed?: string, positional?: string) => {
+		found = true;
+		const index = indexed ?? positional;
+		if (index !== undefined) return parsed[Number(index)] ?? "";
+		const named = names.indexOf(match.slice(1));
+		return named === -1 ? args : (parsed[named] ?? "");
 	});
-	result = result.replace(/\$ARGUMENTS\[(\d+)\]/g, (_, index: string) => parsed[Number(index)] ?? "");
-	result = result.replace(/\$(\d+)(?!\w)/g, (_, index: string) => parsed[Number(index)] ?? "");
-	result = result.split("$ARGUMENTS").join(args);
-	if (result === content && args) result = `${result}\n\nARGUMENTS: ${args}`;
-	return result;
+	return found || !args ? result : `${result}\n\nARGUMENTS: ${args}`;
 }
