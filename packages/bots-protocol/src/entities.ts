@@ -7,7 +7,7 @@ const Id = Type.String({ minLength: 1 });
 const Time = Type.Number();
 const Json = Type.Unknown();
 const Opt = <T extends TSchema>(schema: T) => Type.Optional(schema);
-const Lit = <const T extends readonly string[]>(values: T) => Type.Enum(values);
+const Lit = <const V extends string[]>(values: readonly [...V]) => Type.Enum(values);
 
 // ─── Shared values ──────────────────────────────────────────────────────────
 
@@ -53,9 +53,49 @@ export const AccountSchema = Type.Object({
 	handle: Opt(Type.String()),
 	timeZone: Type.String(),
 	plan: PlanStateSchema,
+	/** The model new bots start with, chosen by the user. There is no built-in default. */
+	defaultModel: Opt(ModelRefSchema),
+	/** Helper models the user picked; each falls back to the bot's own model, or `defaultModel` outside a bot. */
+	helperModels: Type.Object({
+		memory: Opt(ModelRefSchema),
+		catchUp: Opt(ModelRefSchema),
+		groupJudge: Opt(ModelRefSchema),
+	}),
 	createdAt: Time,
 });
 export type Account = Static<typeof AccountSchema>;
+
+/** A handle, or the bot part of a bot's email address: lowercase letters, digits and hyphens, 3 to 20 characters. */
+export const NAME_PATTERN = /^[a-z0-9-]{3,20}$/;
+
+/** Names no handle or bot address may take (spec section 10). */
+export const RESERVED_NAMES: ReadonlySet<string> = new Set([
+	"abuse",
+	"admin",
+	"administrator",
+	"billing",
+	"help",
+	"hostmaster",
+	"info",
+	"knightcode",
+	"mailer-daemon",
+	"no-reply",
+	"noreply",
+	"official",
+	"postmaster",
+	"root",
+	"security",
+	"staff",
+	"support",
+	"system",
+	"webmaster",
+]);
+
+/** Checks a handle or bot address part against the shape and reserved-name rules. */
+export function checkName(name: string): "ok" | "invalid" | "reserved" {
+	if (!NAME_PATTERN.test(name)) return "invalid";
+	return RESERVED_NAMES.has(name) ? "reserved" : "ok";
+}
 
 export const SignInMethodSchema = Type.Object({
 	kind: Lit(["github", "google", "email", "passkey"] as const),
@@ -217,8 +257,8 @@ export const TriggerSchema = Type.Union([
 	}),
 	Type.Object({ kind: Type.Literal("email"), from: Opt(Type.String()), allowUnauthenticated: Opt(Type.Boolean()) }),
 	Type.Object({ kind: Type.Literal("composio"), appId: Id, event: Type.String() }),
-	/** `url` is shown once, when minted; afterwards only its id is known. */
-	Type.Object({ kind: Type.Literal("webhook"), id: Opt(Id), url: Opt(Type.String()) }),
+	/** The secret URL exists only in `mintWebhook`'s response, never in a stored routine. */
+	Type.Object({ kind: Type.Literal("webhook"), id: Opt(Id) }, { additionalProperties: false }),
 	Type.Object({
 		kind: Type.Literal("watch"),
 		target: Lit(["connector", "file", "command"] as const),
@@ -664,6 +704,8 @@ export const CardSchema = Type.Union([
 		state: Lit(["open", "saved", "dismissed"] as const),
 	}),
 	Type.Object({ type: Type.Literal("run-setup"), skill: Type.String() }),
+	/** An interactive panel from an MCP server, served from the sandbox origin. */
+	Type.Object({ type: Type.Literal("app-panel"), appId: Id, title: Type.String(), appUrl: Type.String() }),
 ]);
 export type Card = Static<typeof CardSchema>;
 

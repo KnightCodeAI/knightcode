@@ -117,7 +117,12 @@ export const ROUTES = [
 		"updateAccount",
 		"PATCH",
 		"/api/account",
-		Obj({ name: Opt(Type.String()), timeZone: Opt(Type.String()) }),
+		Obj({
+			name: Opt(Type.String()),
+			timeZone: Opt(Type.String()),
+			defaultModel: Opt(ModelRefSchema),
+			helperModels: Opt(AccountSchema.properties.helperModels),
+		}),
 		AccountSchema,
 	),
 	route(
@@ -175,6 +180,22 @@ export const ROUTES = [
 		ProviderConnectionSchema,
 	),
 	route("disconnectProvider", "DELETE", "/api/providers/:provider", Obj({ provider: Id }), Ok),
+	/** A short-lived, single-use enrollment the desktop requests before running a provider's sign-in locally. */
+	route(
+		"beginEnrollment",
+		"POST",
+		"/api/providers/:provider/enrollment",
+		Obj({ provider: Id }),
+		Obj({ token: Type.String(), expiresAt: Type.Number() }),
+	),
+	/** Uploads the fresh sign-in's result; the desktop's own credentials are never read or sent. */
+	route(
+		"completeEnrollment",
+		"POST",
+		"/api/providers/:provider/enrollment/:token",
+		Obj({ provider: Id, token: Id, credential: Type.Unknown() }),
+		ProviderConnectionSchema,
+	),
 	route("listModels", "GET", "/api/models", None, Obj({ models: Type.Array(ModelOptionSchema) })),
 
 	// Bots and the sidebar
@@ -252,6 +273,8 @@ export const ROUTES = [
 			plugins: Selection,
 			runSetup: Type.Boolean(),
 			avatar: Opt(AvatarSchema),
+			/** Recipes carry no model; omitted, the account's `defaultModel` is used, and without one the import is refused. */
+			model: Opt(ModelRefSchema),
 		}),
 		Obj({ bot: BotSchema, unmatchedPlugins: Type.Array(Type.String()) }),
 	),
@@ -271,6 +294,51 @@ export const ROUTES = [
 		"/api/bots/:botId/history",
 		Obj({ botId: Id, before: Opt(Id), limit: Opt(Type.Number()) }),
 		ConversationViewSchema,
+	),
+	route(
+		"getGroupHistory",
+		"GET",
+		"/api/groups/:groupId/history",
+		Obj({ groupId: Id, before: Opt(Id), limit: Opt(Type.Number()) }),
+		ConversationViewSchema,
+	),
+	route(
+		"reactInGroup",
+		"POST",
+		"/api/groups/:groupId/entries/:entryId/reactions",
+		Obj({ groupId: Id, entryId: Id, emoji: Type.String() }),
+		Ok,
+	),
+	/** The full exchange behind a "Messaged <bot>" or "Message from <bot>" row, read-only. */
+	route(
+		"getExchange",
+		"GET",
+		"/api/bots/:botId/exchanges/:entryId",
+		Obj({ botId: Id, entryId: Id }),
+		Obj({
+			peerBotId: Id,
+			messages: Type.Array(
+				Obj({
+					from: Id,
+					intent: Type.Union([
+						Type.Literal("request"),
+						Type.Literal("question"),
+						Type.Literal("status"),
+						Type.Literal("result"),
+					]),
+					text: Type.String({ maxLength: 8000 }),
+					createdAt: Type.Number(),
+				}),
+			),
+		}),
+	),
+	/** An action from an MCP App panel; it goes through the same approval policy as the model's actions. */
+	route(
+		"appAction",
+		"POST",
+		"/api/bots/:botId/entries/:entryId/app-action",
+		Obj({ botId: Id, entryId: Id, action: Type.Unknown() }),
+		Obj({ result: Opt(Type.Unknown()), approval: Opt(ApprovalSchema) }),
 	),
 	route(
 		"react",
@@ -293,6 +361,21 @@ export const ROUTES = [
 		"/api/bots/:botId/entries/:entryId/save-skill",
 		Obj({ botId: Id, entryId: Id, ...SkillFields }),
 		SkillSchema,
+	),
+	route(
+		"discardSkillDraft",
+		"POST",
+		"/api/bots/:botId/entries/:entryId/discard-skill",
+		Obj({ botId: Id, entryId: Id }),
+		Ok,
+	),
+	/** Answers a secret-request card: a value saves it to the vault (write-only), no value dismisses it. */
+	route(
+		"answerSecretRequest",
+		"POST",
+		"/api/bots/:botId/entries/:entryId/secret",
+		Obj({ botId: Id, entryId: Id, value: Opt(Type.String({ minLength: 1 })) }),
+		Ok,
 	),
 	route(
 		"linkPreview",
@@ -327,6 +410,8 @@ export const ROUTES = [
 		Obj({ files: Type.Array(FileRefSchema) }),
 	),
 	route("deleteFile", "DELETE", "/api/files/:id", Obj({ id: Id }), Ok),
+	/** A short-lived download URL for one of the user's files. */
+	route("getFile", "GET", "/api/files/:id", Obj({ id: Id }), Obj({ file: FileRefSchema, url: Type.String() })),
 	route(
 		"listApprovals",
 		"GET",
@@ -436,6 +521,13 @@ export const ROUTES = [
 	),
 	route("getCatalogEntry", "GET", "/api/catalog/:appId", Obj({ appId: Id }), CatalogEntrySchema),
 	route(
+		"listAppEvents",
+		"GET",
+		"/api/catalog/:appId/events",
+		Obj({ appId: Id }),
+		Obj({ events: Type.Array(Obj({ id: Id, name: Type.String(), description: Type.String() })) }),
+	),
+	route(
 		"connectApp",
 		"POST",
 		"/api/connections/:appId",
@@ -504,7 +596,14 @@ export const ROUTES = [
 	),
 	route("deleteRoutine", "DELETE", "/api/routines/:id", Obj({ id: Id }), Ok),
 	route("testRoutine", "POST", "/api/routines/:id/test", Obj({ id: Id }), RunSchema),
-	route("mintWebhook", "POST", "/api/routines/:id/webhook", Obj({ id: Id }), Obj({ trigger: TriggerSchema })),
+	/** The only response that carries the webhook's secret URL. */
+	route(
+		"mintWebhook",
+		"POST",
+		"/api/routines/:id/webhook",
+		Obj({ id: Id }),
+		Obj({ trigger: TriggerSchema, url: Type.String() }),
+	),
 	route(
 		"estimateWatch",
 		"POST",
@@ -562,6 +661,14 @@ export const ROUTES = [
 		"/api/pages/:id/versions",
 		Obj({ id: Id }),
 		Obj({ versions: Type.Array(Obj({ version: Type.Number(), updatedAt: Type.Number(), author: Type.String() })) }),
+	),
+	route("getPageVersion", "GET", "/api/pages/:id/versions/:version", Obj({ id: Id, version: Id }), PageSchema),
+	route(
+		"restorePageVersion",
+		"POST",
+		"/api/pages/:id/versions/:version/restore",
+		Obj({ id: Id, version: Id }),
+		PageSchema,
 	),
 	route(
 		"pressPageButton",
@@ -668,6 +775,7 @@ export const ROUTES = [
 	),
 	route("getFinance", "GET", "/api/finance", None, FinanceSchema),
 	route("linkBank", "POST", "/api/finance/link", None, Obj({ linkToken: Type.String() })),
+	route("completeBankLink", "POST", "/api/finance/link/complete", Obj({ publicToken: Type.String() }), FinanceSchema),
 	route("unlinkBank", "DELETE", "/api/finance/accounts/:id", Obj({ id: Id }), Ok),
 	route("getHomeRouting", "GET", "/api/settings/home-routing", None, HomeRoutingSchema),
 	route("updateHomeRouting", "PATCH", "/api/settings/home-routing", Type.Partial(HomeRoutingSchema), HomeRoutingSchema),
@@ -714,7 +822,17 @@ export const ROUTES = [
 		Obj({ limit: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]) }),
 		BillingSchema,
 	),
-	route("setAutoTopUp", "PUT", "/api/billing/auto-top-up", BillingSchema.properties.autoTopUp, BillingSchema),
+	route(
+		"setAutoTopUp",
+		"PUT",
+		"/api/billing/auto-top-up",
+		Obj({
+			enabled: Type.Boolean(),
+			threshold: Opt(Type.Number({ minimum: 0 })),
+			amount: Opt(Type.Number({ minimum: 5 })),
+		}),
+		BillingSchema,
+	),
 ] as const;
 
 export type Route = (typeof ROUTES)[number];
