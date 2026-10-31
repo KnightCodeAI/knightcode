@@ -1877,7 +1877,7 @@ validation and copies the v2 kernel added around Delta.
   reload, swapping the committed plugin back silently. Rejected: resolving with the report after the commit despite
   the abort (it would change the rule that an abort after the commit rejects). Examples for 7c (owner): full coverage,
   each example a folder with the host code and real plugin directories (35-39).
-- **Slice 10's points (owner, 2026-10-30; `slice-10.md`):** (D1, "a") the HTTP component defines the registry `Http`
+- **Slice 10's points (owner, 2026-10-30; `slice-10.md`):** (D1, "a"; `httpServer` **superseded** by `createHttp`, decisions "The HTTP core is a fetch handler" and "Settings are arguments") the HTTP component defines the registry `Http`
   (`"chord.http"`) and serves it through a facet of its own (`http.facet`, plugin name `chord.http`) that the app loads
   with its plugins; its `compose` builds the router; the server reads it with `host.registry(Http, ctx)` per request.
   (D2, "a") Wraps are built in slice 10 as designed (decision "HTTP routes and wraps", design §23): a contribution's
@@ -1885,7 +1885,7 @@ validation and copies the v2 kernel added around Delta.
   phase in contributor order, by default around their own plugin's routes (`scope: "own"`; `"all"` explicit; `route`
   narrows to one, a missing one a reported conflict). The server's `headers` option stays for every response, also
   those no route makes (a 404, a refused request).
-  (D3, "a") Authentication is one app function, `authenticate(request, ctx) => P | undefined`, called once per request
+  (D3, "a"; **superseded** by "The HTTP server is a native object": the `Authenticators` registry) Authentication is one app function, `authenticate(request, ctx) => P | undefined`, called once per request
   and per upgrade; no Chord registry of resolvers (p3 composes its own from sharing, devices and the relay, with its
   own precedence rules).
   (D4, "k": a) Request bodies: `request.json(limit?)` (parsed JSON, 1 MiB by default, malformed: 400) and
@@ -1948,7 +1948,7 @@ validation and copies the v2 kernel added around Delta.
   (R3, "a"; refines D9) The child reports only the flip: `{ idle: true }` when every count (`host.activity` and `busy`)
   becomes zero, `{ idle: false }` when one becomes nonzero; the server's idle clock starts at `true` (a status message
   costs about 6 µs on each side, a local call 2.9 µs: no report per call).
-  (R4, "a if configurable at runtime so allowed domains can be added and removed by a plugin") Before `authenticate`, the
+  (R4; **superseded in part** by "allowed hosts only through contributions" and "The HTTP component's security baseline": no `allowedHosts` option, provenance by the socket; "a if configurable at runtime so allowed domains can be added and removed by a plugin") Before `authenticate`, the
   component refuses (403) a `Host` that is neither loopback nor allowed, and an upgrade (`/chord`, a plugin socket)
   whose `Origin` is not the request's own origin; `request.origin` comes only from an accepted `Host` (`http://` on
   loopback, `https://` for an allowed host); `headers(request, principal)` gets the principal. Allowed hosts are the
