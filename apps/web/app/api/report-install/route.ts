@@ -19,8 +19,16 @@ const UA = /^knightcode\/(\S+) \(([^;]+); ([^;]+); ([^)]+)\)$/
 // installs, so they are dropped rather than counted.
 const RETIRED_IDE_UA = /^knightcode-ide\//
 
-// The ping carries no identity. Hash IP+UA so repeat pings from one machine
-// collapse into one person in PostHog without ever storing the address.
+// The CLI's anonymous install ID: a salted hash of its local device ID
+// (packages/cli/src/core/telemetry.ts). Anything else falls back to anonId.
+const INSTALL_ID = /^[0-9a-f]{32}$/
+
+// `?active=` marks a launch of that client rather than an install. These
+// `app_active` events are what DAU/WAU/MAU per client count.
+const CLIENTS = new Set(["cli", "desktop"])
+
+// CLIs older than the install ID send no identity. Hash IP+UA so repeat pings
+// from one machine collapse into one person without ever storing the address.
 async function anonId(ip: string, ua: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${ip}|${ua}`))
   return Array.from(new Uint8Array(digest).slice(0, 16))
@@ -36,11 +44,14 @@ export async function GET(request: Request) {
   // No launch signals are accepted any more. Rejecting them before the key
   // check keeps `?event=bogus` a liveness probe that writes nothing.
   if (url.searchParams.has("event")) return new Response(null, { status: 400 })
+  const active = url.searchParams.get("active")
+  if (active !== null && !CLIENTS.has(active)) return new Response(null, { status: 400 })
 
   const key = process.env.POSTHOG_KEY
   if (!key || RETIRED_IDE_UA.test(ua)) return new Response(null, { status: 204 })
 
   const [, uaVersion, os, runtime, arch] = UA.exec(ua) ?? []
+  const id = url.searchParams.get("id") ?? ""
 
   // ponytail: fire-and-forget, one event per ping. Batch via /batch/ only if
   // install volume ever makes per-request latency show up.
@@ -49,10 +60,11 @@ export async function GET(request: Request) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       api_key: key,
-      event: "cli_install",
-      distinct_id: await anonId(h.get("x-forwarded-for") ?? "", ua),
+      event: active ? "app_active" : "cli_install",
+      distinct_id: INSTALL_ID.test(id) ? id : await anonId(h.get("x-forwarded-for") ?? "", ua),
       properties: {
         product: "knightcode",
+        ...(active && { client: active }),
         // The query param is what the CLI reports; the UA copy is a cross-check.
         version: url.searchParams.get("version") ?? "unknown",
         ua_version: uaVersion ?? "",

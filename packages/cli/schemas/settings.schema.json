@@ -287,7 +287,7 @@
     },
     "enableInstallTelemetry": {
       "type": "boolean",
-      "description": "Send an anonymous version and update ping after changelog-detected updates.",
+      "description": "Send install, update, and launch pings keyed by a hashed install ID.",
       "default": true
     },
     "enableAnalytics": {

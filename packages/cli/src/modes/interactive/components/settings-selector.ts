@@ -586,7 +586,7 @@ export class SettingsSelectorComponent extends Container {
 			{
 				id: "install-telemetry",
 				label: "Install telemetry",
-				description: "Send an anonymous version/update ping after changelog-detected updates",
+				description: "Send install, update, and launch pings keyed by a hashed install ID",
 				currentValue: config.enableInstallTelemetry ? "true" : "false",
 				values: ["true", "false"],
 			},
