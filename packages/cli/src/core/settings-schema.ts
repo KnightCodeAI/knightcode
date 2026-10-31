@@ -297,7 +297,7 @@ export const SettingsSchema = Type.Object(
 		),
 		enableInstallTelemetry: Type.Optional(
 			Type.Boolean({
-				description: "Send anonymous install, update, and launch pings.",
+				description: "Send install, update, and launch pings keyed by a hashed install ID.",
 				default: SETTINGS_DEFAULTS.enableInstallTelemetry,
 			}),
 		),

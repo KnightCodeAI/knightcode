@@ -15,8 +15,9 @@ export function isInstallTelemetryEnabled(
 }
 
 /**
- * Anonymous install ID for telemetry: a salted one-way hash of the device ID, so the raw ID (which
- * other services receive) never reaches knightcode.dev and the two cannot be joined.
+ * Install ID for telemetry: a one-way hash of the device ID, so the raw ID (which OpenAI also
+ * receives) is never sent to knightcode.dev. The prefix is public, so anyone holding the raw ID
+ * can recompute this one; it hides the ID, it does not make the two unlinkable.
  */
 export function telemetryInstallId(deviceId: string): string {
 	return createHash("sha256").update(`knightcode-telemetry:${deviceId}`).digest("hex").slice(0, 32);
@@ -24,7 +25,8 @@ export function telemetryInstallId(deviceId: string): string {
 
 /**
  * Ping knightcode.dev/api/report-install. No `active`: an install/update. With `active`: one launch
- * of that client, which PostHog turns into DAU/WAU/MAU per client. The response is ignored.
+ * of that client, which PostHog turns into DAU/WAU/MAU per client. The CLI reports interactive
+ * sessions only, so print-mode runs from scripts and CI do not count as users. The response is ignored.
  */
 export function reportTelemetry(settingsManager: SettingsManager, version: string, active?: "cli" | "desktop"): void {
 	if (process.env.KNIGHTCODE_OFFLINE || !isInstallTelemetryEnabled(settingsManager)) return;

@@ -104,6 +104,7 @@ describe("activity pings", () => {
     for (const client of ["cli", "desktop"]) {
       stubFetch()
       await GET(ping(`?version=0.4.2&id=${ID}&active=${client}`))
+      expect(sent).toHaveLength(1)
       expect(sent[0].body.event).toBe("app_active")
       expect(sent[0].body.distinct_id).toBe(ID)
       expect((sent[0].body.properties as Record<string, unknown>).client).toBe(client)

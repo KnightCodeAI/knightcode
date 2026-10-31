@@ -80,17 +80,21 @@ export default function PrivacyPage() {
             <code>KNIGHTCODE_OFFLINE=1</code> turns them off.
           </li>
           <li>
-            <strong>Install, update, and launch pings.</strong> Each launch of
-            the CLI or the desktop app sends one anonymous request to{" "}
-            <code>knightcode.dev</code> with the KnightCode version, whether it
-            was the CLI or the desktop app, and a user agent that names your
-            operating system, runtime, and CPU architecture. The first launch of
-            a new version also marks the install or update. The request carries
-            an anonymous install ID: a one-way hash of a random ID stored in
-            your settings, so it cannot be traced back to that ID. The site
-            adds a coarse location (country, region, city) from the request and
-            does not store your IP address. This counts how many people use
-            KnightCode each day. The pings are on by default. Turn them off
+            <strong>Install, update, and launch pings.</strong> Each
+            interactive CLI session and each desktop app launch sends one
+            request to <code>knightcode.dev</code> with the KnightCode version,
+            whether it was the CLI or the desktop app, and a user agent that
+            names your operating system, runtime, and CPU architecture. The
+            CLI&apos;s first session on a new version also marks the install or
+            update. Each request carries an install ID: a one-way hash of a
+            random ID stored in your settings. The random ID itself is never
+            sent, but the install ID stays the same across launches, so pings
+            from one installation can be linked to each other. Versions released
+            before this ID existed are identified by a hash of the IP address
+            and user agent instead. The site adds a coarse location (country,
+            region, city) from the request and does not store your IP address.
+            This counts how many installations are active each day. The pings
+            are on by default. Turn them off
             with <code>enableInstallTelemetry: false</code> or{" "}
             <code>KNIGHTCODE_TELEMETRY=0</code>. The same setting controls the
             identifying headers KnightCode adds to requests for OpenRouter,

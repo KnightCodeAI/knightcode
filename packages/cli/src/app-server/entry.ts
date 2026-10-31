@@ -64,8 +64,8 @@ export async function runAppServer(args: string[]): Promise<void> {
 		(envSessionDir ? expandTildePath(envSessionDir) : undefined) ??
 		SettingsManager.create(process.cwd(), agentDir, { projectTrusted: false }).getSessionDir();
 	const ctx = await createAppServerContext({ agentDir, sessionDir });
-	// The desktop app is the only client that starts `app-server`, so each start is one desktop launch.
-	reportTelemetry(ctx.settings, VERSION, "desktop");
+	// apps/desktop sets this on every app-server it spawns; a script or other protocol client does not.
+	if (process.env.KNIGHTCODE_CLIENT === "desktop") reportTelemetry(ctx.settings, VERSION, "desktop");
 	const threads = new ThreadManager(ctx, { extensionPaths: (values.extension ?? []).map((path) => resolvePath(path)) });
 	const transport = createStdioTransport(process.stdin, writeRawStdoutReporting);
 	// Output closes after the connection answered everything it accepted (Task 7), or on abort.
