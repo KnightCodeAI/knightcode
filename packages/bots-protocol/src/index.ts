@@ -5,3 +5,4 @@ export * from "./entities.ts";
 export * from "./frames.ts";
 export * from "./recipe.ts";
 export * from "./validate.ts";
+export * from "./fake/index.ts";

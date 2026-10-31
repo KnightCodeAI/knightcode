@@ -231,7 +231,7 @@ git commit -m "feat(bots): add the client contracts for KnightCode Bots"
   real semantics for approvals (consumed once) and streaming (partial
   updates, then the final entry).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // packages/bots-protocol/test/fake.test.ts
@@ -267,22 +267,22 @@ it("runs an approved action once even when answered twice", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `bunx vitest --run test/fake.test.ts` in `packages/bots-protocol`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `createFakeBackend` in `src/fake/`**
+- [x] **Step 3: Implement `createFakeBackend` in `src/fake/`**
 
 State is plain in-memory objects; streaming uses the injectable clock so
 tests and screenshots are deterministic.
 
-- [ ] **Step 4: Run them to verify they pass**
+- [x] **Step 4: Run them to verify they pass**
 
 Run: `bunx vitest --run` in `packages/bots-protocol`
 Expected: all passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-protocol/src/fake packages/bots-protocol/test/fake.test.ts
