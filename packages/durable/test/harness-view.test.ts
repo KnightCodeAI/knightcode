@@ -144,7 +144,8 @@ describe("conversation view", () => {
 		await submission.wait(context);
 		await harness.waitForIdle(context);
 		await drained();
-		expect(frames).toHaveLength(touching.count);
+		// One frame per stored commit, and one for the attempt, a deferred commit stored with the answer.
+		expect(frames).toHaveLength(touching.count + 1);
 		const last = replay(initial, frames);
 		expect(last).toEqual(await committed(harness, root, initial.conversation, last.entries.length));
 		expect(frames[0]!.ops).toContainEqual([

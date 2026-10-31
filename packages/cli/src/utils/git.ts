@@ -14,7 +14,7 @@ export type GitSource = {
 	path: string;
 	/** Git ref (branch, tag, commit) if specified */
 	ref?: string;
-	/** True if ref was specified (package won't be auto-updated) */
+	/** True if ref was specified. `knightcode update` reconciles the checkout to the ref but does not move the ref. */
 	pinned: boolean;
 };
 
@@ -110,6 +110,11 @@ function buildGitSource(args: { repo: string; host: string; path: string; ref?: 
 		return null;
 	}
 	if (hasUnsafeGitInstallPart(args.host, false) || hasUnsafeGitInstallPart(normalizedPath, true)) {
+		return null;
+	}
+	// The ref reaches `git fetch` and `git checkout` as an argument, where a leading dash reads as an option. No branch,
+	// tag, or commit can start with one.
+	if (args.ref?.startsWith("-")) {
 		return null;
 	}
 

@@ -39,7 +39,7 @@ bun packages/cli/test/mcp-conformance/run.ts --update-baseline
 ## Known failures
 
 - `elicitation-sep1034-client-defaults`: KnightCode does not support elicitation.
-- `auth/basic-cimd`: KnightCode registers clients dynamically instead of using a Client ID Metadata Document.
+- `auth/basic-cimd`: KnightCode uses its Client ID Metadata Document on knightcode.dev, not the suite's `https://conformance-test.local/client-metadata.json`.
 - `auth/scope-retry-limit`: `knightcode-client` fails by design; the server never accepts the granted scope.
 
 2026-07-28 is not covered: it is a stateless protocol KnightCode does not implement.

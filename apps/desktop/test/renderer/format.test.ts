@@ -14,7 +14,8 @@ import {
 const now = new Date(2026, 9, 19, 15, 0).getTime();
 const at = (month: number, day: number, hour = 10, year = 2026) => new Date(year, month, day, hour, 30).getTime();
 
-test("date separators name the day as Codex does", () => {
+// The first toLocaleDateString in the process loads ICU locale data, which has taken over 16 s on a cold Windows runner.
+test("date separators name the day as Codex does", { timeout: 30_000 }, () => {
 	expect(dayLabel(at(9, 19, 0), now)).toBe("Today");
 	expect(dayLabel(at(9, 18, 23), now)).toBe("Yesterday");
 	expect(dayLabel(at(9, 15), now)).toBe(new Date(at(9, 15)).toLocaleDateString(undefined, { weekday: "long" }));

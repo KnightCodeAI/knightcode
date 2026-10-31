@@ -75,6 +75,17 @@ describe("Git URL Parsing", () => {
 		}
 	});
 
+	it("should reject refs that git would read as options", () => {
+		for (const source of [
+			"git:github.com/user/repo@--upload-pack=touch pwned",
+			"https://github.com/user/repo@-c",
+			"git:git@github.com:user/repo@--output=x",
+			"git:evil.example/user/repo@-b",
+		]) {
+			expect(parseGitUrl(source)).toBeNull();
+		}
+	});
+
 	describe("unsupported without git: prefix", () => {
 		it("should reject git@host:path without git: prefix", () => {
 			expect(parseGitUrl("git@github.com:user/repo")).toBeNull();

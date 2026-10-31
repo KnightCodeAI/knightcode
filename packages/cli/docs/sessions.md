@@ -11,7 +11,17 @@ knightcode --continue
 knightcode --resume
 ```
 
-`--continue` opens the most recent session for the current working directory. `--resume` opens the session picker. In interactive mode, `/resume` opens the same picker and `/new` starts a new session.
+`--continue` opens the most recent session for the current directory. `--resume` opens the session picker. In interactive mode, `/resume` opens the same picker and `/new` starts a new session.
+
+Each session records the working directory it was created in and never changes it. KnightCode runs a session in its working directory, so tools, `@path` references, project configuration, and context files resolve from there.
+
+| Entry point | Working directory |
+|---|---|
+| `--continue` | The current directory |
+| `--resume`, `/resume`, `--session`, `/import` | The session's working directory, which can differ from the current directory |
+| `--fork`, or a `--session` ID from another directory that you choose to fork | The current directory, in a new session |
+
+If a session's working directory no longer exists, interactive mode offers to run the session in the current directory instead. KnightCode does not store that choice, so it asks again the next time you open the session. Other modes exit with an error.
 
 Use `/name` or `--name` to assign a recognizable session name. Run `/session` to verify the current session file, ID, message count, token usage, and cost.
 
@@ -90,8 +100,6 @@ See [Compaction Reference](compaction.md) for thresholds, retained boundaries, b
 By default, KnightCode stores sessions under `~/.knightcode/agent/sessions/`, grouped by working directory. Use `--session-dir`, `KNIGHTCODE_CODING_AGENT_SESSION_DIR`, or the `sessionDir` setting to choose another location. The CLI option has highest precedence.
 
 Use `--no-session` for an ephemeral run. An ephemeral session cannot be resumed after KnightCode exits.
-
-Use `--session` when you already know the session path or ID. Use `--fork` to create a new session from an existing session before interactive mode starts.
 
 ## Session ownership
 

@@ -1,5 +1,106 @@
 # @knightcodeai/cli
 
+## 0.23.2
+
+### Added
+
+- Added `KNIGHTCODE_SELF_UPDATE_COMMAND` and the `selfUpdateCommand` setting, so `knightcode update` can update an installation that a wrapper or another package manager provides (mise, Nix), which it previously refused with "cannot self-update this installation". The command runs only when a newer release exists (or with `--force`), with `{packageName}`, `{version}` and `{installSpec}` filled from that release, and `knightcode update` warns when `knightcode --version` on `PATH` does not report the new version afterwards. The setting is read from user-level settings only, and while a command is configured, automatic updates only show the update notice.
+
+- Added a launch ping to install telemetry, sent each time an interactive CLI session or the desktop app starts, so daily, weekly, and monthly users can be counted for each. The ping carries a one-way hash of the local device ID, never the ID itself, and `enableInstallTelemetry: false` or `KNIGHTCODE_TELEMETRY=0` still turns every ping off.
+
+### Changed
+
+- Changed the `--continue`, `--resume`, `--session`, `--session-id` and `--fork` help and the `/resume` and `/import` descriptions to say which working directory a session runs in. A resumed or imported session keeps the directory it was created in, which can differ from the current one; `--continue`, `--fork` and `--session-id` use the current directory.
+
+- Changed `tool_search` and code mode's `searchTools()` to weigh a tool's name above its description. A query word in the tool name now outranks any number of mentions in other tools' descriptions, a server's instructions no longer push its tools down, and a query that contains a tool's whole name (`peekaboo app` for `mcp__peekaboo__app`) usually ranks that tool first.
+
+### Fixed
+
+- Fixed extension renderers showing hints such as " to expand" with no key. An extension that imports `keyHint`/`keyText` can load its own copy of `@knightcodeai/cli`, which never sees your keybindings. Tool renderers now get `context.keyText()`/`context.keyHint()`, and message and entry renderers get `options.keyText()`/`options.keyHint()`, which format your configured keys; the extension docs and the `debug-provider` example use them.
+
+- Fixed the external editor (`Ctrl+G`) failing silently. When the editor cannot be launched or exits with an error, a status message now says so and the prompt is left unchanged. Clipboard copies and browser launches also start from the filesystem root, so they work under WSL when the working directory's `\\wsl.localhost\...` path is too long for Windows programs.
+
+- Fixed `knightcode mcp login -l` and `knightcode mcp logout -l` failing with `Unknown option --local.` although `mcp add` and `mcp remove` accept `-l`. With `-l`, they now require the server to be defined in the project's `.knightcode/mcp.json`. Unknown options are reported as typed, and a mistyped server name gets a suggestion, for example `Did you mean "gurker"?`
+
+- Fixed `tool_search` and code mode's `searchTools()` ranking a tool first because one query word is its name, above a tool whose description matches more of the query: `screenshot window` returned a `window` tool instead of the screenshot tool, and `describe app` an `app` tool instead of the one that describes an app's UI. A tool that matches more of the query's words now ranks first; among tools matching as many words the name still counts most, and a query that is exactly a tool's name still finds that tool first.
+
+- Fixed `tool_search` and code mode's `searchTools()` finding nothing for queries in languages other than English. Search split text only on ASCII letters and digits, so Chinese, Japanese, Korean, Thai, Cyrillic, Arabic, Hindi or accented words were dropped from both tool descriptions and queries. Text is now split into Unicode words (including scripts written without spaces), and canonically equivalent spellings such as a precomposed and a combining `é` match.
+
+- Fixed `knightcode update` claiming an installation is "not managed by a global pnpm install" when it only lives under a package manager's directory, such as a wrapper under `PNPM_HOME`. The message now names the package manager only when it owns the install, and otherwise says to update the package with whatever provides it.
+
+## 0.23.1
+
+### Changed
+
+- Changed MCP OAuth sign-in to identify with KnightCode's Client ID Metadata Document by default when the authorization server supports it for public clients, and to register a client dynamically otherwise. A client registered before keeps being used until you sign out. Set `oauth.clientRegistration` to `dcr` to always register, or pass `--oauth-client-registration` to `knightcode mcp add`.
+
+### Fixed
+
+- Fixed git package sources accepting a ref that starts with `-`, which `git fetch` and `git checkout` read as an option rather than a ref. Such sources are now rejected like other malformed git URLs.
+
+- Fixed regular expressions for provider error messages, npm package specs, and LaTeX sub/superscripts that slowed down quadratically on long runs of whitespace or slashes. They now run in linear time and match exactly the same strings.
+
+- Fixed images not rendering inline in Orca terminals. Orca supports Kitty graphics and advertises it through `ORCA_IMAGE_PROTOCOL=kitty`, which is now detected.
+
+- Fixed `knightcode -e npm:<pkg>` staying on the version from the first download. On each start and `/reload`, an `-e` npm package without an exact version is reinstalled when the registry has a newer matching version. `knightcode -e git:<repo>@<branch>` likewise stayed on its first checkout and is now fetched and reset to the branch; a commit-hash ref that is already checked out is not fetched. Offline mode and failed checks keep the cached copy.
+
+- Fixed a saved "Do not trust" decision being ignored for projects without trust-requiring resources, such as a folder with only `AGENTS.md`. Such projects were always auto-trusted, so `ctx.isProjectTrusted()` returned true and package commands treated them as trusted. A saved decision in `trust.json` now wins; auto-trust applies only when nothing is saved.
+
+- Fixed paths that differ only by letter case being treated as different locations on Windows. A project trust decision saved as `C:\Work\app` now applies to `c:\work\app`, the user `~/.agents/skills` folder is recognized when `HOME` uses different casing, and duplicate resources, the current session in `/resume`, and `~` shortening in displayed paths now ignore case on Windows.
+
+- Fixed wrapped Markdown lines starting with a space after a bold or code word at the wrap boundary, and strikethrough bleeding into the padding of a wrapped line on a background color.
+
+### Security
+
+- Security updated the webfetch regex dependency `re2js` to 2.8.7 to address
+  CVE-2026-116795. KnightCode does not enable the affected lookbehind feature.
+
+## 0.23.0
+
+### Added
+
+- Added extension changelogs. After an extension package updates, the next fresh launch shows the top changes from its new `CHANGELOG.md` entries under "Extension updates", the same way KnightCode shows its own. Packages can point `knightcode.changelogPath` at another file inside the package, or set it to `""` to opt out; `collapseChangelog` condenses the section to one line per package.
+
+- Added a Windows installer. `powershell -c "irm https://knightcode.dev/install.ps1 | iex"` installs KnightCode the same way `install.sh` does on macOS and Linux: a managed install pinned by the published lockfile that updates with `knightcode update`. It offers to install Node.js and Git Bash when they are missing, and running it again reinstalls or uninstalls.
+
+### Changed
+
+- Changed `knightcode update` on global npm installations to recommend migrating to the managed installation from the knightcode.dev installer, which pins all dependencies. It shows the `install.ps1` command on Windows and the `install.sh` command elsewhere.
+
+### Fixed
+
+- Fixed thinking being dropped on replay for OpenRouter's `~anthropic/claude-*-latest` aliases: they used Chat Completions, which loses the thinking signature. They now use Anthropic Messages with adaptive thinking, like the versioned Claude models.
+
+- Fixed a Zhipu / Z.ai plan that reached its usage limit (HTTP 429 with error code `1308`) being retried: the limit resets after hours, so the retries only delayed the error by about 14 seconds. It is now reported at once.
+
+- Fixed the app server treating a managed worktree as a project of its own for trust. At a worktree's path, `project/trust/read` and `project/trust/set` now read and record its project's decision, the one its threads load with, and `project/trust/read` names that project in a new `project` field. Project settings, MCP servers and resources read and written there check the same decision; before, trusting there was never seen by a new thread in that worktree, and Settings in the worktree could not read or write project settings once the project was trusted.
+
+- Fixed an extension that sets the same active tools in a different order recording a "System Prompt Update: tools, rules" message, and on providers without mid-conversation system messages rewriting the prompt head and losing the cache. Tools that stay active now keep their order and newly active ones are appended.
+
+- Fixed codemode tool descriptions inlining a tool's whole output type when it was a union or spanned several lines, which added thousands of characters to every request. Unions of objects now list each variant's field names (with the value of `const` discriminators such as `action`), and other multi-line types point to `describeTool()` instead.
+
+- Fixed starting `knightcode` from a directory that has since been deleted: it crashed with an `ENOENT ... uv_cwd` stack trace (also for `--version` and `--help`). It now prints that the working directory no longer exists and exits with code 1.
+
+- Fixed `knightcode.exec()` in extensions buffering unlimited output: a command that kept writing could exhaust memory. Output is now capped by a new `maxBuffer` option (default 256 MiB); past it the command is terminated and the result has `truncated: true`. A command that ignores SIGTERM is now actually force-killed after 5 seconds, and the call returns even when a child process keeps the output pipes open.
+
+- Fixed the startup `Model scope: …` notice staying in the shell after a fullscreen session exited (above the resume hint, with `fullscreenExitOutput: "resume-hint"`). Fullscreen now shows the notice in its header; regular mode prints it before the session starts, as before.
+
+- Fixed resized photos being sent as multi-megabyte PNGs, which could make requests fail or time out. Resizing now picks whichever of PNG and JPEG is smaller at each size step; screenshots where PNG is smaller still go out as PNG.
+
+- Fixed `knightcode update` reporting an npm package as updated when npm actually installed the old version again (stale registry metadata shortly after a publish). It now warns that the package is still on the old version and suggests trying again in a few minutes.
+
+- Fixed compaction, branch summaries and bug-report summaries failing for a provider whose API-key path differs from its OAuth login (for example one that refuses explicit keys) while normal prompts worked. Summaries now let the session's model runtime resolve the stored login, as prompts do.
+
+- Fixed tool output keeping the parameters of private-parameter escape sequences, such as `35;59;1M` from a mouse report (`ESC[<35;59;1M`). They are now stripped whole, while the digits after `ESC=` and `ESC>` keypad-mode sequences stay.
+
+- Fixed bare URLs in Markdown swallowing the CJK punctuation and text that follow them (`https://example.com。后面的中文` linked the whole run). A bare URL now ends at CJK punctuation; explicit links and `<...>` autolinks can still contain it.
+
+- Fixed Shift+Enter in Apple Terminal setups that send `ESC` + Return being read as Alt+Enter, which queued a follow-up message instead of inserting a new line. With Shift held, `ESC` + Return is now treated as Shift+Enter (also on native Windows); without Shift it stays Alt+Enter.
+
+- Fixed PageUp and PageDown (`tui.select.pageUp` / `tui.select.pageDown`) being ignored by most scrolling lists: autocomplete, `/settings`, the model, scoped-model, login, undo, fork and `/mcp` pickers, the llama.cpp model search and the background tasks list now page their selection. In fullscreen these keys used to scroll the transcript instead; a focused list now receives them. A remapped page key also pages an open autocomplete menu before triggering an app action.
+
+- Fixed the terminal's program status (for example the working indicator in iTerm2 3.7.5+) disappearing right after a run started in regular mode. KnightCode no longer writes OSC 133 shell-prompt markers to the terminal there; fullscreen already stripped them.
+
 ## 0.22.2
 
 ### Added

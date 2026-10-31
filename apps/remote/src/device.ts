@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { type Env, issueCliToken } from "./accounts.ts";
 import { randomId, sha256Hex, sign, verify } from "./crypto.ts";
 
@@ -9,8 +10,8 @@ const USER_CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ23456789";
 const USER_CODE_SHAPE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
 function userCode(): string {
-	const raw = crypto.getRandomValues(new Uint8Array(8));
-	const characters = [...raw].map((byte) => USER_CODE_ALPHABET[byte % USER_CODE_ALPHABET.length]);
+	// randomInt rejects out-of-range draws; `byte % 28` made the first 4 letters slightly more likely.
+	const characters = Array.from({ length: 8 }, () => USER_CODE_ALPHABET[randomInt(USER_CODE_ALPHABET.length)]);
 	return `${characters.slice(0, 4).join("")}-${characters.slice(4).join("")}`;
 }
 

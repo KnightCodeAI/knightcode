@@ -30,6 +30,8 @@ Use `--extension` or `-e` to try a package for one invocation without adding it 
 knightcode -e npm:@example/knightcode-tools
 ```
 
+KnightCode caches `-e` packages under `~/.knightcode/agent/tmp/extensions/` and checks them on every start and `/reload`. An npm package is reinstalled when the registry has a newer version that matches the specification. A version pinned to an exact number, such as `@1.2.3`, is not checked. A git package is fetched and reset to the remote branch or ref. A ref that is a commit hash already checked out is not fetched. If the check fails or offline mode is on, KnightCode loads the cached copy.
+
 ## Choose a source
 
 | Source | Example | Behavior |

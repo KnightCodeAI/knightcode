@@ -110,6 +110,7 @@ export type {
 	InputEvent,
 	InputEventResult,
 	InputSource,
+	KeybindingHints,
 	KeybindingsManager,
 	LoadExtensionsResult,
 	LsToolCallEvent,

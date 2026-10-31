@@ -1,5 +1,13 @@
 # @knightcode/desktop
 
+## 0.1.1
+
+### Fixed
+
+- Fixed the file tree collapsing its folders when a file opens from it. The tree keeps its open folders, scroll position and filter from one file to the next.
+
+- Fixed a new project never asking to be trusted. A project with its own extensions, skills or settings now asks on the new-thread screen, with Trust and Not now. Trust records the decision in the same trust store the terminal uses, so the project's own resources load in its threads; before, the only way to trust a project was the switch in Settings. In a narrow window, the new-thread screen's cards now put their buttons under the text instead of squeezing it.
+
 ## 0.1.0
 
 The first release of the KnightCode desktop app. It runs the same agent as the terminal, so threads, settings, sign-ins and extensions are shared between the two. The installers are not signed by a recognised publisher yet, so Windows SmartScreen and macOS Gatekeeper ask once before the first launch: see the [install notes](https://knightcode.dev/docs/run/desktop).

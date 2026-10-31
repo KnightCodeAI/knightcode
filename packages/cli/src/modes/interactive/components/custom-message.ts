@@ -8,6 +8,7 @@ import { formatToolCall } from "../../../core/tools/render-utils.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { callBlock, paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
 import { ViewComponent } from "./view-component.ts";
+import { keyHint, keyText } from "./keybinding-hints.ts";
 
 /**
  * Component that renders a custom message entry from extensions. Without a custom renderer it is drawn like a
@@ -87,7 +88,7 @@ export class CustomMessageComponent extends Container {
 			try {
 				const component = this.customRenderer(
 					this.message,
-					{ expanded: this._expanded, outputPad: this.outputPad },
+					{ expanded: this._expanded, outputPad: this.outputPad, keyText, keyHint },
 					theme,
 				);
 				if (component) {

@@ -21,7 +21,7 @@ import { ensurePngTranscoder } from "../../../utils/image-convert.ts";
 import { BLOCK_INDENT, BULLET, RESULT_GUTTER, RESULT_INDENT } from "../glyphs.ts";
 import { theme } from "../theme/theme.ts";
 import { paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
-import { keyHint } from "./keybinding-hints.ts";
+import { keyHint, keyText } from "./keybinding-hints.ts";
 import { ViewComponent } from "./view-component.ts";
 
 /** What this component needs from a tool: how to draw it, without executing it. */
@@ -150,6 +150,8 @@ export class ToolExecutionComponent extends Container {
 			isError: this.result?.isError ?? false,
 			durationMs: this.isPartial ? undefined : this.result?.durationMs,
 			outputPad: this.outputPad,
+			keyText,
+			keyHint,
 		};
 	}
 

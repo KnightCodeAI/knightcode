@@ -7,11 +7,14 @@ import { createProjectTrustContext } from "./cli/project-trust.ts";
 import {
 	APP_NAME,
 	CONFIG_DIR_NAME,
+	detectInstallChange,
 	detectInstallMethod,
 	getAgentDir,
+	getConfiguredSelfUpdateArgv,
 	getSelfUpdateCommand,
 	getSelfUpdatePackageDir,
 	getSelfUpdateUnavailableInstruction,
+	makeConfiguredSelfUpdateCommand,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
 	type SelfUpdatePackageTarget,
@@ -24,6 +27,7 @@ import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import { DefaultResourceLoader, formatPackageInstallWarning, isBuiltinExtension } from "./core/resource-loader.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/trust-manager.ts";
+import { spawnProcessSync } from "./utils/child-process.ts";
 import { runGlobalSelfUpdate } from "./utils/global-self-update.ts";
 import { getStandaloneUpdateUnavailableReason, runStandaloneSelfUpdate } from "./utils/standalone-self-update.ts";
 import { UPDATE_EXIT_LOCKED, UPDATE_EXIT_UNSUPPORTED } from "./utils/update-process.ts";
@@ -421,12 +425,15 @@ async function refreshModelCatalogs(agentDir: string): Promise<void> {
 	console.log(chalk.green("Model catalogs refreshed"));
 }
 
+const SELF_UPDATE_COMMAND_HINT = `To make \`${APP_NAME} update\` run your own update command, set KNIGHTCODE_SELF_UPDATE_COMMAND or the selfUpdateCommand setting.`;
+
 function printSelfUpdateUnavailable(
 	npmCommand?: string[],
 	updatePackageTarget: SelfUpdatePackageTarget = PACKAGE_NAME,
 ): void {
 	console.error(`error: ${APP_NAME} cannot self-update this installation.`);
 	console.error(getSelfUpdateUnavailableInstruction(PACKAGE_NAME, npmCommand, updatePackageTarget));
+	console.error(SELF_UPDATE_COMMAND_HINT);
 
 	const entrypoint = process.argv[1];
 	if (entrypoint) {
@@ -516,6 +523,49 @@ function getSelfUpdateExitCode(error: unknown): number {
 	if (!process.env.KNIGHTCODE_SELF_UPDATE_VERSION) return 1;
 	if (error === UPDATE_EXIT_UNSUPPORTED) return UPDATE_EXIT_UNSUPPORTED;
 	return error instanceof Error && "code" in error && error.code === "ELOCKED" ? UPDATE_EXIT_LOCKED : 1;
+}
+
+/** Run the user-configured self-update command, then report the version installed on disk. */
+async function runConfiguredSelfUpdate(argv: string[], plan: SelfUpdatePlan): Promise<void> {
+	const command = makeConfiguredSelfUpdateCommand(argv, plan);
+	if (plan.note) {
+		printSelfUpdateNote(plan.note);
+	}
+	try {
+		console.log(chalk.dim(`Updating ${APP_NAME} with ${command.display}...`));
+		await runGlobalSelfUpdate(command);
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : "Unknown self-update command error";
+		console.error(chalk.red(`Error: ${message}`));
+		process.exitCode = getSelfUpdateExitCode(error);
+		return;
+	}
+	// Exit code 0 does not prove an update. Wrappers such as mise or Nix install each version into a
+	// new directory and leave this installation untouched, so fall back to the KnightCode on PATH.
+	const change = detectInstallChange();
+	const installedVersion =
+		change?.kind === "updated" && change.version === plan.version ? change.version : readVersionOnPath();
+	if (installedVersion === plan.version) {
+		console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${plan.version}`));
+		return;
+	}
+	console.log(
+		chalk.yellow(
+			`Ran ${command.display}, but \`${APP_NAME} --version\` reports ${installedVersion ?? "no version"}, not ${plan.version}.`,
+		),
+	);
+}
+
+/** Version printed by `knightcode --version` as resolved from PATH, the KnightCode the user runs next. */
+function readVersionOnPath(): string | undefined {
+	// KNIGHTCODE_PACKAGE_DIR points at this installation and would make the new KnightCode report the old version.
+	const { KNIGHTCODE_PACKAGE_DIR: _, ...env } = process.env;
+	const result = spawnProcessSync(APP_NAME, ["--version"], {
+		encoding: "utf-8",
+		stdio: ["ignore", "pipe", "pipe"],
+		env,
+	});
+	return result.status === 0 ? result.stdout.trim() || undefined : undefined;
 }
 
 export interface PackageCommandRuntimeOptions {
@@ -829,7 +879,11 @@ export async function handlePackageCommand(
 					}
 				}
 				if (updateTargetIncludesSelf(target)) {
-					const managedInstallRoot = getActiveManagedInstallRoot();
+					const configuredSelfUpdateArgv = getConfiguredSelfUpdateArgv(
+						settingsManager.getGlobalSettings().selfUpdateCommand,
+					);
+					// A configured command is explicit user intent, so it replaces the managed install path too.
+					const managedInstallRoot = configuredSelfUpdateArgv ? undefined : getActiveManagedInstallRoot();
 					if (managedInstallRoot && options.force) {
 						console.error(
 							chalk.red(
@@ -841,6 +895,10 @@ export async function handlePackageCommand(
 					}
 					const selfUpdatePlan = await getSelfUpdatePlan(options.force);
 					if (!selfUpdatePlan.shouldRun) {
+						return true;
+					}
+					if (configuredSelfUpdateArgv) {
+						await runConfiguredSelfUpdate(configuredSelfUpdateArgv, selfUpdatePlan);
 						return true;
 					}
 					if (managedInstallRoot) {
@@ -886,6 +944,7 @@ export async function handlePackageCommand(
 					if (process.platform === "win32" && installMethod !== "npm" && installMethod !== "pnpm") {
 						console.error(chalk.red(`${APP_NAME} self-update on Windows is only supported for npm and pnpm installs.`));
 						console.error(chalk.dim(`Detected install method: ${installMethod}. Update ${APP_NAME} manually.`));
+						console.error(chalk.dim(SELF_UPDATE_COMMAND_HINT));
 						process.exitCode = getSelfUpdateExitCode(UPDATE_EXIT_UNSUPPORTED);
 						return true;
 					}
@@ -921,6 +980,19 @@ export async function handlePackageCommand(
 						return true;
 					}
 					console.log(chalk.green(`Updated ${APP_NAME} from ${VERSION} to ${selfUpdatePlan.version}`));
+					// The knightcode.dev installer migrates global npm installs to a managed install
+					// that pins all dependencies. It does not migrate pnpm, yarn, or bun installs.
+					if (installMethod === "npm") {
+						const installerCommand =
+							process.platform === "win32"
+								? 'powershell -c "irm https://knightcode.dev/install.ps1 | iex"'
+								: "curl -fsSL https://knightcode.dev/install.sh | sh";
+						console.log();
+						console.log(chalk.yellow(`This npm installation of ${APP_NAME} does not pin its dependencies.`));
+						console.log(chalk.yellow("Run the installer to migrate to a managed installation that does:"));
+						console.log();
+						console.log(`  ${chalk.bold(installerCommand)}`);
+					}
 				}
 				return true;
 			}

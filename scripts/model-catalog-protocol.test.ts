@@ -93,6 +93,17 @@ test("serves explicit and unversioned catalog requests without redirecting", () 
 	});
 });
 
+test("parses a long hostile User-Agent in linear time", () => {
+	// The quadratic version took about 11 s on this header.
+	const start = performance.now();
+	const request = parseModelCatalogRequest(
+		"https://knightcode.dev/api/models",
+		`knightcode/1 (a;${"\t".repeat(100_000)}`,
+	);
+	assert.ok(performance.now() - start < 1000);
+	assert.deepEqual(request, { kind: "catalog", knightcodeVersion: undefined, representation: "legacy" });
+});
+
 test("rejects invalid catalog request parameters", () => {
 	assert.deepEqual(parseModelCatalogRequest("https://knightcode.dev/api/models?knightcode-version=latest", undefined), {
 		kind: "invalid",

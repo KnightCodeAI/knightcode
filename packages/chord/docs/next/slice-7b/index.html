@@ -191,7 +191,7 @@ named by their directory).</p>
     icon.svg
   skills/notes/SKILL.md   optional resources (p2 §4.4)</code></pre>
 <pre><code>{
-  <span class="tk-s">"name"</span>: <span class="tk-s">"@pi/notes"</span>,
+  <span class="tk-s">"name"</span>: <span class="tk-s">"@knightcode/notes"</span>,
   <span class="tk-s">"version"</span>: <span class="tk-s">"1.4.0"</span>,
   <span class="tk-s">"type"</span>: <span class="tk-s">"module"</span>,
   <span class="tk-s">"peerDependencies"</span>: {
@@ -261,7 +261,7 @@ returns nothing.</p>
 <td>inlined into the facet&#39;s script</td>
 </tr>
 <tr>
-<td>another plugin&#39;s contract (<code>../sessions/contract.ts</code>, or <code>@pi/sessions/contract</code> for an installed package)</td>
+<td>another plugin&#39;s contract (<code>../sessions/contract.ts</code>, or <code>@knightcode/sessions/contract</code> for an installed package)</td>
 <td>inlined too: a copy, so a plugin carries the contract version it was built against (<code>accepts</code> needs that); only contracts and side-effect-free modules may be imported across plugins</td>
 </tr>
 <tr>
@@ -308,7 +308,7 @@ second copy of Chord, and an old version is garbage-collected once nothing holds
 };
 <span class="tk-k">const</span> script = <span class="tk-k">await</span> <span class="tk-f">buildFacet</span>({ plugin: <span class="tk-s">"/data/plugins/notes"</span>, facet: <span class="tk-s">"worker.ts"</span>, hostPackages: <span class="tk-t">Object</span>.<span class="tk-f">keys</span>(HOST_PACKAGES), platform: <span class="tk-s">"node"</span> });
 <span class="tk-k">const</span> facet = <span class="tk-f">evaluateFacet</span>(script, { hostPackages: HOST_PACKAGES, require: <span class="tk-f">createRequire</span>(<span class="tk-k">import</span>.meta.url), dir: <span class="tk-s">"/data/plugins/notes"</span> });
-<span class="tk-k">await</span> host.<span class="tk-f">reload</span>([{ name: <span class="tk-s">"@pi/notes"</span>, facet }], ctx);    <span class="tk-c">// or host.load the first time</span></code></pre>
+<span class="tk-k">await</span> host.<span class="tk-f">reload</span>([{ name: <span class="tk-s">"@knightcode/notes"</span>, facet }], ctx);    <span class="tk-c">// or host.load the first time</span></code></pre>
 <ul>
 <li><code>buildFacet</code> is esbuild with: the facet as entry, the host packages and <code>node:*</code> external, <code>format: &quot;cjs&quot;</code> wrapped
 as the function above, minified, an <code>onResolve</code> that refuses anything outside the plugin, its <code>node_modules</code>, a

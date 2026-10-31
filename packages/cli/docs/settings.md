@@ -197,6 +197,7 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are requir
 | `shellPath` | string | Platform default | Custom shell executable path. Supports a leading `~`. |
 | `shellCommandPrefix` | string | None | Prefix prepended to every shell command. |
 | `npmCommand` | `string[]` | `npm` | Command and arguments used for npm package lookup and installation. |
+| `selfUpdateCommand` | `string[]` | None | Command and arguments `knightcode update` runs to update KnightCode itself, with `{packageName}`, `{version}`, and `{installSpec}` placeholders. `KNIGHTCODE_SELF_UPDATE_COMMAND` takes precedence. **Can only be set in agent-directory settings.** See [Custom update command](cli.md#custom-update-command). |
 
 See [Shell aliases](shell-aliases.md) for shell setup and [KnightCode Packages](packages.md) for package-manager behavior.
 
@@ -225,7 +226,7 @@ The built-in extensions are named `builtin:mcp`, `builtin:llama.cpp`, `builtin:c
 |---|---|---|---|
 | `autoUpdate` | boolean | `true` | Download KnightCode CLI updates automatically while retaining update notices when `false`. **Can only be set in agent-directory settings.** `KNIGHTCODE_DISABLE_AUTO_UPDATE=1` overrides this setting. See [Disable automatic updates](#disable-automatic-updates). |
 | `collapseChangelog` | boolean | `false` | After an update, show a one-line notice instead of the top three changes, and one line per updated extension package. |
-| `enableInstallTelemetry` | boolean | `true` | Enable anonymous install/update reporting and selected provider attribution headers. Does not control update checks. |
+| `enableInstallTelemetry` | boolean | `true` | Enable install, update, and launch reporting (keyed by a hashed install ID) and selected provider attribution headers. Does not control update checks. |
 | `enableAnalytics` | boolean | `false` | Opt in to analytics data sharing. Currently used only by the experimental first-run setup. |
 | `warnings.anthropicExtraUsage` | boolean | `true` | Warn when Anthropic subscription authentication may use paid extra usage. |
 

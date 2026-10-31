@@ -61,6 +61,7 @@ import {
 	detectInstallChange,
 	getAgentDir,
 	getAuthPath,
+	getConfiguredSelfUpdateArgv,
 	getDebugLogPath,
 	getDocsPath,
 	VERSION,
@@ -120,7 +121,7 @@ import {
 import type { FullscreenExitOutput, TuiMode } from "../../core/settings-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import { getSourcePackageKey, type SourceInfo } from "../../core/source-info.ts";
-import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
+import { reportTelemetry } from "../../core/telemetry.ts";
 import { withBuiltInRenderers } from "../../core/tools/renderers/index.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../../core/trust-manager.ts";
@@ -137,8 +138,7 @@ import { copyToClipboard, readClipboardFilePaths, readClipboardText } from "../.
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { ensurePngTranscoder } from "../../utils/image-convert.ts";
-import { getCwdRelativePath } from "../../utils/paths.ts";
-import { getKnightcodeUserAgent } from "../../utils/user-agent.ts";
+import { getCwdRelativePath, shortenHomePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { loadAllHighlightLanguages } from "../../utils/syntax-highlight.ts";
 import { stripBom } from "../../utils/text.ts";
@@ -1002,6 +1002,7 @@ export class InteractiveMode {
 
 		// Load changelogs (only show new entries, skip for resumed sessions)
 		this.changelogHighlights = this.getChangelogForDisplay();
+		reportTelemetry(this.settingsManager, VERSION, "cli");
 		this.extensionChangelogUpdates = this.getExtensionChangelogUpdates();
 
 		// Fullscreen renders on the alternate screen, so text printed to stdout here would stay in the shell
@@ -1199,7 +1200,11 @@ export class InteractiveMode {
 		this.backgroundUpdater = new BackgroundUpdater(
 			this.version,
 			(state) => this.showBackgroundUpdateNotification(state),
-			() => this.settingsManager.getAutoUpdate(),
+			// A configured update command replaces KnightCode's own update logic, including this
+			// one; it runs from `knightcode update`, never detached with its output discarded.
+			() =>
+				this.settingsManager.getAutoUpdate() &&
+				!getConfiguredSelfUpdateArgv(this.settingsManager.getGlobalSettings().selfUpdateCommand),
 		);
 		this.backgroundUpdater.start();
 
@@ -1383,14 +1388,14 @@ export class InteractiveMode {
 		if (!lastVersion) {
 			// Fresh install - record the version, send telemetry, don't show changelog
 			this.settingsManager.setLastChangelogVersion(VERSION);
-			this.reportInstallTelemetry(VERSION);
+			reportTelemetry(this.settingsManager, VERSION);
 			return undefined;
 		}
 
 		const newEntries = getNewEntries(entries, lastVersion);
 		if (newEntries.length > 0) {
 			this.settingsManager.setLastChangelogVersion(VERSION);
-			this.reportInstallTelemetry(VERSION);
+			reportTelemetry(this.settingsManager, VERSION);
 			return getChangelogHighlights(newEntries);
 		}
 
@@ -1457,25 +1462,6 @@ export class InteractiveMode {
 		}
 	}
 
-	private reportInstallTelemetry(version: string): void {
-		if (process.env.KNIGHTCODE_OFFLINE) {
-			return;
-		}
-
-		if (!isInstallTelemetryEnabled(this.settingsManager)) {
-			return;
-		}
-
-		void fetch(`https://knightcode.dev/api/report-install?version=${encodeURIComponent(version)}`, {
-			headers: {
-				"User-Agent": getKnightcodeUserAgent(version),
-			},
-			signal: AbortSignal.timeout(5000),
-		})
-			.then(() => undefined)
-			.catch(() => undefined);
-	}
-
 	private getMarkdownThemeWithSettings(): MarkdownTheme {
 		return {
 			...getMarkdownTheme(),
@@ -1488,15 +1474,7 @@ export class InteractiveMode {
 	// =========================================================================
 
 	private formatDisplayPath(p: string): string {
-		const home = os.homedir();
-		let result = p;
-
-		// Replace home directory with ~
-		if (result.startsWith(home)) {
-			result = `~${result.slice(home.length)}`;
-		}
-
-		return result;
+		return shortenHomePath(p);
 	}
 
 	private formatExtensionDisplayPath(path: string): string {
@@ -4733,6 +4711,8 @@ export class InteractiveMode {
 			});
 			if (result.status === "complete") {
 				this.editor.setText(result.content);
+			} else {
+				this.showStatus(result.message);
 			}
 		} finally {
 			this.ui.start();
