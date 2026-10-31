@@ -12,6 +12,7 @@ import {
 	type Component,
 	type Focusable,
 	Input,
+	type Keybinding,
 	type SelectItem,
 	SelectList,
 	Spacer,
@@ -67,8 +68,28 @@ export interface BrowseRow {
 	details?: string[];
 	badge?: Badge;
 	dimmed?: boolean;
-	/** What each key does here, as `enter`, `space` or a letter, to its hint. */
+	/** What each action does here (an `ACTION_KEYBINDINGS` name), to its hint. */
 	actions: Record<string, string>;
+}
+
+/** The keybinding behind each action name rows and tabs offer; the first match wins. */
+const ACTION_KEYBINDINGS = {
+	enter: "tui.select.confirm",
+	space: "app.plugins.toggle",
+	a: "app.plugins.add",
+	r: "app.plugins.refresh",
+	u: "app.plugins.update",
+	x: "app.plugins.remove",
+	d: "app.plugins.uninstall",
+	i: "app.plugins.install",
+	m: "app.plugins.mcp",
+} as const satisfies Record<string, Keybinding>;
+type ActionName = keyof typeof ACTION_KEYBINDINGS;
+const ACTION_NAMES = Object.keys(ACTION_KEYBINDINGS) as ActionName[];
+
+/** The keys an action is bound to, for hints and screen text. */
+function actionKey(name: ActionName): string {
+	return keyText(ACTION_KEYBINDINGS[name]);
 }
 
 export interface BrowseGroup {
@@ -95,7 +116,7 @@ export interface BrowseTab {
 
 export interface BrowseAction {
 	tab: PluginsTab;
-	/** `enter`, `space`, or a letter. */
+	/** The action's name: `enter`, `space`, or the letter of its default key. */
 	key: string;
 	/** The selected row or group. */
 	target?: string;
@@ -384,13 +405,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		} else if (keys.matches(data, "app.plugins.search")) {
 			this.searching = true;
 		} else {
-			const key = keys.matches(data, "tui.select.confirm")
-				? "enter"
-				: keys.matches(data, "app.plugins.toggle")
-					? "space"
-					: /^[a-z]$/.test(data)
-						? data
-						: undefined;
+			const key = ACTION_NAMES.find((name) => keys.matches(data, ACTION_KEYBINDINGS[name]));
 			if (!key) return undefined;
 			const own = item ? (item.kind === "row" ? item.row.actions : (item.group.actions ?? {})) : {};
 			const target = item ? { target: itemKey(item) } : {};
@@ -497,10 +512,9 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 				: item?.kind === "row" && item.row.details?.length
 					? "details"
 					: undefined;
-		// One hint per action: `enter/i install`, with `enter` and `space` shown as the keys they are bound to.
+		// One hint per action, `enter/i install`, each shown as the keys it is bound to.
 		const hints = (actions: [string, string][]) => {
-			const shown = (key: string) =>
-				key === "enter" ? keyText("tui.select.confirm") : key === "space" ? keyText("app.plugins.toggle") : key;
+			const shown = (key: string) => (Object.hasOwn(ACTION_KEYBINDINGS, key) ? actionKey(key as ActionName) : key);
 			const byLabel = new Map<string, string[]>();
 			for (const [key, label] of actions) byLabel.set(label, [...(byLabel.get(label) ?? []), shown(key)]);
 			return [...byLabel].map(([label, keys]) => rawKeyHint(keys.join("/"), label));
@@ -662,7 +676,7 @@ function pluginsTab(data: Snapshot, running: McpServerSummary[]): BrowseTab {
 			{ key: "grok", label: "In Grok Build", rows: imports("Grok Build") },
 		].filter((group) => group.rows.length > 0),
 		actions: { a: "install from source", r: "reload session" },
-		empty: `No plugins installed. Press a to install one from a source, or ${keyText("app.plugins.nextTab")} to the Marketplace.`,
+		empty: `No plugins installed. Press ${actionKey("a")} to install one from a source, or ${keyText("app.plugins.nextTab")} to the Marketplace.`,
 	};
 }
 
@@ -720,7 +734,7 @@ function marketplaceTab(data: Snapshot, fetches: Fetches): BrowseTab {
 		label: "Marketplace",
 		groups,
 		actions: { a: "add marketplace", r: "refresh all" },
-		empty: "No marketplaces. Press a to add one.",
+		empty: `No marketplaces. Press ${actionKey("a")} to add one.`,
 	};
 }
 

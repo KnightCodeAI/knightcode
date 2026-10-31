@@ -197,6 +197,21 @@ describe("plugins view", () => {
 		expect(await action).toEqual({ tab: "plugins", key: "space", target: "plugin:demo" });
 	});
 
+	it("follows rebound row and tab action keys", async () => {
+		const keys = new KeybindingsManager({ "app.plugins.remove": "delete", "app.plugins.add": "ctrl+n" });
+		setKeybindings(keys);
+		const view = new PluginsView(tui, theme, keys);
+		const removed = view.browse(tabs);
+		expect(screen(view)).toMatch(/delete uninstall[\s\S]*ctrl\+n install from source/);
+		view.handleInput("x");
+		view.handleInput("\x1b[3~");
+		expect(await removed).toEqual({ tab: "plugins", key: "x", target: "plugin:demo" });
+		const added = view.browse(tabs);
+		view.handleInput("a");
+		view.handleInput("\x0e");
+		expect(await added).toEqual({ tab: "plugins", key: "a", target: "plugin:demo" });
+	});
+
 	// PageDown has to reach the list in fullscreen instead of scrolling the transcript.
 	it("captures fullscreen viewport keys while a list is shown, and leaves /mcp's screens to decide", () => {
 		const view = new PluginsView(tui, theme, new KeybindingsManager());
