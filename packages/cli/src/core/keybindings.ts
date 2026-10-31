@@ -179,6 +179,50 @@ const APP_KEYBINDINGS = {
 		defaultKeys: "shift+ctrl+o",
 		description: "Tree filter: cycle backward",
 	},
+	"app.plugins.nextTab": {
+		defaultKeys: "tab",
+		description: "Plugins: next tab",
+	},
+	"app.plugins.previousTab": {
+		defaultKeys: "shift+tab",
+		description: "Plugins: previous tab",
+	},
+	"app.plugins.search": {
+		defaultKeys: "/",
+		description: "Plugins: search",
+	},
+	"app.plugins.toggle": {
+		defaultKeys: "space",
+		description: "Plugins: turn a plugin on or off",
+	},
+	"app.plugins.add": {
+		defaultKeys: "a",
+		description: "Plugins: install from a source, or add a marketplace",
+	},
+	"app.plugins.refresh": {
+		defaultKeys: "r",
+		description: "Plugins: reload the session, or refresh every marketplace",
+	},
+	"app.plugins.update": {
+		defaultKeys: "u",
+		description: "Plugins: update a plugin, or refresh a marketplace",
+	},
+	"app.plugins.remove": {
+		defaultKeys: "x",
+		description: "Plugins: uninstall an installed plugin, or remove a marketplace",
+	},
+	"app.plugins.uninstall": {
+		defaultKeys: "d",
+		description: "Plugins: uninstall a marketplace plugin",
+	},
+	"app.plugins.install": {
+		defaultKeys: "i",
+		description: "Plugins: install or import a plugin",
+	},
+	"app.plugins.mcp": {
+		defaultKeys: "m",
+		description: "Plugins: manage a plugin's MCP servers",
+	},
 } as const satisfies KeybindingDefinitions;
 
 export type AppKeybinding = keyof typeof APP_KEYBINDINGS;

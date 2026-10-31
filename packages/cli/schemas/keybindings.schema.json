@@ -378,6 +378,50 @@
     "app.tree.filter.cycleBackward": {
       "$ref": "#/$defs/KeybindingValue",
       "description": "Tree filter: cycle backward"
+    },
+    "app.plugins.nextTab": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: next tab"
+    },
+    "app.plugins.previousTab": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: previous tab"
+    },
+    "app.plugins.search": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: search"
+    },
+    "app.plugins.toggle": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: turn a plugin on or off"
+    },
+    "app.plugins.add": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: install from a source, or add a marketplace"
+    },
+    "app.plugins.refresh": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: reload the session, or refresh every marketplace"
+    },
+    "app.plugins.update": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: update a plugin, or refresh a marketplace"
+    },
+    "app.plugins.remove": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: uninstall an installed plugin, or remove a marketplace"
+    },
+    "app.plugins.uninstall": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: uninstall a marketplace plugin"
+    },
+    "app.plugins.install": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: install or import a plugin"
+    },
+    "app.plugins.mcp": {
+      "$ref": "#/$defs/KeybindingValue",
+      "description": "Plugins: manage a plugin's MCP servers"
     }
   },
   "additionalProperties": {

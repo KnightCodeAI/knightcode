@@ -25,6 +25,8 @@ These commands add user-level servers by default. Add `--local` or `-l` to write
 knightcode mcp add -l tools --env API_KEY='${TOOLS_KEY}' -- uvx tools-mcp
 ```
 
+[Plugins](plugins.md) can bring MCP servers too; they connect next to these and are listed by `/mcp`.
+
 Use `/mcp` inside an interactive session to inspect connections, sign in, reconnect, change exposure, or enable and disable servers. Run `/reload` after adding, removing, or changing a server outside the session.
 
 ## Configure servers
@@ -126,7 +128,7 @@ Remote servers that use OAuth, such as Sentry, need no credentials in `mcp.json`
 
 When the server rejects an unauthenticated connection, `/mcp` shows that it needs sign-in. Select "Sign in", run `/mcp login sentry`, or run `knightcode mcp login sentry`. KnightCode opens the authorization page and waits for approval. If the browser runs on another machine, such as over SSH, paste its redirected URL into the sign-in screen. A running session uses the new credentials on its next turn.
 
-KnightCode identifies itself to the authorization server with its Client ID Metadata Document or by registering a client, stores tokens in `~/.knightcode/agent/mcp-auth.json`, and refreshes access tokens when they expire or the server rejects them. If a server later requests additional scope, KnightCode asks for sign-in again. Signing out deletes the stored credentials.
+KnightCode identifies itself to the authorization server with its Client ID Metadata Document or by registering a client, stores tokens in `~/.knightcode/agent/mcp-auth.json`, and refreshes access tokens when they expire or the server rejects them. If a server later requests additional scope, KnightCode asks for sign-in again and names the missing scope; the new sign-in requests it on top of what was granted. Signing out deletes the stored credentials.
 
 Credentials belong to a server name and URL. Servers with the same URL under different names, such as one per account, sign in separately; servers with the same name and URL in different `mcp.json` files share one sign-in.
 

@@ -71,6 +71,7 @@ import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { initTheme, setThemeJsonValidator, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
 import { validateThemeJson } from "./modes/interactive/theme/theme-schema.ts";
 import { cleanupManagedInstall, handleConfigCommand, handlePackageCommand } from "./package-manager-cli.ts";
+import { loadPluginCommand } from "./plugins/cli.lazy.ts";
 import { cleanupStandaloneInstall } from "./utils/standalone-self-update.ts";
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
 import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
@@ -660,6 +661,12 @@ export async function main(args: string[], options?: MainOptions) {
 	if (args[0] === "mcp") {
 		const { runMcpCommand } = await loadMcpCommand();
 		process.exitCode = await runMcpCommand(args.slice(1), { cwd, agentDir });
+		return;
+	}
+
+	if (args[0] === "plugin") {
+		const { runPluginCommand } = await loadPluginCommand();
+		process.exitCode = await runPluginCommand(args.slice(1), { cwd, agentDir });
 		return;
 	}
 

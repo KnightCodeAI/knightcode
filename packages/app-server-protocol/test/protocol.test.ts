@@ -185,6 +185,15 @@ const requestParams: Record<string, unknown> = {
 	"mcp/remove": { scope: "global", name: "docs" },
 	"resource/list": { cwd: "/p" },
 	"resource/set": { cwd: "/p", type: "skills", path: "/home/u/.knightcode/agent/skills/a/SKILL.md", enabled: false },
+	"plugin/list": { cwd: "/p" },
+	"plugin/install": { scope: "global", source: "acme/tools", ref: "v1", trust: false },
+	"plugin/set": { scope: "project", cwd: "/p", name: "tools", enabled: true, trust: true },
+	"plugin/update": { scope: "global", name: "tools" },
+	"plugin/uninstall": { scope: "global", name: "tools@shop" },
+	"plugin/marketplace/list": {},
+	"plugin/marketplace/add": { scope: "global", source: "acme/marketplace" },
+	"plugin/marketplace/update": { name: "shop" },
+	"plugin/marketplace/remove": { scope: "global", name: "shop" },
 	"project/trust/read": { cwd: "/p" },
 	"project/trust/set": { cwd: "/p", trusted: true },
 	"account/list": {},
@@ -193,6 +202,33 @@ const requestParams: Record<string, unknown> = {
 	"account/login/cancel": { loginId: "l1" },
 	"account/logout": { provider: "anthropic" },
 	"ui/event": { threadId: "t1", widgetKey: "checks", id: "verbose", value: true },
+};
+const pluginInfo = {
+	name: "Tools",
+	namespace: "tools",
+	identity: "https://github.com/acme/tools",
+	scope: "global",
+	source: "acme/tools",
+	ref: "v1",
+	commit: "a".repeat(40),
+	enabled: true,
+	trusted: false,
+	active: false,
+	skills: ["tools:fix"],
+	commands: ["tools:review"],
+	mcpServers: [{ name: "api", target: "node server.js" }],
+	environment: ["API_TOKEN"],
+	unsupported: ["hooks"],
+	warnings: [],
+};
+const marketplaceInfo = {
+	name: "shop",
+	scope: "global",
+	source: "acme/marketplace",
+	commit: "b".repeat(40),
+	updatedAt: "2026-10-28T00:00:00.000Z",
+	plugins: [{ name: "tools", description: "Tools", installed: true }],
+	diagnostics: [],
 };
 const requestResults: Record<string, unknown> = {
 	initialize: {
@@ -365,6 +401,40 @@ const requestResults: Record<string, unknown> = {
 	"mcp/update": {},
 	"mcp/add": { replaced: false },
 	"mcp/remove": { removed: true },
+	"plugin/list": {
+		plugins: [pluginInfo],
+		diagnostics: ['plugin "x" is declared but not installed'],
+		importable: [{ name: "beta", from: "Claude Code", source: "beta@shop", enabled: true }],
+	},
+	"plugin/install": { plugin: pluginInfo },
+	"plugin/set": { plugin: pluginInfo },
+	"plugin/update": { plugin: pluginInfo, changed: true },
+	"plugin/uninstall": {},
+	"plugin/marketplace/list": {
+		marketplaces: [
+			{
+				name: "shop",
+				source: "acme/marketplace",
+				added: true,
+				scope: "global",
+				updatedAt: "2026-10-28T00:00:00.000Z",
+				plugins: [{ name: "tools", description: "Tools", author: "Acme", installed: true, update: false }],
+				diagnostics: [],
+			},
+			{
+				name: "claude-plugins-official",
+				source: "anthropics/claude-plugins-official",
+				from: "Anthropic",
+				added: false,
+				missing: true,
+				plugins: [],
+				diagnostics: [],
+			},
+		],
+	},
+	"plugin/marketplace/add": { marketplace: marketplaceInfo },
+	"plugin/marketplace/update": {},
+	"plugin/marketplace/remove": {},
 	"resource/list": {
 		resources: [
 			{

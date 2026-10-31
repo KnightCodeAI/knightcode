@@ -16,6 +16,7 @@ import { accountHandlers } from "./accounts.ts";
 import { configureHandlers } from "./configure.ts";
 import { type AppServerContext, createAppServerContext } from "./context.ts";
 import { modelHandlers } from "./models.ts";
+import { pluginHandlers } from "./plugins.ts";
 import { AppServer, type Handlers } from "./server.ts";
 import { createStdioTransport } from "./stdio.ts";
 import { ThreadManager } from "./threads.ts";
@@ -24,7 +25,13 @@ import { ThreadManager } from "./threads.ts";
 const SHUTDOWN_DEADLINE_MS = 10_000;
 
 export function appServerHandlers(ctx: AppServerContext, threads: ThreadManager): Handlers {
-	return { ...threads.handlers(), ...accountHandlers(ctx), ...modelHandlers(ctx), ...configureHandlers(ctx) };
+	return {
+		...threads.handlers(),
+		...accountHandlers(ctx),
+		...modelHandlers(ctx),
+		...configureHandlers(ctx),
+		...pluginHandlers(ctx),
+	};
 }
 
 export async function runAppServer(args: string[]): Promise<void> {

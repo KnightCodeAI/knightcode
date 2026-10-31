@@ -32,6 +32,7 @@ import {
 } from "@knightcode/app-server-protocol";
 import { CONFIG_DIR_NAME } from "../config.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../core/trust-manager.ts";
+import { resolvePath } from "../utils/paths.ts";
 import { getShellConfig, type ShellConfig } from "../utils/shell.ts";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
@@ -247,6 +248,15 @@ export function manifestFor(settings: WorktreeSettings, cwd: string): Manifest |
 /** Where `cwd`'s trust decision is kept: a managed worktree's is its project's, the one its threads load with (§6.1). */
 export function trustKey(agentDir: string, cwd: string): string {
 	return manifestFor(worktreeSettings(agentDir, []), cwd)?.projectCwd ?? cwd;
+}
+
+/** A project directory the user explicitly trusted, as project writes require (config/write, plugins). */
+export function trustedProject(agentDir: string, cwd: string | undefined): string {
+	if (cwd === undefined) throw new AppServerError("invalidParams", "project writes require cwd");
+	const resolved = resolvePath(cwd);
+	if (new ProjectTrustStore(agentDir).get(trustKey(agentDir, resolved)) !== true)
+		throw new AppServerError("invalidParams", "project is not trusted", { reason: "untrusted" });
+	return resolved;
 }
 
 /** Whether a project's own files are read: it has nothing that needs trust, or the user trusted it. */

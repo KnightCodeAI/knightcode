@@ -595,6 +595,91 @@ export const Resource = Obj({
 });
 export type Resource = Static<typeof Resource>;
 
+/** An installed Claude Code or Grok Build plugin. `global` scope is the user's settings. */
+export const PluginInfo = Obj({
+	name: Str,
+	/** The prefix of its commands and skills: `/<namespace>:<name>`. */
+	namespace: Str,
+	identity: Str,
+	scope: SettingsScope,
+	marketplace: Type.Optional(Str),
+	source: Str,
+	ref: Type.Optional(Str),
+	/** The installed commit, or a content hash for a directory source. */
+	commit: Str,
+	enabled: Bool,
+	trusted: Bool,
+	/** Loaded by new threads in this project: declared, installed, trusted and enabled. */
+	active: Bool,
+	description: Type.Optional(Str),
+	version: Type.Optional(Str),
+	skills: Type.Array(Str),
+	commands: Type.Array(Str),
+	/** What each MCP server runs or connects to. */
+	mcpServers: Type.Array(Obj({ name: Str, target: Str })),
+	/** Environment variables the MCP configuration reads. */
+	environment: Type.Array(Str),
+	/** Components KnightCode never runs: hooks, agents, LSP servers, output styles. */
+	unsupported: Type.Array(Str),
+	warnings: Type.Array(Str),
+});
+export type PluginInfo = Static<typeof PluginInfo>;
+export const PluginMarketplaceInfo = Obj({
+	name: Str,
+	/** Where it is declared; `global` when the user's settings do. */
+	scope: SettingsScope,
+	source: Str,
+	ref: Type.Optional(Str),
+	description: Type.Optional(Str),
+	commit: Str,
+	updatedAt: Str,
+	plugins: Type.Array(
+		Obj({ name: Str, description: Type.Optional(Str), version: Type.Optional(Str), installed: Bool }),
+	),
+	diagnostics: Type.Array(Str),
+});
+export type PluginMarketplaceInfo = Static<typeof PluginMarketplaceInfo>;
+/** A plugin Claude Code or Grok Build installed that is not installed here; installing `source` imports it. */
+export const PluginImportInfo = Obj({
+	name: Str,
+	/** `Claude Code` or `Grok Build`. */
+	from: Str,
+	/** `name@marketplace`. */
+	source: Str,
+	/** False when that tool has it turned off. */
+	enabled: Bool,
+});
+export type PluginImportInfo = Static<typeof PluginImportInfo>;
+/** A marketplace to browse: an added one, or one built in (Anthropic, xAI) or Claude Code or Grok Build has. */
+export const PluginMarketplaceListing = Obj({
+	name: Str,
+	source: Str,
+	ref: Type.Optional(Str),
+	/** `Anthropic`, `xAI`, `Claude Code` or `Grok Build`, for a marketplace KnightCode knows of. */
+	from: Type.Optional(Str),
+	/** Declared in settings. Installing from a marketplace that is not adds it. */
+	added: Bool,
+	/** Where it is declared, when added. */
+	scope: Type.Optional(SettingsScope),
+	/** When its catalog was fetched; absent for one read from Claude Code's or Grok Build's copy. */
+	updatedAt: Type.Optional(Str),
+	/** Its catalog was never fetched; `plugin/marketplace/update` fetches it. */
+	missing: Type.Optional(Bool),
+	plugins: Type.Array(
+		Obj({
+			name: Str,
+			description: Type.Optional(Str),
+			version: Type.Optional(Str),
+			author: Type.Optional(Str),
+			installed: Bool,
+			/** The catalog has a version other than the installed one. */
+			update: Bool,
+		}),
+	),
+	diagnostics: Type.Array(Str),
+});
+export type PluginMarketplaceListing = Static<typeof PluginMarketplaceListing>;
+
 /** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
 /** `attachments`: images and review comments the input carries, which its text alone does not. */
 const QueueEntry = Obj({ id: Str, text: Str, attachments: Type.Optional(Num) });
@@ -1068,6 +1153,81 @@ export const ClientRequests = {
 	},
 	"resource/set": {
 		params: Obj({ cwd: Type.Optional(Str), type: ResourceType, path: Str, enabled: Bool }),
+		result: Empty,
+	},
+	/**
+	 * Installed plugins of the user and, with cwd, its project, and the plugins Claude Code and Grok Build have that
+	 * are not installed. Reads local state only.
+	 */
+	"plugin/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({
+			plugins: Type.Array(PluginInfo),
+			diagnostics: Type.Array(Str),
+			importable: Type.Array(PluginImportInfo),
+		}),
+	},
+	/**
+	 * Installs without trusting unless `trust`; an untrusted plugin runs nothing until `plugin/set` trusts it.
+	 * `name@marketplace` from a known marketplace not added yet adds it first.
+	 */
+	"plugin/install": {
+		params: Obj({
+			scope: SettingsScope,
+			cwd: Type.Optional(Str),
+			source: Str,
+			ref: Type.Optional(Str),
+			path: Type.Optional(Str),
+			trust: Type.Optional(Bool),
+		}),
+		result: Obj({ plugin: PluginInfo }),
+	},
+	/**
+	 * `name` is a namespace, `name@marketplace`, or an identity. `trust: true` trusts the plugin; trust is only ever
+	 * granted here (`false` or none leaves it as it is), and uninstalling the plugin from every scope revokes it.
+	 */
+	"plugin/set": {
+		params: Obj({
+			scope: SettingsScope,
+			cwd: Type.Optional(Str),
+			name: Str,
+			enabled: Type.Optional(Bool),
+			trust: Type.Optional(Bool),
+		}),
+		result: Obj({ plugin: PluginInfo }),
+	},
+	"plugin/update": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
+		result: Obj({ plugin: PluginInfo, changed: Bool }),
+	},
+	"plugin/uninstall": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
+		result: Empty,
+	},
+	/**
+	 * Every marketplace to browse, as `/plugins` lists them: built in first, then the added ones, then Claude Code's
+	 * and Grok Build's, each with its whole catalog. Reads local state only.
+	 */
+	"plugin/marketplace/list": {
+		params: Obj({ cwd: Type.Optional(Str) }),
+		result: Obj({ marketplaces: Type.Array(PluginMarketplaceListing) }),
+	},
+	/** Fetches the catalog. Nothing in it is installed. `source` may name a known marketplace. */
+	"plugin/marketplace/add": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), source: Str, ref: Type.Optional(Str) }),
+		result: Obj({ marketplace: PluginMarketplaceInfo }),
+	},
+	/**
+	 * Fetches a listed marketplace's catalog again, added or not; without `name`, every added one. Nothing in it is
+	 * installed or added.
+	 */
+	"plugin/marketplace/update": {
+		params: Obj({ cwd: Type.Optional(Str), name: Type.Optional(Str) }),
+		result: Empty,
+	},
+	/** Plugins installed from the marketplace stay installed. */
+	"plugin/marketplace/remove": {
+		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
 		result: Empty,
 	},
 	"project/trust/read": {

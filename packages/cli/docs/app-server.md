@@ -553,6 +553,40 @@ need a trusted project; an unknown path is `invalidParams`.
 {"id":29,"method":"resource/set","params":{"type":"skills","path":"/home/u/.knightcode/agent/skills/review/SKILL.md","enabled":false}}
 ```
 
+### `plugin/*`
+
+[Plugins](plugins.md), as `knightcode plugin` manages them. `scope` is `global` (the user's
+settings) or `project`; project writes need a trusted project (`invalidParams` with
+`reason: "untrusted"` otherwise). `name` is a plugin's name, `name@marketplace`, or its identity.
+
+- `plugin/list {cwd?}` returns `{plugins, diagnostics, importable}`: each plugin's identity, scope,
+  source, commit, `enabled`, `trusted`, `active` (what a new thread in `cwd` loads), skills,
+  commands, MCP servers, the environment variables they read, unsupported components and warnings;
+  and `importable`, the plugins Claude Code and Grok Build installed that are not installed here,
+  each `{name, from, source, enabled}` with the `name@marketplace` that installs it.
+- `plugin/install {scope, cwd?, source, ref?, path?, trust?}` installs without trusting unless
+  `trust`; an untrusted plugin runs nothing. `name@marketplace` from a known marketplace that is not
+  added yet adds it first.
+- `plugin/set {scope, cwd?, name, enabled?, trust?}`, `plugin/update {scope, cwd?, name}` and
+  `plugin/uninstall {scope, cwd?, name}`. `trust: true` trusts the plugin; `plugin/set` never revokes
+  trust (`false` leaves it as it is), and uninstalling the plugin from every scope does.
+- `plugin/marketplace/list {cwd?}` returns `{marketplaces}`: every marketplace `/plugins` lists
+  (built in, added, then Claude Code's and Grok Build's), each `{name, source, ref?, from?, added,
+  scope?, updatedAt?, missing?, plugins, diagnostics}` with its whole catalog, each plugin
+  `{name, description?, version?, author?, installed, update}`. Reads local state only.
+- `plugin/marketplace/update {cwd?, name?}` fetches the named marketplace's catalog, added or not,
+  without adding it (offline, only a folder's); without `name`, every added one.
+  `plugin/marketplace/add {scope, cwd?, source, ref?}` takes a source or a known name, and
+  `plugin/marketplace/remove {scope, cwd?, name}` keeps the plugins installed from it. Adding a
+  marketplace installs nothing.
+
+Reads use local state only. Changes apply to threads that start, resume, or reload afterwards.
+`command/list {cwd}` includes the commands and skills of the plugins a new thread would load.
+
+```json
+{"id":30,"method":"plugin/install","params":{"scope":"global","source":"acme/review-tools"}}
+```
+
 ### `project/trust/read`
 
 Params: `{cwd}`. Result: `{trusted, needsTrust, project}`. `trusted` is true,
