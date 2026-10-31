@@ -19,6 +19,7 @@ import {
 	type TUI,
 	truncateToWidth,
 	visibleWidth,
+	wrapTextWithAnsi,
 } from "@knightcode/tui";
 import type { KeybindingsManager } from "../../core/keybindings.ts";
 import { isOfflineModeEnabled } from "../../core/package-manager.ts";
@@ -147,6 +148,23 @@ class Lines implements Component {
 	invalidate(): void {}
 }
 
+/** A catalog's description or git's stderr on one line: a newline inside a rendered line breaks the screen. */
+const oneLine = (text: string) => text.replace(/\s*\n\s*/g, " ");
+
+/**
+ * `text` wrapped inside a one-column margin and cut to `rows` lines, the last ending in "…": a plugin with hundreds of
+ * skills, or a whole stderr, still leaves the screen's choices in view.
+ */
+const capped = (text: string, rows: number) =>
+	new Lines((width) => {
+		const wrapped = wrapTextWithAnsi(text, Math.max(1, width - 2));
+		const shown =
+			wrapped.length > rows
+				? [...wrapped.slice(0, rows - 1), truncateToWidth(`${wrapped[rows - 1]} …`, Math.max(1, width - 2), "…")]
+				: wrapped;
+		return shown.map((line) => ` ${line}`);
+	});
+
 export class PluginsView implements PluginsUi, Component, Focusable {
 	private readonly tui: TUI;
 	private readonly theme: Theme;
@@ -204,7 +222,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			list.onSelect = (item) => resolve(item.value);
 			list.onCancel = () => resolve(undefined);
 			const body: Component[] = [
-				...(menu.details ?? []).map((line) => new Text(this.theme.fg("muted", line), 1, 0)),
+				...(menu.details ?? []).map((line) => capped(this.theme.fg("muted", line), 3)),
 				new Spacer(1),
 				list,
 			];
@@ -420,14 +438,14 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			new Spacer(1),
 			items.length ? new Lines((width) => this.listLines(tab, items, width)) : new Text(theme.fg("muted", none), 1, 0),
 		];
-		if (notice) body.push(new Spacer(1), new Text(theme.fg(notice.error ? "error" : "success", notice.text), 1, 0));
+		if (notice) body.push(new Spacer(1), capped(theme.fg(notice.error ? "error" : "success", notice.text), 3));
 		return frame(theme, "Plugins", body, this.browseFooter(tab, items));
 	}
 
 	/** One line: the label, a dim right text, and the badge at the right edge. */
 	private line(prefix: string, label: string, right: string | undefined, badge: Badge | undefined, width: number) {
 		const tag = badge ? this.theme.fg(badge.tone, `[${badge.text}]`) : "";
-		const left = `${prefix}${label}${right ? `  ${this.theme.fg("dim", right)}` : ""}`;
+		const left = `${prefix}${oneLine(label)}${right ? `  ${this.theme.fg("dim", oneLine(right))}` : ""}`;
 		const shown = truncateToWidth(left, Math.max(1, width - (tag ? visibleWidth(tag) + 2 : 0)));
 		return tag ? `${shown}${" ".repeat(Math.max(2, width - visibleWidth(shown) - visibleWidth(tag)))}${tag}` : shown;
 	}
@@ -451,8 +469,8 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			const label = selected ? theme.fg("accent", row.label) : row.dimmed ? theme.fg("muted", row.label) : row.label;
 			lines.push(` ${this.line(`  ${cursor}`, label, row.right, row.badge, inner)}`);
 			const below = [
-				...(row.description ? [theme.fg("dim", row.description)] : []),
-				...(this.opened.has(row.key) ? (row.details ?? []).map((detail) => theme.fg("muted", detail)) : []),
+				...(row.description ? [theme.fg("dim", oneLine(row.description))] : []),
+				...(this.opened.has(row.key) ? (row.details ?? []).map((detail) => theme.fg("muted", oneLine(detail))) : []),
 			];
 			for (const text of below) lines.push(` ${truncateToWidth(`      ${text}`, inner)}`);
 		});

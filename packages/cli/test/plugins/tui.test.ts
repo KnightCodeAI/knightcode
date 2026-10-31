@@ -130,6 +130,32 @@ describe("plugins view", () => {
 		expect(await action).toBeUndefined();
 	});
 
+	it("keeps a trust question with hundreds of skills short enough to show its choices", () => {
+		const view = new PluginsView(tui, theme, new KeybindingsManager());
+		const skills = Array.from({ length: 150 }, (_, i) => `posthog:exploring-thing-${i}`).join(", ");
+		void view.menu({ ...menu, title: "Trust posthog?", details: ["What it runs:", `Skills (150): ${skills}`] });
+		const lines = view.render(100);
+		expect(lines.length).toBeLessThan(20);
+		expect(stripAnsi(lines.join("\n"))).toMatch(/Skills \(150\)[\s\S]*…[\s\S]*alpha[\s\S]*gamma/);
+	});
+
+	it("draws a multi-line description or fetch error on one line", () => {
+		const view = new PluginsView(tui, theme, new KeybindingsManager());
+		const multiLine = (): BrowseTab[] =>
+			tabs().map((tab) => ({
+				...tab,
+				groups: tab.groups.map((group) => ({
+					...group,
+					right: "git fetch failed: fatal: offline\nremote: retry",
+					rows: group.rows.map((row) => ({ ...row, description: "First line\nsecond line" })),
+				})),
+			}));
+		void view.browse(multiLine);
+		const lines = view.render(100);
+		expect(lines.some((line) => line.includes("\n"))).toBe(false);
+		expect(stripAnsi(lines.join("\n"))).toContain("fatal: offline remote: retry");
+	});
+
 	it("opens a group that starts collapsed with enter, and a search opens it too", async () => {
 		const collapsed = (): BrowseTab[] =>
 			tabs().map((tab) => ({ ...tab, groups: tab.groups.map((group) => ({ ...group, collapsed: true })) }));

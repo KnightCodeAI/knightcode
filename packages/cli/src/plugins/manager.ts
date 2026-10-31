@@ -136,17 +136,29 @@ export function describeInventory(inventory: PluginInventory): string[] {
 	const lines = [
 		`${inventory.name}${inventory.version ? ` ${inventory.version}` : ""}${inventory.description ? ` - ${inventory.description}` : ""}`,
 	];
-	if (inventory.skills.length) lines.push(`Skills: ${inventory.skills.map((skill) => skill.name).join(", ")}`);
-	if (inventory.commands.length) {
-		lines.push(
-			`Commands: ${inventory.commands.map((command) => `/${inventory.namespace}:${command.name}`).join(", ")}`,
-		);
-	}
+	// What runs first, then what it offers; a long list carries its count, since `/plugins` cuts it short.
 	for (const [name, config] of Object.entries(inventory.mcpServers)) {
 		lines.push(`MCP server ${name}: ${describeMcpServer(config)}`);
 	}
 	const env = mcpEnvironmentNames(inventory.mcpServers);
 	if (env.length) lines.push(`MCP configuration reads environment variables: ${env.join(", ")}`);
+	const counted = (label: string, names: string[]) =>
+		`${label}${names.length > 1 ? ` (${names.length})` : ""}: ${names.join(", ")}`;
+	if (inventory.commands.length) {
+		lines.push(
+			counted(
+				"Commands",
+				inventory.commands.map((command) => `/${inventory.namespace}:${command.name}`),
+			),
+		);
+	}
+	if (inventory.skills.length)
+		lines.push(
+			counted(
+				"Skills",
+				inventory.skills.map((skill) => skill.name),
+			),
+		);
 	if (inventory.unsupported.length) lines.push(`Not supported, never run: ${inventory.unsupported.join(", ")}`);
 	for (const warning of inventory.warnings) lines.push(`Warning: ${warning}`);
 	return lines;
