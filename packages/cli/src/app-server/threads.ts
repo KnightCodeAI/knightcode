@@ -1703,8 +1703,12 @@ export class ThreadManager {
 	/**
 	 * Plugin commands and skills a new thread in `cwd` would offer. The probe session is never bound, so neither
 	 * session_start (which registers them) nor resources_discover (which loads the skills) fires; MCP servers stay off.
+	 * None when the probe's extension selection leaves the plugins extension out, as the thread would.
 	 */
-	private pluginCommandsFor(cwdParam: string): ResultOf<"command/list">["commands"] {
+	private pluginCommandsFor(session: AgentSession, cwdParam: string): ResultOf<"command/list">["commands"] {
+		if (!session.resourceLoader.getExtensions().extensions.some((extension) => extension.path === "builtin:plugins")) {
+			return [];
+		}
 		const cwd = resolvePath(cwdParam);
 		const { plugins } = new PluginManager({ agentDir: this.ctx.agentDir, cwd }).loadActive(
 			projectReadable(this.ctx.agentDir, cwd),
@@ -2316,7 +2320,7 @@ export class ThreadManager {
 				"threadId" in params
 					? { commands: commandsOf(this.get(params.threadId).session) }
 					: this.probe(params.cwd, (session) => ({
-							commands: [...commandsOf(session), ...this.pluginCommandsFor(params.cwd)],
+							commands: [...commandsOf(session), ...this.pluginCommandsFor(session, params.cwd)],
 						})),
 			// Without a project, the agent directory stands in: it has no `.knightcode` of its own.
 			"tool/list": async ({ cwd }) => {

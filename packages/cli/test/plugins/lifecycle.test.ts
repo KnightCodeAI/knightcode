@@ -255,6 +255,31 @@ describe("plugin installation", () => {
 		await expect(manager().install(two, { trust: true })).rejects.toThrow(/same/);
 	});
 
+	it("names a plugin without a manifest after its source directory", async () => {
+		const { manager } = setup();
+		const review = writeTree(join(tempDir(), "review-tools"), { "commands/check.md": "check" });
+		const lint = writeTree(join(tempDir(), "lint-tools"), { "commands/run.md": "run" });
+		expect((await manager().install(review, { trust: true })).plugin.namespace).toBe("review-tools");
+		expect((await manager().install(lint, { trust: true })).plugin.namespace).toBe("lint-tools");
+		const bare = gitRepo({ "commands/go.md": "go" });
+		const named = bare.dir.split(/[\\/]/).pop()!;
+		expect((await manager().install(bare.url, { trust: true })).plugin.name).toBe(named);
+	});
+
+	it("restores a revision that went missing when updating an unchanged source", async () => {
+		const { manager } = setup();
+		const source = writeTree(tempDir(), { "plugin.json": { name: "gone" }, "commands/x.md": "x" });
+		const { plugin } = await manager().install(source, { trust: true });
+		rmSync(join(plugin.root, ".."), { recursive: true, force: true });
+		expect(manager().loadActive(false).diagnostics.join("\n")).toMatch(/missing; run knightcode plugin update/);
+		await manager().update("gone", {});
+		expect(
+			manager()
+				.loadActive(false)
+				.plugins.map((active) => active.namespace),
+		).toEqual(["gone"]);
+	});
+
 	it("reports ambiguous names with the candidates", async () => {
 		const { manager } = setup();
 		const a = writeTree(tempDir(), { "plugin.json": { name: "dup" }, "commands/x.md": "x" });
@@ -443,6 +468,97 @@ describe("marketplaces", () => {
 		});
 		await manager().updateMarketplaces("shop");
 		await expect(manager().update("tool", {})).rejects.toThrow(/uninstall it and install it again/);
+	});
+
+	it("installs the --path subdirectory of a repository a catalog entry points at", async () => {
+		const { manager } = setup();
+		const repo = gitRepo({ "subdir/plugin.json": { name: "nested" }, "subdir/commands/x.md": "x" });
+		const market = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": {
+				name: "shop",
+				plugins: [{ name: "nested", source: { source: "url", url: repo.url } }],
+			},
+		});
+		await manager().addMarketplace(market, {});
+		const { plugin } = await manager().install("nested@shop", { path: "subdir", trust: true });
+		expect(plugin.identity).toContain("#path=subdir");
+		expect(plugin.inventory.commands.map((command) => command.name)).toEqual(["x"]);
+	});
+
+	it("updates a plugin without a manifest when only its catalog entry's version changes", async () => {
+		const { manager } = setup();
+		const catalog = (version: string) => ({
+			".claude-plugin/marketplace.json": {
+				name: "shop",
+				plugins: [{ name: "bare", source: "./bare", version, description: `v${version}` }],
+			},
+		});
+		const market = writeTree(tempDir(), { ...catalog("1.0.0"), "bare/commands/x.md": "x" });
+		await manager().addMarketplace(market, {});
+		await manager().install("bare@shop", { trust: true });
+		writeTree(market, catalog("2.0.0"));
+		await manager().updateMarketplaces("shop");
+		const updated = await manager().update("bare", {});
+		expect(updated.changed).toBe(true);
+		expect(updated.plugin.inventory).toMatchObject({ version: "2.0.0", description: "v2.0.0" });
+	});
+
+	it("manages a plugin by its catalog name when its manifest names it otherwise", async () => {
+		const { manager } = setup();
+		const market = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": { name: "shop", plugins: [{ name: "catalog-alias", source: "./p" }] },
+			"p/plugin.json": { name: "actual-name" },
+			"p/commands/x.md": "x",
+		});
+		await manager().addMarketplace(market, {});
+		await manager().install("catalog-alias@shop", { trust: true });
+		expect(manager().details("catalog-alias@shop").name).toBe("actual-name");
+		await manager().setEnabled("catalog-alias@shop", false, {});
+		expect(manager().loadActive(false).plugins).toEqual([]);
+		await manager().uninstall("catalog-alias@shop", {});
+		expect(manager().list()).toEqual([]);
+	});
+
+	it("refetches a marketplace from its declaration after settings change its source", async () => {
+		const { manager, agentDir, settings } = setup();
+		const catalog = (plugin: string) => ({
+			".claude-plugin/marketplace.json": { name: "shop", plugins: [{ name: plugin, source: `./${plugin}` }] },
+			[`${plugin}/commands/x.md`]: "x",
+		});
+		const first = writeTree(tempDir(), catalog("alpha"));
+		const second = writeTree(tempDir(), catalog("beta"));
+		await manager().addMarketplace(first, {});
+		const user = settings("user");
+		user.pluginMarketplaces[0].source = second;
+		writeFileSync(join(agentDir, "settings.json"), JSON.stringify(user));
+		// The cached catalog no longer matches what settings say: it is not browsed or installed from until refetched.
+		expect(
+			manager()
+				.browseMarketplaces()
+				.find((market) => market.name === "shop"),
+		).toMatchObject({
+			source: second,
+			missing: true,
+		});
+		await expect(manager().install("beta@shop", { trust: true })).rejects.toThrow(/changed in settings/);
+		await manager().updateMarketplaces("shop");
+		expect(manager().listMarketplaces()[0]).toMatchObject({ source: second, plugins: [{ name: "beta" }] });
+		expect((await manager().install("beta@shop", { trust: true })).plugin.name).toBe("beta");
+	});
+
+	it("reads a managed worktree's project marketplaces with the project's trust", async () => {
+		const { agentDir, cwd } = setup();
+		const project = tempDir();
+		new ProjectTrustStore(agentDir).set(project, true);
+		const manager = new PluginManager({ agentDir, cwd, trustPath: project });
+		const market = writeTree(tempDir(), {
+			".claude-plugin/marketplace.json": { name: "shop", plugins: [{ name: "alpha", source: "./alpha" }] },
+			"alpha/commands/x.md": "x",
+		});
+		await manager.addMarketplace(market, { scope: "project" });
+		expect(manager.listMarketplaces().map((listed) => listed.name)).toEqual(["shop"]);
+		const { plugin } = await manager.install("alpha@shop", { scope: "project", trust: true });
+		expect(plugin.scopeKind).toBe("project");
 	});
 });
 

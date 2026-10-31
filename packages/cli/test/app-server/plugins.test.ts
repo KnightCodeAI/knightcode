@@ -1,5 +1,5 @@
 import { ClientRequests } from "@knightcode/app-server-protocol";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Compile } from "typebox/compile";
@@ -91,6 +91,20 @@ test("lists plugin commands for a cwd before any thread exists", async () => {
 	expect(names).not.toContain("skill:demo:fix");
 	expect(names).not.toContain("plugins");
 	expect(listed.commands.find((command) => command.name === "demo:go")?.description).toBe("Go");
+});
+
+test("lists no plugin commands for a cwd when settings turn the plugins extension off", async () => {
+	const { cwd, agentDir, connect } = await startServer();
+	const a = await connect();
+	await a.client.request("plugin/install", { scope: "global", cwd, source: pluginSource(), trust: true });
+	const path = join(agentDir, "settings.json");
+	writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf-8")), extensions: ["-builtin:plugins"] }));
+	const names = (await a.client.request("command/list", { cwd })).commands.map((command) => command.name);
+	expect(names).not.toContain("demo:go");
+	// As the thread started there offers.
+	const { thread } = await a.client.request("thread/start", { cwd });
+	const started = (await a.client.request("command/list", { threadId: thread.id })).commands;
+	expect(started.map((command) => command.name)).not.toContain("demo:go");
 });
 
 test("loads a thread's plugins from the server's agent directory", async () => {

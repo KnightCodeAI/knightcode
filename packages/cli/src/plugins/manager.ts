@@ -9,8 +9,8 @@
  * inactive orphan that no session loads.
  */
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { getAgentDir } from "../config.ts";
 import { isOfflineModeEnabled } from "../core/package-manager.ts";
 import { type PluginDeclaration, SettingsManager } from "../core/settings-manager.ts";
@@ -293,12 +293,17 @@ export class PluginManager {
 		if (!market) {
 			throw new Error(`no marketplace named "${parsed.marketplace}"; add it with knightcode plugin marketplace add`);
 		}
+		if (!this.fetchedAsDeclared(market, this.declaredMarketplaces().get(market.name))) {
+			throw new Error(
+				`marketplace "${market.name}" changed in settings; fetch it with knightcode plugin marketplace update ${market.name}`,
+			);
+		}
 		const entry = this.catalog(market).plugins.find((candidate) => candidate.name === parsed.plugin);
 		if (!entry) throw new Error(`marketplace "${market.name}" has no plugin named "${parsed.plugin}"`);
 		const catalogEntry = `${entry.name}@${market.name}`;
 		const base = { ...declaration, marketplace: market.name, entry };
+		const subdir = [entry.source.path, declaration.path].filter(Boolean).join("/");
 		if (entry.source.kind === "local") {
-			const subdir = [entry.source.path, declaration.path].filter(Boolean).join("/");
 			return {
 				...base,
 				identity: pluginIdentity(market.canonical, subdir, catalogEntry),
@@ -308,9 +313,9 @@ export class PluginManager {
 		}
 		return {
 			...base,
-			identity: pluginIdentity(canonicalUrl(entry.source.url), entry.source.path, catalogEntry),
+			identity: pluginIdentity(canonicalUrl(entry.source.url), subdir, catalogEntry),
 			origin: { kind: "git", url: entry.source.url, ref: declaration.ref ?? entry.source.sha ?? entry.source.ref },
-			subdir: entry.source.path,
+			subdir,
 		};
 	}
 
@@ -348,14 +353,22 @@ export class PluginManager {
 			const stage = join(tmp, "revision");
 			copyContent(pluginDir, join(stage, "plugin"));
 			commit ??= hashTree(join(stage, "plugin"));
+			// The copy's directory is always `plugin`; a plugin with no manifest is named after its source.
+			const name =
+				target.origin.kind === "git" && pluginDir === tree
+					? basename(target.origin.url).replace(/\.git$/, "")
+					: basename(pluginDir);
+			const plugin = loadPlugin(join(stage, "plugin"), target.entry, name);
+			// Without a manifest, the entry's description and version are the plugin's own.
+			const fields = plugin.manifestPath
+				? ENTRY_COMPONENT_FIELDS
+				: [...ENTRY_COMPONENT_FIELDS, "description", "version"];
 			const entryFields = Object.fromEntries(
-				ENTRY_COMPONENT_FIELDS.filter((field) => target.entry?.raw[field] !== undefined).map((field) => [
-					field,
-					target.entry?.raw[field],
-				]),
+				fields
+					.filter((field) => target.entry?.raw[field] !== undefined)
+					.map((field) => [field, target.entry?.raw[field]]),
 			);
 			const revision = sha256(`${commit}\0${JSON.stringify(entryFields)}`).slice(0, 16);
-			const plugin = loadPlugin(join(stage, "plugin"), target.entry);
 			const id = `${plugin.namespace}-${sha256(target.identity).slice(0, 10)}`;
 			const inventory = renderPlugin(plugin, {
 				root: this.store.pluginRoot(id, revision),
@@ -383,13 +396,19 @@ export class PluginManager {
 		}
 	}
 
-	/** The record a management command names: plugin name, `name@marketplace`, or identity. */
+	/** The record a management command names: plugin name, `name@marketplace` (either name), source, or identity. */
 	resolveRecord(name: string, scope: PluginScope = "user"): InstallRecord {
 		const key = scope === "user" ? "user" : this.projectKey;
 		const candidates = this.readState().plugins.filter(
 			(record) =>
 				record.scope === key &&
-				[record.namespace, record.name, record.identity, `${record.name}@${record.marketplace}`].includes(name),
+				[
+					record.namespace,
+					record.name,
+					record.identity,
+					record.source,
+					`${record.name}@${record.marketplace}`,
+				].includes(name),
 		);
 		if (candidates.length === 0) throw new Error(`no installed plugin "${name}" in ${scope} scope`);
 		if (candidates.length > 1) {
@@ -581,13 +600,18 @@ export class PluginManager {
 		}
 		const staged = await this.stage(target);
 		try {
-			if (staged.revision === record.revision && staged.id === record.id) {
+			// A revision that went missing or unreadable is put back, as `loadActive` tells the user to do.
+			const intact = this.store.readInventory(record.id, record.revision) !== undefined;
+			if (staged.revision === record.revision && staged.id === record.id && intact) {
 				return { plugin: this.view(record, this.readState()), changed: false };
 			}
 			const updated = await this.store.withLock(async () => {
 				const state = this.readState();
 				this.assertNamespaceFree(staged.inventory.namespace, record.identity, state);
-				this.store.commitRevision(staged.stage, this.store.revisionDir(staged.id, staged.revision));
+				const dir = this.store.revisionDir(staged.id, staged.revision);
+				if (this.store.readInventory(staged.id, staged.revision) === undefined)
+					rmSync(dir, { recursive: true, force: true });
+				this.store.commitRevision(staged.stage, dir);
 				mkdirSync(this.store.dataDir(staged.id), { recursive: true });
 				const next: InstallRecord = {
 					...record,
@@ -868,8 +892,7 @@ export class PluginManager {
 		if (isOfflineModeEnabled() && !("kind" in parsed && parsed.kind === "local")) {
 			throw new Error("offline: only marketplaces in a folder are fetched");
 		}
-		// A declared catalog never fetched here has no record to update yet.
-		await (market.added && !market.missing ? this.updateMarketplaces(market.name) : this.cacheMarketplace(market));
+		await (market.added ? this.updateMarketplaces(market.name) : this.cacheMarketplace(market));
 	}
 
 	/** Fetches a catalog and records it; with `declare`, also adds it to that scope's settings. */
@@ -928,7 +951,7 @@ export class PluginManager {
 	 * scope that declares each (the user's when both do).
 	 */
 	private declaredMarketplaces(): Map<string, { scope: PluginScope; source: string; ref?: string }> {
-		const projectTrusted = new ProjectTrustStore(this.agentDir).get(this.cwd) === true;
+		const projectTrusted = new ProjectTrustStore(this.agentDir).get(this.trustPath) === true;
 		const settings = SettingsManager.create(this.cwd, this.agentDir, { projectTrusted });
 		const declared = new Map<string, { scope: PluginScope; source: string; ref?: string }>();
 		for (const { name, source, ref } of projectTrusted
@@ -940,6 +963,13 @@ export class PluginManager {
 			declared.set(name, { scope: "user", source, ...(ref ? { ref } : {}) });
 		}
 		return declared;
+	}
+
+	/** Whether a cached catalog came from what settings declare now; one whose source or ref was edited is stale. */
+	private fetchedAsDeclared(record: MarketplaceRecord, declared?: { source: string; ref?: string }): boolean {
+		if (!declared) return true;
+		const parsed = parseSource(declared.source, this.cwd);
+		return "canonical" in parsed && parsed.canonical === record.canonical && declared.ref === record.ref;
 	}
 
 	/** Marketplaces offered but not added here: the built-in ones, and Claude Code's and Grok Build's. */
@@ -1051,16 +1081,18 @@ export class PluginManager {
 			...this.listingPlugins(record, state),
 			...extra,
 		});
-		const added = state.marketplaces.filter((record) => declared.has(record.name));
+		const added = state.marketplaces.filter(
+			(record) => declared.has(record.name) && this.fetchedAsDeclared(record, declared.get(record.name)),
+		);
 		const listings: MarketplaceListing[] = added.map((record) => {
 			const from = known.find(
 				(market) => market.name === record.name || marketplaceKey(market.source) === record.canonical,
 			)?.from;
 			return listing(record, { added: true, scope: declared.get(record.name)!.scope, ...(from ? { from } : {}) });
 		});
-		// Declared but never fetched here, like a project's on a new machine: `/plugins` fetches it.
+		// Declared but never fetched here (like a project's on a new machine), or edited since: `/plugins` fetches it.
 		for (const [name, { scope, source, ref }] of declared) {
-			if (state.marketplaces.some((record) => record.name === name)) continue;
+			if (added.some((record) => record.name === name)) continue;
 			const from = known.find(
 				(market) => market.name === name || marketplaceKey(market.source) === marketplaceKey(source),
 			)?.from;
@@ -1119,27 +1151,38 @@ export class PluginManager {
 		});
 	}
 
-	/** Fetches catalogs again: the named one, or every declared one. */
+	/**
+	 * Fetches catalogs again: the named one, or every declared one. A declared catalog is fetched from what settings say
+	 * now, so an edited source or ref takes effect; one only cached (or removed) from where it was fetched.
+	 */
 	async updateMarketplaces(name?: string): Promise<MarketplaceView[]> {
 		const declared = this.declaredMarketplaces();
-		const names = name
-			? [name]
-			: this.readState().marketplaces.flatMap((record) => (declared.has(record.name) ? [record.name] : []));
 		const updated: MarketplaceView[] = [];
-		for (const marketName of names) {
-			const record = this.readState().marketplaces.find((candidate) => candidate.name === marketName);
-			if (!record) throw new Error(`no marketplace named "${marketName}"`);
-			const staged = await this.stageMarketplace(record.source, record.ref);
+		for (const marketName of name ? [name] : [...declared.keys()]) {
+			const from =
+				declared.get(marketName) ?? this.readState().marketplaces.find((candidate) => candidate.name === marketName);
+			if (!from) throw new Error(`no marketplace named "${marketName}"`);
+			const staged = await this.stageMarketplace(from.source, from.ref);
 			try {
 				updated.push(
 					await this.store.withLock(async () => {
 						const state = this.readState();
+						const id = `${sanitizePluginName(marketName)}-${sha256(staged.canonical).slice(0, 10)}`;
 						const revision = sha256(staged.commit).slice(0, 16);
-						this.store.commitRevision(staged.stage, this.store.marketplaceRoot(record.id, revision));
-						const next = { ...record, commit: staged.commit, revision, updatedAt: new Date().toISOString() };
-						state.marketplaces = state.marketplaces.map((other) => (other.name === record.name ? next : other));
+						this.store.commitRevision(staged.stage, this.store.marketplaceRoot(id, revision));
+						const next: MarketplaceRecord = {
+							name: marketName,
+							source: staged.declaredSource,
+							...(from.ref ? { ref: from.ref } : {}),
+							canonical: staged.canonical,
+							id,
+							commit: staged.commit,
+							revision,
+							updatedAt: new Date().toISOString(),
+						};
+						state.marketplaces = [...state.marketplaces.filter((other) => other.name !== marketName), next];
 						this.store.write(state);
-						return this.marketplaceView(next, state, declared.get(record.name)?.scope ?? "user");
+						return this.marketplaceView(next, state, declared.get(marketName)?.scope ?? "user");
 					}),
 				);
 			} finally {

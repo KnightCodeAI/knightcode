@@ -5,7 +5,7 @@
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 import { APP_NAME, CONFIG_DIR_NAME } from "../config.ts";
@@ -244,7 +244,7 @@ export async function runPluginCommand(args: string[], options: PluginCommandOpt
 				const copy = mkdtempSync(join(tmpdir(), "knightcode-plugin-validate-"));
 				try {
 					copyContent(path, join(copy, "plugin"));
-					const plugin = loadPlugin(join(copy, "plugin"));
+					const plugin = loadPlugin(join(copy, "plugin"), undefined, basename(resolve(path)));
 					const inventory = renderPlugin(plugin, { root: path, dataDir: join(copy, "data") });
 					for (const line of describeInventory(inventory)) log(line);
 				} finally {

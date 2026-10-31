@@ -228,9 +228,11 @@ function findManifest(root: string): string | undefined {
  * - a manifest and `strict: false`: an entry that declares components conflicts with the manifest, and the plugin is
  *   rejected; `mcpServers` alone add to the manifest's.
  *
+ * `name` names a plugin with neither: the source's own name when `root` is a copy of it.
+ *
  * Throws when the directory is not a plugin or its manifest is malformed.
  */
-export function loadPlugin(root: string, entry?: PluginEntryOverlay): LoadedPlugin {
+export function loadPlugin(root: string, entry?: PluginEntryOverlay, name = basename(root)): LoadedPlugin {
 	const manifestPath = findManifest(root);
 	const parsed = manifestPath ? readJson(manifestPath) : undefined;
 	if (manifestPath && !isRecord(parsed)) throw new Error(`${manifestPath}: the manifest must be a JSON object`);
@@ -284,7 +286,7 @@ export function loadPlugin(root: string, entry?: PluginEntryOverlay): LoadedPlug
 		if (existsSync(join(root, path))) unsupported.add(field);
 	}
 
-	const displayName = typeof own.name === "string" ? own.name : (entry?.name ?? basename(root));
+	const displayName = typeof own.name === "string" ? own.name : (entry?.name ?? name);
 	const namespace = sanitizePluginName(displayName);
 	if (!namespace) throw new Error(`plugin name "${displayName}" has no usable characters`);
 	const description = typeof own.description === "string" ? own.description : manifest ? undefined : entry?.description;
