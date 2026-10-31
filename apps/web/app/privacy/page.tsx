@@ -87,8 +87,10 @@ export default function PrivacyPage() {
             names your operating system, runtime, and CPU architecture. The
             CLI&apos;s first session on a new version also marks the install or
             update. Each request carries an install ID: a one-way hash of a
-            random ID stored in your settings. The random ID itself is never
-            sent, but the install ID stays the same across launches, so pings
+            random ID stored in your settings. Only the hash is sent to{" "}
+            <code>knightcode.dev</code>. The random ID itself goes only to
+            OpenAI, which receives it as a device ID when you sign in with
+            ChatGPT. The install ID stays the same across launches, so pings
             from one installation can be linked to each other. Versions released
             before this ID existed are identified by a hash of the IP address
             and user agent instead. The site adds a coarse location (country,
