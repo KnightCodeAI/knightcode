@@ -1,5 +1,33 @@
 # @knightcodeai/cli
 
+## 0.23.2
+
+### Added
+
+- Added `KNIGHTCODE_SELF_UPDATE_COMMAND` and the `selfUpdateCommand` setting, so `knightcode update` can update an installation that a wrapper or another package manager provides (mise, Nix), which it previously refused with "cannot self-update this installation". The command runs only when a newer release exists (or with `--force`), with `{packageName}`, `{version}` and `{installSpec}` filled from that release, and `knightcode update` warns when `knightcode --version` on `PATH` does not report the new version afterwards. The setting is read from user-level settings only, and while a command is configured, automatic updates only show the update notice.
+
+- Added a launch ping to install telemetry, sent each time an interactive CLI session or the desktop app starts, so daily, weekly, and monthly users can be counted for each. The ping carries a one-way hash of the local device ID, never the ID itself, and `enableInstallTelemetry: false` or `KNIGHTCODE_TELEMETRY=0` still turns every ping off.
+
+### Changed
+
+- Changed the `--continue`, `--resume`, `--session`, `--session-id` and `--fork` help and the `/resume` and `/import` descriptions to say which working directory a session runs in. A resumed or imported session keeps the directory it was created in, which can differ from the current one; `--continue`, `--fork` and `--session-id` use the current directory.
+
+- Changed `tool_search` and code mode's `searchTools()` to weigh a tool's name above its description. A query word in the tool name now outranks any number of mentions in other tools' descriptions, a server's instructions no longer push its tools down, and a query that contains a tool's whole name (`peekaboo app` for `mcp__peekaboo__app`) usually ranks that tool first.
+
+### Fixed
+
+- Fixed extension renderers showing hints such as " to expand" with no key. An extension that imports `keyHint`/`keyText` can load its own copy of `@knightcodeai/cli`, which never sees your keybindings. Tool renderers now get `context.keyText()`/`context.keyHint()`, and message and entry renderers get `options.keyText()`/`options.keyHint()`, which format your configured keys; the extension docs and the `debug-provider` example use them.
+
+- Fixed the external editor (`Ctrl+G`) failing silently. When the editor cannot be launched or exits with an error, a status message now says so and the prompt is left unchanged. Clipboard copies and browser launches also start from the filesystem root, so they work under WSL when the working directory's `\\wsl.localhost\...` path is too long for Windows programs.
+
+- Fixed `knightcode mcp login -l` and `knightcode mcp logout -l` failing with `Unknown option --local.` although `mcp add` and `mcp remove` accept `-l`. With `-l`, they now require the server to be defined in the project's `.knightcode/mcp.json`. Unknown options are reported as typed, and a mistyped server name gets a suggestion, for example `Did you mean "gurker"?`
+
+- Fixed `tool_search` and code mode's `searchTools()` ranking a tool first because one query word is its name, above a tool whose description matches more of the query: `screenshot window` returned a `window` tool instead of the screenshot tool, and `describe app` an `app` tool instead of the one that describes an app's UI. A tool that matches more of the query's words now ranks first; among tools matching as many words the name still counts most, and a query that is exactly a tool's name still finds that tool first.
+
+- Fixed `tool_search` and code mode's `searchTools()` finding nothing for queries in languages other than English. Search split text only on ASCII letters and digits, so Chinese, Japanese, Korean, Thai, Cyrillic, Arabic, Hindi or accented words were dropped from both tool descriptions and queries. Text is now split into Unicode words (including scripts written without spaces), and canonically equivalent spellings such as a precomposed and a combining `é` match.
+
+- Fixed `knightcode update` claiming an installation is "not managed by a global pnpm install" when it only lives under a package manager's directory, such as a wrapper under `PNPM_HOME`. The message now names the package manager only when it owns the install, and otherwise says to update the package with whatever provides it.
+
 ## 0.23.1
 
 ### Changed
