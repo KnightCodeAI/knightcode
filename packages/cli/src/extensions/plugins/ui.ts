@@ -77,6 +77,8 @@ export interface BrowseGroup {
 	badge?: Badge;
 	/** Keys on the group's own line; enter expands or collapses it otherwise. */
 	actions?: Record<string, string>;
+	/** Starts collapsed the first time it is shown. */
+	collapsed?: boolean;
 	rows: BrowseRow[];
 }
 
@@ -157,6 +159,8 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 	private tab: PluginsTab = "plugins";
 	private readonly selected = new Map<PluginsTab, string>();
 	private readonly collapsed = new Set<string>();
+	/** Groups shown before: only a new group starts collapsed, so a rebuild keeps what the user opened. */
+	private readonly seen = new Set<string>();
 	private readonly opened = new Set<string>();
 	private readonly search = new Input();
 	private searching = false;
@@ -246,7 +250,16 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 
 	browse(build: () => BrowseTab[], options: BrowseOptions = {}): Promise<BrowseAction | undefined> {
 		return new Promise((resolve) => {
-			let tabs = build();
+			const rebuild = () => {
+				const built = build();
+				for (const group of built.flatMap((tab) => tab.groups)) {
+					if (this.seen.has(group.key)) continue;
+					this.seen.add(group.key);
+					if (group.collapsed) this.collapsed.add(group.key);
+				}
+				return built;
+			};
+			let tabs = rebuild();
 			const { focus } = options;
 			if (focus) {
 				this.tab = focus.tab;
@@ -275,7 +288,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 				);
 			};
 			unsubscribe = options.subscribe?.(() => {
-				tabs = build();
+				tabs = rebuild();
 				render();
 			});
 			render();
@@ -443,7 +456,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 			];
 			for (const text of below) lines.push(` ${truncateToWidth(`      ${text}`, inner)}`);
 		});
-		if (items.length > MAX_VISIBLE_ROWS) lines.push(` ${theme.fg("muted", `  ${index + 1}/${items.length}`)}`);
+		if (items.length > MAX_VISIBLE_ROWS) lines.push(` ${theme.fg("muted", `  (${index + 1}/${items.length})`)}`);
 		return lines;
 	}
 
@@ -466,22 +479,26 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 				: item?.kind === "row" && item.row.details?.length
 					? "details"
 					: undefined;
-		const actions = [
-			...Object.entries(own),
-			...(opens && !Object.hasOwn(own, "enter") ? [["enter", opens]] : []),
-			...Object.entries(tab.actions).filter(([key]) => !Object.hasOwn(own, key)),
-		];
 		// One hint per action: `enter/i install`, with `enter` and `space` shown as the keys they are bound to.
-		const shown = (key: string) =>
-			key === "enter" ? keyText("tui.select.confirm") : key === "space" ? keyText("app.plugins.toggle") : key;
-		const byLabel = new Map<string, string[]>();
-		for (const [key, label] of actions) byLabel.set(label!, [...(byLabel.get(label!) ?? []), shown(key!)]);
-		return [
-			...[...byLabel].map(([label, keys]) => rawKeyHint(keys.join("/"), label)),
+		const hints = (actions: [string, string][]) => {
+			const shown = (key: string) =>
+				key === "enter" ? keyText("tui.select.confirm") : key === "space" ? keyText("app.plugins.toggle") : key;
+			const byLabel = new Map<string, string[]>();
+			for (const [key, label] of actions) byLabel.set(label, [...(byLabel.get(label) ?? []), shown(key)]);
+			return [...byLabel].map(([label, keys]) => rawKeyHint(keys.join("/"), label));
+		};
+		// Two steady lines: what the selected row offers, then the keys that work anywhere on the tab.
+		const row = hints([
+			...Object.entries(own),
+			...(opens && !Object.hasOwn(own, "enter") ? ([["enter", opens]] as [string, string][]) : []),
+		]);
+		const anywhere = [
+			...hints(Object.entries(tab.actions).filter(([key]) => !Object.hasOwn(own, key))),
 			keyHint("app.plugins.search", "search"),
 			keyHint("app.plugins.nextTab", "next tab"),
 			keyHint("tui.select.cancel", "close"),
-		].join(" • ");
+		];
+		return [...(row.length ? [row.join(" • ")] : []), anywhere.join(" • ")].join("\n");
 	}
 
 	handleInput(data: string): void {
@@ -615,12 +632,11 @@ function pluginsTab(data: Snapshot, running: McpServerSummary[]): BrowseTab {
 				label: plugin.name,
 				right: `@${plugin.source.slice(plugin.source.indexOf("@") + 1)}`,
 				description: `installed in ${plugin.from}${plugin.enabled ? "" : ", turned off there"}`,
-				badge: { text: "not imported", tone: "muted" },
 				actions: { enter: "import", i: "import" },
 			}));
 	return {
 		id: "plugins",
-		label: "Plugins",
+		label: "Installed",
 		groups: [
 			{ key: "user", label: "User", rows: installed("user") },
 			{ key: "project", label: "This project", rows: installed("project") },
@@ -654,6 +670,8 @@ function marketplaceTab(data: Snapshot, fetches: Fetches): BrowseTab {
 			right: failure ?? market.from ?? market.source,
 			...(badge ? { badge } : {}),
 			actions: { u: "refresh", ...(market.added ? { x: "remove" } : {}) },
+			// As Grok Build: the tab opens on the list of marketplaces, and enter opens one.
+			collapsed: data.markets.length > 1,
 			rows: market.plugins.map((entry): BrowseRow => {
 				const source = `${entry.name}@${market.name}`;
 				const from = elsewhere.get(source);
@@ -734,10 +752,7 @@ export async function managePlugins(
 	const fetches: Fetches = { busy: new Set(), failed: new Map(), offline: isOfflineModeEnabled() };
 	const fetchCatalog = async (market: MarketplaceListing) => {
 		try {
-			// A declared catalog never fetched here has no record to update yet.
-			await (market.added && !market.missing
-				? manager.updateMarketplaces(market.name)
-				: manager.cacheMarketplace(market));
+			await manager.fetchListing(market);
 			fetches.failed.delete(market.name);
 		} catch (error) {
 			fetches.failed.set(market.name, errorText(error));

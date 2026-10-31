@@ -12,6 +12,7 @@
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "../config.ts";
+import { isOfflineModeEnabled } from "../core/package-manager.ts";
 import { type PluginDeclaration, SettingsManager } from "../core/settings-manager.ts";
 import { ProjectTrustStore } from "../core/trust-manager.ts";
 import { canonicalizePath, getCwdRelativePath, resolvePath } from "../utils/paths.ts";
@@ -815,6 +816,19 @@ export class PluginManager {
 	 */
 	async cacheMarketplace(market: { source: string; ref?: string }): Promise<MarketplaceView> {
 		return this.storeMarketplace(market.source, market.ref);
+	}
+
+	/**
+	 * Fetches a browsed marketplace's catalog again: updates an added one, caches a known one. Adds nothing. Offline,
+	 * only a catalog in a folder is read.
+	 */
+	async fetchListing(market: MarketplaceListing): Promise<void> {
+		const parsed = parseSource(market.source, this.cwd);
+		if (isOfflineModeEnabled() && !("kind" in parsed && parsed.kind === "local")) {
+			throw new Error("offline: only marketplaces in a folder are fetched");
+		}
+		// A declared catalog never fetched here has no record to update yet.
+		await (market.added && !market.missing ? this.updateMarketplaces(market.name) : this.cacheMarketplace(market));
 	}
 
 	/** Fetches a catalog and records it; with `declare`, also adds it to that scope's settings. */

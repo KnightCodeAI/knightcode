@@ -130,6 +130,22 @@ describe("plugins view", () => {
 		expect(await action).toBeUndefined();
 	});
 
+	it("opens a group that starts collapsed with enter, and a search opens it too", async () => {
+		const collapsed = (): BrowseTab[] =>
+			tabs().map((tab) => ({ ...tab, groups: tab.groups.map((group) => ({ ...group, collapsed: true })) }));
+		const view = new PluginsView(tui, theme, new KeybindingsManager());
+		void view.browse(collapsed, { focus: { tab: "marketplace" } });
+		expect(screen(view)).toMatch(/▸ shop \(2\)/);
+		expect(screen(view)).not.toContain("alpha");
+		view.handleInput("/");
+		view.handleInput("b");
+		expect(screen(view)).toContain("beta");
+		view.handleInput(ESCAPE);
+		view.handleInput(ESCAPE);
+		view.handleInput(ENTER);
+		expect(screen(view)).toMatch(/alpha[\s\S]*beta/);
+	});
+
 	it("follows rebound tab, search and toggle keys", async () => {
 		const keys = new KeybindingsManager({
 			"app.plugins.nextTab": "]",
