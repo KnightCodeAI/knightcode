@@ -175,9 +175,11 @@
       },
       "peerDependencies": {
         "esbuild": "0.28.2",
+        "ws": "8.21.3",
       },
       "optionalPeers": [
         "esbuild",
+        "ws",
       ],
     },
     "packages/cli": {
