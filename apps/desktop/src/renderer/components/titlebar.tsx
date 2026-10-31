@@ -23,7 +23,7 @@ import {
 	showNew,
 	useStore,
 } from "../store.ts";
-import { IconButton } from "./button.tsx";
+import { Button, IconButton } from "./button.tsx";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./menu.tsx";
 
 export const runAppCommand = (command: AppCommandName) => void client.host("host/app/command", { command });
@@ -35,14 +35,17 @@ function AppMenu({ label, items }: { label: string; items: AppMenuItem[] }) {
 	return (
 		<Menu>
 			<MenuTrigger>
-				<button
-					type="button"
-					className="no-drag rounded-md border border-transparent px-2.5 py-1 text-base leading-none text-tertiary hover:bg-soft-alt data-[state=open]:bg-soft-alt"
+				<Button
+					variant="ghost"
+					color="secondary"
+					strong
+					size="xs"
+					className="kc-app-menu-trigger quiet no-drag text-ink hover:text-ink px-2 font-medium cursor-pointer"
 				>
 					{label}
-				</button>
+				</Button>
 			</MenuTrigger>
-			<MenuContent variant="app">
+			<MenuContent variant="app" sideOffset={4}>
 				{items.map((item, i) =>
 					item === "-" ? (
 						<MenuSeparator key={i} />
@@ -179,9 +182,10 @@ function UpdatePill() {
 			aria-label={tooltip}
 			disabled={update.state === "downloading"}
 			onClick={() => (update.state === "available" ? openUpdatePage(update.url) : installUpdate())}
-			className="no-drag me-2 flex h-5 shrink-0 items-center gap-1 rounded-full bg-[var(--kc-update)] px-2.5 text-[10px] leading-3 font-semibold text-white shadow-sm enabled:hover:bg-[color-mix(in_srgb,var(--kc-update)_92%,black_8%)] enabled:active:bg-[color-mix(in_srgb,var(--kc-update)_80%,transparent)]"
+			style={{ backgroundColor: "var(--kc-accent)", color: "var(--kc-text-on-accent)" }}
+			className="kc-update-pill no-drag me-2 flex h-5 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] leading-3 font-semibold shadow-sm select-none enabled:cursor-pointer enabled:hover:brightness-105 enabled:active:brightness-95 disabled:cursor-default"
 		>
-			<Download size={12} className="shrink-0" />
+			<Download size={12} className={`shrink-0 ${update.state === "downloading" ? "animate-pulse" : ""}`} />
 			{update.state === "downloading" ? "Downloading" : "Update"}
 		</button>
 	);
@@ -194,15 +198,21 @@ export function TitleBar() {
 	return (
 		<div
 			style={{ height: WINDOW_CHROME.titleBarHeight }}
-			className={`drag flex shrink-0 items-center gap-1.5 bg-shell ${isMac() ? "ps-20 pe-2" : "ps-1.5 pe-36"}`}
+			className={`kc-titlebar drag flex shrink-0 items-center gap-1.5 bg-shell ${isMac() ? "ps-20 pe-2" : "ps-1.5 pe-36"}`}
 		>
-			<IconButton label="Back" strong className="no-drag" onClick={() => goBack(-1)} disabled={history.index === 0}>
+			<IconButton
+				label="Back"
+				strong
+				className="no-drag text-ink hover:text-ink"
+				onClick={() => goBack(-1)}
+				disabled={history.index === 0}
+			>
 				<ArrowLeft size={16} />
 			</IconButton>
 			<IconButton
 				label="Forward"
 				strong
-				className="no-drag"
+				className="no-drag text-ink hover:text-ink"
 				onClick={() => goBack(1)}
 				disabled={history.index >= history.stack.length - 1}
 			>
@@ -211,13 +221,17 @@ export function TitleBar() {
 			<IconButton
 				label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
 				strong
-				className="no-drag"
+				className="no-drag text-ink hover:text-ink"
 				onClick={() => setSidebarOpen(!sidebarOpen)}
 			>
 				<PanelLeft size={16} filled={sidebarOpen} />
 			</IconButton>
 			{isMac() ? null : (
-				<div role="menubar" aria-label="Application menu" className="flex items-center gap-0.5 ps-1 pe-2">
+				<div
+					role="menubar"
+					aria-label="Application menu"
+					className="no-drag flex shrink-0 items-center gap-1.5 ps-1.5 pe-2"
+				>
 					{appMenus(sidebarOpen, inThread).map((menu) => (
 						<AppMenu key={menu.label} label={menu.label} items={menu.items} />
 					))}

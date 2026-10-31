@@ -1,7 +1,14 @@
 import { CircleAlert, CircleCheck, Info, Minus, Plus, X } from "./components/icons.tsx";
 import { Button, IconButton } from "./components/button.tsx";
 import { Component, type ReactNode, useEffect, useRef, useState } from "react";
-import { customTokens, fontFaces } from "./appearance.ts";
+import {
+	customTokens,
+	fontFaces,
+	freebuffTokens,
+	renderGradientOverlay,
+	renderSourceGradient,
+	THEME_PRESETS,
+} from "./appearance.ts";
 import { client } from "./client.ts";
 import { Home } from "./components/home.tsx";
 import { Palette } from "./components/palette.tsx";
@@ -177,6 +184,60 @@ function ZoomBanner() {
 	);
 }
 
+export function Wallpaper() {
+	const prefs = useStore(selectPreferences);
+	const activePreset = prefs.activePreset;
+	const preset = THEME_PRESETS.find((p) => p.id === activePreset);
+	if (!preset?.wallpaper?.source) return null;
+	const { source, gradient } = preset.wallpaper;
+	const isGradient = source.startsWith("gradient:");
+
+	return (
+		<div
+			className="app-wallpaper pointer-events-none fixed inset-0 z-0 overflow-hidden select-none"
+			aria-hidden="true"
+			style={{ backgroundColor: preset.colors.surface }}
+		>
+			{isGradient ? (
+				<div
+					style={{
+						position: "absolute",
+						inset: 0,
+						width: "100%",
+						height: "100%",
+						backgroundImage: renderSourceGradient(source),
+					}}
+				/>
+			) : (
+				<img
+					alt=""
+					src={source}
+					draggable={false}
+					style={{
+						position: "absolute",
+						inset: 0,
+						width: "100%",
+						height: "100%",
+						objectFit: "cover",
+					}}
+				/>
+			)}
+			{gradient?.enabled && (
+				<div
+					style={{
+						position: "absolute",
+						inset: 0,
+						width: "100%",
+						height: "100%",
+						backgroundImage: renderGradientOverlay(preset.colors.surface, gradient),
+						pointerEvents: "none",
+					}}
+				/>
+			)}
+		</div>
+	);
+}
+
 /**
  * Resolve the theme preference onto <html> and the native caption buttons, and lay the theme's customization
  * (Settings › Appearance) over its tokens: colours and fonts (appearance.ts), the chosen font faces, the sidebar's
@@ -184,21 +245,50 @@ function ZoomBanner() {
  */
 function useTheme(): void {
 	const prefs = useStore(selectPreferences);
-	const { theme, appearance } = prefs;
+	const { theme, appearance, activePreset, surfaceStyle } = prefs;
 	const resolved = useStore((s) => s.resolvedTheme);
+
+	const activePresetObj = THEME_PRESETS.find((p) => p.id === activePreset);
+
 	useEffect(() => {
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
 		const apply = () => {
-			const dark = theme === "dark" || (theme === "system" && media.matches);
-			document.documentElement.dataset.theme = dark ? "dark" : "light";
-			setResolvedTheme(dark ? "dark" : "light");
+			if (activePresetObj) {
+				const dark = activePresetObj.mode === "system" ? media.matches : activePresetObj.mode === "dark";
+				document.documentElement.dataset.theme = dark ? "dark" : "light";
+				setResolvedTheme(dark ? "dark" : "light");
+			} else {
+				const dark = theme === "dark" || (theme === "system" && media.matches);
+				document.documentElement.dataset.theme = dark ? "dark" : "light";
+				setResolvedTheme(dark ? "dark" : "light");
+			}
 		};
 		apply();
 		media.addEventListener("change", apply);
 		return () => media.removeEventListener("change", apply);
-	}, [theme]);
+	}, [theme, activePresetObj]);
+
+	useEffect(() => {
+		const root = document.documentElement;
+		if (activePresetObj) {
+			root.dataset.preset = activePresetObj.id;
+			root.dataset.wallpaper = Boolean(activePresetObj.wallpaper?.source).toString();
+		} else {
+			delete root.dataset.preset;
+			root.dataset.wallpaper = "false";
+		}
+		const effectiveSurface = surfaceStyle === "shine" ? "glass" : (surfaceStyle ?? "flat");
+		root.dataset.surfaceStyle = effectiveSurface;
+		return () => {
+			delete root.dataset.preset;
+			delete root.dataset.wallpaper;
+			delete root.dataset.surfaceStyle;
+		};
+	}, [activePresetObj, surfaceStyle]);
+
 	const custom = appearance?.[resolved];
-	const translucent = custom?.translucentSidebar === true;
+	const translucent = !activePresetObj?.wallpaper && custom?.translucentSidebar === true;
+
 	useEffect(() => {
 		// Main says whether the material took (Windows 11 22H2+, macOS); only then is the sidebar see-through.
 		void client
@@ -209,8 +299,9 @@ function useTheme(): void {
 			})
 			.catch(() => {});
 	}, [resolved, translucent]);
+
 	useEffect(() => {
-		const tokens = customTokens(resolved, custom);
+		const tokens = activePresetObj ? freebuffTokens(activePresetObj, resolved) : customTokens(resolved, custom);
 		const root = document.documentElement.style;
 		for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
 		const faces = document.createElement("style");
@@ -220,7 +311,8 @@ function useTheme(): void {
 			for (const name of Object.keys(tokens)) root.removeProperty(name);
 			faces.remove();
 		};
-	}, [resolved, custom]);
+	}, [resolved, custom, activePresetObj]);
+
 	const { uiFontSize, codeFontSize, pointerCursors } = prefs;
 	useEffect(() => {
 		const root = document.documentElement;
@@ -305,7 +397,8 @@ export function App() {
 		{ binding: "desktop.thread.nextAttention", run: () => openNextNeedingAttention() },
 	]);
 	return (
-		<div className="kc-app flex h-full flex-col bg-shell">
+		<div className="kc-app relative isolate z-1 flex h-full flex-col bg-shell">
+			<Wallpaper />
 			<TitleBar />
 			<ServerBanner />
 			{/* Codex leaves 8px under the title bar and 4px at the window's right and bottom edges. */}

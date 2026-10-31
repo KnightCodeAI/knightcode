@@ -77,8 +77,8 @@
 	--kc-selection: rgb(251 170 113 / 0.4);
 	/* A switch's and a slider's knob, white in both themes (Codex's). */
 	--kc-knob: #ffffff;
-	/* The title bar's update pill: the accent blue, in both themes. */
-	--kc-update: #339cff;
+	/* The title bar's update pill: the theme accent. */
+	--kc-update: var(--kc-accent);
 	--kc-accent: #f97316;
 	--kc-accent-hover: #fa893b;
 	--kc-success: #40c977;
@@ -127,7 +127,7 @@
 	/* Menus, measured from Codex's (2026-10-15/18): the ring is its border token, the app menus are opaque. */
 	--kc-hairline: var(--kc-border);
 	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.12);
-	--kc-app-menu-bg: #1f1f1f;
+	--kc-app-menu-bg: var(--kc-bg-menu);
 	--kc-app-menu-hint: rgb(255 255 255 / 0.75);
 	--kc-app-menu-rule: rgb(255 255 255 / 0.157);
 	/* Terminals (section 9.7): the surface and text, and ANSI slots from its theme's accents (measured
@@ -302,7 +302,7 @@
 	--kc-chess-light: rgb(26 28 31 / 0.035);
 	--kc-chess-dark: rgb(26 28 31 / 0.1);
 	--kc-menu-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.12);
-	--kc-app-menu-bg: #ffffff;
+	--kc-app-menu-bg: var(--kc-bg-menu);
 	--kc-app-menu-hint: rgb(0 0 0 / 0.6);
 	--kc-app-menu-rule: rgb(0 0 0 / 0.12);
 	--kc-terminal-selection: rgb(0 0 0 / 0.1);
@@ -477,7 +477,7 @@ body {
 		z-index: 60;
 		max-width: min(320px, var(--radix-tooltip-content-available-width));
 		padding: 5px 12px;
-		border: 1px solid color-mix(in oklab, var(--kc-text-tooltip) 5%, transparent);
+		border: 1px solid var(--kc-border-strong);
 		border-radius: 20px;
 		corner-shape: var(--kc-corner-shape);
 		background: var(--kc-bg-tooltip);
@@ -944,18 +944,30 @@ body {
 		flex-shrink: 0;
 		align-items: center;
 		gap: 8px;
-		border-radius: 12.5px;
+		border-radius: 8px;
 		corner-shape: var(--kc-corner-shape);
-		padding: 5px 5px 5px 8px;
+		padding: 5px 8px;
 		color: var(--kc-text-nav);
 		font-size: 14px;
 		line-height: 20px;
 		text-align: start;
 		cursor: default;
 		outline: none;
+		border: 1px solid transparent;
+		transition:
+			background-color 0.12s ease,
+			border-color 0.12s ease;
 	}
-	.kc-nav-row:is(:hover, [aria-current="page"], [data-selected], [data-state="open"], :has([data-state="open"])) {
+	.kc-nav-row:is(:hover, [data-state="open"], :has([data-state="open"])):not([aria-current="page"]):not(
+			[data-selected]
+		) {
 		background: var(--kc-ghost-hover);
+	}
+	.kc-nav-row:is([aria-current="page"], [data-selected]) {
+		background: color-mix(in srgb, var(--kc-text) 11%, transparent) !important;
+		border-color: var(--kc-border-strong) !important;
+		color: var(--kc-text) !important;
+		font-weight: 500 !important;
 	}
 	.kc-nav-row:focus-visible {
 		outline: 2px solid var(--kc-focus);
@@ -1244,7 +1256,8 @@ body {
 	width: 16px;
 	flex-shrink: 0;
 }
-.kc-mp-toggle {
+.kc-mp-toggle,
+button.kc-mp-toggle {
 	display: flex;
 	min-width: 0;
 	min-height: 32px;
@@ -1253,6 +1266,14 @@ body {
 	line-height: 20px;
 	font-weight: 500;
 	outline: none;
+	border: none !important;
+	box-shadow: none !important;
+	background: transparent !important;
+}
+.kc-mp-toggle::after,
+button.kc-mp-toggle::after {
+	display: none !important;
+	content: none !important;
 }
 .kc-mp-toggle-content {
 	display: flex;
@@ -1261,6 +1282,12 @@ body {
 	gap: 2px;
 	border-radius: 6px;
 	padding: 2px 4px;
+	border: none !important;
+	box-shadow: none !important;
+}
+.kc-mp-toggle-content::after {
+	display: none !important;
+	content: none !important;
 }
 .kc-mp-toggle:is(:hover, :focus-visible) .kc-mp-toggle-content {
 	background: var(--kc-ghost-hover);
@@ -1406,12 +1433,56 @@ body {
 	background: #fff;
 	box-shadow: 0 0 2px rgb(0 0 0 / 0.1);
 	transition: scale 0.61s
-		linear(0, 0.084, 0.247, 0.429, 0.587, 0.719, 0.815, 0.885, 0.932, 0.963, 0.982, 0.993, 0.999, 1.002, 1.003, 1.003, 1.002, 1.002, 1.001, 1.001, 1);
+		linear(
+			0,
+			0.084,
+			0.247,
+			0.429,
+			0.587,
+			0.719,
+			0.815,
+			0.885,
+			0.932,
+			0.963,
+			0.982,
+			0.993,
+			0.999,
+			1.002,
+			1.003,
+			1.003,
+			1.002,
+			1.002,
+			1.001,
+			1.001,
+			1
+		);
 }
 .kc-power-root[data-lifted] .kc-power-knob > span {
 	scale: calc(32 / 28);
 	transition: scale 0.39s
-		linear(0, 0.069, 0.203, 0.361, 0.502, 0.629, 0.726, 0.803, 0.863, 0.907, 0.937, 0.959, 0.973, 0.984, 0.99, 0.994, 0.997, 0.998, 0.999, 1, 1);
+		linear(
+			0,
+			0.069,
+			0.203,
+			0.361,
+			0.502,
+			0.629,
+			0.726,
+			0.803,
+			0.863,
+			0.907,
+			0.937,
+			0.959,
+			0.973,
+			0.984,
+			0.99,
+			0.994,
+			0.997,
+			0.998,
+			0.999,
+			1,
+			1
+		);
 }
 .kc-power:has(.kc-power-thumb:focus-visible) .kc-power-knob > span {
 	outline: 2px solid var(--kc-focus);
@@ -1726,17 +1797,36 @@ body {
 		padding-bottom: calc(var(--md-space) * 6);
 	}
 	.kc-markdown[data-tone="user"] {
-		color: inherit;
+		color: #ffffff !important;
+		font-size: inherit;
+		font-weight: inherit;
+		line-height: inherit;
+		letter-spacing: inherit;
 	}
 	.kc-markdown[data-tone="user"] p {
 		margin-block: 0;
+		color: #ffffff !important;
+	}
+	.kc-markdown[data-tone="user"] span {
+		color: #ffffff !important;
+	}
+	.kc-markdown[data-tone="user"] a {
+		color: #ffffff !important;
+		text-decoration: underline;
+		font-weight: 600;
+	}
+	.kc-markdown[data-tone="user"] :not(pre) > code {
+		background: color-mix(in srgb, #ffffff 18%, transparent) !important;
+		border-color: color-mix(in srgb, #ffffff 25%, transparent) !important;
+		color: #ffffff !important;
 	}
 	.kc-markdown :not(pre) > code {
 		border-radius: 6px;
 		background: var(--kc-code-chip);
-		padding: 1px 6px;
+		padding: 1.5px 6px;
 		font-family: var(--kc-font-code);
 		font-size: 0.92em;
+		border: 1px solid var(--kc-border-subtle);
 	}
 	.kc-markdown a {
 		color: var(--kc-link);
@@ -2299,4 +2389,672 @@ body {
 	outline: 2px solid var(--kc-focus);
 	outline-offset: 2px;
 	border-radius: 9999px;
+}
+
+/*
+ * Freebuff-style Wallpaper, Glassmorphism, and Surface depth (flat, 3d, shine)
+ */
+:root[data-wallpaper="true"] {
+	--kc-workspace-glass: color-mix(
+		in srgb,
+		var(--kc-surface-solid, var(--kc-bg-surface)) var(--wallpaper-opacity, 72%),
+		transparent
+	);
+}
+
+:root[data-wallpaper="true"] .kc-app {
+	background: transparent !important;
+}
+
+:root[data-wallpaper="true"] .kc-titlebar {
+	background: transparent !important;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
+	border-bottom: none !important;
+	color: var(--kc-text) !important;
+}
+
+:root[data-wallpaper="true"] .kc-titlebar button:not(.kc-update-pill) {
+	color: var(--kc-text) !important;
+}
+
+:root[data-wallpaper="true"] .kc-titlebar button:not(.kc-update-pill):disabled {
+	color: var(--kc-text-secondary) !important;
+	opacity: 0.5 !important;
+}
+
+/* Update Pill in Titlebar - High contrast, legible, and prominent across ALL themes and surface modes */
+.kc-update-pill,
+.kc-titlebar .kc-update-pill,
+button.kc-update-pill,
+:root[data-wallpaper="true"] .kc-titlebar .kc-update-pill,
+:root[data-wallpaper="true"] button.kc-update-pill,
+.kc-titlebar .kc-update-pill:disabled,
+:root[data-wallpaper="true"] .kc-titlebar .kc-update-pill:disabled {
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+	background-color: var(--kc-accent) !important;
+	color: var(--kc-text-on-accent) !important;
+	border: 1px solid color-mix(in srgb, var(--kc-text-on-accent) 26%, transparent) !important;
+	box-shadow:
+		0 2px 8px rgb(0 0 0 / 0.28),
+		inset 0 1px 0 0 color-mix(in srgb, var(--kc-text-on-accent) 20%, transparent) !important;
+	z-index: 10 !important;
+	position: relative !important;
+}
+
+:root[data-wallpaper="true"] .kc-update-pill,
+:root[data-wallpaper="true"] .kc-titlebar .kc-update-pill,
+:root[data-wallpaper="true"] button.kc-update-pill {
+	backdrop-filter: blur(12px) !important;
+	-webkit-backdrop-filter: blur(12px) !important;
+	border: 1px solid color-mix(in srgb, var(--kc-text-on-accent) 30%, transparent) !important;
+	box-shadow:
+		0 2px 10px rgb(0 0 0 / 0.35),
+		0 1px 3px rgb(0 0 0 / 0.2),
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 35%, transparent) !important;
+}
+
+:root[data-surface-style="3d"] .kc-update-pill,
+:root[data-surface-style="3d"] .kc-titlebar .kc-update-pill,
+:root[data-surface-style="3d"] button.kc-update-pill {
+	border: 1px solid color-mix(in srgb, var(--kc-text-on-accent) 28%, transparent) !important;
+	box-shadow:
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 42%, transparent),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.25),
+		0 2px 8px rgb(0 0 0 / 0.3) !important;
+}
+
+:root[data-surface-style="glass"] .kc-update-pill,
+:root[data-surface-style="glass"] .kc-titlebar .kc-update-pill,
+:root[data-surface-style="glass"] button.kc-update-pill,
+:root[data-surface-style="shine"] .kc-update-pill,
+:root[data-surface-style="shine"] .kc-titlebar .kc-update-pill,
+:root[data-surface-style="shine"] button.kc-update-pill {
+	border: 1px solid color-mix(in srgb, #ffffff 42%, var(--kc-text-on-accent)) !important;
+	box-shadow:
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 60%, transparent),
+		inset 0 0 0 1px color-mix(in srgb, #ffffff 25%, transparent),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.16),
+		0 0 0 0.5px color-mix(in srgb, #ffffff 16%, transparent),
+		0 2px 6px rgb(0 0 0 / 0.22) !important;
+}
+
+/* User chat message bubble styling across all themes and surface styles */
+.kc-user-bubble {
+	background-color: var(--kc-user-bubble);
+	color: #ffffff !important;
+	text-shadow:
+		0 1px 2px rgb(0 0 0 / 0.35),
+		0 0 1px rgb(0 0 0 / 0.2) !important;
+	font-size: 15px;
+	font-weight: 500;
+	line-height: 1.55;
+	letter-spacing: -0.01em;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+	border: 1px solid color-mix(in srgb, #ffffff 18%, transparent);
+	box-shadow:
+		0 2px 8px rgb(0 0 0 / 0.12),
+		0 1px 3px rgb(0 0 0 / 0.08),
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 20%, transparent);
+	word-break: break-word;
+	overflow-wrap: anywhere;
+	transition:
+		box-shadow var(--kc-duration-fast) ease,
+		border-color var(--kc-duration-fast) ease;
+}
+
+:root[data-theme="dark"] .kc-user-bubble {
+	border-color: color-mix(in srgb, #ffffff 18%, transparent);
+	box-shadow:
+		0 3px 12px rgb(0 0 0 / 0.2),
+		0 1px 3px rgb(0 0 0 / 0.12),
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 22%, transparent);
+}
+
+:root[data-theme="light"] .kc-user-bubble {
+	border-color: color-mix(in srgb, #ffffff 16%, transparent);
+	box-shadow:
+		0 2px 8px rgb(0 0 0 / 0.1),
+		0 1px 3px rgb(0 0 0 / 0.06),
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 18%, transparent);
+}
+
+/* Wallpaper mode: vibrant, luminous surface with clean backdrop blur and subtle edge highlight */
+:root[data-wallpaper="true"] .kc-user-bubble {
+	background: color-mix(in srgb, var(--kc-user-bubble) 92%, #000000 8%) !important;
+	color: #ffffff !important;
+	text-shadow:
+		0 1px 2px rgb(0 0 0 / 0.4),
+		0 0 1px rgb(0 0 0 / 0.25) !important;
+	border: 1.5px solid color-mix(in srgb, #ffffff 22%, transparent) !important;
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	box-shadow:
+		0 4px 18px rgb(0 0 0 / 0.24),
+		0 1px 4px rgb(0 0 0 / 0.14),
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 25%, transparent) !important;
+}
+
+/* 3D surface style: refined dimensional elevation */
+:root[data-surface-style="3d"] .kc-user-bubble {
+	box-shadow:
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 28%, transparent),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.18),
+		0 4px 12px rgb(0 0 0 / 0.22) !important;
+}
+
+/* Glass & Shine surface style: Apple glass effect with luminous perimeter specular rim */
+:root[data-surface-style="glass"] .kc-user-bubble,
+:root[data-surface-style="shine"] .kc-user-bubble {
+	border: 1px solid color-mix(in srgb, #ffffff 42%, transparent) !important;
+	box-shadow:
+		/* Top specular rim */
+		inset 0 1px 0 0 color-mix(in srgb, #ffffff 52%, transparent),
+		/* All-around perimeter specular rim */ inset 0 0 0 1px color-mix(in srgb, #ffffff 22%, transparent),
+		/* Bottom subtle refraction */ inset 0 -1px 0 0 rgb(0 0 0 / 0.16),
+		/* Outer ambient glass halo */ 0 0 0 0.5px color-mix(in srgb, #ffffff 16%, transparent),
+		/* Depth elevation */ 0 4px 14px rgb(0 0 0 / 0.2) !important;
+}
+
+:root[data-wallpaper="true"] .kc-md-code {
+	box-shadow: 0 4px 16px rgb(0 0 0 / 0.22);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	background: color-mix(in srgb, var(--kc-bg-surface) 92%, transparent);
+}
+
+.kc-titlebar [role="menubar"] {
+	display: flex !important;
+	align-items: center !important;
+	gap: 2px !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+}
+
+.kc-titlebar [role="menubar"] button,
+:root[data-wallpaper="true"] .kc-titlebar [role="menubar"] button {
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+	color: var(--kc-text) !important;
+	background: transparent !important;
+	border: none !important;
+	box-shadow: none !important;
+	font-size: 13px !important;
+	font-weight: 500 !important;
+	line-height: 1 !important;
+	padding: 4px 8px !important;
+	border-radius: 6px !important;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.kc-titlebar [role="menubar"] button:hover,
+.kc-titlebar [role="menubar"] button[data-state="open"],
+:root[data-wallpaper="true"] .kc-titlebar [role="menubar"] button:hover,
+:root[data-wallpaper="true"] .kc-titlebar [role="menubar"] button[data-state="open"] {
+	color: var(--kc-text) !important;
+	background-color: var(--kc-ghost-hover) !important;
+	border: none !important;
+}
+
+:root[data-wallpaper="true"] .kc-rail {
+	background: transparent !important;
+}
+
+:root[data-wallpaper="true"] .kc-app-card {
+	background: var(--kc-workspace-glass) !important;
+	backdrop-filter: blur(var(--wallpaper-blur, 8px));
+	-webkit-backdrop-filter: blur(var(--wallpaper-blur, 8px));
+	border: 1px solid var(--kc-border);
+}
+
+:root[data-wallpaper="true"] .kc-sidebar-slot,
+:root[data-wallpaper="true"] .kc-sidebar {
+	background: transparent !important;
+}
+
+:root[data-wallpaper="true"] main {
+	background: transparent !important;
+}
+
+:root[data-wallpaper="true"] .kc-home-content {
+	background: transparent !important;
+}
+
+:root[data-wallpaper="true"] .kc-composer-card {
+	background: color-mix(in srgb, var(--kc-surface-solid, var(--kc-bg-surface)) 68%, transparent) !important;
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	border: 1px solid var(--kc-border-strong);
+	box-shadow: 0 4px 20px rgb(0 0 0 / 0.25);
+}
+
+:root[data-wallpaper="true"] .kc-settings-page,
+:root[data-wallpaper="true"] .kc-settings-nav {
+	background: transparent !important;
+}
+
+:root[data-wallpaper="true"] .kc-toast,
+:root[data-wallpaper="true"] .kc-menu,
+:root[data-wallpaper="true"] .kc-tooltip {
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+}
+
+:root[data-wallpaper="true"] .kc-tooltip {
+	background: color-mix(in srgb, var(--kc-surface-solid, var(--kc-bg-surface)) 88%, transparent) !important;
+	border: 1px solid var(--kc-border-strong) !important;
+	color: var(--kc-text) !important;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 0.35) !important;
+}
+
+:root[data-surface-style="3d"] .kc-tooltip {
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.15),
+		0 8px 24px rgb(0 0 0 / 0.35) !important;
+}
+
+:root[data-surface-style="glass"] .kc-tooltip,
+:root[data-surface-style="shine"] .kc-tooltip {
+	border: 1px solid rgb(255 255 255 / 0.28) !important;
+	box-shadow:
+		inset 0 1.5px 0.5px 0 rgb(255 255 255 / 0.45),
+		inset 0 0 0 1px rgb(255 255 255 / 0.22),
+		0 0 0 0.5px rgb(255 255 255 / 0.15),
+		0 0 14px -2px rgb(255 255 255 / 0.15),
+		0 8px 24px rgb(0 0 0 / 0.35) !important;
+}
+
+/* Surface style: 3D */
+:root[data-surface-style="3d"] button:not(.quiet),
+:root[data-surface-style="3d"] .kc-composer-card {
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.14),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.18),
+		0 2px 5px rgb(0 0 0 / 0.2);
+}
+
+@property --kc-beam-angle {
+	syntax: "<angle>";
+	initial-value: 0deg;
+	inherits: false;
+}
+
+@keyframes kc-border-beam-spin {
+	to {
+		--kc-beam-angle: 360deg;
+	}
+}
+
+/*
+ * Surface style: Glass (Apple Glass Specular Rim Effect & Running Border Reflection)
+ * Features a crisp 360-degree perimeter specular rim, overhead key light gleam,
+ * and a traveling luminous border beam inspired by Apple visionOS & macOS Sequoia glassmorphism.
+ */
+:root[data-surface-style="glass"] button:not(.quiet),
+:root[data-surface-style="shine"] button:not(.quiet) {
+	border: 1px solid rgb(255 255 255 / 0.22);
+	box-shadow:
+		/* Top specular rim catching key light */
+		inset 0 1px 0 0 rgb(255 255 255 / 0.45),
+		/* Continuous 360-degree perimeter specular rim all around */ inset 0 0 0 1px rgb(255 255 255 / 0.16),
+		/* Bottom edge refraction shadow */ inset 0 -1px 0 0 rgb(0 0 0 / 0.14),
+		/* Outer ambient luminous glass halo */ 0 0 0 0.5px rgb(255 255 255 / 0.12),
+		/* Physical elevation drop shadow */ 0 2px 6px rgb(0 0 0 / 0.18);
+	transition:
+		box-shadow var(--kc-duration-fast) ease,
+		border-color var(--kc-duration-fast) ease,
+		background-color var(--kc-duration-fast) ease;
+	position: relative;
+}
+
+:root[data-surface-style="glass"] button:not(.quiet):hover,
+:root[data-surface-style="shine"] button:not(.quiet):hover {
+	border-color: rgb(255 255 255 / 0.38);
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.65),
+		inset 0 0 0 1px rgb(255 255 255 / 0.25),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.16),
+		0 0 0 0.5px rgb(255 255 255 / 0.16),
+		0 3px 10px rgb(0 0 0 / 0.22);
+}
+
+:root[data-surface-style="glass"] button:not(.quiet):hover::before,
+:root[data-surface-style="shine"] button:not(.quiet):hover::before {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	border-radius: inherit;
+	padding: 1px;
+	background: conic-gradient(
+		from var(--kc-beam-angle),
+		transparent 0deg,
+		transparent 65deg,
+		color-mix(in srgb, #ffffff 85%, transparent) 90deg,
+		transparent 115deg,
+		transparent 360deg
+	);
+	-webkit-mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	-webkit-mask-composite: xor;
+	mask-composite: exclude;
+	pointer-events: none;
+	animation: kc-border-beam-spin 2s linear infinite;
+	z-index: 1;
+}
+
+:root[data-surface-style="glass"] button:not(.quiet):active,
+:root[data-surface-style="shine"] button:not(.quiet):active {
+	border-color: rgb(255 255 255 / 0.26);
+	box-shadow:
+		inset 0 1px 0 0 rgb(0 0 0 / 0.14),
+		inset 0 0 0 1px rgb(255 255 255 / 0.12),
+		0 1px 2px rgb(0 0 0 / 0.2);
+}
+
+:root[data-theme="light"][data-surface-style="glass"] button:not(.quiet),
+:root[data-theme="light"][data-surface-style="shine"] button:not(.quiet) {
+	border: 1px solid color-mix(in srgb, #ffffff 65%, var(--kc-border-strong));
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.85),
+		inset 0 0 0 1px rgb(255 255 255 / 0.4),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.06),
+		0 0 0 0.5px rgb(255 255 255 / 0.45),
+		0 2px 5px rgb(0 0 0 / 0.08);
+}
+
+:root[data-theme="light"][data-surface-style="glass"] button:not(.quiet):hover,
+:root[data-theme="light"][data-surface-style="shine"] button:not(.quiet):hover {
+	border-color: color-mix(in srgb, #ffffff 85%, var(--kc-border-strong));
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.95),
+		inset 0 0 0 1px rgb(255 255 255 / 0.55),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.08),
+		0 0 0 0.5px rgb(255 255 255 / 0.6),
+		0 3px 8px rgb(0 0 0 / 0.12);
+}
+
+/* Apple Glass border shine & running glow for Composer Card */
+:root[data-surface-style="glass"] .kc-composer-card,
+:root[data-surface-style="shine"] .kc-composer-card {
+	position: relative;
+	border: 1px solid rgb(255 255 255 / 0.22) !important;
+	box-shadow:
+		/* Top specular gleam */
+		inset 0 1px 0 0 rgb(255 255 255 / 0.42),
+		/* All-around perimeter specular rim */ inset 0 0 0 1px rgb(255 255 255 / 0.18),
+		/* Bottom refraction */ inset 0 -1px 0 0 rgb(0 0 0 / 0.14),
+		/* Outer glass rim glow */ 0 0 0 0.5px rgb(255 255 255 / 0.12),
+		/* Deep card elevation */ 0 8px 28px rgb(0 0 0 / 0.25) !important;
+}
+
+:root[data-surface-style="glass"] .kc-composer-card::before,
+:root[data-surface-style="shine"] .kc-composer-card::before {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	border-radius: inherit;
+	padding: 1.5px;
+	background: conic-gradient(
+		from var(--kc-beam-angle),
+		transparent 0deg,
+		transparent 60deg,
+		color-mix(in srgb, #ffffff 80%, transparent) 90deg,
+		transparent 120deg,
+		transparent 360deg
+	);
+	-webkit-mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	-webkit-mask-composite: xor;
+	mask-composite: exclude;
+	pointer-events: none;
+	animation: kc-border-beam-spin 6s linear infinite;
+	z-index: 1;
+}
+
+:root[data-theme="light"][data-surface-style="glass"] .kc-composer-card,
+:root[data-theme="light"][data-surface-style="shine"] .kc-composer-card {
+	border: 1px solid color-mix(in srgb, #ffffff 65%, var(--kc-border-strong)) !important;
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.85),
+		inset 0 0 0 1px rgb(255 255 255 / 0.4),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.08),
+		0 0 0 0.5px rgb(255 255 255 / 0.45),
+		0 8px 24px rgb(0 0 0 / 0.1) !important;
+}
+
+/* Selected chat row in sidebar (Projects and Recent) */
+:root[data-surface-style="3d"] .kc-nav-row:is([aria-current="page"], [data-selected]) {
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.15),
+		0 2px 5px rgb(0 0 0 / 0.25) !important;
+	border-color: var(--kc-border-strong) !important;
+}
+
+:root[data-surface-style="glass"] .kc-nav-row:is([aria-current="page"], [data-selected]),
+:root[data-surface-style="shine"] .kc-nav-row:is([aria-current="page"], [data-selected]) {
+	border: 1px solid rgb(255 255 255 / 0.22) !important;
+	box-shadow:
+		/* Top specular gleam */
+		inset 0 1px 0 0 rgb(255 255 255 / 0.4),
+		/* Perimeter specular rim all around */ inset 0 0 0 1px rgb(255 255 255 / 0.16),
+		/* Bottom refraction */ inset 0 -1px 0 0 rgb(0 0 0 / 0.12),
+		/* Outer glass aura */ 0 0 0 0.5px rgb(255 255 255 / 0.1),
+		0 2px 6px rgb(0 0 0 / 0.2) !important;
+}
+
+:root[data-theme="light"][data-surface-style="glass"] .kc-nav-row:is([aria-current="page"], [data-selected]),
+:root[data-theme="light"][data-surface-style="shine"] .kc-nav-row:is([aria-current="page"], [data-selected]) {
+	border: 1px solid color-mix(in srgb, #ffffff 60%, var(--kc-border-strong)) !important;
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.75),
+		inset 0 0 0 1px rgb(255 255 255 / 0.35),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.06),
+		0 0 0 0.5px rgb(255 255 255 / 0.4),
+		0 2px 5px rgb(0 0 0 / 0.08) !important;
+}
+
+/* App cards & Dialogs in Glass & Shine Surface Style */
+:root[data-surface-style="glass"] .kc-app-card,
+:root[data-surface-style="glass"] .kc-dialog,
+:root[data-surface-style="shine"] .kc-app-card,
+:root[data-surface-style="shine"] .kc-dialog {
+	border: 1px solid rgb(255 255 255 / 0.2) !important;
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.35),
+		inset 0 0 0 1px rgb(255 255 255 / 0.16),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.12),
+		0 0 0 0.5px rgb(255 255 255 / 0.1),
+		0 8px 24px rgb(0 0 0 / 0.24) !important;
+}
+
+/* Code blocks in Glass & Shine Surface Style */
+:root[data-surface-style="glass"] .kc-md-code,
+:root[data-surface-style="shine"] .kc-md-code {
+	border: 1px solid rgb(255 255 255 / 0.18) !important;
+	box-shadow:
+		inset 0 1px 0 0 rgb(255 255 255 / 0.3),
+		inset 0 0 0 1px rgb(255 255 255 / 0.14),
+		inset 0 -1px 0 0 rgb(0 0 0 / 0.1),
+		0 0 0 0.5px rgb(255 255 255 / 0.08),
+		0 4px 16px rgb(0 0 0 / 0.2) !important;
+}
+
+/* Explicit resets to guarantee zero boxes on subtle navigation elements across all themes and surface modes */
+.quiet,
+.kc-home-mark,
+.kc-chess-mark,
+.kc-sidebar-section-header,
+.kc-sidebar-section-actions button,
+.kc-worked-for-toggle,
+.kc-titlebar button:not(.kc-update-pill),
+.kc-app-menu-trigger,
+.kc-titlebar [role="menubar"] button,
+.kc-thread-title,
+.kc-edited-files-card,
+.kc-edited-files-btn,
+.kc-edited-file-row,
+.kc-model-picker-btn,
+.kc-mp-toggle,
+.kc-mp-toggle-content,
+.kc-project-picker-btn,
+.kc-approval-picker-btn,
+:root[data-surface-style="3d"] .quiet,
+:root[data-surface-style="3d"] .kc-home-mark,
+:root[data-surface-style="3d"] .kc-chess-mark,
+:root[data-surface-style="3d"] .kc-sidebar-section-header,
+:root[data-surface-style="3d"] .kc-sidebar-section-actions button,
+:root[data-surface-style="3d"] .kc-worked-for-toggle,
+:root[data-surface-style="3d"] .kc-titlebar button:not(.kc-update-pill),
+:root[data-surface-style="3d"] .kc-app-menu-trigger,
+:root[data-surface-style="3d"] .kc-titlebar [role="menubar"] button,
+:root[data-surface-style="3d"] .kc-thread-title,
+:root[data-surface-style="3d"] .kc-edited-files-card,
+:root[data-surface-style="3d"] .kc-edited-files-btn,
+:root[data-surface-style="3d"] .kc-edited-file-row,
+:root[data-surface-style="3d"] .kc-model-picker-btn,
+:root[data-surface-style="3d"] .kc-mp-toggle,
+:root[data-surface-style="3d"] .kc-mp-toggle-content,
+:root[data-surface-style="3d"] .kc-project-picker-btn,
+:root[data-surface-style="3d"] .kc-approval-picker-btn,
+:root[data-surface-style="glass"] .quiet,
+:root[data-surface-style="glass"] .kc-home-mark,
+:root[data-surface-style="glass"] .kc-chess-mark,
+:root[data-surface-style="glass"] .kc-sidebar-section-header,
+:root[data-surface-style="glass"] .kc-sidebar-section-actions button,
+:root[data-surface-style="glass"] .kc-worked-for-toggle,
+:root[data-surface-style="glass"] .kc-titlebar button:not(.kc-update-pill),
+:root[data-surface-style="glass"] .kc-app-menu-trigger,
+:root[data-surface-style="glass"] .kc-titlebar [role="menubar"] button,
+:root[data-surface-style="glass"] .kc-thread-title,
+:root[data-surface-style="glass"] .kc-edited-files-card,
+:root[data-surface-style="glass"] .kc-edited-files-btn,
+:root[data-surface-style="glass"] .kc-edited-file-row,
+:root[data-surface-style="glass"] .kc-model-picker-btn,
+:root[data-surface-style="glass"] .kc-mp-toggle,
+:root[data-surface-style="glass"] .kc-mp-toggle-content,
+:root[data-surface-style="glass"] .kc-project-picker-btn,
+:root[data-surface-style="glass"] .kc-approval-picker-btn,
+:root[data-surface-style="shine"] .quiet,
+:root[data-surface-style="shine"] .kc-home-mark,
+:root[data-surface-style="shine"] .kc-chess-mark,
+:root[data-surface-style="shine"] .kc-sidebar-section-header,
+:root[data-surface-style="shine"] .kc-sidebar-section-actions button,
+:root[data-surface-style="shine"] .kc-worked-for-toggle,
+:root[data-surface-style="shine"] .kc-titlebar button:not(.kc-update-pill),
+:root[data-surface-style="shine"] .kc-app-menu-trigger,
+:root[data-surface-style="shine"] .kc-titlebar [role="menubar"] button,
+:root[data-surface-style="shine"] .kc-thread-title,
+:root[data-surface-style="shine"] .kc-edited-files-card,
+:root[data-surface-style="shine"] .kc-edited-files-btn,
+:root[data-surface-style="shine"] .kc-edited-file-row,
+:root[data-surface-style="shine"] .kc-model-picker-btn,
+:root[data-surface-style="shine"] .kc-mp-toggle,
+:root[data-surface-style="shine"] .kc-mp-toggle-content,
+:root[data-surface-style="shine"] .kc-project-picker-btn,
+:root[data-surface-style="shine"] .kc-approval-picker-btn {
+	box-shadow: none !important;
+	border: none !important;
+	outline: none !important;
+}
+
+:root[data-surface-style="glass"] .quiet::after,
+:root[data-surface-style="glass"] .quiet::before,
+:root[data-surface-style="glass"] .kc-home-mark::after,
+:root[data-surface-style="glass"] .kc-home-mark::before,
+:root[data-surface-style="glass"] .kc-chess-mark::after,
+:root[data-surface-style="glass"] .kc-chess-mark::before,
+:root[data-surface-style="glass"] .kc-sidebar-section-header::after,
+:root[data-surface-style="glass"] .kc-sidebar-section-header::before,
+:root[data-surface-style="glass"] .kc-sidebar-section-actions button::after,
+:root[data-surface-style="glass"] .kc-sidebar-section-actions button::before,
+:root[data-surface-style="glass"] .kc-worked-for-toggle::after,
+:root[data-surface-style="glass"] .kc-worked-for-toggle::before,
+:root[data-surface-style="glass"] .kc-titlebar button:not(.kc-update-pill)::after,
+:root[data-surface-style="glass"] .kc-titlebar button:not(.kc-update-pill)::before,
+:root[data-surface-style="glass"] .kc-app-menu-trigger::after,
+:root[data-surface-style="glass"] .kc-app-menu-trigger::before,
+:root[data-surface-style="glass"] .kc-titlebar [role="menubar"] button::after,
+:root[data-surface-style="glass"] .kc-titlebar [role="menubar"] button::before,
+:root[data-surface-style="glass"] .kc-thread-title::after,
+:root[data-surface-style="glass"] .kc-thread-title::before,
+:root[data-surface-style="glass"] .kc-edited-files-card::after,
+:root[data-surface-style="glass"] .kc-edited-files-card::before,
+:root[data-surface-style="glass"] .kc-edited-files-btn::after,
+:root[data-surface-style="glass"] .kc-edited-files-btn::before,
+:root[data-surface-style="glass"] .kc-edited-file-row::after,
+:root[data-surface-style="glass"] .kc-edited-file-row::before,
+:root[data-surface-style="glass"] .kc-model-picker-btn::after,
+:root[data-surface-style="glass"] .kc-model-picker-btn::before,
+:root[data-surface-style="glass"] .kc-mp-toggle::after,
+:root[data-surface-style="glass"] .kc-mp-toggle::before,
+:root[data-surface-style="glass"] .kc-mp-toggle-content::after,
+:root[data-surface-style="glass"] .kc-mp-toggle-content::before,
+:root[data-surface-style="glass"] .kc-project-picker-btn::after,
+:root[data-surface-style="glass"] .kc-project-picker-btn::before,
+:root[data-surface-style="glass"] .kc-approval-picker-btn::after,
+:root[data-surface-style="glass"] .kc-approval-picker-btn::before,
+:root[data-surface-style="shine"] .quiet::after,
+:root[data-surface-style="shine"] .quiet::before,
+:root[data-surface-style="shine"] .kc-home-mark::after,
+:root[data-surface-style="shine"] .kc-home-mark::before,
+:root[data-surface-style="shine"] .kc-chess-mark::after,
+:root[data-surface-style="shine"] .kc-chess-mark::before,
+:root[data-surface-style="shine"] .kc-sidebar-section-header::after,
+:root[data-surface-style="shine"] .kc-sidebar-section-header::before,
+:root[data-surface-style="shine"] .kc-sidebar-section-actions button::after,
+:root[data-surface-style="shine"] .kc-sidebar-section-actions button::before,
+:root[data-surface-style="shine"] .kc-worked-for-toggle::after,
+:root[data-surface-style="shine"] .kc-worked-for-toggle::before,
+:root[data-surface-style="shine"] .kc-titlebar button:not(.kc-update-pill)::after,
+:root[data-surface-style="shine"] .kc-titlebar button:not(.kc-update-pill)::before,
+:root[data-surface-style="shine"] .kc-app-menu-trigger::after,
+:root[data-surface-style="shine"] .kc-app-menu-trigger::before,
+:root[data-surface-style="shine"] .kc-titlebar [role="menubar"] button::after,
+:root[data-surface-style="shine"] .kc-titlebar [role="menubar"] button::before,
+:root[data-surface-style="shine"] .kc-thread-title::after,
+:root[data-surface-style="shine"] .kc-thread-title::before,
+:root[data-surface-style="shine"] .kc-edited-files-card::after,
+:root[data-surface-style="shine"] .kc-edited-files-card::before,
+:root[data-surface-style="shine"] .kc-edited-files-btn::after,
+:root[data-surface-style="shine"] .kc-edited-files-btn::before,
+:root[data-surface-style="shine"] .kc-edited-file-row::after,
+:root[data-surface-style="shine"] .kc-edited-file-row::before,
+:root[data-surface-style="shine"] .kc-model-picker-btn::after,
+:root[data-surface-style="shine"] .kc-model-picker-btn::before,
+:root[data-surface-style="shine"] .kc-mp-toggle::after,
+:root[data-surface-style="shine"] .kc-mp-toggle::before,
+:root[data-surface-style="shine"] .kc-mp-toggle-content::after,
+:root[data-surface-style="shine"] .kc-mp-toggle-content::before,
+:root[data-surface-style="shine"] .kc-project-picker-btn::after,
+:root[data-surface-style="shine"] .kc-project-picker-btn::before,
+:root[data-surface-style="shine"] .kc-approval-picker-btn::after,
+:root[data-surface-style="shine"] .kc-approval-picker-btn::before {
+	display: none !important;
+	content: none !important;
+}
+
+.kc-worked-for-toggle,
+button.kc-worked-for-toggle,
+.kc-thread-title,
+button.kc-thread-title,
+.kc-edited-files-btn,
+button.kc-edited-files-btn,
+.kc-project-picker-btn,
+button.kc-project-picker-btn,
+.kc-mp-toggle,
+button.kc-mp-toggle {
+	background: transparent !important;
 }

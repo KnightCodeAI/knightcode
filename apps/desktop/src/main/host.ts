@@ -125,6 +125,8 @@ export interface HostDeps {
 	openWindow: (route?: string) => void;
 	/** Step the window's zoom (-1 out, 1 in, 0 back to 100%). */
 	zoom: (window: BrowserWindow, step: -1 | 0 | 1) => void;
+	/** Set the window's zoom factor directly. */
+	setZoom: (window: BrowserWindow, factor: number) => void;
 	/** host/window/role for the requesting window. */
 	role: () => { primary: boolean; heldElsewhere: string[] };
 	updates: Updates;
@@ -154,7 +156,20 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openIn, terminals, mcpApps, windowId, openWindow, zoom, role, updates, installUpdate }: HostDeps,
+	{
+		state,
+		server,
+		openIn,
+		terminals,
+		mcpApps,
+		windowId,
+		openWindow,
+		zoom,
+		setZoom,
+		role,
+		updates,
+		installUpdate,
+	}: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
 		case "host/mcpApp/serve":
@@ -293,6 +308,13 @@ async function run(
 				});
 			return { translucent: setMaterial(window, params.translucent === true, chrome.background) };
 		}
+		case "host/window/setZoom": {
+			const factor = params.factor as number;
+			setZoom(window, factor);
+			return { factor };
+		}
+		case "host/window/getZoom":
+			return { factor: window.webContents.getZoomFactor() };
 		case "host/app/command": {
 			const contents = window.webContents;
 			switch (params.command as string) {

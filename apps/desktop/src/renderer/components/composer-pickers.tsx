@@ -67,7 +67,7 @@ export function ApprovalPicker({
 					color="secondary"
 					pill
 					aria-label="Change permissions"
-					className={`px-1.5 text-sm ${mode === "fullAccess" ? "!text-caution" : ""}`}
+					className={`quiet kc-approval-picker-btn px-1.5 text-sm ${mode === "fullAccess" ? "!text-caution" : ""}`}
 				>
 					<Icon size={16} />
 					<span className="@max-[520px]:hidden">{current.name}</span>
@@ -204,7 +204,7 @@ export function ModelPicker({
 						color="secondary"
 						pill
 						aria-expanded={open}
-						className="justify-center px-2 text-sm"
+						className="quiet kc-model-picker-btn justify-center px-2 text-sm"
 						style={open ? { minWidth } : undefined}
 					>
 						{open && view === "effort" ? (
@@ -323,7 +323,7 @@ function ModelMenu({
 				{model && level ? (
 					<>
 						<div className="kc-mp-part kc-mp-header" data-part="header" data-active={active("effort")}>
-							<button type="button" aria-label="Select model" onClick={onList} className="kc-mp-toggle group">
+							<button type="button" aria-label="Select model" onClick={onList} className="quiet kc-mp-toggle group">
 								<span className="kc-mp-toggle-content">
 									<span className="truncate text-ink">{model.name}</span>
 									<span className="ms-0.5 shrink-0 text-tertiary">{levelName(level)}</span>
@@ -651,7 +651,7 @@ export function ProjectChip({ cwd, onChange }: { cwd: string | undefined; onChan
 					pill
 					aria-expanded={open}
 					aria-label={cwd ? `Change project: ${basename(cwd)}` : "Choose a project"}
-					className="gap-1.5 px-2 text-sm"
+					className="quiet kc-project-picker-btn gap-1.5 px-2 text-sm"
 				>
 					<Folder size={16} className="text-ink" />
 					<span className="text-ink">{cwd ? basename(cwd) : "Choose a project"}</span>

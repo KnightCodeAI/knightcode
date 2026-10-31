@@ -1,7 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { BASE, customTokens, fontFaces, parseThemeString, themeString } from "../../src/renderer/appearance.ts";
+import {
+	BASE,
+	customTokens,
+	fontFaces,
+	freebuffTokens,
+	isHex,
+	parseThemeString,
+	renderGradientOverlay,
+	renderSourceGradient,
+	THEME_PRESETS,
+	themeString,
+} from "../../src/renderer/appearance.ts";
 
 const css = readFileSync(join(import.meta.dirname, "../../src/renderer/styles.css"), "utf8");
 
@@ -111,4 +122,74 @@ test("a chosen font face is named by an @font-face alias ahead of its family", (
 	expect(fontFaces(hostile)).toBe(
 		'@font-face { font-family: "kc-ui-face"; src: local("X} .kc-button { display: none } @font-face {"); }',
 	);
+});
+
+test("theme presets are well-formed and valid", () => {
+	expect(THEME_PRESETS.length).toBe(28);
+	const ids = new Set(THEME_PRESETS.map((p) => p.id));
+	expect(ids.size).toBe(28);
+
+	const builtins = THEME_PRESETS.filter((p) => p.builtin);
+	expect(builtins.map((p) => p.id)).toEqual(["auto", "dark", "light"]);
+
+	const downloadable = THEME_PRESETS.filter((p) => !p.builtin);
+	expect(downloadable.length).toBe(25);
+
+	for (const preset of THEME_PRESETS) {
+		expect(["dark", "light", "system"]).toContain(preset.mode);
+		expect(preset.name.length).toBeGreaterThan(0);
+		expect(preset.description.length).toBeGreaterThan(0);
+		expect(preset.dots.length).toBe(4);
+		for (const dot of preset.dots) {
+			expect(isHex(dot)).toBe(true);
+		}
+		if (preset.customization.background) expect(isHex(preset.customization.background)).toBe(true);
+		if (preset.customization.foreground) expect(isHex(preset.customization.foreground)).toBe(true);
+		if (preset.customization.accent) expect(isHex(preset.customization.accent)).toBe(true);
+	}
+});
+
+test("freebuffTokens derives tokens for wallpaper preset (Alpine)", () => {
+	const alpine = THEME_PRESETS.find((p) => p.id === "alpine")!;
+	expect(alpine).toBeDefined();
+	const tokens = freebuffTokens(alpine);
+	expect(tokens["--kc-accent"]).toBe(alpine.colors.accent);
+	expect(tokens["--kc-text"]).toBe(alpine.colors.text);
+	expect(tokens["--kc-bg-shell"]).toBe("transparent");
+	expect(tokens["--wallpaper-opacity"]).toBe("72%");
+	expect(tokens["--wallpaper-blur"]).toBe("8px");
+	expect(tokens["--kc-user-bubble"]).toBe(alpine.colors.accent);
+	expect(tokens["--kc-user-bubble-text"]).toBe("#ffffff");
+});
+
+test("freebuffTokens derives solid tokens for non-wallpaper preset (OG Shine)", () => {
+	const shine = THEME_PRESETS.find((p) => p.id === "og-shine")!;
+	expect(shine).toBeDefined();
+	const tokens = freebuffTokens(shine);
+	expect(tokens["--kc-accent"]).toBe("#50ecb3");
+	expect(tokens["--kc-bg-shell"]).not.toBe("transparent");
+});
+
+test("freebuffTokens dynamically adapts the System preset for dark and light modes", () => {
+	const system = THEME_PRESETS.find((p) => p.id === "auto")!;
+	expect(system).toBeDefined();
+	const darkTokens = freebuffTokens(system, "dark");
+	expect(darkTokens["--kc-accent"]).toBe("#f97316");
+	expect(darkTokens["--kc-user-bubble"]).toBe("#f97316");
+	expect(darkTokens["--kc-text"]).toBe("#ffffff");
+
+	const lightTokens = freebuffTokens(system, "light");
+	expect(lightTokens["--kc-accent"]).toBe("#ea580c");
+	expect(lightTokens["--kc-user-bubble"]).toBe("#ea580c");
+	expect(lightTokens["--kc-text"]).toBe("#1a1c1f");
+});
+
+test("gradient rendering helpers handle linear, radial, mesh and overlays", () => {
+	expect(renderSourceGradient("gradient:linear:#111111,#222222,#333333")).toContain("linear-gradient");
+	expect(renderSourceGradient("gradient:radial:#111111,#222222,#333333")).toContain("radial-gradient");
+	expect(renderSourceGradient("gradient:mesh:#111111,#222222,#333333")).toContain("radial-gradient");
+	const overlay = renderGradientOverlay("#152423", { enabled: true, direction: "bottom", position: 0.66 });
+	expect(overlay).toContain("linear-gradient(to top");
+	expect(overlay).toContain("#15242300");
+	expect(overlay).toContain("#152423ff");
 });

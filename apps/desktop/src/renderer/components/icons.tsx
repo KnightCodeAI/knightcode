@@ -593,6 +593,25 @@ export const CloudUpload = icon(
 	"CloudUpload",
 	<path d="M5 12.75h-.5a3 3 0 0 1-.35-5.98 4.25 4.25 0 0 1 8.15-1.17 3.5 3.5 0 0 1-.55 7.15H11M8 13.75V8.5m-2 2 2-2 2 2" />,
 );
+export const Image = icon(
+	"Image",
+	<>
+		<rect x="2.5" y="2.5" width="11" height="11" rx="2" />
+		<circle cx="5.5" cy="5.5" r="1" />
+		<path d="m3 11.5 3.5-3.5 2.5 2.5 2.5-2.5 1.5 1.5" />
+	</>,
+);
+export const Monitor = icon(
+	"Monitor",
+	<>
+		<rect x="2" y="2.75" width="12" height="8.5" rx="1.5" />
+		<path d="M8 11.25v2.5M5.5 13.75h5" />
+	</>,
+);
+export const Sliders = icon(
+	"Sliders",
+	<path d="M2.5 4h3m2 0h6M2.5 8h6m2 0h3M2.5 12h1m2 0h8M5.5 2.5v3M10.5 6.5v3M3.5 10.5v3" />,
+);
 
 /** The mark's knight (an even-odd outline) and its two-step base, which the home screen's chess pieces stand on. */
 export const KNIGHT_BODY =

@@ -68,7 +68,7 @@ function HomeMark() {
 	return (
 		<button
 			type="button"
-			className="kc-home-mark"
+			className="kc-home-mark quiet"
 			aria-label="Chess animation"
 			aria-pressed={playing}
 			disabled={reduceMotion}
@@ -146,7 +146,7 @@ export function Home({ cwd: requested }: { cwd?: string }) {
 									trigger={() => (
 										<button
 											type="button"
-											className="inline-block max-w-full align-baseline break-words underline decoration-tertiary decoration-dotted decoration-1 underline-offset-4 hover:text-secondary"
+											className="quiet kc-project-picker-btn inline-block max-w-full align-baseline break-words underline decoration-tertiary decoration-dotted decoration-1 underline-offset-4 hover:text-secondary"
 										>
 											{basename(cwd)}?
 										</button>

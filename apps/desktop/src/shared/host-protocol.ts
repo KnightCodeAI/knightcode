@@ -55,6 +55,16 @@ export const Preferences = Obj({
 	codeFontSize: Type.Optional(Type.Number()),
 	diffMarkers: Type.Optional(Type.Union([Type.Literal("color"), Type.Literal("plusMinus")])),
 	pointerCursors: Type.Optional(Type.Boolean()),
+	/** Appearance › Interface size: window zoom factor (1 = 100%). */
+	zoomFactor: Type.Optional(Type.Number()),
+	/** Appearance › Theme presets: currently active preset id ("auto", "dark", "light", etc.). */
+	activePreset: Type.Optional(Type.String()),
+	/** Appearance › Theme presets: list of downloaded external preset ids. */
+	downloadedPresets: Type.Optional(Type.Array(Type.String())),
+	/** Appearance › Style: "flat", "3d", or "glass" (legacy "shine" also supported). */
+	surfaceStyle: Type.Optional(
+		Type.Union([Type.Literal("flat"), Type.Literal("3d"), Type.Literal("glass"), Type.Literal("shine")]),
+	),
 	/** Rebound shortcuts (Settings › Keyboard shortcuts): a binding id's keys, replacing its defaults; [] unassigns it. */
 	keybindings: Type.Optional(Type.Record(Type.String(), Type.Array(Type.String()))),
 	/** The "Open" button's app: the last one picked, and per project folder. */
@@ -358,6 +368,16 @@ export const HostMethods = {
 	"host/window/setTheme": {
 		params: Obj({ dark: Type.Boolean(), translucent: Type.Optional(Type.Boolean()) }),
 		result: Obj({ translucent: Type.Boolean() }),
+	},
+	/** Set the window's zoom factor (Appearance › Interface size). */
+	"host/window/setZoom": {
+		params: Obj({ factor: Type.Number() }),
+		result: Obj({ factor: Type.Number() }),
+	},
+	/** Read the window's current zoom factor. */
+	"host/window/getZoom": {
+		params: Obj({}),
+		result: Obj({ factor: Type.Number() }),
 	},
 	"host/app/command": { params: Obj({ command: AppCommand }), result: Obj({}) },
 	"host/server/restart": { params: Obj({}), result: Obj({}) },

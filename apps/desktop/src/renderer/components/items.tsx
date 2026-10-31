@@ -213,7 +213,7 @@ export function UserBubble({
 	if (editing !== undefined && onEdit)
 		return (
 			<div className="flex flex-col items-end">
-				<div className="flex w-full max-w-[70%] flex-col gap-2 rounded-composer bg-composer p-3 shadow-[var(--kc-composer-ring)]">
+				<div className="flex w-full max-w-[78%] flex-col gap-2 rounded-[20px] rounded-br-[5px] border border-line bg-composer p-4 shadow-lg">
 					<textarea
 						autoFocus
 						aria-label="Edit message"
@@ -230,7 +230,7 @@ export function UserBubble({
 							}
 						}}
 						rows={Math.min(8, editing.split("\n").length + 1)}
-						className="selectable w-full resize-none bg-transparent px-1 text-base leading-[22.75px] text-ink outline-none focus-visible:outline-none"
+						className="selectable w-full resize-none bg-transparent px-1 text-base leading-relaxed text-ink outline-none focus-visible:outline-none"
 					/>
 					<div className="flex justify-end gap-2">
 						<Button variant="ghost" color="secondary" size="md" squircle onClick={() => setEditing(undefined)}>
@@ -253,14 +253,14 @@ export function UserBubble({
 			</div>
 		);
 	return (
-		<div className="group/message flex flex-col items-end gap-1">
+		<div className="group/message flex flex-col items-end gap-1.5">
 			{images?.length ? (
-				<div className={`flex max-w-[70%] flex-wrap justify-end gap-2 ${pending ? "opacity-60" : ""}`}>
+				<div className={`flex max-w-[78%] flex-wrap justify-end gap-2 ${pending ? "opacity-60" : ""}`}>
 					{images.map((image, i) => (
 						<img
 							key={i}
 							src={`data:${image.mimeType};base64,${image.data}`}
-							className="max-h-40 rounded-xl border border-line object-cover"
+							className="max-h-48 rounded-xl border border-line object-cover shadow-sm"
 							alt=""
 						/>
 					))}
@@ -268,7 +268,7 @@ export function UserBubble({
 			) : null}
 			{text ? (
 				<div
-					className={`flex max-w-[70%] flex-col rounded-composer bg-bubble px-4 py-2.5 text-base leading-[22.75px] text-bubble-text ${pending ? "opacity-60" : ""}`}
+					className={`kc-user-bubble flex max-w-[78%] flex-col rounded-[20px] rounded-br-[5px] px-5 py-3.5 text-[15px] leading-[23px] font-medium tracking-[-0.01em] select-text text-white ${pending ? "opacity-60" : ""}`}
 				>
 					<FoldedText text={text} />
 				</div>
@@ -439,7 +439,7 @@ function WorkedFor({ turn, open, onToggle }: { turn: ViewTurn; open: boolean; on
 					type="button"
 					aria-expanded={open}
 					onClick={onToggle}
-					className={`-ms-1 flex w-fit items-center gap-1 rounded-md px-1 text-base ${open ? "text-ink" : "text-tertiary hover:text-secondary"}`}
+					className={`kc-worked-for-toggle quiet -ms-1 flex w-fit items-center gap-1 rounded-md px-1 text-base ${open ? "text-ink" : "text-tertiary hover:text-secondary"}`}
 				>
 					{label}
 					<ChevronRight
@@ -508,13 +508,13 @@ function EditedFilesCard({
 		void undoTurnEdits(threadId, turnId, undone).then(() => setPending(false));
 	};
 	return (
-		<div className="overflow-hidden rounded-lg bg-card-soft shadow-[0_0_0_0.5px_var(--kc-border-strong)]">
+		<div className="kc-edited-files-card overflow-hidden rounded-lg bg-card-soft">
 			<div className="flex items-center gap-2.5 p-3">
 				<button
 					type="button"
 					onClick={view}
 					aria-label="View changed files"
-					className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
+					className="quiet kc-edited-files-btn flex min-w-0 flex-1 items-center gap-2.5 text-start"
 				>
 					<span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-secondary">
 						<FileDiff size={24} />
@@ -554,7 +554,7 @@ function EditedFilesCard({
 							key={f.path}
 							type="button"
 							onClick={view}
-							className="flex h-9 w-full items-center gap-2 bg-card-row px-3 text-base hover:bg-ghost-hover"
+							className="quiet kc-edited-file-row flex h-9 w-full items-center gap-2 bg-card-row px-3 text-base hover:bg-ghost-hover"
 						>
 							<Tooltip content={f.path} align="start" overflow>
 								<span className="min-w-0 flex-1 truncate text-start">

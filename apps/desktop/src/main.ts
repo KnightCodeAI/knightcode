@@ -84,18 +84,22 @@ function sendEvent(target: OpenWindow, event: HostEvent): void {
  * Codex's window zoom: 10% steps from 50% to 300%, the caption buttons' overlay as tall as the zoomed title bar, and
  * the level shown in the window that changed it. Chromium zooms by origin, so every window follows.
  */
-function zoom(window: BrowserWindow, step: -1 | 0 | 1): void {
-	const contents = window.webContents;
-	const factor = step === 0 ? 1 : Math.min(3, Math.max(0.5, Math.round(contents.getZoomFactor() * 10 + step) / 10));
-	contents.setZoomFactor(factor);
+function setZoom(window: BrowserWindow, factor: number): void {
+	const clamped = Math.min(3, Math.max(0.5, Math.round(factor * 100) / 100));
+	window.webContents.setZoomFactor(clamped);
 	for (const open of windows.values()) {
 		if (process.platform === "win32")
 			open.window.setTitleBarOverlay({
-				// The new factor for every window: one origin, and another window's own reading can lag.
-				height: Math.round(WINDOW_CHROME.titleBarHeight * factor),
+				height: Math.round(WINDOW_CHROME.titleBarHeight * clamped),
 			});
-		if (open.window === window) sendEvent(open, { event: "zoom", factor });
+		if (open.window === window) sendEvent(open, { event: "zoom", factor: clamped });
 	}
+}
+
+function zoom(window: BrowserWindow, step: -1 | 0 | 1): void {
+	const contents = window.webContents;
+	const factor = step === 0 ? 1 : Math.min(3, Math.max(0.5, Math.round(contents.getZoomFactor() * 10 + step) / 10));
+	setZoom(window, factor);
 }
 
 const router = new Router({
@@ -153,6 +157,7 @@ function connectPort(id: number, open: OpenWindow): void {
 				windowId: id,
 				openWindow: createWindow,
 				zoom,
+				setZoom,
 				role: () => roleOf(id),
 				updates,
 				installUpdate,
@@ -227,6 +232,10 @@ function createWindow(route?: string): BrowserWindow {
 	});
 	const open: OpenWindow = { window, port: undefined, lastFocusedAt: Date.now(), route };
 	windows.set(id, open);
+	const savedZoom = state.read().preferences?.zoomFactor;
+	if (typeof savedZoom === "number" && savedZoom >= 0.5 && savedZoom <= 3) {
+		window.webContents.setZoomFactor(savedZoom);
+	}
 	window.on("focus", () => {
 		open.lastFocusedAt = Date.now();
 	});
@@ -436,7 +445,7 @@ let pendingLink: string | undefined;
 if (squirrelEvent()) {
 	// Squirrel's install, update or removal run: it quits once the shortcuts are done.
 } else if (!app.requestSingleInstanceLock()) {
-	app.quit();
+	app.exit(0);
 } else {
 	app.on("second-instance", (_event, argv) => {
 		const link = linkIn(argv);

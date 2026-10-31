@@ -476,7 +476,7 @@ export function Composer({
 						setDragging(false);
 						drop([...event.dataTransfer.files]);
 					}}
-					className="relative rounded-composer bg-composer shadow-[var(--kc-composer-ring)]"
+					className="kc-composer-card relative rounded-composer bg-composer shadow-[var(--kc-composer-ring)]"
 				>
 					{/* The "/", "@" and "+" panel: as wide as the composer, 8px above it, as Codex's. */}
 					{suggestions ? (

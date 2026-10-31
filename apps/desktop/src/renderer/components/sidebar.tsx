@@ -271,7 +271,7 @@ function Section({
 					type="button"
 					aria-expanded={!folded}
 					onClick={() => toggleSection(id)}
-					className="-ms-1 flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-0.5 text-base font-medium text-tertiary"
+					className="kc-sidebar-section-header quiet -ms-1 flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-0.5 text-base font-medium text-tertiary"
 				>
 					<span className="truncate">{title}</span>
 					<ChevronRight
@@ -281,7 +281,7 @@ function Section({
 				</button>
 				{actions ? (
 					// Kept shown while a menu they opened is open.
-					<div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/section:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
+					<div className="kc-sidebar-section-actions flex items-center gap-1 opacity-0 transition-opacity group-hover/section:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
 						{actions}
 					</div>
 				) : null}
@@ -298,7 +298,7 @@ function SidebarOptionsMenu({ label }: { label: string }) {
 	return (
 		<Menu>
 			<MenuTrigger>
-				<IconButton label={label} size="xs">
+				<IconButton label={label} size="xs" className="quiet">
 					<MoreHorizontal size={16} />
 				</IconButton>
 			</MenuTrigger>
@@ -622,7 +622,7 @@ export function Sidebar() {
 						actions={
 							<>
 								<SidebarOptionsMenu label="Project sidebar options" />
-								<IconButton label="Add new project" size="xs" onClick={() => void addProject()}>
+								<IconButton label="Add new project" size="xs" className="quiet" onClick={() => void addProject()}>
 									<FolderPlus size={16} />
 								</IconButton>
 							</>
@@ -656,7 +656,7 @@ export function Sidebar() {
 						actions={
 							<>
 								<SidebarOptionsMenu label="Thread sidebar options" />
-								<IconButton label="New thread" size="xs" onClick={() => showNew()}>
+								<IconButton label="New thread" size="xs" className="quiet" onClick={() => showNew()}>
 									<SquarePen size={16} />
 								</IconButton>
 							</>

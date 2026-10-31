@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { DESKTOP_KEYBINDINGS, type KeybindingId, matchesBinding } from "../shared/keybindings.ts";
 
-export const isMac = () => window.knightcode.platform === "darwin";
+export const isMac = () => window.knightcode?.platform === "darwin";
 
 const KEY_NAMES: Record<string, string> = {
 	arrowleft: "←",

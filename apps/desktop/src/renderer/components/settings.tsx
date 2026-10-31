@@ -15,7 +15,17 @@ import type {
 	ResultOf,
 	ThreadSummary,
 } from "@knightcode/app-server-protocol";
-import { type CSSProperties, Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	Fragment,
+	type MouseEvent,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react";
 import { comboFromEvent, DESKTOP_KEYBINDINGS, type KeybindingId } from "../../shared/keybindings.ts";
 import { client } from "../client.ts";
 import {
@@ -32,6 +42,9 @@ import {
 	DEFAULT_CONTRAST,
 	isHex,
 	parseThemeString,
+	renderSourceGradient,
+	THEME_PRESETS,
+	type ThemePreset,
 	themeString,
 } from "../appearance.ts";
 import { basename, samePath } from "../format.ts";
@@ -70,13 +83,16 @@ import {
 	Check,
 	Copy,
 	ChevronDown,
+	ChevronLeft,
 	ChevronRight,
 	CircleUserRound,
 	Code,
+	Download,
 	ExternalLink,
 	Folder,
 	GitBranch,
 	Globe,
+	Image,
 	Import,
 	Info,
 	Keyboard,
@@ -86,11 +102,14 @@ import {
 	ListFilter,
 	LogOut,
 	MessageSquare,
+	Monitor,
 	Pencil,
 	Plus,
 	RefreshCw,
 	Search,
 	Settings as SettingsIcon,
+	Sliders,
+	Spinner,
 	SquarePen,
 	Sun,
 	Trash2,
@@ -226,14 +245,32 @@ const PageBar = ({ children }: { children: ReactNode }) => (
 	<div className="sticky top-0 z-10 -mt-5 -mb-5 bg-surface pt-5 pb-2">{children}</div>
 );
 
-/** A section: its heading (14px medium, centred in 40px over 6px), then its cards. */
-function Section({ title, aside, children }: { title?: ReactNode; aside?: ReactNode; children: ReactNode }) {
+/** A section: its heading (14px medium, centred in 40px over 6px), optional detail, then its cards. */
+function Section({
+	title,
+	detail,
+	aside,
+	children,
+}: {
+	title?: ReactNode;
+	detail?: ReactNode;
+	aside?: ReactNode;
+	children: ReactNode;
+}) {
 	return (
 		<section className="flex flex-col">
 			{title ? (
-				<div className="flex min-h-11.5 items-center justify-between gap-4 pb-1.5">
-					<h2 className="text-base font-medium">{title}</h2>
-					{aside}
+				<div className={`flex justify-between gap-4 ${detail ? "flex-col pb-2.5" : "min-h-11.5 items-center pb-1.5"}`}>
+					<div className="flex items-center justify-between gap-4">
+						<h2 className="text-base font-medium">{title}</h2>
+						{!detail && aside}
+					</div>
+					{detail ? (
+						<div className="flex items-center justify-between gap-4">
+							<p className="text-xs text-secondary">{detail}</p>
+							{aside}
+						</div>
+					) : null}
 				</div>
 			) : null}
 			{/* A section's cards stack 16px apart (Codex's Visual style: Mode, then the theme). */}
@@ -347,39 +384,6 @@ function General() {
 		</>
 	);
 }
-
-/** A miniature window in one theme (its tokens scoped to it), as Codex draws its Mode choices: 80 by 60. */
-function ThemePreview({ theme, className = "" }: { theme: "light" | "dark"; className?: string }) {
-	// Lines of text at [left, top, width], the first and last in the accent (Codex's blue), after Codex's art.
-	const lines: [number, number, number, boolean][] = [
-		[38, 12, 30, true],
-		[24, 18, 30, false],
-		[24, 22, 18, false],
-		[24, 26, 36, false],
-		[29, 32, 39, true],
-	];
-	return (
-		<span data-theme={theme} className={`absolute top-0 h-15 w-20 bg-shell ${className}`}>
-			<span className="absolute inset-2 overflow-hidden rounded-xs border border-line-strong bg-surface">
-				<span className="absolute inset-y-0 left-0 w-3 border-r border-line bg-sidebar" />
-			</span>
-			{lines.map(([left, top, width, accent]) => (
-				<span
-					key={top}
-					style={{ left, top, width }}
-					className={`absolute h-0.5 rounded-full ${accent ? "bg-current" : "bg-ink/10"}`}
-				/>
-			))}
-			<span className="absolute top-[42px] left-6 h-1.5 w-11 rounded-full border border-line-strong" />
-		</span>
-	);
-}
-
-const MODES = [
-	{ value: "system", label: "System" },
-	{ value: "light", label: "Light" },
-	{ value: "dark", label: "Dark" },
-] as const;
 
 /**
  * A select on a pill, as Codex's Appearance rows draw theirs (Theme, Accent, Font): 28px, the surface's fill under
@@ -513,178 +517,13 @@ const ACCENT_OPTIONS = [
 	{ value: "custom", label: "Custom" },
 ];
 
-/**
- * Appearance, as Codex's: the Mode tiles, then the theme's own customization (Codex keeps one per light and dark;
- * these rows edit the one showing): the theme with Import and Copy, Accent (Codex's choices or a custom colour),
- * Background, Foreground and Font.
- */
-function Appearance() {
-	const prefs = useStore(selectPreferences);
-	const theme = useStore((s) => s.resolvedTheme);
-	const custom = prefs.appearance?.[theme] ?? {};
-	const base = BASE[theme];
-	const name = theme === "dark" ? "Dark" : "Light";
-	const [importing, setImporting] = useState(false);
-	const [fonts, setFonts] = useState<LocalFont[]>([]);
-	useEffect(() => {
-		// The installed fonts, as Codex lists them (Chromium's Local Font Access); the system font alone if refused.
-		// The query can need a user gesture, so a refused one is tried again on the next press (opening a picker).
-		let cancelled = false;
-		const load = () =>
-			window.queryLocalFonts().then(
-				(found) => {
-					if (!cancelled) setFonts(found);
-					return true;
-				},
-				() => false,
-			);
-		const retry = () => void load();
-		void load().then((ok) => {
-			if (!ok && !cancelled) window.addEventListener("pointerdown", retry, { once: true, capture: true });
-		});
-		return () => {
-			cancelled = true;
-			window.removeEventListener("pointerdown", retry, { capture: true });
-		};
-	}, []);
-	const accent = custom.accent ?? base.accent;
-	const named = ACCENTS.find((a) => a.hex === custom.accent);
-	const accentValue = !custom.accent ? "default" : named ? named.hex : "custom";
-	const customized = Object.keys(custom).length > 0;
-	return (
-		<>
-			<Section title="Visual style">
-				<Box>
-					<div className="flex items-center justify-between gap-3 px-4 py-2">
-						<span className="text-sm font-medium">Mode</span>
-						<div role="radiogroup" aria-label="Mode" className="flex gap-4">
-							{MODES.map((m) => (
-								<Tooltip key={m.value} content={m.label}>
-									<label className="relative block h-15 w-20">
-										<input
-											type="radio"
-											name="mode"
-											aria-label={m.label}
-											checked={prefs.theme === m.value}
-											onChange={() => setPreference("theme", m.value)}
-											className="peer sr-only"
-										/>
-										<span className="absolute inset-0 overflow-hidden rounded-lg text-info">
-											{m.value === "system" ? (
-												<>
-													<span className="absolute inset-y-0 left-0 w-1/2 overflow-hidden">
-														<ThemePreview theme="light" className="left-0" />
-													</span>
-													<span className="absolute inset-y-0 right-0 w-1/2 overflow-hidden">
-														<ThemePreview theme="dark" className="right-0" />
-													</span>
-												</>
-											) : (
-												<ThemePreview theme={m.value} className="left-0" />
-											)}
-										</span>
-										<span className="pointer-events-none absolute inset-0 rounded-lg border-2 border-line peer-checked:border-[var(--kc-focus)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--kc-focus)]" />
-									</label>
-								</Tooltip>
-							))}
-						</div>
-					</div>
-				</Box>
-				<Box>
-					<Row compact title="Theme">
-						<IconButton label={`Import ${name} theme`} size="lg" round onClick={() => setImporting(true)}>
-							<Import size={20} />
-						</IconButton>
-						<IconButton
-							label={`Copy ${name} theme`}
-							size="lg"
-							round
-							onClick={() =>
-								void client
-									.host("host/clipboard/writeText", { text: themeString(custom) })
-									.then(() => toast("Copied theme", "success"))
-							}
-						>
-							<Copy size={20} />
-						</IconButton>
-						<PillMenu
-							label={`${name} theme`}
-							mark={
-								<span className="flex size-5 items-center justify-center rounded-full border border-line-strong text-xs leading-3 font-semibold text-accent">
-									<span className="[text-box:trim-both_cap_alphabetic]">Aa</span>
-								</span>
-							}
-							text={customized ? "Custom" : "KnightCode"}
-							value={customized ? "custom" : "knightcode"}
-							options={[
-								{ value: "knightcode", label: "KnightCode" },
-								...(customized ? [{ value: "custom", label: "Custom" }] : []),
-							]}
-							onChange={(v) => v === "knightcode" && customize(theme, undefined)}
-						/>
-					</Row>
-					<Row compact title="Accent">
-						{accentValue === "custom" ? (
-							<ColorField
-								label={`${name} custom accent color`}
-								value={accent}
-								onChange={(hex) => customize(theme, { accent: hex })}
-							/>
-						) : null}
-						<PillMenu
-							label={`${name} accent color`}
-							mark={<Swatch color={accent} />}
-							text={ACCENT_OPTIONS.find((o) => o.value === accentValue)!.label}
-							value={accentValue}
-							options={ACCENT_OPTIONS.map((o) => ({
-								...o,
-								icon:
-									o.value === "custom" ? undefined : <Swatch color={o.value === "default" ? base.accent : o.value} />,
-							}))}
-							onChange={(v) => customize(theme, { accent: v === "default" ? undefined : v === "custom" ? accent : v })}
-						/>
-					</Row>
-					<Row compact title="Background">
-						<ColorField
-							label={`${name} background color`}
-							value={custom.background ?? base.background}
-							onChange={(hex) => customize(theme, { background: hex })}
-						/>
-					</Row>
-					<Row compact title="Foreground">
-						<ColorField
-							label={`${name} ink color`}
-							value={custom.foreground ?? base.foreground}
-							onChange={(hex) => customize(theme, { foreground: hex })}
-						/>
-					</Row>
-					<Row compact title="Font">
-						<PillMenu
-							label={`${name} UI font`}
-							text={custom.font ?? "System"}
-							value={custom.font ?? "system"}
-							options={[
-								{ value: "system", label: "System" },
-								...[...new Set(fonts.map((f) => f.family))].map((f) => ({ value: f, label: f })),
-							]}
-							onChange={(v) => customize(theme, { font: v === "system" ? undefined : v, fontStyle: undefined })}
-						/>
-					</Row>
-				</Box>
-				{importing ? (
-					<ImportThemeDialog
-						onClose={() => setImporting(false)}
-						onImport={(imported) => {
-							setImporting(false);
-							customize(theme, imported, true);
-						}}
-					/>
-				) : null}
-			</Section>
-			<AdvancedAppearance fonts={fonts} />
-		</>
-	);
-}
+const INTERFACE_SIZES: { label: string; factor: number }[] = [
+	{ label: "90%", factor: 0.9 },
+	{ label: "100%", factor: 1.0 },
+	{ label: "110%", factor: 1.1 },
+	{ label: "125%", factor: 1.25 },
+	{ label: "150%", factor: 1.5 },
+];
 
 /**
  * A number, as Codex's Advanced font sizes: a 64px field (96px for large ones) with its unit after it, applied on
@@ -708,7 +547,6 @@ function SizeField({
 	const [text, setText] = useState(String(value));
 	useEffect(() => setText(String(value)), [value]);
 	const commit = () => {
-		// Number("") is 0: a cleared field reverts rather than writing 0.
 		const n = text.trim() === "" ? Number.NaN : Math.round(Number(text));
 		if (n >= min && n <= max) {
 			if (n !== value) onChange(n);
@@ -734,20 +572,269 @@ function SizeField({
 
 type LocalFont = { family: string; style: string; postscriptName: string };
 
+function EditorMock({
+	windowBg = "rgba(24, 24, 24, 0.85)",
+	windowBorder = "rgba(255, 255, 255, 0.12)",
+	tabAccent = "#f97316",
+	lineColors = ["#f97316", "#ffffff", "#71717a", "#3b82f6"],
+	light = false,
+}: {
+	windowBg?: string;
+	windowBorder?: string;
+	tabAccent?: string;
+	lineColors?: readonly string[];
+	light?: boolean;
+}) {
+	const dotColor = light ? "#94a3b8" : "#404040";
+	const navColor = light ? "#cbd5e1" : "#2e2e2e";
+	const dividerColor = light ? "rgba(0, 0, 0, 0.08)" : "rgba(255, 255, 255, 0.08)";
+	const cardColor = light ? "rgba(0, 0, 0, 0.04)" : "rgba(255, 255, 255, 0.04)";
+
+	return (
+		<g>
+			{/* Window frame */}
+			<rect x="18" y="14" width="204" height="112" rx="6" fill={windowBg} stroke={windowBorder} strokeWidth="1" />
+			{/* Title bar */}
+			<circle cx="26" cy="21.5" r="1.8" fill={dotColor} />
+			<circle cx="31.5" cy="21.5" r="1.8" fill={dotColor} />
+			<circle cx="37" cy="21.5" r="1.8" fill={dotColor} />
+			{/* Active tab */}
+			<rect x="50" y="17" width="36" height="8" rx="2" fill={light ? "#e2e8f0" : "#262626"} />
+			<rect x="50" y="24" width="36" height="1.5" fill={tabAccent} />
+			{/* Sidebar */}
+			<line x1="46" y1="26" x2="46" y2="126" stroke={dividerColor} strokeWidth="1" />
+			<rect x="23" y="34" width="16" height="2" rx="1" fill={navColor} />
+			<rect x="23" y="41" width="12" height="2" rx="1" fill={navColor} />
+			<rect x="23" y="48" width="15" height="2" rx="1" fill={navColor} />
+			<rect x="23" y="55" width="10" height="2" rx="1" fill={navColor} />
+			{/* Code lines */}
+			<rect x="54" y="34" width="18" height="2.5" rx="1" fill={lineColors[0] ?? tabAccent} />
+			<rect x="76" y="34" width="38" height="2.5" rx="1" fill={lineColors[1] ?? "#fff"} />
+			<rect x="62" y="43" width="26" height="2.5" rx="1" fill={lineColors[2] ?? "#888"} />
+			<rect x="92" y="43" width="32" height="2.5" rx="1" fill={lineColors[3] ?? lineColors[0] ?? tabAccent} />
+			<rect x="62" y="52" width="42" height="2.5" rx="1" fill={lineColors[1] ?? "#fff"} />
+			<rect x="108" y="52" width="22" height="2.5" rx="1" fill={lineColors[2] ?? "#888"} />
+			<rect x="62" y="61" width="30" height="2.5" rx="1" fill={lineColors[0] ?? tabAccent} />
+			<rect x="96" y="61" width="34" height="2.5" rx="1" fill={lineColors[3] ?? "#888"} />
+			<rect x="54" y="70" width="10" height="2.5" rx="1" fill={lineColors[2] ?? "#888"} />
+			<rect x="54" y="79" width="24" height="2.5" rx="1" fill={lineColors[0] ?? tabAccent} />
+			<rect x="82" y="79" width="36" height="2.5" rx="1" fill={lineColors[1] ?? "#fff"} />
+			{/* Inspector divider & cards */}
+			<line x1="156" y1="26" x2="156" y2="126" stroke={dividerColor} strokeWidth="1" />
+			<rect x="162" y="34" width="52" height="22" rx="3" fill={cardColor} stroke={dividerColor} strokeWidth="1" />
+			<rect x="166" y="39" width="28" height="2" rx="1" fill={lineColors[2] ?? "#888"} />
+			<rect x="166" y="46" width="38" height="2" rx="1" fill={lineColors[1] ?? "#fff"} />
+			<rect x="162" y="62" width="52" height="34" rx="3" fill={cardColor} stroke={dividerColor} strokeWidth="1" />
+			<rect x="166" y="68" width="34" height="2" rx="1" fill={lineColors[2] ?? "#888"} />
+			<rect x="166" y="75" width="22" height="2" rx="1" fill={lineColors[0] ?? tabAccent} />
+			<rect x="166" y="82" width="40" height="2" rx="1" fill={lineColors[1] ?? "#fff"} />
+		</g>
+	);
+}
+
+function PresetThumbnail({ preset }: { preset: ThemePreset }) {
+	const id = useId();
+
+	switch (preset.id) {
+		case "auto": {
+			const leftClip = `auto-l-${id}`;
+			const rightClip = `auto-r-${id}`;
+			return (
+				<svg viewBox="0 0 240 140" className="size-full select-none" aria-hidden="true">
+					<defs>
+						<clipPath id={leftClip}>
+							<polygon points="0,0 148,0 84,140 0,140" />
+						</clipPath>
+						<clipPath id={rightClip}>
+							<polygon points="148,0 240,0 240,140 84,140" />
+						</clipPath>
+					</defs>
+					<g clipPath={`url(#${leftClip})`}>
+						<rect width="240" height="140" fill="#f1f5f9" />
+						<EditorMock
+							light
+							windowBg="#ffffff"
+							windowBorder="#cbd5e1"
+							tabAccent="#f97316"
+							lineColors={["#f97316", "#0f172a", "#64748b", "#3b82f6"]}
+						/>
+					</g>
+					<g clipPath={`url(#${rightClip})`}>
+						<rect width="240" height="140" fill="#111214" />
+						<EditorMock
+							windowBg="#181818"
+							windowBorder="#2e2e2e"
+							tabAccent="#f97316"
+							lineColors={["#f97316", "#ffffff", "#71717a", "#f97316"]}
+						/>
+					</g>
+					<polygon points="138,0 158,0 94,140 74,140" fill="#ffffff" fillOpacity="0.22" />
+					<line x1="148" y1="0" x2="84" y2="140" stroke="#ffffff" strokeWidth="1.5" strokeOpacity="0.5" />
+				</svg>
+			);
+		}
+		case "dark":
+			return (
+				<svg viewBox="0 0 240 140" className="size-full select-none" aria-hidden="true">
+					<rect width="240" height="140" fill="#111214" />
+					<EditorMock
+						windowBg="#181818"
+						windowBorder="#2e2e2e"
+						tabAccent="#f97316"
+						lineColors={["#f97316", "#f4f4f5", "#71717a", "#a1a1aa"]}
+					/>
+				</svg>
+			);
+		case "light":
+			return (
+				<svg viewBox="0 0 240 140" className="size-full select-none" aria-hidden="true">
+					<rect width="240" height="140" fill="#e2e8f0" />
+					<EditorMock
+						light
+						windowBg="#ffffff"
+						windowBorder="#cbd5e1"
+						tabAccent="#2563eb"
+						lineColors={["#2563eb", "#0f172a", "#3b82f6", "#64748b"]}
+					/>
+				</svg>
+			);
+		case "og-shine": {
+			const glowId = `og-glow-${id}`;
+			return (
+				<svg viewBox="0 0 240 140" className="size-full select-none" aria-hidden="true">
+					<defs>
+						<radialGradient id={glowId} cx="50%" cy="50%" r="60%">
+							<stop offset="0%" stopColor="#0284c7" stopOpacity="0.8" />
+							<stop offset="70%" stopColor="#0c4a6e" stopOpacity="0.3" />
+							<stop offset="100%" stopColor="#030712" stopOpacity="0" />
+						</radialGradient>
+					</defs>
+					<rect width="240" height="140" fill="#030712" />
+					<rect width="240" height="140" fill={`url(#${glowId})`} />
+					<EditorMock
+						windowBg="rgba(7, 19, 34, 0.85)"
+						windowBorder="rgba(56, 189, 248, 0.7)"
+						tabAccent="#38bdf8"
+						lineColors={["#38bdf8", "#f0f9ff", "#7dd3fc", "#0284c7"]}
+					/>
+				</svg>
+			);
+		}
+		default: {
+			const isDark = preset.mode !== "light";
+			const wp = preset.wallpaper;
+			const isGradient = wp?.source.startsWith("gradient:");
+			return (
+				<div className="relative size-full overflow-hidden select-none" aria-hidden="true">
+					{wp ? (
+						isGradient ? (
+							<div
+								className="absolute inset-0 size-full"
+								style={{ backgroundImage: renderSourceGradient(wp.source) }}
+							/>
+						) : (
+							<img alt="" src={wp.source} className="absolute inset-0 size-full object-cover" draggable={false} />
+						)
+					) : (
+						<div className="absolute inset-0 size-full" style={{ backgroundColor: preset.colors.surface }} />
+					)}
+					<svg viewBox="0 0 240 140" className="absolute inset-0 size-full">
+						<EditorMock
+							light={!isDark}
+							windowBg={wp ? (isDark ? "rgba(18, 28, 24, 0.72)" : "rgba(255, 255, 255, 0.75)") : preset.colors.surface}
+							windowBorder={isDark ? "rgba(255, 255, 255, 0.18)" : "rgba(0, 0, 0, 0.15)"}
+							tabAccent={preset.colors.accent}
+							lineColors={[
+								preset.colors.accent,
+								preset.colors.text,
+								isDark ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.4)",
+								preset.colors.accent,
+							]}
+						/>
+					</svg>
+				</div>
+			);
+		}
+	}
+}
+
 /**
- * Appearance › Advanced, as Codex's (measured 2026-10-19): the UI and code sizes (window-wide); the showing theme's
- * UI font style, content and code fonts with their styles, translucent sidebar and contrast; then diff markers and
- * pointer cursors. A style picks one of the chosen family's faces, so it waits for a family.
+ * Appearance settings: Custom controls and Theme presets, with full support for Interface size zoom,
+ * Visual style mode cards with checkmark indicators, color/font options, and drill-down Advanced appearance.
  */
-function AdvancedAppearance({ fonts }: { fonts: LocalFont[] }) {
+function Appearance() {
 	const prefs = useStore(selectPreferences);
 	const theme = useStore((s) => s.resolvedTheme);
 	const custom = prefs.appearance?.[theme] ?? {};
+	const base = BASE[theme];
 	const name = theme === "dark" ? "Dark" : "Light";
-	const [open, setOpen] = useState(false);
+
+	const [view, setView] = useState<"main" | "advanced">("main");
+	const [tab, setTab] = useState<"controls" | "presets">("controls");
+	const [zoomFactor, setZoomFactor] = useState(prefs.zoomFactor ?? 1);
+	const [importing, setImporting] = useState(false);
+	const [fonts, setFonts] = useState<LocalFont[]>([]);
+	const [downloadingId, setDownloadingId] = useState<string | undefined>(undefined);
+	const [presetFilter, setPresetFilter] = useState<"all" | "dark" | "light">("all");
+	const activePresetObj = THEME_PRESETS.find((p) => p.id === (prefs.activePreset ?? "dark")) ?? THEME_PRESETS[1];
+	const filteredPresets = THEME_PRESETS.filter((p) => {
+		if (presetFilter === "all") return true;
+		if (presetFilter === "dark") return p.mode === "dark" || p.mode === "system";
+		if (presetFilter === "light") return p.mode === "light" || p.mode === "system";
+		return true;
+	});
+
+	useEffect(() => {
+		let cancelled = false;
+		client
+			.host("host/window/getZoom", {})
+			.then((r) => {
+				if (!cancelled && r?.factor) setZoomFactor(r.factor);
+			})
+			.catch(() => {});
+		const off = client.onHostEvent((event) => {
+			if (event.event === "zoom" && !cancelled) setZoomFactor(event.factor);
+		});
+		return () => {
+			cancelled = true;
+			off();
+		};
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		const load = () =>
+			window.queryLocalFonts().then(
+				(found) => {
+					if (!cancelled) setFonts(found);
+					return true;
+				},
+				() => false,
+			);
+		const retry = () => void load();
+		void load().then((ok) => {
+			if (!ok && !cancelled) window.addEventListener("pointerdown", retry, { once: true, capture: true });
+		});
+		return () => {
+			cancelled = true;
+			window.removeEventListener("pointerdown", retry, { capture: true });
+		};
+	}, []);
+
+	const changeZoom = (factor: number) => {
+		setZoomFactor(factor);
+		setPreference("zoomFactor", factor === 1 ? undefined : factor);
+		void client.host("host/window/setZoom", { factor }).catch(() => {});
+	};
+
+	const accent = custom.accent ?? base.accent;
+	const named = ACCENTS.find((a) => a.hex === custom.accent);
+	const accentValue = !custom.accent ? "default" : named ? named.hex : "custom";
+	const customized = Object.keys(custom).length > 0;
 	const families = [...new Set(fonts.map((f) => f.family))];
 	const familyOptions = families.map((f) => ({ value: f, label: f }));
 	const contrast = custom.contrast ?? DEFAULT_CONTRAST;
+
 	const styleMenu = (
 		label: string,
 		family: string | undefined,
@@ -766,23 +853,110 @@ function AdvancedAppearance({ fonts }: { fonts: LocalFont[] }) {
 			/>
 		);
 	};
-	return (
-		<section className="flex flex-col">
-			<button
-				type="button"
-				aria-expanded={open}
-				onClick={() => setOpen(!open)}
-				className="flex min-h-11.5 w-fit items-center gap-1 pb-1.5 text-base font-medium text-tertiary hover:text-ink"
-			>
-				Advanced
-				<ChevronRight
-					size={14}
-					className={`transition-transform motion-reduce:transition-none ${open ? "rotate-90" : ""}`}
+
+	const isDownloaded = (preset: ThemePreset) => preset.builtin || (prefs.downloadedPresets ?? []).includes(preset.id);
+
+	const isPresetActive = (preset: ThemePreset) => {
+		if (prefs.activePreset) {
+			return prefs.activePreset === preset.id;
+		}
+		if (preset.id === "auto") return prefs.theme === "system" && !customized;
+		if (preset.id === "dark") return prefs.theme === "dark" && !customized;
+		if (preset.id === "light") return prefs.theme === "light" && !customized;
+		return (
+			prefs.theme === preset.mode &&
+			custom.background?.toLowerCase() === preset.customization.background?.toLowerCase() &&
+			custom.accent?.toLowerCase() === preset.customization.accent?.toLowerCase()
+		);
+	};
+
+	const applyPreset = (preset: ThemePreset) => {
+		setPreference("activePreset", preset.id);
+		if (preset.mode === "system") {
+			setPreference("theme", "system");
+			customize("dark", undefined);
+			customize("light", undefined);
+		} else {
+			setPreference("theme", preset.mode);
+			customize(preset.mode, preset.customization, true);
+		}
+		toast(`Applied ${preset.name}`, "success");
+	};
+
+	const downloadPreset = async (preset: ThemePreset) => {
+		if (downloadingId) return;
+		setDownloadingId(preset.id);
+		try {
+			await new Promise((resolve) => setTimeout(resolve, 650));
+			const current = prefs.downloadedPresets ?? [];
+			if (!current.includes(preset.id)) {
+				setPreference("downloadedPresets", [...current, preset.id]);
+			}
+			applyPreset(preset);
+			toast(`Downloaded and applied ${preset.name}`, "success");
+		} catch {
+			toast(`Failed to download ${preset.name}`, "error");
+		} finally {
+			setDownloadingId(undefined);
+		}
+	};
+
+	const removePreset = (preset: ThemePreset, e: MouseEvent) => {
+		e.stopPropagation();
+		const current = prefs.downloadedPresets ?? [];
+		const updated = current.filter((id) => id !== preset.id);
+		setPreference("downloadedPresets", updated.length ? updated : undefined);
+		if (prefs.activePreset === preset.id) {
+			setPreference("activePreset", "dark");
+			setPreference("theme", "dark");
+			customize("dark", undefined);
+		}
+		toast(`Removed ${preset.name}`, "info");
+	};
+
+	const handlePresetClick = (preset: ThemePreset) => {
+		if (!isDownloaded(preset)) {
+			void downloadPreset(preset);
+			return;
+		}
+		applyPreset(preset);
+	};
+
+	const onCustomize = (patch: Customization | undefined) => {
+		if (prefs.activePreset) setPreference("activePreset", undefined);
+		customize(theme, patch);
+	};
+
+	if (view === "advanced") {
+		return (
+			<>
+				<PageHeader
+					back={
+						<button
+							type="button"
+							onClick={() => setView("main")}
+							className="group inline-flex items-center gap-1.5 text-xs font-medium text-secondary transition-colors hover:text-ink pb-1"
+						>
+							<ChevronLeft size={14} className="transition-transform group-hover:-translate-x-0.5" />
+							<span>Back to Appearance</span>
+						</button>
+					}
+					title="Advanced appearance"
+					subtitle="Fine-tune typography, layout, and editor behavior"
 				/>
-			</button>
-			{open ? (
-				<div className="flex flex-col gap-4">
+				<PageBody>
+					{/* Card 1: Font sizes */}
 					<Box>
+						<div className="flex items-center gap-3 px-4 py-3">
+							<span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-secondary font-ui text-xs font-semibold text-ink">
+								Aa
+							</span>
+							<div className="flex flex-col">
+								<span className="text-sm font-semibold text-ink">Font sizes</span>
+								<span className="text-xs text-secondary">Adjust the base font sizes for the application</span>
+							</div>
+						</div>
+						<div className="h-px bg-line" />
 						<Row title="UI font size" detail="Adjust the base size used for KnightCode">
 							<SizeField
 								label="UI font size"
@@ -802,34 +976,64 @@ function AdvancedAppearance({ fonts }: { fonts: LocalFont[] }) {
 							/>
 						</Row>
 					</Box>
+
+					{/* Card 2: Typography */}
 					<Box>
+						<div className="flex items-center gap-3 px-4 py-3">
+							<span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-secondary font-ui text-xs font-semibold text-ink">
+								T
+							</span>
+							<div className="flex flex-col">
+								<span className="text-sm font-semibold text-ink">Typography</span>
+								<span className="text-xs text-secondary">Configure the fonts used across the interface</span>
+							</div>
+						</div>
+						<div className="h-px bg-line" />
 						<Row compact title="UI font style">
 							{styleMenu("UI font style", custom.font, custom.fontStyle, "fontStyle")}
 						</Row>
 						<Row compact title="Content font">
-							<PillMenu
-								label={`${name} content font`}
-								text={custom.contentFont ?? "Same as UI font"}
-								value={custom.contentFont ?? "ui"}
-								options={[{ value: "ui", label: "Same as UI font" }, ...familyOptions]}
-								onChange={(v) =>
-									customize(theme, { contentFont: v === "ui" ? undefined : v, contentFontStyle: undefined })
-								}
-							/>
-							{styleMenu("content font style", custom.contentFont, custom.contentFontStyle, "contentFontStyle")}
+							<div className="flex items-center gap-2">
+								<PillMenu
+									label={`${name} content font`}
+									text={custom.contentFont ?? "Same as UI font"}
+									value={custom.contentFont ?? "ui"}
+									options={[{ value: "ui", label: "Same as UI font" }, ...familyOptions]}
+									onChange={(v) =>
+										customize(theme, { contentFont: v === "ui" ? undefined : v, contentFontStyle: undefined })
+									}
+								/>
+								{styleMenu("content font style", custom.contentFont, custom.contentFontStyle, "contentFontStyle")}
+							</div>
 						</Row>
 						<Row compact title="Code font">
-							<PillMenu
-								label={`${name} code font`}
-								text={custom.codeFont ?? "System"}
-								value={custom.codeFont ?? "system"}
-								options={[{ value: "system", label: "System" }, ...familyOptions]}
-								onChange={(v) =>
-									customize(theme, { codeFont: v === "system" ? undefined : v, codeFontStyle: undefined })
-								}
-							/>
-							{styleMenu("code font style", custom.codeFont, custom.codeFontStyle, "codeFontStyle")}
+							<div className="flex items-center gap-2">
+								<PillMenu
+									label={`${name} code font`}
+									text={custom.codeFont ?? "System"}
+									value={custom.codeFont ?? "system"}
+									options={[{ value: "system", label: "System" }, ...familyOptions]}
+									onChange={(v) =>
+										customize(theme, { codeFont: v === "system" ? undefined : v, codeFontStyle: undefined })
+									}
+								/>
+								{styleMenu("code font style", custom.codeFont, custom.codeFontStyle, "codeFontStyle")}
+							</div>
 						</Row>
+					</Box>
+
+					{/* Card 3: Display */}
+					<Box>
+						<div className="flex items-center gap-3 px-4 py-3">
+							<div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-secondary">
+								<Monitor size={16} />
+							</div>
+							<div className="flex flex-col">
+								<span className="text-sm font-semibold text-ink">Display</span>
+								<span className="text-xs text-secondary">Adjust visual elements and contrast</span>
+							</div>
+						</div>
+						<div className="h-px bg-line" />
 						<Row compact title="Translucent sidebar">
 							<Switch
 								label={`${name} translucent sidebar`}
@@ -838,24 +1042,38 @@ function AdvancedAppearance({ fonts }: { fonts: LocalFont[] }) {
 							/>
 						</Row>
 						<Row compact title="Contrast">
-							<input
-								type="range"
-								aria-label={`${name} contrast`}
-								min={0}
-								max={100}
-								step={1}
-								value={contrast}
-								style={{ "--kc-range-fill": `${contrast}%` } as CSSProperties}
-								onChange={(e) => {
-									const v = Number(e.target.value);
-									customize(theme, { contrast: v === DEFAULT_CONTRAST ? undefined : v });
-								}}
-								className="kc-range w-36"
-							/>
-							<span className="w-8 text-end text-sm tabular-nums">{contrast}</span>
+							<div className="flex items-center gap-3">
+								<input
+									type="range"
+									aria-label={`${name} contrast`}
+									min={0}
+									max={100}
+									step={1}
+									value={contrast}
+									style={{ "--kc-range-fill": `${contrast}%` } as CSSProperties}
+									onChange={(e) => {
+										const v = Number(e.target.value);
+										customize(theme, { contrast: v === DEFAULT_CONTRAST ? undefined : v });
+									}}
+									className="kc-range w-36"
+								/>
+								<span className="w-8 text-end text-sm tabular-nums text-secondary">{contrast}</span>
+							</div>
 						</Row>
 					</Box>
+
+					{/* Card 4: Editor behavior */}
 					<Box>
+						<div className="flex items-center gap-3 px-4 py-3">
+							<div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-secondary">
+								<Sliders size={16} />
+							</div>
+							<div className="flex flex-col">
+								<span className="text-sm font-semibold text-ink">Editor behavior</span>
+								<span className="text-xs text-secondary">Customize editor interactions and diff display</span>
+							</div>
+						</div>
+						<div className="h-px bg-line" />
 						<Row title="Diff markers" detail="Show changes using colors or +/− markers">
 							<Segmented
 								label="Diff markers"
@@ -878,9 +1096,356 @@ function AdvancedAppearance({ fonts }: { fonts: LocalFont[] }) {
 							/>
 						</Row>
 					</Box>
+				</PageBody>
+			</>
+		);
+	}
+
+	return (
+		<>
+			<PageHeader title="Appearance" subtitle="Customize how KnightCode looks and feels" />
+			<PageBody>
+				{/* Top Switcher: Custom controls vs Theme presets */}
+				<div className="flex w-full rounded-2xl border border-line bg-section p-1">
+					<button
+						type="button"
+						onClick={() => setTab("controls")}
+						className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold transition-colors ${
+							tab === "controls"
+								? "bg-accent text-white shadow-sm"
+								: "text-secondary hover:bg-surface-secondary/40 hover:text-ink"
+						}`}
+					>
+						<SettingsIcon size={16} />
+						<span>Custom controls</span>
+					</button>
+					<button
+						type="button"
+						onClick={() => setTab("presets")}
+						className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold transition-colors ${
+							tab === "presets"
+								? "bg-accent text-white shadow-sm"
+								: "text-secondary hover:bg-surface-secondary/40 hover:text-ink"
+						}`}
+					>
+						<Image size={16} />
+						<span>Theme presets</span>
+					</button>
 				</div>
-			) : null}
-		</section>
+
+				{tab === "controls" ? (
+					<>
+						{/* Interface size section */}
+						<Section title="Interface size" detail="Adjust the overall size of the KnightCode interface">
+							<div className="flex flex-wrap items-center gap-2">
+								{INTERFACE_SIZES.map((s) => {
+									const isCurrent = Math.abs(zoomFactor - s.factor) < 0.03;
+									return (
+										<button
+											key={s.label}
+											type="button"
+											onClick={() => changeZoom(s.factor)}
+											className={`h-8 min-w-16 rounded-xl border px-3 text-xs font-medium transition-all ${
+												isCurrent
+													? "border-accent bg-surface text-ink ring-1 ring-accent/30"
+													: "border-line bg-surface/60 text-secondary hover:border-line-strong hover:bg-surface hover:text-ink"
+											}`}
+										>
+											{s.label}
+										</button>
+									);
+								})}
+								<button
+									type="button"
+									disabled={Math.abs(zoomFactor - 1.0) < 0.03}
+									onClick={() => changeZoom(1.0)}
+									className="h-8 min-w-16 rounded-xl border border-line bg-surface/60 px-3 text-xs font-medium text-secondary transition-all hover:border-line-strong hover:bg-surface hover:text-ink disabled:pointer-events-none disabled:opacity-40"
+								>
+									Reset
+								</button>
+							</div>
+						</Section>
+
+						{/* Appearance options section */}
+						<Section title="Appearance options" detail="Customize the colors, fonts and overall look">
+							<Box>
+								<Row compact title="Theme">
+									<IconButton label={`Import ${name} theme`} size="lg" round onClick={() => setImporting(true)}>
+										<Import size={18} />
+									</IconButton>
+									<IconButton
+										label={`Copy ${name} theme`}
+										size="lg"
+										round
+										onClick={() =>
+											void client
+												.host("host/clipboard/writeText", { text: themeString(custom) })
+												.then(() => toast("Copied theme", "success"))
+										}
+									>
+										<Copy size={18} />
+									</IconButton>
+									<PillMenu
+										label={`${name} theme`}
+										mark={
+											<span className="flex size-5 items-center justify-center rounded-full border border-line-strong text-xs leading-3 font-semibold text-accent">
+												<span className="[text-box:trim-both_cap_alphabetic]">Aa</span>
+											</span>
+										}
+										text={customized ? "Custom" : "KnightCode"}
+										value={customized ? "custom" : "knightcode"}
+										options={[
+											{ value: "knightcode", label: "KnightCode" },
+											...(customized ? [{ value: "custom", label: "Custom" }] : []),
+										]}
+										onChange={(v) => {
+											if (prefs.activePreset) setPreference("activePreset", undefined);
+											if (v === "knightcode") customize(theme, undefined);
+										}}
+									/>
+								</Row>
+								<Row compact title="Accent">
+									{accentValue === "custom" ? (
+										<ColorField
+											label={`${name} custom accent color`}
+											value={accent}
+											onChange={(hex) => onCustomize({ accent: hex })}
+										/>
+									) : null}
+									<PillMenu
+										label={`${name} accent color`}
+										mark={<Swatch color={accent} />}
+										text={ACCENT_OPTIONS.find((o) => o.value === accentValue)!.label}
+										value={accentValue}
+										options={ACCENT_OPTIONS.map((o) => ({
+											...o,
+											icon:
+												o.value === "custom" ? undefined : (
+													<Swatch color={o.value === "default" ? base.accent : o.value} />
+												),
+										}))}
+										onChange={(v) => onCustomize({ accent: v === "default" ? undefined : v === "custom" ? accent : v })}
+									/>
+								</Row>
+								<Row compact title="Background">
+									<ColorField
+										label={`${name} background color`}
+										value={custom.background ?? base.background}
+										onChange={(hex) => onCustomize({ background: hex })}
+									/>
+								</Row>
+								<Row compact title="Foreground">
+									<ColorField
+										label={`${name} ink color`}
+										value={custom.foreground ?? base.foreground}
+										onChange={(hex) => onCustomize({ foreground: hex })}
+									/>
+								</Row>
+								<Row compact title="Font">
+									<PillMenu
+										label={`${name} UI font`}
+										text={custom.font ?? "System"}
+										value={custom.font ?? "system"}
+										options={[
+											{ value: "system", label: "System" },
+											...[...new Set(fonts.map((f) => f.family))].map((f) => ({ value: f, label: f })),
+										]}
+										onChange={(v) => onCustomize({ font: v === "system" ? undefined : v, fontStyle: undefined })}
+									/>
+								</Row>
+							</Box>
+						</Section>
+
+						{/* Advanced button card */}
+						<button
+							type="button"
+							onClick={() => setView("advanced")}
+							className="group flex w-full items-center justify-between rounded-2xl border border-line bg-section p-4 text-start transition-colors hover:bg-surface-secondary/50 focus-visible:outline-2 focus-visible:outline-[var(--kc-focus)]"
+						>
+							<div className="flex items-center gap-3">
+								<div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary text-secondary group-hover:text-ink">
+									<SettingsIcon size={20} />
+								</div>
+								<div>
+									<div className="text-sm font-semibold text-ink">Advanced</div>
+									<div className="text-xs text-secondary">Typography, sidebar, contrast, and editor behavior</div>
+								</div>
+							</div>
+							<ChevronRight
+								size={18}
+								className="text-tertiary transition-transform group-hover:translate-x-0.5 group-hover:text-ink"
+							/>
+						</button>
+					</>
+				) : (
+					/* Theme presets gallery (after Freebuff Image 2) */
+					<div className="flex flex-col gap-5">
+						{/* Hero Card featuring active preset */}
+						<div className="flex flex-col sm:flex-row items-center gap-6 rounded-2xl border border-line bg-section p-5 shadow-sm">
+							<div className="relative aspect-[16/10] w-full sm:w-72 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30 shadow-md">
+								<PresetThumbnail preset={activePresetObj} />
+							</div>
+							<div className="flex flex-1 flex-col items-start gap-3 w-full">
+								<div>
+									<h2 className="text-2xl font-bold text-ink">{activePresetObj.name}</h2>
+									<p className="text-xs text-secondary mt-0.5">{activePresetObj.description}</p>
+								</div>
+								<div className="flex items-center gap-2 mt-1">
+									<div
+										title={`Surface: ${activePresetObj.colors.surface}`}
+										className="size-7 rounded-lg border border-white/15 shadow-sm transition-transform hover:scale-105"
+										style={{ backgroundColor: activePresetObj.colors.surface }}
+									/>
+									<div
+										title={`Accent: ${activePresetObj.colors.accent}`}
+										className="size-7 rounded-lg border border-white/15 shadow-sm transition-transform hover:scale-105"
+										style={{ backgroundColor: activePresetObj.colors.accent }}
+									/>
+									<div
+										title={`Text: ${activePresetObj.colors.text}`}
+										className="size-7 rounded-lg border border-white/15 shadow-sm transition-transform hover:scale-105"
+										style={{ backgroundColor: activePresetObj.colors.text }}
+									/>
+								</div>
+							</div>
+						</div>
+
+						{/* Style section: Flat, 3D, Glass */}
+						<div className="flex items-center justify-between py-1">
+							<span className="text-sm font-semibold text-ink">Style</span>
+							<div className="flex items-center rounded-xl border border-line bg-section p-1">
+								{(["flat", "3d", "glass"] as const).map((style) => {
+									const currentStyle = prefs.surfaceStyle === "shine" ? "glass" : (prefs.surfaceStyle ?? "flat");
+									const isSelected = currentStyle === style;
+									const label = style === "flat" ? "Flat" : style === "3d" ? "3D" : "Glass";
+									return (
+										<button
+											key={style}
+											type="button"
+											onClick={() => setPreference("surfaceStyle", style)}
+											className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+												isSelected
+													? "bg-accent text-white shadow-sm"
+													: "text-secondary hover:text-ink hover:bg-surface-secondary/40"
+											}`}
+										>
+											{label}
+										</button>
+									);
+								})}
+							</div>
+						</div>
+
+						{/* Presets header with filter tabs */}
+						<div className="flex items-center justify-between pt-1">
+							<div>
+								<h3 className="text-sm font-semibold text-ink">Select a preset</h3>
+								<p className="text-xs text-secondary">Choose from beautiful themes for KnightCode</p>
+							</div>
+							<div className="flex items-center rounded-xl border border-line bg-section p-1">
+								{(["all", "dark", "light"] as const).map((f) => {
+									const isSelected = presetFilter === f;
+									const label = f === "all" ? "All" : f === "dark" ? "Dark" : "Light";
+									return (
+										<button
+											key={f}
+											type="button"
+											onClick={() => setPresetFilter(f)}
+											className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+												isSelected ? "bg-surface-secondary text-ink shadow-sm" : "text-secondary hover:text-ink"
+											}`}
+										>
+											{label}
+										</button>
+									);
+								})}
+							</div>
+						</div>
+
+						{/* 4-column Presets Grid */}
+						<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+							{filteredPresets.map((preset) => {
+								const isCurrent = isPresetActive(preset);
+								const downloaded = isDownloaded(preset);
+								const isDownloading = downloadingId === preset.id;
+								return (
+									<div
+										key={preset.id}
+										onClick={() => handlePresetClick(preset)}
+										className={`group relative flex cursor-pointer flex-col rounded-2xl border p-2 transition-all ${
+											isCurrent
+												? "border-accent ring-2 ring-accent/30 bg-surface-secondary/40"
+												: "border-line bg-section hover:border-line-strong hover:bg-surface-secondary/20"
+										}`}
+									>
+										{/* Thumbnail container */}
+										<div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl border border-white/5 bg-black/20">
+											<PresetThumbnail preset={preset} />
+
+											{/* Active checkmark badge */}
+											{isCurrent ? (
+												<div className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-accent text-white shadow-md ring-2 ring-white/20">
+													<Check size={12} strokeWidth={2.5} />
+												</div>
+											) : !downloaded ? (
+												/* Download badge for external preset */
+												<div className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-md shadow-sm transition-all group-hover:bg-accent group-hover:text-white">
+													{isDownloading ? (
+														<>
+															<Spinner size={10} className="animate-spin text-white" />
+															<span>Downloading…</span>
+														</>
+													) : (
+														<>
+															<Download size={10} />
+															<span>Download</span>
+														</>
+													)}
+												</div>
+											) : !preset.builtin ? (
+												/* Trash / uninstall button for downloaded external preset on hover */
+												<button
+													type="button"
+													title={`Remove ${preset.name}`}
+													onClick={(e) => removePreset(preset, e)}
+													className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-md bg-black/60 text-secondary opacity-0 backdrop-blur-md transition-all hover:bg-red-500 hover:text-white group-hover:opacity-100"
+												>
+													<Trash2 size={12} />
+												</button>
+											) : null}
+										</div>
+
+										{/* Label and 4 palette dots */}
+										<div className="flex items-center justify-between px-1 pt-2 pb-0.5">
+											<span className="text-xs font-semibold text-ink">{preset.name}</span>
+											<div className="flex items-center gap-1.5">
+												{preset.dots.map((dot, idx) => (
+													<span
+														key={idx}
+														className="size-3.5 rounded-full ring-1 ring-black/20"
+														style={{ backgroundColor: dot }}
+													/>
+												))}
+											</div>
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				)}
+
+				{importing ? (
+					<ImportThemeDialog
+						onClose={() => setImporting(false)}
+						onImport={(imported) => {
+							setImporting(false);
+							customize(theme, imported, true);
+						}}
+					/>
+				) : null}
+			</PageBody>
+		</>
 	);
 }
 
@@ -2724,11 +3289,29 @@ function Updates() {
 }
 
 /** Codex's page title: a 46px band and 16px over it, 28px medium in the 768px column, any actions at its end. */
-function PageHeader({ title, actions }: { title: string; actions?: ReactNode }) {
+function PageHeader({
+	title,
+	subtitle,
+	back,
+	actions,
+}: {
+	title: string;
+	subtitle?: ReactNode;
+	back?: ReactNode;
+	actions?: ReactNode;
+}) {
 	return (
-		<div className="mx-auto flex w-full max-w-[768px] items-center justify-between gap-4 px-5 pt-[62px]">
-			<h1 className="flex min-h-15 items-center text-[28px] leading-[33.6px] font-medium">{title}</h1>
-			{actions}
+		<div className="mx-auto flex w-full max-w-[768px] flex-col px-5 pt-[62px]">
+			{back ? <div className="mb-2">{back}</div> : null}
+			<div className="flex items-center justify-between gap-4">
+				<h1
+					className={`flex ${subtitle ? "min-h-10" : "min-h-15"} items-center text-[28px] leading-[33.6px] font-medium`}
+				>
+					{title}
+				</h1>
+				{actions}
+			</div>
+			{subtitle ? <p className="mt-1 text-sm text-secondary">{subtitle}</p> : null}
 		</div>
 	);
 }
@@ -2755,9 +3338,11 @@ export function Settings({ page }: { page: SettingsPage }) {
 	}[page];
 	return (
 		<div className="min-w-0 flex-1 overflow-y-auto">
-			{/* Archived threads puts Delete all beside its title, so it draws its own header. */}
+			{/* Archived and Appearance draw their own headers when switching views or adding actions. */}
 			{page === "archived" ? (
 				<Archived title={title} />
+			) : page === "appearance" ? (
+				<Appearance />
 			) : (
 				<>
 					<PageHeader title={title} />

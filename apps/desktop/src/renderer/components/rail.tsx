@@ -132,7 +132,10 @@ export function Rail() {
 	}, []);
 	return (
 		// Codex's rail: 36px buttons with 20px icons, 8px apart, 8px in from the edges (measured 2026-10-19).
-		<nav aria-label="App navigation" className="flex w-[52px] shrink-0 flex-col items-center gap-2 px-2 pt-2 pb-1">
+		<nav
+			aria-label="App navigation"
+			className="kc-rail flex w-[52px] shrink-0 flex-col items-center gap-2 px-2 pt-2 pb-1"
+		>
 			<IconButton label="Home" size="xl" strong aria-current={home ? "page" : undefined} onClick={() => showNew()}>
 				<House size={20} filled={home} />
 			</IconButton>

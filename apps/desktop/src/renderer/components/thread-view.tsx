@@ -85,8 +85,11 @@ function DateSeparator({ at }: { at: number }) {
 	const day = dayLabel(at);
 	return (
 		<div role="separator" aria-label={`${day} ${clockTime(at)}`} className="flex justify-center py-4">
-			<time className="text-sm leading-5 text-tertiary" dateTime={new Date(at).toISOString()}>
-				<span className="font-medium">{day}</span> {clockTime(at)}
+			<time
+				className="rounded-full border border-line-subtle bg-surface-secondary/70 px-3 py-0.5 text-xs font-medium text-tertiary shadow-sm backdrop-blur-sm"
+				dateTime={new Date(at).toISOString()}
+			>
+				<span className="font-semibold text-secondary">{day}</span> {clockTime(at)}
 			</time>
 		</div>
 	);
@@ -508,7 +511,7 @@ export function ThreadView({ id }: { id: string }) {
 								<button
 									type="button"
 									onDoubleClick={() => setRenaming(name)}
-									className="min-w-0 truncate px-1.5 text-start text-base leading-6 font-medium text-ink"
+									className="quiet kc-thread-title min-w-0 truncate px-1.5 text-start text-base leading-6 font-medium text-ink"
 								>
 									{name}
 								</button>

@@ -26,9 +26,9 @@ export function squirrelEvent(): boolean {
 	const update = updateExe();
 	const exe = basename(process.execPath);
 	const run = (args: string[]) =>
-		spawn(update, args, { detached: true })
-			.on("close", () => app.quit())
-			.on("error", () => app.quit());
+		spawn(update, args, { detached: true, stdio: "ignore" })
+			.on("close", () => app.exit(0))
+			.on("error", () => app.exit(0));
 	switch (process.argv[1]) {
 		case "--squirrel-install":
 		case "--squirrel-updated":
@@ -39,7 +39,7 @@ export function squirrelEvent(): boolean {
 			run([`--removeShortcut=${exe}`]);
 			return true;
 		case "--squirrel-obsolete":
-			app.quit();
+			app.exit(0);
 			return true;
 	}
 	return false;
