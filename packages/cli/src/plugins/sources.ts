@@ -20,15 +20,22 @@ export function forwardSlashes(path: string): string {
 	return path.replace(/\\/g, "/");
 }
 
+/** `text` without trailing `char`s. A loop, because `/c+$/` is quadratic on a long run of `c` that is not at the end. */
+export function trimTrailing(text: string, char: string): string {
+	let end = text.length;
+	while (end > 0 && text[end - 1] === char) end--;
+	return text.slice(0, end);
+}
+
 /** `https://host/owner/repo`: lowercase host, no `.git`, no trailing slash. */
 export function canonicalUrl(url: string): string {
-	const trimmed = url.replace(/\/+$/, "").replace(/\.git$/, "");
+	const trimmed = trimTrailing(url, "/").replace(/\.git$/, "");
 	try {
 		const parsed = new URL(trimmed);
 		parsed.hostname = parsed.hostname.toLowerCase();
 		parsed.username = "";
 		parsed.password = "";
-		return parsed.toString().replace(/\/+$/, "");
+		return trimTrailing(parsed.toString(), "/");
 	} catch {
 		return trimmed;
 	}
@@ -37,7 +44,7 @@ export function canonicalUrl(url: string): string {
 /** `https://host[:port]/owner/repo` for any transport; GitHub ignores case in repository paths, so it is dropped. */
 function hostCanonical(host: string, path: string, port = ""): string {
 	const lower = host.toLowerCase();
-	const repo = path.replace(/\.git$/, "");
+	const repo = trimTrailing(path, "/").replace(/\.git$/, "");
 	return `https://${lower}${port ? `:${port}` : ""}/${lower === "github.com" ? repo.toLowerCase() : repo}`;
 }
 
@@ -90,6 +97,6 @@ export function parseSource(source: string, baseDir: string): ParsedSource | { e
 
 /** The identity of a plugin: its canonical source, subdirectory, and catalog entry. */
 export function pluginIdentity(canonical: string, path: string | undefined, catalogEntry?: string): string {
-	const subdir = path ? forwardSlashes(path).replace(/^\.\//, "").replace(/\/+$/, "") : "";
+	const subdir = path ? trimTrailing(forwardSlashes(path).replace(/^\.\//, ""), "/") : "";
 	return `${canonical}${subdir && subdir !== "." ? `#path=${subdir}` : ""}${catalogEntry ? `#plugin=${catalogEntry}` : ""}`;
 }

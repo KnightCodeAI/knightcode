@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadPlugin, sanitizePluginName } from "../../src/plugins/manifest.ts";
 import { readMarketplace } from "../../src/plugins/marketplace.ts";
-import { parseSource } from "../../src/plugins/sources.ts";
+import { parseSource, pluginIdentity } from "../../src/plugins/sources.ts";
 import { copyContent } from "../../src/plugins/store.ts";
 import { useTempDirs, writeTree } from "./helpers.ts";
 
@@ -16,6 +16,14 @@ describe("plugin names", () => {
 		expect(sanitizePluginName("--Edge--")).toBe("edge");
 		expect(sanitizePluginName("x".repeat(80))).toBe("x".repeat(64));
 		expect(sanitizePluginName("!!!")).toBeUndefined();
+	});
+
+	it("sanitizes a long run of dashes in linear time", () => {
+		// The quadratic `-+$` took about 5 s on this name.
+		const start = performance.now();
+		expect(sanitizePluginName(`a${"-".repeat(100_000)}b`)).toBe("a");
+		expect(sanitizePluginName("_".repeat(100_000))).toBeUndefined();
+		expect(performance.now() - start).toBeLessThan(1000);
 	});
 });
 
@@ -319,10 +327,25 @@ describe("plugin sources", () => {
 		);
 		expect(canonical("https://git.example.com:3000/o/r.git")).toBe("https://git.example.com:3000/o/r");
 		expect(canonical("git@git.example.com:o/r.git")).toBe("https://git.example.com/o/r");
+		expect(canonical("https://git.example.com/o/r.git/")).toBe("https://git.example.com/o/r");
+		expect(canonical("ssh://git@git.example.com/o/r/")).toBe("https://git.example.com/o/r");
 		expect(
 			new Set(
 				["Owner/Repo", "owner/repo", "https://github.com/Owner/Repo", "git@github.com:OWNER/repo.git"].map(canonical),
 			),
 		).toEqual(new Set(["https://github.com/owner/repo"]));
+	});
+
+	it("trims trailing slashes in linear time", () => {
+		// The quadratic `\/+$` took seconds on each of these.
+		const slashes = "/".repeat(100_000);
+		const start = performance.now();
+		expect(canonical(`https://git.example.com/o/r${slashes}`)).toBe("https://git.example.com/o/r");
+		expect(canonical(`https://git.example.com/o/${slashes}r`)).toMatch(/\/r$/);
+		expect(canonical(`file:///srv/r${slashes}`)).toBe("file:///srv/r");
+		expect(canonical(`file:///srv/${slashes}r`)).toMatch(/\/r$/);
+		expect(pluginIdentity("https://h/o/r", `./sub${slashes}`)).toBe("https://h/o/r#path=sub");
+		expect(pluginIdentity("https://h/o/r", `${slashes}sub`)).toMatch(/\/sub$/);
+		expect(performance.now() - start).toBeLessThan(1000);
 	});
 });

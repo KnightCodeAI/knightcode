@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { foreignPlugins, knownMarketplaces } from "../../src/plugins/known.ts";
+import { foreignPlugins, knownMarketplaces, toolClones } from "../../src/plugins/known.ts";
 import { PluginManager } from "../../src/plugins/manager.ts";
 import { useTempDirs, writeTree } from "./helpers.ts";
 
@@ -218,6 +218,16 @@ describe("marketplaces and plugins from Claude Code and Grok Build", () => {
 			"xai-official false cloudflare",
 			"ponytail false ponytail",
 		]);
+	});
+
+	it("reads a Grok Build clone's Git config in linear time", () => {
+		// Under the `m` flag the old `^\s*url` spanned blank lines, quadratic on a long run of them (about 5 s here).
+		writeTree(grok, {
+			"marketplace-cache/c6b314fa/.git/config": `${"\n".repeat(100_000)}[remote "origin"]\n\turl = https://github.com/xai-org/plugin-marketplace.git\n`,
+		});
+		const start = performance.now();
+		expect([...toolClones().keys()]).toEqual(["https://github.com/xai-org/plugin-marketplace"]);
+		expect(performance.now() - start).toBeLessThan(1000);
 	});
 
 	it("browses a known marketplace from KnightCode's cache without adding it, and marks updates", async () => {

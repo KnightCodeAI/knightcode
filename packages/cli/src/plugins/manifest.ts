@@ -9,6 +9,7 @@
 
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { trimTrailing } from "./sources.ts";
 
 export const MANIFEST_PATHS = ["plugin.json", ".grok-plugin/plugin.json", ".claude-plugin/plugin.json"];
 
@@ -27,13 +28,11 @@ const MAX_NAME_LENGTH = 64;
 
 /** The namespace form of a plugin name: lowercase `[a-z0-9-]`, trimmed of `-`, at most 64 characters. */
 export function sanitizePluginName(name: string): string | undefined {
-	const sanitized = name
+	const leading = name
 		.toLowerCase()
 		.replace(/[^a-z0-9-]/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, MAX_NAME_LENGTH)
-		.replace(/-+$/, "");
-	return sanitized || undefined;
+		.replace(/^-+/, "");
+	return trimTrailing(leading.slice(0, MAX_NAME_LENGTH), "-") || undefined;
 }
 
 export interface PluginCommandSource {

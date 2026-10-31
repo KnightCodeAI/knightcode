@@ -170,7 +170,9 @@ class Lines implements Component {
 }
 
 /** A catalog's description or git's stderr on one line: a newline inside a rendered line breaks the screen. */
-const oneLine = (text: string) => text.replace(/\s*\n\s*/g, " ");
+const oneLine = (text: string) =>
+	// Whole whitespace runs, not `/\s*\n\s*/g`, which is quadratic on a long run of spaces with no newline.
+	text.replace(/\s+/g, (run) => (run.includes("\n") ? " " : run));
 
 /**
  * `text` wrapped inside a one-column margin and cut to `rows` lines, the last ending in "…": a plugin with hundreds of

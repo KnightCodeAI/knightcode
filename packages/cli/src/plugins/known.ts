@@ -115,7 +115,8 @@ export function toolClones(): Map<string, string> {
 		} catch {
 			continue;
 		}
-		const url = /^\s*url\s*=\s*(\S+)/m.exec(config)?.[1];
+		// `[ \t]`, not `\s`: under `m`, `^\s*` spans blank lines, which is quadratic on a long run of them.
+		const url = /^[ \t]*url[ \t]*=[ \t]*(\S+)/m.exec(config)?.[1];
 		const key = url && marketplaceKey(url);
 		if (key && !clones.has(key)) clones.set(key, join(cache, dir));
 	}

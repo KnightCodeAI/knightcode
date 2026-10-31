@@ -156,6 +156,23 @@ describe("plugins view", () => {
 		expect(stripAnsi(lines.join("\n"))).toContain("fatal: offline remote: retry");
 	});
 
+	it("draws a catalog description of long whitespace in linear time", () => {
+		// The quadratic `\s*\n\s*` took about 7 s on this description.
+		const view = new PluginsView(tui, theme, new KeybindingsManager());
+		const padded = (): BrowseTab[] =>
+			tabs().map((tab) => ({
+				...tab,
+				groups: tab.groups.map((group) => ({
+					...group,
+					rows: group.rows.map((row) => ({ ...row, description: `First${" ".repeat(100_000)}last` })),
+				})),
+			}));
+		const start = performance.now();
+		void view.browse(padded, { focus: { tab: "marketplace", key: "market:shop" } });
+		expect(stripAnsi(view.render(100).join("\n"))).toContain("First");
+		expect(performance.now() - start).toBeLessThan(1000);
+	});
+
 	it("opens a group that starts collapsed with enter, and a search opens it too", async () => {
 		const collapsed = (): BrowseTab[] =>
 			tabs().map((tab) => ({ ...tab, groups: tab.groups.map((group) => ({ ...group, collapsed: true })) }));
