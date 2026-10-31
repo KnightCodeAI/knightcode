@@ -158,7 +158,7 @@ git commit -m "feat(bots): add the KnightCode Bots Worker skeleton"
   - `parse<T>(schema: TSchema, value: unknown): T` throwing
     `ProtocolError { path, message }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // packages/bots-protocol/test/protocol.test.ts
@@ -187,23 +187,23 @@ describe("contracts", () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `bunx vitest --run` in `packages/bots-protocol`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement the schemas and helpers in the listed files**
+- [x] **Step 3: Implement the schemas and helpers in the listed files**
 
 One schema per entity, unions discriminated by `kind` or `type`. Every
 route the Part 1 screens need is in `ROUTES`; add routes there first when a
 later task needs one, never ad hoc.
 
-- [ ] **Step 4: Run them to verify they pass**
+- [x] **Step 4: Run them to verify they pass**
 
 Run: `bunx vitest --run` and `bunx tsc --noEmit` in `packages/bots-protocol`
 Expected: 4 passed; no type errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-protocol bun.lock

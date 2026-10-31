@@ -51,6 +51,7 @@
       "@knightcode/schema": ["./packages/schema/src/index.ts"],
       "@knightcode/schema/formats": ["./packages/schema/src/formats/index.ts"],
       "@knightcode/app-server-protocol": ["./packages/app-server-protocol/src/index.ts"],
+      "@knightcode/bots-protocol": ["./packages/bots-protocol/src/index.ts"],
       "@knightcode/remote": ["./packages/remote/src/index.ts"],
       "@knightcode/remote/*": ["./packages/remote/src/*"],
       "@knightcode/tools": ["./packages/tools/src/index.ts"],
