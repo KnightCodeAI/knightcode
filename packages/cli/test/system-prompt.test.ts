@@ -48,7 +48,9 @@ describe("buildSystemPrompt", () => {
 				skills: [],
 			});
 
-			expect(defaultPrompt.startsWith("You are an expert coding assistant operating inside KnightCode")).toBe(true);
+			expect(
+				defaultPrompt.startsWith("You are a coding assistant running inside KnightCode, a coding agent harness."),
+			).toBe(true);
 			expect(customPrompt.startsWith("You are Exact.\n\n<cwd>")).toBe(true);
 		});
 
@@ -119,14 +121,17 @@ describe("buildSystemPrompt", () => {
 				"- When reading KnightCode docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory",
 			);
 			expect(prompt).toContain("environment variables (docs/environment-variables.md), MCP servers (docs/mcp.md)");
+			expect(prompt).toContain(
+				"Before implementing harness changes, read the relevant docs and examples in full, following related cross-references.",
+			);
 		});
 
 		test("names the desktop docs in the docs list, and the line costs only what that entry adds", () => {
 			const prompt = buildSystemPrompt({ contextFiles: [], skills: [], cwd: process.cwd() });
 			const line = prompt.split("\n").find((l) => l.startsWith("- When asked about:"));
 			expect(line).toMatch(/, desktop app and its extensions \(docs\/desktop\.md\)$/);
-			// Every byte here is paid on every request (AGENTS.md, "The Core Constraint"): 556 before the desktop entry.
-			expect(line).toHaveLength(606);
+			// Every byte here is paid on every request (AGENTS.md, "The Core Constraint"): 545 before the desktop entry.
+			expect(line).toHaveLength(595);
 		});
 	});
 
@@ -200,6 +205,9 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("<available_skills>");
 			expect(prompt).toContain("<name>test-skill</name>");
 			expect(prompt).toContain("Use bash to load a skill's file");
+			expect(prompt).toContain(
+				"Resolve relative paths against the skill's directory (parent of SKILL.md). Use absolute paths in tool calls.",
+			);
 		});
 
 		test("omits skills without read or bash", () => {
