@@ -650,9 +650,35 @@ export const PluginImportInfo = Obj({
 	enabled: Bool,
 });
 export type PluginImportInfo = Static<typeof PluginImportInfo>;
-/** A marketplace not added yet: built in (Anthropic, xAI), or one Claude Code or Grok Build has. */
-export const PluginMarketplaceSuggestion = Obj({ name: Str, source: Str, ref: Type.Optional(Str), from: Str });
-export type PluginMarketplaceSuggestion = Static<typeof PluginMarketplaceSuggestion>;
+/** A marketplace to browse: an added one, or one built in (Anthropic, xAI) or Claude Code or Grok Build has. */
+export const PluginMarketplaceListing = Obj({
+	name: Str,
+	source: Str,
+	ref: Type.Optional(Str),
+	/** `Anthropic`, `xAI`, `Claude Code` or `Grok Build`, for a marketplace KnightCode knows of. */
+	from: Type.Optional(Str),
+	/** Declared in settings. Installing from a marketplace that is not adds it. */
+	added: Bool,
+	/** Where it is declared, when added. */
+	scope: Type.Optional(SettingsScope),
+	/** When its catalog was fetched; absent for one read from Claude Code's or Grok Build's copy. */
+	updatedAt: Type.Optional(Str),
+	/** Its catalog was never fetched; `plugin/marketplace/update` fetches it. */
+	missing: Type.Optional(Bool),
+	plugins: Type.Array(
+		Obj({
+			name: Str,
+			description: Type.Optional(Str),
+			version: Type.Optional(Str),
+			author: Type.Optional(Str),
+			installed: Bool,
+			/** The catalog has a version other than the installed one. */
+			update: Bool,
+		}),
+	),
+	diagnostics: Type.Array(Str),
+});
+export type PluginMarketplaceListing = Static<typeof PluginMarketplaceListing>;
 
 /** Steers already went to the running turn and cannot be taken back; queued inputs wait for an idle thread. */
 /** `attachments`: images and review comments the input carries, which its text alone does not. */
@@ -1175,22 +1201,26 @@ export const ClientRequests = {
 		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), name: Str }),
 		result: Empty,
 	},
-	/** The added marketplaces, and the known ones not added yet. */
+	/**
+	 * Every marketplace to browse, as `/plugins` lists them: built in first, then the added ones, then Claude Code's
+	 * and Grok Build's, each with its whole catalog. Reads local state only.
+	 */
 	"plugin/marketplace/list": {
 		params: Obj({ cwd: Type.Optional(Str) }),
-		result: Obj({
-			marketplaces: Type.Array(PluginMarketplaceInfo),
-			available: Type.Array(PluginMarketplaceSuggestion),
-		}),
+		result: Obj({ marketplaces: Type.Array(PluginMarketplaceListing) }),
 	},
 	/** Fetches the catalog. Nothing in it is installed. `source` may name a known marketplace. */
 	"plugin/marketplace/add": {
 		params: Obj({ scope: SettingsScope, cwd: Type.Optional(Str), source: Str, ref: Type.Optional(Str) }),
 		result: Obj({ marketplace: PluginMarketplaceInfo }),
 	},
+	/**
+	 * Fetches a listed marketplace's catalog again, added or not; without `name`, every added one. Nothing in it is
+	 * installed or added.
+	 */
 	"plugin/marketplace/update": {
 		params: Obj({ cwd: Type.Optional(Str), name: Type.Optional(Str) }),
-		result: Obj({ marketplaces: Type.Array(PluginMarketplaceInfo) }),
+		result: Empty,
 	},
 	/** Plugins installed from the marketplace stay installed. */
 	"plugin/marketplace/remove": {

@@ -12792,8 +12792,7 @@
 			"result": {
 				"type": "object",
 				"required": [
-					"marketplaces",
-					"available"
+					"marketplaces"
 				],
 				"properties": {
 					"marketplaces": {
@@ -12802,87 +12801,10 @@
 							"type": "object",
 							"required": [
 								"name",
-								"scope",
 								"source",
-								"commit",
-								"updatedAt",
+								"added",
 								"plugins",
 								"diagnostics"
-							],
-							"properties": {
-								"name": {
-									"type": "string"
-								},
-								"scope": {
-									"anyOf": [
-										{
-											"type": "string",
-											"const": "global"
-										},
-										{
-											"type": "string",
-											"const": "project"
-										}
-									]
-								},
-								"source": {
-									"type": "string"
-								},
-								"ref": {
-									"type": "string"
-								},
-								"description": {
-									"type": "string"
-								},
-								"commit": {
-									"type": "string"
-								},
-								"updatedAt": {
-									"type": "string"
-								},
-								"plugins": {
-									"type": "array",
-									"items": {
-										"type": "object",
-										"required": [
-											"name",
-											"installed"
-										],
-										"properties": {
-											"name": {
-												"type": "string"
-											},
-											"description": {
-												"type": "string"
-											},
-											"version": {
-												"type": "string"
-											},
-											"installed": {
-												"type": "boolean"
-											}
-										},
-										"additionalProperties": false
-									}
-								},
-								"diagnostics": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								}
-							},
-							"additionalProperties": false
-						}
-					},
-					"available": {
-						"type": "array",
-						"items": {
-							"type": "object",
-							"required": [
-								"name",
-								"source",
-								"from"
 							],
 							"properties": {
 								"name": {
@@ -12896,6 +12818,65 @@
 								},
 								"from": {
 									"type": "string"
+								},
+								"added": {
+									"type": "boolean"
+								},
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "global"
+										},
+										{
+											"type": "string",
+											"const": "project"
+										}
+									]
+								},
+								"updatedAt": {
+									"type": "string"
+								},
+								"missing": {
+									"type": "boolean"
+								},
+								"plugins": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"name",
+											"installed",
+											"update"
+										],
+										"properties": {
+											"name": {
+												"type": "string"
+											},
+											"description": {
+												"type": "string"
+											},
+											"version": {
+												"type": "string"
+											},
+											"author": {
+												"type": "string"
+											},
+											"installed": {
+												"type": "boolean"
+											},
+											"update": {
+												"type": "boolean"
+											}
+										},
+										"additionalProperties": false
+									}
+								},
+								"diagnostics": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
 								}
 							},
 							"additionalProperties": false
@@ -13038,90 +13019,7 @@
 			},
 			"result": {
 				"type": "object",
-				"required": [
-					"marketplaces"
-				],
-				"properties": {
-					"marketplaces": {
-						"type": "array",
-						"items": {
-							"type": "object",
-							"required": [
-								"name",
-								"scope",
-								"source",
-								"commit",
-								"updatedAt",
-								"plugins",
-								"diagnostics"
-							],
-							"properties": {
-								"name": {
-									"type": "string"
-								},
-								"scope": {
-									"anyOf": [
-										{
-											"type": "string",
-											"const": "global"
-										},
-										{
-											"type": "string",
-											"const": "project"
-										}
-									]
-								},
-								"source": {
-									"type": "string"
-								},
-								"ref": {
-									"type": "string"
-								},
-								"description": {
-									"type": "string"
-								},
-								"commit": {
-									"type": "string"
-								},
-								"updatedAt": {
-									"type": "string"
-								},
-								"plugins": {
-									"type": "array",
-									"items": {
-										"type": "object",
-										"required": [
-											"name",
-											"installed"
-										],
-										"properties": {
-											"name": {
-												"type": "string"
-											},
-											"description": {
-												"type": "string"
-											},
-											"version": {
-												"type": "string"
-											},
-											"installed": {
-												"type": "boolean"
-											}
-										},
-										"additionalProperties": false
-									}
-								},
-								"diagnostics": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								}
-							},
-							"additionalProperties": false
-						}
-					}
-				},
+				"properties": {},
 				"additionalProperties": false
 			}
 		},

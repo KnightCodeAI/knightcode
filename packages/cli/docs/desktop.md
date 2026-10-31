@@ -110,12 +110,13 @@ The end-to-end tests launch the production build that packaging leaves in
     server and its live status stay with `/mcp` in a thread.
   - Extensions & skills: load or skip each extension, skill, prompt template and theme you
     added, as `knightcode config` does. Built-in extensions are always on and not listed.
-  - Plugins: install, trust, turn on or off, update and uninstall [plugins](plugins.md), and
-    add marketplaces (the built-in Anthropic and xAI ones and those Claude Code and Grok Build
-    know are offered) and install from their catalogs, or import what Claude Code and Grok
-    Build installed, as `knightcode plugin` does. A plugin
-    is trusted only after a confirmation that lists what it runs. Its MCP servers' sign-in
-    and status stay with `/mcp` in a thread.
+  - Plugins: the same two tabs as `/plugins`. Installed turns [plugins](plugins.md) on or off,
+    updates, uninstalls and shows what each holds, and imports what Claude Code and Grok Build
+    installed. Marketplace lists every known marketplace (built-in Anthropic and xAI, the ones
+    you added, Claude Code's and Grok Build's) with its whole catalog, fetched in the
+    background as `/plugins` does; installing from one adds it. A plugin is trusted only after
+    a confirmation that lists what it runs. Its MCP servers' sign-in and status stay with
+    `/mcp` in a thread.
 
   Changes apply to threads that start or resume afterwards.
 - Side panel: Changes shows the thread's diff; the separators between hunks expand to

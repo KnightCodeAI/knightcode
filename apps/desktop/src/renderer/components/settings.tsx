@@ -87,19 +87,30 @@ import {
 	LogIn,
 	LogOut,
 	MessageSquare,
+	MoreHorizontal,
 	Pencil,
 	Plug,
 	Plus,
 	RefreshCw,
 	Search,
 	Settings as SettingsIcon,
+	Spinner,
 	SquarePen,
 	Sun,
 	Trash2,
 	Undo,
 	Wrench,
 } from "./icons.tsx";
-import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, SelectMenu } from "./menu.tsx";
+import {
+	Menu,
+	MenuContent,
+	MenuItem,
+	MenuRadioGroup,
+	MenuRadioItem,
+	MenuSeparator,
+	MenuTrigger,
+	SelectMenu,
+} from "./menu.tsx";
 import { NavRow } from "./nav-row.tsx";
 import { Popover } from "./popover.tsx";
 import { SidebarFrame } from "./sidebar.tsx";
@@ -195,28 +206,34 @@ export function SettingsNav({ page }: { page: SettingsPage }) {
 	);
 }
 
-/** A row: the title (13px medium) over its description (12px, secondary), the control at the end. */
+/**
+ * A row: the title (13px medium) over its description (12px, secondary), the control at the end, and what `below`
+ * holds under them.
+ */
 function Row({
 	title,
 	detail,
 	compact,
+	below,
 	children,
 }: {
 	title: ReactNode;
 	detail?: ReactNode;
 	/** Codex's Appearance rows: 8px above and below instead of 12. */
 	compact?: boolean;
+	below?: ReactNode;
 	children?: ReactNode;
 }) {
 	return (
-		<div
-			className={`relative flex items-center justify-between gap-6 px-4 ${compact ? "py-2" : "py-3"} not-last:after:absolute not-last:after:inset-x-4 not-last:after:bottom-0 not-last:after:h-px not-last:after:bg-line`}
-		>
-			<div className="flex min-w-0 flex-col gap-0.5">
-				<div className="text-sm font-medium [overflow-wrap:anywhere]">{title}</div>
-				{detail ? <div className="text-xs [overflow-wrap:anywhere] text-secondary">{detail}</div> : null}
+		<div className="relative not-last:after:absolute not-last:after:inset-x-4 not-last:after:bottom-0 not-last:after:h-px not-last:after:bg-line">
+			<div className={`flex items-center justify-between gap-6 px-4 ${compact ? "py-2" : "py-3"}`}>
+				<div className="flex min-w-0 flex-col gap-0.5">
+					<div className="text-sm font-medium [overflow-wrap:anywhere]">{title}</div>
+					{detail ? <div className="text-xs [overflow-wrap:anywhere] text-secondary">{detail}</div> : null}
+				</div>
+				<div className="flex min-w-40 shrink-0 items-center justify-end gap-2">{children}</div>
 			</div>
-			<div className="flex min-w-40 shrink-0 items-center justify-end gap-2">{children}</div>
+			{below}
 		</div>
 	);
 }
@@ -2656,7 +2673,39 @@ function Extensions() {
 
 type PluginRow = ResultOf<"plugin/list">["plugins"][number];
 type MarketplaceRow = ResultOf<"plugin/marketplace/list">["marketplaces"][number];
-type MarketplaceSuggestion = ResultOf<"plugin/marketplace/list">["available"][number];
+type CatalogEntry = MarketplaceRow["plugins"][number];
+
+/** Catalogs older than this are fetched again when the page opens, as `/plugins` does. */
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+/** How many of a marketplace's plugins show until "Show all". */
+const CATALOG_PREVIEW = 20;
+
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+const TAG_TONES = {
+	neutral: "bg-soft-alt text-secondary",
+	accent: "bg-accent/10 text-accent",
+	warning: "bg-warning/10 text-warning",
+};
+
+/** A status beside a title, drawn as the question panel's Recommended badge. */
+const Tag = ({ tone = "neutral", children }: { tone?: keyof typeof TAG_TONES; children: ReactNode }) => (
+	<span
+		className={`inline-flex shrink-0 items-center rounded-sm px-1.5 py-0.5 text-xs leading-none font-normal ${TAG_TONES[tone]}`}
+	>
+		{children}
+	</span>
+);
+
+/** The last control of a row that opens more under it; its chevron turns over while open. */
+const Disclosure = ({ open, label, onToggle }: { open: boolean; label: string; onToggle: () => void }) => (
+	<IconButton label={label} toolbar aria-expanded={open} onClick={onToggle}>
+		<ChevronDown
+			size={16}
+			className={`transition-[rotate] duration-150 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+		/>
+	</IconButton>
+);
 
 /** A plugin's or catalog's source to add, and where to save it. */
 function AddPluginSourceDialog({
@@ -2741,6 +2790,56 @@ function pluginInventory(plugin: PluginRow): string[] {
 	];
 }
 
+/** A plugin's row text: what it offers, then its description, as `/plugins` writes it. */
+function pluginSummary(plugin: PluginRow): string {
+	const offers = [
+		...(plugin.skills.length ? [plural(plugin.skills.length, "skill")] : []),
+		...(plugin.commands.length ? [plural(plugin.commands.length, "command")] : []),
+		...(plugin.mcpServers.length ? [plural(plugin.mcpServers.length, "MCP server")] : []),
+	].join(", ");
+	return [offers, plugin.description].filter(Boolean).join(" · ");
+}
+
+/** Everything a plugin holds, under its row once opened. Its own skills drop the `<plugin>:` they all carry. */
+function PluginDetails({ plugin }: { plugin: PluginRow }) {
+	const prefix = `${plugin.namespace}:`;
+	const own = (name: string) => (name.startsWith(prefix) ? name.slice(prefix.length) : name);
+	const facts: [string, ReactNode][] = [
+		["Source", <span className="font-code">{plugin.ref ? `${plugin.source}#${plugin.ref}` : plugin.source}</span>],
+		...(plugin.skills.length ? [["Skills", plugin.skills.map(own).join(", ")] as [string, ReactNode]] : []),
+		...(plugin.commands.length
+			? [["Commands", plugin.commands.map((command) => `/${command}`).join(", ")] as [string, ReactNode]]
+			: []),
+		...plugin.mcpServers.map((server): [string, ReactNode] => [
+			"MCP server",
+			<>
+				<span className="text-ink">{server.name}</span> <span className="font-code">{server.target}</span>
+			</>,
+		]),
+		...(plugin.environment.length
+			? [["Reads", <span className="font-code">{plugin.environment.join(", ")}</span>] as [string, ReactNode]]
+			: []),
+		...(plugin.unsupported.length ? [["Never runs", plugin.unsupported.join(", ")] as [string, ReactNode]] : []),
+	];
+	return (
+		<div className="flex flex-col gap-2 px-4 pb-3">
+			<dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
+				{facts.map(([term, value], index) => (
+					<Fragment key={index}>
+						<dt className="text-tertiary">{term}</dt>
+						<dd className="[overflow-wrap:anywhere] text-secondary">{value}</dd>
+					</Fragment>
+				))}
+			</dl>
+			{plugin.warnings.map((warning) => (
+				<p key={warning} className="text-xs text-secondary">
+					{warning}
+				</p>
+			))}
+		</div>
+	);
+}
+
 /** Asked before a plugin is trusted: it lists what the plugin will run, and what KnightCode will not run. */
 function TrustPluginDialog({
 	plugin,
@@ -2792,63 +2891,321 @@ function TrustPluginDialog({
 	);
 }
 
+/** A set with `value` added or taken out, for toggles held in state. */
+function toggled<T>(set: ReadonlySet<T>, value: T): Set<T> {
+	const next = new Set(set);
+	if (!next.delete(value)) next.add(value);
+	return next;
+}
+
 /**
- * Plugins (Claude Code and Grok Build): the installed ones, the ones those tools have to import, the marketplaces not
- * added yet (built-in Anthropic and xAI, and those tools' own) and the marketplace catalogs, as `knightcode plugin` and
- * `/plugins` manage them. A plugin runs nothing until it is trusted. Sign-in and live status of plugin MCP servers
- * stay with `/mcp` in a thread, since the MCP page lists only mcp.json servers.
+ * Plugins (Claude Code and Grok Build), as `/plugins` lays them out: Installed (the user's and the project's, then the
+ * ones Claude Code and Grok Build have to import) and Marketplace (every known marketplace with its whole catalog;
+ * installing from one adds it). A plugin runs nothing until it is trusted. Sign-in and live status of plugin MCP
+ * servers stay with `/mcp` in a thread, since the MCP page lists only mcp.json servers.
  */
 function Plugins() {
 	const [cwd, setCwd] = useState<string>();
 	const [trusted, setTrusted] = useProjectTrust(cwd);
-	const [tab, setTab] = useState<"installed" | "marketplaces">("installed");
+	const [tab, setTab] = useState<"installed" | "marketplace">("installed");
 	const [query, setQuery] = useState("");
 	// Tagged with its scope, newest request only: another project's list never shows (or gets acted on) under this one.
 	const [loaded, setLoaded] = useState<{
 		cwd: string | undefined;
 		plugins: ResultOf<"plugin/list">;
 		marketplaces: MarketplaceRow[];
-		available: MarketplaceSuggestion[];
 	}>();
 	const latest = useRef(0);
 	const list = loaded && loaded.cwd === cwd ? loaded : undefined;
+	/** One change at a time: the others wait until it settles, and `working` names the row it runs for. */
 	const [busy, setBusy] = useState(false);
+	const [working, setWorking] = useState<string>();
 	const [adding, setAdding] = useState<"plugin" | "marketplace">();
 	const [trusting, setTrusting] = useState<PluginRow>();
 	const [removing, setRemoving] = useState<PluginRow>();
+	const [removingMarket, setRemovingMarket] = useState<MarketplaceRow>();
+	// Opened plugin details; marketplaces toggled from how they start (closed, unless there is only one); catalogs
+	// showing every plugin.
+	const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+	const [flipped, setFlipped] = useState<ReadonlySet<string>>(new Set());
+	const [whole, setWhole] = useState<ReadonlySet<string>>(new Set());
+	const [fetching, setFetching] = useState<ReadonlySet<string>>(new Set());
+	const [failed, setFailed] = useState<ReadonlyMap<string, string>>(new Map());
+	const tried = useRef(new Set<string>());
 	const where = cwd === undefined ? {} : { cwd };
 	const load = useCallback(() => {
 		const request = ++latest.current;
 		const params = cwd === undefined ? {} : { cwd };
 		Promise.all([client.request("plugin/list", params), client.request("plugin/marketplace/list", params)])
 			.then(([plugins, markets]) => {
-				if (request === latest.current) {
-					setLoaded({ cwd, plugins, marketplaces: markets.marketplaces, available: markets.available });
-				}
+				if (request === latest.current) setLoaded({ cwd, plugins, marketplaces: markets.marketplaces });
 			})
 			.catch((e: unknown) => toast(errorText(e), "error"));
 	}, [cwd, trusted]);
 	useEffect(load, [load]);
-	/** One mutation at a time: conflicting actions are disabled until it settles. */
-	const run = <T,>(request: () => Promise<T>, then?: (result: T) => void) => {
+	const run = <T,>(key: string, request: () => Promise<T>, then?: (result: T) => void) => {
 		setBusy(true);
+		setWorking(key);
 		void request()
 			.then((result) => {
 				then?.(result);
 				load();
 			})
 			.catch((e: unknown) => toast(errorText(e), "error"))
-			.finally(() => setBusy(false));
+			.finally(() => {
+				setBusy(false);
+				setWorking(undefined);
+			});
 	};
 	const install = (params: { source: string; ref?: string; scope: "global" | "project" }) =>
 		client.request("plugin/install", { ...where, ...params }).then(({ plugin }) => setTrusting(plugin));
+	const update = (plugin: PluginRow, key: string) =>
+		run(
+			key,
+			() => client.request("plugin/update", { ...where, scope: plugin.scope, name: plugin.identity }),
+			(result) => toast(result.changed ? `Updated ${plugin.name}` : `${plugin.name} is up to date`, "info"),
+		);
+	/** Fetches a catalog again; its card shows the fetch and what went wrong. */
+	const fetchCatalog = (name: string) => {
+		setFetching((names) => new Set(names).add(name));
+		void client
+			.request("plugin/marketplace/update", { ...where, name })
+			.then(
+				() => undefined,
+				(e: unknown) => errorText(e),
+			)
+			.then((failure) => {
+				setFailed((failures) => {
+					const next = new Map(failures);
+					if (failure === undefined) next.delete(name);
+					else next.set(name, failure);
+					return next;
+				});
+				setFetching((names) => {
+					const next = new Set(names);
+					next.delete(name);
+					return next;
+				});
+				load();
+			});
+	};
+	// As `/plugins`: catalogs never fetched, or fetched a few minutes ago, are fetched in the background once.
+	useEffect(() => {
+		for (const market of list?.marketplaces ?? []) {
+			const key = `${cwd ?? ""}\n${market.name}`;
+			const stale = market.missing || !market.updatedAt || Date.now() - Date.parse(market.updatedAt) > CATALOG_TTL_MS;
+			if (!stale || tried.current.has(key)) continue;
+			tried.current.add(key);
+			fetchCatalog(market.name);
+		}
+	}, [list]);
+
 	const needle = query.trim().toLowerCase();
-	const plugins = (list?.plugins.plugins ?? []).filter((plugin) =>
-		`${plugin.name} ${plugin.description ?? ""} ${plugin.source}`.toLowerCase().includes(needle),
+	const hit = (...texts: (string | undefined)[]) => texts.join(" ").toLowerCase().includes(needle);
+	const installed = (list?.plugins.plugins ?? []).filter((plugin) =>
+		hit(plugin.name, plugin.description, plugin.source),
 	);
-	const importable = (list?.plugins.importable ?? []).filter((plugin) =>
-		`${plugin.source} ${plugin.from}`.toLowerCase().includes(needle),
+	const importable = (list?.plugins.importable ?? []).filter((plugin) => hit(plugin.name, plugin.source, plugin.from));
+	const markets = list?.marketplaces ?? [];
+	const updates = new Set(
+		markets.flatMap((market) =>
+			market.plugins.filter((entry) => entry.update).map((entry) => `${entry.name}@${market.name}`),
+		),
 	);
+	const elsewhere = new Map((list?.plugins.importable ?? []).map((plugin) => [plugin.source, plugin.from]));
+
+	const pluginRow = (plugin: PluginRow) => {
+		const key = `${plugin.scope}:${plugin.identity}`;
+		const open = opened.has(key);
+		return (
+			<Row
+				key={key}
+				title={
+					<span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+						{plugin.name}
+						{plugin.version ? <span className="text-xs font-normal text-tertiary">v{plugin.version}</span> : null}
+						{plugin.trusted ? null : <Tag tone="warning">Not trusted</Tag>}
+						{updates.has(plugin.source) ? <Tag tone="accent">Update available</Tag> : null}
+					</span>
+				}
+				detail={<span className="line-clamp-2">{pluginSummary(plugin)}</span>}
+				below={open ? <PluginDetails plugin={plugin} /> : undefined}
+			>
+				{working === key ? <Spinner size={16} className="text-secondary motion-safe:animate-spin" /> : null}
+				<Switch
+					label={`Enable ${plugin.name}`}
+					checked={plugin.enabled && plugin.trusted}
+					disabled={busy}
+					onChange={(on) =>
+						on && !plugin.trusted
+							? setTrusting(plugin)
+							: run(key, () =>
+									client.request("plugin/set", {
+										...where,
+										scope: plugin.scope,
+										name: plugin.identity,
+										enabled: on,
+									}),
+								)
+					}
+				/>
+				<Menu>
+					<MenuTrigger>
+						<IconButton label={`More for ${plugin.name}`} toolbar disabled={busy}>
+							<MoreHorizontal size={16} />
+						</IconButton>
+					</MenuTrigger>
+					<MenuContent align="end">
+						<MenuItem icon={<RefreshCw size={16} />} onSelect={() => update(plugin, key)}>
+							{updates.has(plugin.source) ? "Update" : "Check for updates"}
+						</MenuItem>
+						<MenuSeparator />
+						<MenuItem icon={<Trash2 size={16} />} onSelect={() => setRemoving(plugin)}>
+							Uninstall
+						</MenuItem>
+					</MenuContent>
+				</Menu>
+				<Disclosure
+					open={open}
+					label={open ? "Hide details" : "Show details"}
+					onToggle={() => setOpened((keys) => toggled(keys, key))}
+				/>
+			</Row>
+		);
+	};
+
+	const entryRow = (market: MarketplaceRow, entry: CatalogEntry) => {
+		const source = `${entry.name}@${market.name}`;
+		const key = `entry:${source}`;
+		const mine = list?.plugins.plugins.find((plugin) => plugin.source === source);
+		const from = entry.installed ? undefined : elsewhere.get(source);
+		const by = [entry.version ? `v${entry.version}` : "", entry.author ? `by ${entry.author}` : ""]
+			.filter(Boolean)
+			.join(" · ");
+		return (
+			<Row
+				key={entry.name}
+				title={
+					<span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+						{entry.name}
+						{by ? <span className="text-xs font-normal text-tertiary">{by}</span> : null}
+						{from ? <Tag>In {from}</Tag> : null}
+					</span>
+				}
+				detail={entry.description ? <span className="line-clamp-2">{entry.description}</span> : undefined}
+			>
+				{entry.installed && entry.update && mine ? (
+					<Button variant="soft" toolbar disabled={busy} onClick={() => update(mine, key)}>
+						{working === key ? <Spinner size={16} className="motion-safe:animate-spin" /> : <RefreshCw size={16} />}
+						Update
+					</Button>
+				) : entry.installed ? (
+					<span className="flex items-center gap-1.5 text-sm text-secondary">
+						<Check size={16} /> Installed
+					</span>
+				) : (
+					<Button
+						variant="soft"
+						toolbar
+						disabled={busy}
+						onClick={() => run(key, () => install({ source, scope: "global" }))}
+					>
+						{working === key ? <Spinner size={16} className="motion-safe:animate-spin" /> : <Download size={16} />}
+						{working === key ? "Installing…" : "Install"}
+					</Button>
+				)}
+			</Row>
+		);
+	};
+
+	const marketCard = (market: MarketplaceRow) => {
+		const entries = market.plugins.filter(
+			(entry) => !needle || hit(market.name) || hit(entry.name, entry.description, entry.author),
+		);
+		if (needle && entries.length === 0) return null;
+		const open = needle ? true : (markets.length === 1) !== flipped.has(market.name);
+		const shown = whole.has(market.name) ? entries : entries.slice(0, CATALOG_PREVIEW);
+		const failure = failed.get(market.name);
+		const busyFetching = fetching.has(market.name);
+		const detail = failure ? (
+			<span className="text-danger-text">Couldn't fetch the catalog: {failure}</span>
+		) : market.missing ? (
+			busyFetching ? (
+				"Fetching the catalog…"
+			) : (
+				"Not fetched yet"
+			)
+		) : (
+			<>
+				{market.source} · {needle ? `${entries.length} of ${market.plugins.length}` : market.plugins.length}{" "}
+				{market.plugins.length === 1 ? "plugin" : "plugins"}
+				{market.diagnostics.length ? (
+					<span className="block text-danger-text">{market.diagnostics.join("; ")}</span>
+				) : null}
+			</>
+		);
+		return (
+			<Box key={market.name}>
+				<Row
+					title={
+						<span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+							{market.name}
+							<Tag>{market.from ?? "Added"}</Tag>
+						</span>
+					}
+					detail={detail}
+				>
+					<IconButton
+						label={`Refresh ${market.name}`}
+						toolbar
+						disabled={busyFetching}
+						onClick={() => fetchCatalog(market.name)}
+					>
+						{busyFetching ? <Spinner size={16} className="motion-safe:animate-spin" /> : <RefreshCw size={16} />}
+					</IconButton>
+					{market.added ? (
+						<IconButton
+							label={`Remove ${market.name}`}
+							toolbar
+							disabled={busy}
+							onClick={() => setRemovingMarket(market)}
+						>
+							<Trash2 size={16} />
+						</IconButton>
+					) : null}
+					{needle ? null : (
+						<Disclosure
+							open={open}
+							label={open ? "Hide plugins" : "Show plugins"}
+							onToggle={() => setFlipped((names) => toggled(names, market.name))}
+						/>
+					)}
+				</Row>
+				{open ? shown.map((entry) => entryRow(market, entry)) : null}
+				{open && shown.length < entries.length ? (
+					<button
+						type="button"
+						onClick={() => setWhole((names) => toggled(names, market.name))}
+						className="flex w-full items-center justify-center gap-1 rounded-b-2xl px-4 py-2.5 text-sm text-secondary hover:text-ink"
+					>
+						Show all {entries.length} plugins <ChevronDown size={14} />
+					</button>
+				) : null}
+			</Box>
+		);
+	};
+
+	const groups: [string, PluginRow[]][] = [
+		["User", installed.filter((plugin) => plugin.scope === "global")],
+		["This project", installed.filter((plugin) => plugin.scope === "project")],
+	];
+	const imports: [string, typeof importable][] = [
+		["In Claude Code", importable.filter((plugin) => plugin.from === "Claude Code")],
+		["In Grok Build", importable.filter((plugin) => plugin.from === "Grok Build")],
+	];
+	const count = (rows: unknown[]) => <span className="text-sm text-secondary">{plural(rows.length, "plugin")}</span>;
+	const nothing = (text: string) => <div className="text-secondary">{text}</div>;
+	const shownMarkets = markets.map(marketCard).filter(Boolean);
 	return (
 		<>
 			<ScopeCard
@@ -2859,224 +3216,97 @@ function Plugins() {
 				detail="A trusted project adds the plugins its .knightcode/settings.json declares"
 			/>
 			<PageBar>
-				<div className="flex items-center justify-between gap-4">
+				<div className="flex items-center gap-2">
 					<Tabs
 						label="Plugins"
 						value={tab}
 						onChange={setTab}
 						options={[
 							{ value: "installed", label: "Installed" },
-							{ value: "marketplaces", label: "Marketplaces" },
+							{ value: "marketplace", label: "Marketplace" },
 						]}
 					/>
-					<SearchField value={query} onChange={setQuery} placeholder="Search plugins" page />
+					<div className="ms-auto max-w-60 min-w-0 flex-1">
+						<SearchField value={query} onChange={setQuery} placeholder="Search plugins" page />
+					</div>
+					<Button
+						variant="soft"
+						toolbar
+						disabled={busy}
+						onClick={() => setAdding(tab === "installed" ? "plugin" : "marketplace")}
+					>
+						<Plus size={16} /> {tab === "installed" ? "Install from source" : "Add marketplace"}
+					</Button>
 				</div>
 			</PageBar>
-			{tab === "installed" ? (
-				<Card
-					title="Installed"
-					aside={
-						<Button variant="soft" toolbar disabled={busy} onClick={() => setAdding("plugin")}>
-							<Plus size={16} /> Install plugin
-						</Button>
-					}
-				>
-					{list && plugins.length === 0 ? (
-						<Row
-							title={needle ? "No plugins match" : "No plugins"}
-							detail="Install one here, from a marketplace, or with knightcode plugin install"
-						/>
-					) : null}
-					{plugins.map((plugin) => (
-						<Row
-							key={`${plugin.scope}:${plugin.identity}`}
-							title={
-								<span className="flex items-center gap-2">
-									{plugin.name}
-									<span className="text-xs font-normal text-tertiary">
-										{plugin.scope === "project" ? "Project" : "User"}
-										{plugin.marketplace ? ` · ${plugin.marketplace}` : ""}
-										{plugin.active ? " · active" : plugin.trusted ? "" : " · not trusted"}
-									</span>
-								</span>
-							}
-							detail={
-								<>
-									{plugin.description ? <span className="block">{plugin.description}</span> : null}
-									{pluginInventory(plugin).map((line) => (
-										<span key={line} className="block font-code">
-											{line}
-										</span>
-									))}
-									{plugin.unsupported.length ? (
-										<span className="block">Not supported, never run: {plugin.unsupported.join(", ")}</span>
-									) : null}
-								</>
-							}
-						>
-							<IconButton
-								label={`Update ${plugin.name}`}
-								toolbar
-								disabled={busy}
-								onClick={() =>
-									run(
-										() => client.request("plugin/update", { ...where, scope: plugin.scope, name: plugin.identity }),
-										(result) =>
-											toast(result.changed ? `Updated ${plugin.name}` : `${plugin.name} is up to date`, "info"),
-									)
-								}
-							>
-								<RefreshCw size={16} />
-							</IconButton>
-							<Switch
-								label={`Enable ${plugin.name}`}
-								checked={plugin.enabled && plugin.trusted}
-								disabled={busy}
-								onChange={(on) =>
-									on && !plugin.trusted
-										? setTrusting(plugin)
-										: run(() =>
-												client.request("plugin/set", {
-													...where,
-													scope: plugin.scope,
-													name: plugin.identity,
-													enabled: on,
-												}),
-											)
-								}
-							/>
-							<IconButton
-								label={`Uninstall ${plugin.name}`}
-								toolbar
-								disabled={busy}
-								onClick={() => setRemoving(plugin)}
-							>
-								<Trash2 size={16} />
-							</IconButton>
-						</Row>
-					))}
-				</Card>
-			) : null}
-			{tab === "installed" && importable.length ? (
-				<Card title="In Claude Code and Grok Build">
-					{importable.map((plugin) => (
-						<Row
-							key={`${plugin.from}:${plugin.source}`}
-							title={plugin.name}
-							detail={`${plugin.from} · ${plugin.source}${plugin.enabled ? "" : " · off there"}`}
-						>
-							<Button
-								variant="soft"
-								toolbar
-								disabled={busy}
-								onClick={() => run(() => install({ source: plugin.source, scope: "global" }))}
-							>
-								<Download size={16} /> Import
-							</Button>
-						</Row>
-					))}
-				</Card>
-			) : null}
-			{tab === "marketplaces" ? (
+			{list === undefined ? <div className="kc-pulse text-tertiary">Loading…</div> : null}
+			{list && tab === "installed" ? (
 				<>
-					<Card
-						title="Marketplaces"
-						aside={
-							<Button variant="soft" toolbar disabled={busy} onClick={() => setAdding("marketplace")}>
-								<Plus size={16} /> Add marketplace
-							</Button>
-						}
-					>
-						{list?.marketplaces.length === 0 && list.available.length === 0 ? (
-							<Row title="No marketplaces" detail="Adding one installs nothing; pick plugins from it here" />
-						) : null}
-						{list?.marketplaces.map((market) => (
+					{list.plugins.plugins.length === 0 ? (
+						<Card title="Installed">
 							<Row
-								key={market.name}
-								title={market.name}
-								detail={`${market.source} · ${market.plugins.length} plugins${market.diagnostics.length ? ` · ${market.diagnostics.join("; ")}` : ""}`}
+								title="No plugins installed"
+								detail="Install one from a marketplace, or from a Git repository or folder"
 							>
-								<IconButton
-									label={`Update ${market.name}`}
-									toolbar
-									disabled={busy}
-									onClick={() =>
-										run(() => client.request("plugin/marketplace/update", { ...where, name: market.name }))
-									}
-								>
-									<RefreshCw size={16} />
-								</IconButton>
-								<IconButton
-									label={`Remove ${market.name}`}
-									toolbar
-									disabled={busy}
-									onClick={() =>
-										run(() =>
-											client.request("plugin/marketplace/remove", { ...where, scope: market.scope, name: market.name }),
-										)
-									}
-								>
-									<Trash2 size={16} />
-								</IconButton>
-							</Row>
-						))}
-						{list?.available.map((market) => (
-							<Row
-								key={`available:${market.name}`}
-								title={
-									<span className="flex items-center gap-2">
-										{market.name}
-										<span className="text-xs font-normal text-tertiary">{market.from} · not added</span>
-									</span>
-								}
-								detail={market.source}
-							>
-								<Button
-									variant="soft"
-									toolbar
-									disabled={busy}
-									onClick={() =>
-										run(() =>
-											client.request("plugin/marketplace/add", {
-												...where,
-												scope: "global",
-												source: market.source,
-												...(market.ref ? { ref: market.ref } : {}),
-											}),
-										)
-									}
-								>
-									<Plus size={16} /> Add
+								<Button variant="soft" toolbar onClick={() => setTab("marketplace")}>
+									Browse marketplace
 								</Button>
 							</Row>
-						))}
-					</Card>
-					{list?.marketplaces.map((market) => {
-						const entries = market.plugins.filter((entry) =>
-							`${entry.name} ${entry.description ?? ""}`.toLowerCase().includes(needle),
-						);
-						return entries.length ? (
-							<Card key={market.name} title={market.name}>
-								{entries.map((entry) => (
-									<Row key={entry.name} title={entry.name} detail={entry.description}>
-										{entry.installed ? (
-											<span className="text-xs text-tertiary">Installed</span>
-										) : (
+						</Card>
+					) : null}
+					{needle && installed.length === 0 && importable.length === 0 ? nothing("No plugins match.") : null}
+					{groups.map(([title, rows]) =>
+						rows.length ? (
+							<Card key={title} title={title} aside={count(rows)}>
+								{rows.map(pluginRow)}
+							</Card>
+						) : null,
+					)}
+					{imports.map(([title, rows]) =>
+						rows.length ? (
+							<Card key={title} title={title} aside={count(rows)}>
+								{rows.map((plugin) => {
+									const key = `import:${plugin.from}:${plugin.source}`;
+									return (
+										<Row
+											key={key}
+											title={plugin.name}
+											detail={`${plugin.source}${plugin.enabled ? "" : ` · turned off in ${plugin.from}`}`}
+										>
 											<Button
 												variant="soft"
 												toolbar
 												disabled={busy}
-												onClick={() => run(() => install({ source: `${entry.name}@${market.name}`, scope: "global" }))}
+												onClick={() => run(key, () => install({ source: plugin.source, scope: "global" }))}
 											>
-												<Download size={16} /> Install
+												{working === key ? (
+													<Spinner size={16} className="motion-safe:animate-spin" />
+												) : (
+													<Download size={16} />
+												)}
+												{working === key ? "Importing…" : "Import"}
 											</Button>
-										)}
-									</Row>
-								))}
+										</Row>
+									);
+								})}
 							</Card>
-						) : null;
-					})}
+						) : null,
+					)}
 				</>
+			) : null}
+			{list && tab === "marketplace" ? (
+				<Section
+					title="Marketplaces"
+					aside={<span className="text-sm text-secondary">{plural(markets.length, "marketplace")}</span>}
+				>
+					{markets.length === 0 ? (
+						<Box>
+							<Row title="No marketplaces" detail="Add one to browse its plugins. Adding installs nothing" />
+						</Box>
+					) : null}
+					{needle && markets.length > 0 && shownMarkets.length === 0 ? nothing("No plugins match.") : null}
+					{shownMarkets}
+				</Section>
 			) : null}
 			{list?.plugins.diagnostics.length ? (
 				<Card title="Problems">
@@ -3097,7 +3327,7 @@ function Plugins() {
 			</Card>
 			{adding ? (
 				<AddPluginSourceDialog
-					title={adding === "plugin" ? "Install plugin" : "Add marketplace"}
+					title={adding === "plugin" ? "Install from source" : "Add marketplace"}
 					placeholder={
 						adding === "plugin"
 							? "owner/repo, a Git URL, a folder, or name@marketplace"
@@ -3117,7 +3347,7 @@ function Plugins() {
 				<TrustPluginDialog
 					plugin={trusting}
 					onTrust={() =>
-						run(() =>
+						run(`${trusting.scope}:${trusting.identity}`, () =>
 							client.request("plugin/set", {
 								...where,
 								scope: trusting.scope,
@@ -3136,9 +3366,28 @@ function Plugins() {
 					description="Its settings entry and trust are removed. Its data directory is kept."
 					confirm="Uninstall"
 					onConfirm={() =>
-						run(() => client.request("plugin/uninstall", { ...where, scope: removing.scope, name: removing.identity }))
+						run(`${removing.scope}:${removing.identity}`, () =>
+							client.request("plugin/uninstall", { ...where, scope: removing.scope, name: removing.identity }),
+						)
 					}
 					onClose={() => setRemoving(undefined)}
+				/>
+			) : null}
+			{removingMarket ? (
+				<ConfirmDialog
+					title={`Remove ${removingMarket.name}?`}
+					description="Plugins installed from it stay installed."
+					confirm="Remove"
+					onConfirm={() =>
+						run(`market:${removingMarket.name}`, () =>
+							client.request("plugin/marketplace/remove", {
+								...where,
+								scope: removingMarket.scope ?? "global",
+								name: removingMarket.name,
+							}),
+						)
+					}
+					onClose={() => setRemovingMarket(undefined)}
 				/>
 			) : null}
 		</>

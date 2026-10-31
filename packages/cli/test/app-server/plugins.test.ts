@@ -127,10 +127,15 @@ test("adds marketplaces without installing, and installs from them", async () =>
 	await a.client.request("plugin/install", { scope: "global", cwd, source: "alpha@shop", trust: true });
 	const markets = await a.client.request("plugin/marketplace/list", { cwd });
 	conforms("plugin/marketplace/list", markets);
-	expect(markets.marketplaces[0]?.plugins[0]).toMatchObject({ name: "alpha", installed: true });
+	expect(markets.marketplaces.find((market) => market.name === "shop")).toMatchObject({
+		added: true,
+		scope: "global",
+		plugins: [{ name: "alpha", installed: true, update: false }],
+	});
 	conforms("plugin/marketplace/update", await a.client.request("plugin/marketplace/update", { cwd }));
 	await a.client.request("plugin/marketplace/remove", { scope: "global", cwd, name: "shop" });
-	expect((await a.client.request("plugin/marketplace/list", { cwd })).marketplaces).toEqual([]);
+	const left = (await a.client.request("plugin/marketplace/list", { cwd })).marketplaces;
+	expect(left.map((market) => market.name)).toEqual(["claude-plugins-official", "xai-official"]);
 	expect((await a.client.request("plugin/list", { cwd })).plugins).toHaveLength(1);
 });
 
@@ -152,17 +157,50 @@ test("offers Claude Code's installs and the known marketplaces, and imports thro
 	const listed = await a.client.request("plugin/list", { cwd });
 	conforms("plugin/list", listed);
 	expect(listed.importable).toEqual([{ name: "alpha", from: "Claude Code", source: "alpha@shop", enabled: true }]);
+	const list = async () => (await a.client.request("plugin/marketplace/list", { cwd })).marketplaces;
 	const markets = await a.client.request("plugin/marketplace/list", { cwd });
 	conforms("plugin/marketplace/list", markets);
-	expect(markets.available).toEqual([
-		{ name: "claude-plugins-official", source: "anthropics/claude-plugins-official", from: "Anthropic" },
-		{ name: "xai-official", source: "xai-org/plugin-marketplace", from: "xAI" },
-		{ name: "shop", source: market, from: "Claude Code" },
+	expect(
+		markets.marketplaces.map(({ name, source, from, added, missing, plugins }) => ({
+			name,
+			source,
+			from,
+			added,
+			missing,
+			plugins: plugins.length,
+		})),
+	).toEqual([
+		{
+			name: "claude-plugins-official",
+			source: "anthropics/claude-plugins-official",
+			from: "Anthropic",
+			added: false,
+			missing: true,
+			plugins: 0,
+		},
+		{
+			name: "xai-official",
+			source: "xai-org/plugin-marketplace",
+			from: "xAI",
+			added: false,
+			missing: true,
+			plugins: 0,
+		},
+		{ name: "shop", source: market, from: "Claude Code", added: false, missing: true, plugins: 0 },
 	]);
+	// Fetching a catalog to browse it adds nothing.
+	conforms("plugin/marketplace/update", await a.client.request("plugin/marketplace/update", { cwd, name: "shop" }));
+	expect((await list()).find((row) => row.name === "shop")).toMatchObject({
+		added: false,
+		plugins: [{ name: "alpha", installed: false }],
+	});
 	const imported = await a.client.request("plugin/install", { scope: "global", cwd, source: "alpha@shop" });
 	expect(imported.plugin).toMatchObject({ name: "alpha", marketplace: "shop", trusted: false });
-	const after = await a.client.request("plugin/marketplace/list", { cwd });
-	expect(after.marketplaces.map((added) => added.name)).toEqual(["shop"]);
-	expect(after.available.map((known) => known.name)).toEqual(["claude-plugins-official", "xai-official"]);
+	// The plugin's row says it is not trusted; the terminal's hint to trust it is not repeated as a problem.
+	expect((await a.client.request("plugin/list", { cwd })).diagnostics).toEqual([]);
+	expect((await list()).find((row) => row.name === "shop")).toMatchObject({
+		added: true,
+		plugins: [{ name: "alpha", installed: true }],
+	});
 	expect((await a.client.request("plugin/list", { cwd })).importable).toEqual([]);
 });

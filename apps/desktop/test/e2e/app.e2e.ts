@@ -36,7 +36,9 @@ test.afterEach(async () => {
 });
 
 /** The app on a new thread in a fixture project, opened by a `knightcode://new?cwd=` link as the system would. */
-async function launch(options: { counter?: boolean; projectSettings?: boolean } = {}): Promise<Launched> {
+async function launch(
+	options: { counter?: boolean; projectSettings?: boolean; offline?: boolean } = {},
+): Promise<Launched> {
 	// Its long form: a Windows runner's temp dir is an 8.3 name (RUNNER~1), and git gives a repository's root long.
 	const root = realpathSync.native(mkdtempSync(join(tmpdir(), "kc-e2e-")));
 	roots.push(root);
@@ -74,6 +76,7 @@ async function launch(options: { counter?: boolean; projectSettings?: boolean } 
 			// Plugins also read Claude Code's and Grok Build's folders; keep the developer's own out.
 			CLAUDE_CONFIG_DIR: join(root, "claude"),
 			GROK_HOME: join(root, "grok"),
+			...(options.offline ? { KNIGHTCODE_OFFLINE: "1" } : {}),
 			// Split on whitespace (src/main/server.ts): the checkout's path has no spaces in CI.
 			KNIGHTCODE_DESKTOP_SERVER: `bun ${FAUX_SERVER}`,
 		},
@@ -297,7 +300,8 @@ test("an MCP App draws in its tool's row and calls its server's tool once confir
 });
 
 test("a plugin installs, asks for trust, toggles, uninstalls, and offers its command", async () => {
-	const { page, project } = await launch();
+	// Offline: the Marketplace tab would fetch the built-in catalogs from GitHub.
+	const { page, project } = await launch({ offline: true });
 	const plugin = join(project, "..", "e2e-plugin");
 	mkdirSync(join(plugin, "commands"), { recursive: true });
 	writeFileSync(join(plugin, "plugin.json"), JSON.stringify({ name: "e2e-plugin", description: "E2E plugin" }));
@@ -305,18 +309,28 @@ test("a plugin installs, asks for trust, toggles, uninstalls, and offers its com
 	const mod = process.platform === "darwin" ? "Meta" : "Control";
 	await page.keyboard.press(`${mod}+Comma`);
 	await page.getByRole("button", { name: "Plugins" }).click();
-	await page.getByRole("button", { name: "Install plugin" }).click();
+	await page.getByRole("button", { name: "Install from source" }).click();
 	await page.getByRole("textbox", { name: "Source" }).fill(plugin);
 	await page.getByRole("button", { name: "Install", exact: true }).click();
 	// Installed untrusted; the trust dialog lists what it offers before anything runs.
 	await expect(page.getByText("Trust e2e-plugin?")).toBeVisible();
 	await expect(page.getByRole("dialog").getByText("Commands: /e2e-plugin:go")).toBeVisible();
+	await page.getByRole("button", { name: "Not now" }).click();
+	await expect(page.getByText("Not trusted", { exact: true })).toBeVisible();
+	const enable = page.getByRole("switch", { name: "Enable e2e-plugin" });
+	await expect(enable).not.toBeChecked();
+	// Turning an untrusted plugin on asks again.
+	await enable.click();
 	await page.getByRole("button", { name: "Trust and activate" }).click();
-	await expect(page.getByText(/User · active/)).toBeVisible();
-	await page.getByRole("switch", { name: "Enable e2e-plugin" }).click();
-	await expect(page.getByText(/User · active/)).toBeHidden();
-	await page.getByRole("switch", { name: "Enable e2e-plugin" }).click();
-	await expect(page.getByText(/User · active/)).toBeVisible();
+	await expect(enable).toBeChecked();
+	await expect(page.getByText("Not trusted", { exact: true })).toBeHidden();
+	await enable.click();
+	await expect(enable).not.toBeChecked();
+	await enable.click();
+	await expect(enable).toBeChecked();
+	// Its details list what it holds.
+	await page.getByRole("button", { name: "Show details" }).click();
+	await expect(page.getByText("/e2e-plugin:go")).toBeVisible();
 	// A new thread in the project offers the plugin's command before the thread exists. Back leaves Plugins, then
 	// General, which opened Settings.
 	await page.keyboard.press(`${mod}+BracketLeft`);
@@ -325,12 +339,14 @@ test("a plugin installs, asks for trust, toggles, uninstalls, and offers its com
 	await expect(page.getByText("e2e-plugin:go")).toBeVisible();
 	await page.keyboard.press(`${mod}+Comma`);
 	await page.getByRole("button", { name: "Plugins" }).click();
-	await page.getByRole("button", { name: "Uninstall e2e-plugin" }).click();
+	await page.getByRole("button", { name: "More for e2e-plugin" }).click();
+	await page.getByRole("menuitem", { name: "Uninstall" }).click();
 	await page.getByRole("button", { name: "Uninstall", exact: true }).click();
-	await expect(page.getByText("No plugins", { exact: true })).toBeVisible();
-	// The built-in marketplaces are offered without being added.
-	await page.getByRole("tab", { name: "Marketplaces" }).click();
-	await expect(page.getByRole("button", { name: "Add", exact: true })).toHaveCount(2);
-	await expect(page.getByText("Anthropic · not added")).toBeVisible();
-	await expect(page.getByText("xAI · not added")).toBeVisible();
+	await expect(page.getByText("No plugins installed")).toBeVisible();
+	// Every known marketplace is listed without being added: nothing to remove, and offline nothing is fetched.
+	await page.getByRole("tab", { name: "Marketplace" }).click();
+	await expect(page.getByText("claude-plugins-official")).toBeVisible();
+	await expect(page.getByText("xai-official")).toBeVisible();
+	await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+	await expect(page.getByText(/^Couldn't fetch the catalog: offline/)).toHaveCount(2);
 });

@@ -24,16 +24,16 @@ Start KnightCode, or run `/reload` in a running session. The plugin's commands a
 
 In an interactive session, `/plugins` opens two tabs that one search covers (`/` to search, `tab` to switch):
 
-- **Plugins**: the installed plugins, and the ones Claude Code and Grok Build have to import. `space` turns a plugin on or off (asking for trust first), `u` updates, `x` uninstalls, `enter` shows what it offers (or signs in when one of its MCP servers needs it), `a` installs from a source, and `r` reloads the session.
-- **Marketplace**: every plugin of every marketplace, as Grok Build lists them: the built-in Anthropic and xAI catalogs, the ones you added, and Claude Code's and Grok Build's. `enter` or `i` installs a plugin, adding its marketplace if needed; `d` uninstalls, `u` updates a plugin or refreshes a marketplace, `x` removes an added marketplace, `r` refreshes them all, and `a` adds one from a source.
+- **Installed**: the installed plugins, and the ones Claude Code and Grok Build have to import. `space` turns a plugin on or off (asking for trust first), `u` updates, `x` uninstalls, `enter` shows what it offers (or signs in when one of its MCP servers needs it), `a` installs from a source, and `r` reloads the session.
+- **Marketplace**: every plugin of every marketplace, as Grok Build lists them: the built-in Anthropic and xAI catalogs, the ones you added, and Claude Code's and Grok Build's. Each marketplace starts collapsed: `enter` on one opens it, and a search opens them all. `enter` or `i` installs a plugin, adding its marketplace if needed; `d` uninstalls, `u` updates a plugin or refreshes a marketplace, `x` removes an added marketplace, `r` refreshes them all, and `a` adds one from a source.
 
-Each row shows its state, such as `not trusted`, `disabled`, `installed`, `update available`, `in Claude Code`, or `needs sign-in`, and the footer lists the keys that act on it.
+Each row shows its state, such as `not trusted`, `disabled`, `installed`, `update available`, `in Claude Code`, or `needs sign-in`. The footer lists the keys for the selected row, then the keys that work anywhere on the tab.
 
 Opening `/plugins` shows catalogs at once: KnightCode's cached copy, or else the copy Claude Code or Grok Build keeps (only its catalog file is read). Catalogs missing or more than five minutes old are fetched in the background, including ones your or the project's settings declare but this machine never fetched, and each group updates when its fetch lands; with `--offline`, only folders are read and the others show `offline`.
 
 A plugin's MCP servers start as soon as it is installed or turned on, without a reload. When one asks for a sign-in, `/plugins` opens [`/mcp`](mcp.md)'s menu for it, where you sign in in the browser. Later, `m` on the plugin opens the same menus to sign in or out, reconnect, or turn its servers off. Skills and commands load when you reload.
 
-The desktop app has the plugin controls under **Settings › Plugins**.
+The desktop app has the same two tabs under **Settings › Plugins**: Installed, where a switch turns a plugin on or off and its menu updates or uninstalls it, and Marketplace, a card per marketplace whose catalog is fetched in the background the same way.
 
 ## Marketplaces
 
@@ -49,13 +49,13 @@ knightcode plugin install review-tools@acme-plugins
 
 ### Built-in and known marketplaces
 
-Two marketplaces are built in: Anthropic's `claude-plugins-official` (`anthropics/claude-plugins-official`) and xAI's `xai-official` (`xai-org/plugin-marketplace`). KnightCode also offers the marketplaces Claude Code and Grok Build know: `extraKnownMarketplaces` in their `settings.json` and `settings.local.json`, and their `plugins/known_marketplaces.json`. `/plugins`, **Settings › Plugins** and `marketplace list` show these until you add them, which you do by name:
+Two marketplaces are built in: Anthropic's `claude-plugins-official` (`anthropics/claude-plugins-official`) and xAI's `xai-official` (`xai-org/plugin-marketplace`). KnightCode also offers the marketplaces Claude Code and Grok Build know: `extraKnownMarketplaces` in their `settings.json` and `settings.local.json`, and their `plugins/known_marketplaces.json`. `/plugins` and **Settings › Plugins** list their plugins without adding them; `marketplace list` offers them until you add them, which you do by name:
 
 ```bash
 knightcode plugin marketplace add claude-plugins-official
 ```
 
-Installing `name@marketplace` from a known marketplace that is not added yet adds it first. Nothing is fetched until you add or install.
+Installing `name@marketplace` from a known marketplace that is not added yet adds it first. On the command line, nothing is fetched until you add or install.
 
 ### Importing from Claude Code and Grok Build
 

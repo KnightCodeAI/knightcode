@@ -21,8 +21,10 @@ import { projectReadable } from "./workspaces.ts";
 
 type Scope = ParamsOf<"plugin/install">["scope"];
 
+const settingsScope = (scope: PluginScope): Scope => (scope === "user" ? "global" : "project");
+
 function marketplaceInfo(market: MarketplaceView): PluginMarketplaceInfo {
-	return { ...market, scope: market.scope === "user" ? "global" : "project" };
+	return { ...market, scope: settingsScope(market.scope) };
 }
 
 export function pluginHandlers(ctx: AppServerContext): Handlers {
@@ -43,7 +45,7 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 			name: plugin.name,
 			namespace: plugin.namespace,
 			identity: plugin.identity,
-			scope: plugin.scopeKind === "user" ? "global" : "project",
+			scope: settingsScope(plugin.scopeKind),
 			...(plugin.marketplace ? { marketplace: plugin.marketplace } : {}),
 			source: plugin.source,
 			...(plugin.ref ? { ref: plugin.ref } : {}),
@@ -71,9 +73,14 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 		"plugin/list": async ({ cwd }) => {
 			const manager = managerFor(cwd);
 			const { plugins: active, diagnostics } = loadActive(manager, cwd);
+			const plugins = manager.list().map((plugin) => info(plugin, active));
+			// Each plugin says whether it is trusted; the hint to trust one with `knightcode plugin` is for the terminal.
+			const untrusted = plugins
+				.filter((plugin) => !plugin.trusted)
+				.map((plugin) => `plugin "${plugin.name}" is not trusted;`);
 			return {
-				plugins: manager.list().map((plugin) => info(plugin, active)),
-				diagnostics,
+				plugins,
+				diagnostics: diagnostics.filter((line) => !untrusted.some((hint) => line.startsWith(hint))),
 				importable: manager.importablePlugins(),
 			};
 		},
@@ -105,21 +112,27 @@ export function pluginHandlers(ctx: AppServerContext): Handlers {
 			await writer(scope, cwd).uninstall(name, { scope: scopeOf(scope) });
 			return {};
 		},
-		"plugin/marketplace/list": async ({ cwd }) => {
-			const manager = managerFor(cwd);
-			return {
-				marketplaces: manager.listMarketplaces().map(marketplaceInfo),
-				available: manager.availableMarketplaces(),
-			};
-		},
+		"plugin/marketplace/list": async ({ cwd }) => ({
+			marketplaces: managerFor(cwd)
+				.browseMarketplaces()
+				.map(({ scope, ...market }) => ({ ...market, ...(scope ? { scope: settingsScope(scope) } : {}) })),
+		}),
 		"plugin/marketplace/add": async ({ scope, cwd, source, ref }) => ({
 			marketplace: marketplaceInfo(
 				await writer(scope, cwd).addMarketplace(source, { scope: scopeOf(scope), ...(ref ? { ref } : {}) }),
 			),
 		}),
-		"plugin/marketplace/update": async ({ cwd, name }) => ({
-			marketplaces: (await managerFor(cwd).updateMarketplaces(name)).map(marketplaceInfo),
-		}),
+		"plugin/marketplace/update": async ({ cwd, name }) => {
+			const manager = managerFor(cwd);
+			if (name === undefined) {
+				await manager.updateMarketplaces();
+				return {};
+			}
+			const market = manager.browseMarketplaces().find((candidate) => candidate.name === name);
+			if (!market) throw new Error(`no marketplace named "${name}"`);
+			await manager.fetchListing(market);
+			return {};
+		},
 		"plugin/marketplace/remove": async ({ scope, cwd, name }) => {
 			await writer(scope, cwd).removeMarketplace(name, { scope: scopeOf(scope) });
 			return {};

@@ -411,11 +411,29 @@ const requestResults: Record<string, unknown> = {
 	"plugin/update": { plugin: pluginInfo, changed: true },
 	"plugin/uninstall": {},
 	"plugin/marketplace/list": {
-		marketplaces: [marketplaceInfo],
-		available: [{ name: "claude-plugins-official", source: "anthropics/claude-plugins-official", from: "Anthropic" }],
+		marketplaces: [
+			{
+				name: "shop",
+				source: "acme/marketplace",
+				added: true,
+				scope: "global",
+				updatedAt: "2026-10-28T00:00:00.000Z",
+				plugins: [{ name: "tools", description: "Tools", author: "Acme", installed: true, update: false }],
+				diagnostics: [],
+			},
+			{
+				name: "claude-plugins-official",
+				source: "anthropics/claude-plugins-official",
+				from: "Anthropic",
+				added: false,
+				missing: true,
+				plugins: [],
+				diagnostics: [],
+			},
+		],
 	},
 	"plugin/marketplace/add": { marketplace: marketplaceInfo },
-	"plugin/marketplace/update": { marketplaces: [marketplaceInfo] },
+	"plugin/marketplace/update": {},
 	"plugin/marketplace/remove": {},
 	"resource/list": {
 		resources: [

@@ -569,11 +569,15 @@ settings) or `project`; project writes need a trusted project (`invalidParams` w
   added yet adds it first.
 - `plugin/set {scope, cwd?, name, enabled?, trust?}`, `plugin/update {scope, cwd?, name}` and
   `plugin/uninstall {scope, cwd?, name}`.
-- `plugin/marketplace/list {cwd?}` returns `{marketplaces, available}`: the added catalogs, and
-  the known ones not added yet (`{name, source, ref?, from}`: built in, or Claude Code's or Grok
-  Build's). `plugin/marketplace/add {scope, cwd?, source, ref?}` takes a source or a known name;
-  `plugin/marketplace/update {cwd?, name?}` and `plugin/marketplace/remove {scope, cwd?, name}`.
-  Adding a marketplace installs nothing.
+- `plugin/marketplace/list {cwd?}` returns `{marketplaces}`: every marketplace `/plugins` lists
+  (built in, added, then Claude Code's and Grok Build's), each `{name, source, ref?, from?, added,
+  scope?, updatedAt?, missing?, plugins, diagnostics}` with its whole catalog, each plugin
+  `{name, description?, version?, author?, installed, update}`. Reads local state only.
+- `plugin/marketplace/update {cwd?, name?}` fetches the named marketplace's catalog, added or not,
+  without adding it (offline, only a folder's); without `name`, every added one.
+  `plugin/marketplace/add {scope, cwd?, source, ref?}` takes a source or a known name, and
+  `plugin/marketplace/remove {scope, cwd?, name}` keeps the plugins installed from it. Adding a
+  marketplace installs nothing.
 
 Reads use local state only. Changes apply to threads that start, resume, or reload afterwards.
 `command/list {cwd}` includes the commands and skills of the plugins a new thread would load.
