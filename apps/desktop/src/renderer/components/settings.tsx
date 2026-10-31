@@ -2679,6 +2679,8 @@ type CatalogEntry = MarketplaceRow["plugins"][number];
 const CATALOG_TTL_MS = 5 * 60 * 1000;
 /** How many of a marketplace's plugins show until "Show all". */
 const CATALOG_PREVIEW = 20;
+/** How many of a plugin's skills or commands its details name until "Show all". */
+const DETAIL_PREVIEW = 24;
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -2795,9 +2797,22 @@ function pluginSummary(plugin: PluginRow): string {
  * Its own skills drop the `<plugin>:` they all carry. Under its row once opened, and in the trust question.
  */
 function PluginDetails({ plugin, className = "px-4 pb-3" }: { plugin: PluginRow; className?: string }) {
+	const [whole, setWhole] = useState(false);
 	const prefix = `${plugin.namespace}:`;
 	const own = (name: string) => (name.startsWith(prefix) ? name.slice(prefix.length) : name);
 	const counted = (term: string, count: number) => (count > 1 ? `${term} (${count})` : term);
+	/** A long list shows its first names until "Show all", as a marketplace shows its first plugins. */
+	const names = (all: string[]): ReactNode =>
+		whole || all.length <= DETAIL_PREVIEW ? (
+			all.join(", ")
+		) : (
+			<>
+				{all.slice(0, DETAIL_PREVIEW).join(", ")}, …{" "}
+				<button type="button" onClick={() => setWhole(true)} className="text-ink hover:underline">
+					Show all {all.length}
+				</button>
+			</>
+		);
 	const facts: [string, ReactNode][] = [
 		["Source", <span className="font-code">{plugin.ref ? `${plugin.source}#${plugin.ref}` : plugin.source}</span>],
 		...plugin.mcpServers.map((server): [string, ReactNode] => [
@@ -2811,14 +2826,14 @@ function PluginDetails({ plugin, className = "px-4 pb-3" }: { plugin: PluginRow;
 			: []),
 		...(plugin.commands.length
 			? [
-					[counted("Commands", plugin.commands.length), plugin.commands.map((command) => `/${command}`).join(", ")] as [
+					[counted("Commands", plugin.commands.length), names(plugin.commands.map((command) => `/${command}`))] as [
 						string,
 						ReactNode,
 					],
 				]
 			: []),
 		...(plugin.skills.length
-			? [[counted("Skills", plugin.skills.length), plugin.skills.map(own).join(", ")] as [string, ReactNode]]
+			? [[counted("Skills", plugin.skills.length), names(plugin.skills.map(own))] as [string, ReactNode]]
 			: []),
 		...(plugin.unsupported.length ? [["Never runs", plugin.unsupported.join(", ")] as [string, ReactNode]] : []),
 	];
@@ -3124,8 +3139,14 @@ function Plugins() {
 		const shown = whole.has(market.name) ? entries : entries.slice(0, CATALOG_PREVIEW);
 		const failure = failed.get(market.name);
 		const busyFetching = fetching.has(market.name);
+		// Git's whole stderr can be many lines: two show, and the rest is a hover away.
+		const problem = (text: string) => (
+			<Tooltip content={text}>
+				<span className="line-clamp-2 text-danger-text">{text}</span>
+			</Tooltip>
+		);
 		const detail = failure ? (
-			<span className="text-danger-text">Couldn't fetch the catalog: {failure}</span>
+			problem(`Couldn't fetch the catalog: ${failure}`)
 		) : market.missing ? (
 			busyFetching ? (
 				"Fetching the catalog…"
@@ -3136,9 +3157,7 @@ function Plugins() {
 			<>
 				{market.source} · {needle ? `${entries.length} of ${market.plugins.length}` : market.plugins.length}{" "}
 				{market.plugins.length === 1 ? "plugin" : "plugins"}
-				{market.diagnostics.length ? (
-					<span className="block text-danger-text">{market.diagnostics.join("; ")}</span>
-				) : null}
+				{market.diagnostics.length ? problem(market.diagnostics.join("; ")) : null}
 			</>
 		);
 		return (
