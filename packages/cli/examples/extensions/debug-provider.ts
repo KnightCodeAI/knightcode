@@ -6,7 +6,7 @@
  * as expandable custom entries.
  */
 
-import { type ExtensionAPI, keyHint } from "@knightcodeai/cli";
+import type { ExtensionAPI } from "@knightcodeai/cli";
 import { Box, Text } from "@knightcode/tui";
 
 const ENTRY_TYPE = "debug-provider-events";
@@ -24,7 +24,7 @@ export default function (knightcode: ExtensionAPI) {
 	let activeEvents: unknown[] | undefined;
 	let completedEntry: ProviderDebugEntry | undefined;
 
-	knightcode.registerEntryRenderer<ProviderDebugEntry>(ENTRY_TYPE, (entry, { expanded }, theme) => {
+	knightcode.registerEntryRenderer<ProviderDebugEntry>(ENTRY_TYPE, (entry, { expanded, keyHint }, theme) => {
 		const data = entry.data;
 		if (!data) return new Text(theme.fg("warning", "[provider debug] Missing event data"), 0, 0);
 

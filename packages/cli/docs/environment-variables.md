@@ -85,6 +85,7 @@ These variables are read by KnightCode itself:
 | `KNIGHTCODE_DISABLE_FILE_CHECKPOINTS` | Set to `1`, `true`, or `yes` to stop backing up files before edits; `/undo` then rewinds the conversation only. See [Sessions](sessions.md#file-restore) |
 | `KNIGHTCODE_SKIP_VERSION_CHECK` | Disable automatic version checks and downloads; explicit `knightcode update` still works |
 | `KNIGHTCODE_DISABLE_AUTO_UPDATE` | Set to `1` to disable automatic update downloads while retaining update notices, overriding the user-level [`autoUpdate` setting](settings.md#disable-automatic-updates); explicit `knightcode update` still works |
+| `KNIGHTCODE_SELF_UPDATE_COMMAND` | Command `knightcode update` runs to update KnightCode itself, split on whitespace, with `{packageName}`, `{version}`, and `{installSpec}` placeholders. Takes precedence over the `selfUpdateCommand` setting. See [Custom update command](cli.md#custom-update-command) |
 | `KNIGHTCODE_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no` |
 | `KNIGHTCODE_CODEMODE_MAX_WORKERS` | Maximum codemode workers alive at once across all sessions in the process; default `2`. Each worker's script may use up to 256 MB. Raise it when one process runs several sessions, such as in-process subagents. Further scripts wait for a free worker. See [Codemode](codemode.md) |
 | `KNIGHTCODE_CACHE_RETENTION` | Set to `long` for extended provider prompt caching where supported |

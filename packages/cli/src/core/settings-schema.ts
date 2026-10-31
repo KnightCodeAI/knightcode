@@ -289,6 +289,13 @@ export const SettingsSchema = Type.Object(
 				default: true,
 			}),
 		),
+		selfUpdateCommand: Type.Optional(
+			Type.Array(Type.String(), {
+				minItems: 1,
+				description:
+					'Command `knightcode update` runs to update KnightCode itself, in argv form such as ["mise", "use", "-g", "npm:{packageName}@{version}"]. Placeholders: {packageName}, {version}, {installSpec}. KNIGHTCODE_SELF_UPDATE_COMMAND takes precedence. Global setting only.',
+			}),
+		),
 		collapseChangelog: Type.Optional(
 			Type.Boolean({
 				description: "Show the condensed changelog after update; use /changelog for the full changelog.",

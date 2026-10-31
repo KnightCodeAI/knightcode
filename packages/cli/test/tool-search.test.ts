@@ -19,6 +19,40 @@ describe("tokenize", () => {
 	it("splits camelCase and snake_case, drops stop words, and folds plurals", () => {
 		expect(tokenize("listIssues for the GitHub_repo")).toEqual(["list", "issue", "git", "hub", "repo"]);
 		expect(tokenize("searches queries HTTPServer")).toEqual(["search", "query", "http", "server"]);
+		expect(tokenize("repo.issues/search:queries")).toEqual(["repo", "issue", "search", "query"]);
+	});
+
+	it.each([
+		["搜索仓库问题", ["搜索", "仓库", "问题"]],
+		["文書を検索", ["文書", "を", "検索"]],
+		["문서 검색", ["문서", "검색"]],
+		["ค้นหาเอกสาร", ["ค้นหา", "เอกสาร"]],
+		["Поиск документов", ["поиск", "документов"]],
+		["البحث عن الملفات", ["البحث", "عن", "الملفات"]],
+		["फ़ाइल खोजें", ["फ़ाइल", "खोजें"]],
+		["Éléments cafés", ["éléments", "cafés"]],
+	])("segments Unicode words in %s", (text, expected) => {
+		expect(tokenize(text)).toEqual(expected);
+	});
+
+	it("preserves non-ASCII words and splits mixed-language identifiers", () => {
+		expect(tokenize("搜索GitHub_repoIssues résumé cafés")).toEqual([
+			"搜索",
+			"git",
+			"hub",
+			"repo",
+			"issue",
+			"résumé",
+			"cafés",
+		]);
+	});
+
+	it("normalizes canonically equivalent Unicode text", () => {
+		expect(tokenize("CAFÉ cafe\u0301")).toEqual(["café", "café"]);
+	});
+
+	it("ignores whitespace, punctuation, and emoji", () => {
+		expect(tokenize(" \t，。!? 😀 ")).toEqual([]);
 	});
 });
 
@@ -43,6 +77,22 @@ describe("Bm25Ranker", () => {
 		expect(ranker.rank("search", documents, 1)).toHaveLength(1);
 		// Property names and descriptions are searchable.
 		expect(ranker.rank("closed", documents, 8).map((match) => match.name)).toEqual(["mcp__github__list_issues"]);
+	});
+
+	it.each([
+		["搜索仓库问题", "问题"],
+		["文書を検索", "検索"],
+		["문서 검색", "검색"],
+		["ค้นหาเอกสาร", "เอกสาร"],
+		["Поиск документов", "документов"],
+		["البحث عن الملفات", "الملفات"],
+		["फ़ाइल खोजें", "खोजें"],
+		["Rechercher un café", "cafe\u0301"],
+	])("matches Unicode queries against %s", (description, query) => {
+		const localized = createToolSearchDocument(tool("localized", description));
+		expect(new Bm25Ranker().rank(query, [...documents, localized], 8)).toEqual([
+			{ name: "localized", score: expect.any(Number) },
+		]);
 	});
 
 	it("returns nothing for unknown or empty queries", () => {
@@ -108,10 +158,25 @@ describe("Bm25Ranker", () => {
 		const first = (query: string) => ranker.rank(query, documents, 1).map((match) => match.name);
 		expect(first("peekaboo app")).toEqual(["mcp__peekaboo__app"]);
 		expect(first("open the peekaboo app tool")).toEqual(["mcp__peekaboo__app"]);
-		expect(first("describe app")).toEqual(["mcp__peekaboo__app"]);
 		expect(first("read thread_read state")).toEqual(["mcp__dev-app__thread_read"]);
 		// Without the whole name, mentions in descriptions decide.
 		expect(first("describe window")).toEqual(["mcp__peekaboo__see"]);
+	});
+
+	it("ranks a tool matching more query terms first, whatever the scores", () => {
+		const documents = [
+			tool("mcp__peekaboo__app", "Launch, quit, focus, or switch applications by name or bundle identifier."),
+			tool("mcp__peekaboo__see", "Capture the app window and describe the UI elements of the app."),
+			tool("mcp__peekaboo__window", "Move, resize, or close a window of an app."),
+			tool("mcp__peekaboo__image", "Take a screenshot of the screen, an app, or a window."),
+		].map((entry) => createToolSearchDocument(entry));
+		const ranker = new Bm25Ranker();
+		const first = (query: string) => ranker.rank(query, documents, 1).map((match) => match.name);
+		// `window` and `app` are whole names, but each covers one of the two terms.
+		expect(first("screenshot window")).toEqual(["mcp__peekaboo__image"]);
+		expect(first("describe app")).toEqual(["mcp__peekaboo__see"]);
+		// An exact name still ranks first.
+		expect(first("window")).toEqual(["mcp__peekaboo__window"]);
 	});
 
 	it("includes the namespace in the search text", () => {

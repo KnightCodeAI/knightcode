@@ -6,10 +6,12 @@ import {
 	detectInstallChange,
 	detectInstallMethod,
 	findNodePackageDir,
+	getConfiguredSelfUpdateArgv,
 	getSelfUpdateCommand,
 	getSelfUpdatePackageDir,
 	getSelfUpdateUnavailableInstruction,
 	getUpdateInstruction,
+	makeConfiguredSelfUpdateCommand,
 } from "../src/config.ts";
 
 const execPathDescriptor = Object.getOwnPropertyDescriptor(process, "execPath");
@@ -545,5 +547,48 @@ describe("detectInstallChange", () => {
 		writeFileSync(join(tempDir, "package.json"), JSON.stringify({ version: "0.0.1" }));
 		rmSync(installDir, { recursive: true, force: true });
 		expect(detectInstallChange(join(installDir, "package.json"))).toEqual({ kind: "removed" });
+	});
+});
+
+describe("configured self-update command", () => {
+	const originalSelfUpdateCommand = process.env.KNIGHTCODE_SELF_UPDATE_COMMAND;
+
+	afterEach(() => {
+		if (originalSelfUpdateCommand === undefined) {
+			delete process.env.KNIGHTCODE_SELF_UPDATE_COMMAND;
+		} else {
+			process.env.KNIGHTCODE_SELF_UPDATE_COMMAND = originalSelfUpdateCommand;
+		}
+	});
+
+	test("prefers KNIGHTCODE_SELF_UPDATE_COMMAND over the setting and splits it on whitespace", () => {
+		process.env.KNIGHTCODE_SELF_UPDATE_COMMAND = "  nub   upgrade {installSpec} ";
+
+		expect(getConfiguredSelfUpdateArgv(["mise", "upgrade"])).toEqual(["nub", "upgrade", "{installSpec}"]);
+	});
+
+	test("uses the setting when KNIGHTCODE_SELF_UPDATE_COMMAND is unset or blank", () => {
+		process.env.KNIGHTCODE_SELF_UPDATE_COMMAND = " ";
+
+		expect(getConfiguredSelfUpdateArgv(["mise", "upgrade", "npm:{packageName}"])).toEqual([
+			"mise",
+			"upgrade",
+			"npm:{packageName}",
+		]);
+		expect(getConfiguredSelfUpdateArgv([])).toBeUndefined();
+		expect(getConfiguredSelfUpdateArgv(undefined)).toBeUndefined();
+	});
+
+	test("fills placeholders in every argument", () => {
+		const command = makeConfiguredSelfUpdateCommand(
+			["wrapper", "install", "{installSpec}", "--name={packageName}", "--version", "{version}", "{unknown}"],
+			{ packageName: "@knightcodeai/cli", version: "1.2.3" },
+		);
+
+		expect(command).toEqual({
+			command: "wrapper",
+			args: ["install", "@knightcodeai/cli@1.2.3", "--name=@knightcodeai/cli", "--version", "1.2.3", "{unknown}"],
+			display: "wrapper install @knightcodeai/cli@1.2.3 --name=@knightcodeai/cli --version 1.2.3 {unknown}",
+		});
 	});
 });

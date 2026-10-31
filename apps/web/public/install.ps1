@@ -264,7 +264,14 @@ function Invoke-PreflightChecks {
     $status = 1
   }
 
-  if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
+  # Prefer npm.cmd, the shim shipped with the official Node.js install. Some
+  # Node managers (for example nvm for Windows setups) expose only npm.exe.
+  # Plain `npm` is avoided because it can resolve to npm.ps1, which
+  # Restricted/AllSigned execution policies block.
+  $npm = Get-Command npm.cmd, npm.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($npm) {
+    $global:NpmCommand = $npm.Source
+  } else {
     Write-Output "error: npm is required to install KnightCode."
     $status = 1
   }
@@ -770,12 +777,12 @@ function Get-NpmGlobalPrefix {
     # npm writes UTF-8 to redirected stdout. Decode it explicitly instead of
     # using the console's OEM code page, which corrupts non-ASCII paths.
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    $prefix = (& npm.cmd prefix -g 2>$null).Trim()
+    $prefix = (& $global:NpmCommand prefix -g 2>$null).Trim()
     if ($prefix) {
       return $prefix
     }
 
-    return (& npm.cmd config get prefix 2>$null).Trim()
+    return (& $global:NpmCommand config get prefix 2>$null).Trim()
   } finally {
     [Console]::OutputEncoding = $previousOutputEncoding
   }
@@ -976,11 +983,15 @@ function Select-KnightcodeManagedInstallDir {
   return Join-Path (Get-KnightcodeAgentDir) "install"
 }
 
+function Get-NpmCommandName {
+  return Split-Path $global:NpmCommand -Leaf
+}
+
 function Get-NpmUninstallKnightcodeCommand {
   if ($env:KNIGHTCODE_NPM_UNINSTALL_PREFIX) {
-    return "npm.cmd uninstall -g --prefix `"$env:KNIGHTCODE_NPM_UNINSTALL_PREFIX`" $KnightcodePackage"
+    return "$(Get-NpmCommandName) uninstall -g --prefix `"$env:KNIGHTCODE_NPM_UNINSTALL_PREFIX`" $KnightcodePackage"
   }
-  return "npm.cmd uninstall -g $KnightcodePackage"
+  return "$(Get-NpmCommandName) uninstall -g $KnightcodePackage"
 }
 
 function Write-KnightcodeInstallCommand {
@@ -993,9 +1004,9 @@ function Write-KnightcodeInstallCommand {
     return "KnightCode will install to $knightcodeCommand"
   }
   if ($env:KNIGHTCODE_NPM_INSTALL_PREFIX) {
-    return "Using legacy self managed installation`n  npm.cmd install -g --ignore-scripts $NpmMinReleaseAgeArg --prefix `"$env:KNIGHTCODE_NPM_INSTALL_PREFIX`" $KnightcodePackage"
+    return "Using legacy self managed installation`n  $(Get-NpmCommandName) install -g --ignore-scripts $NpmMinReleaseAgeArg --prefix `"$env:KNIGHTCODE_NPM_INSTALL_PREFIX`" $KnightcodePackage"
   }
-  return "Using legacy self managed installation`n  npm.cmd install -g --ignore-scripts $NpmMinReleaseAgeArg $KnightcodePackage"
+  return "Using legacy self managed installation`n  $(Get-NpmCommandName) install -g --ignore-scripts $NpmMinReleaseAgeArg $KnightcodePackage"
 }
 
 function Write-KnightcodeActionMenu {
@@ -1161,7 +1172,7 @@ function Invoke-NpmInstallKnightcode {
   param([string]$LogLevel)
 
   $args = Get-NpmInstallKnightcodeArgs $LogLevel "false"
-  & npm.cmd @args
+  & $global:NpmCommand @args
 }
 
 function Invoke-DownloadManagedInstallerArtifact {
@@ -1498,7 +1509,7 @@ function Invoke-KnightcodeManagedInstall {
     $savedErrorActionPreference = $ErrorActionPreference
     try {
       $ErrorActionPreference = "Continue"
-      & npm.cmd @npmArgs
+      & $global:NpmCommand @npmArgs
       $managedStatus = $LASTEXITCODE
     } finally {
       $ErrorActionPreference = $savedErrorActionPreference
@@ -1625,10 +1636,12 @@ function Install-KnightcodePackageWithProgress {
         [string]$InstallerApiBase,
         [string]$ManagedInstallMarker,
         [string]$MinReleaseAgeArg,
+        [string]$Npm,
         [string]$OutputLog
       )
 
       $ErrorActionPreference = "Stop"
+      $global:NpmCommand = $Npm
       $global:KnightcodePackage = $Package
       $global:KnightcodeCmd = $Command
       $global:KnightcodeInstallerApiBase = $InstallerApiBase
@@ -1643,16 +1656,16 @@ function Install-KnightcodePackageWithProgress {
         $failureMessage | Out-File -FilePath $OutputLog -Append
         1
       }
-    } -ArgumentList $workerSource, $KnightcodePackage, $KnightcodeCmd, $KnightcodeInstallerApiBase, $KnightcodeManagedInstallMarker, $NpmMinReleaseAgeArg, $logFile
+    } -ArgumentList $workerSource, $KnightcodePackage, $KnightcodeCmd, $KnightcodeInstallerApiBase, $KnightcodeManagedInstallMarker, $NpmMinReleaseAgeArg, $global:NpmCommand, $logFile
   } else {
     $npmArgs = [System.Collections.ArrayList]::new()
     $npmArgs.AddRange([string[]](Get-NpmInstallKnightcodeArgs "verbose" "false"))
     $job = Start-Job -ScriptBlock {
-      param([string[]]$ArgsForNpm, [string]$OutputLog)
+      param([string]$Npm, [string[]]$ArgsForNpm, [string]$OutputLog)
 
-      & npm.cmd @ArgsForNpm *> $OutputLog
+      & $Npm @ArgsForNpm *> $OutputLog
       $LASTEXITCODE
-    } -ArgumentList $npmArgs, $logFile
+    } -ArgumentList $global:NpmCommand, $npmArgs, $logFile
   }
 
   [Console]::Write("${KnightcodeEsc}[?25l")
@@ -1713,7 +1726,7 @@ function Invoke-NpmUninstallKnightcode {
   $savedErrorActionPreference = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
-    & npm.cmd @args
+    & $global:NpmCommand @args
   } finally {
     $ErrorActionPreference = $savedErrorActionPreference
   }
@@ -1757,7 +1770,7 @@ function Test-NpmPackageInstalledForUninstall {
   $savedErrorActionPreference = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
-    & npm.cmd @args *> $null
+    & $global:NpmCommand @args *> $null
   } finally {
     $ErrorActionPreference = $savedErrorActionPreference
   }

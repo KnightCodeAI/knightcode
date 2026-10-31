@@ -5,6 +5,7 @@ import type { CustomEntry } from "../../../core/session-manager.ts";
 import { formatToolCall } from "../../../core/tools/render-utils.ts";
 import { theme } from "../theme/theme.ts";
 import { callBlock, paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
+import { keyHint, keyText } from "./keybinding-hints.ts";
 
 /**
  * Component that renders a custom session entry from extensions.
@@ -67,7 +68,7 @@ export class CustomEntryComponent extends Container {
 		let component: Component | undefined;
 		this.padContent = false;
 		try {
-			component = this.renderer(this.entry, { expanded: this._expanded }, theme);
+			component = this.renderer(this.entry, { expanded: this._expanded, keyText, keyHint }, theme);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			this.padContent = true;
