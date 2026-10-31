@@ -1967,6 +1967,43 @@ validation and copies the v2 kernel added around Delta.
   (R6, "b, common enough") `bytes` may omit `size`: chunked transfer encoding, no ranges (no `Accept-Ranges`), `read`
   called with growing offsets until it returns an empty chunk (a zip built on the fly, a growing log, an export paged
   from a worker).
+  Spec review round 2 (Fable, Opus, Astra, Sol): (Q1, recommended) holders of a failed worker get `failed { waiting }`
+  with the stored error as cause and stay on the address's path: a later link of the address (Retry, a rollout) binds
+  them without a re-hold; a `get` waits its `readyTimeout` meanwhile.
+  (Q2, "a") A rollout that reaches workers clears the failures from before it, then calls `RouteHandle.retry` for the
+  cleared addresses that have holders (they start with the new code and are listed in the step); an unheld one starts
+  at its next hold; a worker that fails during this rollout stays failed (no loop: one start per held failed address per
+  rollout a person triggers).
+  (Q3, "a"; refines R1) A `stop`'s suspension lasts while the address has holders; they see `failed { waiting }`
+  ("suspended"); with the last holder the record goes, and a later hold starts the worker on demand (as after an idle
+  stop); whether an archived session may be opened is the app's (`authorize`, its views). Memory stays bounded.
+  (Q4, "a") The start timer (60 s) covers fork, lock and connect (`started`) only; after `started` a slow `load` is
+  objects showing `loading`; `ready` sets `state` to `running` and lets idle stops begin; a `load` that never ends
+  shows `starting` until `stop` (no kill, no retry).
+  (Q5, "a"; refines R3) A worker's idleness is `references`, `jobs`, `lingering` and the app's `busy`, not `calls`: a
+  remote call runs on a hold (counted), local calls come from routines (not counted, §14), jobs, Durable tasks (`busy`)
+  and handlers under a hold; no message per local call, no timer. The first report goes with `ready` (`ready { idle }`),
+  so a worker idle from its start is stopped too.
+  (Q6, owner: "if sockets are a contribution, why keep them when the contribution is removed?": design §17's rule, an
+  entry lives as long as its contributor and consumers keep nothing beyond a use) A plugin socket is closed (1012,
+  "service restart") when the contribution that handed it out leaves the table (a reload changing or removing it); a
+  `/chord` link or socket whose `Host` is no longer allowed closes (1008) when the allowed hosts change.
+- **Slice 11's points (owner, 2026-10-30; `slice-11.md`):** the surfaces are generic plumbing; the app keeps
+  everything visible (owner: "this one needs to be generic, so apps can do whatever they want, css, tui components,
+  themes"). (P1, "a") `chord/next/web` ships serving the surface (the base bundle, the plugins' web scripts,
+  stylesheets and assets, the page through the app's template, all as `Http` contributions), the browser's client host
+  with its connection loop, and loading and applying the plugins' web facets; not HTML, CSS, components, themes,
+  navigation, slots or layout.
+  (P2, "script tag") A plugin's web script is served as a file that registers itself
+  (`chordFacet("<plugin>", "<digest>", function (require, module, exports) { … })`) and is loaded with `<script src>`
+  under a `'self'` CSP: no `eval`, no `new Function`.
+  (Kinds, owner: "ya"; changes 7c's `createPlugins` options, built in slice 10) One definition per facet kind:
+  `kinds: { server: { platform: "node", hostPackages: [...names] }, web: { platform: "browser", hostPackages: [...] } }`
+  replaces `kinds` plus `browserKinds` and the component-wide `hostPackages` map. The platform decides the build (Node:
+  builtins and `chord.external` external, no CSS or `?url` assets; browser: CSS and assets collected, builtins and
+  `chord.external` refused); the names keep those imports external. The module objects are given where scripts are
+  evaluated: the server's own at `plugins.load(host, { kind, core, modules })`, a worker's in `workerMain`'s
+  `hostPackages`, a page's in `startPage`.
 - **A plugin's npm dependencies are bundled; external only by opt-in (owner, 2026-10-29: "explicit opt in + (a)"):**
   a plugin's `dependencies` are installed into its own `node_modules` (`npm install --ignore-scripts`) and bundled into
   each facet that imports them (host packages, its `peerDependencies`, stay external and are passed in). On Node a
