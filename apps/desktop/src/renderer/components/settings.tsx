@@ -2945,7 +2945,14 @@ function Plugins() {
 	const [failed, setFailed] = useState<ReadonlyMap<string, string>>(new Map());
 	const tried = useRef(new Set<string>());
 	const where = cwd === undefined ? {} : { cwd };
+	// The project shown now. A fetch or change that settles after a switch must not reload the old project, whose
+	// request would then be the newest and leave this one loading.
+	const shownCwd = useRef(cwd);
+	shownCwd.current = cwd;
+	/** Fetches and their failures belong to the project they ran in. */
+	const catalogKey = (name: string) => `${cwd ?? ""}\n${name}`;
 	const load = useCallback(() => {
+		if (shownCwd.current !== cwd) return;
 		const request = ++latest.current;
 		const params = cwd === undefined ? {} : { cwd };
 		Promise.all([client.request("plugin/list", params), client.request("plugin/marketplace/list", params)])
@@ -2979,7 +2986,8 @@ function Plugins() {
 		);
 	/** Fetches a catalog again; its card shows the fetch and what went wrong. */
 	const fetchCatalog = (name: string) => {
-		setFetching((names) => new Set(names).add(name));
+		const key = catalogKey(name);
+		setFetching((keys) => new Set(keys).add(key));
 		void client
 			.request("plugin/marketplace/update", { ...where, name })
 			.then(
@@ -2989,13 +2997,13 @@ function Plugins() {
 			.then((failure) => {
 				setFailed((failures) => {
 					const next = new Map(failures);
-					if (failure === undefined) next.delete(name);
-					else next.set(name, failure);
+					if (failure === undefined) next.delete(key);
+					else next.set(key, failure);
 					return next;
 				});
-				setFetching((names) => {
-					const next = new Set(names);
-					next.delete(name);
+				setFetching((keys) => {
+					const next = new Set(keys);
+					next.delete(key);
 					return next;
 				});
 				load();
@@ -3004,7 +3012,7 @@ function Plugins() {
 	// As `/plugins`: catalogs never fetched, or fetched a few minutes ago, are fetched in the background once.
 	useEffect(() => {
 		for (const market of list?.marketplaces ?? []) {
-			const key = `${cwd ?? ""}\n${market.name}`;
+			const key = catalogKey(market.name);
 			const stale = market.missing || !market.updatedAt || Date.now() - Date.parse(market.updatedAt) > CATALOG_TTL_MS;
 			if (!stale || tried.current.has(key)) continue;
 			tried.current.add(key);
@@ -3137,8 +3145,8 @@ function Plugins() {
 		if (needle && entries.length === 0) return null;
 		const open = needle ? true : (markets.length === 1) !== flipped.has(market.name);
 		const shown = whole.has(market.name) ? entries : entries.slice(0, CATALOG_PREVIEW);
-		const failure = failed.get(market.name);
-		const busyFetching = fetching.has(market.name);
+		const failure = failed.get(catalogKey(market.name));
+		const busyFetching = fetching.has(catalogKey(market.name));
 		// Git's whole stderr can be many lines: two show, and the rest is a hover away.
 		const problem = (text: string) => (
 			<Tooltip content={text}>
